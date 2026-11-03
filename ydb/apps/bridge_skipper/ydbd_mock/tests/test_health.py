@@ -93,24 +93,32 @@ class AutomaticBlameTest(HealthCase):
         self.assertEqual(inst.replica.state.per_pile[1], model.Stored.SUSPENDED)
         self.assertEqual(health.blame(inst, 0), {})
 
-    async def test_both_resync_stages_are_invisible_even_when_they_hold_data_quorum(self):
+    async def test_stage1_pile_is_invisible_without_data_quorum(self):
         c = await self.make()
         inst = c.inst("pile1")
         inst.set_blocked([1])
-        for stage in (model.Stored.NOT_SYNCHRONIZED_1, model.Stored.NOT_SYNCHRONIZED_2):
-            with self.subTest(stage=stage):
-                state = inst.state.copy()
-                state.per_pile[1] = stage
-                inst.replica.force(state, False)
-                self.assertEqual(model.requires_data_quorum(stage), stage == model.Stored.NOT_SYNCHRONIZED_2)
-                self.assertEqual(health.blame(inst, 0), {})
-                result = self.build(c)
-                self.assertEqual(len(result.issue_log), 0)
-                self.assertEqual(result.database_status[0].storage.pools[0].groups[0].overall, Flag.GREEN)
-        inst.override_replica({"pile2": model.PUB_SYNCHRONIZED})
-        self.assertEqual(health.blame(inst, 0), {"pile2": health.CONNECTIVITY})
+        state = inst.state.copy()
+        state.per_pile[1] = model.Stored.NOT_SYNCHRONIZED_1
+        inst.replica.force(state, False)
+        self.assertEqual(health.blame(inst, 0), {})
+        result = self.build(c)
+        self.assertEqual(len(result.issue_log), 0)
+        self.assertEqual(result.database_status[0].storage.pools[0].groups[0].overall, Flag.GREEN)
 
-    async def test_manual_blame_obeys_the_synchronized_visibility_filter(self):
+    async def test_stage2_pile_is_visible_with_data_quorum(self):
+        c = await self.make()
+        inst = c.inst("pile1")
+        inst.set_blocked([1])
+        state = inst.state.copy()
+        state.per_pile[1] = model.Stored.NOT_SYNCHRONIZED_2
+        inst.replica.force(state, False)
+        self.assertEqual(health.blame(inst, 0), {"pile2": health.CONNECTIVITY})
+        result = self.build(c)
+        self.assertEqual(len(result.issue_log), 1)
+        self.assertEqual(result.database_status[0].storage.pools[0].groups[0].overall, Flag.ORANGE)
+        self.assertEqual(result.self_check_result, ydb_monitoring_pb2.SelfCheck.MAINTENANCE_REQUIRED)
+
+    async def test_manual_blame_obeys_the_data_quorum_visibility_filter(self):
         c = await self.make()
         inst = c.inst("pile1")
         inst.node_faults[0].blame_storage = {"pile2"}
@@ -119,7 +127,7 @@ class AutomaticBlameTest(HealthCase):
                 state = inst.state.copy()
                 state.per_pile[1] = stored
                 inst.replica.force(state, False)
-                expected = {"pile2": health.STORAGE} if stored == model.Stored.SYNCHRONIZED else {}
+                expected = {"pile2": health.STORAGE} if model.requires_data_quorum(stored) else {}
                 self.assertEqual(health.blame(inst, 0), expected)
 
     async def test_node_never_blames_its_own_pile(self):
@@ -194,6 +202,44 @@ class RealisticStyleTest(HealthCase):
         self.assertFalse(parent.location.storage.pool.group.HasField("pile"))
         self.assertEqual(list(parent.location.storage.pool.group.id),
                          [result.database_status[0].storage.pools[0].groups[0].id])
+
+    async def test_dead_stage2_pile_has_orange_parent_with_its_pile(self):
+        c = await self.make(policies=Policies(issue_style="realistic"))
+        inst = c.inst("pile1")
+        state = inst.state.copy()
+        state.per_pile[1] = model.Stored.NOT_SYNCHRONIZED_2
+        inst.replica.force(state, False)
+        inst.node_faults[0].blame_storage = {"pile2"}
+        result = self.build(c)
+        self.assertEqual([i.type for i in result.issue_log], ["BRIDGE_GROUP", "STORAGE_GROUP"])
+        parent = result.issue_log[-1]
+        self.assertEqual(parent.status, Flag.ORANGE)
+        self.assertEqual(parent.location.storage.pool.group.pile.name, "pile2")
+
+    async def test_healthy_stage2_pile_cannot_save_dead_synchronized_pile(self):
+        c = await self.make(policies=Policies(issue_style="realistic"))
+        inst = c.inst("pile1")
+        state = inst.state.copy()
+        state.per_pile[1] = model.Stored.NOT_SYNCHRONIZED_2
+        inst.replica.force(state, False)
+        inst.node_faults[0].blame_storage = {"pile1"}
+        result = self.build(c)
+        parent = result.issue_log[-1]
+        self.assertEqual((parent.type, parent.status), ("STORAGE_GROUP", Flag.RED))
+        self.assertEqual(parent.location.storage.pool.group.pile.name, "pile1")
+
+    async def test_dead_synchronized_piles_with_healthy_stage2_have_some_piles_message(self):
+        c = await self.make(piles=3, policies=Policies(issue_style="realistic"))
+        inst = c.inst("pile1")
+        state = inst.state.copy()
+        state.per_pile[2] = model.Stored.NOT_SYNCHRONIZED_2
+        inst.replica.force(state, False)
+        inst.node_faults[0].blame_storage = {"pile1", "pile2"}
+        result = self.build(c)
+        parent = result.issue_log[-1]
+        self.assertEqual((parent.type, parent.status), ("STORAGE_GROUP", Flag.RED))
+        self.assertFalse(parent.location.storage.pool.group.HasField("pile"))
+        self.assertEqual(parent.message, "Group dead in some piles")
 
     async def test_single_child_parent_preserves_an_explicit_empty_pile(self):
         c = await self.make(pile_names=["pile1", ""], policies=Policies(issue_style="realistic"))

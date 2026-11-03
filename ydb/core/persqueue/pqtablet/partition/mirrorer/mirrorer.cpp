@@ -38,6 +38,19 @@ TString StructuredLogPrefixText(const TStructuredMessage& prefix) {
     return out;
 }
 
+TString FormatOffsetsByConsumers(const y_absl::flat_hash_map<TString, ui64>& offsetsByConsumers) {
+    TStringBuilder out;
+    bool firstConsumer = true;
+    for (const auto& [consumer, offset] : offsetsByConsumers) {
+        if (!firstConsumer) {
+            out << ", ";
+        }
+        firstConsumer = false;
+        out << consumer << ": " << offset;
+    }
+    return out;
+}
+
 struct TBatchInfo {
     ui32 LogicalMessageCount = 1;
     std::optional<ui64> MaxSeqNo;
@@ -346,6 +359,13 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
             {"endOffset", EndOffset}
         );
         LOG_N(
+            "[STATE] replication offsets",
+            {"replicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
+            {"offsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
+            {"lastReplicationDataTimestamp", LastReplicationDataTimestamp},
+            {"replicationDataInFlight", ReplicationDataInFlight}
+        );
+        LOG_N(
             "[STATE] bytes in flight messages in write request queue",
             {"bytesInFlight", BytesInFlight},
             {"writeInFlightSize", WriteInFlight.size()},
@@ -491,17 +511,38 @@ void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
         return;
     }
 
-    for (const auto& [consumer, offset] : OffsetsByConsumers) {
-        if (offset > EndOffset) {
-            return;
+    y_absl::flat_hash_map<TString, ui64> offsetsByConsumersToSend;
+    for (auto& [consumer, offset] : OffsetsByConsumers) {
+        auto offsetToSend = Min(offset, EndOffset);
+        if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offsetToSend) {
+            continue;
         }
+        
+        offsetsByConsumersToSend[consumer] = offsetToSend;
     }
+
+    if (offsetsByConsumersToSend.empty() && !MirroredOffsetToSend.Defined()) {
+        return;
+    }
+
     ReplicationDataInFlight = true;
     auto event = MakeHolder<TEvPQ::TEvReplicationData>();
-    for (const auto& [consumer, offset] : OffsetsByConsumers) {
+    for (const auto& [consumer, offset] : offsetsByConsumersToSend) {
         (event->OffsetsByConsumers)[consumer] = offset;
+
+        ReplicatedOffsetsByConsumers[consumer] = offset;
+
+        if (offset == OffsetsByConsumers[consumer]) {
+            OffsetsByConsumers.erase(consumer);
+        }
     }
-    OffsetsByConsumers.clear();
+
+    LOG_D("Sending replication data to consumers",
+        {"offsetsByConsumersToSend", FormatOffsetsByConsumers(offsetsByConsumersToSend)},
+        {"ReplicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
+        {"OffsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
+        {"MirroredOffsetToSend", MirroredOffsetToSend ? ToString(*MirroredOffsetToSend) : "none"});
+
     if (MirroredOffsetToSend) {
         event->MirroredOffset = *MirroredOffsetToSend;
         MirroredOffsetToSend = Nothing();
@@ -704,12 +745,17 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     ctx.Send(TabletActorId, request.Release());
 }
 
-void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
+void TMirrorer::AddMessagesToQueue(
+    std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages
+) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
         if (NYdb::NTopic::IsReplicationServiceMessage(offset, msg.GetMessageMeta()->Fields)) {
             NKikimrPQ::TReplicationDataPayload replicationData;
             if (replicationData.ParseFromString(msg.GetData())) {
+                LastReplicationDataTimestamp = TActivationContext::Now();
+                LOG_D("Received replication data", {"replicationData", replicationData.DebugString()});
+
                 for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
                     auto& pendingOffset = OffsetsByConsumers[consumer];
                     pendingOffset = Max(pendingOffset, offset);

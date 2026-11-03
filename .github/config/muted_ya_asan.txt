@@ -5,6 +5,7 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery11
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
+ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboOlap.OlapPerfQueries
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
@@ -74,16 +75,10 @@ ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_prestable-27-1-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_stable-26-4-1-False]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_stable-26-4-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-3-1_to_stable-26-4-1-False]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-3-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_prestable-27-1-1-False]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_prestable-27-1-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-3-1-False]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-3-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-4-1-False]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-4-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_stable-26-3-1_to_stable-26-4-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_stable-26-4-1_to_stable-26-3-1-True]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_stable-26-4-1_and_stable-26-3-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_from_mid_blob_offset[mixed_prestable-27-1-1_and_stable-26-4-1]

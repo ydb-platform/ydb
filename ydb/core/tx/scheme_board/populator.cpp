@@ -207,7 +207,9 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
 
     void RequestUpdates() {
         auto move = [](auto& src, auto& dst) {
-            dst.insert(src.begin(), src.end());
+            for (auto& [pathId, versions] : src) {
+                dst[pathId].insert(versions.begin(), versions.end());
+            }
             src.clear();
         };
 

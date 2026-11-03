@@ -192,10 +192,7 @@ jobs:
               if command -v unzip >/dev/null 2>&1; then
                 unzip -qo /tmp/executor-summary.zip -d /tmp/executor-summary
               else
-                python3 - <<'PY'
-import zipfile
-zipfile.ZipFile("/tmp/executor-summary.zip").extractall("/tmp/executor-summary")
-PY
+                python3 -c 'import zipfile; zipfile.ZipFile("/tmp/executor-summary.zip").extractall("/tmp/executor-summary")'
               fi
               summary_file="$(find /tmp/executor-summary -type f | head -1 || true)"
               if [ -n "$summary_file" ]; then
@@ -209,23 +206,18 @@ PY
 
           if [ "$mirrored" != "1" ]; then
             echo "Artifact missing — falling back to S3 summary_links"
-            # Path layout from s3cmd action: {endpoint}/{bucket}/{repo}/{workflow}/{run_id}/ya-x86-64/
+            # Path layout from s3cmd: {endpoint}/{bucket}/{repo}/{workflow}/{run_id}/ya-x86-64/
             wf_name="Run and debug tests"
             base="${AWS_ENDPOINT}/${AWS_BUCKET}/${REPO}/${wf_name}/${run_id}/ya-x86-64"
-            # URL-encode spaces for curl
             base_enc="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=":/"))' "$base")"
             if curl -fsS "$base_enc/summary_links.txt" -o /tmp/summary_links.txt; then
-              python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
-import pathlib
-links = []
+              python3 -c 'import pathlib; links=[]
 for line in pathlib.Path("/tmp/summary_links.txt").read_text().splitlines():
-    line=line.strip()
-    if not line: continue
-    parts=line.split(" ", 1)
-    if len(parts)==2:
-        links.append(parts[1])
-print(" | ".join(links))
-PY
+  line=line.strip()
+  if not line: continue
+  parts=line.split(" ", 1)
+  if len(parts)==2: links.append(parts[1])
+print(" | ".join(links))' >> "$GITHUB_STEP_SUMMARY"
             else
               echo "_Could not mirror executor summary (no artifact / S3 links). See executor run._" >> "$GITHUB_STEP_SUMMARY"
             fi

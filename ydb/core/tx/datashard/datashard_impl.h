@@ -52,7 +52,6 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tablet_flat/flat_page_iface.h>
-#include <ydb/core/tablet_flat/flat_row_versions.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/protos/tx.pb.h>
@@ -91,12 +90,10 @@ using NLongTxService::TEvLongTxService;
 // For CopyTable and MoveShadow
 class TTxTableSnapshotContext : public NTabletFlatExecutor::TTableSnapshotContext {
 public:
-    TTxTableSnapshotContext(ui64 step, ui64 txId, TVector<ui32>&& tables, bool hasOpenTxs = false,
-        NTable::TRowVersionRanges removedRowVersions = {})
+    TTxTableSnapshotContext(ui64 step, ui64 txId, TVector<ui32>&& tables, bool hasOpenTxs = false)
         : StepOrder(step, txId)
         , Tables(tables)
         , HasOpenTxs_(hasOpenTxs)
-        , RemovedRowVersions_(std::move(removedRowVersions))
     {}
 
     const TStepOrder& GetStepOrder() const {
@@ -111,15 +108,10 @@ public:
         return HasOpenTxs_;
     }
 
-    const NTable::TRowVersionRanges& GetRemovedRowVersions() const {
-        return RemovedRowVersions_;
-    }
-
 private:
     TStepOrder StepOrder;
     TVector<ui32> Tables;
     bool HasOpenTxs_;
-    NTable::TRowVersionRanges RemovedRowVersions_;
 };
 
 // For Split
@@ -147,7 +139,6 @@ public:
     TRowVersion IncompleteEdge;
     TRowVersion ImmediateWriteEdge;
     TRowVersion LowWatermark;
-    THashMap<ui32, NTable::TRowVersionRanges> RemovedRowVersions;
 
 private:
     TVector<ui32> Tables;

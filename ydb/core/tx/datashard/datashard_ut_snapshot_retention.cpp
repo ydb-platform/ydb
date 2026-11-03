@@ -3,6 +3,8 @@
 
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/tablet/resource_broker.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
@@ -518,6 +520,42 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionRead) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
+    Y_UNIT_TEST(CleanupWhilePreparingSplitSnapshotIsTransferred) {
+        TSnapshotRetentionTest test;
+        auto& runtime = test.GetRuntime();
+        const auto snapshot = test.WriteVersion(1);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        test.WriteVersion(2);
+        runtime.SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        test.RunCleanup();
+
+        bool splitting = false;
+        auto observeSplit = runtime.AddObserver<TEvDataShard::TEvSplit>([&](auto&) {
+            splitting = true;
+        });
+        TBlockEvents<TEvResourceBroker::TEvResourceAllocated> compactions(runtime, [&](const auto&) {
+            return splitting;
+        });
+        SetSplitMergePartCountLimit(test.Server->GetRuntime(), -1);
+        const auto txId = AsyncSplitTable(test.Server, test.Sender, "/Root/table-a", test.ShardA, 4);
+        runtime.WaitFor("split snapshot compaction is waiting", [&] { return !compactions.empty(); });
+
+        // Cleanup still runs while the source is making its physical snapshot.
+        test.PublishRegistry();
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        compactions.Stop().Unblock();
+        observeSplit.Remove();
+        WaitTxNotification(test.Server, test.Sender, txId);
+        for (ui64 shard : NKqp::GetTableShards(test.Server, test.Sender, "/Root/table-a")) {
+            UNIT_ASSERT(test.IsRemoved(shard, snapshot));
+            const auto result = test.ReadSnapshot(shard, test.TableA, snapshot);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(SnapshotSurvivesSplitMergeAndRestart, MissingRegistry) {
         TSnapshotRetentionTest test;
         auto& runtime = test.GetRuntime();

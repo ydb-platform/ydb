@@ -64,8 +64,7 @@ EExecutionStatus TMakeSnapshotUnit::Execute(TOperation::TPtr op,
         ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
         const auto& openTxs = txc.DB.GetOpenTxs(localTableId);
         TIntrusivePtr<TTableSnapshotContext> snapContext
-            = new TTxTableSnapshotContext(op->GetStep(), op->GetTxId(), {localTableId}, !openTxs.empty(),
-                txc.DB.GetRemovedRowVersions(localTableId));
+            = new TTxTableSnapshotContext(op->GetStep(), op->GetTxId(), {localTableId}, !openTxs.empty());
         txc.Env.MakeSnapshot(snapContext);
 
         op->SetWaitingForSnapshotFlag();

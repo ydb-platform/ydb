@@ -1551,6 +1551,7 @@ struct TAlterReplicationSettings {
 struct TDropReplicationSettings {
     TString Name;
     bool Cascade = false;
+    NKikimrReplication::ESourceCleanupPolicy SourceCleanup = NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP;
 };
 
 struct TTransferSettings : public TReplicationSettingsBase {

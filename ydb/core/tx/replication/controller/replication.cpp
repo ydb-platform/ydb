@@ -59,9 +59,19 @@ class TReplication::TImpl: public TLagProvider {
         TenantResolver = ctx.Register(CreateTenantResolver(ctx.SelfID, ReplicationId, PathId));
     }
 
+    bool HasSourceStreams() const {
+        for (const auto& [_, target] : Targets) {
+            if (target->GetStreamState() != EStreamState::Removed) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool CanApplyResolvedCredentials() const {
         // DROP still needs source credentials to remove retained streams after DONE.
-        return State != EState::Done && (DesiredState != EState::Done || State == EState::Removing);
+        return State != EState::Done && (DesiredState != EState::Done || State == EState::Removing)
+            && (State != EState::Removing || HasSourceStreams());
     }
 
     template <typename... Args>
@@ -192,7 +202,7 @@ public:
             return ProgressTargets(ctx);
         }
 
-        if (!YdbProxy && !(State == EState::Removing && !Targets)) {
+        if (!YdbProxy && !(State == EState::Removing && !HasSourceStreams())) {
             THolder<IActor> ydbProxy;
             const auto& params = Config.GetSrcConnectionParams();
             const auto& endpoint = params.GetEndpoint();

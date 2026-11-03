@@ -2398,6 +2398,307 @@ Y_UNIT_TEST_F(ReplicationDataRestoresReadSessionActorOnHasData, TPartitionFixtur
     TestRestoreReadSessionActor(true);
 }
 
+<<<<<<< HEAD
+=======
+Y_UNIT_TEST_F(ReplicationDataAckAfterPersist, TPartitionFixture)
+{
+    const TConfigParams initialConfig{.Version = 1,
+        .Consumers = {{.Consumer = "first"}, {.Consumer = "second"}}};
+    CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+        .Config = initialConfig, .FillHead = true}, initialConfig);
+    CreateSession("first", "first-session");
+
+    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+    event->OffsetsByConsumers = {{"first", 4}, {"second", 3}};
+    Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release(), 0, 17));
+    WaitCmdWrite({.MetaStartOffset = 0, .MetaEndOffset = 10, .UserInfos = {
+        {0, {.Consumer = "first", .Session = "first-session", .Offset = 4}},
+        {1, {.Consumer = "second", .Offset = 3}},
+    }});
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    SendGetOffset(18, "first");
+    WaitProxyResponse({.Cookie = 18, .Offset = 4});
+    SendGetOffset(19, "second");
+    WaitProxyResponse({.Cookie = 19, .Offset = 3});
+
+    // Persisting the batch frees PendingReplicationData for the next one.
+    event = MakeHolder<TEvPQ::TEvReplicationData>();
+    event->OffsetsByConsumers = {{"first", 6}};
+    SendEvent(event.Release());
+    WaitCmdWrite({.MetaStartOffset = 0, .MetaEndOffset = 10,
+        .UserInfos = {{0, {.Consumer = "first", .Session = "first-session", .Offset = 6}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+}
+
+Y_UNIT_TEST_F(ReplicationDataIgnoresUnknownConsumersAndInvalidOffsets, TPartitionFixture)
+{
+    const TConfigParams initialConfig{.Version = 1, .Consumers = {{.Consumer = "first"}}};
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+        .Config = initialConfig, .FillHead = true}, initialConfig);
+    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+    event->OffsetsByConsumers = {{"first", 4}, {"unknown", 8}, {"", 9}};
+    SendEvent(event.Release());
+    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 4}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    UNIT_ASSERT(!TPartitionTestWrapper::GetUserInfo(*partition, "unknown"));
+    UNIT_ASSERT(!TPartitionTestWrapper::GetUserInfo(*partition, ""));
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "first")->Offset, 4);
+
+    event = MakeHolder<TEvPQ::TEvReplicationData>();
+    event->OffsetsByConsumers = {{"unknown", 9}, {"first", Max<ui64>()}};
+    SendEvent(event.Release());
+    WaitCmdWrite({.Count = 1}); // Only partition metadata; no consumer records are created.
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    UNIT_ASSERT(!TPartitionTestWrapper::GetUserInfo(*partition, "unknown"));
+}
+
+Y_UNIT_TEST_F(ReplicationDataDoesNotRewindConsumerOffsets, TPartitionFixture)
+{
+    const TConfigParams initialConfig{.Version = 1,
+        .Consumers = {{.Consumer = "first", .Offset = 6}, {.Consumer = "second"}}};
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+        .Config = initialConfig, .FillHead = true}, initialConfig);
+    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+    event->OffsetsByConsumers = {{"first", 4}, {"second", 8}};
+    SendEvent(event.Release());
+    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 6}}, {1, {.Consumer = "second", .Offset = 8}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    // An older batch does not move persisted offsets backwards.
+    event = MakeHolder<TEvPQ::TEvReplicationData>();
+    event->OffsetsByConsumers = {{"first", 1}, {"second", 2}};
+    SendEvent(event.Release());
+    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 6}}, {1, {.Consumer = "second", .Offset = 8}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "first")->Offset, 6);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "second")->Offset, 8);
+}
+
+Y_UNIT_TEST_F(ReplicationDataDoesNotRestoreRemovedConsumer, TPartitionFixture)
+{
+    const TConfigParams initialConfig{.Version = 1,
+        .Consumers = {{.Consumer = "first"}, {.Consumer = "removed"}}};
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+        .Config = initialConfig, .FillHead = true}, initialConfig);
+    SendChangePartitionConfig({.Version = 2, .Consumers = {{.Consumer = "first"}}});
+    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 0}}},
+        .DeleteRanges = {{0, {.Partition = 0, .Consumer = "removed"}}}});
+
+    // The payload arrives while removing the consumer is still being persisted.
+    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+    event->OffsetsByConsumers = {{"first", 7}, {"removed", 8}};
+    SendEvent(event.Release());
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged();
+    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 7}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    UNIT_ASSERT(!TPartitionTestWrapper::GetUserInfo(*partition, "removed"));
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "first")->Offset, 7);
+}
+
+Y_UNIT_TEST_F(ReplicationDataRetriesAfterUnrelatedPersist, TPartitionFixture)
+{
+    const TConfigParams initialConfig{.Version = 1,
+        .Consumers = {{.Consumer = "first"}, {.Consumer = "second"}}};
+    CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+        .Config = initialConfig, .FillHead = true}, initialConfig);
+
+    SendSetOffset(1, "first", 2, "");
+    WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 2}}}});
+    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+    event->OffsetsByConsumers = {{"first", 7}, {"second", 8}};
+    SendEvent(event.Release());
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 1});
+    WaitCmdWrite({.UserInfos = {
+        {0, {.Consumer = "first", .Offset = 7}},
+        {1, {.Consumer = "second", .Offset = 8}},
+    }});
+    // The previous KV reply must publish only the offset that it actually wrote.
+    SendGetOffset(2, "first");
+    WaitProxyResponse({.Cookie = 2, .Offset = 2});
+    SendGetOffset(3, "second");
+    WaitProxyResponse({.Cookie = 3, .Offset = 0});
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    SendGetOffset(4, "first");
+    WaitProxyResponse({.Cookie = 4, .Offset = 7});
+    SendGetOffset(5, "second");
+    WaitProxyResponse({.Cookie = 5, .Offset = 8});
+}
+
+Y_UNIT_TEST_F(ReplicationDataRetriesMirroredOffsetAfterUnrelatedPersist, TPartitionFixture)
+{
+    const TConfigParams initialConfig{.Version = 1, .Consumers = {{.Consumer = "first"}}};
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Config = initialConfig}, initialConfig);
+
+    for (bool includeCommittedConsumer : {false, true}) {
+        const ui64 oldMirroredOffset = includeCommittedConsumer ? 100 : 0;
+        const ui64 mirroredOffset = oldMirroredOffset + 100;
+        SendSetOffset(1, "first", 0, "");
+        WaitCmdWrite({.MetaEndOffset = 0, .MetaMirroredOffset = oldMirroredOffset,
+            .UserInfos = {{0, {.Consumer = "first", .Offset = 0}}}});
+
+        auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+        event->MirroredOffset = mirroredOffset;
+        if (includeCommittedConsumer) {
+            event->OffsetsByConsumers = {{"first", 0}};
+        }
+        Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release(), 0, mirroredOffset));
+        Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::BlobEncoder(*partition).MirroredOffset, oldMirroredOffset);
+
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        WaitProxyResponse({.Cookie = 1});
+        WaitCmdWrite({.MetaEndOffset = 0, .MetaMirroredOffset = mirroredOffset});
+
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::BlobEncoder(*partition).MirroredOffset, mirroredOffset);
+    }
+}
+
+// ReplyError uses !!replyTo as IsInternal (same as TEvRead::IsInternal). Call sites must pass the
+// original ReplyTo override, not ReplyTo(cookie, …): the resolved id is always non-empty and would
+// mark every external error as internal.
+Y_UNIT_TEST_F(ExternalReadErrorIsNotMarkedInternal, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+
+    CreatePartition({
+        .Partition = partition,
+        .Begin = 0,
+        .End = 10,
+        .Config = {.Consumers = {{.Consumer = client, .Offset = 0}}},
+    });
+    // Drain the timestamp-read blob request from CreatePartition.
+    Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+
+    // External read (empty ReplyTo), cookie != 0 → error must go to TabletActorId (Edge)
+    // with IsInternal=false. Passing a resolved ReplyTo() into ReplyError would set IsInternal.
+    SendEvent(MakeTestRead(/*cookie=*/42, /*offset=*/0, /*count=*/0, client).Release());
+    WaitErrorResponse({
+        .Cookie = 42,
+        .ErrorCode = NPersQueue::NErrorCode::BAD_REQUEST,
+        .IsInternal = false,
+    });
+
+    SendEvent(MakeTestRead(/*cookie=*/43, /*offset=*/11, /*count=*/1, client).Release());
+    WaitErrorResponse({
+        .Cookie = 43,
+        .ErrorCode = NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET,
+        .IsInternal = false,
+    });
+}
+
+Y_UNIT_TEST_F(InternalReadErrorIsMarkedInternal, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+
+    CreatePartition({
+        .Partition = partition,
+        .Begin = 0,
+        .End = 10,
+        .Config = {.Consumers = {{.Consumer = client, .Offset = 0}}},
+    });
+    Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+
+    TMaybe<bool> observedIsInternal;
+    auto prevObserver = Ctx->Runtime->SetObserverFunc(
+        [&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->Recipient == ActorId) {
+                if (auto* error = ev->CastAsLocal<TEvPQ::TEvError>()) {
+                    if (error->Cookie == 7) {
+                        observedIsInternal = error->IsInternal;
+                    }
+                }
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+
+    // Compaction-style read: ReplyTo = SelfId ⇒ IsInternal must be true, reply stays on Self.
+    SendEvent(MakeTestRead(/*cookie=*/7, /*offset=*/0, /*count=*/0, client, ActorId).Release());
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return observedIsInternal.Defined();
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)));
+    Ctx->Runtime->SetObserverFunc(prevObserver);
+
+    UNIT_ASSERT(observedIsInternal.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(*observedIsInternal, true);
+
+    auto leakedToTablet =
+        Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvError>(TDuration::MilliSeconds(200));
+    UNIT_ASSERT_C(
+        leakedToTablet == nullptr,
+        "internal read error must be sent to SelfId, not TabletActorId");
+}
+
+// cookie==0 + empty ReplyTo resolves to SelfId (same destination as timestamp reads). IsInternal
+// must still be false: otherwise Handle(TEvError) takes the compaction early-return and leaves
+// ReadingTimestamp stuck.
+Y_UNIT_TEST_F(ExternalCookieZeroReadErrorRestartsTimestampRead, TPartitionFixture)
+{
+    const TPartitionId partition{0};
+    const TString client = "client";
+    const TString session = "session";
+
+    CreatePartition({
+        .Partition = partition,
+        .Begin = 0,
+        .End = 10,
+        .Config = {.Consumers = {{.Consumer = client, .Offset = 0, .Session = session}}},
+    });
+
+    auto blobRequest = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT_C(blobRequest != nullptr, "expected timestamp-read blob request");
+
+    TMaybe<bool> observedIsInternal;
+    auto prevObserver = Ctx->Runtime->SetObserverFunc(
+        [&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->Recipient == ActorId) {
+                if (auto* error = ev->CastAsLocal<TEvPQ::TEvError>()) {
+                    if (error->Cookie == 0 &&
+                        error->ErrorCode == NPersQueue::NErrorCode::BAD_REQUEST)
+                    {
+                        observedIsInternal = error->IsInternal;
+                    }
+                }
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+
+    // External read with cookie 0 (empty ReplyTo): destination is SelfId, but not internal.
+    SendEvent(MakeTestRead(/*cookie=*/0, /*offset=*/0, /*count=*/0, client).Release());
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&]() {
+        return observedIsInternal.Defined();
+    };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)));
+    Ctx->Runtime->SetObserverFunc(prevObserver);
+
+    UNIT_ASSERT(observedIsInternal.Defined());
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        *observedIsInternal,
+        false,
+        "empty ReplyTo must not mark ReplyError as IsInternal even when cookie==0");
+
+    auto restartedBlobRequest =
+        Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT_C(
+        restartedBlobRequest != nullptr,
+        "non-internal cookie==0 TEvError must clear ReadingTimestamp and restart timestamp read");
+}
+
+>>>>>>> e6770d00f3c (fix)
 Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionTxTestHelper)
 {
     const TPartitionId partition{0};

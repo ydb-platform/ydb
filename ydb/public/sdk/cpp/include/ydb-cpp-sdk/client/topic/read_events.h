@@ -6,6 +6,11 @@
 
 #include <util/datetime/base.h>
 
+<<<<<<< HEAD
+=======
+#include <optional>
+#include <span>
+>>>>>>> ca95a87422f ([KIKIMR-27454] Detect lost messages for async replication on startup if all were lost and no per-message checks will be triggered on consumer. (#57837))
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -282,10 +287,22 @@ struct TReadSessionEvent {
     struct TStartPartitionSessionEvent: public TPartitionSessionAccessor,
                                         public TPrintable<TStartPartitionSessionEvent> {
         explicit TStartPartitionSessionEvent(TPartitionSession::TPtr, uint64_t committedOffset, uint64_t endOffset);
+        explicit TStartPartitionSessionEvent(TPartitionSession::TPtr, uint64_t committedOffset, uint64_t readOffset,
+                                            uint64_t endOffset, std::optional<uint64_t> retainedStartOffset);
 
         //! Current committed offset in partition session.
         uint64_t GetCommittedOffset() const {
             return CommittedOffset;
+        }
+
+        //! Read position reported when the partition session starts.
+        uint64_t GetReadOffset() const {
+            return ReadOffset;
+        }
+
+        //! Earliest retained offset, when reported by the server.
+        std::optional<uint64_t> GetRetainedStartOffset() const {
+            return RetainedStartOffset;
         }
 
         //! Offset of first not existing message in partition session.
@@ -300,7 +317,9 @@ struct TReadSessionEvent {
 
     private:
         uint64_t CommittedOffset;
+        uint64_t ReadOffset;
         uint64_t EndOffset;
+        std::optional<uint64_t> RetainedStartOffset;
     };
 
     //! Server command for stopping and destroying partition session.

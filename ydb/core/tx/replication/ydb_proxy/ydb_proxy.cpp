@@ -44,7 +44,16 @@ void TEvYdbProxy::TEndTopicPartitionResult::Out(IOutputStream& out) const {
 void TEvYdbProxy::TStartTopicReadingSessionResult::Out(IOutputStream& out) const {
     out << "{"
         << " ReadSessionId: " << ReadSessionId
+<<<<<<< HEAD
     << " }";
+=======
+        << " CommittedOffset: " << CommittedOffset
+        << " ReadOffset: " << ReadOffset;
+    if (RetainedStartOffset) {
+        out << " RetainedStartOffset: " << *RetainedStartOffset;
+    }
+    out << " }";
+>>>>>>> ca95a87422f ([KIKIMR-27454] Detect lost messages for async replication on startup if all were lost and no per-message checks will be triggered on consumer. (#57837))
 }
 
 template <typename TDerived>

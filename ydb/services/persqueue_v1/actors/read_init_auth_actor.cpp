@@ -167,8 +167,8 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
             return CloseSession("Internal error describing topics", PersQueue::ErrorCode::ERROR, ctx);
         }
 
-        // GetOriginalPath dereferences the converter. A missing path used to abort the process
-        // (YDBBUGS-1107); close this read session instead.
+        // GetOriginalPath dereferences the converter. A missing path used to abort the process;
+        // close this read session instead.
         const TString path = converter->GetOriginalPath();
         if (path.empty()) {
             LOG_C("Describe topics response has an empty topic path",

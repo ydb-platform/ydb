@@ -1898,6 +1898,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
               std::back_inserter(response->BodyKeys));
     std::move(BlobEncoder.DataKeysBody.begin(), BlobEncoder.DataKeysBody.end(),
               std::back_inserter(response->BodyKeys));
+    response->EndWriteTimestamp = EndWriteTimestamp;
     if (!ev->GetSkipSrcIdInfo()) {
         response->SrcIdInfo = std::move(SourceIdStorage.ExtractInMemorySourceIds());
         response->SrcIdInfo.erase("");
@@ -3916,6 +3917,8 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         const auto oldHeadOffset = BlobEncoder.NewHead.Offset;
 
         if (!t.WriteInfo->BodyKeys.empty()) {
+            // Committed messages keep their write time from the supportive partition, which may be older than the main partition's own writes
+            PendingWriteTimestamp = Max(PendingWriteTimestamp, t.WriteInfo->EndWriteTimestamp);
             bool needCompactHead =
                 (Parameters->FirstCommitWriteOperations ? BlobEncoder.Head : BlobEncoder.NewHead).PackedSize != 0;
 

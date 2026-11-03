@@ -322,38 +322,40 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         auto lookup = &lookupJoin->GetTableLookup();
         input->Props.StageId = *lookup->Props.StageId;
         YQL_CLOG(TRACE, CoreDq) << "Assign stages index lookup join";
+    } else if (input->Kind == EOperator::Sequencer) {
+        auto& sequencer = CastOperator<TOpSequencer>(*input);
+        auto& exprCtx = ctx.ExprCtx;
+        const auto pos = sequencer.Pos;
+        const auto inputStageId = *sequencer.GetInput()->Props.StageId;
+        const auto outputIndex = OutputIndex(*sequencer.GetInput(), props.StageGraph);
+        const auto newStageId = props.StageGraph.AddStage();
+        sequencer.Props.StageId = newStageId;
+
+        TVector<TExprNode::TPtr> columns;
+        TVector<TExprNode::TPtr> generatedColumns;
+        TVector<const TItemExprType*> inputItems;
+        for (const auto& [id, name] : sequencer.GetInputColumns().Items()) {
+            columns.push_back(exprCtx.NewAtom(pos, name));
+            inputItems.push_back(exprCtx.MakeType<TItemExprType>(name, sequencer.GetInput()->GetIUType(id, exprCtx)));
+        }
+        for (const auto& [id, name] : sequencer.GetGeneratedColumns().Items()) {
+            columns.push_back(exprCtx.NewAtom(pos, name));
+            generatedColumns.push_back(exprCtx.NewAtom(pos, name));
+        }
+        props.StageGraph.Connect(inputStageId, newStageId,
+            MakeIntrusive<TSequencerConnection>(outputIndex, sequencer.Table,
+                exprCtx.NewList(pos, std::move(columns)), exprCtx.NewList(pos, std::move(generatedColumns)),
+                ExpandType(pos, *exprCtx.MakeType<TListExprType>(exprCtx.MakeType<TStructExprType>(inputItems)), exprCtx)));
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages sequencer";
     } else if (input->Kind == EOperator::TableEffect) {
         auto tableEffect = CastOperator<TOpTableEffect>(input);
         // OLAP sinks use the direct-write actor, which requires priority zero.
         const auto priority = tableEffect->Props.Metadata->StorageType == EStorageType::ColumnStorage ? 0 : props.EffectPriority;
         const auto newStageId = props.StageGraph.AddSinkStage(tableEffect->BuildSettings(ctx.ExprCtx, priority));
-        const auto inputStageId = *(tableEffect->GetInput()->Props.StageId);
+        const auto inputStageId = *tableEffect->GetInput()->Props.StageId;
         const auto outputIndex = OutputIndex(*tableEffect->GetInput(), props.StageGraph);
-
         input->Props.StageId = newStageId;
-        if (const auto& preparation = tableEffect->Options.Preparation) {
-            auto& exprCtx = ctx.ExprCtx;
-            const auto pos = tableEffect->Pos;
-            TVector<TExprNode::TPtr> columns;
-            TVector<TExprNode::TPtr> generatedColumns;
-            TVector<const TItemExprType*> inputItems;
-            for (const auto& [id, name] : preparation->InputColumns.Items()) {
-                columns.push_back(exprCtx.NewAtom(pos, name));
-                inputItems.push_back(exprCtx.MakeType<TItemExprType>(name, tableEffect->GetInput()->GetIUType(id, exprCtx)));
-            }
-            for (const auto& [id, name] : preparation->GeneratedColumns.Items()) {
-                columns.push_back(exprCtx.NewAtom(pos, name));
-                generatedColumns.push_back(exprCtx.NewAtom(pos, name));
-            }
-            // Sequence allocation is an input connection of the write stage,
-            // not an independently optimizable relational operation.
-            props.StageGraph.Connect(inputStageId, newStageId,
-                MakeIntrusive<TSequencerConnection>(outputIndex, tableEffect->Table,
-                    exprCtx.NewList(pos, std::move(columns)), exprCtx.NewList(pos, std::move(generatedColumns)),
-                    ExpandType(pos, *exprCtx.MakeType<TListExprType>(exprCtx.MakeType<TStructExprType>(inputItems)), exprCtx)));
-        } else {
-            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
-        }
+        props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
         YQL_CLOG(TRACE, CoreDq) << "Assign stages table effects";
     }
     else {

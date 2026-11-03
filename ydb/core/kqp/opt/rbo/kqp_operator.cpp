@@ -943,29 +943,44 @@ const TIntrusivePtr<IOperator>& TOpCBOTree::GetChild(size_t index) const {
     return std::as_const(*parent).GetChild(slot);
 }
 
+TOpSequencer::TOpSequencer(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
+    TOrderedIUs<TString> inputColumns, TOrderedIUs<TString> generatedColumns)
+    : IUnaryOperator(EOperator::Sequencer, pos, std::move(input))
+    , Table(std::move(table))
+    , InputColumns_(std::move(inputColumns))
+    , GeneratedColumns_(std::move(generatedColumns))
+{
+    Y_ENSURE(!InputColumns_.Unordered().HasAny(GeneratedColumns_.Unordered()), "Sequence columns must have fresh IUs");
+}
+
+void TOpSequencer::ComputeOutputIUs() {
+    auto columns = InputColumns_.Unordered();
+    columns.UnionWith(GeneratedColumns_.Unordered());
+    Props.OutputIUs = std::move(columns);
+}
+
+TUnorderedIUs TOpSequencer::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    return InputColumns_.Unordered();
+}
+
 /**
 * Table Effect operator methods: these are inserts/updates/deletes
 */
 TOpTableEffect::TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
-    EEffectType type, TEffectOptions options, TUnorderedIUs pgConstraintColumns)
+    EEffectType type, TEffectOptions options)
     : IUnaryOperator(EOperator::TableEffect, pos, input)
     , Table(std::move(table))
     , EffectType(type)
     , Options(std::move(options))
-    , PgConstraintColumns_(std::move(pgConstraintColumns))
 {
-    Y_ENSURE(PgConstraintColumns_.IsSubsetOf(Options.Columns.Unordered()));
     Y_ENSURE(Options.DefaultColumns.IsSubsetOf(Options.Columns.Unordered()));
 }
 
 TUnorderedIUs TOpTableEffect::GetUsedIUs(TPlanProps& props) {
     Y_UNUSED(props);
-    if (Options.Preparation) {
-        return Options.Preparation->InputColumns.Unordered();
-    }
     auto used = Options.Columns.Unordered();
     used.UnionWith(Options.DefaultColumns);
-    used.UnionWith(PgConstraintColumns_);
     return used;
 }
 

@@ -149,9 +149,13 @@ Y_UNIT_TEST_QUAD(SequencedWritePreparation, PhysicalStagePeephole, CompileTimeDe
 
     // Both the sequence and literal default must be available to g. The
     // returned values must be the same values that reach the write sink.
-    auto inserted = session.ExecuteDataQuery(R"(
+    const TString insert = R"(
         INSERT INTO PreparedRows (tag) VALUES ("a"), ("b") RETURNING id, payload, g;
-    )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+    )";
+    auto explained = session.ExplainDataQuery(insert).GetValueSync();
+    UNIT_ASSERT_C(explained.IsSuccess(), explained.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS(explained.GetPlan(), "\"Sequencer\"");
+    auto inserted = session.ExecuteDataQuery(insert, TTxControl::BeginTx().CommitTx()).GetValueSync();
     UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
     CompareYson("[[1;[7];[17]];[2;[7];[27]]]", FormatResultSetYson(inserted.GetResultSet(0)));
 

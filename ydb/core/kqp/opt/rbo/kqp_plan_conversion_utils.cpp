@@ -361,6 +361,32 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
         Projections[key] = std::move(projection);
         OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(bindings);
         result = std::move(read);
+    } else if (TKqlSequencer::Match(node.Get())) {
+        const auto sequencer = TKqlSequencer(node);
+        auto input = ExprNodeToOperator(sequencer.Input().Ptr());
+        const auto inputBindings = GetBindings(sequencer.Input().Ptr());
+        auto bindings = std::make_shared<TExpression::TBindings>();
+        TOrderedIUs<TString> inputColumns;
+        TOrderedIUs<TString> generatedColumns;
+        THashSet<TString> generatedNames;
+        for (const auto column : sequencer.DefaultConstraintColumns()) {
+            Y_ENSURE(generatedNames.insert(column.StringValue()).second, "Duplicate sequence column");
+        }
+        TOrderedIUs<> projection;
+        for (const auto column : sequencer.Columns()) {
+            const auto name = column.StringValue();
+            const auto generated = generatedNames.contains(name);
+            Y_ENSURE(!generated || !inputBindings->contains(name), "Sequence column already supplied: " << name);
+            const auto id = generated ? PlanProps.InfoUnitRegistry.Add(TInfoUnit("", name)) : ResolveBinding(*inputBindings, name);
+            (generated ? generatedColumns : inputColumns).Append(id, name);
+            Y_ENSURE(bindings->emplace(name, id).second, "Duplicate sequencer output " << name);
+            projection.Append(id);
+        }
+        Y_ENSURE(generatedColumns.Items().size() == generatedNames.size(), "Missing sequencer output column");
+        Projections[key] = std::move(projection);
+        OutputBindings[key] = std::move(bindings);
+        result = MakeIntrusive<TOpSequencer>(std::move(input), node->Pos(), sequencer.Table().Ptr(),
+            std::move(inputColumns), std::move(generatedColumns));
     } else if (TKqlStreamLookupTable::Match(node.Get())) {
         const auto lookup = TKqlStreamLookupTable(node);
         Y_ENSURE(TKqpStreamLookupSettings::Parse(lookup.Settings()).Strategy == EStreamLookupStrategyType::LookupRows);
@@ -958,47 +984,12 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpEmptySource(TExprNode::TPtr
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr node) {
     const auto opTableEffect = TKqpOpTableEffect(node);
-    auto preparationNode = opTableEffect.Input().Ptr();
-    while (preparationNode->IsCallable({"Map", "OrderedMap", "Filter", "OrderedFilter", "ExtractMembers"})) {
-        preparationNode = preparationNode->HeadPtr();
-    }
-    const auto sequencer = TMaybeNode<TKqlSequencer>(preparationNode);
-    const auto relationalInput = sequencer ? sequencer.Cast().Input().Ptr() : opTableEffect.Input().Ptr();
-    auto input = ExprNodeToOperator(relationalInput);
-    
+    auto input = ExprNodeToOperator(opTableEffect.Input().Ptr());
+    const auto bindings = GetBindings(opTableEffect.Input().Ptr());
     PlanProps.WithEffects = true;
 
     EEffectType type = EEffectType::InsertRows;
     TEffectOptions options;
-    auto bindings = GetBindings(relationalInput);
-    if (sequencer) {
-        TEffectPreparation preparation;
-        const auto* inputRow = relationalInput->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        for (const auto* field : inputRow->GetItems()) {
-            preparation.InputColumns.Append(ResolveBinding(*bindings, field->GetName()), TString(field->GetName()));
-        }
-        for (const auto column : sequencer.Cast().DefaultConstraintColumns()) {
-            const auto name = column.StringValue();
-            Y_ENSURE(!bindings->contains(name), "Sequence column already supplied: " << name);
-            preparation.GeneratedColumns.Append(PlanProps.InfoUnitRegistry.Add(TInfoUnit("", name)), name);
-        }
-        // Close the dependent expression suffix over the sequenced stream.
-        // It remains inside the effect, so relational rewrites cannot move it
-        // ahead of sequence allocation or duplicate evaluation.
-        auto rows = Ctx.NewArgument(node->Pos(), "sequenced_rows");
-        preparation.Program = Ctx.NewLambda(node->Pos(), Ctx.NewArguments(node->Pos(), {rows}),
-            Ctx.ReplaceNode(opTableEffect.Input().Ptr(), *preparationNode, rows));
-        options.Preparation = std::move(preparation);
-
-        auto preparedBindings = std::make_shared<TExpression::TBindings>();
-        const auto* row = opTableEffect.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        for (const auto* field : row->GetItems()) {
-            const TString name(field->GetName());
-            preparedBindings->emplace(name, PlanProps.InfoUnitRegistry.Add(TInfoUnit("", name)));
-        }
-        bindings = std::move(preparedBindings);
-    }
-
     auto effectType = opTableEffect.EffectType().StringValue();
 
     auto processSettings = [](const TCoNameValueTupleList& settingsList) {
@@ -1055,14 +1046,6 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
         Y_ENSURE(false, "Unexpected table effects operation");
     }
 
-    // Only PG types need these runtime NOT NULL checks. Resolve the frontend's
-    // names once; subsequent rewrites and copies track the input attributes by IU.
-    TUnorderedIUs pgConstraintColumns;
-    if (auto columns = opTableEffect.PgConstraintColumns().Maybe<TCoAtomList>()) {
-        for (const auto column : columns.Cast()) {
-            pgConstraintColumns.Add(ResolveBinding(*bindings, column.StringValue()));
-        }
-    }
     const auto* schema = opTableEffect.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     for (const auto* field : schema->GetItems()) {
         options.Columns.Append(ResolveBinding(*bindings, field->GetName()), TString(field->GetName()));
@@ -1086,8 +1069,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
         }
     }
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(output);
-    return MakeIntrusive<TOpTableEffect>(std::move(input), node->Pos(), opTableEffect.Table().Ptr(), type, std::move(options),
-        std::move(pgConstraintColumns));
+    return MakeIntrusive<TOpTableEffect>(std::move(input), node->Pos(), opTableEffect.Table().Ptr(), type, std::move(options));
 }
 
 } // namespace NKikimr::Nkqp

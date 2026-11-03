@@ -379,15 +379,15 @@ void TOpCBOTree::PropagateLiveness(ILivenessContext& ctx) {
     }
 }
 
+void TOpSequencer::PropagateLiveness(ILivenessContext& ctx) {
+    // Keep the connection's full input schema. Allocation is observable even
+    // when a generated column is not demanded by a later projection.
+    ctx.AddLiveInput(this, 0, GetInputColumns().Unordered());
+}
+
 void TOpTableEffect::PropagateLiveness(ILivenessContext& ctx) {
-    if (Options.Preparation) {
-        ctx.AddLiveInput(this, 0, Options.Preparation->InputColumns.Unordered());
-        return;
-    }
     ctx.AddLiveInput(this, 0, GetColumns().Unordered());
     ctx.AddLiveInput(this, 0, Options.DefaultColumns);
-    // PG-only runtime NOT NULL checks consume these attributes too.
-    ctx.AddLiveInput(this, 0, GetPgConstraintColumns());
 }
 
 void ComputePlanLiveness(TOpRoot& root, ELivenessMode mode, bool pruneKeyColumns, EPruningScope scope) {

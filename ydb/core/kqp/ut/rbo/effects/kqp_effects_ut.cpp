@@ -9,10 +9,11 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
-    Y_UNIT_TEST_TWIN(PgNotNullWriteConstraints, PhysicalStagePeephole) {
+    Y_UNIT_TEST_TWIN(RejectPgNotNullWriteConstraints, PhysicalStagePeephole) {
         auto config = NewRboAppConfig();
         config.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(PhysicalStagePeephole);
-        TEffectsKikimrRunner kikimr(TKikimrSettings(config)
+        config.MutableTableServiceConfig()->SetEnableNewRBO(false);
+        TKikimrRunner kikimr(TKikimrSettings(config)
             .SetWithSampleTables(false)
             .SetEnableNotNullDataColumns(true));
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -27,6 +28,16 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
         )").ExtractValueSync();
         UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
 
+        // Prepare the PG NOT NULL fixture with the old optimizer, then verify
+        // that strict New RBO rejects these constraints before any write runs.
+        auto setup = session.ExecuteDataQuery(R"(
+            UPSERT INTO Checked (Key, A, B) VALUES (1u, PgInt2(10), PgInt2(20));
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(setup.IsSuccess(), setup.GetIssues().ToString());
+        EnableNewRbo(kikimr);
+        UNIT_ASSERT(session.Close().GetValueSync().IsSuccess());
+        session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
         for (const TString& write : {
             TString("INSERT INTO Checked (Key, A, B) VALUES ($key, $a, $b);"),
             TString("INSERT OR REVERT INTO Checked (Key, A, B) VALUES ($key, $a, $b);"),
@@ -34,15 +45,9 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
             TString("REPLACE INTO Checked (Key, A, B) VALUES ($key, $a, $b);"),
             TString("UPDATE Checked ON (Key, A, B) VALUES ($key, $a, $b);"),
             TString("UPDATE Checked SET A = $a, B = $b WHERE Key = $key;")}) {
-            auto setup = session.ExecuteDataQuery(R"(
-                DELETE FROM Checked;
-                DELETE FROM Audit;
-                UPSERT INTO Checked (Key, A, B) VALUES (1u, PgInt2(10), PgInt2(20));
-            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(setup.IsSuccess(), setup.GetIssues().ToString());
-
-            // Parameters keep NULL detection at runtime. Check each constrained
-            // column independently so a broken Ensure chain cannot pass the test.
+            // Keep values parameterized so the constraints remain in the plan.
+            // Reject both NULL and non-NULL values: the feature is unsupported,
+            // regardless of whether a particular row would satisfy the check.
             const TString query = TStringBuilder() << R"(
                 DECLARE $key AS Uint64;
                 DECLARE $a AS PgInt2;
@@ -59,18 +64,15 @@ Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
                         nullColumn == "B" ? "" : "40", TPgType("pgint2"))).Build()
                     .Build();
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
-                if (nullColumn.empty()) {
-                    UNIT_ASSERT_C(result.IsSuccess(), TStringBuilder() << write << ": " << result.GetIssues().ToString());
-                    continue;
-                }
                 UNIT_ASSERT_C(!result.IsSuccess(), write);
-                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE),
-                    TStringBuilder() << write << ": " << result.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-                    TStringBuilder() << "Tried to insert NULL value into NOT NULL column: " << nullColumn);
+                    "PG write constraints are not supported in New RBO");
 
-                // A failed constraint must roll back the other effect as well
-                // as leave existing destination rows untouched.
+                // A fatal compilation error invalidates the session. Check the
+                // stored state and submit the next case through a fresh one.
+                session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+                // Rejection must prevent the other effect from running too,
+                // and leave existing destination rows untouched.
                 auto state = session.ExecuteDataQuery(R"(
                     SELECT Key, A, B FROM Checked ORDER BY Key;
                     SELECT COUNT(*) FROM Audit;

@@ -103,10 +103,12 @@ bool TExpandInsertRevertRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
         return false;
     }
     auto& effect = CastOperator<TOpTableEffect>(*input);
-    // These relational prechecks consume already prepared keys. Sequenced
-    // defaults are internal to the effect and cannot be moved below this gate.
-    Y_ENSURE(!effect.Options.Preparation,
-        "INSERT OR REVERT with sequenced defaults requires conflict checks after write preparation");
+    // Keep sequenced INSERT OR REVERT unsupported until its conflict branches
+    // can share the allocation stage in every supported spilling configuration.
+    for (const auto& item : IterateSubtree(effect.GetInput().Get())) {
+        Y_ENSURE(item.Current->Kind != EOperator::Sequencer,
+            "INSERT OR REVERT with sequenced defaults is not supported in New RBO");
+    }
     const auto pos = effect.Pos;
     const auto& table = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, NNodes::TKqpTable(effect.Table).Path());
     THashMap<TString, TInfoUnitId> columns;
@@ -155,9 +157,9 @@ bool TExpandInsertRevertRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
     // rule from expanding the same effect again.
     auto options = effect.Options;
     options.OnConflict = "abort";
-    // The gate preserves the input IUs, including the PG-only NOT NULL checks.
+    // The gate preserves the input IUs.
     input = MakeIntrusive<TOpTableEffect>(std::move(checked), pos, effect.Table, effect.EffectType,
-        std::move(options), effect.GetPgConstraintColumns());
+        std::move(options));
     return true;
 }
 

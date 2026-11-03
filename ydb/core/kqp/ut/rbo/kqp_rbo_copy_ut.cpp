@@ -387,6 +387,44 @@ Y_UNIT_TEST_SUITE(KqpRboCopy) {
         NTests::AssertIdInvariants(*copy, f.Props);
     }
 
+    Y_UNIT_TEST(SequencerIsAnAllocationBarrier) {
+        TIdTestContext f;
+        const auto source = f.Id("input"), generated = f.Id("id"), result = f.Id("dependent");
+        auto read = f.Read({source});
+        auto sequencer = MakeIntrusive<TOpSequencer>(read, f.Pos, read->TableCallable,
+            TOrderedIUs<TString>{{source, "value"}}, TOrderedIUs<TString>{{generated, "id"}});
+        TMapIUs expressions;
+        expressions.Add(result, MakeBinaryPredicate("+", f.Column(generated), f.Constant()));
+        auto map = MakeIntrusive<TOpMap>(sequencer, f.Pos, std::move(expressions));
+        map->NeedToPush = true;
+        auto root = f.Root(map, {{result, "dependent"}});
+        UNIT_ASSERT(sequencer->GetOutputIUs() == (TUnorderedIUs{source, generated}));
+        UNIT_ASSERT(sequencer->GetUsedIUs(root->PlanProps) == TUnorderedIUs{source});
+        NTests::AssertIdInvariants(*root, root->PlanProps);
+
+        UNIT_ASSERT(!CanDuplicateOperator(*sequencer));
+        UNIT_ASSERT(!CanDuplicateSubtree(*map, root->PlanProps.Subplans));
+        TSubstitutions copyRenames;
+        UNIT_ASSERT(!map->Copy(root->PlanProps.InfoUnitRegistry, copyRenames));
+        TPushMapElementsThroughInputRule push;
+        UNIT_ASSERT(!push.QuickMatch(map));
+
+        // Even when only the generated expression is requested, pruning must
+        // retain the sequencer's input row schema and the allocation itself.
+        TGlobalPruningStage("prune").RunStage(*root, f.RboCtx);
+        UNIT_ASSERT(map->GetInput() == sequencer);
+        UNIT_ASSERT(read->GetOutputIUs().Contains(source));
+        UNIT_ASSERT(sequencer->GetGeneratedColumns().Unordered().Contains(generated));
+
+        const auto replacement = root->PlanProps.InfoUnitRegistry.AddCopy(source);
+        TSubstitutions renames;
+        renames.Add(source, replacement);
+        sequencer->RenameUsedIUs(renames);
+        UNIT_ASSERT_VALUES_EQUAL(sequencer->GetInputColumns().Items()[0].first, replacement);
+        UNIT_ASSERT_VALUES_EQUAL(sequencer->GetInputColumns().Items()[0].second, "value");
+        UNIT_ASSERT_VALUES_EQUAL(sequencer->GetGeneratedColumns().Items()[0].first, generated);
+    }
+
     Y_UNIT_TEST(CopiesEffectBindingsWithoutChangingStorageNames) {
         TIdTestContext f;
         const auto source = f.Id("input"), result = f.Id("returned");
@@ -398,7 +436,7 @@ Y_UNIT_TEST_SUITE(KqpRboCopy) {
         options.OnConflict = "revert";
         options.IsBatch = true;
         auto effect = MakeIntrusive<TOpTableEffect>(read, f.Pos, read->TableCallable, EEffectType::UpsertRows,
-            options, TUnorderedIUs{source});
+            options);
 
         TSubstitutions renames;
         auto copy = effect->Copy(f.Props.InfoUnitRegistry, renames);
@@ -413,10 +451,6 @@ Y_UNIT_TEST_SUITE(KqpRboCopy) {
         UNIT_ASSERT(copiedEffect.Options.IsBatch == options.IsBatch);
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetColumns().Items()[0].first, renames.At(source));
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetColumns().Items()[0].second, "Key");
-        // PG NOT NULL checks must follow copied input IUs while diagnostics keep
-        // the destination name from the effect's storage-column mapping.
-        UNIT_ASSERT(copiedEffect.GetPgConstraintColumns() == TUnorderedIUs{renames.At(source)});
-        UNIT_ASSERT(effect->GetPgConstraintColumns() == TUnorderedIUs{source});
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items()[0].first, renames.At(result));
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items()[1].first, renames.At(result));

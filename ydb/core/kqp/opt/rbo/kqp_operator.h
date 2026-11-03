@@ -25,7 +25,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, DependentJoin, Aggregate, GroupingSets, Window, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, TableEffect, Root, Replicate };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, DependentJoin, Aggregate, GroupingSets, Window, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, TableEffect, Root, Replicate, Sequencer };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -1401,28 +1401,40 @@ enum class EEffectType : ui32 {
     DeleteRowsIndex
 };
 
-// Write preparation belongs to the effect, not to relational algebra. The
-// input bindings are uses; generated values and the final write-row columns
-// are internal definitions. Sequence allocation and dependent row expressions
-// must execute once, in this order, before constraints and the write itself.
-struct TEffectPreparation {
-    TOrderedIUs<TString> InputColumns;
-    TOrderedIUs<TString> GeneratedColumns;
-    // Storage-named rows -> storage-named rows after sequence allocation.
-    // This closed frontend lambda may contain dependent default/generated
-    // column expressions. It is lowered only inside the effect's stage.
-    TExprNode::TPtr Program;
+// Allocates sequence/default values once per input row. Generated columns are
+// owned definitions; input columns are forwarded uses with fixed storage labels.
+// This is a rewrite barrier: it must not be copied, duplicated, or pushed across
+// operators that change which rows consume sequence values. CopyImpl therefore
+// keeps IOperator's non-copyable default; replication must share its output.
+class TOpSequencer: public IUnaryOperator {
+public:
+    TOpSequencer(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
+        TOrderedIUs<TString> inputColumns, TOrderedIUs<TString> generatedColumns);
+    TString GetExplainName() const override { return "Sequencer"; }
+    TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
+    TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
+    void RenameUsedIUs(const TSubstitutions& substitutions) override;
+    void PropagateLiveness(ILivenessContext& ctx) override;
+    const TOrderedIUs<TString>& GetInputColumns() const Y_LIFETIME_BOUND { return InputColumns_; }
+    const TOrderedIUs<TString>& GetGeneratedColumns() const Y_LIFETIME_BOUND { return GeneratedColumns_; }
+
+    TExprNode::TPtr Table;
+
+protected:
+    void ComputeOutputIUs() override;
+
+private:
+    TOrderedIUs<TString> InputColumns_;
+    TOrderedIUs<TString> GeneratedColumns_;
 };
 
 struct TEffectOptions {
-    // Write-row columns are input uses unless Preparation defines them inside
-    // the effect. Returning columns are output definitions. Destination labels
-    // stay fixed when input IUs are renamed.
+    // Write-row columns are input uses; returning columns are output definitions.
+    // Destination labels stay fixed when input IUs are renamed.
     TOrderedIUs<TString> Columns;
     TOrderedIUs<TString> ReturningColumns;
     // Input attributes whose supplied defaults apply only when inserting a row.
     TUnorderedIUs DefaultColumns;
-    std::optional<TEffectPreparation> Preparation;
     std::optional<TString> OnConflict;
     std::optional<bool> IsBatch;
     std::optional<TVector<TExprNode::TPtr>> Settings;
@@ -1431,13 +1443,12 @@ struct TEffectOptions {
 class TOpTableEffect: public IUnaryOperator {
 public:
     TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
-        EEffectType type, TEffectOptions options, TUnorderedIUs pgConstraintColumns = {});
+        EEffectType type, TEffectOptions options);
     TString GetExplainName() const override;
     TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
     const TUnorderedIUs& GetOutputIUs() override { return Options.ReturningColumns.Unordered(); }
     const TOrderedIUs<TString>& GetColumns() const Y_LIFETIME_BOUND { return Options.Columns; }
     const TOrderedIUs<TString>& GetReturningColumns() const Y_LIFETIME_BOUND { return Options.ReturningColumns; }
-    const TUnorderedIUs& GetPgConstraintColumns() const Y_LIFETIME_BOUND { return PgConstraintColumns_; }
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     void PropagateLiveness(ILivenessContext& ctx) override;
     TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
@@ -1450,11 +1461,6 @@ public:
 
 protected:
     TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
-
-private:
-    // Input attributes requiring runtime NOT NULL checks for PG types only.
-    // Native YQL types encode nullability in their type annotations instead.
-    TUnorderedIUs PgConstraintColumns_;
 };
 
 // End-of-traversal sentinel for TOpIterator

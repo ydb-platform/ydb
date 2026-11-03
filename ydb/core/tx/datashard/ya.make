@@ -524,6 +524,7 @@ END()
 
 RECURSE_FOR_TESTS(
     build_index/ut
+    snapshot_retention
     ut_bloom_filter
     ut_borrowed_compaction
     ut_change_collector

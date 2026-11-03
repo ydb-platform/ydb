@@ -8,6 +8,7 @@ namespace NKikimr::NOlap {
 
 namespace {
 
+// rangeStart is always a pk prefix: KQP sends NKikimrTx::TKeyRange, whose From is bare cell values without column names, the i-th is the i-th pk column
 bool StartsAtOrAbove(const TPredicateContainer& rangeStart, const NArrow::NMerger::TSortableBatchPosition& loadedFrom) {
     if (rangeStart.IsAll()) {
         return false;

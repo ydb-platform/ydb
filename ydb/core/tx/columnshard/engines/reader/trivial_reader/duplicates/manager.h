@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/core/formats/arrow/reader/stats/stats.h>
-
 #include "borders_flow_controller.h"
 #include "common.h"
 #include "events.h"
@@ -9,6 +7,7 @@
 #include "hang_tracker.h"
 #include "private_events.h"
 
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>

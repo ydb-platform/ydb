@@ -1,5 +1,4 @@
 #include "column_engine_logs.h"
-#include <ydb/core/formats/arrow/reader/stats/stats.h>
 
 #include "changes/actualization/construction/context.h"
 #include "changes/cleanup_portions.h"
@@ -10,6 +9,7 @@
 #include "loading/stages.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
@@ -803,8 +803,8 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
     AFL_VERIFY(dataLocksManager);
 
     const auto parent = NScanStats::Current();
-    auto operation = parent ? parent->GetCollector()->Start(NScanStats::TStep::SelectPortions,
-        "SELECT_PORTIONS", "Select portions", parent) : nullptr;
+    auto operation =
+        parent ? parent->GetCollector()->Start(NScanStats::TStep::SelectPortions, "SELECT_PORTIONS", "Select portions", parent) : nullptr;
     auto result = [&]() -> std::vector<TSelectedPortionInfo> {
         NScanStats::TScope scope(operation);
         auto granuleMeta = GranulesStorage->GetGranuleOptional(pathId);

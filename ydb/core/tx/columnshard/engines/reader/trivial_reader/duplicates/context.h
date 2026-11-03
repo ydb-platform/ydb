@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/formats/arrow/reader/stats/stats.h>
-
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>

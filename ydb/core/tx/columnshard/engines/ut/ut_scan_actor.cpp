@@ -84,7 +84,18 @@ Y_UNIT_TEST_SUITE(TColumnShardScanActorTests) {
             const auto& stats = *result->Get()->ColumnShardStats;
             UNIT_ASSERT_STRINGS_EQUAL(stats.GetStatsScanId(), scan.ToString());
             UNIT_ASSERT(stats.GetFinished());
-            UNIT_ASSERT_VALUES_EQUAL(stats.StepsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.GetPendingOperations(), 0);
+            bool readerInit = false;
+            bool ack = false;
+            bool send = false;
+            bool finish = false;
+            for (const auto& step : stats.GetSteps()) {
+                readerInit |= step.GetStepKind() == NScanStats::TStep::ReaderInit;
+                ack |= step.GetStepKind() == NScanStats::TStep::Ack;
+                send |= step.GetStepKind() == NScanStats::TStep::Send;
+                finish |= step.GetStepKind() == NScanStats::TStep::Finish;
+            }
+            UNIT_ASSERT(readerInit && ack && send && finish);
         }
     }
 

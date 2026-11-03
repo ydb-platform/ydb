@@ -1,9 +1,9 @@
 #include "merge.h"
-
-#include <util/generic/scope.h>
 #include "private_events.h"
 
 #include <ydb/core/formats/arrow/reader/merger.h>
+
+#include <util/generic/scope.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
@@ -34,8 +34,8 @@ void TMergeBorders::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     if (const auto& acquisition = Event->Get()->Context.GetGlobalContext().GetStatsJob()) {
         acquisition->Finish();
     }
-    auto operation = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Merge,
-        "DUPLICATE_MERGE", "Resolve visible PK versions", {}) : nullptr;
+    auto operation =
+        runtimeStats ? runtimeStats->Start(NScanStats::TStep::Merge, "DUPLICATE_MERGE", "Resolve visible PK versions", {}) : nullptr;
     if (operation) {
         operation->Update([](auto& record) {
             record.SetMetaStep("PKFilter");

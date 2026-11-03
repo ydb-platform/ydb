@@ -1,9 +1,9 @@
 #include "executor.h"
-
-#include <util/generic/scope.h>
 #include "private_events.h"
 
 #include <ydb/core/formats/arrow/reader/merger.h>
+
+#include <util/generic/scope.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
@@ -72,10 +72,15 @@ private:
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         THashSet<TPortionAddress> portionAddresses;
         const auto runtimeStats = Request.GetGlobalContext().GetRuntimeStats();
-        auto operation = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader,
-            "DUPLICATE_COLUMN_CACHE", "Request duplicate column inputs", Request.GetGlobalContext().GetStatsJob()) : nullptr;
+        auto operation = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader, "DUPLICATE_COLUMN_CACHE",
+                                            "Request duplicate column inputs", Request.GetGlobalContext().GetStatsJob())
+                                      : nullptr;
         NScanStats::TScope statsScope(operation, runtimeStats);
-        Y_DEFER { if (operation) { operation->Finish(); } };
+        Y_DEFER {
+            if (operation) {
+                operation->Finish();
+            }
+        };
         for (const ui64 portionId : Request.GetBatch().GetPortionIds()) {
             AFL_VERIFY(portionAddresses.emplace(Request.GetGlobalContext().GetPortion(portionId)->GetAddress()).second);
         }
@@ -106,10 +111,15 @@ private:
 private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
         const auto runtimeStats = Request.GetGlobalContext().GetRuntimeStats();
-        auto operation = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader,
-            "DUPLICATE_ACCESSORS_READY", "Process duplicate accessors", Request.GetGlobalContext().GetStatsJob()) : nullptr;
+        auto operation = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader, "DUPLICATE_ACCESSORS_READY",
+                                            "Process duplicate accessors", Request.GetGlobalContext().GetStatsJob())
+                                      : nullptr;
         NScanStats::TScope statsScope(operation, runtimeStats);
-        Y_DEFER { if (operation) { operation->Finish(); } };
+        Y_DEFER {
+            if (operation) {
+                operation->Finish();
+            }
+        };
         if (result.HasErrors()) {
             if (const auto& acquisition = Request.GetGlobalContext().GetStatsJob()) {
                 acquisition->Finish(NScanStats::TStep::failed);
@@ -181,10 +191,15 @@ private:
         }
         auto dataAccessorsManager = Request.GetGlobalContext().GetDataAccessorsManager();
         const auto runtimeStats = Request.GetGlobalContext().GetRuntimeStats();
-        auto operation = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader,
-            "DUPLICATE_ACCESSORS", "Request duplicate accessors", Request.GetGlobalContext().GetStatsJob()) : nullptr;
+        auto operation = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader, "DUPLICATE_ACCESSORS", "Request duplicate accessors",
+                                            Request.GetGlobalContext().GetStatsJob())
+                                      : nullptr;
         NScanStats::TScope statsScope(operation, runtimeStats);
-        Y_DEFER { if (operation) { operation->Finish(); } };
+        Y_DEFER {
+            if (operation) {
+                operation->Finish();
+            }
+        };
         request->RegisterSubscriber(std::make_shared<TColumnDataAccessorFetching>(std::move(Request), guard));
         dataAccessorsManager->AskData(request);
         return true;
@@ -207,8 +222,8 @@ TBuildFilterTaskExecutor::TBuildFilterTaskExecutor(TBordersIterator&& bordersIte
 
 bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
     const auto runtimeStats = context.GetRuntimeStats();
-    auto scheduling = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader,
-        "DUPLICATE_PLAN", "Plan duplicate input batch", {}) : nullptr;
+    auto scheduling =
+        runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader, "DUPLICATE_PLAN", "Plan duplicate input batch", {}) : nullptr;
     if (scheduling) {
         scheduling->Update([](auto& record) {
             record.SetMetaStep("PKFilter");
@@ -216,15 +231,19 @@ bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
         });
     }
     NScanStats::TScope schedulingScope(scheduling, runtimeStats);
-    Y_DEFER { if (scheduling) { scheduling->Finish(); } };
+    Y_DEFER {
+        if (scheduling) {
+            scheduling->Finish();
+        }
+    };
     if (BordersIterator.IsDone()) {
         return false;
     }
 
     auto bordersBatch = BordersIterator.Next();
     const ui64 mem = TColumnDataAccessorFetching::GetRequiredMemory(bordersBatch.GetPortionIds(), context);
-    auto acquisition = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader,
-        "DUPLICATE_INPUTS", "Acquire duplicate merge inputs", {}) : nullptr;
+    auto acquisition =
+        runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader, "DUPLICATE_INPUTS", "Acquire duplicate merge inputs", {}) : nullptr;
     if (acquisition) {
         acquisition->Update([](auto& record) {
             record.SetMetaStep("PKFilter");
@@ -236,7 +255,11 @@ bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
     if (acquisition) {
         acquisitionScope.emplace(acquisition, runtimeStats);
     }
-    Y_DEFER { if (acquisition) { acquisition->Suspend(); } };
+    Y_DEFER {
+        if (acquisition) {
+            acquisition->Suspend();
+        }
+    };
     const ui64 processId = context.GetRequestGuard()->GetMemoryProcessId();
     const ui64 scopeId = context.GetRequestGuard()->GetMemoryScopeId();
     const ui64 groupId = context.GetRequestGuard()->GetMemoryGroupId();

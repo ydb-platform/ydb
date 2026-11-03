@@ -292,7 +292,7 @@ private:
         YDB_LOG_DEBUG("",
             {"ask", blobRange});
 
-        const TWaiter waiter{sender, readItem.Stats};
+        const TWaiter waiter{ sender, readItem.Stats };
         if (SendCached(waiter, blobRange, readItem.PromoteInCache(), ctx)) {
             return true;
         }

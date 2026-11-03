@@ -76,8 +76,12 @@ TConclusion<std::shared_ptr<IChunkedArray>> TColumnLoader::BuildAccessor(
             operation->Update([&](auto& record) {
                 auto* details = record.MutableDetails()->MutableDecode();
                 details->SetDecodedRows(result.GetResult()->GetRecordsCount());
-                if (const auto size = result.GetResult()->GetRawSize()) {
-                    details->SetDecodedOutputBytes(*size);
+                // shortcut: lazy accessors may not expose a safe raw size; measure them when the accessor API does.
+                const auto type = result.GetResult()->GetType();
+                if (type == IChunkedArray::EType::Array || type == IChunkedArray::EType::ChunkedArray) {
+                    if (const auto size = result.GetResult()->GetRawSize()) {
+                        details->SetDecodedOutputBytes(*size);
+                    }
                 }
             });
         }

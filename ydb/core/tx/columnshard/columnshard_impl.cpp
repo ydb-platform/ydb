@@ -1,7 +1,5 @@
 #include "blob.h"
 #include "columnshard_impl.h"
-
-#include <util/generic/scope.h>
 #include "columnshard_schema.h"
 #include "scan_snapshot_guard.h"
 
@@ -9,6 +7,8 @@
 #include "blobs_reader/task.h"
 #include "common/tablet_id.h"
 #include "resource_subscriber/task.h"
+
+#include <util/generic/scope.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 #include "blobs_action/tier/storage.h"
@@ -1776,10 +1776,16 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors::T
 
 void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, const TActorContext& /*ctx*/) {
     const auto& statsCapture = ev->Get()->GetStatsCapture();
-    auto statsOperation = statsCapture.Collector ? statsCapture.Collector->Start(NScanStats::TStep::Reader,
-        "COLUMN_CACHE_MISS", "Prepare uncached column inputs", statsCapture.Operation) : nullptr;
+    auto statsOperation = statsCapture.Collector ? statsCapture.Collector->Start(NScanStats::TStep::Reader, "COLUMN_CACHE_MISS",
+                                                       "Prepare uncached column inputs", statsCapture.Operation)
+                                                 : nullptr;
     NScanStats::TScope statsScope(statsOperation, statsCapture.Collector);
-    Y_DEFER { if (statsOperation) { statsOperation->Finish(); } };
+    Y_DEFER {
+        if (statsOperation) {
+            statsOperation->Finish();
+        }
+    };
+
     class TExecutor: public NOlap::NDataFetcher::IFetchCallback {
     private:
         std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>> CacheCallback;
@@ -1797,10 +1803,15 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
         }
 
         virtual void DoOnFinished(NOlap::NDataFetcher::TCurrentContext&& context) override {
-            auto operation = StatsCapture.Collector ? StatsCapture.Collector->Start(NScanStats::TStep::Reader,
-                "COLUMN_CACHE_COMPLETE", "Prepare column cache result", StatsCapture.Operation) : nullptr;
+            auto operation = StatsCapture.Collector ? StatsCapture.Collector->Start(NScanStats::TStep::Reader, "COLUMN_CACHE_COMPLETE",
+                                                          "Prepare column cache result", StatsCapture.Operation)
+                                                    : nullptr;
             NScanStats::TScope scope(operation, StatsCapture.Collector);
-            Y_DEFER { if (operation) { operation->Finish(); } };
+            Y_DEFER {
+                if (operation) {
+                    operation->Finish();
+                }
+            };
             THashMap<NOlap::NGeneralCache::TGlobalColumnAddress, NOlap::NGeneralCache::TColumnDataCachePolicy::TObject> result;
 
             auto portionsData = context.ExtractAssembledData();
@@ -1823,10 +1834,15 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
         }
 
         virtual void DoOnError(const TString& errorMessage) override {
-            auto operation = StatsCapture.Collector ? StatsCapture.Collector->Start(NScanStats::TStep::Reader,
-                "COLUMN_CACHE_ERROR", "Prepare column cache error", StatsCapture.Operation) : nullptr;
+            auto operation = StatsCapture.Collector ? StatsCapture.Collector->Start(NScanStats::TStep::Reader, "COLUMN_CACHE_ERROR",
+                                                          "Prepare column cache error", StatsCapture.Operation)
+                                                    : nullptr;
             NScanStats::TScope scope(operation, StatsCapture.Collector);
-            Y_DEFER { if (operation) { operation->Finish(NScanStats::TStep::failed); } };
+            Y_DEFER {
+                if (operation) {
+                    operation->Finish(NScanStats::TStep::failed);
+                }
+            };
             THashMap<NOlap::NGeneralCache::TGlobalColumnAddress, TString> errorAddresses;
             for (const ui32 columnId : Schema->GetColumnIds()) {
                 errorAddresses.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(Owner, Portion, columnId), errorMessage);

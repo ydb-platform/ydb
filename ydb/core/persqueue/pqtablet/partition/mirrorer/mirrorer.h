@@ -51,6 +51,7 @@ private:
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvUpdateCounters, Handle);
             HFuncTraced(TEvPQ::TEvRewindCommitResult, HandleRewindCommit);
+            HFuncTraced(TEvPQ::TEvPersistDone, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             break;
@@ -71,6 +72,7 @@ private:
             HFuncTraced(TEvPQ::TEvUpdateCounters, Handle);
             HFuncTraced(TEvPQ::TEvReaderEventArrived, ProcessNextReaderEvent);
             HFuncTraced(TEvPQ::TEvRewindCommitResult, HandleRewindCommit);
+            HFuncTraced(TEvPQ::TEvPersistDone, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
         default:
             break;
@@ -122,6 +124,7 @@ public:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvPersistDone::TPtr& ev, const TActorContext& ctx);
     void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     void TryToRead(const TActorContext& ctx);
     void TryToWrite(const TActorContext& ctx);
@@ -147,6 +150,7 @@ private:
     const ui32 Partition;
     const bool IsLocalDC;
     ui64 EndOffset;
+    ui64 ConfirmedEndOffset = 0;
     ui64 OffsetToRead;
     TMaybe<ui64> LastReadOffset;
     NKikimrPQ::TMirrorPartitionConfig Config;

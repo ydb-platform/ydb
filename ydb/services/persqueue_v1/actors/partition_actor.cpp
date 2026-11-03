@@ -20,7 +20,7 @@
 #include <util/charset/utf8.h>
 
 #define PARTITION_ENSURE(condition) \
-    YDB_LOG_ENSURE(condition, {"session", Session}, {"partition", Partition}, {"tabletId", TabletID})
+    AFL_ENSURE(condition)("session", Session)("partition", Partition)("tabletId", TabletID)
 
 namespace NKikimr::NGRpcProxy::V1 {
 

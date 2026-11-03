@@ -20,11 +20,6 @@ void TTxInternalScan::SendError(const TString& problem, const TString& details, 
     SendScanError(Self->TabletID(), InternalScanEvent->Sender, ScanGen, TStringBuilder() << request.GetPathId(), problem, details, ctx);
 }
 
-TSnapshot TTxInternalScan::GetSnapshot() const {
-    const auto& request = *InternalScanEvent->Get();
-    return Self->TablesManager.ResolveReadSnapshot(request.GetPathId().GetSchemeShardLocalPathId(), request.GetSnapshot());
-}
-
 ERequestSorting TTxInternalScan::GetRequestSorting() const {
     return InternalScanEvent->Get()->GetReverse() ? ERequestSorting::DESC : ERequestSorting::ASC;
 }
@@ -43,19 +38,11 @@ TReadDescription TTxInternalScan::MakeReadDescription(const TSnapshot& snapshot,
         request.GetReadOnlyConflicts());
     read.ColumnIds = request.GetColumnIds();
     read.SetScanCursor(nullptr);
-    if (request.RangesFilter) {
-        read.PKRangesFilter = request.RangesFilter;
-    }
+    read.PKRangesFilter = Target.PKRangesFilter;
     TProgramContainer program;
     program.OverrideProcessingColumns(read.ColumnIds);
     read.SetProgram(std::move(program));
     return read;
-}
-
-TConclusion<std::shared_ptr<ITableMetadataAccessor>> TTxInternalScan::MakeTableAccessor(const TSnapshot& snapshot) const {
-    const auto& request = *InternalScanEvent->Get();
-    return Self->TablesManager.BuildTableMetadataAccessor(
-        "internal_request", request.GetPathId().GetInternalPathId(), request.GetPathId().GetSchemeShardLocalPathId(), snapshot);
 }
 
 std::unique_ptr<TTxInternalScan::TDiagnosticsEvent> TTxInternalScan::MakeDiagnosticsEvent(const TReadDescription& read) const {
@@ -111,7 +98,7 @@ bool TTxInternalScan::Execute(TTransactionContext& /*txc*/, const TActorContext&
 void TTxInternalScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxInternalScan::Complete");
     const auto& request = *InternalScanEvent->Get();
-    const TSnapshot snapshot = GetSnapshot();
+    const TSnapshot snapshot = Target.Snapshot;
     YDB_LOG_CREATE_CONTEXT(
         {"tablet", Self->TabletID()},
         {"snapshot", snapshot.DebugString()},
@@ -119,12 +106,7 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
     const ERequestSorting requestSorting = GetRequestSorting();
     const TScannerConstructorContext context(snapshot, 0);
 
-    auto accessorConclusion = MakeTableAccessor(snapshot);
-    if (accessorConclusion.IsFail()) {
-        return SendError("cannot build table metadata accessor for request: " + accessorConclusion.GetErrorMessage(),
-            AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
-    }
-    TReadDescription read = MakeReadDescription(snapshot, requestSorting, accessorConclusion.DetachResult());
+    TReadDescription read = MakeReadDescription(snapshot, requestSorting, Target.TableMetadataAccessor);
 
     const NTrivial::TIndexScannerConstructor scannerConstructor(context);
     auto metadataConclusion = MakeReadMetadata(Self, Self->Counters.GetScanCounters(), scannerConstructor, read);

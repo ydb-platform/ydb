@@ -440,7 +440,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
 
     TMemoryProfileGuard g("TTablesManager/InitFromDB::Other");
     for (auto&& i : Tables) {
-        PrimaryIndex->RegisterTable(i.first);
+        PrimaryIndex->RegisterTableToLoad(i.first);
     }
     return true;
 }
@@ -882,7 +882,7 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
     return chains;
 }
 
-TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(const TString& tablePath,
+std::shared_ptr<NOlap::ITableMetadataAccessor> TTablesManager::BuildTableMetadataAccessor(const TString& tablePath,
     const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot) {
     if (!HasTable(internalPathId, /*withDeleted=*/false, readSnapshot)) {
         return std::make_shared<NOlap::TAbsentTableAccessor>(
@@ -892,7 +892,7 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
 }
 
 TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
-    const TString& tablePath, const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot) {
+    const TString& tablePath, const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot) const {
     const std::optional<TInternalPathId> internalPathId = ResolveInternalPathIdOptional(externalPathId, false);
     auto path = TFsPath(tablePath).Fix();
     auto schemaAdapter = NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(

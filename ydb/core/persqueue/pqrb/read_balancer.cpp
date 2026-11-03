@@ -22,7 +22,7 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
 
-#define PQ_ENSURE(condition) YDB_LOG_ENSURE(condition)("tablet_id", TabletID())("path", Path)("topic", Topic)
+#define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletID())("path", Path)("topic", Topic)
 
 namespace NKikimr {
 namespace NPQ {

@@ -5,8 +5,10 @@ set -euo pipefail
 preset="${BUILD_PRESET%%,*}"
 preset="$(echo "$preset" | xargs)"
 api="https://api.github.com/repos/${REPO}"
-auth_hdr() {
-  printf '%s\n' \
+
+# Keep -H values quoted — do not expand via $(...) or quotes are lost.
+curl_gh() {
+  curl "$@" \
     -H "Authorization: Bearer ${GH_TOKEN}" \
     -H "Accept: application/vnd.github+json" \
     -H "X-GitHub-Api-Version: 2022-11-28"
@@ -16,7 +18,7 @@ echo "Dispatching \"Run and debug tests\" --ref ${EXECUTOR_REF}"
 echo "code_ref=${CODE_REF} preset=${preset} targets=${TEST_TARGETS} wait=${WAIT_FOR_REMOTE}"
 
 workflow_path="run_and_debug_tests.yml"
-workflow_id="$(curl -fsS $(auth_hdr) \
+workflow_id="$(curl_gh -fsS \
   "${api}/actions/workflows/${workflow_path}" \
   | jq -r '.id // empty')"
 if [ -z "$workflow_id" ] || [ "$workflow_id" = "null" ]; then
@@ -32,7 +34,7 @@ payload="$(jq -n \
   '{ref:$ref, inputs:{test_targets:$test_targets, build_preset:$build_preset}}')"
 
 before_epoch="$(date -u +%s)"
-http_code="$(curl -sS $(auth_hdr) -o /tmp/dispatch_resp.txt -w '%{http_code}' -X POST \
+http_code="$(curl_gh -sS -o /tmp/dispatch_resp.txt -w '%{http_code}' -X POST \
   "${api}/actions/workflows/${workflow_id}/dispatches" \
   -d "$payload")"
 if [ "$http_code" != "204" ]; then
@@ -45,7 +47,7 @@ run_id=""
 run_url=""
 for _ in $(seq 1 30); do
   sleep 2
-  run_json="$(curl -fsS $(auth_hdr) \
+  run_json="$(curl_gh -fsS \
     "${api}/actions/workflows/${workflow_id}/runs?branch=${EXECUTOR_REF}&event=workflow_dispatch&per_page=5")"
   run_id="$(echo "$run_json" | jq -r --argjson before "$before_epoch" '
     [.workflow_runs[] | select((.created_at | fromdateiso8601) >= ($before - 5))][0].id // empty')"
@@ -84,7 +86,7 @@ echo "Waiting for executor run ${run_id} ..."
 conclusion=""
 status=""
 for _ in $(seq 1 720); do
-  run_state="$(curl -fsS $(auth_hdr) "${api}/actions/runs/${run_id}")"
+  run_state="$(curl_gh -fsS "${api}/actions/runs/${run_id}")"
   status="$(echo "$run_state" | jq -r '.status')"
   conclusion="$(echo "$run_state" | jq -r '.conclusion // empty')"
   echo "$(date -u +%H:%M:%S) status=${status} conclusion=${conclusion:-none}"
@@ -107,12 +109,12 @@ fi
 
 mirrored=0
 for _ in $(seq 1 20); do
-  arts="$(curl -fsS $(auth_hdr) "${api}/actions/runs/${run_id}/artifacts")"
+  arts="$(curl_gh -fsS "${api}/actions/runs/${run_id}/artifacts")"
   art_id="$(echo "$arts" | jq -r '
     [.artifacts[] | select(.name=="executor-summary" and .expired==false)][0].id // empty')"
   if [ -n "$art_id" ]; then
     echo "Downloading artifact executor-summary id=${art_id}"
-    curl -fsS $(auth_hdr) -L \
+    curl_gh -fsS -L \
       "${api}/actions/artifacts/${art_id}/zip" \
       -o /tmp/executor-summary.zip
     rm -rf /tmp/executor-summary && mkdir -p /tmp/executor-summary

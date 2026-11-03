@@ -1,4 +1,5 @@
 #include <ydb/public/sdk/cpp/src/client/topic/impl/producer.h>
+#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -9,11 +10,15 @@ using namespace NYdb::NTopic;
 
 namespace NYdb::inline Dev::NTopic {
 
-    struct TProducerRetryPolicyTestHelper {
-        static TProducer::TProducerRetryPolicy::TPtr Create(IRetryPolicy::TPtr userPolicy) {
-            return std::make_shared<TProducer::TProducerRetryPolicy>(std::move(userPolicy));
-        }
-    };
+struct TProducerRetryPolicyTestHelper {
+    static TProducer::TProducerRetryPolicy::TPtr Create(IRetryPolicy::TPtr userPolicy) {
+        return std::make_shared<TProducer::TProducerRetryPolicy>(std::move(userPolicy));
+    }
+
+    static TProducer::TProducerRetryPolicy::TPtr FromProducer(IProducer& producer) {
+        return static_cast<TProducer&>(producer).RetryPolicy;
+    }
+};
 
 } // namespace NYdb::inline Dev::NTopic
 
@@ -100,6 +105,30 @@ Y_UNIT_TEST_SUITE(ProducerRetryPolicy) {
         UNIT_ASSERT(second->GetNextRetryDelay(EStatus::TRANSPORT_UNAVAILABLE));
         UNIT_ASSERT_VALUES_EQUAL(user->StateCount, 2);
         UNIT_ASSERT(user->LastStatus == EStatus::TRANSPORT_UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(SurvivesProducerDestruction) {
+        NTests::TTopicSdkTestSetup setup{TEST_CASE_NAME, NTests::TTopicSdkTestSetup::MakeServerSettings(), false};
+        setup.CreateTopic();
+
+        auto client = setup.MakeClient();
+        TProducerSettings settings;
+        settings
+            .Path(setup.GetTopicPath())
+            .Codec(ECodec::RAW);
+        settings.ProducerIdPrefix("retry-after-destroy");
+        settings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        auto user = std::make_shared<TScriptedRetryPolicy>();
+        settings.RetryPolicy(user);
+
+        auto producer = client.CreateProducer(settings);
+        auto policy = TProducerRetryPolicyTestHelper::FromProducer(*producer);
+        producer.reset();
+
+        const auto delay = policy->CreateRetryState()->GetNextRetryDelay(EStatus::UNAVAILABLE);
+        UNIT_ASSERT(delay);
+        UNIT_ASSERT_VALUES_EQUAL(delay->MilliSeconds(), 15);
+        UNIT_ASSERT_VALUES_EQUAL(user->CallCount, 1);
     }
 
     Y_UNIT_TEST(MissingUserPolicyUsesDefaultAndDoesNotNeedProducer) {

@@ -138,9 +138,9 @@ private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Custom retry policy
 
-    // Write sessions own this object and may call it from the gRPC thread after
-    // TProducer is destroyed. The user policy is snapshotted here so retry never
-    // dereferences the producer.
+    // Write-session settings keep this object alive. GetNextRetryDelay may run
+    // on the gRPC thread after TProducer is destroyed, so the user policy is
+    // stored here instead of a producer pointer.
     struct TProducerRetryPolicy : public ::IRetryPolicy<EStatus> {
         using TSelf = TProducerRetryPolicy;
         using TPtr = std::shared_ptr<TSelf>;

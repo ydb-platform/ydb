@@ -1529,9 +1529,7 @@ void TProducer::TMessagesWorker::RebuildPendingMessagesIndex(std::uint32_t parti
 
 TProducer::TProducerRetryPolicy::TProducerRetryPolicy(::IRetryPolicy<EStatus>::TPtr userPolicy)
     : UserPolicy(userPolicy ? std::move(userPolicy) : NYdb::NTopic::IRetryPolicy::GetDefaultPolicy())
-{
-    Y_ABORT_UNLESS(UserPolicy);
-}
+{}
 
 typename TProducer::TProducerRetryPolicy::IRetryState::TPtr TProducer::TProducerRetryPolicy::CreateRetryState() const {
     struct TRetryState : public IRetryState {
@@ -1540,6 +1538,9 @@ typename TProducer::TProducerRetryPolicy::IRetryState::TPtr TProducer::TProducer
         {}
 
         TMaybe<TDuration> GetNextRetryDelay(EStatus status) override {
+            // OVERLOADED closes this session so the producer can switch partitions
+            // (HandleAutoPartitioning). A user retry would keep the session on the
+            // inactive partition, so the user policy must not see this status.
             if (status == EStatus::OVERLOADED) {
                 return Nothing();
             }

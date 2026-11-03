@@ -73,6 +73,9 @@ using IStatsPtr = std::shared_ptr<IStats>;
 struct IStatsUpdater;
 using IStatsUpdaterPtr = std::shared_ptr<IStatsUpdater>;
 
+struct IStatsHandler;
+using IStatsHandlerPtr = std::shared_ptr<IStatsHandler>;
+
 struct IIncompleteRequestProcessor;
 using IIncompleteRequestProcessorPtr =
     std::shared_ptr<IIncompleteRequestProcessor>;

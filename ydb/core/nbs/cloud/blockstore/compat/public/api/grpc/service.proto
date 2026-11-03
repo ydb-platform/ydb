@@ -1,0 +1,461 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/actions.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/checkpoints.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/cms.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/discovery.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/disk.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/endpoints.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/io.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/local_nvme.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/local_ssd.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/metrics.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/mount.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/ping.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/placement.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/volume_throttling.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/volume.proto";
+
+import "google/api/annotations.proto";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/public/api/grpc";
+
+////////////////////////////////////////////////////////////////////////////////
+// The NBS service definition.
+
+service TBlockStoreService
+{
+    //
+    // Service requests.
+    //
+
+    rpc Ping(TPingRequest) returns (TPingResponse) {
+        option (google.api.http) = {
+            post: "/ping"
+            body: "*"
+        };
+    }
+
+    rpc UploadClientMetrics(TUploadClientMetricsRequest) returns (TUploadClientMetricsResponse) {
+        option (google.api.http) = {
+            post: "/upload_client_metrics"
+            body: "*"
+        };
+    }
+
+    //
+    // High level volume management operations.
+    //
+
+    rpc CreateVolume(TCreateVolumeRequest) returns (TCreateVolumeResponse) {
+        option (google.api.http) = {
+            post: "/create_volume"
+            body: "*"
+        };
+    }
+
+    rpc DestroyVolume(TDestroyVolumeRequest) returns (TDestroyVolumeResponse) {
+        option (google.api.http) = {
+            post: "/destroy_volume"
+            body: "*"
+        };
+    }
+
+    rpc ResizeVolume(TResizeVolumeRequest) returns (TResizeVolumeResponse) {
+        option (google.api.http) = {
+            post: "/resize_volume"
+            body: "*"
+        };
+    }
+
+    rpc AlterVolume(TAlterVolumeRequest) returns (TAlterVolumeResponse) {
+        option (google.api.http) = {
+            post: "/alter_volume"
+            body: "*"
+        };
+    }
+
+    rpc AssignVolume(TAssignVolumeRequest) returns (TAssignVolumeResponse) {
+        option (google.api.http) = {
+            post: "/assign_volume"
+            body: "*"
+        };
+    }
+
+    rpc CreateVolumeLink(TCreateVolumeLinkRequest) returns (TCreateVolumeLinkResponse) {
+        option (google.api.http) = {
+            post: "/create_volume_link"
+            body: "*"
+        };
+    }
+
+    rpc DestroyVolumeLink(TDestroyVolumeLinkRequest) returns (TDestroyVolumeLinkResponse) {
+        option (google.api.http) = {
+            post: "/destroy_volume_link"
+            body: "*"
+        };
+    }
+
+    rpc RemoveVolumeClient(TRemoveVolumeClientRequest) returns (TRemoveVolumeClientResponse) {
+        option (google.api.http) = {
+            post: "/remove_volume_client"
+            body: "*"
+        };
+    }
+
+    //
+    // Volume information and statistics.
+    //
+
+    rpc ListVolumes(TListVolumesRequest) returns (TListVolumesResponse) {
+        option (google.api.http) = {
+            post: "/list_volumes"
+            body: "*"
+        };
+    }
+
+    rpc StatVolume(TStatVolumeRequest) returns (TStatVolumeResponse) {
+        option (google.api.http) = {
+            post: "/stat_volume"
+            body: "*"
+        };
+    }
+
+    rpc DescribeVolume(TDescribeVolumeRequest) returns (TDescribeVolumeResponse) {
+        option (google.api.http) = {
+            post: "/describe_volume"
+            body: "*"
+        };
+    }
+
+    rpc DescribeVolumeModel(TDescribeVolumeModelRequest) returns (TDescribeVolumeModelResponse) {
+        option (google.api.http) = {
+            post: "/describe_volume_model"
+            body: "*"
+        };
+    }
+
+    //
+    // Mount operations.
+    //
+
+    rpc MountVolume(TMountVolumeRequest) returns (TMountVolumeResponse) {
+        option (google.api.http) = {
+            post: "/mount_volume"
+            body: "*"
+        };
+    }
+
+    rpc UnmountVolume(TUnmountVolumeRequest) returns (TUnmountVolumeResponse) {
+        option (google.api.http) = {
+            post: "/unmount_volume"
+            body: "*"
+        };
+    }
+
+    //
+    // Block I/O.
+    //
+
+    rpc ReadBlocks(TReadBlocksRequest) returns (TReadBlocksResponse) {
+        option (google.api.http) = {
+            post: "/read_blocks"
+            body: "*"
+        };
+    }
+
+    rpc WriteBlocks(TWriteBlocksRequest) returns (TWriteBlocksResponse) {
+        option (google.api.http) = {
+            post: "/write_blocks"
+            body: "*"
+        };
+    }
+
+    rpc ZeroBlocks(TZeroBlocksRequest) returns (TZeroBlocksResponse) {
+        option (google.api.http) = {
+            post: "/zero_blocks"
+            body: "*"
+        };
+    }
+
+    //
+    // Checkpoint operations.
+    //
+
+    rpc CreateCheckpoint(TCreateCheckpointRequest) returns (TCreateCheckpointResponse) {
+        option (google.api.http) = {
+            post: "/create_checkpoint"
+            body: "*"
+        };
+    }
+
+    rpc DeleteCheckpoint(TDeleteCheckpointRequest) returns (TDeleteCheckpointResponse) {
+        option (google.api.http) = {
+            post: "/delete_checkpoint"
+            body: "*"
+        };
+    }
+
+    // Support for differential backup.
+    rpc GetChangedBlocks(TGetChangedBlocksRequest) returns (TGetChangedBlocksResponse) {
+        option (google.api.http) = {
+            post: "/get_changed_blocks"
+            body: "*"
+        };
+    }
+
+    rpc GetCheckpointStatus(TGetCheckpointStatusRequest) returns (TGetCheckpointStatusResponse) {
+        option (google.api.http) = {
+            post: "/get_checkpoint_status"
+            body: "*"
+        };
+    }
+
+    //
+    // Instance discovery.
+    //
+
+    rpc DiscoverInstances(TDiscoverInstancesRequest) returns (TDiscoverInstancesResponse) {
+        option (google.api.http) = {
+            post: "/discover_instances"
+            body: "*"
+        };
+    }
+
+    //
+    // Endpoint operations.
+    //
+
+    rpc StartEndpoint(TStartEndpointRequest) returns (TStartEndpointResponse) {
+        option (google.api.http) = {
+            post: "/start_endpoint"
+            body: "*"
+        };
+    }
+
+    rpc StopEndpoint(TStopEndpointRequest) returns (TStopEndpointResponse) {
+        option (google.api.http) = {
+            post: "/stop_endpoint"
+            body: "*"
+        };
+    }
+
+    rpc ListEndpoints(TListEndpointsRequest) returns (TListEndpointsResponse) {
+        option (google.api.http) = {
+            post: "/list_endpoints"
+            body: "*"
+        };
+    }
+
+    rpc KickEndpoint(TKickEndpointRequest) returns (TKickEndpointResponse) {
+        option (google.api.http) = {
+            post: "/kick_endpoint"
+            body: "*"
+        };
+    }
+
+    rpc ListKeyrings(TListKeyringsRequest) returns (TListKeyringsResponse) {
+        option (google.api.http) = {
+            post: "/list_keyrings"
+            body: "*"
+        };
+    }
+
+    rpc DescribeEndpoint(TDescribeEndpointRequest) returns (TDescribeEndpointResponse) {
+        option (google.api.http) = {
+            post: "/describe_endpoint"
+            body: "*"
+        };
+    }
+
+    rpc RefreshEndpoint(TRefreshEndpointRequest) returns (TRefreshEndpointResponse) {
+        option (google.api.http) = {
+            post: "/refresh_endpoint"
+            body: "*"
+        };
+    }
+
+    //
+    // Disk Registry config.
+    //
+
+    rpc UpdateDiskRegistryConfig(TUpdateDiskRegistryConfigRequest) returns (TUpdateDiskRegistryConfigResponse) {
+        option (google.api.http) = {
+            post: "/update_disk_registry_config"
+            body: "*"
+        };
+    }
+
+    rpc DescribeDiskRegistryConfig(TDescribeDiskRegistryConfigRequest) returns (TDescribeDiskRegistryConfigResponse) {
+        option (google.api.http) = {
+            post: "/describe_disk_registry_config"
+            body: "*"
+        };
+    }
+
+    //
+    // Throttling manager
+    //
+
+    rpc UpdateVolumeThrottlingConfig(TUpdateVolumeThrottlingConfigRequest) returns (TUpdateVolumeThrottlingConfigResponse) {
+        option (google.api.http) = {
+            post: "/update_volume_throttling_config"
+            body: "*"
+        };
+    }
+
+    //
+    // Agents info
+    //
+    rpc QueryAgentsInfo(TQueryAgentsInfoRequest) returns (TQueryAgentsInfoResponse) {
+        option (google.api.http) = {
+            post: "/query_agents_info"
+            body: "*"
+        };
+    }
+
+    //
+    // Local SSD
+    //
+
+    rpc QueryAvailableStorage(TQueryAvailableStorageRequest) returns (TQueryAvailableStorageResponse) {
+        option (google.api.http) = {
+            post: "/query_available_storage"
+            body: "*"
+        };
+    }
+
+    rpc CreateVolumeFromDevice(TCreateVolumeFromDeviceRequest) returns (TCreateVolumeFromDeviceResponse) {
+        option (google.api.http) = {
+            post: "/create_volume_from_device"
+        };
+    }
+
+    rpc ResumeDevice(TResumeDeviceRequest) returns (TResumeDeviceResponse) {
+        option (google.api.http) = {
+            post: "/resume_device"
+            body: "*"
+        };
+    }
+
+    //
+    // Private API.
+    //
+
+    rpc ExecuteAction(TExecuteActionRequest) returns (TExecuteActionResponse) {
+        option (google.api.http) = {
+            post: "/execute_action"
+            body: "*"
+        };
+    }
+
+    //
+    // Placement group management operations.
+    //
+
+    rpc CreatePlacementGroup(TCreatePlacementGroupRequest) returns (TCreatePlacementGroupResponse) {
+        option (google.api.http) = {
+            post: "/create_placement_group"
+            body: "*"
+        };
+    }
+
+    rpc DestroyPlacementGroup(TDestroyPlacementGroupRequest) returns (TDestroyPlacementGroupResponse) {
+        option (google.api.http) = {
+            post: "/destroy_placement_group"
+            body: "*"
+        };
+    }
+
+    rpc AlterPlacementGroupMembership(TAlterPlacementGroupMembershipRequest) returns (TAlterPlacementGroupMembershipResponse) {
+        option (google.api.http) = {
+            post: "/alter_placement_group_membership"
+            body: "*"
+        };
+    }
+
+    //
+    // Placement group information and statistics.
+    //
+
+    rpc ListPlacementGroups(TListPlacementGroupsRequest) returns (TListPlacementGroupsResponse) {
+        option (google.api.http) = {
+            post: "/list_placement_groups"
+            body: "*"
+        };
+    }
+
+    rpc DescribePlacementGroup(TDescribePlacementGroupRequest) returns (TDescribePlacementGroupResponse) {
+        option (google.api.http) = {
+            post: "/describe_placement_group"
+            body: "*"
+        };
+    }
+
+    //
+    // CMS
+    //
+
+    rpc CmsAction(TCmsActionRequest) returns (TCmsActionResponse) {
+        option (google.api.http) = {
+            post: "/cmsactionrequest"
+            body: "*"
+        };
+    }
+
+    //
+    // List nonreplicated/mirrored disk states
+    //
+
+    rpc ListDiskStates(TListDiskStatesRequest) returns (TListDiskStatesResponse) {
+        option (google.api.http) = {
+            post: "/list_disk_states"
+            body: "*"
+        };
+    }
+
+    //
+    // Local NVMe
+    //
+
+    rpc ListNVMeDevices(TListNVMeDevicesRequest) returns (TListNVMeDevicesResponse) {
+        option (google.api.http) = {
+            post: "/list_nvme_devices"
+            body: "*"
+        };
+    }
+
+    rpc AcquireNVMeDevice(TAcquireNVMeDeviceRequest) returns (TAcquireNVMeDeviceResponse) {
+        option (google.api.http) = {
+            post: "/acquire_nvme_device"
+            body: "*"
+        };
+    }
+
+    rpc ReleaseNVMeDevice(TReleaseNVMeDeviceRequest) returns (TReleaseNVMeDeviceResponse) {
+        option (google.api.http) = {
+            post: "/release_nvme_device"
+            body: "*"
+        };
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// The NBS data service definition (limited API subset for VM usage).
+
+service TBlockStoreDataService
+{
+    // Service requests.
+    rpc UploadClientMetrics(TUploadClientMetricsRequest) returns (TUploadClientMetricsResponse);
+
+    // Mount operations.
+    rpc MountVolume(TMountVolumeRequest) returns (TMountVolumeResponse);
+    rpc UnmountVolume(TUnmountVolumeRequest) returns (TUnmountVolumeResponse);
+
+    // Block I/O.
+    rpc ReadBlocks(TReadBlocksRequest) returns (TReadBlocksResponse);
+    rpc WriteBlocks(TWriteBlocksRequest) returns (TWriteBlocksResponse);
+    rpc ZeroBlocks(TZeroBlocksRequest) returns (TZeroBlocksResponse);
+}

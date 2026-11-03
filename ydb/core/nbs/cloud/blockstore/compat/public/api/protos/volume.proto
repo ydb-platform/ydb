@@ -1,0 +1,868 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/encryption.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/headers.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/rdma.proto";
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/volume_throttling.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+import "ydb/core/nbs/cloud/storage/core/compat/protos/media.proto";
+import "ydb/core/nbs/cloud/storage/core/compat/protos/trace.proto";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume access mode
+
+enum EVolumeAccessMode
+{
+    VOLUME_ACCESS_READ_WRITE = 0;
+    VOLUME_ACCESS_READ_ONLY = 1;
+    VOLUME_ACCESS_REPAIR = 2;
+    VOLUME_ACCESS_USER_READ_ONLY = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume mount mode
+
+enum EVolumeMountMode
+{
+    VOLUME_MOUNT_LOCAL = 0;
+    VOLUME_MOUNT_REMOTE = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume IO mode
+
+enum EVolumeIOMode
+{
+    VOLUME_IO_OK = 0;
+    VOLUME_IO_ERROR_READ_ONLY = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume performance profile
+
+message TVolumePerformanceProfile
+{
+    // Bytes per sec
+    uint64 MaxReadBandwidth = 1;
+
+    // Max instantaneous bandwidth
+    /* uint32 MaxBurstBandwidth = 2; obsolete */
+    // Limits the total weight of all postponed operations
+    uint64 MaxPostponedWeight = 3;
+
+    // Throttling enabled
+    bool ThrottlingEnabled = 4;
+
+    // Iops
+    uint32 MaxReadIops = 5;
+
+    // Max instantaneous iop count
+    /* uint32 MaxBurstIops = 6; obsolete */
+    // Boost params, see NBS-530, all times are measured in milliseconds
+    uint32 BoostTime = 7;
+    uint32 BoostRefillTime = 8;
+
+    // Max available boost percentage of Max{Read,Write}{Iops,Bandwidth}
+    uint32 BoostPercentage = 9;
+
+    // Bytes per sec
+    uint64 MaxWriteBandwidth = 10;
+
+    // Iops
+    uint32 MaxWriteIops = 11;
+
+    // Max available instantaneous percentage of Max{Read,Write}{Iops,Bandwidth}
+    uint32 BurstPercentage = 12;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume model description.
+
+message TVolumeModel
+{
+    // Minimum addressable block size (smallest unit of I/O operations).
+    uint32 BlockSize = 1;
+
+    // Maximum number of blocks stored in volume.
+    uint64 BlocksCount = 2;
+
+    // Number of user channels to store blobs.
+    uint32 ChannelsCount = 3;
+
+    // Storage media to use.
+    NCloud.NProto.EStorageMediaKind StorageMediaKind = 4;
+
+    // Performance profile, used for throttling
+    TVolumePerformanceProfile PerformanceProfile = 5;
+
+    // Number of user channels to store merged blobs.
+    uint32 MergedChannelsCount = 6;
+
+    // Number of user channels to store mixed blobs.
+    uint32 MixedChannelsCount = 7;
+
+    // Number of partition tablets.
+    uint32 PartitionsCount = 8;
+
+    // Number of user channels to store fresh blobs.
+    uint32 FreshChannelsCount = 9;
+
+    // Number of blocks per stripe (for multipartition YDB-based volumes).
+    uint32 BlocksPerStripe = 10;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Device description.
+
+message TDevice
+{
+    // NVMe-oF transport id.
+    string TransportId = 1;
+    // The size of this device in volume blocks (not in original device blocks).
+    uint64 BlockCount = 2;
+    // Device base name
+    string BaseName = 3;
+    // Agent id.
+    string AgentId = 4;
+    // Device id.
+    string DeviceUUID = 5;
+    // Device name.
+    string DeviceName = 6;
+    // RDMA endpoint.
+    TRdmaEndpoint RdmaEndpoint = 7;
+    // Physical offset in bytes.
+    uint64 PhysicalOffset = 8;
+    // Node that agent is running on.
+    uint32 NodeId = 9;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Device migration description.
+
+message TDeviceMigrationInfo
+{
+    // Migration source transport id.
+    string SourceTransportId = 1;
+    // Migration target device.
+    TDevice TargetDevice = 2;
+    // Migration source device id.
+    string SourceDeviceId = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Replica description.
+
+message TReplicaInfo
+{
+    // Device list.
+    repeated TDevice Devices = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Encryption description.
+
+message TEncryptionDesc
+{
+    EEncryptionMode Mode = 1;
+    bytes KeyHash = 2;
+    TKmsKey EncryptionKey = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Mounted volume description.
+
+message TVolume
+{
+    reserved 25, 36;
+
+    // Label of volume.
+    string DiskId = 1;
+
+    // Owner information.
+    string ProjectId = 2;
+
+    // VM information (unused)
+    string InstanceId = 3;
+
+    // Minimum addressable block size (smallest unit of I/O operations).
+    uint32 BlockSize = 4;
+
+    // Maximum number of blocks stored in volume.
+    uint64 BlocksCount = 5;
+
+    // Number of user channels to store blobs.
+    uint32 ChannelsCount = 6;
+
+    // Storage media to use.
+    NCloud.NProto.EStorageMediaKind StorageMediaKind = 7;
+
+    // User folder Id, used for billing.
+    string FolderId = 8;
+
+    // Cloud Id, used for billing.
+    string CloudId = 9;
+
+    // Volume configuration version.
+    uint32 ConfigVersion = 10;
+
+    // Performance profile, used for throttling
+    TVolumePerformanceProfile PerformanceProfile = 11;
+
+    // Optional label of base volume.
+    // If this is set then current volume is called "overlay volume".
+    string BaseDiskId = 12;
+
+    // Optional "base volume checkpoint" overlay volume sits on.
+    // Should not be empty when BaseDiskId is not empty.
+    string BaseDiskCheckpointId = 13;
+
+    // Number of user channels to store merged blobs.
+    uint32 MergedChannelsCount = 14;
+
+    // Number of user channels to store mixed blobs.
+    uint32 MixedChannelsCount = 15;
+
+    /* repeated string TransportIds = 16; obsolete */
+
+    // Device list (for nonreplicated disks).
+    repeated TDevice Devices = 17;
+
+    // Partition tablet version.
+    uint32 TabletVersion = 18;
+
+    // Volume creation and alter timestamps.
+    uint64 CreationTs = 19;
+    uint64 AlterTs = 20;
+
+    // Placement group id, assigned during disk creation.
+    string PlacementGroupId = 21;
+
+    // Number of partition tablets.
+    uint32 PartitionsCount = 22;
+
+    // Volume IO mode.
+    EVolumeIOMode IOMode = 23;
+
+    // MountToken Version.
+    uint64 TokenVersion = 24;
+
+    // Migration list (for nonreplicated disks).
+    repeated TDeviceMigrationInfo Migrations = 26;
+
+    // Number of user channels to store fresh blobs.
+    uint32 FreshChannelsCount = 27;
+
+    // Indicates that volume does not belong to user directly, but used for system needs.
+    bool IsSystem = 28;
+
+    // Replica list (for mirrored disks).
+    repeated TReplicaInfo Replicas = 29;
+
+    // Replica resync in progress (only for mirrored volumes).
+    bool ResyncInProgress = 30;
+
+    // Encryption description
+    TEncryptionDesc EncryptionDesc = 31;
+
+    // Placement partition index, assigned during disk creation.
+    // Takes values from 1 to PlacementPartitionCount.
+    uint32 PlacementPartitionIndex = 32;
+
+    // Fresh (recently replaced) device ids.
+    repeated string FreshDeviceIds = 33;
+
+    // First block index accessible to the user. Currently it's a crutch for
+    // NBS-3941 which is needed because TVolume is used internally in the
+    // StorageProvider interface. But there is a chance that this field becomes
+    // in fact needed in our public api.
+    uint64 StartIndex = 34;
+
+    // Represents whether disk filling finished or not.
+    bool IsFillFinished = 35;
+
+    // When a disk is being copied or has already been copied, the
+    // PrincipalDiskId field specifies the name of the disk that the client
+    // should use instead of current.
+    string PrincipalDiskId = 37;
+
+    // Set of volume tags. Value can be empty.
+    map<string, string> Tags = 38;
+
+    // Enables discard (ZeroBlocks) requests for the volume.
+    // If this flag is set, it should never be unset anymore!
+    optional bool VhostDiscardEnabled = 39;
+
+    // Number of blocks per stripe (for multipartition YDB-based volumes).
+    uint32 BlocksPerStripe = 40;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TVolumeClient
+{
+    // Client id.
+    string ClientId = 1;
+
+    // Instance id.
+    string InstanceId = 2;
+
+    // Client disconnect timestamp (0 for active clients).
+    uint64 DisconnectTimestamp = 3;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// I/O counters.
+
+message TIOCounters
+{
+    // Number of I/O requests.
+    uint64 RequestsCount = 1;
+
+    // Number of blocks proceeded.
+    uint64 BlocksCount = 2;
+
+    // Total request execution time.
+    uint64 ExecTime = 3;
+
+    // Total time request spent waiting for I/O.
+    uint64 WaitTime = 4;
+
+    // Number of batch requests.
+    uint64 BatchCount = 5;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume statistics.
+
+message TVolumeStats
+{
+    // I/O operations invoked directly by user.
+    TIOCounters UserReadCounters = 1;
+    TIOCounters UserWriteCounters = 2;
+
+    // Background I/O operations (system overhead).
+    TIOCounters SysReadCounters = 3;
+    TIOCounters SysWriteCounters = 4;
+
+    // Numbers of stored blobs.
+    uint64 MixedBlobsCount = 5;
+    uint64 MergedBlobsCount = 6;
+
+    // Numbers of stored blocks.
+    uint64 FreshBlocksCount = 7;
+    uint64 MixedBlocksCount = 8;
+    uint64 MergedBlocksCount = 9;
+
+    // Number of blocks actually used.
+    uint64 UsedBlocksCount = 10;
+
+    // Number of garbage blocks.
+    uint64 GarbageBlocksCount = 11;
+
+    // Number of non empty ranges.
+    uint64 NonEmptyRangeCount = 12;
+
+    // Number of overwritten blocks stored only for checkpoints.
+    uint64 CheckpointBlocksCount = 13;
+
+    // Number of garbage blocks in the most dirty range.
+    uint32 CompactionGarbageScore = 14;
+
+    // Garbage queue size.
+    uint32 GarbageQueueSize = 15;
+
+    // Cleanup and Compaction delays (in ms).
+    uint32 CleanupDelay = 16;
+    uint32 CompactionDelay = 17;
+
+    // Number of stored fresh blobs.
+    uint64 FreshBlobsCount = 18;
+
+    // Number of blocks actually used.
+    // Includes the blocks used at the base disk (for overlay disks).
+    uint64 LogicalUsedBlocksCount = 19;
+
+    // Number of write and zero requests inflight for network-ssd/network-hdd.
+    uint64 WriteAndZeroRequestsInFlight = 20;
+
+    // Volume level used block counter.
+    uint64 VolumeUsedBlocksCount = 21;
+
+    // Volume boost budget in milliseconds.
+    uint64 BoostBudget = 22;
+
+    // Current timed out device state duration limit after which this disk
+    // starts to return E_IO errors.
+    uint64 MaxTimedOutDeviceStateDuration = 23;
+
+    // Background I/O operations (system overhead).
+    TIOCounters RealSysReadCounters = 24;
+    TIOCounters RealSysWriteCounters = 25;
+
+    // Number of bytes in cleanup queue.
+    uint64 CleanupQueueBytes = 26;
+
+    // TODO: current max device timeout
+
+    uint32 UnconfirmedBlobCount = 27;
+    uint32 ConfirmedBlobCount = 28;
+
+    // Current trim fresh log as commit id
+    uint64 TrimFreshLogToCommitId = 29;
+
+    // Number of read block masks during compaction.
+    uint64 BlockMaskReadDuringCompaction = 30;
+
+    // Number of blobs processed during compaction.
+    uint64 BlobsProcessedDuringCompaction = 31;
+
+    // Number of garbage blocks in the most dirty range ignoring zeroed blocks.
+    uint32 CompactionIgnoringZeroedScore = 32;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume create request/response.
+
+message TCreateVolumeRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to create.
+    string DiskId = 2;
+
+    // Owner information.
+    string ProjectId = 3;
+
+    // Minimum addressable block size (smallest unit of I/O operations).
+    uint32 BlockSize = 4;
+
+    // Maximum number of blocks stored in volume.
+    uint64 BlocksCount = 5;
+
+    // Number of user channels to store blobs (unused, computed automatically instead).
+    uint32 ChannelsCount = 6;
+
+    // Storage media to use.
+    NCloud.NProto.EStorageMediaKind StorageMediaKind = 7;
+
+    // User folder Id, used for billing.
+    string FolderId = 8;
+
+    // Cloud Id, used for billing.
+    string CloudId = 9;
+
+    // Partition tablet version.
+    uint32 TabletVersion = 10;
+
+    // Performance profile, used for throttling
+    TVolumePerformanceProfile PerformanceProfile = 11;
+
+    // Optional id of base disk.
+    string BaseDiskId = 12;
+
+    // Optional id of base disk checkpoint.
+    string BaseDiskCheckpointId = 13;
+
+    // Placement group id, allowed only for nonreplicated volumes.
+    string PlacementGroupId = 14;
+
+    // If set, forces creation of the specified partition tablet count.
+    uint32 PartitionsCount = 15;
+
+    // Encryption spec.
+    TEncryptionSpec EncryptionSpec = 16;
+
+    // Indicates that volume does not belong to user directly, but used for system needs.
+    bool IsSystem = 17;
+
+    // Optional storage pool name (e.g. local:ssd), allowed only for nonreplicated volumes.
+    string StoragePoolName = 18;
+
+    // Optional list of nodes to allocate disk, allowed only for nonreplicated volumes.
+    repeated string AgentIds = 19;
+
+    // Placement partition index, allowed only for nonreplicated volumes.
+    // Takes values from 1 to PlacementPartitionCount.
+    uint32 PlacementPartitionIndex = 20;
+
+    // Mount requests with incorrect FillGeneration will be rejected unless filling is finished.
+    uint64 FillGeneration = 21;
+
+    // Tags. Format: "key=value,key2=value2,just_key"
+    string TagsStr = 22;
+}
+
+message TCreateVolumeResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume destroy request/response.
+
+message TDestroyVolumeRequest
+{
+    reserved 5;
+
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to destroy.
+    string DiskId = 2;
+
+    // If this flag is set, nbs will destroy the specified disk only if it's
+    // broken and can't be repaired
+    bool DestroyIfBroken = 3;
+
+    // Synchronous force deallocation: deallocate nonrepl. backend and wait for
+    // devices cleanup.
+    bool Sync = 4;
+
+    // Delete requests with incorrect FillGeneration will be rejected.
+    uint64 FillGeneration = 6;
+}
+
+message TDestroyVolumeResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume resize request/response.
+
+message TResizeVolumeRequestFlags
+{
+    // NBS-841
+    bool NoSeparateMixedChannelAllocation = 1;
+}
+
+message TResizeVolumeRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to resize.
+    string DiskId = 2;
+
+    // Number of blocks stored in volume.
+    // Only size increase is guaranteed to work.
+    uint64 BlocksCount = 3;
+
+    // Number of user channels to store blobs (unused, computed automatically instead).
+    uint32 ChannelsCount = 4;
+
+    // Volume configuration version resize applies to.
+    uint32 ConfigVersion = 5;
+
+    // Performance profile, used for throttling
+    // Fields with zero values will be autocalculated based on main storage config
+    TVolumePerformanceProfile PerformanceProfile = 6;
+
+    // Various experimental flags
+    TResizeVolumeRequestFlags Flags = 7;
+}
+
+message TResizeVolumeResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume alter request/response.
+
+message TAlterVolumeRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to alter.
+    string DiskId = 2;
+
+    // Owner information.
+    string ProjectId = 3;
+
+    // User folder Id, used for billing.
+    string FolderId = 4;
+
+    // Cloud Id, used for billing.
+    string CloudId = 5;
+
+    // Volume configuration version alter applies to.
+    uint32 ConfigVersion = 6;
+
+    // Encryption key hash, used for encrypted disks.
+    bytes EncryptionKeyHash = 7;
+}
+
+message TAlterVolumeResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume assignment request/response.
+
+message TAssignVolumeRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to assign.
+    string DiskId = 2;
+
+    // VM information.
+    string InstanceId = 3;
+
+    // VM token.
+    string Token = 4;
+
+    // Assigned host.
+    string Host = 5;
+
+    // Mount token version.
+    uint64 TokenVersion = 6;
+}
+
+message TAssignVolumeResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Volume information.
+    TVolume Volume = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Get list of volumes
+
+message TListVolumesRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Maximum number of concurrent DescribeScheme requests during traversal.
+    // 0 means use server default.
+    uint32 MaxConcurrency = 2;
+}
+
+message TListVolumesResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // List of volume names.
+    repeated string Volumes = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Blocks statistics request/response.
+
+message TStatVolumeRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to query.
+    string DiskId = 2;
+
+    // Maybe some flags to describe what exactly to query, if some info is hard to get?
+    uint32 Flags = 3;
+
+    // Storage config fields to get values for.
+    repeated string StorageConfigFields = 4;
+
+    // Don't return partition stats (skips partition readiness check).
+    bool NoPartition = 5;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Volatile throttling state applied to a volume
+
+message TVolumeVolatileThrottlingInfo
+{
+    // Version of the throttling configuration that is applied
+    // - Tracks which update from the VolumeThrottlingManager is currently active
+    uint32 Version = 1;
+
+    // Throttling rule applied to this volume
+    // - Contains the selector (disk IDs/filters) and performance coefficients
+    // - Empty if no matching rule exists in the current config
+    TVolumeThrottlingRule AppliedRule = 2;
+
+    // The actual performance profile derived from:
+    // - Base volume performance profile
+    // - Coefficients from AppliedRule
+    TVolumePerformanceProfile ActualPerformanceProfile = 3;
+}
+
+message TStatVolumeResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Volume information.
+    TVolume Volume = 2;
+
+    // Volume statistics.
+    TVolumeStats Stats = 3;
+
+    // Volume Mount seq number.
+    uint64 MountSeqNumber = 4;
+
+    // Request traces. Deprecated. Use Headers.Trace instead.
+    NCloud.NProto.TTraceInfo DeprecatedTrace = 5;
+
+    // List of checkpoints.
+    repeated string Checkpoints = 6;
+
+    // List of volume clients.
+    repeated TVolumeClient Clients = 7;
+
+    // The host where volume tablet is currently running.
+    string TabletHost = 8;
+
+    // Volume generation.
+    uint32 VolumeGeneration = 9;
+
+    // Mapping of storage config fields to values.
+    map<string, string> StorageConfigFieldsToValues = 10;
+
+    // Debug string with some other contents of volume state. There are no
+    // guarantees about the format.
+    string DebugString = 11;
+
+    // Volatile (not persisted to volume tablet state) throttling config
+    // applied to this volume via VolumeThrottlingManager
+    TVolumeVolatileThrottlingInfo VolatileThrottlingInfo = 12;
+
+    // Optional response headers.
+    TResponseHeaders Headers = 1000;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Get volume information
+
+message TDescribeVolumeRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume.
+    string DiskId = 2;
+}
+
+message TDescribeVolumeResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Volume information.
+    TVolume Volume = 2;
+
+    string CellId = 3;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Get volume model information
+
+message TDescribeVolumeModelRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Minimum addressable block size (smallest unit of I/O operations).
+    uint32 BlockSize = 2;
+
+    // Maximum number of blocks stored in volume.
+    uint64 BlocksCount = 3;
+
+    // Storage media to use.
+    NCloud.NProto.EStorageMediaKind StorageMediaKind = 4;
+
+    // Partition tablet version.
+    uint32 TabletVersion = 5;
+
+    // Indicates that volume does not belong to user directly, but used for system needs.
+    bool IsSystem = 6;
+
+    // Id of base disk.
+    string BaseDiskId = 7;
+}
+
+message TDescribeVolumeModelResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Volume model information.
+    TVolumeModel VolumeModel = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Create volumes link
+
+message TCreateVolumeLinkRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Id of leader disk.
+    string LeaderDiskId = 2;
+
+    // Id of follower disk.
+    string FollowerDiskId = 3;
+}
+
+message TCreateVolumeLinkResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Destroy volumes link
+
+message TDestroyVolumeLinkRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Id of leader disk.
+    string LeaderDiskId = 2;
+
+    // Id of follower disk.
+    string FollowerDiskId = 3;
+}
+
+message TDestroyVolumeLinkResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Remove volume client
+
+message TRemoveVolumeClientRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Id of disk to remove client.
+    string DiskId = 2;
+}
+
+message TRemoveVolumeClientResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}

@@ -1,0 +1,300 @@
+syntax = "proto2";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/config";
+
+import "ydb/core/nbs/cloud/storage/core/compat/config/opentelemetry_client.proto";
+import "ydb/core/nbs/cloud/storage/core/compat/protos/diagnostics.proto";
+import "ydb/core/nbs/cloud/storage/core/compat/protos/trace.proto";
+
+////////////////////////////////////////////////////////////////////////////////
+// HostName scheme
+
+enum EHostNameScheme
+{
+    HOSTNAME_RAW = 0;
+    HOSTNAME_BASTION = 1;
+    HOSTNAME_YDBVIEWER = 2;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume critical events reporting mode (for per-disk critical events)
+enum EVolumeCriticalEventsReportingMode
+{
+    // Report disk critical events only via per-host AppCriticalEvents metrics.
+    APP_ONLY = 0;
+
+    // Report disk critical events both via per-host AppCriticalEvents
+    // and via per-volume VolumeCriticalEvents metrics.
+    ALL = 1;
+
+    // Report disk critical events only via per-volume VolumeCriticalEvents
+    // metrics.
+    VOLUME_ONLY = 2;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Operation threshold
+
+message TOperationPerfThreshold
+{
+    // Operation threshold. In milliseconds.
+    optional uint64 Threshold = 1;
+
+    // Percentile to apply threshold to. [0..100]
+    optional double Percentile = 2;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume thresholds
+
+message TVolumePerfThreshold
+{
+    optional TOperationPerfThreshold ReadThreshold = 1;
+    optional TOperationPerfThreshold WriteThreshold = 2;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume performance measurements settings
+
+message TVolumePerfSettings
+{
+    optional NCloud.NProto.TPerformanceProfile Write = 1;
+    optional NCloud.NProto.TPerformanceProfile Read = 2;
+    optional uint32 CriticalFactor = 3;
+
+    // Multiplier that applies to volume's performance profile limits.
+    optional double ThrottlerOvercommit = 4;
+
+    // Minimum effective limits for write/read. After applying clamping by the
+    // volume performance profile (optionally scaled by ThrottlerOvercommit),
+    // the resulting IOPS/BW will not go below these values.
+    optional NCloud.NProto.TPerformanceProfile MinWrite = 5;
+    optional NCloud.NProto.TPerformanceProfile MinRead = 6;
+
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Monitoring URL components
+
+message TMonitoringUrlData
+{
+    // Monitoring cluster name (e.g. yandexcloud_prod_vla).
+    optional string MonitoringClusterName = 1;
+    // Monitoring host url.
+    optional string MonitoringUrl = 2;
+    // Project name in monitoring.
+    optional string MonitoringProject = 3;
+
+    // Dashboards ids for monitoring URL formation.
+    optional string MonitoringVolumeDashboard = 4;
+    optional string MonitoringPartitionDashboard = 5;
+    optional string MonitoringNBSAlertsDashboard = 6;
+    optional string MonitoringNBSTVDashboard = 7;
+
+    optional string MonitoringYDBProject = 8;
+    optional string MonitoringYDBGroupDashboard = 9;
+
+    // Monitoring dashboard url template
+    // For example
+    // {MonitoringUrl}/projects/{MonitoringProject}/dashboards/{MonitoringVolumeDashboard}
+    // ?from=now-1d&to=now&refresh=60000&p.cluster={MonitoringClusterName}&p.volume={diskId}"
+    // or
+    // {MonitoringUrl}/d/{MonitoringVolumeDashboard}?orgId=1
+    // &from=now-1d&to=now&refresh=60000
+    // &var-datasource={MonitoringProject}
+    // &var-disk_id={diskId}
+    // Possible template parameters:
+    // - MonitoringUrl
+    // - MonitoringProject
+    // - MonitoringClusterName
+    // - MonitoringVolumeDashboard
+    // - MonitoringNBSAlertsDashboard
+    // - MonitoringNBSTVDashboard
+    // - MonitoringYDBProject
+    // - MonitoringYDBGroupDashboard
+    // - diskId
+    optional string MonitoringUrlTemplate = 10;
+
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TDiagnosticsConfig
+{
+    reserved 55;
+
+    // How NBS generates name for external resources.
+    optional EHostNameScheme HostNameScheme = 1;
+
+    // Domain for hosts refered via bastion.
+    optional string BastionNameSuffix = 2;
+
+    // Ydb viewer host name.
+    optional string ViewerHostName = 3;
+
+    // Kikimr monitoring port.
+    optional string KikimrMonitoringPort = 4;
+
+    // [obsolete]
+    // Name of cluster in Solomon.
+    // optional string SolomonClusterName = 5;
+
+    // Kikimr monitoring port.
+    optional uint32 KikimrMonPort = 6;
+
+    // Nbs monitoring port.
+    optional uint32 NbsMonPort = 7;
+
+    // Dump profile log data every ProfileLogTimeThreshold ms
+    optional uint32 ProfileLogTimeThreshold = 12;
+
+    optional bool UseAsyncLogger = 13;
+
+    // [obsolete]
+    // SSD disk performance threshold
+    // optional TVolumePerfThreshold SsdPerfThreshold = 14;
+
+    // [obsolete]
+    // HDD disk performance threshold
+    // optional TVolumePerfThreshold HddPerfThreshold = 15;
+
+    // [obsolete]
+    // Solomon host url.
+    // optional string SolomonUrl = 16;
+
+    // Allow destructive LWTrace actions.
+    optional bool UnsafeLWTrace = 17;
+
+    // Path to LWTrace query file.
+    optional string LWTraceDebugInitializationQuery = 18;
+
+    // [obsolete]
+    // Project name in solomon.
+    // optional string SolomonProject = 20;
+
+    // Sampling rate for request tracking
+    optional uint32 SamplingRate = 21;
+
+    // Sampling rate for requests with processing time above "slow" threshold
+    optional uint32 SlowRequestSamplingRate = 22;
+
+    // Performance measurements coefficients for SSD.
+    optional TVolumePerfSettings SsdPerfSettings = 23;
+
+    // Performance measurements coefficients for HDD.
+    optional TVolumePerfSettings HddPerfSettings = 24;
+
+    // Performance measurements coefficients for NRD.
+    optional TVolumePerfSettings NonreplPerfSettings = 25;
+
+    // Performance measurements coefficients for mirror2 disks.
+    optional TVolumePerfSettings Mirror2PerfSettings = 26;
+
+    // Performance measurements coefficients for mirror3 disks.
+    optional TVolumePerfSettings Mirror3PerfSettings = 27;
+
+    // Expected io parallelism. Used in disk performance guarantees.
+    optional uint32 ExpectedIoParallelism = 28;
+
+    // Unified agent endpoint
+    optional string TracesUnifiedAgentEndpoint = 29;
+
+    // Performance measurements coefficients for local disks.
+    optional TVolumePerfSettings LocalSSDPerfSettings = 30;
+
+    // Traces "syslog" identifier
+    optional string TracesSyslogIdentifier = 31;
+
+    // Path to file with cpu wait counters.
+    optional string CpuWaitFilename = 32;
+
+    // Number of shuttles in lwtrace pool.
+    optional uint32 LWTraceShuttleCount = 33;
+
+    // Predictor's interval window (ms).
+    optional uint32 PostponeTimePredictorInterval = 34;
+
+    // Max possible predicted time (ms).
+    optional uint32 PostponeTimePredictorMaxTime = 35;
+
+    // Requests percentage in predictor to calculate possible delay [0.0, 1.0].
+    optional double PostponeTimePredictorPercentage = 36;
+
+    // Request duration after which it should show up in max
+    // request time alert. Thresholds are for different media kinds.
+    // Measured in milliseconds.
+    optional uint32 SSDDowntimeThreshold = 37;
+    optional uint32 HDDDowntimeThreshold = 38;
+    optional uint32 NonreplicatedSSDDowntimeThreshold = 39;
+    optional uint32 Mirror2SSDDowntimeThreshold = 40;
+    optional uint32 Mirror3SSDDowntimeThreshold = 41;
+    optional uint32 LocalSSDDowntimeThreshold = 42;
+
+    // The tracks of the requests whose processing time in ms exceeds
+    // corresponding values have a chance to be logged.
+    repeated NCloud.NProto.TLWTraceThreshold RequestThresholds = 43;
+
+    // We will report suffering disks from these clouds in a separate metric.
+    repeated string CloudIdsWithStrictSLA = 44;
+
+    // Request duration after which it should show up in max
+    // request time alert. Thresholds are for different media kinds.
+    // Measured in milliseconds.
+    optional uint32 NonreplicatedHDDDowntimeThreshold = 45;
+
+    // Performance measurements coefficients for HDD NRD.
+    optional TVolumePerfSettings HddNonreplPerfSettings = 46;
+
+    // Monitoring data necessary for link generation on monpages.
+    optional TMonitoringUrlData MonitoringUrlData = 47;
+
+    // Report histogram as a set of manually created counters
+    optional bool ReportHistogramAsMultipleCounters = 48;
+
+    // Report histogram as a single counter (THistogramCounter)
+    optional bool ReportHistogramAsSingleCounter = 49;
+
+    // Request duration after which it should show up in max
+    // request time alert. Measured in milliseconds.
+    optional uint32 LocalHDDDowntimeThreshold = 50;
+
+    // Performance measurements coefficients for local HDD disks.
+    optional TVolumePerfSettings LocalHDDPerfSettings = 51;
+
+    // Type of fetching CPU stats
+    optional NCloud.NProto.EStatsFetcherType StatsFetcherType = 52;
+
+    // Skip reporting ZeroBlocks metrics as part of WriteBlocks metrics
+    optional bool SkipReportingZeroBlocksMetricsForYDBBasedDisks = 53;
+
+    // Opentelemetry trace config
+    optional NCloud.NProto.TOpentelemetryTraceConfig OpentelemetryTraceConfig = 54;
+
+    // Represents [Start, End) interval.
+    message TInterval
+    {
+        required uint64 Start = 1;
+        required uint64 End = 2;
+    };
+
+    // Request size intervals that should be measured separately (in bytes).
+    // Intersections between ExecutionTimeSizeClasses are not allowed.
+    repeated TInterval ExecutionTimeSizeClasses = 56;
+
+    // Report time histograms with milliseconds buckets. Percentiles are still
+    // reported in microseconds.
+    optional bool UseMsUnitsForTimeHistogram = 57;
+
+    // Enables passing trace id to blobstorage.
+    optional bool PassTraceIdToBlobstorage = 58;
+
+    // Makes VolumeInfo stats for endpoints durable by pinning the VolumeInfo
+    // object (not removed by InactiveClientsTimeout while the endpoint exists)
+    optional bool EnableDurableVolumeInfo = 59;
+
+    // Selects the critical event metrics to report.
+    optional EVolumeCriticalEventsReportingMode
+        VolumeCriticalEventsReportingMode = 60;
+}

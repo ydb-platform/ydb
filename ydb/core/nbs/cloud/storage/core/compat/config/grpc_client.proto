@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package NCloud.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/storage/core/config";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TGrpcClientConfig
+{
+    // Server address.
+    optional string Address = 1;
+
+    // Request timeout.
+    optional uint32 RequestTimeout = 2; // in milliseconds
+
+    // Without TLS.
+    optional bool Insecure = 3;
+
+    // SSL target name override.
+    optional string SslTargetNameOverride = 4;
+}

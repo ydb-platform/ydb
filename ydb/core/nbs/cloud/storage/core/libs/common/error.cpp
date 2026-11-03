@@ -58,12 +58,14 @@ EErrorKind GetErrorKind(const NProto::TError& e)
         case E_BS_THROTTLED:
         case E_FS_THROTTLED:
         case E_RDMA_UNAVAILABLE:
+        case E_UNAVAILABLE:
             return EErrorKind::ErrorRetriable;
 
         case E_BS_INVALID_SESSION:
         case E_FS_INVALID_SESSION:
             return EErrorKind::ErrorSession;
         case E_ABORTED:
+        case E_TRANSPORT_ERROR:
             return EErrorKind::ErrorAborted;
     }
 
@@ -169,6 +171,7 @@ EDiagnosticsErrorKind GetDiagnosticsErrorKind(const NProto::TError& e)
         case E_BS_INVALID_SESSION:
             return EDiagnosticsErrorKind::ErrorSession;
         case E_ABORTED:
+        case E_TRANSPORT_ERROR:
             return EDiagnosticsErrorKind::ErrorAborted;
     }
 
@@ -192,7 +195,7 @@ bool IsCanNotAcquireDataError(const NProto::TError& e)
 
 bool IsConnectionError(const NProto::TError& e)
 {
-    return e.GetCode() == E_GRPC_UNAVAILABLE;
+    return e.GetCode() == E_GRPC_UNAVAILABLE || e.GetCode() == E_UNAVAILABLE;
 }
 
 bool IsSessionBlockedError(const NProto::TError& e)

@@ -13,6 +13,7 @@ SRCS(
     block_buffer_ut.cpp
     block_data_ref_ut.cpp
     context_ut.cpp
+    disjoint_interval_map_ut.cpp
     guarded_sglist_ut.cpp
     ring_buffer_ut.cpp
     scheduler_ut.cpp

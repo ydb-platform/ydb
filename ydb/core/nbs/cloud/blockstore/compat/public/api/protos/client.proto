@@ -1,0 +1,62 @@
+syntax = "proto2";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TClientMediaKindPerformanceProfile
+{
+    // Read bytes per sec.
+    optional uint64 MaxReadBandwidth = 1;
+    // Read iops.
+    optional uint32 MaxReadIops = 2;
+    // Write bytes per sec.
+    optional uint64 MaxWriteBandwidth = 3;
+    // Write iops.
+    optional uint32 MaxWriteIops = 4;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TClientPerformanceProfile
+{
+    // Performance profile used to throttle requests to network-hdd volumes.
+    optional TClientMediaKindPerformanceProfile HDDProfile = 1;
+    // Performance profile used to throttle requests to network-ssd volumes.
+    optional TClientMediaKindPerformanceProfile SSDProfile = 2;
+    // Performance profile used to throttle requests to
+    // network-ssd-nonreplicated volumes.
+    optional TClientMediaKindPerformanceProfile NonreplProfile = 3;
+    // Performance profile used to throttle requests to network-ssd-mirror2
+    // volumes.
+    optional TClientMediaKindPerformanceProfile Mirror2Profile = 4;
+    // Performance profile used to throttle requests to network-ssd-mirror3
+    // volumes.
+    optional TClientMediaKindPerformanceProfile Mirror3Profile = 5;
+    // Maximum burst length in milliseconds.
+    optional uint32 BurstTime = 6;
+    // Performance profile used to throttle requests to
+    // network-hdd-nonreplicated volumes.
+    optional TClientMediaKindPerformanceProfile HddNonreplProfile = 7;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+enum EHostType
+{
+    HOST_TYPE_DEFAULT = 0;
+    HOST_TYPE_DEDICATED = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TClientProfile
+{
+    // e.g. the number of cores allocated to the VM.
+    optional uint32 CpuUnitCount = 1;
+
+    // Throttling policy depends on the type of the host.
+    optional EHostType HostType = 2;
+}

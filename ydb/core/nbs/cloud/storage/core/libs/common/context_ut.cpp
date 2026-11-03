@@ -59,6 +59,21 @@ Y_UNIT_TEST_SUITE(TCallContext)
                 .TotalTime = CyclesToDurationSafe(15),
                 .ExecutionTime = CyclesToDurationSafe(2)});
     }
+
+    Y_UNIT_TEST(ShouldTrackShapingTime)
+    {
+        auto callContext =
+            MakeIntrusive<TCallContextBase>(static_cast<ui64>(0));
+        callContext->SetRequestStartedCycles(123);
+
+        const auto shapingTime = TDuration::MicroSeconds(17);
+        callContext->AddTime(EProcessingStage::Shaping, shapingTime);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            shapingTime,
+            callContext->Time(EProcessingStage::Shaping));
+        UNIT_ASSERT_VALUES_EQUAL(123, callContext->GetRequestStartedCycles());
+    }
 }
 
 }   // namespace NYdb::NBS

@@ -1,0 +1,176 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/blockstore/compat/public/api/protos/headers.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+import "ydb/core/nbs/cloud/storage/core/compat/protos/trace.proto";
+
+package NCloud.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// I/O vector message.
+
+message TIOVector
+{
+    // I/O buffers.
+    repeated bytes Buffers = 1;
+
+    // IPC buffer handles. Obsolete.
+    /* repeated fixed32 Handles = 2; */
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Checksum message.
+
+message TChecksum
+{
+    // The checksum value.
+    uint32 Checksum = 1;
+
+    // The length of the checksummed data in bytes.
+    uint64 ByteCount = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Blocks read request/response.
+
+message TReadBlocksRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to read from.
+    string DiskId = 2;
+
+    // Start block index.
+    uint64 StartIndex = 3;
+
+    // Number of blocks to read.
+    uint32 BlocksCount = 4;
+
+    // Additional flags. Do we need it?
+    uint32 Flags = 5;
+
+    // Checkpoint identifier.
+    string CheckpointId = 6;
+
+    // Session identifier.
+    string SessionId = 7;
+
+    // Size of the block in bytes.
+    uint32 BlockSize = 8;
+}
+
+message TReadBlocksResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Requested blocks.
+    TIOVector Blocks = 2;
+
+    // Request traces. Deprecated. Use Headers.Trace instead.
+    NCloud.NProto.TTraceInfo DeprecatedTrace = 3;
+
+    // Bitmask for unencrypted blocks
+    bytes UnencryptedBlockMask = 4;
+
+    // Throttler delay. Deprecated. Use Headers.Throttler.Delay instead.
+    uint64 DeprecatedThrottlerDelay = 5;
+
+    // If true, it means that all the data read was zeros.
+    // It's a hint, false negatives are allowed.
+    bool AllZeroes = 6;
+
+    // Checksum of the "Blocks" data read.
+    TChecksum Checksum = 7;
+
+    // Optional response headers.
+    TResponseHeaders Headers = 1000;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Blocks write request/response.
+
+// Update WriteBlockLocal CreateDependentRequest method after adding a new field.
+message TWriteBlocksRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to write to.
+    string DiskId = 2;
+
+    // Start block index.
+    uint64 StartIndex = 3;
+
+    // Blocks to write.
+    TIOVector Blocks = 4;
+
+    // Additional flags. Do we need it?
+    uint32 Flags = 5;
+
+    // Session identifier.
+    string SessionId = 6;
+
+    // Size of the block in bytes.
+    uint32 BlockSize = 7;
+
+    // Checksums of the "Blocks" data to write.
+    repeated TChecksum Checksums = 8;
+}
+
+message TWriteBlocksResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Request traces. Deprecated. Use Headers.Trace instead.
+    NCloud.NProto.TTraceInfo DeprecatedTrace = 2;
+
+    // Throttler delay.
+    uint64 DeprecatedThrottlerDelay = 3;
+
+    // Optional response headers.
+    TResponseHeaders Headers = 1000;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Blocks zero request/response.
+
+message TZeroBlocksRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to write to.
+    string DiskId = 2;
+
+    // Start block index.
+    uint64 StartIndex = 3;
+
+    // Number of blocks to delete.
+    uint32 BlocksCount = 4;
+
+    // Additional flags. Do we need it?
+    uint32 Flags = 5;
+
+    // Session identifier.
+    string SessionId = 6;
+}
+
+message TZeroBlocksResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Request traces.
+    NCloud.NProto.TTraceInfo DeprecatedTrace = 2;
+
+    // Throttler delay. Deprecated. Use Headers.Throttler.Delay instead.
+    uint64 DeprecatedThrottlerDelay = 3;
+
+    // Optional response headers.
+    TResponseHeaders Headers = 1000;
+}

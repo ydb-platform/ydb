@@ -1461,6 +1461,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NKikimrBridge::TClusterState::EPileState LocalState = NKikimrBridge::TClusterState::SYNCHRONIZED;
         NKikimrBridge::TClusterState::EPileState RemoteState = NKikimrBridge::TClusterState::SYNCHRONIZED;
         std::unordered_set<ui32> AliveNodeIndexes = {0, 1, 2, 4};
+        std::unordered_set<ui32> MissingOffloadNodeIndexes;
+        std::unordered_set<ui32> UnmappedNodeIndexes;
+        std::unordered_set<ui32> RemoteUnmappedNodeIndexes;
+        std::unordered_set<ui32> NameserviceDeadNodeIndexes;
     };
 
     NJson::TJsonValue GetClusterBridgeInfo(const TClusterBridgeOptions& options) {
@@ -1602,16 +1606,35 @@ Y_UNIT_TEST_SUITE(Viewer) {
                             ev->Sender.NodeId() - firstNodeId >= 4 ? remoteBridgeInfo : bridgeInfo), 0, ev->Cookie),
                         ev->Sender.NodeId() - firstNodeId);
                     return TTestActorRuntime::EEventAction::DROP;
-                case TEvInterconnect::EvListNodes:
+                case TEvInterconnect::EvListNodes: {
                     if (!isClusterActor(ev->Sender)) {
                         break;
                     }
                     if (!options.DropNodesInfo) {
+                        auto responseNodes = nodes;
+                        // Long lease keeps Dead nodes in the full list, but hides them in an alive-only list.
+                        if (ev->Get<TEvInterconnect::TEvListNodes>()->OnlyAliveDynamicNodes && !options.NameserviceDeadNodeIndexes.empty()) {
+                            responseNodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
+                            for (const auto& node : *nodes) {
+                                if (node.IsStatic || !options.NameserviceDeadNodeIndexes.contains(node.NodeId - firstNodeId)) {
+                                    responseNodes->push_back(node);
+                                }
+                            }
+                        }
+                        auto responsePileMap = options.ProvidePileMap ? std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>(*pileMap) : nullptr;
+                        if (responsePileMap) {
+                            const auto& unmapped = ev->Sender.NodeId() - firstNodeId >= 4
+                                ? options.RemoteUnmappedNodeIndexes : options.UnmappedNodeIndexes;
+                            for (auto& pile : *responsePileMap) {
+                                std::erase_if(pile, [&](ui32 nodeId) { return unmapped.contains(nodeId - firstNodeId); });
+                            }
+                        }
                         runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
-                            new TEvInterconnect::TEvNodesInfo(nodes, options.ProvidePileMap ? pileMap : nullptr),
+                            new TEvInterconnect::TEvNodesInfo(responseNodes, responsePileMap),
                             0, ev->Cookie), ev->Sender.NodeId() - firstNodeId);
                     }
                     return TTestActorRuntime::EEventAction::DROP;
+                }
                 case TEvWhiteboard::EvSystemStateRequest: {
                     if (!isClusterActor(ev->Sender)) {
                         break;
@@ -1635,6 +1658,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         auto response = std::make_unique<NViewer::TEvViewer::TEvViewerResponse>();
                         auto* system = response->Record.MutableSystemResponse();
                         for (ui32 nodeId : ev->Get<NViewer::TEvViewer::TEvViewerRequest>()->Record.GetLocation().GetNodeId()) {
+                            if (options.MissingOffloadNodeIndexes.contains(nodeId - firstNodeId)) {
+                                continue;
+                            }
+                            response->Record.MutableLocationResponded()->AddNodeId(nodeId);
                             addSystemState(*system, nodeId);
                         }
                         runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie),
@@ -1697,14 +1724,37 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(json["NodesAlive"].GetUIntegerSafe(), 4);
     }
 
-    Y_UNIT_TEST(ClusterBridgeNoAliveNodes) {
-        const auto json = GetClusterBridgeInfo({.AliveNodeIndexes = {}});
+    Y_UNIT_TEST_TWIN(ClusterBridgeNoAliveNodes, offloadMerge) {
+        const auto json = GetClusterBridgeInfo({.OffloadMerge = offloadMerge, .AliveNodeIndexes = {}});
         const auto& piles = json["BridgeInfo"]["Piles"].GetArraySafe();
         AssertBridgePileCounts(piles[0], 2, 2);
         AssertBridgePileCounts(piles[1], 1, 1);
         for (const auto& pile : piles) {
             AssertBridgePileAliveCounts(pile, 0, 0);
         }
+    }
+
+    Y_UNIT_TEST_TWIN(ClusterBridgePartialOffloadResponse, storage) {
+        const auto json = GetClusterBridgeInfo({
+            .OffloadMerge = true,
+            .MissingOffloadNodeIndexes = {storage ? 2u : 1u},
+        });
+        const auto& piles = json["BridgeInfo"]["Piles"].GetArraySafe();
+        AssertBridgePileCounts(piles[0], 2, 2);
+        AssertBridgePileUnknownAliveCounts(piles[0]);
+        AssertBridgePileAliveCounts(piles[1], 1, 0);
+        AssertBridgePileAliveCounts(piles[2], 0, 0);
+    }
+
+    Y_UNIT_TEST_TWIN(ClusterBridgeIncludesDeadComputeNodes, offloadMerge) {
+        const auto json = GetClusterBridgeInfo({
+            .OffloadMerge = offloadMerge,
+            .NameserviceDeadNodeIndexes = {3},
+        });
+        const auto& pile = json["BridgeInfo"]["Piles"][0];
+        AssertBridgePileCounts(pile, 2, 2);
+        AssertBridgePileAliveCounts(pile, 2, 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["NodesTotal"].GetUIntegerSafe(), 6);
     }
 
     Y_UNIT_TEST_TWIN(ClusterBridgeDisconnectedPile, offloadMerge) {
@@ -1776,6 +1826,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
             .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
         });
         AssertBridgePileUnknownAliveCounts(json["BridgeInfo"]["Piles"][1]);
+    }
+
+    Y_UNIT_TEST(ClusterBridgeHttpsIncompletePileMap) {
+        const auto json = GetClusterBridgeInfo({
+            .Https = true,
+            .ExpectedHttpsRequests = 1,
+            .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
+            .RemoteUnmappedNodeIndexes = {4},
+        });
+        const auto& piles = json["BridgeInfo"]["Piles"].GetArraySafe();
+        AssertBridgePileAliveCounts(piles[0], 2, 1);
+        AssertBridgePileCounts(piles[1], 1, 1);
+        AssertBridgePileUnknownAliveCounts(piles[1]);
+        UNIT_ASSERT_VALUES_EQUAL(json["NodesTotal"].GetUIntegerSafe(), 6);
     }
 
     Y_UNIT_TEST(ClusterBridgeHttpsRejectsInvalidResponses) {
@@ -1868,6 +1932,18 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST_TWIN(ClusterBridgeMissingNameserviceData, dropNodesInfo) {
         const auto json = GetClusterBridgeInfo({.ProvidePileMap = false, .DropNodesInfo = dropNodesInfo});
+        for (const auto& pile : json["BridgeInfo"]["Piles"].GetArraySafe()) {
+            UNIT_ASSERT(!pile.Has("Nodes"));
+            UNIT_ASSERT(!pile.Has("StorageNodes"));
+            UNIT_ASSERT(!pile.Has("ComputeNodes"));
+            AssertBridgePileUnknownAliveCounts(pile);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(ClusterBridgeIncompletePileMap, empty) {
+        const auto json = GetClusterBridgeInfo({
+            .UnmappedNodeIndexes = empty ? std::unordered_set<ui32>{0, 1, 2, 3, 4, 5} : std::unordered_set<ui32>{0},
+        });
         for (const auto& pile : json["BridgeInfo"]["Piles"].GetArraySafe()) {
             UNIT_ASSERT(!pile.Has("Nodes"));
             UNIT_ASSERT(!pile.Has("StorageNodes"));

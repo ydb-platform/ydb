@@ -32,7 +32,7 @@ class TJsonCluster : public TViewerPipeClient {
 
     int WhiteboardStateRequestsInFlight = 0;
     bool WhiteboardRequestsSent = false;
-    bool NodePileMapAvailable = false;
+    bool NodePileMapComplete = false;
     bool LocalPileOnly = false;
     bool PileRequestsStarted = false;
     TInstant Deadline;
@@ -140,7 +140,8 @@ public:
         if (!UseHealthCheck) {
             UseHealthCheckCache = false;
         }
-        NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
+        NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(),
+            new TEvInterconnect::TEvListNodes(/*subscribeToStaticNodeChanges=*/ false, /*onlyAliveDynamicNodes=*/ false));
         if (AppData()->BridgeModeEnabled) {
             NodeWardenStorageConfigResponse = MakeRequest<TEvNodeWardenStorageConfig>(MakeBlobStorageNodeWardenID(SelfId().NodeId()),
                 new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ false));
@@ -401,7 +402,7 @@ private:
     }
 
     void StartPileRequests() {
-        if (PileRequestsStarted || LocalPileOnly || !NodePileMapAvailable) {
+        if (PileRequestsStarted || LocalPileOnly || !NodePileMapComplete) {
             return;
         }
         const auto* bridgeInfo = GetBridgeInfo();
@@ -513,7 +514,6 @@ private:
                     NodeCache.emplace(node.NodeInfo.NodeId, &node);
                 }
                 if (NodesInfoResponse->Get()->PileMap) {
-                    NodePileMapAvailable = true;
                     for (ui32 pileNum = 0; pileNum < NodesInfoResponse->Get()->PileMap->size(); ++pileNum) {
                         for (ui32 nodeId : (*NodesInfoResponse->Get()->PileMap)[pileNum]) {
                             auto itNode = NodeCache.find(nodeId);
@@ -523,6 +523,9 @@ private:
                             itNode->second->PileNum = pileNum;
                         }
                     }
+                    NodePileMapComplete = std::all_of(NodeData.begin(), NodeData.end(), [](const TNode& node) {
+                        return node.PileNum.has_value();
+                    });
                 }
                 ClusterInfo.SetNodesTotal(NodesInfoResponse->Get()->Nodes.size());
                 ClusterInfo.SetHosts(hosts.size());
@@ -1246,16 +1249,32 @@ private:
                 if (NodeWardenStorageConfigResponse->Get()->BridgeInfo) {
                     const auto& srcBridgeInfo = *NodeWardenStorageConfigResponse->Get()->BridgeInfo.get();
                     auto& pbBridgeInfo = *ClusterInfo.MutableBridgeInfo();
+                    // An offloaded request may finish with only some nodes responding.
+                    std::unordered_set<TNodeId> nodesResponded;
+                    for (const auto& [nodeId, response] : SystemViewerResponse) {
+                        if (response.IsOk()) {
+                            const auto& responded = response.Get()->Record.GetLocationResponded().GetNodeId();
+                            nodesResponded.insert(responded.begin(), responded.end());
+                        }
+                    }
+                    for (const auto& [nodeId, response] : SystemStateResponse) {
+                        if (response.IsOk()) {
+                            nodesResponded.insert(nodeId);
+                        }
+                    }
                     struct TPileNodes {
                         ui32 Storage = 0;
                         ui32 Compute = 0;
                         ui32 AliveStorage = 0;
                         ui32 AliveCompute = 0;
+                        bool AliveKnown = true;
                     };
                     std::unordered_map<ui32, TPileNodes> pileNodes;
                     for (const auto& node : NodeData) {
                         if (node.PileNum) {
                             auto& nodes = pileNodes[*node.PileNum];
+                            nodes.AliveKnown &= node.Disconnected || node.SystemState.HasSystemState()
+                                || nodesResponded.contains(node.NodeId);
                             if (node.Static) {
                                 ++nodes.Storage;
                                 nodes.AliveStorage += node.IsAlive();
@@ -1276,10 +1295,10 @@ private:
                         for (const auto& [status, count] : pileToGroupStatus[pbBridgePileInfo.GetPileId()]) {
                             (*pbBridgePileInfo.MutableGroupStatuses())[status] = count;
                         }
-                        if (NodePileMapAvailable) {
+                        if (NodePileMapComplete) {
                             auto nodes = pileNodes[pile.BridgePileId.GetPileIndex()];
                             // A DISCONNECTED pile can still be queried from within that same pile.
-                            bool aliveKnown = WhiteboardRequestsSent && WhiteboardStateRequestsInFlight == 0
+                            bool aliveKnown = nodes.AliveKnown && WhiteboardRequestsSent && WhiteboardStateRequestsInFlight == 0
                                 && CanQueryPile(srcBridgeInfo, pile);
                             if (auto it = PileRequests.find(pile.BridgePileId.GetPileIndex());
                                     it != PileRequests.end() && it->second.Result) {

@@ -54,6 +54,11 @@ namespace NTable {
 
                 switch (op) {
                     case EScan::Feed:
+                        if (Scan->ShouldSkipSubset(Subset)) {
+                            /* The scan needs no rows at all, finish it without
+                                even creating an iterator over the subset. */
+                            return EReady::Gone;
+                        }
                         if (!Reset()) {
                             return EReady::Page;
                         }

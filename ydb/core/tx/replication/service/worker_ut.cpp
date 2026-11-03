@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         runtime.Send(new IEventHandle(firstReader, ydbProxy,
             new TEvYdbProxy::TEvCreateTopicReaderResponse(firstReadSession)));
         runtime.Send(new IEventHandle(firstReader, firstReadSession,
-            new TEvYdbProxy::TEvStartTopicReadingSession("first", 0)));
+            new TEvYdbProxy::TEvStartTopicReadingSession("first", 0, std::nullopt)));
         runtime.GrabEdgeEventRethrow<TEvYdbProxy::TEvReadTopicRequest>(firstReadSession);
 
         runtime.Send(new IEventHandle(firstReader, firstReadSession,
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         runtime.Send(new IEventHandle(replacementReader, ydbProxy,
             new TEvYdbProxy::TEvCreateTopicReaderResponse(replacementReadSession)));
         runtime.Send(new IEventHandle(replacementReader, replacementReadSession,
-            new TEvYdbProxy::TEvStartTopicReadingSession("replacement", 0)));
+            new TEvYdbProxy::TEvStartTopicReadingSession("replacement", 0, std::nullopt)));
 
         commit = runtime.GrabEdgeEventRethrow<TEvYdbProxy::TEvCommitOffsetRequest>(ydbProxy);
         UNIT_ASSERT_VALUES_EQUAL(std::get<3>(commit->Get()->GetArgs()), 1);

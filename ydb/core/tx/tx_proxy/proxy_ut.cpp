@@ -693,16 +693,30 @@ Y_UNIT_TEST_SUITE(TSubDomainTest) {
         env.GetClient().MarkNodeInHive(&env.GetRuntime(), nodeId, true);
         UNIT_ASSERT(env.GetClient().WaitForTabletAlive(&env.GetRuntime(), coordinator, true, WaitTimeOut));
 
-        //coordinator runs on dynamic node
+        // A successful pipe connection can precede Hive learning the restarted leader's node.
+        const auto leaderDeadline = TInstant::Now() + WaitTimeOut;
         ui32 newNodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), coordinator);
-        UNIT_ASSERT_C(env.GetTenants().IsActive("/dc-1/USER_0", newNodeId), "assert IsActive nodeId " << nodeId);
+        while (newNodeId == Max<ui32>()) {
+            UNIT_ASSERT_C(TInstant::Now() < leaderDeadline,
+                "Coordinator " << coordinator << " has no leader node in Hive after restarting");
+            newNodeId = env.GetClient().GetLeaderNode(&env.GetRuntime(), coordinator);
+        }
+
+        //coordinator runs on dynamic node
+        UNIT_ASSERT_C(env.GetTenants().IsActive("/dc-1/USER_0", newNodeId), "assert IsActive nodeId " << newNodeId);
 
         //coordinator no runs on static node, when dynamic is offline
         env.GetTenants().Stop("/dc-1/USER_0");
 
         UNIT_ASSERT(env.GetClient().WaitForTabletDown(&env.GetRuntime(), coordinator, true, WaitTimeOut));
         UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK, env.GetClient().ForceDeleteSubdomain("/dc-1", "USER_0"));
-        UNIT_ASSERT(!env.GetClient().TabletExistsInHive(&env.GetRuntime(), coordinator, false));
+
+        // Force-deleting the subdomain can complete before Hive processes tablet deletion.
+        const auto deadline = TInstant::Now() + WaitTimeOut;
+        while (env.GetClient().TabletExistsInHive(&env.GetRuntime(), coordinator, false)) {
+            UNIT_ASSERT_C(TInstant::Now() < deadline,
+                "Coordinator " << coordinator << " still exists in Hive after force-deleting its subdomain");
+        }
     }
 
     Y_UNIT_TEST(CoordinatorRunAtSubdomainNodeWhenAvailable2) {

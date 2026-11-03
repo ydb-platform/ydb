@@ -45,7 +45,8 @@ namespace {
     constexpr ui32 FirstNodeOfPile[] = {1, 10};
 
     // ordinary pool with the settings of pool 1, its groups reside in the datacenter of the designated pile
-    void CreateOrdinaryPool(TEnvironmentSetup& env, ui64 storagePoolId, ui32 numGroups, ui32 pileIndex) {
+    void CreateOrdinaryPool(TEnvironmentSetup& env, ui64 storagePoolId, ui32 numGroups, ui32 pileIndex,
+            ui32 numFailDomains = 0) {
         auto pool = ReadStoragePool(env, 1);
         pool.SetStoragePoolId(storagePoolId);
         pool.SetName(TStringBuilder() << "pool_" << storagePoolId);
@@ -53,6 +54,12 @@ namespace {
         pool.ClearItemConfigGeneration();
         pool.SetBridgeMode(false);
         pool.SetNumGroups(numGroups);
+        if (numFailDomains) {
+            auto *geometry = pool.MutableGeometry();
+            geometry->SetNumFailRealms(1);
+            geometry->SetNumFailDomainsPerFailRealm(numFailDomains);
+            geometry->SetNumVDisksPerFailDomain(1);
+        }
         UNIT_ASSERT(pool.PDiskFilterSize());
         pool.MutablePDiskFilter(0)->AddProperty()->MutableLocation()->SetDataCenter(TStringBuilder() << "dc_"
             << pileIndex + 1);
@@ -175,9 +182,131 @@ namespace {
         return env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false)->Get()->Status;
     }
 
+    void SetPoolPileOverride(TEnvironmentSetup& env, const TString& erasure, ui32 numFailDomains) {
+        const auto result = ReplaceMainConfig(env, [&](YAML::Node& config) {
+            YAML::Node rule;
+            rule["pile_name"].push_back("pile_2");
+            rule["kind"].push_back("pool_2");
+            rule["static_group_override"] = false;
+            rule["erasure_species"] = erasure;
+            rule["geometry"] = YAML::Node(YAML::NodeType::Map);
+            if (numFailDomains) {
+                auto geometry = rule["geometry"];
+                geometry["num_fail_realms"] = 1;
+                geometry["num_fail_domains_per_fail_realm"] = numFailDomains;
+                geometry["num_vdisks_per_fail_domain"] = 1;
+            }
+            config["blob_storage_config"]["storage_pool_pile_overrides"].push_back(rule);
+        });
+        UNIT_ASSERT_EQUAL_C(result.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
+            result.GetErrorReason());
+        env.Sim(TDuration::Seconds(10));
+    }
+
+    void CheckIncompatiblePoolPileOverride(const TString& erasure, ui32 baseNumFailDomains,
+            ui32 overrideNumFailDomains) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        CreateOrdinaryPool(env, 2, 1, 0, baseNumFailDomains);
+        CreateOrdinaryPool(env, 3, 1, 1, baseNumFailDomains);
+        const ui32 firstGroupId = GetLogicalPoolGroups(env, 2).front();
+        const ui32 secondGroupId = GetLogicalPoolGroups(env, 3).front();
+        UNIT_ASSERT_LT(firstGroupId, secondGroupId);
+        DropLocationFilter(env, 2);
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *move = request.AddCommand()->MutableMoveGroups();
+        move->SetBoxId(1);
+        move->SetOriginStoragePoolId(3);
+        move->SetTargetStoragePoolId(2);
+        move->SetOriginStoragePoolGeneration(ReadStoragePool(env, 3).GetItemConfigGeneration());
+        move->SetTargetStoragePoolGeneration(ReadStoragePool(env, 2).GetItemConfigGeneration());
+        const auto moved = env.Invoke(request);
+        UNIT_ASSERT_C(moved.GetSuccess(), moved.GetErrorDescription());
+
+        TDataChecker checker(env);
+        checker.Write(firstGroupId);
+        checker.Write(secondGroupId);
+        SetPoolPileOverride(env, erasure, overrideNumFailDomains);
+
+        const auto poolBefore = ReadStoragePool(env, 2);
+        const auto baseBefore = env.FetchBaseConfig();
+        const auto firstBefore = GetGroupInfo(env, firstGroupId);
+        const auto secondBefore = GetGroupInfo(env, secondGroupId);
+        const auto response = ChangeStoragePoolBridgeMode(env, 2, true);
+        UNIT_ASSERT_C(!response.GetSuccess(), "conversion accepted an incompatible pile override");
+        UNIT_ASSERT_STRING_CONTAINS(response.GetErrorDescription(), "erasure or topology");
+        UNIT_ASSERT_VALUES_EQUAL(ReadStoragePool(env, 2).SerializeAsString(), poolBefore.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(GetGroupInfo(env, firstGroupId).SerializeAsString(), firstBefore.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(GetGroupInfo(env, secondGroupId).SerializeAsString(), secondBefore.SerializeAsString());
+
+        const auto baseAfter = env.FetchBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(baseAfter.GroupSize(), baseBefore.GroupSize());
+        UNIT_ASSERT_VALUES_EQUAL(baseAfter.VSlotSize(), baseBefore.VSlotSize());
+        for (const auto& before : baseBefore.GetGroup()) {
+            const auto& after = FindGroup(baseAfter, before.GetGroupId());
+            UNIT_ASSERT_VALUES_EQUAL(after.GetGroupGeneration(), before.GetGroupGeneration());
+            UNIT_ASSERT_VALUES_EQUAL(after.GetIsProxyGroup(), before.GetIsProxyGroup());
+            UNIT_ASSERT_VALUES_EQUAL(after.VSlotIdSize(), before.VSlotIdSize());
+            for (size_t i = 0; i < before.VSlotIdSize(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(after.GetVSlotId(i).SerializeAsString(), before.GetVSlotId(i).SerializeAsString());
+            }
+        }
+        checker.CheckAll();
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(BridgePoolMode) {
+
+    Y_UNIT_TEST(RejectIncompatiblePileOverrideErasure) {
+        CheckIncompatiblePoolPileOverride("none", 8, 0);
+    }
+
+    Y_UNIT_TEST(RejectIncompatiblePileOverrideLargerTopology) {
+        CheckIncompatiblePoolPileOverride("block-4-2", 8, 9);
+    }
+
+    Y_UNIT_TEST(RejectIncompatiblePileOverrideSmallerTopology) {
+        CheckIncompatiblePoolPileOverride("block-4-2", 9, 8);
+    }
+
+    Y_UNIT_TEST(CompatiblePileOverrideAllowsConversionAndRepair) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool();
+        CreateOrdinaryPool(env, 2, 1, 1);
+        const ui32 groupId = GetLogicalPoolGroups(env, 2).front();
+        DropLocationFilter(env, 2);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        SetPoolPileOverride(env, "block-4-2", 8);
+
+        const auto poolBefore = ReadStoragePool(env, 2);
+        const auto response = ChangeStoragePoolBridgeMode(env, 2, true);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        WaitUntil(env, [&] { return IsFullyBridged(GetGroupInfo(env, groupId)); }, "group fully bridged");
+        const auto info = GetGroupInfo(env, groupId);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetBridgeProxyGroupId(), groupId);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetErasureSpecies(), TBlobStorageGroupType::Erasure4Plus2Block);
+        UNIT_ASSERT_C(TBridgePileId::FromProto(&info, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId) ==
+            TBridgePileId::FromPileIndex(1), info.ShortDebugString());
+
+        auto expectedPool = poolBefore;
+        expectedPool.SetBridgeMode(true);
+        expectedPool.SetItemConfigGeneration(poolBefore.GetItemConfigGeneration() + 1);
+        UNIT_ASSERT_VALUES_EQUAL(ReadStoragePool(env, 2).SerializeAsString(), expectedPool.SerializeAsString());
+        NKikimrBlobStorage::TConfigRequest redefine;
+        redefine.AddCommand()->MutableDefineStoragePool()->CopyFrom(ReadStoragePool(env, 2));
+        const auto redefined = env.Invoke(redefine);
+        UNIT_ASSERT_C(redefined.GetSuccess(), redefined.GetErrorDescription());
+
+        ReassignOneDisk(env, groupId);
+        env.Sim(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(GetGroupInfo(env, groupId).GetErasureSpecies(),
+            TBlobStorageGroupType::Erasure4Plus2Block);
+        checker.Write(groupId);
+        checker.CheckAll();
+    }
 
     // ordinary groups residing in single piles become inline piles, get their parts in the other pile, which are synced
     // while the groups are written to, and then the groups don't rely on their original parts anymore

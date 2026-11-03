@@ -801,6 +801,50 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         }
     }
 
+    Y_UNIT_TEST(DynamicNodeRejectsUnknownPileName) {
+        const auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
+        TNodeWardenTestState state;
+        state.RequiredRootNodeId = 1;
+        FillTwoPileBridgedMetadata(state, config);
+        TTestActorSystem runtime(5);
+        auto& bridge = runtime.GetAppDataBridgeConfig();
+        bridge.AddPiles()->SetName("pile0");
+        bridge.AddPiles()->SetName("pile1");
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        std::vector<TActorId> keepers;
+        for (ui32 nodeId = 1; nodeId <= 4; ++nodeId) {
+            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state, {}, &bridge));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers) == 1; }));
+
+        bool configPushed = false;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (nodeId == 5 && ev->GetTypeRewrite() == NStorage::TEvNodeWardenDynamicConfigPush::EventType &&
+                    ev->Get<NStorage::TEvNodeWardenDynamicConfigPush>()->Record.HasConfig()) {
+                configPushed = true;
+            }
+            return true;
+        };
+        // Its startup registry resolves a local name which is absent from the committed cluster registry. The stale
+        // nameservice locations still let it subscribe to a static node and receive the current configuration.
+        const auto startupConfig = MakeTwoPileBridgedConfig("pile0", "unknown-pile");
+        const auto invalid = RegisterKeeper(runtime, startupConfig, 5, state, {}, &bridge, nullptr, "unknown-pile");
+        UNIT_ASSERT(SimUntil(runtime, [&] { return configPushed; }));
+        const auto deadline = runtime.GetClock() + TDuration::Seconds(1);
+        runtime.Sim([&] { return runtime.GetClock() < deadline; });
+        UNIT_ASSERT(runtime.GetActor(invalid));
+        UNIT_ASSERT_C(!state.NodeWardenConfigs.contains(5), "unresolvable local pile was accepted");
+        UNIT_ASSERT(FindConvergedRoot(runtime, keepers) == 1);
+
+        // Correcting the node's startup location allows a replacement keeper to accept the same cluster config.
+        runtime.Send(new IEventHandle(invalid, {}, new TEvents::TEvPoison), 5);
+        UNIT_ASSERT(SimUntil(runtime, [&] { return !runtime.GetActor(invalid); }));
+        RegisterKeeper(runtime, config, 5, state, {}, &bridge, nullptr, "pile1");
+        UNIT_ASSERT(SimUntil(runtime, [&] { return state.NodeWardenConfigs.contains(5); }));
+        UNIT_ASSERT_VALUES_EQUAL(state.NodeWardenConfigs.at(5)->GetFingerprint(), config.GetFingerprint());
+    }
+
     // pile registry lists piles in the order other than local BridgeConfig does; pile ids must come from the registry
     Y_UNIT_TEST(PileRegistryDefinesPileIds) {
         const auto config = MakeTwoPileBridgedConfig("pile1", "pile0");
@@ -4235,6 +4279,128 @@ selector_config: []
         } else if (ev.GetTypeRewrite() == NStorage::TEvNodeWardenReadMetadataResult::EventType) {
             ev.Get<NStorage::TEvNodeWardenReadMetadataResult>()->Guid = nodeId * 1000 + 1;
         }
+    }
+
+    void CheckStaticVDiskSlainAfterSlotReuse(bool obsoleteOccupant) {
+        TCommitConfirmationFixture fixture;
+        auto *ss = fixture.Config.MutableBlobStorageConfig()->MutableServiceSet();
+        ss->MutableGroups(0)->SetGroupGeneration(2);
+        ss->MutableVDisks(0)->MutableVDiskID()->SetGroupGeneration(2);
+        auto oldVDisk = ss->GetVDisks(0);
+        oldVDisk.MutableVDiskID()->SetGroupGeneration(1);
+        oldVDisk.MutableVDiskLocation()->SetVDiskSlotID(1);
+        oldVDisk.SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+        ss->AddVDisks()->CopyFrom(oldVDisk);
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.Runtime.FilterFunction = [](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return true;
+        };
+        fixture.Start();
+
+        auto query = [&] {
+            return QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
+        };
+        auto report = [&](ui32 generation, ui32 slotId) {
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto *command = request->Record.MutableStaticVDiskSlain();
+            command->MutableVDiskId()->CopyFrom(oldVDisk.GetVDiskID());
+            command->MutableVDiskId()->SetGroupGeneration(generation);
+            auto *slot = command->MutableVSlotId();
+            slot->SetNodeId(oldVDisk.GetVDiskLocation().GetNodeID());
+            slot->SetPDiskId(oldVDisk.GetVDiskLocation().GetPDiskID());
+            slot->SetVSlotId(slotId);
+            InvokeKeeper(fixture.Runtime, fixture.Root(), std::move(request));
+        };
+        auto reassign = [&](ui32 activeIndex, ui32 generation, ui32 slotId) {
+            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            auto *config = request->Record.MutableUpdateConfig()->MutableConfig();
+            config->CopyFrom(query());
+            auto *serviceSet = config->MutableBlobStorageConfig()->MutableServiceSet();
+            auto replacement = serviceSet->GetVDisks(activeIndex);
+            serviceSet->MutableVDisks(activeIndex)->SetEntityStatus(NKikimrBlobStorage::EEntityStatus::DESTROY);
+            replacement.MutableVDiskID()->SetGroupGeneration(generation);
+            replacement.MutableVDiskLocation()->SetVDiskSlotID(slotId);
+            serviceSet->AddVDisks()->CopyFrom(replacement);
+            serviceSet->MutableGroups(0)->SetGroupGeneration(generation);
+            serviceSet->MutableGroups(0)->MutableRings(0)->MutableFailDomains(0)->MutableVDiskLocations(0)
+                ->SetVDiskSlotID(slotId);
+            InvokeKeeper(fixture.Runtime, fixture.Root(), std::move(request));
+        };
+
+        // A full VDiskID at another location must not remove the original record.
+        report(1, 9);
+        UNIT_ASSERT_VALUES_EQUAL(query().GetFingerprint(), fixture.Config.GetFingerprint());
+
+        // Remove G, keeping a repeated report for it delayed until its slot is reused.
+        report(1, 1);
+        auto cleaned = query();
+        UNIT_ASSERT_VALUES_EQUAL(cleaned.GetBlobStorageConfig().GetServiceSet().VDisksSize(), 1);
+        report(1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(query().GetFingerprint(), cleaned.GetFingerprint());
+
+        // The freed highest slot can now be allocated to the same position at G+2.
+        reassign(0, 3, 1);
+        if (obsoleteOccupant) {
+            // Retain G+2 at that slot as a destroyed record after another reassignment.
+            reassign(1, 4, 2);
+        }
+
+        const auto beforeDelayedReport = query();
+        const auto& reusedVDisk = beforeDelayedReport.GetBlobStorageConfig().GetServiceSet().GetVDisks(1);
+        UNIT_ASSERT_VALUES_EQUAL(reusedVDisk.GetVDiskID().GetGroupGeneration(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(reusedVDisk.GetVDiskLocation().GetVDiskSlotID(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reusedVDisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY, obsoleteOccupant);
+        report(1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(query().GetFingerprint(), beforeDelayedReport.GetFingerprint());
+
+        if (obsoleteOccupant) {
+            // The report for the actual obsolete occupant still removes exactly that record.
+            report(3, 1);
+            UNIT_ASSERT_VALUES_EQUAL(query().GetBlobStorageConfig().GetServiceSet().VDisksSize(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(StaticVDiskSlainIgnoresReusedActiveSlot) {
+        CheckStaticVDiskSlainAfterSlotReuse(false);
+    }
+
+    Y_UNIT_TEST(StaticVDiskSlainIgnoresReusedObsoleteSlot) {
+        CheckStaticVDiskSlainAfterSlotReuse(true);
+    }
+
+    Y_UNIT_TEST(StaticVDiskSlainIgnoresMissingSlotOnUnusedPDisk) {
+        TCommitConfirmationFixture fixture;
+        auto *ss = fixture.Config.MutableBlobStorageConfig()->MutableServiceSet();
+        ss->MutableGroups(0)->SetGroupGeneration(2);
+        ss->MutableVDisks(0)->MutableVDiskID()->SetGroupGeneration(2);
+        ss->AddPDisks()->CopyFrom(MakeStorageConfig(3, 1, {2}).GetBlobStorageConfig().GetServiceSet().GetPDisks(0));
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        fixture.Runtime.FilterFunction = [](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            return true;
+        };
+        fixture.Start();
+
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableStaticVDiskSlain();
+        command->MutableVDiskId()->CopyFrom(ss->GetVDisks(0).GetVDiskID());
+        command->MutableVDiskId()->SetGroupGeneration(1);
+        auto *slot = command->MutableVSlotId();
+        slot->SetNodeId(2);
+        slot->SetPDiskId(1);
+        slot->SetVSlotId(0);
+        InvokeKeeper(fixture.Runtime, fixture.Root(), std::move(request));
+
+        const auto after = QueryKeeper(fixture.Runtime, fixture.Root()).GetQueryConfig().GetConfig();
+        UNIT_ASSERT_VALUES_EQUAL(after.GetFingerprint(), fixture.Config.GetFingerprint());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetBlobStorageConfig().GetServiceSet().PDisksSize(), 2);
     }
 
     bool HandleReplaceEvent(TTestActorSystem& runtime, ui32 nodeId, IEventHandle& ev,
@@ -7984,6 +8150,169 @@ selector_config: []
         UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&boardGroup,
             &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId), TBridgePileId::FromPileIndex(0));
         CheckDurableConfigConverges(fixture, committed);
+    }
+
+    // State storage of three single-node rings 1, 2, 3, two of them needed for the quorum. Node 1 is seen bad, and the
+    // allowed nodes 1, 2, 4 make the healthy node 3 move to 4. Replacing the one node disables its ring first, and with
+    // the ring of node 1 out too, only one ring would be left; this must not go the way of replacing the one node.
+    Y_UNIT_TEST(SelfHealDoesNotDisableHealthyRingWithoutQuorum) {
+        TCommitConfirmationFixture fixture(false, 4);
+        fixture.Config = MakeStorageConfig(4, 1, {1});
+        fixture.Config.MutableSelfManagementConfig()->SetEnabled(true);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageManagement(true);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageBoardManagement(false);
+        fixture.Config.MutableSelfManagementConfig()->SetAutomaticSchemeBoardManagement(false);
+        for (ui32 nodeId : {1, 2, 4}) {
+            fixture.Config.MutableSelfManagementConfig()->AddStateStorageSelfHealAllowedNodes(nodeId);
+        }
+        for (auto& node : *fixture.Config.MutableAllNodes()) {
+            node.MutableLocation()->SetDataCenter("dc-1");
+        }
+        auto makeConfig = [](auto *config, const std::vector<ui32>& nodes) {
+            config->SetSSId(1);
+            auto *group = config->MutableRing();
+            group->SetNToSelect(3);
+            for (ui32 nodeId : nodes) {
+                group->AddRing()->AddNode(nodeId);
+            }
+        };
+        makeConfig(fixture.Config.MutableStateStorageConfig(), {1, 2, 3});
+        makeConfig(fixture.Config.MutableStateStorageBoardConfig(), {1, 2, 4});
+        makeConfig(fixture.Config.MutableSchemeBoardConfig(), {1, 2, 4});
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        const auto& policy = fixture.Config.GetSelfManagementConfig();
+
+        auto& runtime = fixture.Runtime;
+        std::optional<ui32> reassignedNode; // the node the way of replacing the one node started with
+        bool reconfigured = false; // the full way has proposed the state storage without node 3
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
+                const auto& command = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
+                if (command.HasReassignStateStorageNode() && !reassignedNode) {
+                    reassignedNode = command.GetReassignStateStorageNode().GetFrom();
+                } else if (command.HasReconfigStateStorage() &&
+                        command.GetReconfigStateStorage().HasStateStorageConfig()) {
+                    const TString config = command.GetReconfigStateStorage().GetStateStorageConfig().ShortDebugString();
+                    reconfigured |= !config.Contains("Node: 3");
+                }
+                if (ev->Recipient == MakeBlobStorageNodeWardenID(1) && !fixture.Keepers.empty()) {
+                    ev->Rewrite(NStorage::TEvNodeConfigInvokeOnRoot::EventType, fixture.Keepers.front());
+                }
+            }
+            return true;
+        };
+        runtime.Start();
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State, {}, nullptr,
+                &policy));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
+
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableSelfHealNodesStateUpdate();
+        command->SetEnableSelfHealStateStorage(true);
+        command->SetWaitForConfigStep(1);
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            auto *nodeState = command->AddNodesState();
+            nodeState->SetNodeId(nodeId);
+            nodeState->SetState(nodeId == 1 ? NKikimr::BAD : NKikimr::GOOD); // node 1 is bad
+        }
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() ==
+            NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, response->Get()->Record.DebugString());
+        SimUntil(runtime, [&] { return reassignedNode || reconfigured; });
+        UNIT_ASSERT_C(reassignedNode != 3u, "the ring of the healthy node 3 is disabled while the ring of node 1 is out");
+        UNIT_ASSERT_C(reassignedNode || reconfigured, "self-heal didn't move the state storage off node 3");
+    }
+
+    // Self-heal replaces the bad node 3 of state storage with node 4, while the board, on nodes 7, 6, 5, only gets
+    // its rings in another order. The board has no node to replace, so the replacement of node 3 must be made in state
+    // storage only.
+    Y_UNIT_TEST(SelfHealReplacesNodeOnlyInItsSubsystem) {
+        TCommitConfirmationFixture fixture(false, 7);
+        fixture.Config = MakeStorageConfig(7, 1, {1});
+        auto *policy = fixture.Config.MutableSelfManagementConfig();
+        policy->SetEnabled(true);
+        policy->SetAutomaticStateStorageManagement(true);
+        policy->SetAutomaticStateStorageBoardManagement(true);
+        policy->SetAutomaticSchemeBoardManagement(false);
+        for (ui32 nodeId : {1, 2, 3, 4}) {
+            policy->AddStateStorageSelfHealAllowedNodes(nodeId);
+        }
+        for (ui32 nodeId : {5, 6, 7}) {
+            policy->AddStateStorageBoardSelfHealAllowedNodes(nodeId);
+        }
+        for (auto& node : *fixture.Config.MutableAllNodes()) {
+            node.MutableLocation()->SetDataCenter("dc-1");
+        }
+        auto makeConfig = [](auto *config, const std::vector<ui32>& nodes) {
+            config->SetSSId(1);
+            auto *group = config->MutableRing();
+            group->SetNToSelect(3);
+            for (ui32 nodeId : nodes) {
+                group->AddRing()->AddNode(nodeId);
+            }
+        };
+        makeConfig(fixture.Config.MutableStateStorageConfig(), {1, 2, 3});
+        makeConfig(fixture.Config.MutableStateStorageBoardConfig(), {7, 6, 5});
+        makeConfig(fixture.Config.MutableSchemeBoardConfig(), {1, 2, 3});
+        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&fixture.Config);
+        for (ui32 nodeId = 1; nodeId <= 7; ++nodeId) {
+            fixture.Metadata(nodeId).MutableCommittedStorageConfig()->CopyFrom(fixture.Config);
+        }
+        const auto& policyRef = fixture.Config.GetSelfManagementConfig();
+
+        auto& runtime = fixture.Runtime;
+        std::vector<std::decay_t<decltype(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot().GetReassignStateStorageNode())>> reassigns;
+        runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            SetMetadataDiskGuid(nodeId, *ev);
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRoot::EventType) {
+                const auto& command = ev->Get<NStorage::TEvNodeConfigInvokeOnRoot>()->Record;
+                if (command.HasReassignStateStorageNode()) {
+                    reassigns.push_back(command.GetReassignStateStorageNode());
+                }
+                if (ev->Recipient == MakeBlobStorageNodeWardenID(1) && !fixture.Keepers.empty()) {
+                    ev->Rewrite(NStorage::TEvNodeConfigInvokeOnRoot::EventType, fixture.Keepers.front());
+                }
+            }
+            return true;
+        };
+        runtime.Start();
+        for (ui32 nodeId = 1; nodeId <= 7; ++nodeId) {
+            fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State, {}, nullptr,
+                &policyRef));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
+
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *command = request->Record.MutableSelfHealNodesStateUpdate();
+        command->SetEnableSelfHealStateStorage(true);
+        command->SetWaitForConfigStep(1);
+        command->SetPileupReplicas(true);
+        command->SetOverrideRingsCount(3);
+        command->SetOverrideReplicasInRingCount(1);
+        for (ui32 nodeId = 1; nodeId <= 7; ++nodeId) {
+            auto *nodeState = command->AddNodesState();
+            nodeState->SetNodeId(nodeId);
+            nodeState->SetState(nodeId == 3 ? NKikimr::BAD : NKikimr::GOOD); // node 3 is bad
+        }
+        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
+        const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        UNIT_ASSERT_C(response->Get()->Record.GetStatus() ==
+            NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, response->Get()->Record.DebugString());
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return !reassigns.empty(); }), "self-heal didn't replace node 3");
+        for (const auto& reassign : reassigns) {
+            UNIT_ASSERT_VALUES_EQUAL(reassign.GetFrom(), 3);
+            UNIT_ASSERT(reassign.GetStateStorage());
+            UNIT_ASSERT_C(!reassign.GetStateStorageBoard(), reassign.ShortDebugString());
+        }
     }
 
     Y_UNIT_TEST(SelfHealRejectsEmptyGeneratedStateStorageConfig) {

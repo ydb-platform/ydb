@@ -26,6 +26,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
+#include <util/stream/fwd.h>
 
 #include <optional>
 
@@ -117,6 +118,9 @@ private:
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override;
     void OnActivateExecutor(const TActorContext& ctx) override;
     void DefaultSignalTabletActive(const TActorContext& ctx) override;
+    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
+    bool RenderMonitoring(TStringStream& out, ui64 replicationId, ui32 page) const;
+    TStringBuf GetMonitoringBootStatus(const TWorkerId& id) const;
 
     // state functions
     STFUNC(StateInit);
@@ -202,6 +206,7 @@ private:
     TVector<TString> GetCommitTablePaths(const TRowVersion& version) const;
     bool CanCommitIndexBuilds(const TRowVersion& version) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
+    void UpdateLagCounters();
     void InvalidateLag(const TWorkerId& id);
     void ScheduleLagExpiry(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvExpireWorkerLag::TPtr& ev, const TActorContext& ctx);
@@ -209,10 +214,12 @@ private:
     void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status);
     void ProcessCreateStreamQueue(const TActorContext& ctx);
     void ProcessDropStreamQueue(const TActorContext& ctx);
+    void RemoveTarget(NIceDb::TNiceDb& db, TReplication& replication, ui64 targetId);
 
     // local transactions
     class TTxInitSchema;
     class TTxInit;
+    class TTxMonitoring;
     class TTxCreateReplication;
     class TTxAlterReplication;
     class TTxDropReplication;
@@ -307,6 +314,8 @@ private:
             Y_VERIFY_S(res.second, "Duplication replication: " << pathId);
         }
 
+        replication->SetLagChangedCallback([this] { UpdateLagCounters(); });
+        UpdateLagCounters();
         return replication;
     }
 

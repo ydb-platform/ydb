@@ -105,13 +105,15 @@ public:
         Env.Runtime->WrapInActorContext(Edge, [&] {
             auto request = std::make_unique<TEvBlobStorage::TEvBlock>(TabletId, Generation, TInstant::Max());
             request->IsIdempotent = isIdempotent;
-            request->ForceGroupGeneration = info->GroupGeneration;
+            if (!info->IsBridged()) {
+                request->ForceGroupGeneration = info->GroupGeneration;
+            }
             SendToBSProxy(Edge, info->GroupID, request.release());
         });
         auto result = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(Edge, false,
             Env.Runtime->GetClock() + TDuration::Seconds(5));
         UNIT_ASSERT(result);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, expected);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, expected, result->Get()->ErrorReason);
         Env.Sim(TDuration::MilliSeconds(100));
     }
 

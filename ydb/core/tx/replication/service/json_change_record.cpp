@@ -6,7 +6,10 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/replication/common/family_settings.h>
 
+#include <contrib/libs/rapidjson/include/rapidjson/reader.h>
+
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/rapidjson_helpers.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
@@ -15,6 +18,80 @@
 namespace NKikimr::NReplication::NService {
 
 namespace {
+
+// NJson::ReadJson does not expose kParseFullPrecisionFlag, and its RapidJSON
+// callback adapter is private to the JSON library. This local bridge lets
+// replication parse CDC doubles exactly while retaining the existing schema
+// validation callbacks.
+class TRapidJsonCallbacks {
+public:
+    explicit TRapidJsonCallbacks(NJson::TJsonCallbacks& callbacks)
+        : Callbacks(callbacks)
+    {
+    }
+
+    bool Null() {
+        return Callbacks.OnNull();
+    }
+
+    bool Bool(bool value) {
+        return Callbacks.OnBoolean(value);
+    }
+
+    bool Int(int value) {
+        return Callbacks.OnInteger(value);
+    }
+
+    bool Uint(unsigned value) {
+        return Uint64(value);
+    }
+
+    bool Int64(i64 value) {
+        return Callbacks.OnInteger(value);
+    }
+
+    bool Uint64(ui64 value) {
+        if (value <= ui64(Max<i64>())) {
+            return Callbacks.OnInteger(i64(value));
+        }
+        return Callbacks.OnUInteger(value);
+    }
+
+    bool Double(double value) {
+        return Callbacks.OnDouble(value);
+    }
+
+    bool RawNumber(const char*, rapidjson::SizeType, bool) {
+        return false;
+    }
+
+    bool String(const char* value, rapidjson::SizeType length, bool) {
+        return Callbacks.OnString(TStringBuf(value, length));
+    }
+
+    bool StartObject() {
+        return Callbacks.OnOpenMap();
+    }
+
+    bool Key(const char* value, rapidjson::SizeType length, bool) {
+        return Callbacks.OnMapKey(TStringBuf(value, length));
+    }
+
+    bool EndObject(rapidjson::SizeType) {
+        return Callbacks.OnCloseMap();
+    }
+
+    bool StartArray() {
+        return Callbacks.OnOpenArray();
+    }
+
+    bool EndArray(rapidjson::SizeType) {
+        return Callbacks.OnCloseArray();
+    }
+
+private:
+    NJson::TJsonCallbacks& Callbacks;
+};
 
 class TSchemaKeyParser: public NJson::TParserCallbacks {
 public:
@@ -70,9 +147,13 @@ private:
 } // namespace
 
 bool TChangeRecordBuilder::ParseJsonBody(TStringBuf body, NJson::TJsonValue& json, TString& error) {
-    TMemoryInput input(body.data(), body.size());
+    NJson::TStringBufStreamWrapper input(body);
     TSchemaKeyParser parser(json);
-    if (NJson::ReadJson(&input, &parser)) {
+    TRapidJsonCallbacks callbacks(parser);
+    rapidjson::Reader reader;
+    // CDC emits enough digits to recover the original double exactly.
+    constexpr auto flags = rapidjson::kParseValidateEncodingFlag | rapidjson::kParseFullPrecisionFlag;
+    if (reader.Parse<flags>(input, callbacks) && parser.OnEnd()) {
         return true;
     }
 

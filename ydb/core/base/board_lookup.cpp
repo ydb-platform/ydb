@@ -317,8 +317,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
                 Info.erase(oid);
                 update = { "", true };
             } else {
-                auto& currentInfo = Info[oid];
-                if (currentInfo.Payload != info.GetPayload()) {
+                const auto [it, inserted] = Info.try_emplace(oid);
+                auto& currentInfo = it->second;
+                if (inserted || currentInfo.Payload != info.GetPayload()) {
                     currentInfo.Payload = info.GetPayload();
                     update = { info.GetPayload(), false };
                 }
@@ -385,8 +386,9 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
             for (const auto &x : record.GetInfo()) {
                 const TActorId oid = ActorIdFromProto(x.GetOwner());
 
-                auto& currentInfo = Info[oid];
-                if (currentInfo.Payload != x.GetPayload()) {
+                const auto [it, inserted] = Info.try_emplace(oid);
+                auto& currentInfo = it->second;
+                if (inserted || currentInfo.Payload != x.GetPayload()) {
                     currentInfo.Payload = x.GetPayload();
                     if (isStateSubscribe) {
                         updates[oid] = {x.GetPayload(), false};

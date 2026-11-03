@@ -5,6 +5,7 @@ on:
       - 'main'
       - 'stable-*'
       - 'nbs-*'
+      - 'nbs2-*'
       - 'prestable-*'
       - 'stream-nb-*'
       - 'dev/**/*'
@@ -20,6 +21,7 @@ on:
       - 'main'
       - 'stable-*'
       - 'nbs-*'
+      - 'nbs2-*'
       - 'stream-nb-*'
     paths-ignore:
       - 'ydb/docs/**'

@@ -33,19 +33,28 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         explicit TSecretGate(TTestActorRuntime& runtime)
             : Runtime(runtime)
             , Observer(runtime.AddObserver([this](IEventHandle::TPtr& ev) {
-                if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySet
-                    && Runtime.FindActor(ev->Sender)->GetActivityType()
-                        == NKikimrServices::TActivity::REPLICATION_CONTROLLER_SECRET_RESOLVER)
-                {
+                if (!ev->HasEvent()) {
+                    return;
+                }
+
+                if (ev->GetTypeRewrite() == TEvTxProxySchemeCache::EvNavigateKeySet) {
+                    const auto* sender = Runtime.FindActor(ev->Sender);
+                    if (!sender || sender->GetActivityType()
+                        != NKikimrServices::TActivity::REPLICATION_CONTROLLER_SECRET_RESOLVER)
+                    {
+                        return;
+                    }
+
                     auto request = ev->Get<TEvTxProxySchemeCache::TEvNavigateKeySet>()->Request;
                     request->ResultSet.front().Status = NSchemeCache::TSchemeCacheNavigate::EStatus::Ok;
                     request->ResultSet.front().SecurityObject = nullptr;
                     Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
                         new TEvTxProxySchemeCache::TEvNavigateKeySetResult(request)));
                     ev.Reset();
-                } else if (ev->GetTypeRewrite() == TEvPrivate::EvResolveSecretResult) {
+                } else if (const auto* original = dynamic_cast<TEvPrivate::TEvResolveSecretResult*>(ev->GetBase())) {
+                    // Private event IDs are shared with unrelated actors, including Hive.
                     auto result = MakeHolder<TEvPrivate::TEvResolveSecretResult>(
-                        ev->Get<TEvPrivate::TEvResolveSecretResult>()->ReplicationId, "root@builtin");
+                        original->ReplicationId, "root@builtin");
                     ev.Reset(new IEventHandle(ev->GetRecipientRewrite(), ev->Sender,
                         result.Release(), 0, ev->Cookie));
                     if (Hold) {
@@ -185,6 +194,20 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             Sync();
         }
 
+        void ExpectLagCounters(TDuration lag, ui64 unavailable) {
+            const auto response = Env.Send<TEvTablet::TEvGetCountersResponse>(
+                ControllerId, new TEvTablet::TEvGetCounters());
+            THashMap<TString, ui64> counters;
+            for (const auto& counter : response->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+                counters.emplace(counter.GetName(), counter.GetValue());
+            }
+
+            UNIT_ASSERT(counters.contains("ReplicationController/DataLag"));
+            UNIT_ASSERT_VALUES_EQUAL(counters.at("ReplicationController/DataLag"), lag.MilliSeconds());
+            UNIT_ASSERT(counters.contains("ReplicationController/DataLagUnavailableReplications"));
+            UNIT_ASSERT_VALUES_EQUAL(counters.at("ReplicationController/DataLagUnavailableReplications"), unavailable);
+        }
+
         void ExpectLag(std::optional<TDuration> lag) {
             const auto desc = Describe();
             UNIT_ASSERT_VALUES_EQUAL(desc.TargetsSize(), 1);
@@ -195,6 +218,8 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                 UNIT_ASSERT_VALUES_EQUAL(desc.GetTargets(0).GetLagMilliSeconds(), lag->MilliSeconds());
                 UNIT_ASSERT_VALUES_EQUAL(desc.GetState().GetStandBy().GetLagMilliSeconds(), lag->MilliSeconds());
             }
+
+            ExpectLagCounters(lag.value_or(TDuration::Zero()), lag ? 0 : 1);
         }
 
         void Status(ui32 node, bool hasWorker = true) {
@@ -254,11 +279,25 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             UNIT_ASSERT_VALUES_EQUAL(LocalQuery(Env.GetRuntime(), ControllerId, query, result), NKikimrProto::OK);
             return result.GetValue().GetStruct(0).GetOptional().HasOptional();
         }
+
+        TString Monitoring(const TVector<std::pair<TString, TString>>& parameters = {}) {
+            NActorsProto::TRemoteHttpInfo request;
+            request.SetMethod(HTTP_METHOD_GET);
+            request.SetPath("/app");
+            for (const auto& [key, value] : parameters) {
+                auto* parameter = request.AddQueryParams();
+                parameter->SetKey(key);
+                parameter->SetValue(value);
+            }
+            return Env.Send<NMon::TEvRemoteHttpInfoRes>(Controller,
+                new NMon::TEvRemoteHttpInfo(std::move(request)))->Get()->Html;
+        }
     };
 
     Y_UNIT_TEST(LagUnavailableAfterStopWhileWaitingInBootQueue) {
         TSetup s(1);
         auto& runtime = s.Env.GetRuntime();
+        s.ExpectLag(std::nullopt);
         s.ReportLag(0, TDuration::Seconds(5));
         s.ExpectLag(TDuration::Seconds(5));
         runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
@@ -269,6 +308,97 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         s.ProcessQueues();
         s.ExpectRun(0);
         s.ExpectLag(std::nullopt); // Starting alone cannot revive the previous sample.
+        s.ReportLag(0, TDuration::Seconds(1));
+        s.ExpectLag(TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST(LagCountersAggregateReplicationsAndTrackRemoval) {
+        TSetup s(1);
+        auto& runtime = s.Env.GetRuntime();
+        s.ReportLag(0, TDuration::Seconds(5));
+
+        // SchemeShard normally allocates separate tablets. Create another
+        // replication directly to exercise the controller's shared counters.
+        const TPathId otherPath(s.PathId.OwnerId, s.PathId.LocalPathId + 1);
+        auto create = MakeHolder<TEvController::TEvCreateReplication>();
+        otherPath.ToProto(create->Record.MutablePathId());
+        create->Record.SetDatabase("/Root");
+        auto* config = create->Record.MutableConfig();
+        config->MutableSrcConnectionParams()->SetEndpoint(s.Env.GetEndpoint());
+        config->MutableSrcConnectionParams()->SetDatabase("/Root");
+        config->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken("");
+        config->MutableConsistencySettings()->MutableRow();
+        auto* target = config->MutableSpecific()->AddTargets();
+        target->SetSrcPath("/Root/table");
+        target->SetDstPath("/Root/other_replica");
+        const auto created = s.Env.Send<TEvController::TEvCreateReplicationResult>(s.Controller, std::move(create));
+        UNIT_ASSERT_C(created->Get()->Record.GetStatus() == NKikimrReplication::TEvCreateReplicationResult::SUCCESS,
+            created->Get()->Record.ShortDebugString());
+        s.ExpectLagCounters(TDuration::Seconds(5), 1);
+
+        const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0]);
+        const auto otherWorker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        UNIT_ASSERT(otherWorker.ReplicationId() != s.Worker.ReplicationId());
+        const auto report = [&](TDuration lag) {
+            runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+                new TEvService::TEvWorkerStatus(otherWorker, lag)));
+            s.Sync();
+        };
+        report(TDuration::Seconds(2));
+        s.ExpectLagCounters(TDuration::Seconds(5), 0);
+        report(TDuration::Seconds(9));
+        s.ReportLag(0, TDuration::Seconds(1));
+        s.ExpectLagCounters(TDuration::Seconds(9), 0);
+        report(TDuration::Seconds(1)); // Equal lag values still represent two replications.
+        s.ExpectLagCounters(TDuration::Seconds(1), 0);
+
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(otherWorker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+        s.Sync();
+        s.ExpectLagCounters(TDuration::Seconds(1), 1);
+        s.ProcessQueues();
+        const auto restarted = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0]);
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(restarted->Get()->Record.GetWorker()), otherWorker);
+        report(TDuration::Seconds(9));
+        s.ExpectLagCounters(TDuration::Seconds(9), 0);
+
+        auto drop = MakeHolder<TEvController::TEvDropReplication>();
+        otherPath.ToProto(drop->Record.MutablePathId());
+        s.Env.SendAsync(s.Controller, std::move(drop));
+        s.Sync();
+        s.ProcessQueues();
+        const auto stop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(s.Edges[0]);
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(stop->Get()->Record.GetWorker()), otherWorker);
+        s.ExpectLagCounters(TDuration::Seconds(1), 1);
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(otherWorker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+        const auto dropped = runtime.GrabEdgeEvent<TEvController::TEvDropReplicationResult>(s.Env.GetSender());
+        UNIT_ASSERT_C(dropped->Get()->Record.GetStatus() == NKikimrReplication::TEvDropReplicationResult::SUCCESS,
+            dropped->Get()->Record.ShortDebugString());
+        s.ExpectLagCounters(TDuration::Seconds(1), 0);
+
+        auto dropLast = MakeHolder<TEvController::TEvDropReplication>();
+        s.PathId.ToProto(dropLast->Record.MutablePathId());
+        s.Env.SendAsync(s.Controller, std::move(dropLast));
+        s.ProcessQueues();
+        s.ExpectStop(0);
+        s.ExpectLagCounters(TDuration::Zero(), 1);
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+        const auto lastDropped = runtime.GrabEdgeEvent<TEvController::TEvDropReplicationResult>(s.Env.GetSender());
+        UNIT_ASSERT_C(lastDropped->Get()->Record.GetStatus() == NKikimrReplication::TEvDropReplicationResult::SUCCESS,
+            lastDropped->Get()->Record.ShortDebugString());
+        s.ExpectLagCounters(TDuration::Zero(), 0);
+    }
+
+    Y_UNIT_TEST(LagCountersUnavailableAfterControllerRestart) {
+        TSetup s(1);
+        s.ReportLag(0, TDuration::Seconds(5));
+        s.ExpectLag(TDuration::Seconds(5));
+        s.Reboot();
+        s.ExpectLag(std::nullopt);
+        s.Status(0);
+        s.ExpectLag(std::nullopt);
         s.ReportLag(0, TDuration::Seconds(1));
         s.ExpectLag(TDuration::Seconds(1));
     }
@@ -286,6 +416,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         UNIT_ASSERT(desc.GetState().HasError());
         UNIT_ASSERT_VALUES_EQUAL(desc.TargetsSize(), 1);
         UNIT_ASSERT(!desc.GetTargets(0).HasLagMilliSeconds());
+        s.ExpectLagCounters(TDuration::Zero(), 1);
     }
 
     Y_UNIT_TEST(LagStaysUnavailableWhileBootQueueHasNoReadySession) {
@@ -887,9 +1018,12 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         auto& runtime = s.Env.GetRuntime();
         const auto nodeId = s.Edges[0].NodeId();
 
+        s.ReportLag(0, TDuration::Seconds(5));
+        s.ExpectLagCounters(TDuration::Seconds(5), 0);
         s.AlterState("Paused");
         s.ProcessQueues();
         s.ExpectStop(0);
+        s.ExpectLagCounters(TDuration::Zero(), 1);
 
         // The node restarts: the acknowledgement is lost, the new process has no workers.
         s.Disconnect(0);
@@ -898,6 +1032,7 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvHandshake>(s.Edges[0]));
         s.Status(0, false);
         s.ProcessQueues();
+        s.ExpectLagCounters(TDuration::Zero(), 1);
 
         s.AlterState("StandBy");
         for (ui32 i = 0; i < 50; ++i) {
@@ -907,6 +1042,9 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
         const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0], TDuration::Seconds(10));
         UNIT_ASSERT_C(run, "worker does not start after resume");
+        s.ExpectLagCounters(TDuration::Zero(), 1);
+        s.ReportLag(0, TDuration::Seconds(1));
+        s.ExpectLagCounters(TDuration::Seconds(1), 0);
     }
 
     Y_UNIT_TEST(TransferResumeAfterPauseWithLostStopAcknowledgement) {
@@ -937,6 +1075,93 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
 
         const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0], TDuration::Seconds(10));
         UNIT_ASSERT_C(run, "transfer worker does not start after resume");
+    }
+
+    Y_UNIT_TEST(MonitoringMemoryAndPersistedTables) {
+        TSetup s;
+        const auto memory = s.Monitoring();
+        for (TStringBuf expected : {"Replication controller", "In memory", "Persisted tables",
+                "/Root/replica", "Workers", "Sessions", "Pipeline", "Schema barriers", "Index builds"}) {
+            UNIT_ASSERT_C(memory.Contains(expected), expected);
+        }
+        for (const TString table : {"Replications", "Targets", "SrcStreams", "Workers", "TxIds",
+                "SysParams", "SchemaBarrierWorkers", "IndexBuildWorkers"}) {
+            const auto storage = s.Monitoring({{"view", "storage"}, {"table", table}});
+            UNIT_ASSERT_C(storage.Contains("<h3>" + table + "</h3>"), storage);
+            UNIT_ASSERT_C(storage.Contains("Read-only snapshot"), storage);
+            UNIT_ASSERT_C(!storage.Contains("Cannot decode"), storage);
+        }
+        const auto storedTargets = s.Monitoring({{"view", "storage"}, {"table", "Targets"}});
+        UNIT_ASSERT_C(storedTargets.Contains("/Root/replica"), storedTargets);
+
+        const auto filtered = s.Monitoring({{"rid", ToString(Max<ui64>())}});
+        UNIT_ASSERT_C(filtered.Contains("is not present in memory"), filtered);
+        UNIT_ASSERT_C(!filtered.Contains("/Root/replica"), filtered);
+        const auto secondPage = s.Monitoring({{"page", "1"}});
+        UNIT_ASSERT_C(secondPage.Contains("Previous page"), secondPage);
+        UNIT_ASSERT_C(secondPage.Contains("No entries on this page"), secondPage);
+        UNIT_ASSERT_C(!secondPage.Contains("/Root/replica"), secondPage);
+    }
+
+    Y_UNIT_TEST(MonitoringEscapesErrorsAndRejectsInvalidParameters) {
+        TSetup s;
+        const TString error = "source <script>alert('error')</script> & destination";
+        s.Env.GetRuntime().Send(new IEventHandle(s.Controller, s.Edges[0], new TEvService::TEvWorkerStatus(
+            s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
+            NKikimrReplication::TEvWorkerStatus::REASON_ERROR, error)));
+        s.Sync();
+
+        for (const auto& parameters : TVector<TVector<std::pair<TString, TString>>>{
+                {}, {{"view", "storage"}, {"table", "Replications"}}, {{"view", "storage"}, {"table", "Targets"}}}) {
+            const auto page = s.Monitoring(parameters);
+            UNIT_ASSERT_C(!page.Contains(error), page);
+            UNIT_ASSERT_C(page.Contains("&lt;script&gt;alert(&#39;error&#39;)&lt;/script&gt; &amp; destination"), page);
+        }
+        const auto invalidId = s.Monitoring({{"rid", "<script>"}});
+        UNIT_ASSERT_C(invalidId.Contains("Invalid replication ID"), invalidId);
+        const auto invalidPage = s.Monitoring({{"page", "-1"}});
+        UNIT_ASSERT_C(invalidPage.Contains("Invalid page number"), invalidPage);
+        const auto invalidTable = s.Monitoring({{"view", "storage"}, {"table", "<script>untrusted-table</script>"}});
+        UNIT_ASSERT_C(invalidTable.Contains("Unknown persisted table"), invalidTable);
+        UNIT_ASSERT_C(!invalidTable.Contains("untrusted-table"), invalidTable);
+        for (const TString cursor : {"1", "1,2,3,4", "-1,2,3", "1,2,<script>"}) {
+            const auto invalidCursor = s.Monitoring({{"view", "storage"}, {"table", "Workers"}, {"from", cursor}});
+            UNIT_ASSERT_C(invalidCursor.Contains("Invalid table cursor"), invalidCursor);
+        }
+    }
+
+    Y_UNIT_TEST(MonitoringReadsStorageIndependentlyAndPaginates) {
+        TSetup s;
+        NKikimrMiniKQL::TResult result;
+        const auto query = Sprintf(R"((
+            (let key '('('ReplicationId (Uint64 '%lu)) '('Id (Uint64 '%lu))))
+            (return (AsList (UpdateRow 'Targets key '('('DstPath (Utf8 '/Root/persisted-only))))))
+        ))", s.Worker.ReplicationId(), s.Worker.TargetId());
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(s.Env.GetRuntime(), s.ControllerId, query, result), NKikimrProto::OK);
+        UNIT_ASSERT(s.Monitoring().Contains("/Root/replica"));
+        UNIT_ASSERT(!s.Monitoring().Contains("/Root/persisted-only"));
+        const auto targets = s.Monitoring({{"view", "storage"}, {"table", "Targets"}});
+        UNIT_ASSERT_C(targets.Contains("/Root/persisted-only"), targets);
+
+        TStringBuilder updates;
+        updates << "((return (AsList ";
+        for (ui32 id = 100; id <= 200; ++id) {
+            updates << "(UpdateRow 'SysParams '('('Id (Uint32 '" << id << "))) "
+                << "'('('IntValue (Uint64 '" << id << ")) "
+                << "'('TextValue (Utf8 'monitoring-secret)) '('BinaryValue (String 'monitoring-secret)))) ";
+        }
+        updates << ")))";
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(s.Env.GetRuntime(), s.ControllerId, updates, result), NKikimrProto::OK);
+        const auto first = s.Monitoring({{"view", "storage"}, {"table", "SysParams"}});
+        UNIT_ASSERT_C(first.Contains("Next page"), first);
+        UNIT_ASSERT_C(first.Contains("from=199"), first);
+        UNIT_ASSERT_C(!first.Contains("<td>200</td>"), first);
+        UNIT_ASSERT_C(!first.Contains("monitoring-secret"), first);
+        const auto next = s.Monitoring({{"view", "storage"}, {"table", "SysParams"}, {"from", "199"}});
+        UNIT_ASSERT_C(next.Contains("<td>199</td>"), next);
+        UNIT_ASSERT_C(next.Contains("<td>200</td>"), next);
+        UNIT_ASSERT_C(!next.Contains("Next page"), next);
+        UNIT_ASSERT_C(!next.Contains("monitoring-secret"), next);
     }
 }
 

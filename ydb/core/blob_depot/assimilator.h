@@ -53,9 +53,8 @@ namespace NKikimr::NBlobDepot {
         bool ActionInProgress = false;
         TBackoffTimer AssimilateRetryBackoff{10, 5000};
         bool ResumeScanDataForCopyingInFlight = false;
-        // reads of the group being decommitted have failed in this pass of copying, so the next pass waits for a while,
-        // as nothing tells the group is available again
-        bool CopyReadErrors = false;
+        // source reads or destination channel allocation failed in this pass, so wait before trying those blobs again
+        bool CopyRetryNeeded = false;
         TBackoffTimer CopyRetryBackoff{10, 5000};
 
         std::optional<TLogoBlobID> LastPlanScannedKey;

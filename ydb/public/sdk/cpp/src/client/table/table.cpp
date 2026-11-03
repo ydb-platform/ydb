@@ -2902,6 +2902,14 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorInd
             return EVectorType::Float16;
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
             return EVectorType::BFloat16;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3:
+            return EVectorType::Float8E4M3;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2:
+            return EVectorType::Float8E5M2;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4:
+            return EVectorType::Uint4;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4:
+            return EVectorType::Int4;
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
             return EVectorType::Uint8;
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
@@ -2946,6 +2954,14 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16;
         case EVectorType::BFloat16:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16;
+        case EVectorType::Float8E4M3:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3;
+        case EVectorType::Float8E5M2:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2;
+        case EVectorType::Uint4:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4;
+        case EVectorType::Int4:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4;
         case EVectorType::Uint8:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         case EVectorType::Int8:

@@ -276,7 +276,8 @@ jobs:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
-    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
+    # Temporary: pin to large-disk ASAN static (7254G) for disk-pressure runs.
+    runs-on: [ self-hosted, auto-provisioned, pool:static-relwithdebinfo-large-disk ]
     strategy:
       fail-fast: false
       matrix:

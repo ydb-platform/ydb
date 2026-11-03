@@ -4,20 +4,15 @@ on:
   workflow_dispatch:
     inputs:
       executor:
-        description: 'Where to run tests: ydb_yc (current runners) or remote (dispatch ci_remote_executor.yml)'
+        description: 'ydb_yc = current runners via run_tests; remote = isolated fat runner (same-repo bootstrap of CI remote executor)'
         required: false
         type: choice
         options:
           - ydb_yc
           - remote
         default: ydb_yc
-      remote_executor_ref:
-        description: 'Branch/ref that hosts ci_remote_executor.yml (required for executor=remote during same-repo bootstrap)'
-        required: false
-        type: string
-        default: 'dev/ci-remote-executor-smoke'
       code_ref:
-        description: 'Git ref/SHA for remote executor to checkout (empty = this run SHA)'
+        description: 'Git ref/SHA to checkout for executor=remote (empty = this workflow SHA)'
         required: false
         type: string
         default: ''
@@ -27,82 +22,81 @@ on:
         type: string
         default: 'ydb/library/actors/util/ut'
       build_preset:
-        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
+        description: 'Build preset types (comma-separated for ydb_yc; single for remote)'
         required: false
         type: string
         default: 'relwithdebinfo'
       branches:
-        description: 'Branches to test (comma-separated / JSON; empty = current). Used only for executor=ydb_yc'
+        description: 'Branches to test (ydb_yc only; empty = current)'
         required: false
         type: string
         default: ''
       use_branches_config:
-        description: 'If true, use branches from .github/config/stable_tests_branches.json (ydb_yc only)'
+        description: 'Use .github/config/stable_tests_branches.json (ydb_yc only)'
         required: false
         type: boolean
         default: false
 
 jobs:
-  # --- remote path: tiny dispatch to ci_remote_executor.yml ---
-  dispatch_remote:
+  # Same-repo bootstrap of generic remote executor (later: dispatch to nebius / ci_remote_executor.yml).
+  remote_build_and_test:
     if: inputs.executor == 'remote'
-    runs-on: [self-hosted, tiny-worker]
-    permissions:
-      actions: write
-      contents: read
+    name: Remote · debug · ${{ inputs.build_preset }}
+    runs-on: [self-hosted, build-preset-relwithdebinfo-fat]
+    timeout-minutes: 360
     steps:
-      - name: Dispatch CI remote executor
-        env:
-          # GITHUB_TOKEN does not start new workflow runs; use PAT.
-          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          REMOTE_EXECUTOR_REF: ${{ inputs.remote_executor_ref }}
-          CODE_REF: ${{ inputs.code_ref || github.sha }}
-          TEST_TARGETS: ${{ inputs.test_targets }}
-          BUILD_PRESET: ${{ inputs.build_preset }}
+      - name: Resolve checkout ref
+        id: ref
         shell: bash
         run: |
-          set -euo pipefail
-          # remote path: single preset only (first token if comma-separated)
-          preset="${BUILD_PRESET%%,*}"
+          code_ref='${{ inputs.code_ref }}'
+          if [ -z "$code_ref" ]; then
+            code_ref='${{ github.sha }}'
+          fi
+          # remote path: first preset if comma-separated
+          preset='${{ inputs.build_preset }}'
+          preset="${preset%%,*}"
           preset="$(echo "$preset" | xargs)"
-          echo "Dispatching ci_remote_executor.yml"
-          echo "- executor_ref: $REMOTE_EXECUTOR_REF"
-          echo "- code_ref: $CODE_REF"
-          echo "- build_preset: $preset"
-          echo "- test_targets: $TEST_TARGETS"
-
-          gh workflow run ci_remote_executor.yml \
-            --repo "${{ github.repository }}" \
-            --ref "$REMOTE_EXECUTOR_REF" \
-            -f "code_ref=$CODE_REF" \
-            -f "test_targets=$TEST_TARGETS" \
-            -f "build_preset=$preset" \
-            -f "test_size=small,medium" \
-            -f "kind=debug"
-
-          # Resolve the new run URL (best-effort; may race briefly)
-          sleep 3
-          run_url="$(gh run list --repo "${{ github.repository }}" \
-            --workflow=ci_remote_executor.yml \
-            --branch "$REMOTE_EXECUTOR_REF" \
-            --limit 1 \
-            --json url \
-            --jq '.[0].url' || true)"
+          echo "value=$code_ref" >> "$GITHUB_OUTPUT"
+          echo "preset=$preset" >> "$GITHUB_OUTPUT"
           {
-            echo "### Dispatched CI remote executor"
-            echo ""
-            echo "- **executor ref:** \`$REMOTE_EXECUTOR_REF\`"
-            echo "- **code ref:** \`$CODE_REF\`"
+            echo "### CI remote executor (same-repo bootstrap)"
+            echo "- **code ref:** \`$code_ref\`"
             echo "- **preset:** \`$preset\`"
-            echo "- **targets:** \`$TEST_TARGETS\`"
-            if [ -n "$run_url" ]; then
-              echo "- **run:** $run_url"
-            else
-              echo "- **runs:** https://github.com/${{ github.repository }}/actions/workflows/ci_remote_executor.yml"
-            fi
+            echo "- **targets:** \`${{ inputs.test_targets }}\`"
+            echo "- **runner:** \`build-preset-relwithdebinfo-fat\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # --- ydb_yc path: existing run_tests matrix ---
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.ref.outputs.value }}
+          fetch-depth: 2
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+
+      - name: Build and test
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: ${{ steps.ref.outputs.preset }}
+          increment: false
+          build_target: ${{ inputs.test_targets }}
+          run_tests: true
+          test_retry_count: 1
+          test_size: small,medium
+          test_threads: 64
+          put_build_results_to_cache: true
+          collect_coredumps: false
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+
   prepare:
     if: inputs.executor == 'ydb_yc'
     runs-on: ubuntu-latest

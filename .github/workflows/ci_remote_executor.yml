@@ -1,6 +1,8 @@
-# Generic remote CI executor (same-repo bootstrap; later moves to nebius/ydb).
-# Trigger from another workflow via:
-#   gh workflow run ci_remote_executor.yml --ref <this-branch> -f ...
+# Generic remote CI executor (later moves to nebius/ydb).
+# GitHub only lists/dispatches workflows that exist on the default branch;
+# until this file is on main, smoke via Run and debug tests (executor=remote)
+# on branch ref. After merge to main:
+#   gh workflow run ci_remote_executor.yml --ref <branch> -f ...
 name: CI remote executor
 
 on:

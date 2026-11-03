@@ -19,7 +19,7 @@ class TestAsyncReplicationBase(MulticlusterTestBase):
 
         dml_cluster_1.create_table(table_name, pk_types, all_types,
                                    index, ttl, unique, sync)
-        dml_cluster_1.insert(table_name, all_types, pk_types, index, ttl)
+        dml_cluster_1.insert(table_name, all_types, pk_types, index, ttl, batch_size=10)
         dml_cluster_2.query(f"""
                         CREATE ASYNC REPLICATION `replication_{table_name}`
                         FOR `{self.get_database()}/{table_name}` AS `{self.get_database()}/{table_name}`
@@ -28,26 +28,24 @@ class TestAsyncReplicationBase(MulticlusterTestBase):
                             )
                          """)
         assert wait_for(lambda: dml_cluster_2.table_exists(table_name), timeout_seconds=100), "Table not created"
-        assert wait_for(self.create_predicate(False, table_name, dml_cluster_2.query), timeout_seconds=100), "Expected non-zero rows after insert"
+        expected_rows = len(pk_types) + len(all_types) + len(index) + bool(ttl)
+        assert wait_for(self.create_predicate(expected_rows, table_name, dml_cluster_2.query), timeout_seconds=100), "Not all rows replicated after insert"
         dml_cluster_2.select_after_insert(
             table_name, all_types, pk_types, index, ttl)
         dml_cluster_1.query(f"delete from {table_name}")
-        assert wait_for(self.create_predicate(True, table_name, dml_cluster_2.query),
+        assert wait_for(self.create_predicate(0, table_name, dml_cluster_2.query),
                         timeout_seconds=100) is True, "Expected zero rows after delete"
-        dml_cluster_1.insert(table_name, all_types, pk_types, index, ttl)
-        wait_for(self.create_predicate(False, table_name,
-                 dml_cluster_2.query), timeout_seconds=100)
+        dml_cluster_1.insert(table_name, all_types, pk_types, index, ttl, batch_size=10)
+        assert wait_for(self.create_predicate(expected_rows, table_name,
+                        dml_cluster_2.query), timeout_seconds=100), "Not all rows replicated after reinsert"
         dml_cluster_2.select_after_insert(
             table_name, all_types, pk_types, index, ttl)
 
-    def create_predicate(self, is_zero, table_name, dml_cluster):
+    def create_predicate(self, expected_rows, table_name, dml_cluster):
         def predicate():
             rows = dml_cluster(
                 f"select count(*) as count from {table_name}")
-            if is_zero:
-                return len(rows) == 1 and rows[0].count == 0
-            else:
-                return len(rows) == 1 and rows[0].count != 0
+            return len(rows) == 1 and rows[0].count == expected_rows
         return predicate
 
 

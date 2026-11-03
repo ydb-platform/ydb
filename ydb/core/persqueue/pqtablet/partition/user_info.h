@@ -71,6 +71,7 @@ struct TUserInfoBase {
 
     ui64 PartitionSessionId = 0;
     TActorId PipeClient;
+    TActorId ReadSessionActor;
 
     std::optional<TString> CommittedMetadata = std::nullopt;
 };

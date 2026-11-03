@@ -331,6 +331,9 @@ message TEvNodeConfigInvokeOnRoot {
     message TSwitchBridgeClusterState {
         NKikimrBridge.TClusterState NewClusterState = 1;
         repeated uint32 SpecificBridgePileIds = 2; // deprecated and ignored, the quorum comes from NewClusterState
+        // when set, apply only if the current cluster state generation equals this value;
+        // NewClusterState.Generation must then be ExpectedGeneration + 1
+        optional uint64 ExpectedGeneration = 3;
     }
 
     message TNotifyBridgeSyncFinished {
@@ -436,6 +439,7 @@ message TEvNodeConfigInvokeOnRootResult {
         ERROR = 2; // failure during request execution
         RACE = 3; // race in requests with other entities
         CONTINUE_BSC = 4; // process this request with BSC
+        GENERATION_MISMATCH = 5; // compare-and-set guard failed; the request was not applied
     }
 
     message TScepter {

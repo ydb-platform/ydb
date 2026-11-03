@@ -295,7 +295,10 @@ void TestMixedDistinctAggregationBeforeHashShuffle(bool columnTables) {
             // leave the shared scan stage through the hash shuffle.
             const auto* partial = FindOperatorByStringField(*shuffle, "Phase", "Intermediate");
             UNIT_ASSERT_C(partial, "Partial DISTINCT must precede HashShuffle:\n" << plan);
-            UNIT_ASSERT_C(GetStringField(*partial, "GroupBy").Contains("ps_suppkey"), plan);
+            const auto& groupBy = (*partial)["GroupBy"].GetArraySafe();
+            UNIT_ASSERT_C(std::any_of(groupBy.begin(), groupBy.end(), [](const auto& column) {
+                return column.GetStringSafe().Contains("ps_suppkey");
+            }), plan);
             UNIT_ASSERT_C(FindOperatorByStringField(*shuffle, "Name", "TableFullScan"), plan);
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -1964,8 +1967,8 @@ PRAGMA ydb.OptimizerHints = '
         const auto simplifiedPlan = GetSimplifiedPlan(plan);
         const auto distinctShuffles = std::count_if(shuffles.begin(), shuffles.end(), [&](const TString& shuffle) {
             const TString key{TStringBuf(shuffle).After('(').RBefore(')')};
-            return FindOperatorByStringField(simplifiedPlan, "Aggregation",
-                "{" + key + ": distinct(/Root/lineitem.l_orderkey)}") != nullptr;
+            const auto* aggregation = FindAggregation(simplifiedPlan, "distinct", key);
+            return aggregation && StringArrayFieldContains(*aggregation, "Arguments", "/Root/lineitem.l_orderkey");
         });
         UNIT_ASSERT_VALUES_EQUAL_C(distinctShuffles, CompositePartitionKey ? 1 : 0, plan);
 

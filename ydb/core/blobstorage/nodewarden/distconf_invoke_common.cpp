@@ -134,6 +134,8 @@ namespace NKikimr::NStorage {
         if (nodeId == WaitingReplyFromNode) {
             if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
                     op && op->Command.HasSwitchBridgeClusterState() &&
+                    // Matching state cannot prove that this invocation won its compare-and-set.
+                    !op->Command.GetSwitchBridgeClusterState().HasExpectedGeneration() &&
                     Self->StorageConfig && Self->StorageConfig->HasClusterState() &&
                     IsClusterStateReached(Self->StorageConfig->GetClusterState(),
                                           op->Command.GetSwitchBridgeClusterState().GetNewClusterState())) {

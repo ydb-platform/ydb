@@ -1,0 +1,99 @@
+package NYT.NYson.NProto;
+
+import "yt_proto/yt/core/yson/proto/protobuf_interop.proto";
+
+option go_package = "a.yandex-team.ru/yt/go/proto/core/yson";
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TDoubleList
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated double values = 1;
+}
+
+message TFloatList
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated float values = 1;
+}
+
+message TInt32List
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated int32 values = 1;
+}
+
+message TInt64List
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated int64 values = 1;
+}
+
+message TUint32List
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated uint32 values = 1;
+}
+
+message TUint64List
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated uint64 values = 1;
+}
+
+message TSint32List
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated sint32 values = 1;
+}
+
+message TSint64List
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated sint64 values = 1;
+}
+
+message TFixed32List
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated fixed32 values = 1;
+}
+
+message TFixed64List
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated fixed64 values = 1;
+}
+
+message TSfixed32List
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated sfixed32 values = 1;
+}
+
+message TSfixed64List
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated sfixed64 values = 1;
+}
+
+message TBoolList
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated bool values = 1;
+}
+
+message TStringList
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated string values = 1;
+}
+
+message TBytesList
+{
+    option (NYT.NYson.NProto.yson_list) = true;
+    repeated bytes values = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////

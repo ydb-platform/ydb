@@ -2033,10 +2033,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
 
     TVector<TEvPQ::TEvWrite::TMsg> msgs;
 
-    const bool replicatedPartition = ReplicationEnabled(Config);
-    const bool clientWriteAllowed = replicatedPartition
+    const bool clientWriteAllowed = ReplicationEnabled(Config)
         && AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled() && !fromMirrorer;
-    const bool mirroredPartition = MirroringEnabled(Config) && !clientWriteAllowed;
+    const bool isPlainMirroring = MirroringEnabled(Config) && !clientWriteAllowed;
 
     if (!req.GetIsDirectWrite()) {
         if (!req.HasMessageNo()) {
@@ -2045,7 +2044,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             return;
         }
 
-        if (!mirroredPartition && !req.HasOwnerCookie()) {
+        if (!isPlainMirroring && !req.HasOwnerCookie()) {
             ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
                        "OwnerCookie must be set for writes");
             return;
@@ -2119,7 +2118,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "TotalSize is incorrect";
         } else if (cmd.HasSourceId() && !cmd.GetSourceId().empty() && NPQ::NSourceIdEncoding::Decode(cmd.GetSourceId()).length() > MAX_SOURCE_ID_LENGTH) {
             errorStr = "Too big SourceId";
-        } else if (mirroredPartition && !cmd.GetDisableDeduplication()) {
+        } else if (isPlainMirroring && !cmd.GetDisableDeduplication()) {
             errorStr = "Write to mirrored topic is forbiden";
         } else if (cmd.HasHeartbeat() && cmd.GetHeartbeat().GetData().size() > MAX_HEARTBEAT_SIZE) {
             errorStr = "Too big Heartbeat";

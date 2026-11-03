@@ -546,20 +546,23 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         fp.write(content)
 
 
-def write_summary(summary: TestSummary):
+def write_summary(summary: TestSummary, public_dir: str = None):
+    lines = [f"{line}\n" for line in summary.render(add_footnote=True)]
+    lines.append("\n")
+
     summary_fn = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_fn:
-        fp = open(summary_fn, "at")
+        with open(summary_fn, "at", encoding="utf-8") as fp:
+            fp.writelines(lines)
     else:
-        fp = sys.stdout
+        sys.stdout.writelines(lines)
 
-    for line in summary.render(add_footnote=True):
-        fp.write(f"{line}\n")
-
-    fp.write("\n")
-
-    if summary_fn:
-        fp.close()
+    # Durable copy for remote dispatch / cross-repo mirrors (survives step boundaries
+    # and lands on S3 with the rest of PUBLIC_DIR).
+    if public_dir:
+        os.makedirs(public_dir, exist_ok=True)
+        with open(os.path.join(public_dir, "job_summary.md"), "at", encoding="utf-8") as fp:
+            fp.writelines(lines)
 
 
 def _list_build_results_report_files(path):
@@ -748,7 +751,7 @@ def main():
                           workflow_run_id=args.workflow_run_id,
                           oom_dmesg_log=args.oom_dmesg_log,
                           )
-    write_summary(summary)
+    write_summary(summary, public_dir=args.public_dir)
 
     if summary.is_failed and not args.is_test_result_ignored:
         overall_status = "failure"

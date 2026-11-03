@@ -84,6 +84,8 @@ namespace NActors {
         // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).
         // v2 is used only when both peers have this enabled and encryption is not in effect.
         bool EnableInterconnectSessionV2 = false;
+        TString RdmaAddress;
+        TString RdmaInterface;
     };
 
     struct TWhiteboardSessionStatus {

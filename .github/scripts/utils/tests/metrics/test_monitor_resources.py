@@ -6,13 +6,51 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import mock_open, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from _paths import METRICS, add_product_paths
 
 add_product_paths(METRICS)
 
-from monitor_resources import apply_io_sample, cpu_delta_jiffies, io_delta_bytes, process_identity
+from monitor_resources import CPU_STATES, apply_io_sample, cpu_delta_jiffies, cpu_usage, io_delta_bytes, process_identity, read_proc_stat
+
+
+class HostCpuAccountingTest(unittest.TestCase):
+    def test_steal_is_not_cpu_execution(self):
+        previous = dict.fromkeys(CPU_STATES, 100)
+        increments = (20, 5, 10, 30, 10, 3, 2, 20)
+        current = {state: previous[state] + delta for state, delta in zip(CPU_STATES, increments)}
+        elapsed, usage = cpu_usage(previous, current)
+        self.assertEqual(elapsed, 100)
+        self.assertEqual(usage, {
+            "cpu_total_pct": 40.0,
+            "cpu_user_pct": 25.0,
+            "cpu_system_pct": 15.0,
+            "cpu_steal_pct": 20.0,
+            "cpu_iowait_pct": 10.0,
+        })
+
+    def test_guest_time_is_not_counted_twice(self):
+        with patch("builtins.open", mock_open(read_data="cpu 20 5 10 30 10 3 2 20 7 2\n")):
+            counters = read_proc_stat()
+        elapsed, usage = cpu_usage(dict.fromkeys(CPU_STATES, 0), counters)
+        self.assertEqual(elapsed, 100)
+        self.assertEqual(usage["cpu_user_pct"], 25.0)
+
+    def test_zero_interval(self):
+        counters = dict.fromkeys(CPU_STATES, 100)
+        elapsed, usage = cpu_usage(counters, counters)
+        self.assertEqual(elapsed, 0)
+        self.assertTrue(all(value == 0 for value in usage.values()))
+
+    def test_decreasing_iowait_does_not_inflate_usage(self):
+        previous = dict.fromkeys(CPU_STATES, 100)
+        current = dict(previous, user=110, idle=110, iowait=90)
+        elapsed, usage = cpu_usage(previous, current)
+        self.assertEqual(elapsed, 20)
+        self.assertEqual(usage["cpu_total_pct"], 50.0)
+        self.assertEqual(usage["cpu_iowait_pct"], 0.0)
 
 
 class ProcessAccountingTest(unittest.TestCase):

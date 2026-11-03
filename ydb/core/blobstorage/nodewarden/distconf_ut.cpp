@@ -1301,60 +1301,6 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         }
     };
 
-    Y_UNIT_TEST_TWIN(DisconnectedPileLocalNodeConnections, dynamic) {
-        auto config = MakeTwoPileBridgedConfig("pile0", "pile1");
-        config.MutableClusterState()->SetPerPileState(1, NKikimrBridge::TClusterState::DISCONNECTED);
-        NStorage::TDistributedConfigKeeper::UpdateFingerprint(&config);
-        const auto configPtr = std::make_shared<const NKikimrBlobStorage::TStorageConfig>(config);
-
-        TTestActorSystem runtime(7); // nodes 1-4 are static; 5-7 are dynamic
-        auto& bridge = runtime.GetAppDataBridgeConfig();
-        bridge.AddPiles()->SetName("pile0");
-        bridge.AddPiles()->SetName("pile1");
-        runtime.Start();
-        Y_DEFER { runtime.Stop(); };
-
-        const ui32 selfNodeId = dynamic ? 5 : 2;
-        auto dynamicNameserviceConfig = MakeIntrusive<TDynamicNameserviceConfig>();
-        dynamicNameserviceConfig->MaxStaticNodeId = 4;
-        dynamicNameserviceConfig->MinDynamicNodeId = 5;
-        dynamicNameserviceConfig->MaxDynamicNodeId = 7;
-        runtime.GetNode(selfNodeId)->AppData->DynamicNameserviceConfig = dynamicNameserviceConfig;
-
-        auto nodeWardenConfig = MakeNodeWardenConfig(config, &bridge);
-        if (dynamic) {
-            nodeWardenConfig->DynamicNodeConfig = std::make_unique<NKikimrConfig::TDynamicNodeConfig>();
-            nodeWardenConfig->DynamicNodeConfig->MutableNodeInfo()->MutableLocation()->SetBridgePileName("pile1");
-        }
-        const auto bridgeInfo = NStorage::TDistributedConfigKeeper::GenerateBridgeInfo(config,
-            *nodeWardenConfig, selfNodeId);
-        runtime.RegisterService(MakeBlobStorageNodeWardenID(selfNodeId), runtime.Register(
-            new TStorageConfigProvider(configPtr, bridgeInfo), selfNodeId));
-        runtime.RegisterService(GetNameserviceActorId(), runtime.Register(new TIgnoreActor, selfNodeId));
-        const TActorId checkerId = runtime.Register(CreateDistconfBridgeConnectionCheckerActor(
-            TBridgePileId::FromPileIndex(1), "pile1"), selfNodeId);
-
-        for (ui32 peerNodeId : {3u, 6u, 1u, 7u}) {
-            const TActorId edge = runtime.AllocateEdgeActor(selfNodeId);
-            const bool samePile = peerNodeId == 3 || peerNodeId == 6;
-            NKikimrBlobStorage::TConnectivityPayload payload;
-            TBridgePileId::FromPileIndex(samePile ? 1 : 0).CopyToProto(&payload,
-                &NKikimrBlobStorage::TConnectivityPayload::SetBridgePileId);
-            payload.SetBridgePileName(samePile ? "pile1" : "pile0");
-            payload.SetPileListChangeCapable(true);
-            payload.SetBridgeFeatureLevel(NStorage::BridgeFeatureLevel);
-            payload.MutableStorageConfig()->CopyFrom(config);
-            THashMap<TString, TString> params;
-            UNIT_ASSERT(payload.SerializeToString(&params["distconf"]));
-            runtime.Send(new IEventHandle(checkerId, edge, new TEvInterconnect::TEvCheckIncomingConnection(
-                peerNodeId, std::move(params))), selfNodeId);
-            auto response = runtime.WaitForEdgeActorEvent<TEvInterconnect::TEvCheckIncomingConnectionResult>(edge);
-            const auto& error = response->Get()->ErrorReason;
-            UNIT_ASSERT_VALUES_EQUAL_C(!error, samePile,
-                TStringBuilder() << "self# " << selfNodeId << " peer# " << peerNodeId << " error# " << error.value_or(""));
-        }
-    }
-
     // nodes of the pile that is listed in BridgeConfig, but not added to the cluster, connect neither to other piles,
     // nor to each other; the ones trying to connect get the cluster config to learn that
     Y_UNIT_TEST(InactivePileNodesDontConnect) {

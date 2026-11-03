@@ -190,7 +190,7 @@ void TLoginCredentialsProvider::FinishRequest(
         {
             std::lock_guard lock(Mutex_);
             retry = (!status.Ok() && IsRetryable(status.Status)) ||
-                (HasToken_ && status.Ok() && IsRetryableOperation(operationStatus));
+                (status.Ok() && IsRetryableOperation(operationStatus));
             if (retry) {
                 Requesting_ = false;
                 TokenRequestAt_ = TInstant::Now() + TDuration::Seconds(1);

@@ -33,6 +33,21 @@ namespace NKikimr::NReplication::NService {
 Y_UNIT_TEST_SUITE(ServiceCredentials) {
     using namespace NTestHelpers;
 
+    Y_UNIT_TEST(LocalGoneStatusFormatting) {
+        using T = TEvWorker::TEvGone;
+        const std::pair<T::EStatus, TStringBuf> cases[] = {
+            {T::DONE, "DONE"}, {T::S3_ERROR, "S3_ERROR"}, {T::SCHEME_ERROR, "SCHEME_ERROR"},
+            {T::UNAVAILABLE, "UNAVAILABLE"}, {T::OVERLOAD, "OVERLOAD"}, {T::DATA_ERROR, "DATA_ERROR"},
+            {T::DATA_LOSS, "DATA_LOSS"}, {T::AUTH_ERROR, "AUTH_ERROR"},
+        };
+        for (size_t index = 0; index < std::size(cases); ++index) {
+            const auto& [status, name] = cases[index];
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(status), index);
+            UNIT_ASSERT_VALUES_EQUAL(ToString(status), name);
+            UNIT_ASSERT_STRING_CONTAINS(T(status, "controlled cause").ToString(), name);
+        }
+    }
+
     // Reader creation stays blocked: these tests exercise cache identity and
     // ownership without creating SDK sessions or contacting IAM services.
     class TCredentialCacheEnv {
@@ -96,7 +111,7 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
             Runtime.Send(new IEventHandle(Service, Edge, stop.Release()));
             RequireStatus(id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
             const auto reader = Workers.at(id);
-            Runtime.WaitFor("worker stopped its reader", [&] { return Poisoned.contains(reader); }, TDuration::Seconds(30));
+            Runtime.WaitFor("worker stopped its reader", [&] { return !Runtime.FindActor(reader) || Poisoned.contains(reader); }, TDuration::Seconds(30));
             Workers.erase(id);
         }
 
@@ -190,6 +205,215 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
         UNIT_ASSERT(staticProxy != iamProxy);
         UNIT_ASSERT(oauthProxy != iamProxy);
         env.Finish();
+    }
+
+    Y_UNIT_TEST(NonStaticInitializationFailureRetriesReader) {
+        for (const auto kind : {NKikimrReplication::TConnectionParams::kIamCredentials,
+                NKikimrReplication::TConnectionParams::kOAuthToken}) {
+            TCredentialCacheEnv env;
+            NKikimrReplication::TConnectionParams credentials;
+            if (kind == NKikimrReplication::TConnectionParams::kIamCredentials) {
+                credentials.MutableIamCredentials()->SetServiceAccountId("test-account");
+                credentials.MutableIamCredentials()->SetResourceId("test-resource");
+            } else {
+                credentials.MutableOAuthToken()->SetToken("test-fixed-token");
+            }
+            ui32 terminalErrors = 0;
+            auto observeStatus = env.Runtime.AddObserver<TEvService::TEvWorkerStatus>(
+                [&](TEvService::TEvWorkerStatus::TPtr& ev) {
+                    if (ev->Get()->Record.GetStatus() == NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED
+                        && ev->Get()->Record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR)
+                    {
+                        ++terminalErrors;
+                    }
+                });
+            const auto proxy = env.Start(1, credentials);
+            const auto reader = env.Blocked.front()->Sender;
+            const auto session = env.Runtime.AllocateEdgeActor();
+            // The production service selects the reader policy. Requests never
+            // reach the proxy: this is a wiring control, not an IAM simulation.
+            env.Runtime.Send(new IEventHandle(reader, proxy,
+                new TEvYdbProxy::TEvCreateTopicReaderResponse(session)));
+            UNIT_ASSERT(env.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvReadTopicRequest>(session, TDuration::Seconds(5)));
+            env.Runtime.Send(new IEventHandle(reader, session, new TEvYdbProxy::TEvTopicReaderGone(
+                NYdb::TStatus(NYdb::EStatus::CLIENT_UNAUTHENTICATED, {}))));
+            env.Runtime.WaitFor("replacement reader after nonstatic initialization failure",
+                [&] { return env.Blocked.size() == 2; }, TDuration::Seconds(5));
+            UNIT_ASSERT_VALUES_EQUAL(terminalErrors, 0);
+            UNIT_ASSERT(env.Blocked.back()->Sender != reader);
+            UNIT_ASSERT_VALUES_EQUAL(env.Blocked.back()->GetRecipientRewrite(), proxy);
+            env.Finish();
+        }
+    }
+
+    Y_UNIT_TEST(LateAuthenticationFailureCannotStopReplacement) {
+        TEnv<true> env("sourceauthuser", "ValidCredential27516", ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        runtime.SetFastSimulatedTime(false);
+        runtime.SetLogPriority(NKikimrServices::REPLICATION_SERVICE, NLog::PRI_DEBUG);
+        const auto edge = env.GetSender();
+        auto topic = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(env.GetYdbProxy(),
+            new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic", NYdb::NTopic::TCreateTopicSettings()
+                .BeginAddConsumer().ConsumerName("consumer").EndAddConsumer()));
+        UNIT_ASSERT_C(topic->Get()->Result.IsSuccess(), topic->Get()->Result.GetIssues().ToString());
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table", .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Utf8"}},
+        }));
+        const auto service = runtime.Register(CreateReplicationService());
+        THashSet<TActorId> serverReadSessions;
+        THashSet<TActorId> cleanupActors{service, env.GetYdbProxy()};
+        TTestActorRuntimeBase::TRegistrationObserver previousRegistrationObserver;
+        previousRegistrationObserver = runtime.SetRegistrationObserverFunc(
+            [&](TTestActorRuntimeBase& actorRuntime, const TActorId& parent, const TActorId& actorId) {
+                previousRegistrationObserver(actorRuntime, parent, actorId);
+                // Track ownership at registration, before queued poison events
+                // can make the roots disappear and a shutdown predicate vacuous.
+                if (cleanupActors.contains(parent)) {
+                    cleanupActors.insert(actorId);
+                }
+                if (actorRuntime.FindActor(actorId)->GetActivityType() == NKikimrServices::TActivity::FRONT_PQ_READ) {
+                    serverReadSessions.insert(actorId);
+                }
+            });
+        auto observeCleanup = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->HasEvent() && ev->GetTypeRewrite() == TEvents::TEvPoison::EventType
+                && cleanupActors.contains(ev->Sender))
+            {
+                cleanupActors.insert(ev->GetRecipientRewrite());
+            }
+        });
+        bool cleanupAttempted = false;
+        auto cleanup = [&] {
+            cleanupAttempted = true;
+            runtime.SetRegistrationObserverFunc(std::move(previousRegistrationObserver));
+            runtime.Send(new IEventHandle(service, edge, new TEvents::TEvPoison()));
+            runtime.Send(new IEventHandle(env.GetYdbProxy(), edge, new TEvents::TEvPoison()));
+            runtime.WaitFor("late-failure client actors stopped", [&] {
+                for (const auto& actor : cleanupActors) {
+                    if (runtime.FindActor(actor)) {
+                        return false;
+                    }
+                }
+                return true;
+            }, TDuration::Seconds(10));
+            for (const auto& actor : serverReadSessions) {
+                if (runtime.FindActor(actor)) {
+                    runtime.Send(new IEventHandle(actor, edge, new NGRpcProxy::V1::TEvPQProxy::TEvDone()));
+                }
+            }
+            runtime.WaitFor("late-failure server readers stopped", [&] {
+                for (const auto& actor : serverReadSessions) {
+                    if (runtime.FindActor(actor)) {
+                        return false;
+                    }
+                }
+                return true;
+            }, TDuration::Seconds(10));
+        };
+        Y_DEFER {
+            if (!cleanupAttempted) {
+                try {
+                    cleanup();
+                } catch (...) {
+                    Cerr << "Late-failure cleanup: " << CurrentExceptionMessage() << Endl;
+                }
+            }
+        };
+        try {
+            // Queue behind the newly registered service's Bootstrap event.
+            runtime.Send(new IEventHandle(service, edge, new TEvService::TEvHandshake(42, 1)), 0, true);
+            UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvStatus>(edge, TDuration::Seconds(5)));
+
+            auto makeRun = [&](const TString& password) {
+                auto run = MakeHolder<TEvService::TEvRunWorker>();
+                run->Record.MutableController()->SetTabletId(42);
+                run->Record.MutableController()->SetGeneration(1);
+                run->Record.MutableWorker()->SetReplicationId(1);
+                run->Record.MutableWorker()->SetTargetId(1);
+                run->Record.MutableWorker()->SetWorkerId(0);
+                auto* command = run->Record.MutableCommand();
+                command->SetDatabase("/Root");
+                auto* reader = command->MutableRemoteTopicReader();
+                auto* connection = reader->MutableConnectionParams();
+                connection->SetEndpoint(env.GetEndpoint());
+                connection->SetDatabase(env.GetDatabase());
+                connection->MutableStaticCredentials()->SetUser("sourceauthuser");
+                connection->MutableStaticCredentials()->SetPassword(password);
+                reader->SetTopicPath("/Root/topic");
+                reader->SetConsumerName("consumer");
+                reader->SetTopicPartitionId(0);
+                env.GetPathId("/Root/Table").ToProto(command->MutableLocalTableWriter()->MutablePathId());
+                return run;
+            };
+            const auto workerId = makeRun("ValidCredential27516")->Record.GetWorker();
+            auto requireStatus = [&](NKikimrReplication::TEvWorkerStatus::EStatus expected) {
+                const auto event = runtime.GrabEdgeEvent<TEvService::TEvWorkerStatus>(edge, TDuration::Seconds(30));
+                UNIT_ASSERT(event);
+                UNIT_ASSERT_VALUES_EQUAL(event->Get()->Record.GetWorker().SerializeAsString(), workerId.SerializeAsString());
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(event->Get()->Record.GetStatus()), static_cast<int>(expected));
+            };
+
+            TEvWorker::TEvGone::TPtr delayed;
+            auto holdFailure = runtime.AddObserver<TEvWorker::TEvGone>([&](TEvWorker::TEvGone::TPtr& ev) {
+                if (ev->GetRecipientRewrite() == service) {
+                    UNIT_ASSERT(!delayed);
+                    delayed = std::move(ev);
+                }
+            });
+            runtime.Send(new IEventHandle(service, edge, makeRun("RejectedCredential27516").Release()));
+            requireStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
+            runtime.WaitFor("actual old worker failure", [&] { return bool(delayed); }, TDuration::Seconds(30));
+            const auto oldWorker = delayed->Sender;
+            holdFailure.Remove();
+
+            auto stop = MakeHolder<TEvService::TEvStopWorker>();
+            stop->Record.MutableController()->SetTabletId(42);
+            stop->Record.MutableController()->SetGeneration(1);
+            stop->Record.MutableWorker()->CopyFrom(workerId);
+            runtime.Send(new IEventHandle(service, edge, stop.Release()));
+            requireStatus(NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
+
+            TVector<TString> reads;
+            TActorId replacementWorker;
+            auto observeData = runtime.AddObserver<TEvWorker::TEvData>([&](TEvWorker::TEvData::TPtr& ev) {
+                const auto* recipient = runtime.FindActor(ev->GetRecipientRewrite());
+                if (!recipient || recipient->GetActivityType() != NKikimrServices::TActivity::REPLICATION_WORKER) {
+                    return; // The same data event is subsequently forwarded to the writer.
+                }
+                replacementWorker = ev->GetRecipientRewrite();
+                for (const auto& record : ev->Get()->Records) {
+                    reads.push_back(record.GetData());
+                }
+            });
+            ui32 terminalErrors = 0;
+            auto observeError = runtime.AddObserver<TEvService::TEvWorkerStatus>([&](TEvService::TEvWorkerStatus::TPtr& ev) {
+                if (ev->Get()->Record.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR) {
+                    ++terminalErrors;
+                }
+            });
+            constexpr auto before = R"({"key":[7], "update":{"value":"before-late-error"}})";
+            constexpr auto after = R"({"key":[8], "update":{"value":"after-late-error"}})";
+            UNIT_ASSERT(env.RunCall([&] { return WriteTopic(env, "/Root/topic", before); }));
+            runtime.Send(new IEventHandle(service, edge, makeRun("ValidCredential27516").Release()));
+            requireStatus(NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
+            runtime.WaitFor("replacement source read", [&] { return reads.size() >= 1; }, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reads[0], before);
+            UNIT_ASSERT(replacementWorker != oldWorker);
+            const auto capturedReplacement = replacementWorker;
+            runtime.Send(delayed.Release());
+            UNIT_ASSERT(env.RunCall([&] { return WriteTopic(env, "/Root/topic", after); }));
+            runtime.WaitFor("source read after old failure delivery", [&] { return reads.size() >= 2; }, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(reads[1], after);
+            UNIT_ASSERT_VALUES_EQUAL(replacementWorker, capturedReplacement);
+            UNIT_ASSERT_VALUES_EQUAL(terminalErrors, 0);
+            cleanup();
+        } catch (...) {
+            Cerr << "Late-failure assertion: " << CurrentExceptionMessage() << Endl;
+            throw;
+        }
     }
 
     Y_UNIT_TEST(InvalidPasswordReportsWorkerError) {

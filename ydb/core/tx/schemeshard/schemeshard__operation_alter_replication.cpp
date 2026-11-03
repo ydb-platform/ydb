@@ -324,7 +324,7 @@ private:
         using TState = NKikimrReplication::TReplicationState;
         case TState::kStandBy:
             result.SetError(NKikimrScheme::StatusInvalidParameter,
-                "Please ensure the replication is not in StandBy state before attempting to modify its settings. Modifications are not allowed in StandBy state");
+                "Settings cannot be changed in STATE = STANDBY (shown as Running during normal operation). Set STATE = PAUSED and wait for Paused before modifying settings.");
             return false;
         case TState::kPaused:
         case TState::kDone:

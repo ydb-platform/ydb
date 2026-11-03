@@ -880,6 +880,34 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         s.ExpectRun(0);
     }
 
+    Y_UNIT_TEST(FormerNodeAuthenticationErrorKeepsNewOwner) {
+        TSetup s;
+        auto& runtime = s.Env.GetRuntime();
+        s.Status(1);
+        s.ProcessQueues();
+        s.ExpectStop(0);
+
+        ui32 duplicateRuns = 0;
+        ui32 stopsToNewOwner = 0;
+        auto observeRun = runtime.AddObserver<TEvService::TEvRunWorker>(
+            [&](TEvService::TEvRunWorker::TPtr&) { ++duplicateRuns; });
+        auto observeStop = runtime.AddObserver<TEvService::TEvStopWorker>(
+            [&](TEvService::TEvStopWorker::TPtr& ev) {
+                if (ev->GetRecipientRewrite().NodeId() == s.Edges[1].NodeId()) {
+                    ++stopsToNewOwner;
+                }
+            });
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED,
+                NKikimrReplication::TEvWorkerStatus::REASON_ERROR, "Source authentication failed")));
+        s.Sync();
+        s.ProcessQueues();
+        s.ReportLag(1, TDuration::Seconds(2));
+        s.ExpectLag(TDuration::Seconds(2)); // The new owner is still authoritative and state is StandBy.
+        UNIT_ASSERT_VALUES_EQUAL(duplicateRuns, 0);
+        UNIT_ASSERT_VALUES_EQUAL(stopsToNewOwner, 0);
+    }
+
     Y_UNIT_TEST(OldNodeDisconnectKeepsNewOwner) {
         TSetup s;
 

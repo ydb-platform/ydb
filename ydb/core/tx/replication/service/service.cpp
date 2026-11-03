@@ -707,10 +707,14 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         bool autoCommit, bool reportStats, bool failOnDataLoss
     ) {
         TActorId ydbProxy;
+        auto authFailurePolicy = EAuthFailurePolicy::SourceRejectionOnly;
         const auto& params = settings.GetConnectionParams();
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
             ydbProxy = GetOrCreateYdbProxy(database, TConnectionParams::FromProto(params), params.GetStaticCredentials());
+            if (!params.GetEndpoint().empty()) {
+                authFailurePolicy = EAuthFailurePolicy::StaticLoginInitialization;
+            }
             break;
         case NKikimrReplication::TConnectionParams::kOAuthToken:
             ydbProxy = GetOrCreateYdbProxy(database, TConnectionParams::FromProto(params), params.GetOAuthToken().GetToken());
@@ -738,8 +742,8 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             topicReaderSettings.Decompress(false);
         }
 
-        return [ydbProxy, settings = std::move(topicReaderSettings)]() {
-            return CreateRemoteTopicReader(ydbProxy, settings);
+        return [ydbProxy, settings = std::move(topicReaderSettings), authFailurePolicy]() {
+            return CreateRemoteTopicReader(ydbProxy, settings, authFailurePolicy);
         };
     }
 
@@ -1133,6 +1137,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         case TEvWorker::TEvGone::SCHEME_ERROR:
         case TEvWorker::TEvGone::DATA_ERROR:
         case TEvWorker::TEvGone::DATA_LOSS:
+        case TEvWorker::TEvGone::AUTH_ERROR:
             return NKikimrReplication::TEvWorkerStatus::REASON_ERROR;
         default:
             return NKikimrReplication::TEvWorkerStatus::REASON_UNSPECIFIED;

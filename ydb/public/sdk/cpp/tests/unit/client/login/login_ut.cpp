@@ -18,103 +18,102 @@ using namespace NYdb;
 
 namespace {
 
-class TDummyClient {
-    class TImpl : public TClientImplCommon<TImpl> {
+    class TDummyClient {
+        class TImpl: public TClientImplCommon<TImpl> {
+        public:
+            explicit TImpl(TDriver& driver)
+                : TClientImplCommon(CreateInternalInterface(driver), TCommonClientSettings())
+            {
+            }
+
+            std::shared_ptr<ICoreFacility> GetCoreFacility() const {
+                return DbDriverState_;
+            }
+        };
+
     public:
-        explicit TImpl(TDriver& driver)
-            : TClientImplCommon(CreateInternalInterface(driver), TCommonClientSettings())
-        {}
+        explicit TDummyClient(TDriver& driver)
+            : Impl_(std::make_shared<TImpl>(driver))
+        {
+        }
 
         std::shared_ptr<ICoreFacility> GetCoreFacility() const {
-            return DbDriverState_;
+            return Impl_->GetCoreFacility();
         }
+
+    private:
+        std::shared_ptr<TImpl> Impl_;
     };
 
-public:
-    explicit TDummyClient(TDriver& driver)
-        : Impl_(std::make_shared<TImpl>(driver))
-    {}
-
-    std::shared_ptr<ICoreFacility> GetCoreFacility() const {
-        return Impl_->GetCoreFacility();
-    }
-
-private:
-    std::shared_ptr<TImpl> Impl_;
-};
-
-class TLoginService final : public Ydb::Auth::V1::AuthService::Service {
-public:
-    explicit TLoginService(Ydb::StatusIds::StatusCode firstStatus)
-        : FirstStatus(firstStatus)
-        , Token(jwt::create()
-            .set_expires_at(std::chrono::system_clock::now() + std::chrono::hours(1))
-            .sign(jwt::algorithm::none{}))
-    {}
-
-    grpc::Status Login(grpc::ServerContext*, const Ydb::Auth::LoginRequest* request,
-        Ydb::Auth::LoginResponse* response) override
-    {
-        if (request->user() != "login-retry-user" || request->password() != "login-retry-password") {
-            CredentialsMatch = false;
+    class TLoginService final: public Ydb::Auth::V1::AuthService::Service {
+    public:
+        explicit TLoginService(Ydb::StatusIds::StatusCode firstStatus)
+            : FirstStatus(firstStatus)
+            , Token(jwt::create()
+                        .set_expires_at(std::chrono::system_clock::now() + std::chrono::hours(1))
+                        .sign(jwt::algorithm::none{}))
+        {
         }
-        const auto attempt = ++Requests;
-        if (attempt == 1 && !ReleaseFirst.WaitT(TDuration::Seconds(10))) {
-            return grpc::Status(grpc::StatusCode::DEADLINE_EXCEEDED, "Test response release timed out");
-        }
-        auto* operation = response->mutable_operation();
-        operation->set_ready(true);
-        operation->set_status(attempt == 1 ? FirstStatus : Ydb::StatusIds::SUCCESS);
-        if (attempt > 1) {
-            Ydb::Auth::LoginResult result;
-            result.set_token(Token);
-            operation->mutable_result()->PackFrom(result);
-        }
-        return grpc::Status::OK;
-    }
 
-    const Ydb::StatusIds::StatusCode FirstStatus;
-    const std::string Token;
-    TManualEvent ReleaseFirst;
-    std::atomic_uint Requests{0};
-    std::atomic_bool CredentialsMatch{true};
-};
+        grpc::Status Login(grpc::ServerContext*, const Ydb::Auth::LoginRequest* request,
+                           Ydb::Auth::LoginResponse* response) override {
+            if (request->user() != "login-retry-user" || request->password() != "login-retry-password") {
+                CredentialsMatch = false;
+            }
+            const auto attempt = ++Requests;
+            if (attempt == 1 && !ReleaseFirst.WaitT(TDuration::Seconds(10))) {
+                return grpc::Status(grpc::StatusCode::DEADLINE_EXCEEDED, "Test response release timed out");
+            }
+            auto* operation = response->mutable_operation();
+            operation->set_ready(true);
+            operation->set_status(attempt == 1 ? FirstStatus : Ydb::StatusIds::SUCCESS);
+            if (attempt > 1) {
+                Ydb::Auth::LoginResult result;
+                result.set_token(Token);
+                operation->mutable_result()->PackFrom(result);
+            }
+            return grpc::Status::OK;
+        }
 
-template <typename TCallback>
-void WithProvider(Ydb::StatusIds::StatusCode firstStatus, TCallback callback) {
-    NTesting::InitPortManagerFromEnv();
-    const auto port = NTesting::GetFreePort();
-    const std::string endpoint = "127.0.0.1:" + std::to_string(port);
-    TLoginService service(firstStatus);
-    auto server = grpc::ServerBuilder()
-        .AddListeningPort(TStringType{endpoint}, grpc::InsecureServerCredentials())
-        .RegisterService(&service)
-        .BuildAndStart();
-    UNIT_ASSERT(server);
-    Y_DEFER {
+        const Ydb::StatusIds::StatusCode FirstStatus;
+        const std::string Token;
+        TManualEvent ReleaseFirst;
+        std::atomic_uint Requests{0};
+        std::atomic_bool CredentialsMatch{true};
+    };
+
+    template <typename TCallback>
+    void WithProvider(Ydb::StatusIds::StatusCode firstStatus, TCallback callback) {
+        NTesting::InitPortManagerFromEnv();
+        const auto port = NTesting::GetFreePort();
+        const std::string endpoint = "127.0.0.1:" + std::to_string(port);
+        TLoginService service(firstStatus);
+        auto server = grpc::ServerBuilder()
+                          .AddListeningPort(TStringType{endpoint}, grpc::InsecureServerCredentials())
+                          .RegisterService(&service)
+                          .BuildAndStart();
+        UNIT_ASSERT(server);
+        Y_DEFER {
+            service.ReleaseFirst.Signal();
+            server->Shutdown(std::chrono::system_clock::now() + std::chrono::seconds(5));
+            server->Wait();
+        };
+
+        TDriver driver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root").SetDiscoveryMode(EDiscoveryMode::Off));
+        TDummyClient client(driver);
+        auto provider = CreateLoginCredentialsProviderFactory({.User = "login-retry-user", .Password = "login-retry-password"})->CreateProvider(client.GetCoreFacility());
+        Y_DEFER {
+            service.ReleaseFirst.Signal();
+            provider.reset();
+            driver.Stop(true);
+        };
+
+        // Capture this future before either response can complete it. Retrying by
+        // obtaining a new future/provider would hide a permanently failed first login.
+        const auto future = provider->GetAuthInfoAsync();
         service.ReleaseFirst.Signal();
-        server->Shutdown(std::chrono::system_clock::now() + std::chrono::seconds(5));
-        server->Wait();
-    };
-
-    TDriver driver(TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Root")
-        .SetDiscoveryMode(EDiscoveryMode::Off));
-    TDummyClient client(driver);
-    auto provider = CreateLoginCredentialsProviderFactory({
-        .User = "login-retry-user", .Password = "login-retry-password"
-    })->CreateProvider(client.GetCoreFacility());
-    Y_DEFER {
-        service.ReleaseFirst.Signal();
-        provider.reset();
-        driver.Stop(true);
-    };
-
-    // Capture this future before either response can complete it. Retrying by
-    // obtaining a new future/provider would hide a permanently failed first login.
-    const auto future = provider->GetAuthInfoAsync();
-    service.ReleaseFirst.Signal();
-    callback(service, future);
-}
+        callback(service, future);
+    }
 
 } // namespace
 
@@ -137,4 +136,4 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT(service.CredentialsMatch.load());
         });
     }
-}
+} // Y_UNIT_TEST_SUITE(Login)

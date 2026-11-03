@@ -723,14 +723,8 @@ public:
             dstPath->ApplyACL(acl);
         }
 
-<<<<<<< HEAD
         context.SS->Sequences[pathId] = sequenceInfo;
-        context.SS->PersistSequence(db, pathId, *sequenceInfo);
-        context.SS->PersistSequenceAlter(db, pathId, *alterData);
         context.SS->IncrementPathDbRefCount(pathId);
-=======
-        context.SS->Sequences.Set(pathId, sequenceInfo);
->>>>>>> 8a522c4a2e2 (schemeshard: make copy-sequence propose undo-safe (#55900))
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
@@ -741,20 +735,18 @@ public:
         return result;
     }
 
-<<<<<<< HEAD
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TCopySequence");
-=======
-    void AbortPropose(TProposeContext& context) override {
-        YDB_LOG_NOTICE_CTX(context.Ctx, "");
->>>>>>> 8a522c4a2e2 (schemeshard: make copy-sequence propose undo-safe (#55900))
+    void AbortPropose(TOperationContext& context) override {
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TCopySequence AbortPropose"
+            << ", opId: " << OperationId
+            << ", schemeshard: " << context.SS->TabletID()
+        );
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        YDB_LOG_NOTICE_CTX(context.Ctx, "TCopySequence AbortUnsafe",
-            {"operationId", OperationId},
-            {"forceDropId", forceDropTxId},
-            {"schemeshard", context.SS->TabletID()},
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TCopySequence AbortUnsafe"
+            << ", opId: " << OperationId
+            << ", forceDropId: " << forceDropTxId
+            << ", schemeshard: " << context.SS->TabletID()
         );
 
         context.OnComplete.DoneOperation(OperationId);

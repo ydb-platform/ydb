@@ -86,10 +86,11 @@ class TStdJoinTable {
 class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
   public:
 
-    TNeumannJoinTable(const NPackedTuple::TTupleLayout* layout, bool trackUsed = false)
+    TNeumannJoinTable(const NPackedTuple::TTupleLayout* layout, bool trackUsed = false, bool any = false)
         : Table_(layout)
         , RowWidth_(layout->TotalRowSize)
         , TrackUsed_(trackUsed)
+        , Any_(any)
     {
         MKQL_ENSURE(Empty(), "table should be empty by default");
     }
@@ -139,6 +140,14 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
     // resumeIndex is where the scan of this probe continues, 0 once every match was consumed
     bool Lookup(TSingleTuple row, size_t& resumeIndex, std::invocable<TSingleTuple> auto consume,
                 std::predicate auto isFull) {
+        if (Any_) {
+            LookupAny(row, [&](TSingleTuple match) {
+                consume(match);
+                return true;
+            });
+            resumeIndex = 0;
+            return true;
+        }
         if (Empty()) {
             resumeIndex = 0;
             return true;
@@ -165,7 +174,8 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         bool found = false;
         Table_.Apply(row.PackedData, row.OverflowBegin, [&](const ui8* packed) {
             found = accept(TSingleTuple{packed, BuildData_.Overflow.data()});
-            return !found;
+            // ANY chooses a representative before evaluating join filters.
+            return !found && !Any_;
         });
         return found;
     }
@@ -208,6 +218,17 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
             if (bool(Used_[resumeIndex]) != used) {
                 continue;
             }
+            if (Any_) {
+                const ui8* row = Table_.PackedRow(resumeIndex);
+                bool duplicate = false;
+                Table_.Apply(row, BuildData_.Overflow.data(), [&](const ui8* match) {
+                    duplicate = match != row;
+                    return false;
+                });
+                if (duplicate) {
+                    continue;
+                }
+            }
             consume(TSingleTuple{
                 Table_.PackedRow(resumeIndex),
                 BuildData_.Overflow.data()
@@ -225,6 +246,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
     NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;
     size_t RowWidth_ = 0;
     bool TrackUsed_ = false;
+    bool Any_ = false;
     TMKQLVector<ui8> Used_;
 };
 

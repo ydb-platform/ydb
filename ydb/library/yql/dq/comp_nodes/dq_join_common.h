@@ -457,7 +457,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             : Spiller(std::move(spiller))
         {
             for(int index = 0; index < std::ssize(Spiller.GetBuckets()); ++index) {
-                ProbeState.Buckets.push_back(TTable{self.Layouts_.Build, PreservedRowsInBuildTable()});
+                ProbeState.Buckets.push_back(TTable{self.Layouts_.Build, PreservedRowsInBuildTable(), self.BuildAny_});
             }
             self.Logger_.LogDebug("BuildingInMemoryTable stage started");
         }
@@ -622,11 +622,10 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         , Layouts_(layouts)
         , Spiller_(ctx.SpillerFactory ? ctx.SpillerFactory->CreateSpiller() : nullptr)
         , Sources_(std::move(sources))
+        , BuildAny_(any.Build)
     {
-        for (const auto side : EachSide) {
-            if (any.SelectSide(side)) {
-                AnyKeys_.SelectSide(side) = std::make_unique<TAnyJoinKeys>(Layouts_.SelectSide(side));
-            }
+        if (any.Probe) {
+            ProbeAnyKeys_ = std::make_unique<TAnyJoinKeys>(Layouts_.Probe);
         }
     }
 
@@ -751,13 +750,9 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.Pack = std::move(GetPayload(var));
-                    if (AnyKeys_.Build) {
-                        AnyKeys_.Build->Filter(*state.Pack);
-                    }
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unhandled status");
                     MKQL_ENSURE(state.Build.Finished(), "sanity check");
-                    AnyKeys_.Build.reset();
                     State_ = BuildingInMemoryTable{*this, std::move(state.Spiller)};
                 }
             } else {
@@ -830,12 +825,12 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.FetchedPack = std::move(GetPayload(var));
-                    if (AnyKeys_.Probe) {
-                        AnyKeys_.Probe->Filter(*state.FetchedPack);
+                    if (ProbeAnyKeys_) {
+                        ProbeAnyKeys_->Filter(*state.FetchedPack);
                     }
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
-                    AnyKeys_.Probe.reset();
+                    ProbeAnyKeys_.reset();
                     if constexpr (PreservedRowsInBuildTable()) {
                         if (!EmitPreservedBuildRowsFromInMemoryBuckets(state.Spiller, state.PreservedBucketIndex,
                                                                        state.PreservedResumeIndex, consume, isFull)) {
@@ -1018,7 +1013,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         for (auto& future : tdata->Futures) {
                             vec.push_back(GetPage(std::move(future), ESide::Build));
                         }
-                        NJoinTable::TNeumannJoinTable table{Layouts_.Build, PreservedRowsInBuildTable()};
+                        NJoinTable::TNeumannJoinTable table{Layouts_.Build, PreservedRowsInBuildTable(), BuildAny_};
                         table.BuildWith(Flatten(std::move(vec)));
                         state.SelectedPair->Table = TTableAndSomeData{.Table = std::move(table), .Futures = {}};
                     } else {
@@ -1206,7 +1201,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     TSides<const NPackedTuple::TTupleLayout*> Layouts_;
     ISpiller::TPtr Spiller_;
     Sources Sources_;
-    TSides<std::unique_ptr<TAnyJoinKeys>> AnyKeys_;
+    bool BuildAny_ = false;
+    std::unique_ptr<TAnyJoinKeys> ProbeAnyKeys_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
 };

@@ -106,8 +106,9 @@ TJoinTestData AnyJoinTestData(EJoinKind kind, bool leftAny, bool rightAny, EBuil
         for (ui64 key = 0; key < distinctKeys; ++key) {
             leftKeys.push_back(makeKey(key));
             rightKeys.push_back(makeKey(key + 1));
-            leftValues.push_back(TStringBuilder() << "left-" << pass << "-" << key);
-            rightValues.push_back(TStringBuilder() << "right-" << pass << "-" << key);
+            // ANY may select any representative; keep its payload independent of the input order.
+            leftValues.push_back(TStringBuilder() << "left-" << (leftAny ? 0 : pass) << "-" << key);
+            rightValues.push_back(TStringBuilder() << "right-" << (rightAny ? 0 : pass) << "-" << key);
         }
         leftKeys.push_back(std::nullopt);
         rightKeys.push_back(std::nullopt);
@@ -173,6 +174,29 @@ TJoinTestData AnyJoinTestData(EJoinKind kind, bool leftAny, bool rightAny, EBuil
         td.JoinMemoryConstraint = 1;
         td.ExpectsSpilling = true;
     }
+    return td;
+}
+
+TJoinTestData AnyJoinInplaceBuildRowsTestData(EBuildSide buildSide, bool equalNulls) {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<std::optional<ui32>> left = {1, 1, 2, 2, std::nullopt, std::nullopt};
+    TVector<std::optional<ui32>> right = {2, 2, 3, 3, std::nullopt, std::nullopt};
+    TVector<std::optional<ui32>> expectedLeft = {1, 2, std::nullopt, std::nullopt};
+    TVector<std::optional<ui32>> expectedRight = {std::nullopt, 2, std::nullopt, std::nullopt};
+    if (equalNulls) {
+        expectedLeft.pop_back();
+        expectedRight.pop_back();
+        td.JoinSettings.EqualNullsKeys = {0};
+    }
+    td.Left = ConvertVectorsToTuples(setup, left);
+    td.Right = ConvertVectorsToTuples(setup, right);
+    td.Result = ConvertVectorsToTuples(setup, expectedLeft, expectedRight);
+    td.Kind = EJoinKind::Left;
+    td.Renames = {{0, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
+    td.JoinSettings.BuildSide = buildSide;
+    td.JoinSettings.LeftAny = true;
+    td.JoinSettings.RightAny = true;
     return td;
 }
 
@@ -2885,6 +2909,14 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         for (const auto buildSide : {EBuildSide::Left, EBuildSide::Right}) {
             for (const auto any : {EAnyJoinSettings::Left, EAnyJoinSettings::Right, EAnyJoinSettings::Both}) {
                 Test(AnyJoinTestData<true>(EJoinKind::Left, IsAnyJoinLeft(any), IsAnyJoinRight(any), buildSide, true), BlockJoin);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TestAnyJoinInplaceBuildRows, BlockJoin) {
+        for (const auto buildSide : {EBuildSide::Left, EBuildSide::Right}) {
+            for (const bool equalNulls : {false, true}) {
+                Test(AnyJoinInplaceBuildRowsTestData(buildSide, equalNulls), BlockJoin);
             }
         }
     }

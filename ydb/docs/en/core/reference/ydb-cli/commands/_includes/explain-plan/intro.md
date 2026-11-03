@@ -1,5 +1,7 @@
 # Getting a query plan
 
+## Query plan command {#explain-plan}
+
 Get a query plan:
 
 ```bash

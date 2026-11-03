@@ -25,7 +25,7 @@ AS SELECT ...
 
 {% endnote %}
 
-* `CREATE TABLE AS` поддерживается только в режиме [неявного контроля транзакций](../../../../concepts/transactions.md#implicit). Таблица появится по указанному пути уже заполненной.
+* `CREATE TABLE AS` поддерживается только в режиме [неявного контроля транзакций](../../../../recipes/ydb-sdk/tx-control.md#implicittx). Таблица появится по указанному пути уже заполненной.
 
 * `CREATE TABLE AS` может быть только единственным [DML](https://en.wikipedia.org/wiki/Data_manipulation_language)/[DDL](https://en.wikipedia.org/wiki/Data_definition_language) выражением в запросе. Допустимо использование [PRAGMA](../pragma.md), [DECLARE](../declare.md) и [именованных выражений](../expressions.md#named-nodes).
 

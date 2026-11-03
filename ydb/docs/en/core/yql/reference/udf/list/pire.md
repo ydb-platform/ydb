@@ -80,7 +80,7 @@ Use the MultiGrep/MultiMatch functions to optimize the query execution speed. Be
 * If you want to match a string against any of the listed expressions (the results are joined with "or"), it would be much more efficient to combine the query parts in a single regular expression with `|` and match it using regular Grep or Match.
 * Pire has a limit on the size of the state machine (YQL uses the default value set in the library). If you exceed the limit, the error is raised at the start of the query: `Failed to glue up regexes, probably the finite state machine appeared to be too large`.
 
-When you call MultiGrep/MultiMatch, regular expressions are passed one per line using [multiline string literals](../../syntax/expressions.md#multiline-string-literals):
+When you call MultiGrep/MultiMatch, regular expressions are passed one per line using [multiline string literals](../../syntax/lexer.md#multiline-string-literals):
 
 ### Examples
 

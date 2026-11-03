@@ -1,5 +1,7 @@
 # Получение плана исполнения запроса и AST
 
+## Команда explain {#explain-plan}
+
 Получить план запроса через {{ ydb-short-name }} CLI можно с помощью команды `explain`:
 
 ```bash
@@ -24,6 +26,8 @@ ResultSet
       └──TablePointLookup (ReadRange: [series_id (1), season_id (1, +∞), episode_id (-∞, +∞)], ReadColumns: [episode_id, season_id, title, series_id], Table: episodes)
           Tables: [episodes]
 ```
+
+## План запроса с AST {#ast}
 
 Дополнительно к плану запроса вы можете получить AST (абстрактное синтаксическое дерево).
 Раздел AST содержит представление на внутреннем языке miniKQL.

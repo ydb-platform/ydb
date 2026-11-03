@@ -474,7 +474,7 @@ JsonPath supports predicates which are expressions that return a Boolean value a
 
 #### `like_regex`
 
-The `like_regex` predicate lets you check if a string matches a regular expression. The syntax of regular expressions is the same as in [Hyperscan UDF](../udf/list/hyperscan.md) and [REGEXP](../syntax/expressions.md#regexp).
+The `like_regex` predicate lets you check if a string matches a regular expression. The syntax of regular expressions is the same as in [Hyperscan UDF](../udf/list/hyperscan.md) and [REGEXP](../syntax/expressions.md#check-match).
 
 ##### Syntax
 

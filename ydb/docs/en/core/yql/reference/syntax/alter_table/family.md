@@ -1,6 +1,6 @@
 # Changing column groups
 
-The mechanism of [column groups](../../../../concepts/datamodel/table.md#column-groups) allows for improved performance of partial row read operations by dividing the storage of table columns into several groups. The most commonly used scenario is to organize the storage of infrequently used attributes into a separate column group.
+The mechanism of [column groups](../../../../concepts/datamodel/table.md) allows for improved performance of partial row read operations by dividing the storage of table columns into several groups. The most commonly used scenario is to organize the storage of infrequently used attributes into a separate column group.
 
 ## Creating column groups {#creating-column-groups}
 

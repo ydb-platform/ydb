@@ -21,7 +21,7 @@ void TColumnShardScanStatsCollection::Merge(const NKqpProto::TColumnShardScanSta
     }
     auto& scan = Scans[report.GetStatsScanId()];
     scan.Context.SetStatsScanId(report.GetStatsScanId());
-    if (report.HasTabletId()) {
+    if (report.GetTabletId()) {
         scan.Context.SetTabletId(report.GetTabletId());
     }
     if (report.HasReaderKind()) {

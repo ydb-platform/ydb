@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(TColumnShardV2Transport) {
         for (const auto& report : reports) {
             if (report.GetExpectedContextOnly()) {
                 ++expectedCount;
-                UNIT_ASSERT(!report.HasTabletId());
+                UNIT_ASSERT_VALUES_EQUAL(report.GetTabletId(), 0);
                 UNIT_ASSERT_VALUES_EQUAL(report.ParticipatingTabletsSize(), 16);
                 UNIT_ASSERT_VALUES_EQUAL(report.StepsSize(), 0);
             } else {

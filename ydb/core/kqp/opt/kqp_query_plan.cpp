@@ -3402,7 +3402,7 @@ static NJson::TJsonValue ColumnShardScanStatsToJson(const NKqpProto::TColumnShar
     NProtobufJson::TProto2JsonConfig config;
     config.EnumMode = NProtobufJson::TProto2JsonConfig::EnumName;
     NProtobufJson::Proto2Json(scan, result, config);
-    if (scan.HasTabletId()) {
+    if (scan.GetTabletId()) {
         result["TabletId"] = ToString(scan.GetTabletId());
     }
     if (scan.ParticipatingTabletsSize()) {

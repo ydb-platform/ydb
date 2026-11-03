@@ -54,7 +54,8 @@ struct TMockProcessorFactory : public ISessionConnectionProcessorFactory<TReques
         NYdbGrpc::IQueueClientContextPtr connectTimeoutContext,
         typename IFactory::TConnectTimeoutCallback connectTimeoutCallback,
         TDuration connectDelay,
-        NYdbGrpc::IQueueClientContextPtr connectDelayOperationContext) override
+        NYdbGrpc::IQueueClientContextPtr connectDelayOperationContext,
+        std::shared_ptr<std::string> /* initialAuthToken */) override
     {
         ASSERT_FALSE(ConnectedCallback) << "Only one connect at a time is expected";
         ASSERT_FALSE(ConnectTimeoutCallback) << "Only one connect at a time is expected";

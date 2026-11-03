@@ -338,7 +338,7 @@ private:
     void DoCdsRequest(TDuration delay = TDuration::Zero());
     void OnCdsResponse(TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result);
     void OnConnect(TPlainStatus&& st, typename IProcessor::TPtr&& processor,
-            const NYdbGrpc::IQueueClientContextPtr& connectContext);
+            const NYdbGrpc::IQueueClientContextPtr& connectContext, std::string initialAuthToken);
     void OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext);
     void ResetForRetryImpl();
     THandleResult RestartImpl(const TPlainStatus& status);

@@ -324,7 +324,9 @@ struct ISessionConnectionProcessorFactory {
         TConnectTimeoutCallback connectTimeoutCallback,
         // Params for delay before reconnect and its cancellation.
         TDuration connectDelay = TDuration::Zero(),
-        NYdbGrpc::IQueueClientContextPtr connectDelayOperationContext = nullptr) = 0;
+        NYdbGrpc::IQueueClientContextPtr connectDelayOperationContext = nullptr,
+        // Receives the token sent in stream metadata before callback is invoked.
+        std::shared_ptr<std::string> initialAuthToken = nullptr) = 0;
 };
 
 template <class TService, class TRequest, class TResponse>
@@ -353,7 +355,8 @@ public:
         NYdbGrpc::IQueueClientContextPtr connectTimeoutContext,
         TConnectTimeoutCallback connectTimeoutCallback,
         TDuration connectDelay,
-        NYdbGrpc::IQueueClientContextPtr connectDelayOperationContext) override
+        NYdbGrpc::IQueueClientContextPtr connectDelayOperationContext,
+        std::shared_ptr<std::string> initialAuthToken) override
     {
         Y_ASSERT(connectContext);
         Y_ASSERT(connectTimeoutContext);
@@ -364,7 +367,8 @@ public:
                     std::move(connectContext),
                     connectTimeout,
                     std::move(connectTimeoutContext),
-                    std::move(connectTimeoutCallback));
+                    std::move(connectTimeoutCallback),
+                    std::move(initialAuthToken));
         } else {
             auto connect = [
                 weakThis = this->weak_from_this(),
@@ -373,8 +377,9 @@ public:
                 connectContext = std::move(connectContext),
                 connectTimeout,
                 connectTimeoutContext = std::move(connectTimeoutContext),
-                connectTimeoutCallback = std::move(connectTimeoutCallback)
-            ] (bool ok)
+                connectTimeoutCallback = std::move(connectTimeoutCallback),
+                initialAuthToken = std::move(initialAuthToken)
+            ] (bool ok) mutable
             {
                 if (!ok) {
                     // Delay context is cancelled (driver Stop, previous
@@ -391,7 +396,8 @@ public:
                         std::move(connectContext),
                         connectTimeout,
                         std::move(connectTimeoutContext),
-                        std::move(connectTimeoutCallback)
+                        std::move(connectTimeoutCallback),
+                        std::move(initialAuthToken)
                     );
                 }
             };
@@ -411,14 +417,17 @@ private:
         NYdbGrpc::IQueueClientContextPtr connectContext,
         TDuration connectTimeout,
         NYdbGrpc::IQueueClientContextPtr connectTimeoutContext,
-        TConnectTimeoutCallback connectTimeoutCallback)
+        TConnectTimeoutCallback connectTimeoutCallback,
+        std::shared_ptr<std::string> initialAuthToken)
     {
         Connections->StartBidirectionalStream<TService, TRequest, TResponse>(
             std::move(callback),
             Rpc,
             DbDriverState,
             requestSettings,
-            std::move(connectContext)
+            std::move(connectContext),
+            {},
+            std::move(initialAuthToken)
         );
 
         Connections->ScheduleCallback(

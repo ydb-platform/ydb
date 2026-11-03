@@ -436,7 +436,7 @@ private:
     void InitWriter();
 
     void OnConnect(TPlainStatus&& st, typename IProcessor::TPtr&& processor,
-                const NYdbGrpc::IQueueClientContextPtr& connectContext);
+                const NYdbGrpc::IQueueClientContextPtr& connectContext, std::string initialAuthToken);
     void OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext);
     void ResetForRetryImpl();
     THandleResult RestartImpl(const TPlainStatus& status);

@@ -417,6 +417,7 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const std::string& end
     NYdbGrpc::IQueueClientContextPtr connectTimeoutContext = nullptr;
     TRpcRequestSettings reqSettings;
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> connectionFactory;
+    auto initialAuthToken = std::make_shared<std::string>();
 
     // Callbacks
     std::function<void(TPlainStatus&&, typename IProcessor::TPtr&&)> connectCallback;
@@ -484,9 +485,9 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const std::string& end
         reqSettings = TRpcRequestSettings::Make(Settings);
 
         connectCallback = [cbContext = SelfContext,
-                           connectContext = connectContext](TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
+                           connectContext = connectContext, initialAuthToken](TPlainStatus&& st, typename IProcessor::TPtr&& processor) {
             if (auto self = cbContext->LockShared()) {
-                self->OnConnect(std::move(st), std::move(processor), connectContext);
+                self->OnConnect(std::move(st), std::move(processor), connectContext, std::move(*initialAuthToken));
             }
         };
 
@@ -507,7 +508,8 @@ void TWriteSessionImpl::DoConnect(const TDuration& delay, const std::string& end
             std::move(connectTimeoutContext),
             std::move(connectTimeoutCallback),
             delay,
-            std::move(connectDelayContext)
+            std::move(connectDelayContext),
+            std::move(initialAuthToken)
     );
 }
 
@@ -540,7 +542,8 @@ void TWriteSessionImpl::OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr&
 
 // RPC callback.
 void TWriteSessionImpl::OnConnect(
-        TPlainStatus&& st, typename IProcessor::TPtr&& processor, const NYdbGrpc::IQueueClientContextPtr& connectContext
+        TPlainStatus&& st, typename IProcessor::TPtr&& processor, const NYdbGrpc::IQueueClientContextPtr& connectContext,
+        std::string initialAuthToken
 ) {
     THandleResult handleResult;
     {
@@ -552,6 +555,8 @@ void TWriteSessionImpl::OnConnect(
             ConnectDelayContext = nullptr;
 
             if (st.Ok()) {
+                PrevToken = std::move(initialAuthToken);
+                UpdateTokenInProgress = false;
                 Processor = std::move(processor);
                 InitImpl();
                 // Still should call ReadFromProcessor();
@@ -1256,7 +1261,7 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: try to update token");
 
     auto credentialsProvider = DbDriverState->GetCredentialsProvider();
-    if (!credentialsProvider || UpdateTokenInProgress || !SessionEstablished || Aborting)
+    if (!credentialsProvider || !credentialsProvider->IsValid() || UpdateTokenInProgress || !SessionEstablished || Aborting)
         return;
     auto authInfo = credentialsProvider->GetAuthInfoAsync();
     if (authInfo.IsReady()) {
@@ -1265,15 +1270,18 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
     }
     UpdateTokenInProgress = true;
     try {
-        authInfo.Subscribe([cbContext = SelfContext](const auto& future) {
+        authInfo.Subscribe([cbContext = SelfContext, connectionGeneration = ConnectionGeneration](const auto& future) {
             if (auto self = cbContext->LockShared()) try {
-                self->Connections->ScheduleCallback(TDuration::Zero(), [cbContext, future](bool ok) {
+                self->Connections->ScheduleCallback(TDuration::Zero(), [cbContext, future, connectionGeneration](bool ok) {
                     if (auto self = cbContext->LockShared()) {
                         if (!ok) {
                             self->UpdateTokenInProgress = false;
                             return;
                         }
                         std::lock_guard guard(self->Lock);
+                        if (connectionGeneration != self->ConnectionGeneration) {
+                            return;
+                        }
                         self->UpdateTokenImpl(future);
                     }
                 });

@@ -333,6 +333,12 @@ void TTxScan::Complete(const TActorContext& ctx) {
     }
     auto metadataConclusion = [&] {
         NScanStats::TScope scope(metadataStats);
+    if (metadataStats) {
+        metadataStats->Update([](auto& record) {
+            record.SetMetaStep("Preparation");
+            record.SetCanonicalPath("");
+        });
+    }
         return MakeReadMetadata(Self, Self->Counters.GetScanCounters(), *scannerConstructor, read);
     }();
     if (metadataStats) {

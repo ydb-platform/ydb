@@ -632,8 +632,9 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch, ui64 sourceId)
     if (sendStats) {
         sendStats->Update([&](auto& record) {
             auto* output = record.MutableDetails()->MutableOutput();
-            output->SetRows(Rows);
-            output->SetDataBatches(Rows ? 1 : 0);
+            const ui32 resultRows = Result->GetRowsCount();
+            output->SetRows(resultRows);
+            output->SetDataBatches(resultRows ? 1 : 0);
             if (Result->ArrowBatch) {
                 output->SetArrowBytes(NArrow::GetTableDataSize(Result->ArrowBatch));
             }

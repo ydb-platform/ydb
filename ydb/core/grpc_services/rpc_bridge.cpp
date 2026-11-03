@@ -215,6 +215,25 @@ private:
 
         const auto& currentClusterState = config->GetClusterState();
 
+        // Compare-and-set: a request based on another generation is reported as such before any state-dependent
+        // validation, so that the client replans instead of treating it as malformed.
+        const auto& request = *GetProtoRequest();
+        if (request.has_expected_generation()) {
+            const ui64 expected = request.expected_generation();
+            const ui64 current = currentClusterState.GetGeneration();
+            if (current > expected) {
+                self->Reply(Ydb::StatusIds::ABORTED, TStringBuilder() << "Cluster state generation# " << current
+                    << " differs from expected_generation# " << expected << ", the update was not applied",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                return;
+            } else if (current < expected) {
+                self->Reply(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Node has cluster state generation# "
+                    << current << " older than expected_generation# " << expected << ", the update was not applied",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                return;
+            }
+        }
+
         for (const auto& update : GetProtoRequest()->updates()) {
             if (nameToId.find(update.pile_name()) == nameToId.end()) {
                  self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Invalid pile name# " << update.pile_name(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
@@ -324,9 +343,12 @@ private:
         finalPromoted->CopyToProto(&newClusterState, &NKikimrBridge::TClusterState::SetPromotedPile);
         newClusterState.SetGeneration(currentClusterState.GetGeneration() + 1);
 
-        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        auto *cmd = request->Record.MutableSwitchBridgeClusterState();
+        auto invokeRequest = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *cmd = invokeRequest->Record.MutableSwitchBridgeClusterState();
         cmd->MutableNewClusterState()->CopyFrom(newClusterState);
+        if (request.has_expected_generation()) {
+            cmd->SetExpectedGeneration(request.expected_generation());
+        }
 
         // quorum_piles is deprecated and doesn't change the quorum of the update, but the names are still checked, as
         // they were when the request was accepted with them
@@ -355,7 +377,7 @@ private:
             }
         }
 
-        self->ActorContext().Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), request.release());
+        self->ActorContext().Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), invokeRequest.release());
         self->Become(&TThis::StateWaitForPropose);
     }
 
@@ -370,6 +392,12 @@ private:
         const auto& response = ev->Get()->Record;
         auto* self = Self();
         const bool success = response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK;
+        if (response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::GENERATION_MISMATCH) {
+            // the guard failed in distconf: this request was not applied and will never be
+            self->Reply(Ydb::StatusIds::ABORTED, response.GetErrorReason(),
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+            return;
+        }
         if (!success) {
             self->Reply(Ydb::StatusIds::INTERNAL_ERROR, response.GetErrorReason(),
                 NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());

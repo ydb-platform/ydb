@@ -57,6 +57,9 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     using TTxState = std::pair<TOperationId, THolder<TTxState>>;
     TStack<TTxState> TxStates;
 
+    using TReplicationSourceCleanupState = std::pair<TOperationId, NKikimrReplication::ESourceCleanupPolicy>;
+    TStack<TReplicationSourceCleanupState> ReplicationSourceCleanups;
+
     using TExternalTableState = std::pair<TPathId, TExternalTableInfo::TPtr>;
     TStack<TExternalTableState> ExternalTables;
 
@@ -105,6 +108,7 @@ public:
     ~TMemoryChanges() = default;
 
     void GrabNewTxState(TSchemeShard* ss, const TOperationId& op);
+    void GrabReplicationSourceCleanup(TSchemeShard* ss, const TOperationId& op);
 
     void GrabNewPath(TSchemeShard* ss, const TPathId& pathId);
     void GrabPath(TSchemeShard* ss, const TPathId& pathId);

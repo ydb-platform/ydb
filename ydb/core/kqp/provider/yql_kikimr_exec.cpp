@@ -1204,9 +1204,9 @@ namespace {
                     setting.Value().Cast<TCoInterval>().Literal().Value()
                 );
 
-                if (value <= 0) {
+                if (value < static_cast<i64>(TDuration::Seconds(1).MicroSeconds())) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                        TStringBuilder() << name << " must be positive"));
+                        TStringBuilder() << name << " must be at least 1 second"));
                     return false;
                 }
 
@@ -3785,6 +3785,11 @@ public:
             TDropReplicationSettings settings;
             settings.Name = TString(dropReplication.Replication());
             settings.Cascade = (dropReplication.Cascade().Value() == "1");
+            if (const auto cleanup = dropReplication.SourceCleanup()) {
+                settings.SourceCleanup = cleanup.Cast().Value() == "abandon"
+                    ? NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON
+                    : NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP;
+            }
 
             auto cluster = TString(dropReplication.DataSink().Cluster());
             auto future = Gateway->DropReplication(cluster, settings);

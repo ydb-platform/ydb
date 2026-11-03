@@ -261,6 +261,7 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
                 ctx.Send(sender, response.Release());
                 return;
             }
+            RestoreReadSessionActor(userInfo, record.GetSessionId(), sender, ctx);
         }
     }
 
@@ -932,6 +933,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
                 TStringBuilder() << "no such session '" << read->SessionId << "'", read->ReplyTo);
             return;
         }
+        RestoreReadSessionActor(userInfo, read->SessionId, read->ReadSessionActor, ctx);
     }
     userInfo.ReadsInQuotaQueue++;
     Send(ReadQuotaTrackerActor,

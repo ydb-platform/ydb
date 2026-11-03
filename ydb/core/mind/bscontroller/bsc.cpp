@@ -173,7 +173,7 @@ bool TBlobStorageController::TGroupInfo::FillInOwnGroupParameters(
 }
 
 ui64 TBlobStorageController::TGroupInfo::ScaleGroupResource(ui64 value) const {
-    const auto scaled = ScaleGroupResource(value, VDisksInGroup.size(), TBlobStorageGroupType(ErasureSpecies));
+    const unsigned __int128 scaled = ScaleGroupResource(value, VDisksInGroup.size(), TBlobStorageGroupType(ErasureSpecies));
     return scaled > Max<ui64>() ? Max<ui64>() : static_cast<ui64>(scaled);
 }
 

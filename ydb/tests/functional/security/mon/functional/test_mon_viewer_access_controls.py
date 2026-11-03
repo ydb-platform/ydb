@@ -188,7 +188,7 @@ def test_empty_monitoring_sids_only_allows_administrators(certificates):
 
         monitoring_path = '/tablets'
         # Empty monitoring_allowed_sids list doesn't provide access to any valid token for monitoring endpoints.
-        # Endpoints required the monitoring access level would be accessible only for administrators in such case.
+        # Endpoints requiring monitoring-level access are accessible only to administrators in this case.
         _assert_status(base_url, monitoring_path, None, 401)
         _assert_status(base_url, monitoring_path, 'database@builtin', 403)
         _assert_status(base_url, monitoring_path, 'viewer@builtin', 403)

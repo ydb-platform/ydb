@@ -30,11 +30,10 @@ inline void ReadString(const NJson::TJsonValue& node, TStringBuf path, TString& 
     }
 }
 
-// Flags such as Blocks, Parallel and Pushdown arrive as the strings "True" and
-// "False", not as JSON booleans.
+// Older plans encode flags as "True"/"False"; new RBO uses JSON booleans.
 inline void ReadBoolString(const NJson::TJsonValue& node, TStringBuf path, bool& target) {
     if (auto* valueNode = node.GetValueByPath(path)) {
-        target = valueNode->GetStringSafe() == "True";
+        target = valueNode->IsBoolean() ? valueNode->GetBooleanSafe() : valueNode->GetStringSafe() == "True";
     }
 }
 
@@ -43,6 +42,10 @@ const NJson::TJsonValue* GetOutputStatNode(const NJson::TJsonValue& node);
 const NJson::TJsonValue* GetInputStatNode(const NJson::TJsonValue& node);
 TString ParseTableOrIndexName(const TString& table);
 TString ParseColumns(const NJson::TJsonValue* node);
+
+// Human-readable labels for both structured RBO properties and legacy strings.
+TString FormatSortColumn(const NJson::TJsonValue& column);
+TString FormatPlanProperty(TStringBuf name, const NJson::TJsonValue& value);
 
 // The { Bytes, Rows, Chunks } group carried by every channel stat node - stage
 // output, connection input, ingress and the two CTE variants all report it the

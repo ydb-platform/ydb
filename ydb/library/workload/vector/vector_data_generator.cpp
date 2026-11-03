@@ -42,6 +42,17 @@ private:
     const TString EmbeddingColumnName;
 
 private:
+    template <typename TProducer>
+    TString SerializeEmbedding(TProducer&& produce) const {
+        // Preserve file-import compatibility: float lists use FloatVector for every
+        // requested vector type, including INT4/UINT4. Binary embeddings are passed through.
+        TStringBuilder buffer;
+        NKnnVectorSerialization::TSerializer<float> serializer(&buffer.Out);
+        produce([&](float value) { serializer.HandleElement(value); });
+        serializer.Finish();
+        return TString(buffer);
+    }
+
     static std::pair<std::shared_ptr<arrow::Schema>, std::shared_ptr<arrow::RecordBatch>> DeserializeArrow(TDataPortion::TArrow* data) {
         arrow::ipc::DictionaryMemo dictionary;
 
@@ -128,14 +139,13 @@ private:
             for (int64_t row = 0; row < batch->num_rows(); ++row) {
                 const auto embeddingFloatList = std::static_pointer_cast<arrow::FloatArray>(embeddingListColumn->value_slice(row));
 
-                TStringBuilder buffer;
-                NKnnVectorSerialization::TSerializer<float> serializer(&buffer.Out);
-                for (int64_t i = 0; i < embeddingFloatList->length(); ++i) {
-                    serializer.HandleElement(embeddingFloatList->Value(i));
-                }
-                serializer.Finish();
+                const TString buffer = SerializeEmbedding([&](auto&& handle) {
+                    for (int64_t i = 0; i < embeddingFloatList->length(); ++i) {
+                        handle(embeddingFloatList->Value(i));
+                    }
+                });
 
-                if (const auto status = newEmbeddingsBuilder.Append(buffer.MutRef()); !status.ok()) {
+                if (const auto status = newEmbeddingsBuilder.Append(buffer.data(), static_cast<i32>(buffer.size())); !status.ok()) {
                     ythrow yexception() << status.ToString();
                 }
             }
@@ -193,21 +203,20 @@ private:
             buffer.SkipPrefix("[");
             buffer.ChopSuffix("]");
 
-            TStringBuilder newEmbeddingBuilder;
             const auto splitter = StringSplitter(buffer.begin(), buffer.end()).SplitByFunc([](char c) {
                 return c == ',' || std::isspace(c);
             }).SkipEmpty();
-            NKnnVectorSerialization::TSerializer<float> serializer(&newEmbeddingBuilder.Out);
-            for (auto it = splitter.begin(); it != splitter.end(); ++it) {
-                float value;
-                if (!TryFromString(it->Token(), value)) {
-                    ythrow yexception() << "Cannot parse float from embedding element '" << it->Token() << "'";
+            const TString newEmbedding = SerializeEmbedding([&](auto&& handle) {
+                for (auto it = splitter.begin(); it != splitter.end(); ++it) {
+                    float value;
+                    if (!TryFromString(it->Token(), value)) {
+                        ythrow yexception() << "Cannot parse float from embedding element '" << it->Token() << "'";
+                    }
+                    handle(value);
                 }
-                serializer.HandleElement(value);
-            }
-            serializer.Finish();
+            });
 
-            if (const auto status = newEmbeddingsBuilder.Append(newEmbeddingBuilder.MutRef()); !status.ok()) {
+            if (const auto status = newEmbeddingsBuilder.Append(newEmbedding.data(), static_cast<i32>(newEmbedding.size())); !status.ok()) {
                 ythrow yexception() << status.ToString();
             }
         }
@@ -277,6 +286,9 @@ private:
         for (size_t j = 0; j < VectorOpts.VectorDimension; ++j) {
             if constexpr (std::is_same_v<T, float> || NVectorDistance::IsReducedPrecisionFloat<T>) {
                 serializer.HandleElement(static_cast<T>(Distribution(RandomGenerator) * 2 - 1));
+            } else if constexpr (NVectorDistance::IsInt4<T>) {
+                std::uniform_int_distribution<int> integerDistribution(T::MinValue, T::MaxValue);
+                serializer.HandleElement(T(integerDistribution(RandomGenerator)));
             } else if constexpr (std::is_same<T, uint8_t>::value) {
                 serializer.HandleElement(Distribution(RandomGenerator) * (UINT8_MAX + 1));
             } else if constexpr (std::is_same<T, int8_t>::value) {
@@ -347,6 +359,10 @@ public:
                 generateEmbedding = [this]() { return GenerateEmbedding<TFloat8E4M3>(); };
             } else if (VectorOpts.VectorType == "float8_e5m2") {
                 generateEmbedding = [this]() { return GenerateEmbedding<TFloat8E5M2>(); };
+            } else if (VectorOpts.VectorType == "uint4") {
+                generateEmbedding = [this]() { return GenerateEmbedding<TUint4>(); };
+            } else if (VectorOpts.VectorType == "int4") {
+                generateEmbedding = [this]() { return GenerateEmbedding<TInt4>(); };
             } else if (VectorOpts.VectorType == "uint8") {
                 generateEmbedding = [this]() { return GenerateEmbedding<uint8_t>(); };
             } else if (VectorOpts.VectorType == "int8") {

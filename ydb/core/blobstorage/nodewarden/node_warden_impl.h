@@ -903,6 +903,7 @@ namespace NKikimr::NStorage {
             const TGroupId TargetGroupId;
             const bool Reconcile = false;
             const bool Thorough = false;
+            const ui64 AssignmentId = 0; // the attempt BSC has made, its result is reported with it
             TActorId ActorId;
             bool Finished = false;
             std::optional<TString> ErrorReason;
@@ -926,8 +927,10 @@ namespace NKikimr::NStorage {
             bool ForceProgressReport = false;
 
             friend std::strong_ordering operator <=>(const TWorkingSyncer& x, const TWorkingSyncer& y) {
-                return std::tie(x.BridgeProxyGroupId, x.SourceGroupId, x.TargetGroupId, x.Reconcile, x.Thorough) <=>
-                    std::tie(y.BridgeProxyGroupId, y.SourceGroupId, y.TargetGroupId, y.Reconcile, y.Thorough);
+                return std::tie(x.BridgeProxyGroupId, x.SourceGroupId, x.TargetGroupId, x.Reconcile, x.Thorough,
+                        x.AssignmentId) <=>
+                    std::tie(y.BridgeProxyGroupId, y.SourceGroupId, y.TargetGroupId, y.Reconcile, y.Thorough,
+                        y.AssignmentId);
             }
         };
 
@@ -938,12 +941,16 @@ namespace NKikimr::NStorage {
         THashMap<TGroupId, bool> StandbyDirty;
 
         // the bridge proxies running on this node by the group they serve, and the seals of the parts promoted from
-        // HOT_STANDBY being waited for from them (by cookie)
+        // HOT_STANDBY being waited for from them (by cookie); a proxy registering while the seal is in progress gets it
+        // too
         THashMap<TGroupId, THashSet<TActorId>> BridgeProxies;
         struct TStandbySealInProgress {
+            TGroupId BridgeProxyGroupId;
+            ui32 BridgeProxyGroupGeneration;
             TGroupId TargetGroupId;
             ui64 SealId;
-            ui32 ProxiesPending;
+            bool Flush = false;
+            THashSet<TActorId> ProxiesPending;
         };
         THashMap<ui64, TStandbySealInProgress> StandbySealsInProgress;
         ui64 LastStandbySealCookie = 0;
@@ -962,8 +969,11 @@ namespace NKikimr::NStorage {
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenRegisterBridgeProxy>> ev);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenStandbySealed>> ev);
         void ApplyStandbySeals(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
-        void OnStandbySealResolved(ui64 cookie);
+        void SendStandbySeal(ui64 cookie, TStandbySealInProgress& seal, TActorId proxyId);
+        void OnStandbySealResolved(ui64 cookie, TActorId proxyId);
+        void CheckStandbySeals();
         bool FillInStandbyReports(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update);
+        void SendStandbyReports();
         bool FillInWorkingSyncer(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update, TWorkingSyncer& syncer,
             bool forceProgress);
         void NotifySyncersProgress();

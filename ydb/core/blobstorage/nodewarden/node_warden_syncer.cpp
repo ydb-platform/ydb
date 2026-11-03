@@ -25,6 +25,7 @@ namespace NKikimr::NStorage {
                 .TargetGroupId = TGroupId::FromProto(&item, &T::GetTargetGroupId),
                 .Reconcile = item.GetReconcile(),
                 .Thorough = item.GetThorough(),
+                .AssignmentId = item.GetAssignmentId(),
             });
             auto& syncer = const_cast<TWorkingSyncer&>(*it);
             syncer.PendingBridgeProxyGroupGeneration = item.GetBridgeProxyGroupGeneration();
@@ -50,6 +51,15 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::StartSyncerIfNeeded(TWorkingSyncer& syncer) {
+        if (syncer.Finished && syncer.AssignmentId &&
+                syncer.BridgeProxyGroupGeneration == syncer.PendingBridgeProxyGroupGeneration) {
+            // The attempt that is over is not started again with the same group generation, neither by an assignment list
+            // made before BSC got its result, nor by the group configuration coming with it (or on its own): the result
+            // is reported already, and BSC makes a new attempt if it needs one. BSC drops the result of the generation
+            // older than the one it has, and keeps the assignment, so the attempt is run with the newer one.
+            return;
+        }
+
         auto& group = Groups[syncer.BridgeProxyGroupId.GetRawId()];
 
         const bool stopCurrent = syncer.BridgeProxyGroupGeneration < syncer.PendingBridgeProxyGroupGeneration
@@ -99,20 +109,14 @@ namespace NKikimr::NStorage {
 
     void TNodeWarden::Handle(TEvNodeWardenNotifySyncerFinished::TPtr ev) {
         auto& msg = *ev->Get();
-        const auto it = WorkingSyncers.find(TWorkingSyncer{
-            .BridgeProxyGroupId = msg.BridgeProxyGroupId,
-            .SourceGroupId = msg.SourceGroupId,
-            .TargetGroupId = msg.TargetGroupId,
-            .Reconcile = msg.Reconcile,
-            .Thorough = msg.Thorough,
+        const auto it = std::ranges::find_if(WorkingSyncers, [&](const TWorkingSyncer& syncer) {
+            return syncer.ActorId == ev->Sender;
         });
         if (it == WorkingSyncers.end()) {
-            return;
-        }
-        auto& syncer = const_cast<TWorkingSyncer&>(*it);
-        if (msg.BridgeProxyGroupGeneration != syncer.BridgeProxyGroupGeneration || ev->Sender != syncer.ActorId) {
             return; // completion from a stopped or replaced syncer
         }
+        auto& syncer = const_cast<TWorkingSyncer&>(*it);
+        Y_DEBUG_ABORT_UNLESS(msg.BridgeProxyGroupGeneration == syncer.BridgeProxyGroupGeneration);
 
         syncer.Finished = true;
         syncer.ErrorReason = std::move(msg.ErrorReason);
@@ -134,64 +138,110 @@ namespace NKikimr::NStorage {
         auto& msg = *ev->Get();
         if (msg.Registered) {
             BridgeProxies[msg.GroupId].insert(ev->Sender);
-        } else if (const auto it = BridgeProxies.find(msg.GroupId); it != BridgeProxies.end()) {
-            it->second.erase(ev->Sender);
-            if (it->second.empty()) {
-                BridgeProxies.erase(it);
+            // the proxy may have been made with the group configuration older than the one of the seal
+            for (auto& [cookie, seal] : StandbySealsInProgress) {
+                if (seal.BridgeProxyGroupId == msg.GroupId) {
+                    SendStandbySeal(cookie, seal, ev->Sender);
+                }
+            }
+        } else {
+            if (const auto it = BridgeProxies.find(msg.GroupId); it != BridgeProxies.end()) {
+                it->second.erase(ev->Sender);
+                if (it->second.empty()) {
+                    BridgeProxies.erase(it);
+                }
+            }
+            for (auto& [cookie, seal] : StandbySealsInProgress) {
+                seal.ProxiesPending.erase(ev->Sender); // the proxy has reported what it had lost before stopping
             }
         }
+        CheckStandbySeals();
     }
 
     void TNodeWarden::ApplyStandbySeals(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update) {
-        bool report = false;
         for (const auto& item : update.GetStandbySeals()) {
             using T = std::decay_t<decltype(item)>;
-            const auto groupId = TGroupId::FromProto(&item, &T::GetBridgeProxyGroupId);
             const auto targetGroupId = TGroupId::FromProto(&item, &T::GetTargetGroupId);
-            const auto it = BridgeProxies.find(groupId);
-            if (it == BridgeProxies.end()) {
-                // no proxy of the group runs here, so nothing is written to the part from this node
-                StandbySealed.emplace_back(targetGroupId, item.GetSealId());
-                report = true;
-                continue;
+            if (item.GetFlush()) {
+                // the seal in progress is flushed, its proxies are asked again
+                const auto it = std::ranges::find_if(StandbySealsInProgress, [&](const auto& kv) {
+                    return kv.second.TargetGroupId == targetGroupId && kv.second.SealId == item.GetSealId();
+                });
+                if (it != StandbySealsInProgress.end()) {
+                    auto& [cookie, seal] = *it;
+                    seal.Flush = true;
+                    for (const TActorId& proxyId : seal.ProxiesPending) {
+                        Send(proxyId, new TEvNodeWardenStandbySeal(seal.TargetGroupId, seal.BridgeProxyGroupGeneration,
+                            true), IEventHandle::FlagTrackDelivery, cookie);
+                    }
+                    continue;
+                }
             }
             const ui64 cookie = ++LastStandbySealCookie;
-            StandbySealsInProgress.emplace(cookie, TStandbySealInProgress{
+            auto& seal = StandbySealsInProgress[cookie] = {
+                .BridgeProxyGroupId = TGroupId::FromProto(&item, &T::GetBridgeProxyGroupId),
+                .BridgeProxyGroupGeneration = item.GetBridgeProxyGroupGeneration(),
                 .TargetGroupId = targetGroupId,
                 .SealId = item.GetSealId(),
-                .ProxiesPending = static_cast<ui32>(it->second.size()),
-            });
-            for (const TActorId& proxyId : it->second) {
-                Send(proxyId, new TEvNodeWardenStandbySeal(targetGroupId, item.GetBridgeProxyGroupGeneration()),
-                    IEventHandle::FlagTrackDelivery, cookie);
+                .Flush = item.GetFlush(),
+            };
+            if (const auto it = BridgeProxies.find(seal.BridgeProxyGroupId); it != BridgeProxies.end()) {
+                for (const TActorId& proxyId : it->second) {
+                    SendStandbySeal(cookie, seal, proxyId);
+                }
             }
         }
-        if (report) {
-            auto notify = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
-            FillInStandbyReports(&notify->Record);
-            SendToController(std::move(notify));
+        CheckStandbySeals();
+    }
+
+    void TNodeWarden::SendStandbySeal(ui64 cookie, TStandbySealInProgress& seal, TActorId proxyId) {
+        if (seal.ProxiesPending.insert(proxyId).second) {
+            Send(proxyId, new TEvNodeWardenStandbySeal(seal.TargetGroupId, seal.BridgeProxyGroupGeneration, seal.Flush),
+                IEventHandle::FlagTrackDelivery, cookie);
         }
     }
 
     void TNodeWarden::Handle(TEvNodeWardenStandbySealed::TPtr ev) {
-        OnStandbySealResolved(ev->Cookie);
+        OnStandbySealResolved(ev->Cookie, ev->Sender);
     }
 
-    void TNodeWarden::OnStandbySealResolved(ui64 cookie) {
-        const auto it = StandbySealsInProgress.find(cookie);
-        if (it == StandbySealsInProgress.end()) {
-            Y_DEBUG_ABORT();
-            return;
+    void TNodeWarden::OnStandbySealResolved(ui64 cookie, TActorId proxyId) {
+        if (const auto it = StandbySealsInProgress.find(cookie); it != StandbySealsInProgress.end()) {
+            it->second.ProxiesPending.erase(proxyId);
+            CheckStandbySeals();
         }
-        if (--it->second.ProxiesPending) {
-            return;
+    }
+
+    void TNodeWarden::CheckStandbySeals() {
+        // Besides the proxies having answered, the one about to register has to: the group has its proxy actor without
+        // any bridge proxy registered then (like DS proxy which is getting the configuration of bridged group and starts
+        // one). Each proxy answers when it has the group generation sealed.
+        bool sealed = false;
+        for (auto it = StandbySealsInProgress.begin(); it != StandbySealsInProgress.end(); ) {
+            const auto& seal = it->second;
+            const auto groupIt = Groups.find(seal.BridgeProxyGroupId.GetRawId());
+            const TGroupRecord *group = groupIt != Groups.end() ? &groupIt->second : nullptr;
+            const bool decommitted = group && group->Info &&
+                group->Info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE; // no bridge proxy then
+            if (seal.ProxiesPending ||
+                    (group && group->ProxyId && !decommitted && !BridgeProxies.contains(seal.BridgeProxyGroupId))) {
+                ++it;
+            } else {
+                StandbySealed.emplace_back(seal.TargetGroupId, seal.SealId);
+                StandbySealsInProgress.erase(it++);
+                sealed = true;
+            }
         }
-        StandbySealed.emplace_back(it->second.TargetGroupId, it->second.SealId);
-        StandbySealsInProgress.erase(it);
-        // the promotion waits for it, so it is reported at once
+        if (sealed) {
+            SendStandbyReports(); // the promotion waits for it
+        }
+    }
+
+    void TNodeWarden::SendStandbyReports() {
         auto notify = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
-        FillInStandbyReports(&notify->Record);
-        SendToController(std::move(notify));
+        if (FillInStandbyReports(&notify->Record)) {
+            SendToController(std::move(notify));
+        }
     }
 
     bool TNodeWarden::FillInStandbyReports(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update) {
@@ -229,6 +279,9 @@ namespace NKikimr::NStorage {
         }
         if (syncer.Reconcile) {
             item->SetReconcile(true);
+        }
+        if (syncer.AssignmentId) {
+            item->SetAssignmentId(syncer.AssignmentId);
         }
         if (syncer.ErrorReason) {
             item->SetErrorReason(*syncer.ErrorReason);

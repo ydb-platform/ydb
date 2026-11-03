@@ -1115,6 +1115,7 @@ message TEvControllerUpdateSyncerState {
         optional bool Finished = 5; // if set, then the current stage described in group is finished
         optional string ErrorReason = 6;
         optional bool Reconcile = 7; // the syncer reconciles the part of HOT_STANDBY pile, and its stage stays as it is
+        optional uint64 AssignmentId = 8; // the one of TSyncerInfo the syncer was started with
 
         // progress report
         optional uint64 BytesDone = 10;
@@ -1212,6 +1213,8 @@ message TEvControllerNodeServiceSetUpdate {
         optional uint32 TargetGroupId = 4;
         optional bool Reconcile = 5; // reconcile the part of HOT_STANDBY pile without changing its stage
         optional bool Thorough = 6; // when reconciling, check the data of every blob, not only of the missing ones
+        // the attempt BSC makes; the syncer that has finished is not started again for the same one
+        optional uint64 AssignmentId = 7;
     }
 
     optional NKikimrProto.EReplyStatus Status = 1;
@@ -1243,6 +1246,8 @@ message TEvControllerNodeServiceSetUpdate {
         optional uint32 BridgeProxyGroupGeneration = 2;
         optional uint32 TargetGroupId = 3;
         optional uint64 SealId = 4;
+        // the background writes to the part whose client writes are over are taken for lost, instead of being waited for
+        optional bool Flush = 5;
     }
     repeated TStandbySeal StandbySeals = 16;
 }

@@ -16,6 +16,24 @@ namespace {
         return sum;
     }
 
+    void SetStandbyBudget(TEnvironmentSetup& env, i64 bytes) {
+        for (const ui32 nodeId : env.Runtime->GetNodes()) {
+            TControlBoard::SetValue(bytes,
+                env.Runtime->GetNode(nodeId)->AppData->Icb->DSProxyControls.BridgeStandbyMaxBytesInFlight);
+        }
+    }
+
+    // the reports of Node Warden telling BSC that the part has missed a write
+    ui32 CountStandbyMarks(IEventHandle& ev, ui32 targetGroupId) {
+        ui32 num = 0;
+        if (ev.GetTypeRewrite() == TEvBlobStorage::EvControllerUpdateSyncerState) {
+            for (const auto& item : ev.Get<TEvBlobStorage::TEvControllerUpdateSyncerState>()->Record.GetStandbyDirty()) {
+                num += item.GetTargetGroupId() == targetGroupId;
+            }
+        }
+        return num;
+    }
+
     TEnvironmentSetup::TSettings MakeSettings() {
         return {
             .NodeCount = 16,
@@ -205,10 +223,7 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         TEnvironmentSetup env(MakeSettings());
         const ui32 groupId = PrepareStandby(env);
         const auto piles = GetPileGroups(env, groupId);
-        for (const ui32 nodeId : env.Runtime->GetNodes()) {
-            TControlBoard::SetValue(0,
-                env.Runtime->GetNode(nodeId)->AppData->Icb->DSProxyControls.BridgeStandbyMaxBytesInFlight);
-        }
+        SetStandbyBudget(env, 0);
         const i64 droppedBefore = GetStandbyCounter(env, "WritesDropped");
         ui32 standbyWrites = 0;
         env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
@@ -234,10 +249,7 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         TEnvironmentSetup env(MakeSettings());
         const ui32 groupId = PrepareStandby(env);
         const auto piles = GetPileGroups(env, groupId);
-        for (const ui32 nodeId : env.Runtime->GetNodes()) {
-            TControlBoard::SetValue(0,
-                env.Runtime->GetNode(nodeId)->AppData->Icb->DSProxyControls.BridgeStandbyMaxBytesInFlight);
-        }
+        SetStandbyBudget(env, 0);
         const i64 droppedBefore = GetStandbyCounter(env, "WritesDropped");
         TDataChecker checker(env);
         checker.Write(groupId);
@@ -350,6 +362,250 @@ Y_UNIT_TEST_SUITE(BridgeHotStandby) {
         env.Runtime->FilterFunction = {};
 
         checker.Write(groupId);
+        CheckPileData(env, checker, 1, 9);
+    }
+
+    // The background write is dropped while the client write is still going to the synchronized pile. The part is
+    // marked when the client write is over, as a reconciliation pass made before would not find the write in the source
+    // either, and take the part for clean.
+    Y_UNIT_TEST(LossIsReportedWhenClientWriteFinishes) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        env.Sim(TDuration::Minutes(2)); // the reconciliation that started with the standby is over
+        SetStandbyBudget(env, 0);
+        std::unique_ptr<IEventHandle> requiredWrite;
+        bool held = false;
+        ui32 marks = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut && ev->Recipient == MakeBlobStorageProxyID(piles[0]) &&
+                    !std::exchange(held, true)) {
+                requiredWrite = std::move(ev);
+                return false;
+            }
+            marks += CountStandbyMarks(*ev, piles[1]);
+            return true;
+        };
+        TDataChecker checker(env);
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        checker.SendPut(groupId, edge);
+        env.Sim(TDuration::Minutes(2)); // a pass would have run by now
+        UNIT_ASSERT(requiredWrite);
+        UNIT_ASSERT_VALUES_EQUAL(marks, 0);
+
+        // the DS proxy the write was held from may have been replaced meanwhile
+        env.Runtime->Send(IEventHandle::Forward(std::move(requiredWrite), MakeBlobStorageProxyID(piles[0])).release(), 1);
+        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Seconds(5));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        const auto& [writtenGroup, id, data] = checker.GetWritten().back();
+        WaitUntil(env, [&] { return ReadFromPileGroup(env, piles[1], 9, id, data) == NKikimrProto::OK; },
+            "reconciliation copies the dropped write");
+        UNIT_ASSERT_LT(0, marks);
+        env.Runtime->FilterFunction = {};
+
+        RejoinPile(env, 1);
+        CheckPileData(env, checker, 1, 9);
+    }
+
+    // The promotion of the part that is to be reconciled anyway waits for the seal too: the client write made before the
+    // fence, whose background copy is lost, may still reach the source after the pass has scanned it.
+    Y_UNIT_TEST(PromotionWaitsForClientWriteMissingStandby) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        env.Sim(TDuration::Minutes(2));
+        SetStandbyBudget(env, 0);
+        TDataChecker checker(env);
+        checker.Write(groupId); // the part is to be reconciled for this one
+        std::unique_ptr<IEventHandle> requiredWrite;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut && ev->Recipient == MakeBlobStorageProxyID(piles[0]) &&
+                    !requiredWrite) {
+                requiredWrite = std::move(ev);
+                return false;
+            }
+            return true;
+        };
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        checker.SendPut(groupId, edge);
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(requiredWrite);
+        SetStandbyBudget(env, 256 << 20);
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+        env.Sim(TDuration::Minutes(1)); // longer than the seal waits for the nodes it can't reach
+        UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+
+        env.Runtime->FilterFunction = {};
+        // the DS proxy the write was held from may have been replaced meanwhile
+        env.Runtime->Send(IEventHandle::Forward(std::move(requiredWrite), MakeBlobStorageProxyID(piles[0])).release(), 1);
+        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Seconds(10));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        CheckPileData(env, checker, 1, 9);
+    }
+
+    // The node BSC has lost may write to the standby without telling what it misses. The part reconciled since is not
+    // taken for clean: the seal waits for the node, and then the part is reconciled after the fence.
+    Y_UNIT_TEST(LostWriterIsReconciledAfterFence) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        TDataChecker checker(env);
+        for (ui32 i = 0; i < 3; ++i) {
+            checker.Write(groupId);
+        }
+        for (const auto& [group, id, data] : checker.GetWritten()) {
+            WaitUntil(env, [&] { return ReadFromPileGroup(env, piles[1], 9, id, data) == NKikimrProto::OK; },
+                "background write reaches standby");
+        }
+        const ui32 lostNodeId = 8;
+        env.StopNode(lostNodeId);
+        env.Sim(TDuration::Minutes(2)); // the reconciliation passes made in standby are over
+
+        ui32 scans = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            scans += ev->GetTypeRewrite() == TEvBlobStorage::EvAssimilate &&
+                ev->Recipient == MakeBlobStorageProxyID(piles[1]);
+            return true;
+        };
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        UNIT_ASSERT_LT(0, scans);
+        env.Runtime->FilterFunction = {};
+
+        env.StartNode(lostNodeId);
+        env.Sim(TDuration::Seconds(30));
+        checker.Write(groupId);
+        CheckPileData(env, checker, 1, 9);
+    }
+
+    // An assignment list BSC has made before getting the result of a reconciliation pass doesn't start the pass again,
+    // neither does the group configuration coming with it, as the result could be taken for the one of a later pass.
+    Y_UNIT_TEST(FinishedPassIsNotRestarted) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        env.Sim(TDuration::Minutes(2));
+
+        enum { WaitAssignment, WaitFinish, HoldUpdate, Count } phase = WaitAssignment;
+        ui32 nodeId = 0;
+        NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate assignment; // the list starting the pass
+        std::vector<NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate> held; // the ones made after its result
+        ui32 scans = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvControllerNodeServiceSetUpdate: {
+                    const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                    if (phase == WaitAssignment) {
+                        for (const auto& syncer : record.GetSyncers()) {
+                            if (syncer.GetReconcile() && syncer.GetTargetGroupId() == piles[1]) {
+                                nodeId = ev->Recipient.NodeId();
+                                assignment = record;
+                                phase = WaitFinish;
+                            }
+                        }
+                    } else if ((phase == HoldUpdate || phase == Count) && ev->Recipient.NodeId() == nodeId &&
+                            ev->Sender) { // the lists the test delivers itself come with no sender
+                        held.push_back(record);
+                        phase = Count;
+                        return false;
+                    }
+                    break;
+                }
+                case TEvBlobStorage::EvControllerUpdateSyncerState:
+                    if (phase == WaitFinish && ev->Sender.NodeId() == nodeId) {
+                        for (const auto& syncer : ev->Get<TEvBlobStorage::TEvControllerUpdateSyncerState>()->Record.GetSyncers()) {
+                            if (syncer.GetFinished() && syncer.GetReconcile() && syncer.GetTargetGroupId() == piles[1]) {
+                                phase = HoldUpdate;
+                            }
+                        }
+                    }
+                    break;
+
+                case TEvBlobStorage::EvAssimilate:
+                    // the scans of the parts of this group by a syncer of the node
+                    scans += phase == Count && ev->Sender.NodeId() == nodeId &&
+                        (ev->Recipient == MakeBlobStorageProxyID(piles[0]) ||
+                            ev->Recipient == MakeBlobStorageProxyID(piles[1]));
+                    break;
+            }
+            return true;
+        };
+
+        // the write dropped over the budget makes BSC start a pass
+        SetStandbyBudget(env, 0);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+        SetStandbyBudget(env, 256 << 20);
+        WaitUntil(env, [&] { return phase == Count; }, "reconciliation pass finishes");
+
+        // the list made before BSC got the result comes after it; it carries the configuration of the group too, which
+        // Node Warden applies before the list itself
+        UNIT_ASSERT(std::ranges::any_of(assignment.GetServiceSet().GetGroups(), [&](const auto& group) {
+            return group.GetGroupID() == groupId;
+        }));
+        auto deliver = [&](const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& record) {
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+            ev->Record = record;
+            env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), {}, ev.release()), nodeId);
+        };
+        deliver(assignment);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(scans, 0);
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT(!held.empty());
+        for (const auto& record : held) {
+            deliver(record);
+        }
+
+        const auto& [writtenGroup, id, data] = checker.GetWritten().back();
+        UNIT_ASSERT_VALUES_EQUAL(ReadFromPileGroup(env, piles[1], 9, id, data), NKikimrProto::OK);
+        RejoinPile(env, 1);
+        CheckPileData(env, checker, 1, 9);
+    }
+
+    // The bridge proxy started on the node before the seal comes is waited for until it registers with Node Warden, as
+    // it may have been made with the group configuration older than the one of the seal.
+    Y_UNIT_TEST(SealWaitsForProxyRegistration) {
+        TEnvironmentSetup env(MakeSettings());
+        const ui32 groupId = PrepareStandby(env);
+        const auto piles = GetPileGroups(env, groupId);
+        env.Sim(TDuration::Minutes(2));
+
+        // node 16 has served no request of the group yet, so its proxy starts with the first one
+        const ui32 nodeId = 16;
+        std::unique_ptr<IEventHandle> registration;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenRegisterBridgeProxy::EventType &&
+                    ev->Sender.NodeId() == nodeId && !registration) {
+                UNIT_ASSERT(ev->Get<NStorage::TEvNodeWardenRegisterBridgeProxy>()->Registered);
+                registration = std::move(ev);
+                return false;
+            }
+            return true;
+        };
+        TDataChecker checker(env);
+        const auto edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        checker.SendPut(groupId, edge);
+        const auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false,
+            env.Runtime->GetClock() + TDuration::Seconds(10));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT(registration);
+
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        env.Sim(TDuration::Minutes(1));
+        UNIT_ASSERT_EQUAL(GetPileState(env, 1), NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+
+        env.Runtime->FilterFunction = {};
+        env.Runtime->Send(registration.release(), nodeId);
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
         CheckPileData(env, checker, 1, 9);
     }
 

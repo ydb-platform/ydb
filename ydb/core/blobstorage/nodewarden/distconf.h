@@ -579,7 +579,8 @@ namespace NKikimr::NStorage {
         // Root node operation
 
         void UpdateQuorums();
-        bool HasConnectedPileQuorum(TBridgePileId pileId);
+        // the nodes bound to this one, directly or through others
+        std::vector<TNodeIdentifier> GetConnectedNodes() const;
         void ReconcileNodeRole();
         void HandleRetryCollectConfigsAndPropose(STATEFN_SIG);
         void BecomeRoot();
@@ -587,7 +588,8 @@ namespace NKikimr::NStorage {
         void HandleErrorTimeout();
         void UndoCurrentPropositionNodeChange(TProposition& proposition);
         void ProcessGather(TEvGather *res);
-        bool HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config) const;
+        // the nodes bound make quorum of the config, the global one or the one of the pile when it is given
+        bool HasConnectedNodeQuorum(const NKikimrBlobStorage::TStorageConfig& config, TBridgePileId pileId = {}) const;
         bool ObserveConfigGeneration(const NKikimrBlobStorage::TStorageConfig& config);
 
         struct TProcessCollectConfigsResult {

@@ -10275,6 +10275,43 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     };
 
+    // Hive along with the tablets started in pile 0, the primary one; the nodes of even indexes belong to pile 0
+    struct TBridgeHiveTablets {
+        TTestBasicRuntime& Runtime;
+        const ui64 HiveTablet = MakeDefaultHiveID();
+        const TActorId Sender;
+        std::vector<ui64> Tablets;
+
+        TBridgeHiveTablets(TTestBasicRuntime& runtime, TDummyBridge& bridge, ui32 numTablets)
+            : Runtime(runtime)
+            , Sender(runtime.AllocateEdgeActor(0))
+        {
+            const ui64 testerTablet = MakeTabletID(false, 1);
+            CreateTestBootstrapper(runtime, CreateTestTabletInfo(HiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+            MakeSureTabletIsUp(runtime, HiveTablet, 0);
+            bridge.Subscribe(GetHiveActor(runtime, HiveTablet));
+            for (ui32 i = 0; i < numTablets; ++i) {
+                THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i,
+                    TTabletTypes::Dummy, BINDED_CHANNELS));
+                Tablets.push_back(SendCreateTestTablet(runtime, HiveTablet, testerTablet, std::move(ev), 0, true));
+                MakeSureTabletIsUp(runtime, Tablets.back(), 0);
+            }
+        }
+
+        // the number of the tablets running in the pile, as Hive sees it
+        ui32 InPile(ui32 pile) {
+            Runtime.SendToPipe(HiveTablet, Sender, new TEvHive::TEvRequestHiveInfo(true), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            const auto *response = Runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            ui32 num = 0;
+            for (const auto& tablet : response->Record.GetTablets()) {
+                num += std::ranges::find(Tablets, tablet.GetTabletID()) != Tablets.end() && tablet.GetNodeID() &&
+                    (tablet.GetNodeID() - Runtime.GetNodeId(0)) % 2 == pile;
+            }
+            return num;
+        }
+    };
+
     Y_UNIT_TEST(TestBridgeCreateTablet) {
         TTestBasicRuntime runtime(2, false);
         TDummyBridge bridge(runtime);
@@ -10644,33 +10681,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         Setup(runtime, true, 2, [](TAppPrepare& app) {
             app.HiveConfig.SetDrainInflight(1);
         });
-        const ui64 hiveTablet = MakeDefaultHiveID();
-        const ui64 testerTablet = MakeTabletID(false, 1);
-        const TActorId sender = runtime.AllocateEdgeActor(0);
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
-        MakeSureTabletIsUp(runtime, hiveTablet, 0);
-        bridge.Subscribe(GetHiveActor(runtime, hiveTablet));
-        std::vector<ui64> tablets;
-        for (ui32 i = 0; i < NUM_TABLETS; ++i) {
-            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i,
-                TTabletTypes::Dummy, BINDED_CHANNELS));
-            tablets.push_back(SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true));
-            MakeSureTabletIsUp(runtime, tablets.back(), 0);
-        }
-
-        // nodes of the even indexes belong to pile 0
-        auto pileOf = [&](ui32 nodeId) { return (nodeId - runtime.GetNodeId(0)) % 2; };
-        auto tabletsInPile = [&](ui32 pile) {
-            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(true), 0, GetPipeConfigWithRetries());
-            TAutoPtr<IEventHandle> handle;
-            const auto *response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
-            ui32 num = 0;
-            for (const auto& tablet : response->Record.GetTablets()) {
-                num += std::ranges::find(tablets, tablet.GetTabletID()) != tablets.end() && tablet.GetNodeID() &&
-                    pileOf(tablet.GetNodeID()) == pile;
-            }
-            return num;
-        };
+        TBridgeHiveTablets hive(runtime, bridge, NUM_TABLETS);
+        auto tabletsInPile = [&](ui32 pile) { return hive.InPile(pile); };
         UNIT_ASSERT(tabletsInPile(0));
 
         // the drain of pile 0 starts and moves one tablet at a time, which is held
@@ -10679,7 +10691,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_C(WaitUntil(runtime, [&] { return !blockBoot.empty(); }), "pile drain did not start");
         UNIT_ASSERT(tabletsInPile(0)); // the drain is in progress
 
-        RebootTablet(runtime, hiveTablet, sender);
+        RebootTablet(runtime, hive.HiveTablet, hive.Sender);
         blockBoot.Stop().Unblock();
         // the restarted Hive learns where the tablets run from the nodes, so all of them have to be seen in pile 1, not
         // just none in pile 0
@@ -10694,33 +10706,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TTestBasicRuntime runtime(NUM_NODES, false);
         TDummyBridge bridge(runtime);
         Setup(runtime, true, 2);
-        const ui64 hiveTablet = MakeDefaultHiveID();
-        const ui64 testerTablet = MakeTabletID(false, 1);
-        const TActorId sender = runtime.AllocateEdgeActor(0);
-        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
-        MakeSureTabletIsUp(runtime, hiveTablet, 0);
-        bridge.Subscribe(GetHiveActor(runtime, hiveTablet));
-        std::vector<ui64> tablets;
-        for (ui32 i = 0; i < NUM_TABLETS; ++i) {
-            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i,
-                TTabletTypes::Dummy, BINDED_CHANNELS));
-            tablets.push_back(SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true));
-            MakeSureTabletIsUp(runtime, tablets.back(), 0);
-        }
-
-        // nodes of the even indexes belong to pile 0
-        auto pileOf = [&](ui32 nodeId) { return (nodeId - runtime.GetNodeId(0)) % 2; };
-        auto tabletsInPile = [&](ui32 pile) {
-            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(true), 0, GetPipeConfigWithRetries());
-            TAutoPtr<IEventHandle> handle;
-            const auto *response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
-            ui32 num = 0;
-            for (const auto& tablet : response->Record.GetTablets()) {
-                num += std::ranges::find(tablets, tablet.GetTabletID()) != tablets.end() && tablet.GetNodeID() &&
-                    pileOf(tablet.GetNodeID()) == pile;
-            }
-            return num;
-        };
+        TBridgeHiveTablets hive(runtime, bridge, NUM_TABLETS);
+        auto tabletsInPile = [&](ui32 pile) { return hive.InPile(pile); };
         UNIT_ASSERT_VALUES_EQUAL(tabletsInPile(0), NUM_TABLETS);
 
         // pile 1 has become the primary one, and the former primary pile goes standby with the tablets left in it

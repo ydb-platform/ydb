@@ -515,11 +515,6 @@ struct TMirrorerEnv {
         Dispatch();
     }
 
-    void AckReplicationData() {
-        Runtime.Send(new IEventHandle(Mirrorer, Partition, new TEvPQ::TEvReplicationDataAck()), 0, true);
-        Dispatch();
-    }
-
     void SendChangeConfig(const NKikimrPQ::TMirrorPartitionConfig& mirrorFrom) {
         NKikimrPQ::TPQTabletConfig config;
         *config.MutablePartitionConfig()->MutableMirrorFrom() = mirrorFrom;
@@ -764,25 +759,20 @@ Y_UNIT_TEST(StatusWrongSessionIgnored) {
     UNIT_ASSERT(env.Factory.CommitPromises.empty());
 }
 
-Y_UNIT_TEST(ReplicationDataBatchesQueuedOffsetsAndWaitsForAck) {
+Y_UNIT_TEST(ReplicationDataSendsConsumerOffsetsWithoutAck) {
     TMirrorerEnv env({.EndOffset = 10, .MirrorConsumerOffsets = true});
     env.Advance(TDuration::Seconds(1));
     env.StartSession(0, 10, 10);
     env.PushReplicationData(5);
     env.PushReplicationData(7);
     env.PushReplicationData(9);
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
-
-    env.Runtime.Send(new IEventHandle(env.Mirrorer, env.Runtime.AllocateEdgeActor(),
-        new TEvPQ::TEvReplicationDataAck()), 0, true);
-    env.Dispatch();
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
-
-    env.AckReplicationData();
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 3);
     const auto& offsets = env.CapturedReplicationData.back()->OffsetsByConsumers;
     UNIT_ASSERT_VALUES_EQUAL(offsets.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(offsets.at("consumer"), 9);
+
+    env.PushReplicationData(9);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 3);
     UNIT_ASSERT(env.CapturedRequests.empty());
 }
 
@@ -807,9 +797,6 @@ Y_UNIT_TEST(ReplicationDataClampsConsumerOffsetsToEndOffset) {
     UNIT_ASSERT_VALUES_EQUAL(offsets.size(), 2u);
     UNIT_ASSERT_VALUES_EQUAL(offsets.at("available-consumer"), 10u);
     UNIT_ASSERT_VALUES_EQUAL(offsets.at("future-consumer"), 10u);
-
-    env.AckReplicationData();
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1u);
 
     env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 10));
     env.Dispatch();
@@ -874,9 +861,6 @@ Y_UNIT_TEST(ReplicationDataWaitsForPersistedMessages) {
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), 0u);
 
-    env.AckReplicationData();
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1u);
-
     env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 0));
     env.Dispatch();
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1u);
@@ -884,18 +868,12 @@ Y_UNIT_TEST(ReplicationDataWaitsForPersistedMessages) {
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2u);
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), 1u);
 
-    env.AckReplicationData();
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2u);
-
     env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 1));
     env.Dispatch();
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2u);
     env.AckWrite(1);
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 3u);
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), 2u);
-
-    env.AckReplicationData();
-    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 3u);
 }
 
 Y_UNIT_TEST(ReplicationDataForEmptySourceDoesNotWaitForMessages) {

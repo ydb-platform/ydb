@@ -1379,9 +1379,6 @@ struct TEvPQ {
         TMaybe<ui64> MirroredOffset;
     };
 
-    struct TEvReplicationDataAck : public TEventLocal<TEvReplicationDataAck, EvReplicationDataAck> {
-    };
-
     struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {
         TEvPartitionScaleStatusChanged() = default;
 
@@ -1847,6 +1844,10 @@ struct TEvPQ {
 
         ui32 GetPartitionId() const {
             return Record.GetPartitionId();
+        }
+
+        std::optional<ui64> GetToOffset() const {
+            return Record.HasToOffset() ? std::make_optional(Record.GetToOffset()) : std::nullopt;
         }
     };
 

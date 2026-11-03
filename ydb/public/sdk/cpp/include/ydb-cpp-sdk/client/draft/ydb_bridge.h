@@ -23,10 +23,29 @@ struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClu
     FLUENT_SETTING_OPTIONAL(uint64_t, ExpectedGeneration);
 };
 
+enum class EStorageView {
+    Unspecified = 0,
+    Piles = 1,
+    Databases = 2,
+    Groups = 3,
+};
+
+struct TStorageQuery {
+    EStorageView View = EStorageView::Piles;
+    std::string DatabasePath;
+    std::string StoragePool;
+    std::string PileName;
+    bool NotSynced = false;
+    uint32_t PageSize = 1000;
+    std::string PageToken;
+};
+
 struct TGetClusterStateSettings : public TOperationRequestSettings<TGetClusterStateSettings> {
     //! Request a static-node connectivity snapshot, independent of storage health.
     //! An older server may reject the optional query or omit the report.
     FLUENT_SETTING_DEFAULT(bool, IncludePileConnectivity, false);
+    //! Request optional storage diagnostics. An older server may omit the storage state.
+    FLUENT_SETTING_OPTIONAL(TStorageQuery, StorageQuery);
 };
 
 struct TConvertToBridgeSettings : public TOperationRequestSettings<TConvertToBridgeSettings> {
@@ -76,6 +95,71 @@ struct TPendingPileOperation {
     std::string ErrorReason; // why the last attempt has failed; the operation is retried meanwhile
 };
 
+enum class ECopySyncState {
+    Unspecified = 0,
+    Synced = 1,
+    Syncing = 2,
+    Pending = 3,
+    NotRequired = 4,
+    Unknown = 5,
+};
+
+enum class EStorageMode {
+    Unspecified = 0,
+    Bridged = 1,
+    Ordinary = 2,
+    Mixed = 3,
+};
+
+struct TGroupSyncCounts {
+    uint64_t Total = 0;
+    uint64_t Synced = 0;
+    uint64_t Running = 0;
+    uint64_t Pending = 0;
+    uint64_t Unknown = 0;
+};
+
+struct TPileStorageState {
+    std::string PileName;
+    TGroupSyncCounts UserGroups;
+    TGroupSyncCounts SystemGroups;
+};
+
+struct TDatabaseStorageState {
+    std::string DatabasePath;
+    //! Names of all pools included in this database summary, without delimiter-based encoding.
+    std::vector<std::string> StoragePools;
+    EStorageMode Mode = EStorageMode::Unspecified;
+    std::string PileName;
+    TGroupSyncCounts Groups;
+    ECopySyncState State = ECopySyncState::Unspecified;
+    std::string LastError;
+    uint64_t LastErrorTimestampUs = 0;
+};
+
+struct TGroupStorageState {
+    uint32_t GroupId = 0;
+    uint32_t PartGroupId = 0;
+    std::string StoragePoolName;
+    std::string PileName;
+    ECopySyncState State = ECopySyncState::Unspecified;
+    std::string Stage;
+    std::string LastError;
+    uint64_t LastErrorTimestampUs = 0;
+};
+
+struct TStorageState {
+    uint64_t Generation = 0;
+    uint64_t CollectedAtUs = 0;
+    std::string DatabasePath;
+    std::string StorageOwnerDatabase;
+    std::vector<TPileStorageState> Piles;
+    std::vector<TDatabaseStorageState> Databases;
+    std::vector<TGroupStorageState> Groups;
+    std::string NextPageToken;
+    std::string UnavailableReason;
+};
+
 // Connectivity of one distconf binding component; this is not disk health or a failover vote.
 struct TPileConnectivity {
     std::string PileName;
@@ -99,13 +183,15 @@ class TGetClusterStateResult : public TStatus {
 public:
     TGetClusterStateResult(TStatus&& status, std::vector<TPileStateUpdate>&& state, uint64_t generation,
             bool conversionInProgress = false, std::optional<TPendingPileOperation> pendingPileOperation = std::nullopt,
-            std::optional<TPileConnectivityReport> pileConnectivity = std::nullopt)
+            std::optional<TPileConnectivityReport> pileConnectivity = std::nullopt,
+            std::optional<TStorageState> storageState = std::nullopt)
         : TStatus(std::move(status))
         , State_(std::move(state))
         , Generation_(generation)
         , ConversionInProgress_(conversionInProgress)
         , PendingPileOperation_(std::move(pendingPileOperation))
         , PileConnectivity_(std::move(pileConnectivity))
+        , StorageState_(std::move(storageState))
     {}
 
     const std::vector<TPileStateUpdate>& GetState() const {
@@ -131,12 +217,18 @@ public:
         return PileConnectivity_;
     }
 
+    //! Absent when diagnostics were not requested or are unsupported by the server.
+    const std::optional<TStorageState>& GetStorageState() const {
+        return StorageState_;
+    }
+
 private:
     std::vector<TPileStateUpdate> State_;
     uint64_t Generation_ = 0;
     bool ConversionInProgress_ = false;
     std::optional<TPendingPileOperation> PendingPileOperation_;
     std::optional<TPileConnectivityReport> PileConnectivity_;
+    std::optional<TStorageState> StorageState_;
 };
 
 using TAsyncGetClusterStateResult = NThreading::TFuture<TGetClusterStateResult>;

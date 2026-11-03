@@ -6,9 +6,6 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
-#include <library/cpp/json/json_writer.h>
-
-#include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 
 #include <util/stream/file.h>
 #include <util/string/cast.h>
@@ -41,29 +38,6 @@ namespace {
         }
         ythrow yexception() << "Invalid pile state: \"" << stateStr
             << "\". Please use one of: DISCONNECTED, NOT_SYNCHRONIZED, SYNCHRONIZED, PROMOTED, PRIMARY, SUSPENDED.";
-    }
-
-    TString PileStateToString(NYdb::NBridge::EPileState state) {
-        switch (state) {
-            case NYdb::NBridge::EPileState::UNSPECIFIED: return "UNSPECIFIED";
-            case NYdb::NBridge::EPileState::DISCONNECTED: return "DISCONNECTED";
-            case NYdb::NBridge::EPileState::NOT_SYNCHRONIZED: return "NOT_SYNCHRONIZED";
-            case NYdb::NBridge::EPileState::SYNCHRONIZED: return "SYNCHRONIZED";
-            case NYdb::NBridge::EPileState::PROMOTED: return "PROMOTED";
-            case NYdb::NBridge::EPileState::PRIMARY: return "PRIMARY";
-            case NYdb::NBridge::EPileState::SUSPENDED: return "SUSPENDED";
-            case NYdb::NBridge::EPileState::INACTIVE: return "INACTIVE";
-        }
-        return "UNKNOWN";
-    }
-
-    TString PendingPileOperationKindToString(NYdb::NBridge::TPendingPileOperation::EKind kind) {
-        switch (kind) {
-            case NYdb::NBridge::TPendingPileOperation::EKind::UNSPECIFIED: return "UNSPECIFIED";
-            case NYdb::NBridge::TPendingPileOperation::EKind::ADD: return "ADD";
-            case NYdb::NBridge::TPendingPileOperation::EKind::REMOVE: return "REMOVE";
-        }
-        return "UNKNOWN";
     }
 }
 
@@ -211,94 +185,6 @@ int TCommandBridgeUpdate::Run(TConfig& config) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster state updated successfully." << Endl;
-
-    return EXIT_SUCCESS;
-}
-
-TCommandBridgeList::TCommandBridgeList(bool allowEmptyDatabase)
-    : TYdbReadOnlyCommand("list", {}, "List state of each pile in bridge mode")
-    , AllowEmptyDatabase(allowEmptyDatabase)
-{}
-
-void TCommandBridgeList::Config(TConfig& config) {
-    TYdbReadOnlyCommand::Config(config);
-    config.AllowEmptyDatabase = AllowEmptyDatabase;
-    config.SetFreeArgsNum(0);
-    AddOutputFormats(config, {
-        EDataFormat::Pretty,
-        EDataFormat::Json,
-        EDataFormat::Csv
-    });
-    config.Opts->AddLongOption("detailed", "Merge and show detailed state from all piles. Useful for diagnosing inconsistencies, e.g. after a split-brain scenario.")
-        .StoreTrue(&Detailed);
-}
-
-void TCommandBridgeList::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
-    ParseOutputFormats();
-}
-
-int TCommandBridgeList::Run(TConfig& config) {
-    auto driver = CreateDriver(config);
-    auto client = NYdb::NBridge::TBridgeClient(driver);
-
-    // TODO(mregrock): support detailed
-    auto result = client.GetClusterState().GetValueSync();
-    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-
-    const auto& state = result.GetState();
-
-    switch (OutputFormat) {
-        case EDataFormat::Json: {
-            NJson::TJsonValue json(NJson::JSON_MAP);
-            json.InsertValue("generation", result.GetGeneration());
-            NJson::TJsonValue piles(NJson::JSON_ARRAY);
-            for (const auto& s : state) {
-                NJson::TJsonValue item(NJson::JSON_MAP);
-                item.InsertValue("pile_name", s.PileName);
-                item.InsertValue("state", PileStateToString(s.State));
-                piles.AppendValue(item);
-            }
-            json.InsertValue("piles", piles);
-            json.InsertValue("conversion_in_progress", result.IsConversionInProgress());
-            if (const auto& op = result.GetPendingPileOperation()) {
-                NJson::TJsonValue item(NJson::JSON_MAP);
-                item.InsertValue("pile_name", op->PileName);
-                item.InsertValue("kind", PendingPileOperationKindToString(op->Kind));
-                item.InsertValue("error_reason", op->ErrorReason);
-                json.InsertValue("pending_pile_operation", item);
-            }
-            NJson::WriteJson(&Cout, &json, true);
-            Cout << Endl;
-            break;
-        }
-        case EDataFormat::Csv: {
-            Cout << "pile_name,state,generation" << Endl;
-            for (const auto& s : state) {
-                Cout << s.PileName << "," << PileStateToString(s.State) << "," << result.GetGeneration() << Endl;
-            }
-            break;
-        }
-        default: {
-            TStringStream ss;
-            for (const auto& s : state) {
-                ss << "Pile " << s.PileName << ": " << PileStateToString(s.State) << Endl;
-            }
-            ss << "Generation: " << result.GetGeneration() << Endl;
-            if (result.IsConversionInProgress()) {
-                ss << "Conversion from non-bridged cluster is in progress, piles can't be added yet" << Endl;
-            }
-            if (const auto& op = result.GetPendingPileOperation()) {
-                ss << "Pending operation on pile " << op->PileName << ": " << PendingPileOperationKindToString(op->Kind)
-                    << Endl;
-                if (!op->ErrorReason.empty()) {
-                    ss << "Last attempt has failed (being retried): " << op->ErrorReason << Endl;
-                }
-            }
-            Cout << ss.Str();
-            break;
-        }
-    }
 
     return EXIT_SUCCESS;
 }

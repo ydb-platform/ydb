@@ -30,6 +30,91 @@ std::vector<TPileStateUpdate> StateFromProto(const Ydb::Bridge::GetClusterStateR
     return state;
 }
 
+void StorageQueryToProto(const TStorageQuery& query, Ydb::Bridge::StorageQuery* proto) {
+    proto->set_view(static_cast<Ydb::Bridge::StorageQuery::View>(query.View));
+    proto->set_database_path(query.DatabasePath);
+    proto->set_storage_pool(query.StoragePool);
+    proto->set_pile_name(query.PileName);
+    proto->set_not_synced(query.NotSynced);
+    proto->set_page_size(query.PageSize);
+    proto->set_page_token(query.PageToken);
+}
+
+TGroupSyncCounts GroupSyncCountsFromProto(const Ydb::Bridge::GroupSyncCounts& proto) {
+    return {
+        .Total = proto.total(),
+        .Synced = proto.synced(),
+        .Running = proto.running(),
+        .Pending = proto.pending(),
+        .Unknown = proto.unknown(),
+    };
+}
+
+ECopySyncState CopySyncStateFromProto(Ydb::Bridge::GroupStorageState::State state) {
+    switch (state) {
+        case Ydb::Bridge::GroupStorageState::STATE_UNSPECIFIED: return ECopySyncState::Unspecified;
+        case Ydb::Bridge::GroupStorageState::SYNCED: return ECopySyncState::Synced;
+        case Ydb::Bridge::GroupStorageState::SYNCING: return ECopySyncState::Syncing;
+        case Ydb::Bridge::GroupStorageState::PENDING: return ECopySyncState::Pending;
+        case Ydb::Bridge::GroupStorageState::NOT_REQUIRED: return ECopySyncState::NotRequired;
+        default: return ECopySyncState::Unknown;
+    }
+}
+
+EStorageMode StorageModeFromProto(Ydb::Bridge::DatabaseStorageState::Mode mode) {
+    switch (mode) {
+        case Ydb::Bridge::DatabaseStorageState::BRIDGED: return EStorageMode::Bridged;
+        case Ydb::Bridge::DatabaseStorageState::ORDINARY: return EStorageMode::Ordinary;
+        case Ydb::Bridge::DatabaseStorageState::MIXED: return EStorageMode::Mixed;
+        default: return EStorageMode::Unspecified;
+    }
+}
+
+TStorageState StorageStateFromProto(const Ydb::Bridge::StorageState& proto) {
+    TStorageState state;
+    state.Generation = proto.generation();
+    state.CollectedAtUs = proto.collected_at_us();
+    state.DatabasePath = proto.database_path();
+    state.StorageOwnerDatabase = proto.storage_owner_database();
+    state.NextPageToken = proto.next_page_token();
+    state.UnavailableReason = proto.unavailable_reason();
+    state.Piles.reserve(proto.piles_size());
+    for (const auto& pile : proto.piles()) {
+        state.Piles.push_back({
+            .PileName = pile.pile_name(),
+            .UserGroups = GroupSyncCountsFromProto(pile.user_groups()),
+            .SystemGroups = GroupSyncCountsFromProto(pile.system_groups()),
+        });
+    }
+    state.Databases.reserve(proto.databases_size());
+    for (const auto& database : proto.databases()) {
+        state.Databases.push_back({
+            .DatabasePath = database.database_path(),
+            .StoragePools = {database.storage_pools().begin(), database.storage_pools().end()},
+            .Mode = StorageModeFromProto(database.mode()),
+            .PileName = database.pile_name(),
+            .Groups = GroupSyncCountsFromProto(database.groups()),
+            .State = CopySyncStateFromProto(database.state()),
+            .LastError = database.last_error(),
+            .LastErrorTimestampUs = database.last_error_timestamp_us(),
+        });
+    }
+    state.Groups.reserve(proto.groups_size());
+    for (const auto& group : proto.groups()) {
+        state.Groups.push_back({
+            .GroupId = group.group_id(),
+            .PartGroupId = group.part_group_id(),
+            .StoragePoolName = group.storage_pool_name(),
+            .PileName = group.pile_name(),
+            .State = CopySyncStateFromProto(group.state()),
+            .Stage = group.stage(),
+            .LastError = group.last_error(),
+            .LastErrorTimestampUs = group.last_error_timestamp_us(),
+        });
+    }
+    return state;
+}
+
 }
 
 class TBridgeClient::TImpl : public TClientImplCommon<TBridgeClient::TImpl> {
@@ -58,6 +143,9 @@ public:
     TAsyncGetClusterStateResult GetClusterState(const TGetClusterStateSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Bridge::GetClusterStateRequest>(settings);
         request.set_include_pile_connectivity(settings.IncludePileConnectivity_);
+        if (settings.StorageQuery_) {
+            StorageQueryToProto(*settings.StorageQuery_, request.mutable_storage_query());
+        }
 
         auto promise = NThreading::NewPromise<TGetClusterStateResult>();
 
@@ -67,6 +155,7 @@ public:
                 bool conversionInProgress = false;
                 std::optional<TPendingPileOperation> pendingPileOperation;
                 std::optional<TPileConnectivityReport> pileConnectivity;
+                std::optional<TStorageState> storageState;
                 if (any) {
                     Ydb::Bridge::GetClusterStateResult result;
                     if (any->UnpackTo(&result)) {
@@ -101,10 +190,13 @@ public:
                                 .ErrorReason = op.error_reason(),
                             });
                         }
+                        if (result.has_storage_state()) {
+                            storageState = StorageStateFromProto(result.storage_state());
+                        }
                     }
                 }
                 promise.SetValue(TGetClusterStateResult(TStatus(std::move(status)), std::move(state), generation,
-                    conversionInProgress, std::move(pendingPileOperation), std::move(pileConnectivity)));
+                    conversionInProgress, std::move(pendingPileOperation), std::move(pileConnectivity), std::move(storageState)));
             };
 
         Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::GetClusterStateRequest, Ydb::Bridge::GetClusterStateResponse>(

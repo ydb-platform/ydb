@@ -1,4 +1,5 @@
 * Added `--expected-generation` option to `ydb admin cluster bridge update` to apply a cluster state update only if the cluster state still has the given generation.
+* Added storage synchronization diagnostics to `ydb admin cluster bridge list`: `--detailed` pile counters, paginated `--databases` and scoped `--groups` views, and pile, database, and synchronization filters. Detailed group output uses compact stage names; database pool names are preserved as arrays in JSON and CSV.
 * Added `ydb admin cluster bridge set-database-mode` to enable or disable bridge mode for the database selected with `--target-database`. Use `bridged` or `ordinary` as the required mode argument, and optionally `--retain-pile` with `ordinary`.
 * Added `ydb admin cluster bridge destroy-pile` command to destroy a DISCONNECTED pile along with all its data (asks for confirmation unless `-y` is given).
 * Added `ydb admin cluster bridge provision-pile` command to provision a pile listed in the bridge config in a running bridged cluster.

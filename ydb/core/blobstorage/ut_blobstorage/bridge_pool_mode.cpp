@@ -1,7 +1,10 @@
 #include "bridge_pile_ops.h"
 
+#include <ydb/core/blobstorage/base/bridge_events.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+
+#include <set>
 
 using namespace NBridgeTest;
 
@@ -306,6 +309,165 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
             TBlobStorageGroupType::Erasure4Plus2Block);
         checker.Write(groupId);
         checker.CheckAll();
+    }
+
+    Y_UNIT_TEST(StorageDiagnosticsCountLogicalGroupsAndPaginateFilteredCopies) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        env.CreatePool(2);
+        CreateOrdinaryPool(env, 2, 1, 1);
+        const auto groups = GetLogicalPoolGroups(env, 1);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+        WaitUntil(env, [&] {
+            return std::ranges::all_of(groups, [&](ui32 groupId) {
+                return IsFullyBridged(GetGroupInfo(env, groupId));
+            });
+        }, "groups synchronized before querying diagnostics");
+        env.Sim(TDuration::Seconds(6)); // refresh the BSC diagnostic aggregates
+
+        auto queryStorage = [&](const NKikimrBridge::TStorageQuery& query) {
+            const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
+            request->Record.CopyFrom(query);
+            env.Runtime->SendToPipe(env.TabletId, edge, request.release(), 0,
+                TTestActorSystem::GetPipeConfigWithRetries());
+            auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(edge, false);
+            return response->Get()->Record;
+        };
+
+        NKikimrBridge::TStorageQuery query;
+        query.SetView(NKikimrBridge::TStorageQuery::PILES);
+        const auto piles = queryStorage(query);
+        UNIT_ASSERT_C(piles.GetUnavailableReason().empty(), piles.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(piles.PilesSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(piles.GetGeneration(), QueryStorageConfig(env).GetClusterState().GetGeneration());
+        UNIT_ASSERT(piles.GetCollectedAtUs());
+        for (const auto& pile : piles.GetPiles()) {
+            // Two logical bridge groups in each pile; their physical parts and the ordinary group are not added.
+            UNIT_ASSERT_VALUES_EQUAL_C(pile.GetUserGroups().GetTotal(), groups.size(), pile.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(pile.GetUserGroups().GetSynced(), groups.size(), pile.DebugString());
+            UNIT_ASSERT(pile.GetSystemGroups().GetTotal());
+        }
+
+        query.Clear();
+        query.SetView(NKikimrBridge::TStorageQuery::GROUPS);
+        query.SetStoragePool(ReadStoragePool(env, 1).GetName());
+        query.SetPageSize(1);
+        std::set<std::pair<ui32, TString>> copies;
+        std::set<TString> tokens;
+        TString firstToken;
+        size_t pages = 0;
+        do {
+            const auto page = queryStorage(query);
+            UNIT_ASSERT_C(page.GetUnavailableReason().empty(), page.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(page.GroupsSize(), 1, page.DebugString());
+            UNIT_ASSERT_C(++pages <= groups.size() * 2, "pagination did not terminate");
+            const auto& row = page.GetGroups(0);
+            UNIT_ASSERT_VALUES_EQUAL(row.GetPoolName(), query.GetStoragePool());
+            UNIT_ASSERT(std::find(groups.begin(), groups.end(), row.GetGroupId()) != groups.end());
+            UNIT_ASSERT(row.GetState() == NKikimrBridge::TStorageGroup::SYNCED);
+            UNIT_ASSERT(copies.emplace(row.GetGroupId(), row.GetPileName()).second);
+            UNIT_ASSERT(row.GetPileName() == "pile_1" || row.GetPileName() == "pile_2");
+            const auto info = GetGroupInfo(env, row.GetGroupId());
+            const auto* part = NBridge::GetGroupPile(info.GetBridgeGroupState(),
+                TBridgePileId::FromPileIndex(row.GetPileName() == "pile_1" ? 0 : 1));
+            UNIT_ASSERT(part);
+            UNIT_ASSERT_VALUES_EQUAL(row.GetPartGroupId(), part->GetGroupId());
+            query.SetPageToken(page.GetNextPageToken());
+            if (!query.GetPageToken().empty()) {
+                UNIT_ASSERT(tokens.insert(query.GetPageToken()).second);
+                if (firstToken.empty()) {
+                    firstToken = query.GetPageToken();
+                }
+            }
+        } while (!query.GetPageToken().empty());
+        UNIT_ASSERT_VALUES_EQUAL(copies.size(), groups.size() * 2);
+        UNIT_ASSERT_VALUES_EQUAL(pages, groups.size() * 2); // the final nonempty page has no continuation token
+
+        query.SetPageToken(firstToken);
+        query.SetPileName("pile_1");
+        const auto changedFilter = queryStorage(query);
+        UNIT_ASSERT_STRING_CONTAINS(changedFilter.GetUnavailableReason(), "Invalid page token");
+        UNIT_ASSERT_VALUES_EQUAL(changedFilter.GroupsSize(), 0);
+        query.ClearPageToken();
+        query.ClearPileName();
+
+        query.SetNotSynced(true);
+        const auto synced = queryStorage(query);
+        UNIT_ASSERT_C(synced.GetUnavailableReason().empty(), synced.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(synced.GroupsSize(), 0);
+        UNIT_ASSERT(synced.GetNextPageToken().empty());
+
+        query.Clear();
+        query.SetView(NKikimrBridge::TStorageQuery::DATABASES);
+        query.SetFilterPools(true);
+        query.AddPoolNames(ReadStoragePool(env, 1).GetName());
+        query.SetPileName("pile_1");
+        query.SetPageSize(1);
+        const auto database = queryStorage(query);
+        UNIT_ASSERT_C(database.GetUnavailableReason().empty(), database.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(database.DatabasesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(database.GetDatabases(0).GetPileName(), "pile_1");
+        UNIT_ASSERT_VALUES_EQUAL(database.GetDatabases(0).StoragePoolsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(database.GetDatabases(0).GetStoragePools(0), ReadStoragePool(env, 1).GetName());
+        UNIT_ASSERT(database.GetNextPageToken().empty()); // the other pile is outside the selected view
+
+        query.AddPoolNames("missing_pool");
+        const auto missingPool = queryStorage(query);
+        UNIT_ASSERT_STRING_CONTAINS(missingPool.GetUnavailableReason(), "must exist");
+        UNIT_ASSERT_VALUES_EQUAL(missingPool.DatabasesSize(), 0);
+
+        query.Clear();
+        query.SetView(NKikimrBridge::TStorageQuery::DATABASES);
+        query.SetPageSize(1);
+        std::set<std::pair<TString, TString>> databaseCopies;
+        do {
+            const auto page = queryStorage(query);
+            UNIT_ASSERT_C(page.GetUnavailableReason().empty(), page.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(page.DatabasesSize(), 1, page.DebugString());
+            const auto& databaseRow = page.GetDatabases(0);
+            UNIT_ASSERT_VALUES_EQUAL(databaseRow.StoragePoolsSize(), 1);
+            UNIT_ASSERT(databaseCopies.emplace(databaseRow.GetStoragePools(0), databaseRow.GetPileName()).second);
+            UNIT_ASSERT(databaseCopies.size() <= 3);
+            query.SetPageToken(page.GetNextPageToken());
+        } while (!query.GetPageToken().empty());
+        UNIT_ASSERT_VALUES_EQUAL(databaseCopies.size(), 3); // bridge copies and one pile-independent ordinary row
+
+        query.Clear();
+        query.SetView(NKikimrBridge::TStorageQuery::DATABASES);
+        query.SetStoragePool("pool_2");
+        const auto ordinary = queryStorage(query);
+        UNIT_ASSERT_C(ordinary.GetUnavailableReason().empty(), ordinary.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(ordinary.DatabasesSize(), 1, ordinary.DebugString());
+        const auto& row = ordinary.GetDatabases(0);
+        UNIT_ASSERT_VALUES_EQUAL(row.GetStoragePools(0), "pool_2");
+        UNIT_ASSERT(row.GetState() == NKikimrBridge::TStorageGroup::NOT_REQUIRED);
+        UNIT_ASSERT(row.GetMode() == NKikimrBridge::TStorageDatabase::ORDINARY);
+        UNIT_ASSERT_VALUES_EQUAL(row.GetGroups().GetTotal(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(row.GetOwnerSchemeShardId(), 0); // the test pool has no database metadata
+        UNIT_ASSERT_VALUES_EQUAL(row.GetOwnerPathId(), 0);
+        query.SetNotSynced(true);
+        const auto excluded = queryStorage(query);
+        UNIT_ASSERT_C(excluded.GetUnavailableReason().empty(), excluded.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(excluded.DatabasesSize(), 0);
+        UNIT_ASSERT(excluded.GetNextPageToken().empty());
+
+        query.Clear();
+        query.SetView(NKikimrBridge::TStorageQuery::GROUPS);
+        query.SetStoragePool("pool_2");
+        query.SetPileName("pile_2");
+        const auto ordinaryGroups = queryStorage(query);
+        UNIT_ASSERT_C(ordinaryGroups.GetUnavailableReason().empty(), ordinaryGroups.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(ordinaryGroups.GroupsSize(), 1);
+        UNIT_ASSERT(ordinaryGroups.GetGroups(0).GetState() == NKikimrBridge::TStorageGroup::NOT_REQUIRED);
+        UNIT_ASSERT(ordinaryGroups.GetGroups(0).GetPileName().empty()); // no per-pile bridge copy is implied
+
+        query.SetPileName("missing_pile");
+        const auto missingPile = queryStorage(query);
+        UNIT_ASSERT_VALUES_EQUAL(missingPile.GetUnavailableReason(), "Pile not found");
+        query.ClearPileName();
+        query.ClearStoragePool();
+        const auto unscoped = queryStorage(query);
+        UNIT_ASSERT_STRING_CONTAINS(unscoped.GetUnavailableReason(), "require a database or storage pool");
     }
 
     // ordinary groups residing in single piles become inline piles, get their parts in the other pile, which are synced

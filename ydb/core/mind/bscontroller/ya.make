@@ -11,6 +11,8 @@ SRCS(
     bsc_audit.cpp
     bridge.cpp
     bridge_sync_counters.h
+    bridge_storage.cpp
+    bridge_storage.h
     cleanup_stale_storage_entries.cpp
     cluster_balancing.cpp
     cmds_box.cpp
@@ -88,6 +90,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/string_utils/base64
     ydb/library/actors/core
     ydb/library/yaml_config
     ydb/core/base

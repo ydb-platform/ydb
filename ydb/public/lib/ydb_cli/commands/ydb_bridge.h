@@ -57,6 +57,13 @@ public:
 private:
     bool AllowEmptyDatabase;
     bool Detailed = false;
+    NBridge::EStorageView View = NBridge::EStorageView::Piles;
+    bool NotSynced = false;
+    TString DatabasePath;
+    TString StoragePool;
+    TString PileName;
+    ui32 PageSize = 1000;
+    TString PageToken;
 };
 
 class TCommandBridgeSwitchover : public TYdbCommand {

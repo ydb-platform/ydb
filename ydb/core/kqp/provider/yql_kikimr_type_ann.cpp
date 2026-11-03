@@ -317,9 +317,21 @@ private:
                     if (!ValidateTableHasIndex(tableDesc->Metadata, ctx, node.Pos())) {
                         return TStatus::Error;
                     }
-                    if (tableDesc->Metadata->GetIndexMetadata(view->Name).first == nullptr) {
+                    const auto indexImplTable = tableDesc->Metadata->GetIndexMetadata(view->Name).first;
+                    if (indexImplTable == nullptr) {
                         ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
                             << "Required global index not found, index name: " << view->Name));
+                        return TStatus::Error;
+                    }
+                    // The index impl table may have been concurrently dropped (e.g. an
+                    // atomic index replace) after the main table metadata was resolved.
+                    // Its metadata is then loaded with DoesExist == false. Fail fast with
+                    // a scheme error here instead of letting compilation reach the
+                    // ExistingTable() invariant, which would abort with a fatal
+                    // INTERNAL_ERROR (S_FATAL) that the client cannot act on.
+                    if (!indexImplTable->DoesExist) {
+                        ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
+                            << "Index was concurrently dropped or its scheme changed during query compilation, index name: " << view->Name));
                         return TStatus::Error;
                     }
                 }

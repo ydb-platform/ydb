@@ -2,6 +2,8 @@
 #include "keyvalue.h"
 #include "keyvalue_flat_impl.h"
 #include "keyvalue_state.h"
+#include "ut/keyvalue_move_data_test_enums.h"
+#include <util/generic/serialized_enum.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -121,8 +123,16 @@ struct TTestContext {
         Runtime->Send(new IEventHandle(TabletActorId, TabletActorId, new TKikimrEvents::TEvPoisonPill));
     }
 
-    void StartReassignedTablet() {
+    void StartReassignedTablet(bool repeatCurrentGroup = false) {
         auto info = CreateReassignedTabletInfo(TabletId, TTabletTypes::KeyValue, TErasureType::ErasureNone, 2181038080, 2181038081, 3);
+        if (repeatCurrentGroup) {
+            for (auto& channel : info->Channels) {
+                auto first = channel.History.back();
+                first.FromGeneration = 0;
+                channel.History.front().FromGeneration = 1;
+                channel.History.insert(channel.History.begin(), first);
+            }
+        }
         auto setupInfo = MakeIntrusive<TTabletSetupInfo>(
             &CreateKeyValueFlat, TMailboxType::Simple, ui32(0), TMailboxType::Simple, ui32(0));
         TabletActorId = Runtime->Register(CreateTablet({}, info.Get(), setupInfo.Get(), 0), 0);
@@ -919,14 +929,8 @@ Y_UNIT_TEST(MoveDataRecordTouchedPreservesNeedsAnotherPass) {
         {valueA + valueB, valueB + valueA + valueB, valueB}, {}, tc);
 }
 
-enum class EMoveDataYieldMutation {
-    None,
-    DeleteCursor,
-    DeleteLastCursor,
-    DeleteAll,
-};
-
-void CheckMoveDataResumeAfterYield(EMoveDataYieldMutation mutation) {
+Y_UNIT_TEST(MoveDataResumeAfterYield, EMoveDataYieldMutation) {
+    const auto mutation = Arg<0>();
     struct TLimits : NKeyValue::TKeyValueState {
         using TKeyValueState::MaxMoveDataRecordsInOneTx;
     };
@@ -1013,29 +1017,13 @@ void CheckMoveDataResumeAfterYield(EMoveDataYieldMutation mutation) {
         {TString(), tc.Value, successorValue}, {allDeleted, cursorDeleted, !hasSuccessor || allDeleted}, tc);
 }
 
-Y_UNIT_TEST(MoveDataYieldResumeAtCursor) {
-    CheckMoveDataResumeAfterYield(EMoveDataYieldMutation::None);
-}
-
-Y_UNIT_TEST(MoveDataYieldDeleteCursor) {
-    CheckMoveDataResumeAfterYield(EMoveDataYieldMutation::DeleteCursor);
-}
-
-Y_UNIT_TEST(MoveDataYieldDeleteLastCursor) {
-    CheckMoveDataResumeAfterYield(EMoveDataYieldMutation::DeleteLastCursor);
-}
-
-Y_UNIT_TEST(MoveDataYieldDeleteAll) {
-    CheckMoveDataResumeAfterYield(EMoveDataYieldMutation::DeleteAll);
-}
-
-Y_UNIT_TEST(MoveDataTrimWhileCopyIsInFlight) {
+void CheckMoveDataTrimWhileCopyIsInFlight(bool repeatCurrentGroup) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     TAutoPtr<IEventHandle> copied;
     bool captured = false;
     bool vacuumSeen = false;
-    bool trimSawCopy = false;
+    ui32 trimCopyOccurrences = 0;
     TLogoBlobID newBlobId;
     tc.Prepare([&](TTestActorRuntime& runtime) {
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
@@ -1050,7 +1038,7 @@ Y_UNIT_TEST(MoveDataTrimWhileCopyIsInFlight) {
             }
             if (captured && event->GetTypeRewrite() == TEvBlobStorage::TEvRangeResult::EventType) {
                 for (const auto& response : event->Get<TEvBlobStorage::TEvRangeResult>()->Responses) {
-                    trimSawCopy |= response.Id == newBlobId;
+                    trimCopyOccurrences += response.Id == newBlobId;
                 }
             }
             return TTestActorRuntime::EEventAction::PROCESS;
@@ -1060,7 +1048,7 @@ Y_UNIT_TEST(MoveDataTrimWhileCopyIsInFlight) {
     CmdWrite("key", tc.Value, NKikimrClient::TKeyValueRequest::MAIN,
         NKikimrClient::TKeyValueRequest::REALTIME, tc);
     tc.PoisonTablet();
-    tc.StartReassignedTablet();
+    tc.StartReassignedTablet(repeatCurrentGroup);
     tc.SendMoveData();
     TDispatchOptions options;
     options.CustomFinalCondition = [&] { return captured; };
@@ -1091,7 +1079,9 @@ Y_UNIT_TEST(MoveDataTrimWhileCopyIsInFlight) {
     UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
     UNIT_ASSERT(result->Record.HasTrimLeakedBlobsResult());
     UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTrimLeakedBlobsResult().GetStatus(), ui32(NKikimrProto::OK));
-    UNIT_ASSERT(trimSawCopy);
+    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTrimLeakedBlobsResult().GetNumItemsTrimmed(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTrimLeakedBlobsResult().GetNumItemsLeft(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(trimCopyOccurrences, repeatCurrentGroup ? 2 : 1);
 
     // Accept N into the index and allow GC of both bins. The earlier bin may
     // set Keep(N); the later bin must not subsequently send DoNotKeep(N).
@@ -1103,12 +1093,21 @@ Y_UNIT_TEST(MoveDataTrimWhileCopyIsInFlight) {
     CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, {tc.Value}, {}, tc);
 }
 
+Y_UNIT_TEST(MoveDataTrimWhileCopyIsInFlight) {
+    CheckMoveDataTrimWhileCopyIsInFlight(false);
+}
+
+Y_UNIT_TEST(MoveDataTrimWhileCopyIsInFlightRepeatedGroup) {
+    CheckMoveDataTrimWhileCopyIsInFlight(true);
+}
+
 class TCheckTrashState : public NKeyValue::TKeyValueState {
 public:
     using TResult = TEvKeyValue::TEvAdvanceMoveDataResult::EResult;
     using TKeyValueState::MaxMoveDataTrashCheckingBlobs;
     using TKeyValueState::Trash;
     using TKeyValueState::TrashForVacuum;
+    using TKeyValueState::VacuumResetGeneration;
 
     TCheckTrashState() {
         TabletInfo = CreateReassignedTabletInfo(1, TTabletTypes::KeyValue,
@@ -1116,8 +1115,8 @@ public:
         MoveDataGroups.insert(100);
     }
 
-    static TLogoBlobID OldBlob(ui32 step) {
-        return TLogoBlobID(1, 1, step, 2, 1, 0);
+    static TLogoBlobID OldBlob(ui32 step, ui8 channel = 2) {
+        return TLogoBlobID(1, 1, step, channel, 1, 0);
     }
 
     static TLogoBlobID CurrentBlob(ui32 step) {
@@ -1129,6 +1128,12 @@ public:
         MoveDataTrashCheckingWaitingForGC = false;
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(CheckTrash()->Result), static_cast<int>(expected));
         UNIT_ASSERT_VALUES_EQUAL(MoveDataTrashCheckingWaitingForGC, expected == TResult::WAIT_FOR_GC);
+    }
+
+    void CheckWaiting(const TLogoBlobID& blob, std::optional<ui64> generation = {}) {
+        Check(TResult::WAIT_FOR_GC);
+        UNIT_ASSERT_VALUES_EQUAL(MoveDataTrashCheckingBlobId, blob);
+        UNIT_ASSERT(MoveDataTrashCheckingVacuumGeneration == generation);
     }
 };
 
@@ -1157,14 +1162,14 @@ Y_UNIT_TEST(MoveDataTrashWaitForEveryLayer) {
     state.TrashForVacuum[30].insert(state.OldBlob(3));
     state.TrashForVacuum[30].insert(state.OldBlob(4));
 
-    state.Check(TResult::WAIT_FOR_GC);
-    state.Check(TResult::WAIT_FOR_GC); // An unrelated GC must not advance past this blob.
+    state.CheckWaiting(blob);
+    state.CheckWaiting(blob); // An unrelated GC must not advance past this blob.
     state.Trash.erase(blob);
-    state.Check(TResult::WAIT_FOR_GC);
+    state.CheckWaiting(state.OldBlob(2), 10);
     state.TrashForVacuum.erase(10);
-    state.Check(TResult::WAIT_FOR_GC);
+    state.CheckWaiting(state.OldBlob(3), 30);
     state.TrashForVacuum[30].erase(state.OldBlob(3));
-    state.Check(TResult::WAIT_FOR_GC);
+    state.CheckWaiting(state.OldBlob(4), 30);
     state.TrashForVacuum.erase(30);
     state.Check(TResult::SUCCESS);
 }
@@ -1174,11 +1179,11 @@ Y_UNIT_TEST(MoveDataTrashCollectedLayerDisappearsBeforeResume) {
     state.TrashForVacuum[10].insert(state.OldBlob(1));
     state.TrashForVacuum[20].insert(state.OldBlob(2));
     state.TrashForVacuum[30].insert(state.OldBlob(3));
-    state.Check(TResult::WAIT_FOR_GC);
+    state.CheckWaiting(state.OldBlob(1), 10);
     // Several GC completions can run before the queued check is dispatched.
     state.TrashForVacuum.erase(10);
     state.TrashForVacuum.erase(20);
-    state.Check(TResult::WAIT_FOR_GC);
+    state.CheckWaiting(state.OldBlob(3), 30);
     state.TrashForVacuum.erase(30);
     state.Check(TResult::SUCCESS);
 }
@@ -1188,14 +1193,14 @@ Y_UNIT_TEST(MoveDataTrashCurrentTrashMovesToNewVacuumLayer) {
     state.Trash.insert(state.OldBlob(3));
     state.TrashForVacuum[10].insert(state.OldBlob(1));
     state.TrashForVacuum[20].insert(state.OldBlob(2));
-    state.Check(TResult::WAIT_FOR_GC);
+    state.CheckWaiting(state.OldBlob(3));
     // StartVacuum moves the whole current bin to a newer generation.
     state.TrashForVacuum[30].swap(state.Trash);
-    state.Check(TResult::WAIT_FOR_GC);
+    state.CheckWaiting(state.OldBlob(1), 10);
     state.TrashForVacuum.erase(10);
-    state.Check(TResult::WAIT_FOR_GC);
+    state.CheckWaiting(state.OldBlob(2), 20);
     state.TrashForVacuum.erase(20);
-    state.Check(TResult::WAIT_FOR_GC);
+    state.CheckWaiting(state.OldBlob(3), 30);
     state.TrashForVacuum.erase(30);
     state.Check(TResult::SUCCESS);
 }
@@ -1208,24 +1213,49 @@ Y_UNIT_TEST(MoveDataTrashResumeAtScanLimitAcrossLayers) {
         state.TrashForVacuum[10].insert(state.CurrentBlob(step + half));
     }
     state.TrashForVacuum[20].insert(state.OldBlob(1));
-    state.TrashForVacuum[30].insert(state.OldBlob(2));
     state.Check(TResult::CHECK_TRASH);
     state.Check(TResult::WAIT_FOR_GC); // The first unchecked blob must not be skipped.
     state.TrashForVacuum.erase(20);
-    state.Check(TResult::WAIT_FOR_GC);
-    state.TrashForVacuum.erase(30);
     state.Check(TResult::SUCCESS);
 }
 
 Y_UNIT_TEST(MoveDataTrashResumeInsideLayerAtScanLimit) {
     TCheckTrashState state;
+    for (ui32 step = 1; step <= state.MaxMoveDataTrashCheckingBlobs; ++step) {
+        state.TrashForVacuum[10].insert(state.CurrentBlob(step));
+    }
+    // Blob IDs sort by channel first: the old blob must follow the current
+    // group's blobs while remaining in the same vacuum layer.
+    const auto boundaryBlob = state.OldBlob(1, 3);
+    UNIT_ASSERT(state.CurrentBlob(state.MaxMoveDataTrashCheckingBlobs) < boundaryBlob);
+    state.TrashForVacuum[10].insert(boundaryBlob);
+    state.Check(TResult::CHECK_TRASH);
+    state.CheckWaiting(boundaryBlob, 10);
+    state.TrashForVacuum[10].erase(boundaryBlob);
+    state.Check(TResult::SUCCESS);
+}
+
+Y_UNIT_TEST(MoveDataTrashVacuumResetAfterScanLimit) {
+    TCheckTrashState state;
     for (ui32 step = 1; step <= state.MaxMoveDataTrashCheckingBlobs + 1; ++step) {
         state.TrashForVacuum[10].insert(state.CurrentBlob(step));
     }
-    state.TrashForVacuum[20].insert(state.OldBlob(1));
+    const auto oldBlob = state.OldBlob(1);
+    state.TrashForVacuum[20].insert(oldBlob);
     state.Check(TResult::CHECK_TRASH);
-    state.Check(TResult::WAIT_FOR_GC);
-    state.TrashForVacuum.erase(20);
+
+    // Reset vacuum while the scan-limit continuation is queued, without a GC
+    // completion. The old blob moves behind the cursor into the already scanned
+    // Trash bin, and its ID is smaller than the saved current-generation ID.
+    for (const auto& [generation, bin] : state.TrashForVacuum) {
+        state.Trash.insert(bin.begin(), bin.end());
+    }
+    state.TrashForVacuum.clear();
+    ++state.VacuumResetGeneration;
+
+    state.CheckWaiting(oldBlob); // Must restart from Trash with a fresh blob cursor.
+    state.Trash.erase(oldBlob);
+    state.Check(TResult::CHECK_TRASH);
     state.Check(TResult::SUCCESS);
 }
 
@@ -1239,7 +1269,7 @@ struct TMoveDataTrashContext : TTestContext {
     ui32 CollectCount = 0;
     ui64 VacuumSeen = 0;
 
-    void PrepareLayers(ui32 layers, bool leaveCurrentTrash = false) {
+    void PrepareLayers(ui32 layers, bool leaveCurrentTrash = false, std::optional<ui32> oldLayer = {}) {
         Prepare([&](TTestActorRuntime& runtime) {
             runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
                 if (event->GetTypeRewrite() == TEvKeyValue::TEvCollect::EventType && BlockCollect) {
@@ -1264,11 +1294,22 @@ struct TMoveDataTrashContext : TTestContext {
         });
 
         for (ui32 i = 0; i < layers; ++i) {
+            if (oldLayer && i != *oldLayer) {
+                continue;
+            }
             CmdWrite(TStringBuilder() << "old" << i, Value,
                 NKikimrClient::TKeyValueRequest::MAIN, NKikimrClient::TKeyValueRequest::REALTIME, *this);
         }
         PoisonTablet();
         StartReassignedTablet();
+        if (oldLayer) {
+            for (ui32 i = 0; i < layers; ++i) {
+                if (i != *oldLayer) {
+                    CmdWrite(TStringBuilder() << "old" << i, Value,
+                        NKikimrClient::TKeyValueRequest::MAIN, NKikimrClient::TKeyValueRequest::REALTIME, *this);
+                }
+            }
+        }
         CmdWrite("alive", Value, NKikimrClient::TKeyValueRequest::MAIN,
             NKikimrClient::TKeyValueRequest::REALTIME, *this);
         BlockCollect = true;
@@ -1327,7 +1368,7 @@ struct TMoveDataTrashContext : TTestContext {
         Runtime->Send(Collect.Release());
         if (expectFinalCheck) {
             WaitFor([&] { return bool(CheckTrash) || MoveDataCompleted; });
-            UNIT_ASSERT_C(CheckTrash, "MoveData completed without checking the remaining trash after vacuum reset");
+            UNIT_ASSERT_C(CheckTrash, "MoveData completed without checking the remaining trash after GC");
             UNIT_ASSERT(!MoveDataCompleted);
         }
         BlockCheck = false;
@@ -1343,6 +1384,33 @@ struct TMoveDataTrashContext : TTestContext {
         }
     }
 };
+
+void CheckMoveDataTrashSingleOldBlobAmongVacuumLayers(bool leaveCurrentTrash) {
+    for (ui32 oldLayer = 0; oldLayer < 3; ++oldLayer) {
+        TMoveDataTrashContext tc;
+        TFinalizer finalizer(tc);
+        // Only this layer can cause WAIT_FOR_GC; later layers cannot mask its skip.
+        tc.PrepareLayers(3, leaveCurrentTrash, oldLayer);
+        tc.CheckStillWaiting();
+        if (leaveCurrentTrash) {
+            tc.StartVacuum(30);
+        }
+        for (ui32 i = 0; i < oldLayer; ++i) {
+            tc.CollectOneLayer();
+            tc.WaitFor([&] { return bool(tc.CheckTrash); });
+            tc.CheckStillWaiting();
+        }
+        tc.Finish(true);
+    }
+}
+
+Y_UNIT_TEST(MoveDataTrashSingleOldBlobAmongVacuumLayers) {
+    CheckMoveDataTrashSingleOldBlobAmongVacuumLayers(false);
+}
+
+Y_UNIT_TEST(MoveDataTrashSingleOldBlobAmongVacuumLayersWithCurrentTrash) {
+    CheckMoveDataTrashSingleOldBlobAmongVacuumLayers(true);
+}
 
 Y_UNIT_TEST(MoveDataTrashMultipleVacuumLayers) {
     TMoveDataTrashContext tc;

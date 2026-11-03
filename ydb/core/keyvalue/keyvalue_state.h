@@ -305,6 +305,8 @@ protected:
     THashMap<TLogoBlobID, TLogoBlobID> MoveDataBlobIdToNewBlobId; // for blobs with refcount > 1
     ui64 MoveDataBlobsMoved = 0;
     // trash checking stage
+    // VacuumResetGeneration snapshot taken when the trash-checking stage starts;
+    // a mismatch in CheckTrash() means bins were reorganized and the scan must restart
     ui64 MoveDataTrashCheckingVacuumResetGeneration = 0;
     std::optional<ui64> MoveDataTrashCheckingVacuumGeneration = {}; // not set for Trash, set for TrashForVacuum
     TLogoBlobID MoveDataTrashCheckingBlobId;

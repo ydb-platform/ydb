@@ -1548,7 +1548,11 @@ void TKeyValueState::CmdTrimLeakedBlobs(THolder<TIntermediate>& intermediate, IS
         response.SetStatus(NKikimrProto::OK);
         ui32 numItems = 0;
         ui32 numUntrimmed = 0;
-        for (const TLogoBlobID& id : intermediate->TrimLeakedBlobs->FoundBlobs) {
+        auto& foundBlobs = intermediate->TrimLeakedBlobs->FoundBlobs;
+        // A group can occur more than once in channel history (A -> B -> A),
+        // so range replies may contain the same blob more than once.
+        SortUnique(foundBlobs);
+        for (const TLogoBlobID& id : foundBlobs) {
             auto it = RefCounts.find(id);
             if (it != RefCounts.end()) {
                 Y_ABORT_UNLESS(it->second != 0);

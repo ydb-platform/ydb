@@ -87,6 +87,7 @@ namespace NSequenceProxy {
                 case NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_MOVED:
                     // Switch to a different tablet and retry transparently
                     TabletId = msg->Record.GetMovedTo();
+                    Moved = true;
                     return Bootstrap();
 
                 case NKikimrTxSequenceShard::TEvAllocateSequenceResult::SEQUENCE_OVERFLOW:
@@ -110,6 +111,7 @@ namespace NSequenceProxy {
             res->Start = msg->Record.GetAllocationStart();
             res->Increment = msg->Record.GetAllocationIncrement();
             res->Count = msg->Record.GetAllocationCount();
+            res->Moved = Moved;
             Send(Owner, res.Release(), 0, Cookie);
             PassAway();
         }
@@ -135,6 +137,7 @@ namespace NSequenceProxy {
         ui64 TabletId;
         TPathId PathId;
         ui64 Cache;
+        bool Moved = false;
         NYql::TIssueManager IssueManager;
     };
 

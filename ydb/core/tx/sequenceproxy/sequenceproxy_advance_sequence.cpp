@@ -44,7 +44,10 @@ namespace NSequenceProxy {
         void ReplyAndDie(Ydb::StatusIds::StatusCode status, NKikimrIssues::TIssuesIds::EIssueCode code, const TString& message) {
             NYql::TIssueManager issueManager;
             issueManager.RaiseIssue(MakeIssue(code, message));
-            auto res = MakeHolder<TEvSequenceProxy::TEvAdvanceSequenceResult>(status, issueManager.GetIssues());
+            auto res = MakeHolder<TEvPrivate::TEvAdvanceResult>();
+            res->Status = status;
+            res->Issues = issueManager.GetIssues();
+            res->Moved = Moved;
             Send(Owner, res.Release(), 0, Cookie);
             PassAway();
         }
@@ -85,6 +88,7 @@ namespace NSequenceProxy {
                 case NKikimrTxSequenceShard::TEvAdvanceSequenceResult::SEQUENCE_MOVED:
                     // Switch to a different tablet and retry transparently
                     TabletId = msg->Record.GetMovedTo();
+                    Moved = true;
                     return Bootstrap();
 
                 default:
@@ -94,8 +98,12 @@ namespace NSequenceProxy {
                             << "Unexpected error from sequence shard " << TabletId);
             }
 
-            auto res = MakeHolder<TEvSequenceProxy::TEvAdvanceSequenceResult>(
-                PathId, msg->Record.GetNextValue(), msg->Record.GetNextUsed());
+            auto res = MakeHolder<TEvPrivate::TEvAdvanceResult>();
+            res->Status = Ydb::StatusIds::SUCCESS;
+            res->PathId = PathId;
+            res->NextValue = msg->Record.GetNextValue();
+            res->NextUsed = msg->Record.GetNextUsed();
+            res->Moved = Moved;
             Send(Owner, res.Release(), 0, Cookie);
             PassAway();
         }
@@ -122,10 +130,16 @@ namespace NSequenceProxy {
         const TPathId PathId;
         const i64 ObservedMin;
         const i64 ObservedMax;
+        bool Moved = false;
     };
 
-    void TSequenceProxy::StartAdvance(ui64 tabletId, const TPathId& pathId, const TAdvanceRequestInfo& request) {
-        Register(new TAdvanceSequenceActor(request.Sender, request.Cookie, tabletId, pathId,
+    void TSequenceProxy::StartAdvance(ui64 tabletId, const TString& database, const TPathId& pathId, const TAdvanceRequestInfo& request) {
+        ui64 cookie = ++LastCookie;
+        auto& info = AdvanceInFlight[cookie];
+        info.Database = database;
+        info.PathId = pathId;
+        info.Request = request;
+        Register(new TAdvanceSequenceActor(SelfId(), cookie, tabletId, pathId,
             request.ObservedMin, request.ObservedMax));
     }
 

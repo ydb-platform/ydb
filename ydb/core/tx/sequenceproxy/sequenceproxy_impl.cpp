@@ -103,6 +103,11 @@ namespace NSequenceProxy {
         Send(request.Sender, new TEvSequenceProxy::TEvAdvanceSequenceResult(status, issues), 0, request.Cookie);
     }
 
+    void TSequenceProxy::Reply(const TAdvanceRequestInfo& request, const TPathId& pathId, i64 nextValue, bool nextUsed) {
+        Counters->ResponseCount->Inc();
+        Send(request.Sender, new TEvSequenceProxy::TEvAdvanceSequenceResult(pathId, nextValue, nextUsed), 0, request.Cookie);
+    }
+
     void TSequenceProxy::MaybeStartResolve(const TString& database, const TString& path, TSequenceByName& info) {
         if (!info.ResolveInProgress && (!info.NewNextValResolve.empty() || !info.NewAdvanceResolve.empty())) {
             info.PendingNextValResolve = std::move(info.NewNextValResolve);
@@ -119,15 +124,15 @@ namespace NSequenceProxy {
         MaybeStartResolve(database, path, info);
     }
 
-    void TSequenceProxy::DoNextVal(TNextValRequestInfo&& request, const TString& database, const TPathId& pathId, bool needRefresh) {
+    void TSequenceProxy::DoNextVal(TNextValRequestInfo&& request, const TString& database, const TPathId& pathId) {
         Counters->RequestCount->Inc();
 
         auto& info = Databases[database].SequenceByPathId[pathId];
-        if (!info.ResolveInProgress && (needRefresh || !info.SequenceInfo)) {
-            StartResolve(database, pathId, !info.SequenceInfo);
-            info.ResolveInProgress = true;
-        }
         if (!info.SequenceInfo) {
+            if (!info.ResolveInProgress) {
+                StartResolve(database, pathId, true);
+                info.ResolveInProgress = true;
+            }
             info.PendingNextValResolve.emplace_back(std::move(request));
             return;
         }
@@ -189,7 +194,7 @@ namespace NSequenceProxy {
             return;
         }
 
-        StartAdvance(info.LastKnownTabletId, pathId, request);
+        StartAdvance(info.LastKnownTabletId, database, pathId, request);
     }
 
     void TSequenceProxy::OnResolveError(const TString& database, const TString& path, Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
@@ -289,7 +294,7 @@ namespace NSequenceProxy {
 
         // Advance is an internal operation of replication, it has no user to check access for.
         while (!resolvedAdvance.empty()) {
-            StartAdvance(info.LastKnownTabletId, pathId, resolvedAdvance.front());
+            StartAdvance(info.LastKnownTabletId, database, pathId, resolvedAdvance.front());
             resolvedAdvance.pop_front();
         }
 
@@ -311,6 +316,13 @@ namespace NSequenceProxy {
         auto* msg = ev->Get();
 
         if (msg->Status == Ydb::StatusIds::SUCCESS) {
+            if (msg->Moved) {
+                // The sequence shard we had in the resolve cache is not the current one anymore,
+                // drop it so that the next request resolves the sequence again.
+                info.SequenceInfo = nullptr;
+                info.SecurityObject = nullptr;
+            }
+
             auto& allocated = info.CachedAllocations.emplace_back();
             allocated.Start = msg->Start;
             allocated.Increment = msg->Increment;
@@ -327,6 +339,36 @@ namespace NSequenceProxy {
         }
 
         OnChanged(database, pathId, info);
+    }
+
+    void TSequenceProxy::Handle(TEvPrivate::TEvAdvanceResult::TPtr& ev) {
+        auto it = AdvanceInFlight.find(ev->Cookie);
+        Y_ABORT_UNLESS(it != AdvanceInFlight.end());
+        auto database = it->second.Database;
+        auto pathId = it->second.PathId;
+        auto request = std::move(it->second.Request);
+        AdvanceInFlight.erase(it);
+
+        auto* msg = ev->Get();
+
+        if (msg->Status != Ydb::StatusIds::SUCCESS) {
+            return Reply(request, msg->Status, msg->Issues);
+        }
+
+        auto& info = Databases[database].SequenceByPathId[pathId];
+
+        if (msg->Moved) {
+            info.SequenceInfo = nullptr;
+            info.SecurityObject = nullptr;
+        }
+
+        // Clear cache on advance.
+        info.CachedAllocations.clear();
+        info.TotalCached = 0;
+
+        OnChanged(database, pathId, info);
+
+        Reply(request, pathId, msg->NextValue, msg->NextUsed);
     }
 
     void TSequenceProxy::Handle(TEvSequenceProxy::TEvGetSequenceResult::TPtr& ev) {

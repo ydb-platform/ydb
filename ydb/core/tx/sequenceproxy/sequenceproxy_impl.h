@@ -50,7 +50,8 @@ namespace NSequenceProxy {
         struct TEvPrivate {
             enum EEv {
                 EvBegin = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
-                EvAllocateResult
+                EvAllocateResult,
+                EvAdvanceResult
             };
 
             struct TEvAllocateResult : public TEventLocal<TEvAllocateResult, EvAllocateResult> {
@@ -60,6 +61,16 @@ namespace NSequenceProxy {
                 TPathId PathId;
                 i64 Start, Increment;
                 ui64 Count;
+                bool Moved = false;
+            };
+
+            struct TEvAdvanceResult : public TEventLocal<TEvAdvanceResult, EvAdvanceResult> {
+                Ydb::StatusIds::StatusCode Status;
+                NYql::TIssues Issues;
+                TPathId PathId;
+                i64 NextValue = 0;
+                bool NextUsed = false;
+                bool Moved = false;
             };
         };
 
@@ -155,6 +166,12 @@ namespace NSequenceProxy {
             TPathId PathId;
         };
 
+        struct TAdvanceInFlight {
+            TString Database;
+            TPathId PathId;
+            TAdvanceRequestInfo Request;
+        };
+
     private:
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
@@ -164,6 +181,7 @@ namespace NSequenceProxy {
                 hFunc(TEvSequenceProxy::TEvGetSequenceResult, Handle);
                 hFunc(TEvSequenceProxy::TEvAdvanceSequence, Handle);
                 hFunc(TEvPrivate::TEvAllocateResult, Handle);
+                hFunc(TEvPrivate::TEvAdvanceResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             }
         }
@@ -173,6 +191,7 @@ namespace NSequenceProxy {
         void Handle(TEvSequenceProxy::TEvGetSequence::TPtr& ev);
         void Handle(TEvSequenceProxy::TEvAdvanceSequence::TPtr& ev);
         void Handle(TEvPrivate::TEvAllocateResult::TPtr& ev);
+        void Handle(TEvPrivate::TEvAdvanceResult::TPtr& ev);
         void Handle(TEvSequenceProxy::TEvGetSequenceResult::TPtr& ev);
         void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
@@ -181,13 +200,14 @@ namespace NSequenceProxy {
         void Reply(const TGetSequenceRequestInfo& request, Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues);
         void Reply(const TGetSequenceRequestInfo& request, const TEvSequenceProxy::TEvGetSequenceResult& ev);
         void Reply(const TAdvanceRequestInfo& request, Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues);
+        void Reply(const TAdvanceRequestInfo& request, const TPathId& pathId, i64 nextValue, bool nextUsed);
         ui64 StartResolve(const TString& database, const std::variant<TString, TPathId>& path, bool syncVersion);
         ui64 StartAllocate(ui64 tabletId, const TString& database, const TPathId& pathId, ui64 cache);
         ui64 StartGetSequence(ui64 tabletId, const TString& database, const TPathId& pathId);
-        void StartAdvance(ui64 tabletId, const TPathId& pathId, const TAdvanceRequestInfo& request);
+        void StartAdvance(ui64 tabletId, const TString& database, const TPathId& pathId, const TAdvanceRequestInfo& request);
         void MaybeStartResolve(const TString& database, const TString& path, TSequenceByName& info);
         void DoNextVal(TNextValRequestInfo&& request, const TString& database, const TString& path);
-        void DoNextVal(TNextValRequestInfo&& request, const TString& database, const TPathId& pathId, bool needRefresh = true);
+        void DoNextVal(TNextValRequestInfo&& request, const TString& database, const TPathId& pathId);
         void DoGetSequence(TGetSequenceRequestInfo&& request, const TString& database, const TPathId& pathId);
         void DoAdvance(TAdvanceRequestInfo&& request, const TString& database, const TString& path);
         void DoAdvance(TAdvanceRequestInfo&& request, const TString& database, const TPathId& pathId);
@@ -210,6 +230,7 @@ namespace NSequenceProxy {
         THashMap<ui64, TResolveInFlight> ResolveInFlight;
         THashMap<ui64, TAllocateInFlight> AllocateInFlight;
         THashMap<ui64, TGetSequenceInFlight> GetSequenceInFlight;
+        THashMap<ui64, TAdvanceInFlight> AdvanceInFlight;
         ui64 LastCookie = 0;
         TIntrusivePtr<TSequenceProxyCounters> Counters;
     };

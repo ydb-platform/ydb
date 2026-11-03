@@ -263,10 +263,9 @@ TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(
     const bool plain = collector && collector->GetReaderKind() == "PLAIN";
     THashMap<ui32, TString> expressions;
     if (plain) {
+        expressions = StatsColumnNames;
         for (const ui32 id : resources->GetStatsColumnIds()) {
-            const auto name = StatsColumnNames.find(id);
-            expressions.emplace(id, name == StatsColumnNames.end()
-                ? TString(resources->GetFieldVerified(id)->name()) : name->second);
+            expressions.emplace(id, TString(resources->GetFieldVerified(id)->name()));
         }
     }
     const auto resolve = [&](ui32 id) -> TString {

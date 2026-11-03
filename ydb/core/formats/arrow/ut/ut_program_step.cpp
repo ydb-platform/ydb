@@ -404,7 +404,7 @@ Y_UNIT_TEST_SUITE(TProgramStatsMeta) {
         for (const auto& step : report->GetSteps()) {
             if (step.GetStepKind() == NKikimr::NScanStats::TStep::Projection) {
                 sawProjection = true;
-                UNIT_ASSERT(step.GetOperation().Contains("metric"));
+                UNIT_ASSERT_C(step.GetOperation().Contains("metric"), step.DebugString());
                 UNIT_ASSERT_STRINGS_EQUAL(step.GetDetails().GetProjection().GetOutputColumns().GetNames(0), "metric");
             }
         }

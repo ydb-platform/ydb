@@ -509,7 +509,7 @@ public:
 
     void WriteData(const TLogRecord& rec) override {
         const TStringBuf line(rec.Data, rec.Len);
-        if (line.Contains("ICP25") && line.Contains("outgoing handshake failed")) {
+        if (line.Contains("ICP25") && line.Contains("Outgoing handshake failed")) {
             if (rec.Priority == TLOG_NOTICE) {
                 OutgoingHandshakeFailures->Notice.fetch_add(1, std::memory_order_relaxed);
             } else if (rec.Priority == TLOG_DEBUG) {

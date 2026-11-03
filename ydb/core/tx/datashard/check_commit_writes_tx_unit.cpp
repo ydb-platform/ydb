@@ -3,6 +3,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -78,7 +80,8 @@ public:
                 << "Can't propose tx " << op->GetTxId()
                 << " at blocked shard " << DataShard.TabletID();
 
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+            YDB_LOG_NOTICE_CTX(ctx, "TCheckCommitWritesTxUnit::Execute: cannot propose tx at blocked shard",
+                {"errorMessage", err});
             return buildUnsuccessfulResult(
                 err,
                 NKikimrTxDataShard::TEvProposeTransactionResult::ERROR,
@@ -87,10 +90,10 @@ public:
 
         BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Prepared " << op->GetKind()
-            << " transaction txId " << op->GetTxId()
-            << " at shard " << DataShard.TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TCheckCommitWritesTxUnit::Execute: prepared transaction",
+            {"opKind", op->GetKind()},
+            {"txId", op->GetTxId()},
+            {"tabletId", DataShard.TabletID()});
         return EExecutionStatus::Executed;
     }
 

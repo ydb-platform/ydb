@@ -1721,8 +1721,9 @@ public:
 
     bool IsImportingReplica() const {
         for (const auto& [_, info] : TableInfos) {
-            if (info->IsReplicated() && info->ReplicationConfig.ImportState
-                    == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING) {
+            if (info->IsReplicated() &&
+                info->ReplicationConfig.ImportState == NKikimrSchemeOp::TTableReplicationConfig::IMPORTING)
+            {
                 return true;
             }
         }

@@ -136,7 +136,16 @@ private:
         Offset = resp.GetOffset();
         SentOffset = Offset;
 
+<<<<<<< HEAD
         Send(Parent, new TEvYdbProxy::TEvStartTopicReadingSession(TStringBuilder() << "Session_" << SelfId()));
+=======
+        std::optional<ui64> retainedStartOffset;
+        if (resp.HasStartOffset()) {
+            retainedStartOffset = resp.GetStartOffset();
+        }
+        Send(Parent, new TEvYdbProxy::TEvStartTopicReadingSession(
+            TStringBuilder() << "Session_" << SelfId(), Offset, retainedStartOffset));
+>>>>>>> ca95a87422f ([KIKIMR-27454] Detect lost messages for async replication on startup if all were lost and no per-message checks will be triggered on consumer. (#57837))
 
         DoWork();
     }

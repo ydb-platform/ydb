@@ -119,7 +119,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     ScanIterator = ReadMetadataRange->StartScan(context);
     auto startResult = ScanIterator->Start();
     if (initStats) {
-        initStats->Finish(startResult ? NScanStats::TStep::completed : NScanStats::TStep::failed);
+        initStats->Finish(startResult.IsFail() ? NScanStats::TStep::failed : NScanStats::TStep::completed);
     }
     initScope.reset();
     StartInstant = TMonotonic::Now();

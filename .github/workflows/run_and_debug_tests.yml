@@ -67,33 +67,40 @@ jobs:
           echo "Dispatching \"Run and debug tests\" --ref $EXECUTOR_REF"
           echo "code_ref=$CODE_REF preset=$preset targets=$TEST_TARGETS"
 
+          # Lookup by filename (list endpoint is paginated and may miss this workflow).
+          workflow_path="run_and_debug_tests.yml"
           workflow_id="$(curl -fsS "${auth[@]}" \
-            "${api}/actions/workflows" \
-            | jq -r '.workflows[] | select(.path==".github/workflows/run_and_debug_tests.yml") | .id')"
+            "${api}/actions/workflows/${workflow_path}" \
+            | jq -r '.id // empty')"
           if [ -z "$workflow_id" ] || [ "$workflow_id" = "null" ]; then
-            echo "::error::workflow run_and_debug_tests.yml not found"
+            echo "::error::workflow ${workflow_path} not found"
             exit 1
           fi
+          echo "workflow_id=$workflow_id"
 
+          # API validates input *keys* against the workflow file on the DEFAULT branch.
+          # Only send keys present on main (test_targets, build_preset, …).
+          # Executor branch (--ref) still runs its own YAML; extra inputs there use defaults.
           payload="$(jq -n \
             --arg ref "$EXECUTOR_REF" \
-            --arg code_ref "$CODE_REF" \
             --arg test_targets "$TEST_TARGETS" \
             --arg build_preset "$preset" \
             '{
               ref: $ref,
               inputs: {
-                code_ref: $code_ref,
                 test_targets: $test_targets,
-                build_preset: $build_preset,
-                test_size: "small,medium",
-                kind: "debug"
+                build_preset: $build_preset
               }
             }')"
 
-          curl -fsS "${auth[@]}" -X POST \
+          http_code="$(curl -sS "${auth[@]}" -o /tmp/dispatch_resp.txt -w '%{http_code}' -X POST \
             "${api}/actions/workflows/${workflow_id}/dispatches" \
-            -d "$payload"
+            -d "$payload")"
+          if [ "$http_code" != "204" ]; then
+            echo "::error::dispatch failed HTTP $http_code"
+            cat /tmp/dispatch_resp.txt || true
+            exit 1
+          fi
 
           sleep 5
           run_json="$(curl -fsS "${auth[@]}" \

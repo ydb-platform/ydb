@@ -750,8 +750,11 @@ class TestS3TopicJoin(StreamingTestBase):
             kikimr.ydb_client.query(f"""
                 CREATE STREAMING QUERY `{query_path}` WITH (CHECKPOINT_INTERVAL = 'PT1S') AS DO BEGIN
                     PRAGMA ydb.MaxTasksPerStage = '2';
-                    INSERT INTO `{output_topic}` WITH (FORMAT=json_each_row)
-                    SELECT dictionary.value AS num, input_rows.word AS word
+                    INSERT INTO `{output_topic}`
+                    SELECT Unwrap(Yson::SerializeJson(Yson::From(AsStruct(
+                        dictionary.value AS num,
+                        input_rows.word AS word
+                    )))) AS Data
                     FROM `{input_topic}`
                     WITH (FORMAT=json_each_row, SCHEMA=(key Int64 NOT NULL, word String NOT NULL)) AS input_rows
                     INNER JOIN (

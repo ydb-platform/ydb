@@ -202,7 +202,7 @@ public:
             // YDB uses several ways to store/pass optional values (see TOptionalTraits<T> below).
             // So, it is required to process optional data using this OutputParam<TValue> (instead of Out<T>).
             if (value) {
-                AddValueToCurrentMessage(name, *value);
+                AddValueToCurrentMessage(std::forward<K>(name), *value);
             } else {
                 TStringStream stream;
                 stream << "<null>";

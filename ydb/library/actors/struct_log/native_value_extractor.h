@@ -5,12 +5,21 @@
 #include <cmath>
 #include <limits>
 #include <optional>
+#include <string_view>
 #include <type_traits>
+#include <utility>
 
 namespace NActors::NStructuredLog {
 
 template <typename T>
 class TNativeValueExtractor {
+    static_assert(
+        !std::is_same_v<T, TStringBuf>,
+        "TNativeValueExtractor does not support TStringBuf; use TNativeValueExtractor<TString> or TStringValueExtractor");
+    static_assert(
+        !std::is_same_v<T, std::string_view>,
+        "TNativeValueExtractor does not support std::string_view; use TNativeValueExtractor<TString> or TStringValueExtractor");
+
 public:
     TNativeValueExtractor() = default;
     TNativeValueExtractor(const TNativeValueExtractor&) = delete;
@@ -26,7 +35,7 @@ public:
     using TOptional = std::optional<T>;
     using TResult = std::pair<TResultKind, TOptional>;
 
-    const TResult& ExtractValue(const TStructuredMessage& message, std::size_t index) {
+    TResult ExtractValue(const TStructuredMessage& message, std::size_t index) {
         Result.first = TResultKind::NoValue;
         Result.second.reset();
 
@@ -38,10 +47,10 @@ public:
             return it->second(data, length);
         };
         message.ForIndexSerialized(index, processValue);
-        return Result;
+        return std::move(Result);
     }
 
-    const TResult& ExtractValue(const TStructuredMessage& message, const std::vector<TKeyName>& name) {
+    TResult ExtractValue(const TStructuredMessage& message, const std::vector<TKeyName>& name) {
         auto index = message.GetValueIndex(name);
         if (!index.has_value()) {
             Result.first = TResultKind::NoValue;
@@ -51,11 +60,23 @@ public:
         return ExtractValue(message, index.value());
     }
 
-    // Rejects NaN/Inf and values whose truncation would not fit in TDst (UB on float→int).
+    // Rejects NaN/Inf and out-of-range numeric casts (notably float→int UB, narrowing float→float).
     template <typename TDst, typename TSrc>
     static bool IsSafeNumericCast(const TSrc& value) {
         if constexpr (std::is_same_v<TDst, TSrc>) {
             return true;
+        } else if constexpr (std::is_floating_point_v<TSrc> && std::is_same_v<TDst, bool>) {
+            if (!std::isfinite(value)) {
+                return false;
+            }
+
+            TSrc intValue;
+            std::modf(value, &intValue);
+            if (value != intValue) {
+                return false;
+            }
+
+            return value == TSrc(0) || value == TSrc(1);
         } else if constexpr (std::is_floating_point_v<TSrc> && std::numeric_limits<TDst>::is_integer) {
             if (!std::isfinite(value)) {
                 return false;
@@ -86,6 +107,14 @@ public:
                 auto unsignedValue = static_cast<std::make_unsigned_t<TSrc>>(value);
                 return unsignedValue <= std::numeric_limits<TDst>::max();
             }
+        } else if constexpr (std::is_floating_point_v<TSrc> && std::is_floating_point_v<TDst>) {
+            if (!std::isfinite(value)) {
+                return false;
+            }
+
+            using TCommon = std::common_type_t<TSrc, TDst>;
+            const TCommon maxVal = std::numeric_limits<TDst>::max();
+            return static_cast<TCommon>(value) >= -maxVal && static_cast<TCommon>(value) <= maxVal;
         } else {
             return true;
         }
@@ -110,11 +139,5 @@ protected:
     TResult Result;
     TInvokerMap TypeValueMap = TTypesMapping::CreateInvokerMap(*this);
 };
-
-template <>
-class TNativeValueExtractor<TStringBuf> {};
-
-template <>
-class TNativeValueExtractor<std::string_view> {};
 
 }

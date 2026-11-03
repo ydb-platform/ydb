@@ -14,7 +14,7 @@ public:
     TStringValueExtractor& operator=(const TStringValueExtractor&) = delete;
     TStringValueExtractor& operator=(const TStringValueExtractor&&) = delete;
 
-    const std::optional<TString>& ExtractValue(const TStructuredMessage& message, std::size_t index) {
+    std::optional<TString> ExtractValue(const TStructuredMessage& message, std::size_t index) {
         ExtractedValue.reset();
 
         auto processValue = [&](const std::vector<TKeyName>& , TNativeTypeCode typeCode, const void* data, std::size_t length)->bool {
@@ -25,10 +25,10 @@ public:
             return it->second(data, length);
         };
         message.ForIndexSerialized(index, processValue);
-        return ExtractedValue;
+        return std::move(ExtractedValue);
     }
 
-    const std::optional<TString>& ExtractValue(const TStructuredMessage& message, const std::vector<TKeyName>& name) {
+    std::optional<TString> ExtractValue(const TStructuredMessage& message, const std::vector<TKeyName>& name) {
         auto index = message.GetValueIndex(name);
         if (!index.has_value()) {
             ExtractedValue.reset();

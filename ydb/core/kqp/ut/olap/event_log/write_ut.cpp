@@ -1016,11 +1016,11 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLogTypes) {
     }
 
     Y_UNIT_TEST(Int8) {
-        TestType<i8, TString>(i8(-8), TString("s"));
+        TestType<i8, TString>(i8('s'), TString("s"));
     }
 
     Y_UNIT_TEST(UInt8) {
-        TestType<ui8, TString>(ui8(8), TString("s"));
+        TestType<ui8, TString>(ui8('s'), TString("s"));
     }
 
     Y_UNIT_TEST(Int16) {

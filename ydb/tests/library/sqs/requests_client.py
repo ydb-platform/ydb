@@ -14,6 +14,7 @@ from ydb.tests.library.common.helpers import wrap_in_list
 logger = logging.getLogger(__name__)
 
 DEFAULT_DATE = '20180101'
+DEFAULT_DATETIME = '2018-01-01T10:44:19Z'
 REQUEST_TIMEOUT = 180  # teamcity is very slow
 
 
@@ -35,7 +36,7 @@ def auth_string(user):
 
 def auth_headers(user, security_token=None, iam_token=None):
     headers = {
-        'X-Amz-Date': '{}T104419Z'.format(DEFAULT_DATE),
+        'X-Amz-Date': DEFAULT_DATETIME,
         'Authorization': auth_string(user)
     }
     if security_token is not None:

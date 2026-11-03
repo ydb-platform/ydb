@@ -38,7 +38,7 @@ void NormalizeTtlStoragePaths(Ydb::Table::TtlSettings& settings, const IRequestC
     for (auto& tier : *settings.mutable_tiered_ttl()->mutable_tiers()) {
         if (tier.has_evict_to_external_storage()) {
             auto* eviction = tier.mutable_evict_to_external_storage();
-            eviction->set_storage(request.NormalizePath(eviction->storage()));
+            eviction->set_storage(request.GetDatabaseRelativePath(eviction->storage()));
         }
     }
 }

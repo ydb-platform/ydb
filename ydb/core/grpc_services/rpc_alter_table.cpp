@@ -37,11 +37,11 @@ public:
     TAlterTableRPC(IRequestOpCtx* msg)
         : TBase(msg)
         , DatabaseName(Request_->GetDatabaseName().GetOrElse(""))
-        , TablePath(Request_->NormalizePath(GetProtoRequest()->path()))
     {}
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
+        TablePath = Request_->GetDatabaseRelativePath(GetProtoRequest()->path());
 
         const auto* req = GetProtoRequest();
         if (req->operation_params().has_forget_after() && req->operation_params().operation_mode() != Ydb::Operations::OperationParams::SYNC) {
@@ -501,7 +501,7 @@ private:
                 for (auto& column : columns) {
                     if (column.has_from_sequence()) {
                         auto* sequence = column.mutable_from_sequence();
-                        sequence->set_name(Request_->NormalizePath(sequence->name()));
+                        sequence->set_name(Request_->GetDatabaseRelativePath(sequence->name()));
                     }
                 }
             };
@@ -526,7 +526,7 @@ private:
 
     ui64 TxId = 0;
     const TString DatabaseName;
-    const TString TablePath;
+    TString TablePath;
     TString LogPrefix;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TPathId ResolvedPathId;

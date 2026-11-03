@@ -207,59 +207,91 @@ namespace NKikimr {
             TTestContexts ctxs;
             TTrackableVector<TLogoBlobSst::TRec> index(TMemoryConsumer(ctxs.GetVCtx()->SstIndex));
 
-            auto addRecord = [&index](ui64 tabletId, ui32 step, ui32 blobSize) {
-                TLogoBlobID id(tabletId, 0, step, 0, blobSize, 0);
-                index.emplace_back(TKeyLogoBlob(id), TMemRecLogoBlob());
+            TVector<TLogoBlobID> ids = {
+                TLogoBlobID(10, 0, 0, 0, 1, 0),
+                TLogoBlobID(10, 0, 10, 0, 2, 0),
+                TLogoBlobID(20, 0, 0, 0, 3, 0),
+                TLogoBlobID(20, 0, 10, 0, 4, 0),
+                TLogoBlobID(20, 0, 300, 0, 5, 0, 1),
+                TLogoBlobID(20, 0, 300, 0, 5, 0, 2),
+                TLogoBlobID(20, 1, 0, 0, 6, 0),
+                TLogoBlobID(20, 0xFFFFFFFF, 0xFFFFFFFF, 0, 7, 0xFFFFFF, 3),
+                TLogoBlobID(20, 0, 0, 1, 8, 0),
+                TLogoBlobID(Max<ui64>(), Max<ui32>(), Max<ui32>(), TLogoBlobID::MaxChannel,
+                        TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId),
             };
-
-            addRecord(10, 0, 1);
-            addRecord(10, 10, 2);
-            addRecord(20, 0, 3);
-            addRecord(20, 10, 4);
-            addRecord(20, 300, 5);
+            for (ui32 i = 0; i < ids.size(); ++i) {
+                TMemRecLogoBlob memRec(TIngress(0x0123456789ABCDEFull + i));
+                memRec.SetDiskBlob(TDiskPart(i + 1, i * 10, i * 100));
+                index.emplace_back(TKeyLogoBlob(ids[i]), memRec);
+            }
 
             TLogoBlobSstPtr ptr(new TLogoBlobSst(ctxs.GetVCtx()));
             ptr->LoadLinearIndex(index);
 
+            using TRecHigh = TLogoBlobSst::TRecHigh;
+
             const auto& indexHigh = ptr->IndexHigh;
-            auto high = indexHigh.begin();
-
-            using TLogoBlobIdHigh = TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>::TLogoBlobIdHigh;
-
-            UNIT_ASSERT(high->GetKey() == TLogoBlobIdHigh(10, 0, 0, 0));
-            UNIT_ASSERT(high->GetLowRangeEndIndex() == 2);
-            ++high;
-            UNIT_ASSERT(high->GetKey() == TLogoBlobIdHigh(20, 0, 0, 0));
-            UNIT_ASSERT(high->GetLowRangeEndIndex() == 4);
-            ++high;
-            UNIT_ASSERT(high->GetKey() == TLogoBlobIdHigh(20, 0, 300, 0));
-            UNIT_ASSERT(high->GetLowRangeEndIndex() == 5);
-            ++high;
-            UNIT_ASSERT(high == indexHigh.end());
+            UNIT_ASSERT_VALUES_EQUAL(indexHigh.size(), 6u);
+            auto checkHigh = [&](size_t i, const TLogoBlobID& id, ui32 lowRangeEndIndex) {
+                UNIT_ASSERT(indexHigh[i].SameKey(TRecHigh(id)));
+                UNIT_ASSERT_VALUES_EQUAL(indexHigh[i].LowRangeEndIndex, lowRangeEndIndex);
+            };
+            checkHigh(0, ids[0], 2);
+            checkHigh(1, ids[2], 6);
+            checkHigh(2, ids[6], 7);
+            checkHigh(3, ids[7], 8);
+            checkHigh(4, ids[8], 9);
+            checkHigh(5, ids[9], 10);
 
             const auto& indexLow = ptr->IndexLow;
-            auto low = indexLow.begin();
-
-            using TLogoBlobIdLow = TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>::TLogoBlobIdLow;
-
-            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(0, 0, 0, 1, 0));
-            ++low;
-            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(10, 0, 0, 2, 0));
-            ++low;
-            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(0, 0, 0, 3, 0));
-            ++low;
-            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(10, 0, 0, 4, 0));
-            ++low;
-            UNIT_ASSERT(low->GetKey() == TLogoBlobIdLow(300, 0, 0, 5, 0));
-            ++low;
-            UNIT_ASSERT(low == indexLow.end());
+            UNIT_ASSERT_VALUES_EQUAL(indexLow.size(), ids.size());
+            for (size_t i = 0; i < ids.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(indexLow[i].Step, ids[i].Step());
+                UNIT_ASSERT_VALUES_EQUAL(indexLow[i].Raw2, ids[i].GetRaw()[2]);
+                UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(&indexLow[i]) % 32, 0u);
+            }
 
             TTrackableVector<TLogoBlobSst::TRec> checkIndex(TMemoryConsumer(ctxs.GetVCtx()->SstIndex));
             ptr->SaveLinearIndex(&checkIndex);
 
-            for (auto i = index.begin(), c = checkIndex.begin(); i != index.end(); ++i, ++c) {
-                UNIT_ASSERT(i->GetKey() == c->GetKey());
+            UNIT_ASSERT_VALUES_EQUAL(checkIndex.size(), index.size());
+            for (size_t i = 0; i < index.size(); ++i) {
+                UNIT_ASSERT_EQUAL(memcmp(&index[i], &checkIndex[i], sizeof(TLogoBlobSst::TRec)), 0);
             }
+
+            // iterator: forward, backward and seek over every key
+            TLogoBlobSst::TMemIterator it(ptr.Get());
+            it.SeekToFirst();
+            for (const TLogoBlobID& id : ids) {
+                UNIT_ASSERT(it.Valid());
+                UNIT_ASSERT_VALUES_EQUAL(it.GetCurKey().LogoBlobID(), id);
+                it.Next();
+            }
+            UNIT_ASSERT(!it.Valid());
+
+            it.SeekToLast();
+            for (auto id = ids.rbegin(); id != ids.rend(); ++id) {
+                UNIT_ASSERT(it.Valid());
+                UNIT_ASSERT_VALUES_EQUAL(it.GetCurKey().LogoBlobID(), *id);
+                it.Prev();
+            }
+
+            for (const TLogoBlobID& id : ids) {
+                it.Seek(TKeyLogoBlob(id));
+                UNIT_ASSERT(it.Valid());
+                UNIT_ASSERT_VALUES_EQUAL(it.GetCurKey().LogoBlobID(), id);
+            }
+
+            // seek between keys lands on the next key
+            it.Seek(TKeyLogoBlob(TLogoBlobID(20, 0, 300, 0, 5, 0)));
+            UNIT_ASSERT_VALUES_EQUAL(it.GetCurKey().LogoBlobID(), ids[4]);
+            it.Seek(TKeyLogoBlob(TLogoBlobID(20, 0, 301, 0, 0, 0)));
+            UNIT_ASSERT_VALUES_EQUAL(it.GetCurKey().LogoBlobID(), ids[6]);
+            it.Seek(TKeyLogoBlob(TLogoBlobID(15, 0, 0, 0, 0, 0)));
+            UNIT_ASSERT_VALUES_EQUAL(it.GetCurKey().LogoBlobID(), ids[2]);
+            it.Seek(TKeyLogoBlob(TLogoBlobID(5, 0, 0, 0, 0, 0)));
+            UNIT_ASSERT_VALUES_EQUAL(it.GetCurKey().LogoBlobID(), ids[0]);
         }
     } // TBlobStorageHullSstIt
 

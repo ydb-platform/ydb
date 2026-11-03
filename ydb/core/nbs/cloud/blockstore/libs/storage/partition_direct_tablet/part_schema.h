@@ -1,8 +1,10 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet_schema.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/deleted_ddisk.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -116,8 +118,29 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
         using TColumns = TableColumns<VChunkStartIndex, Mask>;
     };
 
-    using TTables =
-        SchemaTables<TabletInfo, VChunkConfigs, DirtyMapStates, TouchedVChunks>;
+    // Append-only history of DDisks removed from touched vchunks. The payload
+    // is the complete protobuf record, including its key.
+    struct DeletedDDisks: public TTableSchema<5>
+    {
+        struct RecordId: public Column<1, NKikimr::NScheme::NTypeIds::Uint64>
+        {
+        };
+
+        struct Record: public Column<2, NKikimr::NScheme::NTypeIds::String>
+        {
+            using Type = TDeletedDDiskRecordProto;
+        };
+
+        using TKey = TableKey<RecordId>;
+        using TColumns = TableColumns<RecordId, Record>;
+    };
+
+    using TTables = SchemaTables<
+        TabletInfo,
+        VChunkConfigs,
+        DirtyMapStates,
+        TouchedVChunks,
+        DeletedDDisks>;
 
     using TSettings =
         SchemaSettings<ExecutorLogBatching<true>, ExecutorLogFlushPeriod<0>>;

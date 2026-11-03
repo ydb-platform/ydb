@@ -120,7 +120,8 @@ public:
 
     TPersistResultFuture UpdateVChunkState(
         const TVChunkConfig& cfg,
-        TDirtyMapStateProto state) override;
+        TDirtyMapStateProto state,
+        TVector<NKikimr::NBsController::TDDiskId> deletedDDiskIds) override;
 
     TPersistResultFuture UpdateDirtyMapState(
         ui32 vChunkIndex,

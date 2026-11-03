@@ -3,6 +3,7 @@ PROTO_LIBRARY()
 EXCLUDE_TAGS(GO_PROTO)
 
 SRCS(
+    deleted_ddisk.proto
     dirty_map.proto
     partition_direct.proto
 )

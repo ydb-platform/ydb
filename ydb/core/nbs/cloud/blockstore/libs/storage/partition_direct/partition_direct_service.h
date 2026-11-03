@@ -14,6 +14,7 @@
 #include <ydb/core/mind/bscontroller/types.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/vector.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -35,7 +36,8 @@ struct IPartitionDirectService: public IDiskStateProvider
     // partition Local DB transaction. Caller must ensure cfg.IsValid().
     virtual TPersistResultFuture UpdateVChunkState(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg,
-        TDirtyMapStateProto state) = 0;
+        TDirtyMapStateProto state,
+        TVector<NKikimr::NBsController::TDDiskId> deletedDDiskIds) = 0;
 
     // Asynchronously persists the given TDirtyMapStateProto to the partition's
     // local DB.

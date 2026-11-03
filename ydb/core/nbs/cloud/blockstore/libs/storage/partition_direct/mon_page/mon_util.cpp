@@ -71,6 +71,8 @@ const char* PageParam(EMonPage page)
             return "latency";
         case EMonPage::Memory:
             return "memory";
+        case EMonPage::DeletedDDisks:
+            return "deletedddisks";
     }
     return "overview";
 }
@@ -94,6 +96,8 @@ const char* PageTitle(EMonPage page)
             return "Latency";
         case EMonPage::Memory:
             return "Memory";
+        case EMonPage::DeletedDDisks:
+            return "Deleted DDisks";
     }
     return "";
 }

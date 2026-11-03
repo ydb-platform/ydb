@@ -1579,6 +1579,11 @@ TExprBase DqBuildHashJoin(
 
     useBlockHashJoin = useBlockHashJoin
         && (joinType == "Inner"sv || joinType == "Left"sv || joinType == "LeftSemi"sv || joinType == "LeftOnly"sv);
+    if (const auto flags = join.Flags()) {
+        for (const auto flag : flags.Cast()) {
+            useBlockHashJoin = useBlockHashJoin && flag.Value() != "LeftAny"sv && flag.Value() != "RightAny"sv;
+        }
+    }
 
     auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
     auto rightIn = join.RightInput().Cast<TDqCnUnionAll>().Output();

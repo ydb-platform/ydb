@@ -151,7 +151,10 @@ void TOpIndexLookupJoin::RenameUsedIUs(const TSubstitutions& substitutions) {
 
 // Substitution changes bindings, never the external field names.
 void TOpTableEffect::RenameUsedIUs(const TSubstitutions& substitutions) {
-    Substitute(Columns_, substitutions);
+    Substitute(Options.Columns, substitutions);
+    Substitute(Options.DefaultColumns, substitutions);
+    // PG NOT NULL checks follow the input bindings, not storage column names.
+    Substitute(PgContraintColumns_, substitutions);
 }
 
 void TOpRoot::RenameUsedIUs(const TSubstitutions& substitutions) {

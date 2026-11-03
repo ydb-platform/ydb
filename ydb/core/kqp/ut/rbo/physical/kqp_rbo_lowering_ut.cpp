@@ -55,6 +55,16 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         auto plan = PlanConverter(f.TypeCtx, ctx).ConvertRoot(rewritten, nullptr);
         auto& effect = CastOperator<TOpTableEffect>(*plan->GetInput());
         UNIT_ASSERT_VALUES_EQUAL(effect.GetExplainName(), "UpsertRows");
+        const auto inputId = effect.GetColumns().Items().front().first;
+        UNIT_ASSERT(effect.Options.DefaultColumns == TUnorderedIUs{inputId});
+        // Defaults are input references: rebinding them must leave the sink's
+        // destination column name unchanged.
+        const auto replacement = plan->PlanProps.InfoUnitRegistry.AddCopy(inputId);
+        TSubstitutions renames;
+        renames.Add(inputId, replacement);
+        effect.RenameUsedIUs(renames);
+        UNIT_ASSERT(effect.Options.DefaultColumns == TUnorderedIUs{replacement});
+        UNIT_ASSERT_VALUES_EQUAL(effect.GetColumns().Items().front().first, replacement);
         const NNodes::TKqpTableSinkSettings settings(effect.BuildSettings(ctx, 0));
         UNIT_ASSERT_VALUES_EQUAL(settings.DefaultColumns().Size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(settings.DefaultColumns().Item(0).StringValue(), "value");

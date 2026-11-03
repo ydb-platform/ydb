@@ -9,6 +9,79 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpEffectsNewRbo) {
+    Y_UNIT_TEST_TWIN(PgNotNullWriteConstraints, PhysicalStagePeephole) {
+        auto config = NewRboAppConfig();
+        config.MutableTableServiceConfig()->SetEnableNewRBOPhysicalStagePeephole(PhysicalStagePeephole);
+        TEffectsKikimrRunner kikimr(TKikimrSettings(config)
+            .SetWithSampleTables(false)
+            .SetEnableNotNullDataColumns(true));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto scheme = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE Checked (
+                Key Uint64 NOT NULL,
+                A PgInt2 NOT NULL,
+                B PgInt2 NOT NULL,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE Audit (Key Uint64 NOT NULL, PRIMARY KEY (Key));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
+
+        for (const TString& write : {
+            TString("INSERT INTO Checked (Key, A, B) VALUES ($key, $a, $b);"),
+            TString("INSERT OR REVERT INTO Checked (Key, A, B) VALUES ($key, $a, $b);"),
+            TString("UPSERT INTO Checked (Key, A, B) VALUES ($key, $a, $b);"),
+            TString("REPLACE INTO Checked (Key, A, B) VALUES ($key, $a, $b);"),
+            TString("UPDATE Checked ON (Key, A, B) VALUES ($key, $a, $b);"),
+            TString("UPDATE Checked SET A = $a, B = $b WHERE Key = $key;")}) {
+            auto setup = session.ExecuteDataQuery(R"(
+                DELETE FROM Checked;
+                DELETE FROM Audit;
+                UPSERT INTO Checked (Key, A, B) VALUES (1u, PgInt2(10), PgInt2(20));
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(setup.IsSuccess(), setup.GetIssues().ToString());
+
+            // Parameters keep NULL detection at runtime. Check each constrained
+            // column independently so a broken Ensure chain cannot pass the test.
+            const TString query = TStringBuilder() << R"(
+                DECLARE $key AS Uint64;
+                DECLARE $a AS PgInt2;
+                DECLARE $b AS PgInt2;
+                UPSERT INTO Audit (Key) VALUES (1u);
+            )" << write;
+            const ui64 key = write.StartsWith("INSERT") ? 2 : 1;
+            for (const TString& nullColumn : {TString("A"), TString("B"), TString()}) {
+                auto params = TParamsBuilder()
+                    .AddParam("$key").Uint64(key).Build()
+                    .AddParam("$a").Pg(TPgValue(nullColumn == "A" ? TPgValue::VK_NULL : TPgValue::VK_TEXT,
+                        nullColumn == "A" ? "" : "30", TPgType("pgint2"))).Build()
+                    .AddParam("$b").Pg(TPgValue(nullColumn == "B" ? TPgValue::VK_NULL : TPgValue::VK_TEXT,
+                        nullColumn == "B" ? "" : "40", TPgType("pgint2"))).Build()
+                    .Build();
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+                if (nullColumn.empty()) {
+                    UNIT_ASSERT_C(result.IsSuccess(), TStringBuilder() << write << ": " << result.GetIssues().ToString());
+                    continue;
+                }
+                UNIT_ASSERT_C(!result.IsSuccess(), write);
+                UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE),
+                    TStringBuilder() << write << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                    TStringBuilder() << "Tried to insert NULL value into NOT NULL column: " << nullColumn);
+
+                // A failed constraint must roll back the other effect as well
+                // as leave existing destination rows untouched.
+                auto state = session.ExecuteDataQuery(R"(
+                    SELECT Key, A, B FROM Checked ORDER BY Key;
+                    SELECT COUNT(*) FROM Audit;
+                )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(state.IsSuccess(), state.GetIssues().ToString());
+                CompareYson(R"([[1u;"10";"20"]])", FormatResultSetYson(state.GetResultSet(0)));
+                CompareYson("[[0u]]", FormatResultSetYson(state.GetResultSet(1)));
+            }
+        }
+    }
+
     Y_UNIT_TEST(MixedResultsAndMultipleEffects) {
         auto kikimr = NewRboKikimrRunner();
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();

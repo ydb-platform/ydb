@@ -392,12 +392,13 @@ Y_UNIT_TEST_SUITE(KqpRboCopy) {
         const auto source = f.Id("input"), result = f.Id("returned");
         auto read = f.Read({source});
         TEffectOptions options;
-        options.Columns = TVector<TString>{"Key"};
-        options.ReturningColumns = TVector<TString>{"Key"};
+        options.Columns = TOrderedIUs<TString>{{source, "Key"}};
+        options.ReturningColumns = TOrderedIUs<TString>{{result, "Key"}, {result, "KeyAgain"}};
+        options.DefaultColumns = TUnorderedIUs{source};
         options.OnConflict = "revert";
         options.IsBatch = true;
         auto effect = MakeIntrusive<TOpTableEffect>(read, f.Pos, read->TableCallable, EEffectType::UpsertRows,
-            options, TOrderedIUs<TString>{{source, "Key"}}, TOrderedIUs<TString>{{result, "Key"}, {result, "KeyAgain"}});
+            options, TUnorderedIUs{source});
 
         TSubstitutions renames;
         auto copy = effect->Copy(f.Props.InfoUnitRegistry, renames);
@@ -406,12 +407,16 @@ Y_UNIT_TEST_SUITE(KqpRboCopy) {
         auto& copiedEffect = CastOperator<TOpTableEffect>(*copy);
         UNIT_ASSERT(copiedEffect.Table == effect->Table);
         UNIT_ASSERT(copiedEffect.EffectType == effect->EffectType);
-        UNIT_ASSERT(copiedEffect.Options.Columns == options.Columns);
-        UNIT_ASSERT(copiedEffect.Options.ReturningColumns == options.ReturningColumns);
+        UNIT_ASSERT(copiedEffect.Options.DefaultColumns == TUnorderedIUs{renames.At(source)});
+        UNIT_ASSERT(effect->Options.DefaultColumns == TUnorderedIUs{source});
         UNIT_ASSERT(copiedEffect.Options.OnConflict == options.OnConflict);
         UNIT_ASSERT(copiedEffect.Options.IsBatch == options.IsBatch);
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetColumns().Items()[0].first, renames.At(source));
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetColumns().Items()[0].second, "Key");
+        // PG NOT NULL checks must follow copied input IUs while diagnostics keep
+        // the destination name from the effect's storage-column mapping.
+        UNIT_ASSERT(copiedEffect.GetPgContraintColumns() == TUnorderedIUs{renames.At(source)});
+        UNIT_ASSERT(effect->GetPgContraintColumns() == TUnorderedIUs{source});
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items()[0].first, renames.At(result));
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items()[1].first, renames.At(result));
@@ -426,8 +431,11 @@ Y_UNIT_TEST_SUITE(KqpRboCopy) {
         f.Config->_KqpEnableSpilling = false;
         const auto key = f.Id("Key"), result = f.Id("result");
         auto read = f.Read({key});
+        TEffectOptions options;
+        options.Columns = TOrderedIUs<TString>{{key, "Key"}};
+        options.ReturningColumns = TOrderedIUs<TString>{{result, "Key"}};
         auto effect = MakeIntrusive<TOpTableEffect>(read, f.Pos, read->TableCallable, EEffectType::InsertRows,
-            TEffectOptions{}, TOrderedIUs<TString>{{key, "Key"}}, TOrderedIUs<TString>{{result, "Key"}});
+            std::move(options));
         auto hub = TReplicate::Create(effect, f.Pos, f.Props.InfoUnitRegistry);
         auto left = hub->AddOutput(), right = hub->AddOutput();
         auto join = MakeIntrusive<TOpJoin>(left, right, f.Pos, "Cross", TJoinIUs{});

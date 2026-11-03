@@ -1402,9 +1402,12 @@ enum class EEffectType : ui32 {
 };
 
 struct TEffectOptions {
-    std::optional<TVector<TString>> Columns;
-    std::optional<TVector<TString>> ReturningColumns;
-    std::optional<TVector<TString>> DefaultColumns;
+    // Input uses and returned definitions are identified by IU. Labels are
+    // destination column names and must survive copying and input renaming.
+    TOrderedIUs<TString> Columns;
+    TOrderedIUs<TString> ReturningColumns;
+    // Input attributes whose supplied defaults apply only when inserting a row.
+    TUnorderedIUs DefaultColumns;
     std::optional<TString> OnConflict;
     std::optional<bool> IsBatch;
     std::optional<TVector<TExprNode::TPtr>> Settings;
@@ -1413,12 +1416,13 @@ struct TEffectOptions {
 class TOpTableEffect: public IUnaryOperator {
 public:
     TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
-        EEffectType type, TEffectOptions options, TOrderedIUs<TString> columns, TOrderedIUs<TString> returning);
+        EEffectType type, TEffectOptions options, TUnorderedIUs pgContraintColumns = {});
     TString GetExplainName() const override;
     TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
-    const TUnorderedIUs& GetOutputIUs() override { return ReturningColumns_.Unordered(); }
-    const TOrderedIUs<TString>& GetColumns() const Y_LIFETIME_BOUND { return Columns_; }
-    const TOrderedIUs<TString>& GetReturningColumns() const Y_LIFETIME_BOUND { return ReturningColumns_; }
+    const TUnorderedIUs& GetOutputIUs() override { return Options.ReturningColumns.Unordered(); }
+    const TOrderedIUs<TString>& GetColumns() const Y_LIFETIME_BOUND { return Options.Columns; }
+    const TOrderedIUs<TString>& GetReturningColumns() const Y_LIFETIME_BOUND { return Options.ReturningColumns; }
+    const TUnorderedIUs& GetPgContraintColumns() const Y_LIFETIME_BOUND { return PgContraintColumns_; }
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     void PropagateLiveness(ILivenessContext& ctx) override;
     TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
@@ -1427,15 +1431,15 @@ public:
 
     TExprNode::TPtr Table;
     EEffectType EffectType;
-    const TEffectOptions Options; // Storage settings; these names are not IU identity.
+    TEffectOptions Options;
 
 protected:
     TIntrusivePtr<IOperator> CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const override;
 
 private:
-    // Target names and positions are fixed; only the input bindings can change.
-    TOrderedIUs<TString> Columns_;
-    const TOrderedIUs<TString> ReturningColumns_;
+    // Input attributes requiring runtime NOT NULL checks for PG types only.
+    // Native YQL types encode nullability in their type annotations instead.
+    TUnorderedIUs PgContraintColumns_;
 };
 
 // End-of-traversal sentinel for TOpIterator

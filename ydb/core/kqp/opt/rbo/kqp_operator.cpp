@@ -947,22 +947,27 @@ const TIntrusivePtr<IOperator>& TOpCBOTree::GetChild(size_t index) const {
 * Table Effect operator methods: these are inserts/updates/deletes
 */
 TOpTableEffect::TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
-    EEffectType type, TEffectOptions options, TOrderedIUs<TString> columns, TOrderedIUs<TString> returning)
+    EEffectType type, TEffectOptions options, TUnorderedIUs pgContraintColumns)
     : IUnaryOperator(EOperator::TableEffect, pos, input)
     , Table(std::move(table))
     , EffectType(type)
     , Options(std::move(options))
-    , Columns_(std::move(columns))
-    , ReturningColumns_(std::move(returning))
-{}
+    , PgContraintColumns_(std::move(pgContraintColumns))
+{
+    Y_ENSURE(PgContraintColumns_.IsSubsetOf(Options.Columns.Unordered()));
+    Y_ENSURE(Options.DefaultColumns.IsSubsetOf(Options.Columns.Unordered()));
+}
 
 TUnorderedIUs TOpTableEffect::GetUsedIUs(TPlanProps& props) {
     Y_UNUSED(props);
-    return Columns_.Unordered();
+    auto used = Options.Columns.Unordered();
+    used.UnionWith(Options.DefaultColumns);
+    used.UnionWith(PgContraintColumns_);
+    return used;
 }
 
 TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx, ui64 priority) {
-    if (Options.ReturningColumns.has_value() && Options.ReturningColumns->size()) {
+    if (!Options.ReturningColumns.Items().empty()) {
         Y_ENSURE(false, "Returning columns not supported in new optimizer");
     }
 
@@ -1008,9 +1013,11 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx, ui64 priority) 
     }
 
     TVector<TExprNode::TPtr> defaultColumns;
-    if (Options.DefaultColumns.has_value()) {
-        for (auto c : Options.DefaultColumns.value()) {
-            defaultColumns.push_back(ctx.NewAtom(Pos, c));
+    // Only the storage boundary needs names; the default-column subset follows
+    // input IUs through rewrites, while these destination labels stay fixed.
+    for (const auto& [id, name] : Options.Columns.Items()) {
+        if (Options.DefaultColumns.Contains(id)) {
+            defaultColumns.push_back(ctx.NewAtom(Pos, name));
         }
     }
 

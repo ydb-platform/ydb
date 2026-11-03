@@ -967,14 +967,6 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
 
     auto effectType = opTableEffect.EffectType().StringValue();
 
-    auto processColumns = [](const TCoAtomList& atomList) {
-        TVector<TString> result;
-        for (auto a : atomList) {
-            result.push_back(a.StringValue());
-        }
-        return result;
-    };
-
     auto processSettings = [](const TCoNameValueTupleList& settingsList) {
         TVector<TExprNode::TPtr> result;
         for (auto s : settingsList) {
@@ -983,7 +975,6 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
         return result;
     };
 
-    auto columns = opTableEffect.Columns().Maybe<TCoAtomList>();
     auto onConflict = opTableEffect.OnConflict().Maybe<TCoAtom>();
     auto returningColumns = opTableEffect.ReturningColumns().Maybe<TCoAtomList>();
     auto settings = opTableEffect.Settings().Maybe<TCoNameValueTupleList>();
@@ -994,52 +985,36 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
     if (effectType == "TKqlInsertRows") {
         type = EEffectType::InsertRows;
 
-        options.Columns = processColumns(columns.Cast());
         options.OnConflict = onConflict.Cast().StringValue();
-        options.ReturningColumns = processColumns(returningColumns.Cast());
         options.Settings = processSettings(settings.Cast());
     } else if (effectType == "TKqlInsertRowsIndex") {
         type = EEffectType::InsertRowsIndex;
 
-        options.Columns = processColumns(columns.Cast());
         options.OnConflict = onConflict.Cast().StringValue();
-        options.ReturningColumns = processColumns(returningColumns.Cast());
         options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
     } else if (effectType == "TKqlUpdateRows") {
         type = EEffectType::UpdateRows;
-
-        options.Columns = processColumns(columns.Cast());
-        options.ReturningColumns = processColumns(returningColumns.Cast());
     } else if (effectType == "TKqlUpdateRowsIndex") {
         type = EEffectType::UpdateRowsIndex;
 
-        options.Columns = processColumns(columns.Cast());
-        options.ReturningColumns = processColumns(returningColumns.Cast());
         options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
     } else if (effectType == "KqlUpsertRows" || effectType == "KqlUpsertRowsIndex") {
         type = effectType == "KqlUpsertRowsIndex" ? EEffectType::UpsertRowsIndex : EEffectType::UpsertRows;
 
-        options.Columns = processColumns(columns.Cast());
-        options.ReturningColumns = processColumns(returningColumns.Cast());
         options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
-        if (auto defaultColumns = opTableEffect.DefaultColumns().Maybe<TCoAtomList>()) {
-            options.DefaultColumns = processColumns(defaultColumns.Cast());
-        }
         if (settings) {
             options.Settings = processSettings(settings.Cast());
         }
     } else if (effectType == "KqlDeleteRows") {
         type = EEffectType::DeleteRows;
 
-        options.ReturningColumns = processColumns(returningColumns.Cast());
         options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
     } else if (effectType == "KqlDeleteRowsIndex") {
         type = EEffectType::DeleteRowsIndex;
 
-        options.ReturningColumns = processColumns(returningColumns.Cast());
         options.IsBatch = isBatch && isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
     } else {
@@ -1047,23 +1022,35 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
     }
 
     const auto bindings = GetBindings(opTableEffect.Input().Ptr());
-    TOrderedIUs<TString> inputColumns;
+    // Only PG types need these runtime NOT NULL checks. Resolve the frontend's
+    // names once; subsequent rewrites and copies track the input attributes by IU.
+    TUnorderedIUs pgContraintColumns;
+    if (auto columns = opTableEffect.PgContraintColumns().Maybe<TCoAtomList>()) {
+        for (const auto column : columns.Cast()) {
+            pgContraintColumns.Add(ResolveBinding(*bindings, column.StringValue()));
+        }
+    }
     const auto* schema = opTableEffect.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     for (const auto* field : schema->GetItems()) {
-        inputColumns.Append(ResolveBinding(*bindings, field->GetName()), TString(field->GetName()));
+        options.Columns.Append(ResolveBinding(*bindings, field->GetName()), TString(field->GetName()));
+    }
+    if (auto defaultColumns = opTableEffect.DefaultColumns().Maybe<TCoAtomList>()) {
+        for (const auto column : defaultColumns.Cast()) {
+            options.DefaultColumns.Add(ResolveBinding(*bindings, column.StringValue()));
+        }
     }
     auto output = std::make_shared<TExpression::TBindings>();
-    TOrderedIUs<TString> returning;
-    if (options.ReturningColumns) {
-        for (const auto& column : *options.ReturningColumns) {
-            const auto id = PlanProps.InfoUnitRegistry.Add(TInfoUnit("", column));
-            returning.Append(id, column);
-            Y_ENSURE(output->emplace(column, id).second, "Duplicate returning column " << column);
+    if (returningColumns) {
+        for (const auto column : returningColumns.Cast()) {
+            const auto name = column.StringValue();
+            const auto id = PlanProps.InfoUnitRegistry.Add(TInfoUnit("", name));
+            options.ReturningColumns.Append(id, name);
+            Y_ENSURE(output->emplace(name, id).second, "Duplicate returning column " << name);
         }
     }
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(output);
     return MakeIntrusive<TOpTableEffect>(std::move(input), node->Pos(), opTableEffect.Table().Ptr(), type, std::move(options),
-        std::move(inputColumns), std::move(returning));
+        std::move(pgContraintColumns));
 }
 
 } // namespace NKikimr::Nkqp

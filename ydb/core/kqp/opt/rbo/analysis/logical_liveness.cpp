@@ -381,6 +381,9 @@ void TOpCBOTree::PropagateLiveness(ILivenessContext& ctx) {
 
 void TOpTableEffect::PropagateLiveness(ILivenessContext& ctx) {
     ctx.AddLiveInput(this, 0, GetColumns().Unordered());
+    ctx.AddLiveInput(this, 0, Options.DefaultColumns);
+    // PG-only runtime NOT NULL checks consume these attributes too.
+    ctx.AddLiveInput(this, 0, GetPgContraintColumns());
 }
 
 void ComputePlanLiveness(TOpRoot& root, ELivenessMode mode, bool pruneKeyColumns, EPruningScope scope) {

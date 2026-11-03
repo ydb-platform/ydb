@@ -151,8 +151,9 @@ bool TExpandInsertRevertRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
     // rule from expanding the same effect again.
     auto options = effect.Options;
     options.OnConflict = "abort";
+    // The gate preserves the input IUs, including the PG-only NOT NULL checks.
     input = MakeIntrusive<TOpTableEffect>(std::move(checked), pos, effect.Table, effect.EffectType,
-        std::move(options), effect.GetColumns(), effect.GetReturningColumns());
+        std::move(options), effect.GetPgContraintColumns());
     return true;
 }
 

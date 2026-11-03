@@ -1221,7 +1221,8 @@
                 {"Index": 6, "Name": "DefaultColumns", "Type": "TCoAtomList", "Optional": true},
                 {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true},
                 {"Index": 8, "Name": "OnConflict", "Type": "TCoAtom", "Description": "'abort or 'revert", "Optional": true},
-                {"Index": 9, "Name": "GenerateColumnsIfInsert", "Type": "TCoAtomList", "Optional": true}
+                {"Index": 9, "Name": "GenerateColumnsIfInsert", "Type": "TCoAtomList", "Optional": true},
+                {"Index": 10, "Name": "PgContraintColumns", "Type": "TCoAtomList", "Optional": true, "Description": "PG columns requiring runtime NOT NULL checks"}
             ]
         }
     ]

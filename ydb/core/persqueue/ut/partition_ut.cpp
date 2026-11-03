@@ -3379,6 +3379,54 @@ Y_UNIT_TEST_F(ReplicationDataIgnoresUnknownConsumersAndInvalidOffsets, TPartitio
     UNIT_ASSERT(!TPartitionTestWrapper::GetUserInfo(*partition, "unknown"));
 }
 
+Y_UNIT_TEST_F(ReplicationDataIgnoresReplicationConsumerWithoutRetryingPersist, TPartitionFixture)
+{
+    const TConfigParams initialConfig{.Version = 1, .Consumers = {
+        {.Consumer = "reader"}, {.Consumer = "replication", .Offset = 2}}};
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+        .Config = initialConfig, .FillHead = true}, initialConfig);
+    Config.SetVersion(2);
+    GetConsumer(Config, "replication")->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged();
+
+    ui64 writes = 0;
+    auto prevObserver = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == TEvKeyValue::TEvRequest::EventType
+            && event->Get<TEvKeyValue::TEvRequest>()->Record.CmdWriteSize() > 0) {
+            ++writes;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    // The upstream replication consumer is ahead of the local downstream reader.
+    // Both a replication-only payload and a mixed payload must finish after one write.
+    for (bool includeReader : {false, true}) {
+        const auto writesBefore = writes;
+        auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+        event->OffsetsByConsumers = {{"replication", 9}};
+        if (includeReader) {
+            event->OffsetsByConsumers["reader"] = 4;
+        }
+        SendEvent(event.Release());
+        if (includeReader) {
+            WaitCmdWrite({.UserInfos = {{0, {.Consumer = "reader", .Offset = 4}}}});
+        } else {
+            WaitCmdWrite({.Count = 1}); // Only partition metadata.
+        }
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+
+        UNIT_ASSERT_VALUES_EQUAL(writes, writesBefore + 1);
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "replication")->Offset, 2);
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "reader")->Offset,
+            includeReader ? 4 : 0);
+    }
+    Ctx->Runtime->SetObserverFunc(prevObserver);
+}
+
 Y_UNIT_TEST_F(ReplicationDataDoesNotRewindConsumerOffsets, TPartitionFixture)
 {
     const TConfigParams initialConfig{.Version = 1,

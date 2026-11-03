@@ -1423,6 +1423,7 @@ public:
     void PropagateLiveness(ILivenessContext& ctx) override;
     TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
     TExprNode::TPtr BuildSettings(TExprContext& ctx, ui64 priority);
+    void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
 
     TExprNode::TPtr Table;
     EEffectType EffectType;

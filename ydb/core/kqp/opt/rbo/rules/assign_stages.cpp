@@ -324,8 +324,9 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         YQL_CLOG(TRACE, CoreDq) << "Assign stages index lookup join";
     } else if (input->Kind == EOperator::TableEffect) {
         auto tableEffect = CastOperator<TOpTableEffect>(input);
-
-        const auto newStageId = props.StageGraph.AddSinkStage(tableEffect->BuildSettings(ctx.ExprCtx, props.EffectPriority));
+        // OLAP sinks use the direct-write actor, which requires priority zero.
+        const auto priority = tableEffect->Props.Metadata->StorageType == EStorageType::ColumnStorage ? 0 : props.EffectPriority;
+        const auto newStageId = props.StageGraph.AddSinkStage(tableEffect->BuildSettings(ctx.ExprCtx, priority));
         const auto inputStageId = *(tableEffect->GetInput()->Props.StageId);
         const auto outputIndex = OutputIndex(*tableEffect->GetInput(), props.StageGraph);
 

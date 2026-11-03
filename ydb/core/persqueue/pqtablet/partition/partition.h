@@ -1036,6 +1036,7 @@ private:
     bool NewPartition;
     ui64 PQRBCookie = 0;
     std::optional<TEvPQ::TEvReplicationData::TPtr> PendingReplicationData;
+    bool ReplicationDataNeedsApply = false;
 
     THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners;
     THashSet<TActorId> OwnerPipes;

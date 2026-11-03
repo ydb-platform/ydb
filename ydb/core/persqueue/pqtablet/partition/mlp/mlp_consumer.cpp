@@ -816,7 +816,12 @@ void TConsumerActor::ProcessEventQueue() {
     ChangeMessageDeadlineRequestsQueue.clear();
 
     for (auto& ev : PurgeRequestsQueue) {
-        Storage->Purge(PartitionEndOffset);
+        auto toOffset = PartitionEndOffset;
+        if (auto evToOffset = ev->Get()->GetToOffset()) {
+            toOffset = *evToOffset;
+        }
+
+        Storage->Purge(toOffset);
         PendingPurgeQueue.emplace_back(ev->Sender, ev->Cookie);
     }
     PurgeRequestsQueue.clear();

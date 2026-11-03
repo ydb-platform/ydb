@@ -1093,14 +1093,18 @@ public:
             const google::protobuf::Reflection* reflection = NKikimrConfig::THiveConfig::GetReflection();
             for (int i = 0; i < descriptor->field_count(); ++i) {
                 const google::protobuf::FieldDescriptor* field = descriptor->field(i);
-                // an override that was present before and is gone now was reset: log it even when the effective value is the same
-                bool reset = !field->is_repeated()
-                    && reflection->HasField(previousDatabaseConfig, field)
-                    && !reflection->HasField(Self->DatabaseConfig, field);
+                // a database override that appeared or disappeared is logged even when the effective value is the same:
+                // an added override pins the value against later CMS changes, a reset one lets them through again
+                const bool hadOverride = !field->is_repeated() && reflection->HasField(previousDatabaseConfig, field);
+                const bool hasOverride = !field->is_repeated() && reflection->HasField(Self->DatabaseConfig, field);
+                const bool added = !hadOverride && hasOverride;
+                const bool reset = hadOverride && !hasOverride;
                 TString from = GetHiveConfigFieldText(previousConfig, field);
                 TString to = GetHiveConfigFieldText(Self->CurrentConfig, field);
-                if (from != to || reset) {
-                    AddChange(TStringBuilder() << field->name() << ": " << from << " -> " << to << (reset ? " (reset to default)" : ""));
+                if (from != to || added || reset) {
+                    AddChange(TStringBuilder() << field->name() << ": " << from << " -> " << to
+                        << (added ? " (override added)" : "")
+                        << (reset ? " (reset to default)" : ""));
                 }
             }
         }

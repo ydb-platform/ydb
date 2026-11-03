@@ -623,6 +623,7 @@ Y_UNIT_TEST(WritesAndAcksAlreadyWritten) {
     env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 0));
     env.Dispatch();
     UNIT_ASSERT_VALUES_EQUAL(env.CountRequests(1), 1u);
+    UNIT_ASSERT(env.FindRequest(1)->FromMirrorer);
 
     env.AckWrite(0, /*alreadyWritten=*/ true);
     UNIT_ASSERT(env.ErrorCount > 0);
@@ -647,6 +648,11 @@ Y_UNIT_TEST(RetriesFailedWriteAndUnexpectedResponses) {
     ), 0, true);
     env.Advance(TDuration::MilliSeconds(5));
     UNIT_ASSERT(env.CountRequests(1) >= 2);
+    for (const auto& request : env.CapturedRequests) {
+        if (request->Record.GetPartitionRequest().CmdWriteSize()) {
+            UNIT_ASSERT(request->FromMirrorer);
+        }
+    }
 
     auto unexpected = MakeHolder<TEvPersQueue::TEvResponse>();
     unexpected->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);

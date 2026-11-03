@@ -231,6 +231,7 @@ private:
                                const TWriteMsg& p,
                                NPersQueue::NErrorCode::EErrorCode errorCode);
     void CreateMirrorerActor();
+    void DestroyMirrorer();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);

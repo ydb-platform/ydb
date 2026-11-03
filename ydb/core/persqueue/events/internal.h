@@ -349,6 +349,7 @@ struct TEvPQ {
         bool IsDirectWrite;
         std::optional<ui64> InitialSeqNo;
         EWriteExternalDeduplicationStatus ExternalDeduplicationStatus;
+        bool FromMirrorer = false;
     };
 
     struct TEvReadTimeout : public TEventLocal<TEvReadTimeout, EvReadTimeout> {

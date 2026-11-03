@@ -99,6 +99,10 @@ public:
         return partition.BlobEncoder;
     }
 
+    static void SetMirrorConsumerOffsets(TPartition& partition, bool enabled) {
+        partition.Config.MutablePartitionConfig()->MutableMirrorFrom()->SetMirrorConsumerOffsets(enabled);
+    }
+
     static void FinalizeEmptyBlobEncoder(TPartition& partition,
                                          TPartitionBlobEncoder& encoder,
                                          ui64 startOffset,
@@ -373,7 +377,7 @@ protected:
     void SendReserveBytes(const ui64 cookie, const ui32 size, const TString& ownerCookie, const ui64 messageNo, bool lastRequest = false);
     void SendChangeOwner(const ui64 cookie, const TString& owner, const TActorId& pipeClient, const bool force = true);
     void SendWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data,
-                   bool ignoreQuotaDeadline = false, ui64 seqNo = 0, bool isDirectWrite = false);
+                   bool ignoreQuotaDeadline = false, ui64 seqNo = 0, bool isDirectWrite = false, bool fromMirrorer = false);
     void SendGetWriteInfo(bool skipSrcIdInfo);
     void ShadowPartitionCountersTest(bool isFirstClass);
     void TestRestoreReadSessionActor(bool hasDataRequest);
@@ -824,7 +828,7 @@ void TPartitionFixture::SendReserveBytes(const ui64 cookie, const ui32 size, con
 
 void TPartitionFixture::SendWrite
         (const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, const TString& data,
-        bool ignoreQuotaDeadline, ui64 seqNo, bool isDirectWrite
+        bool ignoreQuotaDeadline, ui64 seqNo, bool isDirectWrite, bool fromMirrorer
 ) {
     TEvPQ::TEvWrite::TMsg msg;
     msg.SourceId = "SourceId";
@@ -835,7 +839,7 @@ void TPartitionFixture::SendWrite
     msg.CreateTimestamp = TMonotonic::Now().Seconds();
     msg.WriteTimestamp = TMonotonic::Now().Seconds();
     msg.ReceiveTimestamp = TMonotonic::Now().Seconds();
-    msg.DisableDeduplication = false;
+    msg.DisableDeduplication = fromMirrorer;
     msg.Data = data;
     msg.UncompressedSize = data.size();
     msg.PartitionKey = "PartitionKey";
@@ -847,6 +851,7 @@ void TPartitionFixture::SendWrite
     msgs.push_back(msg);
 
     auto event = MakeHolder<TEvPQ::TEvWrite>(cookie, messageNo, ownerCookie, offset, std::move(msgs), isDirectWrite, std::nullopt, TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked);
+    event->FromMirrorer = fromMirrorer;
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -3123,6 +3128,37 @@ THolder<TEvPQ::TEvRead> MakeTestRead(
 }
 
 } // namespace
+
+Y_UNIT_TEST_F(DisabledReplicationRejectsMirrorerButAllowsClientWrites, TPartitionFixture)
+{
+    auto* partition = CreatePartition({.Partition=TPartitionId{0}, .Begin=0, .End=10});
+    TPartitionTestWrapper::SetMirrorConsumerOffsets(*partition, true);
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableDstTopicReplicationDisabled(true);
+
+    SendWrite(101, 0, "", 10, "mirrored", false, 1, false, true);
+    WaitErrorResponse({.Cookie=101, .ErrorCode=NPersQueue::NErrorCode::ERROR,
+                       .Error="Topic replication is temporarily disabled"});
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 10);
+
+    SendWrite(102, 0, "", Nothing(), "local", false, 2, true);
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie=102, .Status=NMsgBusProxy::MSTATUS_OK, .SeqNo=2});
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 11);
+}
+
+Y_UNIT_TEST_F(DisabledReplicationAllowsMirroringWithoutConsumerOffsets, TPartitionFixture)
+{
+    auto* partition = CreatePartition({.Partition=TPartitionId{0}, .Begin=0, .End=10});
+    TPartitionTestWrapper::SetMirrorConsumerOffsets(*partition, false);
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableDstTopicReplicationDisabled(true);
+
+    SendWrite(101, 0, "", 10, "mirrored", false, 1, false, true);
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie=101, .Status=NMsgBusProxy::MSTATUS_OK, .SeqNo=1});
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 11);
+}
 
 Y_UNIT_TEST_F(WriteAssignsOffsetAfterMirroredOffset, TPartitionFixture)
 {

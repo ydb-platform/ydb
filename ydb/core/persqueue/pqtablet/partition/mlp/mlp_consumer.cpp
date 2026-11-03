@@ -1047,6 +1047,12 @@ size_t TConsumerActor::FifoUnlockedGroupDeficit() const {
 }
 
 bool TConsumerActor::FetchMessagesIfNeeded() {
+    if (AppData()->FeatureFlags.GetEnableMLPConsumerInFlightMutateDisabled()) {
+        LOG_D("Fetch messages is disabled");
+        return false;
+    }
+
+
     if (Storage->GetMessageCount() > 0) {
         LastTimeWithMessages = TAppData::TimeProvider->Now();
         NotifyPQRB();

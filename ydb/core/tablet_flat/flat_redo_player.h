@@ -48,8 +48,10 @@ namespace NRedo {
             auto* previousObserver = std::exchange(Observer, observer);
             // Base.DoAnnex may populate the container during replay.
             const auto* previousAnnex = std::exchange(Annex, &annex);
-	    Observer = previousObserver;
-	    Annex = previousAnnex;
+            Y_DEFER {
+                Observer = previousObserver;
+                Annex = previousAnnex;
+            };
 
             TReader iter(plain);
 

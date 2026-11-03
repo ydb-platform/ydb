@@ -23,7 +23,7 @@
 ### Функциональность
 
 * Добавлена поддержка [аутентификации OpenID Connect (OIDC)](./security/authentication.md#external-idp) с готовыми токенами, учётными данными клиента или авторизацией устройства. Параметры можно задать в YAML-файле с помощью опции `--oidc-config`, опциями `--oidc-*`, через переменные окружения или профили соединения.
-* Добавлена поддержка колоночных (OLAP) таблиц в [команду](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и [команду](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`. При восстановлении колоночных таблиц опция `--import-data` не поддерживается: вместо неё автоматически используется `--bulk-upsert`.
+* Добавлена поддержка отдельностоящих колоночных (OLAP) таблиц в [команду](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и [команду](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`. Если кластер не поддерживает копирование колоночных таблиц, для выгрузки требуется опция `--avoid-copy`; этот режим не гарантирует консистентный снимок данных. При восстановлении колоночных таблиц опция `--import-data` не поддерживается: вместо неё автоматически используется `--bulk-upsert`.
 * Добавлена [команда](./reference/ydb-cli/commands/bridge/convert.md) `{{ ydb-cli }} admin cluster bridge convert` для преобразования обычного кластера в кластер в режиме bridge с одним pile. Преобразование необратимо. [Команда](./reference/ydb-cli/commands/bridge/list.md) `{{ ydb-cli }} admin cluster bridge list` теперь показывает, продолжается ли преобразование, в форматах вывода `pretty` и `json`.
 * Добавлена возможность повторять опцию `--pile` в [команде](./reference/ydb-cli/commands/bridge/failover.md) `{{ ydb-cli }} admin cluster bridge failover`, чтобы отключить несколько недоступных pile за одну операцию.
 * Добавлен формат вывода `--format svg` в [команду](./reference/ydb-cli/sql.md) `{{ ydb-cli }} sql` для сохранения планов запросов в SVG при использовании опций `--explain` или `--explain-analyze`.
@@ -40,7 +40,7 @@
 * Исправлена ошибка [команды](./reference/ydb-cli/commands/dir.md#rmdir) `{{ ydb-cli }} scheme rmdir --recursive` при удалении директории, содержащей секреты схемы.
 * Исправлены отображение прогресса, скорости, оставшегося времени и итоговая статистика чтения в [команде](./reference/ydb-cli/export-import/import-file.md) `{{ ydb-cli }} import file parquet`.
 * Исправлены ложные несовпадения с эталонными результатами для пустых опциональных значений `String` и `Utf8` в [командах](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run --check-canonical`.
-* Исправлена утечка памяти при закрытии производителей сообщений в [командах](./reference/ydb-cli/workload-topic.md) `{{ ydb-cli }} workload topic run write|full`.
+* Исправлена утечка памяти при завершении работы писателей в [командах](./reference/ydb-cli/workload-topic.md) `{{ ydb-cli }} workload topic run write|full`.
 * Исправлена ошибка восстановления значений NaN и бесконечности типов `Float` и `Double` из локальных резервных копий в [команде](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`. Сообщения об ошибках разбора теперь содержат файл, строку, столбец и проблемное значение.
 
 ## Версия 2.33.0 {#2-33-0}

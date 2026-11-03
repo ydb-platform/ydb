@@ -334,6 +334,8 @@ public:
                     return (ui32)NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual;
                 default:
                     YDB_LOG_VERIFY(false);
+                    // This code is unreachable, but compiler requires return statement
+                    return 0;
             }
         }()),
           IsSimpleFunction(isSimpleFunction)

@@ -1954,7 +1954,13 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                auto joinSettings = BuildBlockHashJoinSettings(join.Pos(), joinAlgo, ctx);
+                const bool leftAny = std::any_of(flags.begin(), flags.end(),
+                    [](const auto& flag) { return flag->IsAtom("LeftAny"); });
+                // ANY is applied only to rows in the hash table and to probe rows that match it, so
+                // the preserved left side with ANY has to be the build side.
+                const bool buildLeft = joinAlgo == EJoinAlgoType::ReverseBlockJoin || (leftAny && joinType != "Inner"sv);
+                auto joinSettings = BuildBlockHashJoinSettings(
+                    join.Pos(), buildLeft ? EJoinAlgoType::ReverseBlockJoin : joinAlgo, ctx);
                 for (const auto& flag : flags) {
                     joinSettings.push_back(Build<TCoNameValueTuple>(ctx, join.Pos())
                         .Name(flag)

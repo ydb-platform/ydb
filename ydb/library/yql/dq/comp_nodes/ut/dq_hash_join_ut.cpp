@@ -2898,6 +2898,9 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         for (const auto kind : {EJoinKind::Inner, EJoinKind::Left, EJoinKind::LeftSemi, EJoinKind::LeftOnly}) {
             for (const auto buildSide : {EBuildSide::Left, EBuildSide::Right}) {
                 for (const auto any : {EAnyJoinSettings::Left, EAnyJoinSettings::Right, EAnyJoinSettings::Both}) {
+                    if (kind != EJoinKind::Inner && buildSide == EBuildSide::Right && IsAnyJoinLeft(any)) {
+                        continue;
+                    }
                     Test(AnyJoinTestData<false>(kind, IsAnyJoinLeft(any), IsAnyJoinRight(any), buildSide), BlockJoin);
                     Test(AnyJoinTestData<true>(kind, IsAnyJoinLeft(any), IsAnyJoinRight(any), buildSide), BlockJoin);
                 }
@@ -2906,18 +2909,23 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
 
     Y_UNIT_TEST_TWIN(TestAnyJoinSpilling, BlockJoin) {
-        for (const auto buildSide : {EBuildSide::Left, EBuildSide::Right}) {
-            for (const auto any : {EAnyJoinSettings::Left, EAnyJoinSettings::Right, EAnyJoinSettings::Both}) {
-                Test(AnyJoinTestData<true>(EJoinKind::Left, IsAnyJoinLeft(any), IsAnyJoinRight(any), buildSide, true), BlockJoin);
-            }
+        for (const auto any : {EAnyJoinSettings::Left, EAnyJoinSettings::Right, EAnyJoinSettings::Both}) {
+            Test(AnyJoinTestData<true>(EJoinKind::Left, IsAnyJoinLeft(any), IsAnyJoinRight(any), EBuildSide::Left, true), BlockJoin);
         }
+        Test(AnyJoinTestData<true>(EJoinKind::Inner, true, true, EBuildSide::Right, true), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestAnyJoinInplaceBuildRows, BlockJoin) {
-        for (const auto buildSide : {EBuildSide::Left, EBuildSide::Right}) {
-            for (const bool equalNulls : {false, true}) {
-                Test(AnyJoinInplaceBuildRowsTestData(buildSide, equalNulls), BlockJoin);
-            }
+        for (const bool equalNulls : {false, true}) {
+            Test(AnyJoinInplaceBuildRowsTestData(EBuildSide::Left, equalNulls), BlockJoin);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TestAnyJoinRejectsPreservedProbe, BlockJoin) {
+        for (const auto kind : {EJoinKind::Left, EJoinKind::LeftSemi, EJoinKind::LeftOnly}) {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(
+                Test(AnyJoinTestData<false>(kind, true, false, EBuildSide::Right), BlockJoin), yexception,
+                "ANY on the preserved side requires that side to be the build side");
         }
     }
 

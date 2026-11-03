@@ -6,7 +6,6 @@
 #include <numeric>
 #include <vector>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
-#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/any_join_keys.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/spilled_storage.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_counters.h>
@@ -457,7 +456,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             : Spiller(std::move(spiller))
         {
             for(int index = 0; index < std::ssize(Spiller.GetBuckets()); ++index) {
-                ProbeState.Buckets.push_back(TTable{self.Layouts_.Build, PreservedRowsInBuildTable(), self.BuildAny_});
+                ProbeState.Buckets.push_back(self.MakeTable());
             }
             self.Logger_.LogDebug("BuildingInMemoryTable stage started");
         }
@@ -622,14 +621,19 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
         , Layouts_(layouts)
         , Spiller_(ctx.SpillerFactory ? ctx.SpillerFactory->CreateSpiller() : nullptr)
         , Sources_(std::move(sources))
-        , BuildAny_(any.Build)
+        , Any_(any)
     {
-        if (any.Probe) {
-            ProbeAnyKeys_ = std::make_unique<TAnyJoinKeys>(Layouts_.Probe);
-        }
+        // Duplicate probe rows are skipped by a mark on the matched build row, so an unmatched
+        // preserved probe row would have nowhere to keep that mark.
+        MKQL_ENSURE(!Any_.Probe || !PreservedRowsInProbeStream(),
+                    "ANY on the preserved side requires that side to be the build side");
     }
 
     struct Finish {};
+
+    TTable MakeTable() const {
+        return TTable{Layouts_.Build, PreservedRowsInBuildTable(), Any_.Build, Any_.Probe};
+    }
 
     TPackResult Flatten(TMKQLVector<TPackResult> tuples) {
         return Layouts_.Build->Flatten(tuples);
@@ -825,12 +829,8 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.FetchedPack = std::move(GetPayload(var));
-                    if (ProbeAnyKeys_) {
-                        ProbeAnyKeys_->Filter(*state.FetchedPack);
-                    }
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
-                    ProbeAnyKeys_.reset();
                     if constexpr (PreservedRowsInBuildTable()) {
                         if (!EmitPreservedBuildRowsFromInMemoryBuckets(state.Spiller, state.PreservedBucketIndex,
                                                                        state.PreservedResumeIndex, consume, isFull)) {
@@ -1013,7 +1013,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         for (auto& future : tdata->Futures) {
                             vec.push_back(GetPage(std::move(future), ESide::Build));
                         }
-                        NJoinTable::TNeumannJoinTable table{Layouts_.Build, PreservedRowsInBuildTable(), BuildAny_};
+                        TTable table = MakeTable();
                         table.BuildWith(Flatten(std::move(vec)));
                         state.SelectedPair->Table = TTableAndSomeData{.Table = std::move(table), .Futures = {}};
                     } else {
@@ -1201,8 +1201,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     TSides<const NPackedTuple::TTupleLayout*> Layouts_;
     ISpiller::TPtr Spiller_;
     Sources Sources_;
-    bool BuildAny_ = false;
-    std::unique_ptr<TAnyJoinKeys> ProbeAnyKeys_;
+    TSides<bool> Any_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
 };

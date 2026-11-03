@@ -1637,11 +1637,14 @@ namespace NActors {
                 const NInterconnect::TAddress address(Common->Settings.RdmaAddress, 0);
                 rdmaCtx = NLinkMgr::GetCtx(address);
                 if (rdmaCtx) {
-                    YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Found verbs context for configured RDMA address",
+                    YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Found verbs context for specified RDMA address",
                         {"marker", "ICRDMA"},
                         {"address", Common->Settings.RdmaAddress});
                 } else {
-                    YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT, "Unable to find verbs context for configured RDMA address, falling back",
+                    const TString fallbackTarget = Common->Settings.RdmaInterface
+                        ? "the specified RDMA interface"
+                        : "the local TCP socket address";
+                    YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT, "Unable to find verbs context for specified RDMA address. Falling back to " + fallbackTarget,
                         {"marker", "ICRDMA"},
                         {"address", Common->Settings.RdmaAddress});
                 }
@@ -1650,11 +1653,11 @@ namespace NActors {
             if (!rdmaCtx && Common->Settings.RdmaInterface) {
                 rdmaCtx = NLinkMgr::GetCtxByInterface(Common->Settings.RdmaInterface);
                 if (rdmaCtx) {
-                    YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Found verbs context for configured RDMA interface",
+                    YDB_LOG_TRACE_COMP(::NActorsServices::INTERCONNECT, "Found verbs context for specified RDMA interface",
                         {"marker", "ICRDMA"},
                         {"interface", Common->Settings.RdmaInterface});
                 } else {
-                    YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT, "Unable to find verbs context for configured RDMA interface, falling back",
+                    YDB_LOG_WARN_COMP(::NActorsServices::INTERCONNECT, "Unable to find verbs context for specified RDMA interface. Falling back to the local TCP socket address",
                         {"marker", "ICRDMA"},
                         {"interface", Common->Settings.RdmaInterface});
                 }
@@ -1674,12 +1677,12 @@ namespace NActors {
                             {"address", std::get<0>(sockname)});
                     }
                 } else if (int* err = get_if<int>(&sockname)) {
-                    YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "Unable to get local address for Rdma will not be used",
+                    YDB_LOG_ERROR_COMP(::NActorsServices::INTERCONNECT, "Unable to get local address of the TCP socket. RDMA will not be used",
                         {"marker", "ICRDMA"},
                         {"socket", (int)(*MainChannel.GetSocketRef())},
                         {"err", *err});
                 } else {
-                    YDB_LOG_CRIT_COMP(::NActorsServices::INTERCONNECT, "Unknown getsockname return type for Rdma will not be used",
+                    YDB_LOG_CRIT_COMP(::NActorsServices::INTERCONNECT, "Unknown GetSockName return type. It is a BUG. RDMA will not be used",
                         {"marker", "ICRDMA"},
                         {"socket", (int)(*MainChannel.GetSocketRef())});
                 }

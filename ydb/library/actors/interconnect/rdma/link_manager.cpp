@@ -244,15 +244,21 @@ TRdmaCtx* GetCtx(const NInterconnect::TAddress& addr) {
 } 
 
 TRdmaCtx* GetCtxByInterface(const TString& interfaceName) {
+    TRdmaCtx* linkLocalCtx = nullptr;
     for (const auto& interface : NAddr::GetNetworkInterfaces()) {
         if (interface.Name == interfaceName) {
             NInterconnect::TAddress address(*interface.Address);
             if (TRdmaCtx* ctx = GetCtx(address)) {
-                return ctx;
+                if (!address.IsLinkLocal()) {
+                    return ctx;
+                }
+                if (!linkLocalCtx) {
+                    linkLocalCtx = ctx;
+                }
             }
         }
     }
-    return nullptr;
+    return linkLocalCtx;
 }
 
 }

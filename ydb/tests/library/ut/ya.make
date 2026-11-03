@@ -13,6 +13,7 @@ PEERDIR(
 TEST_SRCS(
     kikimr_config.py
     test_all_tablets_alive_liveness_warden.py
+    test_sdk_session_pool.py
 )
 
 END()

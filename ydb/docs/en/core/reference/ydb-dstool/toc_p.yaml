@@ -7,3 +7,5 @@ items:
     href: global-options.md
   - name: Device list
     href: device-list.md
+  - name: Set a pool bridge mode
+    href: pool-set-bridge-mode.md

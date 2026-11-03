@@ -158,6 +158,10 @@ A **pile** is a set of nodes that can fail or be disconnected simultaneously whi
 
 **Bridge mode** is a special cluster topology in which data is stored with synchronous replication between multiple [pile](#pile). Mode details are described in [{#T}](topology.md#bridge) and in [{#T}](bridge.md).
 
+#### Non-uniform storage {#non-uniform-storage}
+
+**Non-uniform storage** is a bridge cluster mode in which bridged storage pools and ordinary storage pools coexist. Ordinary pools can reduce storage overhead and write latency but still depend on the bridge control plane for failover. For details, see [Bridged and ordinary storage pools](bridge.md#storage-pools).
+
 ### Table {#table}
 
 A **table** is a structured piece of information arranged in rows and columns. Each row represents a single record or entry, while each column represents a specific attribute or field with a particular data type.
@@ -378,7 +382,7 @@ A **database root** is a path to a database in a {{ ydb-short-name }} cluster sc
 
 ### Scheme root {#scheme-root}
 
-A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](datamodel/index.md#cluster-scheme). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
+A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](datamodel/cluster-namespace.md). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
 
 ### Scheme object {#scheme-object}
 

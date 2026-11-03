@@ -451,6 +451,7 @@ struct TBlobStorageGroupPatchParameters {
     };
 
     bool UseVPatch = false;
+    bool EnableVPatchForTesting = false;
 };
 IActor* CreateBlobStorageGroupPatchRequest(TBlobStorageGroupPatchParameters params);
 

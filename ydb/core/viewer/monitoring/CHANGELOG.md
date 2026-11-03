@@ -1,5 +1,12 @@
 # Changelog
 
+## Bridge backports — 2026-11-04
+
+* Preserve debounced search input (#4530).
+* Hide cluster healthcheck without monitoring permission (#4541).
+* Preserve search fields when grouping nodes (#4533).
+* Share data center colors across node views (#4523).
+
 ## [18.1.0-hotfix.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v18.1.0...v18.1.0-hotfix.1) (2026-10-21)
 
 

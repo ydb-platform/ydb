@@ -445,6 +445,9 @@ namespace NKikimr::NStorage {
                 if (!currentVDiskId.SameExceptGeneration(vdiskId)) {
                     continue; // definitely incorrect group or position in group
                 }
+                if (!isDropDonor && currentVDiskId != vdiskId) {
+                    continue;
+                }
                 if (isDropDonor && vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
                     continue; // dropping donor and this entity is already destroyed
                 }
@@ -501,6 +504,10 @@ namespace NKikimr::NStorage {
             }
         }
 
+        if (!changes) {
+            return Finish(TResult::OK, std::nullopt);
+        }
+
         bool unusedPDisk = true;
         for (const auto& vdisk : ss->GetVDisks()) {
             if (vdisk.HasVDiskLocation()) {
@@ -515,15 +522,10 @@ namespace NKikimr::NStorage {
             for (size_t i = 0; i < ss->PDisksSize(); ++i) {
                 if (const auto& pdisk = ss->GetPDisks(i); pdisk.HasNodeID() && pdisk.HasPDiskID() &&
                         pdisk.GetNodeID() == vslotId.GetNodeId() && pdisk.GetPDiskID() == vslotId.GetPDiskId()) {
-                    Y_ABORT_UNLESS(changes);
                     ss->MutablePDisks()->DeleteSubrange(i, 1);
                     break;
                 }
             }
-        }
-
-        if (!changes) {
-            return Finish(TResult::OK, std::nullopt);
         }
 
         StartProposition(&config);

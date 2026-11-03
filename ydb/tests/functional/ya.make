@@ -19,6 +19,7 @@ RECURSE(
     large_serializable
     limits
     minidumps
+    mirror3dc
     mvp
     nbs
     query_cache
@@ -37,6 +38,7 @@ RECURSE(
     split_merge
     sqs
     sqs_topic
+    statestorage
     statistics
     suite_tests
     tpc

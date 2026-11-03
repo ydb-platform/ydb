@@ -33,6 +33,7 @@ SRCS(
     dsproxy_nodemonactor.cpp
     dsproxy_nodemonactor.h
     dsproxy_patch.cpp
+    dsproxy_patch.h
     dsproxy_put.cpp
     dsproxy_put_impl.cpp
     dsproxy_put_impl.h
@@ -47,12 +48,14 @@ SRCS(
     dsproxy_strategy_base.h
     dsproxy_strategy_get_bold.h
     dsproxy_strategy_get_m3dc_basic.h
+    dsproxy_strategy_get_mirror3dc.h
     dsproxy_strategy_get_m3dc_restore.h
     dsproxy_strategy_get_m3of4.h
     dsproxy_strategy_get_min_iops_block.h
     dsproxy_strategy_get_min_iops_mirror.h
     dsproxy_strategy_m3of4_base.h
     dsproxy_strategy_put_m3dc.h
+    dsproxy_strategy_put_mirror3dc.h
     dsproxy_strategy_put_m3of4.h
     dsproxy_strategy_restore.h
     group_sessions.cpp

@@ -3,6 +3,8 @@
 #include "diff.h"
 #include "table_merger.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
+#include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT
@@ -339,6 +341,11 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
+            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking || state.ResetDataCenterStates); !result) {
+                *errorDescription = result.error();
+                return false;
+            }
+
             // virtual group state reported to node wardens may change without explicit group content change (for
             // instance, when decommission starts or BlobDepot creation fails), deliver it with new generation
             for (const auto& [base, overlay] : state.Groups.Diff()) {
@@ -582,6 +589,9 @@ namespace NKikimr::NBsController {
 
         void TBlobStorageController::CommitConfigUpdates(TConfigState& state, TTransactionContext& txc) {
             NIceDb::TNiceDb db(txc.DB);
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                state.GroupStateUpdates.push_back(overlay->first.GetRawId());
+            }
 
             if (state.HostConfigs.Changed()) {
                 MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
@@ -626,6 +636,23 @@ namespace NKikimr::NBsController {
             state.VSlots.ApplyToTable(this, txc);
             state.Groups.ApplyToTable(this, txc);
             state.DrivesSerials.ApplyToTable(this, txc);
+
+            if (state.DataCenterStates.Changed()) {
+                db.Table<Schema::State>().Key(true).Update<Schema::State::DataCenterStates>(
+                    SerializeDataCenterStates(state.DataCenterStates.Get()));
+            }
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                if (overlay->second) {
+                    NKikimrBlobStorage::TFailRealmStates states;
+                    if (overlay->second->FailRealmStates) {
+                        for (NKikimrBlobStorage::TGroupInfo::TFailRealm::EState value : *overlay->second->FailRealmStates) {
+                            states.AddState(value);
+                        }
+                    }
+                    db.Table<Schema::Group>().Key(overlay->first.GetRawId())
+                        .Update<Schema::Group::FailRealmStates>(states);
+                }
+            }
 
             // apply group to storage pool mapping
             for (auto&& [base, overlay] : state.Groups.Diff()) {
@@ -914,6 +941,9 @@ namespace NKikimr::NBsController {
                 TActivationContext::Send(std::make_unique<IEventHandle>(Self.SelfHealId, Self.SelfId(), UpdateSelfHealInfoMsg.Release()));
             }
 
+            for (ui32 groupId : GroupStateUpdates) {
+                Self.UpdateGroupStateActor(TGroupId::FromValue(groupId));
+            }
             for (auto& fn : Callbacks) {
                 fn();
             }
@@ -1376,6 +1406,12 @@ namespace NKikimr::NBsController {
             pb->SetGroupId(group.ID.GetRawId());
             pb->SetGroupGeneration(group.Generation);
             pb->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies));
+            if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
+                for (ui32 realm = 0; realm < 3; ++realm) {
+                    pb->AddFailRealms()->SetState(group.FailRealmStates ? (*group.FailRealmStates)[realm]
+                        : NKikimrBlobStorage::TGroupInfo::TFailRealm::N0);
+                }
+            }
             for (const TVSlotInfo *vslot : group.VDisksInGroup) {
                 Serialize(pb->AddVSlotId(), vslot->VSlotId);
             }
@@ -1494,6 +1530,9 @@ namespace NKikimr::NBsController {
                 for (const auto& [vdiskId, vslot] : vdisks) {
                     if (!realm || prevVDiskId.FailRealm != vdiskId.FailRealm) {
                         realm = group->AddRings();
+                        if (groupInfo.FailRealmStates) {
+                            realm->SetState((*groupInfo.FailRealmStates)[vdiskId.FailRealm]);
+                        }
                         domain = nullptr;
                     }
                     if (!domain || prevVDiskId.FailDomain != vdiskId.FailDomain) {

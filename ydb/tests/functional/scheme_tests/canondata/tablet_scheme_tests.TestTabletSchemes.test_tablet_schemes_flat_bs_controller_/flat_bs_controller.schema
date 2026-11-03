@@ -140,6 +140,11 @@
                 "ColumnId": 28,
                 "ColumnName": "ExpectedStorageYamlConfigVersion",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 32,
+                "ColumnName": "DataCenterStates",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -172,7 +177,8 @@
                     24,
                     26,
                     27,
-                    28
+                    28,
+                    32
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -504,6 +510,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 18,
+                "ColumnName": "FailRealmStates",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 106,
                 "ColumnName": "BlobDepotConfig",
                 "ColumnType": "String"
@@ -563,6 +574,7 @@
                     15,
                     16,
                     17,
+                    18,
                     106,
                     109,
                     110,

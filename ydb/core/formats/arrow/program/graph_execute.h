@@ -142,9 +142,8 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TNode>, ResultRoot);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<TNode>>, FilterRoot);
     bool IsFilterRoot(const ui32 identifier) const;
-    const TString& GetStatsMetaStep(ui32 identifier) const;
-
-public:
+    public:
+        const TString& GetStatsMetaStep(ui32 identifier) const;
     std::shared_ptr<IResourcesAggregator> GetResultsAggregationProcessor() const {
         if (ResultRoot->GetProcessor()->GetProcessorType() != EProcessorType::Projection) {
             return nullptr;

@@ -2782,7 +2782,7 @@ void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActo
         YDB_LOG_ERROR("",
             {"error", "cannot parse portions metadata cache config"},
             {"action", "default_usage"},
-            {"serviceConfigerror", serviceConfig.GetErrorMessage()},
+            {"serviceConfigError", serviceConfig.GetErrorMessage()},
             {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }

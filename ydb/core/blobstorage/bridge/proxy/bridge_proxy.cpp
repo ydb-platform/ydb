@@ -490,8 +490,11 @@ namespace NKikimr {
                         if (existing.Status == current.Status) {
                             // status did not change, so there is nothing to do, unless the piles have different data
                             if (!(existing.Buffer == current.Buffer)) {
-                                STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB08, "piles have different data of the blob",
-                                    (GroupId, self.GroupId), (BlobId, existing.Id), (BridgePileId, pile.BridgePileId));
+                                YDB_LOG_CRIT("Piles have different data of the blob",
+                                    {"marker", "BPB08"},
+                                    {"groupId", self.GroupId},
+                                    {"blobId", existing.Id},
+                                    {"bridgePileId", pile.BridgePileId});
                                 existing = {};
                                 existing.Id = current.Id;
                                 existing.Status = NKikimrProto::ERROR;
@@ -669,8 +672,11 @@ namespace NKikimr {
                 } else if (ev->Status == NKikimrProto::NODATA || ev->Id < state.Id) { // this pile has older version than already discovered
                     item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
                 } else if (state.Buffer != ev->Buffer) { // same blob with different data
-                    STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB09, "piles have different data of the blob",
-                        (GroupId, self.GroupId), (BlobId, state.Id), (BridgePileId, pile.BridgePileId));
+                    YDB_LOG_CRIT("Piles have different data of the blob",
+                        {"marker", "BPB09"},
+                        {"groupId", self.GroupId},
+                        {"blobId", state.Id},
+                        {"bridgePileId", pile.BridgePileId});
                     auto res = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::ERROR,
                         state.MinGeneration, state.BlockedGeneration);
                     res->ErrorReason = TStringBuilder() << "piles have different data of the blob " << state.Id;
@@ -779,8 +785,11 @@ namespace NKikimr {
                     merge(std::greater<TLogoBlobID>());
                 }
                 if (divergedId) {
-                    STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB10, "piles have different data of the blob",
-                        (GroupId, self.GroupId), (BlobId, *divergedId), (BridgePileId, pile.BridgePileId));
+                    YDB_LOG_CRIT("Piles have different data of the blob",
+                        {"marker", "BPB10"},
+                        {"groupId", self.GroupId},
+                        {"blobId", *divergedId},
+                        {"bridgePileId", pile.BridgePileId});
                     return static_cast<TEvBlobStorage::TEvRange&>(*OriginalRequest).MakeErrorResponse(NKikimrProto::ERROR,
                         TStringBuilder() << "piles have different data of the blob " << *divergedId, self.GroupId);
                 }

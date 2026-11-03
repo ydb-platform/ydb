@@ -288,6 +288,10 @@ class TestViewer(object):
             'query': 'grant select on `' + cls.dedicated_db + '` to database;'
         })
         cls.call_viewer("/viewer/query", {
+            'database': cls.serverless_db,
+            'query': 'grant describe schema on `' + cls.serverless_db + '` to database;'
+        })
+        cls.call_viewer("/viewer/query", {
             'database': cls.domain_name,
             'query': 'create user viewer password "3456"'
         })
@@ -2329,6 +2333,33 @@ class TestViewer(object):
             tries -= 1
             time.sleep(1)
         return result
+
+    # Strict database users can still get storage statistics for a table inside dedicated or serverless databases.
+    @classmethod
+    def test_storage_stats_path_for_database_user(cls):
+        # With a table path, /viewer/storage_stats describes the table to find its tablets,
+        # which requires DESCRIBE SCHEMA grant.
+        headers = cls.make_cookie_headers(cls.database_session_id)
+        for database in (cls.dedicated_db, cls.serverless_db):
+            path = database + '/table1'
+            for use_hive_tablets in (0, 1):
+                params = {
+                    'database': database,
+                    'path': path,
+                    'group_by': 'path',
+                    'use_hive_tablets': use_hive_tablets,
+                    'tablets': 'true',
+                }
+                expected = cls.get_viewer('/viewer/storage_stats', params)
+                actual = cls.get_viewer('/viewer/storage_stats', params, headers=headers)
+                assert 'status_code' not in expected, (params, expected)
+                assert 'status_code' not in actual, (params, actual)
+                assert len(actual['Paths']) == 1, actual
+                assert actual['Paths'][0]['FullPath'] == path, actual
+                expected_ids = {tablet['TabletId'] for tablet in expected['Paths'][0]['Tablets']}
+                actual_ids = {tablet['TabletId'] for tablet in actual['Paths'][0]['Tablets']}
+                assert expected_ids, expected
+                assert actual_ids == expected_ids, (actual, expected)
 
     @classmethod
     def test_viewer_peers(cls):

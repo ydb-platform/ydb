@@ -7,6 +7,7 @@ SIZE(MEDIUM)
 PEERDIR(
     library/cpp/testing/unittest
     ydb/core/kqp/common
+    ydb/core/security/iam_delegation/tablet
     ydb/core/testlib/default
     ydb/library/testlib/service_mocks
 )

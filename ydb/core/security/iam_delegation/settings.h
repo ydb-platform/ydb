@@ -25,7 +25,7 @@ struct TIamDelegationSettings {
     static constexpr TDuration RequestTimeout = TDuration::Seconds(10);
     static constexpr TDuration OperationPollInterval = TDuration::Seconds(1);
     static constexpr TDuration OperationPollTimeout = TDuration::Seconds(60);
-    static constexpr ui32 MaxRetries = 5; // total attempts of one IAM call
+    static constexpr TDuration RequestRetryTimeout = TDuration::Minutes(1);
 
     static TIamDelegationSettings FromConfig(const NKikimrConfig::TIamConfig& iamConfig);
 
@@ -41,8 +41,7 @@ struct TIamDelegationSettings {
     TString Validate() const;
 
     // Returns an error message when the settings are not sufficient to set up and revoke
-    // delegations (ServiceControlService and OperationService on the IAM control plane). Everything
-    // Validate() requires plus the control plane endpoint and system token provider ID, so a cluster configured only for the IAM
+    // delegations (ServiceControlService and OperationService on the IAM control plane). Requires the service identity, control plane endpoint, system token provider ID and retry tablet. A cluster configured only for the IAM
     // auth of external data sources passes Validate() and fails this one.
     TString ValidateForDelegation() const;
 

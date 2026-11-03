@@ -40,9 +40,6 @@ namespace {
 // fields are required by IAM: the agent service account a delegation is granted to is named
 // yc.<ServiceId>.<MicroserviceId>.<cloud>.agent, and IAM checks that both exist in its service registry.
 void CollectMissingIdentity(const TIamDelegationSettings& settings, TStringBuilder& missing) {
-    if (settings.Config.GetTokenServiceEndpoint().empty()) {
-        missing << " TokenServiceEndpoint";
-    }
     if (settings.Config.GetServiceId().empty()) {
         missing << " ServiceId";
     }
@@ -59,6 +56,9 @@ void CollectMissingIdentity(const TIamDelegationSettings& settings, TStringBuild
 TString TIamDelegationSettings::Validate() const {
     TStringBuilder missing;
     CollectMissingIdentity(*this, missing);
+    if (Config.GetTokenServiceEndpoint().empty()) {
+        missing << " TokenServiceEndpoint";
+    }
     if (!missing.empty()) {
         return TStringBuilder() << "IAM delegation is not configured, missing IamConfig fields:" << missing;
     }
@@ -68,6 +68,9 @@ TString TIamDelegationSettings::Validate() const {
 TString TIamDelegationSettings::ValidateForDelegation() const {
     TStringBuilder missing;
     CollectMissingIdentity(*this, missing);
+    if (!Config.GetDelegationTabletId()) {
+        missing << " DelegationTabletId";
+    }
     if (Config.GetSystemTokenName().empty()) {
         missing << " SystemTokenName";
     }

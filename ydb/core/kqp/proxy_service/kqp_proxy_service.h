@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
@@ -70,7 +71,8 @@ IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources,
     IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    const NKikimrConfig::TIamConfig& iamConfig = {}
     );
 
 }  // namespace NKikimr::NKqp

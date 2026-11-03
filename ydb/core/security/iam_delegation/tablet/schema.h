@@ -12,7 +12,15 @@ struct TSchema : NIceDb::Schema {
         using TColumns = TableColumns<Incarnation, Data>;
     };
 
-    using TTables = SchemaTables<Databases>;
+    // IDs2..8 are reserved for the independently published delegation lifecycle.
+    struct ServiceBackoff : Table<9> {
+        struct Key : Column<1, NScheme::NTypeIds::String> {};
+        struct Data : Column<2, NScheme::NTypeIds::String> {};
+        using TKey = TableKey<Key>;
+        using TColumns = TableColumns<Key, Data>;
+    };
+
+    using TTables = SchemaTables<Databases, ServiceBackoff>;
 };
 
 } // namespace NKikimr::NIamDelegation

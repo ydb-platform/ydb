@@ -9,6 +9,8 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/security/iam_delegation/tablet/iam_delegation.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/testlib/service_mocks/operation_service_mock.h>
 #include <ydb/library/testlib/service_mocks/service_control_service_mock.h>
@@ -71,6 +73,19 @@ struct TFixture {
         Runtime = Server->GetRuntime();
         Runtime->SetLogPriority(NKikimrServices::IAM_DELEGATION, NLog::PRI_DEBUG);
         Sender = Runtime->AllocateEdgeActor();
+        constexpr ui64 tabletId = MakeTabletID(false, 9001);
+        bool ready = false;
+        auto observer = Runtime->AddObserver<TEvTablet::TEvReady>([&](auto& event) {
+            ready |= event->Get()->TabletID == tabletId;
+        });
+        auto bootstrapper = CreateTestBootstrapper(*Runtime,
+            CreateTestTabletInfo(tabletId, TTabletTypes::IamDelegation), &CreateIamDelegationTablet);
+        Runtime->EnableScheduleForActor(bootstrapper);
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] { return ready; };
+        Runtime->DispatchEvents(options);
+        UNIT_ASSERT(ready);
+        Settings.Config.SetDelegationTabletId(tabletId);
 
         IamPort = PortManager.GetPort(8443);
         {
@@ -210,12 +225,12 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
     Y_UNIT_TEST(OperationErrorIsMapped) {
         TFixture f;
         f.ServiceControlMock.OperationErrorCount = 1;
-        ExpectError(f.Setup(), Ydb::StatusIds::UNAUTHORIZED, "injected operation error");
+        ExpectError(f.Setup(), Ydb::StatusIds::UNAUTHORIZED, "permission denied");
         UNIT_ASSERT_VALUES_EQUAL(f.OperationMock.GetCalls.load(), 0u);
 
         f.ServiceControlMock.NotDoneCount = 1;
-        f.OperationMock.OperationError = "user is not allowed to delegate";
-        ExpectError(f.Setup(), Ydb::StatusIds::UNAUTHORIZED, "user is not allowed to delegate");
+        f.OperationMock.OperationError = "permission denied";
+        ExpectError(f.Setup(), Ydb::StatusIds::UNAUTHORIZED, "permission denied");
         UNIT_ASSERT_VALUES_EQUAL(f.OperationMock.GetCalls.load(), 1u);
     }
 
@@ -226,74 +241,46 @@ Y_UNIT_TEST_SUITE(IamDelegationService) {
         f.ServiceControlMock.FailStatus = grpc::StatusCode::FAILED_PRECONDITION;
         f.ServiceControlMock.FailureType = "BAD_SERVICE_ACCOUNT_CLOUD";
         auto result = f.Setup();
-        ExpectError(result, Ydb::StatusIds::BAD_REQUEST, "BAD_SERVICE_ACCOUNT_CLOUD (injected BAD_SERVICE_ACCOUNT_CLOUD)");
+        ExpectError(result, Ydb::StatusIds::BAD_REQUEST, "BAD_SERVICE_ACCOUNT_CLOUD");
         UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToOneLineString(), "set RESOURCE to the cloud of the service account");
         UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 1u);
 
         f.ServiceControlMock.OperationErrorCount = 1;
         f.ServiceControlMock.FailureType = "SERVICE_NOT_ENABLED";
         result = f.Setup();
-        ExpectError(result, Ydb::StatusIds::UNAUTHORIZED, "injected operation error; SERVICE_NOT_ENABLED");
+        ExpectError(result, Ydb::StatusIds::UNAUTHORIZED, "SERVICE_NOT_ENABLED");
         UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToOneLineString(), "YDB service is not enabled");
     }
 
-    Y_UNIT_TEST(RetryableStatusesAreRetried) {
-        TFixture f;
-        ui32 expectedCalls = 0;
-        for (const auto status : {
-            grpc::StatusCode::DEADLINE_EXCEEDED,
-            grpc::StatusCode::RESOURCE_EXHAUSTED,
-            grpc::StatusCode::UNKNOWN,
-            grpc::StatusCode::INTERNAL,
-            grpc::StatusCode::ABORTED,
-        }) {
+    Y_UNIT_TEST(AmbiguousMutationIsNotReplayed) {
+        for (const auto status : {grpc::StatusCode::DEADLINE_EXCEEDED,
+                grpc::StatusCode::RESOURCE_EXHAUSTED, grpc::StatusCode::UNKNOWN,
+                grpc::StatusCode::INTERNAL, grpc::StatusCode::ABORTED}) {
+            TFixture f;
             f.ServiceControlMock.FailStatus = status;
             f.ServiceControlMock.FailCount = 1;
-            ExpectSuccess(f.Setup());
-            expectedCalls += 2;
-            UNIT_ASSERT_VALUES_EQUAL_C(f.ServiceControlMock.SetupCalls(), expectedCalls, "status " << status);
-        }
-
-        for (const auto& [grpcStatus, expected] : {
-            std::pair{grpc::StatusCode::INVALID_ARGUMENT, Ydb::StatusIds::BAD_REQUEST},
-            std::pair{grpc::StatusCode::NOT_FOUND, Ydb::StatusIds::NOT_FOUND},
-            std::pair{grpc::StatusCode::UNAUTHENTICATED, Ydb::StatusIds::UNAUTHORIZED},
-            std::pair{grpc::StatusCode::PERMISSION_DENIED, Ydb::StatusIds::UNAUTHORIZED},
-            std::pair{grpc::StatusCode::FAILED_PRECONDITION, Ydb::StatusIds::BAD_REQUEST},
-        }) {
-            f.ServiceControlMock.FailStatus = grpcStatus;
-            f.ServiceControlMock.FailCount = 1;
-            ExpectError(f.Setup(), expected, "injected failure");
-            expectedCalls += 1;
-            UNIT_ASSERT_VALUES_EQUAL_C(f.ServiceControlMock.SetupCalls(), expectedCalls, "status " << grpcStatus);
+            const auto result = f.Setup();
+            ExpectError(result, MapGrpcStatus(status), "gRPC status");
+            UNIT_ASSERT(!result.Issues.ToOneLineString().Contains("injected"));
+            UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 1u);
         }
     }
 
-    Y_UNIT_TEST(RetriesExhaustedMapsLastStatus) {
+    Y_UNIT_TEST(PermissionRefusalDoesNotBlockIndependentBinding) {
         TFixture f;
-        f.ServiceControlMock.FailStatus = grpc::StatusCode::RESOURCE_EXHAUSTED;
-        f.ServiceControlMock.FailCount = 100;
-        ExpectError(f.Setup(), Ydb::StatusIds::OVERLOADED, "failed after 5 attempts");
-
-        f.ServiceControlMock.FailStatus = grpc::StatusCode::DEADLINE_EXCEEDED;
-        f.ServiceControlMock.FailCount = 100;
-        ExpectError(f.Setup(), Ydb::StatusIds::TIMEOUT, "failed after 5 attempts");
-    }
-
-    Y_UNIT_TEST(RetryCountBounds) {
-        TFixture f;
-        f.ServiceControlMock.FailCount = TIamDelegationSettings::MaxRetries - 1;
-        ExpectSuccess(f.Setup());
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), TIamDelegationSettings::MaxRetries);
-        f.ServiceControlMock.FailCount = 100;
-        ExpectError(f.Setup(), Ydb::StatusIds::UNAVAILABLE, "failed after 5 attempts");
-        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 2 * TIamDelegationSettings::MaxRetries);
+        f.ServiceControlMock.FailStatus = grpc::StatusCode::PERMISSION_DENIED;
+        f.ServiceControlMock.FailCount = 1;
+        auto refused = f.Setup();
+        ExpectError(refused, Ydb::StatusIds::UNAUTHORIZED, "permission denied");
+        UNIT_ASSERT_STRING_CONTAINS(refused.Issues.ToOneLineString(), "iam.serviceAccounts.use");
+        ExpectSuccess(f.Setup(f.Spec("another-account")));
+        UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 2u);
     }
 
     Y_UNIT_TEST(SystemTokenFailure) {
         TFixture f;
         ExpectError(f.Setup(f.StartDelegationService("metadata is down"), f.Spec()),
-            Ydb::StatusIds::UNAVAILABLE, "metadata is down");
+            Ydb::StatusIds::UNAVAILABLE, "system service account token is unavailable");
         UNIT_ASSERT_VALUES_EQUAL(f.ServiceControlMock.SetupCalls(), 0u);
     }
 
@@ -354,6 +341,7 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         iam.SetMicroserviceId("data-plane");
         iam.SetResourceType("resource-manager.cloud");
         iam.SetSystemTokenName("delegation-system-account");
+        iam.SetDelegationTabletId(MakeTabletID(false, 9001));
         appConfig.MutableAuthConfig()->MutableTokenManager()->SetEnable(true);
         return appConfig;
     }
@@ -388,6 +376,18 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         UNIT_ASSERT(!TProxyNode(appConfig, true).Started());
     }
 
+    Y_UNIT_TEST(NothingWithoutRetryTablet) {
+        auto config = FullConfig();
+        config.MutableIamConfig()->ClearDelegationTabletId();
+        UNIT_ASSERT(!TProxyNode(config, true).Started());
+    }
+
+    Y_UNIT_TEST(ControlServiceDoesNotRequireTokenMintingEndpoint) {
+        auto config = FullConfig();
+        config.MutableIamConfig()->ClearTokenServiceEndpoint();
+        UNIT_ASSERT(TProxyNode(config, true).Started());
+    }
+
     Y_UNIT_TEST(StartsWithFullConfig) {
         UNIT_ASSERT(TProxyNode(FullConfig(), true).Started());
     }
@@ -396,6 +396,7 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableIamConfig()->SetServiceControlEndpoint("localhost:1");
         appConfig.MutableIamConfig()->SetSystemTokenName("delegation-system-account");
+        appConfig.MutableIamConfig()->SetDelegationTabletId(MakeTabletID(false, 9001));
         appConfig.MutableAuthConfig()->MutableTokenManager()->SetEnable(true);
         auto& replication = *appConfig.MutableReplicationConfig()->MutableIamServiceControl();
         replication.SetEndpoint("localhost:1");

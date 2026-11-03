@@ -2,12 +2,15 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/security/iam_delegation/iam_delegation_service.h>
 #include <ydb/core/security/token_manager/token_manager.h>
-#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/core/security/iam_delegation/tablet/ut/ut_helpers.h>
 #include <ydb/library/ycloud/api/operation_service.h>
 #include <ydb/library/ycloud/api/service_control_service.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <google/rpc/error_details.pb.h>
+
+#include <algorithm>
 #include <deque>
 #include <optional>
 
@@ -35,14 +38,8 @@ struct TFixture {
         }
     };
 
-    struct TRuntime : TTestActorRuntimeBase {
-        TRuntime() {
-            InitNodes();
-            AppendToLogSettings(NKikimrServices::EServiceKikimr_MIN, NKikimrServices::EServiceKikimr_MAX,
-                NKikimrServices::EServiceKikimr_Name<NLog::EComponent>);
-            SetScheduledEventFilter([](auto&, auto&, auto, auto&) { return false; });
-        }
-    } Runtime;
+    NTests::TTestContext Tablet;
+    TTestBasicRuntime& Runtime = Tablet.GetRuntime();
 
     struct TResult {
         TDelegationResult Result;
@@ -61,6 +58,7 @@ struct TFixture {
     std::deque<TAutoPtr<IEventHandle>> Revokes;
     std::deque<TAutoPtr<IEventHandle>> Polls;
     std::deque<TResult> Results;
+    std::deque<std::pair<TDelegationOperationResult, ui64>> OperationResults;
     TVector<TMonotonic> PollTimes;
     TVector<TActorId> PoisonedClients;
 
@@ -68,6 +66,8 @@ struct TFixture {
     enum class ECall { Setup, Revoke };
 
     explicit TFixture(ETokenManager tokenManager = ETokenManager::Present) {
+        Runtime.SetScheduledEventFilter([](auto&, auto&, auto, auto&) { return false; });
+        Settings.Config.SetDelegationTabletId(NTests::TTestContext::TabletId);
         Settings.Config.SetTokenServiceEndpoint("localhost:1");
         Settings.Config.SetServiceControlEndpoint("localhost:1");
         Settings.Config.SetEnableSsl(false);
@@ -101,6 +101,9 @@ struct TFixture {
                     return EAction::DROP;
                 case TEvIamDelegation::TEvRevokeDelegationResult::EventType:
                     Results.push_back({ev->Get<TEvIamDelegation::TEvRevokeDelegationResult>()->Result, ev->Cookie, Now()});
+                    return EAction::DROP;
+                case TEvIamDelegation::TEvDelegationOperationResult::EventType:
+                    OperationResults.emplace_back(ev->Get<TEvIamDelegation::TEvDelegationOperationResult>()->Result, ev->Cookie);
                     return EAction::DROP;
                 case TEvents::TEvPoison::EventType:
                     if (ev->Sender == Service) {
@@ -152,7 +155,7 @@ struct TFixture {
     }
 
     void Setup(ui64 cookie = 42) {
-        Runtime.Send(new IEventHandle(Service, Sender, new TEvIamDelegation::TEvSetupDelegation(Spec(), "user-subject"), 0, cookie));
+        Runtime.Send(new IEventHandle(Service, Sender, new TEvIamDelegation::TEvSetupDelegation(Spec(), "user-subject"), 0, cookie), 0, true);
     }
 
     void Revoke(ui64 cookie = 43) {
@@ -184,6 +187,30 @@ struct TFixture {
         UNIT_ASSERT_VALUES_EQUAL_C(result.Result.Status, status, result.Result.Issues.ToOneLineString());
         UNIT_ASSERT_VALUES_EQUAL(result.Cookie, cookie);
         return result;
+    }
+
+    static TDelegationBinding Binding() {
+        return {.ServiceAccountId = "target-account", .CloudId = "cloud", .ReferrerId = "referrer",
+            .ServiceId = "persisted-service", .MicroserviceId = "persisted-microservice",
+            .ResourceType = "persisted-resource-type", .ReferrerType = "persisted-referrer-type", .ReferencePolicy = EReferencePolicy::WithReferences};
+    }
+
+    void Submit(EDelegationOperationKind kind = EDelegationOperationKind::Setup) {
+        Runtime.Send(new IEventHandle(Service, Sender,
+            new TEvIamDelegation::TEvSubmitDelegationOperation(kind, Binding(), "user-subject", "durable-correlation-id"), 0, 73));
+    }
+
+    void Poll(const TString& operationId = "operation") {
+        Runtime.Send(new IEventHandle(Service, Sender, new TEvIamDelegation::TEvPollDelegationOperation(operationId), 0, 73));
+    }
+
+    TDelegationOperationResult OperationResult(EDelegationOperationOutcome outcome) {
+        Until([&] { return !OperationResults.empty(); });
+        auto result = std::move(OperationResults.front());
+        OperationResults.pop_front();
+        UNIT_ASSERT_VALUES_EQUAL(result.second, 73u);
+        UNIT_ASSERT(result.first.Outcome == outcome);
+        return std::move(result.first);
     }
 
     TMonotonic BeginPolling(ECall call = ECall::Setup) {
@@ -223,10 +250,62 @@ struct TFixture {
         auto undelivered = Runtime.GrabEdgeEvent<TEvents::TEvUndelivered>(edge, TDuration::Seconds(1));
         UNIT_ASSERT(undelivered);
         UNIT_ASSERT_VALUES_EQUAL(undelivered->Cookie, 123u);
-        Until([&] { return PoisonedClients.size() == 2; });
+        Until([&] { return PoisonedClients.size() >= 2; });
         UNIT_ASSERT(PoisonedClients[0] != PoisonedClients[1]);
     }
 };
+
+enum class EFailureDelivery { SubmissionStatus, PolledOperation };
+
+void CheckSafeFailureReasons(EFailureDelivery delivery) {
+    TFixture f;
+    f.Update();
+    google::rpc::Status error;
+    error.set_code(grpc::StatusCode::PERMISSION_DENIED);
+    error.set_message("credential-sentinel-do-not-persist");
+    google::rpc::PreconditionFailure details;
+    for (const TString type : {
+        "BAD_SERVICE_ACCOUNT_CLOUD", "SERVICE_NOT_ENABLED", "SYSTEM_FOLDER_NOT_FOUND", "AGENT_SA_NOT_FOUND",
+        "RESOURCE_CONTAINER_SETTINGS_NOT_FOUND", "RESOURCE_CONTAINER_NOT_FOUND", "SERVICE_ACCOUNT_NOT_FOUND",
+        "SUBJECT_NOT_FOUND", "BAD_SUBJECT_TYPE", "credential-sentinel-do-not-persist"}) {
+        auto* violation = details.add_violations();
+        violation->set_type(type);
+        violation->set_description("credential-sentinel-do-not-persist");
+    }
+    for (ui32 i = 0; i < 128; ++i) {
+        auto* violation = details.add_violations();
+        violation->set_type("BAD_SERVICE_ACCOUNT_CLOUD");
+    }
+    error.add_details()->PackFrom(details);
+    if (delivery == EFailureDelivery::SubmissionStatus) {
+        f.Submit();
+        auto request = f.Take(f.Setups);
+        auto response = MakeHolder<TControl::TEvSetupDelegationResponse>();
+        response->Status.GRpcStatusCode = grpc::StatusCode::PERMISSION_DENIED;
+        response->Status.Msg = error.message();
+        response->Status.Details = error.SerializeAsString();
+        f.Runtime.Send(new IEventHandle(request->Sender, request->Recipient, response.Release(), 0, request->Cookie));
+    } else {
+        f.Poll("saved-operation");
+        auto request = f.Take(f.Polls);
+        auto response = MakeHolder<TOperation::TEvGetOperationResponse>();
+        response->Response.set_id("saved-operation");
+        response->Response.set_done(true);
+        *response->Response.mutable_error() = error;
+        f.Runtime.Send(new IEventHandle(request->Sender, request->Recipient, response.Release(), 0, request->Cookie));
+    }
+    const auto result = f.OperationResult(EDelegationOperationOutcome::Failed);
+    UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAUTHORIZED);
+    UNIT_ASSERT_VALUES_EQUAL(result.FailureReasons.size(), 6);
+    for (const auto reason : {
+        EDelegationFailureReason::WrongCloud, EDelegationFailureReason::ServiceNotEnabled,
+        EDelegationFailureReason::CloudNotFound, EDelegationFailureReason::ServiceAccountNotFound,
+        EDelegationFailureReason::SubjectNotDelegatable, EDelegationFailureReason::PermissionDenied}) {
+        UNIT_ASSERT(std::find(result.FailureReasons.begin(), result.FailureReasons.end(), reason) != result.FailureReasons.end());
+    }
+    UNIT_ASSERT(f.Setups.empty());
+    UNIT_ASSERT(f.Revokes.empty());
+}
 
 } // namespace
 
@@ -260,19 +339,21 @@ Y_UNIT_TEST_SUITE(IamDelegationActor) {
         UNIT_ASSERT_VALUES_EQUAL(f.Subscriptions, 1u);
     }
 
-    Y_UNIT_TEST(RotationIsUsedOnRetryWithTheSameRequestId) {
+    Y_UNIT_TEST(RotationIsUsedOnNextIndependentRequest) {
         TFixture f;
         f.Update();
         f.Setup();
         auto first = f.Take(f.Setups);
         f.Update(TTokenStatus::ECode::SUCCESS, "rotated-token");
         f.Reply<TControl::TEvSetupDelegationResponse>(*first, false, grpc::StatusCode::UNAVAILABLE);
+        f.Result(Ydb::StatusIds::UNAVAILABLE);
+        f.Setup(44);
         auto retry = f.Take(f.Setups);
         UNIT_ASSERT_VALUES_EQUAL(retry->Get<TControl::TEvSetupDelegationRequest>()->Token, "rotated-token");
-        UNIT_ASSERT_VALUES_EQUAL(retry->Get<TControl::TEvSetupDelegationRequest>()->RequestId,
+        UNIT_ASSERT(retry->Get<TControl::TEvSetupDelegationRequest>()->RequestId !=
             first->Get<TControl::TEvSetupDelegationRequest>()->RequestId);
         f.Reply<TControl::TEvSetupDelegationResponse>(*retry);
-        f.Result();
+        f.Result(Ydb::StatusIds::SUCCESS, 44);
         UNIT_ASSERT_VALUES_EQUAL(f.Subscriptions, 1u);
     }
 
@@ -283,7 +364,8 @@ Y_UNIT_TEST_SUITE(IamDelegationActor) {
         f.Update(TTokenStatus::ECode::ERROR, "first-token", "refresh failed");
         f.Setup();
         auto error = f.Result(Ydb::StatusIds::UNAVAILABLE);
-        UNIT_ASSERT_STRING_CONTAINS(error.Result.Issues.ToOneLineString(), "refresh failed");
+        UNIT_ASSERT_STRING_CONTAINS(error.Result.Issues.ToOneLineString(), "system service account token is unavailable");
+        UNIT_ASSERT(!error.Result.Issues.ToOneLineString().Contains("refresh failed"));
         UNIT_ASSERT(f.Setups.empty());
         f.Update(TTokenStatus::ECode::NOT_READY, "first-token");
         f.Setup(44);
@@ -306,13 +388,13 @@ Y_UNIT_TEST_SUITE(IamDelegationActor) {
         UNIT_ASSERT(f.Setups.empty());
     }
 
-    Y_UNIT_TEST(NotReadyHasBoundedRetriesAndLateSuccessRecovers) {
+    Y_UNIT_TEST(NotReadyHasBoundedWaitAndLateSuccessRecovers) {
         TFixture f;
         const auto start = f.Now();
         f.Setup();
         const auto result = f.Result(Ydb::StatusIds::UNAVAILABLE);
         UNIT_ASSERT_STRING_CONTAINS(result.Result.Issues.ToOneLineString(), "timeout while obtaining");
-        UNIT_ASSERT(result.Time >= start + TIamDelegationSettings::RequestTimeout * TIamDelegationSettings::MaxRetries);
+        UNIT_ASSERT(result.Time >= start + TIamDelegationSettings::RequestTimeout);
         UNIT_ASSERT(result.Time < start + TDuration::Seconds(60));
         UNIT_ASSERT(f.Setups.empty());
         UNIT_ASSERT_VALUES_EQUAL(f.Subscriptions, 1u);
@@ -337,14 +419,15 @@ Y_UNIT_TEST_SUITE(IamDelegationActor) {
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 71u);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Result.Status, Ydb::StatusIds::UNAVAILABLE);
-        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Result.Issues.ToOneLineString(), "delegation-system-account was not found");
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Result.Issues.ToOneLineString(), "system service account token is unavailable");
+        UNIT_ASSERT(!result->Get()->Result.Issues.ToOneLineString().Contains("delegation-system-account"));
     }
 
     Y_UNIT_TEST(MissingTokenManagerIsBounded) {
         TFixture f(TFixture::ETokenManager::Missing);
         f.Setup();
         auto result = f.Result(Ydb::StatusIds::UNAVAILABLE);
-        UNIT_ASSERT_STRING_CONTAINS(result.Result.Issues.ToOneLineString(), "token manager is not available");
+        UNIT_ASSERT_STRING_CONTAINS(result.Result.Issues.ToOneLineString(), "system service account token is unavailable");
         UNIT_ASSERT(f.Setups.empty());
     }
 
@@ -368,18 +451,18 @@ Y_UNIT_TEST_SUITE(IamDelegationActor) {
         UNIT_ASSERT_VALUES_EQUAL(f.Subscriptions, 1u);
     }
 
-    Y_UNIT_TEST(UndeliveredCallsAreRetriedAndLateRepliesAreIgnored) {
+    Y_UNIT_TEST(UndeliveredMutationIsNotReplayedAndLateRepliesAreIgnored) {
         TFixture f;
         f.Update();
         f.Setup();
         TAutoPtr<IEventHandle> last;
-        for (ui32 attempt = 0; attempt < TIamDelegationSettings::MaxRetries; ++attempt) {
+        for (ui32 attempt = 0; attempt < 1; ++attempt) {
             last = f.Take(f.Setups);
             f.Runtime.Send(new IEventHandle(last->Sender, last->Recipient,
                 new TEvents::TEvUndelivered(last->GetTypeRewrite(), TEvents::TEvUndelivered::ReasonActorUnknown), 0, last->Cookie));
         }
         const auto result = f.Result(Ydb::StatusIds::UNAVAILABLE);
-        UNIT_ASSERT_STRING_CONTAINS(result.Result.Issues.ToOneLineString(), "client actor is not available");
+        UNIT_ASSERT_STRING_CONTAINS(result.Result.Issues.ToOneLineString(), "IAM client is unavailable");
         f.Reply<TControl::TEvSetupDelegationResponse>(*last);
         f.Runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(f.Results.empty());
@@ -493,12 +576,350 @@ Y_UNIT_TEST_SUITE(IamDelegationActor) {
     }
 }
 
+enum class EOperationDiagnosticSurface { SubmissionTransport, PollTransport, CompletedOperation };
+
+void CheckOperationDiagnostics(EOperationDiagnosticSurface surface) {
+    TFixture f;
+    f.Update();
+    google::rpc::Status error;
+    error.set_code(grpc::StatusCode::PERMISSION_DENIED);
+    error.set_message("credential-diagnostic-sentinel raw error");
+    google::rpc::PreconditionFailure details;
+    auto* known = details.add_violations();
+    known->set_type("BAD_SERVICE_ACCOUNT_CLOUD");
+    known->set_description("credential-diagnostic-sentinel known description");
+    auto* unknown = details.add_violations();
+    unknown->set_type("credential-diagnostic-sentinel unknown type");
+    unknown->set_description("credential-diagnostic-sentinel unknown description");
+    error.add_details()->PackFrom(details);
+    if (surface == EOperationDiagnosticSurface::SubmissionTransport) {
+        f.Submit();
+        auto request = f.Take(f.Setups);
+        auto reply = MakeHolder<TControl::TEvSetupDelegationResponse>();
+        reply->Status.GRpcStatusCode = grpc::StatusCode::PERMISSION_DENIED;
+        reply->Status.Msg = error.message();
+        reply->Status.Details = error.SerializeAsString();
+        f.Runtime.Send(new IEventHandle(request->Sender, request->Recipient, reply.Release(), 0, request->Cookie));
+    } else {
+        f.Poll("saved-operation");
+        auto request = f.Take(f.Polls);
+        auto reply = MakeHolder<TOperation::TEvGetOperationResponse>();
+        if (surface == EOperationDiagnosticSurface::PollTransport) {
+            reply->Status.GRpcStatusCode = grpc::StatusCode::PERMISSION_DENIED;
+            reply->Status.Msg = error.message();
+            reply->Status.Details = error.SerializeAsString();
+        } else {
+            reply->Response.set_id("saved-operation");
+            reply->Response.set_done(true);
+            *reply->Response.mutable_error() = error;
+        }
+        f.Runtime.Send(new IEventHandle(request->Sender, request->Recipient, reply.Release(), 0, request->Cookie));
+    }
+    const auto result = f.OperationResult(surface == EOperationDiagnosticSurface::PollTransport
+        ? EDelegationOperationOutcome::Unknown : EDelegationOperationOutcome::Failed);
+    UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAUTHORIZED);
+    if (surface != EOperationDiagnosticSurface::SubmissionTransport) {
+        UNIT_ASSERT_VALUES_EQUAL(result.OperationId, "saved-operation");
+    }
+    const auto rendered = result.Issues.ToOneLineString();
+    UNIT_ASSERT_C(!rendered.Contains("credential-diagnostic-sentinel"), rendered);
+    UNIT_ASSERT_STRING_CONTAINS(rendered, "RESOURCE");
+    UNIT_ASSERT(rendered.size() < 1024);
+    UNIT_ASSERT(f.Setups.empty());
+    UNIT_ASSERT(f.Revokes.empty());
+}
+
+
+Y_UNIT_TEST_SUITE(IamDelegationRecovery) {
+    Y_UNIT_TEST(SubmissionIssuesRetainSafeHintWithoutRawTransportDiagnostics) {
+        CheckOperationDiagnostics(EOperationDiagnosticSurface::SubmissionTransport);
+    }
+
+    Y_UNIT_TEST(PollTransportIssuesStayRedactedWithoutResolvingUncertainty) {
+        CheckOperationDiagnostics(EOperationDiagnosticSurface::PollTransport);
+    }
+
+    Y_UNIT_TEST(CompletedOperationIssuesExcludeRawMessageAndDescriptions) {
+        CheckOperationDiagnostics(EOperationDiagnosticSurface::CompletedOperation);
+    }
+
+    Y_UNIT_TEST(SubmissionRefusalExtractsOnlyBoundedSafeReasons) {
+        CheckSafeFailureReasons(EFailureDelivery::SubmissionStatus);
+    }
+
+    Y_UNIT_TEST(PolledRefusalExtractsOnlyBoundedSafeReasons) {
+        CheckSafeFailureReasons(EFailureDelivery::PolledOperation);
+    }
+
+    Y_UNIT_TEST(TerminalOperationWithSuccessErrorCodeRemainsUnknown) {
+        TFixture f;
+        f.Update();
+        f.Poll("saved-operation");
+        auto request = f.Take(f.Polls);
+        auto response = MakeHolder<TOperation::TEvGetOperationResponse>();
+        response->Response.set_id("saved-operation");
+        response->Response.set_done(true);
+        response->Response.mutable_error()->set_code(grpc::StatusCode::OK);
+        f.Runtime.Send(new IEventHandle(request->Sender, request->Recipient, response.Release(), 0, request->Cookie));
+        const auto result = f.OperationResult(EDelegationOperationOutcome::Unknown);
+        UNIT_ASSERT_VALUES_EQUAL(result.OperationId, "saved-operation");
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::INTERNAL_ERROR);
+        UNIT_ASSERT(f.Setups.empty());
+        UNIT_ASSERT(f.Revokes.empty());
+    }
+
+    Y_UNIT_TEST(CredentialsFailureBeforeSubmitProvesNoRemoteMutation) {
+        for (ui32 failure = 0; failure != 3; ++failure) {
+            TFixture f;
+            if (failure == 1) {
+                f.Update(TTokenStatus::ECode::ERROR, {}, "credentials unavailable");
+            } else if (failure == 2) {
+                f.Update(TTokenStatus::ECode::SUCCESS, {});
+            }
+            f.Submit();
+            const auto result = f.OperationResult(EDelegationOperationOutcome::Failed);
+            UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAVAILABLE);
+            UNIT_ASSERT(result.OperationId.empty());
+            UNIT_ASSERT(f.Setups.empty());
+            UNIT_ASSERT(f.Polls.empty());
+            // A new setup is safe after credentials recover: no earlier call
+            // was dispatched that could complete behind this one.
+            f.Update();
+            f.Submit();
+            auto request = f.Take(f.Setups);
+            f.Reply<TControl::TEvSetupDelegationResponse>(*request);
+            f.OperationResult(EDelegationOperationOutcome::Succeeded);
+        }
+    }
+
+    Y_UNIT_TEST(CredentialsFailureDuringPollKeepsKnownOperationUnknown) {
+        TFixture f;
+        f.Update(TTokenStatus::ECode::ERROR, {}, "credentials unavailable");
+        f.Poll("accepted-before-credential-failure");
+        const auto result = f.OperationResult(EDelegationOperationOutcome::Unknown);
+        UNIT_ASSERT_VALUES_EQUAL(result.OperationId, "accepted-before-credential-failure");
+        UNIT_ASSERT(f.Setups.empty());
+        UNIT_ASSERT(f.Polls.empty());
+    }
+
+    Y_UNIT_TEST(OnlyDefiniteUndeliveredSubmitIsFailed) {
+        for (bool unsure : {false, true}) {
+            TFixture f;
+            f.Update();
+            f.Submit();
+            auto request = f.Take(f.Setups);
+            f.Runtime.Send(new IEventHandle(request->Sender, request->Recipient,
+                new TEvents::TEvUndelivered(TControl::TEvSetupDelegationRequest::EventType,
+                    TEvents::TEvUndelivered::ReasonActorUnknown, unsure), 0, request->Cookie));
+            const auto result = f.OperationResult(unsure
+                ? EDelegationOperationOutcome::Unknown : EDelegationOperationOutcome::Failed);
+            UNIT_ASSERT(result.OperationId.empty());
+            UNIT_ASSERT(f.Setups.empty());
+        }
+    }
+
+    Y_UNIT_TEST(SubmitPreservesBindingAndReturnsAcceptedWithoutPolling) {
+        TFixture f;
+        f.Update();
+        f.Submit();
+        auto request = f.Take(f.Setups);
+        const auto& event = *request->Get<TControl::TEvSetupDelegationRequest>();
+        UNIT_ASSERT_VALUES_EQUAL(event.Request.service_id(), "persisted-service");
+        UNIT_ASSERT_VALUES_EQUAL(event.Request.microservice_id(), "persisted-microservice");
+        UNIT_ASSERT_VALUES_EQUAL(event.Request.resource().type(), "persisted-resource-type");
+        UNIT_ASSERT_VALUES_EQUAL(event.Request.referrer().type(), "persisted-referrer-type");
+        UNIT_ASSERT(event.Request.with_references());
+        UNIT_ASSERT_VALUES_EQUAL(event.Request.on_behalf_of_subject_id(), "user-subject");
+        UNIT_ASSERT_VALUES_EQUAL(event.RequestId, "durable-correlation-id");
+        f.Reply<TControl::TEvSetupDelegationResponse>(*request, false);
+        const auto result = f.OperationResult(EDelegationOperationOutcome::Accepted);
+        UNIT_ASSERT_VALUES_EQUAL(result.OperationId, "operation");
+        UNIT_ASSERT(f.Polls.empty());
+    }
+
+    Y_UNIT_TEST(LostSubmitResponseRemainsUnknownAndIsNotRetried) {
+        TFixture f;
+        f.Update();
+        f.Submit();
+        auto request = f.Take(f.Setups);
+        const auto result = f.OperationResult(EDelegationOperationOutcome::Unknown);
+        UNIT_ASSERT(result.OperationId.empty());
+        UNIT_ASSERT(f.Setups.empty());
+        UNIT_ASSERT(f.Polls.empty());
+        f.Reply<TControl::TEvSetupDelegationResponse>(*request, false);
+        f.Poll("known-operation");
+        auto poll = f.Take(f.Polls);
+        UNIT_ASSERT(f.OperationResults.empty()); // late submit response is not reclassified as accepted
+        UNIT_ASSERT_VALUES_EQUAL(poll->Get<TOperation::TEvGetOperationRequest>()->Request.operation_id(), "known-operation");
+        UNIT_ASSERT(f.Setups.empty());
+    }
+
+    Y_UNIT_TEST(ExplicitInitialRefusalIsFailed) {
+        TFixture f;
+        f.Update();
+        f.Submit();
+        auto request = f.Take(f.Setups);
+        f.Reply<TControl::TEvSetupDelegationResponse>(*request, true, grpc::StatusCode::PERMISSION_DENIED);
+        const auto result = f.OperationResult(EDelegationOperationOutcome::Failed);
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAUTHORIZED);
+        UNIT_ASSERT(f.Setups.empty());
+    }
+
+    Y_UNIT_TEST(LegacyCallsDistinguishCredentialsFromPermissionsWithoutRetry) {
+        for (auto code : {grpc::StatusCode::UNAUTHENTICATED, grpc::StatusCode::PERMISSION_DENIED}) {
+            TFixture f;
+            f.Update();
+            f.Setup();
+            auto request = f.Take(f.Setups);
+            f.Reply<TControl::TEvSetupDelegationResponse>(*request, true, code);
+            const auto result = f.Result(Ydb::StatusIds::UNAUTHORIZED).Result;
+            UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToOneLineString(), code == grpc::StatusCode::UNAUTHENTICATED
+                ? "authentication failed" : "permission denied");
+            UNIT_ASSERT(f.Setups.empty());
+        }
+    }
+
+    Y_UNIT_TEST(SubmissionRefusalsKeepDistinctSafeAuthenticationReasons) {
+        for (auto code : {grpc::StatusCode::UNAUTHENTICATED, grpc::StatusCode::PERMISSION_DENIED}) {
+            TFixture f;
+            f.Update();
+            f.Submit();
+            auto request = f.Take(f.Setups);
+            f.Reply<TControl::TEvSetupDelegationResponse>(*request, true, code);
+            const auto result = f.OperationResult(EDelegationOperationOutcome::Failed);
+            UNIT_ASSERT_VALUES_EQUAL(result.FailureReasons.size(), 1);
+            UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToOneLineString(), code == grpc::StatusCode::UNAUTHENTICATED
+                ? "authentication failed" : "permission denied");
+            UNIT_ASSERT(f.Setups.empty());
+        }
+    }
+
+    Y_UNIT_TEST(PollAuthenticationRefusalsKeepTheRemoteOutcomeUnknown) {
+        for (auto code : {grpc::StatusCode::UNAUTHENTICATED, grpc::StatusCode::PERMISSION_DENIED}) {
+            TFixture f;
+            f.Update();
+            f.Poll("saved-operation");
+            auto request = f.Take(f.Polls);
+            f.Reply<TOperation::TEvGetOperationResponse>(*request, false, code);
+            const auto result = f.OperationResult(EDelegationOperationOutcome::Unknown);
+            UNIT_ASSERT_VALUES_EQUAL(result.OperationId, "saved-operation");
+            UNIT_ASSERT_VALUES_EQUAL(result.FailureReasons.size(), 1);
+            UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToOneLineString(), code == grpc::StatusCode::UNAUTHENTICATED
+                ? "authentication failed" : "permission denied");
+            const auto message = result.Issues.ToOneLineString();
+            if (code == grpc::StatusCode::PERMISSION_DENIED) {
+                UNIT_ASSERT_STRING_CONTAINS(message, "original initiating system service account");
+                UNIT_ASSERT_STRING_CONTAINS(message, "<service>.<resource>.get");
+            }
+            UNIT_ASSERT(!message.Contains("iam.serviceAccounts.use"));
+            UNIT_ASSERT(!message.Contains("internal.service-control.delegator"));
+            UNIT_ASSERT(f.Setups.empty());
+            UNIT_ASSERT(f.Revokes.empty());
+        }
+    }
+
+    Y_UNIT_TEST(SetupPermissionRefusalNamesUserAndServiceRights) {
+        TFixture f;
+        f.Update();
+        f.Submit();
+        auto request = f.Take(f.Setups);
+        f.Reply<TControl::TEvSetupDelegationResponse>(*request, true, grpc::StatusCode::PERMISSION_DENIED);
+        const auto result = f.OperationResult(EDelegationOperationOutcome::Failed);
+        const auto message = result.Issues.ToOneLineString();
+        UNIT_ASSERT_STRING_CONTAINS(message, "iam.serviceAccounts.use");
+        UNIT_ASSERT_STRING_CONTAINS(message, "iam.serviceAccounts.user");
+        UNIT_ASSERT_STRING_CONTAINS(message, "internal.service-control.delegator");
+        UNIT_ASSERT_STRING_CONTAINS(message, "iam.gizmo");
+        UNIT_ASSERT_STRING_CONTAINS(message, "service-control.services.referenceUpdater");
+    }
+
+    Y_UNIT_TEST(RevokePermissionRefusalNamesTheServiceRole) {
+        TFixture f;
+        f.Update();
+        f.Revoke();
+        auto request = f.Take(f.Revokes);
+        f.Reply<TControl::TEvRevokeDelegationResponse>(*request, true, grpc::StatusCode::PERMISSION_DENIED);
+        const auto message = f.Result(Ydb::StatusIds::UNAUTHORIZED, 43).Result.Issues.ToOneLineString();
+        UNIT_ASSERT_STRING_CONTAINS(message, "internal.service-control.delegator");
+        UNIT_ASSERT_STRING_CONTAINS(message, "iam.gizmo");
+        UNIT_ASSERT(!message.Contains("iam.serviceAccounts.use"));
+    }
+
+    Y_UNIT_TEST(PollPermissionFailurePreservesUnknownOperation) {
+        TFixture f;
+        f.Update();
+        f.Poll();
+        auto request = f.Take(f.Polls);
+        f.Reply<TOperation::TEvGetOperationResponse>(*request, false, grpc::StatusCode::PERMISSION_DENIED);
+        const auto result = f.OperationResult(EDelegationOperationOutcome::Unknown);
+        UNIT_ASSERT_VALUES_EQUAL(result.OperationId, "operation");
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAUTHORIZED);
+        UNIT_ASSERT(f.Setups.empty());
+        UNIT_ASSERT(f.Revokes.empty());
+    }
+
+    Y_UNIT_TEST(PollTerminalOperationErrorIsFailed) {
+        TFixture f;
+        f.Update();
+        f.Poll();
+        auto request = f.Take(f.Polls);
+        auto response = MakeHolder<TOperation::TEvGetOperationResponse>();
+        response->Response.set_id("operation");
+        response->Response.set_done(true);
+        response->Response.mutable_error()->set_code(grpc::StatusCode::PERMISSION_DENIED);
+        response->Response.mutable_error()->set_message("denied");
+        f.Runtime.Send(new IEventHandle(request->Sender, request->Recipient, response.Release(), 0, request->Cookie));
+        const auto result = f.OperationResult(EDelegationOperationOutcome::Failed);
+        UNIT_ASSERT_VALUES_EQUAL(result.OperationId, "operation");
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::UNAUTHORIZED);
+    }
+
+    Y_UNIT_TEST(PollRejectsDifferentOperationId) {
+        TFixture f;
+        f.Update();
+        f.Poll("persisted-operation");
+        auto request = f.Take(f.Polls);
+        f.Reply<TOperation::TEvGetOperationResponse>(*request);
+        const auto result = f.OperationResult(EDelegationOperationOutcome::Unknown);
+        UNIT_ASSERT_VALUES_EQUAL(result.OperationId, "persisted-operation");
+        UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::INTERNAL_ERROR);
+    }
+
+    Y_UNIT_TEST(RevokeUsesPersistedBindingAndMissingDelegationIsSuccess) {
+        TFixture f;
+        f.Update();
+        f.Submit(EDelegationOperationKind::Revoke);
+        auto request = f.Take(f.Revokes);
+        const auto& proto = request->Get<TControl::TEvRevokeDelegationRequest>()->Request;
+        UNIT_ASSERT_VALUES_EQUAL(proto.service_id(), "persisted-service");
+        UNIT_ASSERT_VALUES_EQUAL(proto.microservice_id(), "persisted-microservice");
+        UNIT_ASSERT_VALUES_EQUAL(proto.resource().type(), "persisted-resource-type");
+        UNIT_ASSERT_VALUES_EQUAL(proto.referrer().type(), "persisted-referrer-type");
+        UNIT_ASSERT(proto.with_references());
+        f.Reply<TControl::TEvRevokeDelegationResponse>(*request, true, grpc::StatusCode::NOT_FOUND);
+        f.OperationResult(EDelegationOperationOutcome::Succeeded);
+    }
+
+    Y_UNIT_TEST(SetupConflictDoesNotProveOriginalOperationFailed) {
+        for (auto code : {grpc::StatusCode::FAILED_PRECONDITION, grpc::StatusCode::ALREADY_EXISTS}) {
+            TFixture f;
+            f.Update();
+            f.Submit();
+            auto request = f.Take(f.Setups);
+            f.Reply<TControl::TEvSetupDelegationResponse>(*request, false, code);
+            f.OperationResult(EDelegationOperationOutcome::Unknown);
+            UNIT_ASSERT(f.Setups.empty());
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(IamDelegationSettings) {
     Y_UNIT_TEST(ProtobufAndReplicationFallbackPreserveIdentity) {
         NKikimrConfig::TIamConfig config;
         config.SetServiceControlEndpoint("control");
         config.SetResourceManagerEndpoint("resource-manager");
         config.SetSystemTokenName("system-account");
+        config.SetDelegationTabletId(NTests::TTestContext::TabletId);
         NKikimrReplication::TReplicationDefaults defaults;
         auto& shared = *defaults.MutableIamServiceControl();
         shared.SetEndpoint("token");
@@ -541,6 +962,7 @@ Y_UNIT_TEST_SUITE(IamDelegationSettings) {
         UNIT_ASSERT(!settings.CanResolveCloud());
         config.SetServiceControlEndpoint("control");
         config.SetSystemTokenName("system-account");
+        config.SetDelegationTabletId(NTests::TTestContext::TabletId);
         settings = TIamDelegationSettings::FromConfig(config);
         UNIT_ASSERT(settings.ValidateForDelegation().empty());
         UNIT_ASSERT(!settings.CanResolveCloud());

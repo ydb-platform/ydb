@@ -300,7 +300,8 @@ public:
         std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
         std::shared_ptr<TKqpProxySharedResources>&& kqpProxySharedResources,
         IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
-        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+        const NKikimrConfig::TIamConfig& iamConfig
         ): LogConfig(logConfig)
         , TableServiceConfig(tableServiceConfig)
         , QueryServiceConfig(queryServiceConfig)
@@ -313,6 +314,7 @@ public:
         , ModuleResolverState()
         , KqpProxySharedResources(std::move(kqpProxySharedResources))
         , S3ActorsFactory(std::move(s3ActorsFactory))
+        , IamConfig(iamConfig)
         , QueryCache(new TKqpQueryCache(TableServiceConfig.GetCompileQueryCacheSize(), TDuration::Seconds(TableServiceConfig.GetCompileQueryCacheTTLSec())))
     {}
 
@@ -2361,7 +2363,7 @@ private:
     }
 
     // IAM delegation secrets: the node-local delegation service (SetupDelegation/RevokeDelegation for
-    // CREATE/ALTER/DROP SECRET) behind the system token service (the token of YDB's own service account).
+    // CREATE/ALTER/DROP SECRET) using the existing token manager for YDB's own service account.
     //
     // Runs at bootstrap and on every config notification, so that turning the feature flag on takes effect
     // at once: a service not running yet is started. Turning the flag off, or changing IamConfig, takes effect
@@ -2377,7 +2379,7 @@ private:
         if (running(NIamDelegation::MakeIamDelegationServiceId())) {
             return;
         }
-        const auto settings = NIamDelegation::TIamDelegationSettings::FromConfig(AppData()->IamConfig, AppData()->ReplicationConfig);
+        const auto settings = NIamDelegation::TIamDelegationSettings::FromConfig(IamConfig, AppData()->ReplicationConfig);
         if (const TString error = settings.ValidateForDelegation()) {
             YDB_LOG_WARN("IAM delegation service is not started", {"reason", error});
             return;
@@ -2454,6 +2456,7 @@ private:
     std::unique_ptr<TLocalSessionsRegistry> LocalSessions;
     std::shared_ptr<TKqpProxySharedResources> KqpProxySharedResources;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
+    const NKikimrConfig::TIamConfig IamConfig;
 
     TKqpQueryCachePtr QueryCache;
 
@@ -2529,11 +2532,12 @@ IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory,
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources,
     IKqpFederatedQuerySetupFactory::TPtr federatedQuerySetupFactory,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+        const NKikimrConfig::TIamConfig& iamConfig
     )
 {
     return new TKqpProxyService(logConfig, tableServiceConfig, queryServiceConfig, tliConfig, std::move(settings),
-        std::move(queryReplayFactory), std::move(kqpProxySharedResources), std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory));
+        std::move(queryReplayFactory), std::move(kqpProxySharedResources), std::move(federatedQuerySetupFactory), std::move(s3ActorsFactory), iamConfig);
 }
 
 } // namespace NKikimr::NKqp

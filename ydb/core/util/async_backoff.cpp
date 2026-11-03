@@ -17,7 +17,7 @@ NActors::async<ui64> TAsyncBackoff::Wait(TDuration requestTimeout) {
     for (;;) {
         const auto now = NActors::TActivationContext::Monotonic();
         if (now >= NextAllowedAt) {
-            if (Backoff.GetIteration() != 0) {
+            if (Ownership == EOwnership::Local && Backoff.GetIteration() != 0) {
                 // Fence both previous outcomes and other waiters before dispatch.
                 ++Version;
                 NextAllowedAt = now + requestTimeout;
@@ -49,6 +49,7 @@ NActors::async<ui64> TAsyncBackoff::Wait(TDuration requestTimeout) {
 }
 
 TAsyncBackoff::EUpdate TAsyncBackoff::OnFailure(ui64 version) {
+    Y_ABORT_UNLESS(Ownership == EOwnership::Local);
     if (version != Version) {
         return EUpdate::Stale;
     }
@@ -59,6 +60,7 @@ TAsyncBackoff::EUpdate TAsyncBackoff::OnFailure(ui64 version) {
 }
 
 TAsyncBackoff::EUpdate TAsyncBackoff::OnSuccess(ui64 version) {
+    Y_ABORT_UNLESS(Ownership == EOwnership::Local);
     if (version != Version) {
         return EUpdate::Stale;
     }
@@ -72,10 +74,18 @@ TAsyncBackoff::EUpdate TAsyncBackoff::OnSuccess(ui64 version) {
 }
 
 TAsyncBackoff::EUpdate TAsyncBackoff::Observe(ui64 version, NActors::TMonotonic nextAllowedAt) {
-    Y_UNUSED(version);
-    Y_UNUSED(nextAllowedAt);
-    Y_UNUSED(Ownership);
-    return EUpdate::Stale;
+    Y_ABORT_UNLESS(Ownership == EOwnership::External);
+    if (version < Version) {
+        return EUpdate::Stale;
+    }
+    // Equal-version duplicate observations cannot postpone an already armed wait.
+    if (version == Version) {
+        nextAllowedAt = Min(nextAllowedAt, NextAllowedAt);
+    }
+    Version = version;
+    NextAllowedAt = nextAllowedAt;
+    Changed.NotifyAll();
+    return EUpdate::Applied;
 }
 
 ui64 TAsyncBackoff::GetVersion() const {

@@ -3,19 +3,16 @@
 #include <ydb/core/base/events.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/monotonic.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NIamDelegation {
-
-enum class EDelegationFailureReason {
-    WrongCloud, ServiceNotEnabled, CloudNotFound, ServiceAccountNotFound,
-    SubjectNotDelegatable, AuthenticationFailed, PermissionDenied,
-};
-
 
 // Parameters of one IAM delegation: "the agent service account of YDB in cloud CloudId may impersonate
 // ServiceAccountId; the delegation is referenced by ReferrerId". The IAM types of the cloud and of the
@@ -50,6 +47,43 @@ struct TDelegationResult {
     }
 };
 
+// Persisted identity of an IAM grant. Recovery must use these values, even if the node's
+// current service identity changes. Transport endpoints and credentials remain node settings.
+enum class EReferencePolicy { WithoutReferences, WithReferences };
+
+struct TDelegationBinding {
+    TString ServiceAccountId;
+    TString CloudId;
+    TString ReferrerId;
+    TString ServiceId;
+    TString MicroserviceId;
+    TString ResourceType;
+    TString ReferrerType;
+    EReferencePolicy ReferencePolicy = EReferencePolicy::WithoutReferences;
+};
+
+enum class EDelegationOperationKind { Setup, Revoke };
+enum class EDelegationOperationOutcome { Unknown, Accepted, Succeeded, Failed };
+
+// Allowlisted diagnostic groups safe to persist; no remote messages or descriptions.
+enum class EDelegationFailureReason {
+    WrongCloud,
+    ServiceNotEnabled,
+    CloudNotFound,
+    ServiceAccountNotFound,
+    SubjectNotDelegatable,
+    AuthenticationFailed,
+    PermissionDenied,
+};
+
+struct TDelegationOperationResult {
+    EDelegationOperationOutcome Outcome = EDelegationOperationOutcome::Unknown;
+    TString OperationId;
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::UNAVAILABLE;
+    NYql::TIssues Issues;
+    TVector<EDelegationFailureReason> FailureReasons;
+};
+
 struct TEvIamDelegation {
     enum EEv {
         // delegation service
@@ -58,6 +92,10 @@ struct TEvIamDelegation {
         EvRevokeDelegation,
         EvRevokeDelegationResult,
 
+        // Slots4/5 are reserved for the separate delegated-token service.
+        EvSubmitDelegationOperation = EvSetupDelegation + 6,
+        EvPollDelegationOperation,
+        EvDelegationOperationResult,
         EvEnd
     };
 
@@ -95,6 +133,33 @@ struct TEvIamDelegation {
         explicit TEvRevokeDelegationResult(TDelegationResult result)
             : Result(std::move(result))
         {}
+    };
+
+    // A single submission. Unknown means the caller must retain the uncertain grant and
+    // cannot assume that another submission or a revocation is safe. RequestId is correlation
+    // metadata only; it does not provide remote idempotency.
+    struct TEvSubmitDelegationOperation : NActors::TEventLocal<TEvSubmitDelegationOperation, EvSubmitDelegationOperation> {
+        EDelegationOperationKind Kind;
+        TDelegationBinding Binding;
+        TString SubjectId;
+        TString RequestId;
+        NActors::TMonotonic Deadline = NActors::TMonotonic::Max();
+
+        TEvSubmitDelegationOperation(EDelegationOperationKind kind, TDelegationBinding binding,
+                TString subjectId = {}, TString requestId = {})
+            : Kind(kind), Binding(std::move(binding)), SubjectId(std::move(subjectId)), RequestId(std::move(requestId)) {}
+    };
+
+    // Polling never resubmits the mutation. A failed Get keeps Outcome=Unknown and the ID.
+    struct TEvPollDelegationOperation : NActors::TEventLocal<TEvPollDelegationOperation, EvPollDelegationOperation> {
+        TString OperationId;
+        NActors::TMonotonic Deadline = NActors::TMonotonic::Max();
+        explicit TEvPollDelegationOperation(TString operationId) : OperationId(std::move(operationId)) {}
+    };
+
+    struct TEvDelegationOperationResult : NActors::TEventLocal<TEvDelegationOperationResult, EvDelegationOperationResult> {
+        TDelegationOperationResult Result;
+        explicit TEvDelegationOperationResult(TDelegationOperationResult result) : Result(std::move(result)) {}
     };
 
 };

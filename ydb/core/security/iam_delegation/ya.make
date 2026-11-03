@@ -3,12 +3,15 @@ LIBRARY()
 SRCS(
     iam_actor_base.cpp
     iam_delegation_service.cpp
+    retry_gate.cpp
     settings.cpp
 )
 
 PEERDIR(
     contrib/libs/googleapis-common-protos
     ydb/core/base
+    ydb/core/security/iam_delegation/tablet/client
+    ydb/core/security/iam_delegation/tablet/protos
     ydb/core/protos
     ydb/core/security/token_manager
     ydb/core/util

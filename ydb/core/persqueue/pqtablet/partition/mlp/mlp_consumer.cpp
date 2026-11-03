@@ -783,7 +783,18 @@ void TConsumerActor::ProcessEventQueue() {
     for (auto& ev : PurgeRequestsQueue) {
         auto toOffset = PartitionEndOffset;
         if (auto evToOffset = ev->Get()->GetToOffset()) {
-            toOffset = *evToOffset;
+            const auto committedOffset = Storage->GetFirstUncommittedOffset();
+            toOffset = Max(committedOffset, *evToOffset);
+            if (toOffset == committedOffset) {
+                // Replayed replication offsets must preserve locks and individual commits.
+                // A preceding operation in this batch may still need to be persisted.
+                if (Storage->IsBatchEmpty()) {
+                    Send(ev->Sender, new TEvPQ::TEvMLPPurgeResponse(PartitionId), 0, ev->Cookie);
+                } else {
+                    PendingPurgeQueue.emplace_back(ev->Sender, ev->Cookie);
+                }
+                continue;
+            }
         }
 
         Storage->Purge(toOffset);

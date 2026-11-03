@@ -51,6 +51,16 @@ namespace NTabletFlatExecutor {
 
         }
 
+        static THolder<NTable::TCompactionResult> MakeCompactionResult(const TResults& results) {
+            auto result = MakeHolder<NTable::TCompactionResult>(
+                results ? results.front().Part.Epoch() : NTable::TEpoch::Max(), results.size());
+            for (const auto& output : results) {
+                result->Parts.emplace_back(output.Part);
+                Y_ENSURE(result->PartOutputIds.emplace(output.Part->Label, output.OutputId).second);
+            }
+            return result;
+        }
+
         bool Success = false;
         std::exception_ptr Exception;
         ui32 Step = Max<ui32>();
@@ -1115,7 +1125,7 @@ namespace NTabletFlatExecutor {
         IDriver * Driver = nullptr;
         THolder<TCompactCfg> Conf;
         TIntrusiveConstPtr<TScheme> Scheme;
-        
+
         TCompactionOutputs Outputs;
         TIntrusivePtr<TPartWriter> Writer;
 

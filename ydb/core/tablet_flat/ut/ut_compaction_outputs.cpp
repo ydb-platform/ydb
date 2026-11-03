@@ -2,10 +2,20 @@
 #include <ydb/core/tablet_flat/flat_fwd_blobs.h>
 #include <ydb/core/tablet_flat/flat_page_label.h>
 #include <ydb/core/tablet_flat/flat_part_loader.h>
+#include <ydb/core/tablet_flat/flat_ops_compact.h>
+#include <ydb/core/tablet_flat/flat_scan_actor.h>
 #include <ydb/core/tablet_flat/flat_table.h>
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
+#include <ydb/core/tablet_flat/test/libs/rows/tool.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/string/cast.h>
+
+#include <algorithm>
 
 namespace NKikimr::NTabletFlatExecutor {
 namespace {
@@ -127,6 +137,20 @@ namespace {
 
     class TWrittenPages final : public IPages {
     public:
+        void Add(const TPart* part) {
+            const auto* store = dynamic_cast<const NTable::TPartStore*>(part);
+            UNIT_ASSERT(store);
+            auto& slots = Pages[part];
+            slots.resize(store->PageCollections.size());
+            for (ui32 slot = 0; slot < slots.size(); ++slot) {
+                for (const auto& page : store->PageCollections[slot]->GetPageMap()) {
+                    auto body = page->SharedBody;
+                    UNIT_ASSERT(body.Use());
+                    slots[slot][page->Offset] = NSharedCache::TPinnedPageRef(body).GetData();
+                }
+            }
+        }
+
         void Add(const TPart* part, const TCompactionOutputs::TResult& result) {
             auto& slots = Pages[part];
             slots.resize(result.PageCollections.size());
@@ -163,6 +187,191 @@ namespace {
     private:
         THashMap<const TPart*, TVector<THashMap<NPage::TPageOffset, TSharedData>>> Pages;
     };
+
+    // Run the production scan actor/driver, retaining BS requests until the test
+    // confirms them. Input comes from a real memtable; output uses the real bundle
+    // and loader, with cached pages available for normal table iterators.
+    class TCompactionScanEnv {
+        class TReceiver : public NActors::TActor<TReceiver> {
+        public:
+            explicit TReceiver(TCompactionScanEnv& env)
+                : TActor(&TReceiver::Receive)
+                , Env(env)
+            {}
+
+        private:
+            void Receive(TAutoPtr<IEventHandle>& ev) {
+                switch (ev->GetTypeRewrite()) {
+                    case TEvBlobStorage::TEvPut::EventType: {
+                        const auto& put = *ev->Get<TEvBlobStorage::TEvPut>();
+                        UNIT_ASSERT_VALUES_EQUAL(put.Buffer.size(), put.Id.BlobSize());
+                        UNIT_ASSERT(Env.WrittenBlobs.insert(put.Id).second);
+                        Env.PendingPuts.emplace_back(ev.Release());
+                        break;
+                    }
+                    case NOps::TEvResult::EventType:
+                        UNIT_ASSERT(!Env.Result);
+                        Env.Result.Reset(ev.Release());
+                        break;
+                    case NOps::TEvScanStat::EventType:
+                    case NBlockIO::TEvStat::EventType:
+                        break;
+                    default:
+                        UNIT_FAIL("Unexpected compaction test event " << ev->GetTypeName());
+                }
+            }
+
+            TCompactionScanEnv& Env;
+        };
+
+    public:
+        TCompactionScanEnv() {
+            TAppPrepare app;
+            Runtime.Initialize(app.Unwrap());
+            Owner = Runtime.Register(new TReceiver(*this));
+            Storage = Owner;
+            Runtime.RegisterService(MakeBlobStorageProxyID(11), Storage);
+            Runtime.RegisterService(MakeBlobStorageProxyID(13), Storage);
+
+            NSharedCache::TSharedCacheConfig config;
+            config.SetMemoryLimit(128 * 1024 * 1024);
+            Runtime.RegisterService(NSharedCache::MakeSharedPageCacheId(),
+                Runtime.Register(NSharedCache::CreateSharedPageCache(config, Runtime.GetDynamicCounters())));
+        }
+
+        void Start(THolder<TCompactCfg> conf, TIntrusivePtr<TMemTable> input,
+                THolder<ICompactionRouter> router) {
+            conf->Epoch = input->Epoch;
+            conf->Params->Table = 101;
+            const TLogoBlobID mask(1, 2, 3, 0, 0, 0);
+            THolder<TScanSnapshot> snapshot(new TScanSnapshot{
+                101,
+                MakeIntrusive<TBarrier>(mask.Step()),
+                new TSubset(TEpoch::Zero(), input->Scheme,
+                    TVector<TMemTableSnapshot>{{input, input->Immediate()}}),
+                TRowVersion::Max(),
+            });
+            TAutoPtr<TCompactCfg> scanConf = conf.Release();
+            TAutoPtr<IScan> scan = new TOpsCompact(Owner, mask, scanConf, std::move(router));
+            Driver = Runtime.Register(new NOps::TDriver(1, scan, {}, std::move(snapshot)),
+                0, 0, NActors::TMailboxType::Simple, 0, Owner);
+            Drain();
+        }
+
+        void Drain() {
+            Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+
+        void Confirm(size_t index = 0, NKikimrProto::EReplyStatus status = NKikimrProto::OK) {
+            UNIT_ASSERT(index < PendingPuts.size());
+            auto request = std::move(PendingPuts[index]);
+            PendingPuts.erase(PendingPuts.begin() + index);
+            const auto& put = *request->Get<TEvBlobStorage::TEvPut>();
+            Runtime.Send(new IEventHandle(request->Sender, Storage,
+                new TEvBlobStorage::TEvPutResult(status, put.Id,
+                    TStorageStatusFlags(NKikimrBlobStorage::StatusIsValid),
+                    ui32(put.Id.Channel()) + 10, 1.f), 0, request->Cookie));
+            Drain();
+        }
+
+        void Complete() {
+            while (!Result) {
+                UNIT_ASSERT_C(!PendingPuts.empty(), "Compaction stopped without pending BS writes");
+                Confirm();
+            }
+            UNIT_ASSERT(PendingPuts.empty());
+        }
+
+        void ConfirmChannel(ui8 channel) {
+            for (;;) {
+                auto it = std::find_if(PendingPuts.begin(), PendingPuts.end(), [channel](const auto& ev) {
+                    return ev->template Get<TEvBlobStorage::TEvPut>()->Id.Channel() == channel;
+                });
+                if (it == PendingPuts.end()) {
+                    return;
+                }
+                Confirm(it - PendingPuts.begin());
+            }
+        }
+
+        const TProdCompact& Product() const {
+            UNIT_ASSERT(Result);
+            auto* product = dynamic_cast<TProdCompact*>(Result->Get<NOps::TEvResult>()->Result.Get());
+            UNIT_ASSERT(product);
+            if (product->Exception) {
+                std::rethrow_exception(product->Exception);
+            }
+            return *product;
+        }
+
+        TTestActorRuntime Runtime;
+        TActorId Owner;
+        TActorId Storage;
+        TActorId Driver;
+        THolder<IEventHandle> Result;
+        TDeque<THolder<IEventHandle>> PendingPuts;
+        THashSet<TLogoBlobID> WrittenBlobs;
+    };
+
+    THolder<TCompactCfg> ScanConfig(ui32 outputs = 2) {
+        auto conf = MakeHolder<TCompactCfg>(MakeHolder<TCompactionParams>());
+        AddOutput(*conf, 17);
+        if (outputs == 2) {
+            AddOutput(*conf, 31, 3);
+        }
+        for (auto& output : conf->Outputs) {
+            output.Writer.Groups[0].MaxBlobSize = 4096;
+        }
+        return conf;
+    }
+
+    void AddMemRow(TMemTable& table, const NTest::TRow& row, TRowVersion version) {
+        const auto split = NTest::TRowTool(*table.Scheme).Split(row, false, true);
+        table.Update(ERowOp::Upsert, split.Key, split.Ops, {}, version, nullptr);
+    }
+
+    TString ScanValue(TStringBuf prefix, ui32 key) {
+        return TString(prefix) + ToString(key) + TString(80, 'x');
+    }
+
+    TIntrusivePtr<TMemTable> ScanInput(ui32 keys, bool history = false, ui32 valueSize = 0) {
+        auto table = MakeIntrusive<TMemTable>(Layout().RowScheme(), TEpoch(i64(7)), ui64(0));
+        for (ui32 key = 0; key < keys; ++key) {
+            if (history) {
+                AddMemRow(*table, *NTest::TSchemedCookRow(*Layout()).Col(key, ScanValue("old", key)), {10, 1});
+            }
+            AddMemRow(*table, *NTest::TSchemedCookRow(*Layout()).Col(key,
+                valueSize ? TString(valueSize, 'a') : ScanValue("head", key)), {20, 1});
+            if (history) {
+                AddMemRow(*table, *NTest::TSchemedCookRow(*Layout()).Col(key, ScanValue("delta", key)),
+                    {Max<ui64>(), 200 + key});
+                const auto lockRow = *NTest::TSchemedCookRow(*Layout()).Col(key);
+                const auto raw = NTest::TRowTool(*Layout()).LookupKey(lockRow);
+                table->LockRow(ELockMode::Exclusive, raw, 100 + key);
+            }
+        }
+        return table;
+    }
+
+    THolder<TTable> ReadTable(const TRowScheme& scheme, TArrayRef<const TPartView> parts) {
+        TScheme::TTableInfo info("test", 101);
+        for (const auto& col : scheme.Cols) {
+            auto& column = info.Columns[col.Tag];
+            column = TColumn("", col.Tag, col.TypeInfo, "");
+            if (col.IsKey()) {
+                column.KeyOrder = col.Key;
+                if (info.KeyColumns.size() <= col.Key) {
+                    info.KeyColumns.resize(col.Key + 1);
+                }
+                info.KeyColumns[col.Key] = col.Tag;
+            }
+        }
+        auto table = MakeHolder<TTable>(TEpoch::Zero());
+        table->SetScheme(info);
+        TSubset empty(TEpoch::Zero(), table->GetScheme());
+        table->Replace(empty, parts, {});
+        return table;
+    }
 }
 
 Y_UNIT_TEST_SUITE(TCompactionOutputsTest) {
@@ -473,6 +682,230 @@ Y_UNIT_TEST_SUITE(TCompactionOutputsTest) {
         conf.IsFulltextCompact = true;
         UNIT_ASSERT_EXCEPTION(TCompactionOutputs(TLogoBlobID(1, 2, 3, 0, 0, 0), conf,
             MakeHolder<TDefaultCompactionRouter>()), yexception);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TCompactionScanOutputsTest) {
+    Y_UNIT_TEST(RouteWholeKeysAndPreserveOutputIds) {
+        TCompactionScanEnv env;
+        auto conf = ScanConfig();
+        for (auto& output : conf->Outputs) {
+            output.Layout.MainPageCollectionEdge = 512;
+        }
+        auto input = ScanInput(40, true);
+        ui32 calls = 0;
+        env.Start(std::move(conf), input, MakeHolder<TParityRouter>(calls));
+        UNIT_ASSERT_VALUES_EQUAL(calls, 40);
+        UNIT_ASSERT(!env.PendingPuts.empty());
+        UNIT_ASSERT(!env.Result);
+
+        env.ConfirmChannel(1);
+        UNIT_ASSERT(!env.PendingPuts.empty());
+        UNIT_ASSERT(!env.Result);
+        while (env.PendingPuts.size() > 1) {
+            env.Confirm();
+            UNIT_ASSERT(!env.Result);
+        }
+        env.Complete();
+        const auto& product = env.Product();
+        UNIT_ASSERT(product.Success);
+
+        // Exercise the same conversion used to deliver results to the strategy.
+        const auto result = TProdCompact::MakeCompactionResult(product.Results);
+        UNIT_ASSERT_VALUES_EQUAL(result->Epoch, input->Epoch);
+        UNIT_ASSERT_VALUES_EQUAL(result->PartOutputIds.size(), result->Parts.size());
+        THashMap<ui32, ui32> partsPerOutput;
+        THashSet<ui32> keys;
+        TWrittenPages pages;
+        for (const auto& part : result->Parts) {
+            const auto outputId = result->PartOutputIds.at(part->Label);
+            UNIT_ASSERT(outputId == 17 || outputId == 31);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(part->Label.Channel()), outputId == 17 ? 1 : 3);
+            ++partsPerOutput[outputId];
+            pages.Add(part.Part.Get());
+            auto table = ReadTable(*input->Scheme, {&part, 1});
+            const TVector<ui32> tags{0, 1};
+            auto iter = table->Iterate(TRawVals{}, tags, &pages, ESeek::Lower, TRowVersion::Max());
+            while (iter->Next(ENext::Uncommitted) == EReady::Data) {
+                const ui32 key = iter->GetKey().Cells()[0].AsValue<ui32>();
+                UNIT_ASSERT(key < 40);
+                UNIT_ASSERT(keys.insert(key).second);
+                UNIT_ASSERT_VALUES_EQUAL(outputId, key % 2 ? 31 : 17);
+                UNIT_ASSERT(iter->IsUncommitted());
+                UNIT_ASSERT_VALUES_EQUAL(iter->GetUncommittedTxId(), 200 + key);
+                UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(1).AsBuf(), ScanValue("delta", key));
+                const auto [lockMode, lockTxId] = iter->GetLockInfo();
+                UNIT_ASSERT_VALUES_EQUAL(lockMode, ELockMode::Exclusive);
+                UNIT_ASSERT_VALUES_EQUAL(lockTxId, 100 + key);
+
+                UNIT_ASSERT_VALUES_EQUAL(iter->SkipUncommitted(), EReady::Data);
+                UNIT_ASSERT(!iter->IsUncommitted());
+                UNIT_ASSERT_VALUES_EQUAL(iter->GetRowVersion(), TRowVersion(20, 1));
+                UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(1).AsBuf(), ScanValue("head", key));
+                UNIT_ASSERT_VALUES_EQUAL(iter->SkipToRowVersion({10, 1}), EReady::Data);
+                UNIT_ASSERT_VALUES_EQUAL(iter->GetRowVersion(), TRowVersion(10, 1));
+                UNIT_ASSERT_VALUES_EQUAL(iter->Row().Get(1).AsBuf(), ScanValue("old", key));
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 40);
+        UNIT_ASSERT(partsPerOutput.at(17) > 1);
+        UNIT_ASSERT(partsPerOutput.at(31) > 1);
+        UNIT_ASSERT_VALUES_EQUAL(calls, 40);
+    }
+
+    Y_UNIT_TEST(EmptyFirstOutputPreservesTransactionStatus) {
+        TCompactionScanEnv env;
+        auto conf = ScanConfig();
+        auto input = ScanInput(0);
+        AddMemRow(*input, *NTest::TSchemedCookRow(*Layout()).Col(ui32(1), ScanValue("head", 1)), {20, 1});
+        input->CommitTx(777, {30, 1});
+        conf->Frozen.push_back(input);
+        ui32 calls = 0;
+        env.Start(std::move(conf), input, MakeHolder<TParityRouter>(calls));
+        env.Complete();
+        const auto& product = env.Product();
+        UNIT_ASSERT(product.Success);
+        const auto result = TProdCompact::MakeCompactionResult(product.Results);
+        UNIT_ASSERT_VALUES_EQUAL(result->Parts.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->PartOutputIds.at(result->Parts[0]->Label), 31);
+        UNIT_ASSERT_VALUES_EQUAL(product.TxStatus.size(), 1);
+        const auto committed = product.TxStatus[0]->TxStatusPage->GetCommittedItems();
+        UNIT_ASSERT_VALUES_EQUAL(committed.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(committed[0].GetTxId(), 777);
+        UNIT_ASSERT_VALUES_EQUAL(committed[0].GetRowVersion(), TRowVersion(30, 1));
+    }
+
+    Y_UNIT_TEST(WriteErrorDiscardsAllOutputs) {
+        TCompactionScanEnv env;
+        ui32 calls = 0;
+        env.Start(ScanConfig(), ScanInput(40), MakeHolder<TParityRouter>(calls));
+        env.ConfirmChannel(1);
+        UNIT_ASSERT(!env.PendingPuts.empty());
+        UNIT_ASSERT(!env.Result);
+        env.Confirm(0, NKikimrProto::ERROR);
+        const auto& product = env.Product();
+        UNIT_ASSERT(!product.Success);
+        UNIT_ASSERT(product.Results.empty());
+    }
+
+    Y_UNIT_TEST(CancellationDiscardsAllOutputs) {
+        TCompactionScanEnv env;
+        ui32 calls = 0;
+        env.Start(ScanConfig(), ScanInput(40), MakeHolder<TParityRouter>(calls));
+        env.ConfirmChannel(1);
+        UNIT_ASSERT(!env.PendingPuts.empty());
+        UNIT_ASSERT(!env.Result);
+        env.Runtime.Send(new IEventHandle(env.Driver, env.Owner, new TEvents::TEvPoison));
+        env.Drain();
+        UNIT_ASSERT(env.Result);
+        UNIT_ASSERT_VALUES_EQUAL(env.Result->Get<NOps::TEvResult>()->Status, EStatus::Term);
+        const auto& product = env.Product();
+        UNIT_ASSERT(!product.Success);
+        UNIT_ASSERT(product.Results.empty());
+    }
+
+    Y_UNIT_TEST(UnfinishedPagesDoNotBlockTheScan) {
+        TCompactionScanEnv env;
+        auto conf = ScanConfig();
+        for (auto& output : conf->Outputs) {
+            output.Layout.Group(0).PageSize = 32 * 1024 * 1024;
+            output.Layout.Group(0).PageRows = Max<ui32>();
+            output.Writer.Groups[0].MaxBlobSize = 8 * 1024 * 1024;
+        }
+        // More than MaxFlight bytes are buffered across the two unfinished pages.
+        // The scan must reach EOF to flush them instead of waiting for nonexistent I/O.
+        constexpr ui32 keys = 24;
+        ui32 calls = 0;
+        env.Start(std::move(conf), ScanInput(keys, false, 1024 * 1024), MakeHolder<TParityRouter>(calls));
+        UNIT_ASSERT_VALUES_EQUAL(calls, keys);
+        UNIT_ASSERT(!env.PendingPuts.empty());
+        UNIT_ASSERT(!env.Result);
+        env.Complete();
+        const auto& product = env.Product();
+        UNIT_ASSERT(product.Success);
+        ui64 rows = 0;
+        for (const auto& result : product.Results) {
+            rows += result.Part->Stat.Rows;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rows, keys);
+    }
+
+    Y_UNIT_TEST(FirstBlobMayExceedFlightLimit) {
+        TCompactionScanEnv env;
+        auto conf = ScanConfig(1);
+        auto& output = conf->Outputs.front();
+        output.Layout.Group(0).PageSize = 32 * 1024 * 1024;
+        output.Layout.Group(0).PageRows = Max<ui32>();
+        output.Writer.Groups[0].MaxBlobSize = 32 * 1024 * 1024;
+        env.Start(std::move(conf), ScanInput(24, false, 1024 * 1024), MakeHolder<TDefaultCompactionRouter>());
+        UNIT_ASSERT_VALUES_EQUAL(env.PendingPuts.size(), 1);
+        UNIT_ASSERT(env.PendingPuts.front()->Get<TEvBlobStorage::TEvPut>()->Id.BlobSize() > TOpsCompact::MaxFlight);
+        UNIT_ASSERT(!env.Result);
+        env.Complete();
+        UNIT_ASSERT(env.Product().Success);
+    }
+
+    Y_UNIT_TEST(SingleOutputFulltextUsesTheOutputWriter) {
+        NTest::TLayoutCook layout;
+        layout.Col(0, 1, NScheme::NTypeIds::String)
+            .Col(0, 2, NScheme::NTypeIds::Uint64)
+            .Col(0, 3, NScheme::NTypeIds::Uint64)
+            .Col(0, 4, NScheme::NTypeIds::Bool)
+            .Col(0, 5, NScheme::NTypeIds::String)
+            .Key({1, 2, 3});
+        auto input = MakeIntrusive<TMemTable>(layout.RowScheme(), TEpoch(i64(7)), ui64(0));
+        auto segment = [](std::initializer_list<ui64> ids) {
+            NFulltext::TDeltaWriter writer;
+            writer.Reset(false, false);
+            for (ui64 id : ids) {
+                writer.Add(id, 1);
+            }
+            const auto data = writer.GetBuf();
+            return TString(reinterpret_cast<const char*>(data.data()), data.size());
+        };
+        AddMemRow(*input, *NTest::TSchemedCookRow(*layout).Col(
+            TString("hello"), ui64(100), ui64(5), true, segment({1, 5})), {50, 1});
+        AddMemRow(*input, *NTest::TSchemedCookRow(*layout).Col(
+            TString("hello"), ui64(101), ui64(10), true, segment({5, 10})), {80, 1});
+
+        TCompactionScanEnv env;
+        auto conf = ScanConfig(1);
+        conf->Params->IsFinal = true;
+        conf->IsFulltextCompact = true;
+        conf->FulltextAddedTag = 4;
+        conf->FulltextSegmentTag = 5;
+        conf->Outputs[0].OutputId = 73;
+        conf->Outputs[0].Layout.Final = true;
+        conf->Outputs[0].Layout.MinRowVersion = {100, 1};
+        env.Start(std::move(conf), input, MakeHolder<TDefaultCompactionRouter>());
+        env.Complete();
+        const auto& product = env.Product();
+        UNIT_ASSERT(product.Success);
+        const auto result = TProdCompact::MakeCompactionResult(product.Results);
+        UNIT_ASSERT_VALUES_EQUAL(result->Parts.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->PartOutputIds.at(result->Parts[0]->Label), 73);
+        TWrittenPages pages;
+        pages.Add(result->Parts[0].Part.Get());
+        auto table = ReadTable(*input->Scheme, result->Parts);
+        const TVector<ui32> tags{1, 2, 3, 4, 5};
+        auto iter = table->Iterate(TRawVals{}, tags, &pages, ESeek::Lower, TRowVersion::Max());
+        UNIT_ASSERT_VALUES_EQUAL(iter->Next(ENext::Data), EReady::Data);
+        const auto key = iter->GetKey().Cells();
+        UNIT_ASSERT_VALUES_EQUAL(key[0].AsBuf(), "hello");
+        UNIT_ASSERT_VALUES_EQUAL(key[1].AsValue<ui64>(), Max<ui64>());
+        UNIT_ASSERT_VALUES_EQUAL(key[2].AsValue<ui64>(), 10);
+        UNIT_ASSERT(iter->Row().Get(3).AsValue<bool>());
+        const auto data = iter->Row().Get(4).AsBuf();
+        NFulltext::TDeltaReader reader(
+            TConstArrayRef<ui8>(reinterpret_cast<const ui8*>(data.data()), data.size()), false, false);
+        TVector<ui64> ids;
+        ui64 id;
+        ui32 frequency;
+        while (reader.Read(id, frequency)) {
+            ids.push_back(id);
+        }
+        UNIT_ASSERT(ids == (TVector<ui64>{1, 5, 10}));
+        UNIT_ASSERT_VALUES_EQUAL(iter->Next(ENext::Data), EReady::Gone);
     }
 }
 

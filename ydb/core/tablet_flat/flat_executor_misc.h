@@ -43,6 +43,8 @@ namespace NTabletFlatExecutor {
             // Physical blob byte thresholds, including wrappers: materialize
             // values strictly below the edge. Layout serialization edges apply
             // to payload bytes and do not force rewriting existing references.
+            // Reserved for future outer materialization control; currently ignored.
+            // Outer values are always materialized regardless of this threshold.
             ui32 MaterializeOuterEdge;
             ui32 MaterializeExtEdge;
             ui32 OutputId = 0;
@@ -54,7 +56,7 @@ namespace NTabletFlatExecutor {
         }
 
         NTable::TEpoch Epoch = NTable::TEpoch::Zero();   /* Result epoch of compacted part */
-        
+
         // Non-empty; the router returns an index into this vector.
         TVector<TOutputConf> Outputs;
         NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;

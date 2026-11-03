@@ -51,14 +51,15 @@ namespace NKikimr::NTabletFlatExecutor {
                 Y_ENSURE(output.Writer.Groups.size() == output.Layout.Groups.size()
                         + output.Layout.Layout.SeparateDescriptorCollection,
                     "Compaction output page collection groups do not match its layout");
+                // Validate that every channel used by this output is present in the shared banks.
                 for (const auto& group : output.Writer.Groups) {
-                    Banks.Data.GroupBy(group.Channel);
+                    (void)Banks.Data.GroupBy(group.Channel);
                 }
-                Banks.Data.GroupBy(output.Writer.OuterChannel);
-                Banks.Data.GroupBy(output.Writer.ExtraChannel);
+                (void)Banks.Data.GroupBy(output.Writer.OuterChannel);
+                (void)Banks.Data.GroupBy(output.Writer.ExtraChannel);
                 Y_ENSURE(!output.Writer.BlobsChannels.empty(), "Compaction output has no blob channels");
                 for (auto channel : output.Writer.BlobsChannels) {
-                    Banks.Data.GroupBy(channel);
+                    (void)Banks.Data.GroupBy(channel);
                 }
                 States.emplace_back().Bundle = MakeHolder<NWriter::TBundle>(&Banks, output.Writer);
             }

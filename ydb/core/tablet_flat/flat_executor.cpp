@@ -4119,13 +4119,7 @@ void TExecutor::Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled) 
 
     // We have applied all effects, time to notify compaction of completion
 
-    auto compactionResult = MakeHolder<NTable::TCompactionResult>(
-        results ? results.front().Part.Epoch() : NTable::TEpoch::Max(),
-        results.size());
-    for (const auto& result : results) {
-        compactionResult->Parts.emplace_back(result.Part);
-        Y_ENSURE(compactionResult->PartOutputIds.emplace(result.Part->Label, result.OutputId).second);
-    }
+    auto compactionResult = TProdCompact::MakeCompactionResult(results);
 
     const auto logicResult = CompactionLogic->CompleteCompaction(
         ops->Serial,

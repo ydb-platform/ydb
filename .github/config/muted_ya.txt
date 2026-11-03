@@ -41,7 +41,6 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexOnColumn
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/tx KqpSinkMvcc.ChangeFromTheFuture-IsOlap
-ydb/core/memory_controller/ut TMemoryController.MemTable
 ydb/core/mind/bscontroller/ut_bscontroller BsControllerGroupState.DurabilityTargets
 ydb/core/mind/bscontroller/ut_bscontroller BsControllerGroupState.RecoveryTargetCountsTheReturningRealm
 ydb/core/mind/hive/ut THiveTest.TestLockTabletExecutionReconnect
@@ -50,6 +49,7 @@ ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerTests.FetchThrottledAtM
 ydb/core/quoter/ut QuoterWithKesusTest.FailsToGetBigQuota
 ydb/core/sys_view/ut AuthSystemView.AuthGroups_Access
 ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
+ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapBeforeSessionStartWithLaterMessageReportsDataLoss
 ydb/core/tx/scheme_board/ut_populator TPopulatorQuorumTest.ColdDeletionWithPathAfterSubscriptionWaitsForReplicaQuorum
 ydb/core/tx/scheme_board/ut_populator TPopulatorQuorumTest.ColdDeletionWithPathWaitsForReplicaQuorum
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
@@ -267,6 +267,7 @@ ydb/tests/fq/multi_plane py3test.[test_retry_high_rate.py] chunk
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping_with_row_dispatcher
 ydb/tests/fq/multi_plane test_retry.py.TestRetry.test_low_rate[kikimr0]
 ydb/tests/fq/multi_plane test_retry_high_rate.py.TestRetry.test_high_rate[kikimr0]
+ydb/tests/fq/s3 test_inflight.py.TestS3.test_inflight[v1-client0-kikimr_params1]
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_increase[local]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[recreate-output-row]
@@ -336,6 +337,7 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snap
 ydb/tests/functional/federation_test unittest.[*/*] chunk
 ydb/tests/functional/mirror3dc test_mirror3dc.py.TestMirror3dc.test_exclude_one_dc
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
+ydb/tests/functional/restarts test_restarts.py.TestRestartSingleBlock42.test_restart_single_node_is_ok
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/sqs/common test_queues_managing.py.TestQueuesManagingWithTenant.test_delete_queue[tables_format_v1-std]
 ydb/tests/functional/sqs/migration/compatibility/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor

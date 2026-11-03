@@ -62,7 +62,9 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         }
     }
 
-    if (!isRealCrossJoin && usingBlockJoin && !isLookupJoin && containsEquiJoinConditions && !forceInlining) {
+    const bool supportsNativeFilters =
+        !isRealCrossJoin && usingBlockJoin && !isLookupJoin && containsEquiJoinConditions;
+    if (supportsNativeFilters && !forceInlining) {
         return input;
     }
 
@@ -87,6 +89,16 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         return input;
     }
 
+    // Joining the matches back to the left input needs a non-null unique key.
+    // If forced expansion cannot do that, keep native filters when supported.
+    const auto keyColumns = join->GetLeftInput()->Props.Metadata->KeyColumns;
+    const bool hasNonNullKeys = !keyColumns.Items().empty() && CheckNonNullKeys(join->GetLeftInput(), keyColumns);
+    if (supportsNativeFilters && !hasNonNullKeys) {
+        return input;
+    }
+    Y_ENSURE(!keyColumns.Items().empty(), "No key columns when inlining join filter");
+    Y_ENSURE(hasNonNullKeys, "During join filter inlining the keys on the left side cannot be null");
+
     // The inner join reads the left input again: a Replicate port gives it its own IDs,
     // so we can join on the same columns again without conflicts
     auto hub = TReplicate::Create(join->GetLeftInput(), join->Pos, props.InfoUnitRegistry);
@@ -104,17 +116,6 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
     auto filterExpr = MakeConjunction(join->JoinFilters).ApplyRenames(renameMap);
 
     auto newFilter = MakeIntrusive<TOpFilter>(innerJoin, input->Pos, filterExpr);
-
-    // The join will be on the keys of lhs, we just need to check that all the keys are non-null
-    // We don't support nullable keys at this stage
-    auto keyColumns = join->GetLeftInput()->Props.Metadata->KeyColumns;
-    if (keyColumns.Items().empty()) {
-        Y_ENSURE(false, "No key columns when inlining join filter");
-    }
-
-    if (!CheckNonNullKeys(join->GetLeftInput(), keyColumns)) {
-        Y_ENSURE(false, "During join filter inlining the keys on the left side cannot be null");
-    }
 
     TJoinIUs newJoinKeys;
     for (const auto & column : keyColumns.Items()) {

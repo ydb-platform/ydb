@@ -103,6 +103,10 @@ bool TExpandInsertRevertRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
         return false;
     }
     auto& effect = CastOperator<TOpTableEffect>(*input);
+    // These relational prechecks consume already prepared keys. Sequenced
+    // defaults are internal to the effect and cannot be moved below this gate.
+    Y_ENSURE(!effect.Options.Preparation,
+        "INSERT OR REVERT with sequenced defaults requires conflict checks after write preparation");
     const auto pos = effect.Pos;
     const auto& table = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, NNodes::TKqpTable(effect.Table).Path());
     THashMap<TString, TInfoUnitId> columns;
@@ -153,7 +157,7 @@ bool TExpandInsertRevertRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
     options.OnConflict = "abort";
     // The gate preserves the input IUs, including the PG-only NOT NULL checks.
     input = MakeIntrusive<TOpTableEffect>(std::move(checked), pos, effect.Table, effect.EffectType,
-        std::move(options), effect.GetPgContraintColumns());
+        std::move(options), effect.GetPgConstraintColumns());
     return true;
 }
 

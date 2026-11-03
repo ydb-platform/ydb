@@ -13,6 +13,32 @@ inline NKikimrConfig::TAppConfig NewRboAppConfig() {
     return appConfig;
 }
 
+inline void EnableNewRbo(TKikimrRunner& kikimr, NKikimrConfig::TTableServiceConfig config) {
+    config.SetEnableNewRBO(true);
+    config.SetEnableFallbackToYqlOptimizer(false);
+
+    // Call only after schema and fixture queries have finished. Preserve the
+    // test's other settings and wait for every compile service and proxy to
+    // acknowledge strict RBO. The proxy supplies the optimizer setting to new
+    // execution sessions as well (notably for execution-plan statistics).
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+        const auto edge = runtime.AllocateEdgeActor(nodeIndex);
+        for (const auto service : {MakeKqpCompileServiceID(runtime.GetNodeId(nodeIndex)), MakeKqpProxyID(runtime.GetNodeId(nodeIndex))}) {
+            auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            *notification->Record.MutableConfig() = *kikimr.GetTestServer().GetSettings().AppConfig;
+            *notification->Record.MutableConfig()->MutableTableServiceConfig() = config;
+            runtime.Send(new IEventHandle(service, edge, notification.Release()), nodeIndex);
+            UNIT_ASSERT(runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
+                edge, TDuration::Seconds(30)));
+        }
+    }
+}
+
+inline void EnableNewRbo(TKikimrRunner& kikimr) {
+    EnableNewRbo(kikimr, kikimr.GetTestServer().GetSettings().AppConfig->GetTableServiceConfig());
+}
+
 class TEffectsKikimrRunner : public TKikimrRunner {
 public:
     explicit TEffectsKikimrRunner(const TKikimrSettings& settings)
@@ -24,22 +50,7 @@ public:
             return;
         }
 
-        auto config = settings.AppConfig.GetTableServiceConfig();
-        config.SetEnableNewRBO(true);
-        config.SetEnableFallbackToYqlOptimizer(false);
-
-        // Fixture queries have finished. Switch every compile service before
-        // the test can issue queries, waiting for each configuration update.
-        auto& runtime = *GetTestServer().GetRuntime();
-        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-            const auto edge = runtime.AllocateEdgeActor(nodeIndex);
-            auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-            *notification->Record.MutableConfig()->MutableTableServiceConfig() = config;
-            runtime.Send(new IEventHandle(MakeKqpCompileServiceID(runtime.GetNodeId(nodeIndex)), edge,
-                notification.Release()), nodeIndex);
-            UNIT_ASSERT(runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
-                edge, TDuration::Seconds(30)));
-        }
+        EnableNewRbo(*this, settings.AppConfig.GetTableServiceConfig());
     }
 
     explicit TEffectsKikimrRunner(const NKikimrConfig::TAppConfig& appConfig)

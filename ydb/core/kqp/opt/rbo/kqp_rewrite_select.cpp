@@ -1622,6 +1622,20 @@ TExprNode::TPtr RewriteReadOrEffectInput(const TExprNode::TPtr& node, TExprConte
     if (TKqpOpRoot::Match(node.Get())) {
         return TKqpOpRoot(node).Input().Ptr();
     }
+    auto preparation = node;
+    while (preparation->IsCallable({"Map", "OrderedMap", "Filter", "OrderedFilter", "ExtractMembers"})) {
+        preparation = preparation->HeadPtr();
+    }
+    if (auto sequencer = TMaybeNode<TKqlSequencer>(preparation)) {
+        // Preserve the row-building suffix as part of write preparation. In
+        // particular, generated-column expressions may consume the sequence
+        // value, so importing them as ordinary Maps would expose definitions
+        // that do not yet exist in the relational input.
+        auto rewritten = Build<TKqlSequencer>(ctx, node->Pos()).InitFrom(sequencer.Cast())
+            .Input(RewriteReadOrEffectInput(sequencer.Cast().Input().Ptr(), ctx, kqpCtx, uniqueSourceIdCounter))
+            .Done().Ptr();
+        return ctx.ReplaceNode(TExprNode::TPtr(node), *preparation, rewritten);
+    }
     if (TKqlReadTableIndexRanges::Match(node.Get())) {
         // Reuse index metadata/covering expansion, then import its read and
         // optional main-table lookup into the relational plan.
@@ -1713,10 +1727,10 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
     // IUs, and physical generation checks them before renaming rows for the sink,
     // including when the full peephole is disabled.
     auto effectInput = node->ChildPtr(1);
-    TVector<TCoAtom> pgContraintColumns;
+    TVector<TCoAtom> pgConstraintColumns;
     while (auto constraint = TMaybeNode<TKqpWriteConstraint>(effectInput)) {
         for (const auto column : constraint.Cast().Columns()) {
-            pgContraintColumns.push_back(column);
+            pgConstraintColumns.push_back(column);
         }
         effectInput = constraint.Cast().Input().Ptr();
     }
@@ -1741,7 +1755,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
             .Input<TKqpOpTableEffect>()
                 .Input(newInput)
                 .GenerateColumnsIfInsert().Build()
-                .PgContraintColumns().Add(pgContraintColumns).Build()
+                .PgConstraintColumns().Add(pgConstraintColumns).Build()
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(insert.Columns())
@@ -1760,7 +1774,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
             .Input<TKqpOpTableEffect>()
                 .Input(newInput)
                 .GenerateColumnsIfInsert().Build()
-                .PgContraintColumns().Add(pgContraintColumns).Build()
+                .PgConstraintColumns().Add(pgConstraintColumns).Build()
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(update.Columns())
@@ -1779,7 +1793,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
             .Input<TKqpOpTableEffect>()
                 .Input(newInput)
                 .GenerateColumnsIfInsert().Build()
-                .PgContraintColumns().Add(pgContraintColumns).Build()
+                .PgConstraintColumns().Add(pgConstraintColumns).Build()
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(update.Columns())
@@ -1798,7 +1812,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
             .Input<TKqpOpTableEffect>()
                 .Input(newInput)
                 .GenerateColumnsIfInsert().Build()
-                .PgContraintColumns().Add(pgContraintColumns).Build()
+                .PgConstraintColumns().Add(pgConstraintColumns).Build()
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(upsert.Columns())
@@ -1816,7 +1830,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
             .Input<TKqpOpTableEffect>()
                 .Input(newInput)
                 .GenerateColumnsIfInsert().Build()
-                .PgContraintColumns().Add(pgContraintColumns).Build()
+                .PgConstraintColumns().Add(pgConstraintColumns).Build()
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns(upsert.Columns())
@@ -1835,7 +1849,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
             .Input<TKqpOpTableEffect>()
                 .Input(newInput)
                 .GenerateColumnsIfInsert().Build()
-                .PgContraintColumns().Add(pgContraintColumns).Build()
+                .PgConstraintColumns().Add(pgConstraintColumns).Build()
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns().Add(emptyList).Build()
@@ -1854,7 +1868,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
             .Input<TKqpOpTableEffect>()
                 .Input(newInput)
                 .GenerateColumnsIfInsert().Build()
-                .PgContraintColumns().Add(pgContraintColumns).Build()
+                .PgConstraintColumns().Add(pgConstraintColumns).Build()
                 .Table(tableEffect.Table())
                 .EffectType().Value(effectType).Build()
                 .Columns().Add(emptyList).Build()
@@ -1880,6 +1894,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         return translated.at(input.Get());
     }
     TVector<TString> finalColumnOrder;
+    bool starResult = false;
     // Generated column names must be unique across the whole query.
     ui64& uniqueAggColumnId = uniqueColumnIdCounter;
 
@@ -1895,6 +1910,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         auto setItem = setItems->ChildPtr(i);
 
         if (auto values = GetSetting(setItem->Tail(), "values")) {
+            starResult = false;
             Y_ENSURE(!GetSetting(setItem->Tail(), "result"), "VALUES cannot have a result projection");
             // VALUES supplies rows directly. Do not silently discard SELECT clauses
             // that would need their own relational operators.
@@ -2331,6 +2347,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
 
         auto result = GetSetting(setItem->Tail(), "result");
         Y_ENSURE(result, "New RBO expects either 'values' or 'result' at a set item");
+        starResult = result->Child(1)->ChildrenSize() == 1 && result->Child(1)->Head().Head().IsList();
 
         // Process all aggregations in result item.
         ProcessAggregationsInResultItems(result, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap, aggregationTraits,
@@ -2603,6 +2620,18 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
     auto sort = GetSetting(node->Head(), "sort");
     if (sort) {
         opResult = BuildSort(opResult, sort, {}, ctx);
+    }
+
+    // A plain SELECT * has no explicit result-column hints. Without
+    // OrderedColumns, the old pipeline exports it in canonical struct-field
+    // order (alphabetically), even though type annotation knows the source's
+    // declaration order. Resolve that presentation order here, before building
+    // the root, so physical export can always use the resolved root columns.
+    // Keep intermediate projections intact: their order is needed by outer
+    // queries and positional operations. Explicit SELECT lists and
+    // OrderedColumns retain their projection order, including for UNION ALL.
+    if (generateRoot && starResult && !typeCtx.OrderedColumns) {
+        ::Sort(finalColumnOrder);
     }
 
     TVector<TCoAtom> columnAtomList;

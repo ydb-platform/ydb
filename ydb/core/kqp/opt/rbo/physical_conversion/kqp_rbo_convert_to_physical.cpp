@@ -428,6 +428,33 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
                     currentStageBody = NPhysicalConvertionUtils::TStageBody::Narrow(stageInput);
                 }
 
+                if (const auto& preparation = tableEffect.Options.Preparation) {
+                    const auto inputStageId = *tableEffect.GetInput()->Props.StageId;
+                    TVector<std::pair<TString, TString>> inputRenames;
+                    for (const auto& [id, name] : preparation->InputColumns.Items()) {
+                        inputRenames.emplace_back(names.Get(id), name);
+                    }
+                    stageBodies[inputStageId] = NPhysicalConvertionUtils::TransformStageOutput(stageBodies.at(inputStageId),
+                        [&](const NPhysicalConvertionUtils::TStageBody& body) {
+                            return NPhysicalConvertionUtils::TStageBody::Narrow(
+                                NPhysicalConvertionUtils::BuildRenameMap(body.AsNarrow(ctx), inputRenames, ctx, /*ordered=*/true));
+                        }, GetReplicateOutputIndex(*tableEffect.GetInput()), ctx);
+
+                    // The connection has supplied the generated values. Now
+                    // evaluate dependent defaults/row expressions exactly once,
+                    // then expose the prepared row's internal IUs to PG checks
+                    // and the final sink rename.
+                    auto stream = Build<TCoToStream>(ctx, op->Pos).Input(currentStageBody.AsNarrow(ctx)).Done().Ptr();
+                    auto program = ctx.DeepCopyLambda(*preparation->Program);
+                    auto preparedRows = ctx.ReplaceNode(program->TailPtr(), program->Head().Head(), stream);
+                    TVector<std::pair<TString, TString>> outputRenames;
+                    for (const auto& [id, name] : tableEffect.GetColumns().Items()) {
+                        outputRenames.emplace_back(name, names.Get(id));
+                    }
+                    currentStageBody = NPhysicalConvertionUtils::TStageBody::Narrow(
+                        NPhysicalConvertionUtils::BuildRenameMap(preparedRows, outputRenames, ctx, /*ordered=*/true));
+                }
+
                 currentStageBody = NPhysicalConvertionUtils::TStageBody::Narrow(
                     Build<TPhysicalTableEffectBuilder>(tableEffect, ctx, op->Pos, names, currentStageBody.AsNarrow(ctx)));
 

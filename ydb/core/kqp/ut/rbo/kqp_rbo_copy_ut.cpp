@@ -415,8 +415,8 @@ Y_UNIT_TEST_SUITE(KqpRboCopy) {
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetColumns().Items()[0].second, "Key");
         // PG NOT NULL checks must follow copied input IUs while diagnostics keep
         // the destination name from the effect's storage-column mapping.
-        UNIT_ASSERT(copiedEffect.GetPgContraintColumns() == TUnorderedIUs{renames.At(source)});
-        UNIT_ASSERT(effect->GetPgContraintColumns() == TUnorderedIUs{source});
+        UNIT_ASSERT(copiedEffect.GetPgConstraintColumns() == TUnorderedIUs{renames.At(source)});
+        UNIT_ASSERT(effect->GetPgConstraintColumns() == TUnorderedIUs{source});
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items()[0].first, renames.At(result));
         UNIT_ASSERT_VALUES_EQUAL(copiedEffect.GetReturningColumns().Items()[1].first, renames.At(result));

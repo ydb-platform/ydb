@@ -947,30 +947,29 @@ const TIntrusivePtr<IOperator>& TOpCBOTree::GetChild(size_t index) const {
 * Table Effect operator methods: these are inserts/updates/deletes
 */
 TOpTableEffect::TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
-    EEffectType type, TEffectOptions options, TUnorderedIUs pgContraintColumns)
+    EEffectType type, TEffectOptions options, TUnorderedIUs pgConstraintColumns)
     : IUnaryOperator(EOperator::TableEffect, pos, input)
     , Table(std::move(table))
     , EffectType(type)
     , Options(std::move(options))
-    , PgContraintColumns_(std::move(pgContraintColumns))
+    , PgConstraintColumns_(std::move(pgConstraintColumns))
 {
-    Y_ENSURE(PgContraintColumns_.IsSubsetOf(Options.Columns.Unordered()));
+    Y_ENSURE(PgConstraintColumns_.IsSubsetOf(Options.Columns.Unordered()));
     Y_ENSURE(Options.DefaultColumns.IsSubsetOf(Options.Columns.Unordered()));
 }
 
 TUnorderedIUs TOpTableEffect::GetUsedIUs(TPlanProps& props) {
     Y_UNUSED(props);
+    if (Options.Preparation) {
+        return Options.Preparation->InputColumns.Unordered();
+    }
     auto used = Options.Columns.Unordered();
     used.UnionWith(Options.DefaultColumns);
-    used.UnionWith(PgContraintColumns_);
+    used.UnionWith(PgConstraintColumns_);
     return used;
 }
 
 TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx, ui64 priority) {
-    if (!Options.ReturningColumns.Items().empty()) {
-        Y_ENSURE(false, "Returning columns not supported in new optimizer");
-    }
-
     TString mode;
     
     switch(EffectType) {
@@ -1026,6 +1025,15 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx, ui64 priority) 
         settings = Options.Settings.value();
     }
 
+    TVector<TExprNode::TPtr> returningColumns;
+    for (const auto& [id, name] : Options.ReturningColumns.Items()) {
+        returningColumns.push_back(ctx.NewAtom(Pos, name));
+    }
+    // The runtime's row layout follows the struct type's canonical name order;
+    // the SQL projection order is restored by the root's result column hints.
+    std::sort(returningColumns.begin(), returningColumns.end(),
+        [](const auto& lhs, const auto& rhs) { return lhs->Content() < rhs->Content(); });
+
     return Build<TKqpTableSinkSettings>(ctx, Pos)
             .Table(Table)
             .InconsistentWrite().Build("false")
@@ -1037,7 +1045,7 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx, ui64 priority) 
             .DefaultColumns()
                 .Add(defaultColumns)
             .Build()
-            .ReturningColumns().Build()
+            .ReturningColumns().Add(returningColumns).Build()
             .Settings()
                 .Add(settings)
             .Build()

@@ -958,12 +958,46 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpEmptySource(TExprNode::TPtr
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr node) {
     const auto opTableEffect = TKqpOpTableEffect(node);
-    auto input = ExprNodeToOperator(opTableEffect.Input().Ptr());
+    auto preparationNode = opTableEffect.Input().Ptr();
+    while (preparationNode->IsCallable({"Map", "OrderedMap", "Filter", "OrderedFilter", "ExtractMembers"})) {
+        preparationNode = preparationNode->HeadPtr();
+    }
+    const auto sequencer = TMaybeNode<TKqlSequencer>(preparationNode);
+    const auto relationalInput = sequencer ? sequencer.Cast().Input().Ptr() : opTableEffect.Input().Ptr();
+    auto input = ExprNodeToOperator(relationalInput);
     
     PlanProps.WithEffects = true;
 
     EEffectType type = EEffectType::InsertRows;
     TEffectOptions options;
+    auto bindings = GetBindings(relationalInput);
+    if (sequencer) {
+        TEffectPreparation preparation;
+        const auto* inputRow = relationalInput->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        for (const auto* field : inputRow->GetItems()) {
+            preparation.InputColumns.Append(ResolveBinding(*bindings, field->GetName()), TString(field->GetName()));
+        }
+        for (const auto column : sequencer.Cast().DefaultConstraintColumns()) {
+            const auto name = column.StringValue();
+            Y_ENSURE(!bindings->contains(name), "Sequence column already supplied: " << name);
+            preparation.GeneratedColumns.Append(PlanProps.InfoUnitRegistry.Add(TInfoUnit("", name)), name);
+        }
+        // Close the dependent expression suffix over the sequenced stream.
+        // It remains inside the effect, so relational rewrites cannot move it
+        // ahead of sequence allocation or duplicate evaluation.
+        auto rows = Ctx.NewArgument(node->Pos(), "sequenced_rows");
+        preparation.Program = Ctx.NewLambda(node->Pos(), Ctx.NewArguments(node->Pos(), {rows}),
+            Ctx.ReplaceNode(opTableEffect.Input().Ptr(), *preparationNode, rows));
+        options.Preparation = std::move(preparation);
+
+        auto preparedBindings = std::make_shared<TExpression::TBindings>();
+        const auto* row = opTableEffect.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        for (const auto* field : row->GetItems()) {
+            const TString name(field->GetName());
+            preparedBindings->emplace(name, PlanProps.InfoUnitRegistry.Add(TInfoUnit("", name)));
+        }
+        bindings = std::move(preparedBindings);
+    }
 
     auto effectType = opTableEffect.EffectType().StringValue();
 
@@ -980,7 +1014,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
     auto settings = opTableEffect.Settings().Maybe<TCoNameValueTupleList>();
     auto isBatch = opTableEffect.IsBatch().Maybe<TCoAtom>();
 
-    PlanProps.WithReturning = (bool)returningColumns;
+    PlanProps.WithReturning = returningColumns && !returningColumns.Cast().Empty();
 
     if (effectType == "TKqlInsertRows") {
         type = EEffectType::InsertRows;
@@ -1021,13 +1055,12 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
         Y_ENSURE(false, "Unexpected table effects operation");
     }
 
-    const auto bindings = GetBindings(opTableEffect.Input().Ptr());
     // Only PG types need these runtime NOT NULL checks. Resolve the frontend's
     // names once; subsequent rewrites and copies track the input attributes by IU.
-    TUnorderedIUs pgContraintColumns;
-    if (auto columns = opTableEffect.PgContraintColumns().Maybe<TCoAtomList>()) {
+    TUnorderedIUs pgConstraintColumns;
+    if (auto columns = opTableEffect.PgConstraintColumns().Maybe<TCoAtomList>()) {
         for (const auto column : columns.Cast()) {
-            pgContraintColumns.Add(ResolveBinding(*bindings, column.StringValue()));
+            pgConstraintColumns.Add(ResolveBinding(*bindings, column.StringValue()));
         }
     }
     const auto* schema = opTableEffect.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -1036,7 +1069,11 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
     }
     if (auto defaultColumns = opTableEffect.DefaultColumns().Maybe<TCoAtomList>()) {
         for (const auto column : defaultColumns.Cast()) {
-            options.DefaultColumns.Add(ResolveBinding(*bindings, column.StringValue()));
+            // The frontend also lists omitted RETURNING fields here. They
+            // are fetched by the returning sink, not supplied default values.
+            if (const auto it = bindings->find(column.StringValue()); it != bindings->end()) {
+                options.DefaultColumns.Add(it->second);
+            }
         }
     }
     auto output = std::make_shared<TExpression::TBindings>();
@@ -1050,7 +1087,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
     }
     OutputBindings[TImportKey{node.Get(), BindingContext}] = std::move(output);
     return MakeIntrusive<TOpTableEffect>(std::move(input), node->Pos(), opTableEffect.Table().Ptr(), type, std::move(options),
-        std::move(pgContraintColumns));
+        std::move(pgConstraintColumns));
 }
 
 } // namespace NKikimr::Nkqp

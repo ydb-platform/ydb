@@ -331,8 +331,29 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         const auto outputIndex = OutputIndex(*tableEffect->GetInput(), props.StageGraph);
 
         input->Props.StageId = newStageId;
-        props.StageGraph.Connect(inputStageId, newStageId,
-                                 MakeIntrusive<TUnionAllConnection>(outputIndex));
+        if (const auto& preparation = tableEffect->Options.Preparation) {
+            auto& exprCtx = ctx.ExprCtx;
+            const auto pos = tableEffect->Pos;
+            TVector<TExprNode::TPtr> columns;
+            TVector<TExprNode::TPtr> generatedColumns;
+            TVector<const TItemExprType*> inputItems;
+            for (const auto& [id, name] : preparation->InputColumns.Items()) {
+                columns.push_back(exprCtx.NewAtom(pos, name));
+                inputItems.push_back(exprCtx.MakeType<TItemExprType>(name, tableEffect->GetInput()->GetIUType(id, exprCtx)));
+            }
+            for (const auto& [id, name] : preparation->GeneratedColumns.Items()) {
+                columns.push_back(exprCtx.NewAtom(pos, name));
+                generatedColumns.push_back(exprCtx.NewAtom(pos, name));
+            }
+            // Sequence allocation is an input connection of the write stage,
+            // not an independently optimizable relational operation.
+            props.StageGraph.Connect(inputStageId, newStageId,
+                MakeIntrusive<TSequencerConnection>(outputIndex, tableEffect->Table,
+                    exprCtx.NewList(pos, std::move(columns)), exprCtx.NewList(pos, std::move(generatedColumns)),
+                    ExpandType(pos, *exprCtx.MakeType<TListExprType>(exprCtx.MakeType<TStructExprType>(inputItems)), exprCtx)));
+        } else {
+            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
+        }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages table effects";
     }
     else {

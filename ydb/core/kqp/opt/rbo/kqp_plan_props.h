@@ -202,6 +202,9 @@ struct TPlanProps {
     ui64 EffectPriority = 0;
     bool WithEffects = false;
     bool WithReturning = false;
+    // Public result order is independent of the read/effect transaction order.
+    std::optional<ui32> ResultIndex;
+    TExprNode::TPtr ReturningRowsLimit;
 };
 
 }

@@ -717,6 +717,18 @@ TStatus ComputeTypes(TIntrusivePtr<TOpCBOTree> cboTree, TRBOContext& ctx, TPlanP
 
 TStatus ComputeTypes(TIntrusivePtr<TOpTableEffect> tableEffect, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
+    if (!tableEffect->GetReturningColumns().Items().empty()) {
+        const auto table = ResolveTable(tableEffect->Table.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
+        if (!table.second) {
+            return TStatus::Error;
+        }
+        TVector<const TItemExprType*> items;
+        for (const auto& [id, name] : tableEffect->GetReturningColumns().Items()) {
+            items.push_back(ctx.ExprCtx.MakeType<TItemExprType>(ctx.ExprCtx.GetIndexAsString(id), table.second->GetColumnType(name)));
+        }
+        tableEffect->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(items));
+        return TStatus::Ok;
+    }
     tableEffect->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TResourceExprType>(KqpEffectTag));
     return TStatus::Ok;
 }

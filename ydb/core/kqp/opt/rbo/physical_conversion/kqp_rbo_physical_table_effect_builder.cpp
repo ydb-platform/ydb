@@ -9,7 +9,7 @@ TExprNode::TPtr TPhysicalTableEffectBuilder::BuildPhysicalOp(TExprNode::TPtr inp
     for (const auto& [id, label] : TableEffect.GetColumns().Items()) {
         columns.emplace_back(Names.Get(id), label);
     }
-    if (TableEffect.GetPgContraintColumns().Empty()) {
+    if (TableEffect.GetPgConstraintColumns().Empty()) {
         return NPhysicalConvertionUtils::BuildRenameMap(input, columns, Ctx, /*ordered=*/true);
     }
 
@@ -18,7 +18,7 @@ TExprNode::TPtr TPhysicalTableEffectBuilder::BuildPhysicalOp(TExprNode::TPtr inp
     // PG types need explicit runtime NOT NULL checks. Check the IU-named input
     // before the sink rename; destination names are only used in diagnostics.
     for (const auto& [id, column] : TableEffect.GetColumns().Items()) {
-        if (!TableEffect.GetPgContraintColumns().Contains(id)) {
+        if (!TableEffect.GetPgConstraintColumns().Contains(id)) {
             continue;
         }
         // Match KqpRewriteWriteConstraint: each predicate consumes the previous

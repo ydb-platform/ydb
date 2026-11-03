@@ -1401,13 +1401,28 @@ enum class EEffectType : ui32 {
     DeleteRowsIndex
 };
 
+// Write preparation belongs to the effect, not to relational algebra. The
+// input bindings are uses; generated values and the final write-row columns
+// are internal definitions. Sequence allocation and dependent row expressions
+// must execute once, in this order, before constraints and the write itself.
+struct TEffectPreparation {
+    TOrderedIUs<TString> InputColumns;
+    TOrderedIUs<TString> GeneratedColumns;
+    // Storage-named rows -> storage-named rows after sequence allocation.
+    // This closed frontend lambda may contain dependent default/generated
+    // column expressions. It is lowered only inside the effect's stage.
+    TExprNode::TPtr Program;
+};
+
 struct TEffectOptions {
-    // Input uses and returned definitions are identified by IU. Labels are
-    // destination column names and must survive copying and input renaming.
+    // Write-row columns are input uses unless Preparation defines them inside
+    // the effect. Returning columns are output definitions. Destination labels
+    // stay fixed when input IUs are renamed.
     TOrderedIUs<TString> Columns;
     TOrderedIUs<TString> ReturningColumns;
     // Input attributes whose supplied defaults apply only when inserting a row.
     TUnorderedIUs DefaultColumns;
+    std::optional<TEffectPreparation> Preparation;
     std::optional<TString> OnConflict;
     std::optional<bool> IsBatch;
     std::optional<TVector<TExprNode::TPtr>> Settings;
@@ -1416,13 +1431,13 @@ struct TEffectOptions {
 class TOpTableEffect: public IUnaryOperator {
 public:
     TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
-        EEffectType type, TEffectOptions options, TUnorderedIUs pgContraintColumns = {});
+        EEffectType type, TEffectOptions options, TUnorderedIUs pgConstraintColumns = {});
     TString GetExplainName() const override;
     TUnorderedIUs GetUsedIUs(TPlanProps& props) override;
     const TUnorderedIUs& GetOutputIUs() override { return Options.ReturningColumns.Unordered(); }
     const TOrderedIUs<TString>& GetColumns() const Y_LIFETIME_BOUND { return Options.Columns; }
     const TOrderedIUs<TString>& GetReturningColumns() const Y_LIFETIME_BOUND { return Options.ReturningColumns; }
-    const TUnorderedIUs& GetPgContraintColumns() const Y_LIFETIME_BOUND { return PgContraintColumns_; }
+    const TUnorderedIUs& GetPgConstraintColumns() const Y_LIFETIME_BOUND { return PgConstraintColumns_; }
     void RenameUsedIUs(const TSubstitutions& substitutions) override;
     void PropagateLiveness(ILivenessContext& ctx) override;
     TString ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) override;
@@ -1439,7 +1454,7 @@ protected:
 private:
     // Input attributes requiring runtime NOT NULL checks for PG types only.
     // Native YQL types encode nullability in their type annotations instead.
-    TUnorderedIUs PgContraintColumns_;
+    TUnorderedIUs PgConstraintColumns_;
 };
 
 // End-of-traversal sentinel for TOpIterator
@@ -1743,7 +1758,7 @@ private:
     // redirect an entry to an equivalent input ID, including repeated IDs.
     TOrderedIUs<TString> Columns_;
     // YQL's optional result hints are distinct from the actual output schema.
-    // In particular, an empty hint list must remain empty at export.
+    // An empty hint list does not override the resolved order in Columns_.
     const TVector<TString> QueryColumns_;
 
 protected:

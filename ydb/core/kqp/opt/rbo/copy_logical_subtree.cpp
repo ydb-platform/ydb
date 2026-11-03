@@ -320,6 +320,11 @@ TIntrusivePtr<IOperator> TOpLimit::CopyImpl(TInfoUnitRegistry&, TSubstitutions&)
 }
 
 TIntrusivePtr<IOperator> TOpTableEffect::CopyImpl(TInfoUnitRegistry& registry, TSubstitutions& renames) const {
+    // Sequence allocation is an effect; copying its preparation would allocate
+    // different values. Share the producer instead of duplicating the effect.
+    if (Options.Preparation) {
+        return nullptr;
+    }
     auto options = Options;
     options.ReturningColumns = {};
     for (const auto& [id, name] : Options.ReturningColumns.Items()) {
@@ -327,7 +332,7 @@ TIntrusivePtr<IOperator> TOpTableEffect::CopyImpl(TInfoUnitRegistry& registry, T
     }
     // Input/default columns and PG constraint IUs are uses; the normal copy
     // renaming pass rebinds them. Returning columns above are fresh definitions.
-    return MakeIntrusive<TOpTableEffect>(GetInput(), Pos, Table, EffectType, std::move(options), PgContraintColumns_);
+    return MakeIntrusive<TOpTableEffect>(GetInput(), Pos, Table, EffectType, std::move(options), PgConstraintColumns_);
 }
 
 } // namespace NKikimr::NKqp

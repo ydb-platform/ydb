@@ -262,7 +262,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
             auto stageGUID = graph.StageGUIDs.at(id);
             if (graph.IsSinkStage(id)) {
                 stage = BuildDqPhySinkStage(stageInputConnections, stageInputArgs, Stages[rootIdx].at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos[rootIdx].at(id)),
-                                    graph.GetSinkSettings(id), ctx, StagePos[rootIdx].at(id));
+                                    graph.GetSinkSettings(id), CastOperator<TOpTableEffect>(*Roots[rootIdx]->GetInput()), ctx, StagePos[rootIdx].at(id));
             }
             else {
                 stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages[rootIdx].at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos[rootIdx].at(id)),
@@ -302,8 +302,26 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
     // but a lone row-source stage is built into Stages without being appended to phyStages (see above),
     // so deriving the final stage from finalizedStages is correct even when phyStages is empty.
     Y_ENSURE(!stageIds.empty());
-    const auto maybeFinalStage = finalizedStages.at(stageIds.back());
-    if (Roots[rootIdx]->PlanProps.WithEffects) {
+    auto maybeFinalStage = finalizedStages.at(stageIds.back());
+    if (Roots[rootIdx]->PlanProps.WithReturning) {
+        // ReturningSink exposes storage column names. Introduce the returned
+        // IU definitions at this boundary before ordinary result projection.
+        const auto& effect = CastOperator<TOpTableEffect>(*Roots[rootIdx]->GetInput());
+        auto connection = Build<TDqCnUnionAll>(ctx, effect.Pos)
+            .Output().Stage(maybeFinalStage).Index().Build("0").Build().Done();
+        auto arg = ctx.NewArgument(effect.Pos, "returned_rows");
+        TVector<std::pair<TString, TString>> columns;
+        for (const auto& [id, name] : effect.GetReturningColumns().Items()) {
+            columns.emplace_back(name, Names[rootIdx].Get(id));
+        }
+        auto resultRows = NPhysicalConvertionUtils::BuildRenameMap(arg, columns, ctx, /*ordered=*/true);
+        if (const auto& limit = Roots[rootIdx]->PlanProps.ReturningRowsLimit) {
+            resultRows = Build<TCoTake>(ctx, effect.Pos).Input(resultRows).Count(limit).Done().Ptr();
+        }
+        maybeFinalStage = BuildDqPhyStage({connection.Ptr()}, {arg}, resultRows,
+            NYql::NDq::TDqStageSettings().New().BuildNode(ctx, effect.Pos), ctx, effect.Pos);
+        phyStages.push_back(maybeFinalStage);
+    } else if (Roots[rootIdx]->PlanProps.WithEffects) {
         // A sink consumes its stream and exposes no result output. In
         // particular, do not add a union/result stage on its output zero.
         Y_ENSURE(!phyStages.empty() && phyStages.back() == maybeFinalStage);
@@ -492,6 +510,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
     const auto pos = Roots.front()->Pos;
     TVector<TExprNode::TPtr> transactions;
     TVector<TExprNode::TPtr> resultBindings;
+    TVector<std::pair<ui32, TExprNode::TPtr>> orderedResults;
 
     // A query block's reads share a snapshot. Its effects also share a
     // snapshot, with sink priorities preserving their write order. Only cross
@@ -548,10 +567,13 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
         for (size_t i = begin; i < end; ++i) {
             Y_ENSURE(Roots[i]->PlanProps.WithEffects == settings.WithEffects);
             stages.insert(stages.end(), physicalStages[i].begin(), physicalStages[i].end());
-            if (settings.WithEffects) {
+            if (settings.WithEffects && !Roots[i]->PlanProps.WithReturning) {
                 continue;
             }
             TVector<TCoAtom> columns;
+            // Export the resolved projection order for SELECT and RETURNING.
+            // Original query hints can be empty even for an ordered projection;
+            // exporting them would fall back to alphabetical struct-field order.
             for (const auto& [id, label] : Roots[i]->GetColumns().Items()) {
                 columns.push_back(Build<TCoAtom>(ctx, pos).Value(label).Done());
             }
@@ -559,10 +581,11 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
                 .Output().Stage(physicalStages[i].back()).Index().Build("0").Build()
                 .ColumnHints().Add(columns).Build().Done().Ptr();
             TypeAnnotate(result);
-            resultBindings.push_back(Build<TKqpTxResultBinding>(ctx, pos)
-                .Type(ExpandType(pos, *result->GetTypeAnn(), ctx))
-                .TxIndex().Build(ToString(transactions.size()))
-                .ResultIndex().Build(ToString(results.size())).Done().Ptr());
+            orderedResults.emplace_back(Roots[i]->PlanProps.ResultIndex.value_or(orderedResults.size()),
+                Build<TKqpTxResultBinding>(ctx, pos)
+                    .Type(ExpandType(pos, *result->GetTypeAnn(), ctx))
+                    .TxIndex().Build(ToString(transactions.size()))
+                    .ResultIndex().Build(ToString(results.size())).Done().Ptr());
             results.push_back(result);
         }
         transactions.push_back(Build<TKqpPhysicalTx>(ctx, pos)
@@ -571,6 +594,10 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
             .ParamBindings().Add(paramBindings).Build()
             .Settings(settings.BuildNode(ctx, pos)).Done().Ptr());
         begin = end;
+    }
+    std::sort(orderedResults.begin(), orderedResults.end(), [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+    for (auto& [index, binding] : orderedResults) {
+        resultBindings.push_back(std::move(binding));
     }
     return Build<TKqpPhysicalQuery>(ctx, pos)
         .Transactions().Add(transactions).Build()
@@ -647,7 +674,32 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildDqPhyStage(const TVector<TExprNode::
 
 TExprNode::TPtr TPhysicalQueryBuilder::BuildDqPhySinkStage(const TVector<TExprNode::TPtr>& inputs, const TVector<TExprNode::TPtr>& args,
                                                        TExprNode::TPtr physicalStageBody, NNodes::TCoNameValueTupleList&& settings, 
-                                                       const TExprNode::TPtr& sinkSettings, TExprContext& ctx, TPositionHandle pos) const {
+                                                       const TExprNode::TPtr& sinkSettings, const TOpTableEffect& effect,
+                                                       TExprContext& ctx, TPositionHandle pos) {
+    if (!effect.GetReturningColumns().Items().empty()) {
+        auto stage = BuildDqPhyStage(inputs, args, physicalStageBody, std::move(settings), ctx, pos);
+        TypeAnnotate(stage);
+        TVector<const TItemExprType*> items;
+        const auto* row = effect.Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        for (const auto& [id, name] : effect.GetReturningColumns().Items()) {
+            const auto* item = row->FindItemType(ctx.GetIndexAsString(id));
+            Y_ENSURE(item);
+            items.push_back(ctx.MakeType<TItemExprType>(name, item));
+        }
+        const auto transform = Build<TDqTransform>(ctx, pos)
+            .Index().Build("0")
+            .DataSink<TKqpTableSink>().Category().Build("KqpTableSink").Cluster().Build("db").Build()
+            .Type().Build("ReturningSink")
+            .InputType(ExpandType(pos, GetSeqItemType(*TDqPhyStage(stage).Program().Body().Ref().GetTypeAnn()), ctx))
+            .OutputType(ExpandType(pos, *ctx.MakeType<TStructExprType>(items), ctx))
+            .Settings(sinkSettings)
+            .Done();
+        // ReturningSink performs the write and emits its result. A separate
+        // sink or a copy of the input stream would duplicate effects or expose
+        // rows that were rejected by a conflict/constraint check.
+        return Build<TDqPhyStage>(ctx, pos).InitFrom(TDqPhyStage(stage))
+            .Outputs().Add(transform).Build().Done().Ptr();
+    }
 
     TVector<TExprNode::TPtr> outputs;
     auto dataSink = ctx.NewCallable(pos, "DataSink", {ctx.NewAtom(pos, "KqpTableSink"), ctx.NewAtom(pos, "db")});

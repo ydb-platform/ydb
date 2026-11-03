@@ -191,23 +191,64 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         if (TCoUnordered::Match(root.Get())) {
             root = root->HeadPtr();
         }
-        Y_ENSURE(TKqpOpRoot::Match(root.Get()), "Expected an RBO query root");
+        Y_ENSURE(TKqpOpRoot::Match(root.Get()), "Expected an RBO query root, got " << root->Content());
         auto opRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(root, columns);
         opRoot->PlanProps.PhysicalTxGroup = physicalTxGroup;
         opRoot->PlanProps.EffectPriority = effectPriority;
         opRoot->ComputeParents();
-        Roots.push_back(std::move(opRoot));
+        Roots.push_back(opRoot);
+        return opRoot;
     };
+    ui32 resultIndex = 0;
     for (const auto query : TKqlQueryList(input)) {
+        struct TReturningResult {
+            ui32 Index;
+            TExprNode::TPtr Columns;
+            TExprNode::TPtr Hints;
+            TExprNode::TPtr RowsLimit;
+        };
+        THashMap<const TExprNode*, TReturningResult> returningResults;
         for (const auto result : query.Results()) {
-            addRoot(result.Value().Ptr(), result.ColumnHints().Ptr());
+            auto value = result.Value().Ptr();
+            TExprNode::TPtr rowsLimit;
+            while (TCoUnordered::Match(value.Get()) || TCoTake::Match(value.Get())) {
+                if (auto take = TMaybeNode<TCoTake>(value)) {
+                    Y_ENSURE(!rowsLimit, "Nested result limits are not supported");
+                    rowsLimit = take.Cast().Count().Ptr();
+                }
+                value = value->HeadPtr();
+            }
+            if (auto returning = TMaybeNode<TKqlReturningList>(value)) {
+                // RETURNING is a view of an effect's output, not another write.
+                // Import that effect only in the effects phase, retaining the
+                // result's original slot for mixed SELECT/RETURNING queries.
+                Y_ENSURE(returningResults.emplace(returning.Cast().Update().Raw(),
+                    TReturningResult{resultIndex, returning.Cast().Columns().Ptr(), result.ColumnHints().Ptr(), rowsLimit}).second);
+            } else {
+                // Ordinary result limits were pushed into their logical root
+                // during rewriting. Only RETURNING keeps a post-write limit.
+                Y_ENSURE(!rowsLimit, "Unexpected result limit outside an RBO root");
+                addRoot(value, result.ColumnHints().Ptr())->PlanProps.ResultIndex = resultIndex;
+            }
+            ++resultIndex;
         }
         ++physicalTxGroup;
         effectPriority = 0;
         for (const auto effect : query.Effects()) {
-            addRoot(effect.Ptr(), nullptr);
+            auto root = effect.Ptr();
+            const auto returning = returningResults.find(root.Get());
+            if (returning != returningResults.end()) {
+                root = ctx.ChangeChild(*root, TKqpOpRoot::idx_ColumnOrder, std::move(returning->second.Columns));
+                auto converted = addRoot(root, returning->second.Hints);
+                converted->PlanProps.ResultIndex = returning->second.Index;
+                converted->PlanProps.ReturningRowsLimit = returning->second.RowsLimit;
+                returningResults.erase(returning);
+            } else {
+                addRoot(root, nullptr);
+            }
             ++effectPriority;
         }
+        Y_ENSURE(returningResults.empty(), "RETURNING must reference an effect in the same query block");
         ++physicalTxGroup;
     }
     if (Roots.size() > 1) {

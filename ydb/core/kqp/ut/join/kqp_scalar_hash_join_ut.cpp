@@ -205,40 +205,61 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(ComplexKeys, Shuffle) {
+    Y_UNIT_TEST(ComplexTypesFallback) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
         CreateSampleTables(client);
 
-        struct TCase {
-            TStringBuf LeftKey;
-            TStringBuf RightKey;
-            bool RequiresScalar;
+        const auto makeQuery = [](bool blocks) {
+            return TStringBuilder() << R"(
+                PRAGMA TablePathPrefix='/Root';
+                PRAGMA ydb.OptimizerHints='JoinType(L R Shuffle)';
+                PRAGMA ydb.UseScalarHashJoin='false';
+                PRAGMA ydb.UseBlockHashJoin=')" << (blocks ? "true" : "false") << R"(';
+                $l = SELECT id, SOME(AsList(k, k)) AS key, SOME(AsDict(AsTuple(id, v))) AS p
+                    FROM L GROUP BY id;
+                $r = SELECT id, SOME(AsList(CAST(k AS Int32), CAST(k AS Int32))) AS key,
+                    SOME(AsDict(AsTuple(id, w))) AS p FROM R GROUP BY id;
+                SELECT L.id AS lid, R.id AS rid, L.p AS lp, R.p AS rp
+                FROM $l AS L INNER JOIN $r AS R ON L.key = R.key;
+            )";
         };
-        const std::vector<TCase> cases = {
-            {"AsList(k, k)", "AsList(k, k)", true},
-            {"AsTuple(k, CAST(k AS String))", "AsTuple(k, CAST(k AS String))", false},
-            {"AsStruct(k AS a, CAST(k AS String) AS b)", "AsStruct(k AS a, CAST(k AS String) AS b)", false},
-            {"AsDict(AsTuple(1, k), AsTuple(2, k))", "AsDict(AsTuple(2, k), AsTuple(1, k))", true},
+        const TString scalarQuery = makeQuery(true);
+        const TString graceQuery = makeQuery(false);
+        CheckPlan(client, scalarQuery, true);
+        CheckPlan(client, graceQuery, false);
+        const auto expected = RunQuerySortedRows(client, graceQuery);
+        UNIT_ASSERT(!expected.empty());
+        UNIT_ASSERT_VALUES_EQUAL(RunQuerySortedRows(client, scalarQuery), expected);
+    }
+
+    Y_UNIT_TEST(ComplexKeys) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetQueryClient();
+        CreateSampleTables(client);
+
+        const std::vector<std::pair<TStringBuf, TStringBuf>> cases = {
+            {"AsList(k, k)", "AsList(k, k)"},
+            {"AsTuple(k, CAST(k AS String))", "AsTuple(k, CAST(k AS String))"},
+            {"AsStruct(k AS a, CAST(k AS String) AS b)", "AsStruct(k AS a, CAST(k AS String) AS b)"},
+            {"AsDict(AsTuple(1, k), AsTuple(2, k))", "AsDict(AsTuple(2, k), AsTuple(1, k))"},
             {"Variant(k, 'key', Variant<key: Int32?, other: String>)",
-             "Variant(k, 'key', Variant<key: Int32?, other: String>)", true},
-            {"Just(k)", "Just(k)", false},
+             "Variant(k, 'key', Variant<key: Int32?, other: String>)"},
+            {"Just(k)", "Just(k)"},
             {"AddTimezone(CAST(k AS Datetime), 'Europe/Moscow')",
-             "AddTimezone(CAST(k AS Datetime), 'Europe/Moscow')", false},
+             "AddTimezone(CAST(k AS Datetime), 'Europe/Moscow')"},
             {"AsList(IF(id = 1, -0.0, CAST(k AS Double)))",
-             "AsList(IF(id = 1, 0.0, CAST(k AS Double)))", true},
+             "AsList(IF(id = 1, 0.0, CAST(k AS Double)))"},
         };
-        for (const auto& [leftKey, rightKey, requiresScalar] : cases) {
+        for (const auto& [leftKey, rightKey] : cases) {
             for (const auto joinKind : {"INNER", "LEFT", "LEFT SEMI", "LEFT ONLY"}) {
-                const auto makeQuery = [&](bool scalar, bool blocks = true) {
+                const auto makeQuery = [&](bool scalar) {
                     const bool leftOnly = TStringBuf(joinKind) == "LEFT SEMI" || TStringBuf(joinKind) == "LEFT ONLY";
                     return TStringBuilder() << R"(
                         PRAGMA TablePathPrefix='/Root';
-                        PRAGMA ydb.OptimizerHints='JoinType(L R )" << (Shuffle ? "Shuffle" : "Broadcast") << R"()';
-                        PRAGMA ydb.UseBlockHashJoin=")" << (blocks ? "true" : "false") << R"(";
-                        PRAGMA ydb.UseScalarHashJoin=")" << (scalar ? "true" : "false") << R"(";
+                        PRAGMA ydb.OptimizerHints='JoinType(L R Broadcast)';
                         PRAGMA ydb.UseScalarHashJoinForMap=")" << (scalar ? "true" : "false") << R"(";
                         $l = SELECT id, SOME()" << leftKey << R"() AS key FROM L GROUP BY id;
                         $r = SELECT id, SOME()" << rightKey << R"() AS key
@@ -248,47 +269,38 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
                     )";
                 };
                 const TString scalarQuery = makeQuery(true);
-                const TString autoQuery = makeQuery(false);
-                const TString mapQuery = makeQuery(false, false);
+                const TString mapQuery = makeQuery(false);
                 CheckPlan(client, scalarQuery, true);
-                CheckPlan(client, autoQuery, Shuffle && requiresScalar);
-                CheckPlan(client, mapQuery, false);
                 const auto expected = RunQuerySortedRows(client, mapQuery);
                 UNIT_ASSERT_C(!expected.empty(), leftKey << " " << joinKind);
                 UNIT_ASSERT_VALUES_EQUAL_C(RunQuerySortedRows(client, scalarQuery), expected, leftKey << " " << joinKind);
-                UNIT_ASSERT_VALUES_EQUAL_C(RunQuerySortedRows(client, autoQuery), expected, leftKey << " " << joinKind);
             }
         }
     }
 
-    Y_UNIT_TEST_TWIN(ComplexPayload, Shuffle) {
-        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
-        TKikimrRunner kikimr(settings);
+    Y_UNIT_TEST(ComplexPayload) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetQueryClient();
         CreateSampleTables(client);
 
-        const std::vector<std::pair<TStringBuf, bool>> cases = {
-            {"SOME(v)", false},
-            {"SOME(Just(v))", false},
-            {"SOME(AsTuple(v, id))", false},
-            {"SOME(AsStruct(v AS value, id AS id))", false},
-            {"SOME(AsList(v, v))", true},
-            {"SOME(AsDict(AsTuple(id, v)))", true},
-            {"SOME(Just(AsStruct(AsList(v, v) AS items)))", true},
-            {"SOME(AddTimezone(CAST(id AS Datetime), 'Europe/Moscow'))", false},
+        const std::vector<TStringBuf> cases = {
+            "SOME(v)",
+            "SOME(Just(v))",
+            "SOME(AsTuple(v, id))",
+            "SOME(AsStruct(v AS value, id AS id))",
+            "SOME(AsList(v, v))",
+            "SOME(AsDict(AsTuple(id, v)))",
+            "SOME(AddTimezone(CAST(id AS Datetime), 'Europe/Moscow'))",
         };
 
-        for (const auto& [payload, requiresScalar] : cases) {
+        for (const auto payload : cases) {
             for (const auto joinKind : {"INNER", "LEFT", "LEFT SEMI", "LEFT ONLY"}) {
                 // Aggregate so that the payload is not pulled above the join
-                const auto makeQuery = [payload, joinKind](bool useScalarHashJoin, bool blocks = true) {
+                const auto makeQuery = [payload, joinKind](bool useScalarHashJoin) {
                     const bool leftOnly = TStringBuf(joinKind) == "LEFT SEMI" || TStringBuf(joinKind) == "LEFT ONLY";
                     return TStringBuilder() << R"(
                         PRAGMA TablePathPrefix='/Root';
-                        PRAGMA ydb.OptimizerHints='JoinType(L R )" << (Shuffle ? "Shuffle" : "Broadcast") << R"()';
-                        PRAGMA ydb.UseBlockHashJoin=")" << (blocks ? "true" : "false") << R"(";
-                        PRAGMA ydb.UseScalarHashJoin=")" << (useScalarHashJoin ? "true" : "false") << R"(";
+                        PRAGMA ydb.OptimizerHints='JoinType(L R Broadcast)';
                         PRAGMA ydb.UseScalarHashJoinForMap=")" << (useScalarHashJoin ? "true" : "false") << R"(";
                         $l = SELECT k, )" << payload << R"( AS p FROM L GROUP BY k;
                         $r = SELECT k, )" << payload << R"( AS p
@@ -300,10 +312,7 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
                     )";
                 };
                 const TString scalarQuery = makeQuery(true);
-                const TString autoQuery = makeQuery(false);
-                const TString mapQuery = makeQuery(false, false);
-                CheckPlan(client, autoQuery, Shuffle && requiresScalar);
-                CheckPlan(client, mapQuery, false);
+                const TString mapQuery = makeQuery(false);
 
                 auto explain = client.ExecuteQuery(scalarQuery, TTxControl::NoTx(),
                     TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
@@ -311,9 +320,7 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
                 const TString ast(*explain.GetStats()->GetAst());
                 UNIT_ASSERT_C(ast.Contains("ScalarHashJoin"), payload << " " << joinKind << "\n" << ast);
 
-                const auto expected = RunQuery(client, mapQuery);
-                UNIT_ASSERT_VALUES_EQUAL_C(RunQuery(client, scalarQuery), expected, payload);
-                UNIT_ASSERT_VALUES_EQUAL_C(RunQuery(client, autoQuery), expected, payload);
+                UNIT_ASSERT_VALUES_EQUAL_C(RunQuery(client, scalarQuery), RunQuery(client, mapQuery), payload);
             }
         }
     }

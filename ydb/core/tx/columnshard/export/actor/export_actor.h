@@ -24,6 +24,10 @@ private:
         WaitData,
         WaitWriting,
         WaitSaveCursor,
+        WaitSaveCursorBeforeReset,
+        WaitSaveResetCursor,
+        WaitSaveCursorBeforeFinish,
+        WaitSaveFinalCursor,
         Finished
     };
 
@@ -31,6 +35,7 @@ private:
     std::optional<TActorId> ScanActorId;
     bool AllowScanPings = false;
     std::optional<TString> PendingAbortReason;
+    ui32 ScanGeneration = 0;
 
     EStage Stage = EStage::Initialization;
     std::shared_ptr<NExport::TSession> ExportSession;
@@ -46,11 +51,17 @@ private:
     TInstant StageStartTime;
 
     void SwitchStage(const EStage from, const EStage to);
+    bool IsSavingCursor() const;
+    bool IsFinishing() const;
+    void SaveCursor(EStage stage);
 
     void AbortExport(const TString& errorMessage);
     void FinishAbortExport(const TString& errorMessage);
     void KillExporter();
     void AbortScanIfKnown(const TString& reason);
+    void StartScan();
+    void ResetCursor();
+    void FinishExport();
 
     void ScheduleTimeoutCheck();
     void HandleWakeup();
@@ -76,6 +87,8 @@ protected:
 
     void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportError::TPtr& /*ev*/);
 
+    void HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportReset::TPtr& ev);
+
     virtual void OnBootstrap(const TActorContext& /*ctx*/) override;
 
     std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> BuildRequestInitiator(const TCursor& cursor) const;
@@ -91,6 +104,7 @@ public:
                 hFunc(NKqp::TEvKqpCompute::TEvScanError, HandleExecute);
                 hFunc(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult, HandleExecute);
                 hFunc(NColumnShard::TEvPrivate::TEvBackupExportError, HandleExecute);
+                hFunc(NColumnShard::TEvPrivate::TEvBackupExportReset, HandleExecute);
                 cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
                 default:
                     TBase::StateInProgress(ev);

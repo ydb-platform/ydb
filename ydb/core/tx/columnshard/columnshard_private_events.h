@@ -92,6 +92,18 @@ struct TEvPrivate {
         EvBackupImportRecordBatch,
         EvBackupImportRecordBatchResult,
 
+<<<<<<< HEAD
+=======
+        EvRetryConfigSubscription,
+        EvUpdateChannelApproximateFreeSpace,
+
+        EvContinueFindEmptyHistoryIntervals,
+        EvFindEmptyHistoryIntervalsPortionsReady,
+        EvPrefetchPortionsMetadata,
+
+        EvBackupExportReset,
+
+>>>>>>> d03e71b2491 (reset has been supported (#57915))
         EvEnd
     };
 
@@ -456,23 +468,36 @@ struct TEvPrivate {
     3. TEvBackupExportState - internal message for iscan iface
     */
     struct TEvBackupExportRecordBatch: public TEventLocal<TEvBackupExportRecordBatch, EvBackupExportRecordBatch> {
-        explicit TEvBackupExportRecordBatch(const std::shared_ptr<arrow::RecordBatch>& data, bool isLast)
+        explicit TEvBackupExportRecordBatch(const std::shared_ptr<arrow::RecordBatch>& data, bool isLast, ui32 generation = 0)
             : Data(data)
             , IsLast(isLast)
+            , Generation(generation)
         {
         }
 
         std::shared_ptr<arrow::RecordBatch> Data;
         bool IsLast;
+        ui32 Generation;
     };
 
     struct TEvBackupExportRecordBatchResult: public TEventLocal<TEvBackupExportRecordBatchResult, EvBackupExportRecordBatchResult> {
-        explicit TEvBackupExportRecordBatchResult(bool isFinish)
+        explicit TEvBackupExportRecordBatchResult(bool isFinish, ui32 generation = 0)
             : IsFinish(isFinish)
+            , Generation(generation)
         {
         }
 
         bool IsFinish = false;
+        ui32 Generation;
+    };
+
+    struct TEvBackupExportReset: public TEventLocal<TEvBackupExportReset, EvBackupExportReset> {
+        explicit TEvBackupExportReset(ui32 generation)
+            : Generation(generation)
+        {
+        }
+
+        ui32 Generation;
     };
 
     struct TEvBackupExportState: public TEventLocal<TEvBackupExportState, EvBackupExportState> {

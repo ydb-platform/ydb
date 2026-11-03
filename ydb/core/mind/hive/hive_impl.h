@@ -129,7 +129,7 @@ NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values);
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values, const TResourceRawValues& maximum);
 TString GetResourceValuesHtml(const NKikimrTabletBase::TMetrics& values);
 
-// value of a THiveConfig field in single-line text form; a repeated field is rendered as [a, b, c]
+// value of a THiveConfig field in single-line text form; a repeated field is rendered as [a, b, c], an absent singular field as <unset>
 TString GetHiveConfigFieldText(const NKikimrConfig::THiveConfig& config, const google::protobuf::FieldDescriptor* field);
 
 // "Field: from -> to" for every field that differs between the two configs, "; "-separated; empty when they are equal

@@ -12,6 +12,10 @@ TString GetHiveConfigFieldText(const NKikimrConfig::THiveConfig& config, const g
     printer.SetSingleLineMode(true);
     TProtoStringType value;
     if (!field->is_repeated()) {
+        // an absent field is not the same as its default: e.g. absent MinCPUScatterToBalance falls back to MinScatterToBalance
+        if (field->has_presence() && !config.GetReflection()->HasField(config, field)) {
+            return "<unset>";
+        }
         printer.PrintFieldValueToString(config, field, -1, &value);
         return TString(value);
     }

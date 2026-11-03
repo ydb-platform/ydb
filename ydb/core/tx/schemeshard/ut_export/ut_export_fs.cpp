@@ -502,6 +502,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
         runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
 
+        TestMkDir(runtime, ++txId, "/MyRoot", "Table");
+        env.TestWaitNotification(runtime, txId);
+
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table1"
             Columns { Name: "key" Type: "Utf8" }
@@ -522,7 +525,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         TString requestStr = Sprintf(R"(
             ExportToFsSettings {
               base_path: "%s"
-              source_path: "/MyRoot"
+              source_path: "/MyRoot/Table"
               items {
                 source_path: "/MyRoot/Table1"
               }
@@ -544,7 +547,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardExportToFsTests) {
         UNIT_ASSERT(FileExists((baseDir / "metadata.json").GetPath()));
         UNIT_ASSERT(FileExists((baseDir / "SchemaMapping" / "metadata.json").GetPath()));
         UNIT_ASSERT(FileExists((baseDir / "SchemaMapping" / "mapping.json").GetPath()));
-        UNIT_ASSERT(FileExists((baseDir / "Table1" / "scheme.pb").GetPath()));
+        UNIT_ASSERT(FileExists((baseDir / "MyRoot/Table1" / "scheme.pb").GetPath()));
         UNIT_ASSERT(FileExists((baseDir / "table2_prefix" / "scheme.pb").GetPath()));
 
         TString metadataContent = ReadFileContent((baseDir / "metadata.json").GetPath());

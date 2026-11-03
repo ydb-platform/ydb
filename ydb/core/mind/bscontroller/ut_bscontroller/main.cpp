@@ -3551,6 +3551,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
 
     void CheckGroupResourcesOnOverflow(TErasureType::EErasureSpecies erasure, ui32 numVDisks, ui64 slotSize, ui64 allocatedSize,
             ui64 expectedSpace, ui64 expectedAvailableSize, ui64 expectedAllocatedSize) {
+        UNIT_ASSERT(allocatedSize <= slotSize);
         using TPDiskInfo = TBlobStorageController::TPDiskInfo;
         TPDiskInfo pdisk(
             TBlobStorageController::THostId(TString("host"), 1),
@@ -3601,6 +3602,12 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         check_mirror_3_dc(12, ui64{1} << 62, ui64{1} << 62, Max<ui64>(), 0, Max<ui64>());
         check_mirror_3_dc(9, ui64{1} << 62, ui64{1} << 61, ui64{3} << 62, ui64{3} << 61, ui64{3} << 61);
         check_mirror_3_dc(9, ui64{1} << 63, ui64{1} << 63, Max<ui64>(), 0, Max<ui64>());
+        // Total capacity overflows while allocated capacity still fits.
+        check_mirror_3_dc(9, ui64{1} << 63, ui64{1} << 62, Max<ui64>(), ui64{3} << 62, ui64{3} << 62);
+        // Both capacities overflow, but their difference still fits.
+        check_mirror_3_dc(9, ui64{1} << 63, ui64{3} << 61, Max<ui64>(), ui64{3} << 61, Max<ui64>());
+        // Available capacity itself also overflows.
+        check_mirror_3_dc(12, ui64{1} << 63, ui64{1} << 62, Max<ui64>(), Max<ui64>(), Max<ui64>());
 
         auto check_block_4_2 = [](ui32 numVDisks, ui64 slotSize, ui64 allocatedSize, ui64 expectedSpace, ui64 expectedAvailableSize, ui64 expectedAllocatedSize) {
             CheckGroupResourcesOnOverflow(TBlobStorageGroupType::Erasure4Plus2Block, numVDisks, slotSize, allocatedSize, expectedSpace, expectedAvailableSize, expectedAllocatedSize);
@@ -3608,6 +3615,24 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         check_block_4_2(10, ui64{1} << 62, 0, Max<ui64>(), Max<ui64>(), 0);
         check_block_4_2(8, ui64{1} << 61, ui64{1} << 60, 2 * (Max<ui64>() / 3), Max<ui64>() / 3, Max<ui64>() / 3);
         check_block_4_2(8, ui64{3} << 60, 0, Max<ui64>(), Max<ui64>(), 0);
+    }
+
+    Y_UNIT_TEST(GroupUsageRoundsBeforeSubtracting) {
+        NKikimrBlobStorage::TPDiskMetrics pdiskMetrics;
+        pdiskMetrics.SetEnforcedDynamicSlotSize(3);
+        NKikimrBlobStorage::TVDiskMetrics vdiskMetrics;
+        const std::vector<TGroupDiskInfo> disks(8, {&pdiskMetrics, &vdiskMetrics, 1, 0});
+
+        auto check = [&](ui64 allocatedSize, ui64 expectedAllocatedSize, ui64 expectedAvailableSize) {
+            vdiskMetrics.SetAllocatedSize(allocatedSize);
+            NKikimrSysView::TGroupInfo info;
+            CalculateGroupUsageStats(&info, disks, TBlobStorageGroupType(TBlobStorageGroupType::Erasure4Plus2Block), 1);
+            UNIT_ASSERT_VALUES_EQUAL(info.GetAllocatedSize(), expectedAllocatedSize);
+            UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), expectedAvailableSize);
+        };
+        check(1, 5, 11); // floor(3 * 16/3) - floor(1 * 16/3), not floor(2 * 16/3).
+        check(3, 16, 0);
+        check(4, 21, 0);
     }
 
     Y_UNIT_TEST(GroupUsagePrefersRoundedDynamicSlotSize) {

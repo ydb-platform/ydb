@@ -17,15 +17,10 @@ on:
         type: string
         default: 'ydb/library/actors/util/ut'
       build_preset:
-        description: 'Build preset'
+        description: 'Build preset (single value; match main input name for API dispatch)'
         required: false
-        type: choice
-        options:
-          - relwithdebinfo
-          - release-asan
-          - release-msan
-          - release-tsan
-        default: relwithdebinfo
+        type: string
+        default: 'relwithdebinfo
       test_size:
         description: 'Test size filter'
         required: false

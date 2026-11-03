@@ -19,6 +19,10 @@ namespace NKikimr::NReplication::NService {
 
 namespace {
 
+// NJson::ReadJson does not expose kParseFullPrecisionFlag, and its RapidJSON
+// callback adapter is private to the JSON library. This local bridge lets
+// replication parse CDC doubles exactly while retaining the existing schema
+// validation callbacks.
 class TRapidJsonCallbacks {
 public:
     explicit TRapidJsonCallbacks(NJson::TJsonCallbacks& callbacks)

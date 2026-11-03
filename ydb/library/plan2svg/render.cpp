@@ -1134,6 +1134,14 @@ void TPlan::PrepareStageSvg(const std::shared_ptr<TStage>& s, ui64 maxTime, ui32
     s->Svg
         << SvgStageId(Config.HeaderLeft + s->IndentX + INTERNAL_GAP_X + INTERNAL_WIDTH * 3 / 2, INTERNAL_GAP_Y + INTERNAL_HEIGHT / 2, s->External ? "E" : ToString(s->PhysicalStageId));
 
+    if (s->ColumnShardHeight) {
+        s->Svg << "<g class='cs-stage-toggle button' role='button' tabindex='0' aria-expanded='false' data-cs-stage='"
+            << s->PhysicalStageId << "' transform='translate(" << Config.HeaderLeft + s->IndentX + INTERNAL_GAP_X
+            << ',' << INTERNAL_GAP_Y + 2 << ")'><title>Show ColumnShard read statistics for Stage "
+            << s->PhysicalStageId << "</title><rect width='10' height='10' fill='transparent'/>"
+            << "<path d='M1 1 L7 5 L1 9 Z' fill='" << Config.Palette.ConnectionText << "'/></g>" << Endl;
+    }
+
     PrintStageBackground(s);
 
     for (auto& region : s->HotRegions) {
@@ -1230,6 +1238,11 @@ void TPlan::PrintStage(TStringBuilder& builder, const std::shared_ptr<TStage>& s
 
     builder << "<svg class='slimable' data-stage='inner " << stage->PhysicalStageId << "' data-height='" << stage->Height << "' width='" << Config.Width << "' height='" << stage->Height << "' x='0' y='" << GAP_Y << "'>" << Endl;
     builder << stage->Svg;
+    if (stage->ColumnShardHeight) {
+        builder << "<svg data-cs-panel='" << stage->PhysicalStageId << "' data-height='" << stage->ColumnShardHeight
+            << "' x='0' y='" << stage->Height << "' width='" << Config.Width << "' height='0' style='display:none'>"
+            << stage->ColumnShardSvg << "</svg>" << Endl;
+    }
     builder << "</svg>" << Endl;
 
     auto y = stage->Height + GAP_Y;
@@ -1756,6 +1769,64 @@ struct TColumnShardMetric {
     }
 };
 
+TString ColumnShardSemanticNames(const NJson::TJsonValue& step, TStringBuf path) {
+    const auto* value = step.GetValueByPath(path);
+    if (!value || value->GetType() != NJson::JSON_ARRAY) {
+        return {};
+    }
+    std::set<TString> names;
+    for (const auto& name : value->GetArraySafe()) {
+        if (name.GetType() == NJson::JSON_STRING) {
+            names.insert(name.GetStringSafe());
+        }
+    }
+    TString result;
+    for (const auto& name : names) {
+        if (result) { result += ", "; }
+        result += name;
+    }
+    return result;
+}
+
+TString ColumnShardSemanticDescription(const NJson::TJsonValue& step) {
+    const TString kind = StepText(step, "StepKind");
+    if (kind == "Filter") {
+        const TString predicate = StepText(step, "Details.Predicate");
+        if (predicate) { return predicate; }
+        const TString operation = StepText(step, "Operation");
+        if (operation.StartsWith("Filter(")) { return operation.substr(7, operation.size() - 8); }
+        return StepText(step, "Details.Purpose");
+    }
+    if (kind == "IndexCheck") {
+        const TString type = StepText(step, "Details.IndexType");
+        return (type ? type + ": " : TString()) + StepText(step, "Operation");
+    }
+    if (kind == "FetchColumns" || kind == "Assemble" || kind == "MemoryReserve") {
+        return ColumnShardSemanticNames(step, "Details.Columns");
+    }
+    if (kind == "Aggregation") {
+        const TString keys = ColumnShardSemanticNames(step, "Details.Keys");
+        const TString functions = ColumnShardSemanticNames(step, "Details.Functions");
+        return functions ? (keys ? "GROUP BY " + keys + ": " : TString()) + functions : StepText(step, "Operation");
+    }
+    if (kind == "Projection" || kind == "BuildResult") {
+        return ColumnShardSemanticNames(step, "Details.OutputColumns");
+    }
+    if (kind == "Calculation") {
+        const TString expression = StepText(step, "Details.Expression");
+        return expression ? expression : StepText(step, "Operation");
+    }
+    if (kind == "Decode") {
+        const TString column = StepText(step, "Details.Column");
+        const TString codec = StepText(step, "Details.Codec");
+        return column + (codec ? " [" + codec + "]" : TString());
+    }
+    if (kind == "StorageRead") {
+        return StepText(step, "Details.DataKind") + " / " + StepText(step, "Details.BackendKind") + " / " + StepText(step, "Details.StorageTier");
+    }
+    return {};
+}
+
 struct TColumnShardNode {
     TString Name;
     TString Meta;
@@ -1782,6 +1853,8 @@ struct TColumnShardNode {
     TColumnShardMetric ReaderOverviewWait;
     TStepGroup Details;
     std::set<TString> Descriptions;
+    std::map<TString, std::set<TString>> SemanticDescriptions;
+    bool SemanticDescriptionsTruncated = false;
 
     TColumnShardNode& Child(TString name, TString meta, TString path, TString kind, TString row) {
         auto& child = Children[name];
@@ -1794,6 +1867,15 @@ struct TColumnShardNode {
     }
 
     void Add(const NJson::TJsonValue& step, const TString& tablet, bool summary, bool directWait) {
+        const TString semantic = ColumnShardSemanticDescription(step);
+        if (semantic) {
+            auto& descriptions = SemanticDescriptions[StepText(step, "StepKind")];
+            if (descriptions.size() < 64 || descriptions.contains(semantic)) {
+                descriptions.insert(semantic);
+            } else {
+                SemanticDescriptionsTruncated = true;
+            }
+        }
         if (ColumnShardSkipped(step)) {
             ++Skipped;
             return;
@@ -2183,6 +2265,33 @@ TString ColumnShardDetails(const TColumnShardNode& node, bool partial, TStringBu
     return {};
 }
 
+TString ColumnShardSemanticLabel(const TColumnShardNode& node, TStringBuilder& tooltip) {
+    TString kind = node.Kind;
+    if (kind == "Reserve") { kind = "MemoryReserve"; }
+    if (kind == "Fetching") { kind = "FetchColumns"; }
+    if (node.Row != "step") {
+        if (node.Name == "PKFilter" || node.Name == "Filter") { kind = "Filter"; }
+        else if (node.Name == "IndexFilter") { kind = "IndexCheck"; }
+        else if (node.Name == "FetchOtherColumns") { kind = "FetchColumns"; }
+        else { kind = node.Name; }
+    }
+    const auto descriptions = node.SemanticDescriptions.find(kind);
+    if (descriptions == node.SemanticDescriptions.end()) { return {}; }
+    tooltip << "Semantic descriptions (distinct observed variants; variants are not a conjunction): ";
+    TString label;
+    ui32 count = 0;
+    for (const auto& description : descriptions->second) {
+        tooltip << description << "; ";
+        if (count++ < 2) {
+            if (label) { label += " | "; }
+            label += description;
+        }
+    }
+    if (count > 2) { label += " (+" + ToString(count - 2) + " variants)"; }
+    if (node.SemanticDescriptionsTruncated) { tooltip << "Description limit reached; additional variants omitted. "; }
+    return label;
+}
+
 ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TColumnShardRead& read,
     const TColumnShardNode& node, ui32 top, ui32 depth) {
     constexpr ui32 rowHeight = INTERNAL_HEIGHT + INTERNAL_GAP_Y;
@@ -2213,6 +2322,10 @@ ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TCo
     node.Wait.Tooltip(tooltip, "Wait, us");
     node.Read.Tooltip(tooltip, "Received bytes (this boundary)");
     TString details = ColumnShardDetails(node, read.Partial, tooltip);
+    const TString semanticLabel = ColumnShardSemanticLabel(node, tooltip);
+    if (semanticLabel) {
+        details = semanticLabel + (details ? "; " + details : TString());
+    }
     if (!node.Descriptions.empty()) {
         tooltip << "Examples / descriptions (up to 12): ";
     }
@@ -2318,7 +2431,7 @@ ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TCo
             << ",0) scale(0.014)' fill='" << viz.Config.Palette.ConnectionText << "'/></g>";
     }
     const ui32 indent = std::min<ui32>((depth + 1) * INTERNAL_WIDTH, 270);
-    StepCell(svg, indent, 315 - indent, node.Name);
+    StepCell(svg, indent, 315 - indent, node.Name + (semanticLabel ? " (" + semanticLabel + ")" : TString()));
     StepCell(svg, 315, 90, TStringBuilder() << node.ActiveTablets.size() << '/' << read.Denominator()
         << (read.ExpectedKnown ? "" : " recv"));
     StepCell(svg, 405, 65, FormatInteger(node.Calls));
@@ -2335,9 +2448,12 @@ ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TCo
     return height;
 }
 
-bool HasColumnShardMetaStats(const TVisualizer& viz) {
+bool HasColumnShardMetaStats(const TVisualizer& viz, const TStage* onlyStage) {
     for (const auto& plan : viz.Plans) {
         for (const auto& stage : plan->Stages) {
+            if (stage.get() != onlyStage) {
+                continue;
+            }
             for (const auto& scan : stage->ColumnShardScans.GetArray()) {
                 if (scan.GetType() != NJson::JSON_MAP) {
                     continue;
@@ -2406,11 +2522,14 @@ ui32 PrintColumnShardCache(TStringBuilder& svg, const TVisualizer& viz, const TC
     return rowHeight;
 }
 
-ui32 PrintAggregatedColumnShardStats(TStringBuilder& svg, const TVisualizer& viz, ui32 top) {
+ui32 PrintAggregatedColumnShardStats(TStringBuilder& svg, const TVisualizer& viz, ui32 top, const TStage* onlyStage) {
     constexpr ui32 rowHeight = INTERNAL_HEIGHT + INTERNAL_GAP_Y;
     ui32 height = 0;
     for (const auto& plan : viz.Plans) {
         for (const auto& stage : plan->Stages) {
+            if (stage.get() != onlyStage) {
+                continue;
+            }
             std::map<TString, TColumnShardAttempt> attempts;
             TColumnShardRead cohortContext;
             bool expectedContextSeen = false;
@@ -2578,14 +2697,17 @@ ui32 PrintAggregatedColumnShardStats(TStringBuilder& svg, const TVisualizer& viz
     return height;
 }
 
-ui32 PrintColumnShardStats(TStringBuilder& svg, const TVisualizer& viz, ui32 top) {
-    if (HasColumnShardMetaStats(viz)) {
-        return PrintAggregatedColumnShardStats(svg, viz, top);
+ui32 PrintColumnShardStats(TStringBuilder& svg, const TVisualizer& viz, ui32 top, const TStage* onlyStage) {
+    if (HasColumnShardMetaStats(viz, onlyStage)) {
+        return PrintAggregatedColumnShardStats(svg, viz, top, onlyStage);
     }
     constexpr ui32 rowHeight = INTERNAL_HEIGHT + INTERNAL_GAP_Y;
     ui32 height = 0;
     for (const auto& plan : viz.Plans) {
         for (const auto& stage : plan->Stages) {
+            if (stage.get() != onlyStage) {
+                continue;
+            }
             for (const auto& scan : stage->ColumnShardScans.GetArray()) {
                 if (scan.GetType() != NJson::JSON_MAP) {
                     continue;
@@ -2748,16 +2870,16 @@ TString TVisualizer::PrintSvg() {
     auto w = Config.TimelineWidth - timelineDelta - INTERNAL_GAP_X * 2;
 
     for (auto& plan : Plans) {
+        for (const auto& stage : plan->Stages) {
+            stage->ColumnShardSvg.clear();
+            stage->ColumnShardHeight = PrintColumnShardStats(stage->ColumnShardSvg, *this, 0, stage.get());
+        }
         plan->PrepareSvg(MaxTime, timelineDelta, offsetY);
     }
 
     for (auto& plan : Plans) {
         plan->PrintSvg(background, MaxTime, timelineDelta);
     }
-
-    TStringBuilder columnShardStats;
-    auto originalHeight = offsetY;
-    offsetY += PrintColumnShardStats(columnShardStats, *this, originalHeight);
 
     svg << "<svg width='" << Config.Width << "' height='" << offsetY << "' xmlns='http://www.w3.org/2000/svg'>" << Endl;
     svg << "<clipPath id='clipTextPath'><rect x='" << Config.HeaderLeft
@@ -2829,11 +2951,10 @@ TString TVisualizer::PrintSvg() {
         auto opacity = MaxTime ? std::min(0.5, static_cast<double>(UpdateTime - MaxTime) / (2 * MaxTime)) : 0.5;
         svg
         << "<rect x='" << Config.TimelineLeft + Config.TimelineWidth - timelineDelta << "' y='" << 0
-        << "' width='" << timelineDelta << "' height='" << originalHeight
+            << "' width='" << timelineDelta << "' height='" << offsetY
         << "' stroke-width='0' opacity='" << opacity << "' fill='" << Config.Palette.StageTextHighlight << "'/>" << Endl;
     }
 
-    svg << columnShardStats;
     PrintColumnHeaders(svg, maxSec, deltaSec, x, w);
 
     svg << "</svg>" << Endl;

@@ -378,6 +378,39 @@ std::shared_ptr<NExecution::TCompiledGraph> BuildMergeFilterSimpleGraph(const bo
 }
 
 Y_UNIT_TEST_SUITE(TProgramStatsMeta) {
+    Y_UNIT_TEST(PlainStatsRetainSchemaNamesAfterResolverDestruction) {
+        auto graph = [] {
+            auto schema = std::make_shared<arrow::Schema>(
+                std::vector{std::make_shared<arrow::Field>("metric", arrow::int64())});
+            TSchemaColumnResolver resolver(schema);
+            NOptimization::TGraph::TBuilder builder(resolver);
+            builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({1})));
+            return builder.Finish().DetachResult();
+        }();
+        arrow::Int64Builder arrayBuilder;
+        UNIT_ASSERT(arrayBuilder.Append(42).ok());
+        std::shared_ptr<arrow::Array> array;
+        UNIT_ASSERT(arrayBuilder.Finish(&array).ok());
+        auto source = std::make_shared<TSimpleDataSource>();
+        source->AddBlob(1, "", array);
+        auto collector = std::make_shared<NKikimr::NScanStats::TCollector>(1);
+        collector->SetReaderKind("PLAIN");
+        {
+            NKikimr::NScanStats::TScope scope(nullptr, collector);
+            source->ReturnResources(graph->Apply(*source, source->ExtractResources()).DetachResult());
+        }
+        const auto report = collector->Drain(true);
+        bool sawProjection = false;
+        for (const auto& step : report->GetSteps()) {
+            if (step.GetStepKind() == NKikimr::NScanStats::TStep::Projection) {
+                sawProjection = true;
+                UNIT_ASSERT(step.GetOperation().Contains("metric"));
+                UNIT_ASSERT_STRINGS_EQUAL(step.GetDetails().GetProjection().GetOutputColumns().GetNames(0), "metric");
+            }
+        }
+        UNIT_ASSERT(sawProjection);
+    }
+
     Y_UNIT_TEST(ConstantIsAScalarCalculation) {
         auto constant = std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(1), 100);
     UNIT_ASSERT(constant->GetStatsKind() == NKikimr::NScanStats::TStep::Calculation);

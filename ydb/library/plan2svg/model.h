@@ -142,6 +142,8 @@ public:
     std::vector<TStageNodeTasks> Nodes; // sorted by NodeId; empty for plans without per-node stats
     const NJson::TJsonValue* StatsNode = nullptr;
     NJson::TJsonValue ColumnShardScans; // owned: the input JSON can expire before rendering
+    TStringBuilder ColumnShardSvg;
+    ui32 ColumnShardHeight = 0;
     ui64 MinTime = 0;
     ui64 MaxTime = 0;
     ui64 UpdateTime = 0;

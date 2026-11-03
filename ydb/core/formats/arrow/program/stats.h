@@ -25,12 +25,24 @@ namespace NKikimr::NArrow::NSSA {
                 description.append(part.substr(0, MaxStatsDescriptionBytes + 1 - description.size()));
             }
         };
-        append(function);
+        TStringBuf infix;
+        if (function == "And") { infix = " AND "; }
+        else if (function == "Or") { infix = " OR "; }
+        else if (function == "TCompareKernel{Equals}") { infix = " = "; }
+        else if (function == "TCompareKernel{NotEquals}") { infix = " != "; }
+        else if (function == "TCompareKernel{Greater}") { infix = " > "; }
+        else if (function == "TCompareKernel{GreaterOrEqual}") { infix = " >= "; }
+        else if (function == "TCompareKernel{Less}") { infix = " < "; }
+        else if (function == "TCompareKernel{LessOrEqual}") { infix = " <= "; }
+        else if (function == "Add") { infix = " + "; }
+        else if (function == "Mul") { infix = " * "; }
+        if (arguments.size() < 2) { infix = {}; }
+        if (!infix) { append(function); }
         append("(");
         bool first = true;
         for (const auto& argument : arguments) {
             if (!first) {
-                append(", ");
+                append(infix ? infix : TStringBuf(", "));
             }
             append(argument);
             first = false;

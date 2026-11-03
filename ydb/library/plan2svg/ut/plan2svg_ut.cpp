@@ -1428,6 +1428,42 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         UNIT_ASSERT_C(CsRow(zero, "Output", "", "Send").Contains("data-cs-output-arrow-bytes-known-shards='1'"), zero);
     }
 
+    Y_UNIT_TEST(MetaStatsSemanticLabelsPreserveVariantsAndNamedInputs) {
+        auto svg = RenderScans(R"([
+            {"StatsScanId":"a","TabletId":"10","ReaderKind":"TRIVIAL","Finished":true,"Steps":[
+                {"StepId":1,"StepKind":"Filter","MetaStep":"Filter","OwnedExecutionDuration":1,"Operation":"Filter((column_a > 10) AND (column_c < 300))"},
+                {"StepId":2,"StepKind":"FetchColumns","MetaStep":"FetchOtherColumns","OwnedExecutionDuration":1,"Details":{"Columns":["payload","category"]}},
+                {"StepId":3,"StepKind":"Aggregation","MetaStep":"Aggregation","OwnedExecutionDuration":1,"Details":{"Keys":["category"],"Functions":["COUNT(*)","SUM(metric)"]}},
+                {"StepId":4,"StepKind":"Projection","MetaStep":"Projection","OwnedExecutionDuration":1,"Details":{"OutputColumns":["category","SUM(metric)"]}}]},
+            {"StatsScanId":"b","TabletId":"11","ReaderKind":"TRIVIAL","Finished":true,"Steps":[
+                {"StepId":1,"StepKind":"Filter","MetaStep":"Filter","OwnedExecutionDuration":1,"Operation":"Filter(column_a = 5)"}]}
+        ])");
+        const auto filter = CsRow(svg, "Filter", "", "Filter");
+        UNIT_ASSERT_C(filter.Contains("column_a") && filter.Contains("column_c"), filter);
+        UNIT_ASSERT_C(filter.Contains(" | "), filter);
+        UNIT_ASSERT_C(!filter.Contains("AND column_a = 5"), filter);
+        UNIT_ASSERT_C(CsRow(svg, "FetchOtherColumns", "", "Fetching").Contains("category, payload"), svg);
+        UNIT_ASSERT_C(CsRow(svg, "Aggregation", "", "Aggregation").Contains("GROUP BY category"), svg);
+        UNIT_ASSERT_C(CsRow(svg, "Aggregation", "", "Aggregation").Contains("SUM(metric)"), svg);
+        UNIT_ASSERT_C(CsRow(svg, "Projection", "", "Projection").Contains("category"), svg);
+        UNIT_ASSERT_C(!svg.Contains("column_c < 300"), svg);
+    }
+
+    Y_UNIT_TEST(MetaStatsSemanticVariantsAreBoundedAndRetainedInTooltip) {
+        TStringBuilder scans;
+        scans << R"([{"StatsScanId":"a","TabletId":"10","ReaderKind":"TRIVIAL","Finished":true,"Steps":[)";
+        for (ui32 i = 0; i < 70; ++i) {
+            if (i) { scans << ','; }
+            scans << "{\"StepId\":" << i + 1 << ",\"StepKind\":\"Filter\",\"MetaStep\":\"Filter\",\"OwnedExecutionDuration\":1,\"Operation\":\"Filter(column_" << i << " > 10)\"}";
+        }
+        scans << "]}]";
+        const auto svg = RenderScans(scans);
+        UNIT_ASSERT_C(svg.Contains("variants)"), svg);
+        UNIT_ASSERT_C(svg.Contains("Description limit reached"), svg);
+        UNIT_ASSERT_C(svg.Contains("column_63"), svg);
+        UNIT_ASSERT_C(!svg.Contains("column_69"), svg);
+    }
+
     Y_UNIT_TEST(MetaStatsKeepDifferentMetastepDetails) {
         auto svg = RenderScans(R"([
             {"StatsScanId":"a","TabletId":"10","ReaderKind":"TRIVIAL","Finished":true,"Truncated":false,"Steps":[
@@ -1501,7 +1537,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         UNIT_ASSERT(!absent.PrintSvg().Contains("data-columnshard"));
     }
 
-    Y_UNIT_TEST(ExistingPlanMarkupAndCoordinatesRemainUnchanged) {
+    Y_UNIT_TEST(ColumnShardDetailsBelongToStageAndStartCollapsed) {
         auto root = Json(ReadPlan("columnshard_steps"));
         TPlanVisualizer withStats;
         withStats.LoadPlans(root["Plan"]);
@@ -1512,14 +1548,45 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         auto after = withStats.PrintSvg();
         auto heightStart = before.find("height='") + 8;
         auto oldHeight = FromString<ui32>(before.substr(heightStart, before.find('\'', heightStart) - heightStart));
-        auto startBefore = before.find("</clipPath>") + 11;
-        auto startAfter = after.find("</clipPath>") + 11;
-        auto appendix = after.find("<svg data-columnshard='scan'");
-        UNIT_ASSERT(appendix != TString::npos);
-        UNIT_ASSERT_VALUES_EQUAL(before.substr(startBefore, before.find("<g id='columnHeaders'>") - startBefore),
-            after.substr(startAfter, appendix - startAfter));
-        UNIT_ASSERT(after.substr(appendix).StartsWith(TStringBuilder() << "<svg data-columnshard='scan' x='0' y='" << oldHeight << '\''));
-        AssertWellFormed(after, "appended ColumnShard statistics");
+        auto newHeightStart = after.find("height='") + 8;
+        UNIT_ASSERT_VALUES_EQUAL(FromString<ui32>(after.substr(newHeightStart, after.find('\'', newHeightStart) - newHeightStart)), oldHeight);
+        auto panel = after.find("<svg data-cs-panel='");
+        auto read = after.find("<svg data-columnshard='scan'");
+        UNIT_ASSERT(panel != TString::npos && read > panel);
+        UNIT_ASSERT(after.substr(panel, read - panel).Contains("height='0' style='display:none'"));
+        UNIT_ASSERT(after.Contains("class='cs-stage-toggle button' role='button' tabindex='0' aria-expanded='false'"));
+        UNIT_ASSERT(after.find("data-stage='inner ") < panel);
+        UNIT_ASSERT(read < after.find("<g id='columnHeaders'>"));
+        AssertWellFormed(after, "ColumnShard details inside stage");
+    }
+
+    Y_UNIT_TEST(ColumnShardPanelsDoNotLeakBetweenStages) {
+        TVisualizer viz;
+        viz.LoadPlans(ReadPlan("cte_subplan"));
+        std::vector<std::shared_ptr<TStage>> owners;
+        for (const auto& plan : viz.Plans) {
+            for (const auto& stage : plan->Stages) {
+                if (!stage->External && owners.size() < 2) {
+                    owners.push_back(stage);
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(owners.size(), 2);
+        for (size_t i = 0; i < owners.size(); ++i) {
+            owners[i]->ColumnShardScans = Json(TStringBuilder() << "[{\"StatsScanId\":\"owner-" << i
+                << "\",\"TabletId\":\"" << i + 1 << "\",\"ReaderKind\":\"TRIVIAL\",\"Finished\":true,"
+                << "\"Truncated\":false,\"Steps\":[{\"StepId\":1,\"StepKind\":\"Filter\","
+                << "\"MetaStep\":\"Filter\",\"CanonicalPath\":\"\",\"OwnedExecutionDuration\":" << 10 + i << "}]}]");
+        }
+        auto svg = viz.PrintSvg();
+        UNIT_ASSERT_VALUES_EQUAL(CsOccurrences(svg, "<svg data-cs-panel='"), 2);
+        UNIT_ASSERT_VALUES_EQUAL(CsOccurrences(svg, "<g class='cs-stage-toggle button'"), 2);
+        for (size_t i = 0; i < owners.size(); ++i) {
+            UNIT_ASSERT(owners[i]->ColumnShardHeight > 0);
+            UNIT_ASSERT_C(owners[i]->ColumnShardSvg.Contains(TStringBuilder() << "data-cs-owned-sum='" << 10 + i << '\''), owners[i]->ColumnShardSvg);
+            UNIT_ASSERT(!owners[i]->ColumnShardSvg.Contains(TStringBuilder() << "data-cs-owned-sum='" << 11 - i << '\''));
+        }
+        AssertWellFormed(svg, "separate stage-owned ColumnShard panels");
     }
 
     Y_UNIT_TEST(GroupsPreserveZerosCoverageAndIndependentExtrema) {

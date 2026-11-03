@@ -10,12 +10,42 @@
     }
 
     function resize_nodes(node, delta) {
+    var origin = node;
         while(node && node.tagName == "svg") {
             node.setAttribute("height", Number(node.getAttribute("height")) + delta);
+        if (node !== origin && node.classList.contains("slimable")) {
+            node.setAttribute("data-height", Number(node.getAttribute("data-height")) + delta);
+        }
             shift_nodes(node.nextElementSibling, delta);
             node = node.parentElement;
         }
     }
+
+function toggle_cs_stats(button) {
+    var stage = find_parent_svg(button);
+    var panel = Array.from(stage.children).find(function(child) { return child.hasAttribute("data-cs-panel"); });
+    if (!panel) return;
+    toggle_slim_off(stage);
+    var open = button.getAttribute("aria-expanded") === "true";
+    if (open) {
+        var height = Number(panel.getAttribute("height"));
+        panel.setAttribute("data-height", height);
+        resize_nodes(panel, -height);
+        panel.style.display = "none";
+    } else {
+        panel.style.display = "inline";
+        resize_nodes(panel, Number(panel.getAttribute("data-height")));
+    }
+    button.setAttribute("aria-expanded", String(!open));
+    button.querySelector("path").setAttribute("transform", open ? "" : "rotate(90 4 5)");
+}
+
+window.addEventListener("keydown", function(e) {
+    if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("cs-stage-toggle")) {
+        e.preventDefault();
+        toggle_cs_stats(e.target);
+    }
+});
 
     function calc_delta(node) {
         var delta = 0;
@@ -172,6 +202,10 @@
     window.addEventListener("click", function(e) {
         var node = e.target;
         while (node) {
+        if (node.classList.contains("cs-stage-toggle")) {
+            toggle_cs_stats(node);
+            return;
+        }
             if (node.classList.contains("button") && node.classList.contains("plus")) {
                 toggle_fold(find_parent_svg(node));
                 return;

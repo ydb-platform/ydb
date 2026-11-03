@@ -48,7 +48,18 @@ namespace NKikimr::NArrow::NSSA {
             UNIT_ASSERT_STRINGS_EQUAL(Utf8Truncate(expression, expression.size()), expression);
         }
 
-        Y_UNIT_TEST(ShortDescriptionsRemainByteExact) {
+    Y_UNIT_TEST(PredicateDescriptionsPreserveBooleanStructure) {
+        const auto left = BuildStatsExpression("TCompareKernel{Greater}", {"column_a", "10"}, 1);
+        const auto right = BuildStatsExpression("TCompareKernel{Less}", {"column_c", "300"}, 2);
+        UNIT_ASSERT_STRINGS_EQUAL(left, "(column_a > 10)");
+        UNIT_ASSERT_STRINGS_EQUAL(BuildStatsExpression("And", {left, right}, 3),
+            "((column_a > 10) AND (column_c < 300))");
+        UNIT_ASSERT_STRINGS_EQUAL(BuildStatsExpression("Or", {left, right}, 4),
+            "((column_a > 10) OR (column_c < 300))");
+        UNIT_ASSERT_STRINGS_EQUAL(BuildStatsExpression("Length", {"payload"}, 5), "Length(payload)");
+    }
+
+    Y_UNIT_TEST(ShortDescriptionsRemainByteExact) {
             UNIT_ASSERT_STRINGS_EQUAL(BuildStatsExpression("add", {"price", "quantity"}, 7), "add(price, quantity)");
             UNIT_ASSERT_STRINGS_EQUAL(BoundStatsDescription("42", 8), "42");
         }

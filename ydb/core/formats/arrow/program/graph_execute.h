@@ -135,6 +135,7 @@ public:
 
 private:
     THashMap<ui64, std::shared_ptr<TNode>> Nodes;
+    THashMap<ui32, TString> StatsColumnNames;
     THashMap<ui32, TString> StatsMetaSteps;
     void BuildStatsMetaSteps();
     THashSet<ui32> SourceColumns;

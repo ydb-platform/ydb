@@ -53,6 +53,12 @@ public:
 TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const IColumnResolver& resolver) {
     for (auto&& i : original.GetNodes()) {
         Nodes.emplace(i.first, std::make_shared<TNode>(i.first, i.second->GetProcessor()));
+        for (const auto& input : i.second->GetProcessor()->GetInput()) {
+            const auto name = resolver.GetColumnName(input.GetColumnId(), false);
+            if (name) {
+                StatsColumnNames.emplace(input.GetColumnId(), name);
+            }
+        }
     }
     for (auto&& n : original.GetNodes()) {
         auto itTo = Nodes.find(n.first);
@@ -257,7 +263,9 @@ TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(
     THashMap<ui32, TString> expressions;
     if (plain) {
         for (const ui32 id : resources->GetStatsColumnIds()) {
-            expressions.emplace(id, TString(resources->GetFieldVerified(id)->name()));
+            const auto name = StatsColumnNames.find(id);
+            expressions.emplace(id, name == StatsColumnNames.end()
+                ? TString(resources->GetFieldVerified(id)->name()) : name->second);
         }
     }
     const auto resolve = [&](ui32 id) -> TString {

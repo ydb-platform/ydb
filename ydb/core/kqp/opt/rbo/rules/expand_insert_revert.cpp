@@ -6,16 +6,28 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-// One row when the input is empty, no rows otherwise. Counting a constant also
-// handles nullable keys: COUNT(key) would miss conflicts on a NULL primary key.
-TIntrusivePtr<IOperator> RequireEmpty(TIntrusivePtr<IOperator> input, TPositionHandle pos,
+// Normalize every conflict branch to a non-null marker and combine them before
+// aggregating. Only emptiness matters: UNION ALL preserves that property without
+// deduplication, and a marker avoids COUNT(key) missing a NULL primary-key conflict.
+// The scalar aggregate emits count=0 even for an empty union. Filtering it gives
+// exactly one row on success and no rows on conflict, suitable for one cross-join
+// gate regardless of the number of constraints.
+TIntrusivePtr<IOperator> RequireNoConflicts(TVector<TIntrusivePtr<IOperator>> conflicts, TPositionHandle pos,
     TExprContext& ctx, TPlanProps& props)
 {
+    TUnionInputRow markers;
+    for (auto& conflict : conflicts) {
+        const auto marker = props.InfoUnitRegistry.AddGenerated("conflict_marker");
+        TMapIUs columns;
+        columns.Add(marker, MakeConstant("Uint64", "1", pos, &ctx));
+        conflict = MakeIntrusive<TOpMap>(std::move(conflict), pos, std::move(columns));
+        markers.Inputs.push_back(marker);
+    }
     const auto row = props.InfoUnitRegistry.AddGenerated("conflict_row");
     const auto count = props.InfoUnitRegistry.AddGenerated("conflict_count");
-    TMapIUs columns;
-    columns.Add(row, MakeConstant("Uint64", "1", pos, &ctx));
-    auto rows = MakeIntrusive<TOpMap>(std::move(input), pos, std::move(columns));
+    TUnionAllIUs columns(TUnionInputPolicy{conflicts.size()});
+    columns.Add(row, std::move(markers));
+    auto rows = MakeIntrusive<TOpUnionAll>(std::move(conflicts), pos, std::move(columns));
     TAggregationIUs traits;
     traits.Add(count, TOpAggregationTraits{row, "count"});
     auto aggregate = MakeIntrusive<TOpAggregate>(rows, std::move(traits), TOrderedIUs<>{}, EOpPhase::Undefined, false, pos);
@@ -23,10 +35,16 @@ TIntrusivePtr<IOperator> RequireEmpty(TIntrusivePtr<IOperator> input, TPositionH
         MakeBinaryPredicate("==", MakeColumnAccess(count, pos, &ctx, &props), MakeConstant("Uint64", "0", pos, &ctx)));
 }
 
-TIntrusivePtr<IOperator> CheckInsertKeys(const TIntrusivePtr<TOpReplicate>& rows,
+// Add two conflict streams for one constraint: duplicate input keys and keys
+// already present in storage. Grouping serves both checks: it counts duplicates
+// globally and reduces storage lookups to one per distinct key. Replicate ports
+// share the grouped input; the primary port keeps its IUs, while the lookup port
+// rebinds them so both branches can coexist in the plan.
+void CollectInsertKeyConflicts(const TIntrusivePtr<TOpReplicate>& rows,
     const TExprNode::TPtr& table, const TVector<TString>& keyNames,
     const THashMap<TString, TInfoUnitId>& sourceColumns, bool skipNullKeys,
-    TPositionHandle pos, TExprContext& ctx, TPlanProps& props)
+    TPositionHandle pos, TExprContext& ctx, TPlanProps& props,
+    TVector<TIntrusivePtr<IOperator>>& conflicts)
 {
     TIntrusivePtr<IOperator> input = rows;
     TOrderedIUs<> keys;
@@ -55,8 +73,9 @@ TIntrusivePtr<IOperator> CheckInsertKeys(const TIntrusivePtr<TOpReplicate>& rows
     auto lookupInput = groups->AddOutput();
 
     auto duplicates = MakeIntrusive<TOpFilter>(duplicatesInput, pos,
-        MakeBinaryPredicate(">", MakeColumnAccess(count, pos, &ctx, &props), MakeConstant("Uint64", "1", pos, &ctx)));
-    auto noDuplicates = RequireEmpty(duplicates, pos, ctx, props);
+        MakeBinaryPredicate(">", MakeColumnAccess(count, pos, &ctx, &props),
+            MakeConstant("Uint64", "1", pos, &ctx)));
+    conflicts.push_back(duplicates);
 
     TOpTableLookup::TLookupKeys lookupKeys;
     for (size_t i = 0; i < keyNames.size(); ++i) {
@@ -65,8 +84,7 @@ TIntrusivePtr<IOperator> CheckInsertKeys(const TIntrusivePtr<TOpReplicate>& rows
     const auto found = props.InfoUnitRegistry.Add(TInfoUnit("insert_conflict", keyNames.front()));
     auto lookup = MakeIntrusive<TOpTableLookup>(lookupInput, pos, table, TUnorderedIUs{found}, std::move(lookupKeys));
     lookup->AllowNullKeys = true;
-    auto noExistingKeys = RequireEmpty(lookup, pos, ctx, props);
-    return MakeIntrusive<TOpJoin>(noDuplicates, noExistingKeys, pos, "Cross", TJoinIUs{});
+    conflicts.push_back(lookup);
 }
 
 } // anonymous namespace
@@ -92,14 +110,22 @@ bool TExpandInsertRevertRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
         columns.emplace(name, id);
     }
 
+    // INSERT OR REVERT is a successful no-op for the entire statement when any
+    // constraint conflicts. Ensure would fail the query, and filtering individual
+    // rows would incorrectly insert the nonconflicting subset. Share the original
+    // input with all checks, then gate it once on their combined result:
+    //   input CROSS JOIN (COUNT(all conflict markers) = 0)
+    // The global aggregate must finish before the gate can emit any input row.
     auto rows = TReplicate::Create(effect.GetInput(), pos, props.InfoUnitRegistry);
-    TIntrusivePtr<IOperator> checked = rows->AddOutput();
-    auto checks = CheckInsertKeys(rows->AddOutput(), effect.Table, table.Metadata->KeyColumnNames,
-        columns, false, pos, ctx.ExprCtx, props);
-    checked = MakeIntrusive<TOpJoin>(checked, checks, pos, "Cross", TJoinIUs{});
+    auto insertRows = rows->AddOutput();
+    TVector<TIntrusivePtr<IOperator>> conflicts;
+    CollectInsertKeyConflicts(rows->AddOutput(), effect.Table, table.Metadata->KeyColumnNames,
+        columns, false, pos, ctx.ExprCtx, props, conflicts);
 
     // Match unique-index semantics: NULL index keys do not conflict, and an
-    // omitted index column is NULL in the inserted row.
+    // omitted index column is NULL in the inserted row. Exclude keys with any
+    // NULL component from both checks for unique indexes, but keep NULL primary
+    // keys: they participate in primary-key uniqueness and storage lookups.
     for (size_t i = 0; i < table.Metadata->Indexes.size(); ++i) {
         const auto& index = table.Metadata->Indexes[i];
         if (index.Type != TIndexDescription::EType::GlobalSyncUnique
@@ -111,13 +137,18 @@ bool TExpandInsertRevertRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
             continue;
         }
         const auto indexTable = NOpt::BuildTableMeta(*table.Metadata->ImplTables.at(i), pos, ctx.ExprCtx);
-        checks = CheckInsertKeys(rows->AddOutput(), indexTable.Ptr(), index.KeyColumns,
-            columns, true, pos, ctx.ExprCtx, props);
-        checked = MakeIntrusive<TOpJoin>(checked, checks, pos, "Cross", TJoinIUs{});
+        CollectInsertKeyConflicts(rows->AddOutput(), indexTable.Ptr(), index.KeyColumns,
+            columns, true, pos, ctx.ExprCtx, props, conflicts);
     }
+
+    auto checks = RequireNoConflicts(std::move(conflicts), pos, ctx.ExprCtx, props);
+    auto checked = MakeIntrusive<TOpJoin>(insertRows, checks, pos, "Cross", TJoinIUs{});
 
     // The complete input is now gated on all conflicts, so the ordinary insert
     // sink can retain its constraint checks for races without reverting per row.
+    // Prechecks describe the transaction's read snapshot; they do not replace
+    // write-time constraint enforcement. Changing the mode also prevents this
+    // rule from expanding the same effect again.
     auto options = effect.Options;
     options.OnConflict = "abort";
     input = MakeIntrusive<TOpTableEffect>(std::move(checked), pos, effect.Table, effect.EffectType,

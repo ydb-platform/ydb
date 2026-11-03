@@ -1,6 +1,7 @@
 #include "datashard_snapshots.h"
 
 #include "datashard_impl.h"
+#include "snapshot_retention/snapshot_retention.h"
 
 #include <ydb/core/protos/datashard_config.pb.h>
 
@@ -376,6 +377,8 @@ bool TSnapshotManager::AdvanceWatermark(NTable::TDatabase& db, const TRowVersion
     if (LowWatermark >= to)
         return false;
 
+    // Schema operations such as TRUNCATE invalidate old history regardless of
+    // registry retention. Periodic MVCC cleanup uses CleanupRowVersions instead.
     RemoveRowVersions(db, LowWatermark, to);
 
     NIceDb::TNiceDb nicedb(db);
@@ -398,6 +401,55 @@ void TSnapshotManager::RemoveRowVersions(NTable::TDatabase& db, const TRowVersio
         if (from0 < to)
             db.RemoveRowVersions(it.second->LocalTid, from0, to);
     }
+}
+
+TSnapshotRetentionPolicy TSnapshotManager::GetSnapshotRetentionPolicy() const {
+    return TSnapshotRetentionPolicy(AppData()->FeatureFlags.GetEnableSnapshotsLocking(),
+        AppData()->SnapshotRegistryHolder, AppData()->LongTxServiceConfig);
+}
+
+TRowVersion TSnapshotManager::GetLeastAcquiredSnapshot() const {
+    TRowVersion leastAcquired = TRowVersion::Max();
+    for (const auto& [txId, op] : Self->Pipeline.GetImmediateOps()) {
+        if (op->IsMvccSnapshotRead()) {
+            leastAcquired = Min(leastAcquired, op->GetMvccSnapshot());
+        }
+    }
+    return leastAcquired;
+}
+
+bool TSnapshotManager::CleanupRowVersions(NTable::TDatabase& db, const TRowVersion& from,
+    const TRowVersion& proposed, const TSnapshotRetentionPolicy& policy)
+{
+    const TRowVersion to = Min(policy.GetCleanupBoundary(proposed), GetLeastAcquiredSnapshot());
+    if (from >= to) {
+        return false;
+    }
+
+    bool removed = false;
+    for (const auto& [pathId, table] : Self->GetUserTables()) {
+        const TTableId tableId(Self->GetPathOwnerId(), pathId);
+        auto snapshots = policy.GetRetainedSnapshots(tableId);
+        for (const auto& [key, snapshot] : GetSnapshots(TSnapshotTableKey(tableId.PathId.OwnerId, pathId))) {
+            snapshots.emplace(key.Step, key.TxId);
+        }
+
+        const auto& ranges = db.GetRemovedRowVersions(table->LocalTid);
+        auto removeRange = [&](const TRowVersion& lower, const TRowVersion& upper) {
+            if (lower < upper && !ranges.Contains(lower, upper)) {
+                db.RemoveRowVersions(table->LocalTid, lower, upper);
+                removed = true;
+            }
+        };
+
+        TRowVersion lower = from;
+        for (auto it = snapshots.lower_bound(from); it != snapshots.end() && *it < to; ++it) {
+            removeRange(lower, *it);
+            lower = it->Next();
+        }
+        removeRange(lower, to);
+    }
+    return removed;
 }
 
 ui64 TSnapshotManager::GetKeepSnapshotTimeout() const {
@@ -549,8 +601,13 @@ void TSnapshotManager::DoRemoveSnapshot(NTable::TDatabase& db, const TSnapshotKe
 
     // Mark snapshot as no longer accessible in local database
     const TRowVersion rowVersion(key.Step, key.TxId);
-    if (rowVersion < LowWatermark)
-        db.RemoveRowVersions(localTableId, rowVersion, rowVersion.Next());
+    if (rowVersion < LowWatermark) {
+        const auto policy = GetSnapshotRetentionPolicy();
+        const TTableId tableId(key.OwnerId, key.PathId);
+        if (rowVersion < GetLeastAcquiredSnapshot() && !policy.ShouldRetain(tableId, rowVersion)) {
+            db.RemoveRowVersions(localTableId, rowVersion, rowVersion.Next());
+        }
+    }
 }
 
 bool TSnapshotManager::CleanupRemovedSnapshots(NTable::TDatabase& db) {
@@ -648,12 +705,8 @@ bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext&
     if (auto it = Self->Pipeline.GetPlan().begin(); it != Self->Pipeline.GetPlan().end())
         leastPlanned = TRowVersion(it->Step, it->TxId);
 
-    // holds current snapshot operations
-    TRowVersion leastAcquired = TRowVersion::Max();
-    for (auto &it : Self->Pipeline.GetImmediateOps()) {
-        if (it.second->IsMvccSnapshotRead())
-            leastAcquired = Min(leastAcquired, it.second->GetMvccSnapshot());
-    }
+    // Holds current snapshot operations, including versions below LowWatermark.
+    const TRowVersion leastAcquired = GetLeastAcquiredSnapshot();
 
     if (CompleteEdge.Step < ImmediateWriteEdgeReplied.Step) {
         PromoteCompleteEdge(ImmediateWriteEdgeReplied.Step, txc);
@@ -676,7 +729,17 @@ bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext&
         }
     }
 
-    removed |= AdvanceWatermark(txc.DB, Min(proposed, leastPlanned, leastAcquired, maxWriteVersion, maxRepeatableRead));
+    const auto policy = GetSnapshotRetentionPolicy();
+    const TRowVersion to = policy.GetCleanupBoundary(Min(proposed, leastPlanned, leastAcquired, maxWriteVersion, maxRepeatableRead));
+
+    // Revisit retained points even when the watermark cannot advance. Removed
+    // ranges are persisted by the executor, so this also works after a restart.
+    removed |= CleanupRowVersions(txc.DB, TRowVersion::Min(), to, policy);
+    if (LowWatermark < to) {
+        NIceDb::TNiceDb db(txc.DB);
+        SetLowWatermark(db, to);
+        removed = true;
+    }
     LastAdvanceWatermark = NActors::TActivationContext::Monotonic();
 
     return removed;
@@ -754,26 +817,8 @@ void TSnapshotManager::Fix_KIKIMR_14259(NTable::TDatabase& db) {
 }
 
 void TSnapshotManager::EnsureRemovedRowVersions(NTable::TDatabase& db, const TRowVersion& fromArg, const TRowVersion& toArg) {
-    for (auto& it : Self->GetUserTables()) {
-        auto tid = it.second->LocalTid;
-        auto ranges = db.GetRemovedRowVersions(tid);
-
-        auto from = fromArg;
-        auto to = toArg;
-
-        auto begin = Snapshots.lower_bound(TSnapshotKey(Self->GetPathOwnerId(), it.first, from.Step, from.TxId));
-        auto end = Snapshots.upper_bound(TSnapshotKey(Self->GetPathOwnerId(), it.first, to.Step, to.TxId));
-        for (auto it = begin; it != end && from < to; ++it) {
-            auto mid = TRowVersion(it->first.Step, it->first.TxId);
-            if (from < mid && !ranges.Contains(from, mid)) {
-                db.RemoveRowVersions(tid, from, mid);
-            }
-            from = mid.Next();
-        }
-        if (from < to && !ranges.Contains(from, to)) {
-            db.RemoveRowVersions(tid, from, to);
-        }
-    }
+    const auto policy = GetSnapshotRetentionPolicy();
+    CleanupRowVersions(db, fromArg, toArg, policy);
 }
 
 void TSnapshotManager::RenameSnapshots(NTable::TDatabase& db, const TPathId& prevTableId, const TPathId& newTableId) {

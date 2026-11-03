@@ -19,6 +19,7 @@ using NTabletFlatExecutor::TTransactionContext;
 
 class TOperation;
 class TDataShard;
+class TSnapshotRetentionPolicy;
 
 class TSnapshot {
     friend class TSnapshotExpireQueue;
@@ -200,6 +201,11 @@ public:
     void RenameSnapshots(NTable::TDatabase& db, const TPathId& prevTableId, const TPathId& newTableId);
 
 private:
+    TSnapshotRetentionPolicy GetSnapshotRetentionPolicy() const;
+    TRowVersion GetLeastAcquiredSnapshot() const;
+    bool CleanupRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to,
+        const TSnapshotRetentionPolicy& policy);
+
     void DoRemoveSnapshot(NTable::TDatabase& db, const TSnapshotKey& key);
 
 private:

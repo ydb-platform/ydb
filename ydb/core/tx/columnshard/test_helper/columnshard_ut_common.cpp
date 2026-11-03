@@ -582,6 +582,48 @@ ui64 CountLocalDbTableRows(
     return NClient::TValue::Create(result)[0]["List"].Size();
 }
 
+namespace {
+
+std::set<std::pair<ui64, ui64>> ReadPathAndPortionIds(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const std::vector<TString>& keyColumns) {
+    TStringBuilder range;
+    for (const auto& column : keyColumns) {
+        range << "'('" << column << " (Null) (Void)) ";
+    }
+    const TString query = Sprintf(R"(
+        (
+            (let range '(%s))
+            (let fields '('PathId 'PortionId))
+            (return (AsList
+                (SetResult 'Result (SelectRange '%s range fields '()))
+            ))
+        )
+    )", range.c_str(), tableName.c_str());
+    const NKikimrMiniKQL::TResult response = LocalMiniKQL(runtime, tabletId, query);
+    const auto result = NClient::TValue::Create(response)[0];
+    UNIT_ASSERT(!bool(result["Truncated"]));
+    const auto rows = result["List"];
+    std::set<std::pair<ui64, ui64>> ids;
+    for (ui32 i = 0; i < rows.Size(); ++i) {
+        ids.emplace(ui64(rows[i]["PathId"]), ui64(rows[i]["PortionId"]));
+    }
+    return ids;
+}
+
+}   // namespace
+
+ui64 AssertIndexMatchesPortions(TTestBasicRuntime& runtime, ui64 tabletId, const std::vector<NArrow::NTest::TTestColumn>& pk) {
+    std::vector<TString> indexKeyColumns = { "PathId" };
+    for (const auto& column : pk) {
+        indexKeyColumns.emplace_back("LastKey_" + column.GetName());
+    }
+    indexKeyColumns.emplace_back("PortionId");
+    const auto portions = ReadPathAndPortionIds(runtime, tabletId, "IndexPortions", { "PathId", "PortionId" });
+    const auto index = ReadPathAndPortionIds(runtime, tabletId, "IndexPortionsByLastKey", indexKeyColumns);
+    UNIT_ASSERT_EQUAL_C(portions, index, "portions: " << portions.size() << ", index: " << index.size());
+    return portions.size();
+}
+
 void EraseLocalDbTableRow(TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec) {
     const TString query = Sprintf(R"(
         (

@@ -96,9 +96,33 @@ private:
         return TConclusionStatus::Success();
     }
 
+    template <class TOnValue>
+    class TForEachValueActor {
+    private:
+        TOnValue& OnValueCallback;
+
+    public:
+        TForEachValueActor(TOnValue& onValue)
+            : OnValueCallback(onValue) {
+        }
+
+        template <class TWrap>
+        bool OnValue(const ui32 /*fieldIndex*/, const char* data, const ui32 size) {
+            OnValueCallback(data ? std::optional<std::string_view>(std::string_view(data, size)) : std::nullopt);
+            return false;
+        }
+    };
+
 public:
     TSimpleRowViewV0(const TStringBuf sb)
         : Values(sb) {
+    }
+
+    // Calls onValue for each column in order, with the column's bytes, or with nullopt if it is null
+    template <class TOnValue>
+    [[nodiscard]] TConclusionStatus ForEachValue(const arrow::Schema& schema, TOnValue&& onValue) const {
+        TForEachValueActor<TOnValue> actor(onValue);
+        return Scan(schema, actor);
     }
 
     class TActorValidator {

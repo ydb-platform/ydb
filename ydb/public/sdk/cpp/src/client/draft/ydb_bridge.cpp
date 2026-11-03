@@ -45,6 +45,9 @@ public:
         for (const auto& quorumPile : quorumPiles) {
             request.add_quorum_piles(quorumPile);
         }
+        if (settings.ExpectedGeneration_) {
+            request.set_expected_generation(*settings.ExpectedGeneration_);
+        }
 
         return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::UpdateClusterStateRequest, Ydb::Bridge::UpdateClusterStateResponse>(
             std::move(request),

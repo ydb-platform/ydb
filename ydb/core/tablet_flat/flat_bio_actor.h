@@ -53,6 +53,7 @@ namespace NBlockIO {
             { }
         };
 
+        std::optional<NSharedCache::TMetadataAccounting> MetadataAccounting;
         TVector<TLoadState> BlockStates;
         TAutoPtr<TPagesToBlobsConverter> PagesToBlobsConverter;
         ui64 Pending = 0;

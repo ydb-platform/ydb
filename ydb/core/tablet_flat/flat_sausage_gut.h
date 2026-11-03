@@ -6,6 +6,13 @@
 
 #include <util/generic/vector.h>
 
+#include <atomic>
+
+namespace NKikimr::NSharedCache {
+class TMetadataAccounting;
+class TMetadataRecord;
+} // namespace NKikimr::NSharedCache
+
 namespace NKikimr {
 namespace NPageCollection {
 
@@ -13,7 +20,7 @@ namespace NPageCollection {
 
     class IPageCollection : public TAtomicRefCount<IPageCollection> {
     public:
-        virtual ~IPageCollection() = default;
+        virtual ~IPageCollection();
 
         virtual const TLogoBlobID& Label() const noexcept = 0;
         virtual ui32 Total() const noexcept = 0;
@@ -38,6 +45,10 @@ namespace NPageCollection {
         /// Returns true when the collection carries both BTreeIndex and BTreeIndexV2 pages
         virtual bool SkipBTreeIndexV1Shadow() const noexcept { return false; }
         virtual void SetSkipBTreeIndexV1Shadow(bool) const noexcept { }
+
+    private:
+        friend class NSharedCache::TMetadataAccounting;
+        mutable std::atomic<NSharedCache::TMetadataRecord*> MetadataAccounts_{ nullptr };
     };
 
     /// A page that must not be loaded: an excluded page, or a dead V1 shadow index.

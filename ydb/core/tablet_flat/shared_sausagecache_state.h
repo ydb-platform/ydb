@@ -12,12 +12,12 @@ namespace NKikimr::NSharedCache {
 struct TCollection;
 class TCollections;
 
-struct TMetadataRequestTag {};
+struct TCollectionRequestTag {};
 
 struct TRequest : public TSimpleRefCount<TRequest>, public TIntrusiveListItem<TRequest>,
-                  public TIntrusiveListItem<TRequest, TMetadataRequestTag> {
+                  public TIntrusiveListItem<TRequest, TCollectionRequestTag> {
     ~TRequest();
-    void ReleaseMetadata();
+    void ReleaseCollection();
     void RetireQueuedWalk();
     bool IsResponded() const {
         return !Sender;
@@ -31,8 +31,7 @@ struct TRequest : public TSimpleRefCount<TRequest>, public TIntrusiveListItem<TR
     TActorId Sender;
     NTabletFlatExecutor::NBlockIO::EPriority Priority;
     TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-    TCollection* MetadataOwner = nullptr;
-    bool IsInFlightFetch = false;
+    TCollection* CollectionOwner = nullptr;
     ui64 EventCookie = 0;
     ui64 RequestCookie = 0;
     ui64 PendingBlocks = 0;
@@ -99,19 +98,12 @@ struct TCollection {
     TCollection(TCollection&&) = delete;
     TCollection& operator=(TCollection&&) = delete;
 
-    struct TMetadataReference {
-        const NPageCollection::IPageCollection* Descriptor;
-        size_t References;
-    };
     TLogoBlobID Id;
     TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
     TCollections* CollectionSet = nullptr;
-    // Descriptor objects and Steps; allocation tags account for shared Raw buffers.
-    i64 MetadataBytes = 0;
-    size_t MetadataRequestCount = 0; // Requests retaining PageCollection
     size_t InFlightFetches = 0;
-    THolder<TVector<TMetadataReference>> RetiredMetadata;
-    TIntrusiveList<TRequest, TMetadataRequestTag> MetadataRequests;
+    // Allows queued walk retirement and safe request teardown when the cache actor stops
+    TIntrusiveList<TRequest, TCollectionRequestTag> Requests;
     TSet<TActorId> InMemoryOwners;
     TSet<TActorId> Owners;
     TPageSet PageSet;
@@ -122,13 +114,8 @@ struct TCollection {
     TDeque<TPageOffset> DroppedPages;
 
     void SetPageCollection(TIntrusiveConstPtr<NPageCollection::IPageCollection> collection);
-    void AddMetadataRequest(TRequest& request);
-    void RemoveMetadataRequest(TRequest& request);
-    void RefMetadata(const NPageCollection::IPageCollection& collection);
-    void UnrefMetadata(const NPageCollection::IPageCollection& collection);
-    bool HasSharedMeta(
-        const NPageCollection::TMeta* meta, const NPageCollection::IPageCollection* except = nullptr) const;
-
+    void AddRequest(TRequest& request);
+    void RemoveRequest(TRequest& request);
     ECacheMode GetCacheMode() {
         return InMemoryOwners ? ECacheMode::TryKeepInMemory : ECacheMode::Regular;
     }
@@ -161,14 +148,12 @@ public:
     }
 
     i64 GetMetadataMemoryUsage() const noexcept {
-        return MetadataBytes + MetadataBuffers.GetMemoryUsage();
+        return Accounting.GetMemoryUsage();
     }
 
-    TMetadataBuffers MetadataBuffers;
+    TMetadataAccounting Accounting;
 
 private:
-    friend struct TCollection;
-    i64 MetadataBytes = 0;
     // Destroy entries before their shared accounting state
     THashMap<TLogoBlobID, TCollection> Entries;
 };

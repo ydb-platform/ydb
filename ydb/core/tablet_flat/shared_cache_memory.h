@@ -4,25 +4,29 @@
 
 namespace NKikimr::NSharedCache {
 
-// Allocation-owned tags correct overlap between metadata references and page charges.
-// Copies of TSharedData share the tag without a separate allocation identity index.
-class TMetadataBuffers {
-public:
-    TMetadataBuffers();
-    ~TMetadataBuffers();
-    TMetadataBuffers(const TMetadataBuffers&) = delete;
-    TMetadataBuffers& operator=(const TMetadataBuffers&) = delete;
+class TMetadataAccount;
 
-    void UpdateMetadataReferences(const TSharedData& buffer, i64 delta);
-    void UpdatePageCharge(const TSharedData& buffer, i64 delta);
-    i64 GetMemoryUsage() const noexcept;
+// Metadata and Globs stay charged until their final allocation/object owner releases them
+class TMetadataAccounting {
+public:
+    TMetadataAccounting();
+    ~TMetadataAccounting();
+    TMetadataAccounting(const TMetadataAccounting&) = delete;
+    TMetadataAccounting& operator=(const TMetadataAccounting&) = delete;
+    TMetadataAccounting(TMetadataAccounting&&) noexcept;
+    TMetadataAccounting& operator=(TMetadataAccounting&&) noexcept;
+
+    TMetadataAccounting Share() const noexcept;
+    // The caller owns the buffer/descriptor throughout registration
+    void AccountBuffer(const TSharedData& buffer) const;
+    void AccountMetadata(const NPageCollection::IPageCollection& collection) const;
+    ui64 GetMemoryUsage() const noexcept;
 
 private:
-    class TAccount;
-    class TBufferTag;
-    void Update(const TSharedData& buffer, i64 referencesDelta, i64 pageBytesDelta);
+    explicit TMetadataAccounting(TIntrusivePtr<TMetadataAccount> account) noexcept;
+    void AccountObject(std::atomic<TMetadataRecord*>& records, ui64 bytes) const;
 
-    TIntrusivePtr<TAccount> Account;
+    TIntrusivePtr<TMetadataAccount> Account_;
 };
 
 } // namespace NKikimr::NSharedCache

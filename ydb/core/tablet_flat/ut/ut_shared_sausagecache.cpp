@@ -236,8 +236,7 @@ void LogCounters(THolder<TSharedPageCacheCounters>& counters) {
 
 void CheckCacheUsageWithMetadata(const TSharedPageCacheCounters& counters) {
     const i64 metadataBytes = counters.MetadataBytes->Val();
-    const i64 usedBytes =
-        counters.ActiveBytes->Val() + counters.PassiveBytes->Val() + counters.LoadInFlyBytes->Val() + metadataBytes;
+    const i64 usedBytes = counters.UsedBytes->Val();
     UNIT_ASSERT_GT(metadataBytes, 0);
     UNIT_ASSERT_LE(usedBytes, counters.ActiveLimitBytes->Val());
 }

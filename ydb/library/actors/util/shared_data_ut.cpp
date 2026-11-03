@@ -131,6 +131,53 @@ namespace NActors {
             TDeque<char*> Deallocated_;
         };
 
+        class TBuiltinOwner final : public TSharedData::IOwner {
+        public:
+            size_t GetAllocationSize(const char* data) const noexcept override {
+                return BuiltinAllocationSize(data);
+            }
+
+            void Deallocate(char* data) noexcept override {
+                ++Deallocated;
+                DeallocateBuiltin(data);
+            }
+
+            ui32 Deallocated = 0;
+        };
+
+        Y_UNIT_TEST(BuiltinOwnerCanBeSharedByIndependentAllocations) {
+            TBuiltinOwner owner;
+            auto first = TSharedData::Uninitialized(64);
+            auto second = TSharedData::Uninitialized(128);
+            const auto firstBytes = first.GetAllocationSize();
+            const auto secondBytes = second.GetAllocationSize();
+            UNIT_ASSERT(first.TrySetBuiltinOwner(owner));
+            UNIT_ASSERT(second.TrySetBuiltinOwner(owner));
+            UNIT_ASSERT(!first.TrySetBuiltinOwner(owner));
+            first.TrimBack(16);
+            UNIT_ASSERT_VALUES_EQUAL(first.GetAllocationSize(), firstBytes);
+            UNIT_ASSERT_VALUES_EQUAL(second.GetAllocationSize(), secondBytes);
+            auto compact = std::move(first);
+            auto view = compact;
+            compact = {};
+            UNIT_ASSERT_VALUES_EQUAL(owner.Deallocated, 0);
+            view = {};
+            UNIT_ASSERT_VALUES_EQUAL(owner.Deallocated, 1);
+            second = {};
+            UNIT_ASSERT_VALUES_EQUAL(owner.Deallocated, 2);
+        }
+
+        Y_UNIT_TEST(BuiltinOwnerReplacementPreservesCustomOwners) {
+            TCustomOwner custom;
+            TBuiltinOwner replacement;
+            auto data = custom.Allocate(64);
+            const char* pointer = data.data();
+            UNIT_ASSERT(!data.TrySetBuiltinOwner(replacement));
+            data = {};
+            UNIT_ASSERT_VALUES_EQUAL(replacement.Deallocated, 0);
+            UNIT_ASSERT(custom.NextDeallocated() == pointer);
+        }
+
         struct TAllocationTag {
             explicit TAllocationTag(std::atomic<size_t>& created, std::atomic<size_t>& destroyed)
                 : Destroyed(destroyed)

@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TSharedMetaCore) {
         UNIT_ASSERT(duplicate.IsPrivate());
     }
 
-    Y_UNIT_TEST(DescriptorsKeepPolicyAndShareCoreAccounting) {
+    Y_UNIT_TEST(DescriptorsAndSharedCoreFollowTheirFinalOwners) {
         auto raw = MakeMeta();
         const auto id = MetaId(raw);
         TAtomicSharedPtr<const TMeta> meta = MakeAtomicShared<TMeta>(raw, id.Group);
@@ -88,106 +88,74 @@ Y_UNIT_TEST_SUITE(TSharedMetaCore) {
         first->SetSkipBTreeIndexV1Shadow(true);
         UNIT_ASSERT(!second->SkipBTreeIndexV1Shadow());
 
+        NSharedCache::TMetadataAccounting accounting;
+        accounting.AccountMetadata(*first);
+        accounting.AccountMetadata(*second);
+        accounting.AccountMetadata(*first);
+        const ui64 rawBytes = raw.GetAllocationSize();
+        const ui64 metaBytes = meta->GetMemoryUsage();
+        UNIT_ASSERT_VALUES_EQUAL(accounting.GetMemoryUsage(), 2 * sizeof(TPageCollection) + metaBytes);
+        first.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(accounting.GetMemoryUsage(), sizeof(TPageCollection) + metaBytes);
+        second.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(accounting.GetMemoryUsage(), metaBytes);
+        meta.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(accounting.GetMemoryUsage(), rawBytes);
+        raw = {};
+        UNIT_ASSERT_VALUES_EQUAL(accounting.GetMemoryUsage(), 0);
+    }
+
+    Y_UNIT_TEST(IndependentCoresShareRawButKeepTheirOwnSteps) {
+        auto raw = MakeMeta();
+        const auto id = MetaId(raw);
+        TAtomicSharedPtr<const TMeta> firstMeta = MakeAtomicShared<TMeta>(raw, id.Group);
+        TAtomicSharedPtr<const TMeta> secondMeta = MakeAtomicShared<TMeta>(raw, id.Group);
+        TIntrusiveConstPtr<TPageCollection> first = new TPageCollection(id, firstMeta);
+        TIntrusiveConstPtr<TPageCollection> second = new TPageCollection(id, secondMeta);
+        NSharedCache::TMetadataAccounting accounting;
+        accounting.AccountMetadata(*first);
+        accounting.AccountMetadata(*second);
+        const ui64 rawBytes = raw.GetAllocationSize();
+        UNIT_ASSERT_VALUES_EQUAL(accounting.GetMemoryUsage(),
+            2 * sizeof(TPageCollection) + firstMeta->GetMemoryUsage() + secondMeta->GetMemoryUsage() - rawBytes);
+        first.Reset();
+        firstMeta.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(accounting.GetMemoryUsage(), second->GetMetadataMemoryUsage());
+        second.Reset();
+        secondMeta.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(accounting.GetMemoryUsage(), rawBytes);
+        raw = {};
+        UNIT_ASSERT_VALUES_EQUAL(accounting.GetMemoryUsage(), 0);
+    }
+
+    Y_UNIT_TEST(DescriptorReplacementNeedsNoRequestAccounting) {
+        auto raw = MakeMeta();
+        const auto id = MetaId(raw);
+        TAtomicSharedPtr<const TMeta> meta = MakeAtomicShared<TMeta>(raw, id.Group);
+        TIntrusiveConstPtr<TPageCollection> first = new TPageCollection(id, meta);
+        TIntrusiveConstPtr<TPageCollection> second = new TPageCollection(id, meta);
         NSharedCache::TCollections collections;
         auto& collection = collections[id.Lead];
         collection.Id = id.Lead;
         collection.SetPageCollection(first);
         NSharedCache::TRequest request;
         request.PageCollection = first;
-        collection.AddMetadataRequest(request);
-        UNIT_ASSERT(!collection.RetiredMetadata);
+        collection.AddRequest(request);
         collection.SetPageCollection(second);
-        const i64 expected = 2 * sizeof(TPageCollection) + meta->GetMemoryUsage();
-        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), expected);
-        NSharedCache::TRequest fetch;
-        fetch.PageCollection = first;
-        fetch.IsInFlightFetch = true;
-        collection.AddMetadataRequest(fetch);
-        request.ReleaseMetadata();
-        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), expected);
-        UNIT_ASSERT_VALUES_EQUAL(collection.InFlightFetches, 1);
-        fetch.ReleaseMetadata();
-        UNIT_ASSERT_VALUES_EQUAL(collection.InFlightFetches, 0);
-        UNIT_ASSERT(!collection.RetiredMetadata);
-        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), second->GetMetadataMemoryUsage());
-        collection.SetPageCollection({});
-        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), 0);
-
-        // Independent cores can share Raw while retaining separate Steps allocations.
-        TAtomicSharedPtr<const TMeta> separate = MakeAtomicShared<TMeta>(raw, id.Group);
-        TIntrusiveConstPtr<TPageCollection> third = new TPageCollection(id, separate);
         collection.SetPageCollection(first);
-        request.PageCollection = first;
-        collection.AddMetadataRequest(request);
-        collection.SetPageCollection(third);
+        collection.SetPageCollection({});
+        const ui64 expected = 2 * sizeof(TPageCollection) + meta->GetMemoryUsage();
+        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), expected);
+        collections.erase(id.Lead);
+        UNIT_ASSERT(!request.CollectionOwner);
+        first.Reset();
+        second.Reset();
         UNIT_ASSERT_VALUES_EQUAL(
-            collections.GetMetadataMemoryUsage(), expected + separate->GetMemoryUsage() - raw.GetAllocationSize());
-        collection.AddMetadataRequest(fetch);
-        request.ReleaseMetadata();
-        UNIT_ASSERT_VALUES_EQUAL(
-            collections.GetMetadataMemoryUsage(), expected + separate->GetMemoryUsage() - raw.GetAllocationSize());
-        fetch.ReleaseMetadata();
-        collection.SetPageCollection({});
-        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), 0);
-    }
-
-    Y_UNIT_TEST(RetiredDescriptorsCanBecomeCurrentAgain) {
-        auto raw = MakeMeta();
-        const auto id = MetaId(raw);
-        TAtomicSharedPtr<const TMeta> meta = MakeAtomicShared<TMeta>(raw, id.Group);
-        TIntrusiveConstPtr<TPageCollection> first = new TPageCollection(id, meta);
-        TIntrusiveConstPtr<TPageCollection> second = new TPageCollection(id, meta);
-        TIntrusiveConstPtr<TPageCollection> third = new TPageCollection(id, TSharedData::Copy(raw.data(), raw.size()));
-
-        NSharedCache::TCollections collections;
-        auto& collection = collections[id.Lead];
-        collection.Id = id.Lead;
-        collection.SetPageCollection(first);
-        NSharedCache::TRequest firstRequest;
-        firstRequest.PageCollection = first;
-        collection.AddMetadataRequest(firstRequest);
-        NSharedCache::TRequest anotherFirstRequest;
-        anotherFirstRequest.PageCollection = first;
-        collection.AddMetadataRequest(anotherFirstRequest);
-        collection.SetPageCollection(first);
-        UNIT_ASSERT(!collection.RetiredMetadata);
-        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), first->GetMetadataMemoryUsage());
-
-        collection.SetPageCollection(second);
-        NSharedCache::TRequest secondRequest;
-        secondRequest.PageCollection = second;
-        collection.AddMetadataRequest(secondRequest);
-        collection.SetPageCollection(third);
-        NSharedCache::TRequest thirdRequest;
-        thirdRequest.PageCollection = third;
-        collection.AddMetadataRequest(thirdRequest);
-        UNIT_ASSERT_VALUES_EQUAL(collection.RetiredMetadata->size(), 2);
-        const i64 expected = 2 * sizeof(TPageCollection) + meta->GetMemoryUsage() + third->GetMetadataMemoryUsage();
-        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), expected);
-
-        collection.SetPageCollection(first);
-        NSharedCache::TRequest newFirstRequest;
-        newFirstRequest.PageCollection = first;
-        collection.AddMetadataRequest(newFirstRequest);
-        UNIT_ASSERT_VALUES_EQUAL(collection.RetiredMetadata->size(), 2);
-        firstRequest.ReleaseMetadata();
-        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), expected);
-        secondRequest.ReleaseMetadata();
-        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), expected - sizeof(TPageCollection));
-        thirdRequest.ReleaseMetadata();
-        UNIT_ASSERT(!collection.RetiredMetadata);
-        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), first->GetMetadataMemoryUsage());
-
-        collection.SetPageCollection({});
-        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), first->GetMetadataMemoryUsage());
-        collection.SetPageCollection(first);
-        UNIT_ASSERT(!collection.RetiredMetadata);
-        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), first->GetMetadataMemoryUsage());
-        collection.SetPageCollection({});
-        anotherFirstRequest.ReleaseMetadata();
-        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), first->GetMetadataMemoryUsage());
-        newFirstRequest.ReleaseMetadata();
-        UNIT_ASSERT(!collection.RetiredMetadata);
+            collections.GetMetadataMemoryUsage(), sizeof(TPageCollection) + meta->GetMemoryUsage());
+        request.PageCollection.Reset();
+        meta.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), raw.GetAllocationSize());
+        raw = {};
         UNIT_ASSERT_VALUES_EQUAL(collections.GetMetadataMemoryUsage(), 0);
     }
 }

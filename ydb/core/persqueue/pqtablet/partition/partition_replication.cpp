@@ -92,8 +92,10 @@ void TPartition::CompleteReplicationDataWrite(const TActorContext&) {
     y_absl::flat_hash_map<TString, ui64> expectedOffsets;
     for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
         const auto* consumerConfig = GetConsumer(config, consumer);
+        // Replication consumers are excluded from applying incoming offsets above.
         // MLP progress is applied by TEvMLPPurgeRequest, not by the streaming commit offset.
         if (!consumerConfig
+            || consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
             || consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP
             || offset > static_cast<ui64>(Max<i64>())) {
             continue;

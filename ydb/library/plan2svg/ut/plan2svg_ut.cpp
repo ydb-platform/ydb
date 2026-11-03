@@ -1561,9 +1561,9 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
     }
 
     Y_UNIT_TEST(ColumnShardLongDescriptionsFitCellsAndKeepFullTooltip) {
-        const auto svg = RenderScans(R"([{"StatsScanId":"wide","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,"Steps":[
+        const auto svg = RenderScans(R"json([{"StatsScanId":"wide","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,"Steps":[
             {"StepId":1,"StepKind":"Filter","MetaStep":"Filter","CanonicalPath":"","OwnedExecutionDuration":1,
-             "Operation":"Filter(колонка_с_длинным_именем > 10 AND another_very_long_column_name < 300 AND final_column = 42)"}]}])");
+             "Operation":"Filter(колонка_с_длинным_именем > 10 AND another_very_long_column_name < 300 AND final_column = 42)"}]}])json");
         const auto title = svg.find("<title>Filter (колонка_с_длинным_именем");
         UNIT_ASSERT_C(title != TString::npos, svg);
         const auto text = svg.find("<text", title);

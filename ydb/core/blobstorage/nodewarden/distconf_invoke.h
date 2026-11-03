@@ -53,6 +53,10 @@ namespace NKikimr::NStorage {
             TExRace() { Status = TResult::RACE; }
         };
 
+        struct TExGenerationMismatch : TExError {
+            TExGenerationMismatch() { Status = TResult::GENERATION_MISMATCH; }
+        };
+
         struct TExNoQuorum : TExError {
             TExNoQuorum() { Status = TResult::NO_QUORUM; }
         };

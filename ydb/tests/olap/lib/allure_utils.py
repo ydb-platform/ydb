@@ -1,5 +1,8 @@
 from __future__ import annotations
 from collections import defaultdict
+from html import escape
+from html.parser import HTMLParser
+import re
 import allure
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
@@ -12,6 +15,69 @@ from copy import deepcopy
 from pytz import timezone
 from typing import Any, Optional
 import logging
+
+
+class _CellColorMarkers(HTMLParser):
+    """Keep cell backgrounds through Allure sanitization using allowed abbr attributes."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self.output = []
+        self.row_color = None
+        self.table_rows = []
+
+    @staticmethod
+    def _background(attrs):
+        attrs = dict(attrs)
+        colors = re.findall(
+            r'(?:^|;)\s*background(?:-color)?\s*:\s*(#[0-9a-fA-F]{6})\s*(?=;|$)',
+            attrs.get('style') or '',
+        )
+        color = colors[-1] if colors else attrs.get('bgcolor') or ''
+        color = color.strip().lower()
+        return color if re.fullmatch(r'#[0-9a-f]{6}', color) else None
+
+    def handle_starttag(self, tag, attrs):
+        text = self.get_starttag_text()
+        if tag == 'table':
+            self.table_rows.append(self.row_color)
+            self.row_color = None
+        elif tag == 'tr':
+            self.row_color = self._background(attrs)
+        elif tag in ('td', 'th'):
+            color = self._background(attrs) or self.row_color
+            if color and 'abbr' not in dict(attrs):
+                text = text[:-1] + f' abbr="bg-{color[1:]}">'
+        self.output.append(text)
+
+    def handle_endtag(self, tag):
+        self.output.append(f'</{tag}>')
+        if tag == 'tr':
+            self.row_color = None
+        elif tag == 'table':
+            self.row_color = self.table_rows.pop() if self.table_rows else None
+
+    def handle_startendtag(self, tag, attrs):
+        self.output.append(self.get_starttag_text())
+
+    def handle_data(self, data):
+        self.output.append(data)
+
+    def handle_entityref(self, name):
+        self.output.append(f'&{name};')
+
+    def handle_charref(self, name):
+        self.output.append(f'&#{name};')
+
+    def handle_comment(self, data):
+        self.output.append(f'<!--{data}-->')
+
+
+def _mark_cell_colors(html: str) -> str:
+    parser = _CellColorMarkers()
+    parser.feed(html)
+    parser.close()
+    return ''.join(parser.output)
 
 
 class NodeErrors:
@@ -124,7 +190,7 @@ def _produce_verify_report(verify_errors) -> str:
         html += f'<details style="margin-bottom: 15px"><summary style="display: list-item">{verify}</summary>'
         html += '<table border="1" cellpadding="2px" style="margin-top: 5px"><tr><th>Node</th><th>VERIFY failed times</th></tr>'
         for host, triggered_times in verify_info['hosts_count'].items():
-            html += f'<tr bgcolor="{'  # 90EE90' if triggered_times == 0 else '#FA8072'}"><td>{host}</td><td>{triggered_times}</td></tr>'
+            html += f'<tr bgcolor="{'#90EE90' if triggered_times == 0 else '#FA8072'}"><td>{host}</td><td>{triggered_times}</td></tr>'
         html += f'</table><br/><code>{''.join(verify_info['full_trace']).replace('\n', '<br/>')}</code></details>'
     return html
 
@@ -953,6 +1019,7 @@ def allure_test_description(
         </tbody></table>
     '''
 
+    description_body_start = len(html)
     html += _set_node_errors(node_errors)
     html += _produce_verify_report(verify_errors)
     logs_in_html = external_param_is_true('save_san_logs_in_html')
@@ -973,5 +1040,18 @@ def allure_test_description(
     else:
         logging.warning("iterations_table is empty, not adding to HTML")
 
-    allure.dynamic.description_html(html)
+    # Keep the original styled document as an attachment for comparison.
+    description_info = dict(test_info)
+    with allure.step('Артефакты'):
+        for key in ('kikimr_log', 'kernel_log'):
+            command_html = description_info.pop(key)
+            command = command_html.removeprefix('<details><code>').removesuffix('</code></details>')
+            with allure.step(f'{_pretty_str(key)}: {command}'):
+                pass
+    info_list = '<ul>' + ''.join(
+        f'<li><strong>{escape(_pretty_str(k))}:</strong> {v}</li>'
+        for k, v in description_info.items()
+    ) + '</ul>'
+    description = info_list + html[description_body_start:]
+    allure.dynamic.description_html(_mark_cell_colors(description))
     allure.attach(html, "description.html", allure.attachment_type.HTML)

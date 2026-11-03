@@ -17,11 +17,15 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <library/cpp/openssl/crypto/sha.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/set.h>
 #include <util/generic/map.h>
 #include <util/generic/size_literals.h>
+
+#include <util/string/hex.h>
 
 #include <tuple>
 
@@ -577,9 +581,9 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, ECredentia
             const TString& caCert,
             ECredentialsKind credentialsKind,
             const TString& identity,
-            const TString& password = {})
+            const TString& credentialFingerprint = {})
         : std::tuple<TString, TString, bool, TString, ECredentialsKind, TString, TString>(
-            endpoint, database, ssl, caCert, credentialsKind, identity, password)
+            endpoint, database, ssl, caCert, credentialsKind, identity, credentialFingerprint)
     {
     }
 
@@ -599,6 +603,11 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, ECredentia
         return std::get<3>(*this);
     }
 
+    static TString FingerprintCredential(const TString& credential) {
+        const auto digest = NOpenSsl::NSha256::Calc(credential.data(), credential.size());
+        return HexEncode(digest.data(), digest.size());
+    }
+
     static TConnectionParams FromProto(const NKikimrReplication::TConnectionParams& params) {
         const auto& endpoint = params.GetEndpoint();
         const auto& database = params.GetDatabase();
@@ -608,10 +617,10 @@ struct TConnectionParams: std::tuple<TString, TString, bool, TString, ECredentia
         switch (params.GetCredentialsCase()) {
         case NKikimrReplication::TConnectionParams::kStaticCredentials:
             return TConnectionParams(endpoint, database, ssl, caCert, ECredentialsKind::Static,
-                params.GetStaticCredentials().GetUser(), params.GetStaticCredentials().GetPassword());
+                params.GetStaticCredentials().GetUser(), FingerprintCredential(params.GetStaticCredentials().GetPassword()));
         case NKikimrReplication::TConnectionParams::kOAuthToken:
             return TConnectionParams(endpoint, database, ssl, caCert, ECredentialsKind::OAuthToken,
-                params.GetOAuthToken().GetToken());
+                {}, FingerprintCredential(params.GetOAuthToken().GetToken()));
         case NKikimrReplication::TConnectionParams::kIamCredentials:
             return TConnectionParams(endpoint, database, ssl, caCert, ECredentialsKind::Iam,
                 params.GetIamCredentials().GetServiceAccountId());

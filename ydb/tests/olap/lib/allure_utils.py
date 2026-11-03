@@ -2,6 +2,8 @@ from __future__ import annotations
 from collections import defaultdict
 from html import escape
 from html.parser import HTMLParser
+from functools import lru_cache
+from library.python.resource import resfs_read
 import re
 import allure
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
@@ -17,6 +19,26 @@ from typing import Any, Optional
 import logging
 
 
+_DESCRIPTION_CSS_RESOURCE = 'ydb/tests/olap/lib/allure-html-plugin/static/styles.css'
+
+
+@lru_cache(maxsize=1)
+def _description_cell_colors() -> frozenset[str]:
+    css = resfs_read(_DESCRIPTION_CSS_RESOURCE)
+    if css is None:
+        raise RuntimeError(f'Missing embedded Allure stylesheet: {_DESCRIPTION_CSS_RESOURCE}')
+    css = re.sub(r'/\*.*?\*/', '', css.decode('utf-8'), flags=re.DOTALL)
+    selectors = re.findall(r'\b(td|th)\[abbr="bg-([0-9a-fA-F]{6})"\]', css)
+    by_tag = {
+        tag: {'#' + color.lower() for cell_tag, color in selectors if cell_tag == tag}
+        for tag in ('td', 'th')
+    }
+    colors = frozenset(by_tag['td'] & by_tag['th'])
+    if not colors:
+        raise ValueError(f'No cell background rules found in {_DESCRIPTION_CSS_RESOURCE}')
+    return colors
+
+
 class _CellColorMarkers(HTMLParser):
     """Keep cell backgrounds through Allure sanitization using allowed abbr attributes."""
 
@@ -29,13 +51,23 @@ class _CellColorMarkers(HTMLParser):
     @staticmethod
     def _background(attrs):
         attrs = dict(attrs)
-        colors = re.findall(
-            r'(?:^|;)\s*background(?:-color)?\s*:\s*(#[0-9a-fA-F]{6})\s*(?=;|$)',
+        backgrounds = re.findall(
+            r'(?:^|;)\s*background(?:-color)?\s*:\s*([^;]*)(?=;|$)',
             attrs.get('style') or '',
+            flags=re.IGNORECASE,
         )
-        color = colors[-1] if colors else attrs.get('bgcolor') or ''
+        color = backgrounds[-1] if backgrounds else attrs.get('bgcolor') or ''
         color = color.strip().lower()
-        return color if re.fullmatch(r'#[0-9a-f]{6}', color) else None
+        if not color:
+            return None
+        if not re.fullmatch(r'#[0-9a-f]{6}', color):
+            raise ValueError(f'Unsupported Allure cell background {color!r}; use #RRGGBB')
+        if color not in _description_cell_colors():
+            raise ValueError(
+                f'Allure cell background {color!r} has no td/th rules in '
+                f'{_DESCRIPTION_CSS_RESOURCE}; add matching abbr selectors to the stylesheet'
+            )
+        return color
 
     def handle_starttag(self, tag, attrs):
         text = self.get_starttag_text()

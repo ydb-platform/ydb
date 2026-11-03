@@ -709,7 +709,14 @@ namespace NActors {
 /// Assert that depend on NDEBUG macro and outputs message like printf
 #define YDB_LOG_VERIFY_DEBUG YDB_LOG_VERIFY
 #else
-#define YDB_LOG_VERIFY_DEBUG(condition) if (true); else NActors::LogVerifFailed(#condition, TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__)
+#define YDB_LOG_VERIFY_DEBUG(condition, ...)                                                                                    \
+    if (true) {                                                                                                                 \
+        static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
+    } else [[unlikely]] {                                                                                                       \
+        NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+        YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+        NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
+    }
 #endif
 
 #define YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \

@@ -5243,6 +5243,13 @@ void TPartition::CreateMirrorerActor() {
     );
 }
 
+void TPartition::DestroyMirrorer() {
+    if (Mirrorer) {
+        Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
+        Mirrorer.Reset();
+    }
+}
+
 bool TPartition::IsQuotingEnabled() const
 {
     return NPQ::IsQuotingEnabled(AppData()->PQConfig,

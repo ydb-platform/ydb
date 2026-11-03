@@ -451,6 +451,7 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
     }
 
     THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    request->FromMirrorer = true;
     auto req = request->Record.MutablePartitionRequest();
     req->SetTopic(TopicConverter->GetClientsideName());
     req->SetPartition(Partition);
@@ -606,6 +607,7 @@ void TMirrorer::RetryWrite(const TActorContext& ctx) {
     PQ_ENSURE(WriteRequestInFlight);
 
     THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
+    request->FromMirrorer = true;
     auto req = request->Record.MutablePartitionRequest();
     req->CopyFrom(WriteRequestInFlight.value());
 

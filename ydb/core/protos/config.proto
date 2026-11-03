@@ -3683,8 +3683,6 @@ message TIamConfig {
     // in AuthConfig.TokenManager (VM metadata or the node's token-agent factory). This identity
     // is independent of AuthConfig.AccessServiceTokenName; it must be selected explicitly.
     optional string SystemTokenName = 9;
-    // Service-owned retry tablet, provisioned independently of tenant lifetime.
-    optional uint64 DelegationTabletId = 10;
 }
 
 // Local path-prefix aliases. Rules are ordered and take effect on node restart.

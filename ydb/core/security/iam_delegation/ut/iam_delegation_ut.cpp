@@ -9,8 +9,6 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/testlib/test_client.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/security/iam_delegation/tablet/iam_delegation.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/testlib/service_mocks/operation_service_mock.h>
 #include <ydb/library/testlib/service_mocks/service_control_service_mock.h>
@@ -73,19 +71,6 @@ struct TFixture {
         Runtime = Server->GetRuntime();
         Runtime->SetLogPriority(NKikimrServices::IAM_DELEGATION, NLog::PRI_DEBUG);
         Sender = Runtime->AllocateEdgeActor();
-        constexpr ui64 tabletId = MakeTabletID(false, 9001);
-        bool ready = false;
-        auto observer = Runtime->AddObserver<TEvTablet::TEvReady>([&](auto& event) {
-            ready |= event->Get()->TabletID == tabletId;
-        });
-        auto bootstrapper = CreateTestBootstrapper(*Runtime,
-            CreateTestTabletInfo(tabletId, TTabletTypes::IamDelegation), &CreateIamDelegationTablet);
-        Runtime->EnableScheduleForActor(bootstrapper);
-        TDispatchOptions options;
-        options.CustomFinalCondition = [&] { return ready; };
-        Runtime->DispatchEvents(options);
-        UNIT_ASSERT(ready);
-        Settings.Config.SetDelegationTabletId(tabletId);
 
         IamPort = PortManager.GetPort(8443);
         {
@@ -341,7 +326,6 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         iam.SetMicroserviceId("data-plane");
         iam.SetResourceType("resource-manager.cloud");
         iam.SetSystemTokenName("delegation-system-account");
-        iam.SetDelegationTabletId(MakeTabletID(false, 9001));
         appConfig.MutableAuthConfig()->MutableTokenManager()->SetEnable(true);
         return appConfig;
     }
@@ -376,12 +360,6 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         UNIT_ASSERT(!TProxyNode(appConfig, true).Started());
     }
 
-    Y_UNIT_TEST(NothingWithoutRetryTablet) {
-        auto config = FullConfig();
-        config.MutableIamConfig()->ClearDelegationTabletId();
-        UNIT_ASSERT(!TProxyNode(config, true).Started());
-    }
-
     Y_UNIT_TEST(ControlServiceDoesNotRequireTokenMintingEndpoint) {
         auto config = FullConfig();
         config.MutableIamConfig()->ClearTokenServiceEndpoint();
@@ -396,7 +374,6 @@ Y_UNIT_TEST_SUITE(IamDelegationProxyRegistration) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableIamConfig()->SetServiceControlEndpoint("localhost:1");
         appConfig.MutableIamConfig()->SetSystemTokenName("delegation-system-account");
-        appConfig.MutableIamConfig()->SetDelegationTabletId(MakeTabletID(false, 9001));
         appConfig.MutableAuthConfig()->MutableTokenManager()->SetEnable(true);
         auto& replication = *appConfig.MutableReplicationConfig()->MutableIamServiceControl();
         replication.SetEndpoint("localhost:1");

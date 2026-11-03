@@ -145,27 +145,16 @@ TString ExplainIamFailure(const NYdbGrpc::TGrpcStatus& status, TStringBuf method
     return ExplainFailureReasons(ExtractIamFailureReasons(status), method);
 }
 
-NKikimrIamDelegation::EServiceHealth IamServiceHealth(const NYdbGrpc::TGrpcStatus& status) {
+EIamServiceHealth IamServiceHealth(const NYdbGrpc::TGrpcStatus& status) {
     if (status.InternalError || IsRetryableGrpcStatus(status)) {
-        return NKikimrIamDelegation::SERVICE_UNAVAILABLE;
+        return EIamServiceHealth::Unavailable;
     }
     if (status.GRpcStatusCode == grpc::StatusCode::UNAUTHENTICATED) {
-        return NKikimrIamDelegation::SERVICE_CREDENTIALS_REJECTED;
+        return EIamServiceHealth::CredentialsRejected;
     }
     // A binding refusal proves the service is reachable; it cannot throttle
     // unrelated bindings just because they share the same system identity.
-    return NKikimrIamDelegation::SERVICE_HEALTHY;
-}
-
-NKikimrIamDelegation::TServiceKey IamServiceKey(const TIamDelegationSettings& settings) {
-    NKikimrIamDelegation::TServiceKey key;
-    key.SetEndpoint(TStringBuilder() << (settings.Config.GetEnableSsl() ? "tls:" : "plain:")
-        << settings.Config.GetServiceControlEndpoint());
-    key.SetServiceId(settings.Config.GetServiceId());
-    key.SetMicroserviceId(settings.Config.GetMicroserviceId());
-    key.SetSystemTokenName(settings.Config.GetSystemTokenName());
-    key.SetResourceType(settings.Config.GetResourceType());
-    return key;
+    return EIamServiceHealth::Healthy;
 }
 
 Ydb::StatusIds::StatusCode MapGrpcStatus(int code) {

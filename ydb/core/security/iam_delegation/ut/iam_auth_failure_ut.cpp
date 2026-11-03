@@ -14,14 +14,12 @@ void CheckAuthenticationFailure(const NYdbGrpc::TGrpcStatus& status, TStringBuf 
     UNIT_ASSERT_VALUES_EQUAL(reasons.size(), 1);
     UNIT_ASSERT_STRING_CONTAINS(ExplainIamFailure(status), expected);
     UNIT_ASSERT(!ExplainIamFailure(status).Contains(Sentinel));
-
-
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(IamAuthenticationFailures) {
-    Y_UNIT_TEST(AuthenticationAndPermissionFailuresHaveDifferentDurableReasons) {
+    Y_UNIT_TEST(AuthenticationAndPermissionFailuresHaveDifferentReasons) {
         NYdbGrpc::TGrpcStatus status;
         status.GRpcStatusCode = grpc::StatusCode::UNAUTHENTICATED;
         status.Msg = TString(Sentinel);

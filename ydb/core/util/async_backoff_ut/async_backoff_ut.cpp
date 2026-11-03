@@ -19,9 +19,8 @@ struct TFixture {
     TAsyncTestActorRuntime Runtime;
     TAsyncTestActorRuntime::TAsyncActorOperations Actor;
 
-    explicit TFixture(TDuration initial = TDuration::Seconds(1), TDuration maximum = TDuration::Seconds(8),
-        TAsyncBackoff::EOwnership ownership = TAsyncBackoff::EOwnership::Local)
-        : Backoff(initial, maximum, ownership)
+    explicit TFixture(TDuration initial = TDuration::Seconds(1), TDuration maximum = TDuration::Seconds(8))
+        : Backoff(initial, maximum)
         , Actor(Runtime.StartAsyncActor(State))
     {
         Runtime.SetScheduledEventFilter([this](auto&, auto& ev, auto, auto&) {
@@ -59,38 +58,6 @@ struct TFixture {
 } // namespace
 
 Y_UNIT_TEST_SUITE(AsyncBackoff) {
-    Y_UNIT_TEST(ExternalStateOwnsAdmissionAndRejectsStaleObservations) {
-        TFixture f(TDuration::Seconds(1), TDuration::Seconds(8), TAsyncBackoff::EOwnership::External);
-        const auto due = f.Runtime.GetCurrentMonotonicTime() + TDuration::Seconds(5);
-        f.Actor.RunSync([&] {
-            UNIT_ASSERT(f.Backoff.Observe(7, due) == TAsyncBackoff::EUpdate::Applied);
-        });
-        for (size_t i = 0; i < 10; ++i) f.Wait();
-        UNIT_ASSERT(f.Admitted.empty());
-        UNIT_ASSERT_VALUES_EQUAL(f.ScheduledWakeups, 1);
-        f.AdvanceTo(due);
-        UNIT_ASSERT_VALUES_EQUAL(f.Admitted.size(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(f.Backoff.GetVersion(), 7);
-        for (auto version : f.Admitted) UNIT_ASSERT_VALUES_EQUAL(version, 7);
-        f.Actor.RunSync([&] {
-            UNIT_ASSERT(f.Backoff.Observe(6, due + TDuration::Minutes(1)) == TAsyncBackoff::EUpdate::Stale);
-        });
-        UNIT_ASSERT_VALUES_EQUAL(f.Backoff.GetNextAllowedAt(), due);
-    }
-
-    Y_UNIT_TEST(ExternalSuccessWakesParkedCallersAndSameVersionCannotExtendWait) {
-        TFixture f(TDuration::Seconds(1), TDuration::Seconds(8), TAsyncBackoff::EOwnership::External);
-        const auto due = f.Runtime.GetCurrentMonotonicTime() + TDuration::Minutes(1);
-        f.Actor.RunSync([&] { f.Backoff.Observe(2, due); });
-        f.Wait();
-        UNIT_ASSERT(f.Admitted.empty());
-        f.Actor.RunSync([&] { f.Backoff.Observe(2, due + TDuration::Minutes(1)); });
-        UNIT_ASSERT_VALUES_EQUAL(f.Backoff.GetNextAllowedAt(), due);
-        f.Actor.RunSync([&] { f.Backoff.Observe(3, TMonotonic::Zero()); });
-        UNIT_ASSERT_VALUES_EQUAL(f.Admitted.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(f.Admitted.front(), 3);
-    }
-
     Y_UNIT_TEST(HealthyCallsRemainConcurrent) {
         TFixture f;
         for (size_t i = 0; i < 20; ++i) {

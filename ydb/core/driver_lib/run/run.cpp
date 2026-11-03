@@ -1771,7 +1771,6 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->ReplicationConfig = runConfig.AppConfig.GetReplicationConfig();
     }
 
-
     if (runConfig.AppConfig.HasHealthCheckConfig()) {
         AppData->HealthCheckConfig = runConfig.AppConfig.GetHealthCheckConfig();
     }

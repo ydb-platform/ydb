@@ -1,7 +1,7 @@
 #pragma once
 
 #include "settings.h"
-#include "retry_gate.h"
+#include <ydb/core/util/async_backoff.h>
 
 #include <ydb/core/base/iam_delegation.h>
 
@@ -41,6 +41,12 @@ public:
     const grpc::StatusCode GrpcCode;
 };
 
+// Bounded diagnostic groups; remote text is never returned.
+enum class EDelegationFailureReason {
+    WrongCloud, ServiceNotEnabled, CloudNotFound, ServiceAccountNotFound,
+    SubjectNotDelegatable, AuthenticationFailed, PermissionDenied,
+};
+
 bool IsRetryableGrpcStatus(const NYdbGrpc::TGrpcStatus& status);
 
 // A hint for the user for the ServiceControl failure types (ServiceControlFailureType in
@@ -61,8 +67,8 @@ TString ExplainIamFailure(const NYdbGrpc::TGrpcStatus& status, TStringBuf method
 TVector<EDelegationFailureReason> ExtractIamFailureReasons(const google::rpc::Status& status);
 TVector<EDelegationFailureReason> ExtractIamFailureReasons(const NYdbGrpc::TGrpcStatus& status);
 
-NKikimrIamDelegation::EServiceHealth IamServiceHealth(const NYdbGrpc::TGrpcStatus& status);
-NKikimrIamDelegation::TServiceKey IamServiceKey(const TIamDelegationSettings& settings);
+enum class EIamServiceHealth { Healthy, Unavailable, CredentialsRejected };
+EIamServiceHealth IamServiceHealth(const NYdbGrpc::TGrpcStatus& status);
 
 Ydb::StatusIds::StatusCode MapGrpcStatus(int code);
 
@@ -95,7 +101,7 @@ protected:
 
     explicit TIamActorBase(TIamDelegationSettings settings)
         : Settings(std::move(settings))
-        , RetryGate(Settings.Config.GetDelegationTabletId())
+        , RetryBackoff(TDuration::Seconds(1), TDuration::Minutes(1))
     {
         static_assert(std::derived_from<TDerived, TIamActorBase>, "TDerived must derive from TIamActorBase<TDerived>");
     }
@@ -111,7 +117,7 @@ protected:
 protected:
     const TIamDelegationSettings Settings;
     TIamCallCredentials Credentials;
-    TIamRetryGate RetryGate;
+    TAsyncBackoff RetryBackoff;
 };
 
 } // namespace NKikimr::NIamDelegation

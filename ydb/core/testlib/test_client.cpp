@@ -85,7 +85,6 @@
 #include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
-#include <ydb/core/security/iam_delegation/tablet/iam_delegation.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
@@ -593,7 +592,6 @@ namespace Tests {
             MERGE_CFG_FROM_APP_CFG(MetadataCacheConfig);
             MERGE_CFG_FROM_APP_CFG(MemoryControllerConfig);
             MERGE_CFG_FROM_APP_CFG(ReplicationConfig);
-            MERGE_CFG_FROM_APP_CFG(IamConfig);
             MERGE_CFG_FROM_APP_CFG(HealthCheckConfig);
             MERGE_CFG_FROM_APP_CFG(WorkloadManagerConfig);
             MERGE_CFG_FROM_APP_CFG(QueryServiceConfig);
@@ -1233,10 +1231,6 @@ namespace Tests {
         localConfig.TabletClassInfo[TTabletTypes::WasmCompileController] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NUdfStore::CreateWasmCompileController, TMailboxType::Revolving, appData.UserPoolId,
-                TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[TTabletTypes::IamDelegation] =
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
-                &NIamDelegation::CreateIamDelegationTablet, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
     }
 

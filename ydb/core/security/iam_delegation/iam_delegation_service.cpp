@@ -57,8 +57,6 @@ public:
     STRICT_STFUNC(StateWork,
         hFunc(TEvIamDelegation::TEvSetupDelegation, HandleSetup);
         hFunc(TEvIamDelegation::TEvRevokeDelegation, HandleRevoke);
-        hFunc(TEvIamDelegation::TEvSubmitDelegationOperation, HandleSubmitOperation);
-        hFunc(TEvIamDelegation::TEvPollDelegationOperation, HandlePollOperation);
         // late replies after a timeout
         IgnoreFunc(NCloud::TEvServiceControlService::TEvSetupDelegationResponse);
         IgnoreFunc(NCloud::TEvServiceControlService::TEvRevokeDelegationResponse);
@@ -97,202 +95,6 @@ private:
         Send(ServiceControlClient, new TEvents::TEvPoison());
         Send(OperationClient, new TEvents::TEvPoison());
         PassAway();
-    }
-
-    static void SetOperationError(TDelegationOperationResult& result, Ydb::StatusIds::StatusCode status, const TString& message) {
-        result.Status = status;
-        result.Issues.AddIssue(message);
-    }
-
-    static bool ValidBinding(const TDelegationBinding& binding) {
-        return !binding.ServiceAccountId.empty() && !binding.CloudId.empty() && !binding.ReferrerId.empty()
-            && !binding.ServiceId.empty() && !binding.MicroserviceId.empty()
-            && !binding.ResourceType.empty() && !binding.ReferrerType.empty()
-            && (binding.ReferencePolicy == EReferencePolicy::WithoutReferences || binding.ReferencePolicy == EReferencePolicy::WithReferences);
-    }
-
-    template<class TRequest>
-    static void FillBinding(TRequest& request, const TDelegationBinding& binding) {
-        request.set_service_id(binding.ServiceId);
-        request.set_microservice_id(binding.MicroserviceId);
-        request.mutable_resource()->set_id(binding.CloudId);
-        request.mutable_resource()->set_type(binding.ResourceType);
-        request.set_target_service_account_id(binding.ServiceAccountId);
-        request.mutable_referrer()->set_id(binding.ReferrerId);
-        request.mutable_referrer()->set_type(binding.ReferrerType);
-        request.set_with_references(binding.ReferencePolicy == EReferencePolicy::WithReferences);
-    }
-
-    // No mutation retry here: a missing response can hide an accepted operation. The owner
-    // persists the accepted ID and uses PollOperation for every subsequent request.
-    template<class TRequest, class TResponse>
-    async<TDelegationOperationResult> CallOperationOnce(TActorId client, THolder<TRequest> request,
-            std::optional<EDelegationOperationKind> kind, TString operationId = {}, TMonotonic requestedDeadline = TMonotonic::Max())
-    {
-        TDelegationOperationResult result;
-        result.OperationId = operationId;
-        const bool polling = !operationId.empty();
-        const TStringBuf method = polling ? "OperationService.Get"
-            : kind == EDelegationOperationKind::Setup ? "ServiceControl.SetupDelegation" : "ServiceControl.RevokeDelegation";
-        bool dispatched = false;
-        std::optional<ui64> admittedVersion;
-        const auto key = IamServiceKey(Settings);
-        const auto deadline = Min(requestedDeadline, TActivationContext::Monotonic() + Settings.RequestRetryTimeout);
-        try {
-            admittedVersion = co_await RetryGate.Wait(key, deadline, Settings.RequestTimeout * 2 + TDuration::Seconds(1));
-            request->Token = co_await GetIamCallToken(Credentials, deadline);
-            if (request->RequestId.empty()) {
-                request->RequestId = CreateGuidAsString();
-            }
-            const auto responseDeadline = Min(deadline, TActivationContext::Monotonic() + Settings.RequestTimeout + TDuration::Seconds(1));
-            dispatched = true;
-            auto response = co_await WithDeadline(responseDeadline, &IamClientRequest, client, request.Release());
-            if (!response) {
-                co_await RetryGate.Report(key, *admittedVersion, NKikimrIamDelegation::SERVICE_UNAVAILABLE, deadline);
-                SetOperationError(result, Ydb::StatusIds::TIMEOUT, "IAM operation response was not received; outcome is unknown");
-                co_return result;
-            }
-            if ((*response)->GetTypeRewrite() == TEvents::TEvUndelivered::EventType) {
-                co_await RetryGate.Report(key, *admittedVersion, NKikimrIamDelegation::SERVICE_UNAVAILABLE, deadline);
-                const auto* undelivered = (*response)->template Get<TEvents::TEvUndelivered>();
-                if (!polling && !undelivered->Unsure
-                    && undelivered->Reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
-                    result.Outcome = EDelegationOperationOutcome::Failed;
-                }
-                SetOperationError(result, Ydb::StatusIds::UNAVAILABLE,
-                    result.Outcome == EDelegationOperationOutcome::Failed
-                        ? "IAM client is unavailable; request was not delivered"
-                        : "IAM client is unavailable; outcome is unknown");
-                co_return result;
-            }
-            if ((*response)->GetTypeRewrite() != TResponse::EventType) {
-                SetOperationError(result, Ydb::StatusIds::INTERNAL_ERROR, "unexpected IAM operation response");
-                co_return result;
-            }
-            typename TResponse::TPtr typed(reinterpret_cast<TEventHandle<TResponse>*>(response->Release()));
-            const auto& status = typed->Get()->Status;
-            co_await RetryGate.Report(key, *admittedVersion, IamServiceHealth(status), deadline);
-            if (!status.Ok()) {
-                if (status.InternalError) {
-                    SetOperationError(result, Ydb::StatusIds::UNAVAILABLE, "IAM client transport failed; outcome is unknown");
-                    co_return result;
-                }
-                result.FailureReasons = ExtractIamFailureReasons(status);
-                SetOperationError(result, MapGrpcStatus(status.GRpcStatusCode),
-                    TStringBuilder() << "IAM request failed with gRPC status " << status.GRpcStatusCode << ExplainIamFailure(status, method));
-                if (!polling) {
-                    const auto code = static_cast<grpc::StatusCode>(status.GRpcStatusCode);
-                    if (kind == EDelegationOperationKind::Revoke && code == grpc::StatusCode::NOT_FOUND) {
-                        result.Outcome = EDelegationOperationOutcome::Succeeded;
-                        result.Status = Ydb::StatusIds::SUCCESS;
-                        result.Issues.Clear();
-                        result.FailureReasons.clear();
-                    } else if (code == grpc::StatusCode::PERMISSION_DENIED || code == grpc::StatusCode::UNAUTHENTICATED
-                            || code == grpc::StatusCode::INVALID_ARGUMENT || code == grpc::StatusCode::OUT_OF_RANGE
-                            || code == grpc::StatusCode::NOT_FOUND || code == grpc::StatusCode::UNIMPLEMENTED) {
-                        result.Outcome = EDelegationOperationOutcome::Failed;
-                    }
-                    // ALREADY_EXISTS and FAILED_PRECONDITION can describe an earlier, still
-                    // unfinished delegation. They do not establish that setup failed.
-                }
-                co_return result;
-            }
-            const auto& operation = typed->Get()->Response;
-            if (operation.id().empty() || (polling && operation.id() != operationId)) {
-                SetOperationError(result, Ydb::StatusIds::INTERNAL_ERROR, "IAM returned a missing or mismatched operation ID");
-                co_return result;
-            }
-            result.OperationId = operation.id();
-            result.Status = Ydb::StatusIds::SUCCESS;
-            if (!operation.done()) {
-                result.Outcome = EDelegationOperationOutcome::Accepted;
-            } else if (operation.has_error()) {
-                if (operation.error().code() == grpc::StatusCode::OK) {
-                    // Contradictory terminal data does not prove that a grant
-                    // failed. Retain the operation ID and durable uncertainty.
-                    SetOperationError(result, Ydb::StatusIds::INTERNAL_ERROR,
-                        "IAM returned a completed operation with a success-coded error; outcome is unknown");
-                } else {
-                    result.Outcome = EDelegationOperationOutcome::Failed;
-                    result.FailureReasons = ExtractIamFailureReasons(operation.error());
-                    // Polling does not reveal the original mutation kind. Only
-                    // its durable owner can add the corresponding requirements.
-                    SetOperationError(result, MapGrpcStatus(operation.error().code()),
-                        TStringBuilder() << "IAM operation failed with gRPC status " << operation.error().code()
-                            << ExplainIamFailure(operation.error(), kind
-                                ? (*kind == EDelegationOperationKind::Setup ? "ServiceControl.SetupDelegation" : "ServiceControl.RevokeDelegation")
-                                : TStringBuf()));
-                }
-            } else {
-                result.Outcome = EDelegationOperationOutcome::Succeeded;
-            }
-        } catch (const TIamCallError& error) {
-            // Credential acquisition failed before a mutation could reach IAM.
-            // A poll failure never changes the known remote operation's outcome.
-            if (!polling && !dispatched) {
-                result.Outcome = EDelegationOperationOutcome::Failed;
-            }
-            SetOperationError(result, error.Status, error.what());
-        } catch (const std::exception&) {
-            if (!polling && !dispatched) {
-                result.Outcome = EDelegationOperationOutcome::Failed;
-            }
-            SetOperationError(result, Ydb::StatusIds::INTERNAL_ERROR, "Unexpected IAM operation failure");
-        }
-        if (admittedVersion && !dispatched) {
-            co_await RetryGate.Report(key, *admittedVersion, NKikimrIamDelegation::SERVICE_UNAVAILABLE, deadline);
-        }
-        co_return result;
-    }
-
-    void HandleSubmitOperation(TEvIamDelegation::TEvSubmitDelegationOperation::TPtr ev) {
-        const auto recipient = ev->Sender;
-        const auto cookie = ev->Cookie;
-        const auto kind = ev->Get()->Kind;
-        const auto binding = ev->Get()->Binding;
-        const auto subjectId = ev->Get()->SubjectId;
-        const auto requestId = ev->Get()->RequestId;
-        const auto deadline = ev->Get()->Deadline;
-        ev.Reset();
-        TDelegationOperationResult result;
-        if (!ValidBinding(binding) || (kind == EDelegationOperationKind::Setup && subjectId.empty())
-                || (kind != EDelegationOperationKind::Setup && kind != EDelegationOperationKind::Revoke)) {
-            result.Outcome = EDelegationOperationOutcome::Failed;
-            SetOperationError(result, Ydb::StatusIds::BAD_REQUEST, "complete IAM binding and setup subject are required");
-        } else if (kind == EDelegationOperationKind::Setup) {
-            auto request = MakeHolder<NCloud::TEvServiceControlService::TEvSetupDelegationRequest>();
-            FillBinding(request->Request, binding);
-            request->Request.set_on_behalf_of_subject_id(subjectId);
-            request->RequestId = requestId;
-            result = co_await CallOperationOnce<NCloud::TEvServiceControlService::TEvSetupDelegationRequest,
-                NCloud::TEvServiceControlService::TEvSetupDelegationResponse>(ServiceControlClient, std::move(request), kind, {}, deadline);
-        } else {
-            auto request = MakeHolder<NCloud::TEvServiceControlService::TEvRevokeDelegationRequest>();
-            FillBinding(request->Request, binding);
-            request->RequestId = requestId;
-            result = co_await CallOperationOnce<NCloud::TEvServiceControlService::TEvRevokeDelegationRequest,
-                NCloud::TEvServiceControlService::TEvRevokeDelegationResponse>(ServiceControlClient, std::move(request), kind, {}, deadline);
-        }
-        Send(recipient, new TEvIamDelegation::TEvDelegationOperationResult(std::move(result)), 0, cookie);
-    }
-
-    void HandlePollOperation(TEvIamDelegation::TEvPollDelegationOperation::TPtr ev) {
-        const auto recipient = ev->Sender;
-        const auto cookie = ev->Cookie;
-        const auto operationId = ev->Get()->OperationId;
-        const auto deadline = ev->Get()->Deadline;
-        ev.Reset();
-        TDelegationOperationResult result;
-        if (operationId.empty()) {
-            SetOperationError(result, Ydb::StatusIds::BAD_REQUEST, "IAM operation ID is required");
-        } else {
-            auto request = MakeHolder<NCloud::TEvOperationService::TEvGetOperationRequest>();
-            request->Request.set_operation_id(operationId);
-            result = co_await CallOperationOnce<NCloud::TEvOperationService::TEvGetOperationRequest,
-                NCloud::TEvOperationService::TEvGetOperationResponse>(OperationClient, std::move(request),
-                    std::nullopt, operationId, deadline);
-        }
-        Send(recipient, new TEvIamDelegation::TEvDelegationOperationResult(std::move(result)), 0, cookie);
     }
 
     // top-level coroutine: one task per request
@@ -334,53 +136,128 @@ private:
         Revoke,
     };
 
+    // Shared scheduling never replays a mutation. A request ID is correlation
+    // metadata; IAM does not guarantee idempotency for it.
+    template<class TRequest, class TResponse>
+    async<std::optional<TOperation>> CallOnce(TActorId client, THolder<TRequest> request,
+            TStringBuf method, ECall call, TString operationId = {}, TMonotonic deadline = TMonotonic::Max()) {
+        deadline = Min(deadline, TActivationContext::Monotonic() + Settings.RequestRetryTimeout);
+        co_await GetIamCallToken(Credentials, deadline);
+        const std::optional<ui64> version = RetryBackoff.GetVersion(); // RED: shared admission not connected yet
+        if (!version) {
+            throw TIamCallError(Ydb::StatusIds::TIMEOUT) << "IAM service retry deadline exceeded";
+        }
+        // Re-read after cooldown to observe token rotation. Local credential
+        // failures do not assert an IAM service outage.
+        const auto dispatchDeadline = Min(deadline,
+            TActivationContext::Monotonic() + Settings.RequestTimeout * 2 + TDuration::Seconds(1));
+        request->Token = co_await GetIamCallToken(Credentials, dispatchDeadline);
+        request->RequestId = CreateGuidAsString();
+        CheckIamCallDeadline(dispatchDeadline);
+        auto response = co_await WithDeadline(Min(dispatchDeadline,
+                TActivationContext::Monotonic() + Settings.RequestTimeout + TDuration::Seconds(1)),
+            &IamClientRequest, client, request.Release());
+        CheckIamCallDeadline(deadline);
+        if (!response) {
+            RetryBackoff.OnFailure(*version);
+            throw TIamCallError(Ydb::StatusIds::TIMEOUT) << "IAM response was not received; outcome is unknown";
+        }
+        if ((*response)->GetTypeRewrite() == TEvents::TEvUndelivered::EventType) {
+            RetryBackoff.OnFailure(*version);
+            throw TIamCallError(Ydb::StatusIds::UNAVAILABLE) << "IAM client is unavailable; outcome is unknown";
+        }
+        if ((*response)->GetTypeRewrite() != TResponse::EventType) {
+            throw TIamCallError(Ydb::StatusIds::INTERNAL_ERROR) << "Unexpected IAM response; outcome is unknown";
+        }
+        typename TResponse::TPtr typed(reinterpret_cast<TEventHandle<TResponse>*>(response->Release()));
+        const auto& status = typed->Get()->Status;
+        if (IamServiceHealth(status) == EIamServiceHealth::Healthy) {
+            RetryBackoff.OnSuccess(*version);
+        } else {
+            RetryBackoff.OnFailure(*version);
+        }
+        if (!status.Ok()) {
+            if (status.InternalError) {
+                throw TIamCallError(Ydb::StatusIds::UNAVAILABLE) << "IAM client transport failed; outcome is unknown";
+            }
+            if (operationId.empty() && call == ECall::Revoke && status.GRpcStatusCode == grpc::StatusCode::NOT_FOUND) {
+                co_return std::nullopt;
+            }
+            throw TIamCallError(MapGrpcStatus(status.GRpcStatusCode), static_cast<grpc::StatusCode>(status.GRpcStatusCode))
+                << "IAM request failed with gRPC status " << status.GRpcStatusCode << ExplainIamFailure(status, method);
+        }
+        const auto& operation = typed->Get()->Response;
+        if (operation.id().empty() || (!operationId.empty() && operation.id() != operationId)) {
+            throw TIamCallError(Ydb::StatusIds::INTERNAL_ERROR) << "IAM returned a missing or mismatched operation ID; outcome is unknown";
+        }
+        co_return operation;
+    }
+
+    template<class TRequest>
+    void FillBinding(TRequest& request, const TDelegationSpec& spec) const {
+        request.set_service_id(Settings.Config.GetServiceId());
+        request.set_microservice_id(Settings.Config.GetMicroserviceId());
+        request.mutable_resource()->set_id(spec.CloudId);
+        request.mutable_resource()->set_type(Settings.Config.GetResourceType());
+        request.set_target_service_account_id(spec.ServiceAccountId);
+        request.mutable_referrer()->set_id(spec.ReferrerId);
+        request.mutable_referrer()->set_type(Settings.ReferrerType);
+        request.set_with_references(false);
+    }
+
     async<TDelegationResult> Run(TDelegationSpec spec, TString subjectId, ECall call) {
         try {
-            TDelegationBinding binding;
-            binding.ServiceAccountId = spec.ServiceAccountId;
-            binding.CloudId = spec.CloudId;
-            binding.ReferrerId = spec.ReferrerId;
-            binding.ServiceId = Settings.Config.GetServiceId();
-            binding.MicroserviceId = Settings.Config.GetMicroserviceId();
-            binding.ResourceType = Settings.Config.GetResourceType();
-            binding.ReferrerType = Settings.ReferrerType;
-            const auto kind = call == ECall::Setup ? EDelegationOperationKind::Setup : EDelegationOperationKind::Revoke;
-            TDelegationOperationResult result;
+            if (spec.ServiceAccountId.empty() || spec.CloudId.empty() || spec.ReferrerId.empty()
+                    || (call == ECall::Setup && subjectId.empty())) {
+                co_return TDelegationResult::Error(Ydb::StatusIds::BAD_REQUEST, "Complete IAM binding and setup subject are required");
+            }
+            std::optional<TOperation> operation;
+            const TStringBuf mutationMethod = call == ECall::Setup ? "ServiceControl.SetupDelegation" : "ServiceControl.RevokeDelegation";
             if (call == ECall::Setup) {
                 auto request = MakeHolder<NCloud::TEvServiceControlService::TEvSetupDelegationRequest>();
-                FillBinding(request->Request, binding);
+                FillBinding(request->Request, spec);
                 request->Request.set_on_behalf_of_subject_id(subjectId);
-                result = co_await CallOperationOnce<NCloud::TEvServiceControlService::TEvSetupDelegationRequest,
-                    NCloud::TEvServiceControlService::TEvSetupDelegationResponse>(ServiceControlClient, std::move(request), kind);
+                operation = co_await CallOnce<NCloud::TEvServiceControlService::TEvSetupDelegationRequest,
+                    NCloud::TEvServiceControlService::TEvSetupDelegationResponse>(ServiceControlClient, std::move(request), mutationMethod, call);
             } else {
                 auto request = MakeHolder<NCloud::TEvServiceControlService::TEvRevokeDelegationRequest>();
-                FillBinding(request->Request, binding);
-                result = co_await CallOperationOnce<NCloud::TEvServiceControlService::TEvRevokeDelegationRequest,
-                    NCloud::TEvServiceControlService::TEvRevokeDelegationResponse>(ServiceControlClient, std::move(request), kind);
+                FillBinding(request->Request, spec);
+                operation = co_await CallOnce<NCloud::TEvServiceControlService::TEvRevokeDelegationRequest,
+                    NCloud::TEvServiceControlService::TEvRevokeDelegationResponse>(ServiceControlClient, std::move(request), mutationMethod, call);
+            }
+            if (!operation) {
+                co_return TDelegationResult::Success();
             }
             const auto pollDeadline = TActivationContext::Monotonic() + Settings.OperationPollTimeout;
-            const auto transient = [](Ydb::StatusIds::StatusCode status) {
-                return status == Ydb::StatusIds::UNAVAILABLE || status == Ydb::StatusIds::TIMEOUT
-                    || status == Ydb::StatusIds::OVERLOADED || status == Ydb::StatusIds::INTERNAL_ERROR;
-            };
-            while (result.Outcome == EDelegationOperationOutcome::Accepted
-                || (result.Outcome == EDelegationOperationOutcome::Unknown && !result.OperationId.empty() && transient(result.Status))) {
+            while (!operation->done()) {
                 CheckIamCallDeadline(pollDeadline);
                 co_await AsyncSleepUntil(Min(pollDeadline, TActivationContext::Monotonic() + Settings.OperationPollInterval));
                 CheckIamCallDeadline(pollDeadline);
-                const auto id = result.OperationId;
                 auto request = MakeHolder<NCloud::TEvOperationService::TEvGetOperationRequest>();
-                request->Request.set_operation_id(id);
-                result = co_await CallOperationOnce<NCloud::TEvOperationService::TEvGetOperationRequest,
-                    NCloud::TEvOperationService::TEvGetOperationResponse>(OperationClient, std::move(request), kind, id, pollDeadline);
+                request->Request.set_operation_id(operation->id());
+                try {
+                    operation = co_await CallOnce<NCloud::TEvOperationService::TEvGetOperationRequest,
+                        NCloud::TEvOperationService::TEvGetOperationResponse>(OperationClient, std::move(request),
+                            "OperationService.Get", call, operation->id(), pollDeadline);
+                } catch (const TIamCallError& error) {
+                    // Repeating a read of a known operation is safe. Transient
+                    // failures share the same gate; no per-operation counter.
+                    if (error.Status != Ydb::StatusIds::UNAVAILABLE && error.Status != Ydb::StatusIds::TIMEOUT
+                        && error.Status != Ydb::StatusIds::OVERLOADED && error.Status != Ydb::StatusIds::INTERNAL_ERROR) {
+                        throw;
+                    }
+                    CheckIamCallDeadline(pollDeadline);
+                }
             }
-            if (result.Outcome == EDelegationOperationOutcome::Succeeded) {
-                co_return TDelegationResult::Success();
+            if (operation->has_error()) {
+                if (operation->error().code() == grpc::StatusCode::OK) {
+                    throw TIamCallError(Ydb::StatusIds::INTERNAL_ERROR) << "IAM returned a success-coded operation error; outcome is unknown";
+                }
+                throw TIamCallError(MapGrpcStatus(operation->error().code()))
+                    << "IAM operation failed with gRPC status " << operation->error().code()
+                    << ExplainIamFailure(operation->error(), mutationMethod);
             }
-            TDelegationResult failed;
-            failed.Status = result.Status;
-            failed.Issues = std::move(result.Issues);
-            co_return failed;
+            co_return TDelegationResult::Success();
         } catch (const TIamCallError& error) {
             co_return TDelegationResult::Error(error.Status, error.what());
         } catch (const std::exception&) {

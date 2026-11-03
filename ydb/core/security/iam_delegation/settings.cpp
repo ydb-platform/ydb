@@ -68,9 +68,6 @@ TString TIamDelegationSettings::Validate() const {
 TString TIamDelegationSettings::ValidateForDelegation() const {
     TStringBuilder missing;
     CollectMissingIdentity(*this, missing);
-    if (!Config.GetDelegationTabletId()) {
-        missing << " DelegationTabletId";
-    }
     if (Config.GetSystemTokenName().empty()) {
         missing << " SystemTokenName";
     }

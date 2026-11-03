@@ -5,9 +5,8 @@
 
 namespace NKikimr {
 
-TAsyncBackoff::TAsyncBackoff(TDuration initialDelay, TDuration maxDelay, EOwnership ownership)
-    : Ownership(ownership)
-    , Backoff(initialDelay, maxDelay)
+TAsyncBackoff::TAsyncBackoff(TDuration initialDelay, TDuration maxDelay)
+    : Backoff(initialDelay, maxDelay)
 {
     Y_ABORT_UNLESS(initialDelay.MilliSeconds() > 0);
 }
@@ -17,7 +16,7 @@ NActors::async<ui64> TAsyncBackoff::Wait(TDuration requestTimeout) {
     for (;;) {
         const auto now = NActors::TActivationContext::Monotonic();
         if (now >= NextAllowedAt) {
-            if (Ownership == EOwnership::Local && Backoff.GetIteration() != 0) {
+            if (Backoff.GetIteration() != 0) {
                 // Fence both previous outcomes and other waiters before dispatch.
                 ++Version;
                 NextAllowedAt = now + requestTimeout;
@@ -49,7 +48,6 @@ NActors::async<ui64> TAsyncBackoff::Wait(TDuration requestTimeout) {
 }
 
 TAsyncBackoff::EUpdate TAsyncBackoff::OnFailure(ui64 version) {
-    Y_ABORT_UNLESS(Ownership == EOwnership::Local);
     if (version != Version) {
         return EUpdate::Stale;
     }
@@ -60,7 +58,6 @@ TAsyncBackoff::EUpdate TAsyncBackoff::OnFailure(ui64 version) {
 }
 
 TAsyncBackoff::EUpdate TAsyncBackoff::OnSuccess(ui64 version) {
-    Y_ABORT_UNLESS(Ownership == EOwnership::Local);
     if (version != Version) {
         return EUpdate::Stale;
     }
@@ -70,21 +67,6 @@ TAsyncBackoff::EUpdate TAsyncBackoff::OnSuccess(ui64 version) {
         ++Version;
         Changed.NotifyAll();
     }
-    return EUpdate::Applied;
-}
-
-TAsyncBackoff::EUpdate TAsyncBackoff::Observe(ui64 version, NActors::TMonotonic nextAllowedAt) {
-    Y_ABORT_UNLESS(Ownership == EOwnership::External);
-    if (version < Version) {
-        return EUpdate::Stale;
-    }
-    // Equal-version duplicate observations cannot postpone an already armed wait.
-    if (version == Version) {
-        nextAllowedAt = Min(nextAllowedAt, NextAllowedAt);
-    }
-    Version = version;
-    NextAllowedAt = nextAllowedAt;
-    Changed.NotifyAll();
     return EUpdate::Applied;
 }
 

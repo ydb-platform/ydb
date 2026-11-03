@@ -1,4 +1,5 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/read.h>
+#include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -25,6 +26,23 @@ void CheckGroupInvariants(const THashMap<TBlobRange, std::vector<TBlobRange>>& g
         }
     }
 }
+
+class TStatsReadingAction: public IBlobsReadingAction {
+    void DoStartReading(THashSet<TBlobRange>&&) override {
+    }
+
+    THashMap<TBlobRange, std::vector<TBlobRange>> GroupBlobsForOptimization(std::vector<TBlobRange>&& ranges) const override {
+        return TBlobsGlueing::GroupRanges(std::move(ranges), TBlobsGlueing::TSequentialGluePolicy());
+    }
+
+public:
+    TStatsReadingAction()
+        : IBlobsReadingAction("default")
+    {
+        auto counters = std::make_shared<NBlobOperations::TStorageCounters>("test");
+        SetCounters(counters->GetConsumerCounter(NBlobOperations::EConsumer::SCAN)->GetReadCounters());
+    }
+};
 
 }   // namespace
 
@@ -59,6 +77,50 @@ Y_UNIT_TEST_SUITE(TBlobRangeOrdering) {
 }
 
 Y_UNIT_TEST_SUITE(TBlobsGlueingGroupRanges) {
+    Y_UNIT_TEST(MergedActionsRetainRangeOwnersAndPurpose) {
+        auto collector = std::make_shared<NScanStats::TCollector>(1);
+        collector->BindScanId("merge");
+        auto first = collector->Start(NScanStats::TStep::FetchColumns, "FETCH", "price");
+        auto second = collector->Start(NScanStats::TStep::FetchColumns, "FETCH", "index");
+        auto a = std::make_shared<TStatsReadingAction>();
+        auto b = std::make_shared<TStatsReadingAction>();
+        {
+            NScanStats::TScope scope(first);
+            a->AddRange(MakeRange(1, 0, 100), {}, NKqpProto::TColumnShardStepDetails::TStorageRead::data);
+        }
+        {
+            NScanStats::TScope scope(second);
+            b->AddRange(MakeRange(1, 100, 50), {}, NKqpProto::TColumnShardStepDetails::TStorageRead::index);
+        }
+        a->Merge(b);
+        a->Start({});
+        auto context = a->GetReadStatsContext(MakeRange(1, 0, 150));
+        UNIT_ASSERT_VALUES_EQUAL(context.Parent->GetStepId(), first->GetStepId());
+        UNIT_ASSERT(context.DataKind == NKqpProto::TColumnShardStepDetails::TStorageRead::mixed);
+        first->Finish();
+        second->Finish();
+        auto report = collector->Drain(true);
+        UNIT_ASSERT_VALUES_EQUAL(report->StepsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(report->GetSteps(0).GetDetails().GetFetchColumns().GetRequestedBytes(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(report->GetSteps(1).GetDetails().GetFetchColumns().GetRequestedBytes(), 50);
+    }
+
+    Y_UNIT_TEST(UnknownRangePurposeIsNotMixed) {
+        auto collector = std::make_shared<NScanStats::TCollector>(1);
+        auto parent = collector->Start(NScanStats::TStep::FetchColumns, "FETCH", "price");
+        auto action = std::make_shared<TStatsReadingAction>();
+        {
+            NScanStats::TScope scope(parent);
+            action->AddRange(MakeRange(1, 0, 100), {}, NKqpProto::TColumnShardStepDetails::TStorageRead::data);
+        }
+        action->AddRange(MakeRange(1, 100, 50));
+        action->Start({});
+        auto context = action->GetReadStatsContext(MakeRange(1, 0, 150));
+        UNIT_ASSERT(context.Collector == collector);
+        UNIT_ASSERT(context.DataKind == NKqpProto::TColumnShardStepDetails::TStorageRead::unknown);
+        parent->Finish();
+    }
+
     Y_UNIT_TEST(SequentialGlueKeepsOffsetInvariant) {
         std::vector<TBlobRange> ranges = {
             MakeRange(1, 0, 100),

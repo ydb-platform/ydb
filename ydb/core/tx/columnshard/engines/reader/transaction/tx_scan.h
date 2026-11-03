@@ -60,6 +60,7 @@ public:
 private:
     TEvDataShard::TEvKqpScan::TPtr Ev;
     const TScanTarget Target;
+    std::shared_ptr<NScanStats::TCollector> RuntimeStats;
 };
 
 TConclusion<TScanTarget> BuildScanTarget(NColumnShard::TColumnShard& shard, const NKikimrTxDataShard::TEvKqpScan& request);

@@ -51,8 +51,9 @@ public:
         Runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
     }
 
-    TEvBlobCache::TEvReadBlobRangeResult::TPtr ReadRange(const TBlobRange& range, const bool cacheAfterRead = true) {
-        auto ev = new TEvBlobCache::TEvReadBlobRange(range, TReadBlobRangeOptions{ .CacheAfterRead = cacheAfterRead, .IsBackgroud = false });
+    TEvBlobCache::TEvReadBlobRangeResult::TPtr ReadRange(const TBlobRange& range, const bool cacheAfterRead = true,
+        NOlap::TReadStatsContext stats = {}) {
+        auto ev = new TEvBlobCache::TEvReadBlobRange(range, TReadBlobRangeOptions{ .CacheAfterRead = cacheAfterRead, .IsBackgroud = false }, std::move(stats));
         Runtime.Send(new IEventHandle(ActorId, Sender, ev), 0, true);
         return Runtime.GrabEdgeEvent<TEvBlobCache::TEvReadBlobRangeResult>(Sender, TDuration::Seconds(5));
     }
@@ -100,6 +101,98 @@ public:
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TBlobCache) {
+    Y_UNIT_TEST(ScanCacheStatsCoveringHit) {
+        TBlobCacheFixture fixture(1024);
+        const auto full = MakeRange(1, 100);
+        fixture.CacheRange(full, MakeData(100, 'x'));
+        auto collector = std::make_shared<NScanStats::TCollector>(1);
+        collector->BindScanId("cache-hit");
+        auto parent = collector->Start(NScanStats::TStep::FetchColumns, "FETCH", "price");
+        auto result = fixture.ReadRange(MakeRange(1, 100, 10, 20), true,
+            {parent, NKqpProto::TColumnShardStepDetails::TStorageRead::data, collector});
+        UNIT_ASSERT(result->Get()->FromCache);
+        parent->Finish();
+        const auto report = collector->Drain(true);
+        UNIT_ASSERT(report->GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(report->StepsSize(), 1);
+        const auto& cache = report->GetCacheStats();
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetCompletedReadRanges(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetCacheServedReadRanges(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetReturnedBytes(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(cache.GetCacheServedBytes(), 20);
+    }
+
+    Y_UNIT_TEST(ScanSharedReadHasOnePhysicalOwner) {
+        TBlobCacheFixture fixture(1024);
+        const auto range = MakeRange(1, 40);
+        std::shared_ptr<NScanStats::TCollector> collectors[2];
+        std::shared_ptr<NScanStats::TOperation> parents[2];
+        for (ui32 i = 0; i < 2; ++i) {
+            collectors[i] = std::make_shared<NScanStats::TCollector>(1);
+            collectors[i]->BindScanId(ToString(i));
+            parents[i] = collectors[i]->Start(NScanStats::TStep::FetchColumns, "FETCH", "price");
+            auto event = new TEvBlobCache::TEvReadBlobRange(range,
+                TReadBlobRangeOptions{.CacheAfterRead = false, .IsBackgroud = false},
+                {parents[i], NKqpProto::TColumnShardStepDetails::TStorageRead::data, collectors[i]});
+            fixture.Runtime.Send(new IEventHandle(fixture.ActorId, fixture.Sender, event), 0, true);
+            fixture.Runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        }
+        auto* reply = new TEvBlobStorage::TEvGetResult(NKikimrProto::OK, 1, 0u);
+        reply->Responses[0].Status = NKikimrProto::OK;
+        reply->Responses[0].Buffer = TRope(MakeData(40, 'x'));
+        fixture.Runtime.Send(new IEventHandle(fixture.ActorId, fixture.Sender, reply, 0, 2), 0, true);
+        for (ui32 i = 0; i < 2; ++i) {
+            auto result = fixture.Runtime.GrabEdgeEvent<TEvBlobCache::TEvReadBlobRangeResult>(fixture.Sender, TDuration::Seconds(5));
+            UNIT_ASSERT(!result->Get()->FromCache);
+        }
+        ui64 physicalBytes = 0;
+        ui32 physicalReads = 0;
+        for (ui32 i = 0; i < 2; ++i) {
+            parents[i]->Finish();
+            auto report = collectors[i]->Drain(true);
+            UNIT_ASSERT(report->GetFinished());
+            const auto& cache = report->GetCacheStats();
+            UNIT_ASSERT_VALUES_EQUAL(cache.GetCompletedReadRanges(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cache.GetCacheServedReadRanges(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(cache.GetReturnedBytes(), 40);
+            UNIT_ASSERT_VALUES_EQUAL(cache.GetCacheServedBytes(), 0);
+            for (const auto& step : report->GetSteps()) {
+                if (step.GetStepKind() == NScanStats::TStep::StorageRead) {
+                    ++physicalReads;
+                    physicalBytes += step.GetReadBytes();
+                    UNIT_ASSERT_VALUES_EQUAL(step.GetDetails().GetStorageRead().GetRequestedRangeBytes(), 40);
+                    UNIT_ASSERT(step.GetDetails().GetStorageRead().GetDataKind() == NKqpProto::TColumnShardStepDetails::TStorageRead::data);
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(physicalReads, 1);
+        UNIT_ASSERT_VALUES_EQUAL(physicalBytes, 40);
+    }
+
+    Y_UNIT_TEST(ScanReadFailureIsOutsideCachePopulation) {
+        TBlobCacheFixture fixture(1024);
+        const auto range = MakeRange(1, 40);
+        auto collector = std::make_shared<NScanStats::TCollector>(1);
+        collector->BindScanId("failure");
+        auto parent = collector->Start(NScanStats::TStep::FetchColumns, "FETCH", "price");
+        auto event = new TEvBlobCache::TEvReadBlobRange(range,
+            TReadBlobRangeOptions{.CacheAfterRead = false, .IsBackgroud = false},
+            {parent, NKqpProto::TColumnShardStepDetails::TStorageRead::data, collector});
+        fixture.Runtime.Send(new IEventHandle(fixture.ActorId, fixture.Sender, event), 0, true);
+        fixture.Runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        auto* reply = new TEvBlobStorage::TEvGetResult(NKikimrProto::ERROR, 1, 0u);
+        reply->Responses[0].Status = NKikimrProto::ERROR;
+        fixture.Runtime.Send(new IEventHandle(fixture.ActorId, fixture.Sender, reply, 0, 2), 0, true);
+        auto result = fixture.Runtime.GrabEdgeEvent<TEvBlobCache::TEvReadBlobRangeResult>(fixture.Sender, TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        parent->Finish(NScanStats::TStep::failed);
+        auto report = collector->Drain(true);
+        UNIT_ASSERT(!report->HasCacheStats());
+        for (const auto& step : report->GetSteps()) {
+            UNIT_ASSERT(step.GetOutcome() == NScanStats::TStep::failed);
+        }
+    }
+
     Y_UNIT_TEST(ExactStickyHit) {
         TBlobCacheFixture fixture(1024);
         auto range = MakeRange(1, 64);

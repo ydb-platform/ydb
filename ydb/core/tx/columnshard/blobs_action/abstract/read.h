@@ -2,6 +2,7 @@
 #include "common.h"
 
 #include <ydb/core/protos/base.pb.h>
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/read.h>
 
@@ -10,6 +11,28 @@
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NOlap {
+
+struct TReadStatsContext {
+    using EDataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::EDataKind;
+    std::shared_ptr<NScanStats::TOperation> Parent;
+    EDataKind DataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::unknown;
+    std::shared_ptr<NScanStats::TCollector> Collector;
+
+    void Merge(const TReadStatsContext& other) {
+        if (!Parent) {
+            Parent = other.Parent;
+        }
+        if (!Collector) {
+            Collector = other.Collector;
+        }
+        if (DataKind == NKqpProto::TColumnShardStepDetails::TStorageRead::unknown ||
+            other.DataKind == NKqpProto::TColumnShardStepDetails::TStorageRead::unknown) {
+            DataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::unknown;
+        } else if (DataKind != other.DataKind) {
+            DataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::mixed;
+        }
+    }
+};
 
 class TActionReadBlobs {
 private:
@@ -173,6 +196,7 @@ private:
     THashMap<TBlobRange, TString> Replies;
     THashMap<TBlobRange, TErrorStatus> Fails;
     THashMap<TBlobRange, std::vector<TBlobRange>> Groups;
+    THashMap<TBlobRange, TReadStatsContext> RangeStats;
     std::shared_ptr<NBlobOperations::TReadCounters> Counters;
     bool Started = false;
     bool DataExtracted = false;
@@ -220,6 +244,27 @@ public:
     void Merge(const std::shared_ptr<IBlobsReadingAction>& action) {
         AFL_VERIFY(action);
         AFL_VERIFY(!Started);
+        if (!RangeStats.empty() || !action->RangeStats.empty()) {
+            auto mergeContext = [&](const TBlobRange& range) {
+                const auto incoming = action->RangeStats.find(range);
+                const auto existing = RangeStats.find(range);
+                if (existing != RangeStats.end()) {
+                    existing->second.Merge(incoming == action->RangeStats.end() ? TReadStatsContext{} : incoming->second);
+                } else if (incoming != action->RangeStats.end()) {
+                    auto context = incoming->second;
+                    if (RangesForRead.contains(range) || RangesForResult.contains(range)) {
+                        context.Merge({});
+                    }
+                    RangeStats.emplace(range, std::move(context));
+                }
+            };
+            for (const auto& range : action->RangesForRead) {
+                mergeContext(range);
+            }
+            for (const auto& [range, _] : action->RangesForResult) {
+                mergeContext(range);
+            }
+        }
         for (auto&& i : action->RangesForResult) {
             RangesForResult.emplace(i.first, i.second);
             auto it = RangesForRead.find(i.first);
@@ -272,7 +317,12 @@ public:
         return RangesForRead.size() + RangesForResult.size();
     }
 
-    void AddRange(const TBlobRange& range, const std::optional<TString>& result = {});
+    void AddRange(const TBlobRange& range, const std::optional<TString>& result = {},
+        TReadStatsContext::EDataKind dataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::unknown);
+
+    TReadStatsContext GetReadStatsContext(const TBlobRange& groupedRange) const;
+
+    virtual void OnReadAttemptResult(const TBlobRange&, std::optional<ui64>, bool) {}
 
     void Start(const THashSet<TBlobRange>& rangesInProgress);
     void OnReadResult(const TBlobRange& range, const TString& data, const bool fromCache);

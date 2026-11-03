@@ -885,10 +885,12 @@ public:
         if (query) {
             schedulerPool = query->GetFullPoolId();
         }
+        NYql::NDq::TComputeRuntimeSettings scanSettings;
+        scanSettings.StatsMode = runtimeSettings.GetStatsMode();
         for (auto&& i : computesByStage) {
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
-                    m.GetMeta(), NYql::NDq::TComputeRuntimeSettings(), msg.GetDatabase(), schedulerPool, txId, lockTxId, lockNodeId, lockMode,
+                    m.GetMeta(), scanSettings, msg.GetDatabase(), schedulerPool, txId, lockTxId, lockNodeId, lockMode,
                     CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(m.TraceId), cpuLimits,
                     msg.GetUseBatchPool()));
             }

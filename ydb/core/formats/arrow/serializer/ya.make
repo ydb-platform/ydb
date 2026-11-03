@@ -8,6 +8,8 @@ PEERDIR(
     ydb/core/protos
 )
 
+ADDINCL(contrib/libs/flatbuffers/include)
+
 SRCS(
     abstract.cpp
     GLOBAL native.cpp

@@ -56,11 +56,23 @@ void TDeletionFilter::ReportTracing(NCommon::IDataSource& source, const TFetchin
 TConclusion<TExecutionResult> TDeletionFilter::DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& step) const {
     if (!source.GetStageData().GetTable().HasColumn((ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG)) {
         ReportTracing(source, step);
+        if (const auto& operation = NScanStats::Current()) {
+            operation->Update([](NScanStats::TStep& record) {
+                auto* details = record.MutableDetails()->MutableFilter();
+                if (details->HasInputRows()) { details->SetOutputRows(details->GetInputRows()); }
+            });
+        }
         return TExecutionResult::Done();
     }
     auto filterTable = source.GetStageData().GetTable().ToTable(std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG }));
     if (!filterTable) {
         ReportTracing(source, step);
+        if (const auto& operation = NScanStats::Current()) {
+            operation->Update([](NScanStats::TStep& record) {
+                auto* details = record.MutableDetails()->MutableFilter();
+                if (details->HasInputRows()) { details->SetOutputRows(details->GetInputRows()); }
+            });
+        }
         return TExecutionResult::Done();
     }
     AFL_VERIFY(filterTable->column(0)->type()->id() == arrow::boolean()->id());
@@ -185,10 +197,13 @@ public:
     virtual bool DoApply(IDataReader& indexedDataRead) override {
         auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
         auto& source = SourceLease->GetSource();
+        const auto operation = Step.GetRuntimeStats();
+        NScanStats::TScope scope(operation, source.GetContext()->GetCommonContext()->GetRuntimeStats());
         source.MutableAs<IDataSource>()->SetCursor(std::move(Step));
         source.StartSyncSection();
         const ui32 syncPointIndex = source.GetAs<IDataSource>()->GetPurposeSyncPointIndex();
         plainReader->MutableScanner().GetSyncPoint(syncPointIndex)->OnSourcePrepared(std::move(SourceLease), *plainReader);
+        if (operation) { operation->Finish(); }
         return true;
     }
 };
@@ -248,9 +263,22 @@ TConclusion<TExecutionResult> TStepAggregationSources::DoExecuteInplace(NCommon:
     for (auto&& i : aggrSource.GetSources()) {
         collections.emplace_back(i->GetSource().MutableStageData().ExtractTable());
     }
+    if (const auto& operation = step.GetRuntimeStats()) {
+        std::optional<ui64> rows = 0;
+        for (const auto& collection : collections) {
+            const auto count = collection->GetRecordsCountActualOptional();
+            if (!count) { rows.reset(); break; }
+            *rows += *count;
+        }
+        if (rows) { operation->Update([&](NScanStats::TStep& record) { record.MutableDetails()->MutableAggregation()->SetInputRows(*rows); }); }
+    }
     auto conclusion = Aggregator->Execute(std::move(collections), source.MutableStageData().MutableTable());
     if (conclusion.IsFail()) {
         return conclusion;
+    }
+    if (const auto& operation = step.GetRuntimeStats()) {
+        const auto rows = source.GetStageData().GetTable().GetRecordsCountActualOptional();
+        if (rows) { operation->Update([&](NScanStats::TStep& record) { record.MutableDetails()->MutableAggregation()->SetOutputRows(*rows); }); }
     }
     source.BuildStageResult();
     ReportTracing(source, step);
@@ -326,6 +354,14 @@ TConclusion<TExecutionResult> TBuildResultStep::DoExecuteInplace(NCommon::IDataS
     auto resultBatch = BuildPageResultBatch(source);
     auto* sSource = source.MutableAs<IDataSource>();
     const ui32 recordsCount = resultBatch ? resultBatch->num_rows() : 0;
+    if (const auto& operation = step.GetRuntimeStats()) {
+        operation->Update([&](NScanStats::TStep& record) {
+            auto* details = record.MutableDetails()->MutableBuildResult();
+            details->SetPageRows(RecordsCount);
+            details->SetResultRows(recordsCount);
+            details->SetResultBytes(resultBatch ? NArrow::GetTableDataSize(resultBatch) : 0);
+        });
+    }
     YDB_LOG_DEBUG("",
         {"event", "TBuildResultStep"},
         {"sourceIdx", source.GetSourceIdx()},
@@ -391,7 +427,9 @@ TConclusion<TExecutionResult> TPrepareResultStep::DoExecuteInplace(NCommon::IDat
     source.MutableAs<IDataSource>()->InitFetchingPlan(plan);
     if (StartResultBuildingInplace) {
         TFetchingScriptCursor cursor(plan, 0);
-        return cursor.Execute(source);
+        auto result = cursor.Execute(source);
+        step.FinishRuntimeStats(result.IsFail() ? NScanStats::TStep::failed : NScanStats::TStep::completed);
+        return result;
     } else {
         return TExecutionResult::Done();
     }
@@ -405,12 +443,14 @@ void TDuplicateFilter::TFilterSubscriber::ReportTracing(NCommon::IDataSource& so
 
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& filter) {
     auto& source = SourceLease->GetSource();
+    NScanStats::TScope scope(Step.GetRuntimeStats(), source.GetContext()->GetCommonContext()->GetRuntimeStats());
     YDB_LOG_TRACE("",
         {"event", "fetch_filter"},
         {"source", source.GetSourceIdx()},
         {"filter", filter.DebugString()},
         {"aborted", source.GetContext()->IsAborted()});
     if (source.GetContext()->IsAborted()) {
+        Step.FinishRuntimeStats(NScanStats::TStep::cancelled);
         return;
     }
     AFL_VERIFY(filter.GetRecordsCountVerified() == source.GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
@@ -422,6 +462,10 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
         filter = filter.ApplyFilterFrom(*appliedFilter);
     }
     source.MutableStageData().AddFilter(std::move(filter));
+    if (const auto& operation = Step.GetRuntimeStats()) {
+        const auto rows = source.GetStatsCandidateRows();
+        if (rows) { operation->Update([&](NScanStats::TStep& record) { record.MutableDetails()->MutableFilter()->SetOutputRows(*rows); }); }
+    }
     Step.Next();
     const auto& commonContext = *source.GetContext()->GetCommonContext();
     const auto scanActorId = commonContext.GetScanActorId();
@@ -430,6 +474,7 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
+    Step.FinishRuntimeStats(NScanStats::TStep::failed);
     SourceLease->GetSource().GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter: " + reason);
 }
 

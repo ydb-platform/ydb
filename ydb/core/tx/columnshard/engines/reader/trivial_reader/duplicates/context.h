@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
+
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
@@ -37,6 +39,8 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<NColumnFetching::TColumnDataManager>, ColumnDataManager);
     YDB_READONLY_DEF(std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>, DataAccessorsManager);
     YDB_READONLY_DEF(std::shared_ptr<NColumnShard::TDuplicateFilteringCounters>, Counters);
+    YDB_ACCESSOR_DEF(std::shared_ptr<NScanStats::TCollector>, RuntimeStats);
+    YDB_ACCESSOR_DEF(std::shared_ptr<NScanStats::TOperation>, StatsJob);
     YDB_READONLY_DEF(std::unique_ptr<TFilterBuildingGuard>, RequestGuard);
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> SelfMemory;
 

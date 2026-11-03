@@ -38,14 +38,169 @@ message TKqpTableExtraStats {
 message TKqpComputeActorExtraStats {
 }
 
+message TColumnShardStepDetails {
+    message TColumns { repeated string Names = 1; }
+    message TFetchColumns {
+        TColumns Columns = 1;
+        optional uint64 RequestedBytes = 2;
+    }
+    message TStorageRead {
+        enum EBackendKind { Unknown = 0; BlobStorage = 1; ExternalStorage = 2; MemoryOrFake = 3; }
+        enum EDataKind { unknown = 0; data = 1; index = 2; metadata = 3; mixed = 4; }
+        optional string StorageTier = 1;
+        optional EBackendKind BackendKind = 2;
+        optional EDataKind DataKind = 3;
+        optional bool IsRetry = 4;
+        optional uint64 RequestedRangeBytes = 5;
+    }
+    message TFilter {
+        enum EPurpose { unknown = 0; sql = 1; pk_range = 2; deletion = 3; sharding = 4; duplicate = 5; limit = 6; }
+        optional uint64 InputRows = 1;
+        optional uint64 OutputRows = 2;
+        optional string Predicate = 3;
+        optional EPurpose Purpose = 4;
+    }
+    message TIndexCheck {
+        optional string IndexType = 1;
+        optional string Predicate = 2;
+        optional uint64 InputRows = 3;
+        optional uint64 OutputRows = 4;
+    }
+    message TAssemble { TColumns Columns = 1; }
+    message TDecode {
+        optional uint64 EncodedInputBytes = 1;
+        optional uint64 DecodedOutputBytes = 2;
+        optional uint64 DecodedRows = 3;
+        optional string Codec = 4;
+        optional string Column = 5;
+    }
+    message TAggregation {
+        optional uint64 InputRows = 1;
+        optional uint64 OutputRows = 2;
+        TColumns Keys = 3;
+        TColumns Functions = 4;
+    }
+    message TCalculation {
+        optional string Expression = 1;
+        optional uint64 RowsCount = 2;
+    }
+    message TProjection {
+        TColumns InputColumns = 1;
+        TColumns OutputColumns = 2;
+    }
+    message TBuildResult {
+        optional uint64 PageRows = 1;
+        optional uint64 PageInputBytes = 2;
+        optional uint64 ResultRows = 3;
+        optional uint64 ResultBytes = 4;
+    }
+    message TMemoryReserve { optional uint64 ReservationBytes = 1; }
+    message TPreparation {
+        optional uint64 SelectedPortions = 1;
+        optional uint64 SelectedVersionRows = 2;
+        optional uint64 SelectedBlobBytes = 3;
+    }
+    message TOutput {
+        optional uint64 Rows = 1;
+        optional uint64 ArrowBytes = 2;
+        optional uint64 DataBatches = 3;
+    }
+    oneof Kind {
+        TFetchColumns FetchColumns = 1;
+        TStorageRead StorageRead = 2;
+        TFilter Filter = 3;
+        TIndexCheck IndexCheck = 4;
+        TAssemble Assemble = 5;
+        TDecode Decode = 6;
+        TAggregation Aggregation = 7;
+        TCalculation Calculation = 8;
+        TProjection Projection = 9;
+        TBuildResult BuildResult = 10;
+        TMemoryReserve MemoryReserve = 11;
+        TPreparation Preparation = 12;
+        TOutput Output = 13;
+    }
+}
+
+// One finalized runtime operation; parent timers are inclusive, all durations are microseconds.
+message TColumnShardStepStats {
+    // V2 semantic grouping; the path contains ancestor kinds inside MetaStep.
+    optional string MetaStep = 20;
+    optional string CanonicalPath = 21;
+    optional uint64 OwnedExecutionDuration = 22;
+    enum EStepKind {
+        Unknown = 0;
+        Reader = 1;
+        SelectPortions = 2;
+        FetchAccessors = 3;
+        PrepareResult = 4;
+        Cleanup = 5;
+        FetchColumns = 6;
+        StorageRead = 7;
+        Filter = 8;
+        IndexCheck = 9;
+        Assemble = 10;
+        Decode = 11;
+        Aggregation = 12;
+        Calculation = 13;
+        Projection = 14;
+        BuildResult = 15;
+        MemoryReserve = 16;
+        Merge = 17;
+        Limit = 18;
+        Ready = 19;
+        Send = 20;
+        Ack = 21;
+        Finish = 22;
+        ParseProgram = 23;
+        ReaderInit = 24;
+    }
+    enum EOutcome { OutcomeUnknown = 0; completed = 1; skipped = 2; failed = 3; cancelled = 4; }
+    uint64 StepId = 1;
+    EStepKind StepKind = 2;
+    string StepName = 3;
+    string Operation = 4;
+    optional uint64 ParentStepId = 5;
+    optional uint64 IntegralExecutionDuration = 6;
+    optional uint64 IntegralWaitDuration = 7;
+    optional uint64 ReadBytes = 8;
+    EOutcome Outcome = 9;
+    TColumnShardStepDetails Details = 10;
+    optional uint64 SourceId = 11;
+}
+
+message TColumnShardCacheStats {
+    optional uint64 CompletedReadRanges = 1;
+    optional uint64 CacheServedReadRanges = 2;
+    optional uint64 ReturnedBytes = 3;
+    optional uint64 CacheServedBytes = 4;
+}
+
+message TColumnShardScanStats {
+    optional string ReaderKind = 20;
+    optional string StatsGroupId = 21;
+    optional uint64 ParticipatingShards = 22;
+    repeated uint64 ParticipatingTablets = 23 [packed = true];
+    optional bool ExpectedContextOnly = 24;
+    optional uint64 PendingOperations = 25;
+    string StatsScanId = 1;
+    uint64 TabletId = 2;
+    bool Finished = 3;
+    bool Truncated = 4;
+    TColumnShardCacheStats CacheStats = 5;
+    repeated TColumnShardStepStats Steps = 6;
+}
+
 // extra for NYql.NDqProto.TDqStageStats
 message TKqpStageExtraStats {
     repeated NYql.NDqProto.TDqTaskStats DatashardTasks = 1;
     repeated TNodeExecutionStats NodeStats = 4;
+    repeated TColumnShardScanStats ColumnShardScans = 5;
 }
 
 message TKqpScanTaskExtraStats {
     uint32 RetriesCount = 1;
+    repeated TColumnShardScanStats ColumnShardScans = 2;
 }
 
 message TKqpLockStats {

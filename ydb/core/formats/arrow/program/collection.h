@@ -12,6 +12,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
+#include <algorithm>
 #include <variant>
 
 namespace NKikimr::NArrow::NAccessor {
@@ -49,6 +50,15 @@ private:
     THashSet<i64> Markers;
 
 public:
+    std::vector<ui32> GetStatsColumnIds() const {
+        std::vector<ui32> ids;
+        ids.reserve(Accessors.size() + Constants.size());
+        for (const auto& [id, _] : Accessors) { ids.push_back(id); }
+        for (const auto& [id, _] : Constants) { ids.push_back(id); }
+        std::sort(ids.begin(), ids.end());
+        return ids;
+    }
+
     void TakeSequenceFrom(const TAccessorsCollection& collection) {
         AFL_VERIFY(ColumnIdsSequence.empty() || ColumnIdsSequence == collection.ColumnIdsSequence);
         ColumnIdsSequence = collection.ColumnIdsSequence;
@@ -465,11 +475,25 @@ public:
         if (recordsCount < limit) {
             return;
         }
+        const auto parent = NScanStats::Current();
+        auto operation = parent ? parent->GetCollector()->Start(NScanStats::TStep::Filter, "LIMIT", "Limit rows", parent) : nullptr;
+        NScanStats::TScope scope(operation);
+        if (operation) {
+            operation->Update([&](NScanStats::TStep& record) {
+                auto* details = record.MutableDetails()->MutableFilter();
+                details->SetInputRows(GetFilteredCount(recordsCount, Max<ui32>()));
+                details->SetPurpose(NKqpProto::TColumnShardStepDetails::TFilter::limit);
+            });
+        }
         if (UseFilter) {
             auto filter = NArrow::TColumnFilter::BuildAllowFilter().Cut(recordsCount, limit, reverse);
             AddFilter(filter);
         } else {
             *Filter = Filter->Cut(recordsCount, limit, reverse);
+        }
+        if (operation) {
+            operation->Update([&](NScanStats::TStep& record) { record.MutableDetails()->MutableFilter()->SetOutputRows(GetFilteredCount(recordsCount, Max<ui32>())); });
+            operation->Finish();
         }
     }
 

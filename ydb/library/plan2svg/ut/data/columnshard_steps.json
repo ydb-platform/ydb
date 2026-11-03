@@ -1,0 +1,39 @@
+{
+  "Plan": {
+    "Plans": [{
+      "Node Type": "ResultSet",
+      "Plans": [{
+        "Node Type": "Stage",
+        "PlanNodeId": 1,
+        "Operators": [{"Name": "Filter", "Predicate": "value > 0"}],
+        "Stats": {
+          "PhysicalStageId": 3,
+          "UpdateTimeMs": 200,
+          "ColumnShardScans": [{
+            "StatsScanId": "scan<&1",
+            "TabletId": "18446744073709551615",
+            "Finished": true,
+            "Truncated": false,
+            "Steps": [
+              {"StepId": 1, "StepKind": "Reader", "StepName": "READER", "Operation": "reader", "IntegralExecutionDuration": 40, "Outcome": "completed"},
+              {"StepId": 2, "ParentStepId": 1, "StepKind": "Filter", "Operation": "value < 10 & valid", "IntegralExecutionDuration": 0, "IntegralWaitDuration": 5, "ReadBytes": 0, "Outcome": "completed", "Details": {"InputRows": 1000, "OutputRows": 100, "Predicate": "value < 10 & valid"}},
+              {"StepId": 3, "ParentStepId": 1, "StepKind": "Filter", "Operation": "value < 10 & valid", "IntegralExecutionDuration": 20, "Outcome": "skipped", "Details": {"InputRows": 1000, "OutputRows": 10}},
+              {"StepId": 4, "StepKind": "Decode", "Operation": "decode value", "IntegralExecutionDuration": 11, "Outcome": "completed", "Details": {"EncodedInputBytes": 100, "DecodedOutputBytes": 1000, "Column": "value", "Codec": "LZ4"}},
+              {"StepId": 5, "StepKind": "StorageRead", "Operation": "read data", "IntegralWaitDuration": 50, "ReadBytes": 512, "Outcome": "completed", "Details": {"RequestedRangeBytes": 1024, "StorageTier": "archive<&", "BackendKind": "ExternalStorage", "DataKind": "data"}},
+              {"StepId": 6, "StepKind": "MemoryReserve", "Operation": "reserve source", "IntegralWaitDuration": 70, "Outcome": "completed", "Details": {"ReservationBytes": 8388608}},
+              {"StepId": 7, "StepKind": "FetchColumns", "Operation": "fetch value", "IntegralWaitDuration": 22, "ReadBytes": 1024, "Outcome": "completed", "Details": {"RequestedBytes": 2048, "Columns": ["value"]}}
+            ],
+            "CacheStats": {"CompletedReadRanges": 10, "CacheServedReadRanges": 4, "ReturnedBytes": 1000, "CacheServedBytes": 250}
+          }, {
+            "StatsScanId": "scan-2",
+            "TabletId": "42",
+            "Finished": false,
+            "Truncated": true,
+            "Steps": [{"StepId": 2, "StepKind": "Filter", "Operation": "value < 10 & valid", "IntegralExecutionDuration": 10000, "Outcome": "failed", "Details": {"InputRows": 10}}],
+            "CacheStats": {"CompletedReadRanges": 10, "CacheServedReadRanges": 4, "ReturnedBytes": 1000, "CacheServedBytes": 250}
+          }]
+        }
+      }]
+    }]
+  }
+}

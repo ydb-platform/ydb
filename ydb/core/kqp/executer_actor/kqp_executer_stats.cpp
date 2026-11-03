@@ -553,6 +553,14 @@ void TStageExecutionStats::SetTaskNode(ui32 index, ui32 nodeId) {
 }
 
 ui64 TStageExecutionStats::UpdateStats(ui32 nodeId, const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs) {
+    if (taskStats.HasExtra()) {
+        NKqpProto::TKqpTaskExtraStats extra;
+        if (taskStats.GetExtra().UnpackTo(&extra)) {
+            for (const auto& scan : extra.GetScanTaskExtraStats().GetColumnShardScans()) {
+                ColumnShardScans.Merge(scan);
+            }
+        }
+    }
     auto taskId = taskStats.GetTaskId();
     auto it = Task2Index.find(taskId);
     ui64 baseTimeMs = 0;
@@ -1746,17 +1754,20 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                     stageStats.AddComputeActors()->Swap(&caStats);
                 }
 
+                NKqpProto::TKqpStageExtraStats extraStats;
+                stageStat.ColumnShardScans.Export(extraStats.MutableColumnShardScans());
                 if (CollectProfileStats(StatsMode)) {
                     auto it = ShardsCountByNode.find(stageId.StageId);
                     if (it != ShardsCountByNode.end()) {
-                        NKqpProto::TKqpStageExtraStats extraStats;
                         for (auto&& n : it->second) {
                             auto& nodeStat = *extraStats.AddNodeStats();
                             nodeStat.SetNodeId(n.first);
                             nodeStat.SetShardsCount(n.second);
                         }
-                        stageStats.MutableExtra()->PackFrom(extraStats);
                     }
+                }
+                if (extraStats.ColumnShardScansSize() || extraStats.NodeStatsSize()) {
+                    stageStats.MutableExtra()->PackFrom(extraStats);
                 }
             }
 

@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/formats/arrow/reader/stats
     ydb/core/tx/columnshard/data_accessor
 )
 

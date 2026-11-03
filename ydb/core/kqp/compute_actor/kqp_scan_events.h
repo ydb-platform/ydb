@@ -48,7 +48,15 @@ struct TEvScanExchange {
         YDB_ACCESSOR_DEF(ui64, CpuTimeUs);
         YDB_ACCESSOR_DEF(ui64, WaitTimeUs);
         YDB_ACCESSOR_DEF(ui64, WaitOutputTimeUs);
+        YDB_READONLY_FLAG(StatsOnly, false);
+        YDB_READONLY_DEF(std::unique_ptr<NKqpProto::TColumnShardScanStats>, ColumnShardStats);
     public:
+        explicit TEvSendData(std::unique_ptr<NKqpProto::TColumnShardScanStats> stats)
+            : StatsOnlyFlag(true)
+            , ColumnShardStats(std::move(stats))
+        {
+        }
+
         ui32 GetRowsCount() const {
             return ArrowBatch ? ArrowBatch->num_rows() : Rows.size();
         }

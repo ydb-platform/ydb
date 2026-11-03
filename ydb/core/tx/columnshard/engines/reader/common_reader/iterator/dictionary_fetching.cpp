@@ -90,7 +90,7 @@ void TDictionaryFetchLogic::DoStart(TReadActionsCollection& nextRead, TFetchingR
             ColumnChunks.emplace_back(range, chunkInfo);
             const auto dictBlobRange = ColumnChunks.back().GetDictionaryBlobRangeOptional();
             AFL_VERIFY(dictBlobRange.has_value());
-            reading->AddRange(dictBlobRange.value());
+            reading->AddRange(dictBlobRange.value(), {}, NKqpProto::TColumnShardStepDetails::TStorageRead::data);
         } else {
             ColumnChunks.emplace_back(TDictionaryChunkRestoreInfo::BuildEmpty(ChunkExternalInfo.GetSubset(meta.GetRecordsCount())));
         }

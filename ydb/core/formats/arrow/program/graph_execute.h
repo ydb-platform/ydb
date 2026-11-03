@@ -135,11 +135,14 @@ public:
 
 private:
     THashMap<ui64, std::shared_ptr<TNode>> Nodes;
+    THashMap<ui32, TString> StatsMetaSteps;
+    void BuildStatsMetaSteps();
     THashSet<ui32> SourceColumns;
     THashSet<ui32> FilterColumns;
     YDB_READONLY_DEF(std::shared_ptr<TNode>, ResultRoot);
     YDB_READONLY_DEF(std::vector<std::shared_ptr<TNode>>, FilterRoot);
     bool IsFilterRoot(const ui32 identifier) const;
+    const TString& GetStatsMetaStep(ui32 identifier) const;
 
 public:
     std::shared_ptr<IResourcesAggregator> GetResultsAggregationProcessor() const {

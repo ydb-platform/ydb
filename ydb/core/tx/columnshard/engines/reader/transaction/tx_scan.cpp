@@ -1,5 +1,9 @@
 #include "tx_scan.h"
 
+#include <util/generic/scope.h>
+
+#include <optional>
+
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
@@ -182,7 +186,14 @@ TConclusionStatus TTxScan::InitScanCursor(TReadDescription& read, const IScanner
 }
 
 TConclusionStatus TTxScan::InitProgram(TReadDescription& read, const IScannerConstructor& scannerConstructor) const {
-    return scannerConstructor.ParseProgram(TProgramParsingContext(GetPresetSchemas(*Self)), Ev->Get()->Record, read);
+    auto operation = RuntimeStats ? RuntimeStats->Start(NScanStats::TStep::ParseProgram,
+        "PARSE_PROGRAM", "Parse ColumnShard program", NScanStats::Current()) : nullptr;
+    NScanStats::TScope scope(operation, RuntimeStats);
+    auto status = scannerConstructor.ParseProgram(TProgramParsingContext(GetPresetSchemas(*Self)), Ev->Get()->Record, read);
+    if (operation) {
+        operation->Finish(status.IsFail() ? NScanStats::TStep::failed : NScanStats::TStep::completed);
+    }
+    return status;
 }
 
 std::unique_ptr<TTxScan::TDiagnosticsEvent> TTxScan::MakeDiagnosticsEvent(const TReadDescription& read) const {
@@ -236,7 +247,7 @@ void TTxScan::StartScanActor(const TReadMetadataBase::TConstPtr& readMetadataRan
             Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy,
             request.GetScanId(), request.GetTxId(), request.GetGeneration(), requestCookie, Self->TabletID(),
             TDuration::MilliSeconds(request.GetTimeoutMs()), readMetadataRange, request.GetDataFormat(), Self->Counters.GetScanCounters(),
-            cpuLimits, std::move(orbit), rawPathId, GetSchedulerPool()), TMailboxType::HTSwap, scanPoolId);
+            cpuLimits, std::move(orbit), rawPathId, GetSchedulerPool(), request.GetStatsMode(), RuntimeStats), TMailboxType::HTSwap, scanPoolId);
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     YDB_LOG_DEBUG("",
@@ -252,6 +263,25 @@ bool TTxScan::Execute(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/
 void TTxScan::Complete(const TActorContext& ctx) {
     TMemoryProfileGuard mpg("TTxScan::Complete");
     const auto& request = Ev->Get()->Record;
+    if (request.GetStatsMode() == NYql::NDqProto::DQ_STATS_MODE_FULL ||
+        request.GetStatsMode() == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
+        RuntimeStats = std::make_shared<NScanStats::TCollector>(Self->TabletID());
+    }
+    auto preparationStats = RuntimeStats ? RuntimeStats->Start(NScanStats::TStep::Reader,
+        "PREPARE_READ", "Prepare ColumnShard read") : nullptr;
+    if (preparationStats) {
+        preparationStats->Update([](auto& record) {
+            record.SetMetaStep("Preparation");
+            record.SetCanonicalPath("");
+        });
+    }
+    std::optional<NScanStats::TScope> preparationScope(std::in_place, preparationStats, RuntimeStats);
+    auto preparationOutcome = NScanStats::TStep::failed;
+    Y_DEFER {
+        if (preparationStats) {
+            preparationStats->Finish(preparationOutcome);
+        }
+    };
     auto orbit = std::make_shared<NLWTrace::TOrbit>();
     const TSnapshot snapshot = Target.Snapshot;
     const ERequestSorting requestSorting = GetRequestSorting();
@@ -276,7 +306,11 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
     const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor = Target.TableMetadataAccessor;
     // A table may insist on a reader of its own, so the scanner comes first: its class shapes the read.
-    auto constructorConclusion = MakeScannerConstructor(context, tableMetadataAccessor->GetOverridenScanType(GetReaderName()));
+    const auto readerName = tableMetadataAccessor->GetOverridenScanType(GetReaderName());
+    if (RuntimeStats) {
+        RuntimeStats->SetReaderKind(readerName);
+    }
+    auto constructorConclusion = MakeScannerConstructor(context, readerName);
     if (constructorConclusion.IsFail()) {
         return SendError("cannot build scanner", constructorConclusion.GetErrorMessage(), ctx);
     }
@@ -293,11 +327,27 @@ void TTxScan::Complete(const TActorContext& ctx) {
         return SendError("cannot parse program", status.GetErrorMessage(), ctx);
     }
 
-    auto metadataConclusion = MakeReadMetadata(Self, Self->Counters.GetScanCounters(), *scannerConstructor, read);
+    std::shared_ptr<NScanStats::TOperation> metadataStats;
+    if (RuntimeStats) {
+        metadataStats = RuntimeStats->Start(NScanStats::TStep::Reader, "READ_METADATA", "Prepare read metadata");
+    }
+    auto metadataConclusion = [&] {
+        NScanStats::TScope scope(metadataStats);
+        return MakeReadMetadata(Self, Self->Counters.GetScanCounters(), *scannerConstructor, read);
+    }();
+    if (metadataStats) {
+        metadataStats->Finish(metadataConclusion.IsFail() ? NScanStats::TStep::failed : NScanStats::TStep::completed);
+    }
     if (metadataConclusion.IsFail()) {
         return SendError("cannot build metadata", metadataConclusion.GetErrorMessage(), ctx);
     }
 
+    preparationOutcome = NScanStats::TStep::completed;
+    if (preparationStats) {
+        // An empty scan may publish its final snapshot as soon as its actor starts.
+        preparationStats->Finish(preparationOutcome);
+    }
+    preparationScope.reset();
     StartScanActor(metadataConclusion.DetachResult(), rawPathId, std::move(orbit), MakeDiagnosticsEvent(read), cpuLimits, ctx);
 }
 

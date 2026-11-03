@@ -39,6 +39,68 @@ Y_UNIT_TEST_SUITE(TColumnShardScanActorTests) {
         }
     };
 
+    class TFinishedIterator: public TScanIteratorBase {
+        TConclusionStatus Start() override {
+            return TConclusionStatus::Success();
+        }
+
+        bool Finished() const override {
+            return true;
+        }
+
+        TConclusion<std::unique_ptr<TPartialReadResult>> GetBatch() override {
+            return std::unique_ptr<TPartialReadResult>();
+        }
+    };
+
+    class TFinishedReadMetadata: public TIdleReadMetadata {
+    public:
+        std::unique_ptr<TScanIteratorBase> StartScan(const std::shared_ptr<TReadContext>& context) const override {
+            if (const auto& collector = context->GetRuntimeStats()) {
+                auto step = collector->Start(NScanStats::TStep::Reader, "EMPTY_READER", "Empty reader");
+                if (step) {
+                    step->Finish();
+                }
+            }
+            return std::make_unique<TFinishedIterator>();
+        }
+    };
+
+    void CheckEmptyFinalStats(NYql::NDqProto::EDqStatsMode mode, bool enabled) {
+        TTestBasicRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        const auto tablet = runtime.AllocateEdgeActor();
+        const auto compute = runtime.AllocateEdgeActor();
+        const auto scan = runtime.Register(new TColumnShardScan(tablet, compute, TActorId(), nullptr, nullptr, nullptr, TComputeShardingPolicy(),
+            1, 1, 1, 7, 1, TDuration::Zero(), std::make_shared<TFinishedReadMetadata>(), NKikimrDataEvents::FORMAT_ARROW,
+            NColumnShard::TScanCounters(), NConveyorComposite::TCPULimitsConfig(), std::make_shared<NLWTrace::TOrbit>(), 0, std::nullopt, mode));
+        runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanInitActor>(compute);
+        runtime.Send(new IEventHandle(scan, compute, new NKqp::TEvKqpCompute::TEvScanDataAck(1024, 1, 1)));
+        const auto result = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanData>(compute);
+        UNIT_ASSERT(result->Get()->Finished);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->GetRowsCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(bool(result->Get()->ColumnShardStats), enabled);
+        if (enabled) {
+            const auto& stats = *result->Get()->ColumnShardStats;
+            UNIT_ASSERT_STRINGS_EQUAL(stats.GetStatsScanId(), scan.ToString());
+            UNIT_ASSERT(stats.GetFinished());
+            UNIT_ASSERT_VALUES_EQUAL(stats.StepsSize(), 1);
+        }
+    }
+
+    Y_UNIT_TEST(FullEmptyFinalStats) {
+        CheckEmptyFinalStats(NYql::NDqProto::DQ_STATS_MODE_FULL, true);
+    }
+    Y_UNIT_TEST(ProfileEmptyFinalStats) {
+        CheckEmptyFinalStats(NYql::NDqProto::DQ_STATS_MODE_PROFILE, true);
+    }
+    Y_UNIT_TEST(BasicHasNoRuntimeStats) {
+        CheckEmptyFinalStats(NYql::NDqProto::DQ_STATS_MODE_BASIC, false);
+    }
+    Y_UNIT_TEST(NoneHasNoRuntimeStats) {
+        CheckEmptyFinalStats(NYql::NDqProto::DQ_STATS_MODE_NONE, false);
+    }
+
     Y_UNIT_TEST(PoisonReportsFinishedToTablet) {
         TTestBasicRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());

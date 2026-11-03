@@ -14,14 +14,43 @@ TConclusion<TExecutionResult> TIndexCheckerProcessor::DoExecute(
     if (conclusion.IsFail()) {
         return conclusion;
     }
+    auto inputRows = context.GetResources().GetFilter().GetFilteredCount();
+    std::optional<ui64> outputRows;
     if (conclusion->IsTotalDenyFilter()) {
+        const ui64 records = context.GetResources().GetRecordsCountRobustVerified();
+        if (!inputRows) {
+            inputRows = records;
+        }
         context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
-            NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
+            NAccessor::TSparsedArray::BuildFalseArrayUI8(records), false);
+        outputRows = 0;
     } else if (conclusion->IsTotalAllowFilter() || !ApplyToFilterFlag) {
+        const ui64 records = context.GetResources().GetRecordsCountRobustVerified();
+        if (!inputRows) {
+            inputRows = records;
+        }
         context.MutableResources().AddVerified(GetOutputColumnIdOnce(),
-            NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources().GetRecordsCountRobustVerified()), false);
+            NAccessor::TSparsedArray::BuildTrueArrayUI8(records), false);
+        outputRows = inputRows;
     } else {
+        if (!inputRows) {
+            inputRows = conclusion->GetRecordsCountVerified();
+        }
         context.MutableResources().AddFilter(*conclusion);
+        outputRows = context.GetResources().GetFilter().GetFilteredCount();
+    }
+    if (const auto& operation = NScanStats::Current()) {
+        operation->Update([&](NScanStats::TStep& record) {
+            if (record.GetStepKind() == NScanStats::TStep::IndexCheck) {
+                auto* details = record.MutableDetails()->MutableIndexCheck();
+                if (inputRows) {
+                    details->SetInputRows(*inputRows);
+                }
+                if (outputRows) {
+                    details->SetOutputRows(*outputRows);
+                }
+            }
+        });
     }
     return TExecutionResult::Done();
 }

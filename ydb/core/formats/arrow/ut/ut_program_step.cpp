@@ -377,6 +377,45 @@ std::shared_ptr<NExecution::TCompiledGraph> BuildMergeFilterSimpleGraph(const bo
     return builder.Finish().DetachResult();
 }
 
+Y_UNIT_TEST_SUITE(TProgramStatsMeta) {
+    Y_UNIT_TEST(ConstantIsAScalarCalculation) {
+        auto constant = std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(1), 100);
+        UNIT_ASSERT_VALUES_EQUAL(constant->GetStatsKind(), NKikimr::NScanStats::TStep::Calculation);
+    }
+
+    Y_UNIT_TEST(CompiledConsumerBoundariesDefineTheMetastep) {
+        auto graph = BuildMergeFilterSimpleGraph(true);
+        bool filterSeen = false;
+        bool projectionSeen = false;
+        bool filterInputSeen = false;
+        for (const auto& [_, node] : graph->GetNodes()) {
+            const auto& meta = graph->GetStatsMetaStep(node->GetIdentifier());
+            UNIT_ASSERT(meta);
+            switch (node->GetProcessor()->GetProcessorType()) {
+                case EProcessorType::Filter:
+                    UNIT_ASSERT_VALUES_EQUAL(meta, "Filter");
+                    filterSeen = true;
+                    break;
+                case EProcessorType::Projection:
+                    UNIT_ASSERT_VALUES_EQUAL(meta, "Projection");
+                    projectionSeen = true;
+                    break;
+                case EProcessorType::CheckIndexData:
+                    UNIT_ASSERT_VALUES_EQUAL(meta, "IndexFilter");
+                    break;
+                case EProcessorType::FetchOriginalData:
+                    filterInputSeen |= meta == "Filter";
+                    break;
+                default:
+                    break;
+            }
+        }
+        UNIT_ASSERT(filterSeen);
+        UNIT_ASSERT(projectionSeen);
+        UNIT_ASSERT(filterInputSeen);
+    }
+}
+
 std::shared_ptr<NExecution::TCompiledGraph> BuildSingleIndexFilterGraph(const bool reserveIndexMemory) {
     auto schema = std::make_shared<arrow::Schema>(std::vector{ std::make_shared<arrow::Field>("int", arrow::int64()) });
     TSchemaColumnResolver resolver(schema);

@@ -1,5 +1,15 @@
 #include "constructor.h"
 #include "source.h"
+#include <ydb/core/formats/arrow/program/aggr_keys.h>
+#include <ydb/core/formats/arrow/program/assign_internal.h>
+#include <ydb/core/formats/arrow/program/assign_const.h>
+#include <ydb/core/formats/arrow/program/header.h>
+#include <ydb/core/formats/arrow/program/index.h>
+#include <ydb/core/formats/arrow/program/original.h>
+#include <ydb/core/formats/arrow/program/stats.h>
+#include <ydb/core/formats/arrow/program/stream_logic.h>
+
+#include <set>
 
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
@@ -9,8 +19,106 @@ namespace NKikimr::NOlap::NReader::NCommon {
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 LWTRACE_USING(YDB_CS_SCAN);
 
-void TExecutionContext::OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals) {
+TString TExecutionContext::GetStatsColumnName(IDataSource& source, ui32 columnId) const {
+    if (auto it = StatsExpressions.find(columnId); it != StatsExpressions.end()) { return it->second; }
+    auto name = source.GetContext()->GetCommonContext()->GetResolver()->GetColumnName(columnId, false);
+    if (name) { return name; }
+    return "intermediate result";
+}
+
+TString TExecutionContext::BuildStatsDescription(IDataSource& source, ui32 nodeId,
+    const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, std::vector<TString> columns) {
+    TString function = processor->GetSignalCategoryName();
+    if (const auto* calculation = dynamic_cast<const NArrow::NSSA::TCalculationProcessor*>(processor.get())) {
+        function = calculation->GetStatsFunctionDescription();
+    } else if (const auto* stream = dynamic_cast<const NArrow::NSSA::TStreamLogicProcessor*>(processor.get())) {
+        function = ::ToString(stream->GetOperation());
+    } else if (const auto* index = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get())) {
+        const auto context = index->GetIndexContext();
+        auto column = context.GetColumnName();
+        if (!column) { column = source.GetContext()->GetCommonContext()->GetResolver()->GetColumnName(context.GetColumnId(), false); }
+        if (context.GetSubColumnName()) { column += "[" + context.GetSubColumnName().GetValue() + "]"; }
+        columns = {column ? column : TString("unknown column"), columns.back()};
+        function = TStringBuilder() << "Index " << context.GetOperation().GetOperation();
+        if (!context.GetOperation().GetCaseSensitive()) { function += " (case insensitive)"; }
+    } else if (const auto* header = dynamic_cast<const NArrow::NSSA::THeaderCheckerProcessor*>(processor.get())) {
+        const auto context = header->GetHeaderContext();
+        auto column = source.GetContext()->GetCommonContext()->GetResolver()->GetColumnName(context.GetColumnId(), false);
+        if (context.GetSubColumnName()) { column += "[" + context.GetSubColumnName().GetValue() + "]"; }
+        columns = {column ? column : TString("unknown column")};
+    }
+    TString description = NArrow::NSSA::BuildStatsExpression(function, columns, nodeId);
+    if (const auto* constant = dynamic_cast<const NArrow::NSSA::TConstProcessor*>(processor.get())) {
+        const auto value = constant->GetScalarConstant()->ToString();
+        description = NArrow::NSSA::BoundStatsDescription(TStringBuf(value.data(), value.size()), nodeId);
+    }
+    const auto type = processor->GetProcessorType();
+    if (type == NArrow::NSSA::EProcessorType::Calculation || type == NArrow::NSSA::EProcessorType::Const ||
+        type == NArrow::NSSA::EProcessorType::StreamLogic || type == NArrow::NSSA::EProcessorType::CheckIndexData ||
+        type == NArrow::NSSA::EProcessorType::CheckHeaderData) {
+        for (const auto& output : processor->GetOutput()) { StatsExpressions[output.GetColumnId()] = description; }
+    }
+    return description;
+}
+
+void TExecutionContext::OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals,
+    IDataSource& source, const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, const TString& metaStep) {
     if (!CurrentProgramNodeId) {
+        const auto& collector = source.GetContext()->GetCommonContext()->GetRuntimeStats();
+        if (collector) {
+            const auto kind = processor->GetStatsKind();
+            std::vector<TString> columns;
+            if (const auto* fetch = dynamic_cast<const NArrow::NSSA::TOriginalColumnDataProcessor*>(processor.get())) {
+                std::set<TString> names;
+                for (const auto& [_, address] : fetch->GetDataAddresses()) { names.insert(address.GetColumnName()); }
+                const auto addSchemaColumn = [&](ui32 id) {
+                    auto name = source.GetContext()->GetCommonContext()->GetResolver()->GetColumnName(id, false);
+                    names.insert(name ? name : TString("unknown column"));
+                };
+                for (const auto& [_, context] : fetch->GetIndexContext()) { addSchemaColumn(context.GetColumnId()); }
+                for (const auto& [_, context] : fetch->GetHeaderContext()) { addSchemaColumn(context.GetColumnId()); }
+                columns.assign(names.begin(), names.end());
+            } else if (const auto* assemble = dynamic_cast<const NArrow::NSSA::TOriginalColumnAccessorProcessor*>(processor.get())) {
+                columns.push_back(assemble->GetDataAddress().GetColumnName());
+            } else {
+                for (const auto& input : processor->GetInput()) { columns.push_back(GetStatsColumnName(source, input.GetColumnId())); }
+            }
+            const TString description = BuildStatsDescription(source, nodeId, processor, columns);
+            RuntimeStats = collector->Start(kind, processor->GetSignalCategoryName(), description,
+                CursorStep->GetRuntimeStats(), source.GetSourceId());
+            if (RuntimeStats) {
+                RuntimeStats->Update([&](NScanStats::TStep& record) {
+                    record.SetMetaStep(metaStep);
+                    record.SetCanonicalPath("");
+                    if (kind == NScanStats::TStep::FetchColumns || kind == NScanStats::TStep::Assemble) {
+                        auto* names = kind == NScanStats::TStep::FetchColumns
+                            ? record.MutableDetails()->MutableFetchColumns()->MutableColumns()
+                            : record.MutableDetails()->MutableAssemble()->MutableColumns();
+                        for (const auto& name : columns) { names->AddNames(name); }
+                    }
+                    if (const auto* keyed = dynamic_cast<const NArrow::NSSA::NAggregation::TWithKeysAggregationProcessor*>(processor.get())) {
+                        auto* details = record.MutableDetails()->MutableAggregation();
+                        for (const auto& key : keyed->GetAggregationKeys()) { details->MutableKeys()->AddNames(GetStatsColumnName(source, key.GetColumnId())); }
+                        std::vector<TString> functions;
+                        for (const auto& aggregate : keyed->GetAggregations()) {
+                            std::vector<TString> inputs;
+                            for (const auto& input : aggregate.GetInputs()) { inputs.push_back(GetStatsColumnName(source, input.GetColumnId())); }
+                            TString function = TStringBuilder() << aggregate.GetAggregationId() << "(" << JoinSeq(", ", inputs) << ")";
+                            details->MutableFunctions()->AddNames(function);
+                            functions.push_back(function);
+                        }
+                        record.SetOperation(TStringBuilder() << "GROUP BY " << JoinSeq(", ", details->GetKeys().GetNames()) << ": " << JoinSeq(", ", functions));
+                    }
+                    if (kind == NScanStats::TStep::Projection) {
+                        auto* details = record.MutableDetails()->MutableProjection();
+                        for (ui32 id : ExecutionVisitor->MutableContext().GetResources().GetStatsColumnIds()) {
+                            details->MutableInputColumns()->AddNames(GetStatsColumnName(source, id));
+                        }
+                        for (const auto& name : columns) { details->MutableOutputColumns()->AddNames(name); }
+                    }
+                });
+            }
+        }
         CurrentNodeStart = TMonotonic::Now();
         CurrentProgramNodeId = nodeId;
         AFL_VERIFY(!CurrentStepSignals);
@@ -22,7 +130,8 @@ void TExecutionContext::OnStartProgramStepExecution(const ui32 nodeId, const std
     }
 }
 
-void TExecutionContext::OnFinishProgramStepExecution() {
+void TExecutionContext::OnFinishProgramStepExecution(NScanStats::TStep::EOutcome outcome) {
+    if (RuntimeStats) { RuntimeStats->Finish(outcome); RuntimeStats.reset(); }
     AFL_VERIFY(!!CurrentProgramNodeId);
     AFL_VERIFY(!!CurrentStepSignals);
     AFL_VERIFY(!!CurrentNodeStart);

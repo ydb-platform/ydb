@@ -55,6 +55,7 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
     TOwnedCellVec LastKey;
     NKikimrKqp::TEvKqpScanCursor LastCursorProto;
     TScanStatistics CurrentStats;
+    std::unique_ptr<NKqpProto::TColumnShardScanStats> ColumnShardStats;
     TDuration CpuTime;
     TDuration WaitTime;
     ui64 RawBytes = 0;
@@ -124,6 +125,9 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
         ev->RequestedBytesLimitReached = pbEv->Record.GetRequestedBytesLimitReached();
         ev->LastKey = TOwnedCellVec(TSerializedCellVec(pbEv->Record.GetLastKey()).GetCells());
         ev->LastCursorProto = pbEv->Record.GetLastCursor();
+        if (pbEv->Record.HasColumnShardStats()) {
+            ev->ColumnShardStats = std::make_unique<NKqpProto::TColumnShardScanStats>(pbEv->Record.GetColumnShardStats());
+        }
         if (pbEv->Record.HasAvailablePacks()) {
             ev->AvailablePacks = pbEv->Record.GetAvailablePacks();
         }
@@ -158,6 +162,9 @@ private:
             Remote->Record.SetPageFault(PageFault);
             Remote->Record.SetLastKey(TSerializedCellVec::Serialize(LastKey));
             *Remote->Record.MutableLastCursor() = LastCursorProto;
+            if (ColumnShardStats) {
+                Remote->Record.MutableColumnShardStats()->CopyFrom(*ColumnShardStats);
+            }
             if (AvailablePacks) {
                 Remote->Record.SetAvailablePacks(*AvailablePacks);
             }

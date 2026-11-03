@@ -18,7 +18,8 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
     const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId, const TActorId& resourceSubscribeActorId,
     const TComputeShardingPolicy& computeShardingPolicy, const ui64 scanId, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
     const std::shared_ptr<NLWTrace::TOrbit>& scanOrbit, const ui64 txId,
-    const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>& schedulerPool)
+    const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId>& schedulerPool,
+    std::shared_ptr<NScanStats::TCollector> runtimeStats)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , ColumnDataManager(columnDataManager)
@@ -40,6 +41,7 @@ TReadContext::TReadContext(const std::shared_ptr<IStoragesManager>& storagesMana
                      AppDataVerified().ColumnShardConfig.GetScanDefaultPool() == "Batch";
           }()))
     , ScanOrbit(scanOrbit)
+    , RuntimeStats(std::move(runtimeStats))
 {
     Y_ABORT_UNLESS(ReadMetadata);
     if (ReadMetadata->HasResultSchema()) {

@@ -31,6 +31,8 @@ private:
     std::optional<TMonotonic> FinishInstant;
     std::shared_ptr<NLWTrace::TOrbit> ScanOrbit;
     const ui64 PathId;
+    std::shared_ptr<NScanStats::TCollector> RuntimeStats;
+    std::shared_ptr<NScanStats::TOperation> CreditStats;
     const std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> SchedulerPool;
 
 public:
@@ -48,7 +50,9 @@ public:
         const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
         const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
         std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId = 0,
-        std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool = std::nullopt);
+        std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool = std::nullopt,
+        NYql::NDqProto::EDqStatsMode statsMode = NYql::NDqProto::DQ_STATS_MODE_NONE,
+        std::shared_ptr<NScanStats::TCollector> runtimeStats = {});
 
     void Bootstrap(const TActorContext& ctx);
 

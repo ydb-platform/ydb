@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
+
 #include "borders_flow_controller.h"
 #include "common.h"
 #include "events.h"
@@ -34,6 +36,7 @@ private:
     const std::shared_ptr<NCommon::TColumnsSet> PKColumns;
     const std::shared_ptr<arrow::Schema> PKSchema;
     const std::shared_ptr<NColumnShard::TDuplicateFilteringCounters> Counters;
+    const std::shared_ptr<NScanStats::TCollector> RuntimeStats;
     const std::shared_ptr<TPortionStore> Portions;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;

@@ -6,6 +6,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/formats/arrow/reader/stats
     library/cpp/retry
     ydb/core/protos
     ydb/library/actors/core

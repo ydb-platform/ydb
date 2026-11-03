@@ -1,4 +1,6 @@
 #pragma once
+
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/read.h>
@@ -162,6 +164,15 @@ public:
 };
 
 class ITask: public NColumnShard::TMonitoringObjectsCounter<ITask> {
+private:
+    NScanStats::TCapture StatsCapture;
+
+public:
+    const NScanStats::TCapture& GetStatsCapture() const {
+        return StatsCapture;
+    }
+
+private:
 private:
     THashMap<TString, std::shared_ptr<IBlobsReadingAction>> AgentsWaiting;
     YDB_READONLY_DEF(TReadActionsCollection, Agents);

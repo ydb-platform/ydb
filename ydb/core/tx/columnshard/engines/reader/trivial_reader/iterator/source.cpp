@@ -141,7 +141,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 auto reading = blobsAction.GetReading(Portion->GetColumnStorageId(c->GetColumnId(), Schema->GetIndexInfo()));
                 reading->SetIsBackgroundProcess(false);
-                reading->AddRange(GetPortionAccessor().RestoreBlobRange(c->BlobRange));
+                reading->AddRange(GetPortionAccessor().RestoreBlobRange(c->BlobRange), {}, NKqpProto::TColumnShardStepDetails::TStorageRead::data);
                 ++fetchedChunks;
             } else {
                 defaultBlocks.emplace(c->GetAddress(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
@@ -313,9 +313,19 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
     if (!meta) {
         NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed({});
         GetContext()->GetCommonContext()->GetCounters().OnNoIndex(GetRecordsCount());
+        if (const auto& operation = NScanStats::Current()) {
+            operation->Update([](NScanStats::TStep& record) {
+                record.SetOperation(record.GetOperation() + " (index unavailable)");
+            });
+        }
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
     AFL_VERIFY(meta->IsSkipIndex());
+    if (const auto& operation = NScanStats::Current()) {
+        operation->Update([&](NScanStats::TStep& record) {
+            record.MutableDetails()->MutableIndexCheck()->SetIndexType(meta->GetClassName());
+        });
+    }
 
     if (auto fetcher = MutableStageData().ExtractFetcherOptional(meta->GetIndexId())) {
         auto& source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
@@ -332,6 +342,11 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
     const NIndexes::TIndexColumnChunked* infoPointer = GetStageData().GetIndexes()->GetIndexDataOptional(meta->GetIndexId());
     if (!infoPointer) {
         GetContext()->GetCommonContext()->GetCounters().OnNoIndexBlobs(GetRecordsCount());
+        if (const auto& operation = NScanStats::Current()) {
+            operation->Update([](NScanStats::TStep& record) {
+                record.SetOperation(record.GetOperation() + " (index data unavailable)");
+            });
+        }
         return filter;
     }
     const auto info = *infoPointer;
@@ -348,7 +363,15 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
             GetContext()->GetCommonContext()->GetCounters().OnDeniedByIndex(i.GetRecordsCount());
         }
     }
-    return filter.And(context.GetResources().GetFilter());
+    auto result = filter.And(context.GetResources().GetFilter());
+    if (const auto& operation = NScanStats::Current()) {
+        operation->Update([&](NScanStats::TStep& record) {
+            auto* details = record.MutableDetails()->MutableIndexCheck();
+            details->SetInputRows(context.GetResources().GetFilter().GetFilteredCount().value_or(GetRecordsCount()));
+            details->SetOutputRows(result.GetFilteredCount().value_or(GetRecordsCount()));
+        });
+    }
+    return result;
 }
 
 void TPortionDataSource::DoAbort() {

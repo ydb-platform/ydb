@@ -1,5 +1,6 @@
 #pragma once
 #include "columns_set.h"
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include "script_counters.h"
 
 #include <ydb/core/formats/arrow/program/abstract.h>
@@ -24,6 +25,9 @@ public:
 class IFetchingStep: public TNonCopyable {
 private:
     YDB_READONLY_DEF(TString, Name);
+    YDB_READONLY(NScanStats::TStep::EStepKind, StatsKind, NScanStats::TStep::Reader);
+    YDB_ACCESSOR_DEF(TString, StatsMetaStep);
+    YDB_READONLY_DEF(std::optional<NKqpProto::TColumnShardStepDetails::TFilter::EPurpose>, StatsPurpose);
     TAtomicCounter SumDuration;
     TAtomicCounter SumSize;
     std::shared_ptr<TFetchingStepSignals> Signals;
@@ -60,8 +64,11 @@ public:
         return 0;
     }
 
-    IFetchingStep(const TString& name)
+    IFetchingStep(const TString& name, NScanStats::TStep::EStepKind statsKind = NScanStats::TStep::Reader,
+        std::optional<NKqpProto::TColumnShardStepDetails::TFilter::EPurpose> statsPurpose = {})
         : Name(name)
+        , StatsKind(statsKind)
+        , StatsPurpose(statsPurpose)
         , Signals(TFetchingStepsSignalsCollection::GetSignals(name))
     {
     }
@@ -188,6 +195,7 @@ private:
     YDB_ACCESSOR(TString, BranchName, "UNDEFINED");
     std::vector<std::shared_ptr<IFetchingStep>> Steps;
     YDB_READONLY_DEF(TColumnsSetIds, AddedFetchingColumns);
+    bool PlainStats = false;
     YDB_READONLY_DEF(TColumnsSetIds, AddedAssembleColumns);
 
     TFetchingScriptBuilder(const ISnapshotSchema::TPtr& schema, const std::shared_ptr<TColumnsSetIds>& guaranteeNotOptional)

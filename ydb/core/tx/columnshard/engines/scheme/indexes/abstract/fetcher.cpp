@@ -50,7 +50,7 @@ void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCom
         }
         std::shared_ptr<IBlobsReadingAction> reading = blobsAction.GetReading(storageId);
         for (auto&& i : ranges) {
-            reading->AddRange(i);
+            reading->AddRange(i, {}, NKqpProto::TColumnShardStepDetails::TStorageRead::index);
         }
         nextRead.Add(reading);
     }
@@ -80,7 +80,7 @@ void TIndexFetcherLogic::DoOnDataReceived(TReadActionsCollection& nextRead, NBlo
         }
         auto reading = blobsAction.GetReading(storageId);
         for (auto&& i : ranges) {
-            reading->AddRange(i);
+            reading->AddRange(i, {}, NKqpProto::TColumnShardStepDetails::TStorageRead::index);
         }
         nextRead.Add(reading);
     }

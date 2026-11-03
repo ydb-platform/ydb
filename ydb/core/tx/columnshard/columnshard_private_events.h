@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
+
 #include "defs.h"
 
 #include "blobs_action/abstract/gc.h"
@@ -201,6 +203,7 @@ struct TEvPrivate {
         using TCallback = NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>;
         using TColumnIdsByRequest = THashMap<TPortionRequest, std::set<ui32>>;
         YDB_READONLY_DEF(TColumnIdsByRequest, Requests);
+        YDB_READONLY_DEF(NScanStats::TCapture, StatsCapture);
         YDB_READONLY_DEF(std::shared_ptr<TCallback>, Callback);
 
     public:

@@ -51,6 +51,8 @@ private:
     virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator(const TColumnChainInfo& output) const override;
 
 public:
+    TString GetStatsName() const override { return ::ToString(AggregationType); }
+
     virtual bool IsAggregation() const override {
         return true;
     }

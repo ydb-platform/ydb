@@ -1,4 +1,6 @@
 #pragma once
+
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/result.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/context.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/source.h>
@@ -25,6 +27,7 @@ protected:
         const ui32 SourceIdx;
         const ui64 MemoryGroupIdx;
         std::unique_ptr<NCommon::TDataSourceLease> Lease;
+        std::shared_ptr<NScanStats::TOperation> ReadyStats;
 
         explicit TSourceEntry(const NCommon::IDataSource& source)
             : SourceIdx(source.GetSourceIdx())

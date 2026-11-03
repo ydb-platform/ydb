@@ -1,4 +1,6 @@
 #pragma once
+
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include "interval.h"
 #include "source.h"
 
@@ -84,6 +86,7 @@ private:
     THashMap<ui32, std::unique_ptr<NCommon::TDataSourceLease>> NotStartedSources;
     THashMap<ui32, std::vector<ui32>> WaitingIntervals;
     THashMap<ui32, std::unique_ptr<TPartialReadResult>> ReadyIntervals;
+    THashMap<ui32, std::shared_ptr<NScanStats::TOperation>> ReadyStats;
     ui32 SegmentIdxCounter = 0;
     std::vector<TIntervalStat> IntervalStats;
     ui64 InFlightLimit = 1;

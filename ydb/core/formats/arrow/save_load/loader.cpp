@@ -1,4 +1,6 @@
 #include "loader.h"
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
+#include <ydb/core/formats/arrow/serializer/native.h>
 
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
@@ -48,7 +50,40 @@ std::shared_ptr<IChunkedArray> TColumnLoader::ApplyVerified(
 
 TConclusion<std::shared_ptr<IChunkedArray>> TColumnLoader::BuildAccessor(
     const TString& originalData, const TChunkConstructionData& chunkData) const {
-    return AccessorConstructor->DeserializeFromString(originalData, chunkData);
+    auto collector = NScanStats::CurrentCollector();
+    if (!collector) {
+        return AccessorConstructor->DeserializeFromString(originalData, chunkData);
+    }
+    auto operation = collector->Start(NScanStats::TStep::Decode, "DECODE", "Deserialize " + TString(ResultField->name()), NScanStats::Current());
+    NScanStats::TScope scope(operation);
+    if (operation) {
+        operation->Update([&](auto& record) {
+            record.SetReadBytes(0);
+            auto* details = record.MutableDetails()->MutableDecode();
+            details->SetEncodedInputBytes(originalData.size());
+            details->SetColumn(ResultField->name().data(), ResultField->name().size());
+            if (AccessorConstructor->GetType() == IChunkedArray::EType::Array &&
+                dynamic_cast<const NSerialization::TNativeSerializer*>(Serializer.GetObjectPtr().get())) {
+                if (auto codec = NSerialization::TNativeSerializer::TryGetReadCodec(originalData)) {
+                    details->SetCodec(*codec);
+                }
+            }
+        });
+    }
+    auto result = AccessorConstructor->DeserializeFromString(originalData, chunkData);
+    if (operation) {
+        if (result.IsSuccess()) {
+            operation->Update([&](auto& record) {
+                auto* details = record.MutableDetails()->MutableDecode();
+                details->SetDecodedRows(result.GetResult()->GetRecordsCount());
+                if (const auto size = result.GetResult()->GetRawSize()) {
+                    details->SetDecodedOutputBytes(*size);
+                }
+            });
+        }
+        operation->Finish(result.IsSuccess() ? NScanStats::TStep::completed : NScanStats::TStep::failed);
+    }
+    return result;
 }
 
 std::shared_ptr<NKikimr::NArrow::NAccessor::IChunkedArray> TColumnLoader::BuildDefaultAccessor(const ui32 recordsCount) const {

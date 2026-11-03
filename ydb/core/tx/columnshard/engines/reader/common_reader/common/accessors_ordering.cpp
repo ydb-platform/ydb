@@ -32,6 +32,7 @@ class TApplySourceResult: public IApplyAction {
 private:
     using TBase = IDataTasksProcessor::ITask;
     TDataAccessorsResult Accessors;
+    std::shared_ptr<NScanStats::TOperation> RuntimeStats;
     const TMonotonic StartTime;
 
     std::vector<ui64> GetAccessorPortionIds() const {
@@ -44,13 +45,15 @@ private:
     }
 
 public:
-    TApplySourceResult(TDataAccessorsResult&& result, const TMonotonic startTime)
+    TApplySourceResult(TDataAccessorsResult&& result, const TMonotonic startTime, std::shared_ptr<NScanStats::TOperation> runtimeStats)
         : Accessors(std::move(result))
+        , RuntimeStats(std::move(runtimeStats))
         , StartTime(startTime)
     {
     }
 
     virtual bool DoApply(IDataReader& indexedDataRead) override {
+        NScanStats::TScope scope(RuntimeStats, indexedDataRead.GetContext().GetRuntimeStats());
         auto* plainReader = static_cast<NSimple::TPlainReadData*>(&indexedDataRead);
         const auto& commonContext = *plainReader->GetSpecialReadContext()->GetCommonContext();
         if (commonContext.GetScanOrbit() &&
@@ -65,6 +68,7 @@ public:
         }
         auto& collection = plainReader->MutableScanner().MutableSourcesCollection();
         const auto status = collection.MutableConstructorsAs<TSourcesConstructorWithAccessorsImpl>().AddAccessors(std::move(Accessors));
+        if (RuntimeStats) { RuntimeStats->Finish(status.IsFail() ? NScanStats::TStep::failed : NScanStats::TStep::completed); }
         if (status.IsFail()) {
             plainReader->GetSpecialReadContext()->GetCommonContext()->AbortWithError(status.GetErrorMessage());
         }
@@ -78,23 +82,29 @@ private:
     NColumnShard::TCounterGuard Guard;
     const std::shared_ptr<const TAtomicCounter> AbortFlag;
     const TMonotonic StartTime;
+    std::shared_ptr<NScanStats::TOperation> RuntimeStats;
+    std::shared_ptr<NScanStats::TCollector> RuntimeCollector;
 
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
         return AbortFlag;
     }
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
+        NScanStats::TScope scope(RuntimeStats, RuntimeCollector);
         NActors::TActivationContext::AsActorContext().Send(
             ScanActorId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-                             std::make_shared<TApplySourceResult>(std::move(result), StartTime), std::move(Guard)));
+                             std::make_shared<TApplySourceResult>(std::move(result), StartTime, RuntimeStats), std::move(Guard)));
     }
 
 public:
-    TLocalPortionAccessorFetchingSubscriber(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
+    TLocalPortionAccessorFetchingSubscriber(const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context,
+        std::shared_ptr<NScanStats::TOperation> runtimeStats)
         : ScanActorId(context->GetCommonContext()->GetScanActorId())
         , Guard(context->GetCommonContext()->GetCounters().GetAccessorsForConstructionGuard())
         , AbortFlag(context->GetCommonContext()->GetAbortionFlag())
         , StartTime(TMonotonic::Now())
+        , RuntimeStats(std::move(runtimeStats))
+        , RuntimeCollector(context->GetCommonContext()->GetRuntimeStats())
     {
     }
 };
@@ -113,9 +123,13 @@ void TAccessorsFetcherImpl::StartRequest(
                 .GetRawValue(), commonContext.GetReadMetadata()->GetTabletId(), commonContext.GetReadMetadata()->GetTxId(),
             commonContext.GetScanId(), BuildTopSourceIds(request->GetPortionIds()));
     }
-    request->RegisterSubscriber(std::make_shared<TLocalPortionAccessorFetchingSubscriber>(context));
+    const auto& collector = commonContext.GetRuntimeStats();
+    auto operation = collector ? collector->Start(NScanStats::TStep::FetchAccessors, "FETCH_ACCESSORS", "Fetch portion accessors", NScanStats::Current()) : nullptr;
+    NScanStats::TScope scope(operation, collector);
+    request->RegisterSubscriber(std::make_shared<TLocalPortionAccessorFetchingSubscriber>(context, operation));
     context->GetCommonContext()->GetDataAccessorsManager()->AskData(std::move(request));
     AFL_VERIFY(++InFlightRequests == 1);
+    if (operation) { operation->Suspend(); }
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

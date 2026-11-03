@@ -6,6 +6,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/formats/arrow/reader/stats
     ydb/library/actors/core
     contrib/libs/apache/arrow
     ydb/library/accessor

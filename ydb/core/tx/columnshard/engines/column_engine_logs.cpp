@@ -1,4 +1,5 @@
 #include "column_engine_logs.h"
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 
 #include "changes/actualization/construction/context.h"
 #include "changes/cleanup_portions.h"
@@ -801,12 +802,46 @@ std::vector<TColumnEngineForLogs::TSelectedPortionInfo> TColumnEngineForLogs::Se
     const NReader::TReadDescription& readDescription, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const {
     AFL_VERIFY(dataLocksManager);
 
-    auto granuleMeta = GranulesStorage->GetGranuleOptional(pathId);
-    if (!granuleMeta) {
-        return {};
+    const auto parent = NScanStats::Current();
+    auto operation = parent ? parent->GetCollector()->Start(NScanStats::TStep::SelectPortions,
+        "SELECT_PORTIONS", "Select portions", parent) : nullptr;
+    auto result = [&]() -> std::vector<TSelectedPortionInfo> {
+        NScanStats::TScope scope(operation);
+        auto granuleMeta = GranulesStorage->GetGranuleOptional(pathId);
+        if (!granuleMeta) {
+            return {};
+        }
+        return TPortionsSelector(granuleMeta, dataLocksManager, pathId, readDescription).Select();
+    }();
+    if (operation) {
+        std::optional<ui64> rows = 0;
+        std::optional<ui64> blobBytes = 0;
+        const auto add = [](std::optional<ui64>& total, ui64 value) {
+            if (total) {
+                if (value > Max<ui64>() - *total) {
+                    total.reset();
+                } else {
+                    *total += value;
+                }
+            }
+        };
+        for (const auto& selected : result) {
+            add(rows, selected.GetPortion()->GetRecordsCount());
+            add(blobBytes, selected.GetPortion()->GetTotalBlobBytes());
+        }
+        operation->Update([&](auto& record) {
+            auto* details = record.MutableDetails()->MutablePreparation();
+            details->SetSelectedPortions(result.size());
+            if (rows) {
+                details->SetSelectedVersionRows(*rows);
+            }
+            if (blobBytes) {
+                details->SetSelectedBlobBytes(*blobBytes);
+            }
+        });
+        operation->Finish();
     }
-
-    return TPortionsSelector(granuleMeta, dataLocksManager, pathId, readDescription).Select();
+    return result;
 }
 
 bool TColumnEngineForLogs::ArePortionsLoaded(const TInternalPathId pathId, const TPKRangesFilter& ranges) const {

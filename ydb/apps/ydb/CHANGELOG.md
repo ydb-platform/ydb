@@ -1,3 +1,4 @@
+* `ydb admin cluster bridge list` now shows piles in the `HOT_STANDBY` state as such.
 
 ## 2.35.0 ##
 

@@ -1539,7 +1539,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         TStringBuilder() << "node" << (httpsRequests ? 5 : 4) << ".example.test:8765");
                     TCgiParameters params(outgoing->Request->URL.After('?'));
                     UNIT_ASSERT_VALUES_EQUAL(params.Get("local_pile_only"), "true");
-                    UNIT_ASSERT_VALUES_EQUAL(params.Get("offload_merge"), "false");
                     UNIT_ASSERT_VALUES_EQUAL(NHttp::THeaders(outgoing->Request->Headers).Get("Authorization"),
                         options.SessionCookie ? "Login test-session" : "Bearer test-token");
                     UNIT_ASSERT(!NHttp::THeaders(outgoing->Request->Headers).Has("Cookie"));

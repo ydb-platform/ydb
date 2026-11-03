@@ -150,7 +150,6 @@ public:
         if (LocalPileOnly) {
             // This request is served inside the target pile. It neither calls other
             // piles over HTTPS nor waits for cluster tablets outside this pile.
-            Tablets = false;
             OffloadMerge = false;
             Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
             return;
@@ -315,10 +314,6 @@ private:
             return false;
         }
 
-        if (LocalPileOnly) {
-            return true;
-        }
-
         if (const auto* bridgeInfo = GetBridgeInfo(); bridgeInfo && bridgeInfo->SelfNodePile
                 && !NBridge::PileStateTraits(bridgeInfo->SelfNodePile->State).AllowsConnection) {
             // Local whiteboard collection must not wait for tablets in other piles.
@@ -374,32 +369,20 @@ private:
         }
     }
 
-    static bool IsHttpsOrigin(const TString& endpoint) {
-        TStringBuf scheme, host, uri;
-        return NHttp::CrackURL(endpoint, scheme, host, uri) && scheme == "https" && !host.empty()
-            && !host.Contains('@') && !endpoint.Contains('\r') && !endpoint.Contains('\n')
-            && !host.Contains('?') && !host.Contains('#') && !host.Contains(' ') && !host.Contains('\t')
-            && (uri.empty() || uri == "/");
-    }
-
-    bool SendPileRequest(ui32 pileIndex, TPileRequest& request) {
+    void SendPileRequest(TPileRequest& request) {
         const auto now = TActivationContext::Now();
         if (request.NextEndpoint == request.Endpoints.size() || now >= Deadline) {
             AddProblem("no-pile-node-info");
-            return false;
+            return;
         }
         const auto timeout = (Deadline - now) / (request.Endpoints.size() - request.NextEndpoint);
         if (timeout.MilliSeconds() < 2) {
             AddProblem("no-pile-node-info");
-            return false;
-        }
-        TString endpoint = request.Endpoints[request.NextEndpoint++];
-        if (endpoint.EndsWith('/')) {
-            endpoint.pop_back();
+            return;
         }
         request.ActiveRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(TStringBuilder()
-            << endpoint << "/viewer/json/cluster?local_pile_only=true&direct=true&offload_merge=false"
-            << "&use_health_check=false&timeout=" << timeout.MilliSeconds() * 3 / 4);
+            << request.Endpoints[request.NextEndpoint++] << "/viewer/json/cluster?local_pile_only=true"
+            << "&timeout=" << timeout.MilliSeconds() * 3 / 4);
         auto authorization = GetRequest().GetHeader("Authorization");
         if (authorization.empty()) {
             const auto cookie = GetRequest().GetHeader("Cookie");
@@ -412,12 +395,10 @@ private:
             request.ActiveRequest->Set("Authorization", authorization);
         }
         request.ActiveRequest->Finish();
-        auto outgoing = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(request.ActiveRequest, timeout);
         if (!HttpProxy) {
             HttpProxy = Register(NHttp::CreateHttpProxy());
         }
-        SendRequest(HttpProxy, outgoing.release(), 0, pileIndex);
-        return true;
+        SendRequest(HttpProxy, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request.ActiveRequest, timeout));
     }
 
     void StartPileRequests() {
@@ -437,7 +418,6 @@ private:
             }
             auto& request = PileRequests[pile.BridgePileId.GetPileIndex()];
             if (config.GetMonitoringPort()) {
-                std::unordered_set<TString> endpoints;
                 for (const auto& node : NodeData) {
                     if (!node.Static || node.PileNum != pile.BridgePileId.GetPileIndex()) {
                         continue;
@@ -450,16 +430,16 @@ private:
                         host = TStringBuilder() << '[' << host << ']';
                     }
                     TString endpoint = TStringBuilder() << "https://" << host << ':' << config.GetMonitoringPort();
-                    if (IsHttpsOrigin(endpoint) && endpoints.insert(endpoint).second) {
+                    if (std::find(request.Endpoints.begin(), request.Endpoints.end(), endpoint) == request.Endpoints.end()) {
                         request.Endpoints.push_back(std::move(endpoint));
+                        // Bound the number of attempts within the common HTTP deadline.
+                        if (request.Endpoints.size() == 3) {
+                            break;
+                        }
                     }
                 }
             }
-            // Bound both the number of failed attempts and the total HTTP deadline.
-            if (request.Endpoints.size() > 3) {
-                request.Endpoints.resize(3);
-            }
-            SendPileRequest(pile.BridgePileId.GetPileIndex(), request);
+            SendPileRequest(request);
         }
     }
 
@@ -502,7 +482,7 @@ private:
                 if (ReadPileResponse(pileIndex, *ev->Get(), result)) {
                     request.Result = std::move(result);
                 } else {
-                    SendPileRequest(pileIndex, request);
+                    SendPileRequest(request);
                 }
                 RequestDone();
                 return;

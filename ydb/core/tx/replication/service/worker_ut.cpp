@@ -4,6 +4,8 @@
 #include "service.h"
 
 #include <ydb/core/tx/replication/common/schema_change.h>
+#include <ydb/core/security/sasl/events.h>
+#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
@@ -16,10 +18,15 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
+#include <grpcpp/create_channel.h>
+#include <grpcpp/client_context.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/scope.h>
 
 #include <util/string/builder.h>
+
+#include <chrono>
 
 namespace NKikimr::NReplication::NService {
 
@@ -183,6 +190,156 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
         UNIT_ASSERT(staticProxy != iamProxy);
         UNIT_ASSERT(oauthProxy != iamProxy);
         env.Finish();
+    }
+
+    Y_UNIT_TEST(InvalidPasswordReportsWorkerError) {
+        const TString user = "source-auth-user";
+        const TString goodPassword = "source-auth-valid-credential-marker";
+        const TString badPassword = "source-auth-rejected-credential-marker";
+        TEnv<true> env(user, goodPassword, ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        runtime.SetFastSimulatedTime(false);
+        runtime.SetDispatchTimeout(TDuration::Seconds(120));
+        const auto edge = env.GetSender();
+
+        auto topic = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(env.GetYdbProxy(),
+            new TEvYdbProxy::TEvCreateTopicRequest("/Root/topic",
+                NYdb::NTopic::TCreateTopicSettings()
+                    .BeginAddConsumer().ConsumerName("consumer").EndAddConsumer()));
+        UNIT_ASSERT_C(topic->Get()->Result.IsSuccess(), topic->Get()->Result.GetIssues().ToString());
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}, {.Name = "value", .Type = "Utf8"}},
+        }));
+
+        // Independent fresh requests prove the fixture's password boundary. The
+        // service below still creates its own real SDK login provider and proxy.
+        auto login = [&](const TString& password) {
+            return env.RunCall([&] {
+                auto stub = Ydb::Auth::V1::AuthService::NewStub(grpc::CreateChannel(
+                    env.GetEndpoint(), grpc::InsecureChannelCredentials()));
+                grpc::ClientContext context;
+                context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(10));
+                context.AddMetadata("x-ydb-database", env.GetDatabase());
+                Ydb::Auth::LoginRequest request;
+                request.set_user(user);
+                request.set_password(password);
+                Ydb::Auth::LoginResponse response;
+                UNIT_ASSERT(stub->Login(&context, request, &response).ok());
+                return response;
+            });
+        };
+        const auto validLogin = login(goodPassword);
+        UNIT_ASSERT_VALUES_EQUAL(validLogin.operation().status(), Ydb::StatusIds::SUCCESS);
+        Ydb::Auth::LoginResult validLoginResult;
+        UNIT_ASSERT(validLogin.operation().result().UnpackTo(&validLoginResult));
+        UNIT_ASSERT(!validLoginResult.token().empty());
+        UNIT_ASSERT_VALUES_EQUAL(login(badPassword).operation().status(), Ydb::StatusIds::UNAUTHORIZED);
+
+        const auto service = runtime.Register(CreateReplicationService());
+        THashSet<TActorId> cleanupActors{service, env.GetYdbProxy()};
+        auto observeCleanup = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->HasEvent() && ev->GetTypeRewrite() == TEvents::TEvPoison::EventType
+                && cleanupActors.contains(ev->Sender))
+            {
+                cleanupActors.insert(ev->GetRecipientRewrite());
+            }
+        });
+        Y_DEFER {
+            runtime.Send(new IEventHandle(service, edge, new TEvents::TEvPoison()));
+            runtime.Send(new IEventHandle(env.GetYdbProxy(), edge, new TEvents::TEvPoison()));
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&] {
+                for (const auto& actor : cleanupActors) {
+                    if (runtime.FindActor(actor)) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+            options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+            runtime.DispatchEvents(options, TDuration::Seconds(5));
+        };
+        runtime.Send(new IEventHandle(service, edge, new TEvService::TEvHandshake(42, 1)), 0, true);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvService::TEvStatus>(edge, TDuration::Seconds(10)));
+
+        ui32 loginRequests = 0;
+        ui32 loginRejections = 0;
+        ui32 readerRequests = 0;
+        ui32 startedPartitions = 0;
+        TVector<NYdb::EStatus> sdkStatuses;
+        using TEvLoginRequest = NGRpcService::TGRpcRequestWrapperNoAuth<
+            NGRpcService::TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
+        auto observeLogin = runtime.AddObserver<TEvLoginRequest>(
+            [&](TEvLoginRequest::TPtr&) { ++loginRequests; });
+        auto observeRejection = runtime.AddObserver<NSasl::TEvSasl::TEvSaslPlainLoginResponse>(
+            [&](NSasl::TEvSasl::TEvSaslPlainLoginResponse::TPtr& ev) {
+                if (ev->Get()->Issue.GetCode() == NKikimrIssues::TIssuesIds::ACCESS_DENIED) {
+                    ++loginRejections;
+                }
+            });
+        auto observeReader = runtime.AddObserver<TEvYdbProxy::TEvCreateTopicReaderRequest>(
+            [&](TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr&) { ++readerRequests; });
+        auto observePartition = runtime.AddObserver<TEvYdbProxy::TEvStartTopicReadingSession>(
+            [&](TEvYdbProxy::TEvStartTopicReadingSession::TPtr&) { ++startedPartitions; });
+        auto observeStatus = runtime.AddObserver<TEvYdbProxy::TEvTopicReaderGone>(
+            [&](TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
+                sdkStatuses.push_back(ev->Get()->Result.GetStatus());
+                Cerr << "InvalidPasswordReportsWorkerError SDK status="
+                    << ev->Get()->Result.GetStatus() << Endl;
+            });
+
+        auto run = MakeHolder<TEvService::TEvRunWorker>();
+        run->Record.MutableController()->SetTabletId(42);
+        run->Record.MutableController()->SetGeneration(1);
+        run->Record.MutableWorker()->SetReplicationId(1);
+        run->Record.MutableWorker()->SetTargetId(1);
+        run->Record.MutableWorker()->SetWorkerId(0);
+        auto* command = run->Record.MutableCommand();
+        command->SetDatabase("/Root");
+        auto* reader = command->MutableRemoteTopicReader();
+        auto* connection = reader->MutableConnectionParams();
+        connection->SetEndpoint(env.GetEndpoint());
+        connection->SetDatabase(env.GetDatabase());
+        connection->MutableStaticCredentials()->SetUser(user);
+        connection->MutableStaticCredentials()->SetPassword(badPassword);
+        reader->SetTopicPath("/Root/topic");
+        reader->SetConsumerName("consumer");
+        reader->SetTopicPartitionId(0);
+        env.GetPathId("/Root/Table").ToProto(command->MutableLocalTableWriter()->MutablePathId());
+        const auto workerId = run->Record.GetWorker();
+        runtime.Send(new IEventHandle(service, edge, run.Release()));
+
+        const auto deadline = TInstant::Now() + TDuration::Seconds(120);
+        NKikimrReplication::TEvWorkerStatus stopped;
+        while (TInstant::Now() < deadline) {
+            auto event = runtime.GrabEdgeEvent<TEvService::TEvWorkerStatus>(edge, deadline - TInstant::Now());
+            UNIT_ASSERT_C(event, TStringBuilder() << "No terminal worker status; loginRequests=" << loginRequests
+                << ", loginRejections=" << loginRejections << ", readerRequests=" << readerRequests
+                << ", SDK closures=" << sdkStatuses.size());
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Record.GetWorker().SerializeAsString(), workerId.SerializeAsString());
+            if (event->Get()->Record.GetStatus() == NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED) {
+                stopped = event->Get()->Record;
+                break;
+            }
+        }
+        UNIT_ASSERT(loginRequests > 0);
+        UNIT_ASSERT(loginRejections > 0);
+        UNIT_ASSERT_C(!sdkStatuses.empty(), "No real SDK closure observed");
+        UNIT_ASSERT_VALUES_EQUAL(startedPartitions, 0);
+        UNIT_ASSERT_VALUES_EQUAL(stopped.GetStatus(), NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
+        UNIT_ASSERT_C(stopped.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR,
+            TStringBuilder() << "Invalid source password did not produce terminal Error: reason=" << stopped.GetReason()
+                << ", SDK status=" << sdkStatuses.back() << ", readerRequests=" << readerRequests);
+        const auto& issue = stopped.GetErrorDescription();
+        UNIT_ASSERT(!issue.empty());
+        UNIT_ASSERT_C(issue.Contains("auth") || issue.Contains("AUTH"), "Missing authentication cause");
+        UNIT_ASSERT(!issue.Contains(goodPassword));
+        UNIT_ASSERT(!issue.Contains(badPassword));
+        UNIT_ASSERT(!issue.Contains(validLoginResult.token()));
+        // The worker has stopped, a causal boundary after all its reader creations.
+        UNIT_ASSERT_VALUES_EQUAL(readerRequests, 1);
     }
 
     Y_UNIT_TEST(ChangedStaticPasswordStartsSourceReadOnSameService) {

@@ -20,7 +20,7 @@ namespace NKikimr::NScanStats {
             auto report = collector->Drain(true);
             UNIT_ASSERT_VALUES_EQUAL(report->StepsSize(), 2);
             const auto& step = report->GetSteps(0);
-            UNIT_ASSERT_VALUES_EQUAL(step.GetStepKind(), TStep::Decode);
+    UNIT_ASSERT(step.GetStepKind() == TStep::Decode);
             UNIT_ASSERT_VALUES_EQUAL(step.GetMetaStep(), "Filter");
             UNIT_ASSERT_VALUES_EQUAL(step.GetCanonicalPath(), "Assemble");
             UNIT_ASSERT(step.HasParentStepId());
@@ -163,7 +163,7 @@ namespace NKikimr::NScanStats {
             const auto& step = report->GetSteps(0);
             UNIT_ASSERT_VALUES_EQUAL(step.GetStepId(), id);
             UNIT_ASSERT_VALUES_EQUAL(step.GetMetaStep(), "Output");
-            UNIT_ASSERT_VALUES_EQUAL(step.GetOutcome(), TStep::completed);
+    UNIT_ASSERT(step.GetOutcome() == TStep::completed);
             UNIT_ASSERT(step.GetIntegralWaitDuration() > 0);
             UNIT_ASSERT(step.HasOwnedExecutionDuration());
         }
@@ -181,7 +181,7 @@ namespace NKikimr::NScanStats {
             auto report = collector->Drain(true);
             UNIT_ASSERT(report->GetFinished());
             UNIT_ASSERT_VALUES_EQUAL(report->StepsSize(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(report->GetSteps(0).GetOutcome(), TStep::cancelled);
+    UNIT_ASSERT(report->GetSteps(0).GetOutcome() == TStep::cancelled);
             UNIT_ASSERT(report->GetSteps(0).GetIntegralWaitDuration() > 0);
         }
 

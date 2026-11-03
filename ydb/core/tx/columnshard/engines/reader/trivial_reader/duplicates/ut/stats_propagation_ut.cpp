@@ -10,12 +10,14 @@ struct TTestPolicy {
     using TAddress = ui64;
     using TObject = ui64;
     using TSourceId = ui64;
-    enum class EConsumer { Undefined, Test };
+    enum class EConsumer {
+        Undefined,
+        Test
+    };
 };
 
-class TCallback final : public ::NKikimr::NGeneralCache::NPublic::ICallback<TTestPolicy> {
-    void DoOnResultReady(THashMap<ui64, ui64>&&, THashSet<ui64>&&,
-        ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<TTestPolicy>&&) override {
+class TCallback final: public ::NKikimr::NGeneralCache::NPublic::ICallback<TTestPolicy> {
+    void DoOnResultReady(THashMap<ui64, ui64>&&, THashSet<ui64>&&, ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<TTestPolicy>&&) override {
     }
 
     bool DoIsAborted() const override {
@@ -26,11 +28,10 @@ class TCallback final : public ::NKikimr::NGeneralCache::NPublic::ICallback<TTes
 using TRequest = ::NKikimr::NGeneralCache::NPublic::TEvents<TTestPolicy>::TEvAskData;
 
 std::unique_ptr<TRequest> MakeRequest() {
-    return std::make_unique<TRequest>(TTestPolicy::EConsumer::Test,
-        THashSet<ui64>{11}, std::make_shared<TCallback>());
+    return std::make_unique<TRequest>(TTestPolicy::EConsumer::Test, THashSet<ui64>{ 11 }, std::make_shared<TCallback>());
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(TDuplicateStatsPropagation) {
     Y_UNIT_TEST(CacheRequestRetainsOwnerAndReleasesItWithRequest) {
@@ -52,8 +53,8 @@ Y_UNIT_TEST_SUITE(TDuplicateStatsPropagation) {
         UNIT_ASSERT_VALUES_EQUAL(request->GetStatsCapture().Collector.get(), collector.get());
         {
             NScanStats::TScope metadata(request->GetStatsCapture());
-            auto child = NScanStats::CurrentCollector()->Start(NScanStats::TStep::Assemble,
-                "CHILD", "Assemble cache-miss inputs", NScanStats::Current());
+            auto child =
+                NScanStats::CurrentCollector()->Start(NScanStats::TStep::Assemble, "CHILD", "Assemble cache-miss inputs", NScanStats::Current());
             NScanStats::TScope work(child, collector);
             child->Finish();
         }
@@ -94,4 +95,4 @@ Y_UNIT_TEST_SUITE(TDuplicateStatsPropagation) {
     }
 }
 
-} // namespace NKikimr::NOlap::NReader::NDuplicateStatsTests
+}   // namespace NKikimr::NOlap::NReader::NDuplicateStatsTests

@@ -2398,8 +2398,6 @@ Y_UNIT_TEST_F(ReplicationDataRestoresReadSessionActorOnHasData, TPartitionFixtur
     TestRestoreReadSessionActor(true);
 }
 
-<<<<<<< HEAD
-=======
 Y_UNIT_TEST_F(ReplicationDataAckAfterPersist, TPartitionFixture)
 {
     const TConfigParams initialConfig{.Version = 1,
@@ -2746,7 +2744,6 @@ Y_UNIT_TEST_F(ExternalCookieZeroReadErrorRestartsTimestampRead, TPartitionFixtur
         "non-internal cookie==0 TEvError must clear ReadingTimestamp and restart timestamp read");
 }
 
->>>>>>> e6770d00f3c (fix)
 Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionTxTestHelper)
 {
     const TPartitionId partition{0};

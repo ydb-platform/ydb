@@ -336,7 +336,7 @@ protected:
     void SendMetaReadResponse(ui64 begin, ui64 end, TMaybe<ui64> step, TMaybe<ui64> txId, TInstant endWriteTimestamp,
                               TMaybe<ui64> mirroredOffset = Nothing());
     void WaitBlobReadRequest();
-    void SendBlobReadResponse(ui64 begin, ui64 end);
+    void SendBlobReadResponse();
     void WaitInfoRangeRequest();
     void SendInfoRangeResponse(ui32 partition,
                                const TVector<TCreateConsumerParams>& consumers);
@@ -441,6 +441,7 @@ protected:
 
     NPersQueue::TTopicConverterPtr TopicConverter;
     NKikimrPQ::TPQTabletConfig Config;
+    TString HeadBlobData;
 
     std::shared_ptr<TTabletCountersBase> TabletCounters;
 
@@ -569,7 +570,7 @@ TPartition* TPartitionFixture::CreatePartition(const TCreatePartitionParams& par
 
             if (params.FillHead) {
                 WaitBlobReadRequest();
-                SendBlobReadResponse(params.Begin, params.End);
+                SendBlobReadResponse();
             }
         }
 
@@ -1052,8 +1053,8 @@ void TPartitionFixture::WaitBlobReadRequest()
     UNIT_ASSERT_VALUES_EQUAL(event->Record.CmdReadSize(), 1);
 }
 
-TBatch CreateBatch(size_t count) {
-    TBatch batch;
+TBatch CreateBatch(size_t count, ui64 offset) {
+    TBatch batch(offset, 0);
 
     for (size_t i = 0; i < count; ++i) {
         Cerr << ">>>> ADD BLOB " << i << " writeTimestamp=" << (TInstant::Now() - TDuration::MilliSeconds(10)) << Endl << Flush;
@@ -1069,18 +1070,16 @@ TBatch CreateBatch(size_t count) {
     return batch;
 }
 
-void TPartitionFixture::SendBlobReadResponse(ui64 begin, ui64 end)
+void TPartitionFixture::SendBlobReadResponse()
 {
-    auto batch = CreateBatch(end - begin);
-    TString valueD;
-    batch.SerializeTo(valueD);
+    UNIT_ASSERT(!HeadBlobData.empty());
 
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
     event->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
 
     auto read = event->Record.AddReadResult();
     read->SetStatus(NKikimrProto::OK);
-    read->SetValue(valueD);
+    read->SetValue(HeadBlobData);
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
@@ -1159,7 +1158,15 @@ void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
 
     pair->SetStatus(NKikimrProto::OK);
     pair->SetKey(key.Data(), key.Size());
-    pair->SetValueSize(684);
+    if (isHead) {
+        // The range response and the subsequent blob read must describe the same bytes.
+        HeadBlobData.clear();
+        auto batch = CreateBatch(end - begin, begin);
+        batch.SerializeTo(HeadBlobData);
+        pair->SetValueSize(HeadBlobData.size());
+    } else {
+        pair->SetValueSize(684);
+    }
     pair->SetCreationUnixTime(TInstant::Now().Seconds());
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));

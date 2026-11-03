@@ -52,7 +52,6 @@ private:
             HFuncTraced(TEvPQ::TEvInitCredentials, HandleInitCredentials);
             HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
-            HFuncTraced(TEvPQ::TEvReplicationDataAck, Handle);
             HFuncTraced(TEvPQ::TEvCreateConsumer, CreateConsumer);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
             HFuncTraced(TEvPersQueue::TEvResponse, Handle);
@@ -72,10 +71,13 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
 <<<<<<< HEAD
+<<<<<<< HEAD
             HFuncTraced(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
 =======
             HFuncTraced(TEvPQ::TEvReplicationDataAck, Handle);
 >>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
+=======
+>>>>>>> 28796270489 (replicate mlp consumer offsets (#57984))
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvPQ::TEvRequestPartitionStatus, RequestSourcePartitionStatus);
             HFuncTraced(TEvPQ::TEvRetryWrite, HandleRetryWrite);
@@ -140,7 +142,6 @@ public:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateCounters::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorContext& ctx);
     void HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
     void TryToRead(const TActorContext& ctx);
     void TryToWrite(const TActorContext& ctx);
@@ -172,7 +173,6 @@ private:
 
     TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> Queue;
     TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> WriteInFlight;
-    bool ReplicationDataInFlight = false;
     ui64 BytesInFlight = 0;
     std::optional<NKikimrClient::TPersQueuePartitionRequest> WriteRequestInFlight;
     std::optional<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent> EndPartitionSessionEvent;

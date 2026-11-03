@@ -1,4 +1,5 @@
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/public/mlp/ut/common/common.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
@@ -109,12 +110,13 @@ public:
         return partitions.front();
     }
 
-    void WaitForOffsets(const TString& path, ui64 expectedCommittedOffset, ui64 expectedEndOffset) {
+    void WaitForOffsets(const TString& path, ui64 expectedCommittedOffset, ui64 expectedEndOffset,
+        const TString& consumer = "reader") {
         const auto deadline = TInstant::Now() + TDuration::Seconds(90);
         ui64 committedOffset = 0;
         ui64 endOffset = 0;
         while (TInstant::Now() < deadline) {
-            const auto partition = DescribePartition(path, "reader");
+            const auto partition = DescribePartition(path, consumer);
             const auto& consumerStats = partition.GetPartitionConsumerStats();
             const auto& partitionStats = partition.GetPartitionStats();
             if (consumerStats && partitionStats) {
@@ -126,17 +128,80 @@ public:
             }
             Sleep(TDuration::MilliSeconds(200));
         }
-        UNIT_ASSERT_VALUES_EQUAL_C(committedOffset, expectedCommittedOffset, "Timed out waiting for replicated consumer offset");
-        UNIT_ASSERT_VALUES_EQUAL_C(endOffset, expectedEndOffset, "Timed out waiting for mirrored messages");
+        UNIT_ASSERT_VALUES_EQUAL_C(committedOffset, expectedCommittedOffset,
+            "Timed out waiting for consumer offset: topic=" << path << ", consumer=" << consumer
+            << ", endOffset=" << endOffset << ", expectedEndOffset=" << expectedEndOffset);
+        UNIT_ASSERT_VALUES_EQUAL_C(endOffset, expectedEndOffset,
+            "Timed out waiting for mirrored messages: topic=" << path << ", consumer=" << consumer);
     }
 
-    void Write(const TString& path, ui64 first, ui64 count) {
+    void Write(const TString& path, ui64 first, ui64 count, const TString& payloadSuffix = {}) {
         auto writer = Client.CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
             .Path(path).ProducerId("producer").MessageGroupId("producer").Codec(NYdb::NTopic::ECodec::RAW));
         for (ui64 offset = first; offset < first + count; ++offset) {
-            UNIT_ASSERT_C(writer->Write("message-" + ToString(offset), offset + 1, std::nullopt, TDuration::Seconds(10)), offset);
+            UNIT_ASSERT_C(writer->Write("message-" + ToString(offset) + payloadSuffix,
+                offset + 1, std::nullopt, TDuration::Seconds(10)), offset);
         }
         UNIT_ASSERT_C(writer->Close(TDuration::Seconds(30)), path);
+    }
+
+    void AddMLPConsumer(const TString& path) {
+        // Use PQv1 so the existing _ydb_replication_consumer attribute is
+        // reapplied when rebuilding the consumer list.
+        auto settings = Describe(path);
+        auto* rule = settings.add_read_rules();
+        rule->set_consumer_name("mlp-consumer");
+        rule->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+        rule->add_supported_codecs(Ydb::PersQueue::V1::CODEC_RAW);
+        rule->mutable_shared_consumer_type()->set_keep_messages_order(false);
+        Alter(path, settings);
+    }
+
+    void ReadMLP(const TString& path, ui64 first, ui64 count, const TString& payloadSuffix) {
+        auto& runtime = Setup.GetRuntime();
+        const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+        ui64 received = 0;
+        while (received < count && TInstant::Now() < deadline) {
+            NPQ::NMLP::CreateReaderActor(runtime, {
+                .DatabasePath = Setup.GetDatabase(),
+                .TopicName = path,
+                .Consumer = "mlp-consumer",
+                .WaitTime = TDuration::Seconds(1),
+                .ProcessingTimeout = TDuration::Minutes(5),
+                .MaxNumberOfMessage = 1,
+            });
+            auto response = NPQ::NMLP::GetReadResponse(runtime, TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+            if (response->Messages.empty()) {
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+            const auto& message = response->Messages.front();
+            UNIT_ASSERT_VALUES_EQUAL(message.MessageId.PartitionId, 0);
+            UNIT_ASSERT_VALUES_EQUAL(message.MessageId.Offset, first + received);
+            UNIT_ASSERT_VALUES_EQUAL(message.Data, "message-" + ToString(first + received) + payloadSuffix);
+            ++received;
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(received, count, path);
+    }
+
+    void CommitMLP(const TString& path, const TVector<ui64>& offsets) {
+        NPQ::NMLP::TCommitterSettings settings{
+            .DatabasePath = Setup.GetDatabase(),
+            .TopicName = path,
+            .Consumer = "mlp-consumer",
+        };
+        for (auto offset : offsets) {
+            settings.Messages.push_back({0, offset});
+        }
+        auto& runtime = Setup.GetRuntime();
+        NPQ::NMLP::CreateCommitterActor(runtime, std::move(settings));
+        auto response = NPQ::NMLP::GetChangeResponse(runtime, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), offsets.size());
+        for (const auto& message : response->Messages) {
+            UNIT_ASSERT_C(message.Status == NPQ::NMLP::EOperationResult::Success, message.MessageId.Offset);
+        }
     }
 
     void Read(const TString& path, ui64 first, ui64 count, ui64 endOffset) {
@@ -254,6 +319,58 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
 
         env.Write(destination, 1000, 100);
         env.Read(destination, 600, 500, 1100);
+    }
+
+    void TestReplicateInitialAndUpdatedMLPConsumerOffsets(bool largeMessages) {
+        TTopicReplicationEnv env;
+        const TString source = "/Root/mlp_replication_source";
+        const TString destination = "/Root/mlp_replication_destination";
+        const TString payloadSuffix = largeMessages ? TString(600 * 1024, 'x') : TString{};
+        env.Create(source, true);
+        env.Create(destination, false);
+        env.AddMLPConsumer(source);
+        env.AddMLPConsumer(destination);
+        const auto sourceSettings = env.Describe(source);
+        const auto replicationConsumer = sourceSettings.attributes().find("_ydb_replication_consumer");
+        UNIT_ASSERT_C(replicationConsumer != sourceSettings.attributes().end(),
+            "Adding an MLP consumer must preserve the replication consumer type");
+        UNIT_ASSERT_VALUES_EQUAL(replicationConsumer->second, "replicator");
+        env.Write(source, 0, 10, payloadSuffix);
+
+        // An acknowledgement beyond a gap must not advance the committed prefix.
+        env.ReadMLP(source, 0, 5, payloadSuffix);
+        env.CommitMLP(source, {0, 1, 2, 4});
+        env.WaitForOffsets(source, 3, 10, "mlp-consumer");
+
+        // The first replication session delivers the existing MLP offset.
+        env.EnableMirroring(source, destination);
+        env.WaitForOffsets(destination, 3, 10, "mlp-consumer");
+
+        // Closing the gap advances the mirror without writing any new messages.
+        env.CommitMLP(source, {3});
+        env.WaitForOffsets(source, 5, 10, "mlp-consumer");
+        env.WaitForOffsets(destination, 5, 10, "mlp-consumer");
+
+        auto settings = env.Describe(destination);
+        settings.clear_remote_mirror_rule();
+        settings.mutable_attributes()->erase("_ydb_mirror_consumer_offsets");
+        env.Alter(destination, settings);
+
+        // Restart without a source that could reapply the offset: the MLP state
+        // itself must be durable, and the uncommitted suffix must remain readable.
+        env.Setup.GetServer().KillTopicPqTablets(destination);
+        env.WaitForOffsets(destination, 5, 10, "mlp-consumer");
+        env.ReadMLP(destination, 5, 5, payloadSuffix);
+        env.CommitMLP(destination, {5, 6, 7, 8, 9});
+        env.WaitForOffsets(destination, 10, 10, "mlp-consumer");
+    }
+
+    Y_UNIT_TEST(ReplicateInitialAndUpdatedMLPConsumerOffsets) {
+        TestReplicateInitialAndUpdatedMLPConsumerOffsets(false);
+    }
+
+    Y_UNIT_TEST(ReplicateInitialAndUpdatedMLPConsumerOffsetsWithLargeMessages) {
+        TestReplicateInitialAndUpdatedMLPConsumerOffsets(true);
     }
 
     Y_UNIT_TEST(ConsumerOffsetsSurviveSourceTabletRestart) {

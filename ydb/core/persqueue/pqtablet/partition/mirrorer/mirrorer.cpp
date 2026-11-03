@@ -387,8 +387,7 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
             "[STATE] replication offsets",
             {"replicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
             {"offsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
-            {"lastReplicationDataTimestamp", LastReplicationDataTimestamp},
-            {"replicationDataInFlight", ReplicationDataInFlight}
+            {"lastReplicationDataTimestamp", LastReplicationDataTimestamp}
         );
         LOG_N(
             "[STATE] bytes in flight messages in write request queue",
@@ -552,7 +551,7 @@ void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const
     }
 =======
 void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
-    if (ReplicationDataInFlight || (OffsetsByConsumers.empty() && !MirroredOffsetToSend)) {
+    if (OffsetsByConsumers.empty() && !MirroredOffsetToSend) {
         return;
     }
 
@@ -570,7 +569,6 @@ void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
         return;
     }
 
-    ReplicationDataInFlight = true;
     auto event = MakeHolder<TEvPQ::TEvReplicationData>();
     for (const auto& [consumer, offset] : offsetsByConsumersToSend) {
         (event->OffsetsByConsumers)[consumer] = offset;
@@ -1057,14 +1055,6 @@ void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const
         TryToSendReplicationData(ctx);
     }
     ScheduleConsumerCreation(ctx);
-}
-
-void TMirrorer::Handle(TEvPQ::TEvReplicationDataAck::TPtr& ev, const TActorContext&) {
-    if (ev->Sender != PartitionActor || !ReplicationDataInFlight) {
-        return;
-    }
-    ReplicationDataInFlight = false;
-    Send(SelfId(), new TEvents::TEvWakeup());
 }
 
 NActors::IActor* CreateMirrorer(const ui64 tabletId,

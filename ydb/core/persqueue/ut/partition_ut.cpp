@@ -128,7 +128,14 @@ public:
         return partition.UsersInfoStorage->GetIfExists(consumer);
     }
 
+<<<<<<< HEAD
 >>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
+=======
+    static bool HasPendingReplicationData(const TPartition& partition) {
+        return partition.PendingReplicationData.has_value();
+    }
+
+>>>>>>> 28796270489 (replicate mlp consumer offsets (#57984))
 private:
     TInitMetaStep* MetaStep;
 };
@@ -311,6 +318,7 @@ protected:
     void WaitCmdWrite(const TCmdWriteMatcher& matcher = {});
     void WaitCmdWriteTx(const TCmdWriteTxMatcher& matcher = {});
     void SendCmdWriteResponse(NMsgBusProxy::EResponseStatus status);
+    void WaitForReplicationDataPersisted(const TPartition& partition);
     void WaitProxyResponse(const TProxyResponseMatcher &matcher = {});
     void WaitErrorResponse(const TErrorMatcher& matcher = {});
 
@@ -772,6 +780,21 @@ void TPartitionFixture::SendCmdWriteResponse(NMsgBusProxy::EResponseStatus statu
     event->Record.SetStatus(status);
 
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
+}
+
+void TPartitionFixture::WaitForReplicationDataPersisted(const TPartition& partition)
+{
+    // A KV reply may defer completion through TEvHandleWriteResponse, even with zero minimum latency.
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] {
+        return !TPartitionTestWrapper::HasPendingReplicationData(partition);
+    };
+    options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+    if (!options.CustomFinalCondition()) {
+        Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5));
+    }
+    UNIT_ASSERT_C(!TPartitionTestWrapper::HasPendingReplicationData(partition),
+                  "Replication data did not finish persisting");
 }
 
 void TPartitionFixture::SendSubDomainStatus(bool subDomainOutOfSpace)
@@ -3240,14 +3263,17 @@ void TPartitionFixture::TestRestoreReadSessionActor(bool hasDataRequest)
     sendRequest(session, readSessionActor);
     sendRequest(session, Ctx->Runtime->AllocateEdgeActor());
     UNIT_ASSERT_VALUES_EQUAL(userInfo->ReadSessionActor, readSessionActor);
-    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 1);
+    // The replication consumer's own committed offset is also published after persist.
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("replication"), 3);
 
     SendSetOffset(202, "reader", 5, "");
     WaitCmdWrite();
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = 202});
     Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
-    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 3);
     UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 5);
     UNIT_ASSERT_VALUES_EQUAL(replicationRecipient, readSessionActor);
@@ -3266,9 +3292,11 @@ Y_UNIT_TEST_F(ReplicationDataRestoresReadSessionActorOnHasData, TPartitionFixtur
 
 Y_UNIT_TEST_F(ReplicationDataAckAfterPersist, TPartitionFixture)
 {
+    // Exercise deferred write completion instead of depending on the runtime's clock resolution.
+    Ctx->Runtime->GetAppData(0).PQConfig.SetMinWriteLatencyMs(10);
     const TConfigParams initialConfig{.Version = 1,
         .Consumers = {{.Consumer = "first"}, {.Consumer = "second"}}};
-    CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
         .Config = initialConfig, .FillHead = true}, initialConfig);
     CreateSession("first", "first-session");
 
@@ -3279,27 +3307,24 @@ Y_UNIT_TEST_F(ReplicationDataAckAfterPersist, TPartitionFixture)
         {0, {.Consumer = "first", .Session = "first-session", .Offset = 4}},
         {1, {.Consumer = "second", .Offset = 3}},
     }});
-    auto ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::MilliSeconds(10));
-    UNIT_ASSERT(!ack);
 
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "first")->Offset, 0);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "second")->Offset, 0);
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::Seconds(1));
-    UNIT_ASSERT(ack);
-    UNIT_ASSERT_VALUES_EQUAL(ack->Cookie, 17);
+    WaitForReplicationDataPersisted(*partition);
     SendGetOffset(18, "first");
     WaitProxyResponse({.Cookie = 18, .Offset = 4});
     SendGetOffset(19, "second");
     WaitProxyResponse({.Cookie = 19, .Offset = 3});
 
-    // Acknowledging the batch frees PendingReplicationData for the next one.
+    // Persisting the batch frees PendingReplicationData for the next one.
     event = MakeHolder<TEvPQ::TEvReplicationData>();
     event->OffsetsByConsumers = {{"first", 6}};
     SendEvent(event.Release());
     WaitCmdWrite({.MetaStartOffset = 0, .MetaEndOffset = 10,
         .UserInfos = {{0, {.Consumer = "first", .Session = "first-session", .Offset = 6}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::Seconds(1));
-    UNIT_ASSERT(ack);
+    WaitForReplicationDataPersisted(*partition);
 }
 
 Y_UNIT_TEST_F(ReplicationDataIgnoresUnknownConsumersAndInvalidOffsets, TPartitionFixture)
@@ -3312,8 +3337,7 @@ Y_UNIT_TEST_F(ReplicationDataIgnoresUnknownConsumersAndInvalidOffsets, TPartitio
     SendEvent(event.Release());
     WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 4}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    auto ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::Seconds(1));
-    UNIT_ASSERT(ack);
+    WaitForReplicationDataPersisted(*partition);
     UNIT_ASSERT(!TPartitionTestWrapper::GetUserInfo(*partition, "unknown"));
     UNIT_ASSERT(!TPartitionTestWrapper::GetUserInfo(*partition, ""));
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "first")->Offset, 4);
@@ -3323,9 +3347,58 @@ Y_UNIT_TEST_F(ReplicationDataIgnoresUnknownConsumersAndInvalidOffsets, TPartitio
     SendEvent(event.Release());
     WaitCmdWrite({.Count = 1}); // Only partition metadata; no consumer records are created.
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::Seconds(1));
-    UNIT_ASSERT(ack);
+    WaitForReplicationDataPersisted(*partition);
     UNIT_ASSERT(!TPartitionTestWrapper::GetUserInfo(*partition, "unknown"));
+}
+
+Y_UNIT_TEST_F(ReplicationDataIgnoresReplicationConsumerWithoutRetryingPersist, TPartitionFixture)
+{
+    const TConfigParams initialConfig{.Version = 1, .Consumers = {
+        {.Consumer = "reader"}, {.Consumer = "replication", .Offset = 2}}};
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+        .Config = initialConfig, .FillHead = true}, initialConfig);
+    Config.SetVersion(2);
+    GetConsumer(Config, "replication")->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged();
+
+    ui64 writes = 0;
+    auto prevObserver = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->Sender == ActorId
+            && event->GetTypeRewrite() == TEvKeyValue::TEvRequest::EventType
+            && event->Get<TEvKeyValue::TEvRequest>()->Record.CmdWriteSize() > 0) {
+            ++writes;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    // The upstream replication consumer is ahead of the local downstream reader.
+    // Both a replication-only payload and a mixed payload must finish after one write.
+    for (bool includeReader : {false, true}) {
+        const auto writesBefore = writes;
+        auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+        event->OffsetsByConsumers = {{"replication", 9}};
+        if (includeReader) {
+            event->OffsetsByConsumers["reader"] = 4;
+        }
+        SendEvent(event.Release());
+        if (includeReader) {
+            WaitCmdWrite({.UserInfos = {{0, {.Consumer = "reader", .Offset = 4}}}});
+        } else {
+            WaitCmdWrite({.Count = 1}); // Only partition metadata.
+        }
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        WaitForReplicationDataPersisted(*partition);
+        Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+
+        UNIT_ASSERT_VALUES_EQUAL(writes, writesBefore + 1);
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "replication")->Offset, 2);
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "reader")->Offset,
+            includeReader ? 4 : 0);
+    }
+    Ctx->Runtime->SetObserverFunc(prevObserver);
 }
 
 Y_UNIT_TEST_F(ReplicationDataDoesNotRewindConsumerOffsets, TPartitionFixture)
@@ -3339,17 +3412,15 @@ Y_UNIT_TEST_F(ReplicationDataDoesNotRewindConsumerOffsets, TPartitionFixture)
     SendEvent(event.Release());
     WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 6}}, {1, {.Consumer = "second", .Offset = 8}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    auto ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::Seconds(1));
-    UNIT_ASSERT(ack);
+    WaitForReplicationDataPersisted(*partition);
 
-    // An older batch is acknowledged without moving persisted offsets backwards.
+    // An older batch does not move persisted offsets backwards.
     event = MakeHolder<TEvPQ::TEvReplicationData>();
     event->OffsetsByConsumers = {{"first", 1}, {"second", 2}};
     SendEvent(event.Release());
     WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 6}}, {1, {.Consumer = "second", .Offset = 8}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::Seconds(1));
-    UNIT_ASSERT(ack);
+    WaitForReplicationDataPersisted(*partition);
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "first")->Offset, 6);
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "second")->Offset, 8);
 }
@@ -3373,8 +3444,7 @@ Y_UNIT_TEST_F(ReplicationDataDoesNotRestoreRemovedConsumer, TPartitionFixture)
     WaitPartitionConfigChanged();
     WaitCmdWrite({.UserInfos = {{0, {.Consumer = "first", .Offset = 7}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    auto ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::Seconds(1));
-    UNIT_ASSERT(ack);
+    WaitForReplicationDataPersisted(*partition);
     UNIT_ASSERT(!TPartitionTestWrapper::GetUserInfo(*partition, "removed"));
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "first")->Offset, 7);
 }
@@ -3383,7 +3453,7 @@ Y_UNIT_TEST_F(ReplicationDataRetriesAfterUnrelatedPersist, TPartitionFixture)
 {
     const TConfigParams initialConfig{.Version = 1,
         .Consumers = {{.Consumer = "first"}, {.Consumer = "second"}}};
-    CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
         .Config = initialConfig, .FillHead = true}, initialConfig);
 
     SendSetOffset(1, "first", 2, "");
@@ -3399,8 +3469,6 @@ Y_UNIT_TEST_F(ReplicationDataRetriesAfterUnrelatedPersist, TPartitionFixture)
         {0, {.Consumer = "first", .Offset = 7}},
         {1, {.Consumer = "second", .Offset = 8}},
     }});
-    auto ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::MilliSeconds(10));
-    UNIT_ASSERT(!ack);
     // The previous KV reply must publish only the offset that it actually wrote.
     SendGetOffset(2, "first");
     WaitProxyResponse({.Cookie = 2, .Offset = 2});
@@ -3408,8 +3476,7 @@ Y_UNIT_TEST_F(ReplicationDataRetriesAfterUnrelatedPersist, TPartitionFixture)
     WaitProxyResponse({.Cookie = 3, .Offset = 0});
 
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::Seconds(1));
-    UNIT_ASSERT(ack);
+    WaitForReplicationDataPersisted(*partition);
     SendGetOffset(4, "first");
     WaitProxyResponse({.Cookie = 4, .Offset = 7});
     SendGetOffset(5, "second");
@@ -3439,16 +3506,10 @@ Y_UNIT_TEST_F(ReplicationDataRetriesMirroredOffsetAfterUnrelatedPersist, TPartit
 
         SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
         WaitProxyResponse({.Cookie = 1});
-        auto ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::MilliSeconds(10));
-        UNIT_ASSERT(!ack);
         WaitCmdWrite({.MetaEndOffset = 0, .MetaMirroredOffset = mirroredOffset});
-        ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::MilliSeconds(10));
-        UNIT_ASSERT(!ack);
 
         SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-        ack = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(Ctx->Edge, TDuration::Seconds(1));
-        UNIT_ASSERT(ack);
-        UNIT_ASSERT_VALUES_EQUAL(ack->Cookie, mirroredOffset);
+        WaitForReplicationDataPersisted(*partition);
         UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::BlobEncoder(*partition).MirroredOffset, mirroredOffset);
     }
 }

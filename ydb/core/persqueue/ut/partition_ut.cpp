@@ -111,6 +111,10 @@ public:
         return partition.GetWriteTimeEstimate(offset);
     }
 
+    static ui64 GetStartOffset(TPartition& partition) {
+        return partition.GetStartOffset();
+    }
+
     static ui64 GetEndOffset(TPartition& partition) {
         return partition.GetEndOffset();
     }

@@ -534,7 +534,6 @@ Y_UNIT_TEST_SUITE(TBlockIO_Actor) {
             const auto sender = runtime.AllocateEdgeActor();
             const auto proxy = runtime.AllocateEdgeActor();
             runtime.RegisterService(MakeBlobStorageProxyID(1), proxy);
-            TBlockEvents<TEvBlobStorage::TEvGet> reads(runtime);
 
             TRecord record(1);
             record.Push(TLogoBlobID(1, 1, 1, 1, 10, 0));
@@ -551,9 +550,8 @@ Y_UNIT_TEST_SUITE(TBlockIO_Actor) {
             runtime.Send(new IEventHandle(
                 bioActor, sender, new NBlockIO::TEvFetch(EPriority::Fast, collection, { collection->GetLocation(0) },
                                       requestCookie, accounting.Share())));
-            runtime.WaitFor("block IO read dispatched", [&] {
-                return !reads.empty();
-            }, TDuration::Seconds(5));
+            auto read = runtime.GrabEdgeEvent<TEvBlobStorage::TEvGet>(proxy, TDuration::Seconds(5));
+            UNIT_ASSERT_VALUES_EQUAL(read->Sender, bioActor);
 
             UNIT_ASSERT_VALUES_EQUAL(
                 accounting.GetMemoryUsage(), metadataBytes + (globs ? 10 + TSharedData::OverheadSize : 0));

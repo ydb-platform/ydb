@@ -49,45 +49,70 @@ jobs:
     steps:
       - name: Dispatch executor workflow on remote_executor_ref
         env:
-          # GITHUB_TOKEN does not start new workflow runs.
+          # GITHUB_TOKEN does not start new workflow runs; tiny-worker has no gh CLI.
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           EXECUTOR_REF: ${{ inputs.remote_executor_ref }}
           CODE_REF: ${{ inputs.code_ref || github.sha }}
           TEST_TARGETS: ${{ inputs.test_targets }}
           BUILD_PRESET: ${{ inputs.build_preset }}
+          REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
           preset="${BUILD_PRESET%%,*}"
           preset="$(echo "$preset" | xargs)"
+          api="https://api.github.com/repos/${REPO}"
+          auth=(-H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+
           echo "Dispatching \"Run and debug tests\" --ref $EXECUTOR_REF"
           echo "code_ref=$CODE_REF preset=$preset targets=$TEST_TARGETS"
 
-          gh workflow run "Run and debug tests" \
-            --repo "${{ github.repository }}" \
-            --ref "$EXECUTOR_REF" \
-            -f "code_ref=$CODE_REF" \
-            -f "test_targets=$TEST_TARGETS" \
-            -f "build_preset=$preset" \
-            -f "test_size=small,medium" \
-            -f "kind=debug"
+          workflow_id="$(curl -fsS "${auth[@]}" \
+            "${api}/actions/workflows" \
+            | jq -r '.workflows[] | select(.path==".github/workflows/run_and_debug_tests.yml") | .id')"
+          if [ -z "$workflow_id" ] || [ "$workflow_id" = "null" ]; then
+            echo "::error::workflow run_and_debug_tests.yml not found"
+            exit 1
+          fi
+
+          payload="$(jq -n \
+            --arg ref "$EXECUTOR_REF" \
+            --arg code_ref "$CODE_REF" \
+            --arg test_targets "$TEST_TARGETS" \
+            --arg build_preset "$preset" \
+            '{
+              ref: $ref,
+              inputs: {
+                code_ref: $code_ref,
+                test_targets: $test_targets,
+                build_preset: $build_preset,
+                test_size: "small,medium",
+                kind: "debug"
+              }
+            }')"
+
+          curl -fsS "${auth[@]}" -X POST \
+            "${api}/actions/workflows/${workflow_id}/dispatches" \
+            -d "$payload"
 
           sleep 5
-          run_url="$(gh run list --repo "${{ github.repository }}" \
-            --workflow="Run and debug tests" \
-            --branch "$EXECUTOR_REF" \
-            --limit 1 \
-            --json url,databaseId,status \
-            --jq '.[0] | "\(.url) id=\(.databaseId) status=\(.status)"' || true)"
+          run_json="$(curl -fsS "${auth[@]}" \
+            "${api}/actions/workflows/${workflow_id}/runs?branch=${EXECUTOR_REF}&event=workflow_dispatch&per_page=1")"
+          run_url="$(echo "$run_json" | jq -r '.workflow_runs[0].html_url // empty')"
+          run_id="$(echo "$run_json" | jq -r '.workflow_runs[0].id // empty')"
           {
             echo "### Dispatched remote executor"
             echo "- **executor branch:** \`$EXECUTOR_REF\`"
             echo "- **code ref:** \`$CODE_REF\`"
             echo "- **preset:** \`$preset\`"
             echo "- **targets:** \`$TEST_TARGETS\`"
-            echo "- **executor run:** $run_url"
+            if [ -n "$run_url" ]; then
+              echo "- **executor run:** [$run_id]($run_url)"
+            else
+              echo "- **runs:** https://github.com/${REPO}/actions/workflows/run_and_debug_tests.yml"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "$run_url"
+          echo "executor_run=$run_url"
 
   prepare:
     if: inputs.executor == 'ydb_yc'

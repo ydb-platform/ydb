@@ -4,6 +4,7 @@
 #include "assign_const.h"
 #include "assign_internal.h"
 #include "stats.h"
+#include "original.h"
 #include "stream_logic.h"
 
 #include <util/string/cast.h>
@@ -53,10 +54,10 @@ public:
 TCompiledGraph::TCompiledGraph(const NOptimization::TGraph& original, const IColumnResolver& resolver) {
     for (auto&& i : original.GetNodes()) {
         Nodes.emplace(i.first, std::make_shared<TNode>(i.first, i.second->GetProcessor()));
-        for (const auto& input : i.second->GetProcessor()->GetInput()) {
-            const auto name = resolver.GetColumnName(input.GetColumnId(), false);
+        if (const auto* accessor = dynamic_cast<const TOriginalColumnAccessorProcessor*>(i.second->GetProcessor().get())) {
+            const auto& name = accessor->GetDataAddress().GetColumnName();
             if (name) {
-                StatsColumnNames.emplace(input.GetColumnId(), name);
+                StatsColumnNames.emplace(accessor->GetOutput().front().GetColumnId(), name);
             }
         }
     }

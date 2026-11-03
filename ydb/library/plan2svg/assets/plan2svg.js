@@ -13,7 +13,8 @@
     var origin = node;
         while(node && node.tagName == "svg") {
             node.setAttribute("height", Number(node.getAttribute("height")) + delta);
-        if (node !== origin && node.classList.contains("slimable")) {
+        if (node !== origin && node.classList.contains("slimable") &&
+            Array.from(node.children).some(function(child) { return child.hasAttribute("data-cs-panel"); })) {
             node.setAttribute("data-height", Number(node.getAttribute("data-height")) + delta);
         }
             shift_nodes(node.nextElementSibling, delta);

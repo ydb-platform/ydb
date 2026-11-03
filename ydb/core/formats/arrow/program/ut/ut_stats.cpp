@@ -16,7 +16,7 @@ namespace NKikimr::NArrow::NSSA {
             UNIT_ASSERT(processor.IsSuccess());
             UNIT_ASSERT_STRINGS_EQUAL((*processor)->GetStatsFunctionDescription(), "TCompareKernel{Equals}");
             UNIT_ASSERT_STRINGS_EQUAL(BuildStatsExpression((*processor)->GetStatsFunctionDescription(), {"level", "7"}, 1),
-                "TCompareKernel{Equals}(level, 7)");
+                "(level = 7)");
         }
 
         Y_UNIT_TEST(SharedExpressionDagDescriptionsStayBounded) {

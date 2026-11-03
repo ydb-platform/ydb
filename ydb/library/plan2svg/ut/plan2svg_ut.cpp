@@ -1439,13 +1439,13 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
                 {"StepId":1,"StepKind":"Filter","MetaStep":"Filter","OwnedExecutionDuration":1,"Operation":"Filter(column_a = 5)"}]}
         ])json");
         const auto filter = CsRow(svg, "Filter", "", "Filter");
-        UNIT_ASSERT_C(filter.Contains("column_a") && filter.Contains("column_c"), filter);
-        UNIT_ASSERT_C(filter.Contains(" | "), filter);
-        UNIT_ASSERT_C(!filter.Contains("AND column_a = 5"), filter);
-        UNIT_ASSERT_C(CsRow(svg, "FetchOtherColumns", "", "Fetching").Contains("category, payload"), svg);
-        UNIT_ASSERT_C(CsRow(svg, "Aggregation", "", "Aggregation").Contains("GROUP BY category"), svg);
-        UNIT_ASSERT_C(CsRow(svg, "Aggregation", "", "Aggregation").Contains("SUM(metric)"), svg);
-        UNIT_ASSERT_C(CsRow(svg, "Projection", "", "Projection").Contains("category"), svg);
+        UNIT_ASSERT_C(filter.Contains("data-cs-active-shards='2'"), filter);
+        UNIT_ASSERT_C(svg.Contains("Filter ((column_a") && svg.Contains("column_c"), svg);
+        UNIT_ASSERT_C(svg.Contains(" | column_a = 5)"), svg);
+        UNIT_ASSERT_C(!svg.Contains("AND column_a = 5"), svg);
+        UNIT_ASSERT_C(svg.Contains("Fetching (category, payload)"), svg);
+        UNIT_ASSERT_C(svg.Contains("Aggregation (GROUP BY category: COUNT(*), SUM(metric))"), svg);
+        UNIT_ASSERT_C(svg.Contains("Projection (SUM(metric), category)"), svg);
         UNIT_ASSERT_C(!svg.Contains("column_c < 300"), svg);
     }
 

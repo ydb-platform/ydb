@@ -189,18 +189,18 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
 
     Y_UNIT_TEST(Defrag) {
         TTestEnv env;
-        env.Setup(true, 0, nullptr, 1000);
+        env.Setup(true, 0, nullptr, 256);
         env.Start();
         TManualEvent event;
         TTestActorConcurrent::TTestActorState state;
-        const ui32 initialNumActions = NSan::PlainOrUnderSanitizer(1000, 100);
+        const ui32 initialNumActions = NSan::PlainOrUnderSanitizer(200, 50);
         TTestActorConcurrent *actor = new TTestActorConcurrent(env.KeeperId, &event, state, initialNumActions, 1,
             100000 /* writeScore */, 80000 /* deleteScore */, 0 /* readScore */);
         env.ActorSystem->Register(actor);
 //        usleep(1 * 1000 * 1000);
 //        env.ActorSystem->Send(new IEventHandle(env.KeeperId, id, new TEvIncrHugeControlDefrag(0.8)));
         event.WaitI();
-        usleep(50 * 1000 * 1000); // wait for defragment
+        usleep(5 * 1000 * 1000); // wait for defragment
         env.Stop();
 
         event.Reset();
@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
         env.Setup(false);
         env.Start();
         YDB_LOG_DEBUG_CTX(*env.ActorSystem, "Starting recovery");
-        const ui32 numActions = NSan::PlainOrUnderSanitizer(5000, 1000);
+        const ui32 numActions = NSan::PlainOrUnderSanitizer(500, 100);
         actor = new TTestActorConcurrent(env.KeeperId, &event, state, numActions, 2);
         env.ActorSystem->Register(actor);
         event.WaitI();

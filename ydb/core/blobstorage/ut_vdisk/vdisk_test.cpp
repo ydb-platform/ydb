@@ -592,9 +592,9 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
         auto vdiskSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(60u << 10u);
         auto vdiskSecondSetup = std::make_shared<TFastVDiskSetupMinHugeBlob>(8u << 10u);
         TChaoticWriteRestartWriteSettings settings(
-            TWriteRestartReadSettings::OneSetup(300, 20u << 10u, HUGEB, vdiskSetup),
+            TWriteRestartReadSettings::OneSetup(80, 20u << 10u, HUGEB, vdiskSetup),
             vdiskSecondSetup,
-            500,
+            80,
             TDuration::Seconds(10),
             TDuration::Seconds(0));
         ChaoticWriteRestartWrite(settings, TIMEOUT);

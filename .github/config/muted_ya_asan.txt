@@ -212,6 +212,7 @@ ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.ChildWor
 ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.PersistedWorkerWaitsForSecret+SecretFirst
 ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.PersistedWorkerWaitsForSecret-SecretFirst
 ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.RecoveredWorkerAuthenticatesAndConsumesAfterDelayedSecret
+ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapAfterSessionStartWithLaterMessageReportsDataLoss
 ydb/core/tx/schemeshard/ut_full_backup TFullBackupRebootTest.ForgetIsDurableAcrossReboots[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_full_backup unittest.sole chunk
 ydb/core/tx/schemeshard/ut_index_build unittest.[*/*] chunk

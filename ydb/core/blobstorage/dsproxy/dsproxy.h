@@ -267,6 +267,8 @@ public:
     virtual ERequestType GetRequestType() const = 0;
     virtual ::NMonitoring::TDynamicCounters::TCounterPtr& GetActiveCounter() const = 0;
 
+    virtual bool ShouldPostponeNotReady(ui32 type) const;
+
     void Registered(TActorSystem *as, const TActorId& parentId) override;
 
     STFUNC(InitialStateFunc);

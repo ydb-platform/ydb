@@ -224,6 +224,7 @@ public:
                 if (!considerSlowAsError || !disk.IsSlow) {
                     TBlobState::ESituation partSituation = disk.DiskParts[partIdx].Situation;
                     if (partSituation != TBlobState::ESituation::Error &&
+                            partSituation != TBlobState::ESituation::NotReady &&
                             partSituation != TBlobState::ESituation::Absent &&
                             partSituation != TBlobState::ESituation::Lost) {
                         isMissing = false;

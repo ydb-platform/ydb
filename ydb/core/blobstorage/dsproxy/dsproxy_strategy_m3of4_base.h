@@ -39,7 +39,8 @@ namespace NKikimr {
             TBlobStorageGroupInfo::TSubgroupVDisks error(&info.GetTopology());
             for (ui32 diskIdx = 0; diskIdx < state.Disks.size(); ++diskIdx) {
                 for (const auto& part : state.Disks[diskIdx].DiskParts) {
-                    if (part.Situation == TBlobState::ESituation::Error) {
+                    if (part.Situation == TBlobState::ESituation::Error ||
+                            part.Situation == TBlobState::ESituation::NotReady) {
                         error |= {&info.GetTopology(), diskIdx};
                         break;
                     }

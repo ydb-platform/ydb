@@ -69,6 +69,7 @@ protected:
                 const bool dataPart = info.Type.PartSize(TLogoBlobID(state.Id, partIdx + 1));
                 switch (state.Disks[diskIdx].DiskParts[partIdx].Situation) {
                     case TBlobState::ESituation::Error:
+                    case TBlobState::ESituation::NotReady:
                         error |= {&info.GetTopology(), diskIdx};
                         break;
 
@@ -123,6 +124,7 @@ protected:
                         auto& part = disk.DiskParts[group.PartIdx];
                         switch (auto& s = part.Situation) {
                             case TBlobState::ESituation::Error:
+                            case TBlobState::ESituation::NotReady:
                             case TBlobState::ESituation::Present:
                             case TBlobState::ESituation::Sent:
                                 break; // this part/disk is ignored for now
@@ -133,7 +135,7 @@ protected:
                                 // look for the data counterpart situation -- can we use this part to store data?
                                 using E = TBlobState::ESituation;
                                 const auto cs = disk.DiskParts[!group.PartIdx].Situation;
-                                if (cs == E::Error || cs == E::Present || cs == E::Sent) {
+                                if (cs == E::Error || cs == E::NotReady || cs == E::Present || cs == E::Sent) {
                                     break; // we should not fill in this part
                                 }
                                 if (considerLost && s != TBlobState::ESituation::Lost) {

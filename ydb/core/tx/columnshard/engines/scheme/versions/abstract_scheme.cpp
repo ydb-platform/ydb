@@ -115,21 +115,20 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
                                                features.GetArrowField()->type()->ToString() + " vs " + incomingColumn->type()->ToString());
             }
         }
-        if (pkFieldIdx && hasNull) {
-            if (!AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK() || !GetIndexInfo().IsNullableVerifiedByIndex(targetIdx)) {
+        if (hasNull && !GetIndexInfo().IsNullableVerifiedByIndex(targetIdx)) {
+            // Nullability comes from the table schema only (AllowNullableColumnsInPK is checked by schemeshard at creation).
+            if (pkFieldIdx) {
+                // a key column identifies the row: NULL is rejected for every modification type, defaults do not apply
                 return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
             }
-        }
-        if (hasNull) {
             switch (mType) {
                 case NEvWrite::EModificationType::Replace:
                 case NEvWrite::EModificationType::Insert:
-                case NEvWrite::EModificationType::Upsert: {
-                    if (!GetIndexInfo().IsNullableVerifiedByIndex(targetIdx) &&
-                        !GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
+                case NEvWrite::EModificationType::Upsert:
+                    if (!GetIndexInfo().GetColumnExternalDefaultValueByIndexVerified(targetIdx)) {
                         return TConclusionStatus::Fail("empty field for non-default column: '" + dstSchema.field(targetIdx)->name() + "'");
                     }
-                }
+                    break;
                 case NEvWrite::EModificationType::Delete:
                 case NEvWrite::EModificationType::Update:
                 case NEvWrite::EModificationType::Increment:

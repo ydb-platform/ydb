@@ -426,14 +426,9 @@ public:
         return result;
     }
 
-<<<<<<< HEAD
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TDropReplication");
-=======
-    void AbortPropose(TProposeContext& context) override {
+    void AbortPropose(TOperationContext& context) override {
         // Escalations use the existing transaction and are reverted by MemChanges.
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
->>>>>>> d316aa153b7 ([KIKIMR-27521] Allow FORCE DROP of asynchronous replication without source access (#57116))
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

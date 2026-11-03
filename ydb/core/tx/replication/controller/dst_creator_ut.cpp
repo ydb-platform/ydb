@@ -1152,7 +1152,7 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return copy;
         };
 
-        ExistingDst(NKikimrScheme::StatusSchemeError, "Empty replication config", clearConfig, TTestTableDescription{
+        ExistingDst(NKikimrScheme::StatusSchemeError, "replication configuration is missing", clearConfig, TTestTableDescription{
             .Name = "Table",
             .KeyColumns = {"key"},
             .Columns = {

@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(BootstrapImport) {
 }
 
 Y_UNIT_TEST_SUITE(AttachmentCompatibility) {
-    Y_UNIT_TEST(LegacyAttachingDoesNotBlockOtherReplicationAndCanBeDropped) {
+    Y_UNIT_TEST_TWIN(LegacyAttachingFailsValidationAndCanBeDropped, MissingConfig) {
         NTestHelpers::TEnv env;
         auto& runtime = env.GetRuntime();
         const auto service = runtime.Register(CreateReplicationService());
@@ -265,7 +265,6 @@ Y_UNIT_TEST_SUITE(AttachmentCompatibility) {
         }, "legacy destination placeholder");
 
         const auto pathId = env.GetPathId("/Root/legacy");
-        const auto destinationId = env.GetPathId("/Root/legacy_replica");
         const auto controllerId = env.GetDescription("/Root/legacy").GetPathDescription()
             .GetReplicationDescription().GetControllerId();
         const auto describe = [&] {
@@ -294,6 +293,12 @@ Y_UNIT_TEST_SUITE(AttachmentCompatibility) {
             return readDestinationState() == static_cast<ui32>(TReplication::EDstState::WaitingImport);
         }, "controller to persist destination creation");
 
+        if (MissingConfig) {
+            scheme(R"(DROP TABLE `/Root/legacy_replica`;)");
+            scheme(R"(CREATE TABLE `/Root/legacy_replica` (key Uint32, value Utf8, PRIMARY KEY(key));)");
+        }
+        const auto destinationId = env.GetPathId("/Root/legacy_replica");
+
         // Reproduce the on-disk layout of an older controller interrupted during attachment.
         // Use the old numeric values so changing the enum cannot silently change the fixture.
         NKikimrMiniKQL::TResult result;
@@ -318,10 +323,20 @@ Y_UNIT_TEST_SUITE(AttachmentCompatibility) {
             InvalidateTabletResolverCache(runtime, controllerId);
             return ResolveTablet(runtime, controllerId) != previousActor;
         }, "legacy controller restart");
-        UNIT_ASSERT_C(describe().GetState().HasStandBy(), "Controller did not load the legacy replication");
+        WaitFor([&] {
+            return describe().GetState().HasError();
+        }, "legacy attachment validation error");
+        const auto error = describe().GetState().GetError().ShortDebugString();
+        UNIT_ASSERT_STRING_CONTAINS(error, MissingConfig
+            ? "replication configuration is missing"
+            : "Destination table import is not complete (expected IMPORTED)");
+        if (MissingConfig) {
+            UNIT_ASSERT_STRING_CONTAINS(error, "/Root/legacy_replica");
+            UNIT_ASSERT_STRING_CONTAINS(error, "Recreate the replication and import data");
+        }
         const auto restartedActor = ResolveTablet(runtime, controllerId);
 
-        // A stranded legacy target must not interfere with other replications using the same service and source.
+        // A failed legacy target must not interfere with other replications using the same service and source.
         scheme(Sprintf(R"(
             CREATE ASYNC REPLICATION `/Root/healthy` FOR `/Root/source` AS `/Root/healthy_replica`
             WITH (CONNECTION_STRING="grpc://%s/?database=/Root", TOKEN="root@builtin", INITIAL_SCAN=TRUE);
@@ -333,7 +348,7 @@ Y_UNIT_TEST_SUITE(AttachmentCompatibility) {
             const auto expected = NYdb::FormatResultSetYson(execute(
                 "SELECT * FROM `/Root/source` ORDER BY key;").GetResultSet(0));
             WaitFor([&] {
-                UNIT_ASSERT(describe().GetState().HasStandBy());
+                UNIT_ASSERT(describe().GetState().HasError());
                 return NYdb::FormatResultSetYson(execute(
                     "SELECT * FROM `/Root/healthy_replica` ORDER BY key;").GetResultSet(0)) == expected;
             }, "healthy replication data");
@@ -342,13 +357,17 @@ Y_UNIT_TEST_SUITE(AttachmentCompatibility) {
         execute(R"(UPDATE `/Root/source` SET value="after"u WHERE key=1u;)");
         waitForData();
 
-        // The legacy target stays inert: no attachment, destination replacement, or restart loop.
+        // Validation must not modify the destination or cause a controller restart loop.
         InvalidateTabletResolverCache(runtime, controllerId);
         UNIT_ASSERT_VALUES_EQUAL(ResolveTablet(runtime, controllerId), restartedActor);
         UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/legacy_replica"), destinationId);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/legacy_replica").GetPathDescription().GetTable()
-            .GetReplicationConfig().GetImportState(), TReplicationConfig::WAITING_IMPORT);
-        UNIT_ASSERT_VALUES_EQUAL(readDestinationState(), 6);
+        const auto table = env.GetDescription("/Root/legacy_replica").GetPathDescription().GetTable();
+        if (MissingConfig) {
+            UNIT_ASSERT(!table.HasReplicationConfig());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(table.GetReplicationConfig().GetImportState(), TReplicationConfig::WAITING_IMPORT);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(readDestinationState(), static_cast<ui32>(TReplication::EDstState::Error));
         UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(execute(
             "SELECT * FROM `/Root/legacy_replica`;").GetResultSet(0)), "[]");
 

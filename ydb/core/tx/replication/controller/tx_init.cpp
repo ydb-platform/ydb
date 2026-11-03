@@ -127,7 +127,10 @@ class TController::TTxInit: public TTxBase {
             auto* target = replication->AddTarget(tid, kind, config);
             Y_ABORT_UNLESS(target);
 
-            target->SetDstState(dstState);
+            // Resume legacy attachment through the current destination validation path.
+            target->SetDstState(dstState == TReplication::EDstState::Attaching
+                ? TReplication::EDstState::Alter
+                : dstState);
             target->SetDstPathId(dstPathId);
             target->SetIssue(issue);
             const auto indexBuild = rowset.GetValueOrDefault<Schema::Targets::IndexBuild>(TString());

@@ -544,7 +544,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     bool CheckTableScheme(const NKikimrSchemeOp::TTableDescription& got, TString& error) const {
         if (!got.HasReplicationConfig()) {
-            error = "Empty replication config";
+            error = TStringBuilder() << "Cannot attach destination table '" << DstPath
+                << "': replication configuration is missing. Recreate the replication and import data"
+                << " into its destination tables before switching to STANDBY";
             return false;
         }
 

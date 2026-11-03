@@ -193,9 +193,9 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
     }
 
     Y_UNIT_TEST(InvalidPasswordReportsWorkerError) {
-        const TString user = "source-auth-user";
-        const TString goodPassword = "source-auth-valid-credential-marker";
-        const TString badPassword = "source-auth-rejected-credential-marker";
+        const TString user = "sourceauthuser";
+        const TString goodPassword = "SourceAuthValidCredentialMarker27516";
+        const TString badPassword = "SourceAuthRejectedCredentialMarker27516";
         TEnv<true> env(user, goodPassword, ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         runtime.SetFastSimulatedTime(false);
@@ -269,10 +269,12 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
         ui32 readerRequests = 0;
         ui32 startedPartitions = 0;
         TVector<NYdb::EStatus> sdkStatuses;
-        using TEvLoginRequest = NGRpcService::TGRpcRequestWrapperNoAuth<
-            NGRpcService::TRpcServices::EvLogin, Ydb::Auth::LoginRequest, Ydb::Auth::LoginResponse>;
-        auto observeLogin = runtime.AddObserver<TEvLoginRequest>(
-            [&](TEvLoginRequest::TPtr&) { ++loginRequests; });
+        auto observeLogin = runtime.AddObserver<NGRpcService::TEvProxyRuntimeEvent>(
+            [&](NGRpcService::TEvProxyRuntimeEvent::TPtr& ev) {
+                if (ev->Get()->GetRpcMethodName().EndsWith("/Login")) {
+                    ++loginRequests;
+                }
+            });
         auto observeRejection = runtime.AddObserver<NSasl::TEvSasl::TEvSaslPlainLoginResponse>(
             [&](NSasl::TEvSasl::TEvSaslPlainLoginResponse::TPtr& ev) {
                 if (ev->Get()->Issue.GetCode() == NKikimrIssues::TIssuesIds::ACCESS_DENIED) {
@@ -328,9 +330,10 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
         UNIT_ASSERT(loginRejections > 0);
         UNIT_ASSERT_C(!sdkStatuses.empty(), "No real SDK closure observed");
         UNIT_ASSERT_VALUES_EQUAL(startedPartitions, 0);
-        UNIT_ASSERT_VALUES_EQUAL(stopped.GetStatus(), NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(stopped.GetStatus()),
+            static_cast<int>(NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
         UNIT_ASSERT_C(stopped.GetReason() == NKikimrReplication::TEvWorkerStatus::REASON_ERROR,
-            TStringBuilder() << "Invalid source password did not produce terminal Error: reason=" << stopped.GetReason()
+            TStringBuilder() << "Invalid source password did not produce terminal Error: reason=" << static_cast<int>(stopped.GetReason())
                 << ", SDK status=" << sdkStatuses.back() << ", readerRequests=" << readerRequests);
         const auto& issue = stopped.GetErrorDescription();
         UNIT_ASSERT(!issue.empty());

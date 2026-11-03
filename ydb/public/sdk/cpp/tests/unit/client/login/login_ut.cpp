@@ -83,10 +83,11 @@ public:
 template <typename TCallback>
 void WithProvider(Ydb::StatusIds::StatusCode firstStatus, TCallback callback) {
     NTesting::InitPortManagerFromEnv();
-    const std::string endpoint = "127.0.0.1:" + std::to_string(NTesting::GetFreePort());
+    const auto port = NTesting::GetFreePort();
+    const std::string endpoint = "127.0.0.1:" + std::to_string(port);
     TLoginService service(firstStatus);
     auto server = grpc::ServerBuilder()
-        .AddListeningPort(endpoint, grpc::InsecureServerCredentials())
+        .AddListeningPort(TStringType{endpoint}, grpc::InsecureServerCredentials())
         .RegisterService(&service)
         .BuildAndStart();
     UNIT_ASSERT(server);

@@ -380,7 +380,7 @@ std::shared_ptr<NExecution::TCompiledGraph> BuildMergeFilterSimpleGraph(const bo
 Y_UNIT_TEST_SUITE(TProgramStatsMeta) {
     Y_UNIT_TEST(ConstantIsAScalarCalculation) {
         auto constant = std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(1), 100);
-        UNIT_ASSERT_VALUES_EQUAL(constant->GetStatsKind(), NKikimr::NScanStats::TStep::Calculation);
+    UNIT_ASSERT(constant->GetStatsKind() == NKikimr::NScanStats::TStep::Calculation);
     }
 
     Y_UNIT_TEST(CompiledConsumerBoundariesDefineTheMetastep) {

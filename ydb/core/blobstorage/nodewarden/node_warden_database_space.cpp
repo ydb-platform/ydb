@@ -78,7 +78,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerDatabaseSpaceState::TPtr e
 
 void TNodeWarden::Handle(TEvents::TEvUndelivered::TPtr ev) {
     if (ev->Get()->SourceType == TEvBlobStorage::EvNodeWardenStandbySeal) {
-        return OnStandbySealResolved(ev->Cookie); // the proxy has gone, and it has reported what it had lost
+        return OnStandbySealResolved(ev->Cookie, ev->Sender); // the proxy has gone, and it has reported what it had lost
     } else if (ev->Get()->SourceType != TEvBlobStorage::EvControllerDatabaseSpaceState) {
         return;
     }

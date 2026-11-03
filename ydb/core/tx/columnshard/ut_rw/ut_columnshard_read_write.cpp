@@ -881,9 +881,10 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     }
 }
 
-void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table) {
+void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table, const bool keepCacheAcrossRestarts = false) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
+    runtime.GetAppData(0).FeatureFlags.SetEnableCsPortionsCacheAcrossRestarts(keepCacheAcrossRestarts);
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_WARN);
@@ -980,6 +981,58 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
             UNIT_ASSERT(DataHas({ rb }, smallWrites, true));
         }
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+    }
+}
+
+void TestPortionsMetadataCacheAfterReboot(const bool keepCacheAcrossRestarts) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    runtime.GetAppData(0).FeatureFlags.SetEnableCsPortionsCacheAcrossRestarts(keepCacheAcrossRestarts);
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    const ui64 tableId = 1;
+    ui64 writeId = 0;
+    ui64 txId = 100;
+    TestTableDescription table;
+    auto planStep = SetupSchema(runtime, sender, tableId, table);
+
+    const std::pair<ui64, ui64> portion = { 0, 100 };
+    std::vector<ui64> writeIds;
+    UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, MakeTestBlob(portion, table.Schema), table.Schema, true, &writeIds));
+    planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    const auto readAll = [&]() {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+        reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
+        auto rb = reader.ReadAll();
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        UNIT_ASSERT(DataHas({ rb }, portion, true));
+    };
+    readAll();
+
+    ui64 askedPortions = 0;
+    auto observer = runtime.AddObserver<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>([&](auto& ev) {
+        for (auto&& [_, byConsumer] : ev->Get()->GetPortions()) {
+            askedPortions += byConsumer.GetPortionsCount();
+        }
+    });
+
+    RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+    readAll();
+
+    if (keepCacheAcrossRestarts) {
+        UNIT_ASSERT_VALUES_EQUAL(askedPortions, 0);
+    } else {
+        UNIT_ASSERT(askedPortions > 0);
     }
 }
 
@@ -3048,14 +3101,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TestWriteRead(true, {}, "zstd");
     }
 
-    void TestCompactionInGranule(const bool reboot, const NScheme::TTypeId typeId) {
+    void TestCompactionInGranule(const bool reboot, const NScheme::TTypeId typeId, const bool keepCacheAcrossRestarts = false) {
         auto schema = TTestSchema::YdbSchema();
         auto pk = TTestSchema::YdbPkSchema();
 
         schema[0].SetType(TTypeInfo(typeId));
         pk[0].SetType(TTypeInfo(typeId));
         TestTableDescription table{ .Schema = schema, .Pk = pk };
-        TestCompactionInGranuleImpl(reboot, table);
+        TestCompactionInGranuleImpl(reboot, table, keepCacheAcrossRestarts);
     }
 
     Y_UNIT_TEST(CompactionInGranule_PKString) {
@@ -3120,6 +3173,46 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(CompactionInGranule_PKDatetime_Reboot) {
         TestCompactionInGranule(true, NTypeIds::Datetime);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKString_Reboot_KeepCache) {
+        TestCompactionInGranule(true, NTypeIds::String, true);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKUtf8_Reboot_KeepCache) {
+        TestCompactionInGranule(true, NTypeIds::Utf8, true);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKTimestamp_Reboot_KeepCache) {
+        TestCompactionInGranule(true, NTypeIds::Timestamp, true);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKInt32_Reboot_KeepCache) {
+        TestCompactionInGranule(true, NTypeIds::Int32, true);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKUInt32_Reboot_KeepCache) {
+        TestCompactionInGranule(true, NTypeIds::Uint32, true);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKInt64_Reboot_KeepCache) {
+        TestCompactionInGranule(true, NTypeIds::Int64, true);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKUInt64_Reboot_KeepCache) {
+        TestCompactionInGranule(true, NTypeIds::Uint64, true);
+    }
+
+    Y_UNIT_TEST(CompactionInGranule_PKDatetime_Reboot_KeepCache) {
+        TestCompactionInGranule(true, NTypeIds::Datetime, true);
+    }
+
+    Y_UNIT_TEST(PortionsMetadataCacheHitAfterReboot) {
+        TestPortionsMetadataCacheAfterReboot(true);
+    }
+
+    Y_UNIT_TEST(PortionsMetadataCacheMissAfterRebootWhenDisabled) {
+        TestPortionsMetadataCacheAfterReboot(false);
     }
 
     Y_UNIT_TEST(ReadWithProgram) {

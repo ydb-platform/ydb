@@ -9,6 +9,16 @@
 namespace NKikimr::NPersQueueTests {
 namespace {
 
+class TInsecureMirrorReaderFactory : public NPQ::TPersQueueMirrorReaderFactory {
+protected:
+    NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr> GetCredentialsProviderImpl(
+        const NKikimrPQ::TMirrorPartitionConfig::TCredentials&
+    ) const override {
+        // The mirror API requires credentials, but the local source needs no authentication.
+        return NThreading::MakeFuture(NYdb::CreateInsecureCredentialsProviderFactory());
+    }
+};
+
 class TTopicReplicationEnv {
 public:
     // The factory must outlive the server and its mirrorer actors.
@@ -26,7 +36,7 @@ public:
             Setup.GetEndpoint(), grpc::InsecureChannelCredentials())))
     {
         auto& runtime = Setup.GetRuntime();
-        Factory = std::make_shared<NPQ::TPersQueueMirrorReaderFactory>();
+        Factory = std::make_shared<TInsecureMirrorReaderFactory>();
         Factory->Initialize(runtime.GetAnyNodeActorSystem(), runtime.GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings());
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
             runtime.GetAppData(node).PersQueueMirrorReaderFactory = Factory.get();

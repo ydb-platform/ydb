@@ -1593,10 +1593,10 @@ TExprBase DqBuildHashJoin(
     for (const auto* item : rightStructType->GetItems()) {
         blockTypesSupported = blockTypesSupported && !BlocksBlockHashJoin(item->GetItemType());
     }
-    const bool forceScalarHashJoin = useBlockHashJoin && !blockTypesSupported
-        && (mode == EHashJoinMode::Grace || mode == EHashJoinMode::GraceAndSelf)
-        && DqCanUseScalarHashJoin(join, ctx);
-    useBlockHashJoin = useBlockHashJoin && (blockTypesSupported || forceScalarHashJoin);
+    if (useBlockHashJoin && !blockTypesSupported) {
+        useBlockHashJoin = (mode == EHashJoinMode::Grace || mode == EHashJoinMode::GraceAndSelf)
+            && DqCanUseScalarHashJoin(join, ctx);
+    }
 
     const auto& leftItems = leftStructType->GetItems();
     const auto& rightItems = rightStructType->GetItems();
@@ -1920,7 +1920,7 @@ TExprBase DqBuildHashJoin(
     TString callableName = "GraceJoinCore";
     int shift = 2;
     bool selfJoin = false;
-    if (!forceScalarHashJoin && mode == EHashJoinMode::GraceAndSelf && leftIn.Stage().Ptr() == rightIn.Stage().Ptr()) {
+    if (!useBlockHashJoin && mode == EHashJoinMode::GraceAndSelf && leftIn.Stage().Ptr() == rightIn.Stage().Ptr()) {
         callableName = "GraceSelfJoinCore";
         shift = 1;
         selfJoin = true;
@@ -1967,7 +1967,7 @@ TExprBase DqBuildHashJoin(
                         .Add(joinSettings)
                         .Build()
                     .Done().Ptr();
-                if (forceScalarHashJoin) {
+                if (!blockTypesSupported) {
                     hashJoin = ctx.RenameNode(*hashJoin, TDqPhyScalarHashJoin::CallableName());
                 } else if (useScalarHashJoin && DqCanUseScalarHashJoin(join, ctx)) {
                     hashJoin = ctx.RenameNode(*hashJoin, TDqPhyHashJoin::CallableName());

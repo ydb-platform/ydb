@@ -245,6 +245,36 @@ Y_UNIT_TEST_SUITE(AsyncBackoff) {
         UNIT_ASSERT_VALUES_EQUAL(f.Admitted.size(), 2);
     }
 
+    Y_UNIT_TEST(BulkDeadlineExpiryHandsTimerToSurvivingCaller) {
+        for (const size_t callers : {512, 4096}) {
+            TFixture f(TDuration::Seconds(20), TDuration::Seconds(20));
+            f.Fail();
+            size_t expired = 0;
+            const auto deadline = f.Runtime.GetCurrentMonotonicTime() + TDuration::MilliSeconds(1);
+            for (size_t i = 0; i < callers; ++i) {
+                f.Actor.RunAsync([&]() -> async<void> {
+                    const auto version = co_await WithDeadline(deadline, [&]() -> async<ui64> {
+                        co_return co_await f.Backoff.Wait(TFixture::RequestTimeout);
+                    });
+                    UNIT_ASSERT(!version);
+                    ++expired;
+                });
+            }
+            // This caller must take over after every shorter-lived caller has
+            // expired, without losing the only cooldown timer.
+            f.Wait();
+            const auto start = TInstant::Now();
+            f.AdvanceTo(deadline);
+            const auto elapsed = TInstant::Now() - start;
+            Cerr << "bulk-deadline callers=" << callers << " processing_us=" << elapsed.MicroSeconds() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(expired, callers);
+            UNIT_ASSERT(f.Admitted.empty());
+            UNIT_ASSERT(f.ScheduledWakeups <= 2 * callers + 2);
+            f.AdvanceTo(f.Backoff.GetNextAllowedAt());
+            UNIT_ASSERT_VALUES_EQUAL(f.Admitted.size(), 1);
+        }
+    }
+
     Y_UNIT_TEST(SharedFailuresUseStandardJitterAndCap) {
         TFixture f;
         const ui64 baseMilliseconds[] = {1000, 1000, 2000, 3000, 5000, 8000, 8000, 8000};

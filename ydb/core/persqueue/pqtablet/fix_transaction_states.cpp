@@ -22,6 +22,8 @@ ui32 GetPartitionsCount(const NKikimrPQ::TTransaction& tx)
         return tx.GetTabletConfig().PartitionsSize();
     case NKikimrPQ::TTransaction::KIND_UNKNOWN:
         YDB_LOG_ENSURE(false);
+        // This code can't b reached, but compiler requires return
+        return 0;
     }
 }
 

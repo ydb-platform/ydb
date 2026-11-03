@@ -1,0 +1,129 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(opentelemetry_proto)
+
+CRATE_VERSION(0.32.0)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/proto.rs
+    src/proto/tonic/opentelemetry.proto.collector.logs.v1.rs
+    src/proto/tonic/opentelemetry.proto.collector.metrics.v1.rs
+    src/proto/tonic/opentelemetry.proto.collector.profiles.v1development.rs
+    src/proto/tonic/opentelemetry.proto.collector.trace.v1.rs
+    src/proto/tonic/opentelemetry.proto.common.v1.rs
+    src/proto/tonic/opentelemetry.proto.logs.v1.rs
+    src/proto/tonic/opentelemetry.proto.metrics.v1.rs
+    src/proto/tonic/opentelemetry.proto.profiles.v1development.rs
+    src/proto/tonic/opentelemetry.proto.resource.v1.rs
+    src/proto/tonic/opentelemetry.proto.trace.v1.rs
+    src/proto/tonic/opentelemetry.proto.tracez.v1.rs
+    src/transform/common.rs
+    src/transform/logs.rs
+    src/transform/metrics.rs
+    src/transform/mod.rs
+    src/transform/profiles.rs
+    src/transform/trace.rs
+    src/transform/tracez.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    CHANGELOG.md
+    Cargo.lock
+    README.md
+    src/proto/opentelemetry-proto/.bcr/metadata.template.json
+    src/proto/opentelemetry-proto/.bcr/presubmit.yml
+    src/proto/opentelemetry-proto/.bcr/source.template.json
+    src/proto/opentelemetry-proto/.gitattributes
+    src/proto/opentelemetry-proto/.github/CODEOWNERS
+    src/proto/opentelemetry-proto/.github/renovate.json5
+    src/proto/opentelemetry-proto/.github/workflows/build-check.yaml
+    src/proto/opentelemetry-proto/.github/workflows/codeql.yml
+    src/proto/opentelemetry-proto/.github/workflows/fossa.yml
+    src/proto/opentelemetry-proto/.github/workflows/ossf-scorecard.yml
+    src/proto/opentelemetry-proto/.github/workflows/publish-to-bcr.yml
+    src/proto/opentelemetry-proto/.gitignore
+    src/proto/opentelemetry-proto/.lychee.toml
+    src/proto/opentelemetry-proto/.markdownlint.yaml
+    src/proto/opentelemetry-proto/CHANGELOG.md
+    src/proto/opentelemetry-proto/CONTRIBUTING.md
+    src/proto/opentelemetry-proto/LICENSE
+    src/proto/opentelemetry-proto/Makefile
+    src/proto/opentelemetry-proto/README.md
+    src/proto/opentelemetry-proto/RELEASING.md
+    src/proto/opentelemetry-proto/buf.yaml
+    src/proto/opentelemetry-proto/dependencies.Dockerfile
+    src/proto/opentelemetry-proto/docs/README.md
+    src/proto/opentelemetry-proto/docs/design-goals.md
+    src/proto/opentelemetry-proto/docs/img/otlp-client-server.png
+    src/proto/opentelemetry-proto/docs/img/otlp-concurrent.png
+    src/proto/opentelemetry-proto/docs/img/otlp-multi-destination.png
+    src/proto/opentelemetry-proto/docs/img/otlp-request-response.png
+    src/proto/opentelemetry-proto/docs/img/otlp-sequential.png
+    src/proto/opentelemetry-proto/docs/requirements.md
+    src/proto/opentelemetry-proto/docs/specification.md
+    src/proto/opentelemetry-proto/examples/README.md
+    src/proto/opentelemetry-proto/examples/events.json
+    src/proto/opentelemetry-proto/examples/logs.json
+    src/proto/opentelemetry-proto/examples/metrics.json
+    src/proto/opentelemetry-proto/examples/trace.json
+    src/proto/opentelemetry-proto/opentelemetry/proto/collector/README.md
+    src/proto/opentelemetry-proto/opentelemetry/proto/collector/logs/v1/logs_service.proto
+    src/proto/opentelemetry-proto/opentelemetry/proto/collector/logs/v1/logs_service_http.yaml
+    src/proto/opentelemetry-proto/opentelemetry/proto/collector/metrics/v1/metrics_service.proto
+    src/proto/opentelemetry-proto/opentelemetry/proto/collector/metrics/v1/metrics_service_http.yaml
+    src/proto/opentelemetry-proto/opentelemetry/proto/collector/profiles/v1development/profiles_service.proto
+    src/proto/opentelemetry-proto/opentelemetry/proto/collector/profiles/v1development/profiles_service_http.yaml
+    src/proto/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service.proto
+    src/proto/opentelemetry-proto/opentelemetry/proto/collector/trace/v1/trace_service_http.yaml
+    src/proto/opentelemetry-proto/opentelemetry/proto/common/v1/common.proto
+    src/proto/opentelemetry-proto/opentelemetry/proto/logs/v1/logs.proto
+    src/proto/opentelemetry-proto/opentelemetry/proto/metrics/v1/metrics.proto
+    src/proto/opentelemetry-proto/opentelemetry/proto/profiles/v1development/profiles.proto
+    src/proto/opentelemetry-proto/opentelemetry/proto/resource/v1/resource.proto
+    src/proto/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.proto
+    src/proto/tracez.proto
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    gen-tonic
+    gen-tonic-messages
+    metrics
+    prost
+    tonic
+    tonic-prost
+    trace
+)
+
+PEERDIR(
+    contrib/crates/opentelemetry-0.32.0
+    contrib/crates/opentelemetry_sdk-0.32.1
+    contrib/crates/prost-0.14.4
+    contrib/crates/tonic-0.14.6
+    contrib/crates/tonic-prost-0.14.6
+)
+
+LICENSE("Apache-2.0")
+VERSION(0.32.0)
+ORIGINAL_SOURCE(https://static.crates.io/crates/opentelemetry-proto/opentelemetry-proto-0.32.0.crate)
+
+CRATE_PROC_MACROS(
+    contrib/crates/async-trait-0.1.92
+    contrib/crates/bytemuck_derive-1.12.1
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/pin-project-internal-1.1.13
+    contrib/crates/prost-derive-0.14.4
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/thiserror-impl-2.0.21
+    contrib/crates/tokio-macros-2.7.2
+    contrib/crates/tracing-attributes-0.1.31
+    contrib/crates/zerocopy-derive-0.8.63
+)
+
+END()

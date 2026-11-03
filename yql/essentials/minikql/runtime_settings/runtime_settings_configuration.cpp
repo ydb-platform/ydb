@@ -50,7 +50,7 @@ const TRuntimeSettingsConfiguration& TRuntimeSettingsConfiguration::Get() {
 }
 
 TRuntimeSettingsConfiguration::TRuntimeSettingsConfiguration()
-    : NCommon::TDispatcher<TRuntimeSettings>("runtime_settings")
+    : NCommon::TDispatcher<TRuntimeSettings>("runtime_settings", /*strictConfigValidation=*/false, /*normalizeSettingNames=*/false)
 {
     REGISTER_RUNTIME_SETTING(DatumValidation)
         .Parser(MakeDatumValidationModeParser())

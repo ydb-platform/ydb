@@ -18,6 +18,59 @@ namespace NInterconnect::NRdma {
         EvRdmaIoDone,
         EvRdmaReadDone,
         EvRdmaIoReceiveDone,
+        EvQpCacheReady,
+        EvQpCacheNoResources,
+        EvQpCacheError,
+        EvPrivateFillCache,
+        EvPrivateRegisterCache,
+        EvPrivateDestroyQp,
+        EvPrivateDoFillCache,
+        EvPrivateStopCache,
+        EvPrivateInvalidateCq,
+        EvPrivateDestroyCq,
+    };
+
+    struct TEvQpCacheReady: public NActors::TEventLocal<TEvQpCacheReady, ui32(ERdma::EvQpCacheReady)> {
+    };
+
+    struct TEvQpCacheNoResources: public NActors::TEventLocal<TEvQpCacheNoResources, ui32(ERdma::EvQpCacheNoResources)> {
+    };
+
+    struct TEvQpCacheError: public NActors::TEventLocal<TEvQpCacheError, ui32(ERdma::EvQpCacheError)> {
+    };
+
+    struct TEvPrivateInvalidateCq
+        : public NActors::TEventLocal<TEvPrivateInvalidateCq, ui32(ERdma::EvPrivateInvalidateCq)>
+    {
+        TEvPrivateInvalidateCq(const TRdmaCtx* ctx, ICq::TPtr cq, int error)
+            : Ctx(ctx)
+            , Cq(std::move(cq))
+            , Error(error)
+        {}
+
+        const TRdmaCtx* const Ctx;
+        ICq::TPtr Cq;
+        const int Error;
+    };
+
+    struct TEvPrivateDestroyQp
+        : public NActors::TEventLocal<TEvPrivateDestroyQp, ui32(ERdma::EvPrivateDestroyQp)>
+    {
+        explicit TEvPrivateDestroyQp(std::unique_ptr<TQueuePair> qp)
+            : Qp(std::move(qp))
+        {}
+
+        std::unique_ptr<TQueuePair> Qp;
+    };
+
+    struct TEvPrivateDestroyCq
+        : public NActors::TEventLocal<TEvPrivateDestroyCq, ui32(ERdma::EvPrivateDestroyCq)>
+    {
+        explicit TEvPrivateDestroyCq(std::unique_ptr<ICq> cq)
+            : Cq(std::move(cq))
+        {}
+
+        std::unique_ptr<ICq> Cq;
     };
 
     struct TEvGetCqHandle: public NActors::TEventLocal<TEvGetCqHandle, ui32(ERdma::EvGetCqHandle)> {

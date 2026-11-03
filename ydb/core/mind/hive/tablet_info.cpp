@@ -213,10 +213,13 @@ bool TTabletInfo::IsStopped() const {
     return VolatileState == EVolatileState::TABLET_VOLATILE_STATE_STOPPED;
 }
 
-bool TTabletInfo::IsGoodForBalancer(TInstant now) const {
+bool TTabletInfo::IsAllowedByBalancerPolicy() const {
     return (BalancerPolicy == EBalancerPolicy::POLICY_BALANCE)
-            && !Hive.IsInBalancerIgnoreList(GetTabletType())
-            && (now - LastBalancerDecisionTime > Hive.GetTabletKickCooldownPeriod());
+            && !Hive.IsInBalancerIgnoreList(GetTabletType());
+}
+
+bool TTabletInfo::IsInBalancerCooldown(TInstant now) const {
+    return now - LastBalancerDecisionTime <= Hive.GetTabletKickCooldownPeriod();
 }
 
 void TTabletInfo::SetUsageImpact(double usageImpact) {

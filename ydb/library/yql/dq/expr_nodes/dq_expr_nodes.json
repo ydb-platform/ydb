@@ -67,6 +67,14 @@
         ]
     },
     {
+        "Name": "TDqPhyHashJoin",
+        "Base": "TDqJoinBase",
+        "Match": {"Type": "Callable", "Name": "DqPhyHashJoin"},
+        "Children": [
+            {"Index": 8, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+        ]
+    },
+    {
         "Name": "TDqBlockHashJoinCore",
         "Base": "TCallable",
         "Match": {"Type": "Callable", "Name": "BlockHashJoinCore"},

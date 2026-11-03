@@ -59,9 +59,19 @@ class TReplication::TImpl: public TLagProvider {
         TenantResolver = ctx.Register(CreateTenantResolver(ctx.SelfID, ReplicationId, PathId));
     }
 
+    bool HasSourceStreams() const {
+        for (const auto& [_, target] : Targets) {
+            if (target->GetStreamState() != EStreamState::Removed) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool CanApplyResolvedCredentials() const {
         // DROP still needs source credentials to remove retained streams after DONE.
-        return State != EState::Done && (DesiredState != EState::Done || State == EState::Removing);
+        return State != EState::Done && (DesiredState != EState::Done || State == EState::Removing)
+            && (State != EState::Removing || HasSourceStreams());
     }
 
     template <typename... Args>
@@ -131,9 +141,11 @@ public:
 
     template <typename... Args>
     ui64 AddTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) {
+        const auto previousLag = GetLag();
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
         TLagProvider::AddPendingLag(id);
+        NotifyLagChanged(previousLag);
         return id;
     }
 
@@ -150,10 +162,12 @@ public:
     }
 
     void RemoveTarget(ui64 id) {
+        const auto previousLag = GetLag();
         const auto it = Targets.find(id);
         if (it != Targets.end()) {
             TLagProvider::RemoveLag(it->second, id);
             Targets.erase(it);
+            NotifyLagChanged(previousLag);
         }
     }
 
@@ -192,7 +206,7 @@ public:
             return ProgressTargets(ctx);
         }
 
-        if (!YdbProxy && !(State == EState::Removing && !Targets)) {
+        if (!YdbProxy && !(State == EState::Removing && !HasSourceStreams())) {
             THolder<IActor> ydbProxy;
             const auto& params = Config.GetSrcConnectionParams();
             const auto& endpoint = params.GetEndpoint();
@@ -343,16 +357,30 @@ public:
         SetState(EState::Error, issue);
     }
 
-    void UpdateLag(ui64 targetId, TDuration lag) {
+    void UpdateLag(ui64 targetId, std::optional<TDuration> lag) {
         auto it = Targets.find(targetId);
         if (it == Targets.end()) {
             return;
         }
 
-        TLagProvider::UpdateLag(it->second, targetId, lag);
+        const auto previousLag = GetLag();
+        if (lag) {
+            TLagProvider::UpdateLag(it->second, targetId, *lag);
+        } else {
+            TLagProvider::InvalidateLag(it->second, targetId);
+        }
+
+        NotifyLagChanged(previousLag);
+    }
+
+    void NotifyLagChanged(std::optional<TDuration> previousLag) {
+        if (LagChangedCallback && previousLag != GetLag()) {
+            LagChangedCallback();
+        }
     }
 
 private:
+    std::function<void()> LagChangedCallback;
     const ui64 ReplicationId;
     const TPathId PathId;
 
@@ -553,6 +581,24 @@ ui64 TReplication::GetNextTargetId() const {
     return Impl->NextTargetId;
 }
 
+bool TReplication::IsCredentialsReady() const {
+    const auto& params = Impl->Config.GetSrcConnectionParams();
+    if (params.GetEndpoint().empty()) {
+        return true;
+    }
+
+    switch (params.GetCredentialsCase()) {
+    case NKikimrReplication::TConnectionParams::kStaticCredentials:
+        return params.GetStaticCredentials().HasPassword();
+    case NKikimrReplication::TConnectionParams::kOAuthToken:
+        return params.GetOAuthToken().HasToken();
+    case NKikimrReplication::TConnectionParams::kIamCredentials:
+        return params.GetIamCredentials().HasResourceId();
+    default:
+        return false;
+    }
+}
+
 void TReplication::UpdateSecret(const TString& secretValue) {
     auto& params = *Impl->Config.MutableSrcConnectionParams();
     switch (params.GetCredentialsCase()) {
@@ -648,12 +694,16 @@ bool TReplication::CheckAlterDone() const {
     return (Impl->State == EState::Ready || Impl->State == EState::Paused) && Impl->PendingAlterTargets.empty();
 }
 
-void TReplication::UpdateLag(ui64 targetId, TDuration lag) {
+void TReplication::UpdateLag(ui64 targetId, std::optional<TDuration> lag) {
     Impl->UpdateLag(targetId, lag);
 }
 
 const std::optional<TDuration> TReplication::GetLag() const {
     return Impl->GetLag();
+}
+
+void TReplication::SetLagChangedCallback(std::function<void()> callback) {
+    Impl->LagChangedCallback = std::move(callback);
 }
 
 void TReplication::SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {

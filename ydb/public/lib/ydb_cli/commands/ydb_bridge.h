@@ -15,6 +15,19 @@ public:
     TCommandBridge(bool allowEmptyDatabase);
 };
 
+class TCommandBridgeSetDatabaseMode : public TYdbCommand {
+public:
+    TCommandBridgeSetDatabaseMode();
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    TString TargetDatabase;
+    bool Bridged = false;
+    TString RetainPile;
+};
+
 class TCommandBridgeUpdate : public TYdbCommand {
 public:
     TCommandBridgeUpdate(bool allowEmptyDatabase);
@@ -29,7 +42,6 @@ private:
     TString FilePath;
 
     std::vector<NYdb::NBridge::TPileStateUpdate> Updates;
-    std::vector<TString> QuorumPiles;
 };
 
 class TCommandBridgeList : public TYdbReadOnlyCommand, public TCommandWithOutput {
@@ -83,9 +95,9 @@ private:
     TString NewPrimaryPile;
 };
 
-class TCommandBridgeRejoin : public TYdbCommand {
+class TCommandBridgeJoinPile : public TYdbCommand {
 public:
-    TCommandBridgeRejoin(bool allowEmptyDatabase);
+    TCommandBridgeJoinPile(bool allowEmptyDatabase);
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
@@ -104,11 +116,12 @@ public:
 
 private:
     bool AllowEmptyDatabase = false;
+    bool SkipStoragePoolConversion = false;
 };
 
-class TCommandBridgeAddPile : public TYdbCommand {
+class TCommandBridgeProvisionPile : public TYdbCommand {
 public:
-    TCommandBridgeAddPile(bool allowEmptyDatabase);
+    TCommandBridgeProvisionPile(bool allowEmptyDatabase);
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
@@ -118,9 +131,9 @@ private:
     TString Pile;
 };
 
-class TCommandBridgeRemovePile : public TYdbCommand {
+class TCommandBridgeDestroyPile : public TYdbCommand {
 public:
-    TCommandBridgeRemovePile(bool allowEmptyDatabase);
+    TCommandBridgeDestroyPile(bool allowEmptyDatabase);
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     bool Prompt(TConfig& config) override;

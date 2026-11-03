@@ -3265,6 +3265,7 @@ TExprBase DqBuildJoin(
     bool shuffleEliminationWithMap,
     bool buildCollectStage,
     bool blockHashJoinBuildSideLeft,
+    bool useScalarHashJoin,
     bool useScalarHashJoinForMap
 ) {
     if (!node.Maybe<TDqJoin>()) {
@@ -3324,7 +3325,8 @@ TExprBase DqBuildJoin(
             shuffleElimination,
             shuffleEliminationWithMap,
             useBlockHashJoin,
-            blockHashJoinBuildSideLeft);
+            blockHashJoinBuildSideLeft,
+            useScalarHashJoin);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {
@@ -3335,7 +3337,7 @@ TExprBase DqBuildJoin(
     // separate stage to receive data from both sides of join.
     // TODO: We can push MapJoin to existing stage for data query, if it doesn't have table reads. This
     //       requires some additional knowledge, probably with use of constraints.
-    useScalarHashJoinForMap = useScalarHashJoinForMap && DqCanUseScalarHashJoinForMap(join, ctx);
+    useScalarHashJoinForMap = useScalarHashJoinForMap && DqCanUseScalarHashJoin(join, ctx);
     return DqBuildPhyJoin(join, pushLeftStage, ctx, optCtx, useGraceCoreForMap, buildCollectStage, useScalarHashJoinForMap);
 }
 

@@ -21,6 +21,10 @@ public:
         return IndexInfo.GetColumnName(id, required);
     }
 
+    std::optional<ui32> GetBloomNgramSize(const ui32 columnId, const bool caseSensitive) const override {
+        return IndexInfo.GetBloomNgramSize(columnId, caseSensitive);
+    }
+
     NArrow::NSSA::TColumnInfo GetDefaultColumn() const override {
         return NArrow::NSSA::TColumnInfo::Original((ui32)NOlap::TIndexInfo::ESpecialColumn::PLAN_STEP, NOlap::TIndexInfo::SPEC_COL_PLAN_STEP);
     }

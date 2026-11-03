@@ -10,6 +10,7 @@ ENDIF()
 
 TEST_SRCS(
     test_async_replication.py
+    test_consistency.py
 )
 
 PEERDIR(

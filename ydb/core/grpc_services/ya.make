@@ -20,6 +20,7 @@ SRCS(
     rpc_alter_table.cpp
     rpc_begin_transaction.cpp
     rpc_bridge.cpp
+    rpc_bridge_mode.cpp
     rpc_cluster_state.cpp
     rpc_cms.cpp
     rpc_config.cpp
@@ -277,4 +278,5 @@ RECURSE_FOR_TESTS(
     grpc_request_check_actor_ut
     grpc_request_tracing_ut
     ut
+    ut_read_rows_bench
 )

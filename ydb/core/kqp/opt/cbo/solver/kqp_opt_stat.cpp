@@ -63,8 +63,11 @@ namespace {
                 : EJoinAlgoType::GraceJoin;
         }
 
-        if (auto blockHashJoin = TMaybeNode<TDqPhyBlockHashJoin>(input)) {
-            return HasSettingValue(blockHashJoin.Cast().Settings(), "BuildSide", "Left")
+        const auto hashJoin = TMaybeNode<TDqPhyHashJoin>(input);
+        const auto blockHashJoin = TMaybeNode<TDqPhyBlockHashJoin>(input);
+        if (hashJoin || blockHashJoin) {
+            const auto settings = hashJoin ? hashJoin.Cast().Settings() : blockHashJoin.Cast().Settings();
+            return HasSettingValue(settings, "BuildSide", "Left")
                 ? EJoinAlgoType::ReverseBlockJoin
                 : EJoinAlgoType::GraceJoin;
         }

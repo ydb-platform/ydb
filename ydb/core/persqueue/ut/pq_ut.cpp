@@ -1108,6 +1108,91 @@ void AssertReadMessage(
     UNIT_ASSERT_VALUES_EQUAL(actual.GetData(), expected.Data);
 }
 
+void TestMirroredOffsetSurvivesRestart(bool kafkaBatch) {
+    for (bool prefill : {false, true}) {
+        TTestContext tc;
+        TFinalizer finalizer(tc);
+        tc.Prepare();
+        tc.Runtime->SetScheduledLimit(50000);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+        SetEnableTopicMessagesBatching(tc);
+
+        TActorId partitionActor;
+        tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvPQ::TEvInitComplete::EventType
+                && ev->Get<TEvPQ::TEvInitComplete>()->Partition == TPartitionId(0)) {
+                partitionActor = ev->Sender;
+            }
+            return TTestActorRuntimeBase::EEventAction::PROCESS;
+        });
+        // No mirror rule: only KV can restore MirroredOffset after the restart.
+        PQTabletPrepare({.partitions = 1, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+        PQGetPartInfo(0, 0, tc);
+        UNIT_ASSERT(partitionActor);
+        tc.Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
+
+        TVector<TExpectedReadMessage> expected;
+        if (prefill) {
+            CmdWrite(0, "sourceid_before_gap", {{1, "before-gap"}}, tc);
+            expected.push_back({.SeqNo = 1, .Offset = 0, .Data = "before-gap"});
+        }
+        const ui64 oldEndOffset = prefill ? 1 : 0;
+        constexpr ui64 mirroredOffset = 1000;
+        auto replicationData = MakeHolder<TEvPQ::TEvReplicationData>();
+        replicationData->MirroredOffset = mirroredOffset;
+        tc.Runtime->Send(new IEventHandle(partitionActor, tc.Edge, replicationData.Release(), 0, 17));
+        auto ack = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(tc.Edge, TDuration::Seconds(10));
+        UNIT_ASSERT(ack);
+        UNIT_ASSERT_VALUES_EQUAL(ack->Cookie, 17);
+        PQGetPartInfo(0, oldEndOffset, tc);
+
+        PQTabletRestart(tc);
+        PQGetPartInfo(0, oldEndOffset, tc);
+
+        const TVector<TString> values = {"after-gap", TString(1_MB, 'x')};
+        if (kafkaBatch) {
+            // No explicit write offset: both native and Kafka writes must use the restored floor.
+            CmdWriteKafkaBatch(0, "sourceid_after_gap", 1, values, tc);
+            NKikimrPQClient::TDataChunk chunk;
+            chunk.SetChunkType(NKikimrPQClient::TDataChunk::REGULAR);
+            chunk.SetCodec(static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1));
+            chunk.SetData(MakeKafkaBatchPayload(values));
+            expected.push_back({.SeqNo = 1, .LogicalMessageCount = 2,
+                .Offset = mirroredOffset, .Data = chunk.SerializeAsString()});
+        } else {
+            CmdWrite(0, "sourceid_after_gap", {{1, values[0]}, {2, values[1]}}, tc);
+            expected.push_back({.SeqNo = 1, .Offset = mirroredOffset, .Data = values[0]});
+            expected.push_back({.SeqNo = 2, .Offset = mirroredOffset + 1, .Data = values[1]});
+        }
+
+        auto checkReads = [&] {
+            for (ui64 readOffset : {ui64(0), mirroredOffset / 2}) {
+                size_t index = prefill && readOffset > 0 ? 1 : 0;
+                while (index < expected.size()) {
+                    const auto result = CmdReadAndGetResult(MakeBatchAwareReadSettings(readOffset, mirroredOffset + 2), tc);
+                    UNIT_ASSERT(result.ResultSize() > 0);
+                    UNIT_ASSERT(index + result.ResultSize() <= expected.size());
+                    for (const auto& message : result.GetResult()) {
+                        AssertReadMessage(message, expected[index++]);
+                        readOffset = message.GetOffset() + message.GetLogicalMessageCount();
+                    }
+                }
+            }
+        };
+        checkReads();
+        PQTabletRestart(tc);
+        checkReads();
+    }
+}
+
+Y_UNIT_TEST(MirroredOffsetSurvivesRestart) {
+    TestMirroredOffsetSurvivesRestart(false);
+}
+
+Y_UNIT_TEST(MirroredOffsetSurvivesRestartKafkaBatch) {
+    TestMirroredOffsetSurvivesRestart(true);
+}
+
 void ReadAndAssertBatchAwareMessages(
     TTestContext& tc,
     const TVector<TExpectedReadMessage>& expected,

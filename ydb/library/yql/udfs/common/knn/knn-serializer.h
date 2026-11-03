@@ -73,6 +73,14 @@ public:
                 return TKnnVectorSerializer<TFloat16, float>::Deserialize(valueBuilder, str);
             case EFormat::BFloat16Vector:
                 return TKnnVectorSerializer<TBFloat16, float>::Deserialize(valueBuilder, str);
+            case EFormat::Float8E4M3Vector:
+                return TKnnVectorSerializer<TFloat8E4M3, float>::Deserialize(valueBuilder, str);
+            case EFormat::Float8E5M2Vector:
+                return TKnnVectorSerializer<TFloat8E5M2, float>::Deserialize(valueBuilder, str);
+            case EFormat::Uint4Vector:
+                return TKnnVectorSerializer<TUint4, float>::Deserialize(valueBuilder, str);
+            case EFormat::Int4Vector:
+                return TKnnVectorSerializer<TInt4, float>::Deserialize(valueBuilder, str);
             case EFormat::Int8Vector:
                 return TKnnVectorSerializer<i8, float>::Deserialize(valueBuilder, str);
             case EFormat::Uint8Vector:

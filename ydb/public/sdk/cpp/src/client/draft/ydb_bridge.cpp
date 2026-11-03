@@ -95,6 +95,7 @@ public:
 
     TAsyncStatus ConvertToBridge(const TConvertToBridgeSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Bridge::ConvertToBridgeRequest>(settings);
+        request.set_skip_storage_pool_conversion(settings.SkipStoragePoolConversion_);
 
         return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::ConvertToBridgeRequest, Ydb::Bridge::ConvertToBridgeResponse>(
             std::move(request),
@@ -109,6 +110,18 @@ public:
         return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::AddPileRequest, Ydb::Bridge::AddPileResponse>(
             std::move(request),
             &Ydb::Bridge::V1::BridgeService::Stub::AsyncAddPile,
+            TRpcRequestSettings::Make(settings));
+    }
+
+    TAsyncStatus SetDatabaseBridgeMode(const std::string& databasePath, bool bridgeMode, const TSetDatabaseBridgeModeSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::SetDatabaseBridgeModeRequest>(settings);
+        request.set_database_path(databasePath);
+        request.set_bridge_mode(bridgeMode);
+        request.set_retain_pile_name(settings.RetainPileName_);
+
+        return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::SetDatabaseBridgeModeRequest, Ydb::Bridge::SetDatabaseBridgeModeResponse>(
+            std::move(request),
+            &Ydb::Bridge::V1::BridgeService::Stub::AsyncSetDatabaseBridgeMode,
             TRpcRequestSettings::Make(settings));
     }
 
@@ -144,6 +157,11 @@ TAsyncStatus TBridgeClient::ConvertToBridge(const TConvertToBridgeSettings& sett
 
 TAsyncStatus TBridgeClient::AddPile(const std::string& pileName, const TAddPileSettings& settings) {
     return Impl_->AddPile(pileName, settings);
+}
+
+TAsyncStatus TBridgeClient::SetDatabaseBridgeMode(const std::string& databasePath, bool bridgeMode,
+        const TSetDatabaseBridgeModeSettings& settings) {
+    return Impl_->SetDatabaseBridgeMode(databasePath, bridgeMode, settings);
 }
 
 TAsyncStatus TBridgeClient::RemovePile(const std::string& pileName, const TRemovePileSettings& settings) {

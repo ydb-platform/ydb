@@ -5,6 +5,7 @@
 
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/kqp/common/compilation/events.h>
 #include <ydb/core/kqp/common/shutdown/events.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
@@ -256,6 +257,31 @@ struct TEvKqp {
     };
 
     struct TEvProxyPingResponse : public TEventLocal<TEvProxyPingResponse, TKqpEvents::EvProxyPingResponse> {
+    };
+
+    struct TCachedLevelTableData : public TAtomicRefCount<TCachedLevelTableData> {
+        TOwnedCellVecBatch BatchRows;
+        TCachedLevelTableData() = default;
+    };
+
+    using TCachedLevelTableDataPtr = TIntrusivePtr<TCachedLevelTableData>;
+
+    class IVectorIndexLevelsCache : public TThrRefBase {
+    public:
+        virtual TCachedLevelTableDataPtr Get(const TPathId& tableId, const TString& serializedKeys) = 0;
+        virtual void Put(const TPathId& tableId, const TString& serializedKeys, TCachedLevelTableDataPtr data) = 0;
+        virtual size_t Size() const = 0;
+        virtual size_t Bytes() const = 0;
+        virtual size_t MaxBytes() const = 0;
+    };
+
+    using IVectorIndexLevelsCachePtr = TIntrusivePtr<IVectorIndexLevelsCache>;
+
+    struct TEvGetVectorIndexLevelsCacheRequest : public TEventLocal<TEvGetVectorIndexLevelsCacheRequest, TKqpEvents::EvGetVectorIndexLevelsCacheRequest> {
+    };
+
+    struct TEvGetVectorIndexLevelsCacheResponse : public TEventLocal<TEvGetVectorIndexLevelsCacheResponse, TKqpEvents::EvGetVectorIndexLevelsCacheResponse> {
+        IVectorIndexLevelsCachePtr CachePtr;
     };
 };
 

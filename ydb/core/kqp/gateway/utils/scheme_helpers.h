@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/base/appdata_fwd.h>
 
 #include <util/generic/string.h>
@@ -9,6 +10,10 @@
 #include <util/string/join.h>
 
 namespace NKikimr::NKqp::NSchemeHelpers {
+
+bool ValidateColumnBuildAlter(const NKikimrSchemeOp::TModifyScheme& modifyScheme,
+    const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings,
+    Ydb::StatusIds::StatusCode& code, TString& error);
 
 TString CanonizePath(const TString& path);
 

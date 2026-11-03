@@ -15,11 +15,21 @@ struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClu
 
 struct TGetClusterStateSettings : public TOperationRequestSettings<TGetClusterStateSettings> {};
 
-struct TConvertToBridgeSettings : public TOperationRequestSettings<TConvertToBridgeSettings> {};
+struct TConvertToBridgeSettings : public TOperationRequestSettings<TConvertToBridgeSettings> {
+    //! Leave existing storage pools and their groups non-bridged (static storage groups are still converted); they are
+    //! not replicated to added piles until converted separately. Requires the bridge config to enable non-uniform
+    //! storage.
+    FLUENT_SETTING_DEFAULT(bool, SkipStoragePoolConversion, false);
+};
 
 struct TAddPileSettings : public TOperationRequestSettings<TAddPileSettings> {};
 
 struct TRemovePileSettings : public TOperationRequestSettings<TRemovePileSettings> {};
+
+struct TSetDatabaseBridgeModeSettings : public TOperationRequestSettings<TSetDatabaseBridgeModeSettings> {
+    //! With ordinary mode, retain data copies in this pile. Empty selects copies automatically.
+    FLUENT_SETTING_DEFAULT(std::string, RetainPileName, {});
+};
 
 enum class EPileState {
     UNSPECIFIED = 0,
@@ -111,6 +121,10 @@ public:
     // Completes when every storage group has lost its part in the pile; the pile is INACTIVE then and may be dropped
     // from the bridge config along with its hosts.
     TAsyncStatus RemovePile(const std::string& pileName, const TRemovePileSettings& settings = {});
+
+    // Atomically change bridge mode of databasePath. For serverless databases, select their shared database.
+    // Requires cluster administrator privileges and non-uniform storage; data synchronization and cleanup continue in the background.
+    TAsyncStatus SetDatabaseBridgeMode(const std::string& databasePath, bool bridgeMode, const TSetDatabaseBridgeModeSettings& settings = {});
 
 private:
     class TImpl;

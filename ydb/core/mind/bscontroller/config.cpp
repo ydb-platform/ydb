@@ -3,6 +3,7 @@
 #include "diff.h"
 #include "table_merger.h"
 
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -393,6 +394,11 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
+            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking || state.ResetDataCenterStates); !result) {
+                *errorDescription = result.error();
+                return false;
+            }
+
             // virtual group state reported to node wardens may change without explicit group content change (for
             // instance, when decommission starts or BlobDepot creation fails), deliver it with new generation
             for (const auto& [base, overlay] : state.Groups.Diff()) {
@@ -636,6 +642,9 @@ namespace NKikimr::NBsController {
 
         void TBlobStorageController::CommitConfigUpdates(TConfigState& state, TTransactionContext& txc) {
             NIceDb::TNiceDb db(txc.DB);
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                state.GroupStateUpdates.push_back(overlay->first.GetRawId());
+            }
 
             if (state.HostConfigs.Changed()) {
                 MakeTableMerger<Schema::HostConfig>(&HostConfigs, &state.HostConfigs.Get(), this)(txc);
@@ -645,6 +654,11 @@ namespace NKikimr::NBsController {
             }
             if (state.StoragePools.Changed()) {
                 MakeTableMerger<Schema::BoxStoragePool>(&StoragePools, &state.StoragePools.Get(), this)(txc);
+                for (const auto& [previous, current] : Diff(&StoragePools, &state.StoragePools.Get())) {
+                    TStoragePoolInfo::UpdatePDiskFilters(txc.DB,
+                        previous ? &previous->second.PDiskFilters : nullptr,
+                        current ? &current->second.PDiskFilters : nullptr);
+                }
             }
             if (state.Nodes.Changed()) {
                 MakeTableMerger<Schema::Node>(&Nodes, &state.Nodes.Get(), this)(txc);
@@ -666,11 +680,37 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            // groups relying on single parts get synced or lose their parts, see if they are done with it
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                if (const TGroupInfo *cur = overlay->second.Get(); cur && cur->BridgeGroupInfo &&
+                        cur->BridgeGroupInfo->GetBridgeGroupState().GetAuthorityPileId()) {
+                    state.Callbacks.push_back([this] { CheckBridgeGroupModes(); });
+                    break;
+                }
+            }
+
             // apply overlay maps to their respective tables
             state.PDisks.ApplyToTable(this, txc);
             state.VSlots.ApplyToTable(this, txc);
             state.Groups.ApplyToTable(this, txc);
             state.DrivesSerials.ApplyToTable(this, txc);
+
+            if (state.DataCenterStates.Changed()) {
+                db.Table<Schema::State>().Key(true).Update<Schema::State::DataCenterStates>(
+                    SerializeDataCenterStates(state.DataCenterStates.Get()));
+            }
+            for (const auto& [base, overlay] : state.Groups.Diff()) {
+                if (overlay->second) {
+                    NKikimrBlobStorage::TFailRealmStates states;
+                    if (overlay->second->FailRealmStates) {
+                        for (NKikimrBlobStorage::TGroupInfo::TFailRealm::EState value : *overlay->second->FailRealmStates) {
+                            states.AddState(value);
+                        }
+                    }
+                    db.Table<Schema::Group>().Key(overlay->first.GetRawId())
+                        .Update<Schema::Group::FailRealmStates>(states);
+                }
+            }
 
             // apply group to storage pool mapping
             for (auto&& [base, overlay] : state.Groups.Diff()) {
@@ -990,6 +1030,9 @@ namespace NKikimr::NBsController {
                 TActivationContext::Send(std::make_unique<IEventHandle>(Self.SelfHealId, Self.SelfId(), UpdateSelfHealInfoMsg.Release()));
             }
 
+            for (ui32 groupId : GroupStateUpdates) {
+                Self.UpdateGroupStateActor(TGroupId::FromValue(groupId));
+            }
             for (auto& fn : Callbacks) {
                 fn();
             }
@@ -1332,6 +1375,58 @@ namespace NKikimr::NBsController {
             }
         }
 
+        bool TBlobStorageController::TStoragePoolInfo::LoadPDiskFilters(NIceDb::TNiceDb& db,
+                const TBoxStoragePoolId& id) {
+            PDiskFilters.clear();
+            auto load = [&]<typename T>() {
+                auto rows = db.Table<T>().Range(std::get<0>(id), std::get<1>(id)).Select();
+                if (!rows.IsReady()) {
+                    return false;
+                }
+                while (rows.IsValid()) {
+                    if constexpr (std::is_same_v<T, Schema::BoxStoragePoolPDiskFilter>) {
+                        PDiskFilters.insert(TPDiskFilter::CreateFromRowset(rows));
+                    } else {
+                        PDiskFilters.insert(TPDiskFilter::Parse(std::get<0>(id), std::get<1>(id),
+                            rows.template GetValue<typename T::Filter>()));
+                    }
+                    if (!rows.Next()) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+            return load.template operator()<Schema::BoxStoragePoolPDiskFilter>()
+                && load.template operator()<Schema::BoxStoragePoolPDiskFilterV2>();
+        }
+
+        void TBlobStorageController::TStoragePoolInfo::UpdatePDiskFilters(NTable::TDatabase& db,
+                const TPDiskFilters* previous, const TPDiskFilters* current) {
+            for (const auto& [prev, cur] : Diff(previous, current)) {
+                if (prev && cur) {
+                    continue;
+                }
+                const auto op = cur ? NTable::ERowOp::Upsert : NTable::ERowOp::Erase;
+                const auto& filter = cur ? *cur : *prev;
+                auto update = [&]<typename T>(const auto& key) {
+                    auto keyTuple = NTableAdapter::PrepareKeyTuple<T>(&key);
+                    TStackVec<TRawTypeValue, std::tuple_size_v<decltype(keyTuple)>> rawKey;
+                    NTableAdapter::MapKey<T>(&keyTuple, rawKey);
+                    db.Update(T::TableId, op, rawKey, {});
+                };
+                if (filter.Location) {
+                    // Serialize the parsed filter in a fixed property order: request ordering
+                    // must not change its persistent identity, including when deleting a row.
+                    NKikimrBlobStorage::TPDiskFilter proto;
+                    Serialize(&proto, filter);
+                    update.template operator()<Schema::BoxStoragePoolPDiskFilterV2>(
+                        std::make_tuple(filter.BoxId, filter.StoragePoolId, proto.SerializeAsString()));
+                } else {
+                    update.template operator()<Schema::BoxStoragePoolPDiskFilter>(filter.GetLegacyKey());
+                }
+            }
+        }
+
         TBlobStorageController::TStoragePoolInfo::TPDiskFilter
         TBlobStorageController::TStoragePoolInfo::TPDiskFilter::Parse(ui64 boxId, ui64 storagePoolId,
                 const NKikimrBlobStorage::TPDiskFilter& proto) {
@@ -1483,6 +1578,12 @@ namespace NKikimr::NBsController {
             pb->SetGroupId(group.ID.GetRawId());
             pb->SetGroupGeneration(group.Generation);
             pb->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies));
+            if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
+                for (ui32 realm = 0; realm < 3; ++realm) {
+                    pb->AddFailRealms()->SetState(group.FailRealmStates ? (*group.FailRealmStates)[realm]
+                        : NKikimrBlobStorage::TGroupInfo::TFailRealm::N0);
+                }
+            }
             for (const TVSlotInfo *vslot : group.VDisksInGroup) {
                 Serialize(pb->AddVSlotId(), vslot->VSlotId);
             }
@@ -1601,6 +1702,9 @@ namespace NKikimr::NBsController {
                 for (const auto& [vdiskId, vslot] : vdisks) {
                     if (!realm || prevVDiskId.FailRealm != vdiskId.FailRealm) {
                         realm = group->AddRings();
+                        if (groupInfo.FailRealmStates) {
+                            realm->SetState((*groupInfo.FailRealmStates)[vdiskId.FailRealm]);
+                        }
                         domain = nullptr;
                     }
                     if (!domain || prevVDiskId.FailDomain != vdiskId.FailDomain) {

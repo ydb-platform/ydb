@@ -87,6 +87,7 @@ public:
     void RemoveWorker(ui64 id) override;
     TVector<ui64> GetWorkers() const override;
     void UpdateLag(ui64 workerId, TDuration lag) override;
+    void InvalidateLag(ui64 workerId) override;
     const std::optional<TDuration> GetLag() const override;
 
     void Progress(const TActorContext& ctx) override;

@@ -432,9 +432,9 @@ runs:
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           analytics start graph_compare
+          GRAPH_COMPARE_WORKDIR=$(mktemp -d "$TMP_DIR/graph_compare_XXXXXX")
           set +e
-          export workdir=$(mktemp -d "$TMP_DIR/graph_compare_XXXXXX")
-          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH --workdir="$GRAPH_COMPARE_WORKDIR" $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
           analytics end graph_compare --rc "$RC"

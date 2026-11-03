@@ -277,7 +277,7 @@ jobs:
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
     # Temporary: pin to large-disk ASAN static (7254G) for disk-pressure runs.
-    runs-on: [ self-hosted, auto-provisioned, pool:static-relwithdebinfo-large-disk ]
+    runs-on: [ self-hosted, auto-provisioned, build-preset-release-asan-large-disk ]
     strategy:
       fail-fast: false
       matrix:

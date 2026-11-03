@@ -37,3 +37,7 @@ SRCS(
 )
 
 END()
+
+RECURSE(
+    recipe
+)

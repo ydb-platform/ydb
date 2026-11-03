@@ -19,7 +19,8 @@ The tests use the real actor coroutine runtime with virtual time:
 - Current success wakes all waiters and resets the backoff; healthy success does
   not invalidate concurrent calls.
 - A missing outcome permits the next recovery call at the request timeout.
-- Cancelling the timer waiter transfers its responsibility. Cancelling all
+- Cancelling the timer waiter wakes one successor; clustered deadlines avoid
+  broadcast wakeups and preserve the timer for surviving callers. Cancelling all
   waiters permits a fresh waiter; caller deadlines do not strand others.
 - A retired timer cannot release callers during a newer cooldown.
 - Graceful death and hard mailbox teardown destroy waiting frames safely.

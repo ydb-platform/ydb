@@ -35,7 +35,9 @@ NActors::async<ui64> TAsyncBackoff::Wait(TDuration requestTimeout) {
                 WakeupActive = false;
                 // Hard mailbox teardown destroys frames without actor TLS.
                 if (NActors::TlsActivationContext) {
-                    Changed.NotifyAll();
+                    // Only ownership changed. Wake one successor; broadcasting
+                    // here makes clustered caller cancellations quadratic.
+                    Changed.NotifyOne();
                 }
             };
             co_await NActors::WithDeadline(NextAllowedAt, [this]() -> NActors::async<void> {

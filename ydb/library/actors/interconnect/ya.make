@@ -103,6 +103,7 @@ RECURSE_FOR_TESTS(
 )
 
 RECURSE_FOR_TESTS(
+    address
     ut
     ut_fat
     ut_huge_cluster

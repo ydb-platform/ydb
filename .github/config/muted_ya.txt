@@ -272,6 +272,7 @@ ydb/tests/fq/s3 test_inflight.py.TestS3.test_inflight[v1-client0-kikimr_params1]
 ydb/tests/fq/s3 test_inflight.py.TestS3.test_inflight[v1-client0-kikimr_params2]
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_increase[local]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[drop-native_join-row]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[recreate-output-row]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_raw_format[False-no_partition_balancing]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_raw_format[False-partition_balancing]

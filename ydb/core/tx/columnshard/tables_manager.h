@@ -415,9 +415,8 @@ public:
 
     TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tablePath,
         const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt);
-    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tablePath,
-        const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId,
-        const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt);
+    std::shared_ptr<NOlap::ITableMetadataAccessor> BuildTableMetadataAccessor(const TString& tablePath, const TInternalPathId internalPathId,
+        const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt);
 
     class TSchemaAddress {
     private:

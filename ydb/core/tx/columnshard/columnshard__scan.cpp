@@ -70,10 +70,9 @@ void TColumnShard::Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActo
     const auto& request = *ev->Get();
     const NOlap::TSnapshot readSnapshot =
         TablesManager.ResolveReadSnapshot(request.GetPathId().GetSchemeShardLocalPathId(), request.GetSnapshot());
-    // with an internal path id the accessor is a user table or an absent one: it never fails
-    auto accessor = TablesManager.BuildTableMetadataAccessor(
-        "internal_request", request.GetPathId().GetInternalPathId(), request.GetPathId().GetSchemeShardLocalPathId(), readSnapshot);
-    NOlap::NReader::TScanTarget target{ readSnapshot, accessor.DetachResult(),
+    NOlap::NReader::TScanTarget target{ readSnapshot,
+        TablesManager.BuildTableMetadataAccessor(
+            "internal_request", request.GetPathId().GetInternalPathId(), request.GetPathId().GetSchemeShardLocalPathId(), readSnapshot),
         request.RangesFilter ? request.RangesFilter : std::make_shared<NOlap::TPKRangesFilter>(NOlap::TPKRangesFilter::BuildEmpty()) };
     if (!ScanGate.PassLoadedPortions(ev, GetIndexOptional(), target)) {
         return;

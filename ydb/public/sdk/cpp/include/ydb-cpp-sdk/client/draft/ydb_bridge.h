@@ -11,7 +11,15 @@
 
 namespace NYdb::inline Dev::NBridge {
 
-struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClusterStateSettings> {};
+struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClusterStateSettings> {
+    //! Compare-and-set guard: the cluster state generation (TGetClusterStateResult::GetGeneration()) the update is
+    //! based on. The update is applied only if the cluster state still has this generation when the change
+    //! executes. ABORTED means that the generation differs and the update was not applied; UNAVAILABLE means that
+    //! the node has not yet seen this generation and the update was not applied. Other failures do not tell whether
+    //! the update was applied: once a greater generation is observed, the update can no longer be applied.
+    //! Nodes of older versions ignore it. If unset, the update is applied on top of the node's current state.
+    FLUENT_SETTING_OPTIONAL(uint64_t, ExpectedGeneration);
+};
 
 struct TGetClusterStateSettings : public TOperationRequestSettings<TGetClusterStateSettings> {};
 
@@ -45,6 +53,7 @@ enum class EPileState {
 struct TPileStateUpdate {
     std::string PileName;
     EPileState State = EPileState::DISCONNECTED;
+    // Not sent in UpdateClusterState requests; use TUpdateClusterStateSettings::ExpectedGeneration for the guard.
     uint64_t Generation = 0;
 };
 

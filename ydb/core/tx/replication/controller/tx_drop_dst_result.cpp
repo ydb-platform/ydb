@@ -63,6 +63,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+        Self->DeleteProcessedSourceOffsets(rid, tid, db);
         db.Table<Schema::Targets>().Key(rid, tid).Delete();
         db.Table<Schema::SrcStreams>().Key(rid, tid).Delete();
         for (const auto wid : target->GetWorkers()) {

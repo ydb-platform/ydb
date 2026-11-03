@@ -15,6 +15,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/audit/heartbeat_actor
     ydb/core/testlib
     ydb/core/kqp
     ydb/core/kqp/event_log

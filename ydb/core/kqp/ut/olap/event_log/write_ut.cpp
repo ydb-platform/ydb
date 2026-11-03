@@ -11,7 +11,9 @@
 #include <ydb/core/kqp/ut/olap/helpers/typed_local.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
+#include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/audit/audit_log.h>
+#include <ydb/core/audit/heartbeat_actor/heartbeat_actor.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -96,26 +98,17 @@ namespace {
 
     std::optional<TQueryResult> ExecuteQueryAndFetchData(TKikimrRunner& kikimr, const TString& query) {
         for(unsigned i = 10;i > 0;i--) {
-            Cerr << "DEBUG: get client " << Endl;
             auto client = kikimr.GetTableClient();
-            Cerr << "DEBUG: execute " << query << Endl;
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
-            Cerr << "DEBUG: it received" << Endl;
-
             if (!it.IsSuccess()) {
-                Cerr << "DEBUG: status=" << it.GetStatus() << " issues=" << it.GetIssues() << Endl;
                 Sleep(TDuration::MilliSeconds(100));
                 continue;
             }
-            Cerr << "DEBUG: Fetch stream data" << Endl;
             auto result = FetchStreamData(it, i == 1);
-            Cerr << "DEBUG: data fetched" << Endl;
             if (!result.has_value()) {
-                Cerr << "DEBUG: empty result" << Endl;
                 Sleep(TDuration::MilliSeconds(100));
                 continue;
             }
-            Cerr << "DEBUG: return data" << Endl;
             return result.value();
         }
         return {};
@@ -263,6 +256,7 @@ struct TEnvironment {
     TKikimrRunner Kikimr;
     std::shared_ptr<TBaseTestExampleLogWriter> Writer;
     std::vector<NStructuredLog::ILogSinkSPtr> AddSinks;
+    bool AuditHeartbeatRegistered = false;
 
     TEnvironment() : Kikimr(TKikimrSettings().SetWithSampleTables(false)) {}
 
@@ -296,6 +290,16 @@ struct TEnvironment {
                 (*sinks)[key] = sink;
             }
             settings->SetSinks(sinks);
+        }
+        if (!AuditHeartbeatRegistered) {
+            NKikimrConfig::TAuditConfig protoCfg;
+            protoCfg.MutableHeartbeat()->SetIntervalSeconds(1);
+            auto* logClassSettings = protoCfg.AddLogClassConfig();
+            logClassSettings->SetLogClass(NKikimrConfig::TAuditConfig::TLogClassConfig::AuditHeartbeat);
+            logClassSettings->SetEnableLogging(true);
+            ::NKikimr::NAudit::TAuditConfig cfg(protoCfg);
+            runtime->Register(::NKikimr::NAudit::CreateHeartbeatActor(cfg).release());
+            AuditHeartbeatRegistered = true;
         }
         runtime->SetLogPriority(TEnvironment::Component, NActors::NLog::PRI_TRACE);
         runtime->SetLogPriority(NKikimrServices::TLI, NLog::PRI_INFO);
@@ -354,10 +358,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:347")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:349")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:351")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:352")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:351")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:353")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:355")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:356")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -663,7 +667,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLogUsage) {
         env.ExecuteQuery(query);
 
         // Select from system table
-        Cerr << "DEBUG: Dump" << Endl;
         TStringBuilder selectQuery;
         selectQuery << "SELECT database, request, action, status FROM `/Root/kqp_requests/kqp_requests` WHERE request='" << query << "'";
 
@@ -674,7 +677,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLogUsage) {
             return result.has_value() && result.value().size() > 0;
         });
 
-        Cerr << "KQP_RESULT:" << Endl;
         Dump(result.value());
 
         UNIT_ASSERT(result.has_value());
@@ -794,6 +796,18 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLogUsage) {
                 .StoreName = "audit_grpc_login",
                 .TableName = "audit_grpc_login",
                 .FlushBatchSize = 0}));
+        env.AddSinks.push_back(std::make_shared<NAudit::NToColumnShard::TWebLoginEventLogWriter>(
+            TBaseColumnShardLogWriter::TDatabaseSettings{
+                .DatabasePath = "/Root",
+                .StoreName = "audit_web_login",
+                .TableName = "audit_web_login",
+                .FlushBatchSize = 0}));
+        env.AddSinks.push_back(std::make_shared<NAudit::NToColumnShard::TAuditServiceEventLogWriter>(
+            TBaseColumnShardLogWriter::TDatabaseSettings{
+                .DatabasePath = "/Root",
+                .StoreName = "audit_service",
+                .TableName = "audit_service",
+                .FlushBatchSize = 0}));
         env.UpdateSinks();
 
         // create user
@@ -837,10 +851,13 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLogUsage) {
             auto responseEv = runtime->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
             Y_UNUSED(responseEv);
         }
+        Sleep(TDuration::Seconds(3)); // Wait guaranted audit heartbeats
 
         // check
         env.CheckSomethingWritten("/Root/audit_grpc_login/audit_grpc_login");
+        env.CheckSomethingWritten("/Root/audit_web_login/audit_web_login");
         env.CheckSomethingWritten("/Root/audit_schemeshard/audit_schemeshard");
+        env.CheckSomethingWritten("/Root/audit_service/audit_service");
     }
 }
 

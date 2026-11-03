@@ -53,8 +53,6 @@ public:
     static NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings
     GetColumnShardDatabaseSettings(const NKikimrConfig::TLogConfig_TSink& sink, const NKikimrConfig::TLogConfig_TSink* defaultSink);
 
-    NStructuredLog::ILogSinkSPtr CreateColumnShardLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
-        const NKikimrConfig::TLogConfig_TSink* defaultSink);
     NStructuredLog::ILogSinkSPtr CreateLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
         const NKikimrConfig::TLogConfig_TSink* defaultSink);
     void ApplyLogSinkSettings(const NKikimrConfig::TLogConfig &config, const TActorContext &ctx);
@@ -293,67 +291,10 @@ TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TL
     return settings;
 }
 
-NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateColumnShardLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
-    const NKikimrConfig::TLogConfig_TSink* defaultSink) {
-    auto eventSource = sink.GetSource();
-
-    auto databaseSettings = GetColumnShardDatabaseSettings(sink, defaultSink);
-    if (databaseSettings.StoreName.empty() || databaseSettings.TableName.empty()) {
-        auto defaults = GetDefaultStoreTableName(eventSource);
-        if (databaseSettings.StoreName.empty()) {
-            databaseSettings.StoreName = defaults.first;
-        }
-        if (databaseSettings.TableName.empty()) {
-            databaseSettings.TableName = defaults.second;
-        }
-    }
-
-    using namespace NKqp::NEventLog;
-    if (eventSource == "kqp-requests") {
-        return std::make_shared<NToColumnShard::TKqpEventLogWriter>(databaseSettings);
-    }
-    else if (eventSource == "tli-datashard") {
-        return std::make_shared<NToColumnShard::TDataShardTliEventLogWriter>(databaseSettings);
-    }
-    else if (eventSource == "tli-session") {
-        return std::make_shared<NToColumnShard::TSessionTliEventLogWriter>(databaseSettings);
-    }
-    else if (eventSource == "audit-schemeshard") {
-        return std::make_shared<NAudit::NToColumnShard::TSchemeShardEventLogWriter>(databaseSettings);
-    }
-    else if (eventSource == "audit-grpc-proxy") {
-        return std::make_shared<NAudit::NToColumnShard::TGrpcProxyEventLogWriter>(databaseSettings);
-    }
-    else if (eventSource == "audit-grpc-conn") {
-        return std::make_shared<NAudit::NToColumnShard::TGrpcConnEventLogWriter>(databaseSettings);
-    }
-    else if (eventSource == "audit-grpc-login") {
-        return std::make_shared<NAudit::NToColumnShard::TGrpcLoginEventLogWriter>(databaseSettings);
-    }
-    else if (eventSource == "audit-monitoring") {
-        return std::make_shared<NAudit::NToColumnShard::TMonitoringEventLogWriter>(databaseSettings);
-    }
-    else if (eventSource == "audit-heartbeat") {
-        return std::make_shared<NAudit::NToColumnShard::TAuditServiceEventLogWriter>(databaseSettings);
-    }
-    else if (eventSource == "audit-bsc") {
-        return std::make_shared<NAudit::NToColumnShard::TBscEventLogWriter>(databaseSettings);
-    }
-    else if (eventSource == "audit-distconf") {
-        return std::make_shared<NAudit::NToColumnShard::TDistconfEventLogWriter>(databaseSettings);
-    }
-    else if (eventSource == "audit-web-login") {
-        return std::make_shared<NAudit::NToColumnShard::TWebLoginEventLogWriter>(databaseSettings);
-    }
-    else if (eventSource == "audit-console") {
-        return std::make_shared<NAudit::NToColumnShard::TConsoleEventLogWriter>(databaseSettings);
-    }
-
-    return nullptr;
-}
-
 NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateLogSink(const NKikimrConfig::TLogConfig_TSink& sink,
     const NKikimrConfig::TLogConfig_TSink* defaultSink) {
+
+    auto eventSource = sink.GetSource();
 
     TString destination;
     if (sink.HasDestination()) {
@@ -362,9 +303,29 @@ NStructuredLog::ILogSinkSPtr TLogSettingsConfigurator::CreateLogSink(const NKiki
         destination = defaultSink->GetDestination();
     }
 
-    if (destination == "local-db") {
-        return CreateColumnShardLogSink(sink, defaultSink);
+#define CHECK_SINK(EventSource, Dest, Class, GetSettings) if (eventSource == EventSource && destination == Dest) {       \
+        auto settins = GetSettings(sink, defaultSink);                                                                   \
+        return std::make_shared<Class>(settins);                                                                         \
     }
+
+    using namespace NKqp::NEventLog;
+    CHECK_SINK("kqp-requests", "local-db", NToColumnShard::TKqpEventLogWriter, GetColumnShardDatabaseSettings);
+
+    CHECK_SINK("tli-datashard", "local-db", NToColumnShard::TDataShardTliEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("tli-session", "local-db", NToColumnShard::TSessionTliEventLogWriter, GetColumnShardDatabaseSettings);
+
+    CHECK_SINK("audit-schemeshard", "local-db", NAudit::NToColumnShard::TSchemeShardEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-grpc-proxy", "local-db", NAudit::NToColumnShard::TGrpcProxyEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-grpc-conn", "local-db", NAudit::NToColumnShard::TGrpcConnEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-grpc-login", "local-db", NAudit::NToColumnShard::TGrpcLoginEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-monitoring", "local-db", NAudit::NToColumnShard::TMonitoringEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-heartbeat", "local-db", NAudit::NToColumnShard::TAuditServiceEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-bsc", "local-db", NAudit::NToColumnShard::TBscEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-distconf", "local-db", NAudit::NToColumnShard::TDistconfEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-web-login", "local-db", NAudit::NToColumnShard::TWebLoginEventLogWriter, GetColumnShardDatabaseSettings);
+    CHECK_SINK("audit-console", "local-db", NAudit::NToColumnShard::TConsoleEventLogWriter, GetColumnShardDatabaseSettings);
+
+#undef CHECK
     return nullptr;
 }
 

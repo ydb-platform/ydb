@@ -330,9 +330,35 @@ namespace NKikimr {
             return TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, synced);
         }
 
+        bool HasMetadataSyncSourceQuorum() const {
+            if (HasMetadataSyncQuorum(*MetadataSyncSourceInfo)) {
+                return true;
+            }
+            using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+            const TBlobStorageGroupInfo::TTopology& topology = MetadataSyncSourceInfo->GetTopology();
+            for (ui32 realm = 0; realm < topology.FailRealms.size(); ++realm) {
+                const TFailRealm::EState sourceState = MetadataSyncSourceInfo->GetFailRealmState(realm);
+                if ((sourceState != TFailRealm::N1 && sourceState != TFailRealm::N2)
+                        || GInfo->IsFailedFailRealm(realm) || GInfo->IsRecoveringFailRealm(realm)) {
+                    continue;
+                }
+                bool allDisksSynced = true;
+                for (const TBlobStorageGroupInfo::TFailDomain& domain : topology.FailRealms[realm].FailDomains) {
+                    for (const TBlobStorageGroupInfo::TVDiskInfo& disk : domain.VDisks) {
+                        allDisksSynced &= MetadataSyncedPeers.contains(disk.OrderNumber);
+                    }
+                }
+                // The original N1/N2 guarantee places every blob in this surviving realm.
+                if (allDisksSynced) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         void CheckMetadataSyncDone(const TActorContext& ctx) {
             if (MetadataSyncGeneration && MetadataSyncGeneration == GInfo->GroupGeneration
-                    && HasMetadataSyncQuorum(*GInfo) && HasMetadataSyncQuorum(*MetadataSyncSourceInfo)) {
+                    && HasMetadataSyncQuorum(*GInfo) && HasMetadataSyncSourceQuorum()) {
                 ctx.Send(MetadataSyncNotifyId, new TEvSyncerMetadataSyncDone(MetadataSyncGeneration));
                 MetadataSyncGeneration = 0;
                 MetadataSyncSourceInfo.Reset();

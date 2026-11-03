@@ -834,6 +834,32 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardianRingGroups) {
 }
 
 Y_UNIT_TEST_SUITE(TStateStorageFollowerGuardian) {
+    Y_UNIT_TEST(RegistrationAcknowledgesUpdatesAndDuplicates) {
+        TTestActorRuntimeBase runtime{1};
+        runtime.Initialize();
+        runtime.SetDispatchTimeout(TDuration::Seconds(5));
+        runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
+            NKikimrServices::EServiceKikimr_MAX,
+            [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId guardian = runtime.AllocateEdgeActor();
+        const TActorId follower = runtime.AllocateEdgeActor();
+        const TActorId followerTablet = runtime.AllocateEdgeActor();
+        auto info = MakeIntrusive<TStateStorageInfo>();
+        const TActorId replica = runtime.Register(CreateStateStorageReplica(info, 0));
+
+        // New registration, duplicate, state update, duplicate of the update.
+        for (bool candidate : {true, true, false, false}) {
+            runtime.SendAsync(new IEventHandle(replica, guardian,
+                new TEvStateStorage::TEvReplicaRegFollower(
+                    tabletId, 1, follower, followerTablet, candidate, 0, 0)));
+            auto ping = runtime.GrabEdgeEvent<TEvTablet::TEvPing>(guardian);
+            UNIT_ASSERT_VALUES_EQUAL(ping->Sender, replica);
+            UNIT_ASSERT_VALUES_EQUAL(ping->Get()->Record.GetTabletID(), tabletId);
+        }
+    }
+
     Y_UNIT_TEST(FollowerRecoveryClearsMissingReplica) {
         TTestActorRuntimeBase runtime{1};
         runtime.Initialize();
@@ -897,7 +923,7 @@ Y_UNIT_TEST_SUITE(TStateStorageFollowerGuardian) {
         });
 
         tabletGuardian = runtime.Register(CreateStateStorageFollowerGuardian(tabletId, 1, follower));
-        runtime.WaitFor("registration on the two available replicas", [&] {
+        runtime.WaitFor("registration attempts at all three replicas and two acknowledgements", [&] {
             return guardians.size() == 3 && pingedGuardians.size() == 2;
         }, TDuration::Seconds(10));
 

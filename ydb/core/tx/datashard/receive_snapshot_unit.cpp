@@ -64,6 +64,7 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
 
     bool hasOpenTxs = false;
     bool loanedTables = false;
+    NTable::TRowVersionRanges removedRowVersions;
 
     for (auto &pr : op->InReadSets()) {
         for (auto& rsdata : pr.second) {
@@ -97,6 +98,16 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                 if (DataShard.GetSnapshotManager().GetLowWatermark() < lowWatermark)
                     DataShard.GetSnapshotManager().SetLowWatermark(db, lowWatermark);
 
+                if (rs.HasRemovedRowVersions()) {
+                    for (const auto& range : rs.GetRemovedRowVersions().GetRanges()) {
+                        removedRowVersions.Add(TRowVersion::FromProto(range.GetLower()),
+                            TRowVersion::FromProto(range.GetUpper()));
+                    }
+                } else {
+                    // Old CopyTable sources did not preserve registry snapshots.
+                    removedRowVersions.Add(TRowVersion::Min(), lowWatermark);
+                }
+
                 if (rs.GetWithOpenTxs()) {
                     hasOpenTxs = true;
                 }
@@ -119,13 +130,12 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
 
     const auto minVersion = DataShard.GetSnapshotManager().GetLowWatermark();
 
-    // If MinWriteVersion is not zero, then all versions below it are inaccessible
-    if (minVersion) {
-        for (const auto& kv : DataShard.GetUserTables()) {
-            ui32 localTableId = kv.second->LocalTid;
-            txc.DB.RemoveRowVersions(localTableId, TRowVersion::Min(), minVersion);
-        }
+    for (const auto& range : removedRowVersions) {
+        txc.DB.RemoveRowVersions(userTable->LocalTid, range.Lower, range.Upper);
     }
+    // Use the destination table identity. Source-only registrations must not
+    // hold history in the copy, while registrations for all tables still apply.
+    DataShard.GetSnapshotManager().EnsureRemovedRowVersions(txc.DB, TRowVersion::Min(), minVersion);
 
     if (hasOpenTxs && loanedTables) {
         // We must wait for loan to complete, so ReceiveSnapshotCleanup would

@@ -408,6 +408,25 @@ TSnapshotRetentionPolicy TSnapshotManager::GetSnapshotRetentionPolicy() const {
         AppData()->SnapshotRegistryHolder, AppData()->LongTxServiceConfig);
 }
 
+void TSnapshotManager::SerializeRemovedRowVersions(const NTable::TRowVersionRanges& ranges,
+    NKikimrTxDataShard::TMvccRemovedRowVersions& proto)
+{
+    for (const auto& range : ranges) {
+        auto* item = proto.AddRanges();
+        range.Lower.ToProto(item->MutableLower());
+        range.Upper.ToProto(item->MutableUpper());
+    }
+}
+
+void TSnapshotManager::RestoreRemovedRowVersions(NTable::TDatabase& db, ui32 localTableId,
+    const NKikimrTxDataShard::TMvccRemovedRowVersions& proto)
+{
+    for (const auto& range : proto.GetRanges()) {
+        db.RemoveRowVersions(localTableId, TRowVersion::FromProto(range.GetLower()),
+            TRowVersion::FromProto(range.GetUpper()));
+    }
+}
+
 bool TSnapshotManager::IsSnapshotReadable(NTable::TDatabase& db, const TTableId& tableId,
     const TRowVersion& version, bool locallyAcquired) const
 {

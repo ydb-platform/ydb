@@ -12,6 +12,10 @@
 #include <util/generic/list.h>
 #include <util/generic/map.h>
 
+namespace NKikimrTxDataShard {
+class TMvccRemovedRowVersions;
+}
+
 namespace NKikimr {
 
 struct TTableId;
@@ -205,6 +209,11 @@ public:
 
     void Fix_KIKIMR_14259(NTable::TDatabase& db);
     void EnsureRemovedRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to);
+
+    static void SerializeRemovedRowVersions(const NTable::TRowVersionRanges& ranges,
+        NKikimrTxDataShard::TMvccRemovedRowVersions& proto);
+    static void RestoreRemovedRowVersions(NTable::TDatabase& db, ui32 localTableId,
+        const NKikimrTxDataShard::TMvccRemovedRowVersions& proto);
 
     void RenameSnapshots(NTable::TDatabase& db, const TPathId& prevTableId, const TPathId& newTableId);
 

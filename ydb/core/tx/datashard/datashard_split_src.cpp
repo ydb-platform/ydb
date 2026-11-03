@@ -298,12 +298,16 @@ public:
             }
         }
 
-        TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext;
+        TIntrusivePtr<TSplitSnapshotContext> snapContext;
         snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot),
                                                 Self->GetSnapshotManager().GetCompleteEdge(),
                                                 Self->GetSnapshotManager().GetIncompleteEdge(),
                                                 Self->GetSnapshotManager().GetImmediateWriteEdge(),
                                                 Self->GetSnapshotManager().GetLowWatermark());
+
+        for (ui32 localTableId : snapContext->TablesToSnapshot()) {
+            snapContext->RemovedRowVersions.emplace(localTableId, txc.DB.GetRemovedRowVersions(localTableId));
+        }
 
         txc.Env.MakeSnapshot(snapContext);
 
@@ -439,6 +443,8 @@ public:
                     tableSnapshot->SetTableId(localTableId);
                     TString compressedBody = NBlockCodecs::Codec("lz4fast")->Encode(snapBody);
                     tableSnapshot->SetSnapshotData(compressedBody);
+                    TSnapshotManager::SerializeRemovedRowVersions(SnapContext->RemovedRowVersions.at(localTableId),
+                        *tableSnapshot->MutableRemovedRowVersions());
                 }
             }
 

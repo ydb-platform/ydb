@@ -574,11 +574,20 @@ private:
             it->second = partitionSession;
         }
 
+<<<<<<< HEAD
         AddOutgoingEvent(TReadSessionEvent::TStartPartitionSessionEvent(
             std::move(partitionSession),
             committedOffset,
             offsets.end()
         ));
+=======
+        std::optional<ui64> retainedStartOffset;
+        if (message.has_retained_start_offset()) {
+            retainedStartOffset = message.retained_start_offset();
+        }
+        AddOutgoingEvent(TReadSessionEvent::TStartPartitionSessionEvent(
+            std::move(partitionSession), committedOffset, offsets.start(), offsets.end(), retainedStartOffset));
+>>>>>>> ca95a87422f ([KIKIMR-27454] Detect lost messages for async replication on startup if all were lost and no per-message checks will be triggered on consumer. (#57837))
     }
 
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::StopPartitionSessionRequest& message) {

@@ -11,6 +11,8 @@ and internal practice.
 ## Comments
 
 - Comment everything non-trivial.
+- A comment states the meaning of the change. It does not restate the code's
+  logic.
 - Every class needs a comment above it: what it does, which problem it solves.
 - Every public method or function needs a comment saying what it does.
 - Every enum needs a comment per element explaining what that element means.
@@ -122,6 +124,10 @@ private:
   (by reference or pointer), then outputs last.
 - Pass output parameters by pointer, so the call site immediately shows the
   argument may be modified.
+- Name every parameter of a function or lambda. If a parameter is unused, keep
+  the name and mark it with `Y_UNUSED` in the body.
+- Do not give a parameter a default value unless it is necessary. Tests may use
+  default parameters.
 - Replace `bool` with an enum with meaningful names. It makes adding a new state
   easy, reduces mistakes, and makes dependent code searchable.
 

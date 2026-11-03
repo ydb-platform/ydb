@@ -111,6 +111,11 @@ TGuardedSgList& TWriteRequestBundle::GetSgList()
     return SgList;
 }
 
+const TBlockChecksums& TWriteRequestBundle::GetChecksums() const
+{
+    return Request->Checksums;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

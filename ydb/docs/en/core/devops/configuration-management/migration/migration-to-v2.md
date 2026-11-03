@@ -66,7 +66,7 @@ To migrate the {{ ydb-short-name }} cluster to configuration V2, you need to per
     - `channel_profile_config`;
     - other related storage configuration parameters, such as `static_erasure`.
 
-4. Add the following field to the checked and updated `config.yaml` file:
+4. Enable the `switch_to_config_v2` [feature flag](../../../reference/configuration/feature_flags.md) in the checked and updated `config.yaml` file:
 
     ```yaml
     feature_flags:

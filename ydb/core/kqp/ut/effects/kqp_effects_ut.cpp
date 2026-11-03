@@ -234,6 +234,40 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    // Regression test: INSERT ... SELECT ... LIMIT NULL OFFSET N leaves a bare Skip node that is
+    // not lowered to a physical stage. It used to crash BuildEffects with an internal
+    // YQL_ENSURE(newEffect) assert; now it must fail with a normal query error.
+    Y_UNIT_TEST(InsertSelect_OffsetWithoutLimit_GracefulError) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto ret = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `Foo` (
+                Key Uint32,
+                Value1 String,
+                Value2 Int32,
+                PRIMARY KEY (Key)
+            )
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(ret.IsSuccess(), ret.GetIssues().ToString());
+
+        auto result = session.ExecuteDataQuery(R"(
+            REPLACE INTO `/Root/Foo` (Key, Value1, Value2) VALUES
+                (10u, "foo", 5), (11u, "bar", 7)
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        // The query must fail gracefully with a user-facing error, not leak the internal
+        // YQL_ENSURE(newEffect) assert ("requirement newEffect failed").
+        result = session.ExecuteDataQuery(R"(
+            INSERT INTO `/Root/TwoShard` SELECT * FROM `/Root/Foo` ORDER BY Key LIMIT NULL OFFSET 100
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), "Expected a query error, got success");
+        const TString issues = result.GetIssues().ToString();
+        UNIT_ASSERT_C(!issues.Contains("newEffect"), issues);
+    }
+
     Y_UNIT_TEST(InsertAbort_Select_Duplicates) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetTableClient();

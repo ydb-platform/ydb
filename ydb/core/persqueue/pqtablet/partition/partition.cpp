@@ -5123,6 +5123,7 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
         user->SetCreateTimestampMS(createTimestamp.MilliSeconds());
     }
     user->SetEndOffset(GetEndOffset());
+    user->SetStartOffset(GetStartOffset());
     user->SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
     if (IsActive() || (offset > -1 && offset < (i64)GetEndOffset())) {
         user->SetSizeLag(GetSizeLag(offset));

@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/query_compiler/kqp_mkql_compiler.h>
 #include <ydb/core/kqp/query_compiler/kqp_olap_compiler.h>
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/query_data/kqp_request_predictor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -565,7 +566,7 @@ std::vector<std::string> GetResultColumnNames(const NKikimr::NMiniKQL::TType* re
 template <class T>
 void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResultType,
     const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyOpReadOlapRanges& readProto, TExprContext &ctx,
-    TTypeAnnotationContext& typesCtx)
+    TTypeAnnotationContext& typesCtx, TCompileTrace* trace)
 {
     if (NYql::HasSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames)) {
         auto groupByKeys = NYql::GetSetting(node.Settings().Ref(), TKqpReadTableSettings::GroupByFieldNames);
@@ -577,7 +578,7 @@ void FillOlapProgram(const T& node, const NKikimr::NMiniKQL::TType* miniKqlResul
         }
     }
     auto resultColNames = GetResultColumnNames(miniKqlResultType);
-    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx, typesCtx);
+    CompileOlapProgram(node.Process(), tableMeta, readProto, resultColNames, ctx, typesCtx, trace);
 }
 
 THashMap<TString, TString> FindSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& typesCtx, TSet<TString>& secretNames) {
@@ -758,8 +759,18 @@ public:
         queryProto.SetEnableHtapTx(Config->GetEnableHtapTx());
         queryProto.SetLangVer(Config->GetDefaultLangVer());
 
-        queryProto.SetForceImmediateEffectsExecution(
-            Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
+        // An unsafe truncate must see the writes that precede it in the same query, so their
+        // effects cannot be deferred past it.
+        bool hasUnsafeTruncate = false;
+        for (const auto& tx : query.Transactions()) {
+            if (GetTableTruncateSettings(tx)) {
+                hasUnsafeTruncate = true;
+                break;
+            }
+        }
+
+        queryProto.SetForceImmediateEffectsExecution(hasUnsafeTruncate
+            || Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
         queryProto.SetDisablePessimisticLocks(
             Config->KqpDisablePessimisticLocks.Get().GetOrElse(false));
 
@@ -1039,7 +1050,10 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
+                {
+                    TCompileTraceScope traceScope(OptimizeCtx.GetCompileTrace(), TCompileTraceLevels::Step, "Compile OLAP program");
+                    FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx, OptimizeCtx.GetCompileTrace());
+                }
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
             } else if (auto maybeReadBlockTableRanges = node.Maybe<TKqpBlockReadOlapTableRanges>()) {
                 auto readTableRanges = maybeReadBlockTableRanges.Cast();
@@ -1052,7 +1066,10 @@ private:
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
                 FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
-                FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
+                {
+                    TCompileTraceScope traceScope(OptimizeCtx.GetCompileTrace(), TCompileTraceLevels::Step, "Compile OLAP program");
+                    FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx, OptimizeCtx.GetCompileTrace());
+                }
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
             } else if (auto maybeDqSourceWrapBase = node.Maybe<TDqSourceWrapBase>()) {
@@ -2593,7 +2610,14 @@ private:
     void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TString, THashSet<TString>>& tablesMap, const TDqPhyStage& stage, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
-        if (IsTableSink(dataSinkCategory)) {
+        if (dataSinkCategory == KqpTableTruncateSinkName) {
+            const auto settings = sink.Settings().Cast<TKqpTableTruncateSettings>();
+            NKikimrKqp::TKqpTableTruncateSettings settingsProto;
+            settingsProto.SetTablePath(settings.TablePath().StringValue());
+            auto& internalSink = *protoSink->MutableInternalSink();
+            internalSink.SetType(TString(KqpTableTruncateSinkName));
+            internalSink.MutableSettings()->PackFrom(settingsProto);
+        } else if (IsTableSink(dataSinkCategory)) {
             auto settings = sink.Settings().Maybe<TKqpTableSinkSettings>();
             YQL_ENSURE(settings, "Unsupported sink type");
             NKqpProto::TKqpInternalSink& internalSinkProto = *protoSink->MutableInternalSink();

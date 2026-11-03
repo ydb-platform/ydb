@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
@@ -51,6 +52,7 @@ public:
         TMaybe<bool> IsInternalCall;
         TMaybe<bool> ConcurrentResults;
         bool UsePessimisticLocks = false;
+        TCompileTrace::TPtr CompileTrace;
 
         TString ToString() const {
             return TStringBuilder() << "TPrepareSettings{"

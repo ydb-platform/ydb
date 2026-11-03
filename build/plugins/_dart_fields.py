@@ -1175,9 +1175,9 @@ class TsConfigPath:
         ts_config_paths = get_values_list(unit, cls.KEY)
 
         # Special case: resolve path, relative to test dir
-        if unit.get("TS_TEST_FOR") == "yes" and unit.get("TS_CONFIG_PATH_CHANGED") == "yes":
+        if unit.get("TS_FOR") == "yes" and unit.get("TS_CONFIG_PATH_CHANGED") == "yes":
             tsconfig_path_test = os.path.join(unit.get("MODDIR"), ts_config_paths[0])
-            tsconfig_path_for = os.path.relpath(tsconfig_path_test, unit.get("TS_TEST_FOR_PATH"))
+            tsconfig_path_for = os.path.relpath(tsconfig_path_test, unit.get("TS_FOR_PATH"))
 
             return tsconfig_path_for
 
@@ -1239,7 +1239,7 @@ class TsTestForPath:
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        return unit.get("TS_TEST_FOR_PATH")
+        return unit.get("TS_FOR_PATH")
 
 
 class TsCheckType:
@@ -1375,7 +1375,7 @@ class TestFiles:
     @classmethod
     def ts_check_srcs(cls, unit, flat_args, spec_args):
         test_files = get_escaped_values_list(unit, "_TS_GLOB_FILES")
-        rel_to = "TS_TEST_FOR_PATH" if unit.get("TS_TEST_FOR") else "MODDIR"
+        rel_to = "TS_FOR_PATH" if unit.get("TS_FOR") else "MODDIR"
         test_files = _resolve_module_files(unit, unit.get(rel_to), test_files)
         value = serialize_list(test_files)
         return value

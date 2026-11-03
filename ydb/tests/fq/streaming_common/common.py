@@ -178,7 +178,6 @@ def get_ydb_config(request, enable_fq_connector=None):
             },
         }
 
-    config.yaml_config["log_config"]["default_level"] = 8
     if "auth_config" not in config.yaml_config:
         config.yaml_config["auth_config"] = {}
     config.yaml_config["auth_config"]["local_metadata_service"] = {

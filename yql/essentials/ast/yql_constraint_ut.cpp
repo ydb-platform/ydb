@@ -195,7 +195,7 @@ Y_UNIT_TEST(StreamingAliasesSerialization) {
     UNIT_ASSERT(!restored->IsEventTimePath(TPath{"other"}));
     UNIT_ASSERT(restored->GetEventTime() == streaming->GetEventTime());
 
-    for (const TStringBuf yson : {"#", "\"t\"", "[\"nested\";\"t\"]", "[]"}) {
+    for (const TStringBuf yson : {"#", "\"t\"", R"(["nested";"t"])", "[]"}) {
         const auto node = NYT::NodeFromYsonString(yson);
         const auto legacy = ctx.MakeConstraint<TStreamingConstraintNode>(node);
         UNIT_ASSERT_VALUES_EQUAL(NYT::NodeToCanonicalYsonString(legacy->ToYson()), NYT::NodeToCanonicalYsonString(node));

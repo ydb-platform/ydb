@@ -42,7 +42,10 @@ public:
             return true;
         }
 
-        if (target->GetStreamState() != TReplication::EStreamState::Removing) {
+        if (target->GetStreamState() != TReplication::EStreamState::Removing
+            && !(target->GetStreamState() == TReplication::EStreamState::Removed
+                && Replication->GetState() == TReplication::EState::Removing))
+        {
             YDB_LOG_WARN_CTX(ctx, "Stream state mismatch",
                 {"rid", rid},
                 {"tid", tid},
@@ -68,15 +71,11 @@ public:
         const bool isRemoving = dstState == TReplication::EDstState::Removing;
         const bool isAttaching = dstState == TReplication::EDstState::Attaching;
         if (isRemoving || isAttaching) {
+            Self->DeleteProcessedSourceOffsets(rid, tid, db);
             target->SetStreamState(TReplication::EStreamState::Removed);
             db.Table<Schema::SrcStreams>().Key(rid, tid).Update<Schema::SrcStreams::State>(target->GetStreamState());
         } else {
-            db.Table<Schema::Targets>().Key(rid, tid).Delete();
-            db.Table<Schema::SrcStreams>().Key(rid, tid).Delete();
-            for (const auto wid : target->GetWorkers()) {
-                db.Table<Schema::Workers>().Key(rid, tid, wid).Delete();
-            }
-            Replication->RemoveTarget(tid);
+            Self->RemoveTarget(db, *Replication, tid);
         }
 
         return true;

@@ -313,6 +313,33 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(ids[2], 3);
     }
 
+    Y_UNIT_TEST(LastLevelMeasuresOverlaps) {
+        TCounters counters;
+        TTestLastLevel lastLevel(TLastLevelSettings{}, counters);
+        lastLevel.AddPortion(MakePortion(1, 0, 10, 100));
+        lastLevel.AddPortion(MakePortion(2, 20, 30, 100));
+
+        UNIT_ASSERT_VALUES_EQUAL(lastLevel.Measure(MakePortion(3, 31, 40, 100)), 0);
+        UNIT_ASSERT_VALUES_EQUAL(lastLevel.Measure(MakePortion(4, 30, 40, 100)), 1);
+        UNIT_ASSERT_VALUES_EQUAL(lastLevel.Measure(MakePortion(5, 25, 40, 100)), 1);
+        UNIT_ASSERT_VALUES_EQUAL(lastLevel.Measure(MakePortion(6, 5, 25, 100)), 2);
+    }
+
+    Y_UNIT_TEST(LastLevelSettlesPortionInGap) {
+        TCounters counters;
+        TTestLastLevel lastLevel(TLastLevelSettings{}, counters);
+        lastLevel.AddPortion(MakePortion(1, 0, 10, 100));
+        lastLevel.AddPortion(MakePortion(2, 20, 30, 100));
+        lastLevel.AddPortion(MakePortion(3, 12, 15, 100));
+
+        TVector<ui64> ids;
+        for (const auto& p : lastLevel.Portions) {
+            ids.push_back(p->GetPortionId());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ids, TVector<ui64>({ 1, 3, 2 }));
+        UNIT_ASSERT(lastLevel.Candidates.empty());
+    }
+
     Y_UNIT_TEST(TilingReturnsAccumulatorTask) {
         TTestTiling::TilingSettings settings;
         settings.AccumulatorSettings.Trigger.Bytes = 100;

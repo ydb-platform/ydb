@@ -1,0 +1,14 @@
+BUILD_ONLY_IF(OS_LINUX)
+BUILD_ONLY_IF(ARCH_X86_64)
+
+IF (NOT CLANG)
+    SET(DISABLE_HYPERSCAN_BUILD)
+ENDIF()
+
+NO_BUILD_IF(DISABLE_HYPERSCAN_BUILD)
+
+YQL_UDF_FAT(hyperscan_udf)
+
+INCLUDE(${ARCADIA_ROOT}/yql/essentials/udfs/common/hyperscan/ya.make.inc)
+
+END()

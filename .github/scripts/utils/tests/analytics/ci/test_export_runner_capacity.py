@@ -26,6 +26,7 @@ from github_actions.export_runner_capacity import (
     hosts_that_fit,
     index_runner_jobs,
     instance_nrd_gib,
+    display_workflow,
     enrich_run_pull,
     is_ghrun,
     is_github_hosted_job,
@@ -261,6 +262,10 @@ class SnapshotRowsTest(unittest.TestCase):
             "main",
         )
         self.assertEqual(target_branch({"head_branch": "stable-25-1"}), "stable-25-1")
+        self.assertEqual(
+            target_branch({"event": "pull_request_target", "head_branch": "feature"}),
+            "",
+        )
         indexed = index_runner_jobs([
             (
                 {"name": "PR-check", "event": "pull_request", "display_title": "dist-cache miss", "head_branch": "feature", "pull_requests": [{"number": 55140, "base": {"ref": "main"}}]},
@@ -367,17 +372,68 @@ class SnapshotRowsTest(unittest.TestCase):
 
     def test_enrich_keeps_pr_and_target_branch(self):
         run = {
+            "name": "PR-check",
             "event": "pull_request_target",
-            "head_branch": "codex/cuthistory-main",
-            "display_title": "Cut history",
-            "pull_requests": [{"number": 53649, "title": "Cut history", "base": {"ref": "main"}}],
+            "head_branch": "feature",
+            "display_title": "fix it",
+            "pull_requests": [{"number": 42, "title": "fix it", "base": {"ref": "main"}}],
         }
         out = enrich_run_pull("ydb-platform", "ydb", run)
-        self.assertEqual(pull_info(out), ("53649", "Cut history"))
+        self.assertEqual(pull_info(out), ("42", "fix it"))
         self.assertEqual(target_branch(out), "main")
         rows = queue_jobs([(out, {"id": 1, "status": "queued", "name": "Build and test relwithdebinfo"})], NOW)
-        self.assertEqual(rows[0]["pr_number"], "53649")
+        self.assertEqual(rows[0]["pr_number"], "42")
         self.assertEqual(rows[0]["branch"], "main")
+        self.assertEqual(rows[0]["workflow"], "PR-check")
+
+    def test_postcommit_is_not_grouped_as_pr_check(self):
+        self.assertEqual(
+            display_workflow(
+                {"name": "PR-check", "event": "push"},
+                {"name": "Postcommit · Build and test relwithdebinfo"},
+            ),
+            "Postcommit",
+        )
+        self.assertEqual(
+            display_workflow(
+                {"name": "PR-check", "event": "pull_request_target"},
+                {"name": "Build and test relwithdebinfo"},
+            ),
+            "PR-check",
+        )
+        rows = queue_jobs([
+            (
+                {"id": 1, "name": "PR-check", "event": "push", "head_branch": "main"},
+                {"id": 11, "status": "queued", "name": "Postcommit · Build and test relwithdebinfo"},
+            ),
+            (
+                {
+                    "id": 2,
+                    "name": "PR-check",
+                    "event": "pull_request_target",
+                    "head_branch": "feature",
+                    "display_title": "fix it",
+                    "pull_requests": [{"number": 1, "title": "fix it", "base": {"ref": "main"}}],
+                },
+                {"id": 22, "status": "queued", "name": "Build and test relwithdebinfo"},
+            ),
+        ], NOW)
+        by_job = {row["job_name"]: row for row in rows}
+        self.assertEqual(by_job["Postcommit · Build and test relwithdebinfo"]["workflow"], "Postcommit")
+        self.assertIsNone(by_job["Postcommit · Build and test relwithdebinfo"]["pr_number"])
+        self.assertEqual(by_job["Build and test relwithdebinfo"]["workflow"], "PR-check")
+        self.assertEqual(by_job["Build and test relwithdebinfo"]["branch"], "main")
+
+    def test_enrich_strips_pulls_on_push(self):
+        run = {
+            "event": "push",
+            "head_branch": "main",
+            "pull_requests": [{"number": 42, "title": "fix it", "base": {"ref": "main"}}],
+        }
+        out = enrich_run_pull("ydb-platform", "ydb", run)
+        self.assertEqual(out["pull_requests"], [])
+        self.assertEqual(pull_info(out), (None, None))
+        self.assertEqual(target_branch(out), "main")
 
     def test_short_in_progress_page_plus_long_queue_is_incomplete(self):
         self.assertTrue(github_jobs_incomplete(124, 24, 96))

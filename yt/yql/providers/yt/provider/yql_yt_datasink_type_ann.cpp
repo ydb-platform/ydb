@@ -568,16 +568,16 @@ private:
             }
         }
 
-        if (content && TCoPgSelect::Match(content.Get())) {
-            auto pgSelect = TCoPgSelect(content);
-            if (NCommon::NeedToRenamePgSelectColumns(pgSelect)) {
+        if (content && content->IsCallable({"PgSelect", "YqlSelect"})) {
+            auto sqlSelect = TExprBase(content);
+            if (NCommon::NeedToRenameSqlSelectColumns(sqlSelect)) {
                 TExprNode::TPtr output;
 
                 const auto& columnOrder = (outTableInfo.RowSpec)
                     ? outTableInfo.RowSpec->GetColumnOrder()
                     : contentColumnOrder;
 
-                bool result = NCommon::RenamePgSelectColumns(pgSelect, output, columnOrder, ctx, *State_->Types);
+                bool result = NCommon::RenameSqlSelectColumns(sqlSelect, output, columnOrder, ctx, *State_->Types);
                 if (!result) {
                     return TStatus::Error;
                 }

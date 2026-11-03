@@ -30,6 +30,7 @@ namespace NKikimr::NStorage {
 
         TEvNodeConfigReversePush(ui32 rootNodeId) {
             Record.SetRootNodeId(rootNodeId);
+            Record.SetSupportsDirectRootQueries(true);
         }
 
         static std::unique_ptr<TEvNodeConfigReversePush> MakeRejected() {

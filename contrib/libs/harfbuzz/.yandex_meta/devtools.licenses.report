@@ -1,0 +1,465 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  2295c305996af1143d5826098775a387
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: src/hb-algs.hh at line 399
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/hb-algs.hh [385:403]
+
+KEEP     MIT-Modern-Variant   3a8f16a4562dea7bf2f1620d06a199f3
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT-Modern-Variant
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing/MIT, https://spdx.org/licenses/MIT-Modern-Variant
+    Files with this license:
+        COPYING [26:42]
+
+KEEP     ISC                  56907e2ae1c24aa1ea6c6e49d6f73b01
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        src/hb-ucd.cc [4:14]
+
+KEEP     MIT                  6a853a9fdcf9414b27b206e0804d52e1
+BELONGS ya.make
+    License text:
+        /* The MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/hb-algs.hh [381:381]
+
+KEEP     MIT-Modern-Variant   741567f2872ab26d4ac3757543a540b3
+BELONGS ya.make
+    License text:
+        HarfBuzz is licensed under the so-called "Old MIT" license.  Details follow.
+    Scancode info:
+        Original SPDX id: MIT-Modern-Variant
+        Score           : 85.00
+        Match type      : NOTICE
+        Links           : http://fedoraproject.org/wiki/Licensing/MIT, https://spdx.org/licenses/MIT-Modern-Variant
+    Files with this license:
+        COPYING [1:1]
+
+KEEP     MIT-Modern-Variant   9f9cae778b69fdc859bc4e69e000361d
+BELONGS glib/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT-Modern-Variant
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing/MIT, https://spdx.org/licenses/MIT-Modern-Variant
+    Files with this license:
+        src/OT/Color/CBDT/CBDT.hh [6:22]
+        src/OT/Color/COLR/COLR.hh [7:23]
+        src/OT/Color/COLR/colrv1-closure.hh [7:23]
+        src/OT/Color/CPAL/CPAL.hh [7:23]
+        src/OT/Color/sbix/sbix.hh [7:23]
+        src/OT/Color/svg/svg.hh [6:22]
+        src/OT/Layout/Common/Coverage.hh [7:23]
+        src/OT/Layout/Common/CoverageFormat1.hh [7:23]
+        src/OT/Layout/Common/CoverageFormat2.hh [7:23]
+        src/OT/Layout/Common/RangeRecord.hh [7:23]
+        src/OT/Layout/GDEF/GDEF.hh [7:23]
+        src/OT/Layout/types.hh [7:23]
+        src/OT/name/name.hh [6:22]
+        src/graph/classdef-graph.hh [6:22]
+        src/graph/coverage-graph.hh [6:22]
+        src/graph/graph.hh [6:22]
+        src/graph/gsubgpos-context.cc [6:22]
+        src/graph/gsubgpos-context.hh [6:22]
+        src/graph/gsubgpos-graph.hh [6:22]
+        src/graph/ligature-graph.hh [6:22]
+        src/graph/markbasepos-graph.hh [6:22]
+        src/graph/pairpos-graph.hh [6:22]
+        src/graph/serialize.hh [6:22]
+        src/graph/split-helpers.hh [6:22]
+        src/hb-aat-layout-ankr-table.hh [6:22]
+        src/hb-aat-layout-bsln-table.hh [6:22]
+        src/hb-aat-layout-common.hh [6:22]
+        src/hb-aat-layout-feat-table.hh [6:22]
+        src/hb-aat-layout-just-table.hh [6:22]
+        src/hb-aat-layout-kerx-table.hh [7:23]
+        src/hb-aat-layout-morx-table.hh [6:22]
+        src/hb-aat-layout-opbd-table.hh [6:22]
+        src/hb-aat-layout-trak-table.hh [7:23]
+        src/hb-aat-layout.cc [7:23]
+        src/hb-aat-layout.h [6:22]
+        src/hb-aat-layout.hh [6:22]
+        src/hb-aat-ltag-table.hh [6:22]
+        src/hb-aat-map.cc [7:23]
+        src/hb-aat-map.hh [6:22]
+        src/hb-aat.h [6:22]
+        src/hb-algs.hh [7:23]
+        src/hb-alloc-pool.hh [4:20]
+        src/hb-array.hh [6:22]
+        src/hb-atomic.hh [8:24]
+        src/hb-bimap.hh [6:22]
+        src/hb-bit-page.hh [7:23]
+        src/hb-bit-set-invertible.hh [7:23]
+        src/hb-bit-set.hh [7:23]
+        src/hb-bit-vector.hh [4:20]
+        src/hb-blob.cc [7:23]
+        src/hb-blob.h [6:22]
+        src/hb-blob.hh [7:23]
+        src/hb-buffer-deserialize-json.hh [8:24]
+        src/hb-buffer-deserialize-text-glyphs.hh [8:24]
+        src/hb-buffer-deserialize-text-unicode.hh [8:24]
+        src/hb-buffer-serialize.cc [6:22]
+        src/hb-buffer-verify.cc [6:22]
+        src/hb-buffer.cc [8:24]
+        src/hb-buffer.h [8:24]
+        src/hb-buffer.hh [8:24]
+        src/hb-cache.hh [6:22]
+        src/hb-cairo-utils.hh [6:22]
+        src/hb-cairo.h [6:22]
+        src/hb-cff-interp-common.hh [6:22]
+        src/hb-cff-interp-cs-common.hh [6:22]
+        src/hb-cff-interp-dict-common.hh [6:22]
+        src/hb-cff1-interp-cs.hh [6:22]
+        src/hb-cff2-interp-cs.hh [6:22]
+        src/hb-common.cc [7:23]
+        src/hb-common.h [7:23]
+        src/hb-config.hh [6:22]
+        src/hb-coretext.h [6:22]
+        src/hb-coretext.hh [7:23]
+        src/hb-cplusplus.hh [6:22]
+        src/hb-debug.hh [6:22]
+        src/hb-decycler.hh [6:22]
+        src/hb-deprecated.h [6:22]
+        src/hb-directwrite.h [6:22]
+        src/hb-directwrite.hh [4:20]
+        src/hb-dispatch.hh [7:23]
+        src/hb-draw.cc [6:22]
+        src/hb-draw.h [6:22]
+        src/hb-draw.hh [6:22]
+        src/hb-face-builder.cc [7:23]
+        src/hb-face.cc [7:23]
+        src/hb-face.h [6:22]
+        src/hb-face.hh [7:23]
+        src/hb-fallback-shape.cc [6:22]
+        src/hb-font.cc [7:23]
+        src/hb-font.h [6:22]
+        src/hb-font.hh [7:23]
+        src/hb-fontations.h [4:20]
+        src/hb-free-pool.hh [6:22]
+        src/hb-ft-colr.hh [6:22]
+        src/hb-ft.cc [8:24]
+        src/hb-ft.h [7:23]
+        src/hb-gdi.h [6:22]
+        src/hb-geometry.hh [6:22]
+        src/hb-glib.cc [7:23]
+        src/hb-glib.h [7:23]
+        src/hb-gobject-structs.h [6:22]
+        src/hb-gobject.h [6:22]
+        src/hb-graphite2.h [7:23]
+        src/hb-icu.h [7:23]
+        src/hb-iter.hh [7:23]
+        src/hb-kern.hh [6:22]
+        src/hb-limits.hh [6:22]
+        src/hb-machinery.hh [7:23]
+        src/hb-map.cc [6:22]
+        src/hb-map.h [6:22]
+        src/hb-map.hh [6:22]
+        src/hb-meta.hh [6:22]
+        src/hb-ms-feature-ranges.hh [7:23]
+        src/hb-multimap.hh [6:22]
+        src/hb-mutex.hh [8:24]
+        src/hb-null.hh [6:22]
+        src/hb-number-parser.hh [8:24]
+        src/hb-number.cc [6:22]
+        src/hb-number.hh [6:22]
+        src/hb-object.hh [8:24]
+        src/hb-open-file.hh [7:23]
+        src/hb-open-type.hh [7:23]
+        src/hb-ot-cff-common.hh [6:22]
+        src/hb-ot-cff1-std-str.hh [6:22]
+        src/hb-ot-cff1-table.cc [6:22]
+        src/hb-ot-cff1-table.hh [6:22]
+        src/hb-ot-cff2-table.cc [6:22]
+        src/hb-ot-cff2-table.hh [6:22]
+        src/hb-ot-cmap-table.hh [6:22]
+        src/hb-ot-color.cc [7:23]
+        src/hb-ot-color.h [8:24]
+        src/hb-ot-deprecated.h [6:22]
+        src/hb-ot-face-table-list.hh [8:24]
+        src/hb-ot-face.cc [6:22]
+        src/hb-ot-face.hh [7:23]
+        src/hb-ot-font.cc [6:22]
+        src/hb-ot-font.h [6:22]
+        src/hb-ot-gasp-table.hh [6:22]
+        src/hb-ot-glyf-table.hh [8:24]
+        src/hb-ot-hdmx-table.hh [6:22]
+        src/hb-ot-head-table.hh [7:23]
+        src/hb-ot-hhea-table.hh [6:22]
+        src/hb-ot-hmtx-table.hh [6:22]
+        src/hb-ot-kern-table.hh [6:22]
+        src/hb-ot-layout-base-table.hh [8:24]
+        src/hb-ot-layout-common.hh [7:23]
+        src/hb-ot-layout-gdef-table.hh [7:23]
+        src/hb-ot-layout-gpos-table.hh [7:23]
+        src/hb-ot-layout-gsub-table.hh [7:23]
+        src/hb-ot-layout-gsubgpos.hh [7:23]
+        src/hb-ot-layout-jstf-table.hh [6:22]
+        src/hb-ot-layout.cc [9:25]
+        src/hb-ot-layout.h [6:22]
+        src/hb-ot-layout.hh [7:23]
+        src/hb-ot-map.cc [7:23]
+        src/hb-ot-map.hh [7:23]
+        src/hb-ot-math-table.hh [6:22]
+        src/hb-ot-math.cc [6:22]
+        src/hb-ot-math.h [6:22]
+        src/hb-ot-maxp-table.hh [6:22]
+        src/hb-ot-meta-table.hh [6:22]
+        src/hb-ot-meta.cc [6:22]
+        src/hb-ot-meta.h [6:22]
+        src/hb-ot-metrics.cc [6:22]
+        src/hb-ot-metrics.h [6:22]
+        src/hb-ot-metrics.hh [6:22]
+        src/hb-ot-name-language-static.hh [6:22]
+        src/hb-ot-name-language.hh [6:22]
+        src/hb-ot-name-table.hh [6:22]
+        src/hb-ot-name.cc [6:22]
+        src/hb-ot-name.h [6:22]
+        src/hb-ot-os2-table.hh [7:23]
+        src/hb-ot-os2-unicode-ranges.hh [6:22]
+        src/hb-ot-post-macroman.hh [6:22]
+        src/hb-ot-post-table-v2subset.hh [6:22]
+        src/hb-ot-post-table.hh [6:22]
+        src/hb-ot-shape-fallback.cc [6:22]
+        src/hb-ot-shape-fallback.hh [6:22]
+        src/hb-ot-shape-normalize.cc [6:22]
+        src/hb-ot-shape-normalize.hh [6:22]
+        src/hb-ot-shape.cc [7:23]
+        src/hb-ot-shape.h [6:22]
+        src/hb-ot-shape.hh [6:22]
+        src/hb-ot-shaper-arabic-fallback.hh [6:22]
+        src/hb-ot-shaper-arabic-win1256.hh [6:22]
+        src/hb-ot-shaper-arabic.cc [6:22]
+        src/hb-ot-shaper-arabic.hh [7:23]
+        src/hb-ot-shaper-default.cc [6:22]
+        src/hb-ot-shaper-hangul.cc [6:22]
+        src/hb-ot-shaper-hebrew.cc [6:22]
+        src/hb-ot-shaper-indic-machine.hh [8:24]
+        src/hb-ot-shaper-indic.cc [6:22]
+        src/hb-ot-shaper-indic.hh [6:22]
+        src/hb-ot-shaper-khmer-machine.hh [8:24]
+        src/hb-ot-shaper-khmer.cc [6:22]
+        src/hb-ot-shaper-myanmar-machine.hh [8:24]
+        src/hb-ot-shaper-myanmar.cc [6:22]
+        src/hb-ot-shaper-syllabic.cc [6:22]
+        src/hb-ot-shaper-syllabic.hh [6:22]
+        src/hb-ot-shaper-thai.cc [6:22]
+        src/hb-ot-shaper-use-machine.hh [9:25]
+        src/hb-ot-shaper-use.cc [7:23]
+        src/hb-ot-shaper-vowel-constraints.hh [6:22]
+        src/hb-ot-shaper.hh [6:22]
+        src/hb-ot-stat-table.hh [6:22]
+        src/hb-ot-tag.cc [7:23]
+        src/hb-ot-var-avar-table.hh [6:22]
+        src/hb-ot-var-common.hh [6:22]
+        src/hb-ot-var-cvar-table.hh [6:22]
+        src/hb-ot-var-fvar-table.hh [6:22]
+        src/hb-ot-var-gvar-table.hh [7:23]
+        src/hb-ot-var-hvar-table.hh [6:22]
+        src/hb-ot-var-mvar-table.hh [6:22]
+        src/hb-ot-var-varc-table.hh [6:22]
+        src/hb-ot-var.cc [6:22]
+        src/hb-ot-var.h [6:22]
+        src/hb-ot-vorg-table.hh [6:22]
+        src/hb-ot.h [6:22]
+        src/hb-outline.cc [9:25]
+        src/hb-outline.hh [6:22]
+        src/hb-paint-bounded.cc [6:22]
+        src/hb-paint-bounded.hh [6:22]
+        src/hb-paint-extents.cc [6:22]
+        src/hb-paint-extents.hh [6:22]
+        src/hb-paint.cc [6:22]
+        src/hb-paint.h [6:22]
+        src/hb-paint.hh [6:22]
+        src/hb-priority-queue.hh [6:22]
+        src/hb-repacker.hh [6:22]
+        src/hb-sanitize.hh [7:23]
+        src/hb-script-list.h [7:23]
+        src/hb-serialize.hh [8:24]
+        src/hb-set-digest.hh [6:22]
+        src/hb-set.cc [6:22]
+        src/hb-set.h [6:22]
+        src/hb-set.hh [7:23]
+        src/hb-shape-plan.cc [6:22]
+        src/hb-shape-plan.h [6:22]
+        src/hb-shape-plan.hh [6:22]
+        src/hb-shape.cc [7:23]
+        src/hb-shape.h [7:23]
+        src/hb-shaper-impl.hh [6:22]
+        src/hb-shaper-list.hh [6:22]
+        src/hb-shaper.cc [6:22]
+        src/hb-shaper.hh [6:22]
+        src/hb-static.cc [6:22]
+        src/hb-string-array.hh [6:22]
+        src/hb-style.cc [6:22]
+        src/hb-style.h [6:22]
+        src/hb-subset-accelerator.hh [6:22]
+        src/hb-subset-cff-common.cc [6:22]
+        src/hb-subset-cff-common.hh [6:22]
+        src/hb-subset-cff1.cc [6:22]
+        src/hb-subset-cff2.cc [6:22]
+        src/hb-subset-input.cc [6:22]
+        src/hb-subset-input.hh [6:22]
+        src/hb-subset-instancer-iup.cc [6:22]
+        src/hb-subset-instancer-iup.hh [6:22]
+        src/hb-subset-instancer-solver.cc [6:22]
+        src/hb-subset-instancer-solver.hh [6:22]
+        src/hb-subset-plan-layout.cc [6:22]
+        src/hb-subset-plan-member-list.hh [7:23]
+        src/hb-subset-plan-var.cc [6:22]
+        src/hb-subset-plan.cc [6:22]
+        src/hb-subset-plan.hh [6:22]
+        src/hb-subset-serialize.cc [6:22]
+        src/hb-subset-serialize.h [6:22]
+        src/hb-subset-table.hh [6:22]
+        src/hb-subset.cc [6:22]
+        src/hb-subset.h [6:22]
+        src/hb-subset.hh [6:22]
+        src/hb-unicode.cc [8:24]
+        src/hb-unicode.h [8:24]
+        src/hb-unicode.hh [8:24]
+        src/hb-uniscribe.h [6:22]
+        src/hb-utf.hh [6:22]
+        src/hb-vector.hh [6:22]
+        src/hb-version.h [6:22]
+        src/hb-wasm-api-blob.hh [6:22]
+        src/hb-wasm-api-buffer.hh [6:22]
+        src/hb-wasm-api-common.hh [6:22]
+        src/hb-wasm-api-face.hh [6:22]
+        src/hb-wasm-api-font.hh [6:22]
+        src/hb-wasm-api-list.hh [6:22]
+        src/hb-wasm-api-shape.hh [6:22]
+        src/hb-wasm-api.h [6:22]
+        src/hb-wasm-api.hh [6:22]
+        src/hb.h [6:22]
+        src/hb.hh [7:23]
+    Belongs difference:
+        + glib/ya.make
+
+KEEP     Public-Domain        befda4a1c9816716cd57b58801997060
+BELONGS ya.make
+    License text:
+        /* Isaac Turner 29 April 2014 Public Domain */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        src/hb-algs.hh [1270:1270]
+
+KEEP     Unicode              c1f357eb75ec4da49c17887b565118e9
+BELONGS ya.make
+    License text:
+         * # Unicode and the Unicode Logo are registered trademarks of Unicode, Inc. in the U.S. and other countries.
+         * # For terms of use and license, see https://www.unicode.org/terms_of_use.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 70.00
+        Match type      : NOTICE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        src/hb-unicode-emoji-table.hh [12:13]
+
+KEEP     Unicode              d56a2724ecf4a816b2276241bf962896
+BELONGS ya.make
+    License text:
+         * # For terms of use and license, see https://www.unicode.org/terms_of_use.html
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        src/hb-unicode-emoji-table.hh [13:13]
+
+SKIP     LicenseRef-scancode-other-permissive ddc1ea69679dbdb39e95373da38a8995
+BELONGS ya.make
+FILE_INCLUDE COPYING found in files: COPYING at line 3
+    # not a license
+    License text:
+        For parts of HarfBuzz that are licensed under different licenses see individual
+        files names COPYING in subdirectories where applicable.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        COPYING [2:3]
+
+KEEP     MIT-Modern-Variant   ecbf838afdb0c639672031a18a73759c
+BELONGS ya.make
+    License text:
+           * to relicense it under the HarfBuzz license. */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown
+        Score           : 12.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown.LICENSE
+    Files with this license:
+        src/hb-outline.cc [118:118]
+
+SKIP     LicenseRef-scancode-unknown-license-reference fefca70ab9d30c4e80853ad8275663dd
+BELONGS ya.make
+    License text:
+        For full copyright notices consult the individual files in the package.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        COPYING [23:23]

@@ -1,7 +1,7 @@
 {
-    "test.test[nan]": [
+    "test.test[nan-Results]": [
         {
-            "uri": "file://test.test_nan_/results.txt"
+            "uri": "file://test.test_nan-Results_/results.txt"
         }
     ]
 }

@@ -98,7 +98,6 @@ PEERDIR(
     contrib/libs/openssl
     contrib/libs/xxhash
     ydb/library/actors/core
-    ydb/library/actors/dnscachelib
     ydb/library/actors/dnsresolver
     ydb/library/actors/helpers
     ydb/library/actors/interconnect/address
@@ -119,7 +118,6 @@ PEERDIR(
     library/cpp/monlib/service/pages/resources
     library/cpp/monlib/service/pages/tablesorter
     library/cpp/openssl/init
-    library/cpp/packedtypes
 )
 
 END()

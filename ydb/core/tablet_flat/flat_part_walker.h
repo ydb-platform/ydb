@@ -24,7 +24,7 @@ public:
     }
 
     /// One resumable descent step.
-    bool Step(const TPart* part, IPages* pages, NPage::TGroupId dataGroupId,
+    bool Step(const TPart* part, IPages* pages, NPage::TGroupId groupId,
               bool skipDataPages = false)
     {
         for (ui32 level = CurrentLevel_; level < Levels.size(); level++) {
@@ -36,14 +36,13 @@ public:
                 return true; // data level always last, walker is done
             }
 
-            /// Index pages are always fetched from the main group (room 0).
-            const auto pageGroupId = isDataLevel ? dataGroupId : NPage::TGroupId{};
-
             bool anyMissed = false;
             size_t keep = 0;
             for (size_t pos = 0; pos < nodes.size(); ++pos) {
                 const auto loc = nodes[pos];
-                const TSharedData* data = pages->TryGetPage(part, loc, pageGroupId);
+                const TSharedData* data = isDataLevel
+                    ? pages->TryGetPage(part, loc, groupId)
+                    : pages->TryGetIndexPage(part, loc, groupId);
                 if (!data) {
                     anyMissed = true;
                     nodes[keep++] = loc; // the page is not here yet, keep it for the next round

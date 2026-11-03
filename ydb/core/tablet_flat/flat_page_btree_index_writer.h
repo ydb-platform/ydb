@@ -426,13 +426,14 @@ namespace NKikimr::NTable::NPage {
             Levels[0].PushChild(std::move(child));
         }
 
-        void Flush(IPageWriter &pager) {
+        // Index pages are written to the page collection `slot` of the part
+        void Flush(IPageWriter &pager, ui32 slot) {
             for (ui32 levelIndex = 0; levelIndex < Levels.size(); levelIndex++) {
                 bool hasChanges = false;
 
                 // Note: in theory we may want to flush one level multiple times when different triggers are applicable
                 while (CanFlush(levelIndex)) {
-                    DoFlush(levelIndex, pager, false);
+                    DoFlush(levelIndex, pager, slot, false);
                     hasChanges = true;
                 }
 
@@ -442,7 +443,7 @@ namespace NKikimr::NTable::NPage {
             }
         }
 
-        TBtreeIndexMeta Finish(IPageWriter &pager) {
+        TBtreeIndexMeta Finish(IPageWriter &pager, ui32 slot) {
             for (ui32 levelIndex = 0; levelIndex < Levels.size(); levelIndex++) {
                 if (!Levels[levelIndex].GetKeysCount()) {
                     Y_ENSURE(Levels[levelIndex].GetChildrenCount() == 1, "Should be root");
@@ -452,7 +453,7 @@ namespace NKikimr::NTable::NPage {
                     return MakeMeta(rootChild, levelIndex, IndexSize);
                 }
 
-                DoFlush(levelIndex, pager, true);
+                DoFlush(levelIndex, pager, slot, true);
             }
 
             Y_ENSURE(false, "Should have returned root");
@@ -484,7 +485,7 @@ namespace NKikimr::NTable::NPage {
                 CalcPageSize(Levels[levelIndex]) > waitFullNodes * NodeTargetSize;
         }
 
-        void DoFlush(ui32 levelIndex, IPageWriter &pager, bool last) {
+        void DoFlush(ui32 levelIndex, IPageWriter &pager, ui32 slot, bool last) {
             Writer.EnsureEmpty();
 
             if (last) {
@@ -510,8 +511,8 @@ namespace NKikimr::NTable::NPage {
 
             auto page = Writer.Finish();
             IndexSize += page.size();
-            auto location = pager.Write(std::move(page), Writer.PageType(), 0);
-            TPageId pageId = pager.GetLastWrittenPageId(0);
+            auto location = pager.Write(std::move(page), Writer.PageType(), slot);
+            TPageId pageId = pager.GetLastWrittenPageId(slot);
 
             if (levelIndex + 1 == Levels.size()) {
                 Levels.emplace_back();

@@ -823,9 +823,9 @@ def connect_pile(pile_name, primary_pile_name, pile_to_endpoints):
     if primary_pile_name is None or primary_pile_name == pile_name:
         raise QueryError('Cannot reconnect a pile without a connected primary pile')
 
-    # A disconnected pile shuts down its gRPC servers. Both requests therefore
-    # enter through the connected primary; quorum_piles selects the witnesses
-    # for each update and does not select the RPC endpoint.
+    # A disconnected pile shuts down its gRPC servers, so the request enters
+    # through the connected primary. The update is committed by the quorum of
+    # every pile taking part in the configuration quorum in the new state.
     primary_endpoints = pile_to_endpoints.get(primary_pile_name)
     if not primary_endpoints:
         raise QueryError(
@@ -834,12 +834,6 @@ def connect_pile(pile_name, primary_pile_name, pile_to_endpoints):
         )
     update_pile_states(
         (update,),
-        quorum_piles=(primary_pile_name,),
-        endpoints=primary_endpoints,
-    )
-    update_pile_states(
-        (update,),
-        quorum_piles=(pile_name,),
         endpoints=primary_endpoints,
     )
 
@@ -1063,10 +1057,8 @@ def pdisk_matches_storage_pool(pdisk, sp, location=None):
                 if prop.Kind != pdisk.Kind:
                     break
             elif prop.HasField('Location'):
-                if location is None or any(
-                    field.name not in ('BridgePileName', 'DataCenter', 'Module', 'Rack', 'Unit')
-                    or not location.HasField(field.name)
-                    or getattr(location, field.name) != value
+                if location is None or not all(
+                    location.HasField(field.name) and getattr(location, field.name) == value
                     for field, value in prop.Location.ListFields()
                 ):
                     break

@@ -3,6 +3,7 @@
 #include "summary.h"
 
 #include <library/cpp/yt/cpu_clock/clock.h>
+
 #include <library/cpp/yt/system/access_spreader.h>
 
 namespace NYT::NProfiling {

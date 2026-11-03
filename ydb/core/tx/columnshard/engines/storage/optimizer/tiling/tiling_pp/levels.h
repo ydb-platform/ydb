@@ -40,7 +40,7 @@ struct LastLevel: ICompactionUnit<TPortion> {
         if (measure == 0) {
             AFL_VERIFY(PortionIds.insert(portionId).second)("portion_id", portionId);
             p->AddRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
-            Portions.insert(p);
+            Portions.insert(Portions.end(), p);   // on startup the portions come sorted by end key
         } else {
             AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
             Candidates.insert(p);
@@ -168,6 +168,10 @@ struct LastLevel: ICompactionUnit<TPortion> {
     }
 
     std::pair<typename PortionsEndSorted::iterator, typename PortionsEndSorted::iterator> Borders(typename TPortion::TConstPtr p) const {
+        // on startup the portions come sorted by end key, so a new one starts after every settled one
+        if (Portions.empty() || (*Portions.rbegin())->IndexKeyEndRef() < p->IndexKeyStartRef()) {
+            return std::make_pair(Portions.end(), Portions.end());
+        }
         auto begin = Portions.lower_bound(p->IndexKeyStartRef());
         auto end = Portions.upper_bound(p->IndexKeyEndRef());
         if (end != Portions.end() && (*end)->IndexKeyStartRef() <= p->IndexKeyEndRef()) {

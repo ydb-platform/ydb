@@ -226,6 +226,7 @@ struct TSkiffSchemaRepresentation
     TString Name;
     EWireType WireType;
     std::optional<std::vector<INodePtr>> Children;
+    std::optional<i64> Size;
 
     REGISTER_YSON_STRUCT(TSkiffSchemaRepresentation);
 
@@ -234,6 +235,8 @@ struct TSkiffSchemaRepresentation
             .Default();
         registrar.Parameter("wire_type", &TThis::WireType);
         registrar.Parameter("children", &TThis::Children)
+            .Default();
+        registrar.Parameter("size", &TThis::Size)
             .Default();
     }
 };
@@ -285,15 +288,20 @@ std::shared_ptr<TSkiffSchema> ParseSchema(
             case ESchemaKind::Simple:
                 return CreateSimpleTypeSchema(schemaRepresentation->WireType)->SetName(schemaRepresentation->Name);
             case ESchemaKind::StringFixed:
-                THROW_ERROR_EXCEPTION(
-                    "Wire type %Qlv is not yet supported in Skiff schema",
-                    schemaRepresentation->WireType);
+                if (!schemaRepresentation->Size) {
+                    THROW_ERROR_EXCEPTION(
+                        "Wire type %Qlv must have a \"size\" key",
+                        schemaRepresentation->WireType);
+                }
+
+                return CreateStringFixedSchema(*schemaRepresentation->Size)->SetName(schemaRepresentation->Name);
             case ESchemaKind::Complex: {
                 if (!schemaRepresentation->Children) {
                     THROW_ERROR_EXCEPTION(
-                        "Complex type %Qlv lacks children",
+                        "Complex wire type %Qlv must have a \"children\" key",
                         schemaRepresentation->WireType);
                 }
+
                 std::vector<std::shared_ptr<TSkiffSchema>> childSchemaList;
                 for (const auto& childNode : *schemaRepresentation->Children) {
                     auto childSchema = ParseSchema(childNode, registry, parsedRegistry, parseInProgressNames);
@@ -305,16 +313,18 @@ std::shared_ptr<TSkiffSchema> ParseSchema(
                         return CreateVariant8Schema(childSchemaList)->SetName(schemaRepresentation->Name);
                     case EWireType::Variant16:
                         return CreateVariant16Schema(childSchemaList)->SetName(schemaRepresentation->Name);
+                    case EWireType::VariantVar:
+                        return CreateVariantVarSchema(childSchemaList)->SetName(schemaRepresentation->Name);
                     case EWireType::RepeatedVariant8:
                         return CreateRepeatedVariant8Schema(childSchemaList)->SetName(schemaRepresentation->Name);
                     case EWireType::RepeatedVariant16:
                         return CreateRepeatedVariant16Schema(childSchemaList)->SetName(schemaRepresentation->Name);
+                    case EWireType::RepeatedBlockVar:
+                        return CreateRepeatedBlockVarSchema(childSchemaList)->SetName(schemaRepresentation->Name);
                     case EWireType::Tuple:
                         return CreateTupleSchema(childSchemaList)->SetName(schemaRepresentation->Name);
                     default:
-                        THROW_ERROR_EXCEPTION(
-                            "Wire type %Qlv is not yet supported in Skiff schema",
-                            schemaRepresentation->WireType);
+                        YT_ABORT();
                 }
             }
         }

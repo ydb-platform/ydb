@@ -651,21 +651,12 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
                 Stream << del << "vector_type=\"float\"";
                 break;
-<<<<<<< HEAD:ydb/core/sys_view/show_create/create_table_formatter.cpp
-=======
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16:
-                Stream << del << "vector_type=\"float16\"";
-                break;
-            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
-                Stream << del << "vector_type=\"bfloat16\"";
-                break;
             case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3:
                 Stream << del << "vector_type=\"float8_e4m3\"";
                 break;
             case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2:
                 Stream << del << "vector_type=\"float8_e5m2\"";
                 break;
->>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246)):ydb/core/sys_view/show_create/formatters/create_table_formatter.cpp
             default:
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::VectorIndexSettings");
         }

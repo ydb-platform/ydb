@@ -27,11 +27,7 @@ void ConfigureVectorOpts(NLastGetopt::TOpts& opts, TVectorOpts* vectorOpts) {
     NColorizer::TColors colors = NYdb::NConsoleClient::AutoColors(Cout);
 
     {
-<<<<<<< HEAD
-        const TVector<TString> vectorTypes = {"float", "int8", "uint8", "bit"};
-=======
-        const TVector<TString> vectorTypes = {"float", "float16", "bfloat16", "float8_e4m3", "float8_e5m2", "int8", "uint8", "bit"};
->>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
+        const TVector<TString> vectorTypes = {"float", "float8_e4m3", "float8_e5m2", "int8", "uint8", "bit"};
 
         TStringBuilder builder;
         builder << "Type of vectors. Available options: ";

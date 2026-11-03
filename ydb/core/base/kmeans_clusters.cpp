@@ -70,17 +70,10 @@ namespace {
         const TString vectorType = to_lower(vectorType_);
         if (vectorType == "float")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
-<<<<<<< HEAD
-=======
-        else if (vectorType == "float16")
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16;
-        else if (vectorType == "bfloat16")
-            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16;
         else if (vectorType == "float8_e4m3")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3;
         else if (vectorType == "float8_e5m2")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2;
->>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
         else if (vectorType == "uint8")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         else if (vectorType == "int8")
@@ -128,14 +121,10 @@ namespace {
 template <typename TCoord>
 struct TMetric {
     using TCoord_ = TCoord;
-<<<<<<< HEAD
-    using TSum = std::conditional_t<std::is_floating_point_v<TCoord>, double, i64>;
-=======
     // Reduced-precision coordinates use float arithmetic and double sums.
     using TArithmeticCoord = NVectorDistance::TArithmeticCoord<TCoord>;
     static constexpr bool IsFloatingPoint = std::is_floating_point_v<TArithmeticCoord>;
     using TSum = std::conditional_t<IsFloatingPoint, double, i64>;
->>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
     static constexpr bool AggregateNormalized = false;
 };
 
@@ -161,7 +150,7 @@ struct TCosineDistance : TMetric<TCoord> {
 template <typename TCoord>
 struct TL1Distance : TMetric<TCoord> {
     using TSum = typename TMetric<TCoord>::TSum;
-    using TRes = std::conditional_t<std::is_floating_point_v<TCoord>, TCoord, ui64>;
+    using TRes = std::conditional_t<TMetric<TCoord>::IsFloatingPoint, typename TMetric<TCoord>::TArithmeticCoord, ui64>;
 
     static TRes Init()
     {
@@ -178,7 +167,7 @@ struct TL1Distance : TMetric<TCoord> {
 template <typename TCoord>
 struct TL2Distance : TMetric<TCoord> {
     using TSum = typename TMetric<TCoord>::TSum;
-    using TRes = std::conditional_t<std::is_floating_point_v<TCoord>, TCoord, ui64>;
+    using TRes = std::conditional_t<TMetric<TCoord>::IsFloatingPoint, typename TMetric<TCoord>::TArithmeticCoord, ui64>;
 
     static TRes Init()
     {
@@ -195,7 +184,7 @@ struct TL2Distance : TMetric<TCoord> {
 template <typename TCoord>
 struct TMaxInnerProductSimilarity : TMetric<TCoord> {
     using TSum = typename TMetric<TCoord>::TSum;
-    using TRes = std::conditional_t<std::is_floating_point_v<TCoord>, TCoord, i64>;
+    using TRes = std::conditional_t<TMetric<TCoord>::IsFloatingPoint, typename TMetric<TCoord>::TArithmeticCoord, i64>;
 
     static TRes Init()
     {
@@ -215,6 +204,7 @@ class TClusters: public IClusters {
     static constexpr double MinVectorsNeedsReassigned = 0.01;
 
     using TCoord = TMetric::TCoord_;
+    using TArithmeticCoord = TMetric::TArithmeticCoord;
     using TSum = TMetric::TSum;
     using TEmbedding = TVector<TSum>;
 
@@ -429,7 +419,7 @@ public:
                 }
             } else {
                 for (const auto coord : this->GetCoords(embedding.data())) {
-                    *coords++ += norm != 0 ? static_cast<TSum>(coord * (weight / norm)) : 0;
+                    *coords++ += norm != 0 ? static_cast<TSum>(static_cast<TArithmeticCoord>(coord) * (weight / norm)) : 0;
                 }
             }
         } else {
@@ -441,7 +431,7 @@ public:
                 }
             } else {
                 for (const auto coord : this->GetCoords(embedding.data())) {
-                    *coords++ += static_cast<TSum>(coord) * weight;
+                    *coords++ += static_cast<TSum>(static_cast<TArithmeticCoord>(coord)) * weight;
                 }
             }
         }
@@ -516,7 +506,7 @@ private:
             }
         } else {
             for (const auto coord : GetCoords(embedding.data())) {
-                const double value = static_cast<double>(coord);
+                const double value = static_cast<TArithmeticCoord>(coord);
                 normSquared += value * value;
             }
         }
@@ -570,11 +560,11 @@ private:
             }
 
             auto data = GetData(d.MutRef().data());
-            if constexpr (std::is_floating_point_v<TCoord>) {
+            if constexpr (TMetric::IsFloatingPoint) {
                 for (auto& coord : data) {
                     coord = norm != 0
                         ? static_cast<TCoord>(static_cast<double>(*embedding) / (static_cast<double>(c) * norm))
-                        : 0;
+                        : TCoord{};
                     ++embedding;
                 }
             } else {
@@ -606,7 +596,7 @@ private:
         } else {
             auto data = GetData(d.MutRef().data());
             for (auto& coord : data) {
-                coord = *embedding / count;
+                coord = static_cast<TCoord>(*embedding / count);
                 embedding++;
             }
         }
@@ -643,17 +633,10 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
     switch (settings.vector_type()) {
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
             return handleMetric.template operator()<float>();
-<<<<<<< HEAD
-=======
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16:
-            return handleMetric.template operator()<TFloat16>();
-        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
-            return handleMetric.template operator()<TBFloat16>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3:
             return handleMetric.template operator()<TFloat8E4M3>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2:
             return handleMetric.template operator()<TFloat8E5M2>();
->>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
             return handleMetric.template operator()<ui8>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
@@ -689,18 +672,6 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
                 return nullptr;
             }
             break;
-<<<<<<< HEAD
-=======
-        case EFormat::Float16Vector:
-            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16, sizeof(TFloat16), "float16")) {
-                return nullptr;
-            }
-            break;
-        case EFormat::BFloat16Vector:
-            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16, sizeof(TBFloat16), "bfloat16")) {
-                return nullptr;
-            }
-            break;
         case EFormat::Float8E4M3Vector:
             if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3, sizeof(TFloat8E4M3), "float8_e4m3")) {
                 return nullptr;
@@ -711,7 +682,6 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
                 return nullptr;
             }
             break;
->>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
         case EFormat::Uint8Vector:
             if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8, sizeof(ui8), "uint8")) {
                 return nullptr;
@@ -966,23 +936,6 @@ bool AutoSelectVectorSettings(Ydb::Table::VectorIndexSettings& vectorSettings, c
             vectorSettings.set_vector_dimension((embedding.size() - HeaderLen) / sizeof(float));
         }
         break;
-<<<<<<< HEAD
-=======
-    case EFormat::Float16Vector:
-    case EFormat::BFloat16Vector:
-        if (!hasVectorType) {
-            vectorSettings.set_vector_type(formatByte == EFormat::Float16Vector
-                ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16
-                : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16);
-        }
-        if (!hasVectorDimension) {
-            if (embedding.size() < HeaderLen + sizeof(TFloat16)
-                || (embedding.size() - HeaderLen) % sizeof(TFloat16) != 0) {
-                return false;
-            }
-            vectorSettings.set_vector_dimension((embedding.size() - HeaderLen) / sizeof(TFloat16));
-        }
-        break;
     case EFormat::Float8E4M3Vector:
     case EFormat::Float8E5M2Vector:
         if (embedding.size() <= HeaderLen) {
@@ -997,7 +950,6 @@ bool AutoSelectVectorSettings(Ydb::Table::VectorIndexSettings& vectorSettings, c
             vectorSettings.set_vector_dimension(embedding.size() - HeaderLen);
         }
         break;
->>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
     case EFormat::Uint8Vector:
         if (!hasVectorType) {
             vectorSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);

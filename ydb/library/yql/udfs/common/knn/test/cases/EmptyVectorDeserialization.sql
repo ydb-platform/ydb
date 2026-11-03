@@ -1,8 +1,6 @@
 -- Tagged numeric vectors declare List<Float>, so empty vectors must return a list.
 $empty = ListCreate(Float);
 select Knn::FloatFromBinaryString(Knn::ToBinaryStringFloat($empty));
-select Knn::FloatFromBinaryString(Knn::ToBinaryStringFloat16($empty));
-select Knn::FloatFromBinaryString(Knn::ToBinaryStringBFloat16($empty));
 select Knn::FloatFromBinaryString(Knn::ToBinaryStringFloat8E4M3($empty));
 select Knn::FloatFromBinaryString(Knn::ToBinaryStringFloat8E5M2($empty));
 select Knn::FloatFromBinaryString(Knn::ToBinaryStringInt8(ListCreate(Int8)));

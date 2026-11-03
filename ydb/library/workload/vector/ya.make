@@ -18,6 +18,7 @@ PEERDIR(
     ydb/library/formats/arrow/csv/converter
     ydb/library/workload/abstract
     ydb/library/workload/benchmark_base
+    ydb/library/vector_distance
     ydb/public/api/protos
     ydb/public/sdk/cpp/src/client/types/status
 )

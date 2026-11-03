@@ -64,13 +64,6 @@
             "uri": "file://test.test_EuclideanDistance_/results.txt"
         }
     ],
-<<<<<<< HEAD
-=======
-    "test.test[Float16Serialization]": [
-        {
-            "uri": "file://test.test_Float16Serialization_/results.txt"
-        }
-    ],
     "test.test[Float8E4M3Serialization]": [
         {
             "uri": "file://test.test_Float8E4M3Serialization_/results.txt"
@@ -81,7 +74,6 @@
             "uri": "file://test.test_Float8E5M2Serialization_/results.txt"
         }
     ],
->>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
     "test.test[InnerProductSimilarity]": [
         {
             "uri": "file://test.test_InnerProductSimilarity_/results.txt"

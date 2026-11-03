@@ -100,13 +100,8 @@ static TString GenerateEmbedding(size_t dimension, std::mt19937_64& rng, std::un
     TStringBuilder buffer;
     NKnnVectorSerialization::TSerializer<T> serializer(&buffer.Out);
     for (size_t j = 0; j < dimension; ++j) {
-<<<<<<< HEAD
-        if constexpr (std::is_same<T, float>::value) {
-            serializer.HandleElement(dist(rng));
-=======
         if constexpr (std::is_same_v<T, float> || NVectorDistance::IsReducedPrecisionFloat<T>) {
             serializer.HandleElement(static_cast<T>(dist(rng)));
->>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
         } else if constexpr (std::is_same<T, uint8_t>::value) {
             serializer.HandleElement(static_cast<uint8_t>(dist(rng) * (UINT8_MAX + 1)));
         } else if constexpr (std::is_same<T, int8_t>::value) {
@@ -144,19 +139,11 @@ TQueryInfoList TVectorWorkloadGenerator::Upsert() {
 
     for (size_t i = 0; i < batchSize; ++i) {
         TString embeddingBuffer;
-<<<<<<< HEAD
-        if (vectorType == "uint8") {
-=======
-        if (vectorType == "float16") {
-            embeddingBuffer = GenerateEmbedding<TFloat16>(dimension, rng, dist);
-        } else if (vectorType == "bfloat16") {
-            embeddingBuffer = GenerateEmbedding<TBFloat16>(dimension, rng, dist);
-        } else if (vectorType == "float8_e4m3") {
+        if (vectorType == "float8_e4m3") {
             embeddingBuffer = GenerateEmbedding<TFloat8E4M3>(dimension, rng, dist);
         } else if (vectorType == "float8_e5m2") {
             embeddingBuffer = GenerateEmbedding<TFloat8E5M2>(dimension, rng, dist);
         } else if (vectorType == "uint8") {
->>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))
             embeddingBuffer = GenerateEmbedding<uint8_t>(dimension, rng, dist);
         } else if (vectorType == "int8") {
             embeddingBuffer = GenerateEmbedding<int8_t>(dimension, rng, dist);

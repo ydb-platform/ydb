@@ -827,63 +827,6 @@ TEST(TableTest, AlterTableSetMetricsSettings) {
         Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION
     );
 }
-<<<<<<< HEAD
-=======
-
-TEST(KMeansTreeSettings, AutoUpdateDefaultsInAggregate) {
-    const NYdb::NTable::TKMeansTreeSettings settings{
-        {NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
-         NYdb::NTable::TVectorIndexSettings::EVectorType::Float, 1024},
-        10,
-        3};
-    EXPECT_FALSE(settings.AutoUpdate.has_value());
-
-    Ydb::Table::KMeansTreeSettings proto;
-    settings.SerializeTo(proto);
-    EXPECT_FALSE(proto.has_autoupdate());
-}
-
-TEST(KMeansTreeSettings, AutoUpdateRoundTrip) {
-    for (const auto autoUpdate : {std::optional<bool>(), std::make_optional(true), std::make_optional(false)}) {
-        NYdb::NTable::TKMeansTreeSettings original;
-        original.AutoUpdate = autoUpdate;
-        Ydb::Table::KMeansTreeSettings proto;
-        original.SerializeTo(proto);
-        EXPECT_EQ(proto.has_autoupdate(), autoUpdate.has_value());
-        if (autoUpdate.has_value()) {
-            EXPECT_EQ(proto.autoupdate(), *autoUpdate);
-        }
-        const auto restored = NYdb::NTable::TKMeansTreeSettings::FromProto(proto);
-        EXPECT_EQ(restored.AutoUpdate, autoUpdate);
-    }
-
-    Ydb::Table::KMeansTreeSettings proto;
-    proto.set_autoupdate(false);
-    NYdb::NTable::TKMeansTreeSettings().SerializeTo(proto);
-    EXPECT_FALSE(proto.has_autoupdate());
-}
-
-TEST(TtlTierSettings, ObjectKeyPrefixRoundTrip) {
-    using namespace NYdb::NTable;
-    for (auto&& prefix : {std::optional<std::string>(), std::make_optional(std::string()),
-                          std::make_optional(std::string("archive//2026:09/"))}) {
-        const TTtlTierSettings original(TDateTypeColumnModeSettings("ts", TDuration::Days(1)),
-                                        TTtlEvictToExternalStorageAction("/Root/eds", prefix));
-        Ydb::Table::TtlTier proto;
-        original.SerializeTo(proto);
-        ASSERT_EQ(proto.evict_to_external_storage().has_object_key_prefix(), prefix.has_value());
-        const auto restored = TTtlTierSettings::FromProto(proto);
-        ASSERT_TRUE(restored);
-        const auto& action = std::get<TTtlEvictToExternalStorageAction>(restored->GetAction());
-        EXPECT_EQ(action.GetStorage(), "/Root/eds");
-        EXPECT_EQ(action.GetObjectKeyPrefix(), prefix);
-    }
-
-    Ydb::Table::EvictionToExternalStorageSettings proto;
-    proto.set_object_key_prefix("previous");
-    TTtlEvictToExternalStorageAction("/Root/eds").SerializeTo(proto);
-    EXPECT_FALSE(proto.has_object_key_prefix());
-}
 
 TEST(VectorIndexSettings, Float8RoundTrip) {
     using TSettings = NYdb::NTable::TVectorIndexSettings;
@@ -912,4 +855,3 @@ TEST(VectorIndexSettings, Float8RoundTrip) {
         EXPECT_EQ(restoredTree.Levels, 3);
     }
 }
->>>>>>> e5e6e86d893 (Add E4M3 and E5M2 FP8 vector support (#57246))

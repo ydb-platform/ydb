@@ -5,8 +5,26 @@
 using namespace NSQLTranslationV1;
 
 Y_UNIT_TEST_SUITE(Symlink) {
+Y_UNIT_TEST(CreateSymlinkDoesntWorkOnOldLangVersion) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 2);
+    ExpectFailWithError("USE plato; CREATE SYMLINK link TO target;",
+                        "<main>:1:12: Error: CREATE/DROP SYMLINK is not available before language version 2026.03\n",
+                        settings);
+}
+
+Y_UNIT_TEST(DropSymlinkDoesntWorkOnOldLangVersion) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2026, 2);
+    ExpectFailWithError("USE plato; DROP SYMLINK link;",
+                        "<main>:1:12: Error: CREATE/DROP SYMLINK is not available before language version 2026.03\n",
+                        settings);
+}
+
 Y_UNIT_TEST(CreateSymlink) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE SYMLINK link TO target;");
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings("USE plato; CREATE SYMLINK link TO target;", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -22,7 +40,9 @@ Y_UNIT_TEST(CreateSymlink) {
 }
 
 Y_UNIT_TEST(CreateSymlinkIfNotExists) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE SYMLINK IF NOT EXISTS link TO target;");
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings("USE plato; CREATE SYMLINK IF NOT EXISTS link TO target;", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -38,7 +58,9 @@ Y_UNIT_TEST(CreateSymlinkIfNotExists) {
 }
 
 Y_UNIT_TEST(DropSymlink) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; DROP SYMLINK link;");
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings("USE plato; DROP SYMLINK link;", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -54,7 +76,9 @@ Y_UNIT_TEST(DropSymlink) {
 }
 
 Y_UNIT_TEST(DropSymlinkIfExists) {
-    NYql::TAstParseResult res = SqlToYql("USE plato; DROP SYMLINK IF EXISTS link;");
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings("USE plato; DROP SYMLINK IF EXISTS link;", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -70,7 +94,9 @@ Y_UNIT_TEST(DropSymlinkIfExists) {
 }
 
 Y_UNIT_TEST(SymlinkReferenceForms) {
-    NYql::TAstParseResult res = SqlToYql(R"sql(
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         USE plato;
         DECLARE $cluster AS String;
         DECLARE $link AS String;
@@ -78,16 +104,18 @@ Y_UNIT_TEST(SymlinkReferenceForms) {
         CREATE SYMLINK $link TO $target;
         CREATE SYMLINK yt:$cluster.$link TO $target;
         DROP SYMLINK plato.$link;
-    )sql");
+    )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
 Y_UNIT_TEST(CreateSymlinkWithTablePathPrefix) {
-    NYql::TAstParseResult res = SqlToYql(R"sql(
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         USE plato;
         PRAGMA TablePathPrefix = "/prefix";
         CREATE SYMLINK link TO target;
-    )sql");
+    )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -103,11 +131,13 @@ Y_UNIT_TEST(CreateSymlinkWithTablePathPrefix) {
 }
 
 Y_UNIT_TEST(CreateSymlinkWithTablePathPrefixKeepsAbsolutePaths) {
-    NYql::TAstParseResult res = SqlToYql(R"sql(
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         USE plato;
         PRAGMA TablePathPrefix = "/prefix";
         CREATE SYMLINK `//home/link` TO `//home/target`;
-    )sql");
+    )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -123,11 +153,13 @@ Y_UNIT_TEST(CreateSymlinkWithTablePathPrefixKeepsAbsolutePaths) {
 }
 
 Y_UNIT_TEST(DropSymlinkWithTablePathPrefix) {
-    NYql::TAstParseResult res = SqlToYql(R"sql(
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         USE plato;
         PRAGMA TablePathPrefix = "/prefix";
         DROP SYMLINK link;
-    )sql");
+    )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -143,13 +175,15 @@ Y_UNIT_TEST(DropSymlinkWithTablePathPrefix) {
 }
 
 Y_UNIT_TEST(SymlinkParametersWithTablePathPrefix) {
-    NYql::TAstParseResult res = SqlToYql(R"sql(
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         USE plato;
         PRAGMA TablePathPrefix = "/prefix";
         DECLARE $link AS String;
         DECLARE $target AS String;
         CREATE SYMLINK $link TO $target;
-    )sql");
+    )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -168,6 +202,8 @@ Y_UNIT_TEST(SymlinkParametersWithTablePathPrefix) {
 }
 
 Y_UNIT_TEST(SymlinkDoesNotAcceptAtPrefix) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
     const TVector<TString> queries = {
         "USE plato; CREATE SYMLINK @link TO target;",
         "USE plato; CREATE SYMLINK link TO @target;",
@@ -175,19 +211,21 @@ Y_UNIT_TEST(SymlinkDoesNotAcceptAtPrefix) {
     };
 
     for (const auto& query : queries) {
-        const auto res = SqlToYql(query);
+        const auto res = SqlToYqlWithSettings(query, settings);
         UNIT_ASSERT_C(!res.IsOk(), query);
     }
 }
 
 Y_UNIT_TEST(CreateSymlinkUsesClusterFromLinkOrUse) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
     const TVector<TString> queries = {
         "USE plato; CREATE SYMLINK hahn.link TO target;",
         "USE hahn; CREATE SYMLINK link TO target;",
     };
 
     for (const auto& query : queries) {
-        const auto res = SqlToYql(query);
+        const auto res = SqlToYqlWithSettings(query, settings);
         UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
         TWordCountHive elementStat = {"Write!"};
@@ -198,6 +236,8 @@ Y_UNIT_TEST(CreateSymlinkUsesClusterFromLinkOrUse) {
 }
 
 Y_UNIT_TEST(CreateSymlinkTargetDoesNotAcceptCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YtSymlinks.MinLangVer;
     const TVector<TString> queries = {
         "CREATE SYMLINK plato.link TO plato.target;",
         "USE plato; CREATE SYMLINK link TO hahn.target;",
@@ -205,7 +245,7 @@ Y_UNIT_TEST(CreateSymlinkTargetDoesNotAcceptCluster) {
     };
 
     for (const auto& query : queries) {
-        const auto res = SqlToYql(query);
+        const auto res = SqlToYqlWithSettings(query, settings);
         UNIT_ASSERT_C(!res.IsOk(), query);
     }
 }

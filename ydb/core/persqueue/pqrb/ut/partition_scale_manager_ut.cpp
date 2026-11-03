@@ -537,11 +537,11 @@ Y_UNIT_TEST(ReorderPrefersSmallerPrescribedChildren) {
     InstallProposeCapture(tc, blocked);
     auto host = StartHost(tc, MakeScaleConfig(10, 2), /*dbPath=*/"");
     NKikimrPQ::TPartitionScaleParticipants late;
-    late.AddChildPartitionIds(20);
-    late.AddChildPartitionIds(21);
+    late.AddChildPartitionIds(4);
+    late.AddChildPartitionIds(5);
     NKikimrPQ::TPartitionScaleParticipants early;
-    early.AddChildPartitionIds(5);
-    early.AddChildPartitionIds(6);
+    early.AddChildPartitionIds(2);
+    early.AddChildPartitionIds(3);
 
     auto first = MakeHolder<TEvScaleStatus>();
     first->PartitionId = 0;
@@ -560,6 +560,67 @@ Y_UNIT_TEST(ReorderPrefersSmallerPrescribedChildren) {
     WaitProposes(tc, blocked);
 
     UNIT_ASSERT_VALUES_EQUAL(GroupOf(blocked).GetSplit(0).GetPartition(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(GroupOf(blocked).SplitSize(), 2u);
+}
+
+Y_UNIT_TEST(PrescribedSplitAheadOfNextIdIsPostponed) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    TProposeCapture blocked;
+    InstallProposeCapture(tc, blocked);
+    auto host = StartHost(tc, MakeScaleConfig(20, 4), /*dbPath=*/"");
+
+    NKikimrPQ::TPartitionScaleParticipants ahead;
+    ahead.AddChildPartitionIds(8);
+    ahead.AddChildPartitionIds(9);
+    NKikimrPQ::TPartitionScaleParticipants next;
+    next.AddChildPartitionIds(4);
+    next.AddChildPartitionIds(5);
+
+    SendScale(tc, host, 2, NKikimrPQ::EScaleStatus::NEED_SPLIT, TString("m"), ahead);
+    SendScale(tc, host, 0, NKikimrPQ::EScaleStatus::NEED_SPLIT, TString("n"), next);
+    UNIT_ASSERT_VALUES_EQUAL(blocked.Records.size(), 0u);
+
+    tc.Runtime->Send(new IEventHandle(host, tc.Edge, new TEvUpdateDb("/Root")));
+    WaitProposes(tc, blocked);
+
+    const auto& group = GroupOf(blocked);
+    UNIT_ASSERT_VALUES_EQUAL(group.SplitSize(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(group.GetSplit(0).GetPartition(), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(group.GetSplit(0).ChildPartitionIdsSize(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(group.GetSplit(0).GetChildPartitionIds(0), 4u);
+    UNIT_ASSERT_VALUES_EQUAL(group.GetSplit(0).GetChildPartitionIds(1), 5u);
+}
+
+Y_UNIT_TEST(PrescribedSplitsInIdOrderAreSentTogether) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    TProposeCapture blocked;
+    InstallProposeCapture(tc, blocked);
+    auto host = StartHost(tc, MakeScaleConfig(20, 4), /*dbPath=*/"");
+
+    NKikimrPQ::TPartitionScaleParticipants firstChildren;
+    firstChildren.AddChildPartitionIds(4);
+    firstChildren.AddChildPartitionIds(5);
+    NKikimrPQ::TPartitionScaleParticipants secondChildren;
+    secondChildren.AddChildPartitionIds(6);
+    secondChildren.AddChildPartitionIds(7);
+
+    SendScale(tc, host, 3, NKikimrPQ::EScaleStatus::NEED_SPLIT, TString("m"), secondChildren);
+    SendScale(tc, host, 1, NKikimrPQ::EScaleStatus::NEED_SPLIT, TString("n"), firstChildren);
+    tc.Runtime->Send(new IEventHandle(host, tc.Edge, new TEvUpdateDb("/Root")));
+    WaitProposes(tc, blocked);
+
+    const auto& group = GroupOf(blocked);
+    UNIT_ASSERT_VALUES_EQUAL(group.SplitSize(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(group.GetSplit(0).GetPartition(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(group.GetSplit(0).GetChildPartitionIds(0), 4u);
+    UNIT_ASSERT_VALUES_EQUAL(group.GetSplit(1).GetPartition(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(group.GetSplit(1).GetChildPartitionIds(0), 6u);
 }
 
 Y_UNIT_TEST(MirrorDescriptionCreatesRootBoundaries) {

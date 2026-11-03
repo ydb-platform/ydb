@@ -11,12 +11,17 @@ PEERDIR(
 )
 
 SRCS(
+    data_center_states.cpp
+    data_center_states.h
+    dsproxy_events.h
     batched_vec.h
     blobstorage_checksum.cpp
     blobstorage_checksum.h
     blobstorage_events.cpp
     blobstorage_events.h
     blobstorage_host_record.h
+    pdisk_filter.h
+    storage_pool_pile_override.cpp
     infer_pdisk_slot_count_settings.h
     blobstorage_oos_defs.h
     blobstorage_vdiskid.cpp

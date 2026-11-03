@@ -1,16 +1,17 @@
 #pragma once
 #include "events.h"
 #include "udf_name.h"
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
+
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <util/system/file.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
 
 namespace NKikimr::NUdfStore {
 
@@ -24,7 +25,7 @@ namespace NKikimr::NUdfStore {
 //   5. On EOF: verifies body size against metadata, MD5, renames tmp→final,
 //      loads UDF into FunctionRegistry and checks that modules were registered
 //   6. Sends TEvReadBodyResponse(success/failure) to ReplyTo
-class TKvBodyReadActor : public NActors::TActorBootstrapped<TKvBodyReadActor> {
+class TKvBodyReadActor: public NActors::TActorBootstrapped<TKvBodyReadActor> {
 private:
     NActors::TActorId ReplyTo;
 
@@ -44,28 +45,23 @@ private:
     // Chunked-read state
     // KV tablet hard-caps a single read response at ~25 MiB (TotalSizeLimit).
     // We use 16 MiB chunks to stay well within that limit.
-    static constexpr ui64 ReadChunkSize = 16ull << 20; // 16 MiB
+    static constexpr ui64 ReadChunkSize = 16ull << 20;   // 16 MiB
     ui64 CurrentOffset = 0;
     TString TmpFilePath;
     THolder<TFile> TmpFile;
     MD5 Md5Ctx;
 
     void SendNavigateRequest();
-    void CreatePipeAndSendRead();  // opens pipe, kicks off first chunk read
-    void SendNextChunkRead();      // sends TEvRead for [CurrentOffset, +ReadChunkSize)
-    void FinalizeAndSave();        // called when last chunk received
-    void CleanupTmpFile();         // closes + removes the tmp file on error
+    void CreatePipeAndSendRead();   // opens pipe, kicks off first chunk read
+    void SendNextChunkRead();   // sends TEvRead for [CurrentOffset, +ReadChunkSize)
+    void FinalizeAndSave();   // called when last chunk received
+    void CleanupTmpFile();   // closes + removes the tmp file on error
     bool LoadUdfIntoRegistry(const TString& finalPath) const;
     void ReplyError(const TString& message);
 
 public:
-    TKvBodyReadActor(const NActors::TActorId& replyTo,
-                     const TString& name,
-                     const TString& md5,
-                     const TString& volumePath,
-                     const TString& outputDir,
-                     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry,
-                     ui64 expectedSize)
+    TKvBodyReadActor(const NActors::TActorId& replyTo, const TString& name, const TString& md5, const TString& volumePath,
+        const TString& outputDir, TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry, ui64 expectedSize)
         : ReplyTo(replyTo)
         , VolumePath(volumePath)
         , Name(name)
@@ -73,7 +69,8 @@ public:
         , OutputDir(outputDir)
         , ExpectedSize(expectedSize)
         , FunctionRegistry(std::move(functionRegistry))
-    {}
+    {
+    }
 
     void Bootstrap();
 
@@ -103,4 +100,4 @@ public:
     }
 };
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

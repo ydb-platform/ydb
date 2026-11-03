@@ -435,7 +435,9 @@ bool PartiallyAnnotateTypes(
     TVector<TTransformStage> transformers;
 
     transformers.push_back(TTransformStage(
-        CreateFunctorTransformer(&ExpandApply),
+        CreateFunctorTransformer([&typeCtx](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            return ExpandApply(input, output, ctx, typeCtx);
+        }),
         "ExpandApply",
         TIssuesIds::CORE_PRE_TYPE_ANN));
 

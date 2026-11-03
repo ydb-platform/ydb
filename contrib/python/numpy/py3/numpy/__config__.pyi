@@ -1,7 +1,7 @@
 from enum import Enum
 from types import ModuleType
-from typing import Final, Literal as L, TypedDict, overload, type_check_only
-from typing_extensions import NotRequired
+from typing import Final, NotRequired, TypedDict, overload, type_check_only
+from typing import Literal as L
 
 _CompilerConfigDictValue = TypedDict(
     "_CompilerConfigDictValue",
@@ -25,7 +25,7 @@ _CompilerConfigDict = TypedDict(
 _MachineInformationDict = TypedDict(
     "_MachineInformationDict",
     {
-        "host":_MachineInformationDictValue,
+        "host": _MachineInformationDictValue,
         "build": _MachineInformationDictValue,
         "cross-compiled": NotRequired[L[True]],
     },

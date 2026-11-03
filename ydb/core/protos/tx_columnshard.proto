@@ -307,6 +307,10 @@ message TDropTable {
     optional uint64 PathId = 1;
 }
 
+message TTruncateTable {
+    optional uint64 PathId = 1;
+}
+
 message TEnsureTables {
     repeated TCreateTable Tables = 1;
 }
@@ -339,6 +343,7 @@ message TSchemaTxBody {
         TAlterStore AlterStore = 6;
         TMoveTable MoveTable = 7;
         TCopyTable CopyTable = 8;
+        TTruncateTable TruncateTable = 9;
     }
 
     optional NKikimrSchemeOp.TGranuleShardingInfo GranuleShardingInfo = 20;
@@ -402,4 +407,15 @@ message TEvNodeOverloadStatus {
 message TCompletedBackupTransaction {
     optional uint64 TxId = 1;
     optional TShardOpResult OpResult = 2;
+}
+
+message TCutHistoryRequest {
+    optional uint64 TabletID = 1;
+    optional uint32 Channel = 2;
+    optional uint32 FromGeneration = 3;
+    optional uint32 GroupID = 4;
+    optional uint64 TimestampUs = 5;
+    optional NActorsProto.TActorId Recipient = 6;
+    optional uint32 ToGeneration = 7;
+    optional uint32 SendingGeneration = 8;
 }

@@ -38,4 +38,4 @@ bool TSnapshot::HasComponent(const TString& componentId) const {
     return false;
 }
 
-}
+}   // namespace NKikimr::NMetadata::NInitializer

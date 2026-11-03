@@ -3,6 +3,8 @@
 #include "mkql_type_ops.h"
 #include "mkql_alloc.h"
 
+#include <yql/essentials/minikql/datetime/datetime.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <library/cpp/type_info/tz/tz.h>
@@ -16,6 +18,7 @@ extern "C" {
 }
 
 using namespace NYql;
+using namespace NYql::NDateTime;
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
@@ -203,6 +206,48 @@ void TestSplitMakeTzDatetime32vs64(ui16 tzId, ui32 beginDatetime, size_t step) {
 Y_UNIT_TEST(SplitMakeTzDatetime32vs64) {
     constexpr size_t datetimeStep = 100 * 86400;
     RunTestForAllTimezones(TestSplitMakeTzDatetime32vs64, datetimeStep);
+}
+
+Y_UNIT_TEST(SplitTzDatetime32vs64Pre1970) {
+    const ui16 tzId = GetTimezoneId("Etc/GMT+1");
+    ui32 year_n, month_n, day_n, hour_n, minute_n, second_n;
+    ui32 dayOfYear_n, weekOfYear_n, weekOfYearIso8601_n, dayOfWeek_n;
+    UNIT_ASSERT(SplitTzDatetime(0u, year_n, month_n, day_n, hour_n, minute_n, second_n,
+                                dayOfYear_n, weekOfYear_n, weekOfYearIso8601_n, dayOfWeek_n, tzId));
+    UNIT_ASSERT_VALUES_EQUAL(1969u, year_n);
+    UNIT_ASSERT_VALUES_EQUAL(12u, month_n);
+    UNIT_ASSERT_VALUES_EQUAL(31u, day_n);
+    UNIT_ASSERT_VALUES_EQUAL(365u, dayOfYear_n);
+    UNIT_ASSERT_VALUES_EQUAL(53u, weekOfYear_n);
+    UNIT_ASSERT_VALUES_EQUAL(1u, weekOfYearIso8601_n);
+    UNIT_ASSERT_VALUES_EQUAL(3u, dayOfWeek_n);
+
+    i32 year_w;
+    ui32 month_w, day_w, hour_w, minute_w, second_w;
+    ui32 dayOfYear_w, weekOfYear_w, weekOfYearIso8601_w, dayOfWeek_w;
+    UNIT_ASSERT(SplitTzDatetime64(0LL, year_w, month_w, day_w, hour_w, minute_w, second_w,
+                                  dayOfYear_w, weekOfYear_w, weekOfYearIso8601_w, dayOfWeek_w, tzId));
+    UNIT_ASSERT_VALUES_EQUAL(year_n, static_cast<ui32>(year_w));
+    UNIT_ASSERT_VALUES_EQUAL(month_n, month_w);
+    UNIT_ASSERT_VALUES_EQUAL(day_n, day_w);
+    UNIT_ASSERT_VALUES_EQUAL(dayOfYear_n, dayOfYear_w);
+    UNIT_ASSERT_VALUES_EQUAL(weekOfYear_n, weekOfYear_w);
+    UNIT_ASSERT_VALUES_EQUAL(weekOfYearIso8601_n, weekOfYearIso8601_w);
+    UNIT_ASSERT_VALUES_EQUAL(dayOfWeek_n, dayOfWeek_w);
+}
+
+Y_UNIT_TEST(MakeTzDateRejectsInvalidDate) {
+    ui16 value = 123;
+    UNIT_ASSERT(!MakeTzDate(1970, 0, 1, value, 0));
+    UNIT_ASSERT_VALUES_EQUAL(value, 123);
+    UNIT_ASSERT(!MakeTzDate(1970, 1, 0, value, 0));
+    UNIT_ASSERT_VALUES_EQUAL(value, 123);
+}
+
+Y_UNIT_TEST(MakeTzDateAcceptsEpoch) {
+    ui16 value = 123;
+    UNIT_ASSERT(MakeTzDate(1970, 1, 1, value, 0));
+    UNIT_ASSERT_VALUES_EQUAL(value, 0);
 }
 
 Y_UNIT_TEST(SplitMakeTzDateSingle) {

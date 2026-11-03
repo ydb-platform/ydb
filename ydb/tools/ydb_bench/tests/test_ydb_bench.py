@@ -32,6 +32,7 @@ from ydb.tools.ydb_bench.lib import (
     actors_core,
     cli,
     common,
+    distributed_builder_ui,
     import_results,
     linux_telemetry,
     load_control,
@@ -458,7 +459,14 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(json.loads(schema_output.getvalue()), CONFIG_SCHEMA)
         self.assertEqual(
             set(CONFIG_SCHEMA["properties"]),
-            {"ping-bench", "star-ping-bench", "memory-bandwidth-bench", "local-ydb", "distributed-ydb"},
+            {
+                "ping-bench",
+                "star-ping-bench",
+                "memory-bandwidth-bench",
+                "local-ydb",
+                "distributed-ydb",
+                "dedicated-ydb",
+            },
         )
         local_load_schema = CONFIG_SCHEMA["properties"]["local-ydb"]["additionalProperties"]["properties"]["load"]
         self.assertEqual(local_load_schema["properties"]["allow-errors"], {"type": "boolean"})
@@ -2629,7 +2637,7 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
 
     @unittest.skipUnless(shutil.which("node"), "node is required for builder state checks")
     def test_add_profile_preserves_unsupported_benchmark_draft(self):
-        script = """
+        script = distributed_builder_ui.JS + """
 const editor={yaml:'original draft',model:{
   benchmarks:[{name:'distributed-ydb',builder_supported:false}],
   profiles:[{benchmark:'distributed-ydb',name:'cluster'}]
@@ -2687,7 +2695,8 @@ if(!detail.open)throw Error('Expansion leaked between profiles');
 
     @unittest.skipUnless(shutil.which("node"), "node is required for editor rendering checks")
     def test_new_run_layout_preserves_host_and_error_controls(self):
-        script = web._JS[web._JS.index("function editorControls()") : web._JS.index("function parameterCases(")]
+        script = distributed_builder_ui.JS
+        script += web._JS[web._JS.index("function editorControls()") : web._JS.index("function parameterCases(")]
         script += web._JS[web._JS.index("const editorDetailState=") : web._JS.index("function clearRefresh()")]
         script += """
 const app={innerHTML:''},elements=new Map();
@@ -4233,7 +4242,10 @@ const renderRun=(...args)=>{rendered=args};
 
     @unittest.skipUnless(shutil.which("node"), "node is needed for browser logic tests")
     def test_new_run_queue_label_uses_selected_host_and_ignores_stale_response(self):
-        script = web._JS[web._JS.index("async function refreshEditorActivity(") : web._JS.index("function runDisplay(")]
+        script = distributed_builder_ui.JS
+        script += web._JS[
+            web._JS.index("async function refreshEditorActivity(") : web._JS.index("function runDisplay(")
+        ]
         script += """
 const assert=require('node:assert/strict'),location={hash:'#new'};
 const editor={model:{profiles:[]}};
@@ -4257,6 +4269,9 @@ const editorApi=path=>{assert.equal(path,'/api/activity-status');return new Prom
   assert.equal(button.textContent,'Add to queue');
   pending=refreshEditorActivity();resolve({queued:1});await pending;
   assert.equal(button.textContent,'Add to queue');
+  pending=refreshEditorActivity();resolve({queued:0});await pending;
+  assert.equal(button.textContent,'Deploy cluster');
+  editor.model.profiles=[{benchmark:'dedicated-ydb',distributed_config:{}}];
   pending=refreshEditorActivity();resolve({queued:0});await pending;
   assert.equal(button.textContent,'Deploy cluster');
   editor.model.profiles=[];
@@ -7659,6 +7674,28 @@ class WebTest(unittest.TestCase):
             with self.assertRaisesRegex(BenchmarkError, "run not found"):
                 service.events("../" + outside_path.name)
 
+    def test_run_service_detail_reads_only_requested_manifest(self):
+        self._manifest(self.root / "complete")
+        self._manifest(self.root / "imported" / "nested", imported=True)
+        service = RunService(self.root)
+        try:
+            expected = service.model()
+            with mock.patch.object(web, "_manifests", side_effect=AssertionError("history scan")):
+                self.assertEqual(service.detail("complete"), expected["complete"])
+                self.assertEqual(service.detail("imported/nested"), expected["imported/nested"])
+                for missing in ("missing", "../outside", ".", "complete/../complete", "/tmp"):
+                    self.assertIsNone(service.detail(missing))
+                (self.root / "complete" / "run.json").write_text("invalid", encoding="utf-8")
+                self.assertIsNone(service.detail("complete"))
+                # CLI output can itself be a run directory, represented by ".".
+                self._manifest(self.root)
+                root_manifest = web.load_manifest(self.root / "run.json")
+                root_record = web.run_record(".", root_manifest, self.root)
+                root_record.update(current_run_id=None, queue_position=None)
+                self.assertEqual(service.detail("."), root_record)
+        finally:
+            service.shutdown()
+
     def test_run_service_events_decodes_each_persisted_line_once(self):
         self._manifest(self.root / "complete")
         (self.root / "complete" / "events.jsonl").write_text(
@@ -8972,7 +9009,9 @@ const renderTopology=()=>{rendered='topology'};
                 self.assertIn(b"Recent activity", script)
                 self.assertIn(b"activityScrollTop", script)
                 self.assertIn(b"activityPinned", script)
-                self.assertIn(b"showLiveOutput=!['local-ydb','distributed-ydb'].includes(activeBenchmark)", script)
+                self.assertIn(
+                    b"showLiveOutput=!['local-ydb','distributed-ydb','dedicated-ydb'].includes(activeBenchmark)", script
+                )
                 self.assertIn(b"local-load-allow-errors", script)
                 self.assertIn(b"allow-errors: ", script)
                 self.assertIn(b"Failed workload requests are allowed", script)

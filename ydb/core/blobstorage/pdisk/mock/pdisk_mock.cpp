@@ -45,6 +45,8 @@ struct TPDiskMockState::TImpl {
     const ui32 AppendBlockSize;
     const ui32 ChunkSize;
     const ui32 TotalChunks;
+    ui64 SystemReserveChunks = 0;
+    ui64 MaintenanceReserveChunks = 0;
     bool IsDiskReadOnly;
     std::map<ui8, TOwner> Owners;
     std::set<ui32> FreeChunks;
@@ -55,7 +57,7 @@ struct TPDiskMockState::TImpl {
     THashSet<ui32> ReadOnlyVDisks;
     TString StateErrorReason;
     NPDisk::EDeviceType DeviceType;
-    std::optional<TRcBuf> Metadata;
+    std::shared_ptr<TMetadata> Metadata = std::make_shared<TMetadata>();
 
     ESpaceColorPolicy SpaceColorPolicy;
     std::shared_ptr<NPDisk::TQuotaRecord> ChunkSharedQuota;
@@ -208,7 +210,14 @@ struct TPDiskMockState::TImpl {
         bool slotIsValid = (slotId != Max<ui32>());
         for (auto& [ownerId, owner] : Owners) {
             if (slotIsValid) {
-                if (slotId == owner.SlotId) {
+                if (slotId == owner.SlotId && owner.Slain && !owner.VDiskId.SameExceptGeneration(vdiskId)) {
+                    // the slot of slain VDisk is given to another one, as real PDisk allows (it tells owners by VDisk id)
+                    owner = TOwner();
+                    owner.VDiskId = vdiskId;
+                    owner.SlotId = slotId;
+                    *created = true;
+                    return std::make_tuple(ownerId, &owner);
+                } else if (slotId == owner.SlotId) {
                     Y_VERIFY(owner.VDiskId.SameExceptGeneration(vdiskId));
                     *created = false;
                     return std::make_tuple(ownerId, &owner);
@@ -357,10 +366,14 @@ struct TPDiskMockState::TImpl {
 };
 
 TPDiskMockState::TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize, bool isDiskReadOnly,
-        NPDisk::EDeviceType deviceType, ESpaceColorPolicy spaceColorPolicy)
+        NPDisk::EDeviceType deviceType, ESpaceColorPolicy spaceColorPolicy, std::shared_ptr<TMetadata> metadata)
     : TPDiskMockState(std::make_unique<TImpl>(nodeId, pdiskId, pdiskGuid, size, chunkSize, isDiskReadOnly, deviceType,
             spaceColorPolicy))
-{}
+{
+    if (metadata) {
+        Impl->Metadata = std::move(metadata);
+    }
+}
 
 TPDiskMockState::TPDiskMockState(std::unique_ptr<TImpl>&& impl)
     : Impl(std::move(impl))
@@ -391,6 +404,11 @@ TIntervalSet<i64> TPDiskMockState::GetWrittenAreas(ui32 chunkIdx) const {
 
 void TPDiskMockState::TrimQuery() {
     Impl->TrimQuery();
+}
+
+void TPDiskMockState::SetAllocationReserves(ui64 system, ui64 maintenance) {
+    Impl->SystemReserveChunks = system;
+    Impl->MaintenanceReserveChunks = maintenance;
 }
 
 void TPDiskMockState::SetStatusFlags(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor) {
@@ -427,6 +445,7 @@ ui32 TPDiskMockState::GetNumActiveSlots() const {
 
 TPDiskMockState::TPtr TPDiskMockState::Snapshot() {
     auto res = MakeIntrusive<TPDiskMockState>(std::make_unique<TImpl>(*Impl));
+    res->Impl->Metadata = std::make_shared<TMetadata>(*Impl->Metadata);
     res->Impl->AdjustRefs();
     return res;
 }
@@ -910,8 +929,11 @@ public:
             const auto estimatedColor = EstimateAllocationColor(msg->SizeChunks);
             res->EstimatedColor = estimatedColor;
             const bool refusedByColor = estimatedColor >= msg->RefuseAtColor;
-            if (Impl.GetNumFreeChunks() < msg->SizeChunks || refusedByColor) {
-                const char *error = refusedByColor ? "color bound exceeded" : "no free chunks";
+            const bool refusedByPurpose = msg->SizeChunks > GetAllocationHeadroom(msg->Purpose);
+            if (Impl.GetNumFreeChunks() < msg->SizeChunks || refusedByColor || refusedByPurpose) {
+                const char *error = refusedByColor ? "color bound exceeded"
+                    : refusedByPurpose ? "allocation purpose headroom exceeded"
+                    : "no free chunks";
                 YDB_LOG_PDISK_MOCK(PRI_NOTICE, "Received TEvChunkReserve",
                     {"marker", "PDM09"},
                     {"msg", msg->ToString()},
@@ -934,7 +956,7 @@ public:
             }
             res->Headroom = GetSpaceHeadroom();
         }
-        Send(ev->Sender, res.release());
+        Send(ev->Sender, res.release(), 0, msg->IsDDisk ? ev->Cookie : 0);
     }
 
     void Handle(NPDisk::TEvChunkRead::TPtr ev) {
@@ -1016,6 +1038,7 @@ public:
                 {"msg", msg->ToString()},
                 {"VDiskId", owner->VDiskId});
             if (!msg->ChunkIdx) { // allocate chunk
+                // as in PDisk: a chunk allocated by writing to it is VDisk metadata and may spend the system reserve
                 if (!Impl.GetNumFreeChunks()) {
                     res->Status = NKikimrProto::OUT_OF_SPACE;
                     res->StatusFlags = GetStatusFlags() | ui32(NKikimrBlobStorage::StatusNotEnoughDiskSpaceForOperation);
@@ -1372,9 +1395,24 @@ public:
         headroom.ToRed = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::RED);
         headroom.ToBlack = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::BLACK);
         // The mock has no static group reserve to hold anything back, so housekeeping sees
-        // exactly the same room as everything else.
+        // exactly the same room as everything else. The allocation reserves do not hold it back either.
         headroom.AllocatableToBlack = headroom.ToBlack;
         return headroom;
+    }
+
+    // TChunkTracker::GetAllocationHeadroom() on the mock's single shared quota.
+    ui64 GetAllocationHeadroom(NPDisk::EAllocationPurpose purpose) {
+        if (!Impl.SystemReserveChunks || purpose == NPDisk::EAllocationPurpose::System
+                || purpose == NPDisk::EAllocationPurpose::Maintenance) {
+            return Max<ui64>();
+        }
+        GetStatusFlags();
+        const ui64 room = Impl.ChunkSharedQuota
+            ? ui64(Impl.ChunkSharedQuota->GetHeadroomBelow(NKikimrBlobStorage::TPDiskSpaceColor::RED))
+            : Impl.GetNumFreeChunks();
+        const ui64 reserve = Impl.SystemReserveChunks
+            + (purpose == NPDisk::EAllocationPurpose::User ? Impl.MaintenanceReserveChunks : 0);
+        return room > reserve ? room - reserve : 0;
     }
 
     void ErrorHandle(NPDisk::TEvYardInit::TPtr &ev) {
@@ -1444,7 +1482,8 @@ public:
     }
 
     void ErrorHandle(NPDisk::TEvChunkReserve::TPtr &ev) {
-        Send(ev->Sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+        Send(ev->Sender, new NPDisk::TEvChunkReserveResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()),
+            0, ev->Get()->IsDDisk ? ev->Cookie : 0);
     }
 
     void ErrorHandle(NPDisk::TEvChunkForget::TPtr &ev) {
@@ -1477,15 +1516,15 @@ public:
     }
 
     void Handle(NPDisk::TEvReadMetadata::TPtr& ev) {
-        if (Impl.Metadata) {
-            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(TRcBuf(*Impl.Metadata), GetPDiskGuid()), 0, ev->Cookie);
+        if (*Impl.Metadata) {
+            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(TRcBuf(**Impl.Metadata), GetPDiskGuid()), 0, ev->Cookie);
         } else {
             Send(ev->Sender, new NPDisk::TEvReadMetadataResult(NPDisk::EPDiskMetadataOutcome::NO_METADATA, GetPDiskGuid()), 0, ev->Cookie);
         }
     }
 
     void Handle(NPDisk::TEvWriteMetadata::TPtr& ev) {
-        Impl.Metadata.emplace(std::move(ev->Get()->Metadata));
+        Impl.Metadata->emplace(std::move(ev->Get()->Metadata));
         Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::OK, GetPDiskGuid()), 0, ev->Cookie);
     }
 
@@ -1507,6 +1546,15 @@ public:
     }
 
     void Ignore() {}
+
+    void HandlePoison(TEvents::TEvPoison::TPtr& ev) {
+        LogQ.clear();
+        Arbiter.reset();
+        if (ev->Sender && ev->Cookie) {
+            Send(ev->Sender, new TEvents::TEvPoisonTaken, 0, ev->Cookie);
+        }
+        PassAway();
+    }
 
     STFUNC(StateNormal) {
         const bool poison = ev->GetTypeRewrite() == TEvents::TSystem::Poison;
@@ -1549,7 +1597,7 @@ public:
 
         cFunc(TEvBlobStorage::EvMarkDirty, Ignore);
 
-        cFunc(TEvents::TSystem::Poison, PassAway);
+        hFunc(TEvents::TEvPoison, HandlePoison);
     )
 
     STRICT_STFUNC(StateError,
@@ -1580,7 +1628,7 @@ public:
 
         cFunc(TEvBlobStorage::EvMarkDirty, Ignore);
 
-        cFunc(TEvents::TSystem::Poison, PassAway);
+        hFunc(TEvents::TEvPoison, HandlePoison);
     )
 };
 

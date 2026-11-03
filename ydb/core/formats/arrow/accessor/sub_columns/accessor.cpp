@@ -1,5 +1,5 @@
 #include "accessor.h"
-#include "types.h"
+#include <ydb/core/formats/arrow/accessor/common/types.h>
 #include "direct_builder.h"
 #include "signals.h"
 

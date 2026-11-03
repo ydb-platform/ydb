@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_table_data_service_proto_helpers.cpp
@@ -7,7 +7,5 @@ SRCS(
 PEERDIR(
     yt/yql/providers/yt/fmr/proto
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -11,6 +11,7 @@ from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted,
 from ydb.tools.ydb_bench.lib.distributed_sessions import PROTOCOL_VERSION, session_reference
 from ydb.tools.ydb_bench.lib.distributed_artifacts import copy_results
 from ydb.tools.ydb_bench.lib.hosts import NoRedirect, validate_endpoint
+from ydb.tools.ydb_bench.lib.cluster_templates import parse_port_selection
 
 
 class DistributedCleanupError(BenchmarkError):
@@ -130,6 +131,9 @@ class DistributedCluster:
 
     def _reserve(self):
         capabilities = {}
+        needs_auto = any(
+            parse_port_selection(ports, 'ports')[1] for ports in self.template.get('port_ranges', {}).values()
+        )
         for host in self.host_ids:
             self._check()
             try:
@@ -145,6 +149,14 @@ class DistributedCluster:
                 or not value["platform"].startswith("linux")
             ):
                 raise BenchmarkError("Host {} does not support this distributed-ydb protocol on Linux".format(host))
+            if self.template.get('port_ranges') and value.get('port_ranges') is not True:
+                raise BenchmarkError(
+                    'Host {} does not support configured port ranges; update its benchmark binary'.format(host)
+                )
+            if needs_auto and value.get('port_auto') is not True:
+                raise BenchmarkError(
+                    'Host {} does not support auto port fallback; update its benchmark binary'.format(host)
+                )
             capabilities[host] = value
         self.metadata["capabilities"] = capabilities
         for host in self.host_ids:

@@ -9,6 +9,4 @@ PEERDIR(
     ydb/core/tx/schemeshard/olap/bg_tasks/protos
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()

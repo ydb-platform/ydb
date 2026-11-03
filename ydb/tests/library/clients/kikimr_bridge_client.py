@@ -122,6 +122,21 @@ class BridgeClient(object):
         response.operation.result.Unpack(result)
         return result
 
+    def convert_to_bridge(self, skip_storage_pool_conversion=False):
+        request = bridge_api.ConvertToBridgeRequest()
+        request.skip_storage_pool_conversion = skip_storage_pool_conversion
+        return self.invoke(request, 'ConvertToBridge')
+
+    def add_pile(self, pile_name):
+        request = bridge_api.AddPileRequest()
+        request.pile_name = pile_name
+        return self.invoke(request, 'AddPile')
+
+    def remove_pile(self, pile_name):
+        request = bridge_api.RemovePileRequest()
+        request.pile_name = pile_name
+        return self.invoke(request, 'RemovePile')
+
     @property
     def per_pile_state(self):
         """

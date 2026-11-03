@@ -756,7 +756,9 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
     TVector<TTransformStage> transformers;
     auto issueCode = TIssuesIds::CORE_PRE_TYPE_ANN;
     transformers.push_back(TTransformStage(
-        CreateFunctorTransformer(&ExpandApply),
+        CreateFunctorTransformer([&typeAnnotationContext](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            return ExpandApply(input, output, ctx, typeAnnotationContext);
+        }),
         "ExpandApply",
         issueCode));
     transformers.push_back(TTransformStage(

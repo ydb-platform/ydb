@@ -119,8 +119,8 @@ TString TopicFullPath(const TString& name);
 TString UniqueName(TStringBuf prefix);
 bool TopicMessagesBatchingEnabled();
 
-NYdb::TDriver MakeYdbDriver();
-void CreateYdbTopic(const TString& name, ui32 partitions);
+NYdb::TDriver MakeYdbDriver(std::optional<TString> ydbEndpoint = std::nullopt, std::optional<TString> ydbDatabase = std::nullopt);
+void CreateYdbTopic(const TString& name, ui32 partitions, std::optional<TString> ydbEndpoint = std::nullopt, std::optional<TString> ydbDatabase = std::nullopt);
 void CreateAutopartitionedYdbTopic(const TString& name);
 
 std::unique_ptr<TProducer> MakeProducer(const THashMap<TString, TString>& extra = {});

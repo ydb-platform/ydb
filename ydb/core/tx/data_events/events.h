@@ -86,6 +86,16 @@ struct TDataEvents {
             return *operation;
         }
 
+        // An unsafe truncate wipes the whole table on the shard, so it carries neither payload nor columns.
+        NKikimrDataEvents::TEvWrite::TOperation& AddUnsafeTruncateOperation(const TTableId& tableId) {
+            auto operation = Record.AddOperations();
+            operation->SetType(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSAFE_TRUNCATE);
+            operation->MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+            operation->MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+            operation->MutableTableId()->SetSchemaVersion(tableId.SchemaVersion);
+            return *operation;
+        }
+
         ui64 GetTxId() const {
             return Record.GetTxId();
         }
@@ -185,8 +195,7 @@ struct TDataEvents {
 
         bool IsPrepared() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED; }
         bool IsComplete() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED; }
-        bool IsDuplicate() const { return Record.GetIsDuplicate(); }
-        bool IsError() const { return !IsPrepared() && !IsComplete() && !IsDuplicate(); }
+        bool IsError() const { return !IsPrepared() && !IsComplete(); }
 
         void SetOrbit(NLWTrace::TOrbit&& orbit) { Orbit = std::move(orbit); }
         NLWTrace::TOrbit& GetOrbit() { return Orbit; }

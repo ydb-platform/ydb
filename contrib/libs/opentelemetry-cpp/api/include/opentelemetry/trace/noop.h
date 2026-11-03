@@ -7,7 +7,7 @@
 // This file is part of the internal implementation of OpenTelemetry. Nothing in this file should be
 // used directly. Please refer to span.h and tracer.h for documentation on these interfaces.
 
-#include <stdint.h>
+#include <cstdint>
 #include <utility>
 
 #include "opentelemetry/common/attribute_value.h"

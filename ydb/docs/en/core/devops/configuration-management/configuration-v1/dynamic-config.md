@@ -10,7 +10,7 @@ Dynamic configuration allows running dynamic [nodes](../../../concepts/glossary.
 This configuration is loaded into the cluster, where it is reliably stored and delivered to each dynamic node at startup. [Some settings](#dynamic-kinds) are updated on the fly, without restarting nodes. Using dynamic configuration, you can centrally solve the following tasks:
 
 * switch component logging settings for both the entire cluster and individual databases or node groups
-* enable experimental functionality (feature flags) on individual databases
+* enable experimental functionality ([feature flags](../../../reference/configuration/feature_flags.md)) on individual databases
 * change actor system settings on a specific database, individual node, or group of nodes
 
 ## Preparing to Use Dynamic Configuration {#preparation}
@@ -180,7 +180,7 @@ All commands for working with configuration are described in the [{#T}](../../..
 ### Configuration Update from Cluster Node Perspective
 
 1. Each node requests full configuration at startup.
-2. Upon receiving configuration, the node [generates final configuration](dynamic-config-selectors.md#selectors-resolve) for its set of [labels](dynamic-config-selectors.md#selectors-intro).
+2. Upon receiving configuration, the node [generates final configuration](dynamic-config-selectors.md#selectors-resolve) for its set of [labels](dynamic-config-selectors.md#labels).
 3. The node subscribes to configuration updates by registering with the [Console tablet](../../../concepts/glossary.md#console).
 4. In case of configuration update, the local service receives it and transforms it for the node's labels.
 5. All local services subscribed to updates receive the updated configuration.

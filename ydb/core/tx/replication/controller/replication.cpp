@@ -9,6 +9,7 @@
 #include "tenant_resolver.h"
 #include "util.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -40,9 +41,13 @@ class TReplication::TImpl: public TLagProvider {
 
     void ResolveSecret(const TString& secretName, const TActorContext& ctx) {
         if (SecretResolver) {
-            return;
+            if (SecretResolverRevision == CredentialsRevision) {
+                return;
+            }
+            ctx.Send(std::exchange(SecretResolver, {}), new TEvents::TEvPoison());
         }
 
+        SecretResolverRevision = CredentialsRevision;
         SecretResolver = ctx.Register(CreateSecretResolver(ctx.SelfID, ReplicationId, PathId, secretName, ++SecretResolverCookie, Database));
     }
 
@@ -54,16 +59,31 @@ class TReplication::TImpl: public TLagProvider {
         TenantResolver = ctx.Register(CreateTenantResolver(ctx.SelfID, ReplicationId, PathId));
     }
 
-    ui64 GetExpectedSecretResolverCookie() const {
-        return SecretResolverCookie;
+    bool HasSourceStreams() const {
+        for (const auto& [_, target] : Targets) {
+            if (target->GetStreamState() != EStreamState::Removed) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool CanApplyResolvedCredentials() const {
+        // DROP still needs source credentials to remove retained streams after DONE.
+        return State != EState::Done && (DesiredState != EState::Done || State == EState::Removing)
+            && (State != EState::Removing || HasSourceStreams());
     }
 
     template <typename... Args>
     void ResolveResourceId(const TActorContext& ctx, Args&&... args) {
         if (ResourceIdResolver) {
-            return;
+            if (ResourceIdResolverRevision == CredentialsRevision) {
+                return;
+            }
+            ctx.Send(std::exchange(ResourceIdResolver, {}), new TEvents::TEvPoison());
         }
 
+        ResourceIdResolverRevision = CredentialsRevision;
         ResourceIdResolver = ctx.Register(CreateResourceIdResolver(ctx.SelfID, ReplicationId, std::forward<Args>(args)...));
     }
 
@@ -80,7 +100,7 @@ class TReplication::TImpl: public TLagProvider {
     }
 
     void DiscoverTargets(const TActorContext& ctx) {
-        if (TargetDiscoverer) {
+        if (TargetDiscoverer || TargetDiscoveryComplete) {
             return;
         }
 
@@ -90,6 +110,7 @@ class TReplication::TImpl: public TLagProvider {
 
             case NKikimrReplication::TReplicationConfig::kSpecific:
             case NKikimrReplication::TReplicationConfig::kTransferSpecific:
+                TargetDiscovererRevision = CredentialsRevision;
                 TargetDiscoverer = ctx.Register(CreateTargetDiscoverer(ctx.SelfID, ReplicationId, YdbProxy, Config));
                 break;
 
@@ -120,10 +141,11 @@ public:
 
     template <typename... Args>
     ui64 AddTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) {
-        TargetTablePaths.clear();
+        const auto previousLag = GetLag();
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
         TLagProvider::AddPendingLag(id);
+        NotifyLagChanged(previousLag);
         return id;
     }
 
@@ -140,29 +162,51 @@ public:
     }
 
     void RemoveTarget(ui64 id) {
-        Targets.erase(id);
-        TargetTablePaths.clear();
+        const auto previousLag = GetLag();
+        const auto it = Targets.find(id);
+        if (it != Targets.end()) {
+            TLagProvider::RemoveLag(it->second, id);
+            Targets.erase(it);
+            NotifyLagChanged(previousLag);
+        }
     }
 
-    const TVector<TString>& GetTargetTablePaths() const {
-        if (!TargetTablePaths) {
-            TargetTablePaths.reserve(Targets.size());
-            for (const auto& [_, target] : Targets) {
-                switch (target->GetKind()) {
-                case ETargetKind::Table:
-                case ETargetKind::IndexTable:
-                case ETargetKind::Transfer:
-                    TargetTablePaths.push_back(target->GetDstPath());
-                    break;
-                }
+    TVector<ITarget*> GetTargets() const {
+        TVector<ITarget*> result;
+        result.reserve(Targets.size());
+        for (const auto& [_, target] : Targets) {
+            result.push_back(target.Ptr.Get());
+        }
+        return result;
+    }
+
+    TVector<TString> GetTargetTablePaths() const {
+        TVector<TString> paths;
+        paths.reserve(Targets.size());
+        for (const auto& [_, target] : Targets) {
+            // State changes must take effect in retries of an in-flight commit.
+            if (target->GetDstState() != EDstState::Removing) {
+                paths.push_back(target->GetDstPath());
             }
         }
-
-        return TargetTablePaths;
+        return paths;
     }
 
     void Progress(const TActorContext& ctx) {
-        if (!YdbProxy && !(State == EState::Removing && !Targets)) {
+        if (State == EState::Done) {
+            return;
+        }
+
+        if (DesiredState == EState::Done && (State == EState::Ready || State == EState::Paused)) {
+            // Forced DONE only needs local destination cleanup. In particular,
+            // unresolved source credentials must not prevent it after restart.
+            if (!Database) {
+                ResolveDatabase(ctx);
+            }
+            return ProgressTargets(ctx);
+        }
+
+        if (!YdbProxy && !(State == EState::Removing && !HasSourceStreams())) {
             THolder<IActor> ydbProxy;
             const auto& params = Config.GetSrcConnectionParams();
             const auto& endpoint = params.GetEndpoint();
@@ -234,6 +278,7 @@ public:
     }
 
     void Shutdown(const TActorContext& ctx) {
+        StopTargetDescribers(ctx);
         for (auto& [_, target] : Targets) {
             target->Shutdown(ctx);
         }
@@ -279,10 +324,28 @@ public:
 
     void SetConfig(NKikimrReplication::TReplicationConfig&& config) {
         KeepResourceId(Config, config);
+        config.SetInitialScan(Config.GetInitialScan());
+        if (Config.GetSrcConnectionParams().SerializeAsString() != config.GetSrcConnectionParams().SerializeAsString()) {
+            // A deferred ALTER installs the config before ResetCredentials.
+            // Invalidate the old callbacks immediately, including A -> B -> A.
+            ++CredentialsRevision;
+        }
         Config = config;
     }
 
+    void StopTargetDescribers(const TActorContext& ctx) {
+        // Describers use this proxy's source connection. Finish them with the
+        // statistics already collected before destroying that connection.
+        for (const auto& actorId : TargetDescribers) {
+            ctx.Send(actorId, new TEvents::TEvPoison());
+        }
+        TargetDescribers.clear();
+    }
+
     void ResetCredentials(const TActorContext& ctx) {
+        ++CredentialsRevision;
+        TargetDiscoveryComplete = false;
+        StopTargetDescribers(ctx);
         for (auto* x : TVector<TActorId*>{&SecretResolver, &ResourceIdResolver, &TargetDiscoverer, &YdbProxy}) {
             if (auto actorId = std::exchange(*x, {})) {
                 ctx.Send(actorId, new TEvents::TEvPoison());
@@ -294,16 +357,30 @@ public:
         SetState(EState::Error, issue);
     }
 
-    void UpdateLag(ui64 targetId, TDuration lag) {
+    void UpdateLag(ui64 targetId, std::optional<TDuration> lag) {
         auto it = Targets.find(targetId);
         if (it == Targets.end()) {
             return;
         }
 
-        TLagProvider::UpdateLag(it->second, targetId, lag);
+        const auto previousLag = GetLag();
+        if (lag) {
+            TLagProvider::UpdateLag(it->second, targetId, *lag);
+        } else {
+            TLagProvider::InvalidateLag(it->second, targetId);
+        }
+
+        NotifyLagChanged(previousLag);
+    }
+
+    void NotifyLagChanged(std::optional<TDuration> previousLag) {
+        if (LagChangedCallback && previousLag != GetLag()) {
+            LagChangedCallback();
+        }
     }
 
 private:
+    std::function<void()> LagChangedCallback;
     const ui64 ReplicationId;
     const TPathId PathId;
 
@@ -315,13 +392,18 @@ private:
     ui64 NextTargetId = 1;
     THashMap<ui64, TTarget> Targets;
     THashSet<ui64> PendingAlterTargets;
-    mutable TVector<TString> TargetTablePaths;
     TActorId SecretResolver;
     ui64 SecretResolverCookie = 0;
+    ui64 CredentialsRevision = 0;
+    ui64 SecretResolverRevision = 0;
     TActorId ResourceIdResolver;
+    ui64 ResourceIdResolverRevision = 0;
     TActorId YdbProxy;
+    THashSet<TActorId> TargetDescribers;
     TActorId TenantResolver; // TODO: Remove in next major release
     TActorId TargetDiscoverer;
+    ui64 TargetDiscovererRevision = 0;
+    bool TargetDiscoveryComplete = false;
 
 }; // TImpl
 
@@ -367,12 +449,50 @@ void TReplication::RemoveTarget(ui64 id) {
     return Impl->RemoveTarget(id);
 }
 
-const TVector<TString>& TReplication::GetTargetTablePaths() const {
+const TReplication::ITarget* TReplication::FindBaseTableTarget(const ITarget& indexTarget) const {
+    if (indexTarget.GetKind() != TReplication::ETargetKind::IndexTable) {
+        return nullptr;
+    }
+
+    const auto path = CanonizePath(TString(ExtractParent(indexTarget.GetSrcPath())));
+    for (const auto* target : GetTargets()) {
+        if (target->GetKind() == TReplication::ETargetKind::Table && CanonizePath(target->GetSrcPath()) == path) {
+            return target;
+        }
+    }
+
+    return nullptr;
+}
+
+TVector<TReplication::ITarget*> TReplication::GetTargets() const {
+    return Impl->GetTargets();
+}
+
+TVector<TString> TReplication::GetTargetTablePaths() const {
     return Impl->GetTargetTablePaths();
 }
 
 void TReplication::Progress(const TActorContext& ctx) {
     Impl->Progress(ctx);
+}
+
+bool TReplication::IsExpectedTargetDiscoverer(const TActorId& actorId) const {
+    if (!actorId || actorId != Impl->TargetDiscoverer) {
+        return false;
+    }
+
+    if (Impl->TargetDiscovererRevision != Impl->CredentialsRevision) {
+        return false;
+    }
+
+    return Impl->Targets.empty() && Impl->DesiredState != EState::Done;
+}
+
+void TReplication::FinishTargetDiscovery() {
+    Impl->TargetDiscoverer = {};
+    // An empty successful discovery must also be consumed: Progress must not
+    // immediately launch another discoverer after retiring the replying actor.
+    Impl->TargetDiscoveryComplete = true;
 }
 
 void TReplication::Shutdown(const TActorContext& ctx) {
@@ -389,6 +509,14 @@ const TPathId& TReplication::GetPathId() const {
 
 const TActorId& TReplication::GetYdbProxy() const {
     return Impl->YdbProxy;
+}
+
+void TReplication::AddTargetDescriber(const TActorId& actorId) {
+    Impl->TargetDescribers.insert(actorId);
+}
+
+void TReplication::RemoveTargetDescriber(const TActorId& actorId) {
+    Impl->TargetDescribers.erase(actorId);
 }
 
 ui64 TReplication::GetSchemeShardId() const {
@@ -437,6 +565,11 @@ TReplication::EState TReplication::GetDesiredState() const {
 }
 
 void TReplication::SetDesiredState(EState state) {
+    if (state == EState::Done && Impl->DesiredState != state) {
+        // Even a deferred DONE retires source lookups immediately. A subsequent
+        // DROP may need fresh lookups before the deferred reset has run.
+        ++Impl->CredentialsRevision;
+    }
     Impl->DesiredState = state;
 }
 
@@ -446,6 +579,24 @@ void TReplication::SetNextTargetId(ui64 value) {
 
 ui64 TReplication::GetNextTargetId() const {
     return Impl->NextTargetId;
+}
+
+bool TReplication::IsCredentialsReady() const {
+    const auto& params = Impl->Config.GetSrcConnectionParams();
+    if (params.GetEndpoint().empty()) {
+        return true;
+    }
+
+    switch (params.GetCredentialsCase()) {
+    case NKikimrReplication::TConnectionParams::kStaticCredentials:
+        return params.GetStaticCredentials().HasPassword();
+    case NKikimrReplication::TConnectionParams::kOAuthToken:
+        return params.GetOAuthToken().HasToken();
+    case NKikimrReplication::TConnectionParams::kIamCredentials:
+        return params.GetIamCredentials().HasResourceId();
+    default:
+        return false;
+    }
 }
 
 void TReplication::UpdateSecret(const TString& secretValue) {
@@ -465,8 +616,51 @@ void TReplication::UpdateSecret(const TString& secretValue) {
     }
 }
 
-ui64 TReplication::GetExpectedSecretResolverCookie() const {
-    return Impl->GetExpectedSecretResolverCookie();
+bool TReplication::IsExpectedSecretResolver(const TActorId& actorId, ui64 cookie) const {
+    if (!actorId || actorId != Impl->SecretResolver) {
+        return false;
+    }
+
+    if (cookie != Impl->SecretResolverCookie) {
+        return false;
+    }
+
+    if (Impl->SecretResolverRevision != Impl->CredentialsRevision) {
+        return false;
+    }
+
+    if (!Impl->CanApplyResolvedCredentials()) {
+        return false;
+    }
+
+    const auto& params = Impl->Config.GetSrcConnectionParams();
+    switch (params.GetCredentialsCase()) {
+    case NKikimrReplication::TConnectionParams::kStaticCredentials:
+        return !params.GetStaticCredentials().HasPassword();
+    case NKikimrReplication::TConnectionParams::kOAuthToken:
+        return !params.GetOAuthToken().HasToken();
+    case NKikimrReplication::TConnectionParams::kIamCredentials:
+        return !params.GetIamCredentials().HasResourceId() && !params.GetIamCredentials().GetInitialToken().HasToken();
+    default:
+        return false;
+    }
+}
+
+bool TReplication::IsExpectedResourceIdResolver(const TActorId& actorId) const {
+    if (!actorId || actorId != Impl->ResourceIdResolver) {
+        return false;
+    }
+
+    if (Impl->ResourceIdResolverRevision != Impl->CredentialsRevision) {
+        return false;
+    }
+
+    if (!Impl->CanApplyResolvedCredentials()) {
+        return false;
+    }
+
+    const auto& params = Impl->Config.GetSrcConnectionParams();
+    return params.HasIamCredentials() && !params.GetIamCredentials().HasResourceId();
 }
 
 void TReplication::UpdateResourceId(const TString& value) {
@@ -500,12 +694,16 @@ bool TReplication::CheckAlterDone() const {
     return (Impl->State == EState::Ready || Impl->State == EState::Paused) && Impl->PendingAlterTargets.empty();
 }
 
-void TReplication::UpdateLag(ui64 targetId, TDuration lag) {
+void TReplication::UpdateLag(ui64 targetId, std::optional<TDuration> lag) {
     Impl->UpdateLag(targetId, lag);
 }
 
 const std::optional<TDuration> TReplication::GetLag() const {
     return Impl->GetLag();
+}
+
+void TReplication::SetLagChangedCallback(std::function<void()> callback) {
+    Impl->LagChangedCallback = std::move(callback);
 }
 
 void TReplication::SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {

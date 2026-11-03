@@ -336,7 +336,7 @@ y_absl::Status PriorityLb::UpdateLocked(UpdateArgs args) {
     gpr_log(GPR_INFO, "[priority_lb %p] received update", this);
   }
   // Update config.
-  config_ = std::move(args.config);
+  config_ = args.config.TakeAsSubclass<PriorityLbConfig>();
   // Update args.
   args_ = std::move(args.args);
   // Update addresses.
@@ -412,7 +412,8 @@ void PriorityLb::ChoosePriorityLocked() {
     // Create child if needed.
     if (child == nullptr) {
       child = MakeOrphanable<ChildPriority>(
-          Ref(DEBUG_LOCATION, "ChildPriority"), child_name);
+          RefAsSubclass<PriorityLb>(DEBUG_LOCATION, "ChildPriority"),
+          child_name);
       auto child_config = config_->children().find(child_name);
       GPR_DEBUG_ASSERT(child_config != config_->children().end());
       // TODO(roth): If the child reports a non-OK status with the
@@ -685,7 +686,8 @@ y_absl::Status PriorityLb::ChildPriority::UpdateLocked(
   if (priority_policy_->addresses_.ok()) {
     auto it = priority_policy_->addresses_->find(name_);
     if (it == priority_policy_->addresses_->end()) {
-      update_args.addresses.emplace();
+      update_args.addresses = std::make_shared<EndpointAddressesListIterator>(
+          EndpointAddressesList());
     } else {
       update_args.addresses = it->second;
     }

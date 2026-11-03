@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "opentelemetry/sdk/metrics/metric_reader.h"
+#include <mutex>
 #include "opentelemetry/sdk/common/global_log_handler.h"
+#include "opentelemetry/sdk/metrics/cardinality_limits.h"
 #include "opentelemetry/sdk/metrics/export/metric_producer.h"
 #include "opentelemetry/version.h"
 
@@ -47,13 +49,14 @@ bool MetricReader::Collect(
 
 bool MetricReader::Shutdown(std::chrono::microseconds timeout) noexcept
 {
-  bool status = true;
-  if (IsShutdown())
+  // Serialize so concurrent calls block until the first call's shutdown has completed.
+  std::lock_guard<std::mutex> shutdown_guard{shutdown_m_};
+  if (shutdown_.exchange(true, std::memory_order_release))
   {
-    OTEL_INTERNAL_LOG_WARN("MetricReader::Shutdown - Cannot invoke shutdown twice!");
+    OTEL_INTERNAL_LOG_WARN("MetricReader::Shutdown - Already shutdown!");
+    return true;
   }
-
-  shutdown_.store(true, std::memory_order_release);
+  bool status = true;
 
   if (!OnShutDown(timeout))
   {
@@ -66,11 +69,14 @@ bool MetricReader::Shutdown(std::chrono::microseconds timeout) noexcept
 /** Flush metric read by this reader **/
 bool MetricReader::ForceFlush(std::chrono::microseconds timeout) noexcept
 {
-  bool status = true;
   if (IsShutdown())
   {
-    OTEL_INTERNAL_LOG_WARN("MetricReader::Shutdown Cannot invoke Force flush on shutdown reader!");
+    OTEL_INTERNAL_LOG_WARN(
+        "MetricReader::ForceFlush Cannot invoke Force flush on shutdown reader!");
+    return false;
   }
+
+  bool status = true;
   if (!OnForceFlush(timeout))
   {
     status = false;
@@ -82,6 +88,40 @@ bool MetricReader::ForceFlush(std::chrono::microseconds timeout) noexcept
 bool MetricReader::IsShutdown() const noexcept
 {
   return shutdown_.load(std::memory_order_acquire);
+}
+
+std::size_t MetricReader::GetCardinalityLimit(InstrumentType instrument_type) const noexcept
+{
+  switch (instrument_type)
+  {
+    case InstrumentType::kCounter:
+      return cardinality_limits_.counter;
+    case InstrumentType::kHistogram:
+      return cardinality_limits_.histogram;
+    case InstrumentType::kUpDownCounter:
+      return cardinality_limits_.up_down_counter;
+    case InstrumentType::kObservableCounter:
+      return cardinality_limits_.observable_counter;
+    case InstrumentType::kObservableGauge:
+      return cardinality_limits_.observable_gauge;
+    case InstrumentType::kObservableUpDownCounter:
+      return cardinality_limits_.observable_up_down_counter;
+    case InstrumentType::kGauge:
+      return cardinality_limits_.gauge;
+    default:
+      return cardinality_limits_.default_limit;
+  }
+}
+
+void MetricReader::SetCardinalityLimits(const CardinalityLimits &limits) noexcept
+{
+  cardinality_limits_ = limits;
+  // TODO: Reader-level limits are stored but not yet enforced as a per-collector
+  // fallback during the collection path. Enforcement will be added in a follow-up.
+  OTEL_INTERNAL_LOG_WARN(
+      "MetricReader::SetCardinalityLimits - reader-level cardinality limits are stored "
+      "but not yet enforced during collection. Use view-level AggregationConfig to "
+      "enforce limits today.");
 }
 
 }  // namespace metrics

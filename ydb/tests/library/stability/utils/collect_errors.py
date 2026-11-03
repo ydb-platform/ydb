@@ -22,7 +22,8 @@ _LOG_COLLECT_TIMEOUT = 900        # unified_agent select for full logs
 _TAR_TIMEOUT = 1200                # tar -czf archive
 
 _WARDEN_POLL_INTERVAL_S = 15
-_WARDEN_POLL_TIMEOUT_S = 420
+# 600s liveness, then safety checks.
+_WARDEN_POLL_TIMEOUT_S = 780
 
 # Default orchestrator port (must match deploy.py _NEMESIS_ORCHESTRATOR_PORT)
 _NEMESIS_ORCHESTRATOR_PORT = 31434

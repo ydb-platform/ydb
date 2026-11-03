@@ -69,8 +69,9 @@ public:
     using TSharedObjectPtr = std::shared_ptr<TObject>;
 
     //! Returns the instance to the pool, or destroys it if it must not be pooled.
-    struct TDeleter
+    class TDeleter
     {
+    public:
         TDeleter() = default;
 
         explicit TDeleter(bool pooled) noexcept;

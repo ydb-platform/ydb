@@ -46,33 +46,33 @@ REGISTRY_ENDPOINT = os.environ.get("YA_REGISTRY_ENDPOINT", "https://devtools-reg
 PLATFORM_MAP = {
     "data": {
         "win32": {
-            "md5": "302354c70ccaec47965a212e5691463f",
+            "md5": "00ffcca981eff9cfcc07f6b801640efb",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/13801950835"
+                f"{REGISTRY_ENDPOINT}/14140328072"
             ]
         },
         "darwin": {
-            "md5": "96a56acd39ee1e7ee1006dd09c75e2ee",
+            "md5": "d00a02ff29d45a0953e8eab11027ccd6",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/13801945682"
+                f"{REGISTRY_ENDPOINT}/14140326292"
             ]
         },
         "darwin-arm64": {
-            "md5": "32c067df6f71179715b7aaf09854937b",
+            "md5": "34dbfd46ca43798c8f15ae1cfaa946df",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/13801941290"
+                f"{REGISTRY_ENDPOINT}/14140324175"
             ]
         },
         "linux-aarch64": {
-            "md5": "4c00c5179cadd2bec6645f0be17b51c2",
+            "md5": "f9960a3f192aa09a54ae9d53519545a4",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/13801937302"
+                f"{REGISTRY_ENDPOINT}/14140321955"
             ]
         },
         "linux": {
-            "md5": "8f3471d08d5f5eee6ba96b77edd82209",
+            "md5": "59595995bfbd7ccabc6c6947093ca8dc",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/13801955303"
+                f"{REGISTRY_ENDPOINT}/14140330120"
             ]
         }
     }
@@ -349,7 +349,12 @@ def main():
         """match by max prefix length, prefer shortest"""
 
         def _key_for_platform(platform):
-            return len(os.path.commonprefix([target_platform, platform])), -len(platform)
+            prefix_length = 0
+            for target_char, platform_char in zip(target_platform, platform):
+                if target_char != platform_char:
+                    break
+                prefix_length += 1
+            return prefix_length, -len(platform)
 
         return _key_for_platform
 

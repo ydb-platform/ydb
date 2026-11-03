@@ -64,6 +64,7 @@ TString Load(const TString& path)
 } // namespace
 
 bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) {
+    TTypeAnnotationContext types;
     TExprNode::TListType tupleItems;
     for (const auto& x : cohesion.Exports.Symbols()) {
         tupleItems.push_back(x.second);
@@ -71,7 +72,7 @@ bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) {
 
     auto root = ctx.NewList(TPositionHandle(), std::move(tupleItems));
     for (;;) {
-        auto status = ExpandApply(root, root, ctx);
+        auto status = ExpandApply(root, root, ctx, types);
         if (status == IGraphTransformer::TStatus::Error) {
             return false;
         }

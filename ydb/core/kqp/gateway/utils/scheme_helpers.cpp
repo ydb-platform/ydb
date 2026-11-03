@@ -8,11 +8,55 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NKqp::NSchemeHelpers {
 
 using namespace NKikimrSchemeOp;
 using namespace NKikimrExternalSources;
 using namespace NYql;
+
+bool ValidateColumnBuildAlter(const TModifyScheme& modifyScheme,
+    const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    if (modifyScheme.GetOperationType() != ESchemeOpAlterTable || !modifyScheme.HasAlterTable()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "invalid ALTER TABLE operation for column build";
+        return false;
+    }
+    // The payload must contain only additions represented in the build settings.
+    auto extraAlter = modifyScheme.GetAlterTable();
+    extraAlter.ClearName();
+    extraAlter.ClearColumns();
+    // KQP also supplies an empty PartitionConfig for ADD COLUMN alone.
+    if (extraAlter.GetPartitionConfig().ByteSizeLong() == 0) {
+        extraAlter.ClearPartitionConfig();
+    }
+    bool onlyDefaultColumns = extraAlter.ByteSizeLong() == 0;
+    THashSet<TString> columnsToBuild;
+    for (const auto& column : buildSettings.column()) {
+        columnsToBuild.insert(column.GetColumnName());
+    }
+    for (const auto& column : modifyScheme.GetAlterTable().GetColumns()) {
+        // Also reject repeated descriptors rather than silently ignoring them.
+        if (!columnsToBuild.erase(column.GetName())) {
+            onlyDefaultColumns = false;
+            break;
+        }
+    }
+    if (!onlyDefaultColumns) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions";
+        return false;
+    }
+    if (!columnsToBuild.empty()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "ALTER TABLE payload is missing columns to build";
+        return false;
+    }
+    return true;
+}
 
 TString CanonizePath(const TString& path) {
     if (path.empty()) {
@@ -100,7 +144,7 @@ void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescriptio
 }
 
 bool Validate(const TAlterDatabaseSettings& settings, TIssue& error) {
-    const int settingsToAlter = (settings.Owner ? 1 : 0) + (settings.SchemeLimits ? 1 : 0);
+    const int settingsToAlter = (settings.Owner ? 1 : 0) + ((settings.SchemeLimits || settings.TablesMetricsLevel) ? 1 : 0);
     if (settingsToAlter > 1) {
         error.SetMessage("Multiple setting classes cannot be altered simultaneously.");
         error.SetCode(TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST, TSeverityIds_ESeverityId_S_ERROR);
@@ -125,11 +169,16 @@ void FillAlterDatabaseOwner(TModifyScheme& modifyScheme, const TString& name, co
     condition->AddPathTypes(EPathType::EPathTypeExtSubDomain);
 }
 
-void FillAlterDatabaseSchemeLimits(TModifyScheme& modifyScheme, const TString& name, const NKikimrSubDomains::TSchemeLimits& in) {
+void FillAlterDatabaseSettings(TModifyScheme& modifyScheme, const TString& name, const TAlterDatabaseSettings& settings) {
     modifyScheme.SetOperationType(ESchemeOpAlterExtSubDomain);
     auto& subdomain = *modifyScheme.MutableSubDomain();
     subdomain.SetName(name);
-    *subdomain.MutableSchemeLimits() = in;
+    if (settings.SchemeLimits) {
+        *subdomain.MutableSchemeLimits() = *settings.SchemeLimits;
+    }
+    if (settings.TablesMetricsLevel) {
+        subdomain.SetTablesMetricsLevel(*settings.TablesMetricsLevel);
+    }
 }
 
 std::pair<TString, TString> SplitPathByDirAndBaseNames(const TString& path) {

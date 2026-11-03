@@ -63,8 +63,14 @@ class TController::TTxInit: public TTxBase {
 
             auto replication = Self->Add(rid, pathId, config, database);
             replication->SetState(state, issue);
+            if (rowset.GetValueOrDefault<Schema::Replications::SourceOffsetMismatch>(false)) {
+                Self->ReplicationsWithSourceOffsetMismatch.insert(rid);
+            }
             replication->SetNextTargetId(nextTid);
             replication->SetDesiredState(desiredState);
+            Self->CommittedVersions[rid] = TRowVersion(
+                rowset.GetValueOrDefault<Schema::Replications::CommittedStep>(0),
+                rowset.GetValueOrDefault<Schema::Replications::CommittedTxId>(0));
             if (rowset.GetValueOrDefault<Schema::Replications::DeferredAlter>(false)) {
                 Self->DeferredAlters.insert(rid);
             }
@@ -101,6 +107,10 @@ class TController::TTxInit: public TTxBase {
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
             );
+            const auto pendingDstPathId = TPathId(
+                rowset.GetValueOrDefault<Schema::Targets::PendingDstPathOwnerId>(InvalidOwnerId),
+                rowset.GetValueOrDefault<Schema::Targets::PendingDstPathLocalId>(InvalidLocalPathId)
+            );
 
             auto replication = Self->Find(rid);
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
@@ -123,7 +133,14 @@ class TController::TTxInit: public TTxBase {
 
             target->SetDstState(dstState);
             target->SetDstPathId(dstPathId);
+            target->SetPendingDstPathId(pendingDstPathId);
             target->SetIssue(issue);
+            const auto indexBuild = rowset.GetValueOrDefault<Schema::Targets::IndexBuild>(TString());
+            if (indexBuild) {
+                target->SetIndexBuild(true);
+                Y_ABORT_UNLESS(Self->IndexBuilds[std::make_pair(rid, tid)].ParseFromString(indexBuild));
+            }
+
             if (workerSetComplete) {
                 Self->CompleteWorkerSets.insert({rid, tid});
             }
@@ -173,6 +190,9 @@ class TController::TTxInit: public TTxBase {
             target->SetStreamName(name);
             target->SetStreamState(state);
             target->SetStreamConsumerName(consumerName);
+            if (rowset.HaveValue<Schema::SrcStreams::SchemaChanges>()) {
+                target->SetStreamSchemaChanges(rowset.GetValue<Schema::SrcStreams::SchemaChanges>());
+            }
 
             if (!rowset.Next()) {
                 return false;
@@ -206,6 +226,24 @@ class TController::TTxInit: public TTxBase {
         return true;
     }
 
+    bool LoadProcessedSourceOffsets(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::ProcessedSourceOffsets>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            const TWorkerId id(rowset.GetValue<Schema::ProcessedSourceOffsets::ReplicationId>(),
+                rowset.GetValue<Schema::ProcessedSourceOffsets::TargetId>(),
+                rowset.GetValue<Schema::ProcessedSourceOffsets::WorkerId>());
+            const auto nextOffset = rowset.GetValue<Schema::ProcessedSourceOffsets::NextOffset>();
+            Self->ProcessedSourceOffsets[id] = {nextOffset, nextOffset};
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool LoadWorkers(NIceDb::TNiceDb& db) {
         auto rowset = db.Table<Schema::Workers>().Select();
         if (!rowset.IsReady()) {
@@ -226,7 +264,7 @@ class TController::TTxInit: public TTxBase {
             auto* worker = Self->GetOrCreateWorker(id);
             // Zero denotes a registered worker that has not reported a
             // heartbeat yet and must not join a recovered heartbeat quorum.
-            if (version != TRowVersion::Min()) {
+            if (version != TRowVersion::Min() && Self->IsHeartbeatParticipant(id)) {
                 worker->SetHeartbeat(version);
                 Self->WorkersWithHeartbeat.insert(id);
                 Self->WorkersByHeartbeat[version].insert(id);
@@ -258,6 +296,11 @@ class TController::TTxInit: public TTxBase {
                 it->second.ReportedWorkers.insert(id);
                 it->second.WorkerOffsets[id] = workers.GetValue<Schema::SchemaBarrierWorkers::Offset>();
             }
+
+            if (workers.GetValueOrDefault<Schema::SchemaBarrierWorkers::IndexMetadata>(false)) {
+                it->second.IndexMetadataWorkers.insert(id);
+            }
+
             if (workers.GetValue<Schema::SchemaBarrierWorkers::Applied>()) {
                 it->second.AppliedWorkers.insert(id);
             }
@@ -265,6 +308,26 @@ class TController::TTxInit: public TTxBase {
                 it->second.CompletedWorkers.insert(id);
             }
             if (!workers.Next()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool LoadIndexBuildWorkers(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::IndexBuildWorkers>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        while (!rowset.EndOfSet()) {
+            const auto id = TWorkerId(
+                rowset.GetValue<Schema::IndexBuildWorkers::ReplicationId>(),
+                rowset.GetValue<Schema::IndexBuildWorkers::TargetId>(),
+                rowset.GetValue<Schema::IndexBuildWorkers::WorkerId>());
+            Y_ABORT_UNLESS(Self->IndexBuildProgress[id].ParseFromString(
+                rowset.GetValue<Schema::IndexBuildWorkers::Progress>()));
+            if (!rowset.Next()) {
                 return false;
             }
         }
@@ -279,7 +342,9 @@ class TController::TTxInit: public TTxBase {
             && LoadSrcStreams(db)
             && LoadTxIds(db)
             && LoadWorkers(db)
-            && LoadSchemaBarrierWorkers(db);
+            && LoadSchemaBarrierWorkers(db)
+            && LoadIndexBuildWorkers(db)
+            && LoadProcessedSourceOffsets(db);
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {

@@ -4,6 +4,8 @@ SRCS(
     ydb_backup.cpp
     ydb_bridge.cpp
     ydb_dynamic_config.cpp
+    ydb_keyvalue.cpp
+    ydb_udf.cpp
     ydb_replication.cpp
     ydb_scripting.cpp
     ydb_view.cpp
@@ -18,6 +20,12 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/types/operation
     ydb/public/sdk/cpp/src/client/value
+    ydb/public/api/grpc
+    ydb/public/api/protos
+    ydb/public/sdk/cpp/src/client/common_client/impl
+    ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/impl/internal/make_request
+    ydb/public/sdk/cpp/src/client/types/executor
 )
 
 END()

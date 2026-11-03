@@ -1,9 +1,7 @@
-from typing import Protocol, TypeAlias, TypeVar
-from typing_extensions import assert_type
+from typing import Protocol, TypeAlias, TypeVar, assert_type
+
 import numpy as np
-
 from numpy._typing import _64Bit
-
 
 _T = TypeVar("_T")
 _T_co = TypeVar("_T_co", covariant=True)

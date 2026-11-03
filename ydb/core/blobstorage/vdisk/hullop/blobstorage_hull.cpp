@@ -810,13 +810,16 @@ namespace NKikimr {
     TFreshShortfall THull::GetFreshReservationShortfall(const TFreshAdmission& admission) const {
         TFreshShortfall shortfall;
         if (!admission.LogoBlobs.Empty()) {
-            shortfall.LogoBlobs = HullDs->LogoBlobs->GetFreshReservationShortfall(admission.LogoBlobs);
+            shortfall.LogoBlobs = HullDs->LogoBlobs->GetFreshReservationShortfall(admission.LogoBlobs,
+                admission.Unsequenced);
         }
         if (!admission.Blocks.Empty()) {
-            shortfall.Blocks = HullDs->Blocks->GetFreshReservationShortfall(admission.Blocks);
+            shortfall.Blocks = HullDs->Blocks->GetFreshReservationShortfall(admission.Blocks,
+                admission.Unsequenced);
         }
         if (!admission.Barriers.Empty()) {
-            shortfall.Barriers = HullDs->Barriers->GetFreshReservationShortfall(admission.Barriers);
+            shortfall.Barriers = HullDs->Barriers->GetFreshReservationShortfall(admission.Barriers,
+                admission.Unsequenced);
         }
         return shortfall;
     }
@@ -838,8 +841,16 @@ namespace NKikimr {
 
     void THull::AdmitToFresh(const TFreshAdmission& admission) {
         ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate& record, EHullDbType) {
-            levelIndex.AdmitToFresh(record);
+            levelIndex.AdmitToFresh(record, admission.Unsequenced);
         });
+    }
+
+    void THull::SequenceFresh(TFreshAdmission& admission) {
+        Y_VERIFY_S(admission.Unsequenced, HullDs->HullCtx->VCtx->VDiskLogPrefix);
+        ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate& record, EHullDbType) {
+            levelIndex.SequenceInFresh(record);
+        });
+        admission.Unsequenced = false;
     }
 
     void THull::LandInFresh(const TFreshAdmission& admission, const TActorContext& ctx) {
@@ -849,7 +860,7 @@ namespace NKikimr {
         // blob, for one, never triggers one on insert).
         ForEachFreshRecord(admission, [&](auto& levelIndex, const TFreshOutputEstimate& record, EHullDbType type) {
             const bool pending = levelIndex.IsFreshRotationPending();
-            levelIndex.LandInFresh(record);
+            levelIndex.LandInFresh(record, admission.Unsequenced);
             if (pending) {
                 CompactFreshDbIfRequired(type, ctx);
             }

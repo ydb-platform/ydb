@@ -228,6 +228,7 @@ namespace NKikimr {
             // send slots to allocate to huge keeper, if any
             if (slotsToAllocate) {
                 ctx.Send(HugeKeeperId, new TEvHugeAllocateSlots(std::move(*slotsToAllocate)));
+                ++PendingResponses;
             }
             if (Worker.IsPlanExceeded() && !IsAborting) {
                 YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Planned compaction needs more chunks than planned",
@@ -326,17 +327,29 @@ namespace NKikimr {
                 return;
             }
             CHECK_PDISK_RESPONSE(HullCtx->VCtx, ev, ctx);
+            // A successful reservation can arrive after another request made
+            // us abort. Keep it in the cleanup set even in that case.
+            Worker.Apply(ev->Get());
             if (FinalizeIfAborting(ctx)) {
                 return;
             }
 
             YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_SKELETON, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "comp reserve ChunkIds# %s", FormatList(ev->Get()->ChunkIds).data()));
 
-            Worker.Apply(ev->Get());
             MainCycle(ctx);
         }
 
         void Handle(TEvHugeAllocateSlotsResult::TPtr ev, const TActorContext& ctx) {
+            --PendingResponses;
+            if (ev->Get()->Status != NKikimrProto::OK) {
+                Y_VERIFY_S(ev->Get()->Status == NKikimrProto::OUT_OF_SPACE, HullCtx->VCtx->VDiskLogPrefix);
+                IsAborting = true;
+            } else if (IsAborting) {
+                ctx.Send(HugeKeeperId, new TEvHugeDropAllocatedSlots(std::move(ev->Get()->Locations)));
+            }
+            if (FinalizeIfAborting(ctx)) {
+                return;
+            }
             Worker.Apply(ev->Get());
             MainCycle(ctx);
         }

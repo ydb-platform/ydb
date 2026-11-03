@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 
 #include <ydb/library/conclusion/status.h>
@@ -338,8 +339,9 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TColumnTableDescription& table
     return true;
 }
 
-bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
-    const Ydb::Table::AlterTableRequest& proto,
+template <typename TRequest>
+static bool FillAlterTableSettingsDescImpl(NKikimrSchemeOp::TTableDescription& tableDesc,
+    const TRequest& proto,
     Ydb::StatusIds::StatusCode& code, TString& error, bool changed)
 {
     bool hadPartitionConfig = tableDesc.HasPartitionConfig();
@@ -502,6 +504,20 @@ bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
     }
 
     return true;
+}
+
+bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
+    const Ydb::Table::AlterTableRequest& proto,
+    Ydb::StatusIds::StatusCode& code, TString& error, bool changed)
+{
+    return FillAlterTableSettingsDescImpl(tableDesc, proto, code, error, changed);
+}
+
+bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
+    const NKikimrKqp::TKqpAlterTableRequest& proto,
+    Ydb::StatusIds::StatusCode& code, TString& error, bool changed)
+{
+    return FillAlterTableSettingsDescImpl(tableDesc, proto, code, error, changed);
 }
 
 bool FillIndexTablePartitioning(
@@ -715,6 +731,10 @@ bool FillPublicTtlSettingsImpl(Ydb::Table::TtlSettings& out, const TTtl& in, Ydb
                 break;
             case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
                 outTier.mutable_evict_to_external_storage()->set_storage(inTier.GetEvictToExternalStorage().GetStorage());
+                if (inTier.GetEvictToExternalStorage().HasObjectKeyPrefix()) {
+                    outTier.mutable_evict_to_external_storage()->set_object_key_prefix(inTier.GetEvictToExternalStorage().GetObjectKeyPrefix());
+                }
+
                 break;
             case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
                 return bad_request("Undefined tier action");
@@ -841,6 +861,10 @@ bool FillSchemeTtlSettingsImpl(TTtl& out, const Ydb::Table::TtlSettings& in, Ydb
                         break;
                     case Ydb::Table::TtlTier::kEvictToExternalStorage:
                         outTier->MutableEvictToExternalStorage()->SetStorage(inTier.evict_to_external_storage().storage());
+                        if (inTier.evict_to_external_storage().has_object_key_prefix()) {
+                            outTier->MutableEvictToExternalStorage()->SetObjectKeyPrefix(inTier.evict_to_external_storage().object_key_prefix());
+                        }
+
                         break;
                     case Ydb::Table::TtlTier::ACTION_NOT_SET:
                         return bad_request("Tier action is undefined");

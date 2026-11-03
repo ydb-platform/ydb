@@ -397,6 +397,10 @@
               <option value="tablet">Tablet Id</option>
               <option value="last_changed_at">Last changed</option>
               <option value="groups_count">Groups count</option>
+              <option value="disk" hidden disabled>DDisk Id</option>
+              <option value="tablets_count" hidden disabled>Tablets count</option>
+              <option value="ddisk_occupancy" hidden disabled>DDisk fullness</option>
+              <option value="persistent_buffer_occupancy" hidden disabled>Persistent buffer fullness</option>
             </select>
             <label for="nbs2-tablets-sort-desc" class="mr-2">Desc</label>
             <input id="nbs2-tablets-sort-desc" type="checkbox" class="mr-3" checked>
@@ -421,7 +425,7 @@
             <tbody id="nbs2-tablets-body"></tbody>
           </table>
           <table id="nbs2-ddisks-table" class="table table-sm table-hover" style="display: none">
-            <thead><tr><th>DDisk</th><th>Node</th><th>PDisk</th><th>State</th><th>Tablets</th></tr></thead>
+            <thead><tr><th>DDisk</th><th>Node</th><th>PDisk</th><th>State</th><th>Tablets</th><th title="Underlying PDisk owner occupancy; - means unavailable">DDisk fullness</th><th title="Used space / configured persistent buffer capacity; - means unavailable">Persistent buffer fullness</th></tr></thead>
             <tbody id="nbs2-ddisks-body"></tbody>
           </table>
         </div>

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_block_input.cpp
@@ -147,8 +147,6 @@ PEERDIR(
     yt/yql/providers/ytflow/integration/interface
     yt/yql/providers/ytflow/integration/proto
 )
-
-YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(yql_yt_op_settings.h)
 

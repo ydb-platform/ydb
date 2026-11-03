@@ -23,12 +23,12 @@ public:
   static constexpr size_t kSize = 16;
 
   // An invalid TraceId (all zeros).
-  TraceId() noexcept : rep_{0} {}
+  TraceId() noexcept = default;
 
   // Creates a TraceId with the given ID.
   explicit TraceId(nostd::span<const uint8_t, kSize> id) noexcept
   {
-    memcpy(rep_, id.data(), kSize);
+    std::memcpy(rep_, id.data(), kSize);
   }
 
   // Populates the buffer with the lowercase base16 representation of the ID.
@@ -50,7 +50,7 @@ public:
 
   bool operator==(const TraceId &that) const noexcept
   {
-    return memcmp(rep_, that.rep_, kSize) == 0;
+    return std::memcmp(rep_, that.rep_, kSize) == 0;
   }
 
   bool operator!=(const TraceId &that) const noexcept { return !(*this == that); }
@@ -61,11 +61,11 @@ public:
   // Copies the opaque TraceId data to dest.
   void CopyBytesTo(nostd::span<uint8_t, kSize> dest) const noexcept
   {
-    memcpy(dest.data(), rep_, kSize);
+    std::memcpy(dest.data(), rep_, kSize);
   }
 
 private:
-  uint8_t rep_[kSize];
+  uint8_t rep_[kSize]{};
 };
 
 }  // namespace trace

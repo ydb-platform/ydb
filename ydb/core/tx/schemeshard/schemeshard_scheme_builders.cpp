@@ -1,8 +1,11 @@
 #include "schemeshard_scheme_builders.h"
 #include "schemeshard_export_helpers.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/ydb_convert/external_data_source_description.h>
 #include <ydb/core/ydb_convert/external_table_description.h>
 #include <ydb/core/ydb_convert/replication_description.h>
@@ -99,6 +102,11 @@ bool BuildReplicationScheme(
         return false;
     }
 
+    if (!replicationDescResult.has_availability_period()) {
+        replicationDescResult.mutable_availability_period()->mutable_duration()->set_seconds(
+            AppData()->ReplicationConfig.GetConsumerAvailabilityPeriodSeconds());
+    }
+
     scheme = NYdb::NDump::BuildCreateReplicationQuery(
         database, database, replicationDesc.GetName(),
         NYdb::NReplication::TReplicationDescription(replicationDescResult));
@@ -190,6 +198,12 @@ bool BuildSysViewScheme(
     Ydb::StatusIds_StatusCode status;
 
     const auto& pathDescription = describeResult.GetPathDescription();
+    const auto sysViewType = pathDescription.GetSysViewDescription().GetType();
+    if (!NKikimrSysView::ESysViewType_IsValid(sysViewType)) {
+        error = TStringBuilder() << "Unknown system view type: " << sysViewType;
+        return false;
+    }
+
     if (!FillSysViewDescription(describeSysViewResult, pathDescription, status, error)) {
         return false;
     }

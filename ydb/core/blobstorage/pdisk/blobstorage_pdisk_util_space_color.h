@@ -6,6 +6,8 @@
 
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
 
+#include <optional>
+
 namespace NKikimr {
 
 // How many more chunks an owner may take while its space color stays strictly
@@ -61,6 +63,14 @@ inline NKikimrBlobStorage::TPDiskSpaceColor::E StatusFlagToSpaceColor(NPDisk::TS
     } else {
         return TColor::GREEN;
     }
+}
+
+// space color of the status flags, if they are valid (flags that have never been reported are not)
+inline std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> StatusFlagToValidSpaceColor(NPDisk::TStatusFlags flags) {
+    if (flags & NKikimrBlobStorage::StatusIsValid) {
+        return StatusFlagToSpaceColor(flags);
+    }
+    return std::nullopt;
 }
 
 inline NPDisk::TStatusFlags SpaceColorToStatusFlag(NKikimrBlobStorage::TPDiskSpaceColor::E color) {

@@ -21,6 +21,7 @@ struct TUserRequestContext : public TAtomicRefCount<TUserRequestContext> {
     TString Database;
     TString DatabaseId;
     TString SessionId;
+    TDuration CurrentQueryStatsInterval = TDuration::Zero();
     bool UseBatchPool = false;
 
     // Workload manager info

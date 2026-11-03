@@ -148,7 +148,7 @@ message DescribeModuleResponse {
 }
 
 message DescribeModuleResult {
-    ModuleInfo module = 1;
+    ModuleInfo module_info = 1 [json_name = "module"];
     string manifest_json = 2;
     repeated PlatformCompileStatus platforms = 3;
 }

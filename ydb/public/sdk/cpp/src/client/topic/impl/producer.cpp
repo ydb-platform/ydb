@@ -641,6 +641,9 @@ void TProducer::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
     }
 
     if (partitionIt->second.IsSplitted() || Producer->SplittedPartitionWorkers.contains(partition)) {
+        std::lock_guard lock(Lock);
+        SubscribedPartitions.erase(partition);
+        ReadyFutures.erase(partition);
         partitionIt->second.Future(NThreading::MakeFuture());
         return;
     }
@@ -649,6 +652,13 @@ void TProducer::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
     auto newFuture = wrappedSession->Session->WaitEvent();
     std::weak_ptr<TProducer> producer = Producer->shared_from_this();
     std::weak_ptr<TEventsWorker> self = shared_from_this();
+
+    {
+        // Arm the subscription before Subscribe(): WaitEvent() may run the callback
+        // synchronously, and that callback takes Lock itself.
+        std::lock_guard lock(Lock);
+        SubscribedPartitions.insert(partition);
+    }
 
     newFuture.Subscribe([self, producer, partition](const NThreading::TFuture<void>&) {
         auto producerPtr = producer.lock();
@@ -663,11 +673,25 @@ void TProducer::TEventsWorker::SubscribeToPartition(std::uint32_t partition) {
 
         {
             std::lock_guard lock(selfPtr->Lock);
+            if (!selfPtr->SubscribedPartitions.contains(partition)) {
+                return;
+            }
             selfPtr->ReadyFutures.insert(partition);
         }
         producerPtr->RunMainWorker(static_cast<std::int64_t>(partition));
     });
-    partitionIt->second.Future(newFuture);
+
+    {
+        std::lock_guard lock(Lock);
+        if (!SubscribedPartitions.contains(partition)) {
+            return;
+        }
+        // The callback above may have run synchronously and mutated Partitions.
+        auto subscribedPartition = Producer->Partitions.find(partition);
+        if (subscribedPartition != Producer->Partitions.end()) {
+            subscribedPartition->second.Future(newFuture);
+        }
+    }
 }
 
 std::optional<TSessionClosedEvent> TProducer::TEventsWorker::GetSessionClosedEvent() {
@@ -870,6 +894,11 @@ NThreading::TFuture<void> TProducer::TEventsWorker::WaitEvent() {
 }
 
 void TProducer::TEventsWorker::UnsubscribeFromPartition(std::uint32_t partition) {
+    // SubscribeToPartition's WaitEvent callback inserts into ReadyFutures on the gRPC
+    // thread. Clear the subscription under the same Lock so that insert cannot race
+    // with erase, and a callback that already lost the race does not resurrect the partition.
+    std::lock_guard lock(Lock);
+    SubscribedPartitions.erase(partition);
     ReadyFutures.erase(partition);
     auto partitionIt = Producer->Partitions.find(partition);
     if (partitionIt != Producer->Partitions.end()) {

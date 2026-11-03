@@ -45,4 +45,4 @@ private:
 
 TWasmModuleCatalog& GetWasmModuleCatalog();
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

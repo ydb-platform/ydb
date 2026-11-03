@@ -12,9 +12,93 @@ Open `http://<node>:8765/actors/load?mode=tablet` on a node in the intended data
 
 {% note warning %}
 
-Run one workload at a time per load tablet, and finish it before deleting the tablet. The tablet stays in its `Ready` phase during a run and does not enforce exclusive access. A later run reconfigures the same per-DBG actors.
+Run one workload at a time per load tablet, and finish it before deleting the tablet. The tablet stays in its `Ready` phase during a run and does not enforce exclusive access. A later run closes I/O admission, drains accepted work, and reconfigures the same per-DBG actors before starting its load workers.
 
 {% endnote %}
+
+## Automation with dstool {#automation}
+
+Use `ydb-dstool cluster workload nbs-dbg-like` for scripts and recoverable runs. It calls the existing legacy `TestShardControl` gRPC method; it never falls back to HTTP. Deploy server support first, including the load service on the coordinator and generator nodes and tablets supporting automation protocol version 1. Each command requires an explicit database (or a saved handle containing it) and administrator authorization. Capability checks reject unsupported servers and stale coordinator incarnations.
+
+The legacy gRPC service is not enabled by default on TLS endpoints or when an explicit service list excludes it. Add `legacy` to `GRpcConfig.ServicesEnabled` (textproto), or merge this setting into the server YAML configuration:
+
+```yaml
+grpc_config:
+  services_enabled:
+    - legacy
+```
+
+Preserve other enabled services and ensure `legacy` is absent from `services_disabled`, which takes precedence. The `test_shard` service is a separate service and does not enable this legacy RPC. This workflow does not change server service-enablement defaults.
+
+Use dedicated load tablets. Serialize create and delete for each Hive owner index, including operations from the HTTP interface. Reserve distinct owner indices across databases that share a Hive. Concurrent lifecycle mutations from independent controllers are unsupported. The coordinator rejects overlapping runs it knows about and deletion of a tablet with a known active run; this is not a cluster-wide lock. Do not concurrently run workloads through another coordinator against the same tablets.
+
+### Configuration and commands
+
+The gRPC `create` command builds `TAllocConfig` from flags; it needs no allocation file. `--pool-name` selects both the DDisk and persistent-buffer pools and defaults to `ddp1`. `--num-groups` defaults to 32; `--target-num-vchunks` defaults to 1 vChunk per group; `--vchunk-size-bytes` defaults to 134217728 (128 MiB); `--hosts-per-dbg` defaults to 5. `TargetNumVChunks` is also the per-group vChunk claim sent to BSC, and the workload address space per group is `TargetNumVChunks * VChunkSizeBytes`. Use the actual pool and geometry supported by your cluster.
+
+If the database has no default tablet channel pools, repeat `--tablet-storage-pool POOL` in channel order. For three channels using the same ordinary tablet-storage pool, pass `--tablet-storage-pool tablet-storage` three times. This is separate from `--pool-name`, which selects DDisk/PB pools. Repeated create reuses an allocation only when its database/domain, effective allocation, and actual ordered bindings match; other reuse conflicts. The preflight checks do not make creation atomic against another controller. Each operation sends at most one create or delete request; after an ambiguous transport failure, inspect the owner index and reported tablet ID before deciding whether to repeat it. A partial failure reports the tablet identity for recovery. An already absent tablet can be deleted again.
+
+`run` builds its `TEvLoadTestRequest` from flags and accepts no `--config`. Supply `--tablet-id ID` for one existing tablet, or repeat `--target TABLET_ID[@NODE_ID]` for multiple existing tablets. Without a target, `run` creates a dedicated tablet using the same allocation flags as `create`, waits for readiness, runs the workload, and deletes that tablet after termination is confirmed. `--pool-name` selects both DDisk and PB pools; `--ddisk-pool-name` and `--pb-pool-name` can override either pool, as on the monitoring page. Omit `@NODE_ID` to use current Hive placement, use `@0` for coordinator-local generation, or specify a nonzero node to override placement. Target tablet IDs must be unique. Each run or trial lasts 10 seconds by default. Duration must be positive and exceed the measurement delay. The CLI uses monitoring-page defaults for duration, warmup, inflight, and max inflight LSNs; other omitted tuning flags use protobuf defaults.
+
+Omitting inflight options runs once with 2048 inflight per tablet. Specify `--inflight N` for another single value, or both `--inflight-from A --inflight-to B` for a sweep. The sweep runs A, 2A, 4A, and so on while the value is at most B; it does not insert B if B is between doubling steps. `--trials` defaults to 1 and must be odd when greater than 1, matching the monitoring page. The CLI preserves the page's multi-tablet targets, read/write ratio, I/O size, DBG prefix, sequential access, LSN cap, checksums, replication toggle, and median trial by write IOPS. The automation path assigns service tags itself.
+
+| Flag | Protobuf field | Default |
+| --- | --- | --- |
+| `--duration-seconds` | `DurationSeconds` | 10 seconds per run or trial |
+| `--delay-before-measurements-seconds` | `DelayBeforeMeasurementsSeconds` | 0 seconds |
+| `--num-groups-to-use` | `NumDirectBlockGroupsToUse` | 0 (all groups) |
+| `--inflight` or `--inflight-from` / `--inflight-to` | Trial `MaxInFlight` values | 2048 per tablet for a single run |
+| `--read-ratio` | `ReadRatio` | 0 reads per 100 writes |
+| `--sequential` | `Sequential` | Random addresses |
+| `--read-write-size-kib` | `ReadWriteSizeKiB` | 4 KiB |
+| `--stop-on-writes-done-count` | `StopOnWritesDoneCount` | 0 (duration only) |
+| `--max-inflight-lsns` | `TabletConfig.MaxInflightLsns` | 65536 |
+| `--flush-batch-size` / `--erase-batch-size` | Tablet batch sizes | 10000 each |
+| `--sync-requests-batch-size` | `TabletConfig.SyncRequestsBatchSize` | 10 |
+| `--pbuffer-reply-timeout-us` | `TabletConfig.PBufferReplyTimeoutMicroseconds` | 50000 µs |
+| `--disable-replication` | `TabletConfig.DisableReplication` | Replication enabled; reads cannot be used when set |
+| `--disable-checksums` | `TabletConfig.EnableChecksums` | Checksums enabled |
+
+`--read-ratio` counts reads per 100 writes, not as a percentage of all operations, and accepts 0–100. `--read-write-size-kib` must be at least 4, a multiple of 4, and fit evenly inside the allocated vChunk size. A nonzero `--stop-on-writes-done-count` is an additional stopping condition; the duration still bounds the run.
+
+Use the usual dstool TLS and credential options and an explicit `grpc://` or `grpcs://` endpoint. Replace the database, endpoint, owner index, and tablet ID in these recipes:
+
+```bash
+DSTOOL_ENDPOINT=grpcs://node.example:2135
+ydb-dstool -e "$DSTOOL_ENDPOINT" cluster workload nbs-dbg-like create --database /Root/test --owner-index 1 --pool-name ddp1 --format json
+ydb-dstool -e "$DSTOOL_ENDPOINT" cluster workload nbs-dbg-like list --database /Root/test --format json
+ydb-dstool -e "$DSTOOL_ENDPOINT" cluster workload nbs-dbg-like describe --database /Root/test --owner-index 1 --format json
+ydb-dstool -e "$DSTOOL_ENDPOINT" cluster workload nbs-dbg-like run --database /Root/test --tablet-id 72057594000000001 --duration-seconds 60 --inflight 32 --output-dir ./run-01 --format json
+ydb-dstool -e "$DSTOOL_ENDPOINT" cluster workload nbs-dbg-like results --handle ./run-01 --wait --format json
+ydb-dstool -e "$DSTOOL_ENDPOINT" cluster workload nbs-dbg-like stop --handle ./run-01 --format json
+ydb-dstool -e "$DSTOOL_ENDPOINT" cluster workload nbs-dbg-like run --database /Root/test --duration-seconds 60 --inflight-from 1 --inflight-to 32 --trials 3 --output-dir ./sweep-01 --format jsonl
+ydb-dstool -e "$DSTOOL_ENDPOINT" cluster workload nbs-dbg-like delete --database /Root/test --owner-index 1 --format json
+```
+
+`create` waits for readiness. `run` waits by default; `--no-wait` is available only for a single run on an explicit tablet and returns the handle and artifact location. `results` retrieves the current state; `--wait` waits for a terminal result. `stop` addresses one run and waits for confirmed termination. For a trial in a range, use `results` or `stop` with `--database`, `--node-id`, `--incarnation`, and `--request-id` from its checkpoint instead of `--handle`.
+
+The receiving node is the default coordinator; `--node-id` selects another. The client pins the coordinator node and service incarnation before submission. Later requests may enter through another gateway and are forwarded to that coordinator. Missing load services or database context cause an error. Each new run, including every sweep trial, resolves current Hive placement. Omitted target `NodeId` colocates the generator with its tablet; an explicit nonzero value overrides placement, and explicit zero uses the coordinator node. Accepted runs retain their placement snapshot on retry and do not automatically relocate or restart.
+
+Automation waits for the entire requested DBG prefix and acknowledged configuration of its per-DBG actors before generating load. It neither uses the HTTP zero-ready fallback nor silently reduces the requested workload. A `NumDirectBlockGroupsToUse` greater than the allocated count is rejected. Defaults are a 90-second RPC timeout, a 60-second startup budget, and a 2-second polling interval; override with `--rpc-timeout`, `--startup-timeout`, and `--poll-interval`. The startup budget is a single deadline measured from START admission that covers placement lookup, capability checks, DBG readiness, and the configuration acknowledgement; a retried START does not extend it, and it cannot exceed 3600 seconds. One RPC timeout is shared across gateway retries and capped by the remaining overall operation budget; both gRPC and gateway `RpcTimeoutMs` receive that cap. Trial budgets begin before START or recovery GET, result waits before the initial GET, readiness before DESCRIBE, and stops before STOP. The runner's default overall wait is startup budget + workload duration + 210 seconds for drain and bounded transport slack; `--wait-timeout` overrides it. Confirmed completion means client-request drain, not completion of background flush or erase. Check `Run.TerminationConfirmed`: without confirmed drain, the service keeps the run in `STOPPING` with `ExecutionError`, `TerminationConfirmed: false`, and no `FinishedAtMs`, even after a worker watchdog reports failure. Such unresolved runs continue blocking reuse of their tablets on the same coordinator. A late terminal reply is saved but still has a timeout verdict. Cancellation has its own bounded budget; a failed or unconfirmed outcome must not permit the next trial.
+
+### Results, recovery, and sweeps
+
+`--format json` keeps stdout machine-readable; progress and diagnostics go to stderr. Pretty sweep output prints tablet placement once, then `MaxInFlight`, direction, IOPS, p50, p95, p99 (microseconds), measured error count, and error percentage for each trial. Reads appear when configured or measured. JSON and JSONL trial results include `measured_io_errors` by direction, with string counts and totals and a numeric percentage; failed verdicts include `failure_reason`. The percentage is errors divided by successful plus failed measured operations for that direction. Protobuf JSON represents 64-bit identifiers and counters as strings. The CLI result contains `response.Run` and a separate `passed` verdict (pending results have no final verdict). Execution states are `IN_PROGRESS`, `STOPPING`, `SUCCEEDED`, `FAILED`, and `CANCELLED`. `SUCCEEDED` means workload execution completed. Partial measured I/O errors remain visible but pass the CLI verdict; a direction fails that check only when it has errors and zero successful measured operations (100% errors). Execution failure, cancellation, timeout, and missing/lost results still cause a nonzero exit. `--allow-io-errors` relaxes only the 100%-error check.
+
+The typed result includes execution errors, effective configuration with resolved placement, build information, timestamps, measured milliseconds, counts, bytes, rates, latency histograms in microseconds, and per-tablet statistics. Histograms are merged for aggregate latency, not averaged as percentiles. Browser metric fields remain a separate compatibility projection.
+
+`run` defaults to `./nbs-dbg-like-load-results/<client-generated-uuid>/`. An explicit output directory must not already exist unless resuming. The generated `config.json` and atomically written `checkpoint.json` preserve settings, pinned coordinator identity, request IDs, targets, and trial states before submission. Automatic allocation also saves `auto.json` before CREATE, including its owner index and allocation. Each `result-NNNN.json` is saved before the checkpoint marks that trial complete. Artifacts contain no credentials.
+
+```bash
+ydb-dstool -e "$DSTOOL_ENDPOINT" cluster workload nbs-dbg-like run --resume ./run-01 --format json
+ydb-dstool -e "$DSTOOL_ENDPOINT" cluster workload nbs-dbg-like run --resume ./sweep-01 --format jsonl
+```
+
+Resume uses saved run settings; conflicting new settings are rejected. `results --handle` and `stop --handle` also save terminal results before marking the checkpoint complete. They reconcile an interrupted result/checkpoint write and serve saved terminal results offline, including after coordinator history is lost. Dry runs do not alter artifacts. Nonterminal replies remain pending. Resume skips saved completed trials, retrieves previously submitted work, and starts only never-submitted trials. A fully completed run or sweep can be resumed from saved results without a live coordinator. An interrupted submission is ambiguous: an unknown or expired handle must never trigger replacement work automatically. Accepted bounded work belongs to the service and continues after client disconnection. Completed server results and deduplication records are retained in memory for 24 hours; each coordinator accepts at most 1,024 active/retained records and rejects new runs at capacity. A coordinator restart loses this history and changes its incarnation. Coordinator loss does not prove remote workers stopped; investigate before launching more work against those tablets.
+
+Sweeps preserve all doubling inflight values and trials, changing only `WorkloadConfig.MaxInFlight`. They run sequentially, stop at the first failed verdict, and save `summary.json` selecting the median trial by write IOPS. On timeout or interruption the runner requests scoped cancellation and confirms termination before it can continue; an unconfirmed outcome remains unresolved. An automatically created tablet is deleted only after every submitted run has a saved terminal result with confirmed drain; otherwise its identity remains in `auto.json` for recovery. Existing tablets are never automatically deleted. The global `--dry-run` option validates and displays intended requests without mutations or simulated results.
+
+For agent-assisted operation, see the scoped [ydb-nbs-dbg-like-load skill](https://github.com/ydb-platform/ydb/blob/main/ydb/apps/dstool/.agents/skills/ydb-nbs-dbg-like-load/SKILL.md). The remaining sections describe the compatible HTTP workflow and the shared workload parameters.
 
 ## Create a Tablet {#create}
 
@@ -119,7 +203,7 @@ curl --fail-with-body \
   'http://<node>:8765/actors/load?mode=results&uuid=<uuid>'
 ```
 
-An empty result array means that no completed result for that UUID is available yet. Use JSON while the workload is active: the NBS load proxies do not implement live HTML status requests. After completion, the same URL without the JSON header displays the final HTML report. Start another run after completion to reuse the allocation with different workload settings.
+An empty result array means that no completed result for that UUID is available yet. Use JSON while the workload is active: the NBS DBG like load proxies do not implement live HTML status requests. After completion, the same URL without the JSON header displays the final HTML report. Start another run after completion to reuse the allocation with different workload settings.
 
 ### Workload Parameters {#workload-parameters}
 
@@ -132,7 +216,7 @@ The tablet page pre-fills `MaxInFlight: 2048` and `MaxInflightLsns: 65536` for a
 | `DurationSeconds` | `0` | Time from workload start to stopping request generation, including warm-up. Set this or `StopOnWritesDoneCount` to a positive value. |
 | `DelayBeforeMeasurementsSeconds` | `15` | Warm-up interval excluded from measured results. Must be less than a positive `DurationSeconds`. |
 | `MaxInFlight` | `32` | Combined concurrent write/read limit per target tablet. Use a positive value. Random workloads split large limits among workers; sequential workloads use one worker. |
-| `ReadRatio` | `0` | Reads issued per 100 writes, based on issued request counts. `100` means approximately one read per write, or half of all requests. It does not select a read-only workload. |
+| `ReadRatio` | `0` | Reads issued per 100 writes, based on issued request counts. `100` means approximately one read per write, or half of all requests. Values above `100` are allowed; `200` means approximately two reads per write. It does not select a read-only workload. |
 | `Sequential` | `false` | Sequential traversal of the flat address space when true; uniform random selection otherwise. |
 | `ReadWriteSizeKiB` | `4` | Fixed I/O size, at least 4 KiB and a multiple of 4 KiB. It must fit in and evenly divide a vChunk. |
 | `NumDirectBlockGroupsToUse` | `0` | Use a prefix of the available DBGs. Zero or a value exceeding the available count uses all available DBGs. |
@@ -141,9 +225,7 @@ The tablet page pre-fills `MaxInFlight: 2048` and `MaxInflightLsns: 65536` for a
 
 Warm-up and drain completions remain in lifetime counters but are excluded from measured throughput and latency. Random reads can access unwritten addresses, and the generator does not verify returned data against an expected block image. Use the integration tests for correctness checks.
 
-When DBGs of one load tablet share a data DDisk, their DBG-local vChunk indexes
-can refer to the same underlying blocks. Do not assume that distinct logical
-DBG address ranges isolate stored data; see the [workload implementation notes](https://github.com/ydb-platform/ydb/blob/main/ydb/core/load_test/rfc/nbs_dbg_like/workload.md).
+PB and DDisk requests use unique 64-bit vChunk IDs: `ui64(DbgIndex) * TargetNumVChunks + localVChunkIndex`. Distinct DBGs therefore keep separate data even when they share a DDisk and use equal local offsets. The flat client address space is unchanged, and allocation dimensions remain fixed across runs. Create fresh load-tablet allocations when moving from the earlier DBG-local mapping: existing data is not migrated. See the [workload implementation notes](https://github.com/ydb-platform/ydb/blob/main/ydb/core/load_test/rfc/nbs_dbg_like/workload.md).
 
 ### Tablet Parameters {#tablet-parameters}
 
@@ -152,16 +234,16 @@ These fields belong to `WorkloadConfig.TabletConfig`.
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `MaxInflightLsns` | `4096` | Budget for tracked log sequence numbers (LSNs). Each DBG actor independently enforces `max(1, budget / allocated_DBG_count)`. The divisor includes inactive DBGs. Zero rejects writes; this is not a single shared global counter. |
-| `FlushBatchSize` | `10000` | Maximum LSNs scheduled per destination in one flush batch; normalized to at least one. |
+| `FlushBatchSize` | `10000` | Maximum LSNs scheduled per destination in one flush pass, across batches grouped by vChunk; normalized to at least one. |
 | `EraseBatchSize` | `10000` | Maximum LSNs scheduled per destination in one erase batch; normalized to at least one. |
-| `SyncRequestsBatchSize` | `10` | Per-DBG threshold of ready LSNs before scheduling flush or erase. Set to `1` to process tails promptly. The gate remains enabled after load generation stops. |
+| `SyncRequestsBatchSize` | `10` | Per-DBG threshold of the current unadmitted flush-ready or erase-ready cohort. Exactly those members are admitted. A later completion, including a lower LSN, waits for a new cohort or idle cleanup, and already admitted records are not counted toward the next gate. Normalized to at least one. Set to `1` to process tails promptly. A coalesced one-second cleanup admits ready records in idle vChunks below the gate, including after load generation stops. Reconfiguration, deletion, and poison immediately admit every already ready record regardless of count and leave incomplete PB writes unadmitted. |
 | `PBufferReplyTimeoutMicroseconds` | `50000` | Timeout passed to the PB plural-write coordinator. |
 | `DisableReplication` | `false` | Write only to the coordinator PB, acknowledge its confirmation, and erase without copying to DDisk. Requires `ReadRatio: 0`. |
 | `EnableChecksums` | `true` | Calculate one checksum per 4 KiB payload block in the load worker and forward the checksums through the load tablet to PersistentBuffer. Set this to the DDisk/PersistentBuffer checksum mode. |
 
 The proxy sets `TabletConfig.IoSizeBytes` from `ReadWriteSizeKiB` and `TabletConfig.NumDirectBlockGroupsToUse` from the selected DBG count. Configure those through the workload fields, not the internal tablet fields.
 
-Keep the per-DBG LSN budget comfortably above the sync threshold: LSNs remain tracked through write, flush, and erase, and both queues need enough work to pass their gates.
+Keep the per-DBG LSN budget comfortably above the sync threshold: LSNs remain tracked through write, flush, and erase, so normal cohorts need enough capacity to pass their gate without waiting for idle cleanup.
 
 ## Run Against Multiple Tablets {#multiple-tablets}
 
@@ -186,13 +268,25 @@ Submit it using the same `mode=start` workflow. A nonempty `Targets` list select
 
 `NodeId` selects the node on which to start that tablet's load proxy. Zero or an omitted value uses the coordinator's node; the actor does not look up or continuously track placement in Hive. Use the current hosting node to keep load generation colocated. The target load service must be available. Include each tablet only once and start this coordinator on one node.
 
+## I/O Ordering {#io-ordering}
+
+Normal writes use `TEvWritePersistentBuffers` to all three primary PB peers. They are acknowledged after three confirmations, before background Sync copies data to DDisk. They do not use DDisk `TEvWrite`; PB writes and PB reads continue during Sync. An incomplete overwrite does not hide the previous acknowledged version, and reordered confirmations cannot move read visibility backwards.
+
+Overlapping Sync operations run in write acceptance order: a newer version waits until all destinations of the older version complete. Normal flush and erase admission takes exactly the current unadmitted ready cohort. Sync batches group its records by destination and vChunk, with one vChunk per request and the total per-destination limit preserved across batches. A later completion, including one with a lower LSN than records already admitted, waits for a new cohort or idle cleanup. PB reads continue to use the acknowledged PB version until Sync completes, then new reads use DDisk. An outstanding PB read holds that version against Erase, without blocking the next otherwise eligible Sync. An outstanding DDisk read holds its range against overlapping Sync, without blocking a PB write. Overlapping PB records erase oldest first; independent ranges can progress concurrently.
+
+Each per-DBG worker coalesces ready-work and PB/Sync-completion cleanup requests into one timer due one second after the first request. At firing, ready flush and erase records from idle local vChunks are admitted below the normal threshold. Idle means no incomplete PB writes and no outstanding Sync destination segments; reads and erases do not disqualify a vChunk. Both admission passes use the same activity snapshot before either queue runs. Ordering and read pins still apply. Busy or pinned work alone does not trigger repeated timer passes; later PB/Sync completions request another pass, and the last reader wakes only its admitted slot. A vChunk becoming ready shortly before a pending timer fires can join that pass; one continuous second of idleness is not required.
+
+The load retains outstanding request state until matching replies arrive. Failed writes remain invisible and confirmed PB copies are cleaned up after their outstanding responses finish. Missing or ambiguous replies cannot authorize cleanup or lifecycle drain completion. This models normal partition ordering and orderly shutdown; it does not implement full NBS crash recovery, recovery markers/fences, repair, or handoff policy.
+
 ## Results and Cleanup {#results}
 
 Results include write/read requests per second, p50/p95/p99 completion latencies in microseconds, configured `max_in_flight`, combined successful request count (`txs`), throughput (`rps`), and errors per second (`errors`). Multi-tablet results also include a `tablets` array. The coordinator merges latency histograms; it does not average per-tablet percentiles.
 
-Write completion measures PB confirmation, before the background copy to DDisk and PB erase. Read results aggregate both PB and DDisk routes. The last HTML report contains counts, byte totals, measurement duration, and latency percentiles. Tablet and per-DBG counters expose write, flush, erase, and read activity through the `load_actor` counter service.
+Write completion measures PB confirmation, before the background copy to DDisk and PB erase. Read results aggregate both PB and DDisk routes. The last HTML report contains counts, byte totals, measurement duration, and latency percentiles. Tablet and per-DBG counters expose write, flush, erase, and read activity through the `load_actor` counter service. The lifecycle gauge `DbgsAllocated` updates with phase transitions to the allocated count after allocation and to zero after deletion.
 
-A duration limit, count target, or [{#T}](load-actors-stop.md) stops new requests and allows up to 30 seconds for outstanding client replies. This drain does not wait for all background flushes or erases. In particular, a sync threshold greater than one can leave a short tail queued until more work arrives.
+A duration limit, count target, or [{#T}](load-actors-stop.md) stops new requests and allows up to 30 seconds for outstanding client replies. This drain does not force background flush or erase. The one-second idle cleanup lets short tails finish naturally after a run, including erase with replication disabled, but client completion does not wait for background maintenance. Records already admitted keep that admission and are not counted toward the next cohort.
+
+The next configuration closes admission and drains accepted writes through Sync, waits for accepted reads, and erases PB copies before installing settings. The proxy starts workers only after configuration is acknowledged by all per-DBG actors. Reconfiguration keeps peer sessions. Drain and poison invalidate ordinary cleanup timers using an internal generation independent of user configuration IDs, so stale events cannot affect a new configuration or clear its timer flag. Forced lifecycle and idle cleanup do not increment the normal gate-blocked counters. Deletion and worker poison also drain accepted work, then wait for peer disconnect acknowledgements. There is no normal worker-drain deadline: an unresolved result can keep these operations pending indefinitely; a client timeout is not evidence that cleanup finished.
 
 After the run finishes, delete each tablet with the owner index used to create it:
 
@@ -203,7 +297,7 @@ curl --fail-with-body 'http://<node>:8765/actors/load' \
   --data-urlencode 'owner_idx=1'
 ```
 
-The helper requests DBG deallocation from the tablet and then deletion from Hive. This is allocation cleanup, not a data sanitization operation. If allocation or deletion fails, inspect the BSC and tablet logs before retrying; the current implementation has incomplete recovery for interrupted allocation and can clear local state after a BSC deallocation error.
+The helper asks the tablet to drain and deallocate DBGs, then asks Hive to delete it. The tablet sends BSC deallocation only after every per-DBG worker has completed its I/O drain and disconnect barrier. This load-generator deletion flushes acknowledged writes before cleaning PB copies, a stronger guarantee than the production partition's destructive deletion path. It releases allocation, not secure erasure of stored data. If allocation or deletion fails, inspect BSC and tablet logs before retrying: the current implementation does not fully recover interrupted allocation and may clear local state after a BSC deallocation error.
 
 ## Source and Implementation Notes {#source}
 

@@ -16,7 +16,8 @@ namespace {
 
 using TDqJoinImplRenames = TDqRenames<ESide>;
 
-constexpr ui32 BaseInputs = 7;
+constexpr ui32 InputsWithoutSettings = 7;
+constexpr ui32 InputsWithSettings = 8;
 
 struct TDqScalarJoinMetadata {
     TSides<TVector<TType*>> InputTypes;
@@ -24,6 +25,7 @@ struct TDqScalarJoinMetadata {
     TVector<TType*> ResultItemTypes;
     TDqJoinImplRenames Renames;
     EJoinKind Kind;
+    TBlockHashJoinSettings Settings;
     TSides<TVector<TType*>> UserTypes;
     TSides<TVector<int>> ColumnPermutation;
 };
@@ -129,45 +131,58 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
 
     TRenamesScalarOutput(const TDqScalarJoinMetadata* meta, TSides<IScalarLayoutConverter*> converters)
         : TBase(&meta->Renames, converters)
-        , BuildWidth_(std::ssize(meta->InputTypes.Build))
-        , ProbeWidth_(std::ssize(meta->InputTypes.Probe))
+        , Widths_({.Build = static_cast<int>(std::ssize(meta->InputTypes.Build)),
+                   .Probe = static_cast<int>(std::ssize(meta->InputTypes.Probe))})
     {
+        if constexpr (LeftSemiOrOnly(Join.Kind)) {
+            for (auto rename : *this->Renames_) {
+                MKQL_ENSURE(rename.Side == Join.Preserved,
+                            "renames in Semi or Only Left Join shouldn't contain columns from the non-preserved side");
+            }
+        }
+
         if constexpr (!std::is_same_v<typename TBase::BuildNullIfNeeded, typename TBase::Empty>) {
-            TMKQLVector<NUdf::TUnboxedValue> nulls(BuildWidth_);
-            this->Converters_.Build->Pack(nulls.data(), this->Nulls_);
+            const auto& nullTypes = meta->UserTypes.SelectSide(Join.NullSupplying());
+            for (int i = 0; i < std::ssize(nullTypes); ++i) {
+                auto* type = nullTypes[i];
+                MKQL_ENSURE(type->IsOptional(),
+                            Sprintf("expected every type of the null-supplying side to be optional when join type is Left, got type #%i: %s",
+                                    i + 1, type->GetKindAsStr().data()));
+            }
+            TMKQLVector<NUdf::TUnboxedValue> nulls(std::ssize(nullTypes));
+            this->Converters_.SelectSide(Join.NullSupplying())->Pack(nulls.data(), this->Nulls_);
         }
     }
 
     TFlushResult Flush() {
         TFlushResult res;
-        const i64 nItems = this->Output_.Probe.NTuples;
+        const i64 nItems = this->SizeTuples();
         res.Packs.Build = std::move(this->Output_.Build);
         res.Packs.Probe = std::move(this->Output_.Probe);
 
         res.Buffer.reserve(nItems * this->Columns());
 
         if constexpr (LeftSemiOrOnly(Join.Kind)) {
-            ProbeValues_.resize(nItems * ProbeWidth_);
-            this->Converters_.Probe->UnpackBatch(res.Packs.Probe, ProbeValues_.data());
+            const int preservedWidth = Widths_.SelectSide(Join.Preserved);
+            auto& preservedValues = Values_.SelectSide(Join.Preserved);
+            preservedValues.resize(nItems * preservedWidth);
+            this->Converters_.SelectSide(Join.Preserved)
+                ->UnpackBatch(res.Packs.SelectSide(Join.Preserved), preservedValues.data());
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
                 for (auto rename : *this->Renames_) {
-                    MKQL_ENSURE(rename.Side == ESide::Probe,
-                                "renames in Semi or Only Left Join shouldn't contain columns from right side");
-                    res.Buffer.push_back(ProbeValues_[tupleIndex * ProbeWidth_ + rename.Index]);
+                    res.Buffer.push_back(preservedValues[tupleIndex * preservedWidth + rename.Index]);
                 }
             }
         } else {
-            BuildValues_.resize(nItems * BuildWidth_);
-            ProbeValues_.resize(nItems * ProbeWidth_);
-            this->Converters_.Build->UnpackBatch(res.Packs.Build, BuildValues_.data());
-            this->Converters_.Probe->UnpackBatch(res.Packs.Probe, ProbeValues_.data());
+            for (ESide side : EachSide) {
+                auto& values = Values_.SelectSide(side);
+                values.resize(nItems * Widths_.SelectSide(side));
+                this->Converters_.SelectSide(side)->UnpackBatch(res.Packs.SelectSide(side), values.data());
+            }
             for (i64 tupleIndex = 0; tupleIndex < nItems; ++tupleIndex) {
                 for (auto rename : *this->Renames_) {
-                    if (rename.Side == ESide::Build) {
-                        res.Buffer.push_back(BuildValues_[tupleIndex * BuildWidth_ + rename.Index]);
-                    } else {
-                        res.Buffer.push_back(ProbeValues_[tupleIndex * ProbeWidth_ + rename.Index]);
-                    }
+                    const auto& values = Values_.SelectSide(rename.Side);
+                    res.Buffer.push_back(values[tupleIndex * Widths_.SelectSide(rename.Side) + rename.Index]);
                 }
             }
         }
@@ -176,10 +191,8 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
     }
 
 private:
-    const int BuildWidth_;
-    const int ProbeWidth_;
-    TMKQLVector<NUdf::TUnboxedValue> BuildValues_;
-    TMKQLVector<NUdf::TUnboxedValue> ProbeValues_;
+    const TSides<int> Widths_;
+    TSides<TMKQLVector<NUdf::TUnboxedValue>> Values_;
 };
 
 template <TPhysicalJoin Join>
@@ -229,6 +242,7 @@ private:
                                                               .Probe = Converters_.Probe->GetTupleLayout()})
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()})
             , PairFilter_(std::move(pairFilter))
+            , OutputRows_(MakeJoinOutputRowsCounter(ctx))
         {}
 
         EFetchResult FetchValues(NUdf::TUnboxedValue* const* output) {
@@ -240,13 +254,16 @@ private:
                 }
             }
             for (int index = 0; index < width; ++index) {
-                *output[index] = Buffer_->Buffer[BufferPos_ + index];
+                if (auto* out = output[index]) {
+                    *out = Buffer_->Buffer[BufferPos_ + index];
+                }
             }
             BufferPos_ += width ? width : 1;
             if (!HasRow()) {
                 Buffer_.reset();
                 BufferPos_ = 0;
             }
+            OutputRows_.Inc();
             return EFetchResult::One;
         }
 
@@ -257,7 +274,7 @@ private:
             }
             const int width = Output_.Columns();
             return width ? BufferPos_ + width <= Buffer_->Buffer.size()
-                         : BufferPos_ < static_cast<size_t>(Buffer_->Packs.Probe.NTuples);
+                         : BufferPos_ < static_cast<size_t>(Buffer_->Packs.SelectSide(Join.Preserved).NTuples);
         }
 
         EFetchResult FillBuffer() {
@@ -278,16 +295,19 @@ private:
         std::optional<TPackedTuplePairFilter> PairFilter_;
         std::optional<typename TRenamesScalarOutput<Join>::TFlushResult> Buffer_;
         size_t BufferPos_ = 0;
+        NYql::NUdf::TCounter OutputRows_;
     };
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         TSides<std::unique_ptr<IScalarLayoutConverter>> converters;
         TTypeInfoHelper helper;
         for(ESide side: EachSide) {
-            const auto roles =
-                MakeColumnRoles(Meta_->UserTypes.SelectSide(side).size(), Meta_->KeyColumns.SelectSide(side));
+            const auto& keyColumns = Meta_->KeyColumns.SelectSide(side);
+            const auto roles = MakeColumnRoles(Meta_->UserTypes.SelectSide(side).size(), keyColumns);
             converters.SelectSide(side) =
                 MakeScalarLayoutConverter(helper, Meta_->UserTypes.SelectSide(side), roles, ctx.HolderFactory);
+            converters.SelectSide(side)->ApplyEqualNulls(
+                EqualNullsInputColumns(Meta_->Settings.EqualNullsKeys, keyColumns));
         }
 
         state = ctx.HolderFactory.Create<TStreamState>(
@@ -311,7 +331,11 @@ private:
 } // namespace
 
 IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() >= BaseInputs, "Expected at least " << BaseInputs << " args");
+    const ui32 inputCount = callable.GetInputsCount();
+    const bool hasSettings = inputCount == InputsWithSettings || inputCount == InputsWithSettings + JoinFilterInputs;
+    const ui32 filterStart = hasSettings ? InputsWithSettings : InputsWithoutSettings;
+    MKQL_ENSURE(inputCount == filterStart || inputCount == filterStart + JoinFilterInputs,
+                "Expected 7, 8, 12 or 13 args, got " << inputCount);
 
     const auto joinType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(joinType->IsFlow(), "Expected WideFlow as a resulting flow");
@@ -324,6 +348,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsFlow(), "Expected WideFlow as a left flow");
+    EnsureNoPgTypes(leftType);
     const auto leftFlowType = AS_TYPE(TFlowType, leftType);
     MKQL_ENSURE(leftFlowType->GetItemType()->IsMulti(), "Expected Multi as a left flow item type");
     const auto leftFlowComponents = GetWideComponents(leftFlowType);
@@ -333,6 +358,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     const auto rightType = callable.GetInput(1).GetStaticType();
     MKQL_ENSURE(rightType->IsFlow(), "Expected WideFlow as a right flow");
+    EnsureNoPgTypes(rightType);
     const auto rightFlowType = AS_TYPE(TFlowType, rightType);
     MKQL_ENSURE(rightFlowType->GetItemType()->IsMulti(), "Expected Multi as a right flow item type");
     const auto rightFlowComponents = GetWideComponents(rightFlowType);
@@ -360,16 +386,24 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     ValidateRenames(parsed.UserRenames, joinKind, std::ssize(meta.InputTypes.Probe), std::ssize(meta.InputTypes.Build));
     meta.Renames = BuildImplRenames(parsed.UserRenames);
 
+    if (hasSettings) {
+        meta.Settings = ParseHashJoinSettingsTuple(callable.GetInput(InputsWithoutSettings));
+    }
+    const bool leftIsBuild = meta.Settings.LeftIsBuild();
+    ApplyLeftBuildSwap(leftIsBuild, meta.InputTypes, meta.KeyColumns, meta.Renames);
+
     ApplyKeyColumnPermutation(meta.KeyColumns, meta.InputTypes, /* trailingColumns */ 0, meta.Renames,
                               meta.ColumnPermutation);
-    meta.UserTypes = ForceOptionalOnNullableSide(meta.InputTypes, joinKind, ESide::Build, ctx.Env);
+    const ESide preservedSide = PreservedSideForLeftBuild(leftIsBuild);
+    meta.UserTypes = ForceOptionalOnNullableSide(meta.InputTypes, joinKind, OtherSide(preservedSide), ctx.Env);
 
-    const TSides<IComputationWideFlowNode*> flows{.Build = rightFlow, .Probe = leftFlow};
+    const auto flows = SidesForLeftBuild(leftIsBuild, leftFlow, rightFlow);
+    TJoinFilters filters = ParseJoinFiltersForBuildSide(ctx, callable, filterStart, leftIsBuild);
 
     return DispatchHashJoinByKind<TScalarHashJoinWrapper, IComputationWideFlowNode>(
-        joinKind, ESide::Probe, isGrid,
+        joinKind, preservedSide, isGrid,
         "unsupported join type in scalar hash join, see gh#26780 for details.", ctx.Mutables, std::move(meta), flows,
-        ParseJoinFilters(ctx, callable, BaseInputs));
+        std::move(filters));
 }
 
 } // namespace NKikimr::NMiniKQL

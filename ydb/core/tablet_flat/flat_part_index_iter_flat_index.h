@@ -102,7 +102,7 @@ public:
         Y_DEBUG_ABORT_UNLESS(Iter.Off());
         TPageId pageId = (Iter - 1)->GetPageId();
         ui64 delta = Part->GetPageSize(pageId, GroupId);
-        ui8 channel = Part->GetGroupChannel(GroupId);
+        ui8 channel = Part->GetDataChannel(GroupId);
         dataSize.Add(delta, channel);
     }
 
@@ -116,10 +116,10 @@ public:
         return EndRowId;
     }
 
-    TPageId GetPageId() const override {
+    TPageLocation GetLocation() const override {
         Y_ENSURE(Index);
         Y_ENSURE(Iter);
-        return Iter->GetPageId();
+        return Part->GetPageLocation(Iter->GetPageId(), GroupId);
     }
 
     TRowId GetRowId() const override {
@@ -184,7 +184,8 @@ private:
             return &*Index;
         }
         auto pageId = Part->IndexPages.GetFlat(GroupId);
-        auto page = Env->TryGetPage(Part, pageId, {});
+        auto location = Part->GetIndexPageLocation(pageId, GroupId);
+        auto page = Env->TryGetIndexPage(Part, location, GroupId);
         if (page) {
             Index = TIndex(*page);
             Y_VERIFY_DEBUG_S(EndRowId == Index->GetEndRowId(), "EndRowId mismatch " << EndRowId << " != " << Index->GetEndRowId() << " (group " << GroupId.Historic << "/" << GroupId.Index <<")");

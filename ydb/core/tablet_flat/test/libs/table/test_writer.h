@@ -73,6 +73,15 @@ namespace NTest {
 
             TEpoch epoch = TEpoch(root.GetEpoch());
 
+            TPartLayout layout;
+            if (root.HasLayout()) {
+                layout.SeparateDescriptorCollection = root.GetLayout().GetSeparateDescriptorCollection();
+                layout.KeyIndexInDescriptor = root.GetLayout().GetKeyIndexInDescriptor();
+                layout.GroupIndexesInDescriptor = root.GetLayout().GetGroupIndexesInDescriptor();
+            }
+            const TPartSlots slots(Max(eggs.BTreeGroupIndexes.size(), eggs.FlatGroupIndexes.size()), layout);
+            Y_ENSURE(Store->GetOuterRoom() == slots.OuterSlot(), "Store has " << Store->GetOuterRoom() << " rooms for " << slots.OuterSlot() << " slots");
+
             size_t indexesRawSize = 0;
             if (eggs.BTreeGroupIndexes) {
                 for (const auto &meta : eggs.BTreeGroupIndexes) {
@@ -82,11 +91,11 @@ namespace NTest {
                     indexesRawSize += meta.IndexSize;
                 }
             } else {
-                for (auto indexPage : eggs.FlatGroupIndexes) {
-                    indexesRawSize += Store->GetPageSize(0, indexPage);
+                for (ui32 groupIndex : xrange(eggs.FlatGroupIndexes.size())) {
+                    indexesRawSize += Store->GetPageSize(slots.IndexSlot(NPage::TGroupId(groupIndex)), eggs.FlatGroupIndexes[groupIndex]);
                 }
-                for (auto indexPage : eggs.FlatHistoricIndexes) {
-                    indexesRawSize += Store->GetPageSize(0, indexPage);
+                for (ui32 groupIndex : xrange(eggs.FlatHistoricIndexes.size())) {
+                    indexesRawSize += Store->GetPageSize(slots.IndexSlot(NPage::TGroupId(groupIndex, true)), eggs.FlatHistoricIndexes[groupIndex]);
                 }
             }
 
@@ -123,6 +132,7 @@ namespace NTest {
                         TRowVersion(maxRowVersion.GetStep(), maxRowVersion.GetTxId()),
                         eggs.GarbageStats ? new NPage::TGarbageStats(*eggs.GarbageStats) : nullptr,
                         eggs.TxIdStats ? new NPage::TTxIdStatsPage(*eggs.TxIdStats) : nullptr,
+                        layout,
                     },
                     {
                         stat.HasBytes() ? stat.GetBytes() : 0,
@@ -152,18 +162,23 @@ namespace NTest {
                 indexHistoricPages.push_back(pageId);
             }
 
+            auto loadMeta = [](const NProto::TBTreeIndexMeta& proto) -> NPage::TBtreeIndexMeta {
+                ui32 lv1 = proto.HasLevelCount() ? proto.GetLevelCount() : Max<ui32>();
+                ui32 lv2 = proto.HasLevelCountV2() ? proto.GetLevelCountV2() : Max<ui32>();
+                auto rootType = (lv2 == 0 ? NPage::EPage::DataPage : NPage::EPage::BTreeIndexV2);
+                auto v1Root = proto.HasRootPageId()
+                    ? proto.GetRootPageId()
+                    : Max<TPageId>();
+                auto v2Root = proto.HasRootOffset()
+                    ? NPage::TBtreeIndexMeta::RootV2Location(proto.GetRootOffset(), proto.GetRootSize(), proto.GetRootCrc32(), rootType)
+                    : NPage::TPageLocation::Max();
+                return { v1Root, v2Root, proto.GetRowCount(), proto.GetDataSize(), proto.GetGroupDataSize(),
+                    proto.GetErasedRowCount(), lv1, lv2, proto.GetIndexSize() };
+            };
             TVector<NPage::TBtreeIndexMeta> BTreeGroupIndexes, BTreeHistoricIndexes;
             for (bool history : {false, true}) {
                 for (const auto &meta : history ? lay.GetBTreeHistoricIndexes() : lay.GetBTreeGroupIndexes()) {
-                    NPage::TBtreeIndexMeta converted{{
-                        meta.GetRootPageId(),
-                        meta.GetRowCount(),
-                        meta.GetDataSize(),
-                        meta.GetGroupDataSize(),
-                        meta.GetErasedRowCount()}, 
-                        meta.GetLevelCount(), 
-                        meta.GetIndexSize()};
-                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(converted);
+                    (history ? BTreeHistoricIndexes : BTreeGroupIndexes).push_back(loadMeta(meta));
                 }
             }
 
@@ -190,8 +205,9 @@ namespace NTest {
 
     class TWriterBundle : public IPageWriter {
     public:
-        TWriterBundle(size_t groups, const TLogoBlobID token)
-            : Groups(groups)
+        // Rooms of written stores are page collections of the part except outer, see TPartSlots
+        TWriterBundle(size_t slots, const TLogoBlobID token)
+            : Groups(slots)
             , CookieAllocator(new NPageCollection::TCookieAllocator(token.TabletID(),
                         (ui64(token.Generation()) << 32) | token.Step(),
                         { token.Cookie(), token.Cookie() + 1000 },
@@ -220,7 +236,7 @@ namespace NTest {
             return Back().WriteOuter(blob);
         }
 
-        TPageId Write(TSharedData page, EPage type, ui32 group) override
+        TPageLocation Write(TSharedData page, EPage type, ui32 group) override
         {
             return Back().Write(page, type, group);
         }
@@ -228,6 +244,11 @@ namespace NTest {
         void WriteInplace(TPageId page, TArrayRef<const char> body) override
         {
             Back().WriteInplace(page, body);
+        }
+
+        ui32 GetLastWrittenPageId(ui32 group) const noexcept override
+        {
+            return Store->GetLastWrittenPageId(group);
         }
 
         NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) override
@@ -283,7 +304,7 @@ namespace NTest {
                 const TLogoBlobID &token = TLogoBlobID(1, 2, 3, 1, 0, 0),
                 TEpoch epoch = TEpoch::Zero())
             : Scheme(rows)
-            , Pages(Scheme->Families.size(), token)
+            , Pages(TPartSlots(Scheme->Families.size(), opts.Layout).SlotsCount(), token)
         {
             auto tags = Scheme->Tags();
             auto *scheme = new TPartScheme(Scheme->Cols);

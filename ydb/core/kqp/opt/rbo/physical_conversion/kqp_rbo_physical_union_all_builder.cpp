@@ -5,34 +5,22 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 TExprNode::TPtr TPhysicalUnionAllBuilder::ProjectInput(TExprNode::TPtr input, ui32 childIndex) const {
-    const auto inputOutput = UnionAll->Children[childIndex]->GetOutputIUs();
-    const auto inputLiveOutput = NPhysicalConvertionUtils::GetLiveOutputIUs(*UnionAll->Children[childIndex]);
-    const auto inputLiveIn = NPhysicalConvertionUtils::GetLiveInputIUs(*UnionAll, childIndex);
-    const auto unionOutput = NPhysicalConvertionUtils::GetLiveOutputIUs(*UnionAll);
-    THashSet<TInfoUnit, TInfoUnit::THashFunction> inputLiveInSet;
-    inputLiveInSet.insert(inputLiveIn.begin(), inputLiveIn.end());
-
+    const auto& liveIn = GetLiveIn(&UnionAll, childIndex);
+    const auto outputs = NPhysicalConvertionUtils::GetLiveOutputIUs(UnionAll);
     TVector<std::pair<TString, TString>> renames;
-    renames.reserve(unionOutput.size());
-    // Extend inputs must have identical schemas.
-    bool identity = inputOutput.size() == unionOutput.size()
-        && inputLiveOutput.size() == unionOutput.size()
-        && inputLiveIn.size() == unionOutput.size();
-    for (size_t i = 0; i < unionOutput.size(); ++i) {
-        const auto& column = unionOutput[i];
-        Y_ENSURE(inputLiveInSet.contains(column), "UnionAll column " << column.GetFullName() << " is not visible");
-        renames.emplace_back(column.GetFullName(), column.GetFullName());
-        identity = identity && inputOutput[i] == column && inputLiveOutput[i] == column && inputLiveIn[i] == column;
+    renames.reserve(outputs.size());
+    // Each input exposes its own IDs. Normalize to the fresh UnionAll output
+    // IDs before Extend, including repeated inputs and zero-column rows.
+    for (const auto output : outputs) {
+        const auto source = UnionAll.GetColumns().Find(output)->Inputs.at(childIndex);
+        Y_ENSURE(liveIn.Contains(source), "UnionAll input ID " << source << " is not live");
+        renames.emplace_back(Names.Get(source), Names.Get(output));
     }
-
-    if (identity) {
-        return input;
-    }
-    return NPhysicalConvertionUtils::BuildRenameMap(input, renames, Ctx);
+    return NPhysicalConvertionUtils::BuildRenameMap(input, renames, Ctx, UnionAll.Ordered);
 }
 
 TExprNode::TPtr TPhysicalUnionAllBuilder::BuildPhysicalOp(const TVector<TExprNode::TPtr>& inputs) {
-    Y_ENSURE(inputs.size() == UnionAll->Children.size(), "UnionAll input count mismatch");
+    Y_ENSURE(inputs.size() == UnionAll.GetChildCount(), "UnionAll input count mismatch");
 
     TVector<TExprNode::TPtr> extendArgs;
     extendArgs.reserve(inputs.size());
@@ -40,7 +28,7 @@ TExprNode::TPtr TPhysicalUnionAllBuilder::BuildPhysicalOp(const TVector<TExprNod
         extendArgs.push_back(ProjectInput(inputs[childIndex], childIndex));
     }
 
-    if (UnionAll->Ordered) {
+    if (UnionAll.Ordered) {
         // clang-format off
         return Build<TCoOrderedExtend>(Ctx, Pos)
             .Add(extendArgs)

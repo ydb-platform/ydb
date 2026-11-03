@@ -46,6 +46,21 @@ namespace NKikimr {
             p->SetPDiskId(pdiskId);
             p->SetVSlotId(vslotId);
         }
+
+        // VDisk's report of a change of its chunk space color, see VDiskSpaceSequence; group generation is not set
+        // (the same way PDisk reports VDisk metrics), NodeWarden fills in the current one
+        TEvControllerUpdateDiskStatus(const TVDiskID& vDiskId, ui32 nodeId, ui32 pdiskId, ui32 vslotId, ui32 statusFlags,
+                ui64 vdiskSpaceSequence) {
+            Record.SetVDiskSpaceSequence(vdiskSpaceSequence);
+            NKikimrBlobStorage::TVDiskMetrics* metric = Record.AddVDisksMetrics();
+            VDiskIDFromVDiskID(vDiskId, metric->MutableVDiskId());
+            metric->MutableVDiskId()->ClearGroupGeneration();
+            metric->SetStatusFlags(statusFlags);
+            auto *p = metric->MutableVSlotId();
+            p->SetNodeId(nodeId);
+            p->SetPDiskId(pdiskId);
+            p->SetVSlotId(vslotId);
+        }
     };
 
     struct TEvBlobStorage::TEvControllerRegisterNode : public TEventPB<
@@ -571,6 +586,14 @@ namespace NKikimr {
             : VDiskId(std::move(vDiskId))
         {}
     };
+
+    struct TEvVRestorePart : TEventPB<TEvVRestorePart, NKikimrBlobStorage::TEvVRestorePart,
+            TEvBlobStorage::EvVRestorePart>
+    {};
+
+    struct TEvVRestorePartResult : TEventPB<TEvVRestorePartResult, NKikimrBlobStorage::TEvVRestorePartResult,
+            TEvBlobStorage::EvVRestorePartResult>
+    {};
 
     struct TEvNodeWardenQueryGroupInfo : TEventPB<TEvNodeWardenQueryGroupInfo, NKikimrBlobStorage::TEvNodeWardenQueryGroupInfo,
             TEvBlobStorage::EvNodeWardenQueryGroupInfo> {

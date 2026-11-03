@@ -90,7 +90,7 @@ public:
 
     virtual const char* Name() const override final { return "TCreateLock"; }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetLockConfig();
         const TTxId lockTxId = op.HasLockTxId()
@@ -203,7 +203,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
         context.SS->TabletCounters->Simple()[COUNTER_LOCKS_COUNT].Sub(1);
     }

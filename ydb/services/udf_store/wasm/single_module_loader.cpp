@@ -1,7 +1,6 @@
-#include "single_module_loader.h"
-
 #include "module_catalog.h"
 #include "registry_helpers.h"
+#include "single_module_loader.h"
 #include "types.h"
 
 #include <util/generic/yexception.h>
@@ -10,18 +9,13 @@ namespace NKikimr::NUdfStore::NWasm {
 
 TWasmModuleStatePtr BuildModuleStateFromManifest(const TWasmLoadParams& params) {
     if (params.ModuleObjectCode.empty()) {
-        ythrow yexception()
-            << "Precompiled object code is required for WASM UDF '"
-            << params.Manifest.ModuleName << "'";
+        ythrow yexception() << "Precompiled object code is required for WASM UDF '" << params.Manifest.ModuleName << "'";
     }
 
     auto artifact = std::make_shared<TWasmModuleArtifact>();
     artifact->ModuleName = params.Manifest.ModuleName;
     artifact->Manifest = params.Manifest;
-    artifact->ModuleBytecode = MakeModuleBytecode(
-        params.ModuleWasmData,
-        params.ModuleObjectCode,
-        params.ModuleFormat);
+    artifact->ModuleBytecode = MakeModuleBytecode(params.ModuleWasmData, params.ModuleObjectCode, params.ModuleFormat);
     artifact->Libraries = params.Libraries;
     GetWasmModuleCatalog().Register(artifact);
 
@@ -47,5 +41,4 @@ TWasmCompartmentStatePtr LoadWasmFromManifest(const TWasmLoadParams& params) {
     return BuildModuleStateFromManifest(params);
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
-
+}   // namespace NKikimr::NUdfStore::NWasm

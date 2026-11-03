@@ -1,0 +1,37 @@
+OpenTelemetry Semantic Conventions
+==================================
+
+|pypi|
+
+.. |pypi| image:: https://badge.fury.io/py/opentelemetry-semantic-conventions.svg
+   :target: https://pypi.org/project/opentelemetry-semantic-conventions/
+
+This library contains generated code for the semantic conventions defined by the OpenTelemetry specification.
+
+Installation
+------------
+
+::
+
+    pip install opentelemetry-semantic-conventions
+
+Code Generation
+---------------
+
+These files were generated automatically from code in semconv_.
+To regenerate the code, run ``../scripts/semconv/generate.sh``.
+
+To build against a new release or specific commit of opentelemetry-specification_,
+update the ``SPEC_VERSION`` variable in
+``../scripts/semconv/generate.sh``. Then run the script and commit the changes.
+
+.. _opentelemetry-specification: https://github.com/open-telemetry/opentelemetry-specification
+.. _semconv: https://github.com/open-telemetry/opentelemetry-python/tree/main/scripts/semconv
+
+
+References
+----------
+
+* `OpenTelemetry Project <https://opentelemetry.io/>`_
+* `OpenTelemetry Semantic Conventions Definitions <https://github.com/open-telemetry/semantic-conventions/blob/main/docs/README.md>`_
+* `generate.sh script <https://github.com/open-telemetry/opentelemetry-python/blob/main/scripts/semconv/generate.sh>`_

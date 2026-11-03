@@ -76,6 +76,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _DefaultCluster);
     REGISTER_SETTING(*this, _ResultRowsLimit);
     REGISTER_SETTING(*this, EnableSystemColumns);
+    REGISTER_SETTING(*this, EnableUnsafeTruncateTable);
     REGISTER_SETTING(*this, UseLlvm);
     REGISTER_SETTING(*this, EnableLlvm);
     REGISTER_SETTING(*this, HashJoinMode).Parser([](const TString& v) { return FromString<NDq::EHashJoinMode>(v); });
@@ -112,6 +113,9 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, EnableNewRBOPhysicalStagePeephole);
     REGISTER_SETTING(*this, BlockHashJoinSwapLeftJoinSides);
     REGISTER_SETTING(*this, EnableBlockHashJoinEqualNulls);
+    REGISTER_SETTING(*this, UseScalarHashJoin);
+    REGISTER_SETTING(*this, UseScalarHashJoinForMap);
+    REGISTER_SETTING(*this, EnableLookupJoinPointPrefixes);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
     REGISTER_SETTING(*this, DqChannelVersion);
@@ -120,6 +124,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, UseDqHashCombine);
     REGISTER_SETTING(*this, UseDqHashAggregate);
     REGISTER_SETTING(*this, DqHashOperatorsUseBlocks);
+    REGISTER_SETTING(*this, DqHashAggregationDescriptorVersion);
     REGISTER_SETTING(*this, DqHashCombineExportTypeInfo);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
@@ -158,7 +163,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, HybridSearchFactor);
     REGISTER_SETTING(*this, HybridSearchK);
     REGISTER_SETTING(*this, DisableCheckpoints);
-    REGISTER_SETTING(*this, EnableStreamingAggregation);
+    REGISTER_SETTING(*this, UseInMemoryStreamingAggregation);
     REGISTER_SETTING(*this, StreamingAggregationStateTablePath);
 
     REGISTER_SETTING(*this, DefaultTxMode).Parser(
@@ -398,6 +403,10 @@ bool TKikimrConfiguration::GetDqHashOperatorsUseBlocks() const {
     return DqHashOperatorsUseBlocks.Get().GetOrElse(TTableServiceConfig::GetDqHashOperatorsUseBlocks());
 }
 
+ui32 TKikimrConfiguration::GetDqHashAggregationDescriptorVersion() const {
+    return DqHashAggregationDescriptorVersion.Get().GetOrElse(TTableServiceConfig::GetDqHashAggregationDescriptorVersion());
+}
+
 bool TKikimrConfiguration::GetUseBlockHashJoin() const {
     return UseBlockHashJoin.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoin());
 }
@@ -406,8 +415,20 @@ bool TKikimrConfiguration::GetUseBlockHashJoinForCross() const {
     return UseBlockHashJoinForCross.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoinForCross());
 }
 
+bool TKikimrConfiguration::GetEnableLookupJoinPointPrefixes() const {
+    return EnableLookupJoinPointPrefixes.Get().GetOrElse(TTableServiceConfig::GetEnableLookupJoinPointPrefixes());
+}
+
 bool TKikimrConfiguration::GetEnableBlockHashJoinEqualNulls() const {
     return EnableBlockHashJoinEqualNulls.Get().GetOrElse(TTableServiceConfig::GetEnableBlockHashJoinEqualNulls());
+}
+
+bool TKikimrConfiguration::GetUseScalarHashJoin() const {
+    return UseScalarHashJoin.Get().GetOrElse(TTableServiceConfig::GetUseScalarHashJoin());
+}
+
+bool TKikimrConfiguration::GetUseScalarHashJoinForMap() const {
+    return UseScalarHashJoinForMap.Get().GetOrElse(TTableServiceConfig::GetUseScalarHashJoinForMap());
 }
 
 bool TKikimrConfiguration::GetEnableNewRBOPhysicalStagePeephole() const {

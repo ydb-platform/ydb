@@ -42,6 +42,8 @@ struct TJoinMetadata {
     TKeyTypes KeyTypes;
 };
 
+void EnsureNoPgTypes(TType* type);
+
 TKeyTypes KeyTypesFromColumns(const TMKQLVector<TType*>& types, const TMKQLVector<ui32>& keyIndexes);
 
 template <EJoinKind Kind> struct TRenamedOutput {
@@ -394,6 +396,8 @@ template <typename Source> class TInMemoryHashJoin {
     ui32 ResumeIndex_ = 0;
     size_t BuildCursor_ = 0;
 };
+
+constexpr size_t PrefetchBatchRows = 32;
 
 template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class THybridHashJoin {
     struct Logger {
@@ -870,9 +874,42 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
                 ui32 idx = 0;
-                for (TSingleTuple tuple : *state.FetchedPack) {
+                const TPackResult& fetchedPack = *state.FetchedPack;
+                const size_t packWidth = fetchedPack.NTuples ? fetchedPack.PackedTuples.size() / fetchedPack.NTuples : 0;
+                std::array<const TTable*, PrefetchBatchRows> batchTables;
+                ui32 batchEnd = 0;
+                auto prefetchBatch = [&](ui32 first) {
+                    const ui32 count = std::min<ui32>(PrefetchBatchRows, fetchedPack.NTuples - first);
+                    const ui8* rows[PrefetchBatchRows];
+                    for (ui32 i = 0; i < count; ++i) {
+                        const TSingleTuple ahead{fetchedPack.PackedTuples.data() + packWidth * (first + i),
+                                                 fetchedPack.Overflow.data()};
+                        rows[i] = ahead.PackedData;
+                        batchTables[i] = std::get_if<TTable>(&state.Spiller.GetState().Buckets[Settings.BucketIndex(ahead)]);
+                        if (batchTables[i]) {
+                            batchTables[i]->PrefetchDirectory(rows[i]);
+                        }
+                    }
+                    for (ui32 i = 0; i < count; ++i) {
+                        if (batchTables[i]) {
+                            batchTables[i]->PrefetchBuffer(rows[i]);
+                        }
+                    }
+                    for (ui32 i = 0; i < count; ++i) {
+                        if (batchTables[i]) {
+                            batchTables[i]->PrefetchTuple(rows[i]);
+                        }
+                    }
+                    batchEnd = first + count;
+                };
+                for (TSingleTuple tuple : fetchedPack) {
                     if (idx++ < state.ResumeIndex) {
                         continue;
+                    }
+                    if constexpr (!IsGrid) {
+                        if (idx > batchEnd) {
+                            prefetchBatch(idx - 1);
+                        }
                     }
                     if constexpr (IsGrid) {
                         if (!MatchGridRowInMemory(state, tuple, lookupToTable, finishProbeRow, isFull)) {
@@ -1246,7 +1283,8 @@ TResult* DispatchHashJoinByKind(EJoinKind kind, ESide preservedSide, bool isGrid
     using enum EJoinKind;
     switch (kind) {
     case Inner:
-        return new Wrapper<TPhysicalJoin{Inner}>(std::forward<Args>(args)...);
+        return DispatchHashJoinByMode<Wrapper, TResult, Inner>(preservedSide, isGrid,
+                                                               std::forward<Args>(args)...);
     case LeftOnly:
         return DispatchHashJoinByMode<Wrapper, TResult, LeftOnly>(preservedSide, isGrid,
                                                                   std::forward<Args>(args)...);
@@ -1257,12 +1295,57 @@ TResult* DispatchHashJoinByKind(EJoinKind kind, ESide preservedSide, bool isGrid
         return DispatchHashJoinByMode<Wrapper, TResult, Left>(preservedSide, isGrid,
                                                               std::forward<Args>(args)...);
     case Cross:
-        return new Wrapper<TPhysicalJoin{Cross}>(std::forward<Args>(args)...);
+        return DispatchHashJoinByMode<Wrapper, TResult, Cross>(preservedSide, isGrid,
+                                                               std::forward<Args>(args)...);
     default:
         break;
     }
     MKQL_ENSURE(false, unsupportedMessage);
     Y_UNREACHABLE();
+}
+
+template <typename TInputTypes, typename TKeyCols>
+void ApplyLeftBuildSwap(bool leftIsBuild, TSides<TInputTypes>& inputTypes, TSides<TKeyCols>& keyColumns,
+                        TDqRenames<ESide>& renames) {
+    if (!leftIsBuild) {
+        return;
+    }
+    std::swap(inputTypes.Build, inputTypes.Probe);
+    std::swap(keyColumns.Build, keyColumns.Probe);
+    for (auto& rename : renames) {
+        rename.Side = OtherSide(rename.Side);
+    }
+}
+
+inline ESide PreservedSideForLeftBuild(bool leftIsBuild) {
+    return leftIsBuild ? ESide::Build : ESide::Probe;
+}
+
+template <typename T>
+TSides<T> SidesForLeftBuild(bool leftIsBuild, T left, T right) {
+    if (leftIsBuild) {
+        return {.Build = std::move(left), .Probe = std::move(right)};
+    }
+    return {.Build = std::move(right), .Probe = std::move(left)};
+}
+
+inline TJoinFilters ParseJoinFiltersForBuildSide(const TComputationNodeFactoryContext& ctx, TCallable& callable,
+                                                 ui32 firstInput, bool leftIsBuild) {
+    TJoinFilters filters = ParseJoinFilters(ctx, callable, firstInput);
+    if (leftIsBuild) {
+        filters.SwapSides();
+    }
+    return filters;
+}
+
+inline TVector<ui32> EqualNullsInputColumns(const TVector<ui32>& equalNullsKeys, const TVector<ui32>& keyColumns) {
+    TVector<ui32> columns;
+    columns.reserve(equalNullsKeys.size());
+    for (ui32 joinKeyIdx : equalNullsKeys) {
+        MKQL_ENSURE(joinKeyIdx < keyColumns.size(), "EqualNulls key index is out of range");
+        columns.push_back(keyColumns[joinKeyIdx]);
+    }
+    return columns;
 }
 
 template <typename TKeyCols, typename TInputTypes>
@@ -1436,6 +1519,15 @@ EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, Ou
     }
     onFlush(output.Flush());
     return EFetchResult::One;
+}
+
+inline NYql::NUdf::TCounter MakeJoinOutputRowsCounter(TComputationContext& ctx) {
+    if (!ctx.CountersProvider) {
+        return {};
+    }
+    // id will be assigned externally in future versions
+    const TString id = TString(Operator_Join) + "0";
+    return ctx.CountersProvider->GetCounter(id, Counter_OutputRows, /*deriv=*/false);
 }
 
 } // namespace NKikimr::NMiniKQL

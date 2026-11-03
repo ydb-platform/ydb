@@ -249,6 +249,13 @@ IGraphTransformer::TStatus MatchRecognizeParamsWrapper(const TExprNode::TPtr& in
         return IGraphTransformer::TStatus::Error;
     }
     const auto measures = input->Child(0);
+    if (!measures->GetTypeAnn()) {
+        YQL_ENSURE(measures->Type() == TExprNode::Lambda);
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(measures->Pos()),
+            "Expected MatchRecognizeMeasures, but got lambda"));
+        return IGraphTransformer::TStatus::Error;
+    }
     input->SetTypeAnn(measures->GetTypeAnn());
     return IGraphTransformer::TStatus::Ok;
 }
@@ -386,6 +393,10 @@ IGraphTransformer::TStatus MatchRecognizeDefinesWrapper(const TExprNode::TPtr& i
         }
         if (!lambda->GetTypeAnn()) {
             return IGraphTransformer::TStatus::Repeat;
+        }
+        if (lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(lambda->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
         }
         if (!IsBoolLike(*lambda->GetTypeAnn())) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(lambda->Pos()), "DEFINE expression must be a predicate"));

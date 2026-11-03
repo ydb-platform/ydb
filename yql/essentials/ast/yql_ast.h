@@ -83,12 +83,12 @@ struct TAstNode {
         return Type_ == List && ListCount_ == len;
     }
 
-    inline TPosition GetPosition() const {
+    inline const TPosition& GetPosition() const {
         return Position_;
     }
 
     inline void SetPosition(TPosition position) {
-        Position_ = position;
+        Position_ = std::move(position);
     }
 
     inline TStringBuf GetContent() const {
@@ -152,14 +152,14 @@ struct TAstNode {
     static inline TAstNode* NewAtom(TPosition position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {
         auto poolContent = pool.AppendString(content);
         auto ret = pool.Allocate<TAstNode>();
-        ::new (ret) TAstNode(position, poolContent, flags);
+        ::new (ret) TAstNode(std::move(position), poolContent, flags);
         return ret;
     }
 
     // atom with non-owning content, useful for literal strings
     static inline TAstNode* NewLiteralAtom(TPosition position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {
         auto ret = pool.Allocate<TAstNode>();
-        ::new (ret) TAstNode(position, content, flags);
+        ::new (ret) TAstNode(std::move(position), content, flags);
         return ret;
     }
 
@@ -179,30 +179,30 @@ struct TAstNode {
         }
 
         auto ret = pool.Allocate<TAstNode>();
-        ::new (ret) TAstNode(position, poolChildren, childrenCount);
+        ::new (ret) TAstNode(std::move(position), poolChildren, childrenCount);
         return ret;
     }
 
     template <typename... TNodes>
     static inline TAstNode* NewList(TPosition position, TMemoryPool& pool, TNodes... nodes) {
         std::array<TAstNode*, sizeof...(TNodes)> children = {nodes...};
-        return NewList(position, children.data(), sizeof...(nodes), pool);
+        return NewList(std::move(position), children.data(), sizeof...(nodes), pool);
     }
 
     static inline TAstNode* NewList(TPosition position, TMemoryPool& pool) {
-        return NewList(position, /*children=*/nullptr, 0, pool);
+        return NewList(std::move(position), /*children=*/nullptr, 0, pool);
     }
 
     static TAstNode QuoteAtom;
 
     static inline TAstNode* Quote(TPosition position, TMemoryPool& pool, TAstNode* node) {
-        return NewList(position, pool, &QuoteAtom, node);
+        return NewList(std::move(position), pool, &QuoteAtom, node);
     }
 
     inline ~TAstNode() = default;
 
     void Destroy() {
-        TString().swap(Position_.File);
+        TCowString().swap(Position_.File);
     }
 
 private:

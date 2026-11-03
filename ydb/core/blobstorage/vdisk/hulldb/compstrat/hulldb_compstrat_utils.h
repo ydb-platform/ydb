@@ -150,7 +150,8 @@ namespace NKikimr {
                     const typename TTask::TCompactSsts &compactSsts,
                     ui32 chunkSize,
                     ui32 appendBlockSize = 0,
-                    ui32 stripeSstBytes = 0)
+                    ui32 stripeSstBytes = 0,
+                    TCompactionYield* yield = nullptr)
             {
                 if (PlaceOutputInStripe(appendBlockSize, stripeSstBytes)) {
                     return 0;
@@ -159,6 +160,7 @@ namespace NKikimr {
                 TLeveledSstsIterator it(&compactSsts.TablesToDelete);
                 it.SeekToFirst();
                 while (it.Valid()) {
+                    CheckCompactionYield(yield);
                     keepBytes += SstKeepBytes(*it.Get().SstPtr);
                     it.Next();
                 }
@@ -172,13 +174,15 @@ namespace NKikimr {
                     const typename TTask::TCompactSsts &compactSsts,
                     ui32 chunkSize,
                     ui32 appendBlockSize = 0,
-                    ui32 stripeSstBytes = 0)
+                    ui32 stripeSstBytes = 0,
+                    TCompactionYield* yield = nullptr)
             {
                 typename TTask::TSpaceForecast forecast;
                 ui64 keepBytes = 0;
                 TLeveledSstsIterator it(&compactSsts.TablesToDelete);
                 it.SeekToFirst();
                 while (it.Valid()) {
+                    CheckCompactionYield(yield);
                     const TLevelSegment &sst = *it.Get().SstPtr;
                     keepBytes += SstKeepBytes(sst);
                     forecast.InputChunks += SstInputChunks(sst);
@@ -217,10 +221,10 @@ namespace NKikimr {
                     ui32 level,
                     typename TSegments::const_iterator first,
                     typename TSegments::const_iterator last,
-                    typename TTask::TCompactSsts &compactSsts)
+                    typename TTask::TCompactSsts &compactSsts, TCompactionYield* yield = nullptr)
             {
                 compactSsts.TargetLevel = level;
-                compactSsts.PushSstFromLevelX(level, first, last);
+                compactSsts.PushSstFromLevelX(level, first, last, yield);
                 PreserveLastCompactedKey(sliceSnap, level, compactSsts);
             }
 

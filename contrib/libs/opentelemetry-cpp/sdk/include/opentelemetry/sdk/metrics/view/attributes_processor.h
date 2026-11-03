@@ -3,13 +3,14 @@
 
 #pragma once
 
-#include <cstring>
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "opentelemetry/common/attribute_value.h"
 #include "opentelemetry/common/key_value_iterable.h"
+#include "opentelemetry/nostd/function_ref.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/common/custom_hash_equality.h"
 #include "opentelemetry/sdk/metrics/state/filtered_ordered_attribute_map.h"
@@ -23,11 +24,10 @@ namespace metrics
 
 using MetricAttributes = opentelemetry::sdk::metrics::FilteredOrderedAttributeMap;
 
-typedef std::unordered_map<std::string,
-                           bool,
-                           opentelemetry::sdk::common::StringViewHash,
-                           opentelemetry::sdk::common::StringViewEqual>
-    FilterAttributeMap;
+using FilterAttributeMap = std::unordered_map<std::string,
+                                              bool,
+                                              opentelemetry::sdk::common::StringViewHash,
+                                              opentelemetry::sdk::common::StringViewEqual>;
 
 /**
  * The AttributesProcessor is responsible for customizing which
@@ -160,6 +160,30 @@ public:
 
 private:
   FilterAttributeMap exclude_list_;
+};
+
+/**
+ * IncludeExcludeAttributesProcessor filters attributes using wildcard include and exclude
+ * patterns. Exclude patterns take precedence over include patterns.
+ */
+class OPENTELEMETRY_EXPORT IncludeExcludeAttributesProcessor final : public AttributesProcessor
+{
+public:
+  IncludeExcludeAttributesProcessor(bool include_all,
+                                    std::vector<std::string> included_patterns,
+                                    std::vector<std::string> excluded_patterns);
+
+  MetricAttributes process(
+      const opentelemetry::common::KeyValueIterable &attributes) const noexcept override;
+
+  bool isPresent(nostd::string_view key) const noexcept override;
+
+private:
+  static bool MatchesAny(const std::vector<std::string> &patterns, nostd::string_view key) noexcept;
+
+  bool include_all_{true};
+  std::vector<std::string> included_patterns_;
+  std::vector<std::string> excluded_patterns_;
 };
 
 }  // namespace metrics

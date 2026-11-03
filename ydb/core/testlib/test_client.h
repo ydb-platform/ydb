@@ -154,6 +154,7 @@ namespace Tests {
         bool EnableConfigsDispatcher = true;
         bool EnableFeatureFlagsConfigurator = false;
         bool UseRealThreads = true;
+        bool UseRealInterconnect = false;
         bool EnableKqpSpilling = false;
         bool EnableYq = false;
         bool EnableYqGrpc = false;
@@ -226,6 +227,7 @@ namespace Tests {
         TServerSettings& SetEnableConfigsDispatcher(bool value) { EnableConfigsDispatcher = value; return *this; }
         TServerSettings& SetEnableFeatureFlagsConfigurator(bool value) { EnableFeatureFlagsConfigurator = value; return *this; }
         TServerSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; }
+        TServerSettings& SetUseRealInterconnect(bool value) { UseRealInterconnect = value; return *this; }
         TServerSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = std::make_shared<NKikimrConfig::TAppConfig>(value); return *this; }
         TServerSettings& InitKikimrRunConfig() { KikimrRunConfig = std::make_shared<TKikimrRunConfig>(*AppConfig); return *this; }
         TServerSettings& SetKeyFor(ui32 nodeId, TString keyValue) { NodeKeys[nodeId] = keyValue; return *this; }
@@ -431,7 +433,10 @@ namespace Tests {
         // actors are gone; otherwise, lingering gRPC contexts or
         // background operations can cause the gRPC client to hang
         // or trigger use-after-free during its destruction.
+        // Slots below are cleared before Runtime is destroyed, so those
+        // callbacks log to stderr instead of a freed TActorSystem.
         std::shared_ptr<NYdb::TDriver> FederatedQuerySetupDriver_;
+        TVector<NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr> FederatedQuerySetupActorSystems_;
         THolder<TTestActorRuntime> Runtime;
         THolder<NYdb::TDriver> Driver;
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;

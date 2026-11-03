@@ -4,30 +4,24 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
-    const auto inputColumns = NPhysicalConvertionUtils::GetLiveInputIUs(*Filter, 0);
+NPhysicalConvertionUtils::TStageBody TPhysicalFilterBuilder::BuildPhysicalOp(const NPhysicalConvertionUtils::TStageBody& input) {
+    const auto inputColumns = NPhysicalConvertionUtils::GetLiveInputIUs(Filter, 0);
 
-    // clang-format off
-    input = Build<TCoToFlow>(Ctx, Pos)
-        .Input(input)
-    .Done().Ptr();
-    // clang-format on
-
-    input = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputColumns, Ctx);
+    auto wideInput = input.AsWide(inputColumns, Ctx, Names);
 
     THashMap<TString, ui32> colNamesToIndices;
     TVector<TExprNode::TPtr> lambdaArgs;
 
     for (ui32 i = 0; i < inputColumns.size(); ++i) {
         lambdaArgs.push_back(Ctx.NewArgument(Pos, "arg_" + ToString(i)));
-        colNamesToIndices.emplace(inputColumns[i].GetFullName(), i);
+        colNamesToIndices.emplace(Names.Get(inputColumns[i]), i);
     }
 
-    auto lambda = TCoLambda(Filter->GetFilterExpression().Node);
+    auto lambda = TCoLambda(Filter.GetFilterExpression().Node);
     auto lambdaBody = lambda.Body().Ptr();
 
     auto isMember = [&](const TExprNode::TPtr& node) -> bool {
-        if (node->IsCallable("Member")) {
+        if (node->IsCallable("Member") && &node->Head() == lambda.Args().Arg(0).Raw()) {
             return true;
         }
         return false;
@@ -36,7 +30,7 @@ TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     TNodeOnNodeOwnedMap replaces;
     auto members = FindNodes(lambdaBody, isMember);
     for (const auto& member : members) {
-        const auto colName = TString(TCoMember(member).Name().StringValue());
+        const auto colName = Names.Get(GetMemberId(*member));
         auto it = colNamesToIndices.find(colName);
         Y_ENSURE(it != colNamesToIndices.end(), colName + " column not found.");
         replaces[member.Get()] = lambdaArgs[it->second];
@@ -56,21 +50,15 @@ TExprNode::TPtr TPhysicalFilterBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     auto wideLambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, std::move(lambdaArgs)), {lambdaResult});
 
     // clang-format off
-    input = Build<TCoWideFilter>(Ctx, Pos)
-        .Input(input)
+    auto output = Build<TCoWideFilter>(Ctx, Pos)
+        .Input(wideInput)
         .Lambda(std::move(wideLambda))
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, inputColumns, NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(*Filter)), Ctx);
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical filter] " << KqpExprToPrettyString(TExprBase(output), Ctx);
 
-    // clang-format off
-    input = Build<TCoFromFlow>(Ctx, Pos)
-        .Input(input)
-    .Done().Ptr();
-    // clang-format on
-
-    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical filter] " << KqpExprToPrettyString(TExprBase(input), Ctx);
-
-    return input;
+    // WideFilter passes every input slot through, so drop the ones that are dead past this operator.
+    return NPhysicalConvertionUtils::BuildLiveWideBody(output, NPhysicalConvertionUtils::GetFullNames(inputColumns, Names),
+        NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(Filter), Names), Ctx);
 }

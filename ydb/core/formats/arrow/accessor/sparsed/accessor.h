@@ -86,6 +86,15 @@ public:
         }
     }
 
+    void VisitDistinctValues(const IChunkedArray::TValuesSimpleVisitor& visitor) const {
+        if (GetNotDefaultRecordsCount() < GetRecordsCount()) {
+            visitor(DefaultsArray);
+        }
+        if (GetNotDefaultRecordsCount()) {
+            visitor(ColValue);
+        }
+    }
+
     ui32 GetFinishPosition() const {
         return RecordsCount;
     }
@@ -141,11 +150,15 @@ private:
         Record.VisitValues(visitor);
     }
 
+    virtual void DoVisitDistinctValues(const IChunkedArray::TValuesSimpleVisitor& visitor) const override {
+        Record.VisitDistinctValues(visitor);
+    }
+
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override {
         if (Record.GetNotDefaultRecordsCount()) {
             return false;
         } else {
-            value = DefaultValue;
+            value = DefaultValue ? DefaultValue : arrow::MakeNullScalar(GetDataType());
             return true;
         }
     }
@@ -155,6 +168,10 @@ protected:
 
     virtual ui32 DoGetNullsCount() const override {
         return Record.GetNullsCount();
+    }
+    virtual std::optional<bool> DoHasNulls() const override {
+        return ((!DefaultValue || !DefaultValue->is_valid) && Record.GetNotDefaultRecordsCount() < GetRecordsCount()) ||
+            Record.GetColValue()->null_count() != 0;
     }
     virtual ui32 DoGetValueRawBytes() const override {
         return Record.GetValueRawBytes();

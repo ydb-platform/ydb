@@ -13,6 +13,7 @@ ENDIF()
 
 SRCS(
     channel_scheduler.h
+    event_destructor.h
     event_filter.h
     event_holder_pool.h
     events_local.h
@@ -50,6 +51,8 @@ SRCS(
     interconnect_tcp_session_v2.cpp
     interconnect_tcp_session_v2.h
     interconnect_uring_engine.h
+    interconnect_uring_engine_client.cpp
+    interconnect_uring_engine_client.h
     interconnect_zc_processor.cpp
     interconnect_zc_processor.h
     load.cpp
@@ -95,7 +98,6 @@ PEERDIR(
     contrib/libs/openssl
     contrib/libs/xxhash
     ydb/library/actors/core
-    ydb/library/actors/dnscachelib
     ydb/library/actors/dnsresolver
     ydb/library/actors/helpers
     ydb/library/actors/interconnect/address
@@ -116,7 +118,6 @@ PEERDIR(
     library/cpp/monlib/service/pages/resources
     library/cpp/monlib/service/pages/tablesorter
     library/cpp/openssl/init
-    library/cpp/packedtypes
 )
 
 END()

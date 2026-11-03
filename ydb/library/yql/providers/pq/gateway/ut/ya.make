@@ -4,6 +4,7 @@ SIZE(MEDIUM)
 
 SRCS(
     composite_client_ut.cpp
+    message_stream_client_ut.cpp
 )
 
 PEERDIR(
@@ -12,6 +13,7 @@ PEERDIR(
     ydb/library/testlib/pq_helpers
     ydb/library/yql/providers/pq/async_io
     ydb/library/yql/providers/pq/gateway/clients/composite
+    ydb/library/yql/providers/pq/gateway/clients/message_stream
     yql/essentials/sql/pg_dummy
 )
 

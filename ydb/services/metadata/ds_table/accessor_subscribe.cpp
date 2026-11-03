@@ -1,4 +1,5 @@
 #include "accessor_subscribe.h"
+
 #include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
@@ -40,7 +41,7 @@ void TDSAccessorNotifier::Handle(TEvUnsubscribe::TPtr& ev) {
 
 void TDSAccessorNotifier::OnSnapshotRefresh() {
     auto snapshot = GetCurrentSnapshot();
-    for (auto it = Asked.begin(); it != Asked.end(); ) {
+    for (auto it = Asked.begin(); it != Asked.end();) {
         if (it->first <= snapshot->GetActuality()) {
             if (!snapshot) {
                 YDB_LOG_ERROR("Cannot construct snapshot on refresh");
@@ -64,4 +65,4 @@ void TDSAccessorNotifier::OnBootstrap() {
     UnsafeBecome(&TDSAccessorNotifier::StateMain);
 }
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

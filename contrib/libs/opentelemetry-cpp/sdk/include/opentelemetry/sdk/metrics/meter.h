@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -156,7 +157,7 @@ private:
       InstrumentDescriptor &instrument_descriptor);
   std::unique_ptr<AsyncWritableMetricStorage> RegisterAsyncMetricStorage(
       InstrumentDescriptor &instrument_descriptor);
-  opentelemetry::common::SpinLockMutex storage_lock_;
+  std::mutex storage_lock_;
 
   static opentelemetry::metrics::NoopMeter kNoopMeter;
 

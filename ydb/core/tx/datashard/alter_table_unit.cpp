@@ -1,9 +1,8 @@
 #include "datashard_impl.h"
+#include "cdc_schema_change.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
-
-#include <ydb/library/aclib/user_context.h>
 
 #include <utility>
 
@@ -41,10 +40,11 @@ TMap<TFamilyKey, TFamilySettings> FamilySettings(const TUserTable& table) {
 
     for (const auto& [id, family] : table.Families) {
         const auto key = FamilyKey(table, id);
+        const auto& data = family.StorageConfig.GetData();
         const TFamilySettings settings{
             .Codec = family.Codec,
             .CacheMode = family.CacheMode,
-            .DataPoolKind = family.StorageConfig.GetData().GetPreferredPoolKind(),
+            .DataPoolKind = data.GetAllowOtherKinds() ? TString{} : data.GetPreferredPoolKind(),
         };
 
         if (key == TFamilyKey{"default", 0}) {
@@ -254,34 +254,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     }
 
     if (schemaChanged) {
-        NIceDb::TNiceDb db(txc.DB);
-
-        for (const auto& streamPathId : newInfo->GetSchemaChangesCdcStreams()) {
-            auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::CdcSchemaChange)
-                .WithOrder(DataShard.AllocateChangeRecordOrder(db))
-                .WithGroup(0)
-                .WithStep(op->GetStep())
-                .WithTxId(op->GetTxId())
-                .WithPathId(streamPathId)
-                .WithTableId(tableId)
-                .WithSchemaVersion(newInfo->GetTableSchemaVersion())
-                .WithUserCtx(NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID).Build())
-                .Build();
-
-            const auto& record = *recordPtr;
-            DataShard.PersistChangeRecord(db, record);
-
-            op->ChangeRecords().push_back(IDataShardChangeCollector::TChange{
-                .Order = record.GetOrder(),
-                .Group = record.GetGroup(),
-                .Step = record.GetStep(),
-                .TxId = record.GetTxId(),
-                .PathId = record.GetPathId(),
-                .BodySize = 0,
-                .TableId = record.GetTableId(),
-                .SchemaVersion = record.GetSchemaVersion(),
-            });
-        }
+        PersistCdcSchemaChange(DataShard, txc, op, tableId, *newInfo);
     }
 
     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);

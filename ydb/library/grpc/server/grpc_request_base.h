@@ -11,6 +11,8 @@ class ByteBuffer;
 
 namespace NYdbGrpc {
 
+struct ICounterBlock;
+
 extern const char* GRPC_USER_AGENT_HEADER;
 
 struct TAuthState {
@@ -101,6 +103,9 @@ public:
 
     //! Use validated database name for counters
     virtual void UseDatabase(const TString& database) = 0;
+
+    //! Returns a borrowed counter block owned by this context, if available
+    virtual ICounterBlock* GetCounterBlock() const { return nullptr; }
 
     // Streaming part
 

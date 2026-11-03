@@ -1,5 +1,7 @@
 PY23_LIBRARY()
 
+STYLE_PYTHON()
+
 PY_SRCS(
     control_plane.py
     data_plane.py

@@ -1,4 +1,6 @@
-IF (SANITIZER_TYPE AND AUTOCHECK)
+IF (NOT OS_LINUX)
+
+ELSEIF (SANITIZER_TYPE AND AUTOCHECK)
 
 ELSE()
 
@@ -9,12 +11,12 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 SRCS(
     ../device_test_tool_ut.cpp
-    device_test_tool_cli_ut.cpp
 )
 
 PEERDIR(
     ydb/apps/version
     ydb/core/load_test/ddisk
+    ydb/library/pdisk_io
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
     yql/essentials/minikql/comp_nodes/llvm16

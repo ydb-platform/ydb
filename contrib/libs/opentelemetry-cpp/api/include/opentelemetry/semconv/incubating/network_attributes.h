@@ -49,7 +49,7 @@ static constexpr const char *kNetworkConnectionState = "network.connection.state
 
 /**
   This describes more details regarding the connection.type. It may be the type of cell technology
-  connection, but it could be used for describing details about a wifi connection.
+  connection, but it could be used for describing details about a Wi-Fi connection.
  */
 static constexpr const char *kNetworkConnectionSubtype = "network.connection.subtype";
 
@@ -71,7 +71,7 @@ static constexpr const char *kNetworkInterfaceName = "network.interface.name";
 static constexpr const char *kNetworkIoDirection = "network.io.direction";
 
 /**
-  Local address of the network connection - IP address or Unix domain socket name.
+  Local address of the network connection - IP address or UNIX domain socket name.
  */
 static constexpr const char *kNetworkLocalAddress = "network.local.address";
 
@@ -81,7 +81,7 @@ static constexpr const char *kNetworkLocalAddress = "network.local.address";
 static constexpr const char *kNetworkLocalPort = "network.local.port";
 
 /**
-  Peer address of the network connection - IP address or Unix domain socket name.
+  Peer address of the network connection - IP address or UNIX domain socket name.
  */
 static constexpr const char *kNetworkPeerAddress = "network.peer.address";
 
@@ -260,7 +260,9 @@ static constexpr const char *kLteCa = "lte_ca";
 
 namespace NetworkConnectionTypeValues
 {
-
+/**
+  Wi-Fi
+ */
 static constexpr const char *kWifi = "wifi";
 
 static constexpr const char *kWired = "wired";
@@ -300,7 +302,7 @@ static constexpr const char *kUdp = "udp";
 static constexpr const char *kPipe = "pipe";
 
 /**
-  Unix domain socket
+  UNIX domain socket
  */
 static constexpr const char *kUnix = "unix";
 

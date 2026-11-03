@@ -178,7 +178,7 @@ class TMoveLocalIndex: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& moving = Transaction.GetMoveIndex();
@@ -370,7 +370,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
           YDB_LOG_NOTICE_CTX(context.Ctx, "");
       }
 

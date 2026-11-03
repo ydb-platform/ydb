@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yqlrun_lib.cpp
@@ -28,7 +28,5 @@ ELSE()
        yqlrun_lib_no_spark.cpp
     )
 ENDIF()
-
-YQL_LAST_ABI_VERSION()
 
 END()

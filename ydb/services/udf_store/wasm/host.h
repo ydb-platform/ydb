@@ -9,4 +9,4 @@ void EnsureUdfHostIntrinsicsRegistered();
 //! Keep bridge intrinsic statics linked (called from EnsureUdfHostIntrinsicsRegistered).
 void KeepBridgeHostIntrinsicsLinked();
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

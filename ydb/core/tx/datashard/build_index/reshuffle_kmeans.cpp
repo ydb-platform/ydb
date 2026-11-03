@@ -101,6 +101,7 @@ protected:
 
     std::unique_ptr<IClusters> Clusters;
     std::vector<std::pair<ui32, double>> TmpClusters;
+    std::vector<bool> EmptyClusters;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -154,6 +155,8 @@ public:
         ScanTags = MakeScanTags(table, embedding, data, toBuild, EmbeddingPos, DataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
         OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data, {}, OutForeign));
+
+        EmptyClusters.resize(Clusters->GetClusters().size(), true);
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
@@ -198,6 +201,11 @@ public:
             YDB_LOG_NOTICE("Scan completed successfully",
                 {"debug", Debug()},
                 {"responseRecord", Response->Record.ShortDebugString()});
+            for (ui32 pos = 0; pos < EmptyClusters.size(); pos++) {
+                if (EmptyClusters[pos]) {
+                    record.AddEmptyClusters(pos);
+                }
+            }
         } else {
             YDB_LOG_ERROR("Scan failed",
                 {"debug", Debug()},
@@ -324,6 +332,11 @@ protected:
                 record.SetRequestSeqNoRound(Response->Record.GetRequestSeqNoRound());
                 record.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
                 record.SetLastKeyAck(LastAckedKey.GetBuffer());
+                for (ui32 pos = 0; pos < EmptyClusters.size(); pos++) {
+                    if (EmptyClusters[pos]) {
+                        record.AddEmptyClusters(pos);
+                    }
+                }
                 Send(ResponseActorId, progress.Release());
             }
             Driver->Touch(EScan::Feed);
@@ -394,11 +407,13 @@ protected:
                 foreign = row.at(IsForeignPos).AsValue<bool>();
             }
             for (auto& [pos, distance]: TmpClusters) {
+                EmptyClusters[pos] = false;
                 AddRowToDataWithForeign(*OutputBuf, Child + pos, sourcePk, dataColumns, origKey, foreign, distance, isPostingLevel);
                 foreign = true;
             }
         } else {
             for (auto& [pos, _]: TmpClusters) {
+                EmptyClusters[pos] = false;
                 AddRowToData(*OutputBuf, Child + pos, sourcePk, dataColumns, origKey, isPostingLevel);
             }
         }

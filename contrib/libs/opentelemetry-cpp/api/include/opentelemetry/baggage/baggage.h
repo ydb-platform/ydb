@@ -142,7 +142,7 @@ public:
         value    = value.substr(0, metadata_separator);
       }
 
-      bool err       = 0;
+      bool err       = false;
       auto key_str   = UrlDecode(common::StringUtil::Trim(key), err);
       auto value_str = UrlDecode(common::StringUtil::Trim(value), err);
 
@@ -264,7 +264,7 @@ private:
       {
         if (i + 2 >= str.size() || !IsHex(str[i + 1]) || !IsHex(str[i + 2]))
         {
-          err = 1;
+          err = true;
           return "";
         }
         ret.push_back(static_cast<char>(from_hex(str[i + 1]) << 4 | from_hex(str[i + 2])));
@@ -286,7 +286,7 @@ private:
       }
       else
       {
-        err = 1;
+        err = true;
         return "";
       }
     }

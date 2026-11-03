@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.28.0)
+VERSION(1.29.0)
 
-ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-cpp/archive/v1.28.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-cpp/archive/v1.29.0.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/libs/opentelemetry-cpp/api/include

@@ -56,8 +56,9 @@ void TTopicWorkloadWriterProducer::Send(const TInstant& createTimestamp,
 }
 
 void TTopicWorkloadWriterProducer::Close() {
-    if (WriteSession_)
-        WriteSession_->Close(TDuration::Zero());
+    if (auto session = std::move(WriteSession_)) {
+        session->Close(TDuration::Zero());
+    }
 }
 
 

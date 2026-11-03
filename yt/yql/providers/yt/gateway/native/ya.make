@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_exec_ctx.cpp
@@ -65,8 +65,6 @@ PEERDIR(
     yt/yql/providers/yt/lib/config_clusters
     yt/yql/providers/yt/provider
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

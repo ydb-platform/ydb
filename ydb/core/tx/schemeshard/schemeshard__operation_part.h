@@ -98,7 +98,6 @@ public:
     TSchemeShard* SS;
     const TActorContext& Ctx;
     TSideEffects& OnComplete;
-    TMemoryChanges& MemChanges;
     TStorageChanges& DbChanges;
 
     TMaybe<NACLib::TUserToken> UserToken;
@@ -115,12 +114,11 @@ public:
     TOperationContext(
             TSchemeShard* ss,
             NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
-            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange,
+            TSideEffects& onComplete, TStorageChanges& dbChange,
             TMaybe<NACLib::TUserToken>&& userToken)
         : SS(ss)
         , Ctx(ctx)
         , OnComplete(onComplete)
-        , MemChanges(memChanges)
         , DbChanges(dbChange)
         , UserToken(userToken)
         , Txc(txc)
@@ -128,8 +126,8 @@ public:
     TOperationContext(
             TSchemeShard* ss,
             NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
-            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange)
-        : TOperationContext(ss, txc, ctx, onComplete, memChanges, dbChange, Nothing())
+            TSideEffects& onComplete, TStorageChanges& dbChange)
+        : TOperationContext(ss, txc, ctx, onComplete, dbChange, Nothing())
     {}
 
     NTable::TDatabase& GetDB(const NKikimr::NCompat::TSourceLocation& location = NKikimr::NCompat::TSourceLocation::current()) {
@@ -178,6 +176,32 @@ public:
     TDbGuard DbGuard() {
         return TDbGuard(*this);
     }
+};
+
+// Propose-phase-only context: the only way to reach TMemoryChanges.
+//
+// TMemoryChanges::UnDo is wired exclusively to AbortOperationPropose, which runs
+// only inside the propose transaction (TTxOperationPropose / IgniteOperation).
+// ProgressState and HandleReply execute in separate progress/reply transactions
+// where UnDo is never invoked, so a Grab* there is inert. Keeping MemChanges out
+// of the base context makes such improper uses a compilation error.
+struct TProposeContext : TOperationContext {
+    TMemoryChanges& MemChanges;
+
+    TProposeContext(
+            TSchemeShard* ss,
+            NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
+            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange,
+            TMaybe<NACLib::TUserToken>&& userToken)
+        : TOperationContext(ss, txc, ctx, onComplete, dbChange, std::move(userToken))
+        , MemChanges(memChanges)
+    {}
+    TProposeContext(
+            TSchemeShard* ss,
+            NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
+            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange)
+        : TProposeContext(ss, txc, ctx, onComplete, memChanges, dbChange, Nothing())
+    {}
 };
 
 // Log context for suboperations and their states.
@@ -257,10 +281,10 @@ public:
     virtual const char* Name() const = 0;
     virtual const char* CurrentStateName() const = 0;
 
-    virtual THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) = 0;
+    virtual THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) = 0;
 
     // call it inside multipart operations after failed propose
-    virtual void AbortPropose(TOperationContext& context) = 0;
+    virtual void AbortPropose(TProposeContext& context) = 0;
 
     // call it only before execute ForceDrop operation for path
     virtual void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) = 0;

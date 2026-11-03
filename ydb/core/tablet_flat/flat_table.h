@@ -183,7 +183,7 @@ public:
 
     void Update(ERowOp, TRawVals key, TOpsRef, TArrayRef<const TMemGlob> apart, TRowVersion rowVersion);
 
-    void UpdateTx(ERowOp, TRawVals key, TOpsRef, TArrayRef<const TMemGlob> apart, ui64 txId);
+    void UpdateTx(ERowOp, TRawVals key, TOpsRef, TArrayRef<const TMemGlob> apart, ui64 txId, ui32 savepointSeqNum = 0);
     void LockRowTx(ELockMode, TRawVals key, ui64 txId);
     void CommitTx(ui64 txId, TRowVersion rowVersion);
     void RemoveTx(ui64 txId);
@@ -292,6 +292,10 @@ public:
         return Stat_.FrozenWaste
             + (Mutable ? Mutable->GetWastedMem() : 0)
             + (MutableBackup ? MutableBackup->GetWastedMem() : 0);
+    }
+
+    ui64 GetMemAllocatedSize() const noexcept {
+        return GetMemSize() + GetMemWaste();
     }
 
     ui64 GetMemRowCount() const noexcept

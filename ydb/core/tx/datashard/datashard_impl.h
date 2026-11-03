@@ -169,6 +169,7 @@ class TDataShard
     class TTxInitRestored;
     class TTxInitSchema;
     class TTxInitSchemaDefaults;
+    class TTxSyncSchemeOnFollower;
     class TTxPlanStep;
     class TTxPlanPredictedTxs;
     class TTxProgressResendRS;
@@ -1429,6 +1430,9 @@ class TDataShard
     void Handle(TEvDataShard::TEvS3DirectWriteBegin::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3DirectWriteFinish::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvS3DirectWriteAbort::TPtr& ev, const TActorContext& ctx);
+    bool IsActiveDirectImport(ui64 txId, ui64 tableId, const TActorId& sender);
+    TString CheckDirectImportSpace();
+    void AbortDirectImportsForSpace();
     void Handle(TEvDataShard::TEvObjectStorageListingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
@@ -1593,6 +1597,7 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxInitRestored(THashMap<ui64, TOperation::TPtr> migratedTxs);
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchemaDefaults();
+    NTabletFlatExecutor::ITransaction* CreateTxSyncSchemeOnFollower();
     NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxStartSplit();
     NTabletFlatExecutor::ITransaction* CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext);
@@ -1611,6 +1616,7 @@ public:
     TDataShard(const TActorId &tablet, TTabletStorageInfo *info);
     ~TDataShard();
 
+    void CancelS3DirectWrite(ui64 txId);
 
     void PrepareAndSaveOutReadSets(ui64 step,
                                    ui64 txId,
@@ -1965,6 +1971,7 @@ public:
     void DelayS3UploadRows(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev);
     void OnRejectProbabilityRelaxed() override;
     void OnFollowersCountChanged() override;
+    void OnFollowerDataUpdated() override;
     ui64 GetMemoryUsage() const override;
 
     bool HasPipeServer(const TActorId& pipeServerId);
@@ -2901,6 +2908,9 @@ private:
     THashSet<TActorId> Actors;
     TLoanReturnTracker LoanReturnTracker;
     TFollowerState FollowerState;
+    // Set when the leader's changes have reached the follower since the last periodic sync
+    bool SyncSchemeOnFollowerNeeded = false;
+    bool SyncSchemeOnFollowerPending = false;
 
     // Non-persistent flag that is set just after we waited for all pending transactions to finish
     // and are starting the split.
@@ -2967,6 +2977,14 @@ private:
 
     TS3UploadsManager S3Uploads;
     TS3DownloadsManager S3Downloads;
+
+    // The shard owns the reservation even while the begin reply is in flight.
+    struct TDirectImportSession {
+        TActorId Actor;
+        ui64 TableId;
+        ui32 Step;
+    };
+    THashMap<ui64, TDirectImportSession> DirectImports;
 
     // Initial state
     struct TInitialState {
@@ -3166,7 +3184,7 @@ private:
         }
 
         explicit TEnqueuedRecord(const TChangeRecord& record)
-            : TEnqueuedRecord(record.GetBody().size(), record.GetTableId(), record.GetSchemaVersion(),
+            : TEnqueuedRecord(record.GetBodySize(), record.GetTableId(), record.GetSchemaVersion(),
                 record.GetApproximateCreationDateTime(), record.GetLockId(), record.GetLockOffset())
         {
         }

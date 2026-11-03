@@ -5,14 +5,16 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/providers/abstract/message_stream/message_stream_client.h>
 #include <ydb/library/yql/providers/pq/common/events.h>
+#include <ydb/library/yql/providers/pq/gateway/clients/message_stream/yql_pq_message_stream_client.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
 #include <library/cpp/retry/retry_policy.h>
-
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
 
@@ -22,14 +24,14 @@ namespace {
 
 using namespace NActors;
 
-class TDqPqControlPlaneActor final : public TActor<TDqPqControlPlaneActor>, public IActorExceptionHandler {
+class TDqPqControlPlaneActor final: public TActor<TDqPqControlPlaneActor>, public IActorExceptionHandler {
     using TBase = TActor<TDqPqControlPlaneActor>;
     using TDescribeResult = NPq::NProto::TEvDescribeConsumerResult;
     using TRetryPolicy = IRetryPolicy<>;
     using TReplyKey = std::pair<TActorId, ui64>;
 
     struct TEvPrivate {
-        enum EEv : ui32 {
+        enum EEv: ui32 {
             EvDescribeFinished = TPqControlPlaneEvents::EvEnd,
             EvRetryError,
             EvEnd
@@ -37,20 +39,22 @@ class TDqPqControlPlaneActor final : public TActor<TDqPqControlPlaneActor>, publ
 
         static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-        struct TEvDescribeFinished : TEventLocal<TEvDescribeFinished, EvDescribeFinished> {
-            TEvDescribeFinished(TString key, NYdb::NTopic::TAsyncDescribeConsumerResult result)
+        struct TEvDescribeFinished: TEventLocal<TEvDescribeFinished, EvDescribeFinished> {
+            TEvDescribeFinished(TString key, NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> result)
                 : Key(std::move(key))
                 , Result(std::move(result))
-            {}
+            {
+            }
 
             const TString Key;
-            const NYdb::NTopic::TAsyncDescribeConsumerResult Result;
+            const NThreading::TFuture<NFq::TMessageStreamResult<NFq::TMessageStreamConsumerDescription>> Result;
         };
 
-        struct TEvRetryError : TEventLocal<TEvRetryError, EvRetryError> {
+        struct TEvRetryError: TEventLocal<TEvRetryError, EvRetryError> {
             explicit TEvRetryError(TReplyKey key)
                 : Key(std::move(key))
-            {}
+            {
+            }
 
             const TReplyKey Key;
         };
@@ -62,20 +66,22 @@ class TDqPqControlPlaneActor final : public TActor<TDqPqControlPlaneActor>, publ
     };
 
     struct TDescription {
-        ITopicClient::TPtr Client;
+        std::shared_ptr<NFq::IMessageStreamClient> Client;
         std::optional<TDescribeResult> Result;
         THashMap<ui64, ui32> PartitionIndexes;
         std::vector<TPqControlPlaneEvents::TEvDescribeConsumer::TPtr> Waiters;
     };
 
 public:
-    TDqPqControlPlaneActor(NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, IPqStaticGateway::TPtr pqGateway, const THashMap<TString, TString>& secureParams)
+    TDqPqControlPlaneActor(NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, IPqStaticGateway::TPtr pqGateway,
+        const THashMap<TString, TString>& secureParams)
         : TBase(&TThis::StateFunc)
         , Driver(std::move(driver))
         , CredentialsFactory(std::move(credentialsFactory))
         , PqGateway(std::move(pqGateway))
         , SecureParams(secureParams)
-    {}
+    {
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TPqControlPlaneEvents::TEvDescribeConsumer, Handle);
@@ -109,15 +115,13 @@ private:
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        Fail(Ydb::StatusIds::UNAVAILABLE, TStringBuilder()
-            << "Failed to deliver PQ control-plane event to " << ev->Sender
-            << ", event type: " << ev->Get()->SourceType << ", reason: " << ev->Get()->Reason);
+        Fail(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Failed to deliver PQ control-plane event to " << ev->Sender
+                                                           << ", event type: " << ev->Get()->SourceType << ", reason: " << ev->Get()->Reason);
         ReplyError(ev->Sender, ev->Cookie);
     }
 
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-        Fail(Ydb::StatusIds::UNAVAILABLE, TStringBuilder()
-            << "PQ control-plane reader node disconnected: " << ev->Get()->NodeId);
+        Fail(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "PQ control-plane reader node disconnected: " << ev->Get()->NodeId);
     }
 
     void HandleError(TEvents::TEvUndelivered::TPtr& ev) {
@@ -129,7 +133,7 @@ private:
             {"reason", ev->Get()->Reason});
 
         if (ev->Get()->SourceType == TPqControlPlaneEvents::TEvDescribeConsumerResult::EventType) {
-            const TReplyKey key{ev->Sender, ev->Cookie};
+            const TReplyKey key{ ev->Sender, ev->Cookie };
             ErrorReplies.try_emplace(key);
             ScheduleErrorRetry(key);
         }
@@ -190,11 +194,11 @@ private:
         }
 
         auto settings = PqGateway->GetTopicClientSettings();
-        settings
-            .DiscoveryEndpoint(connection.GetEndpoint())
+        settings.DiscoveryEndpoint(connection.GetEndpoint())
             .Database(connection.GetDatabase())
             .SslCredentials(NYdb::TSslCredentials(connection.GetUseSsl()))
-            .CredentialsProviderFactory(CredentialsFactory->Create(SecureParams.Value(connection.GetTokenName(), TString()), connection.GetAddBearerToToken()));
+            .CredentialsProviderFactory(
+                CredentialsFactory->Create(SecureParams.Value(connection.GetTokenName(), TString()), connection.GetAddBearerToToken()));
 
         YDB_LOG_DEBUG("[PqControlPlane] Describing consumer",
             {"actorId", SelfId()},
@@ -203,36 +207,30 @@ private:
             {"topic", connection.GetTopicPath()},
             {"consumer", connection.GetConsumerName()});
 
-        description.Client = PqGateway->GetTopicClient(Driver, settings);
-        description.Client->DescribeConsumer(
-            connection.GetTopicPath(),
-            connection.GetConsumerName(),
-            NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)
-        ).Subscribe([key, selfId = SelfId(), actorSystem = TActivationContext::ActorSystem()](const auto& future) {
-            actorSystem->Send(selfId, new TEvPrivate::TEvDescribeFinished(key, future));
-        });
+        description.Client = PqGateway->GetTopicClient(connection.GetTopicPath(), Driver, settings);
+        description.Client->DescribeConsumer(connection.GetConsumerName(), { .IncludeStats = true })
+            .Subscribe([key, selfId = SelfId(), actorSystem = TActivationContext::ActorSystem()](const auto& future) {
+                actorSystem->Send(selfId, new TEvPrivate::TEvDescribeFinished(key, future));
+            });
     }
 
     void Handle(TEvPrivate::TEvDescribeFinished::TPtr& ev) {
         const auto& result = ev->Get()->Result.GetValue();
-        const auto status = static_cast<int>(result.GetStatus());
 
         auto& description = Descriptions.at(ev->Get()->Key);
         auto& response = description.Result.emplace();
-        response.SetStatus(Ydb::StatusIds::StatusCode_IsValid(status)
-            ? static_cast<Ydb::StatusIds::StatusCode>(status)
-            : Ydb::StatusIds::EXTERNAL_ERROR);
-        NYdb::NIssue::IssuesToMessage(result.GetIssues(), response.MutableIssues());
+        response.SetStatus(NYql::ToYdbStatus(result.Status).value_or(Ydb::StatusIds::EXTERNAL_ERROR));
+        NYql::IssuesToMessage(result.Issues, response.MutableIssues());
 
         if (result.IsSuccess()) {
-            for (const auto& partition : result.GetConsumerDescription().GetPartitions()) {
+            for (const auto& partition : result.Value.Partitions) {
                 auto* offsets = response.AddPartitions();
-                offsets->SetPartitionId(partition.GetPartitionId());
-                if (const auto& stats = partition.GetPartitionStats()) {
-                    offsets->SetStartOffset(stats->GetStartOffset());
+                offsets->SetPartitionId(partition.PartitionId.Value);
+                if (partition.StartOffset) {
+                    offsets->SetStartOffset(*partition.StartOffset);
                 }
-                if (const auto& stats = partition.GetPartitionConsumerStats()) {
-                    offsets->SetCommittedOffset(stats->GetCommittedOffset());
+                if (partition.CommittedOffset) {
+                    offsets->SetCommittedOffset(*partition.CommittedOffset);
                 }
             }
         }
@@ -244,7 +242,7 @@ private:
         YDB_LOG_DEBUG("[PqControlPlane] Consumer description finished",
             {"actorId", SelfId()},
             {"status", Ydb::StatusIds::StatusCode_Name(response.GetStatus())},
-            {"issues", result.GetIssues().ToOneLineString()},
+            {"issues", result.Issues.ToOneLineString()},
             {"partitionCount", response.PartitionsSize()},
             {"waiterCount", description.Waiters.size()});
 
@@ -253,7 +251,7 @@ private:
         }
 
         description.Waiters.clear();
-        description.Client.Reset();
+        description.Client.reset();
     }
 
     void UnsubscribeFromSessions() {
@@ -314,7 +312,7 @@ private:
     }
 
     void ReplyError(const TActorId& readerId, ui64 cookie) {
-        ErrorReplies.try_emplace(TReplyKey{readerId, cookie});
+        ErrorReplies.try_emplace(TReplyKey{ readerId, cookie });
         Reply(FatalError, readerId, cookie);
     }
 
@@ -327,11 +325,11 @@ private:
         auto& reply = it->second;
         if (!reply.RetryState) {
             reply.RetryState = TRetryPolicy::GetExponentialBackoffPolicy(
-                [] { return ERetryErrorClass::ShortRetry; },
-                /* minDelay */ TDuration::MilliSeconds(100),
-                /* minLongRetryDelay */ TDuration::MilliSeconds(100),
-                /* maxDelay */ TDuration::Seconds(1)
-            )->CreateRetryState();
+                [] {
+                    return ERetryErrorClass::ShortRetry;
+                }, /* minDelay */ TDuration::MilliSeconds(100), /* minLongRetryDelay */ TDuration::MilliSeconds(100),
+                /* maxDelay */ TDuration::Seconds(1))
+                                   ->CreateRetryState();
         }
 
         const auto delay = reply.RetryState->GetNextRetryDelay();
@@ -383,29 +381,22 @@ private:
     THashMap<TReplyKey, TErrorReply> ErrorReplies;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-NActors::IActor* CreateDqPqControlPlaneActor(
-    NYdb::TDriver driver,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    IPqStaticGateway::TPtr pqGateway,
-    const THashMap<TString, TString>& secureParams)
+NActors::IActor* CreateDqPqControlPlaneActor(NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    IPqStaticGateway::TPtr pqGateway, const THashMap<TString, TString>& secureParams)
 {
     return new TDqPqControlPlaneActor(std::move(driver), std::move(credentialsFactory), std::move(pqGateway), secureParams);
 }
 
-void RegisterDqPqControlPlaneActorFactory(
-    TDqAsyncIoFactory& factory,
-    NYdb::TDriver driver,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    IPqStaticGateway::TPtr pqGateway)
+void RegisterDqPqControlPlaneActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, IPqStaticGateway::TPtr pqGateway)
 {
-    factory.RegisterControlPlane(
-        PqControlPlaneActorType,
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), pqGateway = std::move(pqGateway)](IDqAsyncIoFactory::TControlPlaneArguments&& args) {
+    factory.RegisterControlPlane(PqControlPlaneActorType,
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), pqGateway = std::move(pqGateway)](
+            IDqAsyncIoFactory::TControlPlaneArguments&& args) {
             return CreateDqPqControlPlaneActor(driver, credentialsFactory, pqGateway, args.SecureParams);
-        }
-    );
+        });
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

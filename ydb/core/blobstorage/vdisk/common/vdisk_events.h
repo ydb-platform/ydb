@@ -501,7 +501,8 @@ namespace NKikimr {
 
         template<typename TQueryRecord>
         static inline TInstant GetReceivedTimestamp(const TQueryRecord *queryRecord, TInstant now) {
-            if (queryRecord && queryRecord->HasMsgQoS() && queryRecord->GetMsgQoS().HasExecTimeStats()) {
+            if (queryRecord && queryRecord->HasMsgQoS() && queryRecord->GetMsgQoS().HasExecTimeStats()
+                    && queryRecord->GetMsgQoS().GetExecTimeStats().HasReceivedTimestamp()) {
                 return TInstant::MicroSeconds(queryRecord->GetMsgQoS().GetExecTimeStats().GetReceivedTimestamp());
             }
             return now;
@@ -1160,6 +1161,8 @@ namespace NKikimr {
         , TEventWithRelevanceTracker
     {
         bool IsInternal = false;
+        // Local read checks can report CORRUPTED without starting recovery. Not serialized.
+        bool SuppressCorruptedBlobRestoration = false;
 
         TEvVGet() = default;
 
@@ -1965,7 +1968,7 @@ namespace NKikimr {
                 Record.SetGeneration(actual->ActualGen);
             }
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            if (status == NKikimrProto::OK) {
+            if (status == NKikimrProto::OK || status == NKikimrProto::ALREADY) {
                 Record.SetIncarnationGuid(incarnationGuid);
             }
         }

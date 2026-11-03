@@ -266,8 +266,6 @@ Can be used in the following scenarios:
 
 ### Examples
 
-{% if select_command != "SELECT STREAM" %}
-
 ```yql
 SELECT key AS k FROM my_table;
 ```
@@ -281,26 +279,6 @@ SELECT
     MyFunction(key, 123 AS my_optional_arg)
 FROM my_table;
 ```
-
-{% else %}
-
-```yql
-SELECT STREAM key AS k FROM my_stream;
-```
-
-```yql
-SELECT STREAM s.key FROM my_stream AS s;
-```
-
-```yql
-SELECT STREAM
-    MyFunction(key, 123 AS my_optional_arg)
-FROM my_stream;
-```
-
-{% endif %}
-
-
 
 ## CAST {#cast}
 
@@ -475,7 +453,7 @@ A table expression is an expression that returns a table. Table expressions in Y
 
 Semantics of a table expression depends on the context where it is used. In YQL, table expressions can be used in the following contexts:
 
-* Table context: after [FROM](select/from.md). In this case, table expressions work as expected: for example, `$input = SELECT a, b, c FROM T; SELECT * FROM $input` returns a table with three columns. The table context also occurs after [UNION ALL](select/index.md#unionall){% if feature_join %}, [JOIN](select/join.md#join){% endif %}{% if feature_mapreduce and process_command == "PROCESS" %}, [PROCESS](process.md#process), [REDUCE](reduce.md#reduce){% endif %};
+* Table context: after [FROM](select/from.md). In this case, table expressions work as expected: for example, `$input = SELECT a, b, c FROM T; SELECT * FROM $input` returns a table with three columns. The table context also occurs after [UNION ALL](select/union.md#union-all){% if feature_join %}, [JOIN](select/join.md){% endif %}{% if feature_mapreduce and process_command == "PROCESS" %}, [PROCESS](process.md#process), [REDUCE](reduce.md#reduce){% endif %};
 * Vector context: after [IN](#in). In this context, the table expression must contain exactly one column (the name of this column doesn't affect the expression result in any way). A table expression in a vector context is typed as a list (the type of the list element is the same as the column type in this case). Example: `SELECT * FROM T WHERE key IN (SELECT k FROM T1)`;
 * A scalar context arises *in all the other cases*. As in a vector context, a table expression must contain exactly one column, but the value of the table expression is a scalar, that is, an arbitrarily selected value of this column (if no rows are returned, the result is `NULL`). Example: `$count = SELECT COUNT(*) FROM T; SELECT * FROM T ORDER BY key LIMIT $count / 2`;
 

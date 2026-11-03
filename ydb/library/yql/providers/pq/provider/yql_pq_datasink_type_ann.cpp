@@ -7,9 +7,9 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql {
@@ -26,24 +26,26 @@ bool EnsureStructTypeWithSingleStringMember(const TTypeAnnotationNode* input, TP
 
     const auto* itemSchema = input->Cast<TStructExprType>();
     if (itemSchema->GetSize() != 1) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Only struct with single string, yson or json field is accepted, but has struct with " << itemSchema->GetSize() << " members"));
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                                                      << "Only struct with single string, yson or json field is accepted, but has struct with "
+                                                      << itemSchema->GetSize() << " members"));
         return false;
     }
 
     auto column = itemSchema->GetItems()[0];
     auto columnType = column->GetItemType();
     if (columnType->GetKind() != ETypeAnnotationKind::Data) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Column " << column->GetName() << " must have a data type, but has " << columnType->GetKind()));
+        ctx.AddError(TIssue(ctx.GetPosition(pos),
+            TStringBuilder() << "Column " << column->GetName() << " must have a data type, but has " << columnType->GetKind()));
         return false;
     }
 
     auto columnDataType = columnType->Cast<TDataExprType>();
     auto dataSlot = columnDataType->GetSlot();
 
-    if (dataSlot != NUdf::EDataSlot::String &&
-        dataSlot != NUdf::EDataSlot::Yson &&
-        dataSlot != NUdf::EDataSlot::Json) {
-        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Column " << column->GetName() << " is not a string, yson or json, but " << NUdf::GetDataTypeInfo(dataSlot).Name));
+    if (dataSlot != NUdf::EDataSlot::String && dataSlot != NUdf::EDataSlot::Yson && dataSlot != NUdf::EDataSlot::Json) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Column " << column->GetName() << " is not a string, yson or json, but "
+                                                                   << NUdf::GetDataTypeInfo(dataSlot).Name));
         return false;
     }
 
@@ -59,18 +61,18 @@ bool EnsureListOfStructTypeWithSingleStringMember(const TTypeAnnotationNode* inp
     return EnsureStructTypeWithSingleStringMember(input->Cast<TListExprType>()->GetItemType(), pos, ctx);
 }
 
-class TPqDataSinkTypeAnnotationTransformer : public TVisitorTransformerBase {
+class TPqDataSinkTypeAnnotationTransformer: public TVisitorTransformerBase {
 public:
     explicit TPqDataSinkTypeAnnotationTransformer(TPqState::TPtr state)
         : TVisitorTransformerBase(true)
         , State_(std::move(state))
     {
         using TSelf = TPqDataSinkTypeAnnotationTransformer;
-        AddHandler({TCoCommit::CallableName()}, Hndl(&TSelf::HandleCommit));
-        AddHandler({TPqWriteTopic::CallableName()}, Hndl(&TSelf::HandleWriteTopic));
-        AddHandler({NNodes::TPqClusterConfig::CallableName()}, Hndl(&TSelf::HandleClusterConfig));
-        AddHandler({TDqPqTopicSink::CallableName()}, Hndl(&TSelf::HandleDqPqTopicSink));
-        AddHandler({TPqInsert::CallableName()}, Hndl(&TSelf::HandleInsert));
+        AddHandler({ TCoCommit::CallableName() }, Hndl(&TSelf::HandleCommit));
+        AddHandler({ TPqWriteTopic::CallableName() }, Hndl(&TSelf::HandleWriteTopic));
+        AddHandler({ NNodes::TPqClusterConfig::CallableName() }, Hndl(&TSelf::HandleClusterConfig));
+        AddHandler({ TDqPqTopicSink::CallableName() }, Hndl(&TSelf::HandleDqPqTopicSink));
+        AddHandler({ TPqInsert::CallableName() }, Hndl(&TSelf::HandleInsert));
     }
 
     TStatus HandleCommit(TExprBase input, TExprContext&) {
@@ -113,9 +115,7 @@ public:
                 values.emplace_back(value);
             }
 
-            const auto list = Build<TCoAsList>(ctx, writeInput->Pos())
-                .Add(std::move(values))
-                .Done();
+            const auto list = Build<TCoAsList>(ctx, writeInput->Pos()).Add(std::move(values)).Done();
 
             input->ChildRef(TPqWriteTopic::idx_Input) = list.Ptr();
             return TStatus::Repeat;
@@ -164,16 +164,16 @@ public:
             return TStatus::Error;
         }
 
-        if (!EnsureValidSettings(*input->Child(TDqPqTopicSink::idx_Settings), {
-            NDeliveryGuaranteeSetting::Name, EndpointSetting, UseSslSetting, AddBearerToTokenSetting
-        }, [](TStringBuf, TExprNode& setting, TExprContext& ctx) {
-            if (setting.ChildrenSize() != 2) {
-                ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expected single value for topic sink settings."));
-                return false;
-            }
+        if (!EnsureValidSettings(*input->Child(TDqPqTopicSink::idx_Settings),
+                { NDeliveryGuaranteeSetting::Name, EndpointSetting, UseSslSetting, AddBearerToTokenSetting },
+                [](TStringBuf, TExprNode& setting, TExprContext& ctx) {
+                    if (setting.ChildrenSize() != 2) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expected single value for topic sink settings."));
+                        return false;
+                    }
 
-            return EnsureAtom(*setting.Child(1), ctx);
-        }, ctx)) {
+                    return EnsureAtom(*setting.Child(1), ctx);
+                }, ctx)) {
             return TStatus::Error;
         }
 
@@ -215,9 +215,8 @@ public:
         }
 
         const auto* outputColumnType = insertInput->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetItems()[0];
-        input->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
-            ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(TVector{outputColumnType}))
-        }));
+        input->SetTypeAnn(ctx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{ ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(TVector{ outputColumnType })) }));
         return TStatus::Ok;
     }
 
@@ -230,7 +229,8 @@ private:
         const auto validator = [state = State_, cluster](TStringBuf name, TExprNode& setting, TExprContext& ctx) {
             if (name == NDeliveryGuaranteeSetting::Name) {
                 if (setting.ChildrenSize() != 2) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder() << "Expected `" << NDeliveryGuaranteeSetting::PrettyName << "` = value"));
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
+                        TStringBuilder() << "Expected `" << NDeliveryGuaranteeSetting::PrettyName << "` = value"));
                     return false;
                 }
 
@@ -239,33 +239,34 @@ private:
                     return false;
                 }
 
-                if (!IsIn({NDeliveryGuaranteeSetting::ExactlyOnceValue, NDeliveryGuaranteeSetting::AtLeastOnceValue}, settingValue->Content())) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder()
-                        << "`" << NDeliveryGuaranteeSetting::PrettyName << "` must be '" << NDeliveryGuaranteeSetting::ExactlyOnceValue
-                        << "' or '" << NDeliveryGuaranteeSetting::AtLeastOnceValue << "'"
-                    ));
+                if (!IsIn(
+                        { NDeliveryGuaranteeSetting::ExactlyOnceValue, NDeliveryGuaranteeSetting::AtLeastOnceValue }, settingValue->Content())) {
+                    ctx.AddError(
+                        TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder() << "`" << NDeliveryGuaranteeSetting::PrettyName << "` must be '"
+                                                                                << NDeliveryGuaranteeSetting::ExactlyOnceValue << "' or '"
+                                                                                << NDeliveryGuaranteeSetting::AtLeastOnceValue << "'"));
                     return false;
                 }
 
                 if (settingValue->Content() == NDeliveryGuaranteeSetting::ExactlyOnceValue) {
                     if (state->Configuration->EnableDeduplication.Get().GetOrElse(false)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder()
-                            << "`" << NDeliveryGuaranteeSetting::PrettyName << "` = '" << NDeliveryGuaranteeSetting::ExactlyOnceValue
-                            << "' is not supported with enabled deduplication"
-                        ));
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
+                            TStringBuilder() << "`" << NDeliveryGuaranteeSetting::PrettyName << "` = '"
+                                             << NDeliveryGuaranteeSetting::ExactlyOnceValue << "' is not supported with enabled deduplication"));
                         return false;
                     }
 
                     if (!state->EnableExactlyOnceDeliveryGuaranty) {
-                        ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Exactly once delivery guarantee is disabled. Please contact your system administrator to enable it."));
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
+                            "Exactly once delivery guarantee is disabled. Please contact your system administrator to enable it."));
                         return false;
                     }
 
                     const auto tokenIt = state->Configuration->Tokens.find(cluster);
                     if (tokenIt == state->Configuration->Tokens.end() || CreateStructuredTokenParser(tokenIt->second).IsNoAuth()) {
-                        ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), TStringBuilder()
-                            << "Authorization is required for setting `" << NDeliveryGuaranteeSetting::PrettyName << "` = '" << NDeliveryGuaranteeSetting::ExactlyOnceValue << "'"
-                        ));
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
+                            TStringBuilder() << "Authorization is required for setting `" << NDeliveryGuaranteeSetting::PrettyName << "` = '"
+                                             << NDeliveryGuaranteeSetting::ExactlyOnceValue << "'"));
                         return false;
                     }
                 }
@@ -276,16 +277,16 @@ private:
             return false;
         };
 
-        return EnsureValidSettings(settings, {NDeliveryGuaranteeSetting::Name}, validator, ctx);
+        return EnsureValidSettings(settings, { NDeliveryGuaranteeSetting::Name }, validator, ctx);
     }
 
     TPqState::TPtr State_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<TVisitorTransformerBase> CreatePqDataSinkTypeAnnotationTransformer(TPqState::TPtr state) {
     return MakeHolder<TPqDataSinkTypeAnnotationTransformer>(std::move(state));
 }
 
-} // namespace NYql
+}   // namespace NYql

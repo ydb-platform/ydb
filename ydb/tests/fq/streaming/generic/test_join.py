@@ -1202,8 +1202,12 @@ TESTCASES = [
 class TestJoinYdbStreaming(StreamingTestBase):
     # Use only testcase 16 for column-shard tables (since it exercises unusual types)
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
-    @pytest.mark.parametrize("streamlookup", [True, False] if DEBUG else [True], ids=["slj", "map"] if DEBUG else ["slj"])
-    @pytest.mark.parametrize("column_tables, testcase", [*zip([False]*len(TESTCASES), range(len(TESTCASES))), (True, 16)])
+    @pytest.mark.parametrize(
+        "streamlookup", [True, False] if DEBUG else [True], ids=["slj", "map"] if DEBUG else ["slj"]
+    )
+    @pytest.mark.parametrize(
+        "column_tables, testcase", [*zip([False] * len(TESTCASES), range(len(TESTCASES))), (True, 16)]
+    )
     @pytest.mark.parametrize("local", [True, False], ids=["local", "generic"])
     def test_streamlookup(
         self,
@@ -1296,7 +1300,7 @@ class TestJoinYdbStreaming(StreamingTestBase):
                         assert componentSensors.get("Fullscans", 0) == 0
 
         if "MultiGet true" not in sql:
-            assert hits + miss == len(messages)*sql.count("/*+ streamlookup(")
+            assert hits + miss == len(messages) * sql.count("/*+ streamlookup(")
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY {query_name}")
         if not local:
@@ -1418,7 +1422,12 @@ class TestJoinYdbStreaming(StreamingTestBase):
                 endpoint=endpoint,
             )
             expected = pair[1:]
-            read_data = self.read_stream(len(expected), topic_path=self.output_topic, endpoint=endpoint, timeout=None if len(expected) > 0 else 10)
+            read_data = self.read_stream(
+                len(expected),
+                topic_path=self.output_topic,
+                endpoint=endpoint,
+                timeout=None if len(expected) > 0 else 10,
+            )
             read_data_ctr = Counter(map(freeze, map(json.loads, read_data)))
             messages_ctr = Counter(map(freeze, map(json.loads, expected)))
             assert read_data_ctr == messages_ctr

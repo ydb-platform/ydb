@@ -9,8 +9,6 @@ namespace NKikimr::NBlobDepot {
 
     namespace {
 
-        static constexpr ui32 MaxMoveDataKeysPerTx = 10'000;
-
         TLogoBlobID MakeFirstBlobId(ui64 tabletId, const NKikimrBlobDepot::TBlobLocator& locator) {
             const TBlobSeqId blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
             if (!locator.GetFooterLen()) {
@@ -90,8 +88,7 @@ namespace NKikimr::NBlobDepot {
                             if (it != state.BlobIdToNewLocator.end()) {
                                 const TBlobSeqId newBlobSeqId = TBlobSeqId::FromProto(it->second.GetBlobSeqId());
                                 const TLogoBlobID newBlobId = MakeFirstBlobId(Self->TabletID(), it->second);
-                                if (state.ProtectedBlobSeqIds.contains(newBlobSeqId) ||
-                                        Self->Data->IsBlobReferenced(newBlobId)) {
+                                if (Self->Data->IsBlobReferenced(newBlobId)) {
                                     state.NewBlobLocator.CopyFrom(it->second);
                                     state.NewBlobSeqId = newBlobSeqId;
                                     state.Phase = TMoveDataState::EPhase::UpdatingIndex;
@@ -109,7 +106,8 @@ namespace NKikimr::NBlobDepot {
 
                     state.Key = binaryKey;
                     state.ValueChainIndex = static_cast<ui32>(value.ValueChain.size());
-                    if (++keysProcessed >= MaxMoveDataKeysPerTx) {
+                    ++Self->MoveData.RecordsScanned;
+                    if (++keysProcessed >= Self->MoveData.MaxMoveDataKeysPerTx) {
                         stoppedByLimit = true;
                         return false;
                     }
@@ -131,7 +129,7 @@ namespace NKikimr::NBlobDepot {
             if (state.NeedsAnotherPass) {
                 Self->RestartMoveDataScan();
             } else {
-                state.Phase = TMoveDataState::EPhase::CheckingTrash;
+                state.Phase = TMoveDataState::EPhase::PreparingTrashCheck;
             }
             SendContinue = true;
             return true;
@@ -173,8 +171,12 @@ namespace NKikimr::NBlobDepot {
             auto& state = Self->MoveData;
             Self->Data->CommitTrash(this);
 
+            const auto blobSeqId = TBlobSeqId::FromProto(state.NewBlobLocator.GetBlobSeqId());
+            if (state.ProtectedBlobSeqIds.erase(blobSeqId)) {
+                Self->ReleaseMoveDataBlobSeqId(blobSeqId);
+            }
+
             if (Result == TData::EMoveDataReplaceResult::Replaced) {
-                Self->ReleaseMoveDataBlobSeqId(TBlobSeqId::FromProto(state.NewBlobLocator.GetBlobSeqId()));
                 ++state.ValueChainIndex;
             } else {
                 state.ValueChainIndex = 0;
@@ -194,6 +196,9 @@ namespace NKikimr::NBlobDepot {
         : public TActorBootstrapped<TMoveDataCopyActor>
     {
         const TActorId OwnerId;
+        const TString LogId;
+        TIntrusivePtr<TTabletStorageInfo> TabletInfo;
+
         const ui32 SourceGroupId;
         const ui32 TargetGroupId;
         NKikimrBlobDepot::TBlobLocator NewLocator;
@@ -201,11 +206,20 @@ namespace NKikimr::NBlobDepot {
         const std::vector<TLogoBlobID> TargetBlobIds;
         size_t Index = 0;
 
+        TVector<ui32> YellowMoveChannels;
+        TVector<ui32> YellowStopChannels;
+
     public:
-        TMoveDataCopyActor(TActorId ownerId, ui64 tabletId,
+        TMoveDataCopyActor(
+                TActorId ownerId,
+                const TString& logId,
+                TTabletStorageInfo* tabletInfo,
+                ui64 tabletId,
                 const NKikimrBlobDepot::TBlobLocator& sourceLocator,
                 NKikimrBlobDepot::TBlobLocator newLocator)
             : OwnerId(ownerId)
+            , LogId(logId)
+            , TabletInfo(tabletInfo)
             , SourceGroupId(sourceLocator.GetGroupId())
             , TargetGroupId(newLocator.GetGroupId())
             , NewLocator(std::move(newLocator))
@@ -222,65 +236,212 @@ namespace NKikimr::NBlobDepot {
 
         void IssueGet() {
             const TLogoBlobID& id = SourceBlobIds[Index];
+
+            YDB_LOG_DEBUG("MoveDataCopyActor: send EvGet",
+                {"marker", "BDM16"},
+                {"id", LogId},
+                {"groupId", SourceGroupId},
+                {"blobId", id.ToString()});
+
             SendToBSProxy(SelfId(), SourceGroupId, new TEvBlobStorage::TEvGet(
                 id, 0, id.BlobSize(), TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::LowRead));
+
+            Become(&TThis::StateGet);
         }
 
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
-            auto& msg = *ev->Get();
-            if (msg.Status != NKikimrProto::OK || msg.ResponseSz != 1 ||
-                    msg.Responses[0].Status != NKikimrProto::OK) {
-                const NKikimrProto::EReplyStatus status = msg.Status != NKikimrProto::OK
-                    ? msg.Status
-                    : msg.ResponseSz == 1 ? msg.Responses[0].Status : NKikimrProto::ERROR;
-                return ReplyAndDie(status, msg.ErrorReason);
+            const TLogoBlobID& id = SourceBlobIds[Index];
+
+            if (ev->Get()->GroupId != SourceGroupId) {
+                YDB_LOG_ERROR("MoveDataCopyActor: unexpected EvGet result: invalid group id",
+                    {"marker", "BDM08"},
+                    {"id", LogId},
+                    {"groupId", ev->Get()->GroupId},
+                    {"expectedGroupId", SourceGroupId},
+                    {"blobId", id.ToString()});
+                return HandleErrorAndDie();
             }
 
-            auto& response = msg.Responses[0];
-            if (response.Buffer.size() != SourceBlobIds[Index].BlobSize()) {
-                return ReplyAndDie(NKikimrProto::ERROR, "move data blob size mismatch");
+            NKikimrProto::EReplyStatus status = ev->Get()->Status;
+            if (status != NKikimrProto::OK) {
+                YDB_LOG_ERROR("MoveDataCopyActor: unexpected EvGet result: status is not OK",
+                    {"marker", "BDM09"},
+                    {"id", LogId},
+                    {"groupId", SourceGroupId},
+                    {"blobId", id.ToString()},
+                    {"status", NKikimrProto::EReplyStatus_Name(status)},
+                    {"errorReason", ev->Get()->ErrorReason});
+                return HandleErrorAndDie();
             }
+
+            Y_ABORT_UNLESS(ev->Get()->ResponseSz == 1);
+            auto& response = ev->Get()->Responses[0];
+
+            if (response.Status == NKikimrProto::NODATA) {
+                YDB_LOG_ERROR("MoveDataCopyActor: EvGet result: response status is NODATA, possibly blob was deleted before we started copying it",
+                    {"marker", "BDM10"},
+                    {"id", LogId},
+                    {"groupId", SourceGroupId},
+                    {"blobId", id.ToString()},
+                    {"status", NKikimrProto::EReplyStatus_Name(response.Status)});
+                return ReplyNodata();
+            }
+
+            if (response.Status != NKikimrProto::OK) {
+                YDB_LOG_ERROR("MoveDataCopyActor: unexpected EvGet result: response status is not OK",
+                    {"marker", "BDM11"},
+                    {"id", LogId},
+                    {"groupId", SourceGroupId},
+                    {"blobId", id.ToString()},
+                    {"status", NKikimrProto::EReplyStatus_Name(response.Status)});
+                return HandleErrorAndDie();
+            }
+
+            auto& buffer = response.Buffer;
+            if (buffer.size() != id.BlobSize()) {
+                YDB_LOG_ERROR("MoveDataCopyActor: unexpected EvGet result: buffer size is not equal to blob size",
+                    {"marker", "BDM12"},
+                    {"id", LogId},
+                    {"groupId", SourceGroupId},
+                    {"blobId", id.ToString()},
+                    {"bufferSize", buffer.size()},
+                    {"blobSize", id.BlobSize()});
+                return HandleErrorAndDie();
+            }
+
+            YDB_LOG_DEBUG("MoveDataCopyActor: send EvPut",
+                {"marker", "BDM17"},
+                {"id", LogId},
+                {"newGroupId", TargetGroupId},
+                {"newBlobId", TargetBlobIds[Index].ToString()});
 
             SendToBSProxy(SelfId(), TargetGroupId, new TEvBlobStorage::TEvPut(
                 TEvBlobStorage::TEvPut::TParameters{
                     .BlobId = TargetBlobIds[Index],
-                    .Buffer = std::move(response.Buffer),
+                    .Buffer = std::move(buffer),
                     .Deadline = TInstant::Max(),
                     .HandleClass = NKikimrBlobStorage::AsyncBlob,
                     .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
-                    .WriteSource = TWriteSource::BlobDepotPut,
+                    .WriteSource = TWriteSource::BlobDepotMoveData,
                 }));
+
             Become(&TThis::StatePut);
         }
 
+        void CheckYellow(const TStorageStatusFlags &statusFlags, ui32 currentGroup) {
+            if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
+                for (ui32 channel : xrange(TabletInfo->Channels.size())) {
+                    const ui32 group = TabletInfo->ChannelInfo(channel)->LatestEntry()->GroupID;
+                    if (currentGroup == group) {
+                        YellowMoveChannels.push_back(channel);
+                    }
+                }
+                SortUnique(YellowMoveChannels);
+                YDB_LOG_NOTICE("MoveDataCopyActor: yellow move channels",
+                    {"marker", "BDM13"},
+                    {"id", LogId},
+                    {"yellowMoveChannels", YellowMoveChannels});
+            }
+            if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
+                for (ui32 channel : xrange(TabletInfo->Channels.size())) {
+                    const ui32 group = TabletInfo->ChannelInfo(channel)->LatestEntry()->GroupID;
+                    if (currentGroup == group) {
+                        YellowStopChannels.push_back(channel);
+                    }
+                }
+                SortUnique(YellowStopChannels);
+                YDB_LOG_NOTICE("MoveDataCopyActor: yellow stop channels",
+                    {"marker", "BDM14"},
+                    {"id", LogId},
+                    {"yellowStopChannels", YellowStopChannels});
+            }
+        }
+
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
-            auto& msg = *ev->Get();
-            if (msg.Status != NKikimrProto::OK) {
-                return ReplyAndDie(msg.Status, msg.ErrorReason);
+            const TLogoBlobID& id = TargetBlobIds[Index];
+
+            if (ev->Get()->GroupId != TargetGroupId) {
+                YDB_LOG_ERROR("MoveDataCopyActor: unexpected EvPut result: invalid group id",
+                    {"marker", "BDM15"},
+                    {"id", LogId},
+                    {"groupId", ev->Get()->GroupId},
+                    {"expectedGroupId", TargetGroupId},
+                    {"newBlobId", id.ToString()});
+                return HandleErrorAndDie();
+            }
+
+            auto status = ev->Get()->Status;
+            if (status != NKikimrProto::OK) {
+                YDB_LOG_ERROR("MoveDataCopyActor: unexpected EvPut result: status is not OK",
+                    {"marker", "BDM18"},
+                    {"id", LogId},
+                    {"newGroupId", TargetGroupId},
+                    {"newBlobId", id.ToString()},
+                    {"status", NKikimrProto::EReplyStatus_Name(status)},
+                    {"errorReason", ev->Get()->ErrorReason});
+                return HandleErrorAndDie();
+            }
+
+            CheckYellow(ev->Get()->StatusFlags, TargetGroupId);
+
+            if (!YellowStopChannels.empty()) {
+                return ReplyYellowStop();
             }
 
             if (++Index == SourceBlobIds.size()) {
-                return ReplyAndDie(NKikimrProto::OK, {});
+                return ReplySuccess();
             }
 
             IssueGet();
             Become(&TThis::StateGet);
         }
 
-        void ReplyAndDie(NKikimrProto::EReplyStatus status, TString errorReason) {
-            Send(OwnerId, new TEvMoveDataBlobCopied(status, std::move(NewLocator), std::move(errorReason)));
+        void ReplySuccess() {
+            Send(OwnerId, new TEvMoveDataBlobCopied(
+                TEvMoveDataBlobCopied::EResult::OK, NewLocator,
+                std::move(YellowMoveChannels), std::move(YellowStopChannels)));
+            PassAway();
+        }
+
+        void ReplyNodata() {
+            Send(OwnerId, new TEvMoveDataBlobCopied(
+                TEvMoveDataBlobCopied::EResult::NODATA, NewLocator,
+                std::move(YellowMoveChannels), std::move(YellowStopChannels)));
+            PassAway();
+        }
+
+        void ReplyYellowStop() {
+            Send(OwnerId, new TEvMoveDataBlobCopied(
+                TEvMoveDataBlobCopied::EResult::YELLOW_STOP, NewLocator,
+                std::move(YellowMoveChannels), std::move(YellowStopChannels)));
+            PassAway();
+        }
+
+        void HandleErrorAndDie() {
+            YDB_LOG_ERROR("MoveDataCopyActor: error while copying blob, send PoisonPill to the tablet",
+                {"marker", "BDM15"},
+                {"id", LogId},
+                {"blobId", SourceBlobIds[Index].ToString()},
+                {"newBlobId", TargetBlobIds[Index].ToString()});
+            Send(OwnerId, new TEvents::TEvPoisonPill());
             PassAway();
         }
 
         STATEFN(StateGet) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvBlobStorage::TEvGetResult, Handle);
+                cFunc(TEvents::TSystem::Poison, PassAway);
+                default:
+                    break;
             }
         }
 
         STATEFN(StatePut) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvBlobStorage::TEvPutResult, Handle);
+                cFunc(TEvents::TSystem::Poison, PassAway);
+                default:
+                    break;
             }
         }
     };
@@ -291,12 +452,12 @@ namespace NKikimr::NBlobDepot {
             {"id", GetLogId()},
             {"ev", ev->Get()->ToString()});
 
-        if (MoveData.IsInProgress()) {
+        if (!Data->IsTrashFullyLoaded() || !Data->IsLoaded() || MoveData.IsInProgress()) {
             MoveDataRequestsQueue.push_back(ev);
             return;
         }
 
-        TSet<ui32> moveDataGroups;
+        THashSet<ui32> moveDataGroups;
         for (const ui32 groupId : ev->Get()->Record.GetGroups()) {
             moveDataGroups.insert(groupId);
         }
@@ -308,7 +469,7 @@ namespace NKikimr::NBlobDepot {
         StartMoveData(std::move(moveDataGroups), ev->Sender);
     }
 
-    bool TBlobDepot::ValidateMoveDataGroups(const TSet<ui32>& moveDataGroups, const TActorId& sender) const {
+    bool TBlobDepot::ValidateMoveDataGroups(const THashSet<ui32>& moveDataGroups, const TActorId& sender) const {
         ui32 channelId = 0;
         for (const auto& channel : Info()->Channels) {
             if (moveDataGroups.contains(channel.LatestEntry()->GroupID)) {
@@ -338,10 +499,13 @@ namespace NKikimr::NBlobDepot {
         return MoveData.Groups.contains(groupId);
     }
 
-    void TBlobDepot::StartMoveData(TSet<ui32>&& moveDataGroups, const TActorId& sender) {
+    void TBlobDepot::StartMoveData(THashSet<ui32>&& moveDataGroups, const TActorId& sender) {
+        ++MoveDataOperationId;
+
         YDB_LOG_DEBUG("StartMoveData",
             {"marker", "BDM02"},
-            {"id", GetLogId()});
+            {"id", GetLogId()},
+            {"operationId", MoveDataOperationId});
 
         Y_ABORT_UNLESS(!MoveData.IsInProgress());
         MoveData = {
@@ -360,65 +524,73 @@ namespace NKikimr::NBlobDepot {
                 break;
 
             case TMoveDataState::EPhase::CopyingBlob:
-                StartMoveDataBlobCopy();
+                if (!StartMoveDataBlobCopy()) {
+                    YDB_LOG_CRIT("Move data failed to allocate target channel for blob copy",
+                        {"marker", "BDM22"},
+                        {"id", GetLogId()});
+                    Send(MoveData.RequestSender, new TEvTablet::TEvMoveDataResponse(
+                        TabletID(),
+                        NKikimrTabletBase::TEvMoveDataResponse::NotEnoughSpace));
+                    CancelMoveData();
+                    ProcessMoveDataQueue();
+                    return;
+                }
                 break;
 
             case TMoveDataState::EPhase::UpdatingIndex:
                 Execute(std::make_unique<TTxMoveDataUpdateIndex>(this));
                 break;
 
-            case TMoveDataState::EPhase::CheckingTrash: {
-                if (MoveData.NeedsAnotherPass) {
-                    RestartMoveDataScan();
-                    ContinueMoveData();
-                    break;
-                }
-
-                for (const TBlobSeqId& blobSeqId : MoveData.ProtectedBlobSeqIds) {
-                    TChannelInfo& channel = Channels[blobSeqId.Channel];
-                    const size_t numErased = channel.AssimilatedBlobsInFlight.erase(blobSeqId.ToSequentialNumber());
-                    Y_ABORT_UNLESS(numErased == 1);
-                    Data->OnLeastExpectedBlobIdChange(channel.Index);
-                }
-                MoveData.ProtectedBlobSeqIds.clear();
-
-                switch (Data->CheckMoveDataTrash(MoveData.Groups)) {
-                    case TData::EMoveDataTrashStatus::Clear:
-                        MoveData.Phase = TMoveDataState::EPhase::Vacuum;
-                        Executor()->StartMoveDataVacuumFromOwner();
-                        break;
-
-                    case TData::EMoveDataTrashStatus::NeedsIndexRescan:
-                        RestartMoveDataScan();
-                        ContinueMoveData();
-                        break;
-
-                    case TData::EMoveDataTrashStatus::WaitingForGC:
-                        TActivationContext::Schedule(TDuration::MilliSeconds(100), new IEventHandle(
-                            TEvPrivate::EvMoveDataContinue, 0, SelfId(), {}, nullptr, 0));
-                        break;
-                }
+            case TMoveDataState::EPhase::PreparingTrashCheck:
+                MoveData.ChannelGroups = Data->PrepareCheckTrash(MoveData.Groups);
+                MoveData.Phase = TMoveDataState::EPhase::CheckingTrash;
+                CheckTrash();
                 break;
-            }
 
+            case TMoveDataState::EPhase::CheckingTrash:
             case TMoveDataState::EPhase::Vacuum:
-                break;
-
             case TMoveDataState::EPhase::Idle:
                 Y_ABORT();
         }
     }
 
-    void TBlobDepot::StartMoveDataBlobCopy() {
+    TBlobDepot::TMoveDataState::ETrashStatus TBlobDepot::GetTrashStatus() {
+        for (auto it = MoveData.ChannelGroups.begin(); it != MoveData.ChannelGroups.end(); ) {
+            const auto& [channel, groupId] = *it;
+            auto& record = Data->GetRecordsPerChannelGroup(channel, groupId);
+
+            Y_ABORT_UNLESS(record.Used.empty());
+
+            if (!record.Trash.empty() || record.CollectGarbageRequestsInFlight) {
+                return TMoveDataState::ETrashStatus::WaitingForGC;
+            }
+
+            it = MoveData.ChannelGroups.erase(it);
+        }
+
+        return TMoveDataState::ETrashStatus::Finished;
+    }
+
+    void TBlobDepot::CheckTrash() {
+        Y_ABORT_UNLESS(MoveData.Phase == TMoveDataState::EPhase::CheckingTrash);
+
+        switch (GetTrashStatus()) {
+            case TMoveDataState::ETrashStatus::Finished:
+                MoveData.Phase = TMoveDataState::EPhase::Vacuum;
+                Executor()->StartMoveDataVacuumFromOwner();
+                break;
+
+            case TMoveDataState::ETrashStatus::WaitingForGC:
+                break;
+        }
+    }
+
+    bool TBlobDepot::StartMoveDataBlobCopy() {
         Y_ABORT_UNLESS(MoveData.Phase == TMoveDataState::EPhase::CopyingBlob);
 
         std::vector<ui8> channels(1);
         if (!PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels)) {
-            YDB_LOG_CRIT("Move data failed to allocate target channel",
-                {"marker", "BDM05"},
-                {"id", GetLogId()});
-            Send(SelfId(), new TEvents::TEvPoisonPill);
-            return;
+            return false;
         }
 
         TChannelInfo& channel = Channels[channels.front()];
@@ -436,30 +608,84 @@ namespace NKikimr::NBlobDepot {
         blobSeqId.ToProto(newLocator.MutableBlobSeqId());
 
         MoveData.NewBlobSeqId = blobSeqId;
-        RegisterWithSameMailbox(new TMoveDataCopyActor(
-            SelfId(), TabletID(), MoveData.BlobLocator, std::move(newLocator)));
+        CopyBlobActorId = RegisterWithSameMailbox(new TMoveDataCopyActor(
+            SelfId(), GetLogId(), Info(), TabletID(), MoveData.BlobLocator, std::move(newLocator)));
+
+        return true;
     }
 
     void TBlobDepot::Handle(TEvMoveDataBlobCopied::TPtr ev) {
         Y_ABORT_UNLESS(MoveData.Phase == TMoveDataState::EPhase::CopyingBlob);
-        const TBlobSeqId blobSeqId = TBlobSeqId::FromProto(ev->Get()->NewLocator.GetBlobSeqId());
+
+        auto& newLocator = ev->Get()->NewLocator;
+        const TBlobSeqId blobSeqId = TBlobSeqId::FromProto(newLocator.GetBlobSeqId());
         Y_ABORT_UNLESS(blobSeqId == MoveData.NewBlobSeqId);
 
-        if (ev->Get()->Status != NKikimrProto::OK) {
-            ReleaseMoveDataBlobSeqId(blobSeqId);
-            YDB_LOG_CRIT("Move data blob copy failed",
-                {"marker", "BDM06"},
-                {"id", GetLogId()},
-                {"blobId", MoveData.BlobId},
-                {"status", ev->Get()->Status},
-                {"errorReason", ev->Get()->ErrorReason});
-            Send(SelfId(), new TEvents::TEvPoisonPill);
+        auto size = newLocator.GetTotalDataLen() + newLocator.GetFooterLen();
+
+        switch (ev->Get()->Result) {
+            case TEvMoveDataBlobCopied::EResult::OK:
+                TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_MOVE_DATA_BLOBS_MOVED].Increment(1);
+                TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_MOVE_DATA_BYTES_MOVED].Increment(size);
+                break;
+
+            case TEvMoveDataBlobCopied::EResult::NODATA:
+                YDB_LOG_NOTICE("TEvMoveDataBlobCopied: NODATA",
+                    {"marker", "BDM18"},
+                    {"id", GetLogId()});
+
+                if (!MoveData.RecordTouched) {
+                    // possible data loss, kill tablet
+                    YDB_LOG_CRIT("TEvMoveDataBlobCopied: possible data loss",
+                        {"marker", "BDM19"},
+                        {"id", GetLogId()});
+                    CancelMoveData();
+                    Send(SelfId(), new TEvents::TEvPoisonPill);
+                    return;
+                }
+                break;
+
+            case TEvMoveDataBlobCopied::EResult::YELLOW_STOP:
+                TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_MOVE_DATA_BLOBS_MOVED].Increment(1);
+                TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_MOVE_DATA_BYTES_MOVED].Increment(size);
+
+                YDB_LOG_NOTICE("TEvMoveDataBlobCopied: YELLOW_STOP, stop moving data",
+                    {"marker", "BDM20"},
+                    {"id", GetLogId()});
+                Send(MoveData.RequestSender, new TEvTablet::TEvMoveDataResponse(
+                    TabletID(),
+                    NKikimrTabletBase::TEvMoveDataResponse::NotEnoughSpace));
+                CancelMoveData();
+                ProcessMoveDataQueue();
+                return;
+        }
+
+        CopyBlobActorId = {};
+
+        IExecutor* executor = Executor();
+        if (executor) {
+            if (!ev->Get()->YellowMoveChannels.empty() || !ev->Get()->YellowStopChannels.empty()) {
+                executor->OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels));
+            }
+        }
+
+        if (MoveData.RecordTouched) {
+            const auto blobSeqId = TBlobSeqId::FromProto(newLocator.GetBlobSeqId());
+            if (MoveData.ProtectedBlobSeqIds.erase(blobSeqId)) {
+                ReleaseMoveDataBlobSeqId(blobSeqId);
+            }
+
+            MoveData.RecordTouched = false;
+            MoveData.ValueChainIndex = 0;
+            MoveData.BlobId = {};
+            MoveData.BlobLocator.Clear();
+            MoveData.NewBlobLocator.Clear();
+            MoveData.NewBlobSeqId = {};
+            MoveData.Phase = TMoveDataState::EPhase::ScanningIndex;
+            ContinueMoveData();
             return;
         }
 
-        const bool inserted = MoveData.BlobIdToNewLocator.emplace(
-            MoveData.BlobId, ev->Get()->NewLocator).second;
-        Y_ABORT_UNLESS(inserted);
         MoveData.NewBlobLocator.CopyFrom(ev->Get()->NewLocator);
         MoveData.Phase = TMoveDataState::EPhase::UpdatingIndex;
 
@@ -473,10 +699,6 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::ReleaseMoveDataBlobSeqId(const TBlobSeqId& blobSeqId) {
-        if (!MoveData.ProtectedBlobSeqIds.erase(blobSeqId)) {
-            return;
-        }
-
         TChannelInfo& channel = Channels[blobSeqId.Channel];
         const ui32 generation = Executor()->Generation();
         const TBlobSeqId leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
@@ -497,16 +719,19 @@ namespace NKikimr::NBlobDepot {
         MoveData.BlobLocator.Clear();
         MoveData.NewBlobLocator.Clear();
         MoveData.NewBlobSeqId = {};
+        MoveData.RecordsScanned = 0;
         MoveData.Phase = TMoveDataState::EPhase::ScanningIndex;
     }
 
     void TBlobDepot::FinishMoveData(const TActorContext& ctx) {
         YDB_LOG_DEBUG("FinishMoveData",
             {"marker", "BDM03"},
-            {"id", GetLogId()});
+            {"id", GetLogId()},
+            {"operationId", MoveDataOperationId});
 
         Y_ABORT_UNLESS(MoveData.IsInProgress());
         Y_ABORT_UNLESS(MoveData.ProtectedBlobSeqIds.empty());
+
         ctx.Send(MoveData.RequestSender, new TEvTablet::TEvMoveDataResponse(
             TabletID(),
             NKikimrTabletBase::TEvMoveDataResponse::Success));
@@ -514,18 +739,31 @@ namespace NKikimr::NBlobDepot {
         MoveData = {};
     }
 
-    void TBlobDepot::MoveDataCompleted(const TActorContext& ctx) {
-        YDB_LOG_DEBUG("MoveDataCompleted",
-            {"marker", "BDM04"},
-            {"id", GetLogId()});
+    void TBlobDepot::CancelMoveData() {
+        YDB_LOG_DEBUG("CancelMoveData",
+            {"marker", "BDM21"},
+            {"id", GetLogId()},
+            {"operationId", MoveDataOperationId});
 
-        FinishMoveData(ctx);
+        for (const TBlobSeqId& blobSeqId : MoveData.ProtectedBlobSeqIds) {
+            ReleaseMoveDataBlobSeqId(blobSeqId);
+        }
+        MoveData.ProtectedBlobSeqIds.clear();
+
+        Y_ABORT_UNLESS(MoveData.IsInProgress());
+        MoveData = {};
+    }
+
+    void TBlobDepot::ProcessMoveDataQueue() {
+        if (!Data->IsTrashFullyLoaded() || !Data->IsLoaded() || MoveData.IsInProgress()) {
+            return;
+        }
 
         while (!MoveDataRequestsQueue.empty()) {
             TEvTablet::TEvMoveData::TPtr ev = MoveDataRequestsQueue.front();
             MoveDataRequestsQueue.pop_front();
 
-            TSet<ui32> moveDataGroups;
+            THashSet<ui32> moveDataGroups;
             for (const ui32 groupId : ev->Get()->Record.GetGroups()) {
                 moveDataGroups.insert(groupId);
             }
@@ -538,6 +776,17 @@ namespace NKikimr::NBlobDepot {
             StartMoveData(std::move(moveDataGroups), sender);
             break;
         }
+    }
+
+    void TBlobDepot::MoveDataCompleted(const TActorContext& ctx) {
+        Y_ABORT_UNLESS(MoveData.Phase == TMoveDataState::EPhase::Vacuum);
+
+        YDB_LOG_DEBUG("MoveDataCompleted",
+            {"marker", "BDM04"},
+            {"id", GetLogId()});
+
+        FinishMoveData(ctx);
+        ProcessMoveDataQueue();
     }
 
 } // NKikimr::NBlobDepot

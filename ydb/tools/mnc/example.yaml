@@ -1,0 +1,91 @@
+# Replace example.com everywhere and the partition labels with those of your host.
+hosts:
+  - example.com
+
+nodes_per_host: 4
+node_layout:
+  num_datacenters: 4
+  nodes_per_rack: 1
+  shuffle_locations: false
+sector_map:
+  use: never
+erasure: mirror-3-dc
+device_type: NVME
+use_home_dir: true
+
+overridden_configs:
+  fail_domain_type: disk
+  # Keep the real hostname for node identity and MNC; use loopback for interconnect.
+  hosts:
+    - host: example.com
+      interconnect_host: localhost
+      address: "::1"
+      port: 19001
+      node_id: 1
+      host_config_id: 1
+      location: {body: body_0, data_center: data_center_0, rack: rack_0}
+    - host: example.com
+      interconnect_host: localhost
+      address: "::1"
+      port: 19000
+      node_id: 2
+      host_config_id: 2
+      location: {body: body_1, data_center: data_center_1, rack: rack_1}
+    - host: example.com
+      interconnect_host: localhost
+      address: "::1"
+      port: 19002
+      node_id: 3
+      host_config_id: 3
+      location: {body: body_2, data_center: data_center_2, rack: rack_2}
+    - host: example.com
+      interconnect_host: localhost
+      address: "::1"
+      port: 19003
+      node_id: 4
+      host_config_id: 4
+      location: {body: body_3, data_center: data_center_3, rack: rack_3}
+
+domain:
+  name: Root
+  databases:
+  - name: db1
+    storage_group_count: 4
+    compute_unit_count: 8
+  - name: db2
+    storage_group_count: 1
+    compute_unit_count: 1
+
+disks:
+  - hosts:
+      - example.com
+    disks_for_use:
+      # Partitions _4 on all NVMe disks are reserved.
+      # Node 1: partitions of NVMe disk 00.
+      - partlabel: kikimr_nvme_00_0
+      - partlabel: kikimr_nvme_00_1
+      - partlabel: kikimr_nvme_00_2
+      - partlabel: kikimr_nvme_00_3
+      # Node 2: partitions of NVMe disk 01.
+      - partlabel: kikimr_nvme_01_0
+      - partlabel: kikimr_nvme_01_1
+      - partlabel: kikimr_nvme_01_2
+      - partlabel: kikimr_nvme_01_3
+      # Node 3: partitions of NVMe disk 02.
+      - partlabel: kikimr_nvme_02_0
+      - partlabel: kikimr_nvme_02_1
+      - partlabel: kikimr_nvme_02_2
+      - partlabel: kikimr_nvme_02_3
+      # Node 4: partitions of NVMe disk 03.
+      - partlabel: kikimr_nvme_03_0
+      - partlabel: kikimr_nvme_03_1
+      - partlabel: kikimr_nvme_03_2
+      - partlabel: kikimr_nvme_03_3
+
+build_args:
+  - "--build=relwithdebinfo"
+
+deploy_flags:
+  - do_rebuild
+  - do_strip
+  - do_redeploy_bin

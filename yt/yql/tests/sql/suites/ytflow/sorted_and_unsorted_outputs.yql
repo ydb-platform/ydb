@@ -21,9 +21,8 @@ $lambda = ($row) -> {
 
 $sorted, $unsorted = process Input using $lambda(TableRow());
 
-replace into OutputSorted
-select * from $sorted
-order by key;
+replace into OutputSorted with primary_key = "[key]"
+select * from $sorted;
 
 insert into OutputUnsorted
 select * from $unsorted;

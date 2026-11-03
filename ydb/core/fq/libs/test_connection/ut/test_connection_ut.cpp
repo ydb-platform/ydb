@@ -4,4 +4,4 @@ namespace NFq {
 
 // TODO: tests
 
-} // namespace NFq
+}   // namespace NFq

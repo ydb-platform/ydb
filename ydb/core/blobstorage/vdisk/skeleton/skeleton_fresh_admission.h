@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/fresh/fresh_output_estimate.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
+#include <array>
 #include <deque>
 
 namespace NKikimr {
@@ -33,7 +34,7 @@ namespace NKikimr {
     // queues too. One reservation is in flight at a time.
     //
     // Only client writes come here: TEvVPut and TEvVMultiPut (for a huge blob, its
-    // index record), TEvVBlock and TEvVCollectGarbage. What serves replication and
+    // index record, reserved before writing the data), TEvVBlock and TEvVCollectGarbage. What serves replication and
     // recovery -- local sync data, Anubis/Osiris, recovered huge blobs, detected
     // phantoms -- is still put into Fresh ungated. Those records are charged to the
     // segment like any other, so they use up its reservation, and a segment they
@@ -61,9 +62,10 @@ namespace NKikimr {
         }
 
         // `housekeeping` marks writes that serve reclaiming space, such as garbage collection: their chunks are
-        // not held back by the static group reserve (see TEvChunkReserve::ForHousekeeping).
+        // not held back by the static group reserve (see TEvChunkReserve::ForHousekeeping). `purpose` says which
+        // of the allocation reserves they may spend (see NPDisk::EAllocationPurpose).
         EDecision Decide(const TFreshAdmission& admission, ESpaceColor refuseAtColor, bool housekeeping,
-            const TActorContext& ctx);
+            const TActorContext& ctx, NPDisk::EAllocationPurpose purpose);
 
         template <typename TEvPtr>
         void Park(TEvPtr& ev) {
@@ -88,6 +90,7 @@ namespace NKikimr {
             TFreshShortfall Split;
             ESpaceColor RefuseAtColor;
             bool Housekeeping;
+            NPDisk::EAllocationPurpose Purpose;
         };
 
         const TIntrusivePtr<TVDiskContext> VCtx;
@@ -97,10 +100,11 @@ namespace NKikimr {
 
         std::deque<std::unique_ptr<IEventHandle>> Parked;
         std::optional<TReservation> InFlight;
-        // The loosest bound PDisk has declined, for ordinary and for housekeeping reservations, until it grants
-        // one at that bound or a stricter one. A write no looser is refused without asking again. Forgotten once
-        // nothing waits, so a write arriving later always asks.
-        std::optional<ESpaceColor> RefusedAtColor[2];
+        // The loosest bound PDisk has declined, for ordinary and for housekeeping reservations of each purpose,
+        // until it grants one at that bound or a stricter one (see NPDisk::AllocationReserveRank() for how purposes
+        // relate). A write no looser is refused without asking again. Forgotten once nothing waits, so a write
+        // arriving later always asks.
+        std::array<std::optional<ESpaceColor>, size_t(NPDisk::EAllocationPurpose::Count)> RefusedAtColor[2];
         bool Draining = false;
         bool StopDraining = false;
 

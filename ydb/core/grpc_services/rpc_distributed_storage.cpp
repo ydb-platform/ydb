@@ -340,6 +340,10 @@ void ConvertPDisk(const NKikimrBlobStorage::TBaseConfig::TPDisk& from, Ydb::Dist
     to.set_slot_size_in_units(metrics.HasSlotSizeInUnits() ? metrics.GetSlotSizeInUnits() : from.GetPDiskConfig().GetSlotSizeInUnits());
     to.set_num_static_slots(from.GetNumStaticSlots());
     to.set_enforced_dynamic_slot_size(metrics.GetEnforcedDynamicSlotSize());
+    to.set_expected_slot_size(from.GetExpectedSlotSize());
+    if (metrics.HasUserChunkPoolSize()) {
+        to.set_user_chunk_pool_size(metrics.GetUserChunkPoolSize());
+    }
 
     to.set_total_size(metrics.GetTotalSize());
     to.set_available_size(metrics.GetAvailableSize());
@@ -451,6 +455,9 @@ void ConvertStoragePool(const NKikimrBlobStorage::TDefineStoragePool& from, Ydb:
                     break;
                 case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kKind:
                     f->set_kind(property.GetKind());
+                    break;
+                case NKikimrBlobStorage::TPDiskFilter::TRequiredProperty::kLocation:
+                    CopyNodeLocation(f->mutable_location(), property.GetLocation());
                     break;
                 default:
                     break;

@@ -45,7 +45,10 @@ Examples of projects using pythoncapi_compat.h
   <https://github.com/pyansys/hollerith/blob/main/src/pythoncapi_compat.h>`__)
 * `PyTorch <https://github.com/pytorch/pytorch/>`_ (`pythoncapi_compat.h copy
   <https://github.com/pytorch/pytorch/blob/main/torch/csrc/utils/pythoncapi_compat.h>`__)
-
+* `PyGObject <https://gitlab.gnome.org/GNOME/pygobject/>`_
+  (`commit <https://gitlab.gnome.org/GNOME/pygobject/-/commit/074c0348417b87d3003dbb409e6fc26b61121de3>`__,
+  `pythoncapi-compat Meson subproject
+  <https://gitlab.gnome.org/GNOME/pygobject/-/blob/main/subprojects/pythoncapi-compat.wrap?ref_type=heads>`__)
 
 Projects not using pythoncapi_compat.h
 ======================================

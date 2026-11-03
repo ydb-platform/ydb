@@ -18,6 +18,7 @@ message PileState {
         NOT_SYNCHRONIZED = 4; // not synchronized with primary, cannot be promoted
         SUSPENDED = 5;    // pile is gracefully taken down, preparing to be disconnected
         DISCONNECTED = 6; // disconnected from the cluster (no connectivity to other piles)
+        INACTIVE = 7; // listed in the cluster config, but not added to the cluster yet (or already removed from it)
     }
 
     // The name of the pile

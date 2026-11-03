@@ -1,10 +1,12 @@
-#include <fmt/format.h>
+#include <ydb/core/kqp/common/kqp.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/services/workload_manager/session_updater.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
+#include <fmt/format.h>
 
 namespace NKikimr::NWorkloadManager {
 
@@ -19,12 +21,13 @@ using namespace NActors;
 /// FinalState. This lets a test freeze the WM state visible in
 /// .sys/query_sessions at a chosen level.
 ///
-class TWmSessionUpdaterWrapper : public ISessionUpdater {
+class TWmSessionUpdaterWrapper: public ISessionUpdater {
 public:
     TWmSessionUpdaterWrapper(EState finalState, std::shared_ptr<ISessionUpdater> inner)
         : Inner(inner)
         , FinalState(finalState)
-    {}
+    {
+    }
 
     void SetRequestState(EState state, TInstant timestamp) override {
         if (state > FinalState) {
@@ -33,8 +36,16 @@ public:
         Inner->SetRequestState(state, timestamp);
     }
 
-    void SetPoolContext(TString poolId, TString classifiedBy) override {
-        Inner->SetPoolContext(std::move(poolId), std::move(classifiedBy));
+    void SetPoolContext(TPoolContext context) override {
+        Inner->SetPoolContext(std::move(context));
+    }
+
+    EState GetState() const override {
+        return Inner->GetState();
+    }
+
+    TString GetClassifiedBy() const override {
+        return Inner->GetClassifiedBy();
     }
 
 private:
@@ -49,12 +60,13 @@ private:
 /// This enables thread-safe inspection of system tables before the session
 /// actually starts its SQL execution.
 ///
-class TSessionProxyActor : public TActorBootstrapped<TSessionProxyActor> {
+class TSessionProxyActor: public TActorBootstrapped<TSessionProxyActor> {
 public:
     TSessionProxyActor(TActorId sessionActorId, TActorId edgeActorId)
         : SessionActorId(sessionActorId)
         , EdgeActorId(edgeActorId)
-    {}
+    {
+    }
 
     void Bootstrap(const TActorContext&) {
         Become(&TSessionProxyActor::StateWork);
@@ -118,17 +130,14 @@ struct TInterceptorRules {
 ///
 /// Replaces the real KQP workload service in the actor system.
 ///
-class TKqpWorkloadProxyActor : public TActorBootstrapped<TKqpWorkloadProxyActor> {
+class TKqpWorkloadProxyActor: public TActorBootstrapped<TKqpWorkloadProxyActor> {
 public:
-    TKqpWorkloadProxyActor(
-        ISessionUpdater::EState finalState,
-        TActorId realWorkloadServiceId,
-        std::shared_ptr<TInterceptorRules> rules
-    )
+    TKqpWorkloadProxyActor(ISessionUpdater::EState finalState, TActorId realWorkloadServiceId, std::shared_ptr<TInterceptorRules> rules)
         : FinalState(finalState)
         , WorkloadServiceId(realWorkloadServiceId)
         , Rules(rules)
-    {}
+    {
+    }
 
     void Bootstrap(const TActorContext&) {
         Become(&TKqpWorkloadProxyActor::StateWork);
@@ -147,14 +156,7 @@ public:
         auto wrapper = std::make_shared<TWmSessionUpdaterWrapper>(FinalState, msg->WmSessionUpdater);
 
         auto* proxyMsg = new NWorkloadManager::TEvPlaceRequestIntoPool(
-            msg->QueryId,
-            msg->DatabaseId,
-            msg->SessionId,
-            msg->PoolId,
-            msg->UserToken,
-            msg->RequestText,
-            wrapper
-        );
+            msg->QueryId, msg->DatabaseId, msg->SessionId, msg->PoolId, msg->UserToken, msg->RequestText, wrapper);
 
         TActorId senderForWorkload = ev->Sender;
 
@@ -179,7 +181,10 @@ class TQuerySessionReader {
 public:
     struct Row {
         std::optional<std::string> SessionId;
+        std::optional<ui32> NodeId;
         std::optional<std::string> State;
+        std::optional<std::string> Query;
+        std::optional<ui32> QueryCount;
         std::optional<std::string> WmPoolId;
         std::optional<std::string> WmClassifiedBy;
         std::optional<TInstant> StateChangeAt;
@@ -193,7 +198,8 @@ public:
 public:
     TQuerySessionReader(TIntrusivePtr<IYdbSetup> ydb)
         : Ydb(ydb)
-    {}
+    {
+    }
 
     void FetchAll(TStringBuf query) {
         Fetch(TStringBuilder() << "Query = '" << query << "'");
@@ -209,14 +215,12 @@ private:
 
         Results.clear();
         TString q = fmt::format(R"(
-            SELECT SessionId, State, WmPoolId, WmClassifiedBy, StateChangeAt, QueryStartAt,
-                   WmState, WmEnterTime, WmExitTime
+            SELECT SessionId, NodeId, State, Query, QueryCount, WmPoolId, WmClassifiedBy,
+                   StateChangeAt, QueryStartAt, WmState, WmEnterTime, WmExitTime
             FROM `.sys/query_sessions`
             WHERE {predicate}
             ORDER BY SessionId
-        )",
-            "predicate"_a = predicate
-        );
+        )", "predicate"_a = predicate);
 
         auto result = Ydb->ExecuteQuery(q, TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -226,16 +230,34 @@ private:
 
         while (parser->TryNextRow()) {
             Results.push_back(Row{
-                .SessionId       = parser->ColumnParser("SessionId").GetOptionalUtf8(),
-                .State           = parser->ColumnParser("State").GetOptionalUtf8(),
-                .WmPoolId        = parser->ColumnParser("WmPoolId").GetOptionalUtf8(),
-                .WmClassifiedBy  = parser->ColumnParser("WmClassifiedBy").GetOptionalUtf8(),
-                .StateChangeAt   = parser->ColumnParser("StateChangeAt").GetOptionalTimestamp(),
-                .QueryStartAt    = parser->ColumnParser("QueryStartAt").GetOptionalTimestamp(),
-                .WmState         = parser->ColumnParser("WmState").GetOptionalUtf8(),
-                .WmEnterTime     = parser->ColumnParser("WmEnterTime").GetOptionalTimestamp(),
-                .WmExitTime      = parser->ColumnParser("WmExitTime").GetOptionalTimestamp(),
+                .SessionId = parser->ColumnParser("SessionId").GetOptionalUtf8(),
+                .NodeId = parser->ColumnParser("NodeId").GetOptionalUint32(),
+                .State = parser->ColumnParser("State").GetOptionalUtf8(),
+                .Query = parser->ColumnParser("Query").GetOptionalUtf8(),
+                .QueryCount = parser->ColumnParser("QueryCount").GetOptionalUint32(),
+                .WmPoolId = parser->ColumnParser("WmPoolId").GetOptionalUtf8(),
+                .WmClassifiedBy = parser->ColumnParser("WmClassifiedBy").GetOptionalUtf8(),
+                .StateChangeAt = parser->ColumnParser("StateChangeAt").GetOptionalTimestamp(),
+                .QueryStartAt = parser->ColumnParser("QueryStartAt").GetOptionalTimestamp(),
+                .WmState = parser->ColumnParser("WmState").GetOptionalUtf8(),
+                .WmEnterTime = parser->ColumnParser("WmEnterTime").GetOptionalTimestamp(),
+                .WmExitTime = parser->ColumnParser("WmExitTime").GetOptionalTimestamp(),
             });
+        }
+    }
+
+public:
+    void Dump(IOutputStream& out) const {
+        out << "TQuerySessionReader: " << Results.size() << " rows\n";
+        for (size_t i = 0; i < Results.size(); ++i) {
+            const auto& r = Results[i];
+            out << "  [" << i << "]"
+                << " SessionId=" << r.SessionId.value_or("<null>") << " NodeId=" << (r.NodeId ? ToString(*r.NodeId) : TString("<null>"))
+                << " State=" << r.State.value_or("<null>") << " Query=" << r.Query.value_or("<null>")
+                << " QueryCount=" << (r.QueryCount ? ToString(*r.QueryCount) : TString("<null>"))
+                << " WmPoolId=" << r.WmPoolId.value_or("<null>") << " WmClassifiedBy=" << r.WmClassifiedBy.value_or("<null>")
+                << " StateChangeAt=" << (r.StateChangeAt ? r.StateChangeAt->ToString() : TString("<null>"))
+                << " QueryStartAt=" << (r.QueryStartAt ? r.QueryStartAt->ToString() : TString("<null>")) << "\n";
         }
     }
 
@@ -261,14 +283,14 @@ public:
         , Rules(std::make_shared<TInterceptorRules>())
     {
         Ydb = TYdbSetupSettings()
-            .NodeCount(1)
-            .EnableResourcePools(true)
-            // turn off to reduce "noise" in a log
-            .EnableStreamingQueries(false)
-            .ConcurrentQueryLimit(limit)
-            .CreateSamplePool(true)
-            .PoolId(myPoolId)
-            .Create();
+                  .NodeCount(1)
+                  .EnableResourcePools(true)
+                  // turn off to reduce "noise" in a log
+                  .EnableStreamingQueries(false)
+                  .ConcurrentQueryLimit(limit)
+                  .CreateSamplePool(true)
+                  .PoolId(myPoolId)
+                  .Create();
 
         auto& runtime = *Ydb->GetRuntime();
         auto workloadServiceId = MakeServiceId(runtime.GetNodeId(0));
@@ -286,7 +308,9 @@ public:
         }
     }
 
-    TActorId GetProxyId() const { return ProxyActorId; }
+    TActorId GetProxyId() const {
+        return ProxyActorId;
+    }
 
     TIntrusivePtr<IYdbSetup> GetYdb() {
         return Ydb;
@@ -306,7 +330,7 @@ private:
     std::shared_ptr<TInterceptorRules> Rules;
 };
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
     ///
@@ -368,7 +392,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         auto evHanging = runtime.GrabEdgeEvent<NWorkloadManager::TEvContinueRequest>(edgeHanging);
 
         auto delayedRequest = f.GetYdb()->ExecuteQueryAsync(qDelayed, myPool);
-        f.GetYdb()->WaitPoolState({.DelayedRequests = 1, .RunningRequests = 1});
+        f.GetYdb()->WaitPoolState({ .DelayedRequests = 1, .RunningRequests = 1 });
 
         TQuerySessionReader reader(f.GetYdb());
         reader.FetchAll(qDelayed);
@@ -445,7 +469,8 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
 
         const TString classifierId = "my_pool_classifier";
         auto ddl = f.GetYdb()->ExecuteQuery(TStringBuilder() << R"(
-            CREATE RESOURCE POOL CLASSIFIER )" << classifierId << R"( WITH (
+            CREATE RESOURCE POOL CLASSIFIER )" << classifierId
+                                                             << R"( WITH (
                 RESOURCE_POOL="my_pool",
                 RANK=20
             );
@@ -483,8 +508,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         const auto sessionId = session.GetId();
 
-        auto res = session.ExecuteDataQuery(TSampleQueries::TSelect42::Query,
-                                            TTxControl::BeginTx().CommitTx()).GetValueSync();
+        auto res = session.ExecuteDataQuery(TSampleQueries::TSelect42::Query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT(res.IsSuccess());
 
         TQuerySessionReader reader(f.GetYdb());
@@ -503,17 +527,12 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
     ///
     Y_UNIT_TEST(TestStateWmDisabled) {
         using namespace NYdb::NTable;
-        auto ydb = TYdbSetupSettings()
-            .NodeCount(1)
-            .EnableResourcePools(false)
-            .EnableStreamingQueries(false)
-            .Create();
+        auto ydb = TYdbSetupSettings().NodeCount(1).EnableResourcePools(false).EnableStreamingQueries(false).Create();
 
         auto session = ydb->GetTableClient().CreateSession().GetValueSync().GetSession();
         const auto sessionId = session.GetId();
 
-        auto res = session.ExecuteDataQuery(TSampleQueries::TSelect42::Query,
-                                            TTxControl::BeginTx().CommitTx()).GetValueSync();
+        auto res = session.ExecuteDataQuery(TSampleQueries::TSelect42::Query, TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT(res.IsSuccess());
 
         TQuerySessionReader reader(ydb);
@@ -528,14 +547,142 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
     /// regardless of the actual queue state.
     ///
     Y_UNIT_TEST(TestDeprecatedColumnsAlwaysNull) {
-        for (auto state : {ISessionUpdater::NONE, ISessionUpdater::PENDING, ISessionUpdater::EXITED}) {
+        for (auto state : { ISessionUpdater::NONE, ISessionUpdater::PENDING, ISessionUpdater::EXITED }) {
             auto reader = ReadQuerySessionAfterState(state);
             UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
-            UNIT_ASSERT_C(!reader[0].WmState,     "WmState must be NULL for state=" << ui32(state));
+            UNIT_ASSERT_C(!reader[0].WmState, "WmState must be NULL for state=" << ui32(state));
             UNIT_ASSERT_C(!reader[0].WmEnterTime, "WmEnterTime must be NULL for state=" << ui32(state));
-            UNIT_ASSERT_C(!reader[0].WmExitTime,  "WmExitTime must be NULL for state=" << ui32(state));
+            UNIT_ASSERT_C(!reader[0].WmExitTime, "WmExitTime must be NULL for state=" << ui32(state));
+        }
+    }
+
+    Y_UNIT_TEST(WmStateNotificationsPreserveRequestObserverAndCookie) {
+        TQuerySessionTestFixture f("my_pool", ISessionUpdater::EXITED, /*limit=*/1);
+        auto ydb = f.GetYdb();
+        auto& runtime = *ydb->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto busySender = runtime.AllocateEdgeActor();
+        const auto proxy = NKqp::MakeKqpProxyID(runtime.GetNodeId());
+        auto client = ydb->GetTableClient();
+        auto firstSession = client.CreateSession().GetValueSync().GetSession();
+        auto secondSession = client.CreateSession().GetValueSync().GetSession();
+
+        auto sendQuery = [&](const TString& sessionId, const TString& query, TActorId actor, ui64 cookie, bool report = true) {
+            auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+            event->Record.SetUserToken(NACLib::TUserToken("", "user@" BUILTIN_SYSTEM_DOMAIN, {}).SerializeAsString());
+            auto* request = event->Record.MutableRequest();
+            request->SetSessionId(sessionId);
+            request->SetQuery(query);
+            request->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            request->SetDatabase("/Root");
+            request->SetPoolId("my_pool");
+            request->SetKeepSession(true);
+            request->SetReportWmStateChanges(report);
+            request->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            request->MutableTxControl()->set_commit_tx(true);
+            runtime.Send(new IEventHandle(proxy, actor, event.Release(), 0, cookie));
+        };
+        auto checkState = [&](ISessionUpdater::EState state, ui64 cookie) {
+            auto event = runtime.GrabEdgeEvent<TEvWmStateChanged>(sender, FUTURE_WAIT_TIMEOUT);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL(event->Cookie, cookie);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(event->Get()->State), static_cast<ui32>(state));
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->PoolId, "my_pool");
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->ClassifiedBy, "USER");
+        };
+        auto checkResponse = [&](TActorId actor, ui64 cookie, Ydb::StatusIds::StatusCode status) {
+            auto event = runtime.GrabEdgeEvent<NKqp::TEvKqp::TEvQueryResponse>(actor, FUTURE_WAIT_TIMEOUT);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL(event->Cookie, cookie);
+            UNIT_ASSERT_VALUES_EQUAL_C(event->Get()->Record.GetYdbStatus(), status, event->Get()->Record.DebugString());
+        };
+        auto release = [&](TEvContinueRequest::TPtr& event, TActorId edge) {
+            runtime.Send(new IEventHandle(event->Sender, edge, event->Release().Release()));
+        };
+
+        // Keep the only pool slot occupied until both observed requests queue.
+        const auto hangingEdge = f.SetupInterceptor("SELECT 11;");
+        auto hanging = ydb->ExecuteQueryAsync("SELECT 11;", TQueryRunnerSettings().PoolId("my_pool"));
+        auto hangingEvent = runtime.GrabEdgeEvent<TEvContinueRequest>(hangingEdge, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT(hangingEvent);
+        const auto firstEdge = f.SetupInterceptor("SELECT 42;");
+        const auto secondEdge = f.SetupInterceptor("SELECT 43;");
+
+        sendQuery(TString(firstSession.GetId()), "SELECT 42;", sender, 101);
+        checkState(ISessionUpdater::PENDING, 101);
+        checkState(ISessionUpdater::DELAYED, 101);
+        sendQuery(TString(secondSession.GetId()), "SELECT 43;", sender, 202);
+        checkState(ISessionUpdater::PENDING, 202);
+        checkState(ISessionUpdater::DELAYED, 202);
+
+        // Rejection must not steal the active request's observer or its cookie.
+        sendQuery(TString(firstSession.GetId()), "SELECT 99;", busySender, 303);
+        checkResponse(busySender, 303, Ydb::StatusIds::SESSION_BUSY);
+
+        release(hangingEvent, hangingEdge);
+        UNIT_ASSERT_VALUES_EQUAL(hanging.GetResult().GetStatus(), NYdb::EStatus::SUCCESS);
+        checkState(ISessionUpdater::EXITED, 101);
+        auto firstEvent = runtime.GrabEdgeEvent<TEvContinueRequest>(firstEdge, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT(firstEvent);
+        release(firstEvent, firstEdge);
+        checkResponse(sender, 101, Ydb::StatusIds::SUCCESS);
+        checkState(ISessionUpdater::EXITED, 202);
+        auto secondEvent = runtime.GrabEdgeEvent<TEvContinueRequest>(secondEdge, FUTURE_WAIT_TIMEOUT);
+        UNIT_ASSERT(secondEvent);
+        release(secondEvent, secondEdge);
+        checkResponse(sender, 202, Ydb::StatusIds::SUCCESS);
+
+        // Reusing a session without opting in must clear the previous observer.
+        sendQuery(TString(firstSession.GetId()), "SELECT 44;", sender, 404, false);
+        checkResponse(sender, 404, Ydb::StatusIds::SUCCESS);
+        // All WM transitions precede the completed query response. A marker
+        // bounds the edge queue check without waiting for an absent event.
+        for (auto actor : { sender, busySender }) {
+            runtime.Send(new IEventHandle(actor, {}, new TEvents::TEvWakeup()));
+            runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+                UNIT_ASSERT_C(event->GetTypeRewrite() != TEvWmStateChanged::EventType, "Unexpected WM notification after query completion");
+                return event->GetTypeRewrite() == TEvents::TEvWakeup::EventType;
+            },
+                { actor }, FUTURE_WAIT_TIMEOUT);
+        }
+    }
+
+    ///
+    /// Verify that WmStateToStatus, WmStateToProto, and IsWmStateQueued
+    /// are mutually consistent for all WM states.
+    ///
+    Y_UNIT_TEST(WmStateConversionConsistency) {
+        for (int stateInt = static_cast<int>(ISessionUpdater::EState::NONE); stateInt <= static_cast<int>(ISessionUpdater::EState::EXITED);
+             ++stateInt)
+        {
+            const auto state = static_cast<ISessionUpdater::EState>(stateInt);
+            const auto status = WmStateToStatus(state);
+            const auto protoState = WmStateToProto(state);
+            const auto isQueued = IsWmStateQueued(state);
+
+            // WmStateToStatus and WmStateToProto must agree
+            if (status == "QUEUED") {
+                UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(protoState), static_cast<int>(NKikimrKqp::WM_STATE_QUEUED),
+                    "Inconsistent: status=QUEUED but proto=" << static_cast<int>(protoState) << " for state " << stateInt);
+            } else if (status == "EXECUTING") {
+                UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(protoState), static_cast<int>(NKikimrKqp::WM_STATE_EXECUTING),
+                    "Inconsistent: status=EXECUTING but proto=" << static_cast<int>(protoState) << " for state " << stateInt);
+            } else if (status.empty()) {
+                // WM_STATE_NONE maps to an empty status string
+                UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(protoState), static_cast<int>(NKikimrKqp::WM_STATE_NONE),
+                    "Inconsistent: status is empty but proto=" << static_cast<int>(protoState) << " for state " << stateInt);
+            } else {
+                UNIT_FAIL("Unknown status: " << status);
+            }
+
+            // IsWmStateQueued must agree with both status and proto
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                isQueued, status == "QUEUED", "Inconsistent: isQueued=" << isQueued << " but status=" << status << " for state " << stateInt);
+            UNIT_ASSERT_VALUES_EQUAL_C(isQueued, protoState == NKikimrKqp::WM_STATE_QUEUED,
+                "Inconsistent: isQueued=" << isQueued << " but proto=" << static_cast<int>(protoState) << " for state " << stateInt);
         }
     }
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

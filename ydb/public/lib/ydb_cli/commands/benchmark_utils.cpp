@@ -599,7 +599,9 @@ bool CompareValue(IOutputStream& errStream, const NYdb::TValue& v, TStringBuf vE
         vp.OpenOptional();
         if (vp.IsNull()) {
             return vExpected == "";
-        } else if (vExpected == "") {
+        } else if (vExpected.empty() &&
+            (vp.GetKind() != TTypeParser::ETypeKind::Primitive ||
+             !IsIn({EPrimitiveType::String, EPrimitiveType::Utf8}, vp.GetPrimitiveType()))) {
             return false;
         }
     }

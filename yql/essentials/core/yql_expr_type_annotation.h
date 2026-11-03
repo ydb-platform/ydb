@@ -295,6 +295,9 @@ IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input, c
                                                  const TTypeAnnotationContext& typeCtx);
 
 bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node);
+bool IsSqlInCollectionItemsNullable(
+    const TTypeAnnotationNode* lookupType,
+    const TTypeAnnotationNode* collectionItemType);
 
 bool IsDataTypeNumeric(EDataSlot dataSlot);
 bool IsDataTypeFloat(EDataSlot dataSlot);

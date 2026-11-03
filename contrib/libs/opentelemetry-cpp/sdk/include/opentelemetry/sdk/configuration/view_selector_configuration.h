@@ -21,7 +21,7 @@ class ViewSelectorConfiguration
 {
 public:
   std::string instrument_name;
-  InstrumentType instrument_type{InstrumentType::counter};
+  InstrumentType instrument_type{InstrumentType::none};
   std::string unit;
   std::string meter_name;
   std::string meter_version;

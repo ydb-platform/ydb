@@ -77,7 +77,10 @@ TBlobBatch::~TBlobBatch() = default;
 
 void TBlobBatch::SendWriteRequest(
     const TActorContext& ctx, ui32 groupId, const TLogoBlobID& logoBlobId, const TString& data, ui64 cookie, TInstant deadline) {
-    LOG_S_TRACE("EvPut " << data.size() << " bytes to group " << groupId << " at tablet " << BatchInfo->TabletInfo->TabletID);
+    YDB_LOG_TRACE_COMP(TX_COLUMNSHARD, "EvPut bytes to group at tablet",
+        {"dataSize", data.size()},
+        {"groupId", groupId},
+        {"tabletID", BatchInfo->TabletInfo->TabletID});
 
     auto handleClass = NKikimrBlobStorage::UserData;
     //auto handleClass = NKikimrBlobStorage::AsyncBlob; // TODO: what's the difference?
@@ -136,14 +139,24 @@ TUnifiedBlobId TBlobBatch::AllocateNextBlobId(const TString& blobData) {
     return BatchInfo->NextBlobId(blobData.size());
 }
 
-TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 gen, const TTabletId selfTabletId)
+TBlobManager::TBlobManager(
+    TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 gen, const TTabletId selfTabletId, bool weightedDataChannelSelection)
     : SelfTabletId(selfTabletId)
     , TabletInfo(tabletInfo)
+    , WeightedDataChannelSelection(weightedDataChannelSelection)
     , CurrentGen(gen)
     , CurrentStep(0)
 {
     BlobsManagerCounters.CurrentGen->Set(CurrentGen);
     BlobsManagerCounters.CurrentStep->Set(CurrentStep);
+    if (TabletInfo && TabletInfo->Channels.size() > 2) {
+        DataChannels.reserve(TabletInfo->Channels.size() - 2);
+        for (size_t i = 2; i < TabletInfo->Channels.size(); ++i) {
+            const ui32 channel = TabletInfo->Channels[i].Channel;
+            Y_ENSURE(channel <= Max<ui8>());
+            DataChannels.push_back(static_cast<ui8>(channel));
+        }
+    }
 }
 
 void TBlobManager::RegisterControls(NKikimr::TControlBoard& /*icb*/) {
@@ -410,15 +423,27 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     return result;
 }
 
+ui32 TBlobManager::PickDataChannel() const {
+    AFL_VERIFY(TabletInfo->Channels.size() > 2);
+    if (!WeightedDataChannelSelection) {
+        return TabletInfo->Channels[(CurrentStep % (TabletInfo->Channels.size() - 2)) + 2].Channel;
+    }
+
+    return ChannelsShares.Select(DataChannels);
+}
+
+void TBlobManager::UpdateChannelApproximateFreeSpace(ui32 channel, float approximateFreeSpaceShare) {
+    ChannelsShares.Update(channel, approximateFreeSpaceShare);
+}
+
 TBlobBatch TBlobManager::StartBlobBatch() {
     AFL_VERIFY(++CurrentStep < Max<ui32>() - 10);
     BlobsManagerCounters.CurrentStep->Set(CurrentStep);
-    AFL_VERIFY(TabletInfo->Channels.size() > 2);
-    const auto& channel = TabletInfo->Channels[(CurrentStep % (TabletInfo->Channels.size() - 2)) + 2];
+    const ui32 channel = PickDataChannel();
     ++CountersUpdate.BatchesStarted;
     TAllocatedGenStepConstPtr genStepRef = new TAllocatedGenStep({ CurrentGen, CurrentStep });
     AllocatedGenSteps.push_back(genStepRef);
-    auto batchInfo = std::make_unique<TBlobBatch::TBatchInfo>(TabletInfo, genStepRef, channel.Channel, BlobsManagerCounters);
+    auto batchInfo = std::make_unique<TBlobBatch::TBatchInfo>(TabletInfo, genStepRef, channel, BlobsManagerCounters);
     return TBlobBatch(std::move(batchInfo));
 }
 
@@ -427,8 +452,11 @@ void TBlobManager::DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) {
     ++CountersUpdate.BatchesCommitted;
     CountersUpdate.BlobsWritten += blobBatch.GetBlobCount();
 
-    LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Save Batch GenStep: " << blobBatch.BatchInfo->Gen << ":"
-                                         << blobBatch.BatchInfo->Step << " Blob count: " << blobBatch.BatchInfo->GetBlobIds().size());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet save batch",
+        {"tabletId", TabletInfo->TabletID},
+        {"genStep", blobBatch.BatchInfo->Gen},
+        {"step", blobBatch.BatchInfo->Step},
+        {"count", blobBatch.BatchInfo->GetBlobIds().size()});
 
     // Add this batch to KeepQueue
     TGenStep edgeGenStep = EdgeGenStep();
@@ -448,8 +476,11 @@ void TBlobManager::DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) {
 
 void TBlobManager::DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobManagerDb& db) {
     Y_ABORT_UNLESS(blobBatch.BatchInfo);
-    LOG_S_DEBUG("BlobManager on execute at tablet " << TabletInfo->TabletID << " Save Batch GenStep: " << blobBatch.BatchInfo->Gen << ":"
-                                                    << blobBatch.BatchInfo->Step << " Blob count: " << blobBatch.BatchInfo->GetBlobIds().size());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager on execute at tablet save batch blob",
+        {"tabletID", TabletInfo->TabletID},
+        {"genStep", blobBatch.BatchInfo->Gen},
+        {"step", blobBatch.BatchInfo->Step},
+        {"count", blobBatch.BatchInfo->GetBlobIds().size()});
 
     TGenStep edgeGenStep = EdgeGenStep();
     for (auto&& blobId : blobBatch.BatchInfo->GetBlobIds()) {
@@ -479,11 +510,15 @@ void TBlobManager::DeleteBlobOnComplete(const TTabletId tabletId, const TUnified
     // Check if the deletion needs to be delayed until the blob is no longer
     // used by in-flight requests
     if (!IsBlobInUsage(blobId)) {
-        LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delete Blob " << blobId);
+        YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet delete blob",
+            {"tabletId", TabletInfo->TabletID},
+            {"blobId", blobId});
         AFL_VERIFY(BlobsToDelete.Add(tabletId, blobId));
         BlobsManagerCounters.OnBlobsToDelete(BlobsToDelete);
     } else {
-        LOG_S_DEBUG("BlobManager at tablet " << TabletInfo->TabletID << " Delay Delete Blob " << blobId);
+        YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet delay delete blob",
+            {"tabletId", TabletInfo->TabletID},
+            {"blobId", blobId});
         AFL_VERIFY(BlobsToDeleteDelayed.Add(tabletId, blobId));
         BlobsManagerCounters.OnBlobsToDeleteDelayed(BlobsToDeleteDelayed);
     }

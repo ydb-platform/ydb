@@ -341,6 +341,10 @@ public:
         Bit,
         Float16,
         BFloat16,
+        Float8E4M3, // E4M3FN
+        Float8E5M2,
+        Uint4 = 9, // Packed unsigned 4-bit coordinates [0, 15].
+        Int4 = 10, // Packed signed 4-bit coordinates [-8, 7].
     };
 
     EMetric Metric = EMetric::Unspecified;
@@ -373,6 +377,10 @@ public:
         Bit,
         Float16,
         BFloat16,
+        Float8E4M3, // E4M3FN
+        Float8E5M2,
+        Uint4 = 9, // Packed unsigned 4-bit coordinates [0, 15].
+        Int4 = 10, // Packed signed 4-bit coordinates [-8, 7].
     };
 
     TVectorIndexSettings Settings;
@@ -380,6 +388,10 @@ public:
     uint32_t Levels = 0;
     uint32_t OverlapClusters = 0;
     double OverlapRatio = 0;
+
+    // Maintain the index on table writes. Enabled when unset.
+    // When false, rebuild the index to reflect table changes.
+    std::optional<bool> AutoUpdate = std::nullopt;
 
     static TKMeansTreeSettings FromProto(const Ydb::Table::KMeansTreeSettings& proto);
 
@@ -804,12 +816,15 @@ class TTtlDeleteAction {};
 class TTtlEvictToExternalStorageAction {
 public:
     TTtlEvictToExternalStorageAction(const std::string& storageName);
+    TTtlEvictToExternalStorageAction(const std::string& storageName, const std::optional<std::string>& objectKeyPrefix);
     void SerializeTo(Ydb::Table::EvictionToExternalStorageSettings& proto) const;
 
     std::string GetStorage() const;
+    const std::optional<std::string>& GetObjectKeyPrefix() const;
 
 private:
     std::string Storage_;
+    std::optional<std::string> ObjectKeyPrefix_;
 };
 
 class TTtlTierSettings {

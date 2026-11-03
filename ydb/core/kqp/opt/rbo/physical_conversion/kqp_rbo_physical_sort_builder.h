@@ -8,19 +8,19 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-class TPhysicalSortBuilder: public TPhysicalUnaryOpBuilder {
+class TPhysicalSortBuilder: public TPhysicalWideUnaryOpBuilder {
 public:
-    TPhysicalSortBuilder(TIntrusivePtr<TOpSort> sort, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalUnaryOpBuilder(ctx, pos)
+    TPhysicalSortBuilder(TOpSort& sort, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalWideUnaryOpBuilder(ctx, pos, names)
         , Sort(sort) {
     }
 
-    TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
+    NPhysicalConvertionUtils::TStageBody BuildPhysicalOp(const NPhysicalConvertionUtils::TStageBody& input) override;
 
 private:
-    TVector<TExprNode::TPtr> BuildSortKeysForWideSort(const TVector<TInfoUnit>& inputs, const TVector<TSortElement>& sortElements);
     TExprNode::TPtr BuildSort(TExprNode::TPtr input, TOrderEnforcer& enforcer);
-    std::pair<TExprNode::TPtr, TVector<TExprNode::TPtr>> BuildSortKeySelector(const TVector<TSortElement>& sortElements);
+    std::pair<TExprNode::TPtr, TVector<TExprNode::TPtr>> BuildSortKeySelector(const TSortIUs& sortElements);
+    TVector<TExprNode::TPtr> BuildSortKeysForWideSort(const TVector<TInfoUnitId>& inputs, const TSortIUs& sortElements);
 
-    TIntrusivePtr<TOpSort> Sort;
+    TOpSort& Sort;
 };

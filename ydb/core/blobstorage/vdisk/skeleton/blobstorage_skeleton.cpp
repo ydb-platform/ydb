@@ -21,6 +21,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 #include <ydb/core/blobstorage/vdisk/localrecovery/localrecovery_public.h>
 #include <ydb/core/blobstorage/vdisk/balance/balancing_actor.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
@@ -139,26 +140,6 @@ namespace NKikimr {
         // Some stuff to handle a case when we can't accept TEvVPut requests
         // because of (fresh) compaction overload
         ////////////////////////////////////////////////////////////////////////
-        static bool BlockWrites(NKikimrBlobStorage::TGroupDecommitStatus::E status) {
-            switch (status) {
-                case NKikimrBlobStorage::TGroupDecommitStatus::NONE:
-                case NKikimrBlobStorage::TGroupDecommitStatus::PENDING:
-                    return false;
-
-                case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
-                case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
-                    return true;
-
-                case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
-                    return true; // TODO(alexvru): accept writes only from BlobDepot agent-processed requests
-
-                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
-                case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
-                    Y_ABORT();
-                    return true;
-            }
-        }
-
         template<typename TEvent>
         bool CheckIfWriteAllowed(TAutoPtr<TEventHandle<TEvent>>& ev, const TActorContext& ctx) {
             if (!SelfVDiskId.SameDisk(ev->Get()->Record.GetVDiskID())) {
@@ -167,9 +148,10 @@ namespace NKikimr {
                 ReplyError(NKikimrProto::ERROR, "disk is in donor mode", ev, ctx, TAppData::TimeProvider->Now());
             } else if (Config->BaseInfo.ReadOnly) {
                 ReplyError(NKikimrProto::ERROR, "disk is in readonly mode", ev, ctx, TAppData::TimeProvider->Now());
-            } else if (BlockWrites(GInfo->DecommitStatus)) {
+            } else if (GInfo->DecommitBlocksWrites()) {
                 if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvVCollectGarbage>) {
-                    if (const auto& r = ev->Get()->Record; r.GetHard() && r.GetRecordGeneration() == Max<ui32>()) {
+                    if (const auto& r = ev->Get()->Record;
+                            TBlobStorageGroupInfo::IsAssimilationBarrier(r.GetHard(), r.GetRecordGeneration())) {
                         return true; // part of an assimilation process
                     }
                 }
@@ -563,13 +545,13 @@ namespace NKikimr {
         // been parked, or answered by `refuse`, and must not be handled any further now.
         template <typename TEvPtr, typename TRefuse>
         bool AdmitToFresh(TEvPtr& ev, TFreshAdmission admission, ESpaceColor refuseAtColor, bool housekeeping,
-                const TActorContext& ctx, TRefuse&& refuse) {
+                const TActorContext& ctx, TRefuse&& refuse, NPDisk::EAllocationPurpose purpose) {
             Y_VERIFY_DEBUG_S(PendingFreshAdmission.Empty(), VCtx->VDiskLogPrefix);
             if (FreshGate->MustQueue()) {
                 FreshGate->Park(ev);
                 return false;
             }
-            switch (FreshGate->Decide(admission, refuseAtColor, housekeeping, ctx)) {
+            switch (FreshGate->Decide(admission, refuseAtColor, housekeeping, ctx, purpose)) {
                 case TFreshAdmissionGate::EDecision::Admitted:
                     PendingFreshAdmission = std::move(admission);
                     return true;
@@ -598,9 +580,6 @@ namespace NKikimr {
                     break;
                 case TEvBlobStorage::EvVCollectGarbage:
                     Handle(*reinterpret_cast<TEvBlobStorage::TEvVCollectGarbage::TPtr*>(&handle), ctx);
-                    break;
-                case TEvBlobStorage::EvHullLogHugeBlob:
-                    Handle(*reinterpret_cast<TEvHullLogHugeBlob::TPtr*>(&handle), ctx);
                     break;
                 default:
                     Y_ABORT("unexpected event type %" PRIu32 " waiting for Fresh admission", handle->GetTypeRewrite());
@@ -816,16 +795,19 @@ namespace NKikimr {
             for (;;) {
                 TFreshAdmission admission;
                 std::optional<ESpaceColor> bound;
+                bool hasUser = false;
                 for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) {
                     if (bounds[itemIdx] && !refused[itemIdx]) {
                         admission.Merge(FreshAdmissionForPut(ev->Get()->GetItemBuffer(itemIdx).size()));
                         bound = bound ? Min(*bound, *bounds[itemIdx]) : *bounds[itemIdx];
+                        hasUser |= record.GetItems(itemIdx).GetDataKind() != NKikimrBlobStorage::TDataKind::SYSTEM;
                     }
                 }
                 if (!bound) {
                     return true; // nothing left to charge
                 }
-                switch (FreshGate->Decide(admission, *bound, false, ctx)) {
+                const auto purpose = hasUser ? NPDisk::EAllocationPurpose::User : NPDisk::EAllocationPurpose::System;
+                switch (FreshGate->Decide(admission, *bound, false, ctx, purpose)) {
                     case TFreshAdmissionGate::EDecision::Admitted:
                         PendingFreshAdmission = std::move(admission);
                         return true;
@@ -834,7 +816,11 @@ namespace NKikimr {
                         return false;
                     case TFreshAdmissionGate::EDecision::Refused:
                         for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) {
-                            if (bounds[itemIdx] == bound) {
+                            // A mixed batch tries the USER budget first. Its
+                            // refusal cannot settle SYSTEM items at the same bound.
+                            if (bounds[itemIdx] == bound && (hasUser
+                                    ? record.GetItems(itemIdx).GetDataKind() != NKikimrBlobStorage::TDataKind::SYSTEM
+                                    : true)) {
                                 refused[itemIdx] = true;
                             }
                         }
@@ -1043,8 +1029,13 @@ namespace NKikimr {
         }
 
         void PrivateHandle(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx) {
-            // A huge blob keeps its data out of Fresh; its index record is admitted in Handle(TEvHullLogHugeBlob),
-            // once the data is written and the record is about to be logged.
+            // Internal rewrites reclaim space regardless of the original blob's data kind.
+            const auto allocationPurpose = ev->Get()->RewriteBlob
+                ? NPDisk::EAllocationPurpose::Maintenance
+                : ev->Get()->Record.GetDataKind() == NKikimrBlobStorage::TDataKind::SYSTEM
+                    ? NPDisk::EAllocationPurpose::System : NPDisk::EAllocationPurpose::User;
+            // Reserve the Fresh index before sending a huge put to HugeKeeper.
+            // It stays charged while the data waits for a slot and is written.
             const ESpaceColor freshRefuseAtColor = TOutOfSpaceLogic::FreshRefuseAtColorForPut(
                 ev->Get()->Record.GetDataKind(), ev->Get()->Record.GetIgnoreBlock() || ev->Get()->Record.GetIsZeroEntry());
             // A put the disk's color refuses right now is charged nothing, and so stays refused below even should the
@@ -1053,11 +1044,15 @@ namespace NKikimr {
             if (FreshGate) {
                 const auto& record = ev->Get()->Record;
                 TFreshAdmission admission;
-                if (IsHugePut(LogoBlobIDFromLogoBlobID(record.GetBlobID()))) {
-                    // admitted once its data is written, as said above
-                } else if (OutOfSpaceLogic->WouldAllowVPutLikeWrite(record.GetIgnoreBlock(), record.GetIsZeroEntry(),
+                if (OutOfSpaceLogic->WouldAllowVPutLikeWrite(record.GetIgnoreBlock(), record.GetIsZeroEntry(),
                         record.GetDataKind())) {
-                    admission = FreshAdmissionForPut(ev->Get()->GetBufferBytes());
+                    if (IsHugePut(LogoBlobIDFromLogoBlobID(record.GetBlobID()))) {
+                        // no LSN until its data is written, so Fresh can rotate meanwhile
+                        admission.LogoBlobs.AddHuge();
+                        admission.Unsequenced = true;
+                    } else {
+                        admission = FreshAdmissionForPut(ev->Get()->GetBufferBytes());
+                    }
                 } else {
                     freshRefused = true;
                 }
@@ -1065,7 +1060,7 @@ namespace NKikimr {
                     ReplyError({NKikimrProto::OUT_OF_SPACE, "out of space", 0, false}, ev, ctx,
                         TAppData::TimeProvider->Now());
                 };
-                if (!AdmitToFresh(ev, std::move(admission), freshRefuseAtColor, false, ctx, refuse)) {
+                if (!AdmitToFresh(ev, std::move(admission), freshRefuseAtColor, false, ctx, refuse, allocationPurpose)) {
                     return;
                 }
             }
@@ -1173,41 +1168,54 @@ namespace NKikimr {
                 auto hugeWrite = CreateHullWriteHugeBlob(ev->Sender, ev->Cookie, ignoreBlock, handleClass, info,
                     std::move(result), ev->Get()->RewriteBlob, freshRefuseAtColor);
                 hugeWrite->Orbit = std::move(ev->Get()->Orbit);
+                hugeWrite->FreshAdmission = TakePendingFreshAdmission();
+                hugeWrite->AdmittedGroupGeneration = SelfVDiskId.GroupGeneration;
+                hugeWrite->AllocationPurpose = allocationPurpose;
                 ctx.Send(Db->HugeKeeperID, hugeWrite.release(), 0, 0, std::move(traceId));
             } else {
-                ctx.Send(SelfId(), new TEvHullLogHugeBlob(0, info.BlobId, info.Ingress, TDiskPart(), ignoreBlock,
+                auto logHuge = std::make_unique<TEvHullLogHugeBlob>(0, info.BlobId, info.Ingress, TDiskPart(), ignoreBlock,
                     info.IssueKeepFlag, ev->Sender, ev->Cookie, handleClass, std::move(result), &info.ExtraBlockChecks,
-                    info.WriteSource, false, false, freshRefuseAtColor),
-                    0, 0, std::move(info.TraceId));
+                    info.WriteSource, false, false, freshRefuseAtColor);
+                logHuge->FreshAdmission = TakePendingFreshAdmission();
+                logHuge->AdmittedGroupGeneration = SelfVDiskId.GroupGeneration;
+                ctx.Send(SelfId(), logHuge.release(), 0, 0, std::move(info.TraceId));
             }
         }
 
         void Handle(TEvHullLogHugeBlob::TPtr &ev, const TActorContext &ctx) {
             TEvHullLogHugeBlob *msg = ev->Get();
-            if (FreshGate && msg->FreshRefuseAtColor) {
-                // Only the index record reaches Fresh; the data is already written to its huge slot. Refusing it
-                // hands the slot back, exactly as a blob that turns out to be blocked does below.
-                TFreshAdmission admission;
-                admission.LogoBlobs.AddHuge();
-                auto refuse = [&] {
-                    if (msg->HugeBlob != TDiskPart()) {
-                        ctx.Send(Db->HugeKeeperID, new TEvHullHugeBlobLogged(msg->WriteId, msg->HugeBlob, 0, false));
-                    }
-                    msg->Result->UpdateStatus(NKikimrProto::OUT_OF_SPACE);
-                    SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie, VCtx,
-                        msg->HandleClass);
-                };
-                if (!AdmitToFresh(ev, std::move(admission), *msg->FreshRefuseAtColor, false, ctx, refuse)) {
-                    return;
-                }
-            }
+            Y_VERIFY_DEBUG_S(PendingFreshAdmission.Empty(), VCtx->VDiskLogPrefix);
+            // A put Fresh admission gates had its index record admitted before its data was written
+            // (PrivateHandle(TEvVPut)) and carries that admission here.
+            Y_VERIFY_DEBUG_S(!FreshGate || !msg->FreshRefuseAtColor || !msg->FreshAdmission.Empty(),
+                VCtx->VDiskLogPrefix << "huge blob index not admitted to Fresh");
+            PendingFreshAdmission = std::exchange(msg->FreshAdmission, {});
             Y_SCOPE_EXIT(&) { LandPendingFreshAdmission(ctx); };
+
+            // HugeKeeper could not obtain data capacity. No data or index was
+            // written; release the index admission through the same landing path.
+            if (msg->Result->Record.GetStatus() != NKikimrProto::OK) {
+                Y_VERIFY_S(msg->HugeBlob.Empty(), VCtx->VDiskLogPrefix);
+                SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie, VCtx,
+                    msg->HandleClass);
+                return;
+            }
 
             // update hull write duration
             msg->Result->MarkHugeWriteTime();
             bool writtenBeyondBarrier = false;
-            auto status = Hull->CheckLogoBlob(ctx, msg->LogoBlobID, msg->IgnoreBlock, msg->IssueKeepFlag,
-                msg->ExtraBlockChecks, msg->RewriteBlob ? nullptr : &writtenBeyondBarrier);
+            // Huge writes allocate their log LSN only after the data write. A write from an old generation
+            // must not be acknowledged after a new-generation assimilation snapshot has already been taken.
+            const bool sameGeneration = !msg->AdmittedGroupGeneration ||
+                *msg->AdmittedGroupGeneration == SelfVDiskId.GroupGeneration;
+            auto status = sameGeneration
+                ? Hull->CheckLogoBlob(ctx, msg->LogoBlobID, msg->IgnoreBlock, msg->IssueKeepFlag,
+                    msg->ExtraBlockChecks, msg->RewriteBlob ? nullptr : &writtenBeyondBarrier)
+                : THullCheckStatus(NKikimrProto::RACE, "group generation mismatch");
+            if (!sameGeneration) {
+                VDiskIDFromVDiskID(SelfVDiskId, msg->Result->Record.MutableVDiskID());
+                msg->Result->Record.SetErrorReason(status.ErrorReason);
+            }
             if (status.Status != NKikimrProto::OK) {
                 msg->Result->UpdateStatus(status.Status); // modify status in result
                 YDB_LOG_DEBUG_CTX_COMP(ctx, BS_VDISK_PUT, "TEvVPut: false",
@@ -1231,6 +1239,10 @@ namespace NKikimr {
 
             msg->Result->WrittenLocation = msg->HugeBlob;
 
+            // The index record gets its LSN right here; from now on it has to land in the current Fresh segment.
+            if (PendingFreshAdmission.Unsequenced) {
+                Hull->SequenceFresh(PendingFreshAdmission);
+            }
 #ifdef OPTIMIZE_SYNC
             TLsnSeg seg = Db->LsnMngr->AllocLsnForHull();
 #else
@@ -1460,7 +1472,7 @@ namespace NKikimr {
                     ReplyError(NKikimrProto::OUT_OF_SPACE, "out of space", ev, ctx, TAppData::TimeProvider->Now());
                 };
                 if (!AdmitToFresh(ev, std::move(admission), TOutOfSpaceLogic::FreshRefuseAtColorForBlock(hasExistingEntry),
-                        true, ctx, refuse)) {
+                        true, ctx, refuse, NPDisk::EAllocationPurpose::Maintenance)) {
                     return;
                 }
             }
@@ -1642,7 +1654,7 @@ namespace NKikimr {
                     ReplyError({NKikimrProto::OUT_OF_SPACE, "out of space"}, ev, ctx, TAppData::TimeProvider->Now());
                 };
                 if (!AdmitToFresh(ev, std::move(admission), TOutOfSpaceLogic::FreshRefuseAtColorForGC(), true, ctx,
-                        refuse)) {
+                        refuse, NPDisk::EAllocationPurpose::Maintenance)) {
                     return;
                 }
             }
@@ -1749,8 +1761,10 @@ namespace NKikimr {
             YDB_LOG_DEBUG_CTX_COMP(ctx, BS_VDISK_OTHER, "TEvVStatus",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"marker", "BSVS20"});
-            auto aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
-                IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now, ReplDone, Config->BaseInfo.ReadOnly));
+            const bool durabilityReplDone = DurabilityReplDone && !RepeatRecoveryPending && !HasUnreadableBlobs;
+            const TActorId aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
+                IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now,
+                ReplDone, durabilityReplDone, Config->BaseInfo.ReadOnly));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
@@ -1805,6 +1819,14 @@ namespace NKikimr {
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"marker", "BSVS42"});
 
+            if (LogoBlobIndexStatActorId) {
+                auto result = std::make_unique<TEvGetLogoBlobIndexStatResponse>(
+                    NKikimrProto::TRYLATER, SelfVDiskId, ctx.Now(), nullptr, nullptr);
+                result->Record.set_has_more(false);
+                SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, VCtx, {});
+                return;
+            }
+
             auto result = std::make_unique<TEvGetLogoBlobIndexStatResponse>(NKikimrProto::OK, SelfVDiskId, ctx.Now(),
                 nullptr, nullptr);
             THullDsSnap fullSnap = Hull->GetIndexSnapshot();
@@ -1812,6 +1834,7 @@ namespace NKikimr {
                     ctx.SelfID, ev, std::move(result));
             if (actor) {
                 auto aid = RunInBatchPool(ctx, actor);
+                LogoBlobIndexStatActorId = aid;
                 ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
         }
@@ -1869,10 +1892,18 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVAssimilate::TPtr& ev, const TActorContext& ctx) {
+            ProcessAssimilation(ev, ctx, true);
+        }
+
+        void ProcessAssimilation(TEvBlobStorage::TEvVAssimilate::TPtr& ev, const TActorContext& ctx, bool waitForLog) {
             if (!SelfVDiskId.SameDisk(ev->Get()->Record.GetVDiskID())) {
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, TAppData::TimeProvider->Now());
-            } else if (!BlockWrites(GInfo->DecommitStatus) && !ev->Get()->Record.GetIgnoreDecommitState()) {
+            } else if (!GInfo->DecommitBlocksWrites() && !ev->Get()->Record.GetIgnoreDecommitState()) {
                 ReplyError(NKikimrProto::ERROR, "decommission didn't start yet", ev, ctx, TAppData::TimeProvider->Now());
+            } else if (const auto lsn = LoggedRecsVault.GetLastLsnInFlight(); waitForLog && lsn) {
+                // Requests admitted before a group generation change may still be logging. Their successful
+                // replies must not become visible after the bridge syncer has taken a snapshot without them.
+                PendingAssimilations.emplace_back(*lsn, ev.Release());
             } else {
                 const TActorId actorId = RunInBatchPool(ctx, CreateAssimilationActor(Hull->GetIndexSnapshot(), ev, SelfVDiskId));
                 ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
@@ -2185,7 +2216,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // ANUBIS/OSIRIS SECTOR
         ////////////////////////////////////////////////////////////////////////
-        void Handle(TEvCallOsiris::TPtr &ev, const TActorContext &ctx) {
+        TActorId StartOsiris(const TActorId& notifyId, const TActorContext& ctx) {
             // NOTE:
             // We take ordinary snapshot. Their can be a race, that LocalSyncData
             // may be in-flight at this moment, so we can't take lsn exclusively.
@@ -2193,10 +2224,45 @@ namespace NKikimr {
             // and confirmed.
             const ui64 confirmedLsn = Db->LsnMngr->GetConfirmedLsnForHull();
             THullDsSnap fullSnap = Hull->GetIndexSnapshot();
-            IActor *actor = CreateHullOsiris(ev->Sender, ctx.SelfID, ctx.SelfID, std::move(fullSnap), confirmedLsn,
+            IActor *actor = CreateHullOsiris(notifyId, ctx.SelfID, ctx.SelfID, GInfo, std::move(fullSnap), confirmedLsn,
                     Config->AnubisOsirisMaxInFly);
-            auto aid = ctx.Register(actor);
+            const TActorId aid = ctx.Register(actor);
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+            return aid;
+        }
+
+        void Handle(TEvCallOsiris::TPtr& ev, const TActorContext& ctx) {
+            StartOsiris(ev->Sender, ctx);
+        }
+
+        void TryRepeatRecovery(const TActorContext& ctx) {
+            if (CurrentStateFunc() != &TThis::StateNormal
+                    || !RepeatRecoveryPending || RepeatOsirisId || !Db->ReplID || !DurabilityReplDone
+                    || Config->BaseInfo.ReadOnly || GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)) {
+                return;
+            }
+            RepeatRecoveryPending = false;
+            DurabilityReplDone = false;
+            ReplOnlyPhantomsRemain = false;
+            UpdateReplState();
+            RepeatOsirisId = StartOsiris(SelfId(), ctx);
+        }
+
+        void Handle(TEvOsirisDone::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Sender != RepeatOsirisId) {
+                return;
+            }
+            RepeatOsirisId = {};
+            if (RepeatRecoveryPending) {
+                // A newer policy arrived while the previous snapshot was being processed.
+                RepeatRecoveryPending = false;
+                RepeatOsirisId = StartOsiris(SelfId(), ctx);
+                return;
+            }
+            // The old scheduler has finished; recreate it to scan Hull from the beginning.
+            ctx.Send(Db->ReplID, new TEvents::TEvPoisonPill);
+            ActiveActors.Erase(Db->ReplID);
+            StartReplActor(ctx);
         }
 
         void Handle(TEvAnubisOsirisPut::TPtr &ev, const TActorContext &ctx) {
@@ -2295,6 +2361,13 @@ namespace NKikimr {
             }
             if (VDiskCompactionState && !results.empty()) {
                 VDiskCompactionState->Logged(ctx, results.back().Lsn);
+            }
+            while (!PendingAssimilations.empty() &&
+                    PendingAssimilations.front().first <= Db->LsnMngr->GetConfirmedLsnForHull()) {
+                auto request = std::move(PendingAssimilations.front().second);
+                PendingAssimilations.pop_front();
+                // Recheck the generation, but do not wait for writes admitted after this request.
+                ProcessAssimilation(request, ctx, false);
             }
             if (ev->Get()->StatusFlags & ui32(NKikimrBlobStorage::StatusIsValid)) {
                 i64 count = ev->Get()->LogChunkCount;
@@ -2447,6 +2520,7 @@ namespace NKikimr {
             // propagate status to Node Warden unless replication is on -- in that case it sets the status itself
             if (!runRepl) {
                 ReplDone = true;
+                DurabilityReplDone = true;
             }
             UpdateReplState();
             RunBalancing(ctx);
@@ -2464,7 +2538,7 @@ namespace NKikimr {
                                                           NKikimrProto::ERROR,
                                                           (PDiskCtx ? PDiskCtx->Dsk : nullptr),
                                                           MinHugeBlobInBytes,
-                                                          Db->GetVDiskIncarnationGuid());
+                                                          Db->GetVDiskIncarnationGuid(true));
             ctx.Send(*SkeletonFrontIDPtr, msg.release());
             // push the status
             UpdateVDiskStatus(NKikimrBlobStorage::ERROR);
@@ -2756,22 +2830,27 @@ namespace NKikimr {
             DeliverDelayedCutLogIfAny(ctx);
         }
 
+        void StartReplActor(const TActorContext& ctx) {
+            std::shared_ptr<TReplCtx> replCtx = std::make_shared<TReplCtx>(VCtx, HullCtx, PDiskCtx, HugeBlobCtx, MinHugeBlobInBytes, Hull->GetHullDs(),
+                GInfo, SelfId(), Config, PDiskWriteBytes, Config->ReplPausedAtStart);
+            Db->ReplID.Set(ctx.Register(CreateReplActor(replCtx)));
+            ActiveActors.Insert(Db->ReplID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
+            if (CommenceRepl) {
+                TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, Db->ReplID, SelfId(),
+                    nullptr, 0));
+            }
+        }
+
         void Handle(TEvSyncGuidRecoveryDone::TPtr &ev, const TActorContext &ctx) {
             if (ev->Get()->Status == NKikimrProto::OK) {
                 YDB_LOG_INFO_CTX_COMP(ctx, BS_SKELETON, "SKELETON SYNC GUID RECOVERY SUCCEEDED",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                     {"marker", "BSVS31"});
                 DbBirthLsn = ev->Get()->DbBirthLsn;
+                Db->LsnMngr->AdvanceSyncLogRecoveryBase(*DbBirthLsn);
                 SkeletonIsUpAndRunning(ctx, Config->RunRepl);
                 if (Config->RunRepl) {
-                    auto replCtx = std::make_shared<TReplCtx>(VCtx, HullCtx, PDiskCtx, HugeBlobCtx, MinHugeBlobInBytes, Hull->GetHullDs(),
-                        GInfo, SelfId(), Config, PDiskWriteBytes, Config->ReplPausedAtStart);
-                    Db->ReplID.Set(ctx.Register(CreateReplActor(replCtx)));
-                    ActiveActors.Insert(Db->ReplID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
-                    if (CommenceRepl) {
-                        TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvCommenceRepl, 0, Db->ReplID, SelfId(),
-                            nullptr, 0));
-                    }
+                    StartReplActor(ctx);
                 }
             } else {
                 YDB_LOG_INFO_CTX_COMP(ctx, BS_SKELETON, "SKELETON SYNC GUID RECOVERY FAILED",
@@ -3116,8 +3195,27 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // OTHER MESSAGES SECTOR
         ////////////////////////////////////////////////////////////////////////
+        static std::optional<EMirror3dcLayout> GetDurabilityLayout(const TBlobStorageGroupInfo& info) {
+            if (info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
+                return std::nullopt;
+            }
+            const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(
+                info.GetFailRealmState(0), info.GetFailRealmState(1), info.GetFailRealmState(2));
+            if (!state) {
+                return std::nullopt;
+            }
+            return GetMirror3dcGroupLayouts(*state)->Durability;
+        }
+
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
+
+            if (msg->NewInfo->GroupGeneration > GInfo->GroupGeneration) {
+                const std::optional<EMirror3dcLayout> previousDurability = GetDurabilityLayout(*GInfo);
+                const std::optional<EMirror3dcLayout> nextDurability = GetDurabilityLayout(*msg->NewInfo);
+                RepeatRecoveryPending |= previousDurability && nextDurability
+                    && previousDurability != nextDurability;
+            }
 
             // Save locally
             GInfo = msg->NewInfo;
@@ -3159,15 +3257,22 @@ namespace NKikimr {
                 ctx.Send(Db->SyncFullHandlerID, ev->Get()->Clone());
             }
 
+            TryRepeatRecovery(ctx);
+
             // FIXME: reconfigure handoff
         }
 
         void HandleReplDone(STFUNC_SIG) {
+            if (ev->Sender != Db->ReplID || RepeatOsirisId) {
+                return;
+            }
             if (ev->Cookie) { // semi-finished replication, only phantom blobs
                 ReplOnlyPhantomsRemain = true;
             } else {
                 ReplDone = true;
+                DurabilityReplDone = true;
             }
+            TryRepeatRecovery(TActivationContext::AsActorContext());
             UpdateReplState();
         }
 
@@ -3193,6 +3298,13 @@ namespace NKikimr {
                 {"marker", "BSVS37"});
             Become(&TThis::StateLocalRecovery);
             Db->SkeletonID.Set(ctx.SelfID);
+            if (GInfo->GetFailRealmState(SelfVDiskId.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+                // An excluded realm must answer requests, but must not start recovery or background work.
+                SkeletonErrorState(ctx, TEvFrontRecoveryStatus::LocalRecoveryDone,
+                    NKikimrWhiteboard::EVDiskState::LocalRecoveryError);
+                UpdateWhiteboard(ctx);
+                return;
+            }
             // generation independent self VDisk Id
             auto genIndSelfVDiskId = SelfVDiskId;
             genIndSelfVDiskId.GroupGeneration = -1;
@@ -3210,11 +3322,19 @@ namespace NKikimr {
             if (ev->Sender == VDiskSpaceReportManagerId) {
                 VDiskSpaceReportManagerId = {};
             }
+            if (ev->Sender == LogoBlobIndexStatActorId) {
+                LogoBlobIndexStatActorId = {};
+            }
             ActiveActors.Erase(ev->Sender);
         }
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
+            // assimilation requests go without QoS, so their clients don't learn of the VDisk going away from the
+            // connection, and they must get replies
+            for (auto& [lsn, request] : std::exchange(PendingAssimilations, {})) {
+                ReplyError(NKikimrProto::ERROR, "VDisk is going away", request, ctx, TAppData::TimeProvider->Now());
+            }
             ActiveActors.KillAndClear(ctx);
             Die(ctx);
         }
@@ -3248,7 +3368,7 @@ namespace NKikimr {
         }
 
         void UpdateReplState() {
-            const bool ready = ReplDone && !HasUnreadableBlobs;
+            const bool ready = DurabilityReplDone && !HasUnreadableBlobs;
             UpdateVDiskStatus(ready ? NKikimrBlobStorage::READY : NKikimrBlobStorage::REPLICATING);
         }
 
@@ -3654,8 +3774,9 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVGetBarrier, Handle)
             HFunc(TEvBlobStorage::TEvVSync, Handle)
             HFunc(TEvBlobStorage::TEvVSyncFull, Handle)
+            HFunc(TEvOsirisDone, Handle)
             // TEvCallOsiris
-            // TEvAnubisOsirisPut
+            HFunc(TEvAnubisOsirisPut, Handle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             // TEvSyncGuidRecoveryDone
             HFunc(TEvLocalSyncData, Handle)
@@ -3726,6 +3847,7 @@ namespace NKikimr {
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
+            IgnoreFunc(TEvOsirisDone)
             CFunc(TEvBlobStorage::EvReplDone, Ignore)
             CFunc(TEvBlobStorage::EvCommenceRepl, HandleCommenceRepl)
             fFunc(TEvBlobStorage::EvControllerScrubStartQuantum, ForwardToScrubActor)
@@ -3837,17 +3959,25 @@ namespace NKikimr {
         NMonGroup::TSyncLogIFaceGroup SyncLogIFaceGroup;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         std::shared_ptr<NMonGroup::TFullSyncGroup> FullSyncGroup;
+        bool RepeatRecoveryPending = false;
+        TActorId RepeatOsirisId;
         bool ReplDone = false;
+        bool DurabilityReplDone = false;
         bool ReplOnlyPhantomsRemain = false;
         TInstant WhiteboardUpdateTimestamp = TInstant::Zero();
         std::shared_ptr<std::atomic_uint64_t> PDiskWriteBytes = std::make_shared<std::atomic_uint64_t>();
         TLoggedRecsVault LoggedRecsVault;
+        std::deque<std::pair<ui64, TEvBlobStorage::TEvVAssimilate::TPtr>> PendingAssimilations;
         bool CommenceRepl = false;
         TActorId ScrubId;
         TActorId DefragId;
         TActorId BalancingId;
         TActorId MetadataActorId;
         TActorId VDiskSpaceReportManagerId;
+        // A LogoBlob index statistics scan may retain a response-sized batch
+        // while it waits for an acknowledgement. Keep at most one such scan
+        // alive on this VDisk; concurrent callers receive TRYLATER.
+        TActorId LogoBlobIndexStatActorId;
         bool HasUnreadableBlobs = false;
         std::unique_ptr<TVDiskCompactionState> VDiskCompactionState;
         TMemorizableControlWrapper EnableVPatch;

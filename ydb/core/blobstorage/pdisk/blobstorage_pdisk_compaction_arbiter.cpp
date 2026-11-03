@@ -119,7 +119,12 @@ namespace NKikimr::NPDisk {
         UpdatePressure(space, out);
         // more room may let a candidate of the last round fit now
         if (Pressure && !RoundOpen && !LeaseHolder) {
-            TryGrant(space, out);
+            // A bidder may have answered "nothing" because its local space budget was
+            // stale.  Re-open a round as well as retrying the cached candidates; the
+            // bidder will then re-run the selector with the current budget.
+            if (!TryGrant(space, out)) {
+                StartRound(space, out);
+            }
         }
     }
 

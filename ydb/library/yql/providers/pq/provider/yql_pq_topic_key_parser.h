@@ -1,7 +1,6 @@
 #pragma once
-#include <yql/essentials/ast/yql_expr.h>
-
 #include <util/generic/string.h>
+#include <yql/essentials/ast/yql_expr.h>
 
 namespace NYql {
 
@@ -101,4 +100,4 @@ private:
     TExprNode::TPtr StreamingTopicRead;
 };
 
-} // namespace NYql
+}   // namespace NYql

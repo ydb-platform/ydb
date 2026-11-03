@@ -20,7 +20,11 @@ TConclusion<TExecutionResult> TCalculationProcessor::DoExecute(
     if (result.IsFail()) {
         return result;
     }
-    context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), std::move(*result));
+    if (result->IsScalar()) {
+        context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), arrow::Datum(result->GetScalarVerified()));
+    } else {
+        context.MutableResources().AddVerified(GetOutputColumnIdOnce(), result->GetAccessorVerified(), false);
+    }
     return TExecutionResult::Done();
 }
 

@@ -56,7 +56,7 @@ protected:
 private:
     //! Performs a subscription to the given futures
     /** Lock should not be acquired!
-        @param future - The futures to subscribe to
+        @param futures - The futures to subscribe to
         @param callback - The callback to call for each future
     **/
     template <typename TFutures, typename TCallbackExecutor>

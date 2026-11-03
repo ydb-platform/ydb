@@ -42,6 +42,25 @@ class MultiMapping(Mapping[str, _V_co]):
     def getone(self, key: str, default: _T = ...) -> _V_co | _T:
         """Return first value for key."""
 
+    def to_dict(self) -> dict[str, list[_V_co]]:
+        """Return a dict with lists of all values for each key.
+
+        Deliberately concrete, not abstract: ``MultiMapping`` is public, so
+        requiring a new method would stop every existing subclass outside
+        this project from being instantiated. Subclasses whose keys compare
+        equal under a normalisation the iteration does not apply, such as
+        case-insensitive mappings, must override this; the default would
+        emit one entry per spelling.
+        """
+        result: dict[str, list[_V_co]] = {}
+        for key in self:
+            # Iteration yields a duplicated key once per occurrence, so the
+            # membership test is what keeps getall() from being applied twice.
+            if key not in result:
+                # getall() already returns a fresh list.
+                result[key] = self.getall(key)
+        return result
+
 
 class MutableMultiMapping(MultiMapping[_V], MutableMapping[str, _V]):
     @abc.abstractmethod

@@ -451,6 +451,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 
     Self->DescribeTable(tableInfo, typeRegistry, returnConfig, entry);
     entry->SetName(pathEl->Name);
+    entry->SetPartitionCount(tableInfo.GetPartitions().size());
 
     if (returnBoundaries) {
         // split boundaries (split keys without shard's tablet-ids)
@@ -1023,8 +1024,13 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
         entry->MutableDatabaseQuotas()->CopyFrom(*databaseQuotas);
     }
 
-    if (subDomainInfo->GetDiskQuotaExceeded()) {
+    // exhausted storage blocks user writes through the same flag as the exceeded disk quota
+    if (subDomainInfo->GetDiskQuotaExceeded() || subDomainInfo->GetStorageSpaceExhausted()) {
         entry->MutableDomainState()->SetDiskQuotaExceeded(true);
+    }
+
+    if (subDomainInfo->GetStorageSpaceExhausted()) {
+        entry->MutableDomainState()->SetStorageSpaceExhausted(true);
     }
 
     if (subDomainInfo->GetSmallBlobsQuotaExceeded()) {
@@ -1252,6 +1258,9 @@ void TPathDescriber::DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr p
     auto& entry = *Result->Record.MutablePathDescription()->MutableStreamingQueryDescription();
     entry.SetName(pathEl->Name);
     *entry.MutableProperties() = streamingQueryInfo->Properties;
+    if (streamingQueryInfo->OperationOwnerActorId) {
+        ActorIdToProto(streamingQueryInfo->OperationOwnerActorId, entry.MutableOperationOwnerActorId());
+    }
 }
 
 void TPathDescriber::DescribeTestShardSet(TPathId pathId, TPathElement::TPtr pathEl) {

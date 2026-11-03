@@ -39,6 +39,7 @@
  */
 
 
+	.file   "svml_z0_sin_s_ha.s"
 	.text
 .L_2__routine_start___svml_sinf16_ha_z0_0:
 

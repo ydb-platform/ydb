@@ -222,7 +222,7 @@ public:
 
     virtual const char* Name() const override final { return "TCreateSolomon"; }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisted = !Transaction.GetFailOnExist();
@@ -359,6 +359,12 @@ public:
             adoptedShards[TTabletId(portion.GetTabletId())] = TAdoptedShard{portion.GetOwnerId(), TLocalShardIdx(portion.GetShardIdx())};
         }
 
+        // Undo-safety contract: the first direct DB write follows — from here
+        // on this Propose is undo-unsafe. Single-part suboperation only
+        // (enforced at ignite time in ProcessOperationParts): a failed propose
+        // aborts the whole transaction and the txc rolls everything back.
+        // All validations MUST stay above this line — a SetError/return after
+        // it would leave unreverted memory changes.
         NIceDb::TNiceDb db(context.GetDB());
 
         for (const auto& part: solomonVolume->Partitions) {
@@ -410,7 +416,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TCreateSolomon");
     }
 

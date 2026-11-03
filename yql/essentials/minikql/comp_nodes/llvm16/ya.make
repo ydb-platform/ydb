@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     yql/essentials/minikql/codegen/llvm16

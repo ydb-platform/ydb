@@ -3,7 +3,7 @@
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
-#include <library/cpp/yt/threading/spin_wait_hook.h>
+#include <library/cpp/yt/system/spin_wait_hook.h>
 
 namespace NYT::NThreading {
 

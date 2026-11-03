@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(101), 5);
     }
 
-    Y_UNIT_TEST(ExpectedOwnerSizeForcesOwnerWeightToOne) {
+    Y_UNIT_TEST(ExpectedOwnerSizeScalesByGroupSizeInUnits) {
         using namespace NPDisk;
 
         TChunkTracker chunkTracker;
@@ -200,16 +200,215 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         chunkTracker.AddOwner(101, DynamicVDiskId(), 1);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 30);
 
-        chunkTracker.AddOwner(102, DynamicVDiskId(), 2);
+        chunkTracker.AddOwner(102, DynamicVDiskId(), 2, 2);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 30);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 60);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 2);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 3);
+
+        chunkTracker.SetOwnerWeight(102, 7);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 60);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 7);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 8);
+
+        chunkTracker.SetOwnerWeight(102, 9);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 9);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 60);
+        chunkTracker.SetOwnerSettings(102, 9, 3);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 9);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 30);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 90);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 10);
+
+        chunkTracker.SetOwnerSettings(102, 9, 0);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 30);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 1);
-        UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 2);
+        chunkTracker.SetOwnerSettings(102, 9, 3);
 
         chunkTracker.SetExpectedOwnerSize(0);
         chunkTracker.SetOwnerWeight(102, 2);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 25);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 50);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerWeight(102), 2);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 3);
+    }
+
+    Y_UNIT_TEST(ExpectedOwnerSizeCappedByTotal) {
+        using namespace NPDisk;
+
+        TPerOwnerQuotaTracker tracker;
+        tracker.Reset(100, TColorLimits::MakeLogLimits());
+        tracker.SetExpectedOwnerSize(30);
+        tracker.AddOwner(101, DynamicVDiskId(), 1, 4);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 100);
+        tracker.InitialAllocate(101, 20);
+
+        tracker.SetTotal(80);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 80);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetFree(101), 60);
+        tracker.SetTotal(200);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 120);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetUsed(101), 20);
+
+        tracker.SetExpectedOwnerSize(50);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 200);
+        tracker.SetExpectedOwnerSize(60);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 200);
+        tracker.SetOwnerSettings(101, 1, 2);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 120);
+        tracker.SetOwnerSettings(101, 1, 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 60);
+
+        tracker.SetTotal(0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetUsed(101), 20);
+    }
+
+    Y_UNIT_TEST(ExpectedOwnerSizeMultiplicationDoesNotOverflow) {
+        using namespace NPDisk;
+
+        TPerOwnerQuotaTracker tracker;
+        tracker.Reset(100, TColorLimits::MakeLogLimits());
+        tracker.SetExpectedOwnerSize(i64{1} << 32);
+        tracker.AddOwner(101, DynamicVDiskId(), 1, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 100);
+        tracker.InitialAllocate(101, 20);
+
+        tracker.SetExpectedOwnerSize(Max<i64>());
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 100);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetFree(101), 80);
+        tracker.SetOwnerSettings(101, 1, 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 100);
+        tracker.SetExpectedOwnerSize(30);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 30);
+        tracker.SetOwnerSettings(101, 1, Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 100);
+        tracker.SetTotal(0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetHardLimit(101), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetUsed(101), 20);
+    }
+
+    Y_UNIT_TEST(ExpectedOwnerSizeIndependentOfCapacityAndSlotCounts) {
+        using namespace NPDisk;
+
+        const std::pair<ui32, i64> groupSizesAndQuotas[] = {{0, 1000}, {1, 1000}, {4, 4000}};
+        // Grow from one to nine owners to cross both slot and capacity budgets, including equality.
+        // Only the first group varies; the others consume one slot each.
+        for (ui32 diskSizeInSlots : {2, 4, 8}) {
+            for (ui32 maxSlots : {2, 4, 8}) {
+                for (const auto& [groupSizeInUnits, expectedQuota] : groupSizesAndQuotas) {
+                    TKeeperParams params{
+                        .TotalChunks = diskSizeInSlots * 1000,
+                        .ExpectedOwnerCount = Min(diskSizeInSlots, maxSlots),
+                        .ExpectedOwnerSize = 1000,
+                    };
+                    TChunkTracker tracker;
+                    TString error;
+                    UNIT_ASSERT_C(tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+                    for (ui32 numOwners = 1; numOwners <= 9; ++numOwners) {
+                        const TString context = TStringBuilder() << "DiskSizeInSlots# " << diskSizeInSlots
+                            << " MaxSlots# " << maxSlots << " GroupSizeInUnits# " << groupSizeInUnits
+                            << " NumOwners# " << numOwners;
+                        const TOwner owner = OwnerBeginUser + numOwners - 1;
+                        const ui32 ownerGroupSizeInUnits = numOwners == 1 ? groupSizeInUnits : 1;
+                        tracker.AddOwner(owner, DynamicVDiskId(numOwners), ownerGroupSizeInUnits, ownerGroupSizeInUnits);
+                        UNIT_ASSERT_C(tracker.TryAllocate(owner, 10, error), error);
+                        UNIT_ASSERT_VALUES_EQUAL_C(tracker.GetNumActiveSlots(), numOwners - 1 + Max(1u, groupSizeInUnits), context);
+                        for (TOwner id = OwnerBeginUser; id <= owner; ++id) {
+                            const i64 quota = Min(tracker.GetTotalHardLimit(), id == OwnerBeginUser ? expectedQuota : 1000);
+                            UNIT_ASSERT_VALUES_EQUAL_C(tracker.GetOwnerHardLimit(id), quota, context);
+                            UNIT_ASSERT_VALUES_EQUAL_C(tracker.GetOwnerWeight(id), id == OwnerBeginUser ? Max(1u, groupSizeInUnits) : 1, context);
+                            UNIT_ASSERT_VALUES_EQUAL_C(tracker.GetOwnerUsed(id), 10, context);
+                            UNIT_ASSERT_VALUES_EQUAL_C(tracker.GetOwnerFree(id, true), quota - 10, context);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ExpectedOwnerSizeOvercommitPreservesNeighbours) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        TChunkTracker tracker;
+        TKeeperParams params{
+            .TotalChunks = 205 + 1000,
+            .ExpectedOwnerCount = 2,
+            .ExpectedOwnerSize = 100,
+            .SpaceColorBorder = TColor::YELLOW,
+        };
+        TString error;
+        UNIT_ASSERT_C(tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+        tracker.AddOwner(101, DynamicVDiskId(1), 1, 1);
+        tracker.AddOwner(102, DynamicVDiskId(2), 1, 1);
+        UNIT_ASSERT_C(tracker.TryAllocate(101, 60, error), error);
+        double originalOccupancy;
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetSpaceColor(101, &originalOccupancy), TColor::GREEN);
+        auto checkNeighbour = [&]() {
+            UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerHardLimit(101), 100);
+            UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerFree(101, true), 40);
+            UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerUsed(101), 60);
+            double occupancy;
+            UNIT_ASSERT_VALUES_EQUAL(tracker.GetSpaceColor(101, &occupancy), TColor::GREEN);
+            UNIT_ASSERT_VALUES_EQUAL(occupancy, originalOccupancy);
+        };
+
+        // Resizing must leave the neighbour's quota and color unchanged.
+        tracker.SetOwnerSettings(102, 1, 1000);
+        checkNeighbour();
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerHardLimit(102), 1000);
+
+        // Eleven owners exceed both the two-slot budget and the pool's ten slots.
+        for (TOwner owner = 103; owner <= 111; ++owner) {
+            tracker.AddOwner(owner, DynamicVDiskId(owner), 1, 1);
+            checkNeighbour();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumActiveSlots(), 11);
+        tracker.SetExpectedOwnerCount(1);
+        checkNeighbour();
+        tracker.RemoveOwner(111);
+        checkNeighbour();
+
+        // Actual consumption still changes the shared color and is constrained by the physical pool.
+        UNIT_ASSERT_C(tracker.TryAllocate(102, 850, error), error);
+        double occupancy;
+        UNIT_ASSERT(tracker.GetSpaceColor(101, &occupancy) >= TColor::LIGHT_YELLOW);
+        UNIT_ASSERT(!tracker.TryAllocate(102, 1000, error));
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerHardLimit(101), 100);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerUsed(101), 60);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetTotalUsed(), 910);
+    }
+
+    Y_UNIT_TEST(ExpectedOwnerSizeShrinkWithSemiStrictIsolation) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        TChunkTracker tracker;
+        TKeeperParams params{
+            .TotalChunks = 205 + 1000,
+            .ExpectedOwnerCount = 2,
+            .SpaceColorBorder = TColor::LIGHT_YELLOW,
+        };
+        TString error;
+        UNIT_ASSERT_C(tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+        tracker.AddOwner(101, DynamicVDiskId(), 1);
+        tracker.AddOwner(102, DynamicVDiskId(), 2, 2);
+        UNIT_ASSERT_C(tracker.TryAllocate(101, 150, error), error);
+        double occupancy;
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetSpaceColor(101, &occupancy), TColor::GREEN);
+
+        tracker.SetExpectedOwnerSettings(2, 100);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerHardLimit(101), 100);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerHardLimit(102), 200);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerUsed(101), 150);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumActiveSlots(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetSpaceColor(101, &occupancy), TColor::LIGHT_YELLOW);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetSpaceColor(102, &occupancy), TColor::GREEN);
+
+        tracker.SetExpectedOwnerSize(0);
+        tracker.SetOwnerWeight(102, 2);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerWeight(102), 2);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetOwnerUsed(101), 150);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumActiveSlots(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetSpaceColor(101, &occupancy), TColor::GREEN);
     }
 
     Y_UNIT_TEST(ExpectedOwnerSizeUsesColorBorderForEnforcement) {
@@ -395,6 +594,142 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         // A non-user owner has no housekeeping exception to make.
         UNIT_ASSERT_EQUAL_X(chunkTracker.EstimateAllocationColor(OwnerSystem, 1, true, &occupancy),
             chunkTracker.EstimateSpaceColor(OwnerSystem, 1, &occupancy));
+    }
+
+    Y_UNIT_TEST(AllocationReservesProtectSystemAcrossOwnersAndReturnOnRelease) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        using EPurpose = EAllocationPurpose;
+        TChunkTracker tracker;
+        TKeeperParams params {
+            .TotalChunks = 205 + 1000,
+            .ExpectedOwnerCount = 4,
+            .SpaceColorBorder = TColor::GREEN,
+        };
+        SetupStaticGroupParams(params);
+        TString error;
+        UNIT_ASSERT_C(tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+        tracker.AddOwner(101, StaticVDiskId());
+        tracker.AddOwner(102, DynamicVDiskId());
+        tracker.AddOwner(103, DynamicVDiskId(2));
+        tracker.SetAllocationReserves(10, 20);
+
+        // USER leaves both reserves alone; the two dynamic owners share the pool, so one of them using up its
+        // USER room uses up the other's too.
+        const ui64 userRoom = tracker.GetAllocationHeadroom(102, EPurpose::User);
+        UNIT_ASSERT_C(tracker.TryAllocate(102, userRoom, error), error);
+        for (TOwner owner : {102, 103}) {
+            UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(owner, EPurpose::User), 0);
+            UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(owner, EPurpose::Recovery), 20);
+        }
+        // Recovery leaves the system reserve alone.
+        UNIT_ASSERT_C(tracker.TryAllocate(103, 12, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::Recovery), 8);
+        UNIT_ASSERT_C(tracker.TryAllocate(102, 8, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::Recovery), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetWorstAllocationHeadroom(EPurpose::Recovery), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetSpaceHeadroom(102).ToRed, 10);
+        double occupancy;
+        UNIT_ASSERT(tracker.EstimateAllocationColor(102, 10, false, &occupancy) < TColor::RED);
+        // SYSTEM may spend the reserve, and so may maintenance: it is what gives space back.
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::System), Max<ui64>());
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::Maintenance), Max<ui64>());
+        UNIT_ASSERT(tracker.GetSpaceHeadroom(102).AllocatableToBlack > 10);
+
+        // Completion/forecast alone returns nothing. Releasing actual output or
+        // input chunks restores the shared workspace for every owner.
+        tracker.Release(103, 12);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::Recovery), 12);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::User), 0);
+        tracker.Release(102, 9);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(103, EPurpose::User), 1);
+        tracker.SetAllocationReserves(0, 20);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::Recovery), Max<ui64>());
+    }
+
+    Y_UNIT_TEST(AllocationHeadroomIsPerOwner) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        using EPurpose = EAllocationPurpose;
+        TChunkTracker tracker;
+        // A RED color border enforces the personal quotas, so an owner can run out of room on its own.
+        TKeeperParams params {
+            .TotalChunks = 205 + 1000,
+            .ExpectedOwnerCount = 4,
+            .SpaceColorBorder = TColor::RED,
+        };
+        TString error;
+        UNIT_ASSERT_C(tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+        tracker.AddOwner(101, DynamicVDiskId());
+        tracker.AddOwner(102, DynamicVDiskId(2));
+        tracker.SetAllocationReserves(10, 20);
+
+        const ui64 room = tracker.GetAllocationHeadroom(101, EPurpose::User);
+        UNIT_ASSERT(room > 0);
+        UNIT_ASSERT_C(tracker.TryAllocate(101, room, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(101, EPurpose::User), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetWorstAllocationHeadroom(EPurpose::User), 0);
+        // The neighbour keeps the room of its own quota.
+        UNIT_ASSERT(tracker.GetAllocationHeadroom(102, EPurpose::User) > 0);
+        UNIT_ASSERT_C(tracker.TryAllocate(102, 1, error), error);
+    }
+
+    Y_UNIT_TEST(CompactionPressureUsesEffectiveDynamicOwnerColor) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        TChunkTracker tracker;
+        TKeeperParams params {
+            .TotalChunks = 205 + 1000,
+            .ExpectedOwnerCount = 4,
+            .SpaceColorBorder = TColor::GREEN,
+        };
+        SetupStaticGroupParams(params);
+        TString error;
+        UNIT_ASSERT_C(tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+        const TOwner staticOwner = 101;
+        const TOwner dynamicOwner = 102;
+        tracker.AddOwner(staticOwner, StaticVDiskId());
+        tracker.AddOwner(dynamicOwner, DynamicVDiskId());
+        double occupancy;
+        while (tracker.GetSpaceColor(dynamicOwner, &occupancy) < TColor::PRE_ORANGE) {
+            UNIT_ASSERT_C(tracker.TryAllocate(dynamicOwner, 1, error), error);
+        }
+        UNIT_ASSERT(tracker.GetSharedPoolColor() < TColor::YELLOW);
+        UNIT_ASSERT_EQUAL(tracker.GetCompactionPressureColor(), TColor::PRE_ORANGE);
+        UNIT_ASSERT_EQUAL(tracker.GetSpaceHeadroom(dynamicOwner).ToPreOrange, 0);
+
+        // Changing the static reserve changes pressure without allocating or
+        // freeing a physical chunk. Removing an owner must remove its color too.
+        const i64 used = tracker.GetTotalUsed();
+        tracker.RemoveOwner(staticOwner);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetTotalUsed(), used);
+        UNIT_ASSERT_EQUAL(tracker.GetCompactionPressureColor(), tracker.GetSharedPoolColor());
+        tracker.Release(dynamicOwner, tracker.GetOwnerUsed(dynamicOwner));
+        tracker.RemoveOwner(dynamicOwner);
+        UNIT_ASSERT_EQUAL(tracker.GetCompactionPressureColor(), TColor::GREEN);
+
+        // Reset must forget the old owner list before reconstructing it.
+        UNIT_ASSERT_C(tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+        UNIT_ASSERT_EQUAL(tracker.GetCompactionPressureColor(), TColor::GREEN);
+    }
+
+    Y_UNIT_TEST(CompactionPressureUsesPersonalQuota) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        TChunkTracker tracker;
+        TKeeperParams params {
+            .TotalChunks = 205 + 1000,
+            .ExpectedOwnerCount = 4,
+            .SpaceColorBorder = TColor::YELLOW,
+        };
+        TString error;
+        UNIT_ASSERT_C(tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+        tracker.AddOwner(101, DynamicVDiskId());
+        UNIT_ASSERT_C(tracker.TryAllocate(101, 240, error), error);
+        UNIT_ASSERT_EQUAL(tracker.GetSharedPoolColor(), TColor::GREEN);
+        UNIT_ASSERT_EQUAL(tracker.GetCompactionPressureColor(), TColor::YELLOW);
+        tracker.SetOwnerWeight(101, 2);
+        UNIT_ASSERT_EQUAL(tracker.GetCompactionPressureColor(), TColor::GREEN);
     }
 
     Y_UNIT_TEST(StaticGroupReserveIsHeldBackWhileItIsNotUsed) {

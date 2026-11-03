@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package temporal.api.filter.v1;
+
+option go_package = "go.temporal.io/api/filter/v1;filter";
+option java_package = "io.temporal.api.filter.v1";
+option java_multiple_files = true;
+option java_outer_classname = "MessageProto";
+option ruby_package = "Temporalio::Api::Filter::V1";
+option csharp_namespace = "Temporalio.Api.Filter.V1";
+
+import "google/protobuf/timestamp.proto";
+
+import "temporal/api/enums/v1/workflow.proto";
+
+message WorkflowExecutionFilter {
+    string workflow_id = 1;
+    string run_id = 2;
+}
+
+message WorkflowTypeFilter {
+    string name = 1;
+}
+
+message StartTimeFilter {
+    google.protobuf.Timestamp earliest_time = 1;
+    google.protobuf.Timestamp latest_time = 2;
+}
+
+message StatusFilter {
+    temporal.api.enums.v1.WorkflowExecutionStatus status = 1;
+}

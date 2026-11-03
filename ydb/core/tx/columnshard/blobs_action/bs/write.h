@@ -10,14 +10,17 @@ class TWriteAction: public IBlobsWritingAction {
 private:
     using TBase = IBlobsWritingAction;
     TBlobBatch BlobBatch;
-    std::shared_ptr<IBlobManager> Manager;
+    std::shared_ptr<TBlobManager> Manager;
+    const TActorId TabletActorId;
 
 protected:
     virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) override;
 
     virtual void DoOnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) override {
-        return BlobBatch.OnBlobWriteResult(blobId.GetLogoBlobId(), status);
+        BlobBatch.OnBlobWriteResult(blobId.GetLogoBlobId(), status);
     }
+
+    virtual void DoUpdateChannelApproximateFreeSpace(const TUnifiedBlobId& blobId, float approximateFreeSpaceShare) override;
 
     virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& /*dbBlobs*/) override {
         return;
@@ -39,10 +42,11 @@ public:
         return BlobBatch.AllocateNextBlobId(data);
     }
 
-    TWriteAction(const TString& storageId, const std::shared_ptr<IBlobManager>& manager)
+    TWriteAction(const TString& storageId, const std::shared_ptr<TBlobManager>& manager, const TActorId& tabletActorId)
         : TBase(storageId)
         , BlobBatch(manager->StartBlobBatch())
         , Manager(manager)
+        , TabletActorId(tabletActorId)
     {
     }
 };

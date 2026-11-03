@@ -2,7 +2,6 @@
 
 #include "common.h"
 
-
 namespace NKqpRun {
 
 class TKqpRunner {
@@ -36,4 +35,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-}  // namespace NKqpRun
+}   // namespace NKqpRun

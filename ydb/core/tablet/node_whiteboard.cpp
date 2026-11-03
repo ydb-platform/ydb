@@ -83,6 +83,17 @@ protected:
     std::unordered_map<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo> VDiskStateInfo;
     std::unordered_map<ui32, NKikimrWhiteboard::TBSGroupStateInfo> BSGroupStateInfo;
 
+    struct TDDiskState {
+        NKikimrWhiteboard::TDDiskStateInfo Info;
+        TActorId Publisher;
+        TInstant ExpiresAt;
+        ui64 OwnerRound = 0;
+        bool Deleted = false;
+    };
+    // Keep the last owner round even after expiry/deletion to fence delayed publications.
+    // NodeWarden assigns increasing rounds for slot incarnations within this process.
+    std::unordered_map<ui64, TDDiskState> DDiskStateInfo;
+
     i64 MaxClockSkewWithPeerUs = 0;
     ui32 MaxClockSkewPeerId = 0;
     ui64 SumNetworkWriteThroughput = 0;
@@ -549,6 +560,8 @@ protected:
             hFunc(TEvWhiteboard::TEvPDiskStateUpdate, Handle);
             hFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
             hFunc(TEvWhiteboard::TEvPDiskStateDelete, Handle);
+            hFunc(TEvWhiteboard::TEvDDiskStateUpdate, Handle);
+            hFunc(TEvWhiteboard::TEvDDiskStateDelete, Handle);
             hFunc(TEvWhiteboard::TEvVDiskStateUpdate, Handle);
             hFunc(TEvWhiteboard::TEvVDiskStateGenerationChange, Handle);
             hFunc(TEvWhiteboard::TEvVDiskStateDelete, Handle);
@@ -633,6 +646,39 @@ protected:
             pDiskStateInfo.SetChangeTime(TActivationContext::Now().MilliSeconds());
         }
         SetRole("Storage");
+    }
+
+    void Handle(TEvWhiteboard::TEvDDiskStateUpdate::TPtr& ev) {
+        auto& info = ev->Get()->Record;
+        const ui64 key = (ui64(info.GetPDiskId()) << 32) | info.GetDDiskSlotId();
+        auto& state = DDiskStateInfo[key];
+        const auto& update = *ev->Get();
+        if (update.OwnerRound < state.OwnerRound
+                || (update.OwnerRound == state.OwnerRound
+                    && (state.Deleted || (state.Publisher && state.Publisher != ev->Sender)))) {
+            return;
+        }
+        state.Info = std::move(info);
+        state.Publisher = ev->Sender;
+        state.OwnerRound = update.OwnerRound;
+        state.Deleted = false;
+        const auto now = TActivationContext::Now();
+        state.ExpiresAt = now + update.Lifetime;
+        state.Info.SetChangeTime(now.MilliSeconds());
+    }
+
+    void Handle(TEvWhiteboard::TEvDDiskStateDelete::TPtr& ev) {
+        const ui64 key = (ui64(ev->Get()->PDiskId) << 32) | ev->Get()->DDiskSlotId;
+        auto& state = DDiskStateInfo[key];
+        if (ev->Get()->OwnerRound < state.OwnerRound
+                || (ev->Get()->OwnerRound == state.OwnerRound
+                    && state.Publisher && state.Publisher != ev->Sender)) {
+            return;
+        }
+        state.Info.Clear();
+        state.OwnerRound = ev->Get()->OwnerRound;
+        state.Publisher = ev->Sender;
+        state.Deleted = true;
     }
 
     void Handle(TEvWhiteboard::TEvVDiskStateUpdate::TPtr& ev) {
@@ -980,6 +1026,16 @@ protected:
                 Copy(pDiskStateInfo, pr.second, request);
             }
         }
+        if (request.GetIncludeDDiskState()) {
+            const auto now = TActivationContext::Now();
+            for (auto& [key, state] : DDiskStateInfo) {
+                if (state.ExpiresAt < now) {
+                    state.Info.Clear();
+                } else if (state.Info.HasPDiskId() && state.Info.GetChangeTime() >= changedSince) {
+                    record.AddDDiskStateInfo()->CopyFrom(state.Info);
+                }
+            }
+        }
         response->Record.SetResponseTime(TActivationContext::Now().MilliSeconds());
         Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
@@ -1230,6 +1286,12 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvCleanupDeadTablets::TPtr&) {
+        const auto ddiskNow = TActivationContext::Now();
+        for (auto& [key, state] : DDiskStateInfo) {
+            if (state.ExpiresAt < ddiskNow) {
+                state.Info.Clear();
+            }
+        }
         auto it = TabletStateInfo.begin();
         auto now(TActivationContext::Now());
         ui64 deadDeadline = (now - TDuration::Minutes(10)).MilliSeconds();

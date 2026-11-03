@@ -81,6 +81,7 @@ public:
 
     void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
+    bool IsExpectedStreamCreator(const TActorId& actorId) const override;
 
     void WorkerStatusChanged(ui64 workerId, ui64 status) override;
     bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) override;
@@ -97,6 +98,8 @@ protected:
     virtual TTargetWithStreamCounters* GetCountersImpl();
 
 private:
+    bool CanDetachWithoutStream() const;
+
     std::unique_ptr<TTargetWithStreamStats> Stats;
     std::unique_ptr<TTargetWithStreamCounters> Counters;
 

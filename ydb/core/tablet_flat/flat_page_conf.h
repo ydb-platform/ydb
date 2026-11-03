@@ -2,6 +2,7 @@
 
 #include "bloom_filter_defaults.h"
 #include "flat_page_iface.h"
+#include "flat_part_slots.h"
 #include "flat_row_eggs.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -84,7 +85,8 @@ namespace NPage {
 
         bool Final = true;
         bool CutIndexKeys = true;
-        bool WriteBTreeIndex = true;
+        bool WriteBTreeIndexV1 = true;  /* write V1 b-tree: primary, or shadow of V2 */
+        bool WriteBTreeIndexV2 = false;
         bool WriteFlatIndex = true;
         ui32 MaxLargeBlob = 8 * 1024 * 1024 - 8; /* Maximum large blob size */
         ui32 LargeEdge = Max<ui32>();   /* External blob edge size      */
@@ -101,6 +103,7 @@ namespace NPage {
         IKeySpace* UnderlayMask = nullptr;
         ISplitKeys* SplitKeys = nullptr;
         TRowVersion MinRowVersion = TRowVersion::Min();
+        TPartLayout Layout;             /* Page collections of written parts, needs b-tree index only when separate */
 
         TVector<TGroupConf> Groups;
 

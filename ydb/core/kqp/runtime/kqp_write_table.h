@@ -12,6 +12,10 @@
 namespace NKikimr {
 namespace NKqp {
 
+// O(1) ShardId-to-partition index over a resolved partitioning (kqp_shard_meta.h).
+// Only referenced (by reference) here to keep this header's dependency graph light.
+class TShardPartitionIndex;
+
 using TRowsRef = TConstArrayRef<TConstArrayRef<TCell>>;
 
 class IDataBatch : public TThrRefBase {
@@ -175,6 +179,10 @@ public:
     // targets of shards removed by a split/merge.
     virtual TPartitioning::TCPtr GetPartitioning() const = 0;
 
+    // The held partitioning with its O(1) shard lookup, used for repeated per-shard
+    // metadata registrations and for the covering computation of removed shards.
+    virtual const TShardPartitionIndex& GetShardPartitionIndex() const = 0;
+
     // Shards present in ShardsInfo but absent from the current partitioning: their
     // tablet ids were removed by a split/merge, their pending batches (if any) must be
     // re-routed to the shards now covering their key ranges.
@@ -182,9 +190,15 @@ public:
 
     // Re-route the pending batches of shards removed by a split/merge to the shards
     // now covering their key ranges, preserving the original WriteSeqNum and setting
-    // OriginalShard on the batches. Only row-table (DataShard) controllers with
-    // EnableWriteSeqNum or Inconsistent; the caller must gate this.
-    virtual void ReRouteShards(TVector<ui64>&& deletedShards) = 0;
+    // OriginalShard on the batches. coveringTargets maps every deleted shard to the
+    // shards now covering its key range (computed by the write actor from the removed
+    // shard's metadata): under the WriteSeqNum protocol a covering target that
+    // receives no rows still gets an empty batch carrying the chain position, so the
+    // datashard validates/advances the transferred ancestor chain on it and its
+    // commit-time prepare carries fresh echo locks. Only row-table (DataShard)
+    // controllers with EnableWriteSeqNum or Inconsistent; the caller must gate this.
+    virtual void ReRouteShards(TVector<ui64>&& deletedShards,
+        const TVector<std::pair<ui64, TVector<ui64>>>& coveringTargets) = 0;
 
     // Register empty shard records for the given shards so they receive covering
     // messages (prepare) at commit time. Used for split/merge covering shards that
@@ -255,6 +269,10 @@ public:
     };
     virtual std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) = 0;
 
+    virtual TMessageMetadata PrepareMessageMetadata(ui64 shardId) = 0;
+
+    virtual ui64 AllocateMessageCookie(ui64 shardId) = 0;
+
     struct TSerializationResult {
         i64 TotalDataSize = 0;
         TVector<ui64> PayloadIndexes;
@@ -267,7 +285,7 @@ public:
         bool IsShardEmpty = 0;
     };
 
-    virtual std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
+    virtual TMessageAcknowledgedResult OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
     virtual void OnMessageSent(ui64 shardId, ui64 cookie) = 0;
 
     virtual void ResetRetries(ui64 shardId, ui64 cookie) = 0;
@@ -291,6 +309,10 @@ struct TShardedWriteControllerSettings {
     bool EnableWriteSeqNum = false;
     ui64 WriterIndex = 0;
 };
+
+bool IsSupersededWriteResult(ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata);
+
+bool IsIgnorableSupersededStatus(NKikimrDataEvents::TEvWriteResult::EStatus status);
 
 IShardedWriteControllerPtr CreateShardedWriteController(
     const TShardedWriteControllerSettings& settings,

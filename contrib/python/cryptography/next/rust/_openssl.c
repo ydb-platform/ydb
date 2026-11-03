@@ -627,8 +627,7 @@ static void (*_cffi_call_python_org)(struct _cffi_externpy_s *, char *);
 
 
 #if CRYPTOGRAPHY_OPENSSL_300_OR_GREATER
-#include <openssl/provider.h>
-#include <openssl/proverr.h>
+/* Arcadia's OpenSSL 1.1.1 has no provider headers. */
 #endif
 
 
@@ -672,7 +671,7 @@ static void (*_cffi_call_python_org)(struct _cffi_externpy_s *, char *);
 
 
 #if CRYPTOGRAPHY_IS_BORINGSSL
-#include <openssl/aead.h>
+/* Arcadia uses OpenSSL, not BoringSSL. */
 #endif
 
 

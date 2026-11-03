@@ -27,8 +27,6 @@ PEERDIR(
     yt/yql/providers/yt/expr_nodes
 )
 
-YQL_LAST_ABI_VERSION()
-
 ADDINCL(
     ${ORIG_SRC_DIR}
 )

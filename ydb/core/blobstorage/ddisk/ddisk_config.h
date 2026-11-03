@@ -6,6 +6,7 @@ namespace NKikimr::NDDisk {
 
 struct TDDiskConfig {
     bool ForcePDiskFallback = false;
+    bool DevNullMode = false;
     bool EnableChecksums = true;
 
     // When EnableChecksums is true, recompute payload checksums and reject a write

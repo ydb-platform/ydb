@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_cbo_latency_predictor.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_make_join_hypergraph.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_cbo.h>
 #include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_trace.h>
 
 #include <library/cpp/iterator/zip.h>
@@ -29,7 +30,7 @@ struct THypergraphInfo {
     std::optional<optimizer_trace::Widget> GraphWidget;
 };
 
-std::vector<std::pair<std::string, std::string>> BuildCBOColumnMappingRows(const TVector<TCBOLeaf>& leaves) {
+std::vector<std::pair<std::string, std::string>> BuildCBOColumnMappingRows(const TVector<TCBOLeaf>& leaves, const TInfoUnitRegistry& registry) {
     struct TColumnMappingRow {
         size_t LeafIndex = 0;
         std::string InputColumn;
@@ -39,11 +40,12 @@ std::vector<std::pair<std::string, std::string>> BuildCBOColumnMappingRows(const
     std::vector<TColumnMappingRow> sortedRows;
     for (size_t leafIndex = 0; leafIndex < leaves.size(); ++leafIndex) {
         const auto& leaf = leaves[leafIndex];
-        for (const auto& [rboColumn, cboColumn] : leaf.ColumnsToCBO) {
+        for (const auto column : leaf.Op->GetOutputIUs()) {
+            const auto cboColumn = MakeCBOColumn(leaf.RelationName, column);
             sortedRows.push_back({
                 leafIndex,
-                ToStdString(FormatInfoUnit(rboColumn)),
-                ToStdString(FormatInfoUnit(cboColumn))
+                ToStdString(registry.GetDebugName(column)),
+                ToStdString(cboColumn.RelName + "." + cboColumn.AttributeName)
             });
         }
     }
@@ -79,20 +81,15 @@ void AppendUniqueTargets(TTraceTargets& dst, const TTraceTargets& src) {
 }
 
 TTraceTargets GetLeafTargets(const TTraceBuildState& state, const TCBOLeaf& leaf) {
-    return GetOperatorTargets(state, *leaf.Op);
+    const auto it = state.OperatorTargets.find(leaf.Op.Get());
+    return it == state.OperatorTargets.end() ? TTraceTargets{} : it->second;
 }
 
-TTraceTargets GetCboTreeTargets(
+TTraceTargets GetCboLeafTargets(
     const TTraceBuildState& state,
-    const TOpCBOTree& cboTree,
     const TVector<TCBOLeaf>& leaves)
 {
     TTraceTargets targets;
-    AppendUniqueTargets(targets, GetOperatorTargets(state, cboTree));
-    AppendUniqueTargets(targets, GetOperatorTargets(state, *cboTree.TreeRoot));
-    for (const auto& node : cboTree.TreeNodes) {
-        AppendUniqueTargets(targets, GetOperatorTargets(state, *node));
-    }
     for (const auto& leaf : leaves) {
         AppendUniqueTargets(targets, GetLeafTargets(state, leaf));
     }
@@ -857,6 +854,7 @@ std::vector<std::pair<std::string, std::string>> BuildCboSettingsRows(
 std::vector<optimizer_trace::Widget> BuildCboRunWidgets(
     const THypergraphInfo& hypergraphInfo,
     const TVector<TCBOLeaf>& leaves,
+    const std::vector<std::pair<std::string, std::string>>& columnMappingRows,
     const TCBOSettings& settings,
     int optLevel,
     bool enableShuffleElimination,
@@ -880,7 +878,6 @@ std::vector<optimizer_trace::Widget> BuildCboRunWidgets(
         widgets.push_back(optimizer_trace::Widget::unwrappedText("CBO hypergraph", hypergraphInfo.Dump));
     }
 
-    const auto columnMappingRows = BuildCBOColumnMappingRows(leaves);
     if (!columnMappingRows.empty()) {
         widgets.push_back(optimizer_trace::Widget::table("Column mapping", columnMappingRows).monospaceTable());
     }
@@ -927,7 +924,7 @@ void AddCboWarning(TRBOContext& ctx, const TString& message) {
 
 std::shared_ptr<TCboRunTiming> AddCboRunTrace(
     TRBOContext& ctx,
-    const TIntrusivePtr<TOpCBOTree>& cboTree,
+    const TInfoUnitRegistry& registry,
     const std::shared_ptr<TJoinOptimizerNode>& initialJoinTree,
     const TVector<TCBOLeaf>& leaves,
     const TCBOSettings& settings,
@@ -942,10 +939,14 @@ std::shared_ptr<TCboRunTiming> AddCboRunTrace(
         return {};
     }
 
+    // The owning CBO rewrite destroys its tree before deferred log enrichment.
+    // Snapshot display data now; only surviving leaves can be after-tree targets.
+    const auto columnMappingRows = BuildCBOColumnMappingRows(leaves, registry);
     auto cboRunTiming = std::make_shared<TCboRunTiming>();
     ctx.EnrichRuleLog([
         initialJoinTree,
         leaves,
+        columnMappingRows,
         settings,
         optLevel,
         enableShuffleElimination,
@@ -959,6 +960,7 @@ std::shared_ptr<TCboRunTiming> AddCboRunTrace(
         tab.setWidgets(BuildCboRunWidgets(
             hypergraphInfo,
             leaves,
+            columnMappingRows,
             settings,
             optLevel,
             enableShuffleElimination,
@@ -969,9 +971,9 @@ std::shared_ptr<TCboRunTiming> AddCboRunTrace(
     });
 
     ctx.EnrichRuleLogAfterTree([
-        cboTree,
         initialJoinTree,
         leaves,
+        columnMappingRows,
         settings,
         optLevel,
         enableShuffleElimination,
@@ -984,10 +986,11 @@ std::shared_ptr<TCboRunTiming> AddCboRunTrace(
         const auto relationTargets = BuildRelationTargetMap(state, leaves);
         const auto hypergraphInfo = BuildHypergraphInfo(initialJoinTree, hints, &relationTargets);
         auto& runTab = rule.info().tab("cbo-run", "CBO run");
-        SetTabTargets(runTab, GetCboTreeTargets(state, *cboTree, leaves));
+        SetTabTargets(runTab, GetCboLeafTargets(state, leaves));
         runTab.setWidgets(BuildCboRunWidgets(
             hypergraphInfo,
             leaves,
+            columnMappingRows,
             settings,
             optLevel,
             enableShuffleElimination,
@@ -999,7 +1002,7 @@ std::shared_ptr<TCboRunTiming> AddCboRunTrace(
             &relationTargets));
 
         auto& detailsTab = rule.info().tab("cbo-details", "CBO details");
-        SetTabTargets(detailsTab, GetCboTreeTargets(state, *cboTree, leaves));
+        SetTabTargets(detailsTab, GetCboLeafTargets(state, leaves));
     });
 
     return cboRunTiming;

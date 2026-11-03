@@ -478,7 +478,7 @@ Y_UNIT_TEST_SUITE(KqpWrite) {
                         NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE,
                         "");
 
-                    runtime.Send(ev->Recipient, ev->Sender, newResult.release());
+                    runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, newResult.release(), 0, ev->Cookie));
 
                     responses.emplace_back(ev.Release());
 

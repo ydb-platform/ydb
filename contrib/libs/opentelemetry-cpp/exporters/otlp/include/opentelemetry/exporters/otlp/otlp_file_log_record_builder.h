@@ -7,11 +7,18 @@
 
 #include "opentelemetry/sdk/configuration/otlp_file_log_record_exporter_builder.h"
 #include "opentelemetry/sdk/configuration/otlp_file_log_record_exporter_configuration.h"
-#include "opentelemetry/sdk/configuration/registry.h"
 #include "opentelemetry/sdk/logs/exporter.h"
 #include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
+namespace sdk
+{
+namespace configuration
+{
+class Registry;
+}  // namespace configuration
+}  // namespace sdk
+
 namespace exporter
 {
 namespace otlp

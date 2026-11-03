@@ -6,4 +6,4 @@ namespace NFq {
 TString GetRateLimiterResourcePath(TStringBuf cloud, TStringBuf folder, TStringBuf query);
 TString GetRateLimiterResourcePath(TStringBuf cloud);
 
-} // namespace NFq
+}   // namespace NFq

@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_locks_tli_helpers.h>
+#include <ydb/core/kqp/common/kqp_shard_meta.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
@@ -311,7 +312,7 @@ struct TKqpTableWriterStatistics {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
-    ui64 AffectedRows = 0;
+    std::optional<ui64> AffectedRows;
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
     TVector<ui64> BreakerQuerySpanIds;
@@ -332,7 +333,9 @@ struct TKqpTableWriterStatistics {
             WriteBytes += tableAccessStats.GetUpdateRow().GetBytes();
             EraseRows += tableAccessStats.GetEraseRow().GetRows();
             EraseBytes += tableAccessStats.GetEraseRow().GetBytes();
-            AffectedRows += tableAccessStats.GetAffectedRows();
+            if (tableAccessStats.HasAffectedRows()) {
+                AffectedRows = AffectedRows.value_or(0) + tableAccessStats.GetAffectedRows();
+            }
         }
 
         for (const auto& perShardStats : txStats.GetPerShardStats()) {
@@ -410,7 +413,9 @@ struct TKqpTableWriterStatistics {
         tableStats->SetWriteBytes(tableStats->GetWriteBytes() + WriteBytes);
         tableStats->SetEraseRows(tableStats->GetEraseRows() + EraseRows);
         tableStats->SetEraseBytes(tableStats->GetEraseBytes() + EraseBytes);
-        tableStats->SetAffectedRows(tableStats->GetAffectedRows() + AffectedRows);
+        if (AffectedRows) {
+            tableStats->SetAffectedRows(tableStats->GetAffectedRows() + *AffectedRows);
+        }
 
         ReadRows = 0;
         ReadBytes = 0;
@@ -418,7 +423,7 @@ struct TKqpTableWriterStatistics {
         WriteBytes = 0;
         EraseRows = 0;
         EraseBytes = 0;
-        AffectedRows = 0;
+        AffectedRows.reset();
 
         tableStats->SetAffectedPartitions(
             tableStats->GetAffectedPartitions() + AffectedPartitions.size());
@@ -426,57 +431,25 @@ struct TKqpTableWriterStatistics {
     }
 };
 
-// Compute the shards of `newPartitioning` that now cover the key range of `deadShardId`
-// in `oldPartitioning`. Used on split/merge: the removed shard's pending batches are
-// re-routed to these shards, and its TxManager participant state (locks, flags) is
-// moved to them. Range boundaries come from the neighbor partitions' EndKeyPrefix
-// (the first partition starts at the min key); the intersection with the new
-// partitioning yields exactly the covering shards.
+// Compute the shards of `newPartitioning` that now cover the key range of the removed
+// shard with `removedShardMeta` partitioning metadata. Used on split/merge: the removed
+// shard's pending batches are re-routed to these shards, and its TxManager participant
+// state (locks, flags) is moved to them. The range comes from the removed shard's
+// registered metadata (registered by the caller from the pre-update partitioning);
+// the intersection with the new partitioning yields exactly the covering shards.
 TVector<ui64> FindCoveringShards(
-        const TPartitioning::TCPtr& oldPartitioning,
+        const TShardMeta& removedShardMeta,
         const TPartitioning::TCPtr& newPartitioning,
-        const ui64 deletedShardId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes) {
-    AFL_ENSURE(oldPartitioning);
     AFL_ENSURE(newPartitioning);
-
-    const auto& oldPartitions = oldPartitioning->GetTablePartitioning();
-    size_t deletedIndex = oldPartitions.size();
-    for (size_t index = 0; index < oldPartitions.size(); ++index) {
-        if (oldPartitions[index].ShardId == deletedShardId) {
-            deletedIndex = index;
-            break;
-        }
-    }
-    // The removed shard must exist in the old partitioning; a miss means a cache
-    // desync and re-homing would silently break the commit — fail closed instead.
-    AFL_ENSURE(deletedIndex < oldPartitions.size());
-    AFL_ENSURE(oldPartitions[deletedIndex].Range.Defined());
-
-    const auto makeBoundaryCells = [](const TKeyDesc::TPartitionRangeInfo& range) {
-        return range.EndKeyPrefix.GetCells();
-    };
-
-    // The dead shard's range start: end of the previous partition (exclusive if that
-    // boundary was inclusive, inclusive otherwise); the first partition starts at
-    // the min key (null cells, same convention as ResolveShards' full range).
-    TVector<TCell> from(keyColumnTypes.size());
-    bool inclusiveFrom = true;
-    if (deletedIndex > 0) {
-        AFL_ENSURE(oldPartitions[deletedIndex - 1].Range.Defined());
-        const auto& prevRange = *oldPartitions[deletedIndex - 1].Range;
-        const auto cells = makeBoundaryCells(prevRange);
-        from.assign(cells.begin(), cells.end());
-        inclusiveFrom = !prevRange.IsInclusive;
-    }
-
-    const auto& deadRange = *oldPartitions[deletedIndex].Range;
-    const auto to = makeBoundaryCells(deadRange);
-    const bool inclusiveTo = deadRange.IsInclusive || deadRange.IsPoint;
-    const TTableRange deadTableRange(from, inclusiveFrom, to, inclusiveTo);
+    // The removed shard's metadata must be filled: it is registered from the
+    // pre-update partitioning before the covering computation. A miss means a
+    // re-homing would silently break the commit — fail closed instead.
+    AFL_ENSURE(removedShardMeta.IsKnown());
+    AFL_ENSURE(!removedShardMeta.Borders.From.empty());
 
     auto intersections = newPartitioning->GetIntersectionWithRange(
-        keyColumnTypes, deadTableRange);
+        keyColumnTypes, removedShardMeta.Borders);
     // The removed shard's range must remain covered by the new partitioning; an empty
     // intersection means a desync — fail closed.
     AFL_ENSURE(!intersections.empty());
@@ -486,6 +459,18 @@ TVector<ui64> FindCoveringShards(
         result.push_back(intersection.ShardId);
     }
     return result;
+}
+
+// Whether writes of this transaction participate in the WriteSeqNum protocol —
+// the only user of the split/merge partitioning metadata
+// (FindCoveringShards/MoveShardTo), so shard metas are collected only then.
+// Shared by the table write actor (its AttachWriteSeqNum member) and the buffer
+// write actor (which serves tables with different schemas and becomes
+// InconsistentTx only with the first write task).
+bool ShouldAttachWriteSeqNum(bool inconsistentTx, bool isOlap) {
+    return AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum()
+        && !inconsistentTx
+        && !isOlap;
 }
 
 class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
@@ -557,10 +542,7 @@ public:
         , LockNodeId(lockNodeId)
         , InconsistentTx(inconsistentTx)
         , IsOlap(isOlap)
-        , AttachWriteSeqNum(
-              AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum()
-              && !inconsistentTx
-              && !isOlap)
+        , AttachWriteSeqNum(ShouldAttachWriteSeqNum(inconsistentTx, isOlap))
         , KeyColumnTypes(std::move(keyColumnTypes))
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
@@ -604,7 +586,7 @@ public:
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         try {
-            const auto partitioning = TxManager->GetPartitioning(TableId);
+            const auto partitioning = TxManager->GetTableMeta(TableId).InitialPartitioning;
             if (!partitioning) {
                 Resolve();
             } else {
@@ -1005,6 +987,9 @@ public:
             {"locks", txLocks},
             {"cookie", ev->Cookie});
 
+        // All EvWrites in TKqpTableWriteActor are sent with Cookie >= 1
+        AFL_ENSURE(ev->Cookie != 0);
+
         if (!ShardedWriteController->HasShard(ev->Get()->Record.GetOrigin())) {
             // TODO: in future don't ignore non-retryable errors and fail immediately
             YDB_LOG_INFO("Ignoring a late TEvWriteResult for a shard removed by a reroute.",
@@ -1014,6 +999,10 @@ public:
             return;
         }
 
+        // Only results of the last sent message are processed (see IsSupersededWriteResult).
+
+        const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
+
         TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         if (ev->Sender.NodeId() == SelfId().NodeId()) {
@@ -1021,6 +1010,19 @@ public:
         } else {
             Counters->WriteActorRemoteShardWrites->Inc();
         }
+
+        AFL_ENSURE(!TxId || !ev->Get()->Record.HasTxId() || ev->Get()->Record.GetTxId() == *TxId);
+        if (!(Mode == EMode::COMMIT && ev->Get()->Record.GetTxId() == *TxId) // not commit response
+                && IsSupersededWriteResult(ev->Cookie, metadata)
+                && IsIgnorableSupersededStatus(ev->Get()->GetStatus())) {
+            YDB_LOG_DEBUG("Ignored a result of a superseded or unknown message.",
+                {"logPrefix", this->LogPrefix},
+                {"shardID", ev->Get()->Record.GetOrigin()},
+                {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
+                {"cookie", ev->Cookie});
+            return;
+        }
+
         const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE
                     || ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
 
@@ -1032,17 +1034,19 @@ public:
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
 
-            const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
             if (metadata && ev->Get()->Record.GetOverloadSubscribed() + 1 == metadata->NextOverloadSeqNo) {
                 YDB_LOG_INFO("Waiting for overloaded shard.",
                     {"logPrefix", this->LogPrefix},
                     {"tablePath", TablePath},
                     {"shardID", ev->Get()->Record.GetOrigin()},
                     {"sink", this->SelfId()});
-                // The shard acknowledged the wait: don't let resends burn the bounded
-                // retry budget while the shard is legitimately overloaded. TEvOverloadReady
-                // will reset the attempts again right before the resend.
-                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                // The shard acknowledged the wait. Don't reset the retry counter here:
+                // the batch is still unacknowledged, and zeroing the accumulated attempts
+                // would re-baseline the exponential backoff and the bounded resend budget
+                // on every subscribed rejection (pacing would collapse to the initial retry
+                // delay under sustained overload). No sends happen while we wait, so the
+                // attempts are merely frozen; OnOverloadReady resets them right before the
+                // resend, once the shard reports it is ready.
             }
             return;
         }
@@ -1103,7 +1107,7 @@ public:
             } else if (AttachWriteSeqNum && Mode == EMode::WRITE) {
                 // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs.
                 // Retries are bounded in RetryShard before the write re-resolves and then fails.
-                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                RetryShard(ev->Get()->Record.GetOrigin());
             } else {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
@@ -1165,7 +1169,7 @@ public:
                         << TablePath << "`.",
                     getIssues());
             } else {
-                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                RetryShard(ev->Get()->Record.GetOrigin());
             }
             return;
         }
@@ -1187,7 +1191,7 @@ public:
                         << TablePath << "`.",
                     getIssues());
             } else {
-                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                RetryShard(ev->Get()->Record.GetOrigin());
             }
             return;
         }
@@ -1304,11 +1308,9 @@ public:
         OnMessageReceived(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
-        if (result) {
-            YQL_ENSURE(result->IsShardEmpty);
-            RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
-            Callbacks->OnPrepared(std::move(preparedInfo), result->DataSize);
-        }
+        AFL_ENSURE(result.IsShardEmpty);
+        RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
+        Callbacks->OnPrepared(std::move(preparedInfo), result.DataSize);
     }
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -1336,14 +1338,6 @@ public:
         OnMessageReceived(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
-        if (!result) {
-            // A resent batch is answered twice, only the first result is taken
-            YDB_LOG_DEBUG("Ignored an already acknowledged result",
-                {"logPrefix", this->LogPrefix},
-                {"tabletId", ev->Get()->Record.GetOrigin()},
-                {"cookie", ev->Cookie});
-            return;
-        }
 
         RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
 
@@ -1360,13 +1354,13 @@ public:
             }
         }
 
-        if (result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
+        if (result.IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize, ExtractCommitTimestamp(ev->Get()->Record));
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result.DataSize, ExtractCommitTimestamp(ev->Get()->Record));
         } else {
             AFL_ENSURE(Mode == EMode::WRITE);
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnMessageAcknowledged(result->DataSize);
+            Callbacks->OnMessageAcknowledged(result.DataSize);
         }
     }
 
@@ -1418,9 +1412,36 @@ public:
             // This ensures TxManager tracks the correct per-query SpanId even when
             // FlushBuffers() flushes batches from multiple queries at once.
             const ui64 spanId = shardInfo.QuerySpanId != 0 ? shardInfo.QuerySpanId : CurrentQuerySpanId;
-            TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
+
+            // TxManager must know all shards that will participate in commit
+            // before Prepare/Commit is sent to them.
+            // The partitioning metadata is consumed only by the split/merge
+            // handling (FindCoveringShards/MoveShardTo), so it is filled only
+            // under the WriteSeqNum protocol; everywhere else shards are
+            // registered without metadata. A shard already registered with
+            // borders is left untouched: the shard never changes borders between
+            // resolves (a split/merge removes the tablet id entirely), so
+            // re-adding it would only rebuild and re-merge the same metadata. A
+            // shard registered without borders (e.g. a fresh MoveShardTo transfer
+            // target) still needs this UpdateShards pass — that is how it learns
+            // its exact borders.
+            if (AttachWriteSeqNum && (!TxManager->HasShard(shardInfo.ShardId)
+                    || TxManager->GetShardMeta(shardInfo.ShardId).Borders.From.empty())) {
+                TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath, MakeShardMeta(shardInfo.ShardId));
+            } else {
+                TxManager->AddShard(shardInfo.ShardId, IsOlap, TablePath);
+            }
             TxManager->AddAction(shardInfo.ShardId, flags, spanId);
         }
+    }
+
+    // Borders/version of the shard in the partitioning this actor currently works
+    // with. Called only under the WriteSeqNum protocol (UpdateShards gates on
+    // AttachWriteSeqNum): row tables only, where the resolved partitioning always
+    // has representable per-shard key ranges.
+    TShardMeta MakeShardMeta(const ui64 shardId) const {
+        AFL_ENSURE(AttachWriteSeqNum);
+        return NKqp::MakeShardMeta(TableId, ShardedWriteController->GetShardPartitionIndex(), shardId, KeyColumnTypes.size());
     }
 
     void FlushBuffer(const TWriteToken token) {
@@ -1446,13 +1467,12 @@ public:
     bool SendDataToShard(const ui64 shardId) {
         YQL_ENSURE(Mode != EMode::COMMIT);
 
-        const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
-        YQL_ENSURE(metadata);
+        const auto metadata = ShardedWriteController->PrepareMessageMetadata(shardId);
         // A resend is safe when the shard deduplicates by uncommitted write seq num
         // (AttachWriteSeqNum) or when the write is inconsistent: for a consistent tx
         // without the flag a resend would break the write order, so fail loudly.
-        AFL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
-        if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
+        AFL_ENSURE(metadata.SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
+        if (metadata.SendAttempts >= MessageSettings.MaxWriteAttempts) {
             // The resend budget for this shard is exhausted: re-resolve through RetryShard
             // so the number of consecutive re-resolves per shard stays bounded before
             // failing with UNAVAILABLE (the per-shard counter is cleared on a successful ack).
@@ -1461,14 +1481,14 @@ public:
                 {"shardId", shardId},
                 {"tablePath", TablePath},
                 {"sink", this->SelfId()});
-            RetryShard(shardId, metadata->Cookie);
+            RetryShard(shardId);
             return false;
         }
 
         // BreakerQuerySpanId is set in AddAction during write phase, not here
 
-        const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
-        const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
+        const bool isPrepare = metadata.IsFinal && Mode == EMode::PREPARE;
+        const bool isImmediateCommit = metadata.IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
 
         // In-flight data batches carry the snapshot of the operation that produced
         // them, and all batches of one message must share it (enforced by
@@ -1514,19 +1534,19 @@ public:
 
         evWrite->Record.SetCollectAffectedRows(CollectAffectedRows);
 
-        evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
+        evWrite->Record.SetOverloadSubscribe(metadata.NextOverloadSeqNo);
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite, isPrepare || isImmediateCommit);
-        YQL_ENSURE(isPrepare || isImmediateCommit || serializationResult.TotalDataSize > 0);
+        YQL_ENSURE(isPrepare || isImmediateCommit || evWrite->Record.OperationsSize() > 0);
 
-        if (metadata->SendAttempts == 0) {
+        if (metadata.SendAttempts == 0) {
             if (!isPrepare) {
                 Counters->WriteActorImmediateWrites->Inc();
             } else {
                 Counters->WriteActorPrepareWrites->Inc();
             }
             Counters->WriteActorWritesSizeHistogram->Collect(serializationResult.TotalDataSize);
-            Counters->WriteActorWritesOperationsHistogram->Collect(metadata->OperationsCount);
+            Counters->WriteActorWritesOperationsHistogram->Collect(metadata.OperationsCount);
 
             for (const auto& operation : evWrite->Record.GetOperations()) {
                 if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
@@ -1563,6 +1583,8 @@ public:
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "WriteActor");
 
+        const ui64 cookie = ShardedWriteController->AllocateMessageCookie(shardId);
+
         TStringBuilder locks;
         for (const auto& lock : evWrite->Record.GetLocks().GetLocks()) {
             locks << lock.ShortDebugString();
@@ -1577,29 +1599,29 @@ public:
             {"lockNodeId", evWrite->Record.GetLockNodeId()},
             {"locks", locks},
             {"size", serializationResult.TotalDataSize},
-            {"cookie", metadata->Cookie},
+            {"cookie", cookie},
             {"operationsCount", evWrite->Record.OperationsSize()},
-            {"isFinal", metadata->IsFinal},
-            {"attempts", metadata->SendAttempts},
+            {"isFinal", metadata.IsFinal},
+            {"attempts", metadata.SendAttempts},
             {"mode", static_cast<int>(Mode)},
             {"bufferMemory", GetMemory()});
 
-        AFL_ENSURE(Mode == EMode::WRITE || metadata->IsFinal);
+        AFL_ENSURE(Mode == EMode::WRITE || metadata.IsFinal);
 
         LinkedPipeCache = true;
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
             0,
-            metadata->Cookie,
+            cookie,
             NWilson::TTraceId(ParentTraceId));
 
-        ShardedWriteController->OnMessageSent(shardId, metadata->Cookie);
+        ShardedWriteController->OnMessageSent(shardId, cookie);
 
         return true;
     }
 
-    void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual) {
+    void RetryShard(const ui64 shardId) {
         if (Mode != EMode::WRITE) {
             // At current time retries are only supported for WRITE mode.
             RuntimeError(
@@ -1613,11 +1635,10 @@ public:
 
         AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
-        if (!metadata || (ifCookieEqual && metadata->Cookie != ifCookieEqual)) {
-            YDB_LOG_INFO("Shard retry skipped because metadata was not found for the given cookie.",
+        if (!metadata) {
+            YDB_LOG_INFO("Shard retry skipped because metadata was not found.",
                 {"logPrefix", this->LogPrefix},
-                {"shardID", shardId},
-                {"cookie", ifCookieEqual.value_or(0)});
+                {"shardID", shardId});
             return;
         }
 
@@ -1661,7 +1682,7 @@ public:
         YDB_LOG_DEBUG("Retry Next",
             {"logPrefix", this->LogPrefix},
             {"shardID", shardId},
-            {"cookie", ifCookieEqual.value_or(0)},
+            {"cookie", metadata->Cookie},
             {"attempt", metadata->SendAttempts},
             {"delay", CalculateNextAttemptDelay(MessageSettings, metadata->SendAttempts)});
 
@@ -1721,7 +1742,7 @@ public:
         }
 
         if (InconsistentTx) {
-            RetryShard(ev->Get()->TabletId, std::nullopt);
+            RetryShard(ev->Get()->TabletId);
             return;
         }
 
@@ -1733,7 +1754,7 @@ public:
         // tablet generation restores the writer chain and answers once.
         if (AttachWriteSeqNum && Mode == EMode::WRITE) {
             // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs
-            RetryShard(ev->Get()->TabletId, std::nullopt);
+            RetryShard(ev->Get()->TabletId);
             return;
         }
 
@@ -1835,7 +1856,7 @@ public:
         YQL_ENSURE(TxId);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
             new TEvDataShard::TEvProposeTransactionAttach(tabletId, *TxId),
-            tabletId, /* subscribe */ true), 0, ++state.Cookie);
+            tabletId, /* subscribe */ true), 0, ++state.Cookie, NWilson::TTraceId(ParentTraceId));
     }
 
     void Prepare() {
@@ -1866,8 +1887,10 @@ public:
             YQL_ENSURE(Partitioning);
             // The controller's Partitioning member is overwritten by
             // OnPartitioningChanged: it still holds the pre-update partitioning here,
-            // needed to compute the covering shards of the removed shards.
-            const auto oldPartitioning = ShardedWriteController->GetPartitioning();
+            // needed to register the partitioning metadata of the shards removed by
+            // the split/merge. Captured by value (with its shard index) so it
+            // survives the update below.
+            const TShardPartitionIndex oldPartitioning = ShardedWriteController->GetShardPartitionIndex();
             ShardedWriteController->OnPartitioningChanged(Partitioning);
 
             const auto deletedShards = ShardedWriteController->GetDeletedShards();
@@ -1882,9 +1905,19 @@ public:
                 TVector<std::pair<ui64, TVector<ui64>>> transferTargets;
                 if (AttachWriteSeqNum) {
                     // The inconsistent-tx TxManager is collect-only: nothing to transfer.
+                    // The removed shards' partitioning metadata must be registered from
+                    // the pre-update partitioning before the covering computation: a
+                    // shard whose first batches were flushed by OnPartitioningChanged
+                    // above has no TxManager metadata yet (its shard update is only
+                    // consumed by the UpdateShards pass below, which runs against the
+                    // new partitioning). Removed shards are always a part of the
+                    // pre-update partitioning.
+                    for (const ui64 shardId : deletedShards) {
+                        TxManager->AddShard(shardId, IsOlap, TablePath, NKqp::MakeShardMeta(TableId, oldPartitioning, shardId, KeyColumnTypes.size()));
+                    }
                     transferTargets.reserve(deletedShards.size());
                     for (const ui64 shardId : deletedShards) {
-                        transferTargets.emplace_back(shardId, FindCoveringShards(oldPartitioning, Partitioning, shardId, KeyColumnTypes));
+                        transferTargets.emplace_back(shardId, FindCoveringShards(TxManager->GetShardMeta(shardId), Partitioning, KeyColumnTypes));
                     }
                     THashMap<ui64, ui32> sourcesPerTarget;
                     for (const auto& [shardId, targets] : transferTargets) {
@@ -1910,7 +1943,7 @@ public:
                         }
                     }
                 }
-                ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards));
+                ShardedWriteController->ReRouteShards(TVector<ui64>(deletedShards), transferTargets);
                 UpdateShards();
                 bool locksConsistent = true;
                 for (const auto& [shardId, targets] : transferTargets) {
@@ -4119,6 +4152,9 @@ public:
             .LockMode = NKikimrDataEvents::ELockMode::PESSIMISTIC_EXCLUSIVE, // Writes always need EXCLUSIVE lock
             .QuerySpanId = QuerySpanId,
 
+            .CollectShardMetas = ShouldAttachWriteSeqNum(
+                settings.TransactionSettings.InconsistentTx, settings.IsOlap),
+
             .TxManager = TxManager,
             .Alloc = Alloc,
             .TypeEnv = *TypeEnv,
@@ -4177,48 +4213,24 @@ public:
             const bool isRelevance = (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance);
 
             // Ensure write actor exists for this index table
-            if (!writeInfo.Actors.contains(indexSettings.TableId.PathId)) {
-                if (!EnsureWriteActor(settings, writeInfo, indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns)) {
-                    return false;
-                }
-            } else {
-                if (!CheckSchemaVersion(
-                        writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
-                        indexSettings.TableId,
-                        indexSettings.TablePath)) {
-                    return false;
-                }
+            if (!EnsureWriteActor(settings, writeInfo, indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns)) {
+                return false;
             }
 
             // Fulltext relevance: ensure docs/dict/stats tables
             if (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
-                if (!writeInfo.Actors.contains(indexSettings.DocsTableId.PathId)) {
-                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DocsTableId,
-                            indexSettings.DocsTablePath, {indexSettings.DocsColumns.at(0)})) {
-                        return false;
-                    }
-                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DocsTableId.PathId).WriteActor,
-                    indexSettings.DocsTableId, indexSettings.DocsTablePath)) {
+                if (!EnsureWriteActor(settings, writeInfo, indexSettings.DocsTableId,
+                        indexSettings.DocsTablePath, {indexSettings.DocsColumns.at(0)})) {
                     return false;
                 }
                 if (indexSettings.DictTableId.PathId != TPathId()) {
-                    if (!writeInfo.Actors.contains(indexSettings.DictTableId.PathId)) {
-                        if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
-                                indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
-                            return false;
-                        }
-                    } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
-                        indexSettings.DictTableId, indexSettings.DictTablePath)) {
+                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
+                            indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
                         return false;
                     }
                 }
-                if (!writeInfo.Actors.contains(indexSettings.StatsTableId.PathId)) {
-                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
-                            indexSettings.StatsTablePath, {indexSettings.StatsColumns.at(0)})) {
-                        return false;
-                    }
-                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor,
-                    indexSettings.StatsTableId, indexSettings.StatsTablePath)) {
+                if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
+                        indexSettings.StatsTablePath, {indexSettings.StatsColumns.at(0)})) {
                     return false;
                 }
             }
@@ -5225,6 +5237,10 @@ public:
 
         // Exclude shards prepared by write actors
         ForEachWriteActor([&](const TKqpTableWriteActor* actor, const TActorId) {
+            // Only write-actor shards are erased: their locks are attached
+            // when their prepare/immediate write is filled (via GetLocks).
+            // Shards that hold only locks are not write-actor shards — they
+            // are sent by the loop below, which requires non-empty locks.
             for (const auto& shardId : actor->GetShardsIds()) {
                 shards.erase(shardId);
             }
@@ -5717,7 +5733,7 @@ public:
         YQL_ENSURE(TxId);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
             new TEvDataShard::TEvProposeTransactionAttach(tabletId, *TxId),
-            tabletId, /* subscribe */ true), 0, ++state.Cookie);
+            tabletId, /* subscribe */ true), 0, ++state.Cookie, BufferWriteActorStateSpan.GetTraceId());
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {

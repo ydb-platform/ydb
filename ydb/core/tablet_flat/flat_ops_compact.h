@@ -2,6 +2,7 @@
 
 #include "flat_scan_iface.h"
 #include "flat_scan_spent.h"
+#include "flat_saved_row.h"
 #include "flat_writer_bundle.h"
 #include "flat_sausage_chop.h"
 #include "flat_row_misc.h"
@@ -65,48 +66,6 @@ namespace NTabletFlatExecutor {
         using TRow = NTable::TRowState;
         using TPartWriter = NTable::TPartWriter;
 
-        // Deep-copy of a TRowState for fulltext buffering
-        struct TSavedRow {
-            NTable::ERowOp Op = NTable::ERowOp::Absent;
-            TString Buf;
-            struct TSlot { ui32 Offset = 0; ui32 Size = 0; NTable::TCellOp CellOp; };
-            TVector<TSlot> Slots;
-
-            void Save(const NTable::TRowState& row) {
-                Op = row.GetRowState();
-                Slots.resize(row.Size());
-                Buf.clear();
-                for (ui32 i = 0; i < row.Size(); i++) {
-                    Slots[i].CellOp = row.GetCellOp(i);
-                    const auto& cell = row.Get(i);
-                    Slots[i].Offset = Buf.size();
-                    if (!cell.IsNull()) {
-                        Slots[i].Size = cell.Size();
-                        Buf.append(cell.Data(), cell.Size());
-                    } else {
-                        Slots[i].Size = 0;
-                    }
-                }
-            }
-
-            void Restore(NTable::TRowState& out) const {
-                out.Init(Slots.size());
-                out.Touch(Op);
-                if (Op == NTable::ERowOp::Erase || Op == NTable::ERowOp::Reset) {
-                    return;
-                }
-                for (ui32 i = 0; i < Slots.size(); i++) {
-                    if (Slots[i].CellOp != NTable::ECellOp::Empty) {
-                        TCell cell;
-                        if (Slots[i].Size > 0) {
-                            cell = TCell(Buf.data() + Slots[i].Offset, Slots[i].Size);
-                        }
-                        out.Set(i, Slots[i].CellOp, cell);
-                    }
-                }
-            }
-        };
-
         // Per-key buffer for fulltext compaction
         struct TFtKeyBuf {
             // Part of the key (Gen + MaxId). Current token is stored outside
@@ -118,14 +77,14 @@ namespace NTabletFlatExecutor {
             ui64 LockTxId = 0;
 
             // Deltas
-            struct TDelta { ui64 TxId; TSavedRow Row; };
+            struct TDelta { ui64 TxId; NTable::TSavedRow Row; };
             TVector<TDelta> SavedDeltas;
             TVector<ui64> SavedDeltaOrder;
 
             // Committed versions (descending order)
             struct TVersion {
                 TRowVersion Ver;
-                TSavedRow Row;
+                NTable::TSavedRow Row;
                 bool Added = true;
                 TString Segment;
             };
@@ -848,16 +807,14 @@ namespace NTabletFlatExecutor {
                     auto resultingPageCollection = MakeIntrusive<NTable::TLoader::TPageCollection>(pageCollection.PageCollection);
                     auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
                     auto gcList = SharedCachePages->GCList;
-                    auto addPage = [&saveCompactedPages, &pageCollection, &resultingPageCollection, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
-                        auto pageId = loadedPage.PageId;
-                        auto pageSize = pageCollection.PageCollection->Page(pageId).Size;
-                        auto sharedPage = MakeIntrusive<TPage>(pageId, pageSize, nullptr);
+                    auto addPage = [&saveCompactedPages, &resultingPageCollection, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
+                        auto sharedPage = MakeIntrusive<TPage>(loadedPage.Location.Offset, loadedPage.Location.Size, loadedPage.Location.Type, loadedPage.Location.Crc32, nullptr);
                         sharedPage->ProvideBody(std::move(loadedPage.Data));
                         saveCompactedPages->Pages.push_back(sharedPage);
                         if (sticky) {
-                            resultingPageCollection->AddStickyPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                            resultingPageCollection->AddStickyPage(loadedPage.Location.Offset, loadedPage.Location.Size, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, loadedPage.Location.Type));
                         } else {
-                            resultingPageCollection->AddPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                            resultingPageCollection->AddPage(loadedPage.Location.Offset, loadedPage.Location.Size, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, loadedPage.Location.Type));
                         }
                     };
                     for (auto &page : pageCollection.StickyPages) {
@@ -872,10 +829,17 @@ namespace NTabletFlatExecutor {
                     resultingPageCollections.push_back(std::move(resultingPageCollection));
                 }
 
+                TVector<NTable::TPageCollectionComponents> comps(result.PageCollections.size());
+                NTable::TPartComponents parts{
+                    .PageCollectionComponents = std::move(comps),
+                    .Opaque = std::move(result.Overlay),
+                    .Epoch = NTable::TEpoch::Max(),
+                };
+
+                // Pass pre-built collections with MakeUsed refs so shared cache sees active refs
                 NTable::TLoader loader(
-                    std::move(resultingPageCollections),
-                    { },
-                    std::move(result.Overlay));
+                    std::move(parts),
+                    std::move(resultingPageCollections));
 
                 // do not preload index as it may be already offloaded
                 auto fetch = loader.Run({.PreloadIndex = false, .PreloadData = false});

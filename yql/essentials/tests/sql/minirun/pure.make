@@ -6,12 +6,16 @@ TEST_SRCS(
     test.py
 )
 
-IF (SANITIZER_TYPE OR NOT OPENSOURCE)
+REQUIREMENTS(cpu:1)
+
+IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:20)
+ELSE()
+    REQUIREMENTS(ram:8)
 ENDIF()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    TIMEOUT(3000)
+    TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat sb:ttl=2)
 ELSE()
@@ -33,9 +37,9 @@ DEPENDS(
 DATA(
     arcadia/yql/essentials/tests/sql/minirun # python files
     arcadia/yql/essentials/tests/sql/suites
-    arcadia/yql/essentials/mount
-    arcadia/yql/essentials/cfg/tests
 )
+
+INCLUDE(${ARCADIA_ROOT}/yql/essentials/cfg/configs.inc)
 
 PEERDIR(
     yql/essentials/tests/common/test_framework

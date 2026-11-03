@@ -1,6 +1,9 @@
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/testlib/actor_helpers.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -17,16 +20,16 @@ namespace NKikimr::NGRpcService {
             return std::make_shared<const NPathAliasing::TPathNormalizer>(config);
         }
 
-        std::unique_ptr<TEvRequestAuthAndCheck> MakeRequest() {
-            return std::make_unique<TEvRequestAuthAndCheck>(
+        std::unique_ptr<TEvHttpRequestAuthAndCheck> MakeRequest() {
+            return std::make_unique<TEvHttpRequestAuthAndCheck>(
                 "/raw", TMaybe<TString>{}, TActorId{}, TAuditMode::NonModifying(), "peer", "request-id");
         }
 
-        class TNamedRequest final : public TEvRequestAuthAndCheck {
+        class TNamedRequest final : public TEvHttpRequestAuthAndCheck {
         public:
-            explicit TNamedRequest(TString method)
-                : TEvRequestAuthAndCheck(
-                    "/raw", TMaybe<TString>{}, TActorId{}, TAuditMode::NonModifying(), "peer", "request-id")
+            explicit TNamedRequest(TString method, const TString& database = "/raw")
+                : TEvHttpRequestAuthAndCheck(
+                    database, TMaybe<TString>{}, TActorId{}, TAuditMode::NonModifying(), "peer", "request-id")
                 , Method_(std::move(method))
             {}
 
@@ -71,7 +74,20 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/rewritten");
         }
 
-        Y_UNIT_TEST(LegacyServicesKeepRawDatabaseAndIdentityPaths) {
+        Y_UNIT_TEST(EmptyMappingKeepsCachedDatabase) {
+            TNamedRequest request("Ydb.Query.V1.QueryService/ExecuteQuery");
+            request.EnablePathNormalization();
+            request.InitializePathNormalization(nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw"), "/raw");
+            request.UseDatabase("/resolved");
+            UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/raw");
+        }
+
+        Y_UNIT_TEST_TWIN(LegacyServicesKeepRawDatabaseAndIdentityPaths, relativePathsEnabled) {
+            TActorSystemStub actorSystem;
+            actorSystem.AppData.DomainsInfo = new TDomainsInfo;
+            actorSystem.AppData.DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("Root").Release());
+            actorSystem.AppData.FeatureFlags.SetEnableRelativePaths(relativePathsEnabled);
             const TString methods[] = {
                 "Ydb.PersQueue.V1.PersQueueService/CreateTopic",
                 "Ydb.PersQueue.V1.ClusterDiscoveryService/DiscoverClusters",
@@ -86,6 +102,13 @@ namespace NKikimr::NGRpcService {
 
                 request.UseDatabase("/resolved");
                 UNIT_ASSERT_VALUES_EQUAL_C(request.GetDatabaseName().GetOrElse(""), "/resolved", method);
+
+                TNamedRequest relativeRequest(method, "mydb");
+                relativeRequest.EnablePathNormalization();
+                relativeRequest.InitializePathNormalization(MakeNormalizer());
+                UNIT_ASSERT_VALUES_EQUAL_C(relativeRequest.GetDatabaseName().GetOrElse(""),
+                    relativePathsEnabled ? "/Root/mydb" : "mydb", method);
+                UNIT_ASSERT_VALUES_EQUAL_C(relativeRequest.NormalizePath("/raw"), "/raw", method);
             }
         }
     }

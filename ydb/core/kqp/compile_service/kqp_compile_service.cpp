@@ -1,9 +1,12 @@
 #include "kqp_compile_service.h"
 #include "helpers/kqp_compile_service_helpers.h"
 
+#include <ydb/core/kqp/tracing/kqp_trace_flow.h>
 #include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/tabletid.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -13,7 +16,10 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/library/yql/public/ydb_issue/ydb_issue_message.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/api/protos/ydb_operation.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -98,6 +104,7 @@ struct TKqpCompileRequest {
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan CompileServiceSpan;
+    NWilson::TSpan WaitSpan;
     ui64 Cookie;
     TKqpTempTablesState::TConstPtr TempTablesState;
     std::shared_ptr<std::atomic<bool>> IntrestedInResult;
@@ -110,6 +117,8 @@ struct TKqpCompileRequest {
     bool CollectDiagnostics = false;
 
     bool FindInCache = true;
+
+    ui64 ConfigGeneration = 0;
 
     TInstant CompileQueueEnqueuedAt = TInstant::Now();
 
@@ -155,6 +164,7 @@ public:
 
             if (!request.IsIntrestedInResult()) {
                 auto result = std::move(request);
+                EndQueryTraceSpan(result.WaitSpan, Ydb::StatusIds::CANCELLED);
                 EndQueryTraceSpan(result.CompileServiceSpan, Ydb::StatusIds::CANCELLED);
                 YDB_LOG_DEBUG_CTX(*TlsActivationContext, "Drop compilation request because session is not longer wait for response");
                 if (auto qIt = QueryIndex.find(result.Query); qIt != QueryIndex.end()) {
@@ -238,6 +248,14 @@ private:
 };
 
 class TKqpCompileService : public TActorBootstrapped<TKqpCompileService> {
+    enum class EDatabaseType {
+        Unknown,
+        Dedicated,
+        Unsupported,
+    };
+
+    struct TEvCheckDatabaseType : TEventLocal<TEvCheckDatabaseType, TEvents::ES_PRIVATE> {};
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_COMPILE_SERVICE;
@@ -263,18 +281,25 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        Y_UNUSED(ctx);
+        PathNormalizer = AppData(ctx)->GetPathNormalizer();
 
         QueryReplayBackend.Reset(CreateQueryReplayBackend(TableServiceConfig, Counters, QueryReplayFactory));
         // Subscribe for TableService config changes
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+                 {tableServiceConfigKind, NKikimrConsole::TConfigItem::ResourcePathPrefixMappingItem}),
              IEventHandle::FlagTrackDelivery);
 
         Become(&TKqpCompileService::MainState);
         if (TableServiceConfig.GetCompileQueryCacheTTLSec()) {
             StartCheckQueriesTtlTimer();
+        }
+        const auto& tenant = AppData()->TenantName;
+        if (tenant == CanonizePath(AppData()->DomainsInfo->GetDomain()->Name)) {
+            DatabaseType = EDatabaseType::Dedicated;
+        } else if (!tenant.empty()) {
+            CheckDatabaseType();
         }
     }
 
@@ -293,6 +318,10 @@ private:
             hFunc(TEvents::TEvUndelivered, HandleUndelivery);
 
             hFunc(TEvKqp::TEvListQueryCacheQueriesRequest, Handle);
+            hFunc(NConsole::TEvConsole::TEvGetTenantStatusResponse, HandleDatabaseType);
+            cFunc(TEvCheckDatabaseType::EventType, CheckDatabaseType);
+            case TEvPipeCache::TEvDeliveryProblem::EventType:
+                break; // The scheduled database type check retries failed requests.
 
             CFunc(TEvents::TSystem::Wakeup, HandleTtlTimer);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -302,30 +331,100 @@ private:
     }
 
 private:
+    void CheckDatabaseType() {
+        DatabaseTypeCheckScheduled = false;
+        if (DatabaseType != EDatabaseType::Unknown) {
+            return;
+        }
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(MakeConsoleID()));
+        if (!AppData()->FeatureFlags.GetEnableCompileCacheView() || AppData()->TenantName.empty()) {
+            return;
+        }
+        auto request = MakeHolder<NConsole::TEvConsole::TEvGetTenantStatusRequest>();
+        request->Record.MutableRequest()->set_path(AppData()->TenantName);
+        Send(MakePipePerNodeCacheID(false),
+            new TEvPipeCache::TEvForward(request.Release(), MakeConsoleID(), true),
+            IEventHandle::FlagTrackDelivery);
+
+        const auto delayMs = DatabaseTypeRetryDelay.MilliSeconds();
+        Schedule(TDuration::MilliSeconds(delayMs + AppData()->RandomProvider->GenRand() % delayMs),
+            new TEvCheckDatabaseType());
+        DatabaseTypeCheckScheduled = true;
+        DatabaseTypeRetryDelay = Min(DatabaseTypeRetryDelay * 2, TDuration::Seconds(30));
+    }
+
+    void HandleDatabaseType(NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr& ev) {
+        if (DatabaseType != EDatabaseType::Unknown) {
+            return;
+        }
+        const auto& operation = ev->Get()->Record.GetResponse().operation();
+        Ydb::Cms::GetDatabaseStatusResult status;
+        if (!operation.ready() || operation.status() != Ydb::StatusIds::SUCCESS
+            || !operation.result().UnpackTo(&status)
+            || CanonizePath(status.path()) != CanonizePath(AppData()->TenantName))
+        {
+            return;
+        }
+        if (status.has_serverless_resources() || status.has_required_shared_resources()) {
+            DatabaseType = EDatabaseType::Unsupported;
+        } else if (status.has_required_resources()) {
+            DatabaseType = EDatabaseType::Dedicated;
+        } else {
+            return;
+        }
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(MakeConsoleID()));
+    }
+
+    void PassAway() override {
+        if (DatabaseType == EDatabaseType::Unknown) {
+            Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(MakeConsoleID()));
+        }
+        TActorBootstrapped::PassAway();
+    }
+
     void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
         YDB_LOG_INFO_CTX(*TlsActivationContext, "Subscribed for config changes");
     }
 
     void Handle(TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
-        auto snapshot = QueryCache->GetSnapshot();
-        YDB_LOG_DEBUG("Got query compile cache request",
-            {"snapshotSize", snapshot.size()});
         const auto& tenant = ev->Get()->Record.GetTenantName();
         auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
 
-        // Check for tenant mismatch (serverless scenario)
+        // Only expose cache entries for the node's tenant.
         if (AppData()->TenantName != tenant) {
             response->Record.SetNodeId(SelfId().NodeId());
             response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
 
             NYql::TIssues issues;
-            issues.AddIssue(NYql::TIssue("Compile cache is not available for this database"));
+            issues.AddIssue(NYql::TIssue("Compile cache view is not available for this database"));
             NYql::IssuesToMessage(issues, response->Record.MutableIssues());
 
             Send(ev->Sender, response.release());
             return;
         }
 
+        if (AppData()->FeatureFlags.GetEnableCompileCacheView() && DatabaseType != EDatabaseType::Dedicated) {
+            response->Record.SetNodeId(SelfId().NodeId());
+            NYql::TIssues issues;
+            if (DatabaseType == EDatabaseType::Unknown) {
+                if (!DatabaseTypeCheckScheduled) {
+                    CheckDatabaseType();
+                }
+                response->Record.SetStatus(Ydb::StatusIds::UNAVAILABLE);
+                issues.AddIssue(NYql::TIssue("Compile cache view is unavailable until the database resource type is known"));
+            } else {
+                response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
+                issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED,
+                    "Compile cache view and warmup are not supported for serverless or shared resource databases"));
+            }
+            NYql::IssuesToMessage(issues, response->Record.MutableIssues());
+            Send(ev->Sender, response.release());
+            return;
+        }
+
+        auto snapshot = QueryCache->GetSnapshot();
+        YDB_LOG_DEBUG("Got query compile cache request",
+            {"snapshotSize", snapshot.size()});
         if (snapshot.empty()) {
             response->Record.SetFinished(true);
             response->Record.SetNodeId(SelfId().NodeId());
@@ -388,13 +487,19 @@ private:
 
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
+        const bool aliasesChanged = ev->Get()->PathNormalizer.has_value()
+            && *ev->Get()->PathNormalizer != PathNormalizer;
+        if (ev->Get()->PathNormalizer.has_value()) {
+            PathNormalizer = *ev->Get()->PathNormalizer;
+        }
 
         auto diff = ShouldInvalidateCompileCache(TableServiceConfig, event.GetConfig().GetTableServiceConfig());
-        if (diff.has_value()) {
+        if (aliasesChanged || diff.has_value()) {
             YDB_LOG_NOTICE("Query cache was invalidated due to config change, config change differencer",
-                {"output", diff.value()});
+                {"output", diff.value_or("path aliases changed")});
 
             QueryCache->Clear();
+            ++ConfigGeneration;
         }
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
@@ -406,6 +511,8 @@ private:
 
     void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
+            case TEvPipeCache::EvForward:
+                break;
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
                 YDB_LOG_CRIT_CTX(*TlsActivationContext, "Failed to deliver subscription request to config dispatcher");
                 break;
@@ -441,6 +548,8 @@ private:
             {"spanIdPtr", ev->TraceId.GetSpanIdPtr()});
 
         NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, std::move(ev->TraceId), "Get query plan");
+        // The compile service works concurrently with its requester.
+        MarkSpawn(compileServiceSpan);
 
         YDB_LOG_DEBUG_CTX(ctx, "Received compile request",
             {"sender", ev->Sender},
@@ -529,6 +638,13 @@ private:
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
         }
 
+        // COMPILE is the final lookup, so this is a definitive miss; PARSE and SPLIT may still hit
+        // on a later lookup. The miss is reported before the request is queued, so a request that
+        // is later rejected, times out or is cancelled still counts.
+        if (compileSettings.Action == ECompileActorAction::COMPILE) {
+            Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
+        }
+
         EnqueueCompileRequest(std::move(compileRequest), ctx);
     }
 
@@ -560,6 +676,7 @@ private:
             Counters->ReportCompileRequestCompile(dbCounters);
 
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "Get query plan");
+            MarkSpawn(compileServiceSpan);
 
             TKqpCompileSettings compileSettings(
                 true,
@@ -603,6 +720,7 @@ private:
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() << "Query not found: " << request.Uid);
 
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "Get query plan");
+            MarkSpawn(compileServiceSpan);
 
             ReplyError(ev->Sender, request.Uid, Ydb::StatusIds::NOT_FOUND, {issue}, ctx,
                 ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
@@ -620,6 +738,8 @@ private:
         auto compileRequest = RequestsQueue.FinishActiveRequest(*compileResult->Query);
         Y_ABORT_UNLESS(compileRequest.CompileActor == compileActorId);
         Y_ABORT_UNLESS(compileRequest.Uid == compileResult->Uid);
+        LinkDependsOn(compileRequest.WaitSpan, ev->TraceId);
+        EndQueryTraceSpan(compileRequest.WaitSpan, compileResult->Status);
 
         YDB_LOG_DEBUG_CTX(ctx, "Received response",
             {"sender", compileRequest.Sender},
@@ -637,27 +757,42 @@ private:
         bool isPerStatementExecution = TableServiceConfig.GetEnableAstCache() && compileRequest.QueryAst;
 
         bool hasTempTablesNameClashes = HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState, true);
+        bool isStale = compileRequest.ConfigGeneration != ConfigGeneration;
 
         try {
             if (compileResult->Status == Ydb::StatusIds::SUCCESS) {
                 if (!hasTempTablesNameClashes) {
-                    UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
+                    if (isStale) {
+                        YDB_LOG_DEBUG_CTX(ctx, "Skipped caching compile result from stale config generation",
+                            {"queryUid", compileResult->Uid},
+                            {"requestGeneration", compileRequest.ConfigGeneration},
+                            {"currentGeneration", ConfigGeneration});
+                    } else {
+                        UpdateQueryCache(ctx, compileResult, keepInCache, compileRequest.CompileSettings.IsQueryActionPrepare, isPerStatementExecution, compileRequest.CompileSettings.IsWarmupCompilation);
+                    }
                 }
 
                 if (ev->Get()->ReplayMessage && !QueryReplayBackend->IsNull()) {
                     QueryReplayBackend->Collect(*ev->Get()->ReplayMessage);
-                    QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
+                    if (!isStale) {
+                        QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
+                    }
                 }
 
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
                     MarkJoinedCompilation(request.CompileServiceSpan, compileRequest.CompileServiceSpan);
+                    LinkDependsOn(request.WaitSpan, ev->TraceId);
+                    EndQueryTraceSpan(request.WaitSpan, compileResult->Status);
                     Reply(request.Sender, compileResult, compileStats, ctx,
                         request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan));
                 }
             } else {
-                if (!hasTempTablesNameClashes) {
+                // A stale failure must not erase a fresh entry with the same UID: after the
+                // config change a new compile may have already succeeded under this UID
+                // (e.g. a recompile reuses the UID of the cached query).
+                if (!isStale && !hasTempTablesNameClashes) {
                     if (QueryCache->FindByUid(compileResult->Uid, false)) {
                         QueryCache->EraseByUid(compileResult->Uid);
                     }
@@ -741,8 +876,11 @@ private:
     }
 
     void EnqueueCompileRequest(TKqpCompileRequest&& compileRequest, const TActorContext& ctx) {
+        compileRequest.WaitSpan = compileRequest.CompileServiceSpan.CreateChild(
+            TComponentTracingLevels::TQueryProcessor::Detailed, "Wait for compiler", NWilson::EFlags::AUTO_END);
         auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
         if (overflow) {
+            EndQueryTraceSpan(overflow->WaitSpan, Ydb::StatusIds::OVERLOADED);
             Counters->ReportCompileRequestRejected(overflow->DbCounters);
             YDB_LOG_WARN_CTX(ctx, "Requests queue size limit exceeded",
                 {"sender", overflow->Sender},
@@ -766,16 +904,15 @@ private:
             {"queryId", compileRequest.Query.SerializeToString()},
             {"ast", queryAst.Ast->Root->ToString()});
 
-        auto compileResult = QueryCache->FindByAst(
-            compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache,
-            compileRequest.CompileSettings.IsWarmupCompilation
-                ? EWarmupAttributionMode::Warmup
-                : EWarmupAttributionMode::Client,
-            Counters,
-            compileRequest.TempTablesState);
-
-        if (!compileRequest.FindInCache) {
-            compileResult = nullptr;
+        TKqpCompileResult::TConstPtr compileResult;
+        if (compileRequest.FindInCache) {
+            compileResult = QueryCache->FindByAst(
+                compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache,
+                compileRequest.CompileSettings.IsWarmupCompilation
+                    ? EWarmupAttributionMode::Warmup
+                    : EWarmupAttributionMode::Client,
+                Counters,
+                compileRequest.TempTablesState);
         }
 
         if (compileResult) {
@@ -791,13 +928,16 @@ private:
             return;
         }
 
-        Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
-
         LWTRACK(KqpCompileServiceEnqueued,
             compileRequest.Orbit,
             compileRequest.Query.UserSid);
 
         compileRequest.QueryAst = std::move(queryAst);
+
+        // A recompile did not look up the cache, and a SPLIT is followed by per-statement lookups.
+        if (compileRequest.FindInCache && compileRequest.CompileSettings.Action != ECompileActorAction::SPLIT) {
+            Counters->ReportQueryCacheHit(compileRequest.DbCounters, false);
+        }
 
         EnqueueCompileRequest(std::move(compileRequest), ctx);
     }
@@ -807,6 +947,8 @@ private:
         YQL_ENSURE(astStatements.size());
         auto& query = ev->Get()->Query;
         auto compileRequest = RequestsQueue.FinishActiveRequest(query);
+        LinkDependsOn(compileRequest.WaitSpan, ev->TraceId);
+        EndQueryTraceSpan(compileRequest.WaitSpan, Ydb::StatusIds::SUCCESS);
         if (astStatements.size() > 1) {
             ReplyQueryStatements(compileRequest.Sender, astStatements, query, ctx, compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
             return;
@@ -819,6 +961,9 @@ private:
     void Handle(TEvKqp::TEvSplitResponse::TPtr& ev, const TActorContext& ctx) {
         auto& query = ev->Get()->Query;
         auto compileRequest = RequestsQueue.FinishActiveRequest(query);
+        LinkDependsOn(compileRequest.WaitSpan, ev->TraceId);
+        EndQueryTraceSpan(compileRequest.WaitSpan, ev->Get()->Status);
+        EndQueryTraceSpan(compileRequest.CompileServiceSpan, ev->Get()->Status);
         ctx.Send(compileRequest.Sender, ev->Release(), 0, compileRequest.Cookie);
     }
 
@@ -871,6 +1016,7 @@ private:
                     {"sender", request->Sender},
                     {"deadline", request->CompileSettings.Deadline});
 
+                EndQueryTraceSpan(request->WaitSpan, Ydb::StatusIds::TIMEOUT);
                 Counters->ReportCompileRequestTimeout(request->DbCounters);
 
                 NYql::TIssue issue(NYql::TPosition(), "Compilation timed out.");
@@ -885,17 +1031,21 @@ private:
     }
 
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
-        auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
+        request.WaitSpan.EndOk();
+        auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, PathNormalizer, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), request.CollectDiagnostics,
             request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
+        request.WaitSpan = request.CompileServiceSpan.CreateChild(
+            TComponentTracingLevels::TQueryProcessor::Detailed, "Await compilation", NWilson::EFlags::AUTO_END);
 
         YDB_LOG_DEBUG_CTX(ctx, "Created compile actor",
             {"sender", request.Sender},
             {"compileActor", compileActorId});
         request.CompileActor = compileActorId;
+        request.ConfigGeneration = ConfigGeneration;
 
         RequestsQueue.AddActiveRequest(std::move(request));
     }
@@ -998,8 +1148,14 @@ private:
 
 private:
     TKqpQueryCachePtr QueryCache;
+    EDatabaseType DatabaseType = EDatabaseType::Unknown;
+    bool DatabaseTypeCheckScheduled = false;
+    TDuration DatabaseTypeRetryDelay = TDuration::Seconds(1);
 
     TTableServiceConfig TableServiceConfig;
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
+
+    ui64 ConfigGeneration = 0;
     TQueryServiceConfig QueryServiceConfig;
     TKqpSettings::TConstPtr KqpSettings;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;

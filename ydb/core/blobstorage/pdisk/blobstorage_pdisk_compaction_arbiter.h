@@ -13,7 +13,7 @@ namespace NKikimr::NPDisk {
     ////////////////////////////////////////////////////////////////////////////
     // TCompactionArbiter
     //
-    // Decides which level compaction may run on a PDisk whose shared chunk pool is short of space
+    // Decides which level compaction may run on a PDisk whose pool or dynamic owners are short of space
     // (EnableVDiskPlannedCompaction). Parallel compactions there can each take part of what is left, so that none of
     // them finishes; one at a time, and the one that gives back the most, is what gets the disk out of it.
     //
@@ -38,7 +38,7 @@ namespace NKikimr::NPDisk {
         // What the arbiter needs to know about the space.
         struct ISpace {
             virtual ~ISpace() = default;
-            // colour of the shared chunk pool
+            // worst effective colour of the shared pool and its dynamic owners
             virtual TColor::E GetColor() const = 0;
             // whether a housekeeping reservation of `chunks` for `owner` would succeed right now
             virtual bool Fits(TOwner owner, ui32 chunks) const = 0;

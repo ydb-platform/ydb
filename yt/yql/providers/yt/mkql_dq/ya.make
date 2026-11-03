@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_dq_transform.cpp
@@ -12,7 +12,5 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/utils
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

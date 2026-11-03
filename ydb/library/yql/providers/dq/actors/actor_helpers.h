@@ -20,6 +20,8 @@ enum class EActorFutureCallbackFailureReason {
 enum EExecutorPoolType {
     Main,
     FullResultWriter,
+    // Synchronous task preprocessing must not block control-plane or writer actors.
+    GraphEvents,
 
     TotalCount,
 };

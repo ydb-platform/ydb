@@ -1,0 +1,149 @@
+# Rust dependency of temporalio 1.32.0; versions follow its Cargo.lock.
+
+CRATE(tokio_stream)
+
+CRATE_VERSION(0.1.19)
+CRATE_EDITION(2021)
+CRATE_ROOT(src/lib.rs)
+CRATE_MANIFEST(Cargo.toml)
+
+CRATE_SOURCES(
+    src/empty.rs
+    src/iter.rs
+    src/macros.rs
+    src/once.rs
+    src/pending.rs
+    src/stream_close.rs
+    src/stream_ext.rs
+    src/stream_ext/all.rs
+    src/stream_ext/any.rs
+    src/stream_ext/chain.rs
+    src/stream_ext/chunks_timeout.rs
+    src/stream_ext/collect.rs
+    src/stream_ext/filter.rs
+    src/stream_ext/filter_map.rs
+    src/stream_ext/fold.rs
+    src/stream_ext/fuse.rs
+    src/stream_ext/map.rs
+    src/stream_ext/map_while.rs
+    src/stream_ext/merge.rs
+    src/stream_ext/next.rs
+    src/stream_ext/peekable.rs
+    src/stream_ext/skip.rs
+    src/stream_ext/skip_while.rs
+    src/stream_ext/take.rs
+    src/stream_ext/take_while.rs
+    src/stream_ext/then.rs
+    src/stream_ext/throttle.rs
+    src/stream_ext/timeout.rs
+    src/stream_ext/timeout_repeating.rs
+    src/stream_ext/try_next.rs
+    src/stream_map.rs
+    src/wrappers.rs
+    src/wrappers/broadcast.rs
+    src/wrappers/interval.rs
+    src/wrappers/lines.rs
+    src/wrappers/mpsc_bounded.rs
+    src/wrappers/mpsc_unbounded.rs
+    src/wrappers/read_dir.rs
+    src/wrappers/signal_unix.rs
+    src/wrappers/signal_windows.rs
+    src/wrappers/split.rs
+    src/wrappers/task.rs
+    src/wrappers/tcp_listener.rs
+    src/wrappers/unix_listener.rs
+    src/wrappers/watch.rs
+)
+
+CRATE_INPUTS(
+    .cargo-checksum.json
+    .cargo_vcs_info.json
+    CHANGELOG.md
+    Cargo.lock
+    LICENSE
+    README.md
+)
+
+CRATE_FLAGS(--cap-lints=allow)
+
+CRATE_FEATURES(
+    default
+    net
+    time
+)
+
+PEERDIR(
+    contrib/crates/futures-core-0.3.34
+    contrib/crates/pin-project-lite-0.2.17
+    contrib/crates/tokio-1.54.1
+)
+
+LICENSE("MIT")
+VERSION(0.1.19)
+ORIGINAL_SOURCE(https://static.crates.io/crates/tokio-stream/tokio-stream-0.1.19.crate)
+
+CRATE_FEATURES(
+    sync
+    tokio-util
+)
+
+PEERDIR(
+    contrib/crates/tokio-util-0.7.20
+)
+
+CRATE_SOURCES(
+    src/empty.rs
+    src/iter.rs
+    src/lib.rs
+    src/macros.rs
+    src/once.rs
+    src/pending.rs
+    src/stream_close.rs
+    src/stream_ext.rs
+    src/stream_ext/all.rs
+    src/stream_ext/any.rs
+    src/stream_ext/chain.rs
+    src/stream_ext/chunks_timeout.rs
+    src/stream_ext/collect.rs
+    src/stream_ext/filter.rs
+    src/stream_ext/filter_map.rs
+    src/stream_ext/fold.rs
+    src/stream_ext/fuse.rs
+    src/stream_ext/map.rs
+    src/stream_ext/map_while.rs
+    src/stream_ext/merge.rs
+    src/stream_ext/next.rs
+    src/stream_ext/peekable.rs
+    src/stream_ext/skip.rs
+    src/stream_ext/skip_while.rs
+    src/stream_ext/take.rs
+    src/stream_ext/take_while.rs
+    src/stream_ext/then.rs
+    src/stream_ext/throttle.rs
+    src/stream_ext/timeout.rs
+    src/stream_ext/timeout_repeating.rs
+    src/stream_ext/try_next.rs
+    src/stream_map.rs
+    src/wrappers.rs
+    src/wrappers/broadcast.rs
+    src/wrappers/interval.rs
+    src/wrappers/lines.rs
+    src/wrappers/mpsc_bounded.rs
+    src/wrappers/mpsc_unbounded.rs
+    src/wrappers/read_dir.rs
+    src/wrappers/signal_unix.rs
+    src/wrappers/signal_windows.rs
+    src/wrappers/split.rs
+    src/wrappers/task.rs
+    src/wrappers/tcp_listener.rs
+    src/wrappers/unix_listener.rs
+    src/wrappers/watch.rs
+)
+
+CRATE_PROC_MACROS(
+    contrib/crates/futures-macro-0.3.34
+    contrib/crates/serde_derive-1.0.229
+    contrib/crates/tokio-macros-2.7.2
+)
+
+END()

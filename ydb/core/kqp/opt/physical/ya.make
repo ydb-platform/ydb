@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_opt_phy_build_stage.cpp
@@ -6,6 +6,7 @@ SRCS(
     kqp_opt_phy_olap_agg.cpp
     kqp_opt_phy_olap_distinct.cpp
     kqp_opt_phy_olap_filter.cpp
+    like_hint.cpp
     kqp_opt_phy_precompute.cpp
     kqp_opt_phy_sort.cpp
     kqp_opt_phy_source.cpp
@@ -24,7 +25,5 @@ PEERDIR(
     ydb/library/yql/dq/type_ann
     ydb/library/yql/utils/plan
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -7,8 +7,8 @@
 namespace NKikimr {
 
     // Chunks reserved in advance for compacting Fresh: a record is admitted only once Cur holds enough to
-    // compact everything already in it, everything in flight, and the record itself; and Cur never rotates
-    // out while anything is in flight, so every record lands in the segment its chunks were held for.
+    // compact everything already in it, everything in flight, and the record itself. Sequenced records hold
+    // rotation back; unsequenced ones carry enough credit to land separately in later segments.
     Y_UNIT_TEST_SUITE(TFreshDataReservation) {
 
         using TFreshData = ::NKikimr::TFreshData<TKeyLogoBlob, TMemRecLogoBlob>;
@@ -45,21 +45,35 @@ namespace NKikimr {
                 return r;
             }
 
+            // The index record of a huge blob, whose data is written elsewhere.
+            TRecord MakeHugeRecord() {
+                TRecord r{TLogoBlobID(1, 1, Step++, 0, 1 << 20, 0, 1), TString(), {}};
+                r.Charge.AddHuge();
+                return r;
+            }
+
             void Put(const TRecord& r) {
-                Fresh.PutLogoBlobWithData(Lsn++, TKeyLogoBlob(r.Id), 1, TIngress(), TRope(r.Data), std::nullopt);
+                if (!r.Data.empty()) {
+                    Fresh.PutLogoBlobWithData(Lsn++, TKeyLogoBlob(r.Id), 1, TIngress(), TRope(r.Data), std::nullopt);
+                } else {
+                    TMemRecLogoBlob memRec{TIngress()};
+                    memRec.SetHugeBlob(TDiskPart(1, 0, r.Id.BlobSize()));
+                    Fresh.Put(Lsn++, TKeyLogoBlob(r.Id), memRec);
+                }
             }
 
             // Admission as the skeleton does it: reserve what is missing, then take the record in flight.
-            void Admit(const TRecord& r) {
-                if (const ui64 shortfall = Fresh.GetCurReservationShortfall(r.Charge)) {
+            // `unsequenced` is how a huge blob is admitted before its data is written.
+            void Admit(const TRecord& r, bool unsequenced = false) {
+                if (const ui64 shortfall = Fresh.GetCurReservationShortfall(r.Charge, unsequenced)) {
                     TVector<TChunkIdx> chunks;
                     for (ui64 i = 0; i < shortfall; ++i) {
                         chunks.push_back(NextChunk++);
                     }
                     Fresh.AddCurReservedChunks(chunks);
                 }
-                UNIT_ASSERT_VALUES_EQUAL(Fresh.GetCurReservationShortfall(r.Charge), 0);
-                Fresh.AdmitInFlight(r.Charge);
+                UNIT_ASSERT_VALUES_EQUAL(Fresh.GetCurReservationShortfall(r.Charge, unsequenced), 0);
+                Fresh.AdmitInFlight(r.Charge, unsequenced);
             }
 
             // The log write completed: put the record, then land it, in that order. Landing may let a pending
@@ -240,6 +254,89 @@ namespace NKikimr {
             UNIT_ASSERT(env.Fresh.NeedsCompaction(0, false));
             auto old = env.Fresh.FindSegmentForCompaction();
             UNIT_ASSERT_VALUES_EQUAL(old->GetOutputChunks(), 1);
+        }
+
+        // A huge blob admitted before its data is written has no LSN yet, and a rotation does not wait for it: the
+        // new Cur takes it over together with the chunks to compact it.
+        Y_UNIT_TEST(RotationCarriesUnsequenced) {
+            TEnv env;
+            const auto small = env.MakeRecord();
+            env.Admit(small);
+            env.Replay(small);
+            const auto huge = env.MakeHugeRecord();
+            env.Admit(huge, true);
+
+            UNIT_ASSERT(env.Fresh.NeedsCompaction(0, true));
+            UNIT_ASSERT(!env.Fresh.IsRotationPending());
+            auto old = env.Fresh.FindSegmentForCompaction();
+            UNIT_ASSERT_VALUES_EQUAL(old->GetReservedChunks().size(), old->GetOutputChunks());
+            UNIT_ASSERT(!env.Fresh.GetUnsequenced().Empty());
+
+            // Its data written, the record gets its LSN and lands in the new Cur, which needs nothing more for it.
+            env.Fresh.SequenceInFlight(huge.Charge);
+            UNIT_ASSERT_VALUES_EQUAL(env.Fresh.GetCurReservationShortfall(TFreshOutputEstimate()), 0);
+            env.Replay(huge);
+            UNIT_ASSERT(env.Fresh.GetInFlight().Empty());
+            UNIT_ASSERT(env.Fresh.GetUnsequenced().Empty());
+            UNIT_ASSERT_VALUES_EQUAL(env.Fresh.GetCurReservationShortfall(TFreshOutputEstimate()), 0);
+        }
+
+        // Start with an empty Cur, then complete concurrent huge writes one at a time, compacting between them.
+        // The remaining writes must retain enough credit for every later split, not just the first rotation.
+        Y_UNIT_TEST(ConcurrentHugeWritesCanLandAcrossRotations) {
+            for (const bool force : {false, true}) {
+                for (const ui32 count : {2u, 3u}) {
+                    TEnv env;
+                    TVector<TEnv::TRecord> records;
+                    for (ui32 i = 0; i < count; ++i) {
+                        records.push_back(env.MakeHugeRecord());
+                        env.Admit(records.back(), true);
+                    }
+                    UNIT_ASSERT(env.Fresh.Empty());
+
+                    for (ui32 i = 0; i < count; ++i) {
+                        env.Fresh.SequenceInFlight(records[i].Charge);
+                        UNIT_ASSERT_VALUES_EQUAL(env.Fresh.GetCurReservationShortfall({}), 0);
+                        env.Replay(records[i]);
+                        UNIT_ASSERT_VALUES_EQUAL(env.Fresh.GetUnsequenced().GetRecords(), count - i - 1);
+                        // Cover both forced compaction and the request to release recovery log space.
+                        UNIT_ASSERT(env.Fresh.NeedsCompaction(force ? 0 : Max<ui64>(), force));
+                        UNIT_ASSERT(!env.Fresh.IsRotationPending());
+                        auto old = env.Fresh.FindSegmentForCompaction();
+                        UNIT_ASSERT_VALUES_EQUAL(old->TakeReservedChunks().size(), old->GetOutputChunks());
+                        env.Fresh.CompactionSstCreated(std::move(old));
+                        env.Fresh.CompactionFinished();
+                        UNIT_ASSERT_VALUES_EQUAL(env.Fresh.GetCurReservationShortfall({}), 0);
+                    }
+                }
+            }
+        }
+
+        // Once it has its LSN, the record is in flight like any other, and a rotation waits for it.
+        Y_UNIT_TEST(RotationWaitsForSequenced) {
+            TEnv env;
+            const auto huge = env.MakeHugeRecord();
+            env.Admit(huge, true);
+            env.Fresh.SequenceInFlight(huge.Charge);
+            UNIT_ASSERT(!env.Fresh.NeedsCompaction(0, true));
+            UNIT_ASSERT(env.Fresh.IsRotationPending());
+
+            env.Replay(huge);
+            UNIT_ASSERT(env.Fresh.NeedsCompaction(0, true));
+        }
+
+        // When Cur's chunks cannot be split between it and the record it would carry over -- here because a writer
+        // that bypasses admission filled it -- the rotation waits for the record after all, as for any in flight.
+        Y_UNIT_TEST(RotationWaitsForUncoveredCarry) {
+            TEnv env;
+            const auto huge = env.MakeHugeRecord();
+            env.Admit(huge, true);
+            env.Put(env.MakeRecord()); // not admitted
+            UNIT_ASSERT(!env.Fresh.NeedsCompaction(0, true));
+            UNIT_ASSERT(env.Fresh.IsRotationPending());
+
+            env.Fresh.LandInFlight(huge.Charge, true); // no Put: the huge write was refused
+            UNIT_ASSERT(env.Fresh.NeedsCompaction(0, true));
         }
 
         // With Dreg free, Cur rotates into it on the spot.

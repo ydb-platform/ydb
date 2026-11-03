@@ -9,8 +9,10 @@ namespace NKikimr::NTable {
 namespace {
 
 using TGroupId = NPage::TGroupId;
+using TRecIdx = NPage::TRecIdx;
 using TFrames = NPage::TFrames;
 using TBtreeIndexNode = NPage::TBtreeIndexNode;
+using TBtreeIndexMeta = NPage::TBtreeIndexMeta;
 using TChild = TBtreeIndexNode::TChild;
 using TColumns = TBtreeIndexNode::TColumns;
 using TCells = NPage::TCells;
@@ -25,21 +27,22 @@ ui64 GetPrevDataSize(const TPart* part, TGroupId groupId, TRowId rowId, IPages* 
         return meta.GetDataSize();
     }
 
-    TPageId pageId = meta.GetPageId();
+    auto location = part->IndexPages.GetRootLocation(part, groupId);
     ui64 prevDataSize = 0;
 
-    for (ui32 height = 0; height < meta.LevelCount; height++) {
-        auto page = env->TryGetPage(part, pageId, {});
+    for (ui32 height = 0; height < meta.LevelCount(); height++) {
+        auto page = env->TryGetIndexPage(part, location, groupId);
         if (!page) {
             ready = false;
             return prevDataSize;
         }
-        auto node = TBtreeIndexNode(*page);
+        auto node = TBtreeIndexNode(*page, meta.HasRootV2());
         auto pos = node.Seek(rowId);
 
-        pageId = node.GetShortChild(pos).GetPageId();
+        bool isLeafLevel = (height + 1 == meta.LevelCount());
+        location = node.GetChildLocation(pos, isLeafLevel, part, groupId);
         if (pos) {
-            prevDataSize = node.GetShortChild(pos - 1).GetDataSize();
+            prevDataSize = node.GetPrevChildDataSize(pos);
         }
     }
 
@@ -60,7 +63,7 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
         return meta.GetDataSize();
     }
 
-    TPageId pageId = meta.GetPageId();
+    auto location = part->IndexPages.GetRootLocation(part, groupId);
     ui64 prevDataSize = 0;
     historicRowId = 0;
 
@@ -74,20 +77,20 @@ ui64 GetPrevHistoricDataSize(const TPart* part, TGroupId groupId, TRowId rowId, 
     };
     TCells key1{ key1Cells, 3 };
 
-    for (ui32 height = 0; height < meta.LevelCount; height++) {
-        auto page = env->TryGetPage(part, pageId, {});
+    for (ui32 height = 0; height < meta.LevelCount(); height++) {
+        auto page = env->TryGetIndexPage(part, location, groupId);
         if (!page) {
             ready = false;
             return prevDataSize;
         }
-        auto node = TBtreeIndexNode(*page);
+        auto node = TBtreeIndexNode(*page, meta.HasRootV2());
         auto pos = node.Seek(ESeek::Lower, key1, part->Scheme->HistoryGroup.ColsKeyIdx, part->Scheme->HistoryKeys.Get());
 
-        pageId = node.GetShortChild(pos).GetPageId();
+        bool isLeafLevel = (height + 1 == meta.LevelCount());
+        location = node.GetChildLocation(pos, isLeafLevel, part, groupId);
         if (pos) {
-            const auto& prevChild = node.GetShortChild(pos - 1);
-            prevDataSize = prevChild.GetDataSize();
-            historicRowId = prevChild.GetRowCount();
+            prevDataSize = node.GetPrevChildDataSize(pos);
+            historicRowId = node.GetChildRowCount(pos - 1);
         }
     }
 
@@ -123,7 +126,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
     if (part->GroupsCount) { // main group
         TGroupId groupId{};
-        auto channel = part->GetGroupChannel(groupId);
+        auto channel = part->GetDataChannel(groupId);
         logAddingGroup(groupId);
         
         for (const auto& slice : *part.Slices) {
@@ -152,7 +155,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
     for (ui32 groupIndex : xrange<ui32>(1, part->GroupsCount)) {
         TGroupId groupId{groupIndex};
-        auto channel = part->GetGroupChannel(groupId);
+        auto channel = part->GetDataChannel(groupId);
         logAddingGroup(groupId);
 
         for (const auto& slice : *part.Slices) {
@@ -172,7 +175,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
     if (part->HistoricGroupsCount) { // main historic group
         TGroupId groupId{0, true};
-        auto channel = part->GetGroupChannel(groupId);
+        auto channel = part->GetDataChannel(groupId);
         logAddingGroup(groupId);
 
         for (const auto& slice : *part.Slices) {
@@ -196,7 +199,7 @@ bool AddDataSize(const TPartView& part, TStats& stats, IPages* env, TBuildStatsY
 
     for (ui32 groupIndex : xrange<ui32>(1, part->HistoricGroupsCount)) {
         TGroupId groupId{groupIndex, true};
-        auto channel = part->GetGroupChannel(groupId);
+        auto channel = part->GetDataChannel(groupId);
         logAddingGroup(groupId);
 
         for (const auto& slice : historicSlices) {
@@ -223,7 +226,7 @@ bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBu
     bool ready = true;
     for (const auto& part : subset.Flatten) {
         LOG_BUILD_STATS("adding part " << part->Label.ToString() << " data size (" << HumanReadableSize(part->DataSize(), SF_BYTES) << " in total)");
-        stats.IndexSize.Add(part->IndexesRawSize, part->Label.Channel());
+        AddIndexSize(stats.IndexSize, *part);
         for (const auto& [_, bloom] : part->ByKeyPrefixes) {
             if (bloom) stats.ByKeyFilterSize += bloom->Raw.size();
         }

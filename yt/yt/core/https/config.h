@@ -2,18 +2,17 @@
 
 #include "public.h"
 
-#include <yt/yt/core/http/config.h>
-
 #include <yt/yt/core/crypto/config.h>
+
+#include <yt/yt/core/http/config.h>
 
 namespace NYT::NHttps {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TServerCredentialsConfig
-    : public NCrypto::TSslContextConfig
+    : public NCrypto::TServerSslContextConfig
 {
-    TDuration UpdatePeriod;
     TDuration CertSensorsUpdatePeriod;
 
     REGISTER_YSON_STRUCT(TServerCredentialsConfig);

@@ -56,7 +56,7 @@ private:
         return std::make_shared<TDefaultHeader>(data.GetSize());
     }
 
-    virtual std::optional<ui64> DoCalcCategory(const TString& /*subColumnName*/) const {
+    virtual std::optional<ui64> DoCalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& /*subColumnName*/) const {
         return std::nullopt;
     }
 
@@ -84,7 +84,12 @@ public:
         return std::nullopt;
     }
 
-    std::optional<ui64> CalcCategory(const TString& subColumnName) const;
+    // Ngram size when this index can serve a probe with the given case mode. Empty for every other index.
+    virtual std::optional<ui32> GetCompatibleBloomNgramSize(const bool /*caseSensitive*/) const {
+        return std::nullopt;
+    }
+
+    std::optional<ui64> CalcCategory(const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) const;
 
     TConclusion<std::shared_ptr<IIndexHeader>> BuildHeader(const TChunkOriginalData& data) const {
         return DoBuildHeader(data);

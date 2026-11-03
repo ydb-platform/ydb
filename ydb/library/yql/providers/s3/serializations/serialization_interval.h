@@ -2,20 +2,18 @@
 
 #include <util/generic/string.h>
 
-namespace NDB
-{
+namespace NDB {
 
 class IDataType;
 using DataTypePtr = std::shared_ptr<const IDataType>;
 
-}
+}   // namespace NDB
 
 namespace NYql::NSerialization {
 
 class TSerializationInterval {
 public:
-    enum class EUnit
-    {
+    enum class EUnit {
         MICROSECONDS,
         MILLISECONDS,
         SECONDS,
@@ -31,4 +29,4 @@ public:
 
 NDB::DataTypePtr GetInterval(TSerializationInterval::EUnit unit);
 
-}
+}   // namespace NYql::NSerialization

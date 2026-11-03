@@ -1,28 +1,24 @@
-#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
-
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-
-#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
 #include <fmt/format.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NWorkloadManager {
 
 using namespace NWorkloadManager;
 using namespace NYdb;
 
-
 namespace {
 
 TIntrusivePtr<IYdbSetup> MakeStreamingYdb() {
-    return TYdbSetupSettings()
-        .EnableHasPredicatesInResourcePoolClassifiers(true)
-        .Create([](auto) {});
+    return TYdbSetupSettings().EnableHasPredicatesInResourcePoolClassifiers(true).Create([](auto) {
+    });
 }
 
 void CreateTopic(TIntrusivePtr<IYdbSetup> ydb, TString name) {
@@ -30,8 +26,7 @@ void CreateTopic(TIntrusivePtr<IYdbSetup> ydb, TString name) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 }
 
-}  // anonymous namespace
-
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
     void CreateStreamingPoolAndClassifier(TIntrusivePtr<IYdbSetup> ydb, const TString& poolId, const TString& classifierSql) {
@@ -51,16 +46,13 @@ Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
         // Wait until RunningRequests stays at 1 for a short stable window (avoid fixed sleep).
-        const TPoolStateDescription expected{.DelayedRequests = 0, .RunningRequests = 1};
+        const TPoolStateDescription expected{ .DelayedRequests = 0, .RunningRequests = 1 };
         const TDuration stableFor = TDuration::Seconds(1);
         TInstant stableSince;
         IYdbSetup::WaitFor(FUTURE_WAIT_TIMEOUT, "stable streaming pool state", [&](TString& errorString) {
             const auto description = ydb->GetPoolDescription(TDuration::Zero(), poolId);
-            errorString = TStringBuilder()
-                << "delayed = " << description.DelayedRequests
-                << ", running = " << description.RunningRequests;
-            if (description.DelayedRequests == expected.DelayedRequests
-                    && description.RunningRequests == expected.RunningRequests) {
+            errorString = TStringBuilder() << "delayed = " << description.DelayedRequests << ", running = " << description.RunningRequests;
+            if (description.DelayedRequests == expected.DelayedRequests && description.RunningRequests == expected.RunningRequests) {
                 if (!stableSince) {
                     stableSince = TInstant::Now();
                 }
@@ -152,7 +144,7 @@ Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
             END DO
         )", explicitPoolId);
 
-        ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 0}, classifierPoolId);
+        ydb->WaitPoolState({ .DelayedRequests = 0, .RunningRequests = 0 }, classifierPoolId);
     }
 }
 
@@ -184,27 +176,27 @@ std::unique_ptr<NKqp::TKikimrRunner> SetupStreamingSource(bool enableStreamingQu
     config.MutableTableServiceConfig()->SetDqChannelVersion(1u);
 
     auto kikimr = std::make_unique<NKqp::TKikimrRunner>(NKqp::TKikimrSettings(config)
-        .SetEnableStreamingQueries(enableStreamingQueries)
-        .SetEnableExternalDataSources(true)
-        .SetEnableResourcePools(true)
-        .SetInitFederatedQuerySetupFactory(true));
+                                                            .SetEnableStreamingQueries(enableStreamingQueries)
+                                                            .SetEnableExternalDataSources(true)
+                                                            .SetEnableResourcePools(true)
+                                                            .SetInitFederatedQuerySetupFactory(true));
 
-    const auto result = kikimr->GetQueryClient().ExecuteQuery(fmt::format(R"(
+    const auto result = kikimr->GetQueryClient()
+                            .ExecuteQuery(fmt::format(R"(
         CREATE TOPIC MyTopic;
         CREATE EXTERNAL DATA SOURCE MySource WITH (
             SOURCE_TYPE = "Ydb",
             LOCATION = "localhost:{port}",
             DATABASE_NAME = "/Root",
             AUTH_METHOD = "NONE"
-        );)",
-        "port"_a = kikimr->GetTestServer().GetGRpcServer().GetPort()),
-        NQuery::TTxControl::NoTx()).ExtractValueSync();
+        );)", "port"_a = kikimr->GetTestServer().GetGRpcServer().GetPort()), NQuery::TTxControl::NoTx())
+                            .ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
     return kikimr;
 }
 
-}  // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(WorkloadManagerScheme) {
     Y_UNIT_TEST(StreamingQueriesWithResourcePools) {
@@ -213,11 +205,12 @@ Y_UNIT_TEST_SUITE(WorkloadManagerScheme) {
         auto db = kikimr->GetQueryClient();
 
         {
-            const auto result = kikimr->GetQueryClient().ExecuteQuery(R"(
+            const auto result = kikimr->GetQueryClient()
+                                    .ExecuteQuery(R"(
                 CREATE RESOURCE POOL my_pool WITH (
                     CONCURRENT_QUERY_LIMIT = 0
-                ))",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
+                ))", NQuery::TTxControl::NoTx())
+                                    .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
 
@@ -226,8 +219,8 @@ Y_UNIT_TEST_SUITE(WorkloadManagerScheme) {
                 CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
                     RUN = TRUE,
                     RESOURCE_POOL = "my_pool"
-                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)", NQuery::TTxControl::NoTx())
+                                    .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool my_pool was disabled due to zero concurrent query limit");
 
@@ -238,8 +231,8 @@ Y_UNIT_TEST_SUITE(WorkloadManagerScheme) {
             const auto result = db.ExecuteQuery(R"(
                 CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (
                     RUN = FALSE
-                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)", NQuery::TTxControl::NoTx())
+                                    .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
             CheckObjectProperties(runtime, "/Root/MyFolder/OtherQuery", {});
@@ -250,12 +243,12 @@ Y_UNIT_TEST_SUITE(WorkloadManagerScheme) {
                 ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (
                     RUN = TRUE,
                     RESOURCE_POOL = "my_pool"
-                );)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
+                );)", NQuery::TTxControl::NoTx())
+                                    .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool my_pool was disabled due to zero concurrent query limit");
         }
     }
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

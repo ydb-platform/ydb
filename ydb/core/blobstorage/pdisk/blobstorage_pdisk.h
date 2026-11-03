@@ -1,4 +1,5 @@
 #pragma once
+#include "blobstorage_pdisk_allocation.h"
 #include "defs.h"
 
 #include "blobstorage_pdisk_defs.h"
@@ -152,6 +153,7 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
     ui32 GroupSizeInUnits;
     bool GetUringRouterClient = false; // if true, PDisk creates/shares an IUringRouterClient
     ui32 UringIdleSpinUs = 10; // used if this request creates the shared router
+    bool UringDevNullMode = false; // all DDisk slots sharing this router must agree
 
     TEvYardInit(
             TOwnerRound ownerRound,
@@ -162,7 +164,8 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
             ui32 slotId = Max<ui32>(),
             ui32 groupSizeInUnits = 0,
             bool getUringRouterClient = false,
-            ui32 uringIdleSpinUs = 10
+            ui32 uringIdleSpinUs = 10,
+            bool uringDevNullMode = false
         )
         : OwnerRound(ownerRound)
         , VDisk(vdisk)
@@ -173,6 +176,7 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
         , GroupSizeInUnits(groupSizeInUnits)
         , GetUringRouterClient(getUringRouterClient)
         , UringIdleSpinUs(uringIdleSpinUs)
+        , UringDevNullMode(uringDevNullMode)
     {}
 
     TString ToString() const {
@@ -190,6 +194,7 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
         str << " GroupSizeInUnits# " << record.GroupSizeInUnits;
         str << " GetUringRouterClient# " << record.GetUringRouterClient;
         str << " UringIdleSpinUs# " << record.UringIdleSpinUs;
+        str << " UringDevNullMode# " << record.UringDevNullMode;
         str << "}";
         return str.Str();
     }
@@ -953,6 +958,7 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
     // compaction is the only thing that can free anything, so refusing it leaves the
     // owner stuck for good. It still stops at black.
     bool ForHousekeeping;
+    EAllocationPurpose Purpose;
     // DDisk waits for a terminal reply even when PDisk stops with this request queued.
     bool IsDDisk = false;
     // Refuse the reservation unless the owner's colour after it stays strictly better
@@ -964,11 +970,13 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
     NKikimrBlobStorage::TPDiskSpaceColor::E RefuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK;
 
     TEvChunkReserve(TOwner owner, TOwnerRound ownerRound, ui32 sizeChunks, bool forHousekeeping = false,
-            NKikimrBlobStorage::TPDiskSpaceColor::E refuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK)
+            NKikimrBlobStorage::TPDiskSpaceColor::E refuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK,
+            EAllocationPurpose purpose = EAllocationPurpose::Recovery)
         : Owner(owner)
         , OwnerRound(ownerRound)
         , SizeChunks(sizeChunks)
         , ForHousekeeping(forHousekeeping)
+        , Purpose(forHousekeeping ? EAllocationPurpose::Maintenance : purpose)
         , RefuseAtColor(refuseAtColor)
     {}
 
@@ -982,6 +990,7 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
         str << " ownerRound# " << record.OwnerRound;
         str << " SizeChunks# " << record.SizeChunks;
         str << " ForHousekeeping# " << record.ForHousekeeping;
+        str << " Purpose# " << AllocationPurposeName(record.Purpose);
         str << " RefuseAtColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(record.RefuseAtColor);
         str << "}";
         return str.Str();

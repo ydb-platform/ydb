@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
@@ -74,6 +75,7 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateObject::CallableName());
         DataSinkNames.insert(TKiAlterObject::CallableName());
         DataSinkNames.insert(TKiDropObject::CallableName());
+        DataSinkNames.insert(TKiKillSession::CallableName());
         DataSinkNames.insert(TKiCreateGroup::CallableName());
         DataSinkNames.insert(TKiAlterGroup::CallableName());
         DataSinkNames.insert(TKiRenameGroup::CallableName());
@@ -105,6 +107,7 @@ struct TKikimrData {
         SupportedEffects.insert(TKiWriteTable::CallableName());
         SupportedEffects.insert(TKiUpdateTable::CallableName());
         SupportedEffects.insert(TKiDeleteTable::CallableName());
+        SupportedEffects.insert(TKiTruncateTable::CallableName());
 
         ModifyOps =
             TYdbOperation::Upsert |
@@ -172,6 +175,8 @@ TKikimrQueryContext::TKikimrQueryContext(const NKikimr::NMiniKQL::IFunctionRegis
     : QueryData(std::make_shared<NKikimr::NKqp::TQueryData>(functionRegistry, timeProvider, randomProvider))
 {}
 
+TKikimrQueryContext::~TKikimrQueryContext() = default;
+
 void TKikimrQueryContext::Reset() {
     PrepareOnly = false;
     SuppressDdlChecks = false;
@@ -192,6 +197,7 @@ void TKikimrQueryContext::Reset() {
     RlPath.Clear();
     RpcCtx.reset();
     TranslationSettings = NSQLTranslation::TTranslationSettings();
+    CompileTrace.Reset();
 }
 
 const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TString& cluster,

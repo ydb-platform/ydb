@@ -1,5 +1,5 @@
-#include "dq_solomon_write_actor.h"
 #include "dq_solomon_actors_util.h"
+#include "dq_solomon_write_actor.h"
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_local.h>
@@ -7,13 +7,17 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/actors/http_sender_actor.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <library/cpp/json/easy_parse/json_easy_parser.h>
+#include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
+#include <util/system/compiler.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -21,31 +25,17 @@
 #include <yql/essentials/utils/url_builder.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <library/cpp/json/easy_parse/json_easy_parser.h>
-
-#include <util/generic/algorithm.h>
-#include <util/generic/hash.h>
-#include <util/system/compiler.h>
-
 #include <queue>
 #include <variant>
 
-#define SINK_LOG_T(s) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_D(s) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_I(s) \
-    LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_W(s) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_N(s) \
-    LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_E(s) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG_C(s) \
-    LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, LogPrefix << s)
-#define SINK_LOG(prio, s) \
-    LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SINK_LOG_T(s) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SINK_LOG_D(s) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SINK_LOG_I(s) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SINK_LOG_W(s) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SINK_LOG_N(s) LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SINK_LOG_E(s) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SINK_LOG_C(s) LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
+#define SINK_LOG(prio, s) LOG_LOG_S(*NActors::TlsActivationContext, prio, NKikimrServices::KQP_COMPUTE, LogPrefix << s)
 
 namespace NYql::NDq {
 
@@ -55,11 +45,11 @@ using namespace NKikimr::NMiniKQL;
 
 namespace {
 
-const ui64 MaxMetricsPerRequest = 1000; // Max allowed count is 10000
+const ui64 MaxMetricsPerRequest = 1000;   // Max allowed count is 10000
 const ui64 MaxRequestsInflight = 3;
 
-const auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy(
-    [](const NHttp::TEvHttpProxy::TEvHttpIncomingResponse* resp){
+const auto RetryPolicy =
+    NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy([](const NHttp::TEvHttpProxy::TEvHttpIncomingResponse* resp) {
         if (!resp || !resp->Response) {
             // Connection wasn't established. Should retry.
             return ERetryErrorClass::ShortRetry;
@@ -70,12 +60,8 @@ const auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackof
         }
 
         return ERetryErrorClass::ShortRetry;
-    },
-    TDuration::MilliSeconds(10),
-    TDuration::MilliSeconds(200),
-    TDuration::Seconds(10),
-    std::numeric_limits<size_t>::max(),
-    TDuration::Seconds(60));
+    }, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(10), std::numeric_limits<size_t>::max(),
+        TDuration::Seconds(60));
 
 struct TDqSolomonWriteParams {
     NSo::NProto::TDqSolomonShard Shard;
@@ -92,21 +78,14 @@ struct TMetricsInflight {
     ui64 BodySize = 0;
 };
 
-class TDqSolomonWriteActor : public NActors::TActor<TDqSolomonWriteActor>, public IDqComputeActorAsyncOutput {
+class TDqSolomonWriteActor: public NActors::TActor<TDqSolomonWriteActor>, public IDqComputeActorAsyncOutput {
 public:
     static constexpr char ActorName[] = "DQ_SOLOMON_WRITE_ACTOR";
 
-    TDqSolomonWriteActor(
-        ui64 outputIndex,
-        TCollectStatsLevel statsLevel,
-        const TTxId& txId,
-        ui64 taskId,
-        TDqSolomonWriteParams&& writeParams,
-        NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
-        const ::NMonitoring::TDynamicCounterPtr& counters,
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
-        i64 freeSpace,
-        bool enableStreamingQueriesCounters)
+    TDqSolomonWriteActor(ui64 outputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, ui64 taskId, TDqSolomonWriteParams&& writeParams,
+        NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters,
+        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, i64 freeSpace, bool enableStreamingQueriesCounters,
+        bool enableCountersPerTask)
         : TActor<TDqSolomonWriteActor>(&TDqSolomonWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
@@ -114,11 +93,10 @@ public:
         , WriteParams(std::move(writeParams))
         , Url(GetUrl())
         , Callbacks(callbacks)
-        , Metrics(counters, TxId, taskId, enableStreamingQueriesCounters)
+        , Metrics(counters, TxId, taskId, enableStreamingQueriesCounters, enableCountersPerTask)
         , FreeSpace(freeSpace)
-        , UserMetricsEncoder(
-            WriteParams.Shard.GetScheme(),
-            WriteParams.Shard.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING)
+        ,
+        UserMetricsEncoder(WriteParams.Shard.GetScheme(), WriteParams.Shard.GetClusterType() == NSo::NProto::ESolomonClusterType::CT_MONITORING)
         , CredentialsProvider(credentialsProvider)
     {
         SINK_LOG_D("Init");
@@ -130,16 +108,11 @@ public:
     )
 
 public:
-    void SendData(
-        NKikimr::NMiniKQL::TUnboxedValueBatch&& batch,
-        i64,
-        const TMaybe<NDqProto::TCheckpoint>& checkpoint,
-        bool finished) override
-    {
+    void SendData(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64, const TMaybe<NDqProto::TCheckpoint>& checkpoint, bool finished) override {
         YQL_ENSURE(!batch.IsWide(), "Wide streams are not supported");
         SINK_LOG_T("Got " << batch.RowCount() << " items to send. Checkpoint: " << checkpoint.Defined()
-                   << ". Send queue: " << SendingBuffer.size() << ". Inflight: " << InflightBuffer.size()
-                   << ". Checkpoint in progress: " << CheckpointInProgress.has_value());
+                          << ". Send queue: " << SendingBuffer.size() << ". Inflight: " << InflightBuffer.size()
+                          << ". Checkpoint in progress: " << CheckpointInProgress.has_value());
 
         if (finished) {
             Finished = true;
@@ -163,7 +136,8 @@ public:
             SendingBuffer.emplace(*checkpoint);
         }
 
-        while (TryToSendNextBatch()) {}
+        while (TryToSendNextBatch()) {
+        }
 
         if (FreeSpace <= 0) {
             ShouldNotifyNewFreeSpace = true;
@@ -176,7 +150,8 @@ public:
     // idempotent and there is no way to roll back a partially-sent batch.
     // Silently ignore checkpoint calls so the actor can coexist with
     // checkpoint-enabled pipelines.
-    void LoadState(const TSinkState&, const NDqProto::TCheckpoint&) override {}
+    void LoadState(const TSinkState&, const NDqProto::TCheckpoint&) override {
+    }
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
         Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
@@ -196,17 +171,18 @@ public:
 
 private:
     struct TDqSolomonWriteActorMetrics {
-        explicit TDqSolomonWriteActorMetrics(
-            const ::NMonitoring::TDynamicCounterPtr& counters,
-            const TTxId& txId,
-            ui64 taskId,
-            bool enableStreamingQueriesCounters,
-            bool enableCountersPerTask = false)
-        : TxId(std::visit([](auto arg) { return ToString(arg); }, txId)) {
-
-            auto subgroup = counters->GetSubgroup("sink", "SolomonSink");;
+        explicit TDqSolomonWriteActorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters, const TTxId& txId, ui64 taskId,
+            bool enableStreamingQueriesCounters, bool enableCountersPerTask = false)
+            : TxId(std::visit(
+                  [](auto arg) {
+                      return ToString(arg);
+                  }, txId))
+        {
+            auto subgroup = counters->GetSubgroup("sink", "SolomonSink");
+            ;
 
             if (enableStreamingQueriesCounters) {
+                CountersRoot = subgroup;
                 subgroup = subgroup->GetSubgroup("tx_id", TxId);
                 if (enableCountersPerTask) {
                     subgroup = subgroup->GetSubgroup("task_id", ToString(taskId));
@@ -222,6 +198,16 @@ private:
             Errors = subgroup->GetCounter("Errors", true);
         }
 
+        ~TDqSolomonWriteActorMetrics() {
+            if (CountersRoot) {
+                // XXX Group will be removed by each task of query (repeatedly);
+                // Should be mostly harmless (as all of them removed at once at query termination);
+                // Though, there are some racing potential on query restart;
+                // This is common problem with solomon sink, pq source, pq sink and dq slj actor
+                CountersRoot->RemoveSubgroup("tx_id", TxId);
+            }
+        }
+
         TString TxId;
         ::NMonitoring::TDynamicCounters::TCounterPtr SendingBufferSize;
         ::NMonitoring::TDynamicCounters::TCounterPtr WindowMinSendingBufferSize;
@@ -230,6 +216,7 @@ private:
         ::NMonitoring::TDynamicCounters::TCounterPtr SentMetrics;
         ::NMonitoring::TDynamicCounters::TCounterPtr ConfirmedMetrics;
         ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
+        ::NMonitoring::TDynamicCounterPtr CountersRoot;
 
     public:
         void ReportSendingBufferSize(size_t size) {
@@ -280,8 +267,9 @@ private:
                 errorBuilder << " " << response->GetObfuscatedData();
             }
 
-            TIssues issues { TIssue(errorBuilder) };
-            SINK_LOG_W("Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString());
+            TIssues issues{ TIssue(errorBuilder) };
+            SINK_LOG_W("Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie
+                              << "] from solomon: " << issues.ToOneLineString());
             Metrics.Errors->Inc();
 
             // Restore FreeSpace and remove the inflight entry so backpressure
@@ -291,17 +279,19 @@ private:
                 InflightBuffer.erase(ptr);
             }
 
-            Callbacks->OnAsyncOutputError(OutputIndex, issues, res->IsTerminal ? NYql::NDqProto::StatusIds::EXTERNAL_ERROR : NYql::NDqProto::StatusIds::UNSPECIFIED);
+            Callbacks->OnAsyncOutputError(
+                OutputIndex, issues, res->IsTerminal ? NYql::NDqProto::StatusIds::EXTERNAL_ERROR : NYql::NDqProto::StatusIds::UNSPECIFIED);
             return;
         }
 
         HandleSuccessSolomonResponse(*res->HttpIncomingResponse->Get(), ev->Cookie);
 
-        while (TryToSendNextBatch()) {}
+        while (TryToSendNextBatch()) {
+        }
     }
 
     // IActor & IDqComputeActorAsyncOutput
-    void PassAway() override { // Is called from Compute Actor
+    void PassAway() override {   // Is called from Compute Actor
         for (const auto& [_, metricsInflight] : InflightBuffer) {
             Send(metricsInflight.HttpSenderId, new TEvents::TEvPoison());
         }
@@ -314,15 +304,13 @@ private:
     }
 
 private:
-    TSinkState BuildState() { return {}; }
+    TSinkState BuildState() {
+        return {};
+    }
 
     TString GetUrl() const {
-        return GetSolomonUrl(WriteParams.Shard.GetEndpoint(),
-                WriteParams.Shard.GetUseSsl(),
-                WriteParams.Shard.GetProject(),
-                WriteParams.Shard.GetCluster(),
-                WriteParams.Shard.GetService(),
-                WriteParams.Shard.GetClusterType());
+        return GetSolomonUrl(WriteParams.Shard.GetEndpoint(), WriteParams.Shard.GetUseSsl(), WriteParams.Shard.GetProject(),
+            WriteParams.Shard.GetCluster(), WriteParams.Shard.GetService(), WriteParams.Shard.GetClusterType());
     }
 
     void PushMetricsToBuffer(ui64& metricsCount) {
@@ -331,9 +319,9 @@ private:
             SINK_LOG_T("Push " << data.size() << " bytes of data to buffer");
 
             FreeSpace -= data.size();
-            SendingBuffer.emplace(TMetricsToSend { std::move(data), metricsCount });
+            SendingBuffer.emplace(TMetricsToSend{ std::move(data), metricsCount });
         } catch (const yexception& e) {
-            TIssues issues { TIssue(TStringBuilder() << "Error while encoding solomon metrics: " << e.what()) };
+            TIssues issues{ TIssue(TStringBuilder() << "Error while encoding solomon metrics: " << e.what()) };
             Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
         }
 
@@ -342,7 +330,7 @@ private:
 
     std::optional<NHttp::THttpOutgoingRequestPtr> BuildSolomonRequest(const TString& data) {
         NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestPost(Url);
-        
+
         if (!FillAuth(httpRequest)) {
             return {};
         }
@@ -360,7 +348,7 @@ private:
         try {
             authToken = CredentialsProvider->GetAuthInfo();
         } catch (const std::exception& ex) {
-            TIssues issues { TIssue(TStringBuilder() << "Failed to get auth token: " << ex.what()) };
+            TIssues issues{ TIssue(TStringBuilder() << "Failed to get auth token: " << ex.what()) };
             Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             return false;
         }
@@ -374,7 +362,7 @@ private:
                 httpRequest->Set(authorizationHeader, "Bearer " + authToken);
                 break;
             default:
-                TIssues issues { TIssue(TStringBuilder() << "Invalid cluster type: " << ToString<ui32>(WriteParams.Shard.GetClusterType())) };
+                TIssues issues{ TIssue(TStringBuilder() << "Invalid cluster type: " << ToString<ui32>(WriteParams.Shard.GetClusterType())) };
                 Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                 return false;
         }
@@ -427,7 +415,8 @@ private:
             SINK_LOG_T("Sent " << metricsToSend.MetricsCount << " metrics with size of " << metricsToSend.Data.size() << " bytes to solomon");
 
             *Metrics.SentMetrics += metricsToSend.MetricsCount;
-            Y_VALIDATE(InflightBuffer.emplace(Cookie++, TMetricsInflight { httpSenderId, metricsToSend.MetricsCount, bodySize }).second, "Duplicated inflight event");
+            Y_VALIDATE(InflightBuffer.emplace(Cookie++, TMetricsInflight{ httpSenderId, metricsToSend.MetricsCount, bodySize }).second,
+                "Duplicated inflight event");
             EgressStats.Bytes += bodySize;
             EgressStats.Chunks++;
             return true;
@@ -454,7 +443,7 @@ private:
         auto ptr = InflightBuffer.find(cookie);
         if (ptr == InflightBuffer.end()) {
             SINK_LOG_E("Solomon response[" << cookie << "] was not found in inflight");
-            TIssues issues { TIssue("Internal error in monitoring writer") };
+            TIssues issues{ TIssue("Internal error in monitoring writer") };
             Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             return;
         }
@@ -486,13 +475,14 @@ private:
 
         TVector<TString> res;
         if (!parser.Parse(TString(response.Response->Body), &res)) {
-            TIssues issues { TIssue(TStringBuilder() << "Invalid monitoring response: " << response.Response->GetObfuscatedData()) };
+            TIssues issues{ TIssue(TStringBuilder() << "Invalid monitoring response: " << response.Response->GetObfuscatedData()) };
             SINK_LOG_E("Failed to parse response[" << cookie << "] from solomon: " << issues.ToOneLineString());
             reportError(issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             return;
         }
         if (res.size() != 2) {
-            TIssues issues { TIssue(TStringBuilder() << "Unexpected monitoring response format (fields=" << res.size() << "): " << response.Response->GetObfuscatedData()) };
+            TIssues issues{ TIssue(TStringBuilder() << "Unexpected monitoring response format (fields=" << res.size()
+                                                    << "): " << response.Response->GetObfuscatedData()) };
             SINK_LOG_E("Unexpected response size[" << cookie << "] from solomon: " << issues.ToOneLineString());
             reportError(issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             return;
@@ -502,7 +492,7 @@ private:
         try {
             writtenMetricsCount = std::stoull(res[0]);
         } catch (const std::exception& e) {
-            TIssues issues { TIssue(TStringBuilder() << "Failed to parse writtenMetricsCount from monitoring response: " << e.what()) };
+            TIssues issues{ TIssue(TStringBuilder() << "Failed to parse writtenMetricsCount from monitoring response: " << e.what()) };
             SINK_LOG_E("Failed to parse writtenMetricsCount[" << cookie << "] from solomon: " << issues.ToOneLineString());
             reportError(issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             return;
@@ -513,7 +503,9 @@ private:
             // TIssues issues { TIssue(TStringBuilder() << ToString(ptr->second.MetricsCount - writtenMetricsCount) << " metrics were not written: " << res[1]) };
             // Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             // return;
-            SINK_LOG_W("Some metrics were not written. MetricsCount=" << ptr->second.MetricsCount << " writtenMetricsCount=" << writtenMetricsCount << " Solomon response: " << response.Response->GetObfuscatedData());
+            SINK_LOG_W("Some metrics were not written. MetricsCount=" << ptr->second.MetricsCount
+                                                                      << " writtenMetricsCount=" << writtenMetricsCount
+                                                                      << " Solomon response: " << response.Response->GetObfuscatedData());
         }
 
         FreeSpace += ptr->second.BodySize;
@@ -565,73 +557,48 @@ private:
     ui64 Cookie = 0;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
-std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(
-    NYql::NSo::NProto::TDqSolomonShard&& settings,
-    ui64 outputIndex,
-    TCollectStatsLevel statsLevel,
-    const TTxId& txId,
-    ui64 taskId,
-    const THashMap<TString, TString>& secureParams,
-    NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks,
-    const ::NMonitoring::TDynamicCounterPtr& counters,
-    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-    i64 freeSpace,
-    bool enableStreamingQueriesCounters)
+std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolomonWriteActor(NYql::NSo::NProto::TDqSolomonShard&& settings,
+    ui64 outputIndex, TCollectStatsLevel statsLevel, const TTxId& txId, ui64 taskId, const THashMap<TString, TString>& secureParams,
+    NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks* callbacks, const ::NMonitoring::TDynamicCounterPtr& counters,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory, i64 freeSpace, bool enableStreamingQueriesCounters, bool enableCountersPerTask)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
 
-    TDqSolomonWriteParams params {
+    TDqSolomonWriteParams params{
         .Shard = std::move(settings),
     };
 
     auto credentialsProviderFactory = credentialsFactory->Create(token);
     auto credentialsProvider = credentialsProviderFactory->CreateProvider();
 
-    TDqSolomonWriteActor* actor = new TDqSolomonWriteActor(
-        outputIndex,
-        statsLevel,
-        txId,
-        taskId,
-        std::move(params),
-        callbacks,
-        counters,
-        credentialsProvider,
-        freeSpace,
-        enableStreamingQueriesCounters);
-    return {actor, actor};
+    TDqSolomonWriteActor* actor = new TDqSolomonWriteActor(outputIndex, statsLevel, txId, taskId, std::move(params), callbacks, counters,
+        credentialsProvider, freeSpace, enableStreamingQueriesCounters, enableCountersPerTask);
+    return { actor, actor };
 }
 
-void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters) {
+void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters, bool enableStreamingQueriesCounters) {
     factory.RegisterSink<NSo::NProto::TDqSolomonShard>("SolomonSink",
         [credentialsFactory, counters, enableStreamingQueriesCounters](
-            NYql::NSo::NProto::TDqSolomonShard&& settings,
-            IDqAsyncIoFactory::TSinkArguments&& args)
+            NYql::NSo::NProto::TDqSolomonShard&& settings, IDqAsyncIoFactory::TSinkArguments&& args)
         {
             auto txId = args.TxId;
             auto taskParamsIt = args.TaskParams.find("query_path");
             if (taskParamsIt != args.TaskParams.end()) {
                 txId = taskParamsIt->second;
             }
+            bool enableCountersPerTask = args.StatsLevel == TCollectStatsLevel::Profile;
 
-            return CreateDqSolomonWriteActor(
-                std::move(settings),
-                args.OutputIndex,
-                args.StatsLevel,
-                txId,
-                args.TaskId,
-                args.SecureParams,
-                args.Callback,
-                counters,
-                credentialsFactory,
-                DqSolomonDefaultFreeSpace,
-                enableStreamingQueriesCounters);
+            return CreateDqSolomonWriteActor(std::move(settings), args.OutputIndex, args.StatsLevel, txId, args.TaskId, args.SecureParams,
+                args.Callback, counters, credentialsFactory, DqSolomonDefaultFreeSpace, enableStreamingQueriesCounters, enableCountersPerTask);
         });
 }
 
-TString GetSolomonUrl(const TString& endpoint, bool useSsl, const TString& project, const TString& cluster, const TString& service, const ::NYql::NSo::NProto::ESolomonClusterType& type) {
+TString GetSolomonUrl(const TString& endpoint, bool useSsl, const TString& project, const TString& cluster, const TString& service,
+    const ::NYql::NSo::NProto::ESolomonClusterType& type) {
     TUrlBuilder builder((useSsl ? "https://" : "http://") + endpoint);
 
     switch (type) {
@@ -658,4 +625,4 @@ TString GetSolomonUrl(const TString& endpoint, bool useSsl, const TString& proje
     return builder.Build();
 }
 
-} // namespace NYql::NDq
+}   // namespace NYql::NDq

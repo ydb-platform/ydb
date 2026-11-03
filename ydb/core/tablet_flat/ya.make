@@ -82,17 +82,23 @@ SRCS(
     flat_table_observer.h
     flat_table_committed.cpp
     flat_table_committed.h
+    flat_tier_policy.cpp
+    flat_tier_policy.h
+    flat_tier_predicate.cpp
+    flat_tier_predicate.h
     flat_update_op.h
     probes.cpp
     shared_handle.cpp
     shared_cache_counters.cpp
+    shared_cache_btree_walk.cpp
+    shared_cache_btree_walk.h
+    shared_sausagecache_state.h
     shared_sausagecache.cpp
     shared_sausagecache.h
     tablet_flat_executor.h
     tablet_flat_executor.cpp
     tablet_flat_executed.h
     tablet_flat_executed.cpp
-    flat_executor.proto
 )
 
 GENERATE_ENUM_SERIALIZATION(flat_comp_gen.h)
@@ -138,8 +144,6 @@ PEERDIR(
     yql/essentials/types/dynumber
     ydb/library/mkql_proto/protos
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

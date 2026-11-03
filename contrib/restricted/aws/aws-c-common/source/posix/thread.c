@@ -213,6 +213,10 @@ const struct aws_thread_options *aws_default_thread_options(void) {
     return &s_default_options;
 }
 
+void aws_set_default_thread_options(const struct aws_thread_options *options) {
+    s_default_options = *options;
+}
+
 void aws_thread_clean_up(struct aws_thread *thread) {
     if (thread->detach_state == AWS_THREAD_JOINABLE) {
         pthread_detach(thread->thread_id);

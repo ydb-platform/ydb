@@ -9,5 +9,12 @@ items:
   href: versioning.md
 - name: Обслуживание
   href: maintenance-without-downtime.md
+- name: SelfHeal
+  href: selfheal.md
+  items:
+  - name: SelfHeal хранилища
+    href: selfheal-storage.md
+  - name: SelfHeal подсистем распространения метаданных
+    href: selfheal-metadata-distribution.md
 - name: Аутентификация и авторизация узлов баз данных
   href: node-authorization.md

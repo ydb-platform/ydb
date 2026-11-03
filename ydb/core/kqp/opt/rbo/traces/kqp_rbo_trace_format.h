@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <string>
 #include <vector>
+#include <util/string/builder.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -13,12 +14,27 @@ namespace NKqp {
 
 std::string ToStdString(const TString& value);
 std::string FormatBool(bool value);
-TString FormatInfoUnit(const TInfoUnit& unit);
-TString FormatInfoUnits(const TVector<TInfoUnit>& units);
-std::vector<std::string> MakeInfoUnitItems(const TVector<TInfoUnit>& units);
-TVector<TInfoUnit> SortInfoUnits(TVector<TInfoUnit> units);
-TVector<TInfoUnit> SortInfoUnitSet(const TInfoUnitSet& units);
-TVector<TInfoUnit> UniqueInfoUnits(const TVector<TInfoUnit>& units);
+TString FormatInfoUnit(TInfoUnitId unit, const TInfoUnitRegistry& registry);
+
+template <class TRange>
+TString FormatInfoUnits(const TRange& units, const TInfoUnitRegistry& registry) {
+    TStringBuilder result;
+    TStringBuf separator;
+    for (const auto unit : units) {
+        result << separator << FormatInfoUnit(unit, registry);
+        separator = ", ";
+    }
+    return result;
+}
+
+template <class TRange>
+std::vector<std::string> MakeInfoUnitItems(const TRange& units, const TInfoUnitRegistry& registry) {
+    std::vector<std::string> items;
+    for (const auto unit : units) {
+        items.push_back(ToStdString(FormatInfoUnit(unit, registry)));
+    }
+    return items;
+}
 std::string FormatCountedSummary(const std::vector<std::string>& items, size_t maxItems = 6);
 std::string JoinStrings(const std::vector<std::string>& items, const char* delimiter = ", ");
 

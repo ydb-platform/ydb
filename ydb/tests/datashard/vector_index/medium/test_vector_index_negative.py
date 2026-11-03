@@ -60,16 +60,16 @@ class TestVectorIndexNegative(VectorBase):
             sync="",
         )
         self.query(create_table_sql)
+        self._upsert_values(
+            all_types=all_types,
+            prefix=prefix_data,
+            pk_types=pk_types,
+            vector_type=vector_type,
+            vector_dimension=vector_dimension,
+            to_binary_string_converters=self.to_binary_string_converters,
+        )
         for prefix in prefixes:
             for cover in covers:
-                self._upsert_values(
-                    all_types=all_types,
-                    prefix=prefix_data,
-                    pk_types=pk_types,
-                    vector_type=vector_type,
-                    vector_dimension=vector_dimension,
-                    to_binary_string_converters=self.to_binary_string_converters,
-                )
                 try:
                     self._select(
                         vector_type=vector_type,
@@ -188,7 +188,7 @@ class TestVectorIndexNegative(VectorBase):
                                         order by {knn_func}({col_name}, $Target) {"DESC" if knn_func in targets["similarity"].values() else "ASC"}
                                         limit 10;
                                         """
-        return self.query(select_sql)
+        return self.query(select_sql, retry_settings=ydb.RetrySettings(max_retries=0))
 
     def drop_index(self):
         drop_index_sql = f"""

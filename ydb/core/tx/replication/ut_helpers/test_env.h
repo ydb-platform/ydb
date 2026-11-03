@@ -3,6 +3,7 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/protos/console_base.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -10,10 +11,49 @@
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/threading/future/async.h>
 
 namespace NKikimr::NReplication::NTestHelpers {
 
 class TFeatureFlags: public TTestFeatureFlagsHolder<TFeatureFlags> {
+};
+
+enum class ERuntimeMode {
+    RealThreads,
+    Simulated,
+};
+
+// Fail the first server-side CreateSession RPC while exercising the real SDK
+// GetSession path. Install before using a fresh proxy so its pool is empty.
+class TSessionCreationFault {
+public:
+    TSessionCreationFault(TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode status)
+        : Observer(runtime.AddObserver<NGRpcService::TEvProxyRuntimeEvent>(
+            [this, status](NGRpcService::TEvProxyRuntimeEvent::TPtr& ev) {
+                const auto method = ev->Get()->GetRpcMethodName();
+                if (method.EndsWith("/CreateSession")) {
+                    ++SessionRequests;
+                    if (SessionRequests == 1) {
+                        auto* request = dynamic_cast<NGRpcService::IRequestCtx*>(ev->Get());
+                        UNIT_ASSERT(request);
+                        request->RaiseIssue(NYql::TIssue("injected GetSession failure"));
+                        request->ReplyWithYdbStatus(status);
+                        ev.Reset();
+                    }
+                } else if (method.EndsWith("/CreateTable") || method.EndsWith("/DropTable") || method.EndsWith("/AlterTable")
+                    || method.EndsWith("/CopyTable") || method.EndsWith("/CopyTables") || method.EndsWith("/RenameTables")
+                    || method.EndsWith("/DescribeTable"))
+                {
+                    ++TableRequests;
+                }
+            }))
+    {}
+
+    ui64 SessionRequests = 0;
+    ui64 TableRequests = 0;
+
+private:
+    TTestActorRuntime::TEventObserverHolder Observer;
 };
 
 template <bool UseDatabase = true>
@@ -31,8 +71,10 @@ class TEnv {
         auto grpcPort = PortManager.GetPort();
 
         Server.EnableGRpc(grpcPort);
-        Server.SetupDefaultProfiles();
-        Client.InitRootScheme(DomainName);
+        RunCall([&] {
+            Server.SetupDefaultProfiles();
+            Client.InitRootScheme(DomainName);
+        });
 
         Endpoint = "localhost:" + ToString(grpcPort);
         Database = "/" + ToString(DomainName);
@@ -40,7 +82,11 @@ class TEnv {
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(Endpoint)
             .SetDatabase(Database);
-        Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+
+        // Synchronous endpoint discovery needs the simulated runtime to dispatch RPCs.
+        RunCall([&] {
+            Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+        });
 
         YdbProxy = Server.GetRuntime()->Register(CreateYdbProxy(
             Endpoint, UseDatabase ? Database : "", false /* ssl */, "" /* cert */, std::forward<Args>(args)...));
@@ -68,9 +114,25 @@ class TEnv {
     }
 
 public:
-    TEnv(bool init = true)
+    template <typename TFunc>
+    auto RunCall(TFunc&& func) {
+        if (GetRuntime().IsRealThreads()) {
+            return func();
+        }
+
+        TAdaptiveThreadPool threadPool;
+        threadPool.Start();
+        auto future = NThreading::Async(std::forward<TFunc>(func), threadPool);
+        // External calls progress in wall time, independently of simulated timers.
+        // Rely on the test runner's wall-clock timeout to catch hangs.
+        return GetRuntime().WaitFuture(std::move(future));
+    }
+
+    TEnv(bool init = true, ERuntimeMode runtimeMode = ERuntimeMode::RealThreads, ui32 nodeCount = 1)
         : Settings(Tests::TServerSettings(PortManager.GetPort(), {}, MakePqConfig())
             .SetDomainName(DomainName)
+            .SetNodeCount(nodeCount)
+            .SetUseRealThreads(runtimeMode == ERuntimeMode::RealThreads)
         )
         , Server(Settings)
         , Client(Settings)
@@ -143,7 +205,7 @@ public:
 
     template <typename... Args>
     auto Describe(Args&&... args) {
-        return Client.Ls(std::forward<Args>(args)...);
+        return RunCall([&] { return Client.Ls(std::forward<Args>(args)...); });
     }
 
     auto GetDescription(const TString& path) {
@@ -166,7 +228,19 @@ public:
 
     template <typename... Args>
     auto CreateTable(Args&&... args) {
-        return Client.CreateTable(std::forward<Args>(args)...);
+        return RunCall([&] { return Client.CreateTable(std::forward<Args>(args)...); });
+    }
+
+    void ConfigureTableProfiles(const NKikimrConfig::TTableProfilesConfig& profiles) {
+        TAutoPtr<NMsgBusProxy::TBusConsoleRequest> request(new NMsgBusProxy::TBusConsoleRequest());
+        auto& item = *request->Record.MutableConfigureRequest()->AddActions()->MutableAddConfigItem()->MutableConfigItem();
+        item.SetKind((ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem);
+        item.MutableConfig()->MutableTableProfilesConfig()->CopyFrom(profiles);
+
+        TAutoPtr<NBus::TBusMessage> reply;
+        UNIT_ASSERT_VALUES_EQUAL(Client.SyncCall(request, reply), NBus::MESSAGE_OK);
+        const auto& response = dynamic_cast<NMsgBusProxy::TBusConsoleResponse*>(reply.Get())->Record;
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
     }
 
     template <typename... Args>

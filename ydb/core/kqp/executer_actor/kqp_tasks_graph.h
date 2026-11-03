@@ -111,11 +111,12 @@ struct TStageInfoMeta {
     std::vector<TShardIdToInfoMap> PrunedPartitions;
     // Estimated row counts per table op (indexed as PrunedPartitions), from query optimizer statistics.
     std::vector<double> EstimatedRowsPerTableOp;
-    // Actual row counts per shard from SchemeShard, populated only for "heavy" reads.
-    THashMap<ui64 /* shardId */, ui64 /* rowCount */> PartitionRowCounts;
 
     // Used for single-partitioned stage and sequential inflight optimization.
     std::optional<TShardInfoWithId> VirtualPartition;
+
+    // This stage's share of the query-wide sampled shard concurrency budget.
+    ui32 SamplingMaxInFlightShards = 0;
 
     struct TIndexMeta {
         TTableId TableId;
@@ -467,6 +468,7 @@ public:
 
 private:
     void FillStages();
+    void AllocateSamplingShardBudget();
 
     // Groups the stage's already-placed tasks (stageInfo.Tasks) by their Meta.ExpectedNodeId. Used by Build* methods
     // that fill tasks per node. Every task must already have ExpectedNodeId set (done by the placement pipeline).
@@ -552,5 +554,6 @@ private:
     std::unique_ptr<TMaxTasksGraph> MaxTasksGraph;
     const bool UseKqpTasksGraphV2;
 };
+
 
 } // namespace NKikimr::NKqp

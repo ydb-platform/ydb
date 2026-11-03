@@ -1,4 +1,5 @@
 #include "blobstorage_pdisk_compaction_arbiter.h"
+#include "blobstorage_pdisk_chunk_tracker.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -112,6 +113,69 @@ Y_UNIT_TEST_SUITE(TCompactionArbiterTest) {
         UNIT_ASSERT_VALUES_EQUAL(env.Take(EArbiter::Pressure, 1, 0), 1);
     }
 
+    Y_UNIT_TEST(OwnerReserveStartsPressureBeforeSharedPoolAndKeepsHysteresis) {
+        struct TTrackedSpace : TCompactionArbiter::ISpace {
+            TChunkTracker Tracker;
+
+            TColor::E GetColor() const override {
+                return Tracker.GetCompactionPressureColor();
+            }
+
+            bool Fits(TOwner owner, ui32 chunks) const override {
+                double occupancy;
+                return Tracker.EstimateAllocationColor(owner, chunks, true, &occupancy) < TColor::BLACK;
+            }
+        } space;
+        TKeeperParams params {
+            .TotalChunks = 205 + 1000,
+            .ExpectedOwnerCount = 4,
+            .SpaceColorBorder = TColor::GREEN,
+        };
+        params.CommonStaticLogChunks = 0;
+        params.StaticGroupChunkReservePerMille = 500;
+        TString error;
+        UNIT_ASSERT_C(space.Tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+        const TOwner staticOwner = 101;
+        const TOwner dynamicOwner = 102;
+        auto id = [](EGroupConfigurationType type) {
+            return TVDiskID(TGroupID(type, 1, 1).GetRaw(), 1, TVDiskIdShort(0, 0, 0));
+        };
+        space.Tracker.AddOwner(staticOwner, id(EGroupConfigurationType::Static));
+        space.Tracker.AddOwner(dynamicOwner, id(EGroupConfigurationType::Dynamic));
+
+        TCompactionArbiter arbiter(TColor::YELLOW);
+        TCompactionArbiter::TOutbox out;
+        const auto actor = TEnv::Actor(dynamicOwner, 0);
+        arbiter.Handle(TEvCompactionBidder(EBidder::Register, dynamicOwner, 1, 0), actor, space, out);
+        while (space.GetColor() < TColor::PRE_ORANGE) {
+            UNIT_ASSERT_C(space.Tracker.TryAllocate(dynamicOwner, 1, error), error);
+            arbiter.OnSpaceChanged(space, out);
+        }
+        UNIT_ASSERT(space.Tracker.GetSharedPoolColor() < TColor::YELLOW);
+        UNIT_ASSERT(arbiter.IsPressure());
+        UNIT_ASSERT(arbiter.IsRoundOpen());
+
+        TEvCompactionBidder bid(EBidder::Bid, dynamicOwner, 1, 0);
+        bid.RoundId = arbiter.GetRoundId();
+        bid.HasCandidate = true;
+        bid.NeedChunks = 1;
+        bid.FreeChunks = 5;
+        arbiter.Handle(bid, actor, space, out);
+        UNIT_ASSERT(arbiter.GetLeaseHolder());
+
+        while (space.GetColor() > TColor::LIGHT_YELLOW) {
+            space.Tracker.Release(dynamicOwner, 1);
+            arbiter.OnSpaceChanged(space, out);
+        }
+        UNIT_ASSERT(arbiter.IsPressure());
+        while (space.GetColor() >= TColor::LIGHT_YELLOW) {
+            space.Tracker.Release(dynamicOwner, 1);
+            arbiter.OnSpaceChanged(space, out);
+        }
+        UNIT_ASSERT(!arbiter.IsPressure());
+        UNIT_ASSERT(arbiter.GetLeaseHolder()); // the in-flight job keeps its lease
+    }
+
     Y_UNIT_TEST(RoundWaitsForEveryBidderAndLeasesTheBestNet) {
         TEnv env;
         env.Register(1, 0);
@@ -185,6 +249,25 @@ Y_UNIT_TEST_SUITE(TCompactionArbiterTest) {
         // space freed elsewhere: the bid of the last round fits now
         env.Space.Free = 100;
         env.Arbiter.OnSpaceChanged(env.Space, env.Out);
+        UNIT_ASSERT(env.Leased(1, 0));
+    }
+
+    Y_UNIT_TEST(SpaceChangeRetriesAnEmptyBid) {
+        TEnv env;
+        env.Register(1, 0);
+        env.SetColor(TColor::ORANGE);
+        const ui64 round = env.Arbiter.GetRoundId();
+        env.BidNothing(1, 0, round);
+        UNIT_ASSERT(!env.Arbiter.IsRoundOpen());
+
+        // The first selector saw an insufficient (and possibly stale) budget and answered with no candidate.
+        // Once the space changes, ask it again instead of retaining that empty answer forever.
+        env.Clear();
+        env.Space.Free = 999;
+        env.Arbiter.OnSpaceChanged(env.Space, env.Out);
+        UNIT_ASSERT(env.Arbiter.IsRoundOpen());
+        UNIT_ASSERT(env.Arbiter.GetRoundId() > round);
+        env.Bid(1, 0, env.Arbiter.GetRoundId(), 1, 2);
         UNIT_ASSERT(env.Leased(1, 0));
     }
 

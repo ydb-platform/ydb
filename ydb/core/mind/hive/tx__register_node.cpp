@@ -26,7 +26,10 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         TNodeId nodeId = Local.NodeId();
         TNodeInfo& node = Self->GetNode(nodeId);
-        if (node.Local != Local) {
+        const bool localChanged = node.Local != Local;
+        const TActorId previousLocal = node.Local;
+        const auto previousState = node.GetVolatileState();
+        if (localChanged) {
             Self->RemoveNodeFromSegments(&node);
 
             TInstant now = TActivationContext::Now();
@@ -58,15 +61,19 @@ public:
             node.BecomeDisconnected();
             if (node.LastSeenServicedDomains != servicedDomains) {
                 // new tenant - new rules
-                node.SetDown(false);
-                node.SetFreeze(false);
+                if (!node.LastSeenServicedDomains.empty()) {
+                    Self->RecordNodeEvent(node, EHiveEventType::TenantChanged, EHiveEventReason::ServicedDomainsChanged,
+                        TStringBuilder() << "from=" << node.LastSeenServicedDomains << " to=" << servicedDomains);
+                }
+                node.SetDown(false, EHiveEventReason::TenantChanged);
+                node.SetFreeze(false, EHiveEventReason::TenantChanged);
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::Freeze>(false, false);
             }
             if (node.BecomeUpOnRestart) {
                 YDB_LOG_TRACE("THive::TTxRegisterNode::Execute node became up on restart",
                     {"logPrefix", GetLogPrefix()},
                     {"nodeId", Local.NodeId()});
-                node.SetDown(false);
+                node.SetDown(false, EHiveEventReason::BecomeUpOnRestart);
                 node.BecomeUpOnRestart = false;
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Down, Schema::Node::BecomeUpOnRestart>(false, false);
             }
@@ -74,12 +81,19 @@ public:
             node.ServicedDomains.swap(servicedDomains);
             node.LastSeenServicedDomains = node.ServicedDomains;
             node.Name = name;
+            TBridgePileId bridgePileId;
             if (Record.HasBridgePileId()) {
-                node.BridgePileId = TBridgePileId::FromProto(&Record, &decltype(Record)::GetBridgePileId);
-                Self->GetPile(node.BridgePileId).Nodes.insert(nodeId);
-                db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
+                bridgePileId = TBridgePileId::FromProto(&Record, &decltype(Record)::GetBridgePileId);
+            } else if (const auto implicitPileId = NBridge::GetImplicitPileId(Self->BridgeInfo.get())) {
+                // node is not bridge-capable yet (it is being restarted while converting the cluster into bridged
+                // one), but the cluster has single pile, so the node implicitly belongs to it
+                bridgePileId = implicitPileId;
             } else {
                 Y_ENSURE(!Self->BridgeInfo, "Running in bridge mode, but node " << nodeId << " has no pile");
+            }
+            if (bridgePileId) {
+                node.BridgePileId = bridgePileId;
+                db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::BridgePileId>(node.BridgePileId.GetLocalDb());
             }
 
             Self->UpdateNodeSegments(&node);
@@ -95,8 +109,7 @@ public:
             }
         }
         if (Record.HasSystemLocation() && Record.GetSystemLocation().HasDataCenter()) {
-            node.Location = TNodeLocation(Record.GetSystemLocation());
-            node.LocationAcquired = true;
+            node.SetLocation(TNodeLocation(Record.GetSystemLocation()), EHiveEventReason::RegisterNode);
         }
         node.TabletAvailability.clear();
         for (const NKikimrLocal::TTabletAvailability& tabletAvailability : Record.GetTabletAvailability()) {
@@ -107,7 +120,18 @@ public:
                 itAvail->second.UpdateRestriction(itRestr->second);
             }
         }
-        node.BecomeConnecting();
+        if (node.BecomeConnecting() || localChanged) {
+            TStringBuilder details;
+            details << "previousState=" << TNodeInfo::EVolatileStateName(previousState);
+            if (localChanged && previousLocal) {
+                details << " previousLocal=" << previousLocal;
+            }
+            details << " domains=" << node.ServicedDomains
+                << " location=" << GetLocationString(node.Location)
+                << " tabletTypesAvailable=" << node.TabletAvailability.size();
+            Self->RecordNodeEvent(node, EHiveEventType::Registered,
+                localChanged ? EHiveEventReason::NewLocalActor : EHiveEventReason::SameLocalActor, std::move(details));
+        }
         return true;
     }
 

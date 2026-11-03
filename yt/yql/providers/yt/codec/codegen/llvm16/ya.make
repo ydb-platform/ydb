@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCDIR(yt/yql/providers/yt/codec/codegen/llvm16)
 

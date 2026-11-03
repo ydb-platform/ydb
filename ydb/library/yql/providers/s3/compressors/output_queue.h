@@ -17,7 +17,7 @@ public:
 
     virtual void Push(TString&& item) = 0;
 
-    virtual TString Pop() = 0; // return empty in case of too small and not sealed.
+    virtual TString Pop() = 0;   // return empty in case of too small and not sealed.
 
     virtual void Seal() = 0;
 
@@ -30,4 +30,4 @@ public:
     virtual size_t Volume() const = 0;
 };
 
-}
+}   // namespace NYql

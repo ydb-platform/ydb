@@ -10,32 +10,6 @@
 
 #include "avx2-emu-funcs.hpp"
 
-/*
- * Assumes ymm is random and performs a full sorting network defined in
- * https://en.wikipedia.org/wiki/Bitonic_sorter#/media/File:BitonicSort.svg
- */
-template <typename vtype, typename reg_t = typename vtype::reg_t>
-X86_SIMD_SORT_INLINE reg_t sort_ymm_64bit(reg_t ymm)
-{
-    const typename vtype::opmask_t oxAA
-            = _mm256_set_epi64x(0xFFFFFFFFFFFFFFFF, 0, 0xFFFFFFFFFFFFFFFF, 0);
-    const typename vtype::opmask_t oxCC
-            = _mm256_set_epi64x(0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF, 0, 0);
-    ymm = cmp_merge<vtype>(
-            ymm,
-            vtype::template permutexvar<SHUFFLE_MASK(2, 3, 0, 1)>(ymm),
-            oxAA);
-    ymm = cmp_merge<vtype>(
-            ymm,
-            vtype::template permutexvar<SHUFFLE_MASK(0, 1, 2, 3)>(ymm),
-            oxCC);
-    ymm = cmp_merge<vtype>(
-            ymm,
-            vtype::template permutexvar<SHUFFLE_MASK(2, 3, 0, 1)>(ymm),
-            oxAA);
-    return ymm;
-}
-
 struct avx2_64bit_swizzle_ops;
 
 template <>
@@ -80,6 +54,10 @@ struct avx2_vector<int64_t> {
     {
         auto mask = ((0x1ull << num_to_read) - 0x1ull);
         return convert_int_to_avx2_mask_64bit(mask);
+    }
+    static opmask_t convert_int_to_mask(uint64_t intMask)
+    {
+        return convert_int_to_avx2_mask_64bit(intMask);
     }
     static ymmi_t seti(int64_t v1, int64_t v2, int64_t v3, int64_t v4)
     {
@@ -207,7 +185,7 @@ struct avx2_vector<int64_t> {
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_ymm_64bit<avx2_vector<type_t>>(x);
+        return sort_reg_4lanes<avx2_vector<type_t>>(x);
     }
     static reg_t cast_from(__m256i v)
     {
@@ -264,6 +242,10 @@ struct avx2_vector<uint64_t> {
     {
         auto mask = ((0x1ull << num_to_read) - 0x1ull);
         return convert_int_to_avx2_mask_64bit(mask);
+    }
+    static opmask_t convert_int_to_mask(uint64_t intMask)
+    {
+        return convert_int_to_avx2_mask_64bit(intMask);
     }
     static ymmi_t seti(int64_t v1, int64_t v2, int64_t v3, int64_t v4)
     {
@@ -389,7 +371,7 @@ struct avx2_vector<uint64_t> {
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_ymm_64bit<avx2_vector<type_t>>(x);
+        return sort_reg_4lanes<avx2_vector<type_t>>(x);
     }
     static reg_t cast_from(__m256i v)
     {
@@ -413,8 +395,7 @@ struct avx2_vector<uint64_t> {
 static_assert(sizeof(size_t) == sizeof(uint64_t),
               "Size of size_t and uint64_t are not the same");
 template <>
-struct avx2_vector<size_t> : public avx2_vector<uint64_t> {
-};
+struct avx2_vector<size_t> : public avx2_vector<uint64_t> {};
 #endif
 
 template <>
@@ -459,6 +440,10 @@ struct avx2_vector<double> {
     {
         auto mask = ((0x1ull << num_to_read) - 0x1ull);
         return convert_int_to_avx2_mask_64bit(mask);
+    }
+    static opmask_t convert_int_to_mask(uint64_t intMask)
+    {
+        return convert_int_to_avx2_mask_64bit(intMask);
     }
     static int32_t convert_mask_to_int(opmask_t mask)
     {
@@ -593,7 +578,7 @@ struct avx2_vector<double> {
     }
     static reg_t sort_vec(reg_t x)
     {
-        return sort_ymm_64bit<avx2_vector<type_t>>(x);
+        return sort_reg_4lanes<avx2_vector<type_t>>(x);
     }
     static reg_t cast_from(__m256i v)
     {

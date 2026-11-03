@@ -357,7 +357,9 @@ Pear,15,33'''
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
 
         error_message = str(client.describe_query(query_id).result)
-        assert ("Query failed with code BAD_REQUEST" in error_message) and ("Parquet magic bytes not found in footer." in error_message)
+        assert ("Query failed with code BAD_REQUEST" in error_message) and (
+            "Parquet magic bytes not found in footer." in error_message
+        )
 
     @yq_v2
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -374,7 +376,9 @@ Pear,15,33'''
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
 
-        s3_client.put_object(Body="invalid uncompressed json file", Bucket='bbucket', Key='file.json', ContentType='text/plain')
+        s3_client.put_object(
+            Body="invalid uncompressed json file", Bucket='bbucket', Key='file.json', ContentType='text/plain'
+        )
 
         kikimr.control_plane.wait_bootstrap(1)
         storage_connection_name = unique_prefix + "badbucket"
@@ -390,9 +394,7 @@ Pear,15,33'''
 
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-        assert "Query failed with code BAD_REQUEST" in str(
-            client.describe_query(query_id).result
-        )
+        assert "Query failed with code BAD_REQUEST" in str(client.describe_query(query_id).result)
 
     @yq_v1
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
@@ -717,7 +719,9 @@ Pear,15,33'''
         client.wait_query_status(query_id, fq.QueryMeta.COMPLETED)
 
         describe_string = "{}".format(client.describe_query(query_id).result)
-        assert "Runtime listing is not allowed for federated queries, pragma value was ignored" in describe_string, describe_string
+        assert (
+            "Runtime listing is not allowed for federated queries, pragma value was ignored" in describe_string
+        ), describe_string
         assert len(client.get_result_data(query_id).result.result_set.rows) == 3
 
     @yq_v1
@@ -798,9 +802,7 @@ Banana,3'''
 
     @yq_v1
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
-    def test_hopping_some_tablerow_flatten_alias_projection_yq5620(
-        self, kikimr, s3, client, unique_prefix
-    ):
+    def test_hopping_some_tablerow_flatten_alias_projection_yq5620(self, kikimr, s3, client, unique_prefix):
         self.init_topics("pq_yq5620_hopping")
         bucket_name = "yq5620"
         resource = boto3.resource(

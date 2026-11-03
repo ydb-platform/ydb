@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     local_session.cpp
@@ -14,6 +14,8 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/monlib/dynamic_counters
+    library/cpp/time_provider
     ydb/library/actors/core
     library/cpp/retry
     ydb/core/base
@@ -31,8 +33,6 @@ PEERDIR(
 )
 
 GENERATE_ENUM_SERIALIZATION(ydb.h)
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

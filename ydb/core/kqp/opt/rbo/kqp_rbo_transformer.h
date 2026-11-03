@@ -76,10 +76,12 @@ private:
     TStatus ContinueOptimizations(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx);
     bool IsSuitableToRequestStatistics();
     void CollectTablesAndColumnsNames(NYql::TExprContext& ctx);
-    void CollectTablesAndColumnsNames(const TIntrusivePtr<IOperator>& op);
-    void CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props);
-    void CollectJoinKeysColumns(const TIntrusivePtr<TOpJoin>& join, const TPhysicalOpProps& props);
-    bool IsSuitableToCollectStatistics(const TIntrusivePtr<IOperator>& op) const;
+    void CollectTablesAndColumnsNames(IOperator* op, const TColumnLineage& lineage);
+    void CollectTablesAndColumnsNames(const TExpression& expr, const IOperator& input, const TColumnLineage& lineage);
+    void CollectJoinKeysColumns(TOpJoin* join, const TColumnLineage& lineage);
+    void CollectJoinKeysTuple(const TVector<const TColumnLineageEntry*>& joinKeys);
+    std::optional<TVector<TString>> FindEqHeightHistogramTuple(const TString& tableName, const THashSet<TString>& columns) const;
+    bool IsSuitableToCollectStatistics(IOperator* op) const;
     void ApplyColumnStatistics();
     void InitializeRBOOptimizationStages();
 
@@ -99,8 +101,19 @@ private:
     NActors::TActorSystem* ActorSystem;
     std::shared_ptr<TColumnStatisticsSharedState> SharedState;
     NThreading::TFuture<void> ColumnStatisticsReadiness;
+
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
+    THashMap<TString, THashSet<TString>> SimpleColumnsByTableName;
+    THashMap<TString, THashMap<TString, TVector<TString>>> EqHeightHistTuplesByTableName;
+
+    THashMap<TString, THashSet<TString>> RequestedCMColumns;
+    THashMap<TString, THashSet<TString>> RequestedHistColumns;
+    THashMap<TString, THashSet<TString>> RequestedSimpleColumns;
+    THashMap<TString, THashSet<TString>> RequestedEqHeightTuples;
+
+    // Flag to reset the check of original type for multiple statement queries
+    bool ResetTypes = false;
 
     TVector<TIntrusivePtr<TOpRoot>> Roots;
     TRuleBasedOptimizer RBO;

@@ -1,5 +1,6 @@
 from __future__ import annotations
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.olap.lib.workload_result import WorkloadRunResult
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from .upload import UploadSuiteBase
 import logging
@@ -64,7 +65,7 @@ class ImportFileCsvBase(UploadSuiteBase):
                     logging.warning(f'Failed to parse CPU usage information: {e}')
 
     @classmethod
-    def validate(cls, result: YdbCliHelper.WorkloadRunResult):
+    def validate(cls, result: WorkloadRunResult):
         select_command = yatest.common.execute(YdbCliHelper.get_cli_command() + ['sql', '-s', f'SELECT COUNT (*) AS count FROM `{cls.table_path}`', '--format', 'json-unicode'])
         select_command_result = select_command.stdout.decode('utf-8')
         count = json.loads(select_command_result)["count"]
@@ -73,7 +74,7 @@ class ImportFileCsvBase(UploadSuiteBase):
         result.add_stat(cls.query_name, 'rows_in_table', count)
 
     @classmethod
-    def save_result_additional_info(cls, result: YdbCliHelper.WorkloadRunResult):
+    def save_result_additional_info(cls, result: WorkloadRunResult):
         import_dir = os.path.join(cls.get_external_path(), 'import', cls.table_name)
         file_size = sum(
             os.path.getsize(os.path.join(import_dir, f))

@@ -15,11 +15,21 @@ namespace NYql {
 
 namespace NDqProto {
 
+class TDqTask;
 enum ECheckpointingMode : int;
 
 } // namespace NDqProto
 
 namespace NDq {
+
+struct TCheckpointContext : public TThrRefBase {
+    // Present while collecting the task snapshot, including sink state.
+    TMaybe<NDqProto::TCheckpoint> PendingSaveCheckpoint;
+
+    // The latest checkpoint committed by this task, including its local sinks.
+    // This does not imply that every other task has finished committing.
+    TMaybe<NDqProto::TCheckpoint> LastCommittedCheckpoint;
+};
 
 /*
 
@@ -134,13 +144,14 @@ public:
         ComputeActorCurrentStateVersion = 2,
     };
 
-    TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, TDqTaskSettings task, ICallbacks* computeActor);
+    TDqComputeActorCheckpoints(const NActors::TActorId& owner, const TTxId& txId, TDqTaskSettings task, ICallbacks* computeActor, TIntrusivePtr<TCheckpointContext> checkpointContext);
 
     // Public API methods, which may be called from compute actor
 
     [[nodiscard]] bool HasPendingCheckpoint() const;
     bool ComputeActorStateSaved() const;
     NDqProto::TCheckpoint GetPendingCheckpoint() const;
+    TIntrusiveConstPtr<TCheckpointContext> GetCheckpointContext() const;
 
     // Checkpoint saving.
     void Init(NActors::TActorId computeActorId, NActors::TActorId checkpointsId);
@@ -199,6 +210,7 @@ private:
     TMaybe<TCheckpointCoordinatorId> CheckpointCoordinator;
     TPendingStateSavingCheckpoint PendingSaveStateCheckpoint;
     TPendingCommitCheckpoint PendingCommitCheckpoint;
+    const TIntrusivePtr<TCheckpointContext> CheckpointContext;
     TRetryEventsQueue EventsQueue;
 
     // Restore
@@ -208,6 +220,10 @@ private:
 
     bool SlowCheckpointsMonitoringStarted = false;
 };
+
+bool IsInfiniteSourceType(const TString& sourceType);
+
+NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NDqProto::TDqTask& task);
 
 NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task);
 

@@ -27,7 +27,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_LEAKY_GLOBAL(std::unique_ptr<NThreading::TEvent>, Latch);
+static YT_DEFINE_LEAKY_GLOBAL(std::unique_ptr<TEvent>, Latch);
 static YT_DEFINE_LEAKY_GLOBAL(std::atomic<int>, ConcurrentCalls);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -530,7 +530,7 @@ void ReleaseLatchedCalls()
 void MaybeInitLatch()
 {
     if (!Latch()) {
-        Latch() = std::make_unique<NThreading::TEvent>();
+        Latch() = std::make_unique<TEvent>();
     }
 }
 

@@ -13,7 +13,8 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.city.values" : "MSK,SPB",
                 "storage.location.template" : "/${city}/"
             }
-        )", {"city"});
+        )",
+            { "city" });
         const auto& result = generator->GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(result.Enabled, true);
         UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "${city}/");
@@ -34,7 +35,8 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.city.values" : " MSK ,  SPB   ",
                 "storage.location.template" : "/${city}/"
             }
-        )", {"city"});
+        )",
+            { "city" });
         const auto& result = generator->GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(result.Enabled, true);
         UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "${city}/");
@@ -55,7 +57,8 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.enabled.values" : "MSK,SPB",
                 "storage.location.template" : "/${enabled}/"
             }
-        )", {"enabled"}));
+        )",
+            { "enabled" }));
     }
 
     Y_UNIT_TEST(InvalidPartitioningTemplate) {
@@ -66,7 +69,8 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.city.values" : "MSK,SPB",
                 "storage.location.template" : "/${city}/"
             }
-        )", {"aba"}), yexception, "Template ${city}/ must include ${aba}");
+        )",
+                                           { "aba" }), yexception, "Template ${city}/ must include ${aba}");
     }
 
     Y_UNIT_TEST(InvalidProjectionTemplate) {
@@ -77,18 +81,21 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.city.values" : "MSK,SPB",
                 "storage.location.template" : "/${device_id}/"
             }
-        )", {"city"}), yexception, "Template ${device_id}/ must include ${city}");
+        )",
+                                           { "city" }), yexception, "Template ${device_id}/ must include ${city}");
     }
 
     Y_UNIT_TEST(InvalidTemplate) {
-        UNIT_ASSERT_EXCEPTION_CONTAINS(CreatePathGenerator(R"(
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            CreatePathGenerator(R"(
             {
                 "projection.enabled" : true,
                 "projection.city.type" : "enum",
                 "projection.city.values" : "MSK,SPB",
                 "storage.location.template" : "/${city}/${device_id}/"
             }
-        )", {"city"}), yexception, "Partitioned by column named device_id does not exist for template ${city}/${device_id}/");
+        )",
+                { "city" }), yexception, "Partitioned by column named device_id does not exist for template ${city}/${device_id}/");
     }
 
     Y_UNIT_TEST(StartSubstition) {
@@ -101,7 +108,8 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.device_id.values" : "3f75",
                 "storage.location.template" : "/${city}/${device_id}/"
             }
-        )", {"city", "device_id"});
+        )",
+            { "city", "device_id" });
         const auto& result = generator->GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(result.Enabled, true);
         UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "${city}/${device_id}/");
@@ -131,7 +139,8 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.city.values" : null,
                 "storage.location.template" : "/${city}/"
             }
-        )", {"city"}), yexception, "The values must be a string");
+        )",
+                                           { "city" }), yexception, "The values must be a string");
     }
 
     Y_UNIT_TEST(SuccessParseInteger) {
@@ -143,7 +152,8 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.id.max" : "6",
                 "storage.location.template" : "/${id}/"
             }
-        )", {"id"});
+        )",
+            { "id" });
         const auto& result = generator->GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(result.Enabled, true);
         UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "${id}/");
@@ -164,7 +174,8 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.id.max" : "6",
                 "storage.location.template" : "/${id}/"
             }
-        )", {"id"});
+        )",
+            { "id" });
         const auto& result = generator->GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(result.Enabled, false);
         UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "${id}/");
@@ -184,8 +195,9 @@ Y_UNIT_TEST_SUITE(TParseTests) {
                 "projection.city.values" : null,
                 "storage.location.template" : "/${city}/"
             }
-        )", {"city"}), yexception, "projection error: ");
+        )",
+                                           { "city" }), yexception, "projection error: ");
     }
 }
 
-}
+}   // namespace NYql::NPathGenerator

@@ -43,14 +43,13 @@ BELONGS ya.make
         include/libssh2_publickey.h [4:35]
         include/libssh2_sftp.h [4:35]
         src/agent.c [6:37]
-        src/agent.h [8:39]
         src/agent_win.c [6:37]
-        src/channel.c [7:38]
+        src/channel.c [6:37]
         src/channel.h [7:38]
         src/comp.c [5:36]
         src/comp.h [5:36]
         src/crypt.c [5:36]
-        src/crypto.h [7:38]
+        src/crypto.h [8:39]
         src/global.c [5:36]
         src/hostkey.c [5:36]
         src/keepalive.c [4:35]
@@ -58,11 +57,11 @@ BELONGS ya.make
         src/knownhost.c [5:36]
         src/libssh2_priv.h [8:39]
         src/mac.c [4:35]
-        src/mac.h [5:36]
+        src/mac.h [6:37]
         src/misc.c [6:37]
-        src/misc.h [7:38]
-        src/openssl.c [7:38]
-        src/openssl.h [8:39]
+        src/misc.h [6:37]
+        src/openssl.c [6:37]
+        src/openssl.h [7:38]
         src/packet.c [7:38]
         src/packet.h [7:38]
         src/pem.c [5:36]
@@ -76,7 +75,9 @@ BELONGS ya.make
         src/transport.h [7:38]
         src/userauth.c [6:37]
         src/userauth.h [7:38]
-        src/version.c [3:34]
+        src/userauth_kbd_packet.c [4:35]
+        src/userauth_kbd_packet.h [4:35]
+        src/version.c [4:35]
 
 KEEP     SSH-short            0c7eacf58b0d044ca0f018097e010ee4
 BELONGS ya.make
@@ -87,7 +88,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : https://spdx.org/licenses/SSH-short
     Files with this license:
-        src/agent_win.c [81:85]
+        src/agent_win.c [68:72]
 
 KEEP     BSD-2-Clause         10ff882f46a69d240bf0825aa388b36e
 BELONGS ya.make
@@ -98,7 +99,42 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
     Files with this license:
-        src/agent_win.c [90:108]
+        src/agent_win.c [77:95]
+
+KEEP     BSD-3-Clause         15998ea282d57c57446ae7296c7e3029
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/blowfish.c [10:30]
+
+KEEP     BSD-3-Clause         16b8e1b6918b73e2559dee9f4c7fe0c2
+BELONGS ya.make
+    License text:
+        \# SPDX-License-Identifier: BSD-3-Clause
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        REUSE.toml [3:3]
+
+KEEP     MIT                  3158a75221c70090b7e127aa7c980dd8
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        src/bcrypt_pbkdf.c [17:17]
 
 KEEP     BSD-2-Clause         5910ab87b025a22bc77e66e1e3b30815
 BELONGS ya.make
@@ -109,7 +145,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
     Files with this license:
-        src/agent_win.c [115:134]
+        src/agent_win.c [102:121]
 
 KEEP     Public-Domain        5fe1de9f547f6c5b9a48e6b2a9434fa5
 BELONGS ya.make
@@ -120,7 +156,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain-disclaimer.LICENSE
     Files with this license:
-        src/misc.c [613:621]
+        src/misc.c [723:731]
 
 KEEP     BSD-3-Clause         84641c88058eeb909ee6556511fd471c
 BELONGS ya.make
@@ -136,6 +172,21 @@ BELONGS ya.make
         README [4:5]
         README.md [3:4]
 
+KEEP     SAX-PD-2.0           908c70c8c854eaefd104c5e0fd74527d
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: SAX-PD-2.0
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-spdx
+        Score           : 100.00
+        Match type      : TAG
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-spdx.LICENSE
+    Files with this license:
+        src/chacha.c [7:7]
+        src/chacha.h [9:9]
+        src/poly1305.c [6:6]
+        src/poly1305.h [8:8]
+
 KEEP     BSD-3-Clause         b2a6cb0575a14e3bd41a17c0ffa26b78
 BELONGS ya.make
     License text:
@@ -148,17 +199,83 @@ BELONGS ya.make
     Files with this license:
         README.md [10:10]
 
-KEEP     BSD-4-Clause         c1cf560fc014569f1814c9828bfb4c4b
+KEEP     BSD-3-Clause         bcd96bf495243cd22767952d056c373c
 BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
+    License text:
+         * SPDX-License-Identifier: BSD-3-Clause
     Scancode info:
-        Original SPDX id: BSD-4-Clause
-        Score           : 99.12
-        Match type      : TEXT
-        Links           : http://www.xfree86.org/3.3.6/COPYRIGHT2.html, http://www.xfree86.org/3.3.6/COPYRIGHT2.html#6, https://spdx.org/licenses/BSD-4-Clause
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        src/blf.h [10:33]
-        src/blowfish.c [9:32]
+        include/libssh2.h [39:39]
+        include/libssh2_publickey.h [45:45]
+        include/libssh2_sftp.h [37:37]
+        src/agent.c [39:39]
+        src/blowfish.c [32:32]
+        src/channel.c [39:39]
+        src/channel.h [40:40]
+        src/comp.c [38:38]
+        src/comp.h [38:38]
+        src/crypt.c [38:38]
+        src/crypto.c [3:3]
+        src/crypto.h [41:41]
+        src/crypto_config.h [3:3]
+        src/global.c [38:38]
+        src/hostkey.c [38:38]
+        src/keepalive.c [37:37]
+        src/kex.c [38:38]
+        src/knownhost.c [38:38]
+        src/libssh2_priv.h [41:41]
+        src/libssh2_setup.h [3:3]
+        src/mac.c [37:37]
+        src/mac.h [39:39]
+        src/misc.c [39:39]
+        src/misc.h [39:39]
+        src/openssl.c [39:39]
+        src/openssl.h [40:40]
+        src/packet.c [40:40]
+        src/packet.h [40:40]
+        src/pem.c [38:38]
+        src/publickey.c [38:38]
+        src/scp.c [38:38]
+        src/session.c [39:39]
+        src/session.h [41:41]
+        src/sftp.c [39:39]
+        src/sftp.h [40:40]
+        src/transport.c [38:38]
+        src/transport.h [42:42]
+        src/userauth.c [39:39]
+        src/userauth.h [40:40]
+        src/userauth_kbd_packet.c [37:37]
+        src/userauth_kbd_packet.h [37:37]
+        src/version.c [37:37]
+
+KEEP     BSD-3-Clause         d6665507d1f90146636772d0f47d9ffb
+BELONGS ya.make
+    License text:
+        SPDX-License-Identifier = "BSD-3-Clause"
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        REUSE.toml [56:56]
+
+KEEP     Public-Domain        e42312bd4d922e8537604e66f87ecbcf
+BELONGS ya.make
+    License text:
+         * Public domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        src/chacha.c [4:4]
+        src/chacha.h [6:6]
 
 KEEP     ISC                  e6a382fc7564fdd1a5e46b2d97b3221f
 BELONGS ya.make
@@ -170,3 +287,50 @@ BELONGS ya.make
         Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
     Files with this license:
         src/bcrypt_pbkdf.c [5:15]
+        src/cipher-chachapoly.c [6:16]
+        src/cipher-chachapoly.h [6:16]
+
+KEEP     Public-Domain        f79f3a8930281d502ee0c6a10d3bfcbf
+BELONGS ya.make
+    License text:
+         * Public Domain poly1305 from Andrew Moon
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        src/poly1305.c [2:2]
+        src/poly1305.h [4:4]
+
+KEEP     BSD-2-Clause         fdd6e4d744cbc81401a75a034279b672
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: BSD-2-Clause
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        src/cipher-chachapoly.c [18:18]
+        src/cipher-chachapoly.h [18:18]
+
+KEEP     BSD-3-Clause AND BSD-2-Clause ff935319c808b6cbfe765dc62fa0e79c
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: BSD-3-Clause AND BSD-2-Clause
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        src/agent_win.c [39:39]
+    Scancode info:
+        Original SPDX id: BSD-2-Clause
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/bsd-license.php, http://www.opensource.org/licenses/BSD-2-Clause, https://spdx.org/licenses/BSD-2-Clause
+    Files with this license:
+        src/agent_win.c [39:39]

@@ -37,6 +37,7 @@ class TQuotaRecord {
     TString Name;
     std::optional<TVDiskID> VDiskId;
     ui32 Weight = 1;
+    ui32 GroupSizeInUnits = 0;
 public:
     void SetName(const TString& name) {
         Name = name;
@@ -48,6 +49,14 @@ public:
 
     void SetWeight(ui32 v) {
         Weight = v;
+    }
+
+    void SetGroupSizeInUnits(ui32 v) {
+        GroupSizeInUnits = v;
+    }
+
+    ui32 GetGroupSizeInUnits() const {
+        return GroupSizeInUnits;
     }
 
     i64 GetUsed() const {
@@ -82,6 +91,7 @@ public:
         str << " Free# " << AtomicGet(Free);
         str << " Used# " << GetUsed();
         str << " Weight# " << GetWeight();
+        str << " GroupSizeInUnits# " << GetGroupSizeInUnits();
         double occupancy;
         str << " CurrentColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(EstimateSpaceColor(0, &occupancy)) << "\n";
         str << " Occupancy# " << occupancy << "\n";

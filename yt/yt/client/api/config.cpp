@@ -162,6 +162,8 @@ void TDynamicJournalWriterConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("prefer_local_host", &TThis::PreferLocalHost)
         .Optional();
+    registrar.Parameter("try_disjoint_preallocated_session_nodes", &TThis::TryDisjointPreallocatedSessionNodes)
+        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -183,6 +185,7 @@ void TJournalWriterConfig::ApplyDynamicInplace(const TDynamicJournalWriterConfig
     UpdateYsonStructField(MaxFlushRowCount, dynamicConfig->MaxFlushRowCount);
     UpdateYsonStructField(MaxFlushDataSize, dynamicConfig->MaxFlushDataSize);
     UpdateYsonStructField(PreferLocalHost, dynamicConfig->PreferLocalHost);
+    UpdateYsonStructField(TryDisjointPreallocatedSessionNodes, dynamicConfig->TryDisjointPreallocatedSessionNodes);
 }
 
 void TJournalWriterConfig::Register(TRegistrar registrar)
@@ -214,6 +217,8 @@ void TJournalWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("dont_seal", &TThis::DontSeal)
         .Default(false);
     registrar.Parameter("dont_preallocate", &TThis::DontPreallocate)
+        .Default(false);
+    registrar.Parameter("try_disjoint_preallocated_session_nodes", &TThis::TryDisjointPreallocatedSessionNodes)
         .Default(false);
     registrar.Parameter("open_delay", &TThis::OpenDelay)
         .Default();

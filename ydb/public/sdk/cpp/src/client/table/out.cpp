@@ -58,6 +58,14 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TVectorIndexSettings::EVectorType, stream, va
             return "float16";
         case NYdb::NTable::TVectorIndexSettings::EVectorType::BFloat16:
             return "bfloat16";
+        case NYdb::NTable::TVectorIndexSettings::EVectorType::Float8E4M3:
+            return "float8_e4m3";
+        case NYdb::NTable::TVectorIndexSettings::EVectorType::Float8E5M2:
+            return "float8_e5m2";
+        case NYdb::NTable::TVectorIndexSettings::EVectorType::Uint4:
+            return "uint4";
+        case NYdb::NTable::TVectorIndexSettings::EVectorType::Int4:
+            return "int4";
         case NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8:
             return "uint8";
         case NYdb::NTable::TVectorIndexSettings::EVectorType::Int8:
@@ -87,6 +95,7 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TKMeansTreeSettings, stream, value) {
         ", levels: " << value.Levels << 
         ", overlap_clusters: " << value.OverlapClusters << 
         ", overlap_ratio: " << value.OverlapRatio << 
+        ", autoupdate: " << value.AutoUpdate.value_or(true) <<
         " }";
 }
 

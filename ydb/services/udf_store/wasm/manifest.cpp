@@ -1,16 +1,16 @@
 #include "manifest.h"
-#include <ydb/public/lib/udf/manifest/manifest.h>
 #include "registry_helpers.h"
 
-#include <library/cpp/json/json_reader.h>
-#include <yql/essentials/ast/yql_type_string.h>
-#include <yql/essentials/ast/yql_expr.h>
-#include <util/string/cast.h>
-#include <util/string/strip.h>
+#include <ydb/public/lib/udf/manifest/manifest.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
+#include <util/string/strip.h>
+#include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/ast/yql_type_string.h>
 
 #include <array>
 #include <memory>
@@ -30,8 +30,7 @@ using namespace NYql;
 
 // ParseType produces quoted atoms/lists for type parameters and members.
 const TAstNode& Unquote(const TAstNode& node) {
-    Y_ENSURE(node.IsList() && node.GetChildrenCount() == 2
-        && node.GetChild(0)->IsAtom() && node.GetChild(0)->GetContent() == "quote");
+    Y_ENSURE(node.IsList() && node.GetChildrenCount() == 2 && node.GetChild(0)->IsAtom() && node.GetChild(0)->GetContent() == "quote");
     return *node.GetChild(1);
 }
 
@@ -45,6 +44,7 @@ void ValidateTypeLexicalNesting(TStringBuf type) {
         char Opening = 0;
         ui32 Arrows = 0;
     };
+
     std::array<TFrame, MaxManifestLexicalNesting + 1> frames;
     size_t nesting = 0;
     size_t total = 0;
@@ -60,8 +60,7 @@ void ValidateTypeLexicalNesting(TStringBuf type) {
         } else if (c == '\'') {
             quoted = true;
         } else if (c == '<' || c == '(' || c == '[') {
-            Y_ENSURE(total < MaxManifestLexicalNesting,
-                "Type lexical nesting exceeds " << MaxManifestLexicalNesting << " levels");
+            Y_ENSURE(total < MaxManifestLexicalNesting, "Type lexical nesting exceeds " << MaxManifestLexicalNesting << " levels");
             frames[++nesting].Opening = c;
             frames[nesting].Arrows = 0;
             ++total;
@@ -73,9 +72,7 @@ void ValidateTypeLexicalNesting(TStringBuf type) {
             }
             if (nesting) {
                 const char opening = frames[nesting].Opening;
-                if ((c == '>' && opening == '<') ||
-                    (c == ')' && opening == '(') ||
-                    (c == ']' && opening == '[')) {
+                if ((c == '>' && opening == '<') || (c == ')' && opening == '(') || (c == ']' && opening == '[')) {
                     total -= 1 + frames[nesting].Arrows;
                     --nesting;
                 }
@@ -85,8 +82,7 @@ void ValidateTypeLexicalNesting(TStringBuf type) {
             frames[nesting].Arrows = 0;
         } else if (c == '-' && i + 1 < type.size() && type[i + 1] == '>') {
             ++i;
-            Y_ENSURE(total < MaxManifestLexicalNesting,
-                "Type lexical nesting exceeds " << MaxManifestLexicalNesting << " levels");
+            Y_ENSURE(total < MaxManifestLexicalNesting, "Type lexical nesting exceeds " << MaxManifestLexicalNesting << " levels");
             ++frames[nesting].Arrows;
             ++total;
         }
@@ -102,13 +98,19 @@ TParsedType ConvertType(const TAstNode& ast, TExprContext& ctx, ui32 depth = 0) 
     if (kind == "DataType") {
         const TString name(Unquote(*ast.GetChild(1)).GetContent());
         static const THashMap<TString, EUdfValueType> Leaves = {
-            {"Bool", EUdfValueType::Boolean}, {"Int32", EUdfValueType::Int32},
-            {"Uint32", EUdfValueType::Uint32}, {"Int64", EUdfValueType::Int64},
-            {"Uint64", EUdfValueType::Uint64}, {"Float", EUdfValueType::Float},
-            {"Double", EUdfValueType::Double}, {"String", EUdfValueType::String},
-            {"Utf8", EUdfValueType::Utf8}, {"Date", EUdfValueType::Date},
-            {"Datetime", EUdfValueType::Datetime}, {"Timestamp", EUdfValueType::Timestamp},
-            {"Decimal", EUdfValueType::Decimal},
+            { "Bool", EUdfValueType::Boolean },
+            { "Int32", EUdfValueType::Int32 },
+            { "Uint32", EUdfValueType::Uint32 },
+            { "Int64", EUdfValueType::Int64 },
+            { "Uint64", EUdfValueType::Uint64 },
+            { "Float", EUdfValueType::Float },
+            { "Double", EUdfValueType::Double },
+            { "String", EUdfValueType::String },
+            { "Utf8", EUdfValueType::Utf8 },
+            { "Date", EUdfValueType::Date },
+            { "Datetime", EUdfValueType::Datetime },
+            { "Timestamp", EUdfValueType::Timestamp },
+            { "Decimal", EUdfValueType::Decimal },
         };
         const auto* leaf = Leaves.FindPtr(name);
         Y_ENSURE(leaf, "Unsupported bridge type: " << name);
@@ -130,9 +132,8 @@ TParsedType ConvertType(const TAstNode& ast, TExprContext& ctx, ui32 depth = 0) 
         auto item = ConvertType(*ast.GetChild(1), ctx, depth + 1);
         node->Item = item.Node;
         node->Kind = kind == "OptionalType" ? TWasmTypeNode::EKind::Optional : TWasmTypeNode::EKind::List;
-        annotation = kind == "OptionalType"
-            ? static_cast<const TTypeAnnotationNode*>(ctx.MakeType<TOptionalExprType>(item.Annotation))
-            : ctx.MakeType<TListExprType>(item.Annotation);
+        annotation = kind == "OptionalType" ? static_cast<const TTypeAnnotationNode*>(ctx.MakeType<TOptionalExprType>(item.Annotation))
+                                            : ctx.MakeType<TListExprType>(item.Annotation);
     } else if (kind == "DictType") {
         auto key = ConvertType(*ast.GetChild(1), ctx, depth + 1);
         auto payload = ConvertType(*ast.GetChild(2), ctx, depth + 1);
@@ -146,8 +147,7 @@ TParsedType ConvertType(const TAstNode& ast, TExprContext& ctx, ui32 depth = 0) 
         const bool variant = kind == "VariantType";
         const auto& members = variant ? *ast.GetChild(1) : ast;
         const bool named = members.GetChild(0)->GetContent() == "StructType";
-        node->Kind = variant ? TWasmTypeNode::EKind::Variant
-            : named ? TWasmTypeNode::EKind::Struct : TWasmTypeNode::EKind::Tuple;
+        node->Kind = variant ? TWasmTypeNode::EKind::Variant : named ? TWasmTypeNode::EKind::Struct : TWasmTypeNode::EKind::Tuple;
         node->NamedVariant = variant && named;
         TVector<const TTypeAnnotationNode*> elements;
         TVector<const TItemExprType*> fields;
@@ -155,7 +155,7 @@ TParsedType ConvertType(const TAstNode& ast, TExprContext& ctx, ui32 depth = 0) 
             const auto& member = named ? Unquote(*members.GetChild(i)) : *members.GetChild(i);
             const TString name = named ? TString(Unquote(*member.GetChild(0)).GetContent()) : TString();
             auto type = ConvertType(named ? *member.GetChild(1) : member, ctx, depth + 1);
-            node->Members.push_back({name, type.Node});
+            node->Members.push_back({ name, type.Node });
             if (named) {
                 auto* field = ctx.MakeType<TItemExprType>(name, type.Annotation);
                 Y_ENSURE(field->Validate(ast.GetPosition(), ctx), ctx.IssueManager.GetIssues().ToString());
@@ -183,8 +183,7 @@ TParsedType ConvertType(const TAstNode& ast, TExprContext& ctx, ui32 depth = 0) 
         node->Tag = Unquote(*ast.GetChild(1)).GetContent();
         annotation = ctx.MakeType<TResourceExprType>(node->Tag);
     } else if (kind == "CallableType") {
-        Y_ENSURE(Unquote(*ast.GetChild(1)).GetChildrenCount() == 0,
-            "Callable optional arguments and payload are not supported");
+        Y_ENSURE(Unquote(*ast.GetChild(1)).GetChildrenCount() == 0, "Callable optional arguments and payload are not supported");
         node->Kind = TWasmTypeNode::EKind::Callable;
         auto result = ConvertType(*Unquote(*ast.GetChild(2)).GetChild(0), ctx, depth + 1);
         node->CallableReturns = result.Node;
@@ -193,14 +192,14 @@ TParsedType ConvertType(const TAstNode& ast, TExprContext& ctx, ui32 depth = 0) 
             const auto& arg = Unquote(*ast.GetChild(i));
             Y_ENSURE(arg.GetChildrenCount() == 1, "Callable argument names and flags are not supported");
             auto type = ConvertType(*arg.GetChild(0), ctx, depth + 1);
-            node->Members.push_back({{}, type.Node});
-            args.push_back({type.Annotation, {}, 0});
+            node->Members.push_back({ {}, type.Node });
+            args.push_back({ type.Annotation, {}, 0 });
         }
         annotation = ctx.MakeType<TCallableExprType>(result.Annotation, args, 0, TStringBuf());
     } else {
         ythrow yexception() << "Unsupported bridge type: " << kind;
     }
-    return {std::move(node), annotation};
+    return { std::move(node), annotation };
 }
 
 TWasmTypeNodePtr ParseTypeNode(const NJson::TJsonValue& value, TStringBuf where) {
@@ -209,7 +208,7 @@ TWasmTypeNodePtr ParseTypeNode(const NJson::TJsonValue& value, TStringBuf where)
         ValidateTypeLexicalNesting(value.GetString());
         TMemoryPool pool(4096);
         TIssues issues;
-        auto* ast = NYql::ParseType(value.GetString(), pool, issues, {1, 1});
+        auto* ast = NYql::ParseType(value.GetString(), pool, issues, { 1, 1 });
         Y_ENSURE(ast, issues.ToString());
         TExprContext ctx;
         return ConvertType(*ast, ctx).Node;
@@ -245,9 +244,7 @@ EWasmUdfBinding ParseBinding(const NJson::TJsonValue& node) {
     ythrow yexception() << "Unsupported yql_binding in wasm manifest: " << binding;
 }
 
-TWasmUdfDescriptor ParseFunctionDescriptor(
-    const NJson::TJsonValue& functionNode,
-    TStringBuf where)
+TWasmUdfDescriptor ParseFunctionDescriptor(const NJson::TJsonValue& functionNode, TStringBuf where)
 {
     if (!functionNode.IsMap()) {
         ythrow yexception() << "Each function entry in wasm manifest must be an object";
@@ -268,8 +265,7 @@ TWasmUdfDescriptor ParseFunctionDescriptor(
         descriptor.ExportName = functionNode["export"].GetString();
     }
     if (descriptor.Binding == EWasmUdfBinding::TypeConfigCallable) {
-        ythrow yexception()
-            << "type_config_callable is only supported under objects[].methods, not functions[]";
+        ythrow yexception() << "type_config_callable is only supported under objects[].methods, not functions[]";
     }
     return descriptor;
 }
@@ -293,9 +289,7 @@ TWasmObjectMethodDescriptor ParseObjectMethod(const NJson::TJsonValue& methodNod
     method.Export = methodNode["export"].GetString();
     method.ArgTypes = ParseArgumentTypeNodes(methodNode, where);
     method.ResultType = ParseTypeNode(methodNode["result_type"], TStringBuilder() << where << ".result_type");
-    method.Binding = methodNode.Has("yql_binding")
-        ? ParseBinding(methodNode)
-        : EWasmUdfBinding::TypeConfigCallable;
+    method.Binding = methodNode.Has("yql_binding") ? ParseBinding(methodNode) : EWasmUdfBinding::TypeConfigCallable;
     return method;
 }
 
@@ -321,7 +315,8 @@ TWasmObjectDescriptor ParseObjectDescriptor(const NJson::TJsonValue& objectNode,
         object.DestroyExport = objectNode["destroy_export"].GetString();
     }
     for (const auto& methodNode : objectNode["methods"].GetArray()) {
-        object.Methods.push_back(ParseObjectMethod(methodNode, TStringBuilder() << where << ".methods[" << object.Methods.size() << "] (" << methodNode["name"].GetString() << ")"));
+        object.Methods.push_back(ParseObjectMethod(
+            methodNode, TStringBuilder() << where << ".methods[" << object.Methods.size() << "] (" << methodNode["name"].GetString() << ")"));
     }
     return object;
 }
@@ -341,9 +336,8 @@ void ExpandObjectsIntoFunctions(TWasmManifest& manifest)
             if (!knownNames.insert(ctorName).second) {
                 ctorName = TString("New") + object.Name;
                 if (!knownNames.insert(ctorName).second) {
-                    ythrow yexception()
-                        << "Cannot synthesize constructor for object '" << object.Name
-                        << "': YQL names 'New' and '" << ctorName << "' are already taken";
+                    ythrow yexception() << "Cannot synthesize constructor for object '" << object.Name << "': YQL names 'New' and '" << ctorName
+                                        << "' are already taken";
                 }
             }
             TWasmUdfDescriptor createFn;
@@ -358,9 +352,8 @@ void ExpandObjectsIntoFunctions(TWasmManifest& manifest)
 
         for (const auto& method : object.Methods) {
             if (!knownNames.insert(method.Name).second) {
-                ythrow yexception()
-                    << "Duplicate YQL function name '" << method.Name
-                    << "' from objects[].methods (names must be unique across functions/objects)";
+                ythrow yexception() << "Duplicate YQL function name '" << method.Name
+                                    << "' from objects[].methods (names must be unique across functions/objects)";
             }
             TWasmUdfDescriptor descriptor;
             descriptor.Name = method.Name;
@@ -375,16 +368,14 @@ void ExpandObjectsIntoFunctions(TWasmManifest& manifest)
             }
             if (descriptor.Binding == EWasmUdfBinding::TypeConfigCallable && descriptor.CreateExport.empty())
             {
-                ythrow yexception()
-                    << "type_config_callable method '" << method.Name
-                    << "' requires objects[].create_export";
+                ythrow yexception() << "type_config_callable method '" << method.Name << "' requires objects[].create_export";
             }
             manifest.Functions.push_back(std::move(descriptor));
         }
     }
 }
 
-} // namespace
+}   // namespace
 
 TWasmManifest ParseManifest(TStringBuf manifestJson) {
     const auto common = NYdb::NUdfManifest::Parse(manifestJson);
@@ -404,9 +395,7 @@ TWasmManifest ParseManifest(TStringBuf manifestJson) {
 
     TWasmManifest manifest;
     manifest.ModuleName = root["module_name"].GetString();
-    manifest.ModuleExtension = root.Has("module_extension")
-        ? root["module_extension"].GetString()
-        : TString("wasm");
+    manifest.ModuleExtension = root.Has("module_extension") ? root["module_extension"].GetString() : TString("wasm");
     if (root.Has("required_libraries")) {
         const auto& libraries = root["required_libraries"];
         if (!libraries.IsArray()) {
@@ -431,11 +420,11 @@ TWasmManifest ParseManifest(TStringBuf manifestJson) {
         // name reached the YQL function sink two times.
         THashSet<TString> declaredNames;
         for (const auto& functionNode : functions.GetArray()) {
-            auto descriptor = ParseFunctionDescriptor(functionNode, TStringBuilder() << "functions[" << manifest.Functions.size() << "] (" << functionNode["name"].GetString() << ")");
+            auto descriptor = ParseFunctionDescriptor(
+                functionNode, TStringBuilder() << "functions[" << manifest.Functions.size() << "] (" << functionNode["name"].GetString() << ")");
             if (!declaredNames.insert(descriptor.Name).second) {
-                ythrow yexception()
-                    << "Duplicate YQL function name '" << descriptor.Name
-                    << "' in functions[] (names must be unique across functions/objects)";
+                ythrow yexception() << "Duplicate YQL function name '" << descriptor.Name
+                                    << "' in functions[] (names must be unique across functions/objects)";
             }
             manifest.Functions.push_back(std::move(descriptor));
         }
@@ -453,10 +442,9 @@ TWasmManifest ParseManifest(TStringBuf manifestJson) {
     }
 
     if (manifest.Functions.empty()) {
-        ythrow yexception()
-            << "Wasm manifest must declare non-empty functions[] and/or objects[]";
+        ythrow yexception() << "Wasm manifest must declare non-empty functions[] and/or objects[]";
     }
     return manifest;
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

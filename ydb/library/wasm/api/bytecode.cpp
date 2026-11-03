@@ -14,17 +14,14 @@ ui64 HashSharedRef(const TSharedRef& ref)
     return CityHash64(buf.data(), buf.size());
 }
 
-} // namespace
+}   // namespace
 
-bool TModuleBytecode::operator==(const TModuleBytecode& other) const
-{
-    return Format == other.Format
-        && Data.ToStringBuf() == other.Data.ToStringBuf()
-        && ObjectCode.ToStringBuf() == other.ObjectCode.ToStringBuf();
+bool TModuleBytecode::operator==(const TModuleBytecode& other) const {
+    return Format == other.Format && Data.ToStringBuf() == other.Data.ToStringBuf() &&
+           ObjectCode.ToStringBuf() == other.ObjectCode.ToStringBuf();
 }
 
-TModuleBytecode::operator size_t() const
-{
+TModuleBytecode::operator size_t() const {
     // Prefer TModuleBytecodeKey for hot maps; this remains correct for HashSet.
     return static_cast<size_t>(TModuleBytecodeKey::From(*this));
 }
@@ -42,17 +39,12 @@ TModuleBytecodeKey TModuleBytecodeKey::From(const TModuleBytecode& bytecode)
     };
 }
 
-bool TModuleBytecodeKey::operator==(const TModuleBytecodeKey& other) const
-{
-    return Format == other.Format
-        && DataHash == other.DataHash
-        && ObjectCodeHash == other.ObjectCodeHash
-        && DataSize == other.DataSize
-        && ObjectCodeSize == other.ObjectCodeSize;
+bool TModuleBytecodeKey::operator==(const TModuleBytecodeKey& other) const {
+    return Format == other.Format && DataHash == other.DataHash && ObjectCodeHash == other.ObjectCodeHash && DataSize == other.DataSize &&
+           ObjectCodeSize == other.ObjectCodeSize;
 }
 
-TModuleBytecodeKey::operator size_t() const
-{
+TModuleBytecodeKey::operator size_t() const {
     size_t result = 0;
     HashCombine(result, Format);
     HashCombine(result, DataHash);
@@ -64,4 +56,4 @@ TModuleBytecodeKey::operator size_t() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm

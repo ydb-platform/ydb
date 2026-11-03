@@ -1,17 +1,16 @@
 #pragma once
-#include "scheme_describe.h"
 #include "registration.h"
+#include "scheme_describe.h"
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/initializer/common.h>
 #include <ydb/services/metadata/initializer/events.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NMetadata::NProvider {
 
-class TEvStartRegistration: public TEventLocal<TEvStartRegistration, EEvents::EvStartRegistration> {
-};
+class TEvStartRegistration: public TEventLocal<TEvStartRegistration, EEvents::EvStartRegistration> {};
 
 class TBehaviourRegistrator: public NActors::TActorBootstrapped<TBehaviourRegistrator> {
 private:
@@ -27,28 +26,24 @@ private:
     void Handle(TEvTableDescriptionFailed::TPtr& ev);
     void Handle(TEvStartRegistration::TPtr& ev);
     void Handle(NInitializer::TEvInitializationFinished::TPtr& ev);
+
 public:
     TBehaviourRegistrator(IClassBehaviour::TPtr b, std::shared_ptr<TRegistrationData> registrationData, const NRequest::TConfig& reqConfig)
         : Behaviour(b)
         , RegistrationData(registrationData)
-        , ReqConfig(reqConfig) {
-
+        , ReqConfig(reqConfig)
+    {
     }
 
     void Bootstrap();
 
-    STATEFN(StateMain) {
-        switch (ev->GetTypeRewrite()) {
-
+    STRICT_STFUNC(StateMain,
             hFunc(TEvTableDescriptionSuccess, Handle);
             hFunc(TEvTableDescriptionFailed, Handle);
 
             hFunc(NInitializer::TEvInitializationFinished, Handle);
             hFunc(TEvStartRegistration, Handle);
-            default:
-                Y_ABORT_UNLESS(false);
-        }
-    }
+    );
 };
 
-}
+}   // namespace NKikimr::NMetadata::NProvider

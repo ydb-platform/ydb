@@ -11,6 +11,8 @@
 #include <aws/common/string.h>
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <inttypes.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <sys/stat.h>
@@ -335,6 +337,74 @@ int aws_file_get_last_modified_epoch(FILE *file, uint64_t *last_modified_ns) {
 #endif
 
     *last_modified_ns = secs * (uint64_t)1000000000 + nsecs;
+
+    return AWS_OP_SUCCESS;
+}
+
+/* Largest chunk a single pwrite() is asked to move. Mirrors the constant in
+ * source/linux/file_direct_io.c, which runs the same loop for O_DIRECT descriptors. */
+static const size_t s_file_max_write_chunk = 0x7ffff000;
+
+int aws_file_open_for_write(const struct aws_string *file_path, int *out_fd) {
+    AWS_PRECONDITION(file_path);
+    AWS_PRECONDITION(out_fd);
+
+    int fd = open(aws_string_c_str(file_path), O_WRONLY);
+    if (fd == -1) {
+        int errno_value = errno; /* Always cache errno before potential side-effect */
+        AWS_LOGF_ERROR(
+            AWS_LS_COMMON_GENERAL,
+            "Failed to open file %s for writing, errno: %d",
+            aws_string_c_str(file_path),
+            errno_value);
+        return aws_translate_and_raise_io_error(errno_value);
+    }
+
+    *out_fd = fd;
+    return AWS_OP_SUCCESS;
+}
+
+void aws_file_close_fd(int fd) {
+    if (fd != AWS_FILE_INVALID_FD) {
+        close(fd);
+    }
+}
+
+int aws_file_write_to_offset(int fd, uint64_t offset, struct aws_byte_cursor data) {
+    if (data.len == 0) {
+        return AWS_OP_SUCCESS;
+    }
+
+    if (fd == AWS_FILE_INVALID_FD) {
+        AWS_LOGF_ERROR(AWS_LS_COMMON_GENERAL, "aws_file_write_to_offset: invalid file descriptor");
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+    }
+
+    /* pwrite() carries the offset per call, so it neither reads nor advances the descriptor's file
+     * position. That is what makes one descriptor safe to share across threads writing disjoint
+     * ranges. Same loop as aws_file_write_to_offset_direct_io() in source/linux/file_direct_io.c,
+     * minus the alignment requirements O_DIRECT imposes.
+     *
+     * Plain pwrite() rather than pwrite64(): pwrite() is POSIX and present on every platform this
+     * file is compiled for, while pwrite64() is a glibc/bionic extension that the BSDs -- which
+     * reach this file through AWS_OS_POSIX -- do not provide. off_t is 64-bit on 64-bit platforms;
+     * where it is 32-bit, an offset past 2 GiB fails with EOVERFLOW rather than wrapping. */
+    size_t total_written = 0;
+    while (total_written < data.len) {
+        size_t chunk_size = aws_min_size(data.len - total_written, s_file_max_write_chunk);
+        ssize_t written = pwrite(fd, data.ptr + total_written, chunk_size, (off_t)(offset + total_written));
+        if (written == -1) {
+            int errno_value = errno; /* Always cache errno before potential side-effect */
+            AWS_LOGF_ERROR(
+                AWS_LS_COMMON_GENERAL,
+                "Failed to write %zu bytes at offset %" PRIu64 ", errno: %d",
+                chunk_size,
+                offset + total_written,
+                errno_value);
+            return aws_translate_and_raise_io_error(errno_value);
+        }
+        total_written += (size_t)written;
+    }
 
     return AWS_OP_SUCCESS;
 }

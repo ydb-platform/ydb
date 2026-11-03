@@ -3,10 +3,11 @@
 #include "json_pipe_req.h"
 #include "log.h"
 #include "ydb/core/viewer/json_local_rpc.h"
+
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
+#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 

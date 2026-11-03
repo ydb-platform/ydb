@@ -54,6 +54,7 @@ Y_UNIT_TEST_SUITE(TTransportChaosInjectorTest)
             {},
             NKikimr::NDDisk::TWriteInstruction(0),
             {},
+            /*checksums=*/{},
             nullptr);
 
         UNIT_ASSERT(
@@ -79,6 +80,7 @@ Y_UNIT_TEST_SUITE(TTransportChaosInjectorTest)
                                   {},
                                   NKikimr::NDDisk::TWriteInstruction(0),
                                   {},
+                                  /*checksums=*/{},
                                   nullptr)
                               .GetValueSync());
         AssertUndelivered(
@@ -98,6 +100,7 @@ Y_UNIT_TEST_SUITE(TTransportChaosInjectorTest)
             {},
             NKikimr::NDDisk::TWriteInstruction(0),
             {},
+            /*checksums=*/{},
             nullptr);
 
         UNIT_ASSERT(result.GetValueSync().GetStatus() == TReplyStatus::OK);
@@ -125,6 +128,7 @@ Y_UNIT_TEST_SUITE(TTransportChaosInjectorTest)
             persistentBufferIds,
             TDuration::Seconds(1),
             {},
+            /*checksums=*/{},
             nullptr,
             [&callbackCount, &response](const auto& result, auto)
             {
@@ -148,6 +152,42 @@ Y_UNIT_TEST_SUITE(TTransportChaosInjectorTest)
         AssertUndelivered(response.GetResult(1).GetResult());
         UNIT_ASSERT(
             response.GetResult(2).GetResult().GetStatus() == TReplyStatus::OK);
+    }
+
+    Y_UNIT_TEST(ShouldListAndClearArmedFaultRules)
+    {
+        auto injector = CreateTransportChaosInjector(
+            std::make_shared<TStorageTransportMock>());
+
+        TFaultRule first;
+        first.RemainingHits = 2;
+        first.Reason = "first fault";
+        TFaultRule second;
+        second.RemainingHits = 5;
+        second.Reason = "second fault";
+        injector->ArmFaultRule(first);
+        injector->ArmFaultRule(second);
+
+        const auto rules = injector->GetFaultRules();
+        UNIT_ASSERT_VALUES_EQUAL(2, rules.size());
+        UNIT_ASSERT_VALUES_EQUAL(2, rules[0].RemainingHits);
+        UNIT_ASSERT_VALUES_EQUAL(0, rules[0].Hits);
+        UNIT_ASSERT_STRINGS_EQUAL("first fault", rules[0].Reason);
+        UNIT_ASSERT_VALUES_EQUAL(5, rules[1].RemainingHits);
+        UNIT_ASSERT_VALUES_EQUAL(0, rules[1].Hits);
+        UNIT_ASSERT_STRINGS_EQUAL("second fault", rules[1].Reason);
+
+        const auto result = injector->WriteToDDisk(
+            MakeConnection(42),
+            {},
+            NKikimr::NDDisk::TWriteInstruction(0),
+            {},
+            /*checksums=*/{},
+            nullptr);
+        UNIT_ASSERT(result.GetValueSync().GetStatus() == TReplyStatus::OK);
+
+        injector->ClearFaultRules();
+        UNIT_ASSERT(injector->GetFaultRules().empty());
     }
 }
 

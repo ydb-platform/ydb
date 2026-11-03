@@ -1,3 +1,51 @@
+* Added `TUpdateClusterStateSettings::ExpectedGeneration()` to apply a bridge cluster state update only if the cluster state still has the given generation.
+
+* Added draft `TBridgeClient::SetDatabaseBridgeMode()` to atomically change a database's bridge mode. `TSetDatabaseBridgeModeSettings::RetainPileName()` selects the pile to retain when disabling bridge mode.
+
+* Fixed PersQueue topic settings losing replication-consumer and consumer-offset-mirroring attributes when copied from DescribeTopic into CreateTopic or AlterTopic settings.
+
+* Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
+
+## v3.26.0
+
+* Federated topic read sessions now follow federation membership. After the initial discovery, databases that join the federation are read and databases that leave it are dropped; partition sessions of a dropped database get `TPartitionSessionClosedEvent` with the `ConnectionLost` reason. A listed database that becomes unavailable keeps its subsession. The refresh period is `TFederatedTopicClientSettings::FederationDiscoveryInterval` (30 seconds by default).
+
+* Fixed Query session shutdown racing with session pool return.
+
+* Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
+
+## v3.25.0
+
+* Added recognition of Solomon volumes in Scheme API results and a draft `NKeyValue::TKeyValueClient::DropVolume()` method.
+
+* Added `TExecuteQueryIterator::Cancel()` to explicitly cancel a query response stream, including a pending read.
+
+* Added `TBridgeClient::RemovePile()` to remove a DISCONNECTED pile from a bridged cluster along with its data.
+
+* Added `TBridgeClient::AddPile()` to add an INACTIVE pile to a bridged cluster, and `TGetClusterStateResult::GetPendingPileOperation()`.
+
+* Added `TBridgeClient::ConvertToBridge()` to convert a non-bridged cluster into a bridged one with a single pile, and `TGetClusterStateResult::IsConversionInProgress()`.
+
+* Fixed Topic and PersQueue write-session memory accounting to include queued data protobufs until transport completion.
+
+* Fixed table and query sessions being reused after commit or rollback errors that require closing the session.
+
+* Fixed async credentials acquisition for unary and streaming RPCs and Topic/PersQueue write sessions; the SDK now uses the token returned by `GetAuthInfoAsync()` without a second synchronous lookup.
+
+* Fixed a thread leak in topic and PersQueue write sessions: asynchronous compression no longer keeps the client thread pool alive until process exit.
+
+## v3.24.0
+
+* Added `NValueHelpers::Embedding` to create FloatVector `Bytes` query parameters from numeric ranges.
+
+* Topic and PersQueue writers now respect the driver's outbound gRPC message size limit when batching writes.
+
+* Added a draft UDF client (`client/draft/ydb_udf.h`) with manifest-based uploads, separate module type/code kind, per-platform compile state and optional timestamps, and incremental `UploadModuleFromFile` on a dedicated I/O executor. Upload futures include the final gRPC status.
+
+* Added an optional S3 object key prefix to TTL eviction settings for column tables.
+
+* Added `TTopicClient::ResetOffset` / `TResetOffsetSettings` to rewind a consumer's committed offsets on all topic partitions.
+
 * Added OIDC/OAuth authentication via `NOidc::CreateOidcProviderFactory`, supporting static access tokens, Client Credentials Grant, and Device Authorization Grant, with token refresh and interfaces for token caching and interactive sign-in.
 
 * Added `Float16` and `BFloat16` vector index types.

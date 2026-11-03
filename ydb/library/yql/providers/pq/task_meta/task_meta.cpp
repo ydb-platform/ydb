@@ -13,10 +13,9 @@ TMaybe<TTopicPartitionsSet> GetTopicPartitionsSet(const google::protobuf::Any& d
             if (pqReaderParams != meta.GetTaskParams().end()) {
                 NYql::NPq::NProto::TDqReadTaskParams readTaskParams;
                 if (readTaskParams.ParseFromString(pqReaderParams->second)) {
-                    return TTopicPartitionsSet{
-                        readTaskParams.GetPartitioningParams(0).GetEachTopicPartitionGroupId(),
+                    return TTopicPartitionsSet{ readTaskParams.GetPartitioningParams(0).GetEachTopicPartitionGroupId(),
                         readTaskParams.GetPartitioningParams(0).GetDqPartitionsCount(),
-                        readTaskParams.GetPartitioningParams(0).GetTopicPartitionsCount()};
+                        readTaskParams.GetPartitioningParams(0).GetTopicPartitionsCount() };
                 }
             }
         }
@@ -26,7 +25,7 @@ TMaybe<TTopicPartitionsSet> GetTopicPartitionsSet(const google::protobuf::Any& d
 
 std::vector<TTopicPartitionsSet> GetTopicPartitionsSets(const NDqProto::TDqTask& dqTask) {
     if (auto partitionSet = GetTopicPartitionsSet(dqTask.GetMeta())) {
-        return {std::move(*partitionSet)};
+        return { std::move(*partitionSet) };
     }
 
     std::vector<TTopicPartitionsSet> result;
@@ -38,15 +37,13 @@ std::vector<TTopicPartitionsSet> GetTopicPartitionsSets(const NDqProto::TDqTask&
         }
 
         for (const auto& params : readTaskParams.GetPartitioningParams()) {
-            result.push_back({
-                .EachTopicPartitionGroupId = params.GetEachTopicPartitionGroupId(),
-                .DqPartitionsCount = params.GetDqPartitionsCount(),
-                .TopicPartitionsCount = params.GetTopicPartitionsCount()
-            });
+            result.push_back(
+                { .EachTopicPartitionGroupId = params.GetEachTopicPartitionGroupId(), .DqPartitionsCount = params.GetDqPartitionsCount(),
+                    .TopicPartitionsCount = params.GetTopicPartitionsCount() });
         }
     }
 
     return result;
 }
 
-} // namespace NYql::NPq
+}   // namespace NYql::NPq

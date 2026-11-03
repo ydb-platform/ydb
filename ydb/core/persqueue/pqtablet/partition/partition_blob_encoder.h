@@ -88,6 +88,7 @@ struct TPartitionBlobEncoder {
 
     ui64 StartOffset;
     ui64 EndOffset;
+    ui64 MirroredOffset = 0;
 
     THead Head;
     THead NewHead;

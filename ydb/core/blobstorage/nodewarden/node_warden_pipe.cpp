@@ -20,6 +20,7 @@ void TNodeWarden::EstablishPipe() {
         .MaxRetryTime = TDuration::Seconds(5),
         .DoFirstRetryInstantly = false,
     }));
+    RegisteredAtController = false;
 
     YDB_LOG_DEBUG("EstablishPipe",
         {"marker", "NW21"},

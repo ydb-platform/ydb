@@ -15,6 +15,7 @@
 namespace NKikimr::NKqp {
     struct TKqpFederatedQuerySetup;
     class TNodeState;
+    class IQueryQuotaManager;
 }
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -108,6 +109,8 @@ struct IKqpNodeComputeActorFactory {
     std::atomic<bool> AccountDefaultPoolInScheduler = false;
     std::atomic<ui64> MkqlLightProgramMemoryLimit = 0;
     std::atomic<ui64> MkqlHeavyProgramMemoryLimit = 0;
+    std::atomic<ui64> TaskMemory = 0;
+    std::atomic<double> ElasticMemoryPercent = 100;
 
 public:
     struct TCreateArgs {
@@ -136,6 +139,11 @@ public:
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<TNodeState> State = nullptr;
+        // the execution unit, the initial memory limit (external memory) and the elastic memory of the task are returned
+        // to it when the compute actor terminates, see IQueryQuotaManager::FreeTasks
+        std::shared_ptr<IQueryQuotaManager> QueryQuotaManager;
+        ui64 InitialMemoryLimit = 0;
+        ui64 ElasticMemory = 0;
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
 

@@ -97,13 +97,9 @@ namespace NKikimr::NBlobDepot {
 
         if (TGenStep(leastExpectedBlobId) <= nextGenStep) {
             // remove invalidated step from allocations
-            auto blobSeqId = TBlobSeqId::FromSequentalNumber(record.Channel, generation, channel.NextBlobSeqId);
+            const auto blobSeqId = TBlobSeqId::FromSequentalNumber(record.Channel, generation, channel.NextBlobSeqId);
             Y_ABORT_UNLESS(record.LastConfirmedGenStep < TGenStep(blobSeqId));
-            if (blobSeqId.Step <= invalidatedStep) {
-                blobSeqId.Step = invalidatedStep + 1;
-                blobSeqId.Index = 0;
-                channel.NextBlobSeqId = blobSeqId.ToSequentialNumber();
-            }
+            channel.AdvanceNextBlobSeqId(generation, invalidatedStep);
 
             // recalculate least expected blob id -- it may change if the given id set was empty
             leastExpectedBlobId = channel.GetLeastExpectedBlobId(generation);
@@ -310,6 +306,11 @@ namespace NKikimr::NBlobDepot {
         TrimChannelHistory(channel, groupId, std::move(trashDeleted));
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
         record.ClearInFlight(this);
+
+        if (Self->MoveData.Phase == TMoveDataState::EPhase::CheckingTrash &&
+                Self->MoveData.Groups.contains(groupId)) {
+            Self->CheckTrash();
+        }
     }
 
     void TData::CollectTrashByHardBarrier(ui8 channel, ui32 groupId, TGenStep hardGenStep,
@@ -324,6 +325,11 @@ namespace NKikimr::NBlobDepot {
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
         record.HardGenStep = hardGenStep;
         record.ClearInFlight(this);
+
+        if (Self->MoveData.Phase == TMoveDataState::EPhase::CheckingTrash &&
+                Self->MoveData.Groups.contains(groupId)) {
+            Self->CheckTrash();
+        }
     }
 
     void TData::TrimChannelHistory(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted) {

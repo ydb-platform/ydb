@@ -15,14 +15,10 @@ class AlwaysOffSamplerConfiguration;
 class AlwaysOnSamplerConfiguration;
 class JaegerRemoteSamplerConfiguration;
 class ParentBasedSamplerConfiguration;
+class ProbabilitySamplerConfiguration;
 class TraceIdRatioBasedSamplerConfiguration;
 class ExtensionSamplerConfiguration;
-class ComposableAlwaysOffSamplerConfiguration;
-class ComposableAlwaysOnSamplerConfiguration;
-class ComposableProbabilitySamplerConfiguration;
-class ComposableParentThresholdSamplerConfiguration;
-class ComposableRuleBasedSamplerConfiguration;
-class ComposableSamplerConfiguration;
+class CompositeSamplerConfiguration;
 
 class SamplerConfigurationVisitor
 {
@@ -34,19 +30,14 @@ public:
   SamplerConfigurationVisitor &operator=(const SamplerConfigurationVisitor &other) = default;
   virtual ~SamplerConfigurationVisitor()                                           = default;
 
-  virtual void VisitAlwaysOff(const AlwaysOffSamplerConfiguration *model)                     = 0;
-  virtual void VisitAlwaysOn(const AlwaysOnSamplerConfiguration *model)                       = 0;
-  virtual void VisitJaegerRemote(const JaegerRemoteSamplerConfiguration *model)               = 0;
-  virtual void VisitParentBased(const ParentBasedSamplerConfiguration *model)                 = 0;
-  virtual void VisitTraceIdRatioBased(const TraceIdRatioBasedSamplerConfiguration *model)     = 0;
-  virtual void VisitExtension(const ExtensionSamplerConfiguration *model)                     = 0;
-  virtual void VisitComposableAlwaysOff(const ComposableAlwaysOffSamplerConfiguration *model) = 0;
-  virtual void VisitComposableAlwaysOn(const ComposableAlwaysOnSamplerConfiguration *model)   = 0;
-  virtual void VisitComposableProbability(
-      const ComposableProbabilitySamplerConfiguration *model) = 0;
-  virtual void VisitComposableParentThreshold(
-      const ComposableParentThresholdSamplerConfiguration *model)                             = 0;
-  virtual void VisitComposableRuleBased(const ComposableRuleBasedSamplerConfiguration *model) = 0;
+  virtual void VisitAlwaysOff(const AlwaysOffSamplerConfiguration *model)                 = 0;
+  virtual void VisitAlwaysOn(const AlwaysOnSamplerConfiguration *model)                   = 0;
+  virtual void VisitJaegerRemote(const JaegerRemoteSamplerConfiguration *model)           = 0;
+  virtual void VisitParentBased(const ParentBasedSamplerConfiguration *model)             = 0;
+  virtual void VisitProbability(const ProbabilitySamplerConfiguration *model)             = 0;
+  virtual void VisitTraceIdRatioBased(const TraceIdRatioBasedSamplerConfiguration *model) = 0;
+  virtual void VisitExtension(const ExtensionSamplerConfiguration *model)                 = 0;
+  virtual void VisitComposite(const CompositeSamplerConfiguration *model)                 = 0;
 };
 
 }  // namespace configuration

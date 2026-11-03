@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     scan.h
@@ -28,8 +28,6 @@ PEERDIR(
     ydb/core/wrappers
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()
 
 RECURSE(
@@ -42,6 +40,7 @@ RECURSE(
     resource_pool_classifiers
     resource_pools
     service
+    show_create
     storage
     streaming_queries
     tablets

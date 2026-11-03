@@ -474,6 +474,7 @@ struct TShardedTableOptions {
         ui64 ExternalThreshold = 0;
         ui8 ExternalChannelsCount = 1;
         bool ResetDataPoolKind = false;
+        bool AllowOtherDataPoolKinds = true;
     };
 
     using TAttributes = THashMap<TString, TString>;
@@ -583,10 +584,17 @@ bool DiscardVolatileSnapshot(
         TRowVersion snapshot);
 
 struct TChange {
+    enum class EOperation {
+        Upsert,
+        Reset,
+        Erase,
+    };
+
     i64 Offset;
     ui64 WriteTxId;
     ui32 Key;
     ui32 Value;
+    EOperation Operation = EOperation::Upsert;
 };
 
 void ApplyChanges(
@@ -596,7 +604,9 @@ void ApplyChanges(
         const TString& sourceId,
         const TVector<TChange>& changes,
         NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus expected =
-            NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK);
+            NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK,
+        NKikimrTxDataShard::TEvApplyReplicationChangesResult::EReason expectedReason =
+            NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_NONE);
 
 TRowVersion CommitWrites(
         TTestActorRuntime& runtime,

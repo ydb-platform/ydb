@@ -96,7 +96,16 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool IsSimpleType(EWireType type);
+enum class ESchemaKind
+{
+    Simple,
+    StringFixed,
+    Complex,
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+ESchemaKind GetSchemaKind(EWireType type);
 TString GetShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema);
 void PrintShortDebugString(const std::shared_ptr<const TSkiffSchema>& schema, IOutputStream* out);
 

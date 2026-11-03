@@ -33,4 +33,4 @@ bool TSettings::IsMemberEnabled(const TString& memberName) const {
     return EnabledMembers.contains(memberName);
 }
 
-} // namespace NYql::NPushdown
+}   // namespace NYql::NPushdown

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/core/base
@@ -18,7 +18,5 @@ SRCS(
     local_partition_reader.cpp
     local_proxy.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

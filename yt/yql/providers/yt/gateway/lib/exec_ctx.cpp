@@ -1,4 +1,5 @@
 #include "exec_ctx.h"
+#include "client_config.h"
 
 #include <library/cpp/yson/node/node_io.h>
 #include <yql/essentials/utils/log/log.h>
@@ -393,7 +394,7 @@ TMaybe<TString> TExecContextBaseSimple::GetImpersonationUser(const TYtSettings::
 NYT::IClientPtr TExecContextBaseSimple::CreateYtClient(const TYtSettings::TConstPtr& config) const {
     TString token = GetAuth(config);
     TMaybe<TString> impersonationUser = GetImpersonationUser(config);
-    auto createClientOptions = NYT::TCreateClientOptions().Token(token);
+    auto createClientOptions = NYT::TCreateClientOptions().Token(token).Config(CreateYtClientConfig(*config));
     if (impersonationUser) {
         createClientOptions = createClientOptions.ImpersonationUser(*impersonationUser);
     }

@@ -18,6 +18,9 @@ struct TInput {
     TMaybe<TColumnOrder> Order;
     EInputPriority Priority = External;
     TSet<TString> UsedExternalColumns;
+    bool CaseSensitive = false;
+
+    TMaybe<ui32> FindColumn(TStringBuf name, bool* isVirtual = nullptr) const;
 };
 
 using TInputs = TVector<TInput>;

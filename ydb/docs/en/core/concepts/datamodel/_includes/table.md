@@ -16,7 +16,7 @@ CREATE TABLE article (
 
 {{ ydb-short-name }} supports creating row-based and column-based tables. Their main difference lies in the use case and the data storage format on the hard disk. For row-based tables, data is stored sequentially as rows, while for column-based tables, data is stored as columns. Each table type has its own purpose.
 
-# Column Naming Rules {#column-naming-rules}
+## Column Naming Rules {#column-naming-rules}
 
 Column names in {{ ydb-short-name }} must meet the following requirements:
 
@@ -52,7 +52,7 @@ With a small amount of data or low load, a table can consist of a single partiti
 
 The partition size threshold for splitting and enabling or disabling automatic splitting can be configured individually for each database table.
 
-Regardless of the [AUTO_PARTITIONING_PARTITION_SIZE_MB](#auto_partitioning_by_size) parameter value, {{ ydb-short-name }} performs partition splitting and merging based on a size of 2000 MB. At the same time, {{ ydb-short-name }} does not restrict user settings and works in parallel with them. For example, if you set the [partition size](#auto_partitioning_by_size) to 100 MB and the [limit](#auto_partitioning_max_partitions_count) to 10 partitions, the table stops splitting when it reaches 10 partitions of 100 MB each, and partition sizes begin to grow. When any partition exceeds 2000 MB, it splits, and the table has 11 partitions. If the size of two adjacent partitions drops to 1000 MB, they merge, and the table has 10 partitions again.
+Regardless of the [AUTO_PARTITIONING_PARTITION_SIZE_MB](#auto_partitioning_by_size) parameter value, {{ ydb-short-name }} forcibly splits partitions whose size exceeds the [force_shard_split_data_size](../../../reference/configuration/immediate_controls_config.md) parameter (2 GiB by default). At the same time, {{ ydb-short-name }} does not restrict user settings and works in parallel with them. For example, if you set the [partition size](#auto_partitioning_by_size) to 100 MiB and the [limit](#auto_partitioning_max_partitions_count) to 10 partitions, the table stops splitting when it reaches 10 partitions of 100 MiB each, and partition sizes begin to grow. When any partition exceeds the `force_shard_split_data_size` parameter value, it splits, and the table has 11 partitions. If the combined size of two adjacent partitions drops to 50% of the [AUTO_PARTITIONING_PARTITION_SIZE_MB](#auto_partitioning_by_size) parameter value, they merge, and the table has 10 partitions again.
 
 In addition to automatic splitting, you can create an empty table with a predefined number of partitions. You can manually set exact key split boundaries for partitions or specify uniform distribution across a predefined number of partitions. In the latter case, boundaries are created based on the first component of the primary key. Uniform distribution can be specified for tables whose first primary key component is an integer with data type `Uint64` or `Uint32`.
 
@@ -160,7 +160,7 @@ Syntax of TTL value is described in the article [{#T}](../../../yql/reference/sy
 
 {{ ydb-short-name }} allows you to rename an existing table, move it to another directory in the same database, and replace one table with another, in which case the data of the replaced table is deleted. When performing operations, only the table metadata changes, such as its path and name. The table data is not moved or overwritten.
 
-Operations are performed in isolation; the external process sees only two states of the table: before and after the operation. This is critical, for example, for table replacement: the data of the replaced table is deleted by the same transaction that renames the replacing table. During the replacement, there might be errors in queries to the replaced table that have [retryable statuses](../../../reference/ydb-sdk/error_handling.md#termination-statuses).
+Operations are performed in isolation; the external process sees only two states of the table: before and after the operation. This is critical, for example, for table replacement: the data of the replaced table is deleted by the same transaction that renames the replacing table. During the replacement, there might be errors in queries to the replaced table that have [retryable statuses](../../../reference/ydb-sdk/error_handling.md#handling-retryable-errors).
 
 The speed of the rename operation is determined by the type of data transactions currently running on the table and does not depend on the amount of data in the table.
 
@@ -248,11 +248,6 @@ In most cases, working with columnar tables {{ ydb-short-name }} is similar to w
 
 * Only `NOT NULL` columns can be used as the primary key.
 * Data is partitioned not by the primary key, but by the hash of the partitioning columns.
-* Columnar tables support a limited set of data types:
-
-  + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
-  + Available only in columns not included in the primary key: `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `JsonDocument`, `Json`, `Yson`.
-
 * You can configure compression individually for each column when [creating](../../../yql/reference/syntax/create_table/index.md#compression) a column-oriented table or [change](../../../yql/reference/syntax/alter_table/columns.md#compression) it later.
 * You can also configure encoding for each column when [creating](../../../yql/reference/syntax/create_table/index.md#encoding) a column-oriented table or [change](../../../yql/reference/syntax/alter_table/columns.md#encoding) it later.
 

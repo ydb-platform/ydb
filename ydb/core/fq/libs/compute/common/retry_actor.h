@@ -3,6 +3,7 @@
 #include "metrics.h"
 
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
+
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
@@ -11,8 +12,8 @@
 
 namespace NFq {
 
-template<typename TRequest, typename TResponse, typename ...TArgs>
-class TRetryActor : public NActors::TActorBootstrapped<TRetryActor<TRequest, TResponse, TArgs...>> {
+template <typename TRequest, typename TResponse, typename... TArgs>
+class TRetryActor: public NActors::TActorBootstrapped<TRetryActor<TRequest, TResponse, TArgs...>> {
 public:
     using TBase = NActors::TActorBootstrapped<TRetryActor<TRequest, TResponse, TArgs...>>;
     using TBase::Become;
@@ -22,7 +23,8 @@ public:
 
     using IRetryPolicy = IRetryPolicy<const typename TResponse::TPtr&>;
 
-    TRetryActor(const TComputeRequestCountersPtr& counters, const NActors::TActorId& sender, const NActors::TActorId& recipient, const TArgs&... args)
+    TRetryActor(
+        const TComputeRequestCountersPtr& counters, const NActors::TActorId& sender, const NActors::TActorId& recipient, const TArgs&... args)
         : Sender(sender)
         , Recipient(recipient)
         , CreateMessage([=]() {
@@ -32,9 +34,11 @@ public:
         , Delay(TDuration::Zero())
         , StartTime(TInstant::Now())
         , Counters(counters)
-    {}
+    {
+    }
 
-    TRetryActor(const TComputeRequestCountersPtr& counters, const TDuration& delay, const NActors::TActorId& sender, const NActors::TActorId& recipient, const TArgs&... args)
+    TRetryActor(const TComputeRequestCountersPtr& counters, const TDuration& delay, const NActors::TActorId& sender,
+        const NActors::TActorId& recipient, const TArgs&... args)
         : Sender(sender)
         , Recipient(recipient)
         , CreateMessage([=]() {
@@ -44,12 +48,14 @@ public:
         , Delay(delay)
         , StartTime(TInstant::Now())
         , Counters(counters)
-    {}
+    {
+    }
 
     void Bootstrap() {
         Counters->InFly->Inc();
         Become(&TRetryActor::StateFunc);
-        NActors::TActivationContext::Schedule(Delay, new NActors::IEventHandle(Recipient, static_cast<const NActors::TActorId&>(SelfId()), CreateMessage()));
+        NActors::TActivationContext::Schedule(
+            Delay, new NActors::IEventHandle(Recipient, static_cast<const NActors::TActorId&>(SelfId()), CreateMessage()));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -61,7 +67,8 @@ public:
         auto delay = RetryState->GetNextRetryDelay(ev);
         if (delay) {
             Counters->Retry->Inc();
-            NActors::TActivationContext::Schedule(*delay, new NActors::IEventHandle(Recipient, static_cast<const NActors::TActorId&>(SelfId()), CreateMessage()));
+            NActors::TActivationContext::Schedule(
+                *delay, new NActors::IEventHandle(Recipient, static_cast<const NActors::TActorId&>(SelfId()), CreateMessage()));
             return;
         }
         Counters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
@@ -83,8 +90,7 @@ public:
     }
 
     static bool IsTransportError(const NYdb::EStatus& status) {
-        return static_cast<size_t>(status) >= NYdb::TRANSPORT_STATUSES_FIRST
-            && static_cast<size_t>(status) <= NYdb::TRANSPORT_STATUSES_LAST;
+        return static_cast<size_t>(status) >= NYdb::TRANSPORT_STATUSES_FIRST && static_cast<size_t>(status) <= NYdb::TRANSPORT_STATUSES_LAST;
     }
 
     static ERetryErrorClass RetryComputeClass(const NYdb::EStatus& status) {
@@ -92,24 +98,16 @@ public:
             return ERetryErrorClass::ShortRetry;
         }
 
-        if (status == NYdb::EStatus::INTERNAL_ERROR
-            || status == NYdb::EStatus::UNAVAILABLE
-            || status == NYdb::EStatus::TIMEOUT
-            || status == NYdb::EStatus::BAD_SESSION
-            || status == NYdb::EStatus::SESSION_EXPIRED
-            || status == NYdb::EStatus::UNDETERMINED
-            || status == NYdb::EStatus::TRANSPORT_UNAVAILABLE
-            || status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED
-            || status == NYdb::EStatus::CLIENT_INTERNAL_ERROR
-            || status == NYdb::EStatus::CLIENT_OUT_OF_RANGE
-            || status == NYdb::EStatus::CLIENT_DISCOVERY_FAILED) {
+        if (status == NYdb::EStatus::INTERNAL_ERROR || status == NYdb::EStatus::UNAVAILABLE || status == NYdb::EStatus::TIMEOUT ||
+            status == NYdb::EStatus::BAD_SESSION || status == NYdb::EStatus::SESSION_EXPIRED || status == NYdb::EStatus::UNDETERMINED ||
+            status == NYdb::EStatus::TRANSPORT_UNAVAILABLE || status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED ||
+            status == NYdb::EStatus::CLIENT_INTERNAL_ERROR || status == NYdb::EStatus::CLIENT_OUT_OF_RANGE ||
+            status == NYdb::EStatus::CLIENT_DISCOVERY_FAILED) {
             return ERetryErrorClass::ShortRetry;
         }
 
-        if (status == NYdb::EStatus::OVERLOADED
-            || status == NYdb::EStatus::SESSION_BUSY
-            || status == NYdb::EStatus::CLIENT_RESOURCE_EXHAUSTED
-            || status == NYdb::EStatus::CLIENT_LIMITS_REACHED) {
+        if (status == NYdb::EStatus::OVERLOADED || status == NYdb::EStatus::SESSION_BUSY || status == NYdb::EStatus::CLIENT_RESOURCE_EXHAUSTED ||
+            status == NYdb::EStatus::CLIENT_LIMITS_REACHED) {
             return ERetryErrorClass::LongRetry;
         }
         return ERetryErrorClass::NoRetry;
@@ -129,4 +127,4 @@ private:
     TComputeRequestCountersPtr Counters;
 };
 
-} // namespace NFq
+}   // namespace NFq

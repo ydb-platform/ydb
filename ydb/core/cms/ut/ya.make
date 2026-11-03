@@ -17,6 +17,7 @@ YQL_LAST_ABI_VERSION()
 GENERATE_ENUM_SERIALIZATION(cms_maintenance_api_ut_enums.h)
 
 SRCS(
+    ddisk_usage_ut.cpp
     cluster_info_ut.cpp
     cms_ut.cpp
     cms_tenants_ut.cpp

@@ -7,7 +7,7 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-bool IsSuitableToDisableOlapBlocks(const TIntrusivePtr<IOperator>& input, TTypeAnnotationContext& typesCtx, ui32 columnsLimit) {
+bool IsSuitableToDisableOlapBlocks(IOperator* input, TTypeAnnotationContext& typesCtx, ui32 columnsLimit) {
     if (columnsLimit == 0 || input->GetKind() != EOperator::Limit || typesCtx.BlockEngineMode == NYql::EBlockEngineMode::Disable) {
         return false;
     }
@@ -32,11 +32,11 @@ TIntrusivePtr<IOperator> TDisableBlocksOnColumnsLimitRule::SimpleMatchAndApply(c
 
     const ui32 columnsLimit = rboCtx.KqpCtx.Config->GetDisableOlapBlocksOnColumnsLimit();
 
-    if (!IsSuitableToDisableOlapBlocks(input, typesCtx, columnsLimit)) {
+    if (!IsSuitableToDisableOlapBlocks(input.get(), typesCtx, columnsLimit)) {
         return input;
     }
 
-    if (input->GetOutputIUs().size() >= static_cast<size_t>(columnsLimit)) {
+    if (input->GetOutputIUs().Size() >= static_cast<size_t>(columnsLimit)) {
         typesCtx.BlockEngineMode = NYql::EBlockEngineMode::Disable;
     }
     return input;

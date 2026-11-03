@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_expr_traits.cpp
@@ -14,7 +14,5 @@ PEERDIR(
     yt/yql/providers/yt/common
     yt/yql/providers/yt/expr_nodes
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

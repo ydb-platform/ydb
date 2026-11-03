@@ -87,6 +87,7 @@ Y_UNIT_TEST_SUITE(SystemViewLarge) {
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
     }
+
 }
 
 } // NSysView

@@ -85,6 +85,13 @@ const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, co
     return ctx.MakeType<TFlowExprType>(itemType);
 }
 
+TStringBuf GetExistingObjectKind(const TYtTableMetaInfo& meta) {
+    if (meta.IsLink) {
+        return "Symlink";
+    }
+    return meta.SqlView.empty() ? "Table" : "View";
+}
+
 using namespace NNodes;
 
 class TYtDataSinkTypeAnnotationTransformer : public TVisitorTransformerBase {
@@ -561,16 +568,16 @@ private:
             }
         }
 
-        if (content && TCoPgSelect::Match(content.Get())) {
-            auto pgSelect = TCoPgSelect(content);
-            if (NCommon::NeedToRenamePgSelectColumns(pgSelect)) {
+        if (content && content->IsCallable({"PgSelect", "YqlSelect"})) {
+            auto sqlSelect = TExprBase(content);
+            if (NCommon::NeedToRenameSqlSelectColumns(sqlSelect)) {
                 TExprNode::TPtr output;
 
                 const auto& columnOrder = (outTableInfo.RowSpec)
                     ? outTableInfo.RowSpec->GetColumnOrder()
                     : contentColumnOrder;
 
-                bool result = NCommon::RenamePgSelectColumns(pgSelect, output, columnOrder, ctx, *State_->Types);
+                bool result = NCommon::RenameSqlSelectColumns(sqlSelect, output, columnOrder, ctx, *State_->Types);
                 if (!result) {
                     return TStatus::Error;
                 }
@@ -618,7 +625,7 @@ private:
 
             const TTypeAnnotationNode* targetRowType = description.RowType;
             if (State_->Types->EngineType == EEngineType::Ytflow) {
-                targetRowType = MakeTypeForDynamicTableWrite(description, ctx);
+                targetRowType = MakeTypeForYtflowTableWrite(description.RowType, description.RowSpec->ExpressionColumns, ctx);
             }
 
             if (!IsSameAnnotation(*targetRowType, *itemType)) {
@@ -634,6 +641,15 @@ private:
                     << "Table " << outTableInfo.Name.Quote() << " row type differs from the written row type: "
                     << GetTypeDiff(*targetRowType, *itemType)));
                 return TStatus::Error;
+            }
+        } else if (State_->Types->EngineType == EEngineType::Ytflow) {
+            const auto* targetRowType = MakeTypeForYtflowTableWrite(itemType, Nothing(), ctx);
+            if (!IsSameAnnotation(*targetRowType, *itemType)) {
+                YQL_ENSURE(content, "Expected content to remove read-only columns from table write");
+                auto expectedType = ctx.MakeType<TListExprType>(targetRowType);
+                auto status = TryConvertTo(content, *expectedType, ctx, *State_->Types);
+                YQL_ENSURE(status.Level != TStatus::Error, "Failed to remove read-only columns from table write");
+                return status;
             }
         }
 
@@ -697,7 +713,7 @@ private:
             else {
                 const TTypeAnnotationNode* targetRowType = nextDescription.RowType;
                 if (State_->Types->EngineType == EEngineType::Ytflow) {
-                    targetRowType = MakeTypeForDynamicTableWrite(nextDescription, ctx);
+                    targetRowType = MakeTypeForYtflowTableWrite(nextDescription.RowType, nextDescription.RowSpec->ExpressionColumns, ctx);
                 }
 
                 if (!IsSameAnnotation(*targetRowType, *itemType)) {
@@ -939,7 +955,7 @@ private:
         }
 
         auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, false,
-            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip);
+            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::NonUnique);
         if (status.Level != TStatus::Ok) {
             return status;
         }
@@ -1149,7 +1165,7 @@ private:
         }
 
         auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, false,
-            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample);
+            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::NonUnique);
         if (status.Level != TStatus::Ok) {
             return status;
         }
@@ -1221,7 +1237,7 @@ private:
         }
 
         auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, true,
-            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::SysColumns);
+            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::SysColumns | EYtSettingType::NonUnique);
         if (status.Level != TStatus::Ok) {
             return status;
         }
@@ -1303,7 +1319,7 @@ private:
         }
 
         auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, true,
-            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::SysColumns);
+            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::SysColumns | EYtSettingType::NonUnique);
         if (status.Level != TStatus::Ok) {
             return status;
         }
@@ -1419,7 +1435,7 @@ private:
         }
 
         const bool hasMapLambda = !TCoVoid::Match(input->Child(TYtMapReduce::idx_Mapper));
-        EYtSettingTypes sectionSettings = EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample;
+        EYtSettingTypes sectionSettings = EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::NonUnique;
         if (hasMapLambda) {
             sectionSettings |= EYtSettingType::SysColumns;
         }
@@ -1692,7 +1708,7 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateSettings(*settings, EYtSettingType::Mode
+        auto acceptedSettings = EYtSettingType::Mode
             | EYtSettingType::Initial
             | EYtSettingType::CompressionCodec
             | EYtSettingType::ErasureCodec
@@ -1705,8 +1721,13 @@ private:
             | EYtSettingType::MutationId
             | EYtSettingType::ColumnGroups
             | EYtSettingType::SecurityTags
-            | EYtSettingType::Columns
-            , ctx))
+            | EYtSettingType::Columns;
+
+        if (State_->Types->EngineType == EEngineType::Ytflow) {
+            acceptedSettings |= EYtSettingType::PrimaryKey;
+        }
+
+        if (!ValidateSettings(*settings, acceptedSettings, ctx))
         {
             return TStatus::Error;
         }
@@ -1884,7 +1905,8 @@ private:
         YQL_ENSURE(targetInfo.Meta);
 
         const bool initial = NYql::HasSetting(create.Settings().Ref(), EYtSettingType::Initial);
-        if (linkInfo.Meta->DoesExist || linkInfo.Meta->IsLink || !initial) {
+        const bool objectExists = linkInfo.Meta->DoesExist || linkInfo.Meta->IsLink;
+        if (objectExists || !initial) {
             if (const auto mode = NYql::GetSetting(*settings, EYtSettingType::Mode);
                 mode && EYtWriteMode::CreateSymlinkIfNotExists == FromString<EYtWriteMode>(mode->Tail().Content())) {
                 YQL_CLOG(INFO, ProviderYt) << linkInfo.Name
@@ -1893,8 +1915,13 @@ private:
                 return TStatus::Repeat;
             }
 
-            ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), TStringBuilder()
-                << linkInfo.Name.Quote() << " already exists."));
+            TStringBuilder message;
+            if (objectExists) {
+                message << GetExistingObjectKind(*linkInfo.Meta) << ' ' << linkInfo.Name.Quote() << " already exists.";
+            } else {
+                message << "Cannot create symlink " << linkInfo.Name.Quote() << " after another modification of the same path in this epoch.";
+            }
+            ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), message));
             return TStatus::Error;
         }
 
@@ -2007,8 +2034,13 @@ private:
                     }
                 }
 
-                ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), TStringBuilder() <<
-                    (tableInfo.Meta->SqlView.empty() ? "Table" : "View") << ' ' << tableInfo.Name << " already exists."));
+                TStringBuilder message;
+                if (tableInfo.Meta->DoesExist) {
+                    message << GetExistingObjectKind(*tableInfo.Meta) << ' ' << tableInfo.Name << " already exists.";
+                } else {
+                    message << "Cannot create table " << tableInfo.Name << " after another modification of the same path in this epoch.";
+                }
+                ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), message));
                 return TStatus::Error;
             }
 
@@ -2328,7 +2360,7 @@ private:
                 }
 
                 ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), TStringBuilder() <<
-                    (tableInfo.Meta->SqlView.empty() ? "Table" : "View") << ' ' << tableInfo.Name << " already exists."));
+                    GetExistingObjectKind(*tableInfo.Meta) << ' ' << tableInfo.Name << " already exists."));
                 return TStatus::Error;
             }
 
@@ -2497,7 +2529,7 @@ private:
         }
 
         auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, true,
-            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::JoinLabel | EYtSettingType::StatColumns | EYtSettingType::SysColumns);
+            EYtSettingType::KeyFilter | EYtSettingType::KeyFilter2 | EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::JoinLabel | EYtSettingType::StatColumns | EYtSettingType::SysColumns | EYtSettingType::NonUnique);
         if (status.Level != TStatus::Ok) {
             return status;
         }
@@ -2904,23 +2936,21 @@ private:
         return TStatus::Ok;
     }
 
-    const TTypeAnnotationNode* MakeTypeForDynamicTableWrite(const TYtTableDescription& description, TExprContext& ctx) const {
-        auto* targetRowType = description.RowType;
-        if (description.Meta->IsDynamic) {
-            TVector<const TItemExprType*> items;
-            for (const auto* item : description.RowType->Cast<TStructExprType>()->GetItems()) {
-                const auto& name = item->GetName();
-                if (description.RowSpec->ExpressionColumns.contains(TString(name))) {
-                    continue;
-                }
-                if (Find(ORDERED_TABLE_READ_ONLY_FIELDS, name) != ORDERED_TABLE_READ_ONLY_FIELDS.end()) {
-                    continue;
-                }
-                items.push_back(item);
+    const TTypeAnnotationNode* MakeTypeForYtflowTableWrite(const TTypeAnnotationNode* rowType,
+        const TMaybe<TMap<TString, TString>>& expressionColumns, TExprContext& ctx) const
+    {
+        TVector<const TItemExprType*> items;
+        for (const auto* item : rowType->Cast<TStructExprType>()->GetItems()) {
+            const auto& name = item->GetName();
+            if (expressionColumns && expressionColumns->contains(TString(name))) {
+                continue;
             }
-            targetRowType = ctx.MakeType<TStructExprType>(items);
+            if (Find(ORDERED_TABLE_READ_ONLY_FIELDS, name) != ORDERED_TABLE_READ_ONLY_FIELDS.end()) {
+                continue;
+            }
+            items.push_back(item);
         }
-        return targetRowType;
+        return ctx.MakeType<TStructExprType>(items);
     }
 
 private:

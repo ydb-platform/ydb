@@ -13,6 +13,7 @@
 #include "opentelemetry/sdk/metrics/aggregation/default_aggregation.h"
 
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
+#  include "opentelemetry/sdk/metrics/exemplar/filter_predicate.h"
 #  include "opentelemetry/sdk/metrics/exemplar/filter_type.h"
 #  include "opentelemetry/sdk/metrics/exemplar/reservoir.h"
 #endif
@@ -37,7 +38,7 @@ public:
   AsyncMetricStorage(const InstrumentDescriptor &instrument_descriptor,
                      const AggregationType aggregation_type,
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
-                     ExemplarFilterType exempler_filter_type,
+                     ExemplarFilterType exemplar_filter_type,
                      nostd::shared_ptr<ExemplarReservoir> &&exemplar_reservoir,
 #endif
                      const AggregationConfig *aggregation_config)
@@ -49,7 +50,7 @@ public:
         delta_hash_map_(
             std::make_unique<AttributesHashMap>(aggregation_config_->cardinality_limit_)),
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
-        exemplar_filter_type_(exempler_filter_type),
+        exemplar_filter_type_(exemplar_filter_type),
         exemplar_reservoir_(std::move(exemplar_reservoir)),
 #endif
         temporal_metric_storage_(instrument_descriptor, aggregation_type, aggregation_config)
@@ -62,14 +63,17 @@ public:
     // Async counter always record monotonically increasing values, and the
     // exporter/reader can request either for delta or cumulative value.
     // So we convert the async counter value to delta before passing it to temporal storage.
-    std::lock_guard<opentelemetry::common::SpinLockMutex> guard(hashmap_lock_);
+    std::lock_guard<std::mutex> guard(hashmap_lock_);
+#ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
+    const bool offer_exemplars =
+        ExemplarFilterEnabled(exemplar_filter_type_, opentelemetry::context::Context{});
+#endif
     for (auto &measurement : measurements)
     {
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
-      if (exemplar_filter_type_ == ExemplarFilterType::kAlwaysOn)
+      if (offer_exemplars)
       {
-        exemplar_reservoir_->OfferMeasurement(measurement.second, {}, {},
-                                              std::chrono::system_clock::now());
+        exemplar_reservoir_->OfferMeasurement(measurement.second, measurement.first, {});
       }
 #endif
 
@@ -126,7 +130,7 @@ public:
 
     std::shared_ptr<AttributesHashMap> delta_metrics = nullptr;
     {
-      std::lock_guard<opentelemetry::common::SpinLockMutex> guard(hashmap_lock_);
+      std::lock_guard<std::mutex> guard(hashmap_lock_);
       delta_metrics = std::move(delta_hash_map_);
       delta_hash_map_ =
           std::make_unique<AttributesHashMap>(aggregation_config_->cardinality_limit_);
@@ -144,7 +148,7 @@ private:
   const AggregationConfig *aggregation_config_;
   std::unique_ptr<AttributesHashMap> cumulative_hash_map_;
   std::unique_ptr<AttributesHashMap> delta_hash_map_;
-  opentelemetry::common::SpinLockMutex hashmap_lock_;
+  std::mutex hashmap_lock_;
 #ifdef ENABLE_METRICS_EXEMPLAR_PREVIEW
   ExemplarFilterType exemplar_filter_type_;
   nostd::shared_ptr<ExemplarReservoir> exemplar_reservoir_;

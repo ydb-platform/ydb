@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_opt_phy_delete_index.cpp
@@ -21,7 +21,5 @@ PEERDIR(
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -2,8 +2,11 @@
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
 
 namespace NKikimr::NMetadata::NProvider {
 
@@ -46,17 +49,27 @@ void TTableExistsActor::OnBootstrap() {
     auto& entry = request->ResultSet.emplace_back();
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.Path = NKikimr::SplitPath(Path);
-    AFL_DEBUG(NKikimrServices::METADATA_PROVIDER)("self_id", SelfId())("send_to", MakeSchemeCacheID());
+    YDB_LOG_DEBUG("Dump selfId, sendTo",
+        {"selfId", SelfId()},
+        {"sendTo", MakeSchemeCacheID()});
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), IEventHandle::FlagTrackDelivery);
 }
 
 void TTableExistsActor::Handle(NActors::TEvents::TEvUndelivered::TPtr& /*ev*/) {
-    AFL_DEBUG(NKikimrServices::METADATA_PROVIDER)("actor", "TTableExistsActor")("event", "undelivered")("self_id", SelfId())("send_to", MakeSchemeCacheID());
+    YDB_LOG_DEBUG("Dump actor, event, selfId, sendTo",
+        {"actor", "TTableExistsActor"},
+        {"event", "undelivered"},
+        {"selfId", SelfId()},
+        {"sendTo", MakeSchemeCacheID()});
     OutputController->OnPathExistsCheckFailed("scheme_cache_undelivered_message", Path);
 }
 
 void TTableExistsActor::OnTimeout() {
-    AFL_DEBUG(NKikimrServices::METADATA_PROVIDER)("actor", "TTableExistsActor")("event", "timeout")("self_id", SelfId())("send_to", MakeSchemeCacheID());
+    YDB_LOG_DEBUG("Dump actor, event, selfId, sendTo",
+        {"actor", "TTableExistsActor"},
+        {"event", "timeout"},
+        {"selfId", SelfId()},
+        {"sendTo", MakeSchemeCacheID()});
     OutputController->OnPathExistsCheckFailed("timeout", Path);
 }
 

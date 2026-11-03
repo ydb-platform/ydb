@@ -14,6 +14,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 const TString ReplicationConsumerName = "replicationConsumer";
@@ -24,16 +26,23 @@ namespace {
 
 class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                LOG_W("Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Retry.");
+                YDB_LOG_WARN("Error of resolving topic",
+                    {"streamPath", SrcStreamPath},
+                    {"ev", ev->Get()->ToString()},
+                    {"outcome", "retry"});
                 return Retry();
             }
 
-            LOG_E("Error of resolving topic '" << SrcStreamPath << "': " << ev->Get()->ToString() << ". Stop.");
+            YDB_LOG_ERROR("Error of resolving topic",
+                {"streamPath", SrcStreamPath},
+                {"ev", ev->Get()->ToString()},
+                {"outcome", "stop"});
             return; // TODO: hard error
         }
 
@@ -53,7 +62,7 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
     }
 
     void Retry() {
-        LOG_D("Retry");
+        YDB_LOG_DEBUG("Retry");
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 
@@ -86,7 +95,7 @@ public:
         , SrcStreamPath(srcStreamPath)
         , SrcStreamConsumerName(srcStreamConsumerName)
         , DstPathId(dstPathId)
-        , LogPrefix("TableWorkerRegistar", ReplicationId, TargetId)
+        , LogPrefix(CreateActorLogPrefix("TableWorkerRegistar", ReplicationId, TargetId))
         , Config(config)
         , BatchingSettings(batchingSettings)
         , Database(database)
@@ -96,11 +105,14 @@ public:
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         Become(&TThis::StateWork);
         Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(SrcStreamPath, {}));
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
             sFunc(TEvents::TEvWakeup, Bootstrap);
@@ -118,7 +130,7 @@ private:
     const TString SrcStreamPath;
     const TString SrcStreamConsumerName;
     const TPathId DstPathId;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
     const TReplication::ITarget::IConfig::TPtr Config;
     const NKikimrReplication::TBatchingSettings BatchingSettings;
     const TString Database;

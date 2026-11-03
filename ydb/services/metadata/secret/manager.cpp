@@ -4,6 +4,8 @@
 
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_SECRET
+
 namespace NKikimr::NMetadata::NSecret {
 
 class TCheckSecretNameUnique: public NModifications::TModificationStage {
@@ -20,7 +22,9 @@ private:
         sb << "FROM `" + TSecret::GetBehaviour()->GetStorageTablePath() + "`" << Endl;
         sb << "VIEW index_by_secret_id" << Endl;
         sb << "WHERE " + TSecret::TDecoder::SecretId + " IN $secretNames" << Endl;
-        AFL_DEBUG(NKikimrServices::METADATA_SECRET)("event", "build_precondition")("sql", sb);
+        YDB_LOG_DEBUG("Dump event, sql",
+            {"event", "build_precondition"},
+            {"sql", sb});
         request.mutable_query()->set_yql_text(sb);
 
         Ydb::TypedValue secretNamesParam;

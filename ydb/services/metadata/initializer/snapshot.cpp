@@ -1,5 +1,7 @@
 #include "snapshot.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_INITIALIZER
+
 namespace NKikimr::NMetadata::NInitializer {
 
 bool TSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawDataResult) {
@@ -10,7 +12,7 @@ bool TSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult&
         for (auto&& r : rawData.rows()) {
             TDBInitialization initObject;
             if (!initObject.DeserializeFromRecord(decoder, r)) {
-                ALS_ERROR(NKikimrServices::METADATA_INITIALIZER) << "cannot parse initialization info for snapshot";
+                YDB_LOG_ERROR("Cannot parse initialization info for snapshot");
                 continue;
             }
             Objects.emplace(initObject, initObject);

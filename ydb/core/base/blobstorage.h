@@ -677,6 +677,9 @@ struct TEvBlobStorage {
         EvVRestorePart,
         EvVRestorePartResult,
 
+        EvSyncerMetadataSync,
+        EvSyncerMetadataSyncDone,
+
         EvEnd
     };
 

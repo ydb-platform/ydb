@@ -178,6 +178,7 @@ namespace NKikimr {
         TLocalSyncerState LocalSyncerState;
         TActorId CommitterId;
         TActorId SchedulerId;
+        TEvSyncerMetadataSync::TPtr PendingMetadataSync;
         TActorId GuidRecoveryId;
         TActorId RecoverLostDataId;
         TVector<TActorId> PropagatorIds;
@@ -231,6 +232,10 @@ namespace NKikimr {
             YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "%s: Creating syncer scheduler on node %d", __PRETTY_FUNCTION__, SelfId().NodeId()));
             SchedulerId = ctx.Register(CreateSyncerSchedulerActor(SyncerCtx, GInfo, SyncerData, CommitterId, SelfId()));
             ActiveActors.Insert(SchedulerId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
+            if (PendingMetadataSync) {
+                ctx.Send(PendingMetadataSync->Forward(SchedulerId));
+                PendingMetadataSync.Reset();
+            }
         }
 
         bool IsStartupDataSyncBlockedByCut() const {
@@ -335,6 +340,7 @@ namespace NKikimr {
         }
 
         STRICT_STFUNC(SyncGuidStateFunc,
+            HFunc(TEvSyncerMetadataSync, Handle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             HFunc(TEvSyncerCommitDone, Handle)
             HFunc(TEvVDiskGuidRecovered, Handle)
@@ -359,6 +365,7 @@ namespace NKikimr {
         }
 
         STRICT_STFUNC(InconsistentancyStateFunc,
+            HFunc(TEvSyncerMetadataSync, Handle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             HFunc(TEvSyncerCommitDone, Handle)
             HFunc(TEvRecoveryLogCutDone, Handle)
@@ -426,6 +433,7 @@ namespace NKikimr {
         }
 
         STRICT_STFUNC(RecoverLostDataStateFunc,
+            HFunc(TEvSyncerMetadataSync, Handle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             HFunc(TEvSyncerCommitDone, Handle)
             HFunc(TEvSyncerLostDataRecovered, Handle)
@@ -535,6 +543,7 @@ namespace NKikimr {
         }
 
         STRICT_STFUNC(AwaitStartupDataSyncTokenStateFunc,
+            HFunc(TEvSyncerMetadataSync, Handle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             HFunc(TEvSyncerCommitDone, Handle)
             HFunc(TEvVDiskOperationToken, Handle)
@@ -550,6 +559,7 @@ namespace NKikimr {
         )
 
         STRICT_STFUNC(StandardModeStateFunc,
+            HFunc(TEvSyncerMetadataSync, Handle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             HFunc(TEvSyncerCommitDone, Handle)
             HFunc(TEvStartupDataSyncDone, Handle)
@@ -685,6 +695,14 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // Other handlers
         ////////////////////////////////////////////////////////////////////////
+        void Handle(TEvSyncerMetadataSync::TPtr& ev, const TActorContext& ctx) {
+            if (SchedulerId) {
+                ctx.Send(ev->Forward(SchedulerId));
+            } else {
+                PendingMetadataSync = ev;
+            }
+        }
+
         void Handle(TEvLocalStatus::TPtr &ev, const TActorContext &ctx) {
             if (Phase == TPhaseVal::PhaseStandardMode && SchedulerId) {
                 ctx.Send(ev->Forward(SchedulerId));

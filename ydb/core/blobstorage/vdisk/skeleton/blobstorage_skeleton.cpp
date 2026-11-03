@@ -45,6 +45,7 @@
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_hullrepljob.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer.h>
+#include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_scheduler.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubisrunner.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogrecovery.h>
@@ -2235,17 +2236,34 @@ namespace NKikimr {
             StartOsiris(ev->Sender, ctx);
         }
 
-        void TryRepeatRecovery(const TActorContext& ctx) {
-            if (CurrentStateFunc() != &TThis::StateNormal
-                    || !RepeatRecoveryPending || RepeatOsirisId || !Db->ReplID || !DurabilityReplDone
-                    || Config->BaseInfo.ReadOnly || GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)) {
-                return;
-            }
-            RepeatRecoveryPending = false;
+        void SyncMetadataBeforeRepeatRecovery(const TActorContext& ctx) {
+            RepeatRecoveryMetadataGeneration = GInfo->GroupGeneration;
             DurabilityReplDone = false;
             ReplOnlyPhantomsRemain = false;
             UpdateReplState();
+            ctx.Send(Db->SyncerID, new TEvSyncerMetadataSync(RepeatRecoveryMetadataGeneration,
+                RepeatRecoverySourceInfo));
+        }
+
+        void Handle(TEvSyncerMetadataSyncDone::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Get()->Generation != RepeatRecoveryMetadataGeneration
+                    || ev->Get()->Generation != GInfo->GroupGeneration) {
+                return;
+            }
+            RepeatRecoveryMetadataGeneration = 0;
+            RepeatRecoverySourceInfo.Reset();
+            RepeatRecoveryPending = false;
             RepeatOsirisId = StartOsiris(SelfId(), ctx);
+        }
+
+        void TryRepeatRecovery(const TActorContext& ctx) {
+            if (CurrentStateFunc() != &TThis::StateNormal
+                    || !RepeatRecoveryPending || RepeatOsirisId || RepeatRecoveryMetadataGeneration
+                    || !Db->ReplID || !DurabilityReplDone
+                    || Config->BaseInfo.ReadOnly || GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)) {
+                return;
+            }
+            SyncMetadataBeforeRepeatRecovery(ctx);
         }
 
         void Handle(TEvOsirisDone::TPtr& ev, const TActorContext& ctx) {
@@ -2254,9 +2272,8 @@ namespace NKikimr {
             }
             RepeatOsirisId = {};
             if (RepeatRecoveryPending) {
-                // A newer policy arrived while the previous snapshot was being processed.
-                RepeatRecoveryPending = false;
-                RepeatOsirisId = StartOsiris(SelfId(), ctx);
+                // A newer policy needs a fresh metadata barrier before taking its snapshot.
+                SyncMetadataBeforeRepeatRecovery(ctx);
                 return;
             }
             // The old scheduler has finished; recreate it to scan Hull from the beginning.
@@ -2330,8 +2347,35 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVSyncFull::TPtr &ev, const TActorContext &ctx) {
+            ProcessFullSync(ev, ctx, true);
+        }
+
+        void ProcessFullSync(TEvBlobStorage::TEvVSyncFull::TPtr& ev, const TActorContext& ctx, bool waitForLog) {
             if (Config->BaseInfo.DonorMode) {
                 return; // this is a race; donor disk can't answer TEvVSyncFull queries
+            }
+            const TVDiskID source = VDiskIDFromVDiskID(ev->Get()->Record.GetSourceVDiskID());
+            const TVDiskID target = VDiskIDFromVDiskID(ev->Get()->Record.GetTargetVDiskID());
+            if (!SelfVDiskId.SameGroupAndGeneration(source) || !SelfVDiskId.SameDisk(target)) {
+                return ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx,
+                    TAppData::TimeProvider->Now());
+            }
+            if (const std::optional<ui64> lsn = LoggedRecsVault.GetLastLsnInFlight();
+                    waitForLog && ev->Get()->IsInitial() && lsn) {
+                // Keep one pending initial request per peer when its sync job retries.
+                for (auto it = PendingFullSyncs.begin(); it != PendingFullSyncs.end(); ++it) {
+                    const TVDiskID previousSource =
+                        VDiskIDFromVDiskID(it->second->Get()->Record.GetSourceVDiskID());
+                    if (TVDiskIdShort(previousSource) == TVDiskIdShort(source)) {
+                        ReplyError(NKikimrProto::ERROR, "full sync request superseded", it->second, ctx,
+                            TAppData::TimeProvider->Now());
+                        PendingFullSyncs.erase(it);
+                        break;
+                    }
+                }
+                // The initial full-sync snapshot must include writes already admitted to the recovery log.
+                PendingFullSyncs.emplace_back(*lsn, ev.Release());
+                return;
             }
             Y_VERIFY(Db->SyncFullHandlerID);
             ctx.Send(ev->Forward(Db->SyncFullHandlerID));
@@ -2368,6 +2412,12 @@ namespace NKikimr {
                 PendingAssimilations.pop_front();
                 // Recheck the generation, but do not wait for writes admitted after this request.
                 ProcessAssimilation(request, ctx, false);
+            }
+            while (!PendingFullSyncs.empty()
+                    && PendingFullSyncs.front().first <= Db->LsnMngr->GetConfirmedLsnForHull()) {
+                TEvBlobStorage::TEvVSyncFull::TPtr request = std::move(PendingFullSyncs.front().second);
+                PendingFullSyncs.pop_front();
+                ProcessFullSync(request, ctx, false);
             }
             if (ev->Get()->StatusFlags & ui32(NKikimrBlobStorage::StatusIsValid)) {
                 i64 count = ev->Get()->LogChunkCount;
@@ -3213,8 +3263,12 @@ namespace NKikimr {
             if (msg->NewInfo->GroupGeneration > GInfo->GroupGeneration) {
                 const std::optional<EMirror3dcLayout> previousDurability = GetDurabilityLayout(*GInfo);
                 const std::optional<EMirror3dcLayout> nextDurability = GetDurabilityLayout(*msg->NewInfo);
-                RepeatRecoveryPending |= previousDurability && nextDurability
-                    && previousDurability != nextDurability;
+                if (previousDurability && nextDurability && previousDurability != nextDurability) {
+                    RepeatRecoveryPending = true;
+                    if (!RepeatRecoverySourceInfo) {
+                        RepeatRecoverySourceInfo = GInfo;
+                    }
+                }
             }
 
             // Save locally
@@ -3257,13 +3311,16 @@ namespace NKikimr {
                 ctx.Send(Db->SyncFullHandlerID, ev->Get()->Clone());
             }
 
+            if (RepeatRecoveryMetadataGeneration && RepeatRecoveryMetadataGeneration != GInfo->GroupGeneration) {
+                SyncMetadataBeforeRepeatRecovery(ctx);
+            }
             TryRepeatRecovery(ctx);
 
             // FIXME: reconfigure handoff
         }
 
         void HandleReplDone(STFUNC_SIG) {
-            if (ev->Sender != Db->ReplID || RepeatOsirisId) {
+            if (ev->Sender != Db->ReplID || RepeatOsirisId || RepeatRecoveryMetadataGeneration) {
                 return;
             }
             if (ev->Cookie) { // semi-finished replication, only phantom blobs
@@ -3334,6 +3391,10 @@ namespace NKikimr {
             // connection, and they must get replies
             for (auto& [lsn, request] : std::exchange(PendingAssimilations, {})) {
                 ReplyError(NKikimrProto::ERROR, "VDisk is going away", request, ctx, TAppData::TimeProvider->Now());
+            }
+            for (auto& [lsn, request] : std::exchange(PendingFullSyncs, {})) {
+                ReplyError(NKikimrProto::ERROR, "VDisk is going away", request, ctx,
+                    TAppData::TimeProvider->Now());
             }
             ActiveActors.KillAndClear(ctx);
             Die(ctx);
@@ -3755,6 +3816,7 @@ namespace NKikimr {
         )
 
         COUNTED_STRICT_STFUNC(StateNormal,
+            HFunc(TEvSyncerMetadataSyncDone, Handle)
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvBlobStorage::TEvVMovedPatch, Handle)
@@ -3837,6 +3899,7 @@ namespace NKikimr {
         )
 
         COUNTED_STRICT_STFUNC(StateDatabaseError,
+            IgnoreFunc(TEvSyncerMetadataSyncDone)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             CFunc(TEvBlobStorage::EvCompactionFinished, LevelIndexCompactionFinished)
             CFunc(TEvBlobStorage::EvWakeupEmergencyPutQueue, WakeupEmergencyPutQueue)
@@ -3960,6 +4023,8 @@ namespace NKikimr {
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
         std::shared_ptr<NMonGroup::TFullSyncGroup> FullSyncGroup;
         bool RepeatRecoveryPending = false;
+        ui32 RepeatRecoveryMetadataGeneration = 0;
+        TIntrusivePtr<TBlobStorageGroupInfo> RepeatRecoverySourceInfo;
         TActorId RepeatOsirisId;
         bool ReplDone = false;
         bool DurabilityReplDone = false;
@@ -3968,6 +4033,7 @@ namespace NKikimr {
         std::shared_ptr<std::atomic_uint64_t> PDiskWriteBytes = std::make_shared<std::atomic_uint64_t>();
         TLoggedRecsVault LoggedRecsVault;
         std::deque<std::pair<ui64, TEvBlobStorage::TEvVAssimilate::TPtr>> PendingAssimilations;
+        std::deque<std::pair<ui64, TEvBlobStorage::TEvVSyncFull::TPtr>> PendingFullSyncs;
         bool CommenceRepl = false;
         TActorId ScrubId;
         TActorId DefragId;

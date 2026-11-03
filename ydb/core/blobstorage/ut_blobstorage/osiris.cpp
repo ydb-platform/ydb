@@ -728,6 +728,10 @@ Y_UNIT_TEST_SUITE(Osiris) {
         ui32 osirisDone = 0;
         ui32 replDone = 0;
         ui32 osirisWrites = 0;
+        bool holdMetadata = false;
+        ui32 handoffOsirisDone = 0;
+        std::set<ui32> handoffNodes;
+        std::vector<std::unique_ptr<IEventHandle>> heldMetadata;
         bool holdOsirisDone = false;
         bool holdReplDone = false;
         std::vector<std::unique_ptr<IEventHandle>> heldOsirisDone;
@@ -753,8 +757,16 @@ Y_UNIT_TEST_SUITE(Osiris) {
                     }
                     break;
                 }
+                case TEvBlobStorage::EvLocalSyncData:
+                case TEvBlobStorage::EvAddFullSyncSsts:
+                    if (holdMetadata && handoffNodes.contains(event->Recipient.NodeId())) {
+                        heldMetadata.push_back(std::move(event));
+                        return false;
+                    }
+                    break;
                 case TEvBlobStorage::EvOsirisDone:
                     ++osirisDone;
+                    handoffOsirisDone += handoffNodes.contains(event->Recipient.NodeId());
                     if (holdOsirisDone) {
                         heldOsirisDone.push_back(std::move(event));
                         return false;
@@ -811,6 +823,13 @@ Y_UNIT_TEST_SUITE(Osiris) {
         const TLogoBlobID blobId(1, 1, 1, 0, data.size(), 0);
         TBlobStorageGroupInfo::TOrderNums subgroup;
         info->GetTopology().PickSubgroup(blobId.Hash(), subgroup);
+        for (ui32 idx = 3; idx < subgroup.size(); ++idx) {
+            const TVDiskID disk = info->GetVDiskId(subgroup[idx]);
+            if (disk.FailRealm != 2) {
+                handoffNodes.insert(info->GetActorId(subgroup[idx]).NodeId());
+            }
+        }
+        holdMetadata = true;
         // One copy in each normal realm satisfies D=1+1, but not the later D=2+2.
         for (ui32 part = 0; part < 3; ++part) {
             TVDiskID disk = info->GetVDiskId(subgroup[part]);
@@ -829,8 +848,37 @@ Y_UNIT_TEST_SUITE(Osiris) {
         }
         env.Sim(TDuration::Seconds(30));
         osirisDone = replDone = osirisWrites = 0;
+        handoffOsirisDone = 0;
         states[0] = states[1] = TFailRealm::N1;
         applyStates();
+        UNIT_ASSERT(!heldMetadata.empty());
+        UNIT_ASSERT_VALUES_EQUAL(handoffOsirisDone, 0);
+        UNIT_ASSERT_VALUES_EQUAL(osirisWrites, 0);
+        // A generation-only update while waiting must restart the metadata round.
+        applyStates();
+        UNIT_ASSERT_VALUES_EQUAL(handoffOsirisDone, 0);
+        for (ui32 idx = 3; idx < subgroup.size(); ++idx) {
+            TVDiskID disk = info->GetVDiskId(subgroup[idx]);
+            if (disk.FailRealm == 2) {
+                continue;
+            }
+            disk.GroupGeneration = originalGroup.GetGroupGeneration() + revision;
+            const TActorId service = info->GetActorId(subgroup[idx]);
+            const TActorId edge = env.Runtime->AllocateEdgeActor(service.NodeId());
+            env.Runtime->Send(new IEventHandle(service, edge, new TEvBlobStorage::TEvVStatus(disk)), edge.NodeId());
+            const TAutoPtr<TEventHandle<TEvBlobStorage::TEvVStatusResult>> result =
+                env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT(result->Get()->Record.GetReplicated());
+            UNIT_ASSERT(!result->Get()->Record.GetDurabilityReplicated());
+        }
+        holdMetadata = false;
+        for (std::unique_ptr<IEventHandle>& event : heldMetadata) {
+            const ui32 nodeId = event->Recipient.NodeId();
+            env.Runtime->Send(event.release(), nodeId);
+        }
+        heldMetadata.clear();
+        env.Sim(TDuration::Seconds(60));
         UNIT_ASSERT_VALUES_EQUAL(osirisDone, 6);
         UNIT_ASSERT_VALUES_EQUAL(replDone, 6);
         UNIT_ASSERT_C(osirisWrites, "N0->N1 must resurrect additional copies for D=2+2");

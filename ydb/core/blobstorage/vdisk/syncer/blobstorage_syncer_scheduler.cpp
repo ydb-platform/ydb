@@ -5,6 +5,7 @@
 #include "syncer_job_task.h"
 #include "syncer_job_actor.h"
 #include "syncer_merger.h"
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
 
@@ -227,6 +228,11 @@ namespace NKikimr {
         bool Scheduled;
         THashSet<ui32> StartupDataSyncPeers;
         THashSet<ui32> FullSyncRequested;
+        ui32 MetadataSyncGeneration = 0;
+        TActorId MetadataSyncNotifyId;
+        TIntrusivePtr<TBlobStorageGroupInfo> MetadataSyncSourceInfo;
+        THashSet<ui32> MetadataSyncJobs;
+        THashSet<ui32> MetadataSyncedPeers;
         bool StartupDataSyncDoneReported = false;
         std::shared_ptr<TSjCtx> JobCtx;
 
@@ -315,6 +321,62 @@ namespace NKikimr {
             Schedule(ctx);
         }
 
+        bool HasMetadataSyncQuorum(const TBlobStorageGroupInfo& info) const {
+            TBlobStorageGroupInfo::TGroupVDisks synced(&info.GetTopology());
+            for (ui32 order : MetadataSyncedPeers) {
+                synced |= TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(),
+                    TVDiskIdShort(info.GetVDiskId(order)));
+            }
+            return TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, synced);
+        }
+
+        void CheckMetadataSyncDone(const TActorContext& ctx) {
+            if (MetadataSyncGeneration && MetadataSyncGeneration == GInfo->GroupGeneration
+                    && HasMetadataSyncQuorum(*GInfo) && HasMetadataSyncQuorum(*MetadataSyncSourceInfo)) {
+                ctx.Send(MetadataSyncNotifyId, new TEvSyncerMetadataSyncDone(MetadataSyncGeneration));
+                MetadataSyncGeneration = 0;
+                MetadataSyncSourceInfo.Reset();
+                MetadataSyncJobs.clear();
+                MetadataSyncedPeers.clear();
+            }
+        }
+
+        void RescheduleFullSyncRequests(const TActorContext& ctx) {
+            TVector<TVDiskInfoPtr> queued;
+            while (!SchedulerQueue.empty()) {
+                queued.push_back(SchedulerQueue.top());
+                SchedulerQueue.pop();
+            }
+            const TInstant now = TAppData::TimeProvider->Now();
+            for (TVDiskInfoPtr peer : queued) {
+                if (FullSyncRequested.contains(peer->OrderNumber)) {
+                    NSyncer::TPeerSyncState& peerState =
+                        (*SyncerData->Neighbors)[GInfo->GetVDiskId(peer->OrderNumber)].Get().PeerSyncState;
+                    peerState.SchTime = now;
+                }
+                SchedulerQueue.push(peer);
+            }
+            Schedule(ctx);
+        }
+
+        void Handle(TEvSyncerMetadataSync::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Get()->Generation != GInfo->GroupGeneration) {
+                return;
+            }
+            MetadataSyncGeneration = ev->Get()->Generation;
+            MetadataSyncNotifyId = ev->Sender;
+            MetadataSyncSourceInfo = ev->Get()->SourceInfo;
+            MetadataSyncJobs.clear();
+            MetadataSyncedPeers.clear();
+            MetadataSyncedPeers.insert(GInfo->GetOrderNumber(SyncerContext->VCtx->ShortSelfVDisk));
+            for (const TSyncNeighbors::TValue& peer : *SyncerData->Neighbors) {
+                if (!peer.Myself && !GInfo->IsFailedFailRealm(GInfo->GetVDiskId(peer.OrderNumber).FailRealm)) {
+                    FullSyncRequested.insert(peer.OrderNumber);
+                }
+            }
+            RescheduleFullSyncRequests(ctx);
+        }
+
         void ApplyChanges(
                 const TActorContext &ctx,
                 const TVDiskID& vDiskId,
@@ -323,12 +385,23 @@ namespace NKikimr {
             YDB_LOG_INFO_CTX(ctx, VDISKP(SyncerContext->VCtx->VDiskLogPrefix, "SyncerScheduler: sync job done: vDiskId# %s status# %s newSyncState# %s", vDiskId.ToString().data(), NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus_Name(peerSyncState.LastSyncStatus).data(), peerSyncState.SyncState.ToString().data()));
 
             const ui32 peerOrderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
+            bool metadataSyncRetry = false;
+            if (MetadataSyncJobs.erase(peerOrderNumber)) {
+                if (NSyncer::TPeerSyncState::Good(peerSyncState.LastSyncStatus)
+                        && vDiskId.GroupGeneration == MetadataSyncGeneration) {
+                    MetadataSyncedPeers.insert(peerOrderNumber);
+                    CheckMetadataSyncDone(ctx);
+                } else if (MetadataSyncGeneration) {
+                    FullSyncRequested.insert(peerOrderNumber);
+                    metadataSyncRetry = true;
+                }
+            }
             const bool fullSyncPending = FullSyncRequested.contains(peerOrderNumber);
-            TDuration interval = fullRecovery || fullSyncPending ? TDuration::Zero() : SyncTimeInterval;
+            TDuration interval = !metadataSyncRetry && (fullRecovery || fullSyncPending)
+                ? TDuration::Zero() : SyncTimeInterval;
             SyncerData->Neighbors->ApplyChanges(vDiskId, peerSyncState, interval);
             ActualizeUnsyncedDisksNum();
-            const ui32 orderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
-            if (StartupDataSyncPeers.erase(orderNumber) && StartupDataSyncPeers.empty()) {
+            if (StartupDataSyncPeers.erase(peerOrderNumber) && StartupDataSyncPeers.empty()) {
                 ReportStartupDataSyncDone(ctx);
             }
             SchedulerQueue.push(&(*SyncerData->Neighbors)[vDiskId]);
@@ -411,6 +484,9 @@ namespace NKikimr {
             auto vDiskId = GInfo->GetVDiskId(info->OrderNumber);
             const TSyncerJobTask::EJobType jobType = FullSyncRequested.erase(info->OrderNumber)
                 ? TSyncerJobTask::EFullRecover : TSyncerJobTask::EJustSync;
+            if (MetadataSyncGeneration == GInfo->GroupGeneration && jobType == TSyncerJobTask::EFullRecover) {
+                MetadataSyncJobs.insert(info->OrderNumber);
+            }
             auto task = std::make_unique<TSyncerJobTask>(
                     jobType,
                     vDiskId,
@@ -521,20 +597,7 @@ namespace NKikimr {
             JobCtx = TSjCtx::Create(SyncerContext, GInfo);
 
             // Running jobs finish first; queued peers can start full sync immediately.
-            TVector<TVDiskInfoPtr> queued;
-            while (!SchedulerQueue.empty()) {
-                queued.push_back(SchedulerQueue.top());
-                SchedulerQueue.pop();
-            }
-            const TInstant now = TAppData::TimeProvider->Now();
-            for (TVDiskInfoPtr peer : queued) {
-                if (FullSyncRequested.contains(peer->OrderNumber)) {
-                    NSyncer::TPeerSyncState& peerState = (*SyncerData->Neighbors)[GInfo->GetVDiskId(peer->OrderNumber)].Get().PeerSyncState;
-                    peerState.SchTime = now;
-                }
-                SchedulerQueue.push(peer);
-            }
-            Schedule(ctx);
+            RescheduleFullSyncRequests(ctx);
         }
 
         void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
@@ -543,6 +606,7 @@ namespace NKikimr {
         }
 
         STRICT_STFUNC(StateFunc,
+            HFunc(TEvSyncerMetadataSync, Handle)
             HFunc(TEvSyncerJobDone, Handle)
             HFunc(TEvSyncerCommitProxyDone, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
@@ -558,6 +622,7 @@ namespace NKikimr {
         )
 
         STRICT_STFUNC(NothingToDo,
+            HFunc(TEvSyncerMetadataSync, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvLocalStatus, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)

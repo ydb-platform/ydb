@@ -195,15 +195,14 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
                     PersQueue::ErrorCode::ERROR, ctx);
             }
             const auto& topic = entry.ListNodeEntry->Children.at(0);
-            const TString childPath = JoinPath(ChildPath(entry.Path, topic.Name));
-            if (childPath.empty()) {
-                LOG_C("CDC stream child topic path is empty", {"path", path});
+            if (topic.Name.empty()) {
+                LOG_C("CDC stream child topic name is empty", {"path", path});
                 return CloseSession(TStringBuilder() << "Internal error describing CDC stream '" << path << "'",
                     PersQueue::ErrorCode::ERROR, ctx);
             }
 
             // primary path used to re-describe; GetOriginalPath keeps the path this session was keyed by
-            it->second.DiscoveryConverter->SetPrimaryPath(childPath);
+            it->second.DiscoveryConverter->SetPrimaryPath(JoinPath(ChildPath(entry.Path, topic.Name)));
             it->second.CdcStreamPath = CanonizePath(entry.Path);
 
 //            Topics[it->second.DiscoveryConverter->GetInternalName()] = it->second;

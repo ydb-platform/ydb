@@ -8,19 +8,19 @@
 namespace NKikimr::NMsgBusProxy::NPqMetaCacheV2 {
 
 // Topics whose primary path was not found are described again as DbRoot/<account>/<modern name>.
-// An entry that is skipped must not shift the index: the next result stays paired with its own topic.
+// `isUnknown` is indexed the same way as `topics`: the caller has one scheme-cache entry per topic.
+// A skipped entry does not shift the index, so the next result stays paired with its own topic.
 template <typename TTopics, typename TIsUnknown>
 TVector<ui64> SelectSecondTryTopics(
         const TString& dbRoot,
         TTopics& topics,
-        size_t entryCount,
         const TIsUnknown& isUnknown)
 {
     TVector<ui64> secondTry;
-    if (dbRoot.empty() || entryCount != topics.size()) {
+    if (dbRoot.empty()) {
         return secondTry;
     }
-    for (size_t index = 0; index < entryCount; ++index) {
+    for (size_t index = 0; index < topics.size(); ++index) {
         if (!isUnknown(index)) {
             continue;
         }

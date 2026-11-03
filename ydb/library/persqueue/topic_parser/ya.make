@@ -9,6 +9,7 @@ PEERDIR(
 SRCS(
     topic_parser.h
     topic_parser.cpp
+    describe_retry.h
     counters.h
     counters.cpp
     type_definitions.h

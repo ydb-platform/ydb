@@ -1,5 +1,5 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
-#include <ydb/core/client/server/pq_describe_retry.h>
+#include <ydb/library/persqueue/topic_parser/describe_retry.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <memory>
@@ -482,7 +482,7 @@ std::shared_ptr<TRetryTopic> RetryTopic(TMaybe<TString> account, bool allowSecon
 
 TVector<ui64> SelectRetry(const TString& dbRoot, TRetryTopics& topics, const TVector<bool>& unknown) {
     return NKikimr::NMsgBusProxy::NPqMetaCacheV2::SelectSecondTryTopics(
-        dbRoot, topics, unknown.size(), [&](size_t index) { return unknown[index]; });
+        dbRoot, topics, [&](size_t index) { return unknown[index]; });
 }
 
 Y_UNIT_TEST_SUITE(SecondTryTopicSelection) {
@@ -535,6 +535,26 @@ Y_UNIT_TEST_SUITE(SecondTryTopicSelection) {
         UNIT_ASSERT_VALUES_EQUAL(selected.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(selected[0], 1);
         UNIT_ASSERT_VALUES_EQUAL(topics[1]->Databases[0], "/lb/b");
+    }
+
+    Y_UNIT_TEST(RealConverterSkipDoesNotStealNextTopic) {
+        TTopicNamesConverterFactory firstClass(true, "", "");
+        TTopicNamesConverterFactory federation(false, "/Root/PQ", "dc1");
+        TVector<TDiscoveryConverterPtr> topics{
+            firstClass.MakeDiscoveryConverter("/database/stream", {}, "", "/database"),
+            federation.MakeDiscoveryConverter("acc/topic", {}, "dc1", ""),
+        };
+        UNIT_ASSERT(topics[0]->IsValid());
+        UNIT_ASSERT(topics[1]->IsValid());
+
+        const auto selected = NKikimr::NMsgBusProxy::NPqMetaCacheV2::SelectSecondTryTopics(
+            "/lb", topics, [](size_t) { return true; });
+
+        UNIT_ASSERT_VALUES_EQUAL(selected.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(selected[0], 1);
+        const auto& secondary = topics[1]->GetSecondaryPath("");
+        UNIT_ASSERT(secondary.Defined());
+        UNIT_ASSERT(secondary->StartsWith("/lb/acc"));
     }
 }
 } // NTests

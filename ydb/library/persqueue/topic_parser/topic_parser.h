@@ -20,7 +20,6 @@ namespace NKikimr::NMsgBusProxy::NPqMetaCacheV2 {
     TVector<ui64> SelectSecondTryTopics(
             const TString& dbRoot,
             TTopics& topics,
-            size_t entryCount,
             const TIsUnknown& isUnknown);
 }
 
@@ -66,7 +65,6 @@ class TDiscoveryConverter {
     friend TVector<ui64> NKikimr::NMsgBusProxy::NPqMetaCacheV2::SelectSecondTryTopics(
             const TString& dbRoot,
             TTopics& topics,
-            size_t entryCount,
             const TIsUnknown& isUnknown);
 
     using TDiscoveryConverterPtr = std::shared_ptr<TDiscoveryConverter>;

@@ -60,6 +60,7 @@ ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/postgresql py3test.sole chunk
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.GetAllStartPartitionSessions
+ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.RetryOverheadOnHappyPath
 ydb/services/metadata/secret/ut Secret.Simple
 ydb/services/persqueue_v1/ut TPersQueueTest.PreferredCluster_DisabledRemoteClusterAndWriteSessionsWithDifferentPreferredClusterAndLaterRemoteClusterEnabled_SessionWithMismatchedClusterDiesAfterPreferredClusterEnabledAndOtherSessionsAlive
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootBalancerOnlyCombinedStress
@@ -266,7 +267,9 @@ ydb/tests/fq/multi_plane py3test.[test_retry_high_rate.py] chunk
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping_with_row_dispatcher
 ydb/tests/fq/multi_plane test_retry.py.TestRetry.test_low_rate[kikimr0]
 ydb/tests/fq/multi_plane test_retry_high_rate.py.TestRetry.test_high_rate[kikimr0]
+ydb/tests/fq/s3 test_inflight.py.TestS3.test_inflight[v1-client0-kikimr_params0]
 ydb/tests/fq/s3 test_inflight.py.TestS3.test_inflight[v1-client0-kikimr_params1]
+ydb/tests/fq/s3 test_inflight.py.TestS3.test_inflight[v1-client0-kikimr_params2]
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_increase[local]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[recreate-output-row]

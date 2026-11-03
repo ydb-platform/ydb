@@ -799,7 +799,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
 
 TStructuredMessage TMirrorer::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"topic", TopicConverter->GetPrintableString()},
+        {"topic", TopicConverter->GetPrimaryPath()},
         {"partition", Partition});
 }
 

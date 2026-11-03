@@ -69,7 +69,7 @@ TPartitionCompaction::TPartitionCompaction(ui64 firstUncompactedOffset, ui64 par
 }
 
 void TPartitionCompaction::TryCompactionIfPossible() {
-    AFL_ENSURE(PartitionActor->Config.GetEnableCompactification())("tablet_id", PartitionActor->TabletId)("partition_id", PartitionActor->Partition)("topic", PartitionActor->TopicName());
+    AFL_ENSURE(PartitionActor->Config.GetEnableCompactification())("tablet_id", PartitionActor->TabletId)("partition_id", PartitionActor->Partition)("topic", PartitionActor->TopicPath());
     if (PartitionActor->CompacterPartitionRequestInflight || PartitionActor->CompacterKvRequestInflight) {
         return;
     }
@@ -95,7 +95,7 @@ void TPartitionCompaction::TryCompactionIfPossible() {
                 ("last_offset", ReadState->GetLastOffset())
                 ("tablet_id", PartitionActor->TabletId)
                 ("partition_id", PartitionActor->Partition)
-                ("topic", PartitionActor->TopicName());
+                ("topic", PartitionActor->TopicPath());
             FirstUncompactedOffset = ReadState->GetLastOffset();
             Counters.CurrentReadCycleKeys = CompactState->TopicData.size();
             Counters.ReadCyclesCount += 1;
@@ -122,7 +122,7 @@ void TPartitionCompaction::TryCompactionIfPossible() {
 void TPartitionCompaction::ProcessResponse(TEvPQ::TEvError::TPtr& ev) {
     LOG_E(
         "Compaction for topic proxy ERROR",
-        {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
+        {"topicPath", PartitionActor->TopicPath()},
         {"response", ev->Get()->Error}
     );
     PartitionActor->Send(PartitionActor->TabletActorId, new TEvents::TEvPoison());
@@ -133,7 +133,7 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvError::TPtr& ev) {
 void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
     LOG_D(
         "Compaction for topic proxy response",
-        {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
+        {"topicPath", PartitionActor->TopicPath()},
         {"cookie", ev->Get()->Cookie}
     );
     if (ev->Get()->Cookie != PartRequestCookie) {
@@ -158,7 +158,7 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
                 ("step", static_cast<int>(Step))
                 ("tablet_id", PartitionActor->TabletId)
                 ("partition_id", PartitionActor->Partition)
-                ("topic", PartitionActor->TopicName());
+                ("topic", PartitionActor->TopicPath());
     }
     if (!processResponseResult) {
         PartitionActor->Send(PartitionActor->TabletActorId, new TEvents::TEvPoison());
@@ -193,12 +193,12 @@ void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
     AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight);
     LOG_D(
         "Compaction for topic Process KV response",
-        {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()});
+        {"topicPath", PartitionActor->TopicPath()});
     if (CompactState) {
         if (!CompactState->ProcessKVResponse(ev)) {
             LOG_E(
                 "Compaction for topic Process KV response: BAD Status",
-                {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()});
+                {"topicPath", PartitionActor->TopicPath()});
 
             PartitionActor->Send(PartitionActor->TabletActorId, new TEvents::TEvPoison());
             return;
@@ -382,7 +382,7 @@ TPartitionCompaction::EStep TPartitionCompaction::TReadState::ContinueIfPossible
     PartitionActor->Send(PartitionActor->SelfId(), evRead.release());
     LOG_D(
         "Compaction for topic Send EvRead (Read state)",
-        {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
+        {"topicPath", PartitionActor->TopicPath()},
             {"fromOffset", OffsetToRead},
             {"nextPartNo", NextPartNo}
     );
@@ -424,7 +424,7 @@ TPartitionCompaction::TCompactState::TCompactState(
     if (TopicData.empty()) {
         LOG_C(
             "Partition compaction state created with empty topic data",
-            {"topic", PartitionActor->TopicName()},
+            {"topic", PartitionActor->TopicPath()},
                     {"partitionActorPartitionOriginalPartitionId",
             PartitionActor->Partition.OriginalPartitionId}
         );
@@ -436,7 +436,7 @@ TPartitionCompaction::TCompactState::TCompactState(
                 "Partition compaction state - got less then uncompacted",
                 {"offset", offset},
                 {"firstUncompactedOffset", firstUncompactedOffset},
-                {"topic", PartitionActor->TopicName()},
+                {"topic", PartitionActor->TopicPath()},
                             {"partitionActorPartitionOriginalPartitionId",
                 PartitionActor->Partition.OriginalPartitionId}
             );
@@ -445,7 +445,7 @@ TPartitionCompaction::TCompactState::TCompactState(
     }
     LOG_D(
         "Compaction for topic Created compact state. first head",
-        {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
+        {"topicPath", PartitionActor->TopicPath()},
             {"startOffset", partitionActor->CompactionBlobEncoder.StartOffset},
             {"offset", FirstHeadOffset},
             {"endOffset", partitionActor->BlobEncoder.EndOffset}
@@ -480,7 +480,7 @@ TPartitionCompaction::EStep TPartitionCompaction::TCompactState::ContinueIfPossi
         PartitionActor->Send(PartitionActor->SelfId(), evRead.release());
         LOG_D(
             "Compaction for topic Send EvRead (Compact state)",
-            {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
+            {"topicPath", PartitionActor->TopicPath()},
                     {"fromOffset", currKey.GetOffset()},
                     {"currKeyPartNo", currKey.GetPartNo()}
         );
@@ -625,7 +625,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
     bool hasNonZeroParts = false;
     LOG_D(
         "Compaction for topic process read result in CompState starting isTruncatedBlob",
-        {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
+        {"topicPath", PartitionActor->TopicPath()},
             {"from", readResult.GetResult(0).GetOffset()},
             {"readResultResult0PartNo", readResult.GetResult(0).GetPartNo()},
             {"isTruncatedBlob", isTruncatedBlob}
@@ -688,7 +688,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
                 ("reason", "truncated message before new message")
                 ("tablet_id", PartitionActor->TabletId)
                 ("partition_id", PartitionActor->Partition)
-                ("topic", PartitionActor->TopicName())
+                ("topic", PartitionActor->TopicPath())
                 ("offset", res.GetOffset())
                 ("seqNo", res.GetSeqNo());
             CurrentMessage = Nothing();
@@ -755,7 +755,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
                         ("chunk_type", static_cast<int>(proto.GetChunkType()))
                         ("tablet_id", PartitionActor->TabletId)
                         ("partition_id", PartitionActor->Partition)
-                        ("topic", PartitionActor->TopicName());
+                        ("topic", PartitionActor->TopicPath());
                     continue; //no such chunks must be on prod - ?
                 }
                 TString key;
@@ -771,7 +771,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
 
             LOG_D(
                 "Compaction for topic LastPart processed read result in CompState starting res.GetOffset() isTruncatedBlob hasNonZeroParts keepMessage LastBatch",
-                {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
+                {"topicPath", PartitionActor->TopicPath()},
                             {"from", readResult.GetResult(0).GetOffset()},
                             {"readResultResult0PartNo", readResult.GetResult(0).GetPartNo()},
                             {"offset", res.GetOffset()},
@@ -811,7 +811,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
 
     LOG_D(
         "Compaction for topic processed read result in CompState starting isTruncatedBlob hasNonZeroParts isMiddlePartOfMessage",
-        {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
+        {"topicPath", PartitionActor->TopicPath()},
             {"from", readResult.GetResult(0).GetOffset()},
             {"readResultResult0PartNo", readResult.GetResult(0).GetPartNo()},
             {"isTruncatedBlob", isTruncatedBlob},
@@ -869,7 +869,7 @@ void TPartitionCompaction::TCompactState::AddDeleteRange(const TKey& key) {
     }
     LOG_D(
         "Compaction for topic add CmdDeleteRange for key",
-        {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
+        {"topicPath", PartitionActor->TopicPath()},
             {"key", key}
     );
 
@@ -935,7 +935,7 @@ void TPartitionCompaction::TCompactState::SendCommit(ui64 cookie) {
     ev->IsInternal = true;
     LOG_D(
         "Compaction for topic commit",
-        {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
+        {"topicPath", PartitionActor->TopicPath()},
             {"offset", MaxOffset}
     );
     PartitionActor->CompacterPartitionRequestInflight = true;

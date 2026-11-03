@@ -26,7 +26,7 @@
 Для выполнения примеров вам потребуется:
 
 * запущенная база {{ ydb-short-name }} — см. [quick start](../../quickstart.md);
-* включённые флаги `enable_external_data_sources` и `enable_streaming_queries`.
+* включённые [фича-флаги](../../reference/configuration/feature_flags.md) `enable_external_data_sources` и `enable_streaming_queries`.
 
 {% list tabs %}
 

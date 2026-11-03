@@ -107,6 +107,39 @@ Y_UNIT_TEST_SUITE(TColumnShardPredicateRangesBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(pkRange.GetPredicateTo().NumColumns(), 2u);
     }
 
+    Y_UNIT_TEST(TPKRangesFilter_SerializeRoundTrip_KeepsNullKeyCells) {
+        using NOlap::TRangesBuilder;
+
+        auto ydbPk = MakePairTsUtf8Pk();
+        auto pkSchema = NArrow::MakeArrowSchema(ydbPk, {}).ValueOrDie();
+
+        // KQP sends (NULL, NULL) inclusive as the "-inf" lower bound; with nullable key columns the same cells are real values.
+        TVector<TCell> fromCells;
+        fromCells.emplace_back();
+        fromCells.emplace_back();
+
+        TVector<TCell> toCells;
+        toCells.push_back(TCell::Make(ui64(1776310561000000ULL)));
+        toCells.emplace_back();
+
+        TRangesBuilder builder(ydbPk, pkSchema);
+        builder.AddRange(TSerializedTableRange(TSerializedCellVec::Serialize(fromCells), TSerializedCellVec::Serialize(toCells), true, false));
+        auto filter = builder.Finish();
+        UNIT_ASSERT_C(filter.IsSuccess(), filter.GetErrorMessage());
+        UNIT_ASSERT_VALUES_EQUAL(filter->Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(filter->begin()->GetPredicateFrom().NumColumns(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(filter->begin()->GetPredicateTo().NumColumns(), 2u);
+
+        // the serialized form must keep NULL key cells as values instead of treating them as the end of the prefix
+        const TString serialized = filter->SerializeToString(pkSchema);
+        const auto restored = NOlap::TPKRangesFilter::BuildFromString(serialized, pkSchema);
+        UNIT_ASSERT(restored);
+        UNIT_ASSERT_VALUES_EQUAL(restored->Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(restored->begin()->GetPredicateFrom().NumColumns(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(restored->begin()->GetPredicateTo().NumColumns(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(restored->DebugString(), filter->DebugString());
+    }
+
     Y_UNIT_TEST(QueryServiceAst_And_Execute_RangeByPrefix) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableColumnShardConfig()->SetAllowNullableColumnsInPK(true);

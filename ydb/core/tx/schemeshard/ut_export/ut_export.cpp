@@ -408,6 +408,96 @@ namespace {
             return 101;
         }
 
+        NKikimrExport::TListExportsResponse ListExports(ui64 pageSize = 10, const TString& pageToken = {}) {
+            AsyncSend(Runtime(), TTestTxConfig::SchemeShard,
+                new TEvExport::TEvListExportsRequest("/MyRoot", pageSize, pageToken, "export/s3"));
+            TAutoPtr<IEventHandle> handle;
+            auto ev = Runtime().GrabEdgeEvent<TEvExport::TEvListExportsResponse>(handle);
+            const auto& response = ev->Record.GetResponse();
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::SUCCESS);
+            return response;
+        }
+
+        void CheckExportsHiddenWhileForgetting(bool cancelled) {
+            using namespace NKikimr::NWrappers::NExternalStorage;
+            Env();
+            Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
+            ui64 txId = 100;
+            TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )");
+            Env().TestWaitNotification(Runtime(), txId);
+
+            TVector<ui64> exportIds;
+            for (ui32 i = 0; i < 5; ++i) {
+                // Do not recapture marker requests released by earlier cancelled exports.
+                const TString markerKey = Sprintf("backup%u/data_complete.json", i);
+                TBlockEvents<TEvPutObjectRequest> markers(Runtime(), [cancelled, markerKey](auto& ev) {
+                    return cancelled && TString(ev->Get()->Request.GetKey()) == markerKey;
+                });
+                const ui64 exportId = ++txId;
+                TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+                    ExportToS3Settings {
+                        endpoint: "localhost:%d"
+                        scheme: HTTP
+                        items { source_path: "/MyRoot/Table" destination_prefix: "backup%u" }
+                    }
+                )", S3Port(), i));
+                if (cancelled) {
+                    Runtime().WaitFor("table marker upload", [&] { return !markers.empty(); });
+                    TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
+                }
+                Env().TestWaitNotification(Runtime(), exportId);
+                TestGetExport(Runtime(), exportId, "/MyRoot",
+                    cancelled ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
+                markers.Stop().Unblock();
+                exportIds.push_back(exportId);
+            }
+
+            const auto before = ListExports();
+            UNIT_ASSERT_VALUES_EQUAL(before.EntriesSize(), 5);
+            for (ui32 i = 0; i < exportIds.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(before.GetEntries(i).GetId(), exportIds[4 - i]);
+                UNIT_ASSERT_VALUES_EQUAL(before.GetEntries(i).GetStatus(),
+                    cancelled ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::SUCCESS);
+            }
+
+            TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> drops(Runtime(), [](auto& ev) {
+                return ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpDropTable;
+            });
+            // Hide the newest export and one between visible exports to exercise both pagination loops.
+            for (ui32 i : {4, 2}) {
+                TestForgetExport(Runtime(), ++txId, "/MyRoot", exportIds[i]);
+            }
+            Runtime().WaitFor("export cleanup blocked", [&] { return drops.size() == 2; });
+
+            const auto firstPage = ListExports(2);
+            UNIT_ASSERT_VALUES_EQUAL(firstPage.EntriesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(firstPage.GetEntries(0).GetId(), exportIds[3]);
+            UNIT_ASSERT_VALUES_EQUAL(firstPage.GetEntries(1).GetId(), exportIds[1]);
+            UNIT_ASSERT_VALUES_EQUAL(firstPage.GetNextPageToken(), "2");
+            const auto secondPage = ListExports(2, firstPage.GetNextPageToken());
+            UNIT_ASSERT_VALUES_EQUAL(secondPage.EntriesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(secondPage.GetEntries(0).GetId(), exportIds[0]);
+            UNIT_ASSERT_VALUES_EQUAL(secondPage.GetNextPageToken(), "0");
+
+            for (ui32 i : {3, 1, 0}) {
+                TestForgetExport(Runtime(), ++txId, "/MyRoot", exportIds[i]);
+            }
+            const auto empty = ListExports();
+            UNIT_ASSERT_VALUES_EQUAL(empty.EntriesSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(empty.GetNextPageToken(), "0");
+
+            drops.Stop().Unblock();
+            for (ui64 exportId : exportIds) {
+                Env().TestWaitNotification(Runtime(), exportId);
+                TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+            }
+        }
+
         void CheckCompletionMarkerContents(ui64 exportId) {
             for (const auto* path : {"/backup/table/data_complete.json", "/backup/table/export_complete.json"}) {
                 const auto marker = ParseCompletionMarker(GetS3FileContent(path));
@@ -1732,6 +1822,14 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         UNIT_ASSERT_VALUES_EQUAL(table1DataRequests, 1);
     }
 
+    Y_UNIT_TEST(CancelledExportsHiddenWhileForgetting) {
+        CheckExportsHiddenWhileForgetting(true);
+    }
+
+    Y_UNIT_TEST(CompletedExportsHiddenWhileForgetting) {
+        CheckExportsHiddenWhileForgetting(false);
+    }
+
     Y_UNIT_TEST(CompletionMarkerWithoutAutoDropping) {
         const ui64 exportId = StartCompletionMarkerExport(false);
         Env().TestWaitNotification(Runtime(), exportId);
@@ -1750,6 +1848,10 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         CheckCompletionMarkerContents(exportId);
         const auto status = TestGetExport(Runtime(), exportId, "/MyRoot");
         UNIT_ASSERT_VALUES_EQUAL(status.GetResponse().GetEntry().GetProgress(), Ydb::Export::ExportProgress::PROGRESS_TRANSFER_DATA);
+        const auto list = ListExports();
+        UNIT_ASSERT_VALUES_EQUAL(list.EntriesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(list.GetEntries(0).GetId(), exportId);
+        UNIT_ASSERT_VALUES_EQUAL(list.GetEntries(0).GetProgress(), Ydb::Export::ExportProgress::PROGRESS_TRANSFER_DATA);
         drops.Stop().Unblock();
         Env().TestWaitNotification(Runtime(), exportId);
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);

@@ -70,6 +70,9 @@ EValidationResult ValidateConfig(
     const NKikimrConfig::TAppConfig& config,
     std::vector<TString>& msg);
 
-TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig, const NKikimrConfig::TStateStorageConfig& newSSConfig);
+TString ValidateStateStorageConfig(
+    const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig,
+    const NKikimrConfig::TStateStorageConfig& newSSConfig,
+    bool allowRingGroupReassignment = false);
 
 } // namespace NKikimr::NConfig

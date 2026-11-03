@@ -3352,6 +3352,8 @@ public:
             auto& op = *tx.MutableDrop();
             op.SetName(pathPair.second);
 
+            op.SetReplicationSourceCleanup(settings.SourceCleanup);
+
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
                 auto& phyTx = *phyQuery.AddTransactions();

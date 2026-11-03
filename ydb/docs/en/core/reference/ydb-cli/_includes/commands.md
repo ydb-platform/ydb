@@ -22,9 +22,12 @@ Any command can be run from the command line with the `--help` option to get hel
 
 | Command / subcommand | Brief description |
 | --- | --- |
+| [admin cluster bridge add-pile](../commands/bridge/add-pile.md) | Add an inactive [pile](../../../concepts/glossary.md#pile) and allocate its storage group parts |
+| [admin cluster bridge convert](../commands/bridge/convert.md) | Convert a non-bridged cluster to a single-pile [bridge mode](../../../concepts/bridge.md) cluster |
 | [admin cluster bridge failover](../commands/bridge/failover.md) | Emergency switchover when [pile](../../../concepts/glossary.md#pile) is unavailable |
 | [admin cluster bridge list](../commands/bridge/list.md) | List state of each [pile](../../../concepts/glossary.md#pile) in [bridge mode](../../../concepts/bridge.md) |
 | [admin cluster bridge rejoin](../commands/bridge/rejoin.md) | Returning [pile](../../../concepts/glossary.md#pile) to the [cluster](../../../concepts/glossary.md#cluster) after maintenance or recovery |
+| [admin cluster bridge remove-pile](../commands/bridge/remove-pile.md) | Remove a disconnected [pile](../../../concepts/glossary.md#pile) and delete its storage group parts |
 | [admin cluster bridge switchover](../commands/bridge/switchover.md) | Planned `PRIMARY` [pile](../../../concepts/glossary.md#pile) change |
 | [admin cluster bridge takedown](../commands/bridge/takedown.md) | Taking [pile](../../../concepts/glossary.md#pile) out of the [cluster](../../../concepts/glossary.md#cluster) for maintenance |
 | [admin cluster config fetch](../commands/configuration/cluster/fetch.md) | Getting the current dynamic configuration of the [cluster](../../../concepts/glossary.md#cluster) |

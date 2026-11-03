@@ -1,5 +1,6 @@
 #include "kqp_operator.h"
 #include "kqp_expression.h"
+#include "kqp_explain_json.h"
 #include "kqp_rbo_utils.h"
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
@@ -22,17 +23,6 @@ TString FormatIds(const TRange& ids, const TInfoUnitRegistry* registry = nullptr
     TStringBuf separator;
     for (const auto id : ids) {
         result << separator << (registry ? (debug ? registry->GetDebugName(id) : registry->GetDisplayName(id)) : ::ToString(id));
-        separator = ", ";
-    }
-    return result;
-}
-
-TString FormatSortElements(const TSortIUs& keys, const TInfoUnitRegistry& registry) {
-    TStringBuilder result;
-    TStringBuf separator;
-    for (const auto& [id, order] : keys.Items()) {
-        result << separator << registry.GetDisplayName(id) << (order.Ascending ? " asc" : " desc")
-               << (order.NullsFirst ? " nulls first" : " nulls last");
         separator = ", ";
     }
     return result;
@@ -295,7 +285,7 @@ NJson::TJsonValue TOpEmptySource::ToJson(ui32 explainFlags, const TInfoUnitRegis
         res["Parameter"] = TCoParameter(Input).Name().StringValue();
     }
     if (Input) {
-        res["Columns"] = TStringBuilder() << "{" << FormatIds(Columns, &registry) << "}";
+        res["Columns"] = MakeColumnsJson(Columns, registry);
     }
     return res;
 }
@@ -388,6 +378,7 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
     // In such case we extract the name of a table from a path,
     // fallback to the whole name otherwise.
     auto path = TKqpTable(TableCallable).Path().StringValue();
+    res["Path"] = path;
     auto slash = path.rfind('/');
     res["Table"] = (slash == TString::npos) ? path : path.substr(slash + 1);
 
@@ -438,7 +429,7 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
         res["ReadRangesKeys"] = std::move(rangeKeys);
 
         if (RangeInfo->ExpectedMaxRanges) {
-            res["ReadRangesExpectedSize"] = ::ToString(*RangeInfo->ExpectedMaxRanges);
+            res["ReadRangesExpectedSize"] = *RangeInfo->ExpectedMaxRanges;
         }
     }
     // Choose a deterministic presentation order, not a logical column order.
@@ -450,7 +441,7 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags, const TInfoUnitRegistry& re
     }
     res["ReadColumns"] = std::move(readColumns);
     // ReadColumns names storage fields/ranges; Columns names the produced row.
-    res["Columns"] = TStringBuilder() << "{" << FormatIds(Columns_, &registry) << "}";
+    res["Columns"] = MakeColumnsJson(Columns_, registry);
 
     return res;
 }
@@ -906,7 +897,7 @@ TString TOpUnionAll::ToString(TExprContext& ctx, const TInfoUnitRegistry&) {
 NJson::TJsonValue TOpUnionAll::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
     auto result = IOperator::ToJson(explainFlags, registry);
     result["Ordered"] = Ordered;
-    result["Columns"] = TStringBuilder() << "{" << FormatIds(Columns.Keys(), &registry) << "}";
+    result["Columns"] = MakeColumnsJson(Columns.Keys(), registry);
     return result;
 }
 
@@ -1157,7 +1148,11 @@ NJson::TJsonValue TOpTableLookup::ToJson(ui32 explainFlags, const TInfoUnitRegis
             if (!Prefix->Equalities.Items().empty()) {
                 condition << ", " << FormatLookupKeys(Prefix->Equalities, &registry);
             }
-            result["LookupKeyPrefix"] = JoinSeq(", ", Prefix->Columns);
+            NJson::TJsonValue prefix(NJson::EJsonValueType::JSON_ARRAY);
+            for (const auto& column : Prefix->Columns) {
+                prefix.AppendValue(column);
+            }
+            result["LookupKeyPrefix"] = std::move(prefix);
         }
         if (!ResidualJoinKeys.Items().empty()) {
             condition << ", " << FormatJoinKeys(ResidualJoinKeys, registry);
@@ -1219,12 +1214,12 @@ NJson::TJsonValue TOpIndexLookupJoin::ToJson(ui32 explainFlags, const TInfoUnitR
 NJson::TJsonValue TOpSort::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
     auto res = IOperator::ToJson(explainFlags, registry);
     if (IsTopSort()) {
-        res["TopSortBy"] = FormatSortElements(SortElements, registry);
+        res["TopSortBy"] = MakeSortColumnsJson(SortElements, registry);
         if (LimitCond) {
             res["Limit"] = LimitCond->ToExplainString(registry);
         }
     } else {
-        res["SortBy"] = FormatSortElements(SortElements, registry);
+        res["SortBy"] = MakeSortColumnsJson(SortElements, registry);
     }
     if (SortPhase != EOpPhase::Undefined) {
         res["Phase"] = ToStringPhase(SortPhase);
@@ -1282,26 +1277,27 @@ TString TOpAggregate::ToString(TExprContext& ctx, const TInfoUnitRegistry& regis
 NJson::TJsonValue TOpAggregate::ToJson(ui32 explainFlags, const TInfoUnitRegistry& registry) {
     auto result = IOperator::ToJson(explainFlags, registry);
     if (!KeyColumns.Items().empty()) {
-        result["GroupBy"] = FormatIds(KeyColumns.Items(), &registry);
+        result["GroupBy"] = MakeColumnsJson(KeyColumns.Items(), registry);
     }
     if (!Aggregations.Items().empty()) {
-        TStringBuilder aggregation;
-        aggregation << "{";
-        TStringBuf separator;
+        NJson::TJsonValue aggregations(NJson::EJsonValueType::JSON_ARRAY);
         for (const auto id : Aggregations.Keys()) {
             const auto& traits = *Aggregations.Find(id);
-            aggregation << separator << registry.GetDisplayName(id) << ": " << traits.AggFunction << "(" << registry.GetDisplayName(traits.Input) << ")";
-            separator = ", ";
+            NJson::TJsonValue aggregation(NJson::EJsonValueType::JSON_MAP);
+            aggregation["Output"] = registry.GetDisplayName(id);
+            aggregation["Function"] = traits.AggFunction;
+            aggregation["Arguments"] = MakeColumnsJson(std::views::single(traits.Input), registry);
+            aggregation["Distinct"] = traits.Distinct;
+            aggregations.AppendValue(std::move(aggregation));
         }
-        aggregation << "}";
-        result["Aggregation"] = aggregation;
+        result["Aggregation"] = std::move(aggregations);
     }
     result["Phase"] = ToStringPhase(AggregationPhase);
     if (DistinctAll) {
         result["Distinct"] = "All";
     }
     if (PushedToOlap) {
-        result["Pushdown"] = "True";
+        result["Pushdown"] = true;
     }
     return result;
 }
@@ -1494,12 +1490,22 @@ NJson::TJsonValue TOpWindow::ToJson(ui32 explainFlags, const TInfoUnitRegistry& 
     auto result = IOperator::ToJson(explainFlags, registry);
     result["WindowFunctions"] = TStringBuilder() << "{" << FormatWindowFunctions(WindowFuncs, &registry) << "}";
     if (!PartitionKeys.Items().empty()) {
-        result["PartitionBy"] = FormatIds(PartitionKeys.Items(), &registry);
+        result["PartitionBy"] = MakeColumnsJson(PartitionKeys.Items(), registry);
     }
     if (!SortElements.Items().empty()) {
-        result["OrderBy"] = FormatIds(SortElements.Items() | std::views::keys, &registry);
+        result["OrderBy"] = MakeSortColumnsJson(SortElements, registry);
     }
-    result["Frame"] = ToStringWindowFrameType(Frame.Type);
+    auto makeBound = [](EWindowFrameBound kind, ui64 value) {
+        NJson::TJsonValue bound(NJson::EJsonValueType::JSON_MAP);
+        bound["Kind"] = ToStringWindowFrameBound(kind);
+        if (kind == EWindowFrameBound::Preceding || kind == EWindowFrameBound::Following) {
+            bound["Value"] = value;
+        }
+        return bound;
+    };
+    result["Frame"]["Type"] = ToStringWindowFrameType(Frame.Type);
+    result["Frame"]["Begin"] = makeBound(Frame.BeginKind, Frame.BeginValue);
+    result["Frame"]["End"] = makeBound(Frame.EndKind, Frame.EndValue);
     return result;
 }
 

@@ -1,0 +1,17 @@
+--- a/ydb/_topic_writer/topic_writer.py
++++ b/ydb/_topic_writer/topic_writer.py
+@@ -16,10 +16,10 @@
+ from .._grpc.grpcwrapper.ydb_topic_public_types import PublicCodec
+ from .. import connection
+ 
+-if typing.TYPE_CHECKING:
+-    from .._grpc.v4.protos import ydb_topic_pb2
+-else:
+-    from .._grpc.common.protos import ydb_topic_pb2
++try:
++    from ydb.public.api.protos import ydb_topic_pb2
++except ImportError:
++    from contrib.ydb.public.api.protos import ydb_topic_pb2
+ 
+ Message = typing.Union["PublicMessage", "PublicMessage.SimpleSourceType"]
+ 

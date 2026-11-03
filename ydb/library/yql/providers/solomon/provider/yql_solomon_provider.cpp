@@ -15,12 +15,12 @@ TSolomonState::TSolomonState(bool strictConfigValidation)
 }
 
 TDataProviderInitializer GetSolomonDataProviderInitializer(
-    ISolomonGateway::TPtr gateway, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, bool supportRtmrMode, bool useYtflowEngine) {
-    return [gateway, credentialsFactory, supportRtmrMode, useYtflowEngine](const TString& userName, const TString& sessionId,
-               const TGatewaysConfig* gatewaysConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-               TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-               const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions, THiddenQueryAborter hiddenAborter,
-               const TQContext& qContext)
+    ISolomonGateway::TPtr gateway, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, bool useYtflowEngine) {
+    return
+        [gateway, credentialsFactory, useYtflowEngine](const TString& userName, const TString& sessionId, const TGatewaysConfig* gatewaysConfig,
+            const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, TIntrusivePtr<IRandomProvider> randomProvider,
+            TIntrusivePtr<TTypeAnnotationContext> typeCtx, const TOperationProgressWriter& progressWriter,
+            const TYqlOperationOptions& operationOptions, THiddenQueryAborter hiddenAborter, const TQContext& qContext)
     {
         Y_UNUSED(sessionId);
         Y_UNUSED(userName);
@@ -33,7 +33,6 @@ TDataProviderInitializer GetSolomonDataProviderInitializer(
 
         auto solomonState = MakeIntrusive<TSolomonState>(typeCtx->StrictConfigValidation);
 
-        solomonState->SupportRtmrMode = supportRtmrMode;
         solomonState->Types = typeCtx.Get();
         solomonState->Gateway = gateway;
         solomonState->CredentialsFactory = credentialsFactory;

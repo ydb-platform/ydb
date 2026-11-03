@@ -11,7 +11,15 @@
 
 namespace NYdb::inline Dev::NBridge {
 
-struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClusterStateSettings> {};
+struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClusterStateSettings> {
+    //! Compare-and-set guard: the cluster state generation (TGetClusterStateResult::GetGeneration()) the update is
+    //! based on. The update is applied only if the cluster state still has this generation when the change
+    //! executes. ABORTED means that the generation differs and the update was not applied; UNAVAILABLE means that
+    //! the node has not yet seen this generation and the update was not applied. Other failures do not tell whether
+    //! the update was applied: once a greater generation is observed, the update can no longer be applied.
+    //! Nodes of older versions ignore it. If unset, the update is applied on top of the node's current state.
+    FLUENT_SETTING_OPTIONAL(uint64_t, ExpectedGeneration);
+};
 
 struct TGetClusterStateSettings : public TOperationRequestSettings<TGetClusterStateSettings> {};
 
@@ -25,6 +33,11 @@ struct TConvertToBridgeSettings : public TOperationRequestSettings<TConvertToBri
 struct TAddPileSettings : public TOperationRequestSettings<TAddPileSettings> {};
 
 struct TRemovePileSettings : public TOperationRequestSettings<TRemovePileSettings> {};
+
+struct TSetDatabaseBridgeModeSettings : public TOperationRequestSettings<TSetDatabaseBridgeModeSettings> {
+    //! With ordinary mode, retain data copies in this pile. Empty selects copies automatically.
+    FLUENT_SETTING_DEFAULT(std::string, RetainPileName, {});
+};
 
 enum class EPileState {
     UNSPECIFIED = 0,
@@ -40,6 +53,7 @@ enum class EPileState {
 struct TPileStateUpdate {
     std::string PileName;
     EPileState State = EPileState::DISCONNECTED;
+    // Not sent in UpdateClusterState requests; use TUpdateClusterStateSettings::ExpectedGeneration for the guard.
     uint64_t Generation = 0;
 };
 
@@ -116,6 +130,10 @@ public:
     // Completes when every storage group has lost its part in the pile; the pile is INACTIVE then and may be dropped
     // from the bridge config along with its hosts.
     TAsyncStatus RemovePile(const std::string& pileName, const TRemovePileSettings& settings = {});
+
+    // Atomically change bridge mode of databasePath. For serverless databases, select their shared database.
+    // Requires cluster administrator privileges and non-uniform storage; data synchronization and cleanup continue in the background.
+    TAsyncStatus SetDatabaseBridgeMode(const std::string& databasePath, bool bridgeMode, const TSetDatabaseBridgeModeSettings& settings = {});
 
 private:
     class TImpl;

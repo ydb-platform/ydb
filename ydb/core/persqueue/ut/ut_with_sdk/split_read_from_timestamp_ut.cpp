@@ -252,6 +252,70 @@ namespace NKikimr {
             reader->Close();
         }
 
+        // The session lists the parent and the child, so the child is locked while the parent message is still uncommitted.
+        // read_from then skips that message. The child CommitAcknowledgement must still arrive and commit the parent.
+        Y_UNIT_TEST_TWIN(ExplicitChildLockedBeforeParentSkipped, AutoPartitioningSupport) {
+            TTopicSdkTestSetup setup = CreateSplitSetup();
+            WriteMessage(setup, "parent-0", 1);
+            // Blob write timestamps have second precision.
+            Sleep(TDuration::Seconds(1));
+            const TInstant readFrom = TInstant::Now();
+            ui64 txId = 1006;
+            SplitPartition(setup, ++txId, ParentPartition, "a");
+            Sleep(TDuration::Seconds(1));
+            WriteToPartition(setup, "child", PartitionAfterFirstSplit);
+
+            std::shared_ptr<ITestReadSession> reader = CreateTestReadSession({
+                .Name = "reader",
+                .Setup = setup,
+                .Sdk = SdkVersion::Topic,
+                .AutoCommit = false,
+                .Partitions = {ParentPartition, PartitionAfterFirstSplit},
+                .AutoPartitioningSupport = AutoPartitioningSupport,
+                .ReadFromTimestamp = readFrom,
+            });
+            reader->Run();
+
+            const MsgInfo child = WaitForMessage(*reader, PartitionAfterFirstSplit);
+            UNIT_ASSERT_VALUES_EQUAL(child.Data, "child");
+            UNIT_ASSERT_VALUES_EQUAL_C(reader->GetReceivedMessages().size(), 1, "read_from must skip the parent message, received [" << DumpMessages(reader->GetReceivedMessages()) << "]");
+            child.Msg->Commit();
+            WaitCommitAcknowledgement(*reader, PartitionAfterFirstSplit, child.Offset + 1);
+            WaitConsumerCommittedOffsets(setup, {{ParentPartition, 1}, {PartitionAfterFirstSplit, child.Offset + 1}});
+            reader->Close();
+        }
+
+        // The reader is already on the parent when it is split, and the parent is read through direct read.
+        // read_from filters the parent message, so it must not keep the child commit waiting.
+        Y_UNIT_TEST_TWIN(ChildCommitAfterReaderStartedBeforeSplit_DirectRead, AutoPartitioningSupport) {
+            TTopicSdkTestSetup setup = CreateSplitSetup();
+            WriteMessage(setup, "parent-0", 1);
+            // Blob write timestamps have second precision.
+            Sleep(TDuration::Seconds(1));
+            std::shared_ptr<ITestReadSession> reader = CreateTestReadSession({
+                .Name = "reader",
+                .Setup = setup,
+                .Sdk = SdkVersion::Topic,
+                .AutoCommit = true,
+                .AutoPartitioningSupport = AutoPartitioningSupport,
+                .ReadFromTimestamp = TInstant::Now(),
+                .DirectRead = true,
+            });
+            reader->Run();
+            UNIT_ASSERT_C(WaitForPartitionSession(*reader, ParentPartition), "parent partition session did not start");
+
+            ui64 txId = 1006;
+            SplitPartition(setup, ++txId, ParentPartition, "a");
+            WriteToPartition(setup, "child", PartitionAfterFirstSplit);
+
+            const MsgInfo child = WaitForMessage(*reader, PartitionAfterFirstSplit);
+            UNIT_ASSERT_VALUES_EQUAL(child.Data, "child");
+            UNIT_ASSERT_VALUES_EQUAL_C(reader->GetReceivedMessages().size(), 1, "read_from must skip the parent message, received [" << DumpMessages(reader->GetReceivedMessages()) << "]");
+            WaitCommitAcknowledgement(*reader, PartitionAfterFirstSplit, child.Offset + 1);
+            WaitConsumerCommittedOffsets(setup, {{ParentPartition, 1}, {PartitionAfterFirstSplit, child.Offset + 1}});
+            reader->Close();
+        }
+
         // Without auto-partitioning support the children of a skipped parent are balanced on their own,
         // so the reader of a child may be a session that has never seen the parent.
         Y_UNIT_TEST(ChildCommitOnAnotherReader_NoAutoPartitioningSupport) {

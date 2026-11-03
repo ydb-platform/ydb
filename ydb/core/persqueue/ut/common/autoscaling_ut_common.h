@@ -113,6 +113,7 @@ struct TestReadSessionSettings {
     std::optional<TDuration> ReadLag;
     std::optional<TInstant> ReadFromTimestamp;
     bool WithoutConsumer = false;
+    bool DirectRead = false;
 };
 
 struct ITestReadSession {

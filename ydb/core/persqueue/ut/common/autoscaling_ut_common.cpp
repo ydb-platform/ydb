@@ -297,7 +297,8 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
         .ConsumerName(TEST_CONSUMER)
         .AutoPartitioningSupport(settings.AutoPartitioningSupport)
         .MaxLag(settings.ReadLag)
-        .ReadFromTimestamp(settings.ReadFromTimestamp);
+        .ReadFromTimestamp(settings.ReadFromTimestamp)
+        .DirectRead(settings.DirectRead);
     for (auto& topic : settings.Topics) {
         readSettings.AppendTopics(topic);
     }

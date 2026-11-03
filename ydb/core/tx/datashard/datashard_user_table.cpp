@@ -419,8 +419,14 @@ void TUserTable::AlterSchema() {
     schema.SetPartitionRangeEnd(Range.To.GetBuffer());
     schema.SetPartitionRangeEndIsInclusive(Range.ToInclusive);
 
-    ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
-    IncrementalBackupConfig.Serialize(*schema.MutableIncrementalBackupConfig());
+    // Replication and incremental restore configs share a protobuf oneof.
+    if (IsReplicated()) {
+        ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
+    } else if (IsIncrementalRestore()) {
+        IncrementalBackupConfig.Serialize(*schema.MutableIncrementalBackupConfig());
+    } else {
+        schema.ClearIncomingStreamConfig();
+    }
 
     schema.SetName(Name);
     schema.SetPath(Path);

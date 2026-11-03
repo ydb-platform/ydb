@@ -13,6 +13,7 @@ ENDIF()
 
 SRCS(
     channel_scheduler.h
+    event_destructor.h
     event_filter.h
     event_holder_pool.h
     events_local.h
@@ -48,6 +49,11 @@ SRCS(
     interconnect_tcp_session_v2.cpp
     interconnect_tcp_session_v2.h
     interconnect_uring_engine.h
+<<<<<<< HEAD
+=======
+    interconnect_uring_engine_client.cpp
+    interconnect_uring_engine_client.h
+>>>>>>> nbs-26-3-1
     interconnect_zc_processor.cpp
     interconnect_zc_processor.h
     load.cpp

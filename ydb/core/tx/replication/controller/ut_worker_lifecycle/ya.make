@@ -13,6 +13,7 @@ PEERDIR(
 )
 
 SRCS(
+    session_lifecycle_ut.cpp
     worker_lifecycle_ut.cpp
 )
 

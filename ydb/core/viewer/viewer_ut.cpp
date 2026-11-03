@@ -1,5 +1,6 @@
 #include "ut/ut_utils.h"
 #include <ydb/core/mon/ut_utils/ut_utils.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -573,6 +574,128 @@ Y_UNIT_TEST_SUITE(Viewer) {
         headers["Authorization"] = token;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/commit_offset", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
         return statusCode;
+    }
+
+    class TDatabaseAliasTicketParser : public TActor<TDatabaseAliasTicketParser> {
+    public:
+        TDatabaseAliasTicketParser() : TActor(&TDatabaseAliasTicketParser::StateFunc) {}
+
+        void Handle(TEvTicketParser::TEvAuthorizeTicket::TPtr& ev) {
+            const TCgiParameters paths("database=alias&path=/alias/a,/alias/b&topic=relative");
+            const auto normalizer = std::make_shared<const std::function<TString(TStringBuf)>>(
+                [normalizer = AppData()->GetPathNormalizer()](TStringBuf path) { return normalizer->NormalizePath(path); });
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("path"), "/Root/a,/alias/b");
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer, true).Get("path"), "/Root/a,/Root/b");
+            UNIT_ASSERT_VALUES_EQUAL(NormalizePathParameters(paths, normalizer).Get("topic"), "relative");
+            NJson::TJsonValue jsonPaths;
+            UNIT_ASSERT(NJson::ReadJsonTree(R"({"database":"alias","path":["/alias/a","/alias/b"],"message":"/alias"})", &jsonPaths));
+            NormalizePathParameters(jsonPaths, normalizer);
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["database"].GetString(), "/Root");
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][0].GetString(), "/Root/a");
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"][1].GetString(), "/Root/b");
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["message"].GetString(), "/alias");
+            jsonPaths["path"] = "/alias/a,/alias/b";
+            NormalizePathParameters(jsonPaths, normalizer, true);
+            UNIT_ASSERT_VALUES_EQUAL(jsonPaths["path"].GetString(), "/Root/a,/Root/b");
+
+            const auto& request = *ev->Get();
+            const TString allowedDatabase = request.Ticket == VALID_TOKEN ? "/Root" : "/Other";
+            if (request.Ticket != ROOT_TOKEN && (request.Database != allowedDatabase
+                || (request.Ticket != VALID_TOKEN && request.Ticket != "Bearer other-db"))) {
+                TEvTicketParser::TError error;
+                error.Message = "Token is not valid for this database";
+                error.Retryable = false;
+                Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(request.Ticket, error));
+                return;
+            }
+            NACLib::TUserToken::TUserTokenInitFields fields;
+            fields.UserSID = request.Ticket == ROOT_TOKEN ? ROOT_TOKEN : "username";
+            auto token = MakeIntrusive<NACLib::TUserToken>(fields);
+            token->SaveSerializationInfo();
+            Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(request.Ticket, token));
+        }
+
+        STFUNC(StateFunc) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvTicketParser::TEvAuthorizeTicket, Handle);
+            }
+        }
+    };
+
+    Y_UNIT_TEST(DatabaseAlias) {
+        TPortManager ports;
+        const ui16 monPort = ports.GetPort(8765);
+        auto settings = TServerSettings(ports.GetPort(2134));
+        settings.InitKikimrRunConfig()
+            .SetNodeCount(1)
+            .SetUseRealThreads(true)
+            .SetDomainName("Root")
+            .SetUseSectorMap(true)
+            .SetMonitoringPortOffset(monPort, true);
+        auto* rule = settings.AppConfig->MutableResourcePathPrefixMapping()->AddRules();
+        rule->SetSrc("/alias");
+        rule->SetDst("/Root");
+        settings.FeatureFlags.SetEnableExtraSidsControlForHttpViewer(true);
+        auto* security = settings.AppConfig->MutableDomainsConfig()->MutableSecurityConfig();
+        security->SetEnforceUserTokenCheckRequirement(true);
+        security->AddAdministrationAllowedSIDs(ROOT_TOKEN);
+        security->AddMonitoringAllowedSIDs(ROOT_TOKEN);
+        security->AddViewerAllowedSIDs(ROOT_TOKEN);
+        security->AddDatabaseAllowedSIDs("username");
+        settings.CreateTicketParser = [](const TTicketParserSettings&) -> IActor* { return new TDatabaseAliasTicketParser; };
+        TServer server(settings);
+        server.EnableGRpc(ports.GetPort(2135));
+        TClient client(settings);
+        client.SetSecurityToken(ROOT_TOKEN);
+        client.InitRootScheme();
+        GrantRead(client);
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        WaitForHttpReady(httpClient);
+
+        TKeepAliveHttpClient::THeaders headers;
+        headers["Authorization"] = VALID_TOKEN;
+        TStringStream response;
+        const auto status = httpClient.DoGet("/viewer/tenantinfo?database=/alias&direct=true", &response, headers);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+        const auto json = NJson::ReadJsonTree(&response, true);
+        UNIT_ASSERT_VALUES_EQUAL(json["TenantInfo"][0]["Name"].GetString(), "/alias");
+
+        NJson::TJsonReaderConfig describeJsonConfig;
+        describeJsonConfig.DontValidateUtf8 = true; // Describe includes binary ACL fields.
+        for (const auto* cache : {"never", "only"}) {
+            TStringStream describeResponse;
+            const auto describeStatus = httpClient.DoGet(TStringBuilder() << "/viewer/describe?database=/alias&path=/alias&direct=true&ask_scheme_cache=" << cache, &describeResponse, headers);
+            UNIT_ASSERT_VALUES_EQUAL(describeStatus, HTTP_OK);
+            const auto describeJson = NJson::ReadJsonTree(&describeResponse, &describeJsonConfig, true);
+            UNIT_ASSERT_VALUES_EQUAL(describeJson["Path"].GetString(), "/alias");
+        }
+
+        TStringStream relativeResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/describe?database=alias&path=/alias&direct=true", &relativeResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&relativeResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
+
+        headers["Content-Type"] = "application/json";
+        TStringStream postResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", R"({"database":"/alias","path":"/alias"})", &postResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&postResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
+
+        headers["Content-Type"] = "application/x-www-form-urlencoded";
+        TStringStream formResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoPost("/viewer/describe?direct=true", "database=alias&path=/alias", &formResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&formResponse, &describeJsonConfig, true)["Path"].GetString(), "/alias");
+
+        TStringStream directoryResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/scheme/directory?database=/alias&path=/alias&direct=true", &directoryResponse, headers), HTTP_OK);
+        UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&directoryResponse, true)["self"]["name"].GetString(), "alias");
+        headers["Authorization"] = ROOT_TOKEN;
+        for (const auto* parameter : {"tenant", "path"}) {
+            TStringStream tenantResponse;
+            UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet(TStringBuilder() << "/viewer/tenantinfo?" << parameter << "=/alias&direct=true", &tenantResponse, headers), HTTP_OK);
+            UNIT_ASSERT_VALUES_EQUAL(NJson::ReadJsonTree(&tenantResponse, true)["TenantInfo"][0]["Name"].GetString(), "/alias");
+        }
+        headers["Authorization"] = "Bearer other-db";
+        TStringStream deniedResponse;
+        UNIT_ASSERT_VALUES_EQUAL(httpClient.DoGet("/viewer/whoami?database=/alias", &deniedResponse, headers), HTTP_FORBIDDEN);
     }
 
     NJson::TJsonValue SendQuery(const TString& query, const TString& schema, const bool base64) {
@@ -1342,6 +1465,108 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(StorageGroupsKeepsPDiskControllerStatusesWithoutWhiteboard) {
         CheckPDiskControllerStatuses(true, false);
+    }
+
+    void TestNodesCpuSortWithMissingStats(bool offloadMerge) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(3)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        THashMap<TActorId, TNodeId> whiteboardNodes;
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            const TNodeId nodeId = runtime.GetNodeId(nodeIndex);
+            runtime.RegisterService(MakeViewerID(nodeId), viewerId, nodeIndex);
+            const TActorId whiteboardId = runtime.GetLocalServiceId(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), nodeIndex);
+            whiteboardNodes.emplace(whiteboardId, nodeId);
+        }
+        TString missingStatsPool;
+        size_t offloadedResponses = 0;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvWhiteboard::EvSystemStateResponse) {
+                const auto itNode = whiteboardNodes.find(ev->Sender);
+                if (itNode == whiteboardNodes.end() || ev->Cookie != itNode->second) {
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                auto* response = ev->Get<TEvWhiteboard::TEvSystemStateResponse>();
+                for (auto& info : *response->Record.MutableSystemStateInfo()) {
+                    info.ClearCoresUsed();
+                    info.ClearCoresTotal();
+                    info.ClearPoolStats();
+                    if (itNode->second == runtime.GetNodeId(0)) {
+                        if (!missingStatsPool.empty()) {
+                            auto* pool = info.AddPoolStats();
+                            pool->SetName(missingStatsPool);
+                            pool->SetUsage(0.5);
+                            pool->SetThreads(missingStatsPool == "IO" ? 2 : 0);
+                        }
+                    } else if (itNode->second == runtime.GetNodeId(1)) {
+                        info.SetCoresUsed(1);
+                        info.SetCoresTotal(4);
+                    } else {
+                        auto* pool = info.AddPoolStats();
+                        pool->SetName("System");
+                        pool->SetUsage(0.375);
+                        pool->SetThreads(2);
+                        pool->SetLimit(4);
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvViewer::EvViewerResponse
+                    && ev->Get<TEvViewer::TEvViewerResponse>()->Record.Response_case() == NKikimrViewer::TEvViewerResponse::ResponseCase::kSystemResponse) {
+                ++offloadedResponses;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto makeRequest = [&](const TString& sort) {
+            auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET /viewer/json/nodes?type=static&fields_required=NodeId,CPU"
+                    << "&offload_merge=" << (offloadMerge ? "true" : "false")
+                    << "&offload_merge_attempts=1&timeout=1000&sort=" << sort << " HTTP/1.1\r\n\r\n", endpoint, {});
+            TActorId sender = runtime.AllocateEdgeActor();
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
+            return json;
+        };
+
+        for (const TString& pool : {TString(), TString("System"), TString("IO")}) {
+            missingStatsPool = pool;
+            // Check the value before CPU sorting: an invalid comparator need not crash on every input.
+            for (const TString& sort : {TString("NodeId"), TString("CPU"), TString("-CPU")}) {
+                const size_t responsesBefore = offloadedResponses;
+                const auto json = makeRequest(sort);
+                UNIT_ASSERT_VALUES_EQUAL(offloadedResponses > responsesBefore, offloadMerge);
+                const auto& nodes = json["Nodes"].GetArray();
+                UNIT_ASSERT_VALUES_EQUAL_C(nodes.size(), 3, NJson::WriteJson(json, false));
+                UNIT_ASSERT(!json["NeedSort"].GetBoolean());
+                for (size_t i = 0; i < nodes.size(); ++i) {
+                    const size_t nodeIndex = sort == "-CPU" ? 2 - i : i;
+                    UNIT_ASSERT_VALUES_EQUAL(nodes[i]["NodeId"].GetUInteger(), runtime.GetNodeId(nodeIndex));
+                    if (nodeIndex == 0) {
+                        UNIT_ASSERT_C(!nodes[i].Has("CpuUsage"), NJson::WriteJson(json, false));
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(nodes[i]["CpuUsage"].GetDouble(), nodeIndex == 1 ? 0.25 : 0.75);
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(NodesPageCpuSortWithMissingStatsDirect) {
+        TestNodesCpuSortWithMissingStats(false);
+    }
+
+    Y_UNIT_TEST(NodesPageCpuSortWithMissingStatsOffloaded) {
+        TestNodesCpuSortWithMissingStats(true);
     }
 
     void TestNodesAliveFilter(bool offloadMerge) {

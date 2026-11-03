@@ -21,7 +21,11 @@ namespace NInterconnect {
         TDuration Duration;                 // test duration
         bool UseProtobufWithPayload;        // store payload separately
         ui32 RdmaMode;                      // rdma params bitmap, 0 - not used
+<<<<<<< HEAD
         TDuration DelayBeforeMeasurements;   // warm-up period excluded from reported stats
+=======
+        TDuration DelayBeforeMeasurements;  // warm-up period excluded from reported stats
+>>>>>>> nbs-26-3-1
     };
 
     // Aggregated throughput/RTT statistics of a finished (or just-terminated)
@@ -35,8 +39,11 @@ namespace NInterconnect {
         ui64 BytesPerSecond = 0;         // average throughput over the whole run, bytes/sec
         TDuration RttWindow;             // window over which RTT samples were collected (last aggregation window)
         ui64 RttSamples = 0;             // number of RTT samples within RttWindow
+<<<<<<< HEAD
         ui64 TotalRttSamples = 0;
         TDuration MaxRttGap;             // includes measurement boundaries
+=======
+>>>>>>> nbs-26-3-1
         ui64 NumDropped = 0;             // number of dropped (timed out) messages, full-run total
 
         // Latency (RTT) percentiles; pair of {quantile in [0..1], value in microseconds}.

@@ -4,17 +4,23 @@
 #include "uring_context.h" // for TUringContext::IsSupported() / SqThreadIdleMs
 
 #include "v2_event_serializer.h"
+<<<<<<< HEAD
 #include "v2_probes.h"
 
+=======
+>>>>>>> nbs-26-3-1
 #include "v2_io_buffers.h"
 #include "v2_serialize_window.h"
 #include "interconnect_common.h"
 #include "interconnect_direct_session.h"
 #include "interconnect_uring_event_queue.h"
 
+<<<<<<< HEAD
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
 
+=======
+>>>>>>> nbs-26-3-1
 #include <ydb/library/actors/protos/interconnect.pb.h>
 
 // Must be included AFTER YDB headers because linux/uapi headers pulled by
@@ -35,13 +41,19 @@
 #include <cerrno>
 #include <deque>
 #include <memory>
+<<<<<<< HEAD
 #include <mutex>
+=======
+>>>>>>> nbs-26-3-1
 #include <thread>
 #include <unordered_map>
 #include <vector>
 
 namespace NActors {
+<<<<<<< HEAD
     LWTRACE_USING(INTERCONNECT_V2_PROVIDER);
+=======
+>>>>>>> nbs-26-3-1
 
     namespace {
         constexpr ui32 RingQueueDepth = 4096;
@@ -107,6 +119,7 @@ namespace NActors {
         {}
     };
 
+<<<<<<< HEAD
     struct TEvDestroyEvents : TEventLocal<TEvDestroyEvents, 0> {
         std::vector<std::unique_ptr<IEventBase>> Events;
         std::vector<TIntrusivePtr<TEventSerializedData>> Buffers;
@@ -134,6 +147,10 @@ namespace NActors {
     class TUringEngine final : public IUringEngine {
         TActorSystem *ActorSystem = nullptr; // bound after construction via SetActorSystem()
         std::once_flag ActorSystemInitFlag;
+=======
+    class TUringEngine final : public IUringEngine {
+        IUringEngineClientPtr Client;
+>>>>>>> nbs-26-3-1
         std::atomic_bool Stopping{false};
 
         // Shared interconnect parameters this engine was created with. Common owns the engine as well, so
@@ -162,7 +179,11 @@ namespace NActors {
             const TIntrusivePtr<NInterconnect::TStreamSocket> XdcSocket;
             const TActorId SessionId;
             const std::function<void(TDisconnectReason)> OnDisconnectCallback;
+<<<<<<< HEAD
             TActorSystem* const ActorSystem;
+=======
+            IUringEngineClient& Client;
+>>>>>>> nbs-26-3-1
             TEventSerializer Serializer;
             TEventDeserializer Deserializer;
             TRcBuf ReadBuffer;
@@ -226,7 +247,11 @@ namespace NActors {
 
             TSession(ui32 shardIdx, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
                     TActorId sessionId, bool checksumming, TScopeId peerScopeId,
+<<<<<<< HEAD
                     std::function<void(TDisconnectReason)> onDisconnectCallback, TActorSystem *actorSystem,
+=======
+                    std::function<void(TDisconnectReason)> onDisconnectCallback, IUringEngineClient& client,
+>>>>>>> nbs-26-3-1
                     bool sendPings, std::shared_ptr<std::atomic<int64_t>> clockSkew,
                     std::shared_ptr<std::atomic<uint64_t>> pingRTT,
                     TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket)
@@ -235,7 +260,11 @@ namespace NActors {
                 , XdcSocket(std::move(xdcSocket))
                 , SessionId(sessionId)
                 , OnDisconnectCallback(std::move(onDisconnectCallback))
+<<<<<<< HEAD
                 , ActorSystem(actorSystem)
+=======
+                , Client(client)
+>>>>>>> nbs-26-3-1
                 , Serializer(checksumming, /*useExternalDataChannel=*/ bool(XdcSocket))
                 , Deserializer(peerScopeId)
                 , SendPings(sendPings)
@@ -295,7 +324,11 @@ namespace NActors {
                     it->second->Receive(ev.release());
                     ++EventsReceivedCallback;
                 } else {
+<<<<<<< HEAD
                     ActorSystem->Send(ev.release());
+=======
+                    Client.Send(std::move(ev));
+>>>>>>> nbs-26-3-1
                     ++EventsReceivedActorSystem;
                 }
                 ReceiveCycles += GetCycleCountFast();
@@ -382,7 +415,10 @@ namespace NActors {
 
                 // A call that produced nothing at all (the span vectors are full, or the stream is
                 // blocked mid-event) carries no demand signal, so it must not move the targets.
+<<<<<<< HEAD
                 LWPROBE(IO, reinterpret_cast<ui64>(this), "serialize", false, totalProduced, UnsentBytes);
+=======
+>>>>>>> nbs-26-3-1
                 if (totalProduced) {
                     MainScratch.OnProduce(mainCopied, mainUnthrottled);
                     XdcScratch.OnProduce(xdcCopied, xdcUnthrottled);
@@ -443,8 +479,12 @@ namespace NActors {
             }
 
             void ApplyBytesWritten(size_t num, bool xdc,
+<<<<<<< HEAD
                     std::vector<ui64> *eventToWireTime, std::vector<std::unique_ptr<IEventBase>> *events,
                     std::vector<TIntrusivePtr<TEventSerializedData>> *buffers) {
+=======
+                    std::vector<ui64> *eventToWireTime) {
+>>>>>>> nbs-26-3-1
                 (xdc ? BytesSentXdc : BytesSent) += num;
 
                 size_t& unsent = xdc ? XdcUnsentBytes : UnsentBytes;
@@ -454,6 +494,7 @@ namespace NActors {
 
                 Y_ABORT_UNLESS(num <= unsent, "num# %zu unsent# %zu xdc# %d", num, unsent, int(xdc));
                 unsent -= num;
+<<<<<<< HEAD
                 size_t numEvents = events->size();
                 size_t numBuffers = buffers->size();
                 size_t bytes = 0;
@@ -465,6 +506,11 @@ namespace NActors {
                 for (size_t i = numBuffers, count = buffers->size(); i < count; ++i) {
                     bytes += (*buffers)[i]->GetSize();
                 }
+=======
+                const size_t bytes = Serializer.CommitProducedBytes(
+                    xdc ? 0 : num, xdc ? num : 0, eventToWireTime, &Client);
+                SerializeWindow.CompleteWrite(num, bytesToWrite, xdc);
+>>>>>>> nbs-26-3-1
                 TotalOutputQueueSize.fetch_sub(bytes, std::memory_order_relaxed);
             }
 
@@ -768,8 +814,11 @@ namespace NActors {
 
             TShardLoad& Load;
 
+<<<<<<< HEAD
             std::unique_ptr<TEvDestroyEvents> EvDestroyEvents = std::make_unique<TEvDestroyEvents>();
 
+=======
+>>>>>>> nbs-26-3-1
             const ui32 MinReadBufferSize;
             const ui32 MinWriteBufferSize;
             const ui32 MaxWriteBufferSize;
@@ -1333,6 +1382,7 @@ namespace NActors {
                         MaybeEraseSession(*session);
                     }
 
+<<<<<<< HEAD
                     // discard pending events/buffers, if any
                     SwitchActivity(&DestroyEventsTotalTime);
                     if (!EvDestroyEvents->Events.empty() || !EvDestroyEvents->Buffers.empty()) {
@@ -1347,6 +1397,8 @@ namespace NActors {
                         EvDestroyEvents = std::make_unique<TEvDestroyEvents>();
                     }
 
+=======
+>>>>>>> nbs-26-3-1
                     // wait for CQ in there is no progress
                     SwitchActivity(&CompleteWaitTotalTime);
                     const ui64 waitStartTimestamp = LastActivitySwitchTimestamp;
@@ -1397,16 +1449,22 @@ namespace NActors {
                         if (Sessions.find(&session) == Sessions.end()) { // forward event to other shard
                             Engine.GetShard(record->Conn).Enqueue(std::move(*record));
                         } else if (record->SeqNo != session.ExpectedSeqNo) {
+<<<<<<< HEAD
                             LWPROBE(Command, record->Conn, record->SeqNo, session.ExpectedSeqNo,
                                 record->Ev->Type, record->Ev->Cookie);
+=======
+>>>>>>> nbs-26-3-1
                             Y_DEBUG_ABORT_UNLESS(session.ExpectedSeqNo < record->SeqNo);
                             session.PendingRecordsHeap.push_back(std::move(*record));
                             std::ranges::push_heap(session.PendingRecordsHeap, std::greater<ui64>{},
                                 &TIncomingEventQueue::TRecord::SeqNo);
                             ++*OutOfOrderCameIn;
                         } else {
+<<<<<<< HEAD
                             LWPROBE(Command, record->Conn, record->SeqNo, session.ExpectedSeqNo,
                                 record->Ev->Type, record->Ev->Cookie);
+=======
+>>>>>>> nbs-26-3-1
                             // process this event
                             const bool isUnregister = record->Ev->Type == static_cast<ui32>(ENetwork::EvUnregisterSession);
                             ProcessIncomingEvent(&record.value());
@@ -1417,8 +1475,11 @@ namespace NActors {
                                 if (auto& heap = session.PendingRecordsHeap; Y_UNLIKELY(!heap.empty())) {
                                     while (!heap.empty() && heap.front().SeqNo == session.ExpectedSeqNo) {
                                         std::ranges::pop_heap(heap, std::greater<ui64>{}, &TIncomingEventQueue::TRecord::SeqNo);
+<<<<<<< HEAD
                                         LWPROBE(Command, heap.back().Conn, heap.back().SeqNo, session.ExpectedSeqNo,
                                             heap.back().Ev->Type, heap.back().Ev->Cookie);
+=======
+>>>>>>> nbs-26-3-1
                                         ProcessIncomingEvent(&heap.back());
                                         ++session.ExpectedSeqNo;
                                         heap.pop_back();
@@ -1524,7 +1585,11 @@ namespace NActors {
             void ProcessMonRequest(TSession& session, NMon::TEvHttpInfoRes::TPtr ev) {
                 TStringOutput str(const_cast<TString&>(static_cast<NMon::TEvHttpInfoRes*>(ev->Get())->Answer));
                 session.RenderHtml(str, Engine.DeadPeerTimeout, Engine.PingPeriod);
+<<<<<<< HEAD
                 Engine.ActorSystem->Send(ev.Release());
+=======
+                Engine.Client->Send(std::unique_ptr<IEventHandle>(ev.Release()));
+>>>>>>> nbs-26-3-1
             }
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1614,6 +1679,7 @@ namespace NActors {
                         continue;
                     }
 
+<<<<<<< HEAD
                     LWPROBE(SessionQueue, reinterpret_cast<ui64>(session.get()), session->IncomingSeqNo.load(),
                         session->ExpectedSeqNo, session->PendingRecordsHeap.size(),
                         session->PendingRecordsHeap.empty() ? 0 : session->PendingRecordsHeap.front().SeqNo,
@@ -1621,6 +1687,8 @@ namespace NActors {
                     LWPROBE(SessionIO, reinterpret_cast<ui64>(session.get()), session->BytesSent, session->BytesReceived,
                         session->UnsentBytes, session->XdcUnsentBytes, session->ReadPending, session->WritePending,
                         session->XdcReadPending, session->XdcWritePending);
+=======
+>>>>>>> nbs-26-3-1
                     // Anything arriving from the peer -- payload, ping request, ping response -- counts as
                     // proof of life; when nothing has for the whole timeout, the link is declared dead. The
                     // peer keeps the stream flowing either by pinging us or by answering our pings, so this
@@ -1721,7 +1789,10 @@ namespace NActors {
             void DispatchRead(TSession& session, i32 res, ui32 cqeFlags, ui32 ringIdx) {
                 Y_DEBUG_ABORT_UNLESS(session.ReadPending);
                 session.ReadPending = false;
+<<<<<<< HEAD
                 LWPROBE(IO, reinterpret_cast<ui64>(&session), "read-complete", false, res, session.UnsentBytes);
+=======
+>>>>>>> nbs-26-3-1
 
                 TRingSlot& slot = Rings[ringIdx];
 
@@ -1822,7 +1893,10 @@ namespace NActors {
                 }
 
                 session.ReadPending = true;
+<<<<<<< HEAD
                 LWPROBE(IO, reinterpret_cast<ui64>(&session), "read-submit", false, span.size(), session.UnsentBytes);
+=======
+>>>>>>> nbs-26-3-1
             }
 
             void DispatchWrite(TSession& session, i32 res, bool xdc) {
@@ -1843,17 +1917,27 @@ namespace NActors {
                 } else {
                     *BytesSent += res;
                     ACTIVITY(&ApplyBytesWrittenTotalTime) {
+<<<<<<< HEAD
                         session.ApplyBytesWritten(res, xdc,
                             &EventToWireTimeVec, &EvDestroyEvents->Events, &EvDestroyEvents->Buffers);
+=======
+                        session.ApplyBytesWritten(res, xdc, &EventToWireTimeVec);
+>>>>>>> nbs-26-3-1
                         for (const ui64 time : EventToWireTimeVec) {
                             EventToWireTime->Collect(time * Freq, 1u);
                         }
                         EventToWireTimeVec.clear();
                     }
+<<<<<<< HEAD
                 }
 
                 LWPROBE(IO, reinterpret_cast<ui64>(&session), "write-complete", xdc, res,
                     xdc ? session.XdcUnsentBytes : session.UnsentBytes);
+=======
+                    *DestroyEventsTotalTime += Engine.Client->GetAndResetDestroyEventsCycles() * Freq;
+                }
+
+>>>>>>> nbs-26-3-1
                 TouchedSessions.PushBack(&session);
             }
 
@@ -1889,8 +1973,11 @@ namespace NActors {
                         sqe->flags |= IOSQE_FIXED_FILE;
                     }
                     session.WritePending = true;
+<<<<<<< HEAD
                     LWPROBE(IO, reinterpret_cast<ui64>(&session), "write-submit", false,
                         session.BytesToWriteLastTime, session.UnsentBytes);
+=======
+>>>>>>> nbs-26-3-1
                 }
                 const ui64 xdcLimit = session.Serializer.GetXdcAllowedToSend();
                 const size_t xdcBytesAllowed = xdcLimit > session.BytesSentXdc
@@ -1907,15 +1994,21 @@ namespace NActors {
                         sqe->flags |= IOSQE_FIXED_FILE;
                     }
                     session.XdcWritePending = true;
+<<<<<<< HEAD
                     LWPROBE(IO, reinterpret_cast<ui64>(&session), "write-submit", true,
                         session.XdcBytesToWriteLastTime, session.XdcUnsentBytes);
+=======
+>>>>>>> nbs-26-3-1
                 }
             }
 
             void DispatchXdcRead(TSession& session, i32 res) {
                 Y_ABORT_UNLESS(session.XdcReadPending);
                 session.XdcReadPending = false;
+<<<<<<< HEAD
                 LWPROBE(IO, reinterpret_cast<ui64>(&session), "read-complete", true, res, session.XdcUnsentBytes);
+=======
+>>>>>>> nbs-26-3-1
 
                 if (session.Terminated) {
                 } else if (res == -ECANCELED) {
@@ -2005,7 +2098,10 @@ namespace NActors {
         std::atomic_uint64_t NextShardIdx;
 
         NMonitoring::TDynamicCounterPtr UringCounters;
+<<<<<<< HEAD
         TActorId DestructorActorId;
+=======
+>>>>>>> nbs-26-3-1
 
     public:
         TUringEngine(TIntrusivePtr<TInterconnectProxyCommon> common)
@@ -2038,6 +2134,7 @@ namespace NActors {
             Stop();
         }
 
+<<<<<<< HEAD
         void SetActorSystem(TActorSystem* actorSystem) override {
             Y_ABORT_UNLESS(actorSystem);
             // DestructorId is filled in after the engine is created, so it is picked up here rather than in
@@ -2048,6 +2145,13 @@ namespace NActors {
             // Stop the reaper threads while the actor system is still up, so no completion is posted to a
             // torn-down system.
             actorSystem->DeferPreStop([self = TIntrusivePtr<IUringEngine>(this)] { self->Stop(); });
+=======
+        void SetClient(IUringEngineClientPtr client) override {
+            Y_ABORT_UNLESS(client);
+            Y_ABORT_UNLESS(!Client);
+            Client = std::move(client);
+            Client->Start(TUringEnginePtr(this));
+>>>>>>> nbs-26-3-1
         }
 
         ui64 Register(TIntrusivePtr<NInterconnect::TStreamSocket> socket, const TActorId& sessionActorId,
@@ -2058,7 +2162,11 @@ namespace NActors {
             if (Stopping) {
                 return 0; // engine is shutting down; caller treats 0 as a failed registration and terminates
             }
+<<<<<<< HEAD
             Y_ABORT_UNLESS(ActorSystem);
+=======
+            Y_ABORT_UNLESS(Client);
+>>>>>>> nbs-26-3-1
 
             // Prefer the currently least-loaded shard (in-process signal); fall back to round-robin.
             ui32 shardIdx = NextShardIdx++ % Shards.size();
@@ -2077,7 +2185,11 @@ namespace NActors {
             const ui32 maxReadBufferSize = ClampIoSize(v2.MinReadBufferSize, v2.MaxReadBufferSize, tcpBuf);
 
             auto session = std::make_unique<TSession>(shardIdx, std::move(socket), sessionActorId,
+<<<<<<< HEAD
                 ChecksumEvents, peerScopeId, std::move(onDisconnectCallback), ActorSystem, sendPings,
+=======
+                ChecksumEvents, peerScopeId, std::move(onDisconnectCallback), *Client, sendPings,
+>>>>>>> nbs-26-3-1
                 std::move(clockSkew), std::move(pingRTT), std::move(xdcSocket));
             session->ReadTarget = TReadTarget(v2.MinReadBufferSize, maxReadBufferSize);
             session->MainScratch = TScratchTarget(v2.MinWriteBufferSize, v2.MaxWriteBufferSize);
@@ -2127,6 +2239,12 @@ namespace NActors {
                 for (auto& shard : Shards) {
                     shard->Stop();
                 }
+<<<<<<< HEAD
+=======
+                if (Client) {
+                    Client->Stop();
+                }
+>>>>>>> nbs-26-3-1
                 // Common holds this engine, so keeping a reference to it here would make the pair
                 // unreclaimable. The workers are joined by now and nothing dereferences Common past this
                 // point (all of its data the engine needs is cached in const members).

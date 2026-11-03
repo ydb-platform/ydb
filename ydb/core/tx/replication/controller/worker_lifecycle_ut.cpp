@@ -331,6 +331,30 @@ Y_UNIT_TEST_SUITE(WorkerLifecycle) {
     Y_UNIT_TEST(ChildrenStartAfterRestartWhenNotRunning) {
         TSetup s;
         auto& runtime = s.Env.GetRuntime();
+        NYdb::NTopic::TTopicClient client(s.Env.GetDriver());
+
+        // The mock worker never consumes data. Wait for the initial scan to
+        // populate its partition before splitting, otherwise an empty parent
+        // is already consumed and its children may legitimately start.
+        bool hasUnreadData = false;
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (TInstant::Now() < deadline && !hasUnreadData) {
+            const auto desc = client.DescribeConsumer(s.StreamPath, "replicationConsumer",
+                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            for (const auto& partition : desc.GetConsumerDescription().GetPartitions()) {
+                const auto& stats = partition.GetPartitionStats();
+                const auto& consumerStats = partition.GetPartitionConsumerStats();
+                if (partition.GetPartitionId() == s.Root.WorkerId() && stats && consumerStats) {
+                    hasUnreadData = stats->GetEndOffset() > consumerStats->GetCommittedOffset();
+                }
+            }
+            if (!hasUnreadData) {
+                Sleep(TDuration::MilliSeconds(100));
+            }
+        }
+        UNIT_ASSERT_C(hasUnreadData, "Initial scan did not populate the parent partition");
+
         const auto children = s.SplitRoot();
 
         s.DataEnd(children);
@@ -349,7 +373,6 @@ Y_UNIT_TEST_SUITE(WorkerLifecycle) {
         }
 
         // what the service does when the parent is applied up to the end
-        NYdb::NTopic::TTopicClient client(s.Env.GetDriver());
         const auto desc = client.DescribeTopic(s.StreamPath, NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)).ExtractValueSync();
         UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
         for (const auto& partition : desc.GetTopicDescription().GetPartitions()) {

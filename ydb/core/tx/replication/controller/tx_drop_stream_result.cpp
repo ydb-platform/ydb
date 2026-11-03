@@ -64,7 +64,10 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        if (target->GetDstState() == TReplication::EDstState::Removing) {
+        const auto dstState = target->GetDstState();
+        const bool isRemoving = dstState == TReplication::EDstState::Removing;
+        const bool isAttaching = dstState == TReplication::EDstState::Attaching;
+        if (isRemoving || isAttaching) {
             target->SetStreamState(TReplication::EStreamState::Removed);
             db.Table<Schema::SrcStreams>().Key(rid, tid).Update<Schema::SrcStreams::State>(target->GetStreamState());
         } else {

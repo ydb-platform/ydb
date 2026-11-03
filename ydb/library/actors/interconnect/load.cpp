@@ -159,7 +159,10 @@ namespace NInterconnect {
         bool IsMeasuring(TMonotonic when) const {
             return when >= MeasurementStartTime;
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> nbs-26-3-1
 
     public:
         static constexpr IActor::EActivityType ActorActivityType() {
@@ -192,7 +195,10 @@ namespace NInterconnect {
             Become(&TLoadActor::StateFunc);
             NextMessageTimestamp = ctx.Monotonic();
             MeasurementStartTime = NextMessageTimestamp + Params.DelayBeforeMeasurements;
+<<<<<<< HEAD
             LastRttSample = MeasurementStartTime;
+=======
+>>>>>>> nbs-26-3-1
             ResetThroughput(NextMessageTimestamp, *Traffic);
             GenerateMessages(ctx);
             ctx.Schedule(Params.Duration, new TEvents::TEvPoisonPill);
@@ -255,6 +261,7 @@ namespace NInterconnect {
             auto it = InFly.find(record.GetId());
             if (it != InFly.end()) {
                 const TMonotonic now = ctx.Monotonic();
+<<<<<<< HEAD
                 if (IsMeasuring(it->second.SendTimestamp)) {
                     // record message rtt
                     const TDuration rtt = now - it->second.SendTimestamp;
@@ -264,6 +271,12 @@ namespace NInterconnect {
                     }
                     LastRttSample = now;
                     ++TotalRttSamples;
+=======
+                if (IsMeasuring(now)) {
+                    // record message rtt
+                    const TDuration rtt = now - it->second.SendTimestamp;
+                    UpdateHistogram(now, rtt);
+>>>>>>> nbs-26-3-1
 
                     // update throughput
                     UpdateThroughput(ev->Get()->CalculateSerializedSizeCached());
@@ -457,6 +470,7 @@ namespace NInterconnect {
                 }
             }
 
+<<<<<<< HEAD
             stats.TotalRttSamples = TotalRttSamples;
             if (now > MeasurementStartTime) {
                 stats.MaxRttGap = MaxRttGap;
@@ -464,6 +478,8 @@ namespace NInterconnect {
                     stats.MaxRttGap = finalGap;
                 }
             }
+=======
+>>>>>>> nbs-26-3-1
             stats.NumDropped = NumDropped;
 
             return stats;

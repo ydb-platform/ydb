@@ -60,7 +60,11 @@ IActor *CreateInterconnectLoadTest(const NKikimr::TEvLoadTestRequest::TInterconn
     for (const auto& node : cmd.GetNodeHops())
         params.NodeHops.emplace_back(node);
 
+<<<<<<< HEAD
     const auto callback = [tag, parent] (const TActorContext& ctx, TString&& html, const NInterconnect::TLoadActorStats& stats) {
+=======
+    const auto callback = [tag, parent] (const TActorContext& ctx, TString&& html, const NInterconnect::TLoadActorStats&) {
+>>>>>>> nbs-26-3-1
         TIntrusivePtr<TEvLoad::TLoadReport> report(new TEvLoad::TLoadReport());
         auto finishEv = new TEvLoad::TEvLoadTestFinished(tag, report, "Load test finished.");
         finishEv->LastHtmlPage = std::move(html);

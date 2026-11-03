@@ -68,10 +68,19 @@ Y_UNIT_TEST_SUITE(TPortionMetadataCacheKey) {
 
         UNIT_ASSERT(sameTablet == restarted);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(sameTablet), static_cast<size_t>(restarted));
-        const NGeneralCache::TGlobalPortionAddress changed(first, 100, portion, 5);
         UNIT_ASSERT(!(sameTablet == otherTablet));
         UNIT_ASSERT(!(sameTablet == otherPortion));
-        UNIT_ASSERT(!(sameTablet == changed));
+    }
+
+    Y_UNIT_TEST(PortionAddressIgnoresContentStamp) {
+        const TPortionAddress portion(NKikimr::NColumnShard::TInternalPathId::FromRawValue(7), 9);
+        const NActors::TActorId actor(1, 1);
+        const NGeneralCache::TGlobalPortionAddress added(actor, 100, portion, 1);
+        const NGeneralCache::TGlobalPortionAddress removed(actor, 100, portion, 2);
+
+        UNIT_ASSERT(added == removed);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(added), static_cast<size_t>(removed));
+        UNIT_ASSERT_VALUES_EQUAL(removed.GetContentStamp(), 2);
     }
 
     Y_UNIT_TEST(PortionAddressKeepsActorIdWhenCacheIsPerIncarnation) {

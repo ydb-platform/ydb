@@ -69,8 +69,6 @@ public:
                 } else if (!TPolicy::IsCacheEntryActual(addr, it.Value())) {
                     cache.Erase(it);
                     counters.ObjectCacheMiss->Inc();
-                    counters.CacheSizeCount->Set(cache.Size());
-                    counters.CacheSizeBytes->Set(cache.TotalSize());
                 } else {
                     counters.ObjectCacheHit->Inc();
                     AFL_VERIFY(Result.emplace(addr, it.Value()).second);
@@ -392,6 +390,20 @@ public:
         for (size_t extra = 0; extra < sourceLimit - assigned && extra < order.size(); ++extra) {
             ++candidates[order[extra]].Target;
         }
+        // A queued consumer with a tiny weight still gets one slot, taken from the largest share.
+        for (auto& candidate : candidates) {
+            if (candidate.Target) {
+                continue;
+            }
+            auto donor = std::max_element(candidates.begin(), candidates.end(), [](const TCandidate& a, const TCandidate& b) {
+                return a.Target < b.Target;
+            });
+            if (donor->Target <= 1) {
+                break;
+            }
+            --donor->Target;
+            candidate.Target = 1;
+        }
 
         const TCandidate* chosen = nullptr;
         for (const auto& candidate : candidates) {
@@ -457,7 +469,7 @@ public:
         ui64 leftQueue = 0;
         bool partial = false;
         for (const auto& addr : sourceWaitObjects) {
-            if (IsRequestAttached(addr, request)) {
+            if (!firstDispatch && IsRequestAttached(addr, request)) {
                 continue;
             }
             auto itAddress = RequestedObjects.find(addr);
@@ -584,10 +596,7 @@ private:
         return it->second;
     }
 
-    void AddObjectsToCache(const THashMap<TAddress, TObject>& add) {
-        for (auto&& i : add) {
-            Cache.Insert(i.first, i.second);
-        }
+    void OnCacheSizeChanged() {
         Counters->CacheSizeCount->Set(Cache.Size());
 
         const auto cacheTotalSize = Cache.TotalSize();
@@ -597,6 +606,13 @@ private:
         }
     }
 
+    void AddObjectsToCache(const THashMap<TAddress, TObject>& add) {
+        for (auto&& i : add) {
+            Cache.Insert(i.first, i.second);
+        }
+        OnCacheSizeChanged();
+    }
+
     void RemoveObjectsFromCache(const THashSet<TAddress>& remove) {
         for (auto&& i : remove) {
             auto it = Cache.Find(i);
@@ -604,13 +620,7 @@ private:
                 Cache.Erase(it);
             }
         }
-        Counters->CacheSizeCount->Set(Cache.Size());
-
-        const auto cacheTotalSize = Cache.TotalSize();
-        Counters->CacheSizeBytes->Set(cacheTotalSize);
-        if (MemoryConsumer) {
-            MemoryConsumer->SetConsumption(cacheTotalSize);
-        }
+        OnCacheSizeChanged();
     }
 
 public:
@@ -680,7 +690,9 @@ public:
         } else {
             Counters->IncomingRequestsCount->Inc();
         }
-        if (request->TakeFromCache(*Counters, Cache)) {
+        const bool fromCache = request->TakeFromCache(*Counters, Cache);
+        OnCacheSizeChanged();
+        if (fromCache) {
             Counters->OnHitCacheRequestFinished(request->GetStartRequest(), request->GetCreated(), TMonotonic::Now());
             Counters->RequestCacheHit->Inc();
             return;
@@ -723,7 +735,13 @@ public:
         }
 
         auto* sourceInfo = MutableSourceInfoOptional(sourceId);
+        if (!sourceInfo && hasOwner) {
+            // The owner sends KillSource after all its updates, so a missing source here means the owner is alive.
+            sourceInfo = &UpsertSourceInfo(sourceId, owner);
+        }
         if (sourceInfo && hasOwner && sourceInfo->GetOwner() != owner) {
+            // Objects are equal across incarnations of one source, so another owner's update is still valid for the cache.
+            // Insert never replaces an existing entry. Only the queues of the current owner are left alone.
             AddObjectsToCache(add);
             RemoveObjectsFromCache(remove);
             return;

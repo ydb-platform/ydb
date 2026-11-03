@@ -339,6 +339,43 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         UNIT_ASSERT(!extra->Ready);
     }
 
+    Y_UNIT_TEST(LargestRemainderGetsTheSpareSlot) {
+        NGeneralCacheUt::THarness<false> harness(5, { { "SCAN", 2 }, { "COMPACTION", 1 } });
+        harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 100, 101, 102, 103, 104 });
+        harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1, 2, 3, 4, 5, 6 });
+        harness.Add(1, NGeneralCacheUt::EConsumer::COMPACTION, { 11, 12, 13, 14, 15, 16 });
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 1);
+
+        // 5 * 2 / 3 = 3 rest 1, 5 * 1 / 3 = 1 rest 2: the spare slot goes to compaction.
+        harness.Finish(harness.Processor->Asks.at(0));
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
+        const auto ids = harness.Processor->Asks.at(1).Ids();
+        const auto scanCount = std::count_if(ids.begin(), ids.end(), [](const ui64 id) {
+            return id < 10;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ids.size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(scanCount, 3);
+    }
+
+    Y_UNIT_TEST(SmallWeightStillGetsOneSlot) {
+        NGeneralCacheUt::THarness<false> harness(2, { { "SCAN", 3 }, { "COMPACTION", 1 } });
+        harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 100, 101 });
+        auto scan = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1, 2, 3, 4, 5 });
+        auto compaction = harness.Add(1, NGeneralCacheUt::EConsumer::COMPACTION, { 10 });
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 1);
+
+        // 2 * 1 / 4 rounds to 0: without a minimum share compaction waits for the whole scan.
+        harness.Finish(harness.Processor->Asks.at(0));
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
+        const auto ids = harness.Processor->Asks.at(1).Ids();
+        UNIT_ASSERT_VALUES_EQUAL(ids.size(), 2);
+        UNIT_ASSERT(ids.contains(10));
+
+        harness.Finish(harness.Processor->Asks.at(1));
+        UNIT_ASSERT(compaction->Ready);
+        UNIT_ASSERT(!scan->Ready);
+    }
+
     Y_UNIT_TEST(ZeroWeightWaitsWhileWeightedRequestsAreQueued) {
         NGeneralCacheUt::THarness<false> harness(2, { { "SCAN", 1 } });
         auto scan = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1, 2, 3, 4, 5 });
@@ -474,6 +511,22 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), asks + 1);
         harness.Finish(harness.Processor->Asks.back());
         UNIT_ASSERT(again->Ready);
+    }
+
+    Y_UNIT_TEST(PushedEntriesOfLiveSourceStayWhenEvictionIsOn) {
+        NGeneralCacheUt::THarness<true> harness(2);
+        THashMap<NGeneralCacheUt::TAddress, TString> pushed;
+        pushed.emplace(NGeneralCacheUt::TAddress{ 1, 1, 1 }, "pushed");
+        harness.Manager->OnAdditionalObjectsInfo(1, std::move(pushed), {});
+
+        THashMap<NGeneralCacheUt::TAddress, TString> other;
+        other.emplace(NGeneralCacheUt::TAddress{ 2, 2, 2 }, "other");
+        harness.Manager->OnAdditionalObjectsInfo(2, std::move(other), {});
+
+        const size_t asks = harness.Processor->Asks.size();
+        auto read = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1 });
+        UNIT_ASSERT(read->Ready);
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), asks);
     }
 
     Y_UNIT_TEST(StaleKillDoesNotAbortTheNewIncarnation) {

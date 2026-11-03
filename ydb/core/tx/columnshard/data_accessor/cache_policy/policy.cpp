@@ -159,6 +159,8 @@ ui64 Mix(const ui64 hash, const ui64 value) {
     return CombineHashes(hash, value);
 }
 
+// Covers only the portion meta. Blob ids and chunk layout are not hashed: they never change for a live portion id,
+// every rewrite of the data creates a portion with a new id.
 ui64 PortionContentStamp(const TPortionInfo& portion) {
     ui64 hash = portion.GetRecordsCount();
     hash = Mix(hash, portion.GetCompactionLevel());
@@ -205,12 +207,12 @@ TGlobalPortionAddress::TGlobalPortionAddress(
 }
 
 bool TGlobalPortionAddress::operator==(const TGlobalPortionAddress& item) const {
-    return TabletId == item.TabletId && InternalPortionAddress == item.InternalPortionAddress && ContentStamp == item.ContentStamp &&
-           Incarnation == item.Incarnation;
+    return TabletId == item.TabletId && InternalPortionAddress == item.InternalPortionAddress && Incarnation == item.Incarnation;
 }
 
 TGlobalPortionAddress::operator size_t() const {
-    return CombineHashes(CombineHashes(THash<ui64>()(TabletId), THash<NKikimr::NOlap::TPortionAddress>()(InternalPortionAddress)), ContentStamp);
+    return CombineHashes(
+        CombineHashes(THash<ui64>()(TabletId), THash<NKikimr::NOlap::TPortionAddress>()(InternalPortionAddress)), Incarnation.Hash());
 }
 
 const TString TGlobalPortionAddress::Debug() const {

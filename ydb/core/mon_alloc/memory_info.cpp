@@ -10,6 +10,7 @@ TProcessMemoryInfo TProcessMemoryInfoProvider::Get() const {
     TProcessMemoryInfo result{
         allocState.AllocatedMemory,
         allocState.AllocatorCachesMemory,
+        allocState.ReclaimableMemory,
         {}, {}, {}, {}
     };
 

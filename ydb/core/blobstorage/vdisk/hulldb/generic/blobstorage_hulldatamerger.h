@@ -205,7 +205,7 @@ namespace NKikimr {
                             ui32 offset = 0;
                             TDiskBlob::DeriveBlobHeaderMode(partSize, part.HugeBlob.Size, &offset);
                             const TDiskPart location(part.HugeBlob.ChunkIdx, part.HugeBlob.Offset + offset,
-                                part.HugeBlob.Size - offset);
+                                partSize);
                             CollectTask.Reads.emplace_back(location, partIdx, true);
                             DeletedHugeBlobs.push_back(part.HugeBlob);
                         } else { // add metadata part to merger

@@ -698,7 +698,11 @@ template bool FillBatchedData<Topic::StreamReadMessage::ReadResponse>(
         const NPersQueue::TTopicConverterPtr& topic);
 
 void TPartitionActor::Handle(TEvPQProxy::TEvParentCommitedToFinish::TPtr& ev, const TActorContext& ctx) {
-    NotCommitedToFinishParents.erase(static_cast<ui32>(ev->Get()->ParentPartitionId));
+    const ui32 parentPartitionId = static_cast<ui32>(ev->Get()->ParentPartitionId);
+    if (ev->Get()->Skipped) {
+        SkippedParents.insert(parentPartitionId);
+    }
+    NotCommitedToFinishParents.erase(parentPartitionId);
     MakeCommit(ctx);
 }
 
@@ -925,7 +929,9 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
 
     EndOffset = res.GetEndOffset();
     SizeLag = res.GetSizeLag();
-    WTime = res.GetWriteTimestampMS();
+    if (res.HasWriteTimestampMS()) {
+        WTime = res.GetWriteTimestampMS();
+    }
 
     if (res.GetReadOffset() > 0)
         ReadOffset = res.GetReadOffset();

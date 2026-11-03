@@ -149,6 +149,8 @@ committed to the end.
 `TEvLockPartition` of a child lists its skipped ancestors
 (`SkippedParentPartitions`). The first commit of the child commits them to
 the end in the same transaction, even if another session holds the parent.
+A parent this session skips later is added to descendants already locked here.
+A child waits for a direct parent from its own Lock when that parent is in this session's partition list, including while the parent Lock has not arrived.
 
 ## Common assignment
 

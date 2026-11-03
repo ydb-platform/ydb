@@ -299,7 +299,7 @@ private:
     bool ReadingFinishedSent;
 
     absl::flat_hash_set<ui32> NotCommitedToFinishParents;
-    const absl::flat_hash_set<ui32> SkippedParents; // Ancestors that finished without delivering any data to the consumer
+    absl::flat_hash_set<ui32> SkippedParents; // finished without delivering any data to the consumer
 
     inline bool IsPartitionDataReady() const;
     inline bool IsNeedMorePartitionData() const;

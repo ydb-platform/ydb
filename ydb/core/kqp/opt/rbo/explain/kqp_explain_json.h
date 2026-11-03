@@ -1,6 +1,6 @@
 #pragma once
 
-#include "kqp_stage_graph.h"
+#include "../kqp_stage_graph.h"
 
 namespace NKikimr::NKqp {
 

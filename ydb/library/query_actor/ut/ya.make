@@ -8,11 +8,13 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/core/kqp/ut/common
     ydb/core/testlib
     yql/essentials/sql/pg_dummy
 )
 
 SRCS(
+    mvcc_version_ut.cpp
     query_actor_ut.cpp
 )
 

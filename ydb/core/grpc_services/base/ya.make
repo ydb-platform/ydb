@@ -5,6 +5,7 @@ SRCS(
     path_aliasing.cpp
     base_service.h
     base.h
+    mvcc_version.h
     request_paths.h
     http_database_access_verdict.h
 )

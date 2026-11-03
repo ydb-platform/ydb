@@ -191,19 +191,14 @@ namespace NKikimr::NStorage {
         const ui32 BridgeProxyGroupGeneration;
         const TGroupId SourceGroupId;
         const TGroupId TargetGroupId;
-        const bool Reconcile;
-        const bool Thorough;
         std::optional<TString> ErrorReason;
 
         TEvNodeWardenNotifySyncerFinished(TGroupId bridgeProxyGroupId, ui32 bridgeProxyGroupGeneration,
-                TGroupId sourceGroupId, TGroupId targetGroupId, bool reconcile, bool thorough,
-                std::optional<TString> errorReason)
+                TGroupId sourceGroupId, TGroupId targetGroupId, std::optional<TString> errorReason)
             : BridgeProxyGroupId(bridgeProxyGroupId)
             , BridgeProxyGroupGeneration(bridgeProxyGroupGeneration)
             , SourceGroupId(sourceGroupId)
             , TargetGroupId(targetGroupId)
-            , Reconcile(reconcile)
-            , Thorough(thorough)
             , ErrorReason(errorReason)
         {}
     };
@@ -243,10 +238,12 @@ namespace NKikimr::NStorage {
     {
         const TGroupId TargetGroupId;
         const ui32 BridgeProxyGroupGeneration;
+        const bool Flush; // the copies of the client writes that are over are reported lost instead of being waited for
 
-        TEvNodeWardenStandbySeal(TGroupId targetGroupId, ui32 bridgeProxyGroupGeneration)
+        TEvNodeWardenStandbySeal(TGroupId targetGroupId, ui32 bridgeProxyGroupGeneration, bool flush)
             : TargetGroupId(targetGroupId)
             , BridgeProxyGroupGeneration(bridgeProxyGroupGeneration)
+            , Flush(flush)
         {}
     };
 

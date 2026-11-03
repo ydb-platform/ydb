@@ -115,7 +115,7 @@ namespace NKikimr::NGroupSyncer {
     void TSyncerActor::Terminate(std::optional<TString> errorReason) {
         STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS04, "syncing finished", (LogId, LogId), (ErrorReason, errorReason));
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NStorage::TEvNodeWardenNotifySyncerFinished(Info->GroupID,
-            Info->GroupGeneration, SourceGroupId, TargetGroupId, Reconcile, Thorough, std::move(errorReason)));
+            Info->GroupGeneration, SourceGroupId, TargetGroupId, std::move(errorReason)));
         PassAway();
     }
 

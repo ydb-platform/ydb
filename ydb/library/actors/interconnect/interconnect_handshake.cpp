@@ -970,12 +970,20 @@ namespace NActors {
                 request.SetRequestXdcShuffle(true);
                 request.SetRequestAllowDisablingPayloadChecksums(true);
                 // v2 session is incompatible with encryption and needs the io_uring data plane; only
+<<<<<<< HEAD
                 // request it when encryption is disabled locally and the v2 engine is running here. The
                 // engine is absent when Settings.V2.Threads is zero or io_uring is unavailable, so testing
                 // it covers both; Enable is re-read on every handshake and may have changed since startup.
                 const bool requestSessionV2 = Common->Settings.V2.Enable &&
                     Common->Settings.EncryptionMode == EEncryptionMode::DISABLED &&
                     Common->UringEngineV2;
+=======
+                // request it when encryption is disabled locally and io_uring is available (buffer rings
+                // are used when present, with a fallback to ordinary buffers on older kernels)
+                const bool requestSessionV2 = Common->Settings.V2.Enable &&
+                    Common->Settings.EncryptionMode == EEncryptionMode::DISABLED &&
+                    TUringContext::IsAvailable();
+>>>>>>> nbs-26-3-1
                 request.SetRequestSessionV2(requestSessionV2);
                 request.SetHandshakeId(*HandshakeId);
 
@@ -1379,10 +1387,17 @@ namespace NActors {
                 Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
                 Params.AllowDisablingPayloadChecksums = request.GetRequestAllowDisablingPayloadChecksums();
                 // v2 session is used only when both peers enabled it, encryption is not in effect, and
+<<<<<<< HEAD
                 // this side has the v2 engine running (see the outgoing side above)
                 Params.UseSessionV2 = request.GetRequestSessionV2() &&
                     Common->Settings.V2.Enable && !Params.Encryption &&
                     Common->UringEngineV2;
+=======
+                // this side has the io_uring data plane available
+                Params.UseSessionV2 = request.GetRequestSessionV2() &&
+                    Common->Settings.V2.Enable && !Params.Encryption &&
+                    TUringContext::IsAvailable();
+>>>>>>> nbs-26-3-1
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {

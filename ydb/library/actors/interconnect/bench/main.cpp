@@ -627,7 +627,11 @@ namespace {
             settings.V2.ChecksumEvents = cfg.Checksum;
             settings.V2.EnableSQPOLL = cfg.SqPoll;
             settings.V2.EnablePreserializeEvents = cfg.Preserialize;
+<<<<<<< HEAD
             settings.V2.Threads = cfg.UseV2 ? cfg.UringShards : 0; // zero Threads keeps the v2 engine off
+=======
+            settings.V2.Threads = cfg.UringShards;
+>>>>>>> nbs-26-3-1
             settings.V2.RingsPerShard = cfg.RingsPerShard;
             if (cfg.TcpSocketBufferSize) {
                 settings.TCPSocketBufferSize = cfg.TcpSocketBufferSize;

@@ -1,5 +1,10 @@
 #include "v2_event_serializer.h"
 
+<<<<<<< HEAD
+=======
+#include "event_destructor.h"
+
+>>>>>>> nbs-26-3-1
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/util/rope.h>
 #include <ydb/library/actors/protos/interconnect.pb.h>
@@ -187,15 +192,24 @@ namespace NActors {
         return totalBytesProduced;
     }
 
+<<<<<<< HEAD
     void TEventSerializer::CommitProducedBytes(size_t numMainBytes, size_t numXdcBytes,
             std::vector<ui64> *eventToWireTime,
             std::vector<std::unique_ptr<IEventBase>> *events,
             std::vector<TIntrusivePtr<TEventSerializedData>> *buffers) {
+=======
+    size_t TEventSerializer::CommitProducedBytes(size_t numMainBytes, size_t numXdcBytes,
+            std::vector<ui64> *eventToWireTime, IEventDestructor* eventDestructor) {
+>>>>>>> nbs-26-3-1
         CumulativeCommittedMain += numMainBytes;
         CumulativeCommittedXdc += numXdcBytes;
         Y_ABORT_UNLESS(CumulativeCommittedMain <= CumulativeProducedMain);
         Y_ABORT_UNLESS(CumulativeCommittedXdc <= CumulativeProducedXdc);
 
+<<<<<<< HEAD
+=======
+        size_t bytes = 0;
+>>>>>>> nbs-26-3-1
         const ui64 timestamp = GetCycleCountFast();
         while (!RefcountItems.empty()
                 && RefcountItems.front().MainEndOffset <= CumulativeCommittedMain
@@ -205,6 +219,7 @@ namespace NActors {
                 eventToWireTime->push_back(timestamp - front.EventReceivedTimestamp);
             }
             NumBytesInScratchBuffers -= front.ScratchBytesUsed;
+<<<<<<< HEAD
             if (events && front.Event) {
                 events->push_back(std::move(front.Event));
             }
@@ -213,6 +228,20 @@ namespace NActors {
             }
             RefcountItems.pop_front();
         }
+=======
+            if (front.Event) {
+                bytes += front.Event->CalculateSerializedSizeCached();
+            }
+            if (front.Buffer) {
+                bytes += front.Buffer->GetSize();
+            }
+            if (eventDestructor && (front.Event || front.Buffer)) {
+                eventDestructor->DestroyEvent(std::move(front.Event), std::move(front.Buffer));
+            }
+            RefcountItems.pop_front();
+        }
+        return bytes;
+>>>>>>> nbs-26-3-1
     }
 
     void TEventSerializer::IssueMainBytes(ui64 mainEndOffset) {

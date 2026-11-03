@@ -46,6 +46,7 @@ namespace NKikimr {
         bool EnableVDiskCooldownTimeout = false;
         TDuration RequestReportingThrottlerDelay = TDuration::Seconds(60);
         TDuration LongRequestThreshold = TDuration::Seconds(50);
+        TDuration SelfHealStateRequestTimeout;
 
         // debugging options
         bool VDiskReplPausedAtStart = false;
@@ -59,11 +60,7 @@ namespace NKikimr {
 
         std::function<void(TVDiskConfig&)> VDiskConfigPreprocessor;
 
-        TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
-            : PDiskServiceFactory(pDiskServiceFactory)
-            , AllVDiskKinds(new TAllVDiskKinds)
-            , AllDriveModels(new NPDisk::TDriveModelDb)
-        {}
+        TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory);
 
         bool IsCacheEnabled() const {
             return static_cast<bool>(CacheAccessor);

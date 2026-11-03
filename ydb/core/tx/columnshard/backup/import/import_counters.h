@@ -57,10 +57,12 @@ public:
         WriteInflight->Inc();
     }
 
-    void OnWriteFinished(const TDuration duration) const {
+    void OnWriteFinished(const TDuration duration, const bool success) const {
         WriteInflight->Dec();
         HistogramWriteDurationMs->Collect(duration.MilliSeconds());
-        BatchesWritten->Inc();
+        if (success) {
+            BatchesWritten->Inc();
+        }
     }
 
     void OnSaveProgressStarted() const {

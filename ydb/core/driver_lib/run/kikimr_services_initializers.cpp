@@ -259,7 +259,11 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
+<<<<<<< HEAD
 #include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
+=======
+#include <ydb/library/actors/interconnect/interconnect_uring_engine_client.h>
+>>>>>>> nbs-26-3-1
 #include <ydb/library/actors/interconnect/handshake_broker.h>
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
@@ -784,6 +788,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             icCommon->Settings = settings;
             icCommon->DestructorId = GetDestructActorID();
 
+<<<<<<< HEAD
             if (settings.V2.Threads) {
                 // Create the shared v2 io_uring data-plane engine once, at startup, and publish it in Common.
                 // This is keyed on Threads, not on Settings.V2.Enable: Enable only gates handshake
@@ -807,6 +812,22 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             setup->LocalServices.emplace_back(TActorId(), TActorSetupCmd(
                 NConsole::CreateInterconnectConfigurator(icCommon), TMailboxType::ReadAsFilled, systemPoolId));
 
+=======
+            if (settings.V2.Enable) {
+                // Create the shared v2 io_uring data-plane engine once, at startup, and publish it in Common.
+                // The actor system does not exist yet, so the engine is bound to it later (once it is up,
+                // OnActorSystemCreated installs its client). CreateUringEngine returns null when
+                // io_uring is unavailable, in which case v2 is simply never negotiated during the handshake.
+                // The engine takes its parameters from Common, so Settings/MonCounters must
+                // already be filled in by this point.
+                icCommon->UringEngineV2 = CreateUringEngine(icCommon);
+                setup->OnActorSystemCreated.push_back([common = icCommon](TActorSystem *actorSystem) {
+                    if (const auto& engine = common->UringEngineV2) {
+                        engine->SetClient(CreateUringEngineClient(*common, actorSystem));
+                    }
+                });
+            }
+>>>>>>> nbs-26-3-1
             icCommon->DestructorQueueSize = destructorQueueSize;
             icCommon->HandshakeBallastSize = icConfig.GetHandshakeBallastSize();
             icCommon->LocalScopeId = ScopeId.GetInterconnectScopeId();
@@ -1190,6 +1211,10 @@ TBSNodeWardenInitializer::TBSNodeWardenInitializer(const TKikimrRunConfig& runCo
 void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                   const NKikimr::TAppData* appData) {
     TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(new TRealPDiskServiceFactory()));
+    const auto& selfHealConfig = Config.GetCmsConfig().GetSentinelConfig().GetStateStorageSelfHealConfig();
+    if (const ui32 timeout = selfHealConfig.GetSelfHealStateRequestTimeout()) {
+        nodeWardenConfig->SelfHealStateRequestTimeout = TDuration::MicroSeconds(timeout);
+    }
     if (Config.HasBlobStorageConfig()) {
         const auto& bsc = Config.GetBlobStorageConfig();
         nodeWardenConfig->FeatureFlags = Config.GetFeatureFlags();

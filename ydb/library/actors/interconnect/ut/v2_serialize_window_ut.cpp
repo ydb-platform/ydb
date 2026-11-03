@@ -1,5 +1,9 @@
 #include <ydb/library/actors/core/event_pb.h>
 #include <ydb/library/actors/core/events.h>
+<<<<<<< HEAD
+=======
+#include <ydb/library/actors/interconnect/event_destructor.h>
+>>>>>>> nbs-26-3-1
 #include <ydb/library/actors/interconnect/v2_event_serializer.h>
 #include <ydb/library/actors/interconnect/v2_serialize_window.h>
 #include <ydb/library/actors/protos/unittests.pb.h>
@@ -13,6 +17,25 @@ namespace {
     constexpr size_t MaxWindow = 64 * 1024;
 
     struct TEvPayload: TEventPB<TEvPayload, TMessageWithPayload, EventSpaceBegin(TEvents::ES_PRIVATE)> {};
+<<<<<<< HEAD
+=======
+
+    // Counts objects released as the two socket windows are committed independently.
+    class TCountingEventDestructor final : public IEventDestructor {
+    public:
+        ui64 GetAndResetDestroyEventsCycles() override {
+            return 0;
+        }
+
+        void DestroyEvent(
+                std::unique_ptr<IEventBase> event,
+                TIntrusivePtr<TEventSerializedData> buffer) override {
+            ObjectsDestroyed += bool(event) + bool(buffer);
+        }
+
+        size_t ObjectsDestroyed = 0;
+    };
+>>>>>>> nbs-26-3-1
 }
 
 Y_UNIT_TEST_SUITE(InterconnectV2SerializeWindow) {
@@ -100,7 +123,11 @@ Y_UNIT_TEST_SUITE(InterconnectV2SerializeWindow) {
 
             TRcBuf mainBuffer;
             TRcBuf xdcBuffer;
+<<<<<<< HEAD
             size_t eventsCommitted = 0;
+=======
+            TCountingEventDestructor eventDestructor;
+>>>>>>> nbs-26-3-1
             size_t mainUnsent = 0;
             size_t xdcUnsent = 0;
             for (size_t batch = 0; serializer.IsTrafficPending() || mainUnsent || xdcUnsent; ++batch) {
@@ -126,23 +153,38 @@ Y_UNIT_TEST_SUITE(InterconnectV2SerializeWindow) {
 
                 UNIT_ASSERT(mainUnsent || xdcUnsent || !serializer.IsTrafficPending());
 
+<<<<<<< HEAD
                 std::vector<std::unique_ptr<IEventBase>> events;
                 std::vector<TIntrusivePtr<TEventSerializedData>> buffers;
+=======
+>>>>>>> nbs-26-3-1
                 // Complete one stream at a time so a short XDC write cannot move the main cap.
                 if (xdcUnsent) {
                     const size_t n = Min(xdcUnsent, window.GetXdcSize());
                     window.CompleteWrite(n, n, /*xdc=*/ true);
+<<<<<<< HEAD
                     serializer.CommitProducedBytes(0, n, nullptr, &events, &buffers);
+=======
+                    serializer.CommitProducedBytes(0, n, nullptr, &eventDestructor);
+>>>>>>> nbs-26-3-1
                     xdcUnsent -= n;
                 } else if (mainUnsent) {
                     const size_t n = Min(mainUnsent, window.GetMainSize());
                     window.CompleteWrite(n, n, /*xdc=*/ false);
+<<<<<<< HEAD
                     serializer.CommitProducedBytes(n, 0, nullptr, &events, &buffers);
                     mainUnsent -= n;
                 }
                 eventsCommitted += events.size() + buffers.size();
             }
             UNIT_ASSERT_VALUES_EQUAL(eventsCommitted, NumEvents);
+=======
+                    serializer.CommitProducedBytes(n, 0, nullptr, &eventDestructor);
+                    mainUnsent -= n;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(eventDestructor.ObjectsDestroyed, NumEvents);
+>>>>>>> nbs-26-3-1
             UNIT_ASSERT_VALUES_EQUAL(window.GetXdcSize(), MaxWindow);
             UNIT_ASSERT_VALUES_EQUAL(window.GetMainSize(), Min(MaxWindow, TSerializeWindow::MaxMainWindowWithXdc));
         }

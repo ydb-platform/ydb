@@ -1,6 +1,135 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 
 Y_UNIT_TEST_SUITE(Donor) {
+
+    Y_UNIT_TEST(OfflineDonorDoesNotSubscribeNewNodeProcess) {
+        TEnvironmentSetup env{{
+            .NodeCount = 11,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .ControllerNodeId = 11,
+        }};
+        auto& runtime = *env.Runtime;
+        env.EnableDonorMode();
+        env.CreateBoxAndPool(1, 1, 10);
+        env.Sim(TDuration::Seconds(30));
+        const ui32 groupId = env.GetGroups().front();
+        const auto initial = env.GetGroupInfo(groupId);
+        const ui32 owner = initial->GetActorId(0).NodeId();
+        ui32 getGroupRequests = 0;
+        std::optional<bool> registeredWithGroup;
+        runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerRegisterNode::EventType && ev->Sender.NodeId() == owner) {
+                const auto& groups = ev->Get<TEvBlobStorage::TEvControllerRegisterNode>()->Record.GetGroups();
+                registeredWithGroup = std::find(groups.begin(), groups.end(), groupId) != groups.end();
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerGetGroup::EventType && ev->Sender.NodeId() == owner) {
+                ++getGroupRequests;
+            }
+            return true;
+        };
+
+        auto warden = [&]() {
+            const auto id = runtime.GetNode(owner)->ActorSystem->LookupLocalService(MakeBlobStorageNodeWardenID(owner));
+            auto* actor = dynamic_cast<NStorage::TNodeWarden*>(runtime.GetActor(id));
+            UNIT_ASSERT(actor);
+            return actor;
+        };
+        auto move = [&](ui32 position) {
+            const auto info = env.GetGroupInfo(groupId);
+            std::set<ui32> occupied;
+            for (ui32 i = 0; i < info->GetTotalVDisksNum(); ++i) {
+                occupied.insert(info->GetActorId(i).NodeId());
+            }
+            const auto base = env.FetchBaseConfig();
+            NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreGroupFailModelChecks(true);
+            request.SetIgnoreDegradedGroupsChecks(true);
+            request.SetIgnoreDisintegratedGroupsChecks(true);
+            auto* cmd = request.AddCommand()->MutableReassignGroupDisk();
+            const auto id = info->GetVDiskId(position);
+            cmd->SetGroupId(groupId);
+            cmd->SetGroupGeneration(info->GroupGeneration);
+            cmd->SetFailRealmIdx(id.FailRealm);
+            cmd->SetFailDomainIdx(id.FailDomain);
+            cmd->SetVDiskIdx(id.VDisk);
+            for (const auto& pdisk : base.GetPDisk()) {
+                if (pdisk.GetNodeId() != owner && !occupied.contains(pdisk.GetNodeId())) {
+                    cmd->MutableTargetPDiskId()->SetNodeId(pdisk.GetNodeId());
+                    cmd->MutableTargetPDiskId()->SetPDiskId(pdisk.GetPDiskId());
+                    break;
+                }
+            }
+            UNIT_ASSERT(cmd->HasTargetPDiskId());
+            const auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            env.Sim(TDuration::Seconds(60));
+        };
+
+        // The old process is gone before its VDisk is moved and its donor is dropped.
+        env.StopNode(owner);
+        env.Sim(TDuration::Seconds(2));
+        move(0);
+        const auto afterMove = env.FetchBaseConfig();
+        for (const auto& slot : afterMove.GetVSlot()) {
+            for (const auto& donor : slot.GetDonors()) {
+                UNIT_ASSERT_VALUES_UNEQUAL(donor.GetVSlotId().GetNodeId(), owner);
+            }
+        }
+
+        // A real node restart has no cached group and no MustSubscribe marker.
+        env.StartNode(owner);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT(!warden()->Groups.contains(groupId));
+        UNIT_ASSERT(registeredWithGroup && !*registeredWithGroup);
+        getGroupRequests = 0;
+
+        // A placement change while offline must not subscribe the new process.
+        move(1);
+        const auto beforeRestart = env.GetGroupInfo(groupId)->GroupGeneration;
+        UNIT_ASSERT(!warden()->Groups.contains(groupId));
+        UNIT_ASSERT_VALUES_EQUAL(getGroupRequests, 0);
+
+        // Reboot BSC: the inactive proxy and absent local placement omit the group.
+        registeredWithGroup.reset();
+        env.RestartNode(env.Settings.ControllerNodeId);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT(registeredWithGroup && !*registeredWithGroup);
+        for (ui32 position : {2, 3, 4, 5}) {
+            move(position);
+        }
+        const auto current = env.GetGroupInfo(groupId)->GroupGeneration;
+        UNIT_ASSERT(current > beforeRestart);
+        UNIT_ASSERT(!warden()->Groups.contains(groupId));
+        UNIT_ASSERT_VALUES_EQUAL(getGroupRequests, 0);
+
+        const auto edge = runtime.AllocateEdgeActor(owner, __FILE__, __LINE__);
+        const TLogoBlobID blob(1, 1, 1, 0, 1, 0);
+        auto put = [&]() {
+            runtime.WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvPut(blob, "x", env.Now() + TDuration::Seconds(30)));
+            });
+            auto result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(edge, false,
+                env.Now() + TDuration::Seconds(30));
+            UNIT_ASSERT(result);
+            return std::make_pair(result->Get()->Status, result->Get()->ErrorReason);
+        };
+        const auto [status, reason] = put();
+        UNIT_ASSERT_C(status == NKikimrProto::OK, reason);
+        UNIT_ASSERT(getGroupRequests > 0);
+        UNIT_ASSERT_VALUES_EQUAL(warden()->Groups.at(groupId).Info->GroupGeneration, current);
+
+        // With the proxy active, registration must preserve updates across BSC restarts.
+        registeredWithGroup.reset();
+        env.RestartNode(env.Settings.ControllerNodeId);
+        env.Sim(TDuration::Seconds(10));
+        UNIT_ASSERT(registeredWithGroup && *registeredWithGroup);
+        UNIT_ASSERT_VALUES_EQUAL(warden()->Groups.at(groupId).Info->GroupGeneration, current);
+        move(6);
+        UNIT_ASSERT_VALUES_EQUAL(warden()->Groups.at(groupId).Info->GroupGeneration,
+            env.GetGroupInfo(groupId)->GroupGeneration);
+        UNIT_ASSERT_VALUES_EQUAL(put().first, NKikimrProto::OK);
+        runtime.FilterFunction = {};
+    }
 
     Y_UNIT_TEST(SlayAfterWiping) {
         TEnvironmentSetup env{{

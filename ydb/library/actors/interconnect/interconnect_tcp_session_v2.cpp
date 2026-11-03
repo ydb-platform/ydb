@@ -58,7 +58,6 @@ namespace NActors {
         Proxy->Metrics->SetPeerScopeId(Params.PeerScopeId);
         Proxy->Metrics->SetConnected(0);
         SetPrefix(Sprintf("SessionV2 %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
-
         YDB_LOG_INFO("V2 session created",
             {"marker", "ICS90"});
     }
@@ -93,7 +92,11 @@ namespace NActors {
             onDisconnectCallback, SelfId().NodeId() < Proxy->PeerNodeId, ClockSkew, PingRTT,
             useXdc ? XdcSocket : TIntrusivePtr<NInterconnect::TStreamSocket>{});
         if (!EngineHandle) {
+<<<<<<< HEAD
             YDB_LOG_ERROR("V2 io_uring engine failed to register the connection",
+=======
+            YDB_LOG_ERROR("v2 io_uring engine failed to register the connection",
+>>>>>>> nbs-26-3-1
                 {"marker", "ICS99"});
             return Terminate(TDisconnectReason::LostConnection());
         }

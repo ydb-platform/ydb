@@ -1,5 +1,5 @@
 #include "viewer.h"
-#include "viewer_utils.h"
+#include <ydb/core/base/http_database_param.h>
 #include "counters_hosts.h"
 #include "viewer_healthcheck.h"
 #include "json_handlers.h"
@@ -11,6 +11,8 @@
 #include <util/generic/algorithm.h>
 #include <util/stream/file.h>
 #include <util/system/fstat.h>
+#include <util/string/join.h>
+#include <util/string/split.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
@@ -44,6 +46,24 @@ using namespace NNodeWhiteboard;
 
 namespace {
 
+bool IsPathParameter(TStringBuf name) {
+    return name == "database" || name == "database_path" || name == "tenant" || name == "path" || name == "topic";
+}
+
+TString NormalizePathValue(TStringBuf key, TStringBuf value, const std::function<TString(TStringBuf)>& normalizer, bool pathList = false) {
+    if (pathList && key == "path") {
+        auto paths = StringSplitter(value).Split(',').ToList<TString>();
+        for (auto& path : paths) {
+            path = normalizer(path);
+        }
+        return JoinSeq(',', paths);
+    }
+    if (!value.empty() && (key == "database" || key == "database_path" || key == "tenant")) {
+        return normalizer(CanonizePath(TString(value)));
+    }
+    return normalizer(value);
+}
+
 enum class EViewerEndpointAccessType {
     Administration,
     Monitoring,
@@ -61,6 +81,37 @@ struct TEndpointAccessRule {
     TEndpointAccessSettings Settings;
 };
 
+}
+
+TCgiParameters NormalizePathParameters(TCgiParameters params, const std::shared_ptr<const std::function<TString(TStringBuf)>>& normalizer, bool pathList) {
+    if (normalizer) {
+        for (auto& [key, value] : params) {
+            if (IsPathParameter(key)) {
+                value = NormalizePathValue(key, value, *normalizer, pathList);
+            }
+        }
+    }
+    return params;
+}
+
+void NormalizePathParameters(NJson::TJsonValue& params, const std::shared_ptr<const std::function<TString(TStringBuf)>>& normalizer, bool pathList) {
+    if (!params.IsMap() || !normalizer) {
+        return;
+    }
+    for (auto& [key, value] : params.GetMapSafe()) {
+        if (!IsPathParameter(key)) {
+            continue;
+        }
+        if (value.IsString()) {
+            value = NormalizePathValue(key, value.GetString(), *normalizer, pathList);
+        } else if (value.IsArray()) {
+            for (auto& item : value.GetArraySafe()) {
+                if (item.IsString()) {
+                    item = NormalizePathValue(key, item.GetString(), *normalizer);
+                }
+            }
+        }
+    }
 }
 
 extern void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers);
@@ -661,6 +712,7 @@ private:
         const TCgiParameters& params,
         const TStringBuf& method,
         const TStringBuf& body,
+        const TStringBuf& contentType,
         const TString& serializedToken,
         TString& error) const
     {
@@ -675,7 +727,7 @@ private:
         }
         const auto itAccess = EndpointAccess.find(path);
         if (itAccess != EndpointAccess.end() && itAccess->second.RequireDatabaseParam) {
-            if (GetDatabaseParam(params, method, body).empty()) {
+            if (ExtractHttpDatabaseParam(params, method, body, contentType).empty()) {
                 error = TStringBuilder() << "`database` is required for " << path;
                 return EDatabaseScopedRequestValidationResult::DatabaseRequired;
             }
@@ -913,6 +965,7 @@ private:
                 msg->Request.GetParams(),
                 msg->Request.GetMethod() == HTTP_METHOD_POST ? TStringBuf("POST") : TStringBuf(),
                 msg->Request.GetPostContent(),
+                TrimHttpContentTypeHeader(msg->Request.GetHeader("Content-Type")),
                 msg->UserToken,
                 scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:
@@ -1015,6 +1068,7 @@ private:
                 proxyParams,
                 ev->Get()->Request->Method,
                 ev->Get()->Request->Body,
+                TrimHttpContentTypeHeader(ev->Get()->Request->ContentType),
                 ev->Get()->UserToken,
                 scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:

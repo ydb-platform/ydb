@@ -550,11 +550,14 @@ message TInterconnectConfig {
     optional bool EnableUringSQPOLL = 63 [default = false]; // only effective when UseUring is set
 
     message TV2Config {
+<<<<<<< HEAD
         // Enables negotiation of the v2 session during the handshake. This is the ONLY field of TV2Config
         // that is applied online: it is picked up from a cluster config update without restarting the node
         // (see TInterconnectConfigurator), and affects new handshakes only -- sessions already established
         // keep the version they negotiated. It has no effect unless the node was started with Threads > 0.
         // Every other field here is read once, at startup, and needs a restart to change.
+=======
+>>>>>>> nbs-26-3-1
         optional bool Enable = 1 [default = false];
         optional bool ChecksumEvents = 2 [default = false];
 
@@ -565,11 +568,16 @@ message TInterconnectConfig {
         // If set, this enables event preserialization in IC actor system pool.
         optional bool EnablePreserializeEvents = 4 [default = false];
 
+<<<<<<< HEAD
         // Number of worker threads of ICv2 thread pool (not counting uring internal ones). Zero -- the
         // default -- means the v2 engine is not started at all on this node and v2 can never be negotiated,
         // regardless of Enable. Changing it requires a restart, so a cluster that intends to switch to v2
         // online is first rolled out with Threads set, and then flips Enable through a config update.
         optional uint32 Threads = 5 [default = 0];
+=======
+        // Number of worker threads of ICv2 thread pool (not counting uring internal ones).
+        optional uint32 Threads = 5 [default = 4];
+>>>>>>> nbs-26-3-1
 
         // io_uring rings per v2 shard worker (each ring may own a SQPOLL thread). Default 1 preserves legacy
         // 1:1 ring/worker topology. Raise this when poller-bound; raise Threads when serializer-bound.
@@ -2910,6 +2918,13 @@ message TColumnShardConfig {
     optional TReadRetryPolicy ReadRetryPolicy = 70;
     optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
     optional bool EnableBulkUpsertValidation = 72 [default = false];
+
+    message TBackupSettings {
+        optional uint32 ExportOperationTimeoutSeconds = 1 [default = 172800]; // 2 days
+        optional uint32 ImportOperationTimeoutSeconds = 2 [default = 172800]; // 2 days
+    }
+
+    optional TBackupSettings BackupSettings = 79;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from
@@ -3357,6 +3372,7 @@ message TSystemTabletBackupConfig {
     optional uint32 RetryBackupTimeoutSeconds = 7 [default = 60];
     optional uint32 RetryBackupMaxTimeoutSeconds = 8 [default = 900];
     optional uint32 SnapshotWorkBudgetPercent = 9 [default = 25];
+    optional uint64 MaxGlobalBackupsLimit = 10 [default = 50];
 }
 
 message TClusterDiagnosticsConfig {

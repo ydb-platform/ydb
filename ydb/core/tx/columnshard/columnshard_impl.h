@@ -1,7 +1,6 @@
 #pragma once
 #include "background_controller.h"
 #include "columnshard.h"
-#include "columnshard_find_empty_history_intervals.h"
 #include "columnshard_private_events.h"
 #include "columnshard_subdomain_path_id.h"
 #include "counters.h"
@@ -28,6 +27,7 @@
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
+#include "tablet/cut_history/lib/find_empty_history_intervals.h"
 #include "tablet/ext_tx_base.h"
 #include "transactions/tx_controller.h"
 
@@ -609,7 +609,6 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
-    void StartFindEmptyHistoryIntervals(ui32 completedBarrierGeneration, const TActorContext& ctx);
     void Handle(TEvFindEmptyHistoryIntervals::TEvScanFinished::TPtr& ev, const TActorContext& ctx);
     void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();

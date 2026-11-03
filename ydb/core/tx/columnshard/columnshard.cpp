@@ -121,13 +121,6 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);
 }
 
-void TColumnShard::OnFirstGC(ui32 completedBarrierGeneration, const TActorContext& ctx) {
-    if (IsCutHistoryEnabled()) {
-        FindEmptyHistoryIntervals = std::make_unique<TFindEmptyHistoryIntervals>();
-        StartFindEmptyHistoryIntervals(completedBarrierGeneration, ctx);
-    }
-}
-
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     StartupTimeline.OnExecutorActivated();
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,

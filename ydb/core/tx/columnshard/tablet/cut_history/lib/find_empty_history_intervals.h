@@ -1,10 +1,9 @@
 #pragma once
 
-#include "columnshard.h"
-
-#include "find_empty_history_intervals/intervals.h"
+#include "intervals/intervals.h"
 
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/actors/core/actorid.h>
@@ -24,6 +23,10 @@ namespace NKikimr {
 class TTabletStorageInfo;
 }
 
+namespace NKikimr::NTabletFlatExecutor {
+class ITransaction;
+}
+
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;
 class ISnapshotSchema;
@@ -36,6 +39,10 @@ inline constexpr ui64 CutHistoryJournalLimit = 10;
 bool IsCutHistoryEnabled();
 
 class TCSCounters;
+class TColumnShard;
+
+NTabletFlatExecutor::ITransaction* CreateTxSaveCutHistoryRequests(
+    TColumnShard* self, NFindEmptyHistoryIntervals::THistoryIntervals::TIntervals&& intervals, TInstant scanFinished);
 
 struct TFindEmptyHistoryIntervalsContext {
     struct TPortion {

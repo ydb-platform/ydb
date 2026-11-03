@@ -199,6 +199,9 @@ namespace NBoot {
                     if (move.RebasedEpoch != NTable::TEpoch::Max()) {
                         bundle.Epoch = move.RebasedEpoch;
                     }
+                    if (move.HiddenSince) {
+                        bundle.HiddenSince = move.HiddenSince;
+                    }
 
                     // Don't load the old bundle state
                     source->Load = false;

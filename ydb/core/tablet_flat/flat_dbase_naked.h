@@ -16,6 +16,8 @@
 #include "util_basics.h"
 #include "util_deref.h"
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -263,6 +265,7 @@ namespace NTable {
             Y_DEBUG_ABORT_UNLESS(Annex.empty());
             Y_DEBUG_ABORT_UNLESS(Flushed.empty());
             Y_DEBUG_ABORT_UNLESS(Prepared.empty());
+            Y_DEBUG_ABORT_UNLESS(VersionedMetadataTouched.empty());
         }
 
         TEpoch FlushTable(ui32 tid)
@@ -285,9 +288,51 @@ namespace NTable {
             }
             PrepareRollback(wrap);
             PrepareSnapshot(wrap);
+            if (!wrap->GetVersionedMetadata().empty()) {
+                VersionedMetadataTouched[tid] = true;
+            }
             wrap->PrepareTruncate();
             wrap.DataModified = true;
             wrap.Truncated = true;
+        }
+
+        const char* GetTruncateError(ui32 tid, TRowVersion version) const
+        {
+            if (!InTransaction) {
+                return "Cannot truncate outside a transaction";
+            }
+            const auto* wrap = Tables.FindPtr(tid);
+            if (!wrap || wrap->Dropped) {
+                return "Cannot truncate a missing table";
+            }
+            if (wrap->Truncated) {
+                return "Cannot truncate a truncated table";
+            }
+            if (wrap->DataModified) {
+                return "Cannot truncate a modified table";
+            }
+            return (*wrap)->GetEraseVersionError(version);
+        }
+
+        bool CanImportParts(ui32 tid) const
+        {
+            const auto* wrap = Tables.FindPtr(tid);
+            return wrap && !wrap->Dropped && (*wrap)->GetVersionedMetadata().empty();
+        }
+
+        bool TruncateTable(ui32 tid, TRowVersion version)
+        {
+            const auto* error = GetTruncateError(tid, version);
+            Y_ENSURE(!error, "Table " << tid << ": " << error);
+            auto& wrap = Get(tid, true);
+            const bool snapshot = !wrap.Created && !wrap->ShouldCoalesceErase(version);
+            PrepareRollback(wrap);
+            const std::optional<TEpoch> opened = snapshot
+                ? std::make_optional(PrepareSnapshot(wrap)) : std::nullopt;
+            wrap->AddEraseAll(version, opened);
+            wrap.DataModified = true;
+            VersionedMetadataTouched[tid] = true;
+            return snapshot;
         }
 
         void CommitTransaction(TTxStamp stamp, TArrayRef<const TMemGlob> annex, NRedo::TWriter& writer)
@@ -329,6 +374,7 @@ namespace NTable {
                 auto& wrap = it->second;
                 Y_ENSURE(wrap.EpochSnapshot);
                 writer.EvFlush(tid, Stamp - 1, *wrap.EpochSnapshot);
+                wrap->SetSnapshotStamp(*wrap.EpochSnapshot, Stamp - 1);
                 wrap.EpochSnapshot.reset();
             }
             Flushed.clear();
@@ -440,6 +486,7 @@ namespace NTable {
                 }
             }
             RollbackScheme();
+            VersionedMetadataTouched.clear();
             Serial_ = Begin_;
             InTransaction = false;
             return std::exchange(Affects, {});
@@ -791,9 +838,11 @@ namespace NTable {
             Stats.MemTableOps += 1;
         }
 
-        void DoFlush(ui32 tid, ui64 /* stamp */, TEpoch epoch)
+        void DoFlush(ui32 tid, ui64 stamp, TEpoch epoch)
         {
-            auto on = Touch(tid)->Snapshot();
+            auto& wrap = Touch(tid);
+            auto on = wrap->Snapshot();
+            wrap->SetSnapshotStamp(on, stamp);
 
             if (epoch != TEpoch::Zero() && epoch != on) {
                 Y_TABLET_ERROR("EvFlush{" << tid << ", " << epoch << "eph} turned"
@@ -886,6 +935,8 @@ namespace NTable {
         TGarbage Garbage;       /* Unused full table subsets */
         TVector<ui32> Deleted;
         TVector<TChange::TTruncate> Truncated;
+        // True when the transaction changed metadata, false when only checking expiry.
+        THashMap<ui32, bool> VersionedMetadataTouched;
         TDbStats Stats;
         ui64 First_ = Max<ui64>(); /* First used serial after Switch() */
     };

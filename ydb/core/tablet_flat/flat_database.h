@@ -218,6 +218,13 @@ public:
 
     TEpoch TxSnapTable(ui32 table);
     void Truncate(ui32 table);
+    bool CanTruncate(ui32 table, TRowVersion version) const;
+    void Truncate(ui32 table, TRowVersion version);
+
+    bool HasEraseAll(ui32 table) const;
+    const TVector<TVersionedTableMetadata>& GetVersionedMetadata(ui32 table) const;
+    void SetVersionedMetadata(ui32 table, TVector<TVersionedTableMetadata> metadata);
+    std::optional<TRowVersion> SourceHiddenSince(ui32 table, TEpoch epoch, const std::optional<TRowVersion>& stamp) const;
 
     const TScheme& GetScheme() const noexcept;
 
@@ -232,6 +239,7 @@ public:
     void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
     ui64 GetTableMemSize(ui32 table, TEpoch epoch = TEpoch::Max()) const;
     ui64 GetTableMemAllocatedSize(ui32 table) const;
+    std::optional<TEpoch> GetTableOldestMemEpoch(ui32 table, TEpoch before) const;
     ui64 GetTableMemRowCount(ui32 tableId) const;
     ui64 GetTableMemOpsCount(ui32 tableId) const;
     ui64 GetTableIndexSize(ui32 table) const;
@@ -258,6 +266,8 @@ public:
         const TSubset&,
         TArrayRef<const TPartView>,
         TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>>);
+    bool CanImportParts(ui32 table) const;
+    void PreparePartImport(ui32 table);
     void Merge(ui32 table, TPartView);
     void Merge(ui32 table, TIntrusiveConstPtr<TColdPart>);
     void Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart>);
@@ -326,6 +336,7 @@ private:
 
     void CheckReadAllowed(ui32 table) const;
     void CheckPrechargeAllowed(ui32 table, TRawVals minKey, TRawVals maxKey) const;
+    void CheckPartImportAllowed(ui32 table) const;
 
 private:
     const THolder<TDatabaseImpl> DatabaseImpl;
@@ -343,6 +354,7 @@ private:
 
     mutable TDeque<TPartIter> TempIterators; // Keeps the last result of Select() valid
     mutable TVector<ui32> PrechargedTables;
+    THashSet<ui32> PendingPartImports;
 
     TVector<std::function<void()>> OnCommit_;
     TVector<std::function<void()>> OnRollback_;

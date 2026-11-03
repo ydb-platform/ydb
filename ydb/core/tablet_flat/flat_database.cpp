@@ -298,6 +298,7 @@ TPrechargeResult TDatabase::Precharge(ui32 table, TRawVals minKey, TRawVals maxK
 void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, TRowVersion rowVersion)
 {
     Y_DEBUG_ABORT_UNLESS(rowVersion != TRowVersion::Max(), "Updates cannot have v{max} as row version");
+    Require(table)->CheckWriteVersion(rowVersion);
 
     for (size_t index = 0; index < key.size(); ++index) {
         if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
@@ -345,6 +346,7 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
 
 void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, ui64 txId, ui32 savepointSeqNum)
 {
+    Require(table)->CheckTxWriteVersion(txId);
     for (size_t index = 0; index < key.size(); ++index) {
         if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
             Y_TABLET_ERROR("Key index " << index << " validation failure: " << error);
@@ -385,6 +387,7 @@ void TDatabase::LockRowTx(ui32 table, ELockMode mode, TRawVals key, ui64 txId)
         }
     }
 
+    Require(table)->CheckTxWriteVersion(txId);
     Redo->EvLockRowTx(table, mode, key, txId);
     RequireForUpdate(table)->LockRowTx(mode, key, txId);
 }
@@ -397,6 +400,9 @@ void TDatabase::RemoveTx(ui32 table, ui64 txId)
 
 void TDatabase::CommitTx(ui32 table, ui64 txId, TRowVersion rowVersion)
 {
+    const auto* target = Require(table);
+    target->CheckWriteVersion(rowVersion);
+    target->CheckTxWriteVersion(txId);
     Redo->EvCommitTx(table, txId, rowVersion);
     RequireForUpdate(table)->CommitTx(txId, rowVersion);
 }
@@ -488,6 +494,7 @@ void TDatabase::Begin(TTxStamp stamp, IPages& env)
     NoMoreReadsFlag = false;
     NoMoreUnprechargedReadsFlag = false;
     PrechargedTables.clear();
+    PendingPartImports.clear();
 }
 
 void TDatabase::RollbackChanges()
@@ -538,6 +545,16 @@ ui64 TDatabase::GetTableMemSize(ui32 tableId, TEpoch epoch) const {
 
 ui64 TDatabase::GetTableMemAllocatedSize(ui32 tableId) const {
     return Require(tableId)->GetMemAllocatedSize();
+}
+
+std::optional<TEpoch> TDatabase::GetTableOldestMemEpoch(ui32 tableId, TEpoch before) const {
+    std::optional<TEpoch> oldest;
+    for (const auto& mem : Require(tableId)->GetMemTables()) {
+        if (mem->Epoch < before && (!oldest || mem->Epoch < *oldest)) {
+            oldest = mem->Epoch;
+        }
+    }
+    return oldest;
 }
 
 ui64 TDatabase::GetTableMemRowCount(ui32 tableId) const {
@@ -599,7 +616,9 @@ TString TDatabase::SnapshotToLog(ui32 table, TTxStamp stamp)
     Y_ENSURE(!Redo, "Cannot SnapshotToLog inside a transaction");
 
     auto scn = DatabaseImpl->Serial() + 1;
-    auto epoch = DatabaseImpl->Get(table, true)->Snapshot();
+    auto& wrap = DatabaseImpl->Get(table, true);
+    auto epoch = wrap->Snapshot();
+    wrap->SetSnapshotStamp(epoch, stamp);
 
     DatabaseImpl->Rewind(scn);
 
@@ -621,6 +640,53 @@ void TDatabase::Truncate(ui32 table)
     Y_ENSURE(Redo, "Cannot Truncate outside a transaction");
     ++Change->Snapshots;
     DatabaseImpl->TruncateTable(table);
+}
+
+bool TDatabase::CanTruncate(ui32 table, TRowVersion version) const
+{
+    return !PendingPartImports.contains(table) && !DatabaseImpl->GetTruncateError(table, version);
+}
+
+void TDatabase::Truncate(ui32 table, TRowVersion version)
+{
+    Y_ENSURE(Redo, "Cannot Truncate outside a transaction");
+    Y_ENSURE(!PendingPartImports.contains(table), "Cannot truncate a table with pending part imports");
+    if (DatabaseImpl->TruncateTable(table, version)) {
+        ++Change->Snapshots;
+    }
+}
+
+bool TDatabase::HasEraseAll(ui32 table) const
+{
+    if (auto& wrap = DatabaseImpl->Get(table, false)) {
+        return wrap->HasEraseAll();
+    }
+    return false;
+}
+
+const TVector<TVersionedTableMetadata>& TDatabase::GetVersionedMetadata(ui32 table) const
+{
+    if (auto& wrap = DatabaseImpl->Get(table, false)) {
+        return wrap->GetVersionedMetadata();
+    }
+
+    static const TVector<TVersionedTableMetadata> empty;
+    return empty;
+}
+
+void TDatabase::SetVersionedMetadata(ui32 table, TVector<TVersionedTableMetadata> metadata)
+{
+    if (auto& wrap = DatabaseImpl->Get(table, false)) {
+        wrap->SetVersionedMetadata(std::move(metadata));
+    }
+}
+
+std::optional<TRowVersion> TDatabase::SourceHiddenSince(ui32 table, TEpoch epoch, const std::optional<TRowVersion>& stamp) const
+{
+    if (auto& wrap = DatabaseImpl->Get(table, false)) {
+        return wrap->SourceHiddenSince(epoch, stamp);
+    }
+    return stamp;
 }
 
 TAutoPtr<TSubset> TDatabase::CompactionSubset(ui32 table, TEpoch before, TArrayRef<const TLogoBlobID> bundle) const
@@ -682,18 +748,39 @@ void TDatabase::Replace(
     return DatabaseImpl->Replace(table, subset, newParts, newTxStatus);
 }
 
+bool TDatabase::CanImportParts(ui32 table) const
+{
+    return DatabaseImpl->CanImportParts(table);
+}
+
+void TDatabase::CheckPartImportAllowed(ui32 table) const
+{
+    Y_ENSURE(CanImportParts(table),
+        "Cannot import parts into a missing table or a table with versioned erase metadata");
+}
+
+void TDatabase::PreparePartImport(ui32 table)
+{
+    Y_ENSURE(Redo, "Cannot prepare a part import outside a transaction");
+    CheckPartImportAllowed(table);
+    PendingPartImports.insert(table);
+}
+
 void TDatabase::Merge(ui32 table, TPartView partView)
 {
+    CheckPartImportAllowed(table);
     return DatabaseImpl->Merge(table, std::move(partView));
 }
 
 void TDatabase::Merge(ui32 table, TIntrusiveConstPtr<TColdPart> part)
 {
+    CheckPartImportAllowed(table);
     return DatabaseImpl->Merge(table, std::move(part));
 }
 
 void TDatabase::Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart> txStatus)
 {
+    CheckPartImportAllowed(table);
     return DatabaseImpl->Merge(table, std::move(txStatus));
 }
 
@@ -744,7 +831,8 @@ bool TDatabase::HasChanges() const
 {
     Y_ENSURE(Redo, "Transaction is not in progress");
 
-    return *Redo || (Alter_ && *Alter_) || Change->Snapshots || Change->RemovedRowVersions;
+    return *Redo || (Alter_ && *Alter_) || Change->Snapshots || Change->RemovedRowVersions
+        || !DatabaseImpl->VersionedMetadataTouched.empty();
 }
 
 TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator *cookieAllocator)
@@ -828,8 +916,29 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
                 for (const auto& range : xpair.second) {
                     wrap->RemoveRowVersions(range.Lower, range.Upper);
                 }
+                if (wrap->HasEraseAll()) {
+                    DatabaseImpl->VersionedMetadataTouched.try_emplace(xpair.first, false);
+                }
             }
         }
+
+        for (auto [table, metadataChanged] : DatabaseImpl->VersionedMetadataTouched) {
+            if (auto& wrap = DatabaseImpl->Get(table, false)) {
+                if (wrap->HasEraseAll()) {
+                    wrap.Aggr(DatabaseImpl->Stats, false /* leave */);
+                    if (auto dropped = wrap->DropExpiredSources(metadataChanged)) {
+                        Change->Expired.push_back({ table, std::move(dropped) });
+                        // Keep metadata on expiry switches to group follower GC acknowledgements.
+                        metadataChanged = true;
+                    }
+                    wrap.Aggr(DatabaseImpl->Stats, true /* enter */);
+                }
+                if (metadataChanged) {
+                    Change->VersionedMetadata[table] = wrap->GetVersionedMetadata();
+                }
+            }
+        }
+        DatabaseImpl->VersionedMetadataTouched.clear();
 
         Change->Garbage = std::move(DatabaseImpl->Garbage);
         Change->Deleted = std::move(DatabaseImpl->Deleted);

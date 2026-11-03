@@ -875,6 +875,7 @@ PEERDIR(
     ydb/core/viewer/protos
     ydb/library/actors/core
     ydb/library/actors/helpers
+    ydb/library/actors/http
     ydb/library/computation_graph_renderer
     ydb/library/persqueue/topic_parser
     ydb/library/protobuf_printer

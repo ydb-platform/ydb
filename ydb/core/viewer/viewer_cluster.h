@@ -7,7 +7,9 @@
 #include "viewer_tabletinfo.h"
 #include <ydb/core/util/proto_duration.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/api/protos/ydb_bridge_common.pb.h>
+#include <library/cpp/protobuf/json/json2proto.h>
 
 namespace NKikimr::NViewer {
 
@@ -32,6 +34,17 @@ class TJsonCluster : public TViewerPipeClient {
     bool WhiteboardRequestsSent = false;
     bool WhiteboardProcessed = false;
     bool NodePileMapAvailable = false;
+    bool LocalPileOnly = false;
+    bool PileRequestsStarted = false;
+    TInstant Deadline;
+    TActorId HttpProxy;
+    struct TPileRequest {
+        std::vector<TString> Endpoints;
+        size_t NextEndpoint = 0;
+        NHttp::THttpOutgoingRequestPtr ActiveRequest;
+        std::optional<NKikimrViewer::TBridgePileInfo> Result;
+    };
+    std::unordered_map<ui32, TPileRequest> PileRequests;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvSystemStateResponse>> SystemStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvTabletStateResponse>> TabletStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> SystemViewerResponse;
@@ -118,6 +131,8 @@ public:
     }
 
     void Bootstrap() override {
+        LocalPileOnly = FromStringWithDefault<bool>(Params.Get("local_pile_only"), false);
+        Deadline = TActivationContext::Now() + Timeout;
         Tablets = FromStringWithDefault<bool>(Params.Get("tablets"), false);
         OffloadMerge = FromStringWithDefault<bool>(Params.Get("offload_merge"), OffloadMerge);
         OffloadMergeAttempts = FromStringWithDefault<bool>(Params.Get("offload_merge_attempts"), OffloadMergeAttempts);
@@ -132,6 +147,14 @@ public:
                 new TEvNodeWardenQueryStorageConfig(/*subscribe=*/ false));
         }
         NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, new TEvWhiteboard::TEvNodeStateRequest());
+        if (LocalPileOnly) {
+            // This request is served inside the target pile. It neither calls other
+            // piles over HTTPS nor waits for cluster tablets outside this pile.
+            Tablets = false;
+            OffloadMerge = false;
+            Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
+            return;
+        }
         PDisksResponse = MakeCachedRequestBSControllerPDisks();
         VSlotsResponse = MakeCachedRequestBSControllerVSlots();
         GroupsResponse = MakeCachedRequestBSControllerGroups();
@@ -232,6 +255,10 @@ private:
 
     bool CanQueryNode(const TNode& node) const {
         const auto* bridgeInfo = GetBridgeInfo();
+        if (LocalPileOnly && (!bridgeInfo || !bridgeInfo->SelfNodePile || !node.PileNum
+                || *node.PileNum != bridgeInfo->SelfNodePile->BridgePileId.GetPileIndex())) {
+            return false;
+        }
         return !bridgeInfo || !node.PileNum
             || (*node.PileNum < bridgeInfo->Piles.size() && CanQueryPile(*bridgeInfo, bridgeInfo->Piles[*node.PileNum]));
     }
@@ -286,6 +313,10 @@ private:
 
         if (NodeWardenStorageConfigResponse && !NodeWardenStorageConfigResponse->IsDone()) {
             return false;
+        }
+
+        if (LocalPileOnly) {
+            return true;
         }
 
         if (const auto* bridgeInfo = GetBridgeInfo(); bridgeInfo && bridgeInfo->SelfNodePile
@@ -343,6 +374,150 @@ private:
         }
     }
 
+    static bool IsHttpsOrigin(const TString& endpoint) {
+        TStringBuf scheme, host, uri;
+        return NHttp::CrackURL(endpoint, scheme, host, uri) && scheme == "https" && !host.empty()
+            && !host.Contains('@') && !endpoint.Contains('\r') && !endpoint.Contains('\n')
+            && !host.Contains('?') && !host.Contains('#') && !host.Contains(' ') && !host.Contains('\t')
+            && (uri.empty() || uri == "/");
+    }
+
+    bool SendPileRequest(ui32 pileIndex, TPileRequest& request) {
+        const auto now = TActivationContext::Now();
+        if (request.NextEndpoint == request.Endpoints.size() || now >= Deadline) {
+            AddProblem("no-pile-node-info");
+            return false;
+        }
+        const auto timeout = (Deadline - now) / (request.Endpoints.size() - request.NextEndpoint);
+        if (timeout.MilliSeconds() < 2) {
+            AddProblem("no-pile-node-info");
+            return false;
+        }
+        TString endpoint = request.Endpoints[request.NextEndpoint++];
+        if (endpoint.EndsWith('/')) {
+            endpoint.pop_back();
+        }
+        request.ActiveRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(TStringBuilder()
+            << endpoint << "/viewer/json/cluster?local_pile_only=true&direct=true&offload_merge=false"
+            << "&use_health_check=false&timeout=" << timeout.MilliSeconds() * 3 / 4);
+        auto authorization = GetRequest().GetHeader("Authorization");
+        if (authorization.empty()) {
+            const auto cookie = GetRequest().GetHeader("Cookie");
+            const NHttp::TCookies cookies(cookie);
+            if (const auto session = cookies["ydb_session_id"]; !session.empty()) {
+                authorization = TStringBuilder() << "Login " << session;
+            }
+        }
+        if (!authorization.empty()) {
+            request.ActiveRequest->Set("Authorization", authorization);
+        }
+        request.ActiveRequest->Finish();
+        auto outgoing = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(request.ActiveRequest, timeout);
+        if (!HttpProxy) {
+            HttpProxy = Register(NHttp::CreateHttpProxy());
+        }
+        SendRequest(HttpProxy, outgoing.release(), 0, pileIndex);
+        return true;
+    }
+
+    void StartPileRequests() {
+        if (PileRequestsStarted || LocalPileOnly || !NodePileMapAvailable) {
+            return;
+        }
+        const auto* bridgeInfo = GetBridgeInfo();
+        if (!bridgeInfo || !bridgeInfo->SelfNodePile) {
+            return;
+        }
+        PileRequestsStarted = true;
+        const auto& config = Viewer->GetKikimrRunConfig().AppConfig.GetMonitoringConfig();
+        for (const auto& pile : bridgeInfo->Piles) {
+            if (pile.IsFreeSlot || &pile == bridgeInfo->SelfNodePile || CanQueryPile(*bridgeInfo, pile)
+                    || !NBridge::PileStateTraits(pile.State).AllowsConnectionWithinPile) {
+                continue;
+            }
+            auto& request = PileRequests[pile.BridgePileId.GetPileIndex()];
+            if (config.GetMonitoringPort()) {
+                std::unordered_set<TString> endpoints;
+                for (const auto& node : NodeData) {
+                    if (!node.Static || node.PileNum != pile.BridgePileId.GetPileIndex()) {
+                        continue;
+                    }
+                    TString host = node.NodeInfo.Host ? node.NodeInfo.Host : node.NodeInfo.ResolveHost;
+                    if (host.empty()) {
+                        continue;
+                    }
+                    if (host.Contains(':') && !host.StartsWith('[')) {
+                        host = TStringBuilder() << '[' << host << ']';
+                    }
+                    TString endpoint = TStringBuilder() << "https://" << host << ':' << config.GetMonitoringPort();
+                    if (IsHttpsOrigin(endpoint) && endpoints.insert(endpoint).second) {
+                        request.Endpoints.push_back(std::move(endpoint));
+                    }
+                }
+            }
+            // Bound both the number of failed attempts and the total HTTP deadline.
+            if (request.Endpoints.size() > 3) {
+                request.Endpoints.resize(3);
+            }
+            SendPileRequest(pile.BridgePileId.GetPileIndex(), request);
+        }
+    }
+
+    bool ReadPileResponse(ui32 pileIndex, const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response,
+            NKikimrViewer::TBridgePileInfo& result) {
+        if (response.Error || !response.Response || response.Response->Status != "200") {
+            return false;
+        }
+        NJson::TJsonValue json;
+        if (!NJson::ReadJsonTree(response.Response->Body, &json)) {
+            return false;
+        }
+        const auto& piles = json["BridgeInfo"]["Piles"];
+        // A server ignoring local_pile_only (e.g. an older version) must not
+        // contribute counters for a different or unreachable pile.
+        if (!piles.IsArray() || piles.GetArray().size() != 1) {
+            return false;
+        }
+        try {
+            NProtobufJson::Json2Proto(piles[0], result, NProtobufJson::TJson2ProtoConfig().SetAllowUnknownFields(true));
+        } catch (const yexception&) {
+            return false;
+        }
+        const auto& pile = GetBridgeInfo()->Piles[pileIndex];
+        return result.HasPileId() && TBridgePileId::FromProto(&result, &NKikimrViewer::TBridgePileInfo::GetPileId) == pile.BridgePileId
+            && result.GetName() == pile.Name
+            && result.HasNodes() && result.HasStorageNodes() && result.HasComputeNodes()
+            && result.HasAliveNodes() && result.HasAliveStorageNodes() && result.HasAliveComputeNodes()
+            && ui64(result.GetStorageNodes()) + result.GetComputeNodes() == result.GetNodes()
+            && ui64(result.GetAliveStorageNodes()) + result.GetAliveComputeNodes() == result.GetAliveNodes()
+            && result.GetAliveStorageNodes() <= result.GetStorageNodes()
+            && result.GetAliveComputeNodes() <= result.GetComputeNodes();
+    }
+
+    void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
+        for (auto& [pileIndex, request] : PileRequests) {
+            if (request.ActiveRequest && request.ActiveRequest == ev->Get()->Request) {
+                request.ActiveRequest.Reset();
+                NKikimrViewer::TBridgePileInfo result;
+                if (ReadPileResponse(pileIndex, *ev->Get(), result)) {
+                    request.Result = std::move(result);
+                } else {
+                    SendPileRequest(pileIndex, request);
+                }
+                RequestDone();
+                return;
+            }
+        }
+    }
+
+    void PassAway() override {
+        if (HttpProxy) {
+            Send(HttpProxy, new TEvents::TEvPoisonPill());
+            HttpProxy = {};
+        }
+        TBase::PassAway();
+    }
+
     void ProcessResponses() {
         if (NodesInfoResponse && NodesInfoResponse->IsDone()) {
             if (NodesInfoResponse->IsOk()) {
@@ -381,6 +556,8 @@ private:
         if (NodeData.empty()) {
             return;
         }
+
+        StartPileRequests();
 
         if (NodeStateResponse && NodeStateResponse->IsDone()) {
             if (NodeStateResponse->IsOk()) {
@@ -981,6 +1158,7 @@ private:
             hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvTabletStateResponse, Handle);
             hFunc(TEvViewer::TEvViewerResponse, Handle);
+            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvListTenantsResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, Handle);
             hFunc(NSysView::TEvSysView::TEvGetStorageStatsResponse, Handle);
@@ -1110,7 +1288,7 @@ private:
                         }
                     }
                     for (const auto& pile : srcBridgeInfo.Piles) {
-                        if (pile.IsFreeSlot) {
+                        if (pile.IsFreeSlot || (LocalPileOnly && &pile != srcBridgeInfo.SelfNodePile)) {
                             continue;
                         }
                         auto& pbBridgePileInfo = *pbBridgeInfo.AddPiles();
@@ -1130,6 +1308,18 @@ private:
                                 pbBridgePileInfo.SetAliveNodes(nodes.AliveStorage + nodes.AliveCompute);
                                 pbBridgePileInfo.SetAliveStorageNodes(nodes.AliveStorage);
                                 pbBridgePileInfo.SetAliveComputeNodes(nodes.AliveCompute);
+                            }
+                            if (auto it = PileRequests.find(pile.BridgePileId.GetPileIndex());
+                                    it != PileRequests.end() && it->second.Result) {
+                                const auto& remote = *it->second.Result;
+                                ClusterInfo.SetNodesTotal(ClusterInfo.GetNodesTotal() - pbBridgePileInfo.GetNodes() + remote.GetNodes());
+                                ClusterInfo.SetNodesAlive(ClusterInfo.GetNodesAlive() + remote.GetAliveNodes());
+                                pbBridgePileInfo.SetNodes(remote.GetNodes());
+                                pbBridgePileInfo.SetStorageNodes(remote.GetStorageNodes());
+                                pbBridgePileInfo.SetComputeNodes(remote.GetComputeNodes());
+                                pbBridgePileInfo.SetAliveNodes(remote.GetAliveNodes());
+                                pbBridgePileInfo.SetAliveStorageNodes(remote.GetAliveStorageNodes());
+                                pbBridgePileInfo.SetAliveComputeNodes(remote.GetAliveComputeNodes());
                             }
                         }
                     }
@@ -1225,6 +1415,11 @@ public:
             .Tag = "viewer",
             .Summary = "Cluster information",
             .Description = "Returns information about cluster"
+        });
+        yaml.AddParameter({
+            .Name = "local_pile_only",
+            .Description = "collect node counts only for the serving bridge pile, without HTTPS forwarding or cluster tablet queries",
+            .Type = "boolean",
         });
         yaml.AddParameter({
             .Name = "enums",

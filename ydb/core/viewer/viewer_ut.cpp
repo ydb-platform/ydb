@@ -1447,6 +1447,16 @@ Y_UNIT_TEST_SUITE(Viewer) {
         bool DropNodesInfo = false;
         bool DropWhiteboard = false;
         bool DropClusterResponses = false;
+        bool Https = false;
+        bool LocalPileOnly = false;
+        bool SessionCookie = false;
+        bool RemoteStorageOnly = false;
+        bool DropHttps = false;
+        bool DropRemoteWhiteboard = false;
+        std::vector<TString> HttpsErrors;
+        TString HttpsBody;
+        TString HttpsStatus = "200";
+        ui32 ExpectedHttpsRequests = 0;
         ui32 ServingNodeIndex = 0;
         NKikimrBridge::TClusterState::EPileState LocalState = NKikimrBridge::TClusterState::SYNCHRONIZED;
         NKikimrBridge::TClusterState::EPileState RemoteState = NKikimrBridge::TClusterState::SYNCHRONIZED;
@@ -1461,9 +1471,15 @@ Y_UNIT_TEST_SUITE(Viewer) {
             .SetDomainName("Root")
             .SetUseSectorMap(true)
             .InitKikimrRunConfig();
+        if (options.Https) {
+            auto* monitoring = settings.KikimrRunConfig->AppConfig.MutableMonitoringConfig();
+            monitoring->SetMonitoringPort(8765);
+        }
         Tests::TServer server(settings);
         auto& runtime = *server.GetRuntime();
         runtime.GetAppData(options.ServingNodeIndex).BridgeModeEnabled = true;
+        runtime.GetAppData(4).BridgeModeEnabled = true;
+        runtime.GetAppData(5).BridgeModeEnabled = true;
         const ui32 firstNodeId = runtime.GetNodeId(0);
 
         auto bridgeInfo = std::make_shared<TBridgeInfo>();
@@ -1478,16 +1494,26 @@ Y_UNIT_TEST_SUITE(Viewer) {
         bridgeInfo->Piles[1].IsFreeSlot = true;
         bridgeInfo->Piles[2].State = options.RemoteState;
         bridgeInfo->SelfNodePile = &bridgeInfo->Piles[0];
+        auto remoteBridgeInfo = std::make_shared<TBridgeInfo>();
+        remoteBridgeInfo->Piles = bridgeInfo->Piles;
+        remoteBridgeInfo->SelfNodePile = &remoteBridgeInfo->Piles[2];
 
         auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
         auto pileMap = std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>(4);
         for (ui32 i = 0; i < 6; ++i) {
-            nodes->emplace_back(firstNodeId + i, "::1", "localhost", "localhost", 19001 + i,
-                TNodeLocation(), i % 2 == 0);
+            TString host = TStringBuilder() << "node" << i << ".example.test";
+            nodes->emplace_back(firstNodeId + i, "::1", host, host, 19001 + i,
+                TNodeLocation(), i % 2 == 0 || (options.RemoteStorageOnly && i >= 4));
             (*pileMap)[i < 4 ? 0 : 2].push_back(firstNodeId + i);
         }
 
         std::unordered_set<ui32> queriedNodes;
+        ui32 httpsRequests = 0;
+        struct TForwardedRequest {
+            TActorId Sender;
+            NHttp::THttpOutgoingRequestPtr Request;
+        };
+        THashMap<TActorId, TForwardedRequest> forwarded;
         auto isClusterActor = [&](const TActorId& actorId) {
             return dynamic_cast<TJsonCluster*>(runtime.FindActor(actorId)) != nullptr;
         };
@@ -1502,6 +1528,61 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
+                case NHttp::TEvHttpProxy::EvHttpOutgoingRequest: {
+                    if (!isClusterActor(ev->Sender)) {
+                        break;
+                    }
+                    auto* outgoing = ev->Get<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>();
+                    UNIT_ASSERT(options.Https);
+                    UNIT_ASSERT(outgoing->Request->Secure);
+                    UNIT_ASSERT_VALUES_EQUAL(outgoing->Request->Host,
+                        TStringBuilder() << "node" << (httpsRequests ? 5 : 4) << ".example.test:8765");
+                    TCgiParameters params(outgoing->Request->URL.After('?'));
+                    UNIT_ASSERT_VALUES_EQUAL(params.Get("local_pile_only"), "true");
+                    UNIT_ASSERT_VALUES_EQUAL(params.Get("offload_merge"), "false");
+                    UNIT_ASSERT_VALUES_EQUAL(NHttp::THeaders(outgoing->Request->Headers).Get("Authorization"),
+                        options.SessionCookie ? "Login test-session" : "Bearer test-token");
+                    UNIT_ASSERT(!NHttp::THeaders(outgoing->Request->Headers).Has("Cookie"));
+                    const ui32 attempt = httpsRequests++;
+                    UNIT_ASSERT(httpsRequests <= options.ExpectedHttpsRequests);
+                    if (options.DropHttps) {
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    if (attempt < options.HttpsErrors.size()) {
+                        runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                            new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoing->Request, nullptr,
+                                options.HttpsErrors[attempt])), options.ServingNodeIndex);
+                    } else if (options.HttpsBody) {
+                        auto request = outgoing->Request->Reverse();
+                        request->Endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+                        auto response = request->CreateResponse(options.HttpsStatus, "Response", "application/json", options.HttpsBody);
+                        runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                            new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoing->Request,
+                                response->Reverse(outgoing->Request))), options.ServingNodeIndex);
+                    } else {
+                        // Exercise the real /cluster handler in B, with only the HTTPS transport mocked.
+                        const ui32 remoteNodeIndex = attempt ? 5 : 4;
+                        const auto sender = runtime.AllocateEdgeActor(remoteNodeIndex);
+                        forwarded.emplace(sender, TForwardedRequest{ev->Sender, outgoing->Request});
+                        auto request = outgoing->Request->Reverse();
+                        request->Endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+                        const auto viewer = runtime.GetLocalServiceId(MakeViewerID(remoteNodeIndex), remoteNodeIndex);
+                        runtime.Send(new IEventHandle(viewer, sender,
+                            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)), remoteNodeIndex);
+                    }
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                case NHttp::TEvHttpProxy::EvHttpOutgoingResponse: {
+                    if (auto it = forwarded.find(ev->GetRecipientRewrite()); it != forwarded.end()) {
+                        auto response = ev->Get<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>()->Response;
+                        runtime.Send(new IEventHandle(it->second.Sender, ev->Sender,
+                            new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(it->second.Request,
+                                response->Reverse(it->second.Request))), options.ServingNodeIndex);
+                        forwarded.erase(it);
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
                 case NConsole::TEvConsole::EvListTenantsResponse:
                 case TEvHive::EvResponseHiveNodeStats:
                 case NSysView::TEvSysView::EvGetPDisksResponse:
@@ -1517,7 +1598,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         break;
                     }
                     runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
-                        new TEvNodeWardenStorageConfig(nullptr, false, bridgeInfo), 0, ev->Cookie), options.ServingNodeIndex);
+                        new TEvNodeWardenStorageConfig(nullptr, false,
+                            ev->Sender.NodeId() - firstNodeId >= 4 ? remoteBridgeInfo : bridgeInfo), 0, ev->Cookie),
+                        ev->Sender.NodeId() - firstNodeId);
                     return TTestActorRuntime::EEventAction::DROP;
                 case TEvInterconnect::EvListNodes:
                     if (!isClusterActor(ev->Sender)) {
@@ -1526,18 +1609,21 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     if (!options.DropNodesInfo) {
                         runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
                             new TEvInterconnect::TEvNodesInfo(nodes, options.ProvidePileMap ? pileMap : nullptr),
-                            0, ev->Cookie), options.ServingNodeIndex);
+                            0, ev->Cookie), ev->Sender.NodeId() - firstNodeId);
                     }
                     return TTestActorRuntime::EEventAction::DROP;
                 case TEvWhiteboard::EvSystemStateRequest: {
                     if (!isClusterActor(ev->Sender)) {
                         break;
                     }
-                    if (!options.DropWhiteboard) {
+                    if (!options.DropWhiteboard && !(options.DropRemoteWhiteboard && ev->Sender.NodeId() - firstNodeId >= 4)) {
                         auto response = std::make_unique<TEvWhiteboard::TEvSystemStateResponse>();
+                        if (options.Https && ev->Sender.NodeId() - firstNodeId >= 4) {
+                            UNIT_ASSERT(ev->Recipient.NodeId() - firstNodeId >= 4);
+                        }
                         addSystemState(response->Record, ev->Recipient.NodeId());
                         runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie),
-                            options.ServingNodeIndex);
+                            ev->Sender.NodeId() - firstNodeId);
                     }
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -1552,7 +1638,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                             addSystemState(*system, nodeId);
                         }
                         runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie),
-                            options.ServingNodeIndex);
+                            ev->Sender.NodeId() - firstNodeId);
                     }
                     return TTestActorRuntime::EEventAction::DROP;
                 }
@@ -1563,7 +1649,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
             TStringBuilder() << "GET /viewer/json/cluster?direct=1&use_health_check=false&timeout=10000&offload_merge="
-                << options.OffloadMerge << " HTTP/1.1\r\n\r\n", endpoint, {});
+                << options.OffloadMerge << "&local_pile_only=" << options.LocalPileOnly << " HTTP/1.1\r\n"
+                << (options.SessionCookie ? "Cookie: ydb_session_id=test-session; unrelated=secret\r\n"
+                                          : "Authorization: Bearer test-token\r\n")
+                << "\r\n", endpoint, {});
         const TActorId sender = runtime.AllocateEdgeActor(options.ServingNodeIndex);
         const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(options.ServingNodeIndex), options.ServingNodeIndex);
         runtime.Send(new IEventHandle(viewerId, sender,
@@ -1571,6 +1660,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TAutoPtr<IEventHandle> handle;
         auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, "200", response->Response->Body);
+        UNIT_ASSERT_VALUES_EQUAL(httpsRequests, options.ExpectedHttpsRequests);
         if (options.LocalState == NKikimrBridge::TClusterState::DISCONNECTED) {
             UNIT_ASSERT(!queriedNodes.contains(4));
             UNIT_ASSERT(!queriedNodes.contains(5));
@@ -1637,6 +1727,101 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& pile = json["BridgeInfo"]["Piles"][1];
         AssertBridgePileCounts(pile, 1, 1);
         AssertBridgePileUnknownAliveCounts(pile);
+    }
+
+    Y_UNIT_TEST_TWIN(ClusterBridgeHttpsDisconnectedPile, offloadMerge) {
+        const auto json = GetClusterBridgeInfo({
+            .OffloadMerge = offloadMerge,
+            .Https = true,
+            .SessionCookie = offloadMerge,
+            .ExpectedHttpsRequests = 1,
+            .ServingNodeIndex = 1,
+            .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
+            .AliveNodeIndexes = {0, 1, 2, 4, 5},
+        });
+        const auto& piles = json["BridgeInfo"]["Piles"].GetArraySafe();
+        AssertBridgePileAliveCounts(piles[0], 2, 1);
+        AssertBridgePileCounts(piles[1], 1, 1);
+        AssertBridgePileAliveCounts(piles[1], 1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["NodesAlive"].GetUIntegerSafe(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(json["NodesTotal"].GetUIntegerSafe(), 6);
+    }
+
+    Y_UNIT_TEST(ClusterBridgeHttpsRetriesAnotherNode) {
+        const auto json = GetClusterBridgeInfo({
+            .Https = true,
+            .RemoteStorageOnly = true,
+            .HttpsErrors = {"Connection refused"},
+            .ExpectedHttpsRequests = 2,
+            .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
+        });
+        AssertBridgePileCounts(json["BridgeInfo"]["Piles"][1], 2, 0);
+        AssertBridgePileAliveCounts(json["BridgeInfo"]["Piles"][1], 1, 0);
+    }
+
+    Y_UNIT_TEST_TWIN(ClusterBridgeHttpsUnavailable, timeout) {
+        const auto json = GetClusterBridgeInfo({
+            .Https = true,
+            .DropHttps = timeout,
+            .HttpsErrors = {"Connection reset"},
+            .ExpectedHttpsRequests = 1,
+            .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
+        });
+        AssertBridgePileCounts(json["BridgeInfo"]["Piles"][1], 1, 1);
+        AssertBridgePileUnknownAliveCounts(json["BridgeInfo"]["Piles"][1]);
+        AssertBridgePileAliveCounts(json["BridgeInfo"]["Piles"][0], 2, 1);
+    }
+
+    Y_UNIT_TEST(ClusterBridgeHttpsIncompleteLocalCollection) {
+        const auto json = GetClusterBridgeInfo({
+            .Https = true,
+            .DropRemoteWhiteboard = true,
+            .ExpectedHttpsRequests = 1,
+            .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
+        });
+        AssertBridgePileUnknownAliveCounts(json["BridgeInfo"]["Piles"][1]);
+    }
+
+    Y_UNIT_TEST(ClusterBridgeHttpsRejectsInvalidResponses) {
+        for (const TString& body : {
+                TString("not json"),
+                TString(R"({"BridgeInfo":{"Piles":[{"PileId":3,"Name":"pile2","Nodes":2,"StorageNodes":1,"ComputeNodes":1}]}})"),
+                TString(R"({"BridgeInfo":{"Piles":[{"PileId":1,"Name":"pile0","Nodes":2,"StorageNodes":1,"ComputeNodes":1,"AliveNodes":2,"AliveStorageNodes":1,"AliveComputeNodes":1}]}})"),
+                TString(R"({"BridgeInfo":{"Piles":[{"PileId":3,"Name":"pile2","Nodes":2,"StorageNodes":1,"ComputeNodes":1,"AliveNodes":3,"AliveStorageNodes":2,"AliveComputeNodes":1}]}})"),
+                TString(R"({"BridgeInfo":{"Piles":[{},{}]}})")}) {
+            const auto json = GetClusterBridgeInfo({
+                .Https = true,
+                .HttpsBody = body,
+                .ExpectedHttpsRequests = 1,
+                .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
+            });
+            AssertBridgePileUnknownAliveCounts(json["BridgeInfo"]["Piles"][1]);
+        }
+    }
+
+    Y_UNIT_TEST(ClusterBridgeHttpsRejectsAuthAndRedirectResponses) {
+        for (const TString& status : {TString("401"), TString("403"), TString("302")}) {
+            const auto json = GetClusterBridgeInfo({
+                .Https = true,
+                .HttpsBody = "{}",
+                .HttpsStatus = status,
+                .ExpectedHttpsRequests = 1,
+                .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
+            });
+            AssertBridgePileUnknownAliveCounts(json["BridgeInfo"]["Piles"][1]);
+        }
+    }
+
+    Y_UNIT_TEST(ClusterBridgeLocalPileOnlyDoesNotForward) {
+        const auto json = GetClusterBridgeInfo({
+            .DropClusterResponses = true,
+            .Https = true,
+            .LocalPileOnly = true,
+            .LocalState = NKikimrBridge::TClusterState::DISCONNECTED,
+        });
+        const auto& piles = json["BridgeInfo"]["Piles"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(piles.size(), 1);
+        AssertBridgePileAliveCounts(piles[0], 2, 1);
     }
 
     Y_UNIT_TEST_TWIN(ClusterBridgeDisconnectedServingPile, offloadMerge) {

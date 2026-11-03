@@ -2468,6 +2468,8 @@ Y_UNIT_TEST(NoBulkUpsert) {
         auto result = kikimr.GetTableClient().BulkUpsert("/Root/Texts", rows.Build()).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Only async-indexed tables are supported by BulkUpsert");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), ": table has index \"");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Write the data using a YQL UPSERT query instead");
     }
     auto index = ReadIndex(db);
     CompareYson(R"([])", NYdb::FormatResultSetYson(index));

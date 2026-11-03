@@ -525,7 +525,7 @@ namespace {
             return std::nullopt;
         }
 
-        if (IsNullLiteral(defaultExpr) && columnType) {
+        if (IsYqlNullExprNode(defaultExpr) && columnType) {
             const auto* nullableType = columnType;
             if (nullableType->GetKind() != ETypeAnnotationKind::Optional
                 && nullableType->GetKind() != ETypeAnnotationKind::Pg)
@@ -845,8 +845,7 @@ namespace {
     }
 
     bool ParseConstraintNode(TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple,
-        TCoNameValueTuple constraint, bool& needEval, bool isAlter = false)
-    {
+        TCoNameValueTuple constraint, bool& needEval, bool isAlter = false) {
         auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
         auto typeNode = columnTuple.Item(1);
 

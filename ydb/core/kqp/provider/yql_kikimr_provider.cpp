@@ -710,7 +710,7 @@ bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral) {
         maybeLiteral.Ptr()->Child(0)->IsCallable() && maybeLiteral.Ptr()->Child(0)->Content() == "Null";
 }
 
-bool IsNullLiteral(const NNodes::TExprBase& literal) {
+bool IsYqlNullExprNode(const NNodes::TExprBase& literal) {
     return literal.Maybe<TCoNull>().IsValid();
 }
 

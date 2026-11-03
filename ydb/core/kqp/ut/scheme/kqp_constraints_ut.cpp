@@ -1245,6 +1245,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         for (const auto& other : otherActions) {
             for (ui32 defaultCount : {0, 1, 3}) {
                 for (bool otherFirst : {false, true}) {
+                    runtime.ResetScheduledCount();
                     success(R"(CREATE TABLE t (
                         Key Uint32 NOT NULL, Value Uint32 NOT NULL DEFAULT 7, Ts Timestamp,
                         PRIMARY KEY (Key), FAMILY cold ()
@@ -6902,6 +6903,28 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         UNIT_ASSERT_C(bulk.IsSuccess(), bulk.GetIssues().ToString());
         fixture.Check("SELECT k, value, number, pg_text, plain FROM BulkTable ORDER BY k;",
             R"([[1;#;#;#;#];[2;["explicit"];[42u];"pg";#]])");
+
+        fixture.Exec("CREATE TABLE RequiredTable (k Int32 NOT NULL, value String NOT NULL DEFAULT NULL, PRIMARY KEY (k));");
+        fixture.CheckLiteralNull("/Root/RequiredTable", {"value"}, true);
+        TValueBuilder explicitRequired;
+        explicitRequired.BeginList().AddListItem().BeginStruct()
+            .AddMember("k").Int32(1).AddMember("value").String("explicit").EndStruct().EndList();
+        const auto accepted = fixture.Kikimr.GetTableClient().BulkUpsert("/Root/RequiredTable", explicitRequired.Build()).GetValueSync();
+        UNIT_ASSERT_C(accepted.IsSuccess(), accepted.GetIssues().ToString());
+
+        TValueBuilder nullRequired;
+        nullRequired.BeginList().AddListItem().BeginStruct()
+            .AddMember("k").Int32(1).AddMember("value").EmptyOptional(EPrimitiveType::String).EndStruct().EndList();
+        const auto rejectedNull = fixture.Kikimr.GetTableClient().BulkUpsert("/Root/RequiredTable", nullRequired.Build()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(rejectedNull.GetStatus(), EStatus::BAD_REQUEST, rejectedNull.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(rejectedNull.GetIssues().ToString(), "Received NULL value for not null column: value");
+
+        TValueBuilder missingRequired;
+        missingRequired.BeginList().AddListItem().BeginStruct().AddMember("k").Int32(1).EndStruct().EndList();
+        const auto rejectedMissing = fixture.Kikimr.GetTableClient().BulkUpsert("/Root/RequiredTable", missingRequired.Build()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(rejectedMissing.GetStatus(), EStatus::SCHEME_ERROR, rejectedMissing.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(rejectedMissing.GetIssues().ToString(), "Missing not null columns: value");
+        fixture.Check("SELECT k, value FROM RequiredTable;", R"([[1;"explicit"]])");
     }
 
     Y_UNIT_TEST_TWIN(DefaultNullAddAndBackfill, CompileTimeDefaults) {
@@ -6924,11 +6947,34 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         fixture.Check("SELECT value, extra FROM TestTable WHERE k = 1;", R"([[["updated"];[42u]]])");
         fixture.Reject("ALTER TABLE TestTable ADD COLUMN required Int32 NOT NULL DEFAULT NULL;", "not null");
         fixture.Reject("ALTER TABLE TestTable ADD COLUMN required Int32 (DEFAULT NULL, NOT NULL);", "not null");
+        fixture.Reject("ALTER TABLE TestTable ADD COLUMN required Int32 NOT NULL DEFAULT CAST('invalid' AS Int32);", "not null");
         const auto describe = fixture.Kikimr.GetTestClient().Ls("/Root/TestTable");
         UNIT_ASSERT_VALUES_EQUAL(describe->Record.GetPathDescription().GetTable().ColumnsSize(), 6);
-        fixture.Exec("CREATE TABLE EmptyTable (k Int32 NOT NULL, PRIMARY KEY (k));");
-        fixture.Reject("ALTER TABLE EmptyTable ADD COLUMN required Int32 NOT NULL DEFAULT NULL;", "not null");
-        fixture.CheckNoDefault("/Root/EmptyTable", {"k"}, true);
+        fixture.Check("SELECT k, value FROM TestTable ORDER BY k;", R"([[1;["updated"]];[2;#];[3;#]])");
+        fixture.Exec("ALTER TABLE TestTable ADD COLUMN required Int32 NOT NULL DEFAULT 42;");
+        fixture.Check("SELECT k, required FROM TestTable ORDER BY k;", "[[1;42];[2;42];[3;42]]");
+        fixture.Exec("ALTER TABLE TestTable ADD COLUMN empty_value String NOT NULL DEFAULT '';");
+        fixture.Exec("ALTER TABLE TestTable ADD COLUMN zero_value Uint32 NOT NULL DEFAULT 0;");
+        fixture.Check("SELECT empty_value, zero_value FROM TestTable ORDER BY k;", R"([["";0u];["";0u];["";0u]])");
+    }
+
+    Y_UNIT_TEST_TWIN(DefaultNullAddNotNullRejectedEmpty, CompileTimeDefaults) {
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
+        fixture.Exec("CREATE TABLE TestTable (k Int32 NOT NULL, PRIMARY KEY (k));");
+        fixture.Reject("ALTER TABLE TestTable ADD COLUMN required Uint32 NOT NULL DEFAULT NULL;", "not null");
+        fixture.Reject("ALTER TABLE TestTable ADD COLUMN required Uint32 (DEFAULT NULL, NOT NULL);", "not null");
+        fixture.Reject("ALTER TABLE TestTable ADD COLUMN required Int32 NOT NULL DEFAULT CAST('invalid' AS Int32);", "not null");
+        fixture.CheckNoDefault("/Root/TestTable", {"k"}, true);
+        const auto describe = fixture.Kikimr.GetTestClient().Ls("/Root/TestTable");
+        UNIT_ASSERT_VALUES_EQUAL(describe->Record.GetPathDescription().GetTable().ColumnsSize(), 1);
+        fixture.Exec("ALTER TABLE TestTable ADD COLUMN required Uint32 NOT NULL DEFAULT 0;");
+        int key = 0;
+        for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {
+            fixture.Exec(TStringBuilder() << operation << " INTO TestTable (k, required) VALUES (" << ++key << ", 42);");
+            fixture.Exec(TStringBuilder() << operation << " INTO TestTable (k) VALUES (" << ++key << ");");
+            fixture.Reject(operation + " INTO TestTable (k, required) VALUES (100, NULL);", "Failed to convert type");
+        }
+        fixture.Check("SELECT k, required FROM TestTable ORDER BY k;", "[[1;42u];[2;0u];[3;42u];[4;0u];[5;42u];[6;0u]]");
     }
 
     Y_UNIT_TEST_TWIN(DefaultNullAddRequiresFeatureFlag, CompileTimeDefaults) {
@@ -6984,9 +7030,11 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         )");
         fixture.CheckLiteralNull("/Root/TestTable", {"value"}, true);
         int key = 0;
+        const TString omittedColumnIssue = CompileTimeDefaults ? "not null"
+            : "NULL value violates not null constraint for column: value";
         for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {
             fixture.Exec(TStringBuilder() << operation << " INTO TestTable (k, value) VALUES (" << ++key << ", 'explicit');");
-            fixture.Reject(operation + " INTO TestTable (k) VALUES (100);", "not null");
+            fixture.Reject(operation + " INTO TestTable (k) VALUES (100);", omittedColumnIssue);
             fixture.Reject(operation + " INTO TestTable (k, value) VALUES (100, NULL);", "Failed to convert type");
         }
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value SET DEFAULT 'temporary';");

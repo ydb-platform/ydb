@@ -63,6 +63,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+<<<<<<< HEAD
         Self->DeleteProcessedSourceOffsets(rid, tid, db);
         db.Table<Schema::Targets>().Key(rid, tid).Delete();
         db.Table<Schema::SrcStreams>().Key(rid, tid).Delete();
@@ -70,6 +71,9 @@ public:
             db.Table<Schema::Workers>().Key(rid, tid, wid).Delete();
         }
         Replication->RemoveTarget(tid);
+=======
+        Self->RemoveTarget(db, *Replication, tid);
+>>>>>>> d316aa153b7 ([KIKIMR-27521] Allow FORCE DROP of asynchronous replication without source access (#57116))
 
         return true;
     }
@@ -87,6 +91,26 @@ public:
 
 void TController::RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxDropDstResult(this, ev), ctx);
+}
+
+void TController::RemoveTarget(NIceDb::TNiceDb& db, TReplication& replication, ui64 targetId) {
+    const auto rid = replication.GetId();
+    DeleteProcessedSourceOffsets(rid, targetId, db);
+    db.Table<Schema::Targets>().Key(rid, targetId).Delete();
+    db.Table<Schema::SrcStreams>().Key(rid, targetId).Delete();
+    for (const auto wid : replication.FindTarget(targetId)->GetWorkers()) {
+        db.Table<Schema::Workers>().Key(rid, targetId, wid).Delete();
+    }
+    IndexBuilds.erase({rid, targetId});
+    for (auto it = IndexBuildProgress.begin(); it != IndexBuildProgress.end();) {
+        if (it->first.ReplicationId() == rid && it->first.TargetId() == targetId) {
+            db.Table<Schema::IndexBuildWorkers>().Key(rid, targetId, it->first.WorkerId()).Delete();
+            IndexBuildProgress.erase(it++);
+        } else {
+            ++it;
+        }
+    }
+    replication.RemoveTarget(targetId);
 }
 
 }

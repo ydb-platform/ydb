@@ -8,6 +8,9 @@ import logging
 
 import ydb.public.api.protos.ydb_value_pb2 as ydb
 
+from ydb.tests.fq.s3.s3_helpers import create_bucket_and_put_object
+from ydb.tests.library.common.wait_for import wait_for
+
 
 class TestExternalTables:
     def test_s3_insert(self, kikimr, s3, client, unique_prefix):
@@ -163,6 +166,61 @@ class TestExternalTables:
         query.check(False)
 
         assert "some_unknown_column" in query.error
+
+    def test_ast_in_failed_query_compilation(self, kikimr, s3, client, unique_prefix):
+        create_bucket_and_put_object(s3.s3_url, 'failed-compilation-ast', 'data.txt', 'dictionary')
+        source = client.create_external_data_source(unique_prefix + 'source', 'failed-compilation-ast').name
+        table = client.path(unique_prefix + 'dictionary')
+
+        def create_table(column):
+            client.create_external_table(
+                table,
+                'data.txt',
+                'raw',
+                source,
+                [ydb.Column(name=column, type=ydb.Type(type_id=ydb.Type.STRING))],
+            )
+
+        create_table('some_unknown_column')
+        input_topic = client.path(unique_prefix + 'input')
+        output_topic = client.path(unique_prefix + 'output')
+        for topic in (input_topic, output_topic):
+            client.query(f'CREATE TOPIC `{topic}`;')
+            client.objects.append(('TOPIC', topic))
+        query_path = client.path(unique_prefix + 'failed_compilation')
+        state = None
+
+        def failed_with_ast():
+            nonlocal state
+            rows = kikimr.ydb_client.query(f"""
+                SELECT Status, Issues, Ast FROM `.sys/streaming_queries`
+                WHERE Path = '{query_path}';
+            """)[0].rows
+            state = rows[0] if rows else None
+            return state is not None and state['Status'] == 'FAILED' and bool(state['Ast'])
+
+        try:
+            # Validate the definition before changing the schema. Starting it
+            # must then fail compilation and retain the AST in the sys view.
+            client.query(f"""
+                CREATE STREAMING QUERY `{query_path}` WITH (RUN = FALSE) AS DO BEGIN
+                    INSERT INTO `{output_topic}`
+                    SELECT input_rows.Data || dictionary.some_unknown_column AS Data
+                    FROM `{input_topic}`
+                    WITH (FORMAT=raw, SCHEMA=(Data String NOT NULL)) AS input_rows
+                    CROSS JOIN `{table}` AS dictionary;
+                END DO;
+            """)
+            client.drop('EXTERNAL TABLE', table)
+            create_table('data')
+            result = client.execute(f'ALTER STREAMING QUERY `{query_path}` SET (RUN = TRUE);').check(False)
+            assert 'some_unknown_column' in result.error, result.error
+            assert wait_for(failed_with_ast, timeout_seconds=120, step_seconds=0.5), state
+            assert 'some_unknown_column' in state['Issues'], state
+            assert 'some_unknown_column' in state['Ast'], state['Ast']
+            assert table in state['Ast'], state['Ast']
+        finally:
+            client.query(f'DROP STREAMING QUERY IF EXISTS `{query_path}`;')
 
     def test_external_table_empty_schema(self, kikimr, client, unique_prefix):
         connection_response = client.create_external_data_source(unique_prefix + "fruitbucket", "fbucket")

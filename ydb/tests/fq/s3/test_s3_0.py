@@ -3,9 +3,11 @@
 
 import boto3
 import logging
+import json
 import pytest
 import ydb.public.api.protos.ydb_value_pb2 as ydb
-from ydb.tests.fq.streaming_common.common import StreamingTestBase
+from ydb.tests.fq.streaming_common.common import StreamingTestBase, get_checkpoint_coordinator_metric
+from ydb.tests.library.common.wait_for import wait_for
 
 
 class TestS3:
@@ -714,3 +716,74 @@ class TestS3TopicJoin(StreamingTestBase):
             assert [(row['num'], row['word']) for row in result.rows] == expected
         finally:
             kikimr.ydb_client.query(f'DROP TOPIC {topic};')
+
+    def test_checkpoints_on_join_s3_with_yds(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            's3', endpoint_url=s3.s3_url, aws_access_key_id='key', aws_secret_access_key='secret_key'
+        )
+        bucket = resource.Bucket('checkpoint-join-s3')
+        bucket.create(ACL='public-read')
+        bucket.objects.all().delete()
+        numbers = ['one', 'two', 'three']
+        for key, value in enumerate(numbers, start=1):
+            bucket.put_object(Key=f'{key}.json', Body=json.dumps({'key': key, 'value': value}))
+        source = client.create_external_data_source(unique_prefix + 'source', 'checkpoint-join-s3').name
+
+        endpoint = self.get_endpoint(kikimr, local_topics=True)
+        self.init_topics(unique_prefix + 'checkpoint_join', partitions_count=1, endpoint=endpoint)
+        input_topic = kikimr.get_database_name() + '/' + self.input_topic
+        output_topic = kikimr.get_database_name() + '/' + self.output_topic
+        query_name = unique_prefix + 'checkpoint_join'
+        query_path = kikimr.get_database_name() + '/' + query_name
+        words = ['January', 'February', 'March', 'Monday', 'Tuesday', 'Wednesday', 'Gold', 'Silver', 'Bronze']
+
+        def check_batch(batch):
+            self.write_stream(
+                [json.dumps({'key': i % 3 + 1, 'word': word}) for i, word in enumerate(batch)], endpoint=endpoint
+            )
+            rows = [json.loads(value) for value in self.read_stream(len(batch), endpoint=endpoint)]
+            assert sorted((row['num'], row['word']) for row in rows) == sorted(
+                (numbers[i % 3], word) for i, word in enumerate(batch)
+            ), rows
+
+        try:
+            kikimr.ydb_client.query(f"""
+                CREATE STREAMING QUERY `{query_path}` WITH (CHECKPOINT_INTERVAL = 'PT1S') AS DO BEGIN
+                    PRAGMA ydb.MaxTasksPerStage = '2';
+                    INSERT INTO `{output_topic}` WITH (FORMAT=json_each_row)
+                    SELECT dictionary.value AS num, input_rows.word AS word
+                    FROM `{input_topic}`
+                    WITH (FORMAT=json_each_row, SCHEMA=(key Int64 NOT NULL, word String NOT NULL)) AS input_rows
+                    INNER JOIN (
+                        SELECT key, value FROM `{source}`.`*`
+                        WITH (FORMAT=json_each_row, SCHEMA=(key Int64 NOT NULL, value String NOT NULL))
+                    ) AS dictionary ON input_rows.key = dictionary.key;
+                END DO;
+            """)
+            self.wait_completed_checkpoints(kikimr, query_name)
+            check_batch(words)
+            # Wait beyond the checkpoint that may have started before output
+            # was observed, so that the committed input offsets include it.
+            self.wait_completed_checkpoints(kikimr, query_name, checkpoints_count=3)
+
+            self.restart_streaming_node(kikimr)
+
+            # The same physical graph restores directly; a remapped graph
+            # restores through a state-load plan. Both must use a checkpoint.
+            def restored_from_checkpoint():
+                return any(
+                    get_checkpoint_coordinator_metric(kikimr.cluster, query_path, metric) > 0
+                    for metric in ('RestoredFromSavedCheckpoint', 'RestoredStreamingOffsetsFromCheckpoint')
+                )
+
+            assert wait_for(
+                restored_from_checkpoint, timeout_seconds=120, step_seconds=0.5
+            ), 'S3 join did not restore from a saved checkpoint'
+            self.wait_completed_checkpoints(kikimr, query_name, checkpoints_count=3)
+            # Replayed input would produce the old words and fail this check.
+            check_batch([word + '-after-restart' for word in words])
+            self.wait_completed_checkpoints(kikimr, query_name)
+        finally:
+            kikimr.ydb_client.query(f'DROP STREAMING QUERY IF EXISTS `{query_path}`;')
+            for topic in (output_topic, input_topic):
+                kikimr.ydb_client.query(f'DROP TOPIC IF EXISTS `{topic}`;')

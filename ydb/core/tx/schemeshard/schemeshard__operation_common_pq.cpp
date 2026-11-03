@@ -564,6 +564,11 @@ bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, 
         {"message", evRecord.ShortDebugString()},
     );
 
+    // A non-completion reply may arrive before ProgressState initializes the pending shards.
+    if (evRecord.GetStatus() != NKikimrPQ::TEvProposeTransactionResult::COMPLETE) {
+        return false;
+    }
+
     const bool collected = CollectPQConfigChanged(OperationId, ev, context);
     YDB_LOG_DEBUG_CTX(context.Ctx, "",
         {"collected", collected},
@@ -579,6 +584,11 @@ bool TPropose::HandleReply(TEvDataShard::TEvProposeTransactionAttachResult::TPtr
     YDB_LOG_INFO_CTX(context.Ctx, "",
         {"message", evRecord.ShortDebugString()},
     );
+
+    // A non-completion reply may arrive before ProgressState initializes the pending shards.
+    if (evRecord.GetStatus() != NKikimrProto::NODATA) {
+        return false;
+    }
 
     const bool collected = CollectPQConfigChanged(OperationId, ev, context);
     YDB_LOG_DEBUG_CTX(context.Ctx, "",

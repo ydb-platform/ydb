@@ -30,6 +30,19 @@ static constexpr TDuration REWIND_COMMIT_INTERVAL = TDuration::Minutes(4);
 
 namespace {
 
+TString FormatOffsetsByConsumers(const y_absl::flat_hash_map<TString, ui64>& offsetsByConsumers) {
+    TStringBuilder out;
+    bool firstConsumer = true;
+    for (const auto& [consumer, offset] : offsetsByConsumers) {
+        if (!firstConsumer) {
+            out << ", ";
+        }
+        firstConsumer = false;
+        out << consumer << ": " << offset;
+    }
+    return out;
+}
+
 struct TBatchInfo {
     ui32 LogicalMessageCount = 1;
     std::optional<ui64> MaxSeqNo;
@@ -340,18 +353,30 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
         YDB_LOG_NOTICE("[STATE] next offset to read current end offset",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"offsetToRead", OffsetToRead},
-            {"endOffset", EndOffset});
-        YDB_LOG_NOTICE("[STATE] bytes in flight messages in write request queue",
+            {"endOffset", EndOffset}
+        );
+        YDB_LOG_NOTICE(
+            "[STATE] replication offsets",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"replicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
+            {"offsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
+            {"lastReplicationDataTimestamp", LastReplicationDataTimestamp},
+            {"replicationDataInFlight", ReplicationDataInFlight}
+        );
+        YDB_LOG_NOTICE(
+            "[STATE] bytes in flight messages in write request queue",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"bytesInFlight", BytesInFlight},
             {"writeInFlightSize", WriteInFlight.size()},
-            {"toWrite", Queue.size()});
+            {"toWrite", Queue.size()}
+        );
         YDB_LOG_NOTICE("[STATE] wait new reader last received event read futures inflight",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"event", WaitNextReaderEventInFlight},
             {"time", LastReadEventTime},
             {"readFuturesInFlight", ReadFuturesInFlight},
             {"lastId", ReadFeatureId});
+
         if (!ReadFeatures.empty()) {
             const auto& oldest = *ReadFeatures.begin();
             const auto& info = oldest.second;
@@ -492,17 +517,39 @@ void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
         return;
     }
 
-    for (const auto& [consumer, offset] : OffsetsByConsumers) {
-        if (offset > EndOffset) {
-            return;
+    y_absl::flat_hash_map<TString, ui64> offsetsByConsumersToSend;
+    for (auto& [consumer, offset] : OffsetsByConsumers) {
+        auto offsetToSend = Min(offset, EndOffset);
+        if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offsetToSend) {
+            continue;
         }
+
+        offsetsByConsumersToSend[consumer] = offsetToSend;
     }
+
+    if (offsetsByConsumersToSend.empty() && !MirroredOffsetToSend.Defined()) {
+        return;
+    }
+
     ReplicationDataInFlight = true;
     auto event = MakeHolder<TEvPQ::TEvReplicationData>();
-    for (const auto& [consumer, offset] : OffsetsByConsumers) {
+    for (const auto& [consumer, offset] : offsetsByConsumersToSend) {
         (event->OffsetsByConsumers)[consumer] = offset;
+
+        ReplicatedOffsetsByConsumers[consumer] = offset;
+
+        if (offset == OffsetsByConsumers[consumer]) {
+            OffsetsByConsumers.erase(consumer);
+        }
     }
-    OffsetsByConsumers.clear();
+
+    YDB_LOG_DEBUG("Sending replication data to consumers",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"offsetsByConsumersToSend", FormatOffsetsByConsumers(offsetsByConsumersToSend)},
+        {"ReplicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
+        {"OffsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
+        {"MirroredOffsetToSend", MirroredOffsetToSend ? ToString(*MirroredOffsetToSend) : "none"});
+
     if (MirroredOffsetToSend) {
         event->MirroredOffset = *MirroredOffsetToSend;
         MirroredOffsetToSend = Nothing();
@@ -708,12 +755,19 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     ctx.Send(TabletActorId, request.Release());
 }
 
-void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages) {
+void TMirrorer::AddMessagesToQueue(
+    std::vector<TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage>&& messages
+) {
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
         if (NYdb::NTopic::IsReplicationServiceMessage(offset, msg.GetMessageMeta()->Fields)) {
             NKikimrPQ::TReplicationDataPayload replicationData;
             if (replicationData.ParseFromString(msg.GetData())) {
+                LastReplicationDataTimestamp = TActivationContext::Now();
+                YDB_LOG_DEBUG("Received replication data",
+                    {"logPrefix", NPQ_LOG_PREFIX},
+                    {"replicationData", replicationData.DebugString()});
+
                 for (const auto& [consumer, offset] : replicationData.GetOffsetsByConsumers()) {
                     auto& pendingOffset = OffsetsByConsumers[consumer];
                     pendingOffset = Max(pendingOffset, offset);

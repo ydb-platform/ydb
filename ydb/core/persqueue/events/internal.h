@@ -386,6 +386,7 @@ struct TEvPQ {
         TActorId PipeClient;
         ui64 LastOffset;
         TActorId ReplyTo;
+        TActorId ReadSessionActor;
 
         bool IsInternal() {
             return !!ReplyTo;
@@ -489,6 +490,7 @@ struct TEvPQ {
         bool Strict;
         bool MLPRequest;
         TActorId PipeClient;
+        TActorId ReadSessionActor;
         std::optional<TString> CommittedMetadata;
         bool IsInternal = false;
     };

@@ -217,6 +217,13 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     auto readTimestamp = GetReadFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero(), ctx);
     TActorId sender = ActorIdFromProto(record.GetSender());
 
+    if (InitDone && record.HasClientId() && !record.GetSessionId().empty()) {
+        auto* userInfo = UsersInfoStorage->GetIfExists(record.GetClientId());
+        if (userInfo && !userInfo->NoConsumer) {
+            RestoreReadSessionActor(*userInfo, record.GetSessionId(), sender, ctx);
+        }
+    }
+
     THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
         record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
 
@@ -878,6 +885,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
                 TStringBuilder() << "no such session '" << read->SessionId << "'", replyTo);
             return;
         }
+        RestoreReadSessionActor(userInfo, read->SessionId, read->ReadSessionActor, ctx);
     }
     userInfo.ReadsInQuotaQueue++;
     Send(ReadQuotaTrackerActor,

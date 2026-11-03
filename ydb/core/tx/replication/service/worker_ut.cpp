@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
             Runtime.Send(new IEventHandle(Service, Edge, run.Release()));
             RequireStatus(id, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
             Runtime.WaitFor("remote reader request", [&] { return Blocked.size() == requestCount + 1; }, TDuration::Seconds(30));
-            Workers.insert(id);
+            Workers.emplace(id, Blocked.back()->Sender);
             return Blocked.back()->GetRecipientRewrite();
         }
 
@@ -88,12 +88,14 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
             stop->Record.MutableWorker()->SetWorkerId(id);
             Runtime.Send(new IEventHandle(Service, Edge, stop.Release()));
             RequireStatus(id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
+            const auto reader = Workers.at(id);
+            Runtime.WaitFor("worker stopped its reader", [&] { return Poisoned.contains(reader); }, TDuration::Seconds(30));
             Workers.erase(id);
         }
 
         void Finish() {
             while (!Workers.empty()) {
-                Stop(*Workers.begin());
+                Stop(Workers.begin()->first);
             }
             THashSet<TActorId> readers;
             THashSet<TActorId> proxies;
@@ -141,7 +143,7 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
             UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(record.GetStatus()), static_cast<int>(expected));
         }
 
-        THashSet<ui64> Workers;
+        THashMap<ui64, TActorId> Workers;
         TTestActorRuntime::TEventObserverHolder PoisonObserver;
     };
 

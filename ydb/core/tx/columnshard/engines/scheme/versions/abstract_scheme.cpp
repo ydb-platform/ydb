@@ -115,8 +115,10 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
                                                features.GetArrowField()->type()->ToString() + " vs " + incomingColumn->type()->ToString());
             }
         }
-        if (pkFieldIdx && hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
-            return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
+        if (pkFieldIdx && hasNull) {
+            if (!AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK() || !GetIndexInfo().IsNullableVerifiedByIndex(targetIdx)) {
+                return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
+            }
         }
         if (hasNull) {
             switch (mType) {

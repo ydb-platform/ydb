@@ -1,5 +1,10 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/client/server/pq_describe_retry.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <memory>
+
+#include <util/generic/maybe.h>
 
 namespace NPersQueue::NTests {
 
@@ -442,6 +447,94 @@ Y_UNIT_TEST_SUITE(TopicNameConverterForCPTest) {
         );
         UNIT_ASSERT(!converter->IsValid());
 
+    }
+}
+
+struct TRetryTopic {
+    TMaybe<TString> Account;
+    bool AllowSecondary = true;
+    TVector<TString> Databases;
+
+    const TMaybe<TString>& GetAccount_() const {
+        return Account;
+    }
+
+    void SetDatabase(const TString& database) {
+        Databases.push_back(database);
+    }
+
+    TMaybe<TString> GetSecondaryPath(const TString&) const {
+        if (!AllowSecondary || Databases.empty()) {
+            return {};
+        }
+        return TMaybe<TString>("/secondary");
+    }
+};
+
+using TRetryTopics = TVector<std::shared_ptr<TRetryTopic>>;
+
+std::shared_ptr<TRetryTopic> RetryTopic(TMaybe<TString> account, bool allowSecondary = true) {
+    auto topic = std::make_shared<TRetryTopic>();
+    topic->Account = std::move(account);
+    topic->AllowSecondary = allowSecondary;
+    return topic;
+}
+
+TVector<ui64> SelectRetry(const TString& dbRoot, TRetryTopics& topics, const TVector<bool>& unknown) {
+    return NKikimr::NMsgBusProxy::NPqMetaCacheV2::SelectSecondTryTopics(
+        dbRoot, topics, unknown.size(), [&](size_t index) { return unknown[index]; });
+}
+
+Y_UNIT_TEST_SUITE(SecondTryTopicSelection) {
+    Y_UNIT_TEST(SkippedEntryDoesNotStealNextTopic) {
+        TRetryTopics topics{
+            RetryTopic(Nothing()),
+            RetryTopic(TString("acc")),
+        };
+        const auto selected = SelectRetry("/lb", topics, {true, true});
+
+        UNIT_ASSERT_VALUES_EQUAL(selected.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(selected[0], 1);
+        UNIT_ASSERT(topics[0]->Databases.empty());
+        UNIT_ASSERT_VALUES_EQUAL(topics[1]->Databases.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(topics[1]->Databases[0], "/lb/acc");
+    }
+
+    Y_UNIT_TEST(MiddleSkipKeepsLaterIndex) {
+        TRetryTopics topics{
+            RetryTopic(TString("a")),
+            RetryTopic(Nothing()),
+            RetryTopic(TString("c")),
+        };
+        const auto selected = SelectRetry("/lb", topics, {true, true, true});
+
+        UNIT_ASSERT_VALUES_EQUAL(selected.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(selected[0], 0);
+        UNIT_ASSERT_VALUES_EQUAL(selected[1], 2);
+        UNIT_ASSERT(topics[1]->Databases.empty());
+        UNIT_ASSERT_VALUES_EQUAL(topics[0]->Databases[0], "/lb/a");
+        UNIT_ASSERT_VALUES_EQUAL(topics[2]->Databases[0], "/lb/c");
+    }
+
+    Y_UNIT_TEST(KnownPathAndEmptyRootAreNotRetried) {
+        TRetryTopics topics{RetryTopic(TString("acc"))};
+        UNIT_ASSERT(SelectRetry("/lb", topics, {false}).empty());
+        UNIT_ASSERT(topics[0]->Databases.empty());
+
+        UNIT_ASSERT(SelectRetry("", topics, {true}).empty());
+        UNIT_ASSERT(topics[0]->Databases.empty());
+    }
+
+    Y_UNIT_TEST(MissingSecondaryPathDoesNotShiftIndex) {
+        TRetryTopics topics{
+            RetryTopic(TString("a"), false),
+            RetryTopic(TString("b")),
+        };
+        const auto selected = SelectRetry("/lb", topics, {true, true});
+
+        UNIT_ASSERT_VALUES_EQUAL(selected.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(selected[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(topics[1]->Databases[0], "/lb/b");
     }
 }
 } // NTests

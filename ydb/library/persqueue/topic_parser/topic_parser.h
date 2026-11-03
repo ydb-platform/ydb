@@ -5,6 +5,7 @@
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
+#include <util/generic/vector.h>
 #include <util/string/builder.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -14,6 +15,13 @@
 
 namespace NKikimr::NMsgBusProxy::NPqMetaCacheV2 {
     class TPersQueueMetaCacheActor;
+
+    template <typename TTopics, typename TIsUnknown>
+    TVector<ui64> SelectSecondTryTopics(
+            const TString& dbRoot,
+            TTopics& topics,
+            size_t entryCount,
+            const TIsUnknown& isUnknown);
 }
 
 namespace NPersQueue {
@@ -53,6 +61,13 @@ class TDiscoveryConverter {
     friend class TTopicNamesConverterFactory;
     friend class NKikimr::NMsgBusProxy::NPqMetaCacheV2::TPersQueueMetaCacheActor;
     friend class NTests::TConverterTestWrapper;
+
+    template <typename TTopics, typename TIsUnknown>
+    friend TVector<ui64> NKikimr::NMsgBusProxy::NPqMetaCacheV2::SelectSecondTryTopics(
+            const TString& dbRoot,
+            TTopics& topics,
+            size_t entryCount,
+            const TIsUnknown& isUnknown);
 
     using TDiscoveryConverterPtr = std::shared_ptr<TDiscoveryConverter>;
     using TTopicConverterPtr = std::shared_ptr<TTopicNameConverter>;

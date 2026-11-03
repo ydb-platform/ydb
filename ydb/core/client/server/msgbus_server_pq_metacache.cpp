@@ -1,5 +1,6 @@
 #include "msgbus_server_persqueue.h"
 #include "msgbus_server_pq_metacache.h"
+#include "pq_describe_retry.h"
 
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
@@ -218,29 +219,13 @@ private:
             Y_ABORT_UNLESS(Topics.size() == result->ResultSet.size());
             Y_ABORT_UNLESS(Result == nullptr);
             FirstRequestDone = true;
-            ui64 index = 0;
             Result = std::move(result);
-            for (const auto& entry : Result->ResultSet) {
-                if (DbRoot.empty()) {
-                    continue;
-                }
-                if (entry.Status == TSchemeCacheNavigate::EStatus::PathErrorUnknown ||
-                    entry.Status == TSchemeCacheNavigate::EStatus::RootUnknown
-                ) {
-                    auto account = Topics[index]->GetAccount_();
-                    if (!account.Defined() || account->empty()) {
-                        continue;
-                    }
-                    Topics[index]->SetDatabase(NKikimr::JoinPath({DbRoot, *account}));
-                    if (!Topics[index]->GetSecondaryPath("").Defined()) {
-                        continue;
-                    }
-                    SecondTryTopics.push_back(index);
-                }
-                index++;
-            }
-            //return true;
-            return SecondTryTopics.empty(); //ToDo - second try topics
+            SecondTryTopics = SelectSecondTryTopics(DbRoot, Topics, Result->ResultSet.size(), [&](size_t index) {
+                const auto status = Result->ResultSet[index].Status;
+                return status == TSchemeCacheNavigate::EStatus::PathErrorUnknown
+                    || status == TSchemeCacheNavigate::EStatus::RootUnknown;
+            });
+            return SecondTryTopics.empty();
         }
         std::shared_ptr<TSchemeCacheNavigate>& GetResult() {
             Y_ABORT_UNLESS(Result != nullptr);

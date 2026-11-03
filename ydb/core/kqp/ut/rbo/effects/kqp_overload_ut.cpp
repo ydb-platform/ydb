@@ -16,19 +16,7 @@ using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
 
-    // FIXME: Restore the TWIN registration below and remove the local Distributed
-    // constant once the distributed branch is fixed. Its TwoShard UPSERT uses an
-    // Int32 literal 1 for a Uint32 key; use 1u (or an explicit Uint32 parameter).
-    // Compilation currently fails before TEvWrite, but DispatchEvents waits only
-    // for a write retry, reaches the 100000-event limit, and crashes on teardown.
-    // Make both dispatch waits stop on a completed query/commit future as well as
-    // the expected retry, report failed futures' issues, and restore the observer
-    // on every exit so its captured locals cannot outlive the test. Before enabling,
-    // verify overload subscription, retry cookies/counts, and successful execution
-    // and commit for both shard layouts with optimizer fallback disabled.
-    // Y_UNIT_TEST_TWIN(OltpOverloaded, Distributed) {
-    Y_UNIT_TEST(OltpOverloaded) {
-        constexpr bool Distributed = false; // Keep the passing single-shard case enabled.
+    Y_UNIT_TEST_TWIN(OltpOverloaded, Distributed) {
         auto settings = TKikimrSettings(NewRboAppConfig())
             .SetEnableScriptExecutionOperations(true)
             .SetUseRealThreads(false);
@@ -54,7 +42,7 @@ Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
             const TString query =
                 Distributed
                 ? R"(
-                    UPSERT INTO `/Root/TwoShard` (Key, Value1) VALUES (1, 'value');
+                    UPSERT INTO `/Root/TwoShard` (Key, Value1) VALUES (1u, 'value');
                     SELECT * FROM `/Root/TwoShard`;
                 )"
                 : R"(
@@ -113,7 +101,8 @@ Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
             };
 
 
-            runtime.SetObserverFunc(grab);
+            auto previousObserver = runtime.SetObserverFunc(grab);
+            Y_DEFER { runtime.SetObserverFunc(previousObserver); };
 
             auto future = kikimr.RunInThreadPool([&]{
                 auto txc = TTxControl::BeginTx(TTxSettings::SerializableRW());
@@ -124,10 +113,14 @@ Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
 
             TDispatchOptions opts;
             opts.FinalEvents.emplace_back([&](IEventHandle&) {
-                return requests >= requestsExpected;
+                return requests >= requestsExpected || future.HasValue() || future.HasException();
             });
             runtime.DispatchEvents(opts);
-            UNIT_ASSERT(requests == requestsExpected);
+            if (future.HasValue() || future.HasException()) {
+                const auto completed = future.GetValueSync();
+                UNIT_ASSERT_C(completed.IsSuccess(), completed.GetIssues().ToString());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(requests, requestsExpected);
             UNIT_ASSERT(!blockResults);
             UNIT_ASSERT(overloadSeqNo > 0);
 
@@ -144,8 +137,16 @@ Y_UNIT_TEST_SUITE(KqpOverloadNewRbo) {
                 return tx->Commit().GetValueSync();
             });
 
-            runtime.DispatchEvents(opts);
-            UNIT_ASSERT(requests == requestsExpected);
+            TDispatchOptions commitOpts;
+            commitOpts.FinalEvents.emplace_back([&](IEventHandle&) {
+                return requests >= requestsExpected || commitFuture.HasValue() || commitFuture.HasException();
+            });
+            runtime.DispatchEvents(commitOpts);
+            if (commitFuture.HasValue() || commitFuture.HasException()) {
+                const auto completed = commitFuture.GetValueSync();
+                UNIT_ASSERT_C(completed.IsSuccess(), completed.GetIssues().ToString());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(requests, requestsExpected);
             UNIT_ASSERT(!blockResults);
             UNIT_ASSERT(overloadSeqNo > 0);
 

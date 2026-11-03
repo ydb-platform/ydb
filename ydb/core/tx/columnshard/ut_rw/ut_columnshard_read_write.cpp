@@ -2618,6 +2618,87 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
     }
 
+    Y_UNIT_TEST(ForcedCompactionActualizesSchema) {
+        // ALTER TABLE ... COMPACT WITH (CASCADE = true) on a column table: besides compacting, every portion is
+        // rewritten to the latest schema even though SCHEME_NEED_ACTUALIZATION is not set, and the shard replies
+        // OK only once all of those rewrites have finished.
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        csControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+        {
+            TDispatchOptions options;
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+            runtime.DispatchEvents(options);
+        }
+
+        const ui64 tableId = 1;
+        auto schema = TTestSchema::YdbSchema();
+        auto pk = TTestSchema::YdbPkSchema();
+        auto specials = TTestSchema::TTableSpecials().WithForcedCompaction(true);   // standalone + tiling++
+        Y_UNUSED(SetupSchema(runtime, sender, TTestSchema::CreateStandaloneTableTxBody(tableId, schema, pk, specials), /*txId=*/10));
+
+        ui64 writeId = 0;
+        ui64 txId = 100;
+        const TString data = MakeTestBlob({ 0, 75 * 1000 }, schema);
+        for (ui32 i = 0; i < 3; ++i, ++txId) {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, data, schema, true, &writeIds));
+            auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        // Drives the background loop (see ForcedCompactionHeldUntilNoIntersections) until the shard replies.
+        const auto waitCompactionResult = [&]() {
+            TEvDataShard::TEvCompactTableResult::TPtr ev;
+            for (int i = 0; i < 120 && !ev; ++i) {
+                ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new NColumnShard::TEvPrivate::TEvPeriodicWakeup(true));
+                runtime.SimulateSleep(TDuration::Seconds(1));
+                ev = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1));
+            }
+            UNIT_ASSERT(ev);
+            return ev->Get()->Record.GetStatus();
+        };
+
+        // Plain forced compaction: every portion settles into the last level with schema version 1.
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, tableId));
+        UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+
+        // A new schema version (an extra column) without SCHEME_NEED_ACTUALIZATION: the portions keep version 1.
+        auto schemaV2 = schema;
+        schemaV2.emplace_back("extra", TTypeInfo(NTypeIds::Uint64));
+        {
+            NKikimrTxColumnShard::TSchemaTxBody tx;
+            UNIT_ASSERT(tx.ParseFromString(TTestSchema::AlterTableTxBody(tableId, /*standalone=*/true, 2, schemaV2, pk, specials)));
+            tx.MutableAlterTable()->MutableSchema()->SetVersion(2);
+            Y_UNUSED(SetupSchema(runtime, sender, tx.SerializeAsString(), ++txId));
+        }
+        const i64 ttlStartedBefore = csControllerGuard->GetTTLStartedCounter().Val();
+
+        // Without CASCADE nothing is rewritten: there are no intersections, so the request completes at once.
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(/*ownerId=*/1, tableId));
+        UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        UNIT_ASSERT_VALUES_EQUAL(csControllerGuard->GetTTLStartedCounter().Val(), ttlStartedBefore);
+
+        // With CASCADE the portions are rewritten (actualization tasks are TTL changes) and the reply is sent only
+        // after the last of them has finished; the counters are sampled at the moment the reply leaves the shard.
+        std::optional<std::pair<i64, i64>> ttlCountersOnReply;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvCompactTableResult>([&](TEvDataShard::TEvCompactTableResult::TPtr&) {
+            ttlCountersOnReply = { csControllerGuard->GetTTLStartedCounter().Val(), csControllerGuard->GetTTLFinishedCounter().Val() };
+        });
+        auto request = std::make_unique<TEvDataShard::TEvCompactTable>(/*ownerId=*/1, tableId);
+        request->Record.SetActualizeSchema(true);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, request.release());
+        UNIT_ASSERT_VALUES_EQUAL(waitCompactionResult(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        UNIT_ASSERT(ttlCountersOnReply);
+        UNIT_ASSERT_GT(ttlCountersOnReply->first, ttlStartedBefore);
+        UNIT_ASSERT_VALUES_EQUAL(ttlCountersOnReply->first, ttlCountersOnReply->second);
+    }
+
     Y_UNIT_TEST(WriteReadDuplicate) {
         TestWriteReadDup();
     }

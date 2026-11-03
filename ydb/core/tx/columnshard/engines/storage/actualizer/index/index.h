@@ -40,6 +40,8 @@ public:
 
     void RefreshTiering(const std::optional<TTiering>& info, const TAddExternalContext& context);
     void RefreshScheme(const TAddExternalContext& context);
+    void ForceSchemeActualization(const TAddExternalContext& context);
+    bool IsSchemeActualized(const THashMap<ui64, TPortionInfo::TPtr>& portions) const;
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TAddExternalContext& context);
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion);

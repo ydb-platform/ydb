@@ -549,11 +549,13 @@ private:
 
     // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
     // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends
-    // TEvCompactTable. Each waiter is answered with OK once the table has no intersecting portions.
+    // TEvCompactTable. Each waiter is answered with OK once the table has no intersecting portions (and,
+    // with ActualizeSchema, once every portion has been rewritten to the latest schema).
     struct TForcedCompactionWaiter {
         TActorId Sender;
         ui64 Cookie = 0;
         TPathId SchemePathId;
+        bool ActualizeSchema = false;
     };
 
     THashMap<TInternalPathId, std::vector<TForcedCompactionWaiter>> ForcedCompactionWaiters;

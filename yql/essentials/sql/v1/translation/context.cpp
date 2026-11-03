@@ -422,7 +422,7 @@ bool TContext::IsDynamicCluster(const TDeferredAtom& cluster) const {
 
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     if (arg.Defined()) {
-        if (*arg == YtProviderName || *arg == KikimrProviderName || *arg == RtmrProviderName)
+        if (*arg == YtProviderName || *arg == KikimrProviderName)
         {
             ProviderPathPrefixes_[*arg] = value;
             return true;

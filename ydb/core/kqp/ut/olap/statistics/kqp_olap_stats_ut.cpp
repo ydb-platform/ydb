@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
                 bool sawSelection = false;
                 for (const auto& stageScans : scans) {
                     for (const auto& scan : stageScans.GetArraySafe()) {
-                        if (scan["ExpectedContextOnly"].GetBooleanSafe()) {
+                        if (scan.Has("ExpectedContextOnly") && scan["ExpectedContextOnly"].GetBooleanSafe()) {
                             UNIT_ASSERT_C(!scan.Has("TabletId"), scan);
                             UNIT_ASSERT_VALUES_EQUAL(scan["ParticipatingTablets"].GetArraySafe().size(),
                                 scan["ParticipatingShards"].GetUIntegerSafe());

@@ -1,4 +1,4 @@
-#include "kqp_operator.h"
+#include "../kqp_operator.h"
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 

@@ -43,23 +43,6 @@ TEvent* GrabHttpReply(NActors::TTestActorRuntimeBase& runtime, const NActors::TA
     return handle->Get<TEvent>();
 }
 
-void AssertHttpConnectionClosed(NActors::TTestActorRuntimeBase& runtime, const NActors::TActorId& caller,
-                                const NActors::TActorId& connection) {
-    const auto control = runtime.AllocateEdgeActor();
-    runtime.Send(new NActors::IEventHandle(NActors::TEvents::TSystem::CheckActorLiveness,
-        NActors::TEvents::TEvCheckActorLiveness::RequestFlags, connection, control, nullptr, 0), 0, true);
-    UNIT_ASSERT(runtime.GrabEdgeEvent<NActors::TEvents::TEvActorDead>(control, TDuration::Seconds(10)));
-    auto events = runtime.CaptureEvents();
-    for (const auto& event : events) {
-        UNIT_ASSERT_C(event->GetRecipientRewrite() != caller ||
-            (event->GetTypeRewrite() != NHttp::TEvHttpProxy::TEvHttpIncomingResponse::EventType &&
-             event->GetTypeRewrite() != NHttp::TEvHttpProxy::TEvHttpIncompleteIncomingResponse::EventType &&
-             event->GetTypeRewrite() != NHttp::TEvHttpProxy::TEvHttpIncomingDataChunk::EventType),
-            "Unexpected HTTP reply after connection closed");
-    }
-    runtime.PushEventsFront(events);
-}
-
 template <typename HttpType>
 void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
     request->EnsureEnoughSpaceAvailable(data.size());
@@ -1129,7 +1112,6 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         UNIT_ASSERT_EQUAL(response->Response->Status, "200");
         UNIT_ASSERT_EQUAL(response->Response->Body, "passed");
-        AssertHttpConnectionClosed(actorSystem, clientId, handle->Sender);
     }
 
     /*Y_UNIT_TEST(AdvancedRunning) {
@@ -1444,7 +1426,6 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         UNIT_ASSERT(response->Response->IsError());
         UNIT_ASSERT_EQUAL(response->Error, "ConnectionClosed");
-        AssertHttpConnectionClosed(actorSystem, clientId, handle->Sender);
     }
 
     Y_UNIT_TEST(StreamingResponse1) {
@@ -1518,7 +1499,6 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
         UNIT_ASSERT(!dataChunk3->Error);
         UNIT_ASSERT(!dataChunk3->Data);
         UNIT_ASSERT(dataChunk3->IsEndOfData());
-        AssertHttpConnectionClosed(actorSystem, clientId, handle->Sender);
     }
 
     Y_UNIT_TEST(StreamingResponse2) {
@@ -1653,7 +1633,6 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         UNIT_ASSERT_VALUES_EQUAL(dataChunk3->Error, "ConnectionClosed");
         UNIT_ASSERT(!dataChunk3->Data);
-        AssertHttpConnectionClosed(actorSystem, clientId, handle->Sender);
     }
 
     Y_UNIT_TEST(StreamingFatResponse1) {

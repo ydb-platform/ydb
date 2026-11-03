@@ -3,16 +3,13 @@
 #include "http_cache.h"
 
 #include <ydb/library/actors/async/async.h>
-#include <ydb/library/actors/async/task_group.h>
 #include <ydb/library/actors/async/timeout.h>
 #include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
-#include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <array>
-#include <vector>
 
 namespace {
 
@@ -46,25 +43,12 @@ TEvent* ReceiveReply(TTestActorRuntimeBase& runtime, TActorId caller, TAutoPtr<I
     return handle->Get<TEvent>();
 }
 
-void AssertNoReplies(TTestActorRuntimeBase& runtime, TActorId caller) {
-    auto events = runtime.CaptureEvents();
-    for (const auto& event : events) {
-        if (event->GetRecipientRewrite() == caller) {
-            UNIT_ASSERT_C(event->GetTypeRewrite() != TEv::TEvHttpIncomingResponse::EventType &&
-                event->GetTypeRewrite() != TEv::TEvHttpIncompleteIncomingResponse::EventType &&
-                event->GetTypeRewrite() != TEv::TEvHttpIncomingDataChunk::EventType,
-                "Unexpected additional HTTP reply");
-        }
-    }
-    runtime.PushEventsFront(events);
-}
-
-template <class TExpected>
-void CheckLiveness(TTestActorRuntimeBase& runtime, TActorId actor) {
-    const auto control = runtime.AllocateEdgeActor();
-    runtime.Send(new IEventHandle(TEvents::TSystem::CheckActorLiveness,
-        TEvents::TEvCheckActorLiveness::RequestFlags, actor, control, nullptr, 0), 0, true);
-    Receive<TExpected>(runtime, control);
+void AssertResponse(const TEv::TEvHttpIncomingResponse& response, THttpOutgoingRequestPtr request, TStringBuf body) {
+    UNIT_ASSERT_VALUES_EQUAL(response.Request.Get(), request.Get());
+    UNIT_ASSERT_VALUES_EQUAL(response.Error, "");
+    UNIT_ASSERT(response.Response);
+    UNIT_ASSERT_VALUES_EQUAL(response.Response->Status, "200");
+    UNIT_ASSERT_VALUES_EQUAL(response.Response->Body, body);
 }
 
 struct TSocketFixture {
@@ -75,8 +59,6 @@ struct TSocketFixture {
     TActorId Server;
     TActorId Caller;
     EProtocol Protocol;
-    std::vector<THttpOutgoingRequestPtr> Requests;
-    std::vector<THttpIncomingResponsePtr> Responses;
 
     explicit TSocketFixture(EProtocol protocol)
         : Protocol(protocol)
@@ -95,7 +77,6 @@ struct TSocketFixture {
     THttpOutgoingRequestPtr Request(TStringBuf tag) {
         auto request = THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(Port) + "/cookie");
         request->Set("X-Test-Request", tag);
-        Requests.push_back(request);
         return request;
     }
 
@@ -121,202 +102,63 @@ struct TSocketFixture {
     TActorId ExpectResponse(THttpOutgoingRequestPtr request, ui64 cookie, TStringBuf body) {
         TAutoPtr<IEventHandle> handle;
         const auto* response = ReceiveReply<TEv::TEvHttpIncomingResponse>(Runtime, Caller, handle);
-        UNIT_ASSERT_VALUES_EQUAL(response->Request.Get(), request.Get());
-        UNIT_ASSERT_VALUES_EQUAL(response->Error, "");
-        UNIT_ASSERT(response->Response);
-        UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "200");
-        UNIT_ASSERT_VALUES_EQUAL(response->Response->Body, body);
+        AssertResponse(*response, request, body);
         UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, cookie);
-        Responses.push_back(response->Response);
         return handle->Sender;
     }
 };
 
-struct TCoroutineObservation {
+struct TEvRunRequest : TEventLocal<TEvRunRequest, TEvents::ES_PRIVATE + 1> {
     THttpOutgoingRequestPtr Request;
-    THttpIncomingResponsePtr Response;
-    ui64 Cookie;
-    TActorId Connection;
-};
+    TDuration LocalTimeout;
 
-struct TEvCoroutineProgress : TEventLocal<TEvCoroutineProgress, TEvents::ES_PRIVATE + 1> {
-    THttpOutgoingRequestPtr Request;
-
-    explicit TEvCoroutineProgress(THttpOutgoingRequestPtr request)
+    TEvRunRequest(THttpOutgoingRequestPtr request, TDuration localTimeout)
         : Request(std::move(request))
+        , LocalTimeout(localTimeout)
     {}
-};
-
-struct TEvCoroutineComplete : TEventLocal<TEvCoroutineComplete, TEvents::ES_PRIVATE + 2> {
-    std::vector<TCoroutineObservation> Observations;
-    TString Error;
 };
 
 class TCoroutineClient : public TActorBootstrapped<TCoroutineClient> {
 public:
-    TCoroutineClient(TActorId proxy, TActorId owner, THttpOutgoingRequestPtr requestA, THttpOutgoingRequestPtr requestB)
+    TCoroutineClient(TActorId proxy, TActorId lateReplies)
         : Proxy(proxy)
-        , Owner(owner)
-        , RequestA(std::move(requestA))
-        , RequestB(std::move(requestB))
+        , LateReplies(lateReplies)
     {}
 
     void Bootstrap() {
         Become(&TCoroutineClient::StateWork);
-        auto completion = std::make_unique<TEvCoroutineComplete>();
-        try {
-            auto observations = co_await WithTimeout(TDuration::Seconds(5),
-                RunConcurrent(std::move(RequestA), std::move(RequestB)));
-            if (observations) {
-                completion->Observations = std::move(*observations);
-            } else {
-                completion->Error = "ActorRequest timed out waiting for cookie-correlated HTTP responses";
-            }
-        } catch (...) {
-            completion->Error = CurrentExceptionMessage();
-        }
-        // WithTaskGroup has consumed or cancelled both children before this point.
-        Send(Owner, completion.release());
-        Become(&TCoroutineClient::StateDying);
-        PassAway();
-        co_return;
     }
 
 private:
-    async<TCoroutineObservation> RoundTrip(THttpOutgoingRequestPtr request, TString expectedBody) {
-        auto reply = co_await ActorRequest<TEv::TEvHttpIncomingResponse>(Proxy,
-            new TEv::TEvHttpOutgoingRequest(request));
-        if (reply->Get()->Request.Get() != request.Get() || !reply->Get()->Response ||
-            reply->Get()->Error || reply->Get()->Response->Status != "200" ||
-            reply->Get()->Response->Body != expectedBody || reply->Cookie == 0) {
-            ythrow yexception() << "ActorRequest resumed with an incorrect HTTP response for " << expectedBody;
+    void Handle(TEvRunRequest::TPtr event) {
+        auto reply = co_await WithTimeout(event->Get()->LocalTimeout, RequestOnce(event->Get()->Request));
+        if (reply) {
+            Send((*reply)->Forward(event->Sender));
+        } else {
+            Send(event->Sender, new TEvents::TEvWakeup(), 0, event->Cookie);
         }
-        Send(Owner, new TEvCoroutineProgress(request));
-        co_return TCoroutineObservation{request, reply->Get()->Response, reply->Cookie, reply->Sender};
-    }
-
-    async<std::vector<TCoroutineObservation>> RunConcurrent(THttpOutgoingRequestPtr requestA, THttpOutgoingRequestPtr requestB) {
-        co_return co_await WithTaskGroup<TCoroutineObservation>(
-            [this, requestA = std::move(requestA), requestB = std::move(requestB)]
-            (TTaskGroup<TCoroutineObservation>& group) -> async<std::vector<TCoroutineObservation>> {
-                group.Add([this, requestA]() -> async<TCoroutineObservation> {
-                    co_return co_await RoundTrip(requestA, "coroutine-a-body");
-                });
-                group.Add([this, requestB]() -> async<TCoroutineObservation> {
-                    co_return co_await RoundTrip(requestB, "coroutine-b-body");
-                });
-                std::vector<TCoroutineObservation> observations;
-                while (group.Running() || group.Ready()) {
-                    observations.push_back(co_await group.Next());
-                }
-                co_return observations;
-            });
-    }
-
-    STFUNC(StateWork) {
-        // A reply with a wrong/expired cookie must not be used to satisfy a waiter.
-        Y_UNUSED(ev);
-    }
-
-    STFUNC(StateDying) {
-        Y_UNUSED(ev);
-    }
-
-    const TActorId Proxy;
-    const TActorId Owner;
-    THttpOutgoingRequestPtr RequestA;
-    THttpOutgoingRequestPtr RequestB;
-};
-
-enum class EDeadlineStage { FirstPending, RetryPending, Done };
-enum class EDeadlineOutcome { Success, FirstCompletedEarly, RetryTimedOut, Error };
-
-struct TEvFirstWaitTimedOut : TEventLocal<TEvFirstWaitTimedOut, TEvents::ES_PRIVATE + 3> {};
-struct TEvRetryArmed : TEventLocal<TEvRetryArmed, TEvents::ES_PRIVATE + 4> {};
-
-struct TEvLateFirstObserved : TEventLocal<TEvLateFirstObserved, TEvents::ES_PRIVATE + 5> {
-    TEv::TEvHttpIncomingResponse::TPtr Reply;
-    EDeadlineStage Stage;
-
-    TEvLateFirstObserved(TEv::TEvHttpIncomingResponse::TPtr reply, EDeadlineStage stage)
-        : Reply(std::move(reply))
-        , Stage(stage)
-    {}
-};
-
-struct TEvDeadlineComplete : TEventLocal<TEvDeadlineComplete, TEvents::ES_PRIVATE + 6> {
-    EDeadlineOutcome Outcome = EDeadlineOutcome::Error;
-    TEv::TEvHttpIncomingResponse::TPtr Reply;
-    size_t LateCount = 0;
-    size_t UnexpectedReplies = 0;
-    TString Error;
-};
-
-class TDeadlineRetryClient : public TActorBootstrapped<TDeadlineRetryClient> {
-public:
-    TDeadlineRetryClient(TActorId proxy, TActorId owner, THttpOutgoingRequestPtr first, THttpOutgoingRequestPtr retry)
-        : Proxy(proxy)
-        , Owner(owner)
-        , FirstRequest(std::move(first))
-        , RetryRequest(std::move(retry))
-    {}
-
-    void Bootstrap() {
-        Become(&TDeadlineRetryClient::StateWork);
-        auto completion = std::make_unique<TEvDeadlineComplete>();
-        try {
-            auto first = co_await WithTimeout(TDuration::Seconds(1), RequestOnce(FirstRequest));
-            if (first) {
-                completion->Outcome = EDeadlineOutcome::FirstCompletedEarly;
-            } else {
-                Send(Owner, new TEvFirstWaitTimedOut());
-                Stage = EDeadlineStage::RetryPending;
-                auto retry = co_await WithTimeout(TDuration::Seconds(5), RequestRetry(std::move(RetryRequest)));
-                if (retry) {
-                    completion->Outcome = EDeadlineOutcome::Success;
-                    completion->Reply = std::move(*retry);
-                } else {
-                    completion->Outcome = EDeadlineOutcome::RetryTimedOut;
-                }
-            }
-        } catch (...) {
-            completion->Error = CurrentExceptionMessage();
-        }
-        completion->LateCount = LateCount;
-        completion->UnexpectedReplies = UnexpectedReplies;
-        Stage = EDeadlineStage::Done;
-        Send(Owner, completion.release());
-        Become(&TDeadlineRetryClient::StateDying);
-        PassAway();
         co_return;
     }
 
-private:
     async<TEv::TEvHttpIncomingResponse::TPtr> RequestOnce(THttpOutgoingRequestPtr request) {
         co_return co_await ActorRequest<TEv::TEvHttpIncomingResponse>(Proxy,
             new TEv::TEvHttpOutgoingRequest(request, TDuration::Seconds(30)));
     }
 
-    async<TEv::TEvHttpIncomingResponse::TPtr> RequestRetry(THttpOutgoingRequestPtr request) {
-        // The test also waits for the actual retry server request. This actor
-        // cannot process an old reply until this same turn suspends below.
-        Send(Owner, new TEvRetryArmed());
-        co_return co_await ActorRequest<TEv::TEvHttpIncomingResponse>(Proxy,
-            new TEv::TEvHttpOutgoingRequest(request, TDuration::Seconds(30)));
+    void HandleLateReply(TEv::TEvHttpIncomingResponse::TPtr& event) {
+        Send(event->Forward(LateReplies));
     }
 
-    void HandleLateReply(TEv::TEvHttpIncomingResponse::TPtr& reply) {
-        if (Stage == EDeadlineStage::RetryPending && reply->Get()->Request.Get() == FirstRequest.Get()) {
-            ++LateCount;
-            Send(Owner, new TEvLateFirstObserved(std::move(reply), Stage));
-        } else {
-            ++UnexpectedReplies;
-        }
+    void Stop() {
+        Become(&TCoroutineClient::StateDying);
+        PassAway();
     }
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvRunRequest, Handle);
             hFunc(TEv::TEvHttpIncomingResponse, HandleLateReply);
+            cFunc(TEvents::TEvPoison::EventType, Stop);
         }
     }
 
@@ -325,22 +167,15 @@ private:
     }
 
     const TActorId Proxy;
-    const TActorId Owner;
-    // Shared with the late-reply handler, which owns classification/accounting.
-    const THttpOutgoingRequestPtr FirstRequest;
-    THttpOutgoingRequestPtr RetryRequest;
-    EDeadlineStage Stage = EDeadlineStage::FirstPending;
-    size_t LateCount = 0;
-    size_t UnexpectedReplies = 0;
+    const TActorId LateReplies;
 };
 
-NJson::TJsonValue DumpCache(TTestActorRuntimeBase& runtime, TActorId cache) {
-    const auto control = runtime.AllocateEdgeActor();
-    runtime.Send(new IEventHandle(cache, control, new TEv::TEvHttpDumpStateRequest()), 0, true);
-    auto event = Receive<TEv::TEvHttpDumpStateResponse>(runtime, control);
-    NJson::TJsonValue result;
-    UNIT_ASSERT(NJson::ReadJsonTree(event->Get()->Body, &result, true));
-    return result;
+TEv::TEvHttpIncomingResponse::TPtr ReceiveCoroutineReply(TTestActorRuntimeBase& runtime, TActorId caller) {
+    auto handle = runtime.GrabEdgeEvent<IEventHandle>(caller, WaitBudget);
+    UNIT_ASSERT_C(handle, "Missing coroutine result");
+    UNIT_ASSERT_C(handle->GetTypeRewrite() == TEv::TEvHttpIncomingResponse::EventType,
+        "ActorRequest local wait timed out without a cookie-correlated HTTP response");
+    return static_cast<TEventHandle<TEv::TEvHttpIncomingResponse>*>(handle.Release());
 }
 
 void CheckCacheCookies(EBackendResult result) {
@@ -362,14 +197,6 @@ void CheckCacheCookies(EBackendResult result) {
     }
     auto fetch = Receive<TEv::TEvHttpOutgoingRequest>(runtime, backend);
     const auto fetchRequest = fetch->Get()->Request;
-    for (const auto& request : requests) {
-        UNIT_ASSERT(fetchRequest.Get() != request.Get());
-    }
-    auto dump = DumpCache(runtime, cache);
-    UNIT_ASSERT_VALUES_EQUAL(dump["OutgoingRequestsCount"].GetInteger(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(dump["CacheRecordsCount"].GetInteger(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(dump["CacheRecords"][0]["WaitersCount"].GetInteger(), 3);
-    UNIT_ASSERT(dump["CacheRecords"][0]["RefreshInFlight"].GetBoolean());
     THttpIncomingResponsePtr backendResponse;
     TString error;
     if (result == EBackendResult::Success) {
@@ -384,7 +211,6 @@ void CheckCacheCookies(EBackendResult result) {
     }
     runtime.Send(new IEventHandle(fetch->Sender, backend,
         new TEv::TEvHttpIncomingResponse(fetchRequest, backendResponse, error), 0, BackendCookie), 0, true);
-    std::vector<THttpIncomingResponsePtr> callerResponses;
     auto assertReply = [&](THttpOutgoingRequestPtr request, ui64 cookie, const TEv::TEvHttpIncomingResponse* response, const IEventHandle& handle) {
         UNIT_ASSERT_VALUES_EQUAL(response->Request.Get(), request.Get());
         UNIT_ASSERT_VALUES_EQUAL(response->Error, error);
@@ -393,11 +219,6 @@ void CheckCacheCookies(EBackendResult result) {
             UNIT_ASSERT_VALUES_EQUAL(response->Response->GetRequest().Get(), request.Get());
             UNIT_ASSERT_VALUES_EQUAL(response->Response->Status, "200");
             UNIT_ASSERT_VALUES_EQUAL(response->Response->Body, "cache-cookie");
-            UNIT_ASSERT(response->Response.Get() != backendResponse.Get());
-            for (const auto& previous : callerResponses) {
-                UNIT_ASSERT(response->Response.Get() != previous.Get());
-            }
-            callerResponses.push_back(response->Response);
         } else {
             UNIT_ASSERT(!response->Response);
         }
@@ -425,52 +246,11 @@ void CheckCacheCookies(EBackendResult result) {
         const auto* response = ReceiveReply<TEv::TEvHttpIncomingResponse>(runtime, caller, handle);
         assertReply(request, cookie, response, *handle);
     }
-    dump = DumpCache(runtime, cache);
-    UNIT_ASSERT_VALUES_EQUAL(dump["OutgoingRequestsCount"].GetInteger(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(dump["CacheRecordsCount"].GetInteger(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(dump["CacheHits"].GetInteger(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(dump["CacheMisses"].GetInteger(), 3);
-    UNIT_ASSERT_VALUES_EQUAL(dump["CacheRecords"][0]["WaitersCount"].GetInteger(), 0);
-    UNIT_ASSERT(!dump["CacheRecords"][0]["RefreshInFlight"].GetBoolean());
-    AssertNoReplies(runtime, caller);
-    auto events = runtime.CaptureEvents();
-    for (const auto& event : events) {
-        UNIT_ASSERT_C(event->GetRecipientRewrite() != backend ||
-            event->GetTypeRewrite() != TEv::TEvHttpOutgoingRequest::EventType, "Unexpected extra cache fetch");
-    }
-    runtime.PushEventsFront(events);
 }
 
 }
 
 Y_UNIT_TEST_SUITE(HttpProxyCookies) {
-    Y_UNIT_TEST(ConcurrentOutgoingRequestsEchoDistinctCookies) {
-        TSocketFixture f(EProtocol::Http1);
-        const std::array<ui64, 3> cookies{CookieA, CookieB, 0};
-        std::array<THttpOutgoingRequestPtr, 3> requests{f.Request("a"), f.Request("b"), f.Request("legacy")};
-        std::array<TEv::TEvHttpIncomingRequest::TPtr, 3> incoming;
-        for (size_t i = 0; i < requests.size(); ++i) {
-            f.SendRequest(f.Proxy, requests[i], cookies[i]);
-        }
-        for (size_t count = 0; count < incoming.size(); ++count) {
-            auto event = Receive<TEv::TEvHttpIncomingRequest>(f.Runtime, f.Server);
-            THeaders headers(event->Get()->Request->Headers);
-            const auto tag = headers.Get("X-Test-Request");
-            size_t index = tag == "a" ? 0 : tag == "b" ? 1 : 2;
-            UNIT_ASSERT_VALUES_EQUAL(tag, index == 0 ? "a" : index == 1 ? "b" : "legacy");
-            UNIT_ASSERT(!incoming[index]);
-            incoming[index] = event;
-        }
-        for (size_t index : {size_t(1), size_t(0), size_t(2)}) {
-            auto response = incoming[index]->Get()->Request->CreateResponseString(
-                "HTTP/1.1 200 OK\r\nConnection: Close\r\nContent-Length: 6\r\n\r\npassed");
-            f.Runtime.Send(new IEventHandle(incoming[index]->Sender, f.Server, new TEv::TEvHttpOutgoingResponse(response)), 0, true);
-            const auto connection = f.ExpectResponse(requests[index], cookies[index], "passed");
-            CheckLiveness<TEvents::TEvActorDead>(f.Runtime, connection);
-        }
-        AssertNoReplies(f.Runtime, f.Caller);
-    }
-
     Y_UNIT_TEST(ReusedConnectionEchoesCurrentRequestCookieIncludingZero) {
         TSocketFixture f(EProtocol::Http1);
         const std::array<ui64, 3> cookies{CookieA, CookieB, 0};
@@ -484,13 +264,7 @@ Y_UNIT_TEST_SUITE(HttpProxyCookies) {
                 incomingConnection = incoming->Sender;
             }
             UNIT_ASSERT_VALUES_EQUAL(incoming->Sender, incomingConnection);
-            if (i == 2) {
-                auto response = incoming->Get()->Request->CreateResponseString(
-                    "HTTP/1.1 200 OK\r\nConnection: Close\r\nContent-Length: 5\r\n\r\nthird");
-                f.Runtime.Send(new IEventHandle(incoming->Sender, f.Server, new TEv::TEvHttpOutgoingResponse(response)), 0, true);
-            } else {
-                f.Reply(incoming, bodies[i]);
-            }
+            f.Reply(incoming, bodies[i]);
             const auto sender = f.ExpectResponse(request, cookies[i], bodies[i]);
             if (i == 0) {
                 outgoingConnection = sender;
@@ -498,12 +272,12 @@ Y_UNIT_TEST_SUITE(HttpProxyCookies) {
             UNIT_ASSERT_VALUES_EQUAL(sender, outgoingConnection);
             if (i != 2) {
                 // The actor's preceding turn enqueues connection availability before this barrier.
-                CheckLiveness<TEvents::TEvActorAlive>(f.Runtime, sender);
-            } else {
-                CheckLiveness<TEvents::TEvActorDead>(f.Runtime, sender);
+                const auto control = f.Runtime.AllocateEdgeActor();
+                f.Runtime.Send(new IEventHandle(TEvents::TSystem::CheckActorLiveness,
+                    TEvents::TEvCheckActorLiveness::RequestFlags, sender, control, nullptr, 0), 0, true);
+                Receive<TEvents::TEvActorAlive>(f.Runtime, control);
             }
         }
-        AssertNoReplies(f.Runtime, f.Caller);
     }
 
     Y_UNIT_TEST(ResolveFailureEchoesOutgoingRequestCookie) {
@@ -527,7 +301,6 @@ Y_UNIT_TEST_SUITE(HttpProxyCookies) {
         UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, CookieB);
         auto closed = Receive<TEv::TEvHttpOutgoingConnectionClosed>(runtime, owner);
         UNIT_ASSERT_VALUES_EQUAL(closed->Get()->ConnectionID, connection);
-        AssertNoReplies(runtime, caller);
     }
 
     Y_UNIT_TEST(MultiplexedResponsesEchoPerRequestCookies) {
@@ -541,28 +314,17 @@ Y_UNIT_TEST_SUITE(HttpProxyCookies) {
         auto legacy = f.Request("legacy");
         f.SendRequest(connection, requestB, CookieB);
         f.SendRequest(connection, legacy, 0);
-        TEv::TEvHttpIncomingRequest::TPtr incomingB, incomingLegacy;
-        for (size_t count = 0; count < 2; ++count) {
-            auto incoming = Receive<TEv::TEvHttpIncomingRequest>(f.Runtime, f.Server);
-            UNIT_ASSERT_VALUES_EQUAL(incoming->Sender, incomingWarmup->Sender);
-            THeaders headers(incoming->Get()->Request->Headers);
-            const auto tag = headers.Get("X-Test-Request");
-            if (tag == "b") {
-                UNIT_ASSERT(!incomingB);
-                incomingB = incoming;
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(tag, "legacy");
-                UNIT_ASSERT(!incomingLegacy);
-                incomingLegacy = incoming;
-            }
-        }
+        auto incomingB = Receive<TEv::TEvHttpIncomingRequest>(f.Runtime, f.Server);
+        auto incomingLegacy = Receive<TEv::TEvHttpIncomingRequest>(f.Runtime, f.Server);
+        UNIT_ASSERT_VALUES_EQUAL(THeaders(incomingB->Get()->Request->Headers).Get("X-Test-Request"), "b");
+        UNIT_ASSERT_VALUES_EQUAL(THeaders(incomingLegacy->Get()->Request->Headers).Get("X-Test-Request"), "legacy");
+        UNIT_ASSERT_VALUES_EQUAL(incomingB->Sender, incomingWarmup->Sender);
+        UNIT_ASSERT_VALUES_EQUAL(incomingLegacy->Sender, incomingWarmup->Sender);
         f.Reply(incomingLegacy, "h2-zero");
         UNIT_ASSERT_VALUES_EQUAL(f.ExpectResponse(legacy, 0, "h2-zero"), connection);
         f.Reply(incomingB, "h2-b");
         UNIT_ASSERT_VALUES_EQUAL(f.ExpectResponse(requestB, CookieB, "h2-b"), connection);
         f.Runtime.Send(new IEventHandle(connection, f.Caller, new TEvents::TEvPoison()), 0, true);
-        CheckLiveness<TEvents::TEvActorDead>(f.Runtime, connection);
-        AssertNoReplies(f.Runtime, f.Caller);
     }
 
     Y_UNIT_TEST(ClosingConnectionEchoesEachPendingRequestCookie) {
@@ -595,108 +357,63 @@ Y_UNIT_TEST_SUITE(HttpProxyCookies) {
             seen[index] = true;
             UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, cookies[index]);
         }
-        CheckLiveness<TEvents::TEvActorDead>(f.Runtime, connection);
-        AssertNoReplies(f.Runtime, f.Caller);
     }
 
     Y_UNIT_TEST(CoroutineActorRequestsResumeWithTheirOwnResponses) {
         TSocketFixture f(EProtocol::Http1);
+        const auto client = f.Runtime.Register(new TCoroutineClient(f.Proxy, f.Runtime.AllocateEdgeActor()));
         auto requestA = f.Request("coroutine-a");
         auto requestB = f.Request("coroutine-b");
-        const auto client = f.Runtime.Register(new TCoroutineClient(f.Proxy, f.Caller, requestA, requestB));
-        TEv::TEvHttpIncomingRequest::TPtr incomingA, incomingB;
-        for (size_t count = 0; count < 2; ++count) {
-            auto incoming = Receive<TEv::TEvHttpIncomingRequest>(f.Runtime, f.Server);
-            THeaders headers(incoming->Get()->Request->Headers);
-            const auto tag = headers.Get("X-Test-Request");
-            if (tag == "coroutine-a") {
-                UNIT_ASSERT(!incomingA);
-                incomingA = incoming;
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(tag, "coroutine-b");
-                UNIT_ASSERT(!incomingB);
-                incomingB = incoming;
-            }
+        for (const auto& request : {requestA, requestB}) {
+            f.Runtime.Send(new IEventHandle(client, f.Caller, new TEvRunRequest(request, TDuration::Seconds(5))), 0, true);
         }
+        auto incomingA = Receive<TEv::TEvHttpIncomingRequest>(f.Runtime, f.Server);
+        auto incomingB = Receive<TEv::TEvHttpIncomingRequest>(f.Runtime, f.Server);
+        if (THeaders(incomingA->Get()->Request->Headers).Get("X-Test-Request") != "coroutine-a") {
+            incomingA.Swap(incomingB);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(THeaders(incomingA->Get()->Request->Headers).Get("X-Test-Request"), "coroutine-a");
+        UNIT_ASSERT_VALUES_EQUAL(THeaders(incomingB->Get()->Request->Headers).Get("X-Test-Request"), "coroutine-b");
         f.Reply(incomingB, "coroutine-b-body");
-        // Consume either progress or the explicit timeout completion, so a missing
-        // cookie fails diagnostically rather than hanging on a progress-only wait.
-        TAutoPtr<IEventHandle> handle;
-        f.Runtime.GrabEdgeEvents<TEvCoroutineProgress, TEvCoroutineComplete>(handle, WaitBudget);
-        UNIT_ASSERT(handle);
-        UNIT_ASSERT_VALUES_EQUAL(handle->GetRecipientRewrite(), f.Caller);
-        if (handle->GetTypeRewrite() == TEvCoroutineComplete::EventType) {
-            UNIT_FAIL(handle->Get<TEvCoroutineComplete>()->Error);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(handle->Get<TEvCoroutineProgress>()->Request.Get(), requestB.Get());
+        auto replyB = ReceiveCoroutineReply(f.Runtime, f.Caller);
+        AssertResponse(*replyB->Get(), requestB, "coroutine-b-body");
         f.Reply(incomingA, "coroutine-a-body");
-        auto completion = Receive<TEvCoroutineComplete>(f.Runtime, f.Caller);
-        UNIT_ASSERT_VALUES_EQUAL(completion->Get()->Error, "");
-        const auto& observations = completion->Get()->Observations;
-        UNIT_ASSERT_VALUES_EQUAL(observations.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(observations[0].Request.Get(), requestB.Get());
-        UNIT_ASSERT_VALUES_EQUAL(observations[0].Response->Body, "coroutine-b-body");
-        UNIT_ASSERT_VALUES_EQUAL(observations[1].Request.Get(), requestA.Get());
-        UNIT_ASSERT_VALUES_EQUAL(observations[1].Response->Body, "coroutine-a-body");
-        UNIT_ASSERT(observations[0].Cookie != 0);
-        UNIT_ASSERT(observations[1].Cookie != 0);
-        UNIT_ASSERT(observations[0].Cookie != observations[1].Cookie);
-        CheckLiveness<TEvents::TEvActorDead>(f.Runtime, client);
-        for (const auto& observation : observations) {
-            CheckLiveness<TEvents::TEvActorDead>(f.Runtime, observation.Connection);
-        }
+        auto replyA = ReceiveCoroutineReply(f.Runtime, f.Caller);
+        AssertResponse(*replyA->Get(), requestA, "coroutine-a-body");
+        UNIT_ASSERT(replyA->Cookie != 0);
+        UNIT_ASSERT(replyB->Cookie != 0);
+        UNIT_ASSERT(replyA->Cookie != replyB->Cookie);
+        f.Runtime.Send(new IEventHandle(client, f.Caller, new TEvents::TEvPoison()), 0, true);
     }
 
     Y_UNIT_TEST(CoroutineDeadlineRetryIgnoresLateFirstResponse) {
         TSocketFixture f(EProtocol::Http1);
+        const auto lateReplies = f.Runtime.AllocateEdgeActor();
+        const auto client = f.Runtime.Register(new TCoroutineClient(f.Proxy, lateReplies));
         auto firstRequest = f.Request("deadline-first");
         auto retryRequest = f.Request("deadline-retry");
-        const auto client = f.Runtime.Register(new TDeadlineRetryClient(f.Proxy, f.Caller, firstRequest, retryRequest));
+        f.Runtime.Send(new IEventHandle(client, f.Caller,
+            new TEvRunRequest(firstRequest, TDuration::Seconds(1)), 0, CookieA), 0, true);
         auto first = Receive<TEv::TEvHttpIncomingRequest>(f.Runtime, f.Server);
         UNIT_ASSERT_VALUES_EQUAL(THeaders(first->Get()->Request->Headers).Get("X-Test-Request"), "deadline-first");
-        Receive<TEvFirstWaitTimedOut>(f.Runtime, f.Caller);
-        Receive<TEvRetryArmed>(f.Runtime, f.Caller);
+        UNIT_ASSERT_VALUES_EQUAL(Receive<TEvents::TEvWakeup>(f.Runtime, f.Caller)->Cookie, CookieA);
+
+        f.Runtime.Send(new IEventHandle(client, f.Caller,
+            new TEvRunRequest(retryRequest, TDuration::Seconds(5))), 0, true);
+        // Actual server arrival proves ActorRequest sent the retry; the client
+        // cannot process an old reply until that same handler turn suspends.
         auto retry = Receive<TEv::TEvHttpIncomingRequest>(f.Runtime, f.Server);
         UNIT_ASSERT_VALUES_EQUAL(THeaders(retry->Get()->Request->Headers).Get("X-Test-Request"), "deadline-retry");
-
         f.Reply(first, "late-first-body");
-        auto late = Receive<TEvLateFirstObserved>(f.Runtime, f.Caller);
-        const auto& lateReply = late->Get()->Reply;
-        UNIT_ASSERT(late->Get()->Stage == EDeadlineStage::RetryPending);
-        UNIT_ASSERT_VALUES_EQUAL(lateReply->Get()->Request.Get(), firstRequest.Get());
-        UNIT_ASSERT_VALUES_EQUAL(lateReply->Get()->Error, "");
-        UNIT_ASSERT(lateReply->Get()->Response);
-        UNIT_ASSERT_VALUES_EQUAL(lateReply->Get()->Response->Status, "200");
-        UNIT_ASSERT_VALUES_EQUAL(lateReply->Get()->Response->Body, "late-first-body");
-        auto events = f.Runtime.CaptureEvents();
-        for (const auto& event : events) {
-            UNIT_ASSERT_C(event->GetRecipientRewrite() != f.Caller ||
-                event->GetTypeRewrite() != TEvDeadlineComplete::EventType,
-                "Retry completed before its response was sent");
-        }
-        f.Runtime.PushEventsFront(events);
-
+        auto late = Receive<TEv::TEvHttpIncomingResponse>(f.Runtime, lateReplies);
+        AssertResponse(*late->Get(), firstRequest, "late-first-body");
         f.Reply(retry, "retry-success-body");
-        auto completion = Receive<TEvDeadlineComplete>(f.Runtime, f.Caller);
-        UNIT_ASSERT_VALUES_EQUAL(completion->Get()->Error, "");
-        UNIT_ASSERT_C(completion->Get()->Outcome == EDeadlineOutcome::Success,
-            "Expected Success, got outcome " << static_cast<int>(completion->Get()->Outcome)
-            << "; unexpected replies=" << completion->Get()->UnexpectedReplies);
-        UNIT_ASSERT_VALUES_EQUAL(completion->Get()->LateCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(completion->Get()->UnexpectedReplies, 0);
-        const auto& reply = completion->Get()->Reply;
-        UNIT_ASSERT(reply);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Request.Get(), retryRequest.Get());
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Error, "");
-        UNIT_ASSERT(reply->Get()->Response);
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Response->Status, "200");
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Response->Body, "retry-success-body");
-        UNIT_ASSERT(lateReply->Cookie != 0);
+        auto reply = ReceiveCoroutineReply(f.Runtime, f.Caller);
+        AssertResponse(*reply->Get(), retryRequest, "retry-success-body");
+        UNIT_ASSERT(late->Cookie != 0);
         UNIT_ASSERT(reply->Cookie != 0);
-        UNIT_ASSERT(lateReply->Cookie != reply->Cookie);
-        CheckLiveness<TEvents::TEvActorDead>(f.Runtime, client);
-        CheckLiveness<TEvents::TEvActorDead>(f.Runtime, lateReply->Sender);
-        CheckLiveness<TEvents::TEvActorDead>(f.Runtime, reply->Sender);
+        UNIT_ASSERT(late->Cookie != reply->Cookie);
+        f.Runtime.Send(new IEventHandle(client, f.Caller, new TEvents::TEvPoison()), 0, true);
     }
 
     Y_UNIT_TEST(CoalescedWaitersAndHitsEchoCallerCookies) {

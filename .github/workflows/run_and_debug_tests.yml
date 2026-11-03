@@ -20,7 +20,7 @@ on:
         description: 'Build preset (single value; match main input name for API dispatch)'
         required: false
         type: string
-        default: 'relwithdebinfo
+        default: 'relwithdebinfo'
       test_size:
         description: 'Test size filter'
         required: false

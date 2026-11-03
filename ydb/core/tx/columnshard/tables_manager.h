@@ -414,10 +414,9 @@ public:
         const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId);
 
     TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tablePath,
+        const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt) const;
+    std::shared_ptr<NOlap::ITableMetadataAccessor> BuildTableMetadataAccessor(const TString& tablePath, const TInternalPathId internalPathId,
         const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt);
-    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tablePath,
-        const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId,
-        const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt);
 
     class TSchemaAddress {
     private:

@@ -204,7 +204,7 @@ do { \
     YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, text, __VA_ARGS__)
 #endif
 
-#define FLOG_LOG_S(actorCtxOrSystem, priority, component, text, ...) YDB_LOG_CTX_COMP_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, text, __VA_ARGS__)
+#define FLOG_LOG_S(actorCtxOrSystem, priority, component, text, ...) FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, text, __VA_ARGS__)
 #define FLOG_DEBUG_S(actorCtxOrSystem, component, text, ...) FLOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, text, __VA_ARGS__)
 
 class TCoordinatorStateActor;

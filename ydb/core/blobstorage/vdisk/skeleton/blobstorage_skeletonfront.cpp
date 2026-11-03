@@ -1032,13 +1032,8 @@ namespace NKikimr {
                             }
                         }
                         {
-<<<<<<< HEAD
-=======
-                            str << "<a class=\"btn btn-default\" href=\"?type=spacereportvisual&force=1\">"
-                                << "VDisk Space Report</a> ";
                             str << "<a class=\"btn btn-default\" href=\"?type=restorepart&amp;GroupId="
                                 << SelfVDiskId.GroupID.GetRawId() << "\">Restore Part</a> ";
->>>>>>> fd1d742399d (Impl EvVRestorePart with /restore_part http handle (#57072))
                             str << "<a class=\"btn btn-default\" href=\"?type=restart\" "
                                 << (
                                     IsVDiskRestartAllowed(VDiskMonGroup.VDiskState())

@@ -12,11 +12,6 @@ namespace NActors {
 struct TExecutorThreadStats;
 struct TExecutorPoolStats;
 struct THarmonizerStats;
-<<<<<<< HEAD
-struct TLogHistogram;
-=======
-struct TAllocationCacheFamilyStats;
->>>>>>> d30455d0745 (actors: drop legacy range histograms from execpool counters (#57977))
 
 struct TActivityStats {
     void Init(NMonitoring::TDynamicCounterPtr group);

@@ -680,6 +680,37 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
     }
 
+    // A JSON path that starts with a quoted key and goes on with a method or a filter is a literal, not a sub-column
+    // path: its value is the same for every row.
+    TString scriptQuotedKeyLiteralPath = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            Col1 Uint64 NOT NULL,
+            Col2 JsonDocument,
+            PRIMARY KEY (Col1)
+        )
+        PARTITION BY HASH(Col1)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1);
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`)
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"a" : "x"}')), (2u, JsonDocument('{"b" : "y"}'))
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_EXISTS(Col2, @@"a".type()@@) ORDER BY Col1;
+        EXPECTED: [[1u];[2u]]
+        ------
+        READ: SELECT Col1 FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, @@"a" ? (@ == "a")@@) = "a" ORDER BY Col1;
+        EXPECTED: [[1u];[2u]]
+
+    )";
+    Y_UNIT_TEST_STRING_VARIATOR(QuotedKeyLiteralPath, scriptQuotedKeyLiteralPath) {
+        Variator::ToExecutor(Variator::SingleScript(__SCRIPT_CONTENT)).Execute();
+    }
+
     TString scriptCompactionVariants = R"(
         STOP_COMPACTION
         ------

@@ -1,11 +1,60 @@
 #include "execution_unit.h"
 #include "execution_unit_ctors.h"
 #include "datashard_impl.h"
+#include "datashard_write_operation.h"
+
+#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
+
+namespace {
+
+bool IsReadOnlyLocksPrepare(const TOperation::TPtr& op, TDataShard& dataShard) {
+    const auto* writeOp = TWriteOperation::TryCastWriteOperation(op);
+    if (!writeOp || op->IsImmediate()) {
+        return false;
+    }
+
+    const auto& writeTx = writeOp->GetWriteTx();
+    if (!writeTx || !writeTx->Ready() || writeTx->HasOperations()) {
+        return false;
+    }
+    const auto& locks = writeTx->GetKqpLocks();
+    if (!locks || locks->GetOp() != NKikimrDataEvents::TKqpLocks::Commit
+        || locks->LocksSize() == 0 || locks->ReceivingShardsSize() == 0) {
+        return false;
+    }
+
+    const ui64 tabletId = dataShard.TabletID();
+    const auto& sendingShards = locks->GetSendingShards();
+    if (std::find(sendingShards.begin(), sendingShards.end(), tabletId) == sendingShards.end()) {
+        return false;
+    }
+
+    const bool allowAncestorLocks = AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+    const auto& sysLocks = dataShard.SysLocksTable();
+    for (const auto& lockProto : locks->GetLocks()) {
+        if (lockProto.GetHasWrites()
+            || (lockProto.GetDataShard() != tabletId && !allowAncestorLocks)) {
+            return false;
+        }
+        const auto lock = sysLocks.GetRawLock(lockProto.GetLockId());
+        if (!lock || lock->IsBroken() || lock->IsWriteLock()
+            || !lock->GetReadTables().contains(TPathId(lockProto.GetSchemeShard(), lockProto.GetPathId()))) {
+            return false;
+        }
+        if (lockProto.GetDataShard() != tabletId
+            && !lock->GetAncestorLocks().contains(lockProto.GetDataShard())) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}
 
 THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
                                             TDataShard &dataShard,
@@ -243,7 +292,12 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         return true;
     }
 
-    if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
+    const bool changesQueueOverflow = !op->IsReadOnly() && DataShard.CheckChangesQueueOverflow();
+    const bool readOnlyLocksCommit = changesQueueOverflow && IsReadOnlyLocksPrepare(op, DataShard);
+    if (readOnlyLocksCommit) {
+        op->SetFlag(TTxFlags::ReadOnlyLocksCommit);
+    }
+    if (changesQueueOverflow && !readOnlyLocksCommit) {
         TString err = TStringBuilder()
                 << "Can't execute at blocked shard: " << " tablet id: " << DataShard.TabletID();
 
@@ -307,7 +361,8 @@ bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
         return true;
     }
 
-    if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()) {
+    if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()
+        && !IsReadOnlyLocksPrepare(op, DataShard)) {
         return true;
     }
 

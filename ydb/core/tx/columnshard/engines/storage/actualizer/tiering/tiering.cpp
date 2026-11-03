@@ -78,7 +78,8 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
             }
         }
         const bool skipEviction = !NYDBTest::TControllers::GetColumnShardController()->CheckPortionForEvict(portion);
-        auto tieringInfo = Tiering->GetTierToMove(max, now, skipEviction);
+        auto tieringInfo = Tiering->GetTierToMove(
+            max, now, skipEviction, portionSchema->GetIndexInfo().GetColumnFeaturesVerified(*TieringColumnId).GetTypeInfo().GetTypeId());
         YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"tieringInfo", tieringInfo.DebugString()});
         std::optional<i64> d;
@@ -88,7 +89,8 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
             d = -1 * tieringInfo.GetCurrentTierLag().GetValue();
             targetTierName = tieringInfo.GetCurrentTierName();
         } else if (tieringInfo.GetNextTierName()) {
-            d = tieringInfo.GetNextTierWaitingVerified().GetValue();
+            // DyNumber can represent dates beyond the signed scheduling range.
+            d = Min<ui64>(tieringInfo.GetNextTierWaitingVerified().GetValue(), Max<i64>());
             targetTierName = tieringInfo.GetNextTierNameVerified();
         }
         if (d) {

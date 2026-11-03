@@ -1,5 +1,4 @@
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
-#include <ydb/core/persqueue/ut/common/raw_read_session.h>
 
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
@@ -146,21 +145,17 @@ namespace NKikimr {
             return session;
         }
 
-        TRawReadSessionSettings RawSettings(bool autoPartitioningSupport, TInstant readFrom) {
-            return {
-                .Topics = {TString{TEST_TOPIC}},
-                .AutoPartitioningSupport = autoPartitioningSupport,
-                .ReadFrom = readFrom,
-            };
+        // StartPartitionSession inserts the partition; EndPartitionSession keeps it in the ended events after the session drops it.
+        bool SessionSawPartition(ITestReadSession& session, ui64 partitionId) {
+            if (session.GetPartitions().contains(partitionId)) {
+                return true;
+            }
+            const std::vector<EvEndMsg> ended = session.GetEndedPartitionEvents();
+            return FindIfPtr(ended, [&](const EvEndMsg& event) { return event.PartitionId == partitionId; }) != nullptr;
         }
 
-        void CommitChildAndCheckSkippedParents(TTopicSdkTestSetup& setup, TRawReadSession& reader) {
-            const TRawReadSession::TMessage child = reader.ReadMessage(TEST_TOPIC, PartitionAfterSecondSplit);
-            UNIT_ASSERT_VALUES_EQUAL(child.Data, "child-4");
-            UNIT_ASSERT_VALUES_EQUAL_C(reader.GetMessages().size(), 1, "read_from must skip every parent message");
-            reader.Commit(child);
-            reader.WaitCommitted(TEST_TOPIC, PartitionAfterSecondSplit, child.Offset + 1);
-            WaitConsumerCommittedOffsets(setup, {{ParentPartition, 1}, {PartitionAfterFirstSplit, 1}, {PartitionAfterSecondSplit, child.Offset + 1}});
+        bool WaitForPartitionSession(ITestReadSession& session, ui64 partitionId) {
+            return WaitFor(TDuration::Seconds(30), [&]() { return SessionSawPartition(session, partitionId); });
         }
 
     } // namespace
@@ -215,29 +210,25 @@ namespace NKikimr {
             reader->Close();
         }
 
-    } // Y_UNIT_TEST_SUITE(SplitReadFromTimestamp)
-
-    Y_UNIT_TEST_SUITE(SplitReadFromTimestampRawStream) {
-
-        Y_UNIT_TEST_TWIN(ChildCommitCommitsSkippedParents, AutoPartitioningSupport) {
-            TTopicSdkTestSetup setup = CreateSplitSetup();
-            const TInstant readFrom = WriteThroughTwoSplits(setup);
-
-            TRawReadSession reader(setup, RawSettings(AutoPartitioningSupport, readFrom));
-            CommitChildAndCheckSkippedParents(setup, reader);
-        }
-
         // The skipped parents are not remembered anywhere between sessions: the next session finds them again.
         Y_UNIT_TEST_TWIN(ChildCommitAfterReconnect, AutoPartitioningSupport) {
             TTopicSdkTestSetup setup = CreateSplitSetup();
             const TInstant readFrom = WriteThroughTwoSplits(setup);
 
             {
-                TRawReadSession reader(setup, RawSettings(AutoPartitioningSupport, readFrom));
-                reader.ReadMessage(TEST_TOPIC, PartitionAfterSecondSplit);
+                std::shared_ptr<ITestReadSession> reader = StartReadSession(setup, AutoPartitioningSupport, false, readFrom);
+                const MsgInfo child = WaitForMessage(*reader, PartitionAfterSecondSplit);
+                UNIT_ASSERT_VALUES_EQUAL(child.Data, "child-4");
+                reader->Close();
             }
-            TRawReadSession reader(setup, RawSettings(AutoPartitioningSupport, readFrom));
-            CommitChildAndCheckSkippedParents(setup, reader);
+
+            std::shared_ptr<ITestReadSession> reader = StartReadSession(setup, AutoPartitioningSupport, true, readFrom);
+            const MsgInfo child = WaitForMessage(*reader, PartitionAfterSecondSplit);
+            UNIT_ASSERT_VALUES_EQUAL(child.Data, "child-4");
+            UNIT_ASSERT_VALUES_EQUAL_C(reader->GetReceivedMessages().size(), 1, DumpMessages(reader->GetReceivedMessages()));
+            WaitCommitAcknowledgement(*reader, PartitionAfterSecondSplit, child.Offset + 1);
+            WaitConsumerCommittedOffsets(setup, {{ParentPartition, 1}, {PartitionAfterFirstSplit, 1}, {PartitionAfterSecondSplit, child.Offset + 1}});
+            reader->Close();
         }
 
         // The reader asks the active parent for data before the split, but read_from filters out its only message.
@@ -246,19 +237,19 @@ namespace NKikimr {
             WriteMessage(setup, "parent-0", 1);
             // Blob write timestamps have second precision.
             Sleep(TDuration::Seconds(1));
-            TRawReadSession reader(setup, RawSettings(AutoPartitioningSupport, TInstant::Now()));
-            reader.WaitPartitionSession(TEST_TOPIC, ParentPartition);
+            std::shared_ptr<ITestReadSession> reader = StartReadSession(setup, AutoPartitioningSupport, true, TInstant::Now());
+            UNIT_ASSERT_C(WaitForPartitionSession(*reader, ParentPartition), "parent partition session did not start");
 
             ui64 txId = 1006;
             SplitPartition(setup, ++txId, ParentPartition, "a");
             WriteToPartition(setup, "child", PartitionAfterFirstSplit);
 
-            const TRawReadSession::TMessage child = reader.ReadMessage(TEST_TOPIC, PartitionAfterFirstSplit);
+            const MsgInfo child = WaitForMessage(*reader, PartitionAfterFirstSplit);
             UNIT_ASSERT_VALUES_EQUAL(child.Data, "child");
-            UNIT_ASSERT_VALUES_EQUAL_C(reader.GetMessages().size(), 1, "read_from must skip the parent message");
-            reader.Commit(child);
-            reader.WaitCommitted(TEST_TOPIC, PartitionAfterFirstSplit, child.Offset + 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(reader->GetReceivedMessages().size(), 1, "read_from must skip the parent message, received [" << DumpMessages(reader->GetReceivedMessages()) << "]");
+            WaitCommitAcknowledgement(*reader, PartitionAfterFirstSplit, child.Offset + 1);
             WaitConsumerCommittedOffsets(setup, {{ParentPartition, 1}, {PartitionAfterFirstSplit, child.Offset + 1}});
+            reader->Close();
         }
 
         // Without auto-partitioning support the children of a skipped parent are balanced on their own,
@@ -273,20 +264,31 @@ namespace NKikimr {
             WriteToPartition(setup, "child-2", 2);
 
             // The explicit partition pins the parent to its own session, the children go to the other one.
-            TRawReadSessionSettings parentSettings = RawSettings(false, readFrom);
-            parentSettings.PartitionIds = {ParentPartition};
-            TRawReadSession parentReader(setup, parentSettings);
-            parentReader.WaitPartitionSession(TEST_TOPIC, ParentPartition);
-            TRawReadSession childReader(setup, RawSettings(false, readFrom));
+            std::shared_ptr<ITestReadSession> parentReader = CreateTestReadSession({
+                .Name = "parent-reader",
+                .Setup = setup,
+                .Sdk = SdkVersion::Topic,
+                .AutoCommit = false,
+                .Partitions = {ParentPartition},
+                .AutoPartitioningSupport = false,
+                .ReadFromTimestamp = readFrom,
+            });
+            parentReader->Run();
+            UNIT_ASSERT_C(WaitForPartitionSession(*parentReader, ParentPartition), "parent partition session did not start");
 
-            childReader.WaitFor([&]() { return !childReader.GetMessages().empty(); }, "a child message");
-            UNIT_ASSERT(!childReader.FindPartitionSession(TEST_TOPIC, ParentPartition));
-            const TRawReadSession::TMessage child = childReader.GetMessages().front();
-            childReader.Commit(child);
-            childReader.WaitCommitted(TEST_TOPIC, child.PartitionId, child.Offset + 1);
+            std::shared_ptr<ITestReadSession> childReader = StartReadSession(setup, false, false, readFrom);
+            std::vector<MsgInfo> received;
+            const bool gotChild = WaitFor(TDuration::Seconds(30), [&]() { received = childReader->GetReceivedMessages(); return !received.empty(); });
+            UNIT_ASSERT_C(gotChild, "no child message, received [" << DumpMessages(received) << "]");
+            UNIT_ASSERT_C(!SessionSawPartition(*childReader, ParentPartition), "child session was given the parent partition");
+            const MsgInfo child = received.front();
+            child.Msg->Commit();
+            WaitCommitAcknowledgement(*childReader, child.PartitionId, child.Offset + 1);
             WaitConsumerCommittedOffsets(setup, {{ParentPartition, 1}, {child.PartitionId, child.Offset + 1}});
+            childReader->Close();
+            parentReader->Close();
         }
 
-    } // Y_UNIT_TEST_SUITE(SplitReadFromTimestampRawStream)
+    } // Y_UNIT_TEST_SUITE(SplitReadFromTimestamp)
 
 } // namespace NKikimr

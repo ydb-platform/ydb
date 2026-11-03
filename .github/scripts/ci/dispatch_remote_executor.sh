@@ -107,43 +107,62 @@ fi
   echo ""
 } >> "${GITHUB_STEP_SUMMARY}"
 
+# Primary: S3 job_summary.md (works same-repo and cross-repo; no GH artifact API).
+wf_name="Run and debug tests"
+base="${AWS_ENDPOINT}/${AWS_BUCKET}/${REPO}/${wf_name}/${run_id}/ya-x86-64"
+base_enc="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=":/"))' "$base")"
+job_summary_url="${base_enc}/job_summary.md"
+
 mirrored=0
 for _ in $(seq 1 20); do
-  arts="$(curl_gh -fsS "${api}/actions/runs/${run_id}/artifacts")"
-  art_id="$(echo "$arts" | jq -r '
-    [.artifacts[] | select(.name=="executor-summary" and .expired==false)][0].id // empty')"
-  if [ -n "$art_id" ]; then
-    echo "Downloading artifact executor-summary id=${art_id}"
-    curl_gh -fsS -L \
-      "${api}/actions/artifacts/${art_id}/zip" \
-      -o /tmp/executor-summary.zip
-    rm -rf /tmp/executor-summary && mkdir -p /tmp/executor-summary
-    if command -v unzip >/dev/null 2>&1; then
-      unzip -qo /tmp/executor-summary.zip -d /tmp/executor-summary
-    else
-      python3 -c 'import zipfile; zipfile.ZipFile("/tmp/executor-summary.zip").extractall("/tmp/executor-summary")'
-    fi
-    summary_file="$(find /tmp/executor-summary -type f | head -1 || true)"
-    if [ -n "$summary_file" ]; then
-      cat "$summary_file" >> "${GITHUB_STEP_SUMMARY}"
+  if curl -fsS "$job_summary_url" -o /tmp/job_summary.md; then
+    if [ -s /tmp/job_summary.md ]; then
+      echo "Mirrored S3 job_summary.md from ${base}/job_summary.md"
+      cat /tmp/job_summary.md >> "${GITHUB_STEP_SUMMARY}"
       mirrored=1
+      break
     fi
-    break
   fi
   sleep 3
 done
 
+# Optional same-repo fallback: GH artifact uploaded from PUBLIC_DIR/job_summary.md.
 if [ "$mirrored" != "1" ]; then
-  echo "Artifact missing — falling back to S3 summary_links"
-  wf_name="Run and debug tests"
-  base="${AWS_ENDPOINT}/${AWS_BUCKET}/${REPO}/${wf_name}/${run_id}/ya-x86-64"
-  base_enc="$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=":/"))' "$base")"
+  echo "S3 job_summary.md missing — trying GH artifact executor-summary"
+  for _ in $(seq 1 10); do
+    arts="$(curl_gh -fsS "${api}/actions/runs/${run_id}/artifacts")"
+    art_id="$(echo "$arts" | jq -r '
+      [.artifacts[] | select(.name=="executor-summary" and .expired==false)][0].id // empty')"
+    if [ -n "$art_id" ]; then
+      echo "Downloading artifact executor-summary id=${art_id}"
+      curl_gh -fsS -L \
+        "${api}/actions/artifacts/${art_id}/zip" \
+        -o /tmp/executor-summary.zip
+      rm -rf /tmp/executor-summary && mkdir -p /tmp/executor-summary
+      if command -v unzip >/dev/null 2>&1; then
+        unzip -qo /tmp/executor-summary.zip -d /tmp/executor-summary
+      else
+        python3 -c 'import zipfile; zipfile.ZipFile("/tmp/executor-summary.zip").extractall("/tmp/executor-summary")'
+      fi
+      summary_file="$(find /tmp/executor-summary -type f | head -1 || true)"
+      if [ -n "$summary_file" ] && [ -s "$summary_file" ]; then
+        cat "$summary_file" >> "${GITHUB_STEP_SUMMARY}"
+        mirrored=1
+      fi
+      break
+    fi
+    sleep 3
+  done
+fi
+
+if [ "$mirrored" != "1" ]; then
+  echo "Falling back to S3 summary_links.txt"
   if curl -fsS "${base_enc}/summary_links.txt" -o /tmp/summary_links.txt; then
     # Format: "00 [Artifacts](url)" -> keep markdown after ordinal.
     awk '{$1=""; sub(/^ /,""); if (NR>1) printf " | "; printf "%s", $0} END{print ""}' \
       /tmp/summary_links.txt >> "${GITHUB_STEP_SUMMARY}"
   else
-    echo "_Could not mirror executor summary (no artifact / S3 links). See executor run._" >> "${GITHUB_STEP_SUMMARY}"
+    echo "_Could not mirror executor summary (no job_summary.md / artifact / links). See executor run._" >> "${GITHUB_STEP_SUMMARY}"
   fi
   echo "" >> "${GITHUB_STEP_SUMMARY}"
   echo "[Open executor run](${run_url}) · [Artifacts index](${base}/index.html)" >> "${GITHUB_STEP_SUMMARY}"

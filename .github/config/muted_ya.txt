@@ -49,6 +49,7 @@ ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerTests.FetchThrottledAtM
 ydb/core/quoter/ut QuoterWithKesusTest.FailsToGetBigQuota
 ydb/core/sys_view/ut AuthSystemView.AuthGroups_Access
 ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
+ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapBeforeSessionStartWithLaterMessageReportsDataLoss
 ydb/core/tx/scheme_board/ut_populator TPopulatorQuorumTest.ColdDeletionWithPathAfterSubscriptionWaitsForReplicaQuorum
 ydb/core/tx/scheme_board/ut_populator TPopulatorQuorumTest.ColdDeletionWithPathWaitsForReplicaQuorum
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
@@ -266,6 +267,7 @@ ydb/tests/fq/multi_plane py3test.[test_retry_high_rate.py] chunk
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping_with_row_dispatcher
 ydb/tests/fq/multi_plane test_retry.py.TestRetry.test_low_rate[kikimr0]
 ydb/tests/fq/multi_plane test_retry_high_rate.py.TestRetry.test_high_rate[kikimr0]
+ydb/tests/fq/s3 test_inflight.py.TestS3.test_inflight[v1-client0-kikimr_params1]
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_increase[local]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[recreate-output-row]

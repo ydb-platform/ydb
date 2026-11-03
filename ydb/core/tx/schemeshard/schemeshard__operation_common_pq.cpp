@@ -633,6 +633,11 @@ bool TPropose::HandleReply(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, 
         return false;
     }
 
+    // A non-completion reply may arrive before ProgressState initializes the pending shards.
+    if (evRecord.GetStatus() != NKikimrPQ::TEvProposeTransactionResult::COMPLETE) {
+        return false;
+    }
+
     const bool collected = CollectPQConfigChanged(OperationId, ev, context);
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 DebugHint() << " HandleReply TEvProposeTransactionResult"
@@ -651,6 +656,11 @@ bool TPropose::HandleReply(TEvDataShard::TEvProposeTransactionAttachResult::TPtr
                << " triggers early"
                << ", at schemeshard: " << ssId
                << " message# " << evRecord.ShortDebugString());
+
+    // A non-completion reply may arrive before ProgressState initializes the pending shards.
+    if (evRecord.GetStatus() != NKikimrProto::NODATA) {
+        return false;
+    }
 
     // A non-completion reply may arrive before ProgressState initializes the pending shards.
     if (evRecord.GetStatus() != NKikimrProto::NODATA) {

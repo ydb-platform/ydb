@@ -1,6 +1,7 @@
 #pragma once
 #include "abstract.h"
 #include "collection.h"
+#include "pattern_hints.h"
 
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
@@ -64,6 +65,12 @@ public:
     virtual bool IsBoolInResult() const = 0;
     std::optional<TIndexCheckOperation> GetIndexCheckerOperation() const {
         return DoGetIndexCheckerOperation();
+    }
+
+    // Index probes implied by this calculation (PatternHint contract). Empty unless the result implies them.
+    virtual const std::vector<TPatternIndexHint>& GetIndexHints() const {
+        static const std::vector<TPatternIndexHint> empty;
+        return empty;
     }
 };
 
@@ -441,4 +448,52 @@ private:
 
 public:
 };
+
+// Metadata for an opaque match kernel (Re2 LIKE/ILIKE apply) whose result implies the stored hints.
+// Execution stays on the original kernel; the hints only feed index checks.
+class TLogicPatternMatch: public IKernelLogic {
+private:
+    std::vector<TPatternIndexHint> Hints;
+
+    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
+        TAccessorsCollection& /*resources*/) const override {
+        return false;
+    }
+
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
+        return std::nullopt;
+    }
+
+    virtual NJson::TJsonValue DoDebugJson() const override;
+
+public:
+    TLogicPatternMatch(std::vector<TPatternIndexHint>&& hints)
+        : Hints(std::move(hints)) {
+    }
+
+    virtual ECalculationHardness GetWeight() const override {
+        return ECalculationHardness::StringMatching;
+    }
+
+    static TString GetClassNameStatic() {
+        return "PATTERN_MATCH";
+    }
+
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
+
+    virtual TString SignalDescription() const override {
+        return GetClassNameStatic();
+    }
+
+    virtual bool IsBoolInResult() const override {
+        return true;
+    }
+
+    virtual const std::vector<TPatternIndexHint>& GetIndexHints() const override {
+        return Hints;
+    }
+};
+
 }   // namespace NKikimr::NArrow::NSSA

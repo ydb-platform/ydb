@@ -574,10 +574,11 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
     }
 
     if (auto lock = Self.SysLocksTable().GetRawLock(lockId); lock && !VolatileCommitOrdered) {
-        lock->ForAllVolatileDependencies([this](ui64 txId) {
-            auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId);
+        lock->ForAllVolatileDependencies([this](ui64 dependencyTxId) {
+            auto& manager = Self.GetVolatileTxManager();
+            auto* info = manager.FindByTxId(dependencyTxId);
             if (info && info->State != EVolatileTxState::Aborting) {
-                if (VolatileDependencies.insert(txId).second) {
+                if (VolatileDependencies.insert(info->TxId).second) {
                     EnsureVolatileTxId();
                 }
             }

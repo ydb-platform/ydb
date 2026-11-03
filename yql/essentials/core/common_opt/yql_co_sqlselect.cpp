@@ -4587,7 +4587,6 @@ TExprNode::TPtr ExpandSqlSelectImpl(
 
     YQL_ENSURE(node->IsCallable({"YqlSelect", "PgSelect"}));
     const bool isYql = node->IsCallable("YqlSelect");
-    const bool isOrderedColumns = !isYql || optCtx.Types->OrderedColumns;
 
     const bool isOneRow = (outerInputAliases.size() == 1 && outerInputAliases[0].empty());
     const bool isExternalInputExist = !outerInputAliases.empty() && !isOneRow;
@@ -4613,8 +4612,6 @@ TExprNode::TPtr ExpandSqlSelectImpl(
 
         columnOrder->Assumption = ctx.NewList(node->Pos(), std::move(columnOrder->Items));
     }
-
-    YQL_ENSURE(!isOrderedColumns || columnOrder, "Column order was required, but absent");
 
     auto setItems = GetSetting(node->Head(), "set_items");
     const auto originalSetItems = GetSetting(originalNode->Head(), "set_items");
@@ -4891,6 +4888,14 @@ TExprNode::TPtr ExpandSqlSelectImpl(
     if (onlyOneSetItem == 1) {
         list = setItemNodes.front();
     } else {
+        if (!isYql || optCtx.Types->PositionalUnionAll) {
+            YQL_ENSURE(columnOrder, "Positional set operations require column order");
+            for (ui32 inputIndex = 0; inputIndex < setItemNodes.size(); ++inputIndex) {
+                setItemNodes[inputIndex] = NormalizeColumnOrder(
+                    setItemNodes[inputIndex], columnOrder->BySetItems[inputIndex], columnOrder->Target, ctx);
+            }
+        }
+
         bool hasNonUnionAll = false;
         for (const auto& x : setOps->Tail().Children()) {
             if (x->Content() != "push" && x->Content() != "union_all") {
@@ -4906,16 +4911,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
                 if (x->Content() == "push") {
                     YQL_ENSURE(inputIndex < setItemNodes.size());
 
-                    TExprNode::TPtr expr = setItemNodes[inputIndex];
-                    if (!isYql && columnOrder) {
-                        expr = NormalizeColumnOrder(
-                            expr,
-                            columnOrder->BySetItems[inputIndex],
-                            columnOrder->Target,
-                            ctx);
-                    }
-
-                    stack.push_back(std::move(expr));
+                    stack.push_back(setItemNodes[inputIndex]);
                     ++inputIndex;
                     continue;
                 }
@@ -4937,12 +4933,6 @@ TExprNode::TPtr ExpandSqlSelectImpl(
             }
         } else {
             TExprNode::TListType children = setItemNodes;
-            for (ui32 childIndex = 0; !isYql && columnOrder && childIndex < children.size(); ++childIndex) {
-                const auto& childColumnOrder = columnOrder->BySetItems[childIndex];
-                auto& child = children[childIndex];
-                child = NormalizeColumnOrder(child, childColumnOrder, columnOrder->Target, ctx);
-            }
-
             list = ctx.NewCallable(node->Pos(), "UnionAll", std::move(children));
             if (columnOrder) {
                 list = KeepColumnOrder(columnOrder->Target, list, ctx);

@@ -1,5 +1,7 @@
 #include "import_actor.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/backup/async_jobs/import_downloader.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -71,7 +73,8 @@ void TImportActor::Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
         return;
     }
     const auto elapsed = TInstant::Now() - StageStartTime;
-    if (elapsed > OperationTimeout) {
+    const auto operationTimeout = TDuration::Seconds(AppDataVerified().ColumnShardConfig.GetBackupSettings().GetImportOperationTimeoutSeconds());
+    if (elapsed > operationTimeout) {
         const TString errorMessage = TStringBuilder() << "Import operation timed out after " << elapsed.Seconds() << "s"
                                                       << " in stage " << StageToString(Stage) << ", tablet " << TabletId << ", importActorId "
                                                       << (ImportActorId ? ImportActorId.ToString() : "none");

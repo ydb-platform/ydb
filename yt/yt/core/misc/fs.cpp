@@ -700,7 +700,11 @@ std::string GetHomePath()
     SHGetSpecialFolderPath(0, buffer.data(), CSIDL_PROFILE, 0);
     return buffer.data();
 #else
-    return std::getenv("HOME");
+    const auto* home = std::getenv("HOME");
+    if (!home) {
+        THROW_ERROR_EXCEPTION("HOME environment variable is not set");
+    }
+    return home;
 #endif
 }
 

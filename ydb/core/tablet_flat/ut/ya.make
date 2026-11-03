@@ -48,6 +48,7 @@ SRCS(
     ut_decimal.cpp    
     ut_charge.cpp
     ut_part.cpp
+    ut_part_layout.cpp
     ut_part_multi.cpp
     ut_proto.cpp
     ut_pages.cpp
@@ -65,6 +66,7 @@ SRCS(
     ut_tier_predicate.cpp
     ut_vacuum.cpp
     ut_versions.cpp
+    ut_scan_delta.cpp
     ut_backup.cpp
 )
 

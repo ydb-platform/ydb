@@ -94,6 +94,8 @@ namespace NKikimr::NBlobDepot {
                     ProcessResolveResult(*p);
                 } else if (auto *p = std::get_if<TEvBlobStorage::TEvCheckIntegrityResult*>(&response)) {
                     TQuery::HandleCheckIntegrityResult(context, **p);
+                } else if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
+                    TQuery::HandleCheckIntegrityResolveResult(context, **p);
                 } else if (std::holds_alternative<TTabletDisconnected>(response)) {
                     YDB_LOG_DEBUG("TTabletDisconnected",
                         {"marker", "BDA61"},

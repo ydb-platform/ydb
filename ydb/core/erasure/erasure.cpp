@@ -6,9 +6,8 @@
 #include <library/cpp/digest/crc32c/crc32c.h>
 
 // EVENODD 8+2 uses p=11, including the imaginary zero row in syndromes.
-static constexpr ui32 MaxTotalParts = 10;
 static constexpr ui32 MaxPrime = 11;
-static constexpr size_t MaxBlockSize = (MaxTotalParts - 2) * (MaxPrime - 1) * sizeof(ui64);
+static constexpr size_t MaxBlockSize = (NKikimr::TErasureType::MaxTotalParts - 2) * (MaxPrime - 1) * sizeof(ui64);
 
 #define IS_VERBOSE 0
 #define IS_TRACE 0
@@ -198,7 +197,7 @@ public:
     ui32 Prime;
     TErasureType::ECrcMode CrcMode;
 
-    using TBufferDataPart = TStackVec<ui64*, MaxTotalParts>;
+    using TBufferDataPart = TStackVec<ui64*, TErasureType::MaxTotalParts>;
     TBufferDataPart BufferDataPart;
     char *Data;
 
@@ -231,7 +230,7 @@ public:
         TailSize = (ui32)(DataSize % BlockSize);
 
         Prime = type.Prime();
-        Y_DEBUG_ABORT_UNLESS(TotalParts <= MaxTotalParts && Prime <= MaxPrime && BlockSize <= MaxBlockSize);
+        Y_DEBUG_ABORT_UNLESS(TotalParts <= TErasureType::MaxTotalParts && Prime <= MaxPrime && BlockSize <= MaxBlockSize);
         CrcMode = crcMode;
 
         Data = nullptr;

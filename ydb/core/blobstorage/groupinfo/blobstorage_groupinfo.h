@@ -35,9 +35,9 @@ namespace NBlobMapper {
     class TMirror3dcMapper;
 } // NBlobMapper
 
-static constexpr ui8 MaxHandoffNodes = 6;
-static constexpr ui8 MaxNodesPerBlob = 10;
-static constexpr ui8 MaxTotalPartCount = 7;
+static constexpr ui8 MaxHandoffNodes = TBlobStorageGroupType::MaxHandoffNodes;
+static constexpr ui8 MaxNodesPerBlob = TBlobStorageGroupType::MaxSubgroupSize;
+static constexpr ui8 MaxTotalPartCount = TErasureType::MaxTotalParts;
 static constexpr ui8 MaxVDisksInGroup = 32;
 
 // mapper interface forward declaration
@@ -366,6 +366,12 @@ public:
     const TDynamicInfo &GetDynamicInfo() const { return Dynamic; }
     TDynamicInfo::EFailRealmState GetFailRealmState(ui32 failRealmIdx) const {
         return Dynamic.FailRealmStates.at(failRealmIdx);
+    }
+    bool IsFailedFailRealm(ui32 failRealmIdx) const {
+        return GetFailRealmState(failRealmIdx) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F;
+    }
+    bool IsRecoveringFailRealm(ui32 failRealmIdx) const {
+        return GetFailRealmState(failRealmIdx) == NKikimrBlobStorage::TGroupInfo::TFailRealm::R;
     }
     EEncryptionMode GetEncryptionMode() const { return EncryptionMode; }
     ELifeCyclePhase GetLifeCyclePhase() const { return LifeCyclePhase; }

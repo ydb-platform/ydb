@@ -4,7 +4,6 @@
 #include <vector>
 #include <random>
 
-#include <util/system/cpu_id.h>
 #include <util/system/fs.h>
 #include <util/system/compiler.h>
 #include <util/stream/null.h>
@@ -53,9 +52,6 @@ TVector<TString> GenerateValues(size_t level) {
 Y_UNIT_TEST_SUITE(Accumulator) {
 
 Y_UNIT_TEST(CreateAccumulator) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
     TScopedAlloc alloc(__LOCATION__);
 
     TColumnDesc kc1, kc2, pc1, pc2, pc3;
@@ -86,9 +82,6 @@ Y_UNIT_TEST(CreateAccumulator) {
 } // Y_UNIT_TEST(CreateAccumulator)
 
 Y_UNIT_TEST(MultipleAddToAccumulator) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
     TScopedAlloc alloc(__LOCATION__);
 
     TColumnDesc kc;
@@ -133,9 +126,6 @@ Y_UNIT_TEST(MultipleAddToAccumulator) {
 } // Y_UNIT_TEST(MultipleAddToAccumulator)
 
 Y_UNIT_TEST(AddVarSizedDataToAccumulator) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
     TScopedAlloc alloc(__LOCATION__);
 
     TColumnDesc kc;
@@ -190,9 +180,6 @@ Y_UNIT_TEST(AddVarSizedDataToAccumulator) {
 } // Y_UNIT_TEST(AddVarSizedDataToAccumulator)
 
 Y_UNIT_TEST(AccumulatorFuzz) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
     TScopedAlloc alloc(__LOCATION__);
 
     std::mt19937 rng; // fixed-seed (0) prng
@@ -593,49 +580,31 @@ static bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Bucke
 }
 
 Y_UNIT_TEST(BenchAccumulator_VariateNTuples) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
     CTEST << ">>> BenchAccumulator_VariateNTuples <<<" << Endl;
     UNIT_ASSERT(RunFixSizedAccumulatorBench(1e5, 2, 3));
 } // Y_UNIT_TEST(BenchAccumulator_VariateNTuples)
 
 Y_UNIT_TEST(BenchAccumulator_VariateNColumns) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
     CTEST << ">>> BenchAccumulator_VariateNColumns <<<" << Endl;
     UNIT_ASSERT(RunFixSizedAccumulatorBench(1e5,  2, 4));
 } // Y_UNIT_TEST(BenchAccumulator_VariateNColumns)
 
 Y_UNIT_TEST(BenchAccumulator_VariateNBuckets) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
     CTEST << ">>> BenchAccumulator_VariateNBuckets <<<" << Endl;
     UNIT_ASSERT(RunFixSizedAccumulatorBench(1e5, 4,  2));
 } // Y_UNIT_TEST(BenchAccumulator_VariateNBuckets)
 
 Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNTuples) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
     CTEST << ">>> VarSized_BenchAccumulator_VariateNTuples <<<" << Endl;
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e5, 2, 3));
 } // Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNTuples)
 
 Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNColumns) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
     CTEST << ">>> VarSized_BenchAccumulator_VariateNColumns <<<" << Endl;
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e5,  2, 4));
 } // Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNColumns)
 
 Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNBuckets) {
-    if (!NX86::HaveAVX2()) {
-        return;
-    }
     CTEST << ">>> VarSized_BenchAccumulator_VariateNBuckets <<<" << Endl;
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e5, 2,  4));
 } // Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNBuckets)
@@ -643,7 +612,6 @@ Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNBuckets) {
 #endif
 
 } // Y_UNIT_TEST_SUITE(Accumulator)
-
 
 }
 } // namespace NMiniKQL

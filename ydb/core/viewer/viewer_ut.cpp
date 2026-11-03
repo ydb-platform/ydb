@@ -1151,7 +1151,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
     void CheckStorageLimitWithGroupSizeInUnits(bool enforcedSlotSize, bool cluster = false,
             std::optional<ui64> userChunkPoolSize = {}, bool overflowingQuota = false,
             ui64 tablesSize = 0, ui64 topicsSize = 0, std::optional<TString> poolUsageKind = "ssd",
-            TString expectedTablesStorageType = "SSD",
+            std::optional<TString> expectedTablesStorageType = "SSD",
             bool withoutDomainStoragePools = false)
     {
         TPortManager tp;
@@ -1335,14 +1335,18 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 UNIT_ASSERT_VALUES_EQUAL(usage["Size"].GetString(), type == "SSD" ? "20" : "30");
             }
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(tenant["StorageAllocatedLimit"].GetString(), "0");
-            UNIT_ASSERT_VALUES_EQUAL(tenant["StorageAllocatedSize"].GetString(), "0");
+            UNIT_ASSERT(!tenant.Has("StorageAllocatedLimit"));
+            UNIT_ASSERT(!tenant.Has("StorageAllocatedSize"));
             UNIT_ASSERT_VALUES_EQUAL(storage.size(), 0);
         }
         if (tablesSize || topicsSize) {
             const auto& tablesStorage = tenant["TablesStorage"].GetArray();
             UNIT_ASSERT_VALUES_EQUAL(tablesStorage.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(tablesStorage[0]["Type"].GetString(), expectedTablesStorageType);
+            if (expectedTablesStorageType) {
+                UNIT_ASSERT_VALUES_EQUAL(tablesStorage[0]["Type"].GetString(), *expectedTablesStorageType);
+            } else {
+                UNIT_ASSERT(!tablesStorage[0].Has("Type"));
+            }
             UNIT_ASSERT_VALUES_EQUAL(tablesStorage[0]["Size"].GetString(), ToString(tablesSize + topicsSize));
         }
     }
@@ -1364,17 +1368,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(TenantInfoTablesStorageIncludesTopicsWithoutPoolUsage)
     {
-        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 0, 200, std::nullopt);
+        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 0, 200,
+            std::nullopt);
     }
 
     Y_UNIT_TEST(TenantInfoTablesStorageKeepsTopicsWithUnknownPoolUsage)
     {
-        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 100, 200, "unknown", "None");
+        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 100, 200,
+            "unknown", std::nullopt);
     }
 
     Y_UNIT_TEST(TenantInfoTablesStorageKeepsTopicsWithEmptyDomainPools)
     {
-        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 100, 200, "hdd", "HDD", true);
+        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 100, 200,
+            "hdd", "HDD", true);
     }
 
     Y_UNIT_TEST(ClusterStorageLimitWithGroupSizeInUnits)

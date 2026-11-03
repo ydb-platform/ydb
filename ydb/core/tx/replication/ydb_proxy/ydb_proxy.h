@@ -236,11 +236,7 @@ struct TEvYdbProxy {
         {
         }
 
-<<<<<<< HEAD
-        explicit TStartTopicReadingSessionResult(const TString& readSessionId, ui64 committedOffset = 0)
-=======
         TStartTopicReadingSessionResult(const TString& readSessionId, ui64 committedOffset, std::optional<ui64> retainedStartOffset)
->>>>>>> ca95a87422f ([KIKIMR-27454] Detect lost messages for async replication on startup if all were lost and no per-message checks will be triggered on consumer. (#57837))
             : ReadSessionId(readSessionId)
             , CommittedOffset(committedOffset)
             , ReadOffset(committedOffset)
@@ -251,13 +247,9 @@ struct TEvYdbProxy {
         void Out(IOutputStream& out) const;
 
         TString ReadSessionId;
-<<<<<<< HEAD
-        ui64 CommittedOffset = 0;
-=======
         ui64 CommittedOffset;
         ui64 ReadOffset;
         std::optional<ui64> RetainedStartOffset;
->>>>>>> ca95a87422f ([KIKIMR-27454] Detect lost messages for async replication on startup if all were lost and no per-message checks will be triggered on consumer. (#57837))
     };
 
     struct TEvStartTopicReadingSession: public TGenericResponse<TEvStartTopicReadingSession, EvStartTopicReadingSession, TStartTopicReadingSessionResult> {

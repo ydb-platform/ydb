@@ -6,11 +6,7 @@
 
 #include <util/datetime/base.h>
 
-<<<<<<< HEAD
-=======
 #include <optional>
-#include <span>
->>>>>>> ca95a87422f ([KIKIMR-27454] Detect lost messages for async replication on startup if all were lost and no per-message checks will be triggered on consumer. (#57837))
 
 namespace NYdb::inline Dev::NTopic {
 

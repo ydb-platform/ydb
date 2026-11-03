@@ -125,6 +125,12 @@ void TAccessorsFetcherImpl::StartRequest(
     }
     const auto& collector = commonContext.GetRuntimeStats();
     auto operation = collector ? collector->Start(NScanStats::TStep::FetchAccessors, "FETCH_ACCESSORS", "Fetch portion accessors", NScanStats::Current()) : nullptr;
+    if (operation) {
+        operation->Update([](auto& record) {
+            record.SetMetaStep("Preparation");
+            record.SetCanonicalPath("");
+        });
+    }
     NScanStats::TScope scope(operation, collector);
     request->RegisterSubscriber(std::make_shared<TLocalPortionAccessorFetchingSubscriber>(context, operation));
     context->GetCommonContext()->GetDataAccessorsManager()->AskData(std::move(request));

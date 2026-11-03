@@ -472,7 +472,7 @@ private:
         ui64 targetConsumersConsumption = SafeDiff(targetUtilizationBytes, SaturatingAdd(otherConsumption, externalConsumption));
         const ui64 available = SafeDiff(hardLimitBytes, SaturatingAdd(otherConsumption, externalConsumption));
 
-        PlanConsumerDemands(consumers, snapshots, available);
+        auto planned = PlanConsumerDemands(consumers, snapshots, available);
 
         // Grow elastic targets within both utilization and reserved Hard capacity.
         auto coefficient = BinarySearchCoefficient(consumers, snapshots, targetConsumersConsumption, available);
@@ -543,7 +543,7 @@ private:
         const ui64 softLimitExcess = SafeDiff(
             SaturatingAdd(SaturatingAdd(resultingConsumersConsumption, otherConsumption), externalConsumption), softLimitBytes);
         // Soft pressure trims cache first. Hard shortfalls scale all automatic grants.
-        const auto limits = ApplyConsumerLimits(consumers, snapshots, coefficient, softLimitExcess, available);
+        const auto limits = ApplyConsumerLimits(consumers, snapshots, coefficient, softLimitExcess, available, planned);
 
         ui64 consumersLimitBytes = 0;
         for (const auto& consumer : consumers) {
@@ -579,32 +579,42 @@ private:
         ctx.Schedule(Interval, new TEvents::TEvWakeup());
     }
 
-    void PlanConsumerDemands(const TVector<TConsumerState>& consumers, TConsumerSnapshots& snapshots, ui64 available) {
+    TMemoryGrantLedger::TExplicitPlan PlanConsumerDemands(
+        const TVector<TConsumerState>& consumers, TConsumerSnapshots& snapshots, ui64 available)
+    {
         TVector<TMemoryGrantLedger::TRequest> requests;
-        TVector<TConsumerCollectionSnapshot::TEntry*> entries;
-        // Use the same order as ApplyConsumerLimits, across all consumer kinds.
+        ui64 automaticMinimum = 0;
         for (const auto& consumer : consumers) {
             if (auto* snapshot = snapshots.FindPtr(consumer.Kind)) {
-                for (auto& entry : snapshot->Entries) {
+                for (const auto& entry : snapshot->Entries) {
                     if (entry.Desired) {
                         requests.push_back(TMemoryGrantLedger::TRequest{
                             .Key = {consumer.Kind, entry.Registrant}, .Used = entry.Report.Used,
                             .TargetLimit = *entry.Desired, .Multiplier = GetLimitMultiplier(consumer.Kind),
-                            .Source = ETargetSource::ConsumerRequest});
-                        entries.push_back(&entry);
+                            .Source = ETargetSource::ConsumerRequest, .RequestOrder = entry.RequestOrder});
+                    } else {
+                        automaticMinimum = SaturatingAdd(automaticMinimum, GetLimitReservation(
+                            consumer.Kind, snapshot->ComputeLimitShare(entry, consumer.MinBytes)));
                     }
+                }
+            } else {
+                automaticMinimum = SaturatingAdd(automaticMinimum, GetLimitReservation(consumer.Kind, consumer.MinBytes));
+            }
+        }
+        auto planned = GrantLedger.PlanExplicitLimits(requests, available, automaticMinimum);
+        for (auto& [kind, snapshot] : snapshots) {
+            for (auto& entry : snapshot.Entries) {
+                if (entry.Desired) {
+                    entry.PlannedLimit = planned.at(TMemoryGrantLedger::TKey{kind, entry.Registrant});
                 }
             }
         }
-        const auto planned = GrantLedger.PlanExplicitLimits(requests, available);
-        for (const auto& [index, entry] : Enumerate(entries)) {
-            entry->PlannedLimit = planned[index];
-        }
+        return planned;
     }
 
     THashMap<EMemoryConsumerKind, ui64> ApplyConsumerLimits(
         const TVector<TConsumerState>& consumers, const TConsumerSnapshots& snapshots,
-        double coefficient, ui64 softLimitExcess, ui64 available)
+        double coefficient, ui64 softLimitExcess, ui64 available, TMemoryGrantLedger::TExplicitPlan& planned)
     {
         TVector<TMemoryGrantLedger::TRequest> requests;
         for (const auto& consumer : consumers) {
@@ -614,9 +624,13 @@ private:
                 const auto shares = snapshot->ComputeLimitShares(limitBytes, reduction);
                 for (const auto& [index, entry] : Enumerate(snapshot->Entries)) {
                     const auto source = entry.Desired ? ETargetSource::ConsumerRequest : ETargetSource::MemoryController;
+                    if (entry.Desired) {
+                        planned.at(TMemoryGrantLedger::TKey{consumer.Kind, entry.Registrant}) = shares[index].Bytes;
+                    }
                     requests.push_back(TMemoryGrantLedger::TRequest{
                         .Key = {consumer.Kind, entry.Registrant}, .Used = entry.Report.Used,
-                        .TargetLimit = shares[index].Bytes, .Multiplier = GetLimitMultiplier(consumer.Kind), .Source = source});
+                        .TargetLimit = entry.Desired.value_or(shares[index].Bytes),
+                        .Multiplier = GetLimitMultiplier(consumer.Kind), .Source = source, .RequestOrder = entry.RequestOrder});
                 }
             } else {
                 requests.push_back(TMemoryGrantLedger::TRequest{
@@ -624,7 +638,7 @@ private:
                     .TargetLimit = SafeDiff(limitBytes, reduction), .Multiplier = GetLimitMultiplier(consumer.Kind)});
             }
         }
-        const auto grants = GrantLedger.Allocate(requests, available);
+        const auto grants = GrantLedger.Allocate(requests, available, planned);
         THashMap<EMemoryConsumerKind, ui64> limits;
         for (const auto& grant : grants) {
             const auto& [kind, registrant] = grant.Key;
@@ -693,7 +707,7 @@ private:
     void Handle(TEvConsumerDemand::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         auto* collection = Collections.FindPtr(msg->Kind);
-        if (!collection || !collection->SetDesired(ev->Sender, msg->Desired)) {
+        if (!collection || !collection->SetDesired(ev->Sender, msg->Desired, ++RequestOrder)) {
             YDB_LOG_WARN_CTX(ctx, "Consumer demand ignored for an unknown registration",
                 {"msgKind", msg->Kind}, {"sender", ev->Sender});
             return;
@@ -969,6 +983,7 @@ private:
     // Kinds fed by event-registered actors; each holds one entry per registrant, keyed by its TActorId
     TMap<EMemoryConsumerKind, TConsumerCollection> Collections;
     TMemoryGrantLedger GrantLedger;
+    ui64 RequestOrder = 0;
     std::shared_ptr<TMemTableMemoryConsumersCollection> MemTables;
     const TIntrusiveConstPtr<IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     NKikimrConfig::TMemoryControllerConfig Config;

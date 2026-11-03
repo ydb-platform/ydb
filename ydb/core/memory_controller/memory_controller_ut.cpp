@@ -103,7 +103,7 @@ struct TControllerFixture {
         Runtime.SimulateSleep(TDuration::Seconds(2));
     }
 
-    void RequestLimit(TActorId registrant, EMemoryConsumerKind kind, ui64 desired) {
+    void RequestLimit(TActorId registrant, EMemoryConsumerKind kind, std::optional<ui64> desired) {
         Runtime.Send(new IEventHandle(MemoryController, registrant, new TEvConsumerDemand(kind, desired)));
     }
 };
@@ -1058,7 +1058,8 @@ Y_UNIT_TEST(MemTableCompactionContinuesWhileItsIncreaseWaits) {
 }
 
 Y_UNIT_TEST(ClientDesiredWaitsForFullGrantThenReplacesConfiguredTarget) {
-    const auto config = MakeCacheAndQueryConfig(60_MB, 60_MB, 40_MB); // scan default is 20 MB
+    auto config = MakeCacheAndQueryConfig(20_MB, 60_MB, 40_MB); // scan default is 20 MB
+    config.SetSoftLimitBytes(80_MB);
     TControllerFixture fixture(config);
     const auto cache = fixture.Runtime.AllocateEdgeActor();
     const auto scan = fixture.Runtime.AllocateEdgeActor();
@@ -1074,6 +1075,11 @@ Y_UNIT_TEST(ClientDesiredWaitsForFullGrantThenReplacesConfiguredTarget) {
         }
     });
 
+    fixture.RequestLimit(scan, EMemoryConsumerKind::ColumnTablesScanGroupedMemory, 100_MB);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 20_MB);
+    UNIT_ASSERT_GE(fixture.Counter("Consumer/SharedCache/Limit"), i64(20_MB));
+    UNIT_ASSERT(scanLimits.empty());
     fixture.RequestLimit(scan, EMemoryConsumerKind::ColumnTablesScanGroupedMemory, 60_MB);
     fixture.Tick();
     const ui64 cacheLimit = fixture.Counter("Consumer/SharedCache/Limit");
@@ -1091,6 +1097,27 @@ Y_UNIT_TEST(ClientDesiredWaitsForFullGrantThenReplacesConfiguredTarget) {
     }
     UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 60_MB);
     UNIT_ASSERT(fixture.Counter("Stats/ConsumersCommitted") <= i64(100_MB));
+
+    fixture.RequestLimit(scan, EMemoryConsumerKind::ColumnTablesScanGroupedMemory, std::nullopt);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesScanGroupedMemory/Limit"), 20_MB);
+
+    fixture.Runtime.Send(new IEventHandle(fixture.MemoryController, scan,
+        new TEvConsumerUnregister(EMemoryConsumerKind::ColumnTablesScanGroupedMemory)));
+    fixture.RequestLimit(cache, EMemoryConsumerKind::SharedCache, 60_MB);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 60_MB);
+    cacheConsumer->SetConsumption(60_MB);
+    fixture.Provider->ProcessMemoryInfo.AllocatedMemory = 85_MB;
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 55_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/ConsumersBudgetDeficit"), 0);
+    fixture.Provider->ProcessMemoryInfo.AllocatedMemory = 60_MB;
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 60_MB);
+    fixture.RequestLimit(cache, EMemoryConsumerKind::SharedCache, std::nullopt);
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Consumption"), 60_MB);
 }
 
 Y_UNIT_TEST(ConsumerReportDegradedCoefficient) {

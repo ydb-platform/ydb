@@ -106,15 +106,15 @@ Y_UNIT_TEST(DesiredLimitBelongsToRegistrationAndSnapshot) {
     auto first = collection.Register(Registrant(1));
     collection.Register(Registrant(2));
     UNIT_ASSERT(!collection.SetDesired(Registrant(3), 999));
-    UNIT_ASSERT(collection.SetDesired(Registrant(1), 90));
+    UNIT_ASSERT(collection.SetDesired(Registrant(1), 90, 1));
     const auto snapshot = collection.GetSnapshot();
     UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(100), 190);
     auto shares = AsMap(snapshot.ComputeLimitShares(100));
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 90);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 100);
     const auto reduced = AsMap(snapshot.ComputeLimitShares(100, 40));
-    UNIT_ASSERT_VALUES_EQUAL(reduced.at(Registrant(1)), 90);
-    UNIT_ASSERT_VALUES_EQUAL(reduced.at(Registrant(2)), 60);
+    UNIT_ASSERT_VALUES_EQUAL(reduced.at(Registrant(1)), 71);
+    UNIT_ASSERT_VALUES_EQUAL(reduced.at(Registrant(2)), 78);
 
     // A usage report neither supplies nor replaces a requested limit.
     first->SetReport({.Used = 10, .Demand = 1000, .Reclaimable = 0});
@@ -126,7 +126,9 @@ Y_UNIT_TEST(DesiredLimitBelongsToRegistrationAndSnapshot) {
     UNIT_ASSERT_VALUES_EQUAL(collection.GetSnapshot().GetDesiredLimit(100), 30);
     UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(100), 190);
 
-    collection.Register(Registrant(1)); // fresh registration restores its default
+    UNIT_ASSERT(collection.SetDesired(Registrant(1), std::nullopt));
+    first->SetConsumption(25); // cancellation preserves the live reporting object
+    AssertReport(collection.GetSnapshot().GetTotal(), 25, 25, 0);
     shares = AsMap(collection.GetSnapshot().ComputeLimitShares(100));
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 100);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 30);
@@ -146,8 +148,12 @@ Y_UNIT_TEST(PlanningUsesRetainedLimitWithoutChangingTheRequest) {
         }
     }
     UNIT_ASSERT_VALUES_EQUAL(snapshot.GetDesiredLimit(100), 117);
-    // Planning cannot erase or clip the target passed to the grant allocator.
-    UNIT_ASSERT_VALUES_EQUAL(AsMap(snapshot.ComputeLimitShares(100)).at(Registrant(1)), 101);
+    UNIT_ASSERT_VALUES_EQUAL(AsMap(snapshot.ComputeLimitShares(100)).at(Registrant(1)), 17);
+    UNIT_ASSERT_VALUES_EQUAL(*snapshot.Entries.front().Desired, 101);
+    collection.SetDesired(Registrant(1), 101, 2);
+    UNIT_ASSERT_VALUES_EQUAL(collection.GetSnapshot().Entries.front().RequestOrder, 0);
+    collection.SetDesired(Registrant(1), 102, 3);
+    UNIT_ASSERT_VALUES_EQUAL(collection.GetSnapshot().Entries.front().RequestOrder, 3);
 }
 
 Y_UNIT_TEST(ClampsEachEntry) {

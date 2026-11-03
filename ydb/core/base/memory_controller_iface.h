@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <limits>
+#include <optional>
 
 namespace NKikimr::NMemory {
 
@@ -108,13 +109,13 @@ struct TEvConsumerLimit : public TEventLocal<TEvConsumerLimit, EvConsumerLimit> 
 };
 
 // Replaces the automatic share with a total limit in TEvConsumerLimit units.
-// Zero keeps this registration at zero; re-register to restore automatic allocation.
+// Zero keeps this registration at zero; nullopt restores automatic allocation.
 // Increases wait for the full target. The caller must respect its configured ceiling.
 struct TEvConsumerDemand : public TEventLocal<TEvConsumerDemand, EvConsumerDemand> {
     const EMemoryConsumerKind Kind;
-    const ui64 Desired;
+    const std::optional<ui64> Desired;
 
-    TEvConsumerDemand(EMemoryConsumerKind kind, ui64 desired)
+    TEvConsumerDemand(EMemoryConsumerKind kind, std::optional<ui64> desired)
         : Kind(kind)
         , Desired(desired)
     {}

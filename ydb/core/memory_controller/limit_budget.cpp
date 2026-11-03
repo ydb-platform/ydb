@@ -1,5 +1,6 @@
 #include "limit_budget.h"
 
+#include <algorithm>
 #include <ranges>
 
 namespace NKikimr::NMemory {
@@ -11,46 +12,70 @@ void TMemoryGrantLedger::Register(const TKey& key, ui64 initialLimit, ui64 multi
     state.Limit = Max(state.Limit, initialLimit);
 }
 
-TVector<ui64> TMemoryGrantLedger::PlanExplicitLimits(const TVector<TRequest>& requests, ui64 available) const {
-    TVector<ui64> planned;
-    planned.reserve(requests.size());
-    ui64 headroom = available;
-    bool overBudget = false;
+TVector<size_t> TMemoryGrantLedger::GetRequestOrder(const TVector<TRequest>& requests) {
+    TVector<size_t> order;
+    order.reserve(requests.size());
+    for (size_t i = 0; i < requests.size(); ++i) {
+        order.push_back(i);
+    }
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        if (requests[a].Source != requests[b].Source) {
+            return requests[a].Source == ETargetSource::ConsumerRequest;
+        }
+        return requests[a].Source == ETargetSource::ConsumerRequest
+            && requests[a].RequestOrder < requests[b].RequestOrder;
+    });
+    return order;
+}
+
+TMemoryGrantLedger::TExplicitPlan TMemoryGrantLedger::PlanExplicitLimits(
+    const TVector<TRequest>& requests, ui64 available, ui64 automaticMinimum) const
+{
+    TExplicitPlan planned;
+    unsigned __int128 required = automaticMinimum;
     for (const auto& request : requests) {
         Y_ABORT_UNLESS(request.Multiplier > 0);
-        const ui64 retained = request.Source == ETargetSource::ConsumerRequest
-            ? Min(GetLimit(request.Key), request.TargetLimit) : request.TargetLimit;
-        planned.push_back(retained);
         if (request.Source == ETargetSource::ConsumerRequest) {
-            if (static_cast<unsigned __int128>(retained) * request.Multiplier > headroom) {
-                overBudget = true;
-                headroom = 0;
-            } else {
-                headroom -= retained * request.Multiplier;
-            }
+            const ui64 retained = Min(GetLimit(request.Key), request.TargetLimit);
+            planned.emplace(request.Key, retained);
+            required += static_cast<unsigned __int128>(retained) * request.Multiplier;
         }
     }
-    for (size_t i = 0; i < requests.size() && !overBudget; ++i) {
-        const auto& request = requests[i];
-        if (request.Source == ETargetSource::ConsumerRequest) {
-            const ui64 increase = request.TargetLimit - planned[i];
-            if (static_cast<unsigned __int128>(increase) * request.Multiplier <= headroom) {
-                headroom -= increase * request.Multiplier;
-                planned[i] = request.TargetLimit;
-            }
+    if (required > available) {
+        // Existing permissions and minima no longer fit; reduce them proportionally.
+        for (auto& [key, limit] : planned) {
+            limit = static_cast<unsigned __int128>(limit) * available / required;
         }
+        return planned;
+    }
+    ui64 headroom = available - static_cast<ui64>(required);
+    for (const size_t i : GetRequestOrder(requests)) {
+        const auto& request = requests[i];
+        if (request.Source != ETargetSource::ConsumerRequest) {
+            continue;
+        }
+        auto& limit = planned.at(request.Key);
+        const auto target = static_cast<unsigned __int128>(request.TargetLimit) * request.Multiplier;
+        if (target > available - automaticMinimum) {
+            continue; // An impossible target must not block feasible requests.
+        }
+        const auto increase = static_cast<unsigned __int128>(request.TargetLimit - limit) * request.Multiplier;
+        if (increase > headroom) {
+            break; // Younger requests must not consume the oldest feasible waiter's headroom.
+        }
+        headroom -= static_cast<ui64>(increase);
+        limit = request.TargetLimit;
     }
     return planned;
 }
 
 TMemoryGrantLedger::TTargetBudgets TMemoryGrantLedger::ComputeTargetBudgets(
-    const TVector<TRequest>& requests, const TVector<ui64>& planned)
+    const TVector<TRequest>& requests, const TExplicitPlan& planned)
 {
     TTargetBudgets budgets;
-    for (size_t i = 0; i < requests.size(); ++i) {
-        const auto& request = requests[i];
+    for (const auto& request : requests) {
         if (request.Source == ETargetSource::ConsumerRequest) {
-            budgets.Requested += static_cast<unsigned __int128>(planned[i]) * request.Multiplier;
+            budgets.Requested += static_cast<unsigned __int128>(planned.at(request.Key)) * request.Multiplier;
         } else {
             budgets.Automatic += static_cast<unsigned __int128>(request.TargetLimit) * request.Multiplier;
         }
@@ -58,7 +83,7 @@ TMemoryGrantLedger::TTargetBudgets TMemoryGrantLedger::ComputeTargetBudgets(
     return budgets;
 }
 
-void TMemoryGrantLedger::ScaleAutomaticTargets(TVector<TRequest>& requests, const TVector<ui64>& planned, ui64 available) {
+void TMemoryGrantLedger::ScaleAutomaticTargets(TVector<TRequest>& requests, const TExplicitPlan& planned, ui64 available) {
     const auto [automaticBudget, requestedBudget] = ComputeTargetBudgets(requests, planned);
     const ui64 automaticAvailable = requestedBudget >= available ? 0 : available - static_cast<ui64>(requestedBudget);
     if (automaticBudget <= automaticAvailable) {
@@ -72,7 +97,8 @@ void TMemoryGrantLedger::ScaleAutomaticTargets(TVector<TRequest>& requests, cons
     }
 }
 
-TVector<ui64> TMemoryGrantLedger::ApplyReductions(const TVector<TRequest>& requests, ui64 available) {
+TVector<ui64> TMemoryGrantLedger::ApplyReductions(
+    const TVector<TRequest>& requests, ui64 available, const TExplicitPlan& planned) {
     // Send reductions without waiting for a reply. Reported usage above the
     // reduced limit remains charged until the consumer actually releases it.
     TVector<ui64> previousLimits;
@@ -82,9 +108,9 @@ TVector<ui64> TMemoryGrantLedger::ApplyReductions(const TVector<TRequest>& reque
         previousLimits.push_back(state.Limit);
         state.Used = request.Used;
         state.Multiplier = request.Multiplier;
-        if (request.TargetLimit < state.Limit) {
-            state.Limit = request.TargetLimit;
-        }
+        const ui64 target = request.Source == ETargetSource::ConsumerRequest
+            ? Min(request.TargetLimit, planned.at(request.Key)) : request.TargetLimit;
+        state.Limit = Min(state.Limit, target);
     }
     // Hard can fall below already issued limits. Reduce those permissions even
     // if a client's requested increase is still pending; keep its target intact.
@@ -101,11 +127,10 @@ TVector<ui64> TMemoryGrantLedger::ApplyReductions(const TVector<TRequest>& reque
     return previousLimits;
 }
 
-TVector<TMemoryGrantLedger::TGrant> TMemoryGrantLedger::Allocate(TVector<TRequest> requests, ui64 available) {
-    // Waiting requests reserve their retained grant, not mutually exclusive targets.
-    const auto planned = PlanExplicitLimits(requests, available);
+TVector<TMemoryGrantLedger::TGrant> TMemoryGrantLedger::Allocate(
+    TVector<TRequest> requests, ui64 available, const TExplicitPlan& planned) {
     ScaleAutomaticTargets(requests, planned, available);
-    const auto previousLimits = ApplyReductions(requests, available);
+    const auto previousLimits = ApplyReductions(requests, available, planned);
 
     ui64 headroom = available;
     bool overBudget = false;
@@ -118,9 +143,9 @@ TVector<TMemoryGrantLedger::TGrant> TMemoryGrantLedger::Allocate(TVector<TReques
             headroom -= GetCharge(state);
         }
     }
-    TVector<TGrant> result;
-    result.reserve(requests.size());
-    for (size_t i = 0; i < requests.size(); ++i) {
+    TVector<TGrant> result(requests.size());
+    bool waitingForHeadroom = false;
+    for (const size_t i : GetRequestOrder(requests)) {
         const auto& request = requests[i];
         auto& state = States.at(request.Key);
         bool shouldSend = true;
@@ -128,18 +153,19 @@ TVector<TMemoryGrantLedger::TGrant> TMemoryGrantLedger::Allocate(TVector<TReques
             // Do not send partial increases. Keep the previous limit until
             // reported consumption leaves room for the complete new grant.
             const bool targetFits = static_cast<unsigned __int128>(request.TargetLimit) * state.Multiplier <= available
-                && (request.Source == ETargetSource::MemoryController || planned[i] == request.TargetLimit);
+                && (request.Source == ETargetSource::MemoryController || planned.at(request.Key) == request.TargetLimit);
             const ui64 proposed = targetFits ? request.TargetLimit * state.Multiplier : 0;
             const ui64 increase = proposed - Min(proposed, GetCharge(state));
-            if (!overBudget && targetFits && increase <= headroom) {
+            if (!waitingForHeadroom && !overBudget && targetFits && increase <= headroom) {
                 state.Limit = request.TargetLimit;
                 headroom -= increase;
             } else {
                 // A necessary reduction is not an answer to the pending request.
                 shouldSend = state.Limit < previousLimits[i];
+                waitingForHeadroom |= request.Source == ETargetSource::ConsumerRequest && targetFits;
             }
         }
-        result.push_back({request.Key, state.Limit, shouldSend});
+        result[i] = {request.Key, state.Limit, shouldSend};
     }
     return result;
 }

@@ -36,6 +36,7 @@ public:
         ui64 Multiplier = 1;
         // Client requests must be granted in full. Only default targets scale.
         ETargetSource Source = ETargetSource::MemoryController;
+        ui64 RequestOrder = 0;
     };
 
     struct TGrant {
@@ -44,11 +45,12 @@ public:
         bool ShouldSend = true;
     };
 
+    using TExplicitPlan = THashMap<TKey, ui64>;
+
     void Register(const TKey& key, ui64 initialLimit, ui64 multiplier);
-    // Retain explicit grants, then admit complete increases in request order.
-    // Defaults are returned unchanged; callers share the remaining budget.
-    TVector<ui64> PlanExplicitLimits(const TVector<TRequest>& requests, ui64 available) const;
-    TVector<TGrant> Allocate(TVector<TRequest> requests, ui64 available);
+    // Protect automatic minima, then plan explicit increases in arrival order.
+    TExplicitPlan PlanExplicitLimits(const TVector<TRequest>& requests, ui64 available, ui64 automaticMinimum = 0) const;
+    TVector<TGrant> Allocate(TVector<TRequest> requests, ui64 available, const TExplicitPlan& planned);
     void Forget(const TKey& key);
 
     ui64 GetCommitted() const;
@@ -67,9 +69,10 @@ private:
         unsigned __int128 Requested = 0;
     };
 
-    static TTargetBudgets ComputeTargetBudgets(const TVector<TRequest>& requests, const TVector<ui64>& planned);
-    static void ScaleAutomaticTargets(TVector<TRequest>& requests, const TVector<ui64>& planned, ui64 available);
-    TVector<ui64> ApplyReductions(const TVector<TRequest>& requests, ui64 available);
+    static TVector<size_t> GetRequestOrder(const TVector<TRequest>& requests);
+    static TTargetBudgets ComputeTargetBudgets(const TVector<TRequest>& requests, const TExplicitPlan& planned);
+    static void ScaleAutomaticTargets(TVector<TRequest>& requests, const TExplicitPlan& planned, ui64 available);
+    TVector<ui64> ApplyReductions(const TVector<TRequest>& requests, ui64 available, const TExplicitPlan& planned);
     static ui64 GetCharge(const TState& state);
 
     THashMap<TKey, TState> States;

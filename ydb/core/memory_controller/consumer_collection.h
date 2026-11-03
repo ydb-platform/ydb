@@ -37,6 +37,7 @@ struct TConsumerCollectionSnapshot {
         TActorId Registrant;
         TConsumerReport Report;
         std::optional<ui64> Desired;
+        ui64 RequestOrder = 0;
         std::optional<ui64> PlannedLimit; // explicit target admitted by MC, or the retained grant while waiting
         ui64 LimitCeiling = std::numeric_limits<ui64>::max();
     };
@@ -48,7 +49,7 @@ struct TConsumerCollectionSnapshot {
         return Total;
     }
 
-    // Explicit Desired replaces the default share based on reported demand.
+    // Explicit requests use their planned grant; automatic shares use reported demand.
     ui64 ComputeLimitShare(const TEntry& entry, ui64 limitBytes) const;
     TVector<TConsumerShare> ComputeLimitShares(ui64 limitBytes, ui64 limitReduction = 0) const;
     ui64 GetDesiredLimit(ui64 defaultLimitBytes) const;
@@ -70,7 +71,7 @@ public:
     bool Unregister(TActorId registrant);
 
     // A request belongs to this registration, independently of its usage report.
-    bool SetDesired(TActorId registrant, ui64 desired);
+    bool SetDesired(TActorId registrant, std::optional<ui64> desired, ui64 requestOrder = 0);
 
     bool IsEmpty() const {
         return Registrants.empty();
@@ -89,6 +90,7 @@ private:
     struct TRegistrant {
         TIntrusivePtr<TRegistrantConsumer> Consumer;
         std::optional<ui64> Desired;
+        ui64 RequestOrder = 0;
     };
     TMap<TActorId, TRegistrant> Registrants;
 };

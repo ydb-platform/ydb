@@ -6,6 +6,7 @@
 #include <numeric>
 #include <vector>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/any_join_keys.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/spilled_storage.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_counters.h>
@@ -616,12 +617,17 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     };
 
     THybridHashJoin(TSides<Source> sources, TComputationContext& ctx, TString componentName,
-                    TSides<const NPackedTuple::TTupleLayout*> layouts)
+                    TSides<const NPackedTuple::TTupleLayout*> layouts, TSides<bool> any = {})
         : Logger_(ctx, componentName)
         , Layouts_(layouts)
         , Spiller_(ctx.SpillerFactory ? ctx.SpillerFactory->CreateSpiller() : nullptr)
         , Sources_(std::move(sources))
     {
+        for (const auto side : EachSide) {
+            if (any.SelectSide(side)) {
+                AnyKeys_.SelectSide(side) = std::make_unique<TAnyJoinKeys>(Layouts_.SelectSide(side));
+            }
+        }
     }
 
     struct Finish {};
@@ -745,9 +751,13 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.Pack = std::move(GetPayload(var));
+                    if (AnyKeys_.Build) {
+                        AnyKeys_.Build->Filter(*state.Pack);
+                    }
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unhandled status");
                     MKQL_ENSURE(state.Build.Finished(), "sanity check");
+                    AnyKeys_.Build.reset();
                     State_ = BuildingInMemoryTable{*this, std::move(state.Spiller)};
                 }
             } else {
@@ -820,8 +830,12 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.FetchedPack = std::move(GetPayload(var));
+                    if (AnyKeys_.Probe) {
+                        AnyKeys_.Probe->Filter(*state.FetchedPack);
+                    }
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
+                    AnyKeys_.Probe.reset();
                     if constexpr (PreservedRowsInBuildTable()) {
                         if (!EmitPreservedBuildRowsFromInMemoryBuckets(state.Spiller, state.PreservedBucketIndex,
                                                                        state.PreservedResumeIndex, consume, isFull)) {
@@ -1192,6 +1206,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     TSides<const NPackedTuple::TTupleLayout*> Layouts_;
     ISpiller::TPtr Spiller_;
     Sources Sources_;
+    TSides<std::unique_ptr<TAnyJoinKeys>> AnyKeys_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
 };
@@ -1216,6 +1231,11 @@ inline TBlockHashJoinSettings ParseHashJoinSettingsTuple(TRuntimeNode node) {
         for (ui32 i = 0; i < keys->GetValuesCount(); ++i) {
             settings.EqualNullsKeys.push_back(AS_VALUE(TDataLiteral, keys->GetValue(i))->AsValue().Get<ui32>());
         }
+    }
+    if (settingsTuple->GetValuesCount() >= 3) {
+        const auto any = GetAnyJoinSettings(AS_VALUE(TDataLiteral, settingsTuple->GetValue(2))->AsValue().Get<ui32>());
+        settings.LeftAny = IsAnyJoinLeft(any);
+        settings.RightAny = IsAnyJoinRight(any);
     }
     return settings;
 }

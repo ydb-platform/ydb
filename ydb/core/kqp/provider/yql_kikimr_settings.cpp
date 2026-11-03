@@ -115,6 +115,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, EnableBlockHashJoinEqualNulls);
     REGISTER_SETTING(*this, UseScalarHashJoin);
     REGISTER_SETTING(*this, UseScalarHashJoinForMap);
+    REGISTER_SETTING(*this, UseHashJoinForAny);
     REGISTER_SETTING(*this, EnableLookupJoinPointPrefixes);
     REGISTER_SETTING(*this, EnableOrderPreservingLookupJoin);
     REGISTER_SETTING(*this, OptEnableParallelUnionAllConnectionsForExtend);
@@ -429,6 +430,10 @@ bool TKikimrConfiguration::GetUseScalarHashJoin() const {
 
 bool TKikimrConfiguration::GetUseScalarHashJoinForMap() const {
     return UseScalarHashJoinForMap.Get().GetOrElse(TTableServiceConfig::GetUseScalarHashJoinForMap());
+}
+
+bool TKikimrConfiguration::GetUseHashJoinForAny() const {
+    return UseHashJoinForAny.Get().GetOrElse(TTableServiceConfig::GetUseHashJoinForAny());
 }
 
 bool TKikimrConfiguration::GetEnableNewRBOPhysicalStagePeephole() const {

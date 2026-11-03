@@ -1568,7 +1568,8 @@ TExprBase DqBuildHashJoin(
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
     bool blockHashJoinBuildSideLeft,
-    bool useScalarHashJoin
+    bool useScalarHashJoin,
+    bool useHashJoinForAny
 ) {
 
     Y_UNUSED(blockHashJoinBuildSideLeft);
@@ -1579,7 +1580,8 @@ TExprBase DqBuildHashJoin(
 
     if (const auto flags = join.Flags()) {
         for (const auto flag : flags.Cast()) {
-            useBlockHashJoin = useBlockHashJoin && flag.Value() != "LeftAny"sv && flag.Value() != "RightAny"sv;
+            useBlockHashJoin = useBlockHashJoin
+                && (useHashJoinForAny || (flag.Value() != "LeftAny"sv && flag.Value() != "RightAny"sv));
         }
     }
     useBlockHashJoin = useBlockHashJoin
@@ -1920,7 +1922,7 @@ TExprBase DqBuildHashJoin(
     TString callableName = "GraceJoinCore";
     int shift = 2;
     bool selfJoin = false;
-    if (mode == EHashJoinMode::GraceAndSelf && leftIn.Stage().Ptr() == rightIn.Stage().Ptr()) {
+    if (!useBlockHashJoin && mode == EHashJoinMode::GraceAndSelf && leftIn.Stage().Ptr() == rightIn.Stage().Ptr()) {
         callableName = "GraceSelfJoinCore";
         shift = 1;
         selfJoin = true;
@@ -1952,7 +1954,12 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                const auto joinSettings = BuildBlockHashJoinSettings(join.Pos(), joinAlgo, ctx);
+                auto joinSettings = BuildBlockHashJoinSettings(join.Pos(), joinAlgo, ctx);
+                for (const auto& flag : flags) {
+                    joinSettings.push_back(Build<TCoNameValueTuple>(ctx, join.Pos())
+                        .Name(flag)
+                        .Done());
+                }
 
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
                     .LeftInput(leftInputArg)

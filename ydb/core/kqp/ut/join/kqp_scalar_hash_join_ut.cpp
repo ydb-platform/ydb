@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(AnyJoinsUseGrace, UseScalarHashJoin) {
+    Y_UNIT_TEST_TWIN(AnyJoinImplementations, UseScalarHashJoin) {
         TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         TKikimrRunner kikimr(settings);
@@ -219,12 +219,13 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
         };
         for (const auto& [key, payload] : cases) {
             for (const TStringBuf side : {"Left", "Right", "Both"}) {
-                const auto makeQuery = [&](bool blocks) {
+                const auto makeQuery = [&](bool blocks, bool any = false) {
                     return TStringBuilder() << R"(
                         PRAGMA TablePathPrefix='/Root';
                         PRAGMA ydb.OptimizerHints='JoinType(L R Shuffle)';
                         PRAGMA ydb.UseScalarHashJoin=')" << (UseScalarHashJoin ? "true" : "false") << R"(';
                         PRAGMA ydb.UseBlockHashJoin=')" << (blocks ? "true" : "false") << R"(';
+                        PRAGMA ydb.UseHashJoinForAny=')" << (any ? "true" : "false") << R"(';
                         $l = SELECT id, SOME()" << key << R"() AS key, SOME()" << payload << R"() AS p
                             FROM L WHERE k IS NOT NULL GROUP BY id;
                         $r = SELECT id, SOME()" << key << R"() AS key, SOME()" << payload << R"() AS p
@@ -235,17 +236,24 @@ Y_UNIT_TEST_SUITE(KqpScalarHashJoin) {
                         INNER JOIN )" << (side != "Left" ? "ANY " : "") << R"($r AS R ON L.key = R.key;
                     )";
                 };
-                const TString query = makeQuery(true);
-                auto explain = client.ExecuteQuery(query, TTxControl::NoTx(),
-                    TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
-                UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
-                const TString ast(*explain.GetStats()->GetAst());
-                UNIT_ASSERT_C(ast.Contains("GraceJoinCore"), ast);
-
                 // Payloads are identical for duplicate keys, so either ANY representative gives the same result.
                 const auto expected = RunQuerySortedRows(client, makeQuery(false));
                 UNIT_ASSERT(!expected.empty());
-                UNIT_ASSERT_VALUES_EQUAL(RunQuerySortedRows(client, query), expected);
+                for (const bool enableAny : {false, true}) {
+                    for (const bool blocks : {false, true}) {
+                        const TString query = makeQuery(blocks, enableAny);
+                        auto explain = client.ExecuteQuery(query, TTxControl::NoTx(),
+                            TExecuteQuerySettings().ExecMode(EExecMode::Explain)).GetValueSync();
+                        UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+                        const TString ast(*explain.GetStats()->GetAst());
+                        if (!blocks || !enableAny) {
+                            UNIT_ASSERT_C(ast.Contains("GraceJoinCore"), ast);
+                        } else if (key == "k" && payload == "k") {
+                            UNIT_ASSERT_C(ast.Contains("ScalarHashJoin") || ast.Contains("BlockHashJoin"), ast);
+                        }
+                        UNIT_ASSERT_VALUES_EQUAL(RunQuerySortedRows(client, query), expected);
+                    }
+                }
             }
         }
     }

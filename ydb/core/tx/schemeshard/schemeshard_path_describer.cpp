@@ -643,6 +643,7 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
     auto* pathDescription = Result->Record.MutablePathDescription();
     auto description = pathDescription->MutableColumnTableDescription();
     description->CopyFrom(tableInfo->Description);
+    description->SetIsBackup(tableInfo->IsReadOnly);
     description->MutableSharding()->CopyFrom(tableInfo->Description.GetSharding());
 
     if (tableInfo->IsStandalone()) {

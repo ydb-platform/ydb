@@ -7,6 +7,9 @@
 ### Функциональность
 
 * Добавлена поддержка рекурсивного удаления томов Solomon (KeyValue), пулов ресурсов и коллекций резервных копий с помощью [команды](./reference/ydb-cli/commands/dir.md#rmdir) `{{ ydb-cli }} scheme rmdir --recursive`.
+* Добавлена опция `--skip-storage-pool-conversion` в [команду](./reference/ydb-cli/commands/bridge/convert.md) `{{ ydb-cli }} admin cluster bridge convert`, позволяющая преобразовать только статические группы хранения, оставив существующие пулы хранения и их группы в обычном режиме. Эти пулы не реплицируются в добавляемые pile до отдельного преобразования. Для использования опции в `bridge_config` необходимо задать `enable_non_uniform_storage: true`.
+* В вывод [команды](./reference/ydb-cli/commands/bridge/list.md) `{{ ydb-cli }} admin cluster bridge list` в форматах `pretty` и `json` добавлены сведения о незавершённых операциях с pile, включая ошибку последней неудачной попытки.
+* В вывод [команды](./reference/ydb-cli/commands/bridge/list.md) `{{ ydb-cli }} admin cluster bridge list` добавлена поддержка состояния pile `INACTIVE`.
 
 ### Исправления ошибок
 
@@ -21,6 +24,7 @@
 
 * Добавлена поддержка [аутентификации OpenID Connect (OIDC)](./security/authentication.md#external-idp) с готовыми токенами, учётными данными клиента или авторизацией устройства. Параметры можно задать в YAML-файле с помощью опции `--oidc-config`, опциями `--oidc-*`, через переменные окружения или профили соединения.
 * Добавлена поддержка колоночных (OLAP) таблиц в [команду](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и [команду](./reference/ydb-cli/export-import/tools-restore.md) `{{ ydb-cli }} tools restore`. При восстановлении колоночных таблиц опция `--import-data` не поддерживается: вместо неё автоматически используется `--bulk-upsert`.
+* Добавлена [команда](./reference/ydb-cli/commands/bridge/convert.md) `{{ ydb-cli }} admin cluster bridge convert` для преобразования обычного кластера в кластер в режиме bridge с одним pile. Преобразование необратимо. [Команда](./reference/ydb-cli/commands/bridge/list.md) `{{ ydb-cli }} admin cluster bridge list` теперь показывает, продолжается ли преобразование, в форматах вывода `pretty` и `json`.
 * Добавлена возможность повторять опцию `--pile` в [команде](./reference/ydb-cli/commands/bridge/failover.md) `{{ ydb-cli }} admin cluster bridge failover`, чтобы отключить несколько недоступных pile за одну операцию.
 * Добавлен формат вывода `--format svg` в [команду](./reference/ydb-cli/sql.md) `{{ ydb-cli }} sql` для сохранения планов запросов в SVG при использовании опций `--explain` или `--explain-analyze`.
 * Добавлена опция `--content-based-deduplication` в [команду](./reference/ydb-cli/topic-create.md) `{{ ydb-cli }} topic create` и [команду](./reference/ydb-cli/topic-alter.md) `{{ ydb-cli }} topic alter` для настройки дедупликации сообщений по содержимому.

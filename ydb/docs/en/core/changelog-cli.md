@@ -7,6 +7,9 @@ Released on October 30, 2026. To update to version **2.35.0**, select the [Downl
 ### Features
 
 * Added support for recursively removing Solomon (KeyValue) volumes, resource pools, and backup collections with the `{{ ydb-cli }} scheme rmdir --recursive` [command](./reference/ydb-cli/commands/dir.md#rmdir).
+* Added the `--skip-storage-pool-conversion` option to the `{{ ydb-cli }} admin cluster bridge convert` [command](./reference/ydb-cli/commands/bridge/convert.md) to convert only static storage groups while leaving existing storage pools and their groups outside bridge mode. These pools are not replicated to added piles until converted separately. The option requires `enable_non_uniform_storage: true` in `bridge_config`.
+* Added information about pending pile operations, including the error from the last failed attempt, to the `pretty` and `json` output formats of the `{{ ydb-cli }} admin cluster bridge list` [command](./reference/ydb-cli/commands/bridge/list.md).
+* Added support for displaying the `INACTIVE` pile state in the output of the `{{ ydb-cli }} admin cluster bridge list` [command](./reference/ydb-cli/commands/bridge/list.md).
 
 ### Bug fixes
 
@@ -21,6 +24,7 @@ Released on October 18, 2026. To update to version **2.34.0**, select the [Downl
 
 * Added support for [OpenID Connect (OIDC) authentication](./security/authentication.md#external-idp) using static tokens, client credentials, or device authorization. Settings can be provided through YAML files with the `--oidc-config` option, the `--oidc-*` options, environment variables, or connection profiles.
 * Added support for column-oriented (OLAP) tables to the `{{ ydb-cli }} tools dump` [command](./reference/ydb-cli/export-import/tools-dump.md) and the `{{ ydb-cli }} tools restore` [command](./reference/ydb-cli/export-import/tools-restore.md). When restoring column-oriented tables, the `--import-data` option is not supported: `--bulk-upsert` is used automatically instead.
+* Added the `{{ ydb-cli }} admin cluster bridge convert` [command](./reference/ydb-cli/commands/bridge/convert.md) to convert a non-bridged cluster into a bridged one with a single pile. Conversion is irreversible. The `{{ ydb-cli }} admin cluster bridge list` [command](./reference/ydb-cli/commands/bridge/list.md) now shows whether conversion is still in progress in the `pretty` and `json` output formats.
 * Added support for repeating the `--pile` option in the `{{ ydb-cli }} admin cluster bridge failover` [command](./reference/ydb-cli/commands/bridge/failover.md) to disconnect multiple unavailable piles in one operation.
 * Added the `--format svg` output format to the `{{ ydb-cli }} sql` [command](./reference/ydb-cli/sql.md) for saving query plans as SVG when using the `--explain` or `--explain-analyze` options.
 * Added the `--content-based-deduplication` option to the `{{ ydb-cli }} topic create` [command](./reference/ydb-cli/topic-create.md) and the `{{ ydb-cli }} topic alter` [command](./reference/ydb-cli/topic-alter.md) to configure content-based message deduplication.

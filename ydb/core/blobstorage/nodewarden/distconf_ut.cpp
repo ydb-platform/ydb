@@ -8039,7 +8039,9 @@ selector_config: []
         CheckDisconnectPreservesOtherAddedNodeResponses(10);
     }
 
-    Y_UNIT_TEST(BridgeBoardFullSelfHealLeavesDisabledSubsystemsUnchanged) {
+    enum class EBoardSelfHealOutcome { Success, LateFailure, RootLoss, Superseded };
+
+    void CheckBridgeBoardSelfHealResult(EBoardSelfHealOutcome outcome) {
         TCommitConfirmationFixture fixture(false);
         fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageManagement(false);
         fixture.Config.MutableSelfManagementConfig()->SetAutomaticStateStorageBoardManagement(true);
@@ -8082,15 +8084,42 @@ selector_config: []
         const auto& policy = fixture.Config.GetSelfManagementConfig();
         ui32 reconfigurationRequests = 0;
         TActorId edge;
+        TActorId replacementEdge;
+        TActorId selfheal;
+        std::unique_ptr<IEventHandle> heldResult;
+        ui32 heldResultNode = 0;
+        const ui32 pauseAfterStep = outcome == EBoardSelfHealOutcome::RootLoss
+            || outcome == EBoardSelfHealOutcome::Superseded ? 1 : 4;
+        bool resultHeld = false;
+        constexpr ui64 cookie = 123;
         std::vector<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> results;
+        std::vector<NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult> replacementResults;
+        bool forwardedSelfHealResult = false;
         runtime.FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
             SetMetadataDiskGuid(nodeId, *ev);
+            if (nodeId == 1 && ev->Type == NStorage::TEvNodeConfigInvokeOnRootResult::EventType
+                    && ev->GetTypeRewrite() == TEvInterconnect::EvForward) {
+                forwardedSelfHealResult = true;
+            }
             if (edge && ev->GetRecipientRewrite() == edge
                     && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
                 const auto& result = ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
-                UNIT_ASSERT_C(result.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK,
-                    result.DebugString());
+                UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, cookie);
                 results.push_back(result);
+                return false;
+            }
+            if (replacementEdge && ev->GetRecipientRewrite() == replacementEdge
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, cookie + 1);
+                replacementResults.push_back(ev->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record);
+                return false;
+            }
+            if (selfheal && ev->GetRecipientRewrite() == selfheal && !resultHeld
+                    && reconfigurationRequests == pauseAfterStep
+                    && ev->GetTypeRewrite() == NStorage::TEvNodeConfigInvokeOnRootResult::EventType) {
+                resultHeld = true;
+                heldResultNode = nodeId;
+                heldResult = std::move(ev);
                 return false;
             }
             if (!fixture.Keepers.empty()
@@ -8104,7 +8133,12 @@ selector_config: []
                     UNIT_ASSERT_C(!config.HasStateStorageConfig(), config.DebugString());
                     UNIT_ASSERT_C(!config.HasSchemeBoardConfig(), config.DebugString());
                     UNIT_ASSERT_C(config.HasStateStorageBoardConfig(), config.DebugString());
-                    ++reconfigurationRequests;
+                    if (!selfheal) {
+                        selfheal = ev->Sender;
+                    }
+                    if (ev->Sender == selfheal) {
+                        ++reconfigurationRequests;
+                    }
                 }
             }
             if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenWriteMetadata::EventType) {
@@ -8123,7 +8157,7 @@ selector_config: []
             fixture.Keepers.push_back(RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State, {}, &bridge, &policy));
         }
         UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, fixture.Keepers) == 1; }));
-        edge = runtime.AllocateEdgeActor(1);
+        edge = runtime.AllocateEdgeActor(2);
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         auto *command = request->Record.MutableSelfHealNodesStateUpdate();
         command->SetEnableSelfHealStateStorage(true);
@@ -8136,9 +8170,56 @@ selector_config: []
             nodeState->SetNodeId(nodeId);
             nodeState->SetState(0);
         }
-        runtime.Send(new IEventHandle(fixture.Keepers.front(), edge, request.release()), 1);
-        UNIT_ASSERT_C(SimUntil(runtime, [&] { return results.size() == 2; }), "Board self-heal did not complete");
-        UNIT_ASSERT_VALUES_EQUAL(reconfigurationRequests, 4);
+        const auto originalCommand = request->Record;
+        runtime.Send(new IEventHandle(fixture.Keepers[1], edge, request.release(), 0, cookie), 2);
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return heldResult || !results.empty(); }),
+            "Board self-heal did not reach the held step");
+        UNIT_ASSERT_C(results.empty(), "self-heal answered before its child completed");
+        UNIT_ASSERT(heldResult);
+        UNIT_ASSERT_VALUES_EQUAL(reconfigurationRequests, pauseAfterStep);
+
+        if (outcome == EBoardSelfHealOutcome::RootLoss) {
+            UNIT_ASSERT(runtime.WrapInActorContext(fixture.Keepers.front(), [&](IActor* actor) {
+                static_cast<NStorage::TDistributedConfigKeeper*>(actor)->SwitchToError("self-heal root lost");
+            }));
+        } else if (outcome == EBoardSelfHealOutcome::Superseded) {
+            replacementEdge = runtime.AllocateEdgeActor(2);
+            auto replacement = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+            replacement->Record = originalCommand;
+            runtime.Send(new IEventHandle(fixture.Keepers[1], replacementEdge, replacement.release(), 0, cookie + 1), 2);
+        } else {
+            if (outcome == EBoardSelfHealOutcome::LateFailure) {
+                auto& result = heldResult->Get<NStorage::TEvNodeConfigInvokeOnRootResult>()->Record;
+                result.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::ERROR);
+                result.SetErrorReason("injected final self-heal step failure");
+            }
+            runtime.Send(heldResult.release(), heldResultNode);
+        }
+
+        UNIT_ASSERT_C(SimUntil(runtime, [&] { return !results.empty(); }), "self-heal lost its terminal result");
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        const auto expectedStatus = outcome == EBoardSelfHealOutcome::Success ? TResult::OK
+            : outcome == EBoardSelfHealOutcome::LateFailure ? TResult::ERROR : TResult::RACE;
+        UNIT_ASSERT_C(results.front().GetStatus() == expectedStatus, results.front().DebugString());
+        if (outcome == EBoardSelfHealOutcome::LateFailure) {
+            UNIT_ASSERT_VALUES_EQUAL(results.front().GetErrorReason(), "injected final self-heal step failure");
+        }
+        if (heldResult) {
+            runtime.Send(heldResult.release(), heldResultNode); // late result of the cancelled child
+        }
+        if (replacementEdge) {
+            UNIT_ASSERT_C(SimUntil(runtime, [&] { return !replacementResults.empty(); }),
+                "the replacement self-heal lost its terminal result");
+            UNIT_ASSERT_VALUES_EQUAL(replacementResults.size(), 1);
+            UNIT_ASSERT_C(replacementResults.front().GetStatus() == TResult::OK, replacementResults.front().DebugString());
+        }
+        SimUntil(runtime, [] { return false; }, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        UNIT_ASSERT(forwardedSelfHealResult);
+        UNIT_ASSERT_VALUES_EQUAL(reconfigurationRequests, pauseAfterStep);
+        if (outcome == EBoardSelfHealOutcome::RootLoss) {
+            return;
+        }
         const auto committed = QueryKeeper(runtime, fixture.Keepers.front()).GetQueryConfig().GetConfig();
         UNIT_ASSERT_VALUES_EQUAL(committed.GetStateStorageConfig().SerializeAsString(), originalStateStorage);
         UNIT_ASSERT_VALUES_EQUAL(committed.GetSchemeBoardConfig().SerializeAsString(), originalSchemeBoard);
@@ -8150,6 +8231,22 @@ selector_config: []
         UNIT_ASSERT_EQUAL(TBridgePileId::FromProto(&boardGroup,
             &NKikimrConfig::TStateStorageConfig::TRing::GetBridgePileId), TBridgePileId::FromPileIndex(0));
         CheckDurableConfigConverges(fixture, committed);
+    }
+
+    Y_UNIT_TEST(BridgeBoardFullSelfHealLeavesDisabledSubsystemsUnchanged) {
+        CheckBridgeBoardSelfHealResult(EBoardSelfHealOutcome::Success);
+    }
+
+    Y_UNIT_TEST(BridgeBoardFullSelfHealReturnsLateFailure) {
+        CheckBridgeBoardSelfHealResult(EBoardSelfHealOutcome::LateFailure);
+    }
+
+    Y_UNIT_TEST(BridgeBoardFullSelfHealCancellationOnRootLoss) {
+        CheckBridgeBoardSelfHealResult(EBoardSelfHealOutcome::RootLoss);
+    }
+
+    Y_UNIT_TEST(BridgeBoardFullSelfHealSupersededRequestReturnsRace) {
+        CheckBridgeBoardSelfHealResult(EBoardSelfHealOutcome::Superseded);
     }
 
     // State storage of three single-node rings 1, 2, 3, two of them needed for the quorum. Node 1 is seen bad, and the

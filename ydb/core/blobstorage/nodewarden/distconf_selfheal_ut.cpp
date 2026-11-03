@@ -9,44 +9,72 @@
 namespace NKikimr::NStorage {
 namespace {
 
-void CheckReassignCancellation(ui32 phase) {
+void CheckSelfhealCancellation(bool reassign, ui32 phase) {
     TTestActorSystem runtime(1);
     runtime.Start();
     Y_DEFER { runtime.Stop(); };
 
     const TActorId edge = runtime.AllocateEdgeActor(1);
-    runtime.RegisterService(MakeBlobStorageNodeWardenID(1), edge);
-    const TActorId actor = runtime.Register(new TStateStorageReassignNodeSelfhealActor(
-        edge, 123, TDuration::Minutes(1), 1, 2, true, true, true), 1);
-    auto disable = runtime.WaitForEdgeActorEvent<TEvNodeConfigInvokeOnRoot>(edge, false);
-    UNIT_ASSERT(disable->Get()->Record.GetReassignStateStorageNode().GetDisableRing());
+    const TActorId nodeWarden = runtime.AllocateEdgeActor(1);
+    const TActorId session = runtime.AllocateEdgeActor(1);
+    runtime.RegisterService(MakeBlobStorageNodeWardenID(1), nodeWarden);
+    using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+    std::vector<TResult> results;
+    runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+        if (ev->Type == TEvNodeConfigInvokeOnRootResult::EventType && ev->Recipient == edge) {
+            UNIT_ASSERT(ev->GetTypeRewrite() == TEvInterconnect::EvForward);
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), session);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Cookie, 123);
+            results.push_back(ev->Get<TEvNodeConfigInvokeOnRootResult>()->Record);
+            return false;
+        }
+        return true;
+    };
+    TActorId actor;
+    if (reassign) {
+        actor = runtime.Register(new TStateStorageReassignNodeSelfhealActor(
+            edge, 123, TDuration::Minutes(1), 1, 2, true, true, true, session), 1);
+    } else {
+        NKikimrBlobStorage::TStateStorageConfig current, target;
+        for (auto* config : {&current, &target}) {
+            auto* group = config->MutableStateStorageBoardConfig()->AddRingGroups();
+            group->SetNToSelect(1);
+            group->AddRing()->AddNode(config == &current ? 1 : 2);
+        }
+        actor = runtime.Register(new TStateStorageSelfhealActor(edge, 123, TDuration::Minutes(1),
+            std::move(current), std::move(target), false, session), 1);
+    }
+    auto request = runtime.WaitForEdgeActorEvent<TEvNodeConfigInvokeOnRoot>(nodeWarden, false);
+    UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.HasReassignStateStorageNode(), reassign);
 
     auto acknowledge = [&] {
         auto reply = std::make_unique<TEvNodeConfigInvokeOnRootResult>();
         reply->Record.SetStatus(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK);
-        runtime.Send(new IEventHandle(actor, edge, reply.release()), 1);
+        runtime.Send(new IEventHandle(actor, nodeWarden, reply.release()), 1);
     };
-    if (phase >= 1) {
-        acknowledge();
-    }
-    if (phase >= 2) {
-        runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvWakeup), 1);
-        auto replace = runtime.WaitForEdgeActorEvent<TEvNodeConfigInvokeOnRoot>(edge, false);
-        UNIT_ASSERT(!replace->Get()->Record.GetReassignStateStorageNode().GetDisableRing());
-    }
-    if (phase >= 3) {
-        acknowledge();
+    for (ui32 i : xrange(phase)) {
+        if (i % 2 == 0) {
+            acknowledge();
+        } else {
+            runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvWakeup), 1);
+            request = runtime.WaitForEdgeActorEvent<TEvNodeConfigInvokeOnRoot>(nodeWarden, false);
+        }
     }
 
-    // UnbecomeRoot and a superseding selfheal request cancel this actor with
-    // Poison. It must die quietly, including after applying the replacement
-    // while its final timer is still pending.
+    // Root loss and a superseding operation must complete the original request,
+    // even when the last change was applied but its final timer is pending.
     runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvPoison), 1);
+    runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvPoison), 1);
+    acknowledge(); // a late reply must not produce another result
+    runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvWakeup), 1);
     runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvPing,
         IEventHandle::FlagTrackDelivery), 1);
     auto undelivered = runtime.WaitForEdgeActorEvent<TEvents::TEvUndelivered>(edge);
     UNIT_ASSERT_VALUES_EQUAL(undelivered->Get()->SourceType, TEvents::TEvPing::EventType);
     UNIT_ASSERT_VALUES_EQUAL(undelivered->Get()->Reason, TEvents::TEvUndelivered::ReasonActorUnknown);
+    UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+    UNIT_ASSERT_C(results.front().GetStatus() == TResult::RACE, results.front().DebugString());
+    UNIT_ASSERT(TString(results.front().GetErrorReason()).Contains("cancelled"));
 }
 
 } // namespace
@@ -206,24 +234,33 @@ Y_UNIT_TEST_SUITE(TStateStorageSelfhealRecovery) {
         UNIT_ASSERT_VALUES_EQUAL(introduced.GetRingGroups(1).GetRingGroupActorIdOffset(), 13);
         UNIT_ASSERT(introduced.GetRingGroups(1).GetWriteOnly());
         runtime.Send(new IEventHandle(actor, edge, new TEvents::TEvPoison), 1);
+        auto cancelled = runtime.WaitForEdgeActorEvent<TEvNodeConfigInvokeOnRootResult>(edge);
+        UNIT_ASSERT_C(cancelled->Get()->Record.GetStatus() ==
+            NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE, cancelled->Get()->Record.DebugString());
     }
 }
 
 Y_UNIT_TEST_SUITE(TStateStorageReassignSelfhealCancellation) {
     Y_UNIT_TEST(BeforeDisableCompletes) {
-        CheckReassignCancellation(0);
+        CheckSelfhealCancellation(true, 0);
     }
 
     Y_UNIT_TEST(WhileWaitingToReplace) {
-        CheckReassignCancellation(1);
+        CheckSelfhealCancellation(true, 1);
     }
 
     Y_UNIT_TEST(BeforeReplaceCompletes) {
-        CheckReassignCancellation(2);
+        CheckSelfhealCancellation(true, 2);
     }
 
     Y_UNIT_TEST(AfterReplaceCompletes) {
-        CheckReassignCancellation(3);
+        CheckSelfhealCancellation(true, 3);
+    }
+
+    Y_UNIT_TEST(FullSelfhealReturnsRoutedResultAtEveryPhase) {
+        for (ui32 phase : xrange(8u)) {
+            CheckSelfhealCancellation(false, phase);
+        }
     }
 }
 
@@ -285,6 +322,10 @@ Y_UNIT_TEST_SUITE(TDistconfStateStorageSelfhealTest) {
         setup.ExpectRequest(true);
         setup.ReplyOK();
         setup.Runtime.Send(new IEventHandle(setup.Selfheal, setup.Client, new TEvents::TEvPoison), 1);
+        auto cancelled = setup.Runtime.WaitForEdgeActorEvent<TEvNodeConfigInvokeOnRootResult>(setup.Client, false);
+        UNIT_ASSERT_C(cancelled->Get()->Record.GetStatus() ==
+            NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE, cancelled->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(cancelled->Cookie, 42);
         setup.Runtime.Schedule(TDuration::Seconds(3),
             new IEventHandle(setup.NodeWarden, setup.Client, new TEvents::TEvWakeup), nullptr, 1);
         setup.Runtime.WaitForEdgeActorEvent<TEvents::TEvWakeup>(setup.NodeWarden);

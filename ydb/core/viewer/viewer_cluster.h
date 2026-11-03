@@ -32,7 +32,6 @@ class TJsonCluster : public TViewerPipeClient {
 
     int WhiteboardStateRequestsInFlight = 0;
     bool WhiteboardRequestsSent = false;
-    bool WhiteboardProcessed = false;
     bool NodePileMapAvailable = false;
     bool LocalPileOnly = false;
     bool PileRequestsStarted = false;
@@ -823,7 +822,6 @@ private:
                 (*ClusterInfo.AddSystemTablets()) = std::move(tabletState);
             }
         }
-        WhiteboardProcessed = true;
     }
 
     void WhiteboardRequestDone() {
@@ -1279,27 +1277,28 @@ private:
                             (*pbBridgePileInfo.MutableGroupStatuses())[status] = count;
                         }
                         if (NodePileMapAvailable) {
-                            const auto& nodes = pileNodes[pile.BridgePileId.GetPileIndex()];
-                            pbBridgePileInfo.SetNodes(nodes.Storage + nodes.Compute);
-                            pbBridgePileInfo.SetStorageNodes(nodes.Storage);
-                            pbBridgePileInfo.SetComputeNodes(nodes.Compute);
+                            auto nodes = pileNodes[pile.BridgePileId.GetPileIndex()];
                             // A DISCONNECTED pile can still be queried from within that same pile.
-                            if (WhiteboardProcessed && CanQueryPile(srcBridgeInfo, pile)) {
-                                pbBridgePileInfo.SetAliveNodes(nodes.AliveStorage + nodes.AliveCompute);
-                                pbBridgePileInfo.SetAliveStorageNodes(nodes.AliveStorage);
-                                pbBridgePileInfo.SetAliveComputeNodes(nodes.AliveCompute);
-                            }
+                            bool aliveKnown = WhiteboardRequestsSent && WhiteboardStateRequestsInFlight == 0
+                                && CanQueryPile(srcBridgeInfo, pile);
                             if (auto it = PileRequests.find(pile.BridgePileId.GetPileIndex());
                                     it != PileRequests.end() && it->second.Result) {
                                 const auto& remote = *it->second.Result;
-                                ClusterInfo.SetNodesTotal(ClusterInfo.GetNodesTotal() - pbBridgePileInfo.GetNodes() + remote.GetNodes());
+                                ClusterInfo.SetNodesTotal(ClusterInfo.GetNodesTotal() - (nodes.Storage + nodes.Compute) + remote.GetNodes());
                                 ClusterInfo.SetNodesAlive(ClusterInfo.GetNodesAlive() + remote.GetAliveNodes());
-                                pbBridgePileInfo.SetNodes(remote.GetNodes());
-                                pbBridgePileInfo.SetStorageNodes(remote.GetStorageNodes());
-                                pbBridgePileInfo.SetComputeNodes(remote.GetComputeNodes());
-                                pbBridgePileInfo.SetAliveNodes(remote.GetAliveNodes());
-                                pbBridgePileInfo.SetAliveStorageNodes(remote.GetAliveStorageNodes());
-                                pbBridgePileInfo.SetAliveComputeNodes(remote.GetAliveComputeNodes());
+                                nodes.Storage = remote.GetStorageNodes();
+                                nodes.Compute = remote.GetComputeNodes();
+                                nodes.AliveStorage = remote.GetAliveStorageNodes();
+                                nodes.AliveCompute = remote.GetAliveComputeNodes();
+                                aliveKnown = true;
+                            }
+                            pbBridgePileInfo.SetNodes(nodes.Storage + nodes.Compute);
+                            pbBridgePileInfo.SetStorageNodes(nodes.Storage);
+                            pbBridgePileInfo.SetComputeNodes(nodes.Compute);
+                            if (aliveKnown) {
+                                pbBridgePileInfo.SetAliveNodes(nodes.AliveStorage + nodes.AliveCompute);
+                                pbBridgePileInfo.SetAliveStorageNodes(nodes.AliveStorage);
+                                pbBridgePileInfo.SetAliveComputeNodes(nodes.AliveCompute);
                             }
                         }
                     }

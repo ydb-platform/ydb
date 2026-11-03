@@ -1507,7 +1507,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
             (*pileMap)[i < 4 ? 0 : 2].push_back(firstNodeId + i);
         }
 
-        std::unordered_set<ui32> queriedNodes;
         ui32 httpsRequests = 0;
         struct TForwardedRequest {
             TActorId Sender;
@@ -1518,7 +1517,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
             return dynamic_cast<TJsonCluster*>(runtime.FindActor(actorId)) != nullptr;
         };
         auto addSystemState = [&](NKikimrWhiteboard::TEvSystemStateResponse& response, ui32 nodeId) {
-            queriedNodes.insert(nodeId - firstNodeId);
+            if (options.LocalState == NKikimrBridge::TClusterState::DISCONNECTED) {
+                UNIT_ASSERT_C(nodeId - firstNodeId < 4, "Whiteboard request crossed the disconnected pile boundary");
+            }
             if (options.AliveNodeIndexes.contains(nodeId - firstNodeId)) {
                 auto* state = response.AddSystemStateInfo();
                 state->SetNodeId(nodeId);
@@ -1647,7 +1648,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
-            TStringBuilder() << "GET /viewer/json/cluster?direct=1&use_health_check=false&timeout=10000&offload_merge="
+            TStringBuilder() << "GET /viewer/json/cluster?use_health_check=false&timeout=10000&offload_merge="
                 << options.OffloadMerge << "&local_pile_only=" << options.LocalPileOnly << " HTTP/1.1\r\n"
                 << (options.SessionCookie ? "Cookie: ydb_session_id=test-session; unrelated=secret\r\n"
                                           : "Authorization: Bearer test-token\r\n")
@@ -1660,10 +1661,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, "200", response->Response->Body);
         UNIT_ASSERT_VALUES_EQUAL(httpsRequests, options.ExpectedHttpsRequests);
-        if (options.LocalState == NKikimrBridge::TClusterState::DISCONNECTED) {
-            UNIT_ASSERT(!queriedNodes.contains(4));
-            UNIT_ASSERT(!queriedNodes.contains(5));
-        }
         NJson::TJsonValue json;
         NJson::ReadJsonTree(response->Response->Body, &json, true);
         return json;

@@ -16,7 +16,7 @@ NYT::TAttributeFilter MakeAttrFilter(const TSet<TString>& attributes, bool isRes
 
 IYtGateway::TBatchFolderResult::TFolderItem MakeFolderItem(const NYT::TNode& node, const TString& prefix, const TString& name, const TVector<TString>& reqAttrKeys);
 
-const TTransactionCache::TEntry::TFolderCache::value_type& StoreResInCache(const TTransactionCache::TEntry::TPtr& entry, TVector<IYtGateway::TBatchFolderResult::TFolderItem>&& items, const TString& cacheKey);
+const TTransactionCache::TEntry::TFolderCache::value_type& StoreResInCache(const TTransactionCache::TEntry::TPtr& entry, const TVector<IYtGateway::TBatchFolderResult::TFolderItem>& items, const TString& cacheKey);
 
 TFileLinkPtr SaveItemsToTempFile(const TExecContext<IYtGateway::TBatchFolderOptions>::TPtr& execCtx, const TVector<IYtGateway::TFolderResult::TFolderItem>& folderItems);
 

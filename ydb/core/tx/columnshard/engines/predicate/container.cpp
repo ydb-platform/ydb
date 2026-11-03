@@ -4,12 +4,22 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/replace_key.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap {
 std::partial_ordering TPredicateContainer::ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r) {
     return l.Batch.ComparePartial(r.Batch);
+}
+
+void TPredicateContainer::AppendPointTo(std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders) const {
+    AFL_VERIFY(Object);
+    const auto point = Object->Batch.BuildSortingCursor().ExtractSortingPosition(Object->Batch.GetSortFields());
+    AFL_VERIFY((ui32)point->num_columns() <= builders.size())("point", point->num_columns())("builders", builders.size());
+    for (i32 idx = 0; idx < point->num_columns(); ++idx) {
+        AFL_VERIFY(NArrow::Append(*builders[idx], *point->column(idx), 0));
+    }
 }
 
 TString TPredicateContainer::DebugString() const {

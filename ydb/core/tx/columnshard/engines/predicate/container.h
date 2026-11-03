@@ -61,10 +61,8 @@ public:
         return Object->Batch.ComparePartial(pk);
     }
 
-    void AppendPointTo(std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders) const {
-        AFL_VERIFY(Object);
-        Object->Batch.BuildSortingCursor().AppendPositionTo(builders, nullptr);
-    }
+    // Appends the predicate point into the first NumColumns() builders; the builders beyond the prefix are left to the caller.
+    void AppendPointTo(std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders) const;
 
     bool IsAll() const {
         return !Object;

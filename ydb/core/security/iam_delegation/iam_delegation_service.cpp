@@ -143,7 +143,9 @@ private:
             TStringBuf method, ECall call, TString operationId = {}, TMonotonic deadline = TMonotonic::Max()) {
         deadline = Min(deadline, TActivationContext::Monotonic() + Settings.RequestRetryTimeout);
         co_await GetIamCallToken(Credentials, deadline);
-        const std::optional<ui64> version = RetryBackoff.GetVersion(); // RED: shared admission not connected yet
+        const auto version = co_await WithDeadline(deadline, [this]() -> async<ui64> {
+            co_return co_await RetryBackoff.Wait(Settings.RequestTimeout * 2 + TDuration::Seconds(1));
+        });
         if (!version) {
             throw TIamCallError(Ydb::StatusIds::TIMEOUT) << "IAM service retry deadline exceeded";
         }

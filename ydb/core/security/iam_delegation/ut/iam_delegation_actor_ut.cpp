@@ -226,7 +226,7 @@ struct TFixture {
         auto undelivered = Runtime.GrabEdgeEvent<TEvents::TEvUndelivered>(edge, TDuration::Seconds(1));
         UNIT_ASSERT(undelivered);
         UNIT_ASSERT_VALUES_EQUAL(undelivered->Cookie, 123u);
-        Until([&] { return PoisonedClients.size() >= 2; });
+        Until([&] { return PoisonedClients.size() == 2; });
         UNIT_ASSERT(PoisonedClients[0] != PoisonedClients[1]);
     }
 };
@@ -379,12 +379,9 @@ Y_UNIT_TEST_SUITE(IamDelegationActor) {
         TFixture f;
         f.Update();
         f.Setup();
-        TAutoPtr<IEventHandle> last;
-        for (ui32 attempt = 0; attempt < 1; ++attempt) {
-            last = f.Take(f.Setups);
-            f.Runtime.Send(new IEventHandle(last->Sender, last->Recipient,
-                new TEvents::TEvUndelivered(last->GetTypeRewrite(), TEvents::TEvUndelivered::ReasonActorUnknown), 0, last->Cookie));
-        }
+        auto last = f.Take(f.Setups);
+        f.Runtime.Send(new IEventHandle(last->Sender, last->Recipient,
+            new TEvents::TEvUndelivered(last->GetTypeRewrite(), TEvents::TEvUndelivered::ReasonActorUnknown), 0, last->Cookie));
         const auto result = f.Result(Ydb::StatusIds::UNAVAILABLE);
         UNIT_ASSERT_STRING_CONTAINS(result.Result.Issues.ToOneLineString(), "IAM client is unavailable");
         f.Reply<TControl::TEvSetupDelegationResponse>(*last);
@@ -615,6 +612,32 @@ Y_UNIT_TEST_SUITE(IamSharedRetries) {
         }
     }
 
+    Y_UNIT_TEST(CredentialAndPermissionRefusalsStayDistinctWithoutReplay) {
+        for (auto code : {grpc::StatusCode::UNAUTHENTICATED, grpc::StatusCode::PERMISSION_DENIED}) {
+            TFixture f;
+            f.Update();
+            f.Setup();
+            auto request = f.Take(f.Setups);
+            auto reply = MakeHolder<TControl::TEvSetupDelegationResponse>();
+            reply->Status.GRpcStatusCode = code;
+            reply->Status.Msg = "credential-sentinel";
+            f.Runtime.Send(new IEventHandle(request->Sender, request->Recipient, reply.Release(), 0, request->Cookie));
+            const auto result = f.Result(Ydb::StatusIds::UNAUTHORIZED);
+            const auto issue = result.Result.Issues.ToOneLineString();
+            UNIT_ASSERT_STRING_CONTAINS(issue, code == grpc::StatusCode::UNAUTHENTICATED
+                ? "authentication failed" : "permission denied");
+            UNIT_ASSERT(!issue.Contains("credential-sentinel"));
+            if (code == grpc::StatusCode::PERMISSION_DENIED) {
+                UNIT_ASSERT_STRING_CONTAINS(issue, "iam.serviceAccounts.use");
+                UNIT_ASSERT_STRING_CONTAINS(issue, "internal.service-control.delegator");
+            } else {
+                UNIT_ASSERT(!issue.Contains("iam.serviceAccounts.use"));
+            }
+            f.Runtime.SimulateSleep(TDuration::Seconds(2));
+            UNIT_ASSERT(f.Setups.empty());
+        }
+    }
+
     Y_UNIT_TEST(SuccessCodedTerminalErrorDoesNotReportSuccess) {
         TFixture f;
         f.Update();
@@ -654,6 +677,8 @@ Y_UNIT_TEST_SUITE(IamDelegationSettings) {
         UNIT_ASSERT(!settings.Config.GetEnableSsl());
         UNIT_ASSERT(!config.HasServiceId()); // normalization does not mutate caller config
 
+        // A node normalizing settings must retain fields from newer versions.
+        config.GetReflection()->MutableUnknownFields(&config)->AddLengthDelimited(50000, "future-config");
         config.SetEnableSsl(true);
         config.SetTokenServiceEndpoint("own-token");
         config.SetServiceId("own-service");

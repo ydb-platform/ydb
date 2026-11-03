@@ -7,30 +7,20 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 static void WriteRows(TTestActorRuntime& runtime, ui64 tabletId, ui32 key, ui32 index) {
+    // Five keys per range preserve multiple scan batches and the null-key case.
     TString writeQuery = Sprintf(R"(
         (
-            (let keyNull   '( '('key   (Null) ) ) )
-            (let row0   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-            (let key0   '( '('key   (Uint32 '%u ) ) ) )
-            (let row0   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-            (let key1   '( '('key   (Uint32 '%u ) ) ) )
-            (let row1   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-            (let key2   '( '('key   (Uint32 '%u ) ) ) )
-            (let row2   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-            (let key3   '( '('key   (Uint32 '%u ) ) ) )
-            (let row3   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-            (let key4   '( '('key   (Uint32 '%u ) ) ) )
-            (let row4   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-            (let key5   '( '('key   (Uint32 '%u ) ) ) )
-            (let row5   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-            (let key6   '( '('key   (Uint32 '%u ) ) ) )
-            (let row6   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-            (let key7   '( '('key   (Uint32 '%u ) ) ) )
-            (let row7   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-            (let key8   '( '('key   (Uint32 '%u ) ) ) )
-            (let row8   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
-            (let key9   '( '('key   (Uint32 '%u ) ) ) )
-            (let row9   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let keyNull '( '('key   (Null) ) ) )
+            (let key0    '( '('key   (Uint32 '%u ) ) ) )
+            (let row0    '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key1    '( '('key   (Uint32 '%u ) ) ) )
+            (let row1    '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key2    '( '('key   (Uint32 '%u ) ) ) )
+            (let row2    '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key3    '( '('key   (Uint32 '%u ) ) ) )
+            (let row3    '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
+            (let key4    '( '('key   (Uint32 '%u ) ) ) )
+            (let row4    '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
 
             (return (AsList
                         (UpdateRow '__user__Table keyNull row0)
@@ -39,26 +29,15 @@ static void WriteRows(TTestActorRuntime& runtime, ui64 tabletId, ui32 key, ui32 
                         (UpdateRow '__user__Table key2 row2)
                         (UpdateRow '__user__Table key3 row3)
                         (UpdateRow '__user__Table key4 row4)
-                        (UpdateRow '__user__Table key5 row5)
-                        (UpdateRow '__user__Table key6 row6)
-                        (UpdateRow '__user__Table key7 row7)
-                        (UpdateRow '__user__Table key8 row8)
-                        (UpdateRow '__user__Table key9 row9)
                      )
             )
         )
     )",
-         1000*index + 0,
          1000*key + 0, 1000*index + 0,
          1000*key + 1, 1000*index + 1,
          1000*key + 2, 1000*index + 2,
          1000*key + 3, 1000*index + 3,
-         1000*key + 4, 1000*index + 4,
-         1000*key + 5, 1000*index + 5,
-         1000*key + 6, 1000*index + 6,
-         1000*key + 7, 1000*index + 7,
-         1000*key + 8, 1000*index + 8,
-         1000*key + 9, 1000*index + 9);
+         1000*key + 4, 1000*index + 4);
 
     NKikimrMiniKQL::TResult result;
     TString err;
@@ -88,9 +67,23 @@ static void WriteNullKey(TTestActorRuntime& runtime, ui64 tabletId, ui32 index) 
     UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
 }
 
+static void SetIndexBuildRebootTablets(TTestWithReboots& t) {
+    // Nonexistent tablets would rerun the full scenario in every reboot bucket.
+    t.TabletIds = {
+        t.HiveTabletId,
+        t.CoordinatorTabletId,
+        t.SchemeShardTabletId,
+        t.TxAllocatorId,
+        TTestTxConfig::FakeHiveTablets,
+        TTestTxConfig::FakeHiveTablets + 1,
+        TTestTxConfig::FakeHiveTablets + 2,
+    };
+}
+
 Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
     void DoBaseCase(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {
+        SetIndexBuildRebootTablets(t);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
             runtime.GetAppData().FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
@@ -134,10 +127,10 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
                     if (indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
                         //                                   V -- here the null key
-                        NKqp::CompareYson(R"([[[[[["100500"];#];[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
+                        NKqp::CompareYson(R"([[[[[["100500"];#];[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]]];%false]]])", result);
                     } else {
                         //                                   V -- here the null key
-                        NKqp::CompareYson(R"([[[[[["101000"];#];[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
+                        NKqp::CompareYson(R"([[[[[["101000"];#];[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]]];%false]]])", result);
                     }
                 }
             }
@@ -187,13 +180,12 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 UNIT_ASSERT_VALUES_EQUAL(err, "");
 
                 if (indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
-                    // record with null is there ->                                                                                                                                                                                                                                  V -- here is the null
-                    NKqp::CompareYson(R"([[[[[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["100500"];#];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
+                    NKqp::CompareYson(R"([[[[[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100500"];#];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]]];%false]]])", result);
                 } else {
-                    // record with null is there ->                                                                                                                                                                                                                                  V -- here is the null
-                    NKqp::CompareYson(R"([[[[[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["101000"];#];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
+                    NKqp::CompareYson(R"([[[[[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["101000"];#];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]]];%false]]])", result);
                 }
             }
+            UNIT_ASSERT_VALUES_EQUAL(t.TestEnv->GetHiveState()->NextTabletId, TTestTxConfig::FakeHiveTablets + 3);
         });
     }
 
@@ -210,6 +202,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
     }
 
     void DoBaseCaseWithDataColumns(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {
+        SetIndexBuildRebootTablets(t);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableAddUniqueIndex(true);
             {
@@ -280,11 +273,12 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 UNIT_ASSERT_VALUES_EQUAL(err, "");
 
                 if (indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
-                    NKqp::CompareYson(R"([[[[[["100000"];["1000"];["aaaa"]];[["100001"];["1001"];["aaaa"]];[["100002"];["1002"];["aaaa"]];[["100003"];["1003"];["aaaa"]];[["100004"];["1004"];["aaaa"]];[["100005"];["1005"];["aaaa"]];[["100006"];["1006"];["aaaa"]];[["100007"];["1007"];["aaaa"]];[["100008"];["1008"];["aaaa"]];[["100009"];["1009"];["aaaa"]];[["100500"];#;["aaaa"]];[["101000"];["2000"];["aaaa"]];[["101001"];["2001"];["aaaa"]];[["101002"];["2002"];["aaaa"]];[["101003"];["2003"];["aaaa"]];[["101004"];["2004"];["aaaa"]];[["101005"];["2005"];["aaaa"]];[["101006"];["2006"];["aaaa"]];[["101007"];["2007"];["aaaa"]];[["101008"];["2008"];["aaaa"]];[["101009"];["2009"];["aaaa"]]];%false]]])", result);
+                    NKqp::CompareYson(R"([[[[[["100000"];["1000"];["aaaa"]];[["100001"];["1001"];["aaaa"]];[["100002"];["1002"];["aaaa"]];[["100003"];["1003"];["aaaa"]];[["100004"];["1004"];["aaaa"]];[["100500"];#;["aaaa"]];[["101000"];["2000"];["aaaa"]];[["101001"];["2001"];["aaaa"]];[["101002"];["2002"];["aaaa"]];[["101003"];["2003"];["aaaa"]];[["101004"];["2004"];["aaaa"]]];%false]]])", result);
                 } else {
-                    NKqp::CompareYson(R"([[[[[["100000"];["1000"];["aaaa"]];[["100001"];["1001"];["aaaa"]];[["100002"];["1002"];["aaaa"]];[["100003"];["1003"];["aaaa"]];[["100004"];["1004"];["aaaa"]];[["100005"];["1005"];["aaaa"]];[["100006"];["1006"];["aaaa"]];[["100007"];["1007"];["aaaa"]];[["100008"];["1008"];["aaaa"]];[["100009"];["1009"];["aaaa"]];[["101000"];#;["aaaa"]];[["101000"];["2000"];["aaaa"]];[["101001"];["2001"];["aaaa"]];[["101002"];["2002"];["aaaa"]];[["101003"];["2003"];["aaaa"]];[["101004"];["2004"];["aaaa"]];[["101005"];["2005"];["aaaa"]];[["101006"];["2006"];["aaaa"]];[["101007"];["2007"];["aaaa"]];[["101008"];["2008"];["aaaa"]];[["101009"];["2009"];["aaaa"]]];%false]]])", result);
+                    NKqp::CompareYson(R"([[[[[["100000"];["1000"];["aaaa"]];[["100001"];["1001"];["aaaa"]];[["100002"];["1002"];["aaaa"]];[["100003"];["1003"];["aaaa"]];[["100004"];["1004"];["aaaa"]];[["101000"];#;["aaaa"]];[["101000"];["2000"];["aaaa"]];[["101001"];["2001"];["aaaa"]];[["101002"];["2002"];["aaaa"]];[["101003"];["2003"];["aaaa"]];[["101004"];["2004"];["aaaa"]]];%false]]])", result);
                 }
             }
+            UNIT_ASSERT_VALUES_EQUAL(t.TestEnv->GetHiveState()->NextTabletId, TTestTxConfig::FakeHiveTablets + 3);
         });
     }
 

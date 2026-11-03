@@ -58,4 +58,4 @@ If the block store volume is running out of space, you can apply defragmentation
 
 ## Moving individual VDisks from full block store volumes
 
-If defragmentation doesn't help free up space on the block store volume, you can [move](moving_vdisks.md#moving_disk) individual VDisks.
+If defragmentation doesn't help free up space on the block store volume, you can [move](moving_vdisks.md#moving_vdisk) individual VDisks.

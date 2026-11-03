@@ -1,4 +1,8 @@
-/* syntax version 1 */
+$input = [
+    <|doc: Just("\x0a\x0fhttp://agbz.ru/\x10\x02\x18\x84\xfb\x89\xc6\x05\"\x04fake")|>,
+    <|doc: Just("\x0aSO REALLY BAD BAD BAD PROTO ROW\x0a\xbf\x02")|>,
+];
+
 /*
     Should check is TryParse work correct for proto with required fields
     Can't parse message of type "NNewsStorageProtocol.TRawNewsDoc" because it is missing required fields: Url, Status, FetchTime, FetchHost
@@ -14,4 +18,4 @@ $config = @@{
 $udf = Udf(Protobuf::TryParse, $config as TypeConfig);
 
 SELECT $udf(doc) AS parsed
-FROM Input;
+FROM AS_TABLE($input);

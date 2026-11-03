@@ -6,7 +6,7 @@ LICENSE(MIT)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.1.0)
+VERSION(1.1.1)
 
 PEERDIR(
     contrib/libs/brotli/c/common

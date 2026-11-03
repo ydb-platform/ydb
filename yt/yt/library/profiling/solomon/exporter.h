@@ -11,6 +11,8 @@
 
 #include <yt/yt/core/http/public.h>
 
+#include <yt/yt/core/logging/log.h>
+
 #include <yt/yt/core/ytree/ypath_detail.h>
 
 #include <yt/yt/library/profiling/producer.h>
@@ -19,6 +21,24 @@
 #include <library/cpp/monlib/encode/format.h>
 
 namespace NYT::NProfiling {
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Arguments of a Solomon fetch, see #ParseSolomonFetchArgs.
+struct TSolomonFetchArgs
+{
+    //! Set together; if unset, the last collected step is read.
+    std::optional<TInstant> Now;
+    std::optional<TDuration> Period;
+
+    std::optional<TDuration> Grid;
+
+    //! Enables Solomon-specific conversions, e.g. of counters to rates.
+    bool IsSolomonPull = true;
+};
+
+//! Parses the "now" and "period" query parameters and the "X-Solomon-GridSec" header.
+TSolomonFetchArgs ParseSolomonFetchArgs(TStringBuf rawQuery, std::optional<TStringBuf> gridHeader);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -43,6 +63,14 @@ public:
         ::NMonitoring::IMetricEncoderPtr encoder,
         const TReadOptions& options,
         std::optional<std::string> shard);
+
+    //! Reads sensors as the HTTP shard handler does, for serving Solomon fetches from another HTTP server.
+    //! Unlike #ReadSensors, does not begin or end the stream, so the caller can add its own metrics.
+    //! May wait for read_delay until the requested steps are collected; throws if they are not.
+    void ReadSensorsForFetch(
+        const TSolomonFetchArgs& args,
+        ::NMonitoring::IMetricConsumer* consumer,
+        const std::optional<std::string>& shard = {});
 
     void AttachRemoteProcess(TCallback<TFuture<TSharedRef>()> dumpSensors);
 
@@ -135,6 +163,17 @@ private:
         const std::optional<std::string>& name,
         const NHttp::IRequestPtr& req,
         const NHttp::IResponseWriterPtr& rsp);
+
+    void ValidateFetchArgs(const TSolomonFetchArgs& args, TDuration gridStep);
+
+    //! Requires #Lock_ to be held by #guard, which is reacquired while waiting for the requested steps.
+    void DoReadSensorsForFetch(
+        const TSolomonFetchArgs& args,
+        TDuration gridStep,
+        const std::optional<std::string>& shard,
+        ::NMonitoring::IMetricConsumer* consumer,
+        TIntrusivePtr<NConcurrency::TAsyncLockReaderGuard>* guard,
+        const NLogging::TLogger& Logger);
 
     void ValidatePeriodAndGrid(std::optional<TDuration> period, std::optional<TDuration> readGridStep, TDuration gridStep);
 

@@ -96,6 +96,9 @@ namespace NKikimr::NStorage {
                         &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId);
                     if (std::ranges::find(switchedPileIds, pileId) != switchedPileIds.end()) {
                         pss.SetBecameUnsyncedGeneration(generation); // BSC resets parts of its groups in the pile
+                        // and has to report them synced anew: BSC may have reported the pile synced while it was out,
+                        // when no group needed syncing in it, and groups created since then have parts there too
+                        pss.SetUnsyncedBSC(true);
                     }
                 }
                 ResetStaticGroupPileParts(config, switchedPileIds, generation);

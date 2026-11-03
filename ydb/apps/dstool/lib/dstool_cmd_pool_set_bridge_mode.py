@@ -2,6 +2,7 @@ import ydb.apps.dstool.lib.common as common
 import sys
 
 description = 'Make storage pool of bridged cluster bridged or ordinary one; its groups keep their ids and data'
+hidden = True
 
 
 def add_options(p):

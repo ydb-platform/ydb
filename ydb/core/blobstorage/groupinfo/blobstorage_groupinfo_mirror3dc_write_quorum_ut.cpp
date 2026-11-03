@@ -89,6 +89,82 @@ void CheckBlobStateCase(const TStates& states, const TCopies& copies, const TCop
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
+
+    Y_UNIT_TEST(FullSyncQuorumUsesNormalSourcesInN1RF) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        using TGroupVDisks = TBlobStorageGroupInfo::TGroupVDisks;
+        for (ui32 sourceRealm = 0; sourceRealm < 3; ++sourceRealm) {
+            std::array<TFailRealm::EState, 3> states{TFailRealm::F, TFailRealm::F, TFailRealm::F};
+            states[sourceRealm] = TFailRealm::N1;
+            states[(sourceRealm + 1) % 3] = TFailRealm::R;
+            const TBlobStorageGroupInfo info = MakeInfo(states);
+            const TBlobStorageGroupInfo::TTopology& topology = info.GetTopology();
+            TGroupVDisks synced(&topology);
+            UNIT_ASSERT(!TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, synced));
+            // Replies from R and F cannot replace the surviving normal source.
+            for (ui32 disk = 0; disk < info.GetTotalVDisksNum(); ++disk) {
+                const TVDiskID vdiskId = info.GetVDiskId(disk);
+                if (vdiskId.FailRealm != sourceRealm) {
+                    synced |= TGroupVDisks(&topology, vdiskId);
+                }
+            }
+            UNIT_ASSERT(!TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, synced));
+            const TVector<TBlobStorageGroupInfo::TFailDomain>& domains = topology.FailRealms[sourceRealm].FailDomains;
+            for (ui32 domain = 0; domain < domains.size(); ++domain) {
+                for (const TBlobStorageGroupInfo::TVDiskInfo& disk : domains[domain].VDisks) {
+                    synced |= TGroupVDisks(&topology, info.GetVDiskId(disk.OrderNumber));
+                }
+                UNIT_ASSERT_VALUES_EQUAL(TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, synced),
+                    domain + 1 == domains.size());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(OsirisRestoresDurabilityInsteadOfWriteQuorum) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
+        std::optional<TMirror3dcWriteQuorumChecker> checker = TMirror3dcWriteQuorumChecker::TryCreate(
+            {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0},
+            EMirror3dcLayout::LAYOUT_111_22, EMirror3dcLayout::LAYOUT_111_22);
+        UNIT_ASSERT(checker);
+        TSubgroupPartLayout parts;
+        parts.AddItem(0, 0, type);
+        parts.AddItem(3, 0, type);
+        parts.AddItem(1, 1, type);
+        parts.AddItem(4, 1, type);
+        UNIT_ASSERT(checker->CheckQuorumForLayout(parts)); // W is satisfied by 2+2.
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 2), 1u << 2); // D requires 1+1+1.
+        parts.AddItem(2, 2, type);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 5), 0);
+
+        checker = TMirror3dcWriteQuorumChecker::TryCreate(
+            {TFailRealm::N0, TFailRealm::N0, TFailRealm::F},
+            EMirror3dcLayout::LAYOUT_22, EMirror3dcLayout::LAYOUT_11_2);
+        TSubgroupPartLayout degraded;
+        degraded.AddItem(0, 0, type);
+        degraded.AddItem(1, 1, type);
+        UNIT_ASSERT(!checker->CheckQuorumForLayout(degraded)); // W requires 2+2.
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(degraded, 3), 0); // D only requires 1+1.
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(degraded, 2), 0); // F is excluded.
+    }
+
+    Y_UNIT_TEST(OsirisRequiresAnActiveSourceAndUsesRecoveringRealmWhenNeeded) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        const TBlobStorageGroupType type(TBlobStorageGroupType::ErasureMirror3dc);
+        const std::optional<TMirror3dcWriteQuorumChecker> checker = TMirror3dcWriteQuorumChecker::TryCreate(
+            {TFailRealm::N0, TFailRealm::R, TFailRealm::F},
+            EMirror3dcLayout::LAYOUT_22, EMirror3dcLayout::LAYOUT_0);
+        UNIT_ASSERT(checker);
+        TSubgroupPartLayout parts;
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 0), 0);
+        parts.AddItem(2, 2, type); // A source in F cannot be used.
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 0), 0);
+        parts.AddItem(0, 0, type);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 1), 1u << 1);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 3), 0);
+        parts.AddItem(1, 1, type);
+        UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 4), 0);
+    }
     Y_UNIT_TEST(NormalGroupFailuresMatchLegacy) {
         const auto info = MakeInfo({R::N0, R::N0, R::N0});
         const auto& legacy = info.GetTopology().GetQuorumChecker();
@@ -110,8 +186,8 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
             {{R::N1, R::F, R::F}, {1, 0, 0}, false},
             {{R::N2, R::F, R::F}, {1, 4, 4}, true},
             {{R::N2, R::F, R::F}, {2, 0, 0}, false},
-            {{R::N2, R::N2, R::R}, {1, 1, 4}, false},
-            {{R::N2, R::N2, R::R}, {2, 2, 0}, false},
+            {{R::N1, R::N1, R::R}, {1, 1, 4}, false},
+            {{R::N1, R::N1, R::R}, {2, 2, 0}, false},
             {{R::F, R::F, R::F}, {}, false},
         };
         for (const auto& test : cases) {
@@ -258,7 +334,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         CheckBlobStateCase({R::N2, R::F, R::F}, {1, 0, 0}, {}, G::EBS_RECOVERABLE_FRAGMENTARY);
         CheckBlobStateCase({R::N2, R::F, R::F}, {2, 0, 0}, {}, G::EBS_FULL);
         // W = 1+1+1 OR 2+2, D = 1+1+1: FULL follows W and does not wait for R.
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {2, 2, 0}, {}, G::EBS_FULL);
+        CheckBlobStateCase({R::N1, R::N1, R::R}, {2, 2, 0}, {}, G::EBS_FULL);
     }
 
     Y_UNIT_TEST(EnsuredChangesAbsenceButNotCompleteness) {
@@ -294,9 +370,9 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         // In N/R/F, E fits in N alone; copies in R do not change that failure threshold.
         CheckBlobStateCase({R::N1, R::R, R::F}, {2, 2, 0}, {1, 0, 3}, G::EBS_DISINTEGRATED);
         CheckBlobStateCase({R::N2, R::R, R::F}, {2, 2, 0}, {1, 0, 3}, G::EBS_FULL);
-        // E = 1+1+1 OR 2+2: an error in R completes the hidden 1+1+1 alternative.
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {2, 2, 0}, {1, 1, 0}, G::EBS_FULL);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {2, 2, 0}, {1, 1, 3}, G::EBS_DISINTEGRATED);
+        // N1/N1/R is RECOVERY_INV1: E = 1+1 can be hidden in N alone, regardless of R.
+        CheckBlobStateCase({R::N1, R::N1, R::R}, {2, 2, 0}, {1, 1, 0}, G::EBS_DISINTEGRATED);
+        CheckBlobStateCase({R::N1, R::N1, R::R}, {2, 2, 0}, {1, 1, 3}, G::EBS_DISINTEGRATED);
     }
 
     Y_UNIT_TEST(AbsenceRequiresExcludingEveryEnsuredLayout) {
@@ -317,15 +393,15 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     }
 
     Y_UNIT_TEST(RecoveryFailuresParticipateInEachEnsuredAlternative) {
-        // E = 1+1+1 OR 2+2: R may hide a copy in 1+1+1, but cannot replace N in 2+2.
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 1, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 1, 1}, G::EBS_DISINTEGRATED);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 1, 3}, G::EBS_DISINTEGRATED);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {2, 0, 2}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {2, 2, 0}, G::EBS_DISINTEGRATED);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {2, 2, 3}, G::EBS_DISINTEGRATED);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 0, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
-        CheckBlobStateCase({R::N2, R::N2, R::R}, {}, {1, 0, 3}, G::EBS_UNRECOVERABLE_FRAGMENTARY);
+        // Explicit E = 1+1+1 OR 2+2: R may hide a copy in 1+1+1, but cannot replace N in 2+2.
+        CheckBlobStateCase({R::N1, R::N1, R::R}, {}, {1, 1, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N1, R::N1, R::R}, {}, {1, 1, 1}, G::EBS_DISINTEGRATED, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N1, R::N1, R::R}, {}, {1, 1, 3}, G::EBS_DISINTEGRATED, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N1, R::N1, R::R}, {}, {2, 0, 2}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N1, R::N1, R::R}, {}, {2, 2, 0}, G::EBS_DISINTEGRATED, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N1, R::N1, R::R}, {}, {2, 2, 3}, G::EBS_DISINTEGRATED, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N1, R::N1, R::R}, {}, {1, 0, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_111_22);
+        CheckBlobStateCase({R::N1, R::N1, R::R}, {}, {1, 0, 3}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_111_22);
         // Explicit E = 1+1+1 requires uncertainty in all three realms; known 1+1+1 still satisfies W.
         CheckBlobStateCase({R::N0, R::N0, R::R}, {}, {1, 1, 0}, G::EBS_UNRECOVERABLE_FRAGMENTARY, L::LAYOUT_111);
         CheckBlobStateCase({R::N0, R::N0, R::R}, {}, {1, 1, 3}, G::EBS_DISINTEGRATED, L::LAYOUT_111);
@@ -376,8 +452,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     Y_UNIT_TEST(RecoveryNeedsBothNormalRealms) {
         // N0/N0/R (DC_RECOVERY):      W = 1+1+1 OR 2+2.
         // N1/N1/R (DC_RECOVERY_INV1): W = 1+1+1 OR 2+2.
-        // N2/N2/R (DC_RECOVERY_INV2): W = 1+1+1 OR 2+2.
-        for (const auto state : {R::N0, R::N1, R::N2}) {
+        for (const auto state : {R::N0, R::N1}) {
             // W = 1+1+1 OR 2+2: 1+1+1 is satisfied across N/N/R.
             CheckCase({state, state, R::R}, {1, 1, 1}, true);
             // W = 1+1+1 OR 2+2: 2+2 is satisfied by both N realms, without R.
@@ -410,7 +485,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     }
 
     Y_UNIT_TEST(AllExplicitLayouts) {
-        const TStates states = {R::N2, R::N1, R::R};
+        const TStates states = {R::N1, R::N1, R::R};
         struct TCase {
             L Layout;
             TCopies Copies;

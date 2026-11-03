@@ -605,7 +605,11 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     void UpdateSigFor(ui64 cookie, ui64 sig) {
         Y_ABORT_UNLESS(cookie < Replicas);
         const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
-        if ((sig == Max<ui64>() && UndeliveredReplicas.insert(replicaId).second) || !Signature.HasReplicaSignature(replicaId)) {
+        const bool isNewOutcome = sig == Max<ui64>()
+            ? UndeliveredReplicas.insert(replicaId).second
+            : !Signature.HasReplicaSignature(replicaId);
+
+        if (isNewOutcome) {
             if (sig != Max<ui64>()) {
                 Signature.SetReplicaSignature(replicaId, sig);
             }
@@ -1272,11 +1276,11 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         ui64 fakeTabletId;
         switch (msg->KeyType) {
         case TEvStateStorage::TEvResolveSchemeBoard::KeyTypePath:
-            fakeTabletId = CityHash64(msg->Path);
+            fakeTabletId = GetSchemeBoardSelectionKey(msg->Path);
             break;
 
         case TEvStateStorage::TEvResolveSchemeBoard::KeyTypePathId:
-            fakeTabletId = msg->PathId.Hash();
+            fakeTabletId = GetSchemeBoardSelectionKey(msg->PathId);
             break;
 
         default:

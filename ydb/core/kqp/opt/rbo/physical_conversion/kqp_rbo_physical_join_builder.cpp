@@ -533,7 +533,7 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildGraceJoin(const TString& joinType, TE
     // clang-format on
 }
 
-TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) {
+NPhysicalConvertionUtils::TStageBody TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) {
     const TPhysicalOpProps& props = Join.Props;
     const auto leftIUs = NPhysicalConvertionUtils::GetLiveInputIUs(Join, 0);
     const auto rightIUs = NPhysicalConvertionUtils::GetLiveInputIUs(Join, 1);
@@ -717,23 +717,18 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
             .Build()
         .Done().Ptr();
 
-        return Build<TCoFromFlow>(Ctx, Pos)
-            .Input(NPhysicalConvertionUtils::BuildNarrowMapForWideInput(phyJoin, inputs, joinOutputs, Ctx, Names))
-        .Done().Ptr();
         // clang-format on
+        return NPhysicalConvertionUtils::BuildLiveWideBody(phyJoin, inputs, joinOutputs, Ctx);
     }
 
-    // clang-format off
-    return Build<TCoFromFlow>(Ctx, Pos)
-        .Input(NPhysicalConvertionUtils::BuildNarrowMapForWideInput(phyJoin, joinOutputColumns, joinOutputs, Ctx, Names))
-    .Done().Ptr();
-    // clang-format on
+    return NPhysicalConvertionUtils::BuildLiveWideBody(phyJoin, joinOutputColumns, joinOutputs, Ctx);
 }
 
-TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) {
+NPhysicalConvertionUtils::TStageBody TPhysicalJoinBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) {
     const auto joinKind = to_lower(Join.JoinKind);
     if (joinKind == "cross" && !useBlockHashJoin) {
-        return BuildCrossJoin(leftInput, rightInput);
+        // Cross join is built as a narrow FlatMap over structs.
+        return NPhysicalConvertionUtils::TStageBody::Narrow(BuildCrossJoin(leftInput, rightInput));
     }
 
     Y_ENSURE(joinKind == "inner" || joinKind == "left" || joinKind == "leftonly" || joinKind == "leftsemi" ||

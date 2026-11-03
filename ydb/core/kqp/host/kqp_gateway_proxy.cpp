@@ -1043,6 +1043,7 @@ public:
     }
 
     TFuture<TGenericResult> TruncateTable(const TString& cluster, const TTruncateTableSettings& settings) override {
+        Y_ABORT_UNLESS(!settings.Unsafe);
         CHECK_PREPARED_DDL(TruncateTable);
 
         try {
@@ -1442,6 +1443,16 @@ public:
                 }
 
                 if (buildSettings.has_column_build_operation()) {
+                    if (!NSchemeHelpers::ValidateColumnBuildAlter(modifyScheme,
+                        buildSettings.column_build_operation(), code, error))
+                    {
+                        IKqpGateway::TGenericResult errResult;
+                        const auto issueCode = NYql::YqlStatusFromYdbStatus(code);
+                        errResult.AddIssue(NYql::TIssue(error).SetCode(issueCode, NYql::TSeverityIds::S_ERROR));
+                        errResult.SetStatus(issueCode);
+                        tablePromise.SetValue(errResult);
+                        return;
+                    }
                     buildSettings.MutableAlterMainTablePayload()->PackFrom(modifyScheme);
                     phyTx.MutableSchemeOperation()->MutableBuildOperation()->CopyFrom(buildSettings);
                 } else {
@@ -3187,6 +3198,9 @@ public:
             }
             if (const auto& initialScan = settings.Settings.InitialScan) {
                 config.SetInitialScan(*initialScan);
+            }
+            if (const auto& availabilityPeriod = settings.Settings.AvailabilityPeriod) {
+                config.MutableAvailabilityPeriod()->CopyFrom(*availabilityPeriod);
             }
 
             if (params.GetDatabase().empty()) {

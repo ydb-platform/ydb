@@ -1,0 +1,10 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Run ymake",
+        "availability": "hidden",
+        "definition": {
+            "formula": "build/external_resources/ymake/public.resources.json"
+        }
+    }
+}

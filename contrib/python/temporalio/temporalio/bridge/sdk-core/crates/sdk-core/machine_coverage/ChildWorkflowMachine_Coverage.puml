@@ -1,0 +1,33 @@
+@startuml
+Created -[#blue]-> StartCommandCreated: Schedule
+StartCommandCreated -[#blue]-> StartCommandCreated: CommandStartChildWorkflowExecution
+StartCommandCreated --> StartEventRecorded: StartChildWorkflowExecutionInitiated
+StartCommandCreated --> Cancelled: Cancel
+StartEventRecorded --> Started: ChildWorkflowExecutionStarted
+StartEventRecorded --> StartFailed: StartChildWorkflowExecutionFailed
+StartEventRecorded -[#blue]-> StartEventRecorded: Cancel
+StartEventRecorded -[#blue]-> Cancelled: Cancel
+StartEventRecorded --> StartEventRecorded: CommandRequestCancelExternalWorkflowExecution
+Started --> Completed: ChildWorkflowExecutionCompleted
+Started --> Failed: ChildWorkflowExecutionFailed
+Started --> TimedOut: ChildWorkflowExecutionTimedOut
+Started --> Cancelled: ChildWorkflowExecutionCancelled
+Started --> Terminated: ChildWorkflowExecutionTerminated
+Started --> Started: Cancel
+Started --> Cancelled: Cancel
+Started --> Started: CommandRequestCancelExternalWorkflowExecution
+Cancelled -[#blue]-> Cancelled: Cancel
+Cancelled --> Cancelled: ChildWorkflowExecutionStarted
+Cancelled --> Cancelled: StartChildWorkflowExecutionFailed
+Cancelled --> Cancelled: CommandRequestCancelExternalWorkflowExecution
+Cancelled --> Cancelled: ChildWorkflowExecutionCancelled
+Cancelled --> Cancelled: ChildWorkflowExecutionCompleted
+Cancelled --> Cancelled: ChildWorkflowExecutionFailed
+Cancelled --> Cancelled: ChildWorkflowExecutionTimedOut
+Cancelled --> Cancelled: ChildWorkflowExecutionTerminated
+Failed -[#blue]-> Failed: Cancel
+StartFailed -[#blue]-> StartFailed: Cancel
+TimedOut -[#blue]-> TimedOut: Cancel
+Completed -[#blue]-> Completed: Cancel
+Terminated --> [*]
+@enduml

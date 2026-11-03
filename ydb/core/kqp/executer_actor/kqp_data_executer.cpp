@@ -959,6 +959,14 @@ private:
     void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) {
         auto* msg = ev->Get();
 
+        if (GetUserRequestContext()->IsStreamingQuery) {
+            // Streaming queries are long-running: the snapshot must not be pinned
+            // for their whole lifetime. Reads at the acquired step stay valid via
+            // the datashard KeepSnapshotTimeout grace window and are executed
+            // right away.
+            msg->SnapshotHandle = NKqp::TSnapshotHandle();
+        }
+
         YDB_LOG_TRACE("Read snapshot result",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},

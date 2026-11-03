@@ -5,6 +5,7 @@
 #include <library/cpp/dot_product/dot_product.h>
 #include <library/cpp/l1_distance/l1_distance.h>
 #include <library/cpp/l2_distance/l2_distance.h>
+#include <ydb/library/vector_distance/type_traits.h>
 #include <ydb/library/yql/udfs/common/knn/knn-defines.h>
 #include <ydb/library/yql/udfs/common/knn/knn-distance.h>
 #include <ydb/library/yql/udfs/common/knn/knn-serializer-shared.h>
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <span>
+#include <util/stream/str.h>
 
 namespace NKikimr::NKMeans {
 
@@ -73,6 +75,14 @@ namespace {
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16;
         else if (vectorType == "bfloat16")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16;
+        else if (vectorType == "float8_e4m3")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3;
+        else if (vectorType == "float8_e5m2")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2;
+        else if (vectorType == "uint4")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4;
+        else if (vectorType == "int4")
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4;
         else if (vectorType == "uint8")
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         else if (vectorType == "int8")
@@ -120,8 +130,8 @@ namespace {
 template <typename TCoord>
 struct TMetric {
     using TCoord_ = TCoord;
-    // Half-precision coordinates are stored in 16 bits, but arithmetic uses float.
-    using TArithmeticCoord = std::conditional_t<std::is_same_v<TCoord, TFloat16> || std::is_same_v<TCoord, TBFloat16>, float, TCoord>;
+    // Reduced-precision floats use float arithmetic; packed 4-bit coordinates use int.
+    using TArithmeticCoord = NVectorDistance::TArithmeticCoord<TCoord>;
     static constexpr bool IsFloatingPoint = std::is_floating_point_v<TArithmeticCoord>;
     using TSum = std::conditional_t<IsFloatingPoint, double, i64>;
     static constexpr bool AggregateNormalized = false;
@@ -449,6 +459,11 @@ public:
             return data.size() >= 2 && Dimensions == (data.size() - 2) * 8 - data[data.size() - 2];
         }
 
+        if constexpr (NVectorDistance::IsInt4<TCoord>) {
+            size_t count = 0;
+            return NKnnVectorSerialization::TryGetInt4ElementCount(TStringBuf(data.data(), data.size()), count)
+                && count == Dimensions;
+        }
         return data.size() == 1 + sizeof(TCoord) * Dimensions;
     }
 
@@ -457,8 +472,7 @@ public:
             return TStringBuilder() << "Empty vector data, expected dimension " << Dimensions;
         }
         if (FormatByte != data.back()) {
-            return TStringBuilder() << "Invalid vector format byte, got " << static_cast<ui8>(data.back())
-                << " expected " << static_cast<ui8>(FormatByte);
+            return Sprintf("Invalid vector format byte, got %02x, expected %02x", static_cast<ui8>(data.back()), FormatByte);
         }
         if (IsBitQuantized()) {
             auto actualDim = 0;
@@ -467,6 +481,13 @@ public:
             }
             return TStringBuilder() << "Vector dimension mismatch: got " << actualDim
                 << " expected " << Dimensions;
+        }
+        if constexpr (NVectorDistance::IsInt4<TCoord>) {
+            size_t count = 0;
+            if (!NKnnVectorSerialization::TryGetInt4ElementCount(TStringBuf(data.data(), data.size()), count)) {
+                return "Invalid packed 4-bit vector payload or padding";
+            }
+            return TStringBuilder() << "Vector dimension mismatch: got " << count << " expected " << Dimensions;
         }
         auto actualDim = (data.size() - 1) / sizeof(TCoord);
         return TStringBuilder() << "Vector dimension mismatch: got " << actualDim
@@ -477,8 +498,11 @@ public:
     TString GetEmptyRow() const override {
         TString str;
         const size_t bufferSize = NKnnVectorSerialization::GetBufferSize<TCoord>(Dimensions);
-        str.resize(bufferSize);
+        str.resize(bufferSize, '\0');
         str[bufferSize - HeaderLen] = FormatByte;
+        if constexpr (NVectorDistance::IsInt4<TCoord>) {
+            str[bufferSize - HeaderLen - 1] = Dimensions % 2;
+        }
         if (IsBitQuantized()) {
             str[bufferSize - HeaderLen - 1] = 8 - Dimensions % 8;
         }
@@ -491,7 +515,11 @@ private:
     }
 
     auto GetCoords(const char* coords) const {
-        return std::span{reinterpret_cast<const TCoord*>(coords), Dimensions};
+        if constexpr (NVectorDistance::IsInt4<TCoord>) {
+            return NVectorDistance::TPackedInt4Coords<TCoord>(coords, Dimensions);
+        } else {
+            return std::span{reinterpret_cast<const TCoord*>(coords), Dimensions};
+        }
     }
 
     auto GetData(char* data) {
@@ -541,6 +569,29 @@ private:
     void Fill(TString& d, TSum* embedding, ui64& c) {
         Y_ENSURE(c > 0);
         const auto count = static_cast<TSum>(c);
+
+        if constexpr (NVectorDistance::IsInt4<TCoord>) {
+            TString packed;
+            TStringOutput output(packed);
+            NKnnVectorSerialization::TSerializer<TCoord> serializer(&output);
+            double norm = 0, scale = 0;
+            if constexpr (TMetric::AggregateNormalized) {
+                norm = GetCentroidNorm(embedding, c);
+                scale = GetNormalizedScale(embedding, c, norm);
+            }
+            for (size_t i = 0; i < Dimensions; ++i) {
+                double value;
+                if constexpr (TMetric::AggregateNormalized) {
+                    value = norm != 0 ? std::round(static_cast<double>(embedding[i]) / (static_cast<double>(c) * norm) * scale) : 0;
+                } else {
+                    value = embedding[i] / count;
+                }
+                serializer.HandleElement(TCoord(static_cast<int>(value)));
+            }
+            serializer.Finish();
+            d = std::move(packed);
+            return;
+        }
 
         if constexpr (TMetric::AggregateNormalized) {
             const double norm = GetCentroidNorm(embedding, c);
@@ -639,6 +690,14 @@ std::unique_ptr<IClusters> CreateClusters(const Ydb::Table::VectorIndexSettings&
             return handleMetric.template operator()<TFloat16>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
             return handleMetric.template operator()<TBFloat16>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3:
+            return handleMetric.template operator()<TFloat8E4M3>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2:
+            return handleMetric.template operator()<TFloat8E5M2>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4:
+            return handleMetric.template operator()<TUint4>();
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4:
+            return handleMetric.template operator()<TInt4>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
             return handleMetric.template operator()<ui8>();
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
@@ -688,6 +747,28 @@ std::unique_ptr<IClusters> CreateClustersAutoDetect(Ydb::Table::VectorIndexSetti
                 return nullptr;
             }
             break;
+        case EFormat::Float8E4M3Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3, sizeof(TFloat8E4M3), "float8_e4m3")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Float8E5M2Vector:
+            if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2, sizeof(TFloat8E5M2), "float8_e5m2")) {
+                return nullptr;
+            }
+            break;
+        case EFormat::Uint4Vector:
+        case EFormat::Int4Vector: {
+            size_t count = 0;
+            if (!NKnnVectorSerialization::TryGetInt4ElementCount(targetVector, count) || count == 0) {
+                error = "Invalid packed 4-bit target vector payload or padding";
+                return nullptr;
+            }
+            settings.set_vector_type(formatByte == EFormat::Uint4Vector
+                ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4 : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4);
+            settings.set_vector_dimension(count);
+            break;
+        }
         case EFormat::Uint8Vector:
             if (!setLinearType(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8, sizeof(ui8), "uint8")) {
                 return nullptr;
@@ -957,6 +1038,35 @@ bool AutoSelectVectorSettings(Ydb::Table::VectorIndexSettings& vectorSettings, c
             vectorSettings.set_vector_dimension((embedding.size() - HeaderLen) / sizeof(TFloat16));
         }
         break;
+    case EFormat::Float8E4M3Vector:
+    case EFormat::Float8E5M2Vector:
+        if (embedding.size() <= HeaderLen) {
+            return false;
+        }
+        if (!hasVectorType) {
+            vectorSettings.set_vector_type(formatByte == EFormat::Float8E4M3Vector
+                ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3
+                : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2);
+        }
+        if (!hasVectorDimension) {
+            vectorSettings.set_vector_dimension(embedding.size() - HeaderLen);
+        }
+        break;
+    case EFormat::Uint4Vector:
+    case EFormat::Int4Vector: {
+        size_t count = 0;
+        if (!NKnnVectorSerialization::TryGetInt4ElementCount(embedding, count) || count == 0) {
+            return false;
+        }
+        if (!hasVectorType) {
+            vectorSettings.set_vector_type(formatByte == EFormat::Uint4Vector
+                ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4 : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4);
+        }
+        if (!hasVectorDimension) {
+            vectorSettings.set_vector_dimension(count);
+        }
+        break;
+    }
     case EFormat::Uint8Vector:
         if (!hasVectorType) {
             vectorSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);

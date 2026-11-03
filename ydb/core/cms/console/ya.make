@@ -99,6 +99,7 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/mind
     ydb/core/node_whiteboard
+    ydb/core/path_aliasing
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat

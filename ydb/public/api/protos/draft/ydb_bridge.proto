@@ -12,8 +12,29 @@ import "ydb/public/api/protos/ydb_bridge_common.proto";
 import "ydb/public/api/protos/ydb_operation.proto"; 
 import "google/protobuf/timestamp.proto";
 
+// Atomically change bridge mode of the selected database.
+// Requires administrator privileges and non-uniform storage; data synchronization and cleanup continue in the background.
+message SetDatabaseBridgeModeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    optional bool bridge_mode = 2; // Required: true for bridged storage, false for ordinary storage.
+    // With bridge_mode=false, retain data copies in this pile. Empty selects copies automatically.
+    string retain_pile_name = 3;
+    // Required absolute path of the target database.
+    string database_path = 4;
+}
+
+message SetDatabaseBridgeModeResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message SetDatabaseBridgeModeResult {}
+
 message GetClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1;
+
+    // Also query static-node connectivity, without requiring BSC or tablets.
+    // An older node in the forwarding path may reject this optional query.
+    bool include_pile_connectivity = 2;
 }
 
 message GetClusterStateResponse {
@@ -30,6 +51,39 @@ message GetClusterStateResult {
     bool conversion_in_progress = 3;
     // Operation changing the set of piles of the cluster that is not finished yet
     optional PendingPileOperation pending_pile_operation = 4;
+    optional PileConnectivityReport pile_connectivity = 5;
+}
+
+message PileConnectivity {
+    string pile_name = 1;
+    uint32 static_nodes = 2;
+    uint32 connected_static_nodes = 3;
+
+    // Whether connected static nodes satisfy this pile's distconf node quorum.
+    // This measures node connectivity, not working disks. INACTIVE piles report false.
+    bool has_node_quorum = 4;
+
+    // Only piles in config quorum can block configuration commits. NOT_SYNCHRONIZED
+    // stage 1 is in neither quorum; stage 2 is in both quorums.
+    bool in_config_quorum = 5;
+    bool in_data_quorum = 6;
+}
+
+// A snapshot of one distconf binding component. During a partition, each side can
+// report the other as lacking quorum. This is not a vote and must not select which
+// side survives. Rebinding can temporarily report only part of a reachable pile.
+// DISCONNECTED and INACTIVE piles do not connect to other piles, so their missing
+// quorum is expected when viewed from another pile.
+message PileConnectivityReport {
+    uint32 reporter_node_id = 1;
+    bool reporter_is_root = 2;
+    bool binding_in_progress = 3;
+
+    // Reporter cluster-state generation; may differ from GetClusterStateResult.generation.
+    uint64 generation = 4;
+
+    // Names and quorum requirements come from the reporter, independently of pile_states.
+    repeated PileConnectivity piles = 5;
 }
 
 message PendingPileOperation {
@@ -50,10 +104,22 @@ message UpdateClusterStateRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // List of desired pile states to update
     repeated PileState updates = 2 [(size).ge = 1];
-    // List of piles that are required to form a quorum for this update to succeed.
-    // These piles act as "witnesses" for the operation.
-    // If empty, all piles in the cluster will be used for the quorum check.
+    // Deprecated and ignored. The update is committed by the quorum of every pile that takes part in the
+    // configuration quorum in the new cluster state, that is, every pile not DISCONNECTED, SUSPENDED or INACTIVE
+    // there; to go on without an unavailable pile, set it DISCONNECTED in the same update.
     repeated string quorum_piles = 3;
+    // Compare-and-set guard: the generation of the cluster state (GetClusterStateResult.generation) that this
+    // update is based on. When set, the update is applied only if the cluster state still has this generation
+    // when the change executes; the committed state then has generation expected_generation + 1.
+    // ABORTED: the cluster state has another generation; the update was not applied. Read the state again
+    // before deciding the next update.
+    // UNAVAILABLE with a lagging-node message: the receiving node has not yet received this generation; the
+    // update was not applied and may be sent again, preferably to another node.
+    // Other failures, such as INTERNAL_ERROR, do not tell whether the update was applied. Once a generation
+    // greater than expected_generation is observed, the update can no longer be applied.
+    // When unset, the update is applied on top of the receiving node's current cluster state.
+    // Nodes of older versions ignore this field.
+    optional uint64 expected_generation = 4;
 }
 
 message UpdateClusterStateResponse {

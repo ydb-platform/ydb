@@ -701,6 +701,7 @@ public:
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override;
     ui64 Enqueue(TAutoPtr<ITransaction> transaction) override;
     ui64 EnqueueLowPriority(TAutoPtr<ITransaction> transaction) override;
+    bool TryExecuteReadyTransaction() override;
     bool CancelTransaction(ui64 id) override;
 
     void LeaseConfirmed(ui64 confirmedCookie);

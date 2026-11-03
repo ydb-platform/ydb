@@ -1527,35 +1527,36 @@ void TProducer::TMessagesWorker::RebuildPendingMessagesIndex(std::uint32_t parti
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TProducer::TProducerRetryPolicy
 
-TProducer::TProducerRetryPolicy::TProducerRetryPolicy(TProducer* producer)
-    : Producer(producer)
-{}
+TProducer::TProducerRetryPolicy::TProducerRetryPolicy(::IRetryPolicy<EStatus>::TPtr userPolicy)
+    : UserPolicy(userPolicy ? std::move(userPolicy) : NYdb::NTopic::IRetryPolicy::GetDefaultPolicy())
+{
+    Y_ABORT_UNLESS(UserPolicy);
+}
 
 typename TProducer::TProducerRetryPolicy::IRetryState::TPtr TProducer::TProducerRetryPolicy::CreateRetryState() const {
     struct TRetryState : public IRetryState {
-        TRetryState(TProducer* producer)
-            : Producer(producer)
+        explicit TRetryState(::IRetryPolicy<EStatus>::TPtr userPolicy)
+            : UserPolicy(std::move(userPolicy))
         {}
-        ~TRetryState() = default;
+
         TMaybe<TDuration> GetNextRetryDelay(EStatus status) override {
             if (status == EStatus::OVERLOADED) {
                 return Nothing();
             }
 
             if (!UserRetryState) {
-                auto policy = Producer->Settings.RetryPolicy_ ? Producer->Settings.RetryPolicy_ : NYdb::NTopic::IRetryPolicy::GetDefaultPolicy();
-                UserRetryState = policy->CreateRetryState();
+                UserRetryState = UserPolicy->CreateRetryState();
             }
 
             return UserRetryState->GetNextRetryDelay(status);
         }
 
     private:
-        TProducer* Producer;
+        ::IRetryPolicy<EStatus>::TPtr UserPolicy;
         IRetryState::TPtr UserRetryState;
     };
-    
-    return std::make_unique<TRetryState>(Producer);
+
+    return std::make_unique<TRetryState>(UserPolicy);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1767,7 +1768,7 @@ TProducer::TProducer(
     SessionsWorker = std::make_shared<TSessionsWorker>(this);
     MessagesWorker = std::make_shared<TMessagesWorker>(this);
     EventsWorker = std::make_shared<TEventsWorker>(this);
-    RetryPolicy = std::make_shared<TProducerRetryPolicy>(this);
+    RetryPolicy = std::make_shared<TProducerRetryPolicy>(Settings.RetryPolicy_);
 
     if (Settings.AsyncExecutionMode_) {
         MainWorkerThread = SystemThreadFactory()->Run([this] {

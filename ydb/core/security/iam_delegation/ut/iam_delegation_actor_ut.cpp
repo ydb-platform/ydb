@@ -231,6 +231,8 @@ struct TFixture {
     }
 };
 
+} // namespace
+
 Y_UNIT_TEST_SUITE(IamDelegationActor) {
     Y_UNIT_TEST(SubscribesOnceAndUsesConfiguredSystemIdentity) {
         TFixture f;

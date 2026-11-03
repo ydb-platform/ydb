@@ -48,6 +48,8 @@ class TChangeRecordBuilder: public NChangeExchange::TChangeRecordBuilder<TChange
 public:
     using TBase::TBase;
 
+    static bool ParseJsonBody(TStringBuf body, NJson::TJsonValue& json, TString& error);
+
     TSelf& WithSourceId(const TString& sourceId) {
         GetRecord()->SourceId = sourceId;
         return static_cast<TSelf&>(*this);
@@ -55,8 +57,9 @@ public:
 
     template <typename T>
     TSelf& WithBody(T&& body) {
-        auto res = NJson::ReadJsonTree(body, &GetRecord()->JsonBody);
-        Y_ABORT_UNLESS(res);
+        TString error;
+        auto res = ParseJsonBody(body, GetRecord()->JsonBody, error);
+        Y_ABORT_UNLESS(res, "%s", error.c_str());
         return static_cast<TBase*>(this)->WithBody(std::forward<T>(body));
     }
 

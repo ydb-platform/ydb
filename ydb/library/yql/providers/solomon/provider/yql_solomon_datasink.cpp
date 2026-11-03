@@ -190,7 +190,7 @@ public:
     }
 
     IDqIntegration* GetDqIntegration() override {
-        return State_->IsRtmrMode() ? nullptr : State_->DqIntegration.Get();
+        return State_->DqIntegration.Get();
     }
 
     IYtflowIntegration* GetYtflowIntegration() override {

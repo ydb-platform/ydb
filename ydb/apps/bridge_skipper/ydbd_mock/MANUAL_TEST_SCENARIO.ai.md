@@ -164,7 +164,7 @@ $CLI -e $E2 -d "" monitoring healthcheck -v --format=json --no-merge --no-cache 
 $MOCK cluster events --kind commit
 ```
 
-Expect neither SelfCheck to emit a BRIDGE_GROUP issue naming pile3, even though the dead `_2` pile still participates in data/config quorum. There must be no `synchronized` commit for pile3 in this fresh run before the observation. This intentionally does not satisfy the old demo's failure detector: capture the matching real-YDB fixture and test the controller's separately designed resync-failure evidence.
+Expect both survivors to emit a RED BRIDGE_GROUP issue naming pile3 and an ORANGE group (`MAINTENANCE_REQUIRED`): the dead `_2` pile still participates in data/config quorum. There must be no `synchronized` commit for pile3 in this fresh run before the observation. The old demo still does not act on this NOT_SYNCHRONIZED pile: capture the matching real-YDB fixture and test the controller's separately designed resync-failure evidence.
 
 After recording the result, restore the process and release the exact gates through the implemented per-pile API:
 

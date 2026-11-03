@@ -720,6 +720,7 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
     PARTITION_ENSURE(resp.HasEndOffset())
         ("resp", resp.ShortDebugString());
     EndOffset = resp.GetEndOffset();
+    RetainedStartOffset = resp.HasStartOffset() ? MakeMaybe(resp.GetStartOffset()) : Nothing();
     SizeLag = resp.GetSizeLag();
     WriteTimestampEstimateMs = resp.GetWriteTimestampEstimateMS();
     ClientHasAnyCommits = resp.GetClientHasAnyCommits();
@@ -743,7 +744,7 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
 
 
     if (!StartReading) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset,
+        ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, RetainedStartOffset, EndOffset,
             WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset));
     } else {
         InitStartReading(ctx);
@@ -1296,7 +1297,7 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const 
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr&, const TActorContext& ctx) {
-    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset, false));
+    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, RetainedStartOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset, false));
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TActorContext& ctx) {

@@ -559,7 +559,7 @@ void TExecutor::Active(const TActorContext &ctx) {
         auto alter = Database->GetScheme().GetSnapshot();
         alter->SetRewrite(true);
         auto change = alter->SerializeAsString();
-        Database->RollUp(stamp, change, {}, {});
+        Database->RollUp(stamp, change, {}, {}, {});
         auto commit = CommitManager->Begin(true, ECommit::Misc, {});
         LogicAlter->Clear();
         LogicAlter->WriteLog(*commit, std::move(change));
@@ -1258,11 +1258,20 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
         }
     }
 
-    if (schemeUpdate || dataUpdate || annex) {
+    NKikimrExecutorFlat::TFollowerPartSwitchAux auxProto;
+    if (update->AuxPayload) {
+        const TString auxBody = NPageCollection::TSlicer::Lz4()->Decode(update->AuxPayload);
+        Y_ENSURE(auxProto.ParseFromString(auxBody));
+        Y_ENSURE(auxProto.BySwitchAuxSize() <= partSwitches.size());
+    }
+
+    const TArrayRef<const ui32> truncatedTables = auxProto.GetTruncatedTables();
+    if (schemeUpdate || dataUpdate || annex || truncatedTables) {
         if (dataUpdate)
             dataUpdate = NPageCollection::TSlicer::Lz4()->Decode(dataUpdate);
 
-        for (auto &subset : Database->RollUp(Stamp(), schemeUpdate, dataUpdate, annex))
+        for (auto &subset : Database->RollUp(Stamp(), schemeUpdate, dataUpdate, annex,
+                truncatedTables, Owner->GetFollowerRedoObserver()))
             for (auto &partView: subset->Flatten)
                 DropPartStorePageCollections(*partView);
 
@@ -1289,14 +1298,6 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
     }
 
     if (partSwitches) {
-        NKikimrExecutorFlat::TFollowerPartSwitchAux auxProto;
-
-        if (update->AuxPayload) {
-            const TString auxBody = NPageCollection::TSlicer::Lz4()->Decode(update->AuxPayload);
-            Y_ENSURE(auxProto.ParseFromString(auxBody));
-            Y_ENSURE(auxProto.BySwitchAuxSize() <= partSwitches.size());
-        }
-
         bool hadPendingPartSwitches = bool(PendingPartSwitches);
 
         ui32 nextAuxIdx = 0;
@@ -1309,9 +1310,11 @@ void TExecutor::ApplyFollowerUpdate(THolder<TEvTablet::TFUpdateBody> update) {
             if (proto.HasIntroducedParts() || proto.HasIntroducedTxStatus()) {
                 Y_ENSURE(nextAuxIdx < auxProto.BySwitchAuxSize());
                 aux = &auxProto.GetBySwitchAux(nextAuxIdx++);
+                Owner->OnFollowerPartsReplaced(proto.GetTableId());
             }
 
             const ui32 followerGcStep = update->NeedFollowerGcAck ? Step0 : 0;
+
             AddFollowerPartSwitch(proto, aux, followerGcStep, Step0);
 
             // Row version changes are rolled up immediately (similar to schema changes)
@@ -2798,6 +2801,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             for (auto& record : truncated) {
                 ui32 table = record.Table;
                 TAutoPtr<NTable::TSubset> subset = std::move(record.Subset);
+                aux.AddTruncatedTables(table);
 
                 // Serialize removed subset as if it was compacted into nothing
                 NKikimrExecutorFlat::TTablePartSwitch proto;
@@ -3055,7 +3059,7 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             ApplyReadyPartSwitches(); // safe to apply switches right now
         }
 
-        if (aux.BySwitchAuxSize()) {
+        if (aux.BySwitchAuxSize() || aux.TruncatedTablesSize()) {
             commit->FollowerAux = NPageCollection::TSlicer::Lz4()->Encode(aux.SerializeAsString());
         }
 
@@ -5033,6 +5037,15 @@ void TExecutor::UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr &ev) {
     ReadResourceProfile();
 }
 
+ui32 TExecutor::CreateFollowerSnapshotCheckpoint() {
+    Y_ENSURE(Stats->IsActive && !Stats->IsFollower());
+    // A detached batch may keep accepting writes at Step() - 1. Seal it
+    // before exporting; otherwise a later write could fall inside the
+    // advertised checkpoint without appearing in the exported journal.
+    LogicRedo->FlushBatchedLog();
+    return Step() - 1;
+}
+
 void TExecutor::SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) {
     Y_ENSURE(Stats->IsActive && !Stats->IsFollower());
 
@@ -5326,6 +5339,8 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
     }
 
     if (NWriter::ApplyDescriptorChannel(cfg.Layout, cfg.Writer, descriptorChannel)) {
+        // The descriptor channel differs from the main group channel then and may be missing from
+        // the slots (e.g. of a tier output); a slot of an already added channel is merged
         addChannel(descriptorChannel);
     }
 
@@ -5474,6 +5489,8 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     // Data of the main group is written to the leader family channel too until tier compaction,
     // so parts keep descriptor pages and main group data in a single page collection
     if (NWriter::ApplyDescriptorChannel(comp->Layout, comp->Writer, descriptorChannel)) {
+        // The descriptor channel differs from the main group channel then and may be missing from
+        // the slots (e.g. of a tier output); a slot of an already added channel is merged
         addChannel(descriptorChannel);
     }
 

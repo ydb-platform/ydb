@@ -736,7 +736,7 @@ void TReadSessionActor<Protocol>::NotifyChildren(const TPartitionActorInfo& part
         if (!directChildren.empty()) {
             for (auto& [_, actorInfo]: Partitions) {
                 for (auto& child: directChildren) {
-                    if (actorInfo.Partition.Partition == child->Id) {
+                    if (actorInfo.Partition.Partition == child->Id && actorInfo.Topic->GetInternalName() == topicName) {
                         ctx.Send(actorInfo.Actor, new TEvPQProxy::TEvParentCommitedToFinish(partition.Partition.Partition));
                     }
                 }
@@ -1350,7 +1350,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& e
     std::unordered_set<ui64> notCommitedToFinishParents;
     for (auto& parent: partitionNode->DirectParents) {
         for (auto& [_, actorInfo]: Partitions) { // TODO: map
-            if (actorInfo.Partition.Partition == parent->Id && !actorInfo.IsLastOffsetCommitted()) {
+            if (actorInfo.Partition.Partition == parent->Id && actorInfo.Topic->GetInternalName() == name && !actorInfo.IsLastOffsetCommitted()) {
                 notCommitedToFinishParents.emplace(actorInfo.Partition.Partition);
             }
         }
@@ -1435,7 +1435,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
             auto alias = AliasedTopicPaths.find(topicName);
             if (alias != AliasedTopicPaths.end() && !alias->second.empty() && it->second.Topic->GetClientsideName().StartsWith("/")) {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(alias->second);
-            } else if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() || database == AppData(ctx)->PQConfig.GetDatabase() || database == AppData(ctx)->PQConfig.GetTestDatabaseRoot()) {
+            } else if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() || database == AppData(ctx)->PQConfig.GetDatabase() || database == AppData(ctx)->PQConfig.GetTestDatabaseRoot() || database == "/Root") {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetFederationPathWithDC());
             } else {
                 result.mutable_start_partition_session_request()->mutable_partition_session()->set_path(it->second.Topic->GetModernName());
@@ -1452,6 +1452,9 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
 
             result.mutable_start_partition_session_request()->mutable_partition_offsets()->set_start(ev->Get()->Offset);
             result.mutable_start_partition_session_request()->mutable_partition_offsets()->set_end(ev->Get()->EndOffset);
+            if (ev->Get()->RetainedStartOffset) {
+                result.mutable_start_partition_session_request()->set_retained_start_offset(*ev->Get()->RetainedStartOffset);
+            }
 
             if (DirectRead) {
                 result.mutable_start_partition_session_request()->mutable_partition_location()->set_node_id(ev->Get()->NodeId);
@@ -2523,7 +2526,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvReadingFinished::TPtr& e
 
     TPartitionActorInfo* partitionInfo = nullptr;
     for (auto& [_, p] : Partitions) {
-        if (p.Partition.Partition == msg->PartitionId) {
+        if (p.Actor == ev->Sender) {
             partitionInfo = &p;
             break;
         }

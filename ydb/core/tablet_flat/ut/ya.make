@@ -66,6 +66,7 @@ SRCS(
     ut_tier_predicate.cpp
     ut_vacuum.cpp
     ut_versions.cpp
+    ut_scan_delta.cpp
     ut_backup.cpp
 )
 

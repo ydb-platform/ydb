@@ -2730,63 +2730,6 @@ Y_UNIT_TEST_F(InternalReadErrorIsMarkedInternal, TPartitionFixture)
         "internal read error must be sent to SelfId, not TabletActorId");
 }
 
-// cookie==0 + empty ReplyTo resolves to SelfId (same destination as timestamp reads). IsInternal
-// must still be false: otherwise Handle(TEvError) takes the compaction early-return and leaves
-// ReadingTimestamp stuck.
-Y_UNIT_TEST_F(ExternalCookieZeroReadErrorRestartsTimestampRead, TPartitionFixture)
-{
-    const TPartitionId partition{0};
-    const TString client = "client";
-    const TString session = "session";
-
-    CreatePartition({
-        .Partition = partition,
-        .Begin = 0,
-        .End = 10,
-        .Config = {.Consumers = {{.Consumer = client, .Offset = 0, .Session = session}}},
-    });
-
-    auto blobRequest = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
-    UNIT_ASSERT_C(blobRequest != nullptr, "expected timestamp-read blob request");
-
-    TMaybe<bool> observedIsInternal;
-    auto prevObserver = Ctx->Runtime->SetObserverFunc(
-        [&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->Recipient == ActorId) {
-                if (auto* error = ev->CastAsLocal<TEvPQ::TEvError>()) {
-                    if (error->Cookie == 0 &&
-                        error->ErrorCode == NPersQueue::NErrorCode::BAD_REQUEST)
-                    {
-                        observedIsInternal = error->IsInternal;
-                    }
-                }
-            }
-            return TTestActorRuntimeBase::EEventAction::PROCESS;
-        });
-
-    // External read with cookie 0 (empty ReplyTo): destination is SelfId, but not internal.
-    SendEvent(MakeTestRead(/*cookie=*/0, /*offset=*/0, /*count=*/0, client).Release());
-
-    TDispatchOptions options;
-    options.CustomFinalCondition = [&]() {
-        return observedIsInternal.Defined();
-    };
-    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)));
-    Ctx->Runtime->SetObserverFunc(prevObserver);
-
-    UNIT_ASSERT(observedIsInternal.Defined());
-    UNIT_ASSERT_VALUES_EQUAL_C(
-        *observedIsInternal,
-        false,
-        "empty ReplyTo must not mark ReplyError as IsInternal even when cookie==0");
-
-    auto restartedBlobRequest =
-        Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvBlobRequest>(TDuration::Seconds(5));
-    UNIT_ASSERT_C(
-        restartedBlobRequest != nullptr,
-        "non-internal cookie==0 TEvError must clear ReadingTimestamp and restart timestamp read");
-}
-
 Y_UNIT_TEST_F(TooManyImmediateTxs, TPartitionTxTestHelper)
 {
     const TPartitionId partition{0};

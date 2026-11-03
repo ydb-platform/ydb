@@ -1822,6 +1822,7 @@ public:
         out << "<tr><td>" << "Tablets:" << "</td><td id='runningTablets'>" << runningTablets << "</td></tr>";
         out << "<tr><td>" << "Boot Queue:" << "</td><td id='bootQueue'>" << Self->BootQueue.BootQueue.size() << "</td></tr>";
         out << "<tr><td>" << "Wait Queue:" << "</td><td id='waitQueue'>" << Self->BootQueue.WaitQueue.size() << "</td></tr>";
+        out << "<tr><td>" << "Hive Uptime:" << "</td><td id='hiveUptime'>" << GetDurationString(TActivationContext::Now() - Self->StartTime()) << "</td></tr>";
         out << "</table></div>";
         out << "<div style='width:180px'><table class='simple-table1'>";
         out << "<tr><th colspan='2'>Totals</th></tr>";
@@ -2660,6 +2661,7 @@ function fillDataShort(result) {
             $('#aliveNodes').html(result.AliveNodes);
             $('#bootQueue').html(result.BootQueueSize);
             $('#waitQueue').html(result.WaitQueueSize);
+            $('#hiveUptime').html(result.HiveUptime);
             $('#maxUsage').html(result.MaxUsage);
             $('#objectImbalance').html(result.ObjectImbalance);
             $('#storageScatter').html(result.StorageScatter);
@@ -3026,6 +3028,7 @@ public:
         jsonData["ResourceVariance"] = GetResourceValuesJson(Self->GetStDevResourceValues());
         jsonData["BootQueueSize"] = Self->BootQueue.BootQueue.size();
         jsonData["WaitQueueSize"] = Self->BootQueue.WaitQueue.size();
+        jsonData["HiveUptime"] = GetDurationString(TActivationContext::Now() - Self->StartTime());
         jsonData["Balancers"] = Self->GetBalancerProgressJson();
         jsonData["MaxUsage"] =  GetValueWithColoredGlyph(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) ;
         auto scatterHtml = convert(stats.ScatterByResource, Self->GetMinScatterToBalance(), GetValueWithColoredGlyph);

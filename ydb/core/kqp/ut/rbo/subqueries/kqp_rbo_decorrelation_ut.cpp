@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/rbo/kqp_rbo_test_helpers.h>
 
+#include <ydb/core/kqp/opt/rbo/copy_logical_subtree.h>
 #include <ydb/core/kqp/opt/rbo/rules/decorrelation/dependent_join_pushdown.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -100,6 +101,75 @@ struct TPlan {
 
 TInfoUnitId PortId(TOpReplicate& port, TInfoUnitId source) {
     return port.IsPrimary() ? source : *port.GetRebindings().Find(source);
+}
+
+// A caller and an EXISTS subplan that reads the caller's Outer column through Capture.
+struct TExistsFixture : NTests::TIdTestContext {
+    const bool Nullable;
+    const TInfoUnitId Outer = Id();
+    const TInfoUnitId Inner = Id();
+    const TInfoUnitId Capture = Id();
+    const TInfoUnitId Call = Id();
+    const TIntrusivePtr<IOperator> Left = Read({Outer});
+    const TIntrusivePtr<IOperator> Input = Read({Inner});
+
+    explicit TExistsFixture(bool nullable = false)
+        : Nullable(nullable)
+    {
+        SetTypes(*Left);
+    }
+
+    void SetTypes(IOperator& op) {
+        SetType(op, Nullable ? op.GetOutputIUs() : TUnorderedIUs{});
+    }
+
+    TExpression Compare(const TString& comparison) {
+        return MakeBinaryPredicate(comparison, Column(Inner), Column(Capture));
+    }
+
+    TIntrusivePtr<IOperator> Captured(TIntrusivePtr<IOperator> input, TInfoUnitId capture) {
+        TDependencyIUs captures;
+        captures.Add(capture, TCapturedIU{Outer, Left->GetIUType(Outer, ExprCtx)});
+        return MakeIntrusive<TOpAddDependencies>(std::move(input), Pos, std::move(captures));
+    }
+
+    TIntrusivePtr<TOpFilter> Correlated(const TExpression& predicate, TIntrusivePtr<IOperator> input) {
+        return MakeIntrusive<TOpFilter>(Captured(std::move(input), Capture), Pos, predicate);
+    }
+
+    TIntrusivePtr<TOpFilter> Correlated(const TExpression& predicate) {
+        return Correlated(predicate, Input);
+    }
+
+    void AddExists(TIntrusivePtr<IOperator> body, TInfoUnitId call) {
+        SetTypes(*body);
+        Props.Subplans.Add(call, std::move(body), ESubplanType::EXISTS);
+        Props.Subplans.RefreshDependencies(call);
+    }
+
+    void AddExists(TIntrusivePtr<IOperator> body) {
+        AddExists(std::move(body), Call);
+    }
+
+    TIntrusivePtr<IOperator> PullUp(const TExpression& predicate) {
+        auto result = TPullUpCorrelatedExistsRule().SimpleMatchAndApply(MakeIntrusive<TOpFilter>(Left, Pos, predicate), RboCtx, Props);
+        NTests::AssertIdInvariants(*result, Props);
+        return result;
+    }
+
+    void AssertDeclined(const TExpression& predicate) {
+        auto filter = MakeIntrusive<TOpFilter>(Left, Pos, predicate);
+        const auto* original = filter.get();
+        auto result = TPullUpCorrelatedExistsRule().SimpleMatchAndApply(filter, RboCtx, Props);
+        UNIT_ASSERT(result.get() == original);
+        UNIT_ASSERT(Props.Subplans.Contains(Call));
+    }
+};
+
+void AssertOnlyKey(const TOpJoin& join, TInfoUnitId caller, TInfoUnitId subplan) {
+    UNIT_ASSERT_VALUES_EQUAL(join.JoinKeys.Items().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(join.JoinKeys.Items()[0].first, caller);
+    UNIT_ASSERT_VALUES_EQUAL(join.JoinKeys.Items()[0].second, subplan);
 }
 
 } // anonymous namespace
@@ -413,6 +483,205 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
         auto& copiedPort = CastOperator<TOpReplicate>(*copy.GetInput());
         UNIT_ASSERT(&originalPort.GetReplicate() == &copiedPort.GetReplicate());
         UNIT_ASSERT(originalPort.GetInput() == input);
+    }
+
+    Y_UNIT_TEST(ExistsPullUpTurnsPredicatesIntoJoinConditions) {
+        for (const bool negated : {false, true}) {
+            TExistsFixture f;
+            f.AddExists(f.Correlated(MakeConjunction({f.Compare("=="), f.Compare("!=")})));
+
+            auto result = f.PullUp(negated ? MakeNegation(f.Column(f.Call)) : f.Column(f.Call));
+
+            auto& join = CastOperator<TOpJoin>(*result);
+            UNIT_ASSERT_VALUES_EQUAL(join.JoinKind, negated ? "LeftOnly" : "LeftSemi");
+            UNIT_ASSERT(join.GetLeftInput() == f.Left);
+            UNIT_ASSERT(join.GetRightInput() == f.Input);
+            AssertOnlyKey(join, f.Outer, f.Inner);
+            UNIT_ASSERT_VALUES_EQUAL(join.JoinFilters.size(), 1);
+            UNIT_ASSERT(join.JoinFilters[0].GetRawInputIUs() == (TUnorderedIUs{f.Inner, f.Outer}));
+            UNIT_ASSERT(!f.Props.Subplans.Contains(f.Call));
+        }
+    }
+
+    Y_UNIT_TEST(ExistsPullUpOrientsJoinKeys) {
+        TExistsFixture f;
+        f.AddExists(f.Correlated(MakeBinaryPredicate("==", f.Column(f.Capture), f.Column(f.Inner))));
+
+        auto result = f.PullUp(f.Column(f.Call));
+
+        AssertOnlyKey(CastOperator<TOpJoin>(*result), f.Outer, f.Inner);
+    }
+
+    Y_UNIT_TEST(ExistsPullUpKeepsLocalPredicatesOnTheInput) {
+        TExistsFixture f;
+        f.AddExists(f.Correlated(MakeConjunction({f.Compare("=="), MakeBinaryPredicate(">", f.Column(f.Inner), f.Constant())})));
+
+        auto result = f.PullUp(f.Column(f.Call));
+
+        auto& join = CastOperator<TOpJoin>(*result);
+        UNIT_ASSERT(join.JoinFilters.empty());
+        auto& local = CastOperator<TOpFilter>(*join.GetRightInput());
+        UNIT_ASSERT(local.GetInput() == f.Input);
+        UNIT_ASSERT(local.GetFilterExpression().GetRawInputIUs() == TUnorderedIUs{f.Inner});
+    }
+
+    Y_UNIT_TEST(ExistsPullUpKeepsCallerOnlyPredicatesInTheJoin) {
+        TExistsFixture f;
+        f.AddExists(f.Correlated(MakeConjunction({f.Compare("=="), MakeBinaryPredicate(">", f.Column(f.Capture), f.Constant())})));
+
+        auto result = f.PullUp(f.Column(f.Call));
+
+        auto& join = CastOperator<TOpJoin>(*result);
+        UNIT_ASSERT(join.GetLeftInput() == f.Left);
+        UNIT_ASSERT_VALUES_EQUAL(join.JoinFilters.size(), 1);
+        UNIT_ASSERT(join.JoinFilters[0].GetRawInputIUs() == TUnorderedIUs{f.Outer});
+    }
+
+    Y_UNIT_TEST(ExistsPullUpLooksThroughMaps) {
+        TExistsFixture f;
+        const auto alias = f.Id();
+        auto map = f.Copies(f.Correlated(f.Compare("==")), {{alias, f.Inner}});
+        f.AddExists(MakeIntrusive<TOpFilter>(map, f.Pos, MakeBinaryPredicate("!=", f.Column(alias), f.Column(f.Capture))));
+
+        auto result = f.PullUp(f.Column(f.Call));
+
+        auto& join = CastOperator<TOpJoin>(*result);
+        AssertOnlyKey(join, f.Outer, f.Inner);
+        UNIT_ASSERT_VALUES_EQUAL(join.JoinFilters.size(), 1);
+        UNIT_ASSERT(join.JoinFilters[0].GetRawInputIUs() == (TUnorderedIUs{alias, f.Outer}));
+        UNIT_ASSERT(CastOperator<TOpMap>(*join.GetRightInput()).GetInput() == f.Input);
+    }
+
+    Y_UNIT_TEST(ExistsPullUpUsesPlainKeysForNullableColumns) {
+        TExistsFixture f(/*nullable=*/true);
+        f.AddExists(f.Correlated(MakeConjunction({f.Compare("=="), f.Compare("!=")})));
+
+        auto result = f.PullUp(f.Column(f.Call));
+
+        auto& join = CastOperator<TOpJoin>(*result);
+        AssertOnlyKey(join, f.Outer, f.Inner);
+        UNIT_ASSERT(!HasEqualNullsKey(join.JoinKeys));
+    }
+
+    Y_UNIT_TEST(ExistsPullUpKeepsTheUncorrelatedInputWhole) {
+        TExistsFixture f;
+        const auto value = f.Id();
+        TAggregationIUs functions;
+        functions.Add(f.Id(), TOpAggregationTraits{value, "avg"});
+        TOrderedIUs<> groupKeys;
+        groupKeys.Append(f.Inner);
+        TIntrusivePtr<IOperator> input = MakeIntrusive<TOpAggregate>(f.Read({f.Inner, value}), std::move(functions), std::move(groupKeys),
+            EOpPhase::Undefined, false, f.Pos);
+        // Nothing below the correlation is copied, so this input is not a barrier.
+        UNIT_ASSERT(!CanDuplicateOperator(*input));
+        f.AddExists(f.Correlated(f.Compare("=="), input));
+
+        auto result = f.PullUp(f.Column(f.Call));
+
+        UNIT_ASSERT(CastOperator<TOpJoin>(*result).GetRightInput() == input);
+    }
+
+    Y_UNIT_TEST(ExistsPullUpSkipsConjunctsItCannotRewrite) {
+        TExistsFixture f;
+        const auto key = f.Id(), capture = f.Id(), rewritable = f.Id();
+        f.AddExists(f.Correlated(f.Compare(">")));
+        f.AddExists(MakeIntrusive<TOpFilter>(f.Captured(f.Read({key}), capture), f.Pos,
+            MakeBinaryPredicate("==", f.Column(key), f.Column(capture))), rewritable);
+
+        auto result = f.PullUp(MakeConjunction({f.Column(f.Call), f.Column(rewritable)}));
+
+        auto& remaining = CastOperator<TOpFilter>(*result);
+        UNIT_ASSERT(remaining.GetFilterExpression().GetRawInputIUs() == TUnorderedIUs{f.Call});
+        AssertOnlyKey(CastOperator<TOpJoin>(*remaining.GetInput()), f.Outer, key);
+        UNIT_ASSERT(f.Props.Subplans.Contains(f.Call));
+        UNIT_ASSERT(!f.Props.Subplans.Contains(rewritable));
+    }
+
+    Y_UNIT_TEST(ExistsPullUpDeclinesWithoutEquality) {
+        TExistsFixture f;
+        f.AddExists(f.Correlated(f.Compare(">")));
+        f.AssertDeclined(f.Column(f.Call));
+    }
+
+    Y_UNIT_TEST(ExistsPullUpDeclinesCorrelationBelowLimit) {
+        TExistsFixture f;
+        f.AddExists(MakeIntrusive<TOpLimit>(f.Correlated(f.Compare("==")), f.Pos, f.Constant(), EOpPhase::Undefined));
+        f.AssertDeclined(f.Column(f.Call));
+    }
+
+    Y_UNIT_TEST(ExistsPullUpDeclinesCorrelationBelowAggregate) {
+        TExistsFixture f;
+        TAggregationIUs functions;
+        functions.Add(f.Id(), TOpAggregationTraits{f.Inner, "count"});
+        f.AddExists(MakeIntrusive<TOpAggregate>(f.Correlated(f.Compare("==")), std::move(functions), TOrderedIUs<>{},
+            EOpPhase::Undefined, false, f.Pos));
+        f.AssertDeclined(f.Column(f.Call));
+    }
+
+    Y_UNIT_TEST(ExistsPullUpDeclinesVolatilePredicates) {
+        TExistsFixture f;
+        f.AddExists(f.Correlated(MakeConjunction({f.Compare("=="),
+            MakeBinaryPredicate(">", MakeUnaryCallable("Random", f.Column(f.Inner)), f.Constant())})));
+        f.AssertDeclined(f.Column(f.Call));
+    }
+
+    Y_UNIT_TEST(ExistsPullUpDeclinesFiltersWithoutBlockHashJoin) {
+        TExistsFixture f;
+        f.Config->SetUseBlockHashJoin(false);
+        f.AddExists(f.Correlated(MakeConjunction({f.Compare("=="), f.Compare("!=")})));
+        f.AssertDeclined(f.Column(f.Call));
+    }
+
+    Y_UNIT_TEST(ExistsPullUpDeclinesFiltersOnNonDataKeys) {
+        TExistsFixture f;
+        TIntrusivePtr<IOperator> body = f.Correlated(MakeConjunction({f.Compare("=="), f.Compare("!=")}));
+        f.AddExists(body);
+        const auto* listType = f.ExprCtx.MakeType<TListExprType>(f.ExprCtx.MakeType<TDataExprType>(EDataSlot::Int32));
+        TVector<const TItemExprType*> fields{f.ExprCtx.MakeType<TItemExprType>(f.ExprCtx.GetIndexAsString(f.Inner), listType)};
+        body->Type = f.ExprCtx.MakeType<TListExprType>(f.ExprCtx.MakeType<TStructExprType>(fields));
+        f.AssertDeclined(f.Column(f.Call));
+    }
+
+    Y_UNIT_TEST(ExistsPullUpDeclinesRepeatedCalls) {
+        TExistsFixture f;
+        f.AddExists(f.Correlated(f.Compare("==")));
+        f.AssertDeclined(MakeConjunction({f.Column(f.Call),
+            MakeBinaryPredicate("==", f.Column(f.Call), MakeConstant("Bool", "true", f.Pos, &f.ExprCtx))}));
+    }
+
+    Y_UNIT_TEST(ExistsPullUpDeclinesUncorrelatedExists) {
+        TExistsFixture f;
+        f.Props.Subplans.Add(f.Call, f.Input, ESubplanType::EXISTS);
+        f.AssertDeclined(f.Column(f.Call));
+    }
+
+    Y_UNIT_TEST(ExistsPullUpDeclinesInSubplans) {
+        TExistsFixture f;
+        f.Props.Subplans.Add(f.Call, f.Input, ESubplanType::IN_SUBPLAN, {f.Outer}, f.Inner);
+        f.AssertDeclined(f.Column(f.Call));
+    }
+
+    Y_UNIT_TEST(ExistsPullUpLeavesTheSubplanIntactForTheDependentJoin) {
+        TExistsFixture f;
+        auto correlated = f.Correlated(f.Compare("=="));
+        const auto captured = correlated->GetInput();
+        // The map reads the capture, so the rule declines only after reaching the filter below it.
+        f.AddExists(f.Copies(correlated, {{f.Id(), f.Capture}}));
+
+        f.AssertDeclined(f.Column(f.Call));
+
+        UNIT_ASSERT(correlated->GetInput() == captured);
+        UNIT_ASSERT(correlated->GetFilterExpression().GetRawInputIUs() == (TUnorderedIUs{f.Inner, f.Capture}));
+
+        auto result = TInlineSimpleInExistsSubplanRule().SimpleMatchAndApply(MakeIntrusive<TOpFilter>(f.Left, f.Pos, f.Column(f.Call)), f.RboCtx, f.Props);
+
+        size_t dependentJoins = 0;
+        for (const auto& item : IterateSubtree(result.get())) {
+            dependentJoins += item.Current->Kind == EOperator::DependentJoin;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(dependentJoins, 1);
+        UNIT_ASSERT(!f.Props.Subplans.Contains(f.Call));
+        NTests::AssertIdInvariants(*result, f.Props);
     }
 
     Y_UNIT_TEST(SimpleInLeavesRepeatedCallsForTheMarkJoinPath) {

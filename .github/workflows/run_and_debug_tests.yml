@@ -94,3 +94,27 @@ jobs:
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+
+      # Caller (dispatch) can download this and paste into its own job summary.
+      - name: Prepare step summary artifact
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="${{ runner.temp }}/executor-summary.md"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -f "$GITHUB_STEP_SUMMARY" ]; then
+            cp "$GITHUB_STEP_SUMMARY" "$out"
+          else
+            echo "_No GITHUB_STEP_SUMMARY produced._" > "$out"
+          fi
+          echo "summary_file=$out" >> "$GITHUB_OUTPUT"
+        id: summary_art
+
+      - name: Upload step summary artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: executor-summary
+          path: ${{ steps.summary_art.outputs.summary_file }}
+          if-no-files-found: warn
+          retention-days: 14

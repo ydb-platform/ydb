@@ -4043,6 +4043,12 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             if (LastOffsetHasBeenCommited(userInfo)) {
                 SendReadingFinished(user);
             }
+<<<<<<< HEAD
+=======
+            if (offsetHasChanged) {
+                changedUsers.push_back(&userInfo);
+            }
+>>>>>>> 28796270489 (replicate mlp consumer offsets (#57984))
         } else if (user != CLIENTID_WITHOUT_CONSUMER) {
             // Consumer may already have been removed by an earlier write cycle
             // (e.g. ChangePartitionConfig drop + FillReadFromTimestamps ESCI_DROP_READ_RULE).

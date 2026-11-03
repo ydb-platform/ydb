@@ -614,6 +614,15 @@ struct TMirrorerEnv {
         Dispatch();
     }
 
+<<<<<<< HEAD
+=======
+    void PushReplicationData(ui64 consumerOffset = 0) {
+        Factory.Session(0).PushEvent(MakeReplicationDataEvent(
+            Factory.Session(0).Partition, consumerOffset));
+        Dispatch();
+    }
+
+>>>>>>> 28796270489 (replicate mlp consumer offsets (#57984))
     void SendChangeConfig(const NKikimrPQ::TMirrorPartitionConfig& mirrorFrom) {
         NKikimrPQ::TPQTabletConfig config;
         config.SetYdbDatabasePath(Database);
@@ -860,6 +869,136 @@ Y_UNIT_TEST(StatusWrongSessionIgnored) {
     UNIT_ASSERT(env.Factory.CommitPromises.empty());
 }
 
+<<<<<<< HEAD
+=======
+Y_UNIT_TEST(ReplicationDataSendsConsumerOffsetsWithoutAck) {
+    TMirrorerEnv env({.EndOffset = 10, .MirrorConsumerOffsets = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 10, 10);
+    env.PushReplicationData(5);
+    env.PushReplicationData(7);
+    env.PushReplicationData(9);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 3);
+    const auto& offsets = env.CapturedReplicationData.back()->OffsetsByConsumers;
+    UNIT_ASSERT_VALUES_EQUAL(offsets.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(offsets.at("consumer"), 9);
+
+    env.PushReplicationData(9);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 3);
+    UNIT_ASSERT(env.CapturedRequests.empty());
+}
+
+Y_UNIT_TEST(ReplicationDataClampsConsumerOffsetsToEndOffset) {
+    TMirrorerEnv env({.EndOffset = 10, .MirrorConsumerOffsets = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 10, 10);
+
+    NKikimrPQ::TReplicationDataPayload payload;
+    (*payload.MutableOffsetsByConsumers())["available-consumer"] = 10;
+    (*payload.MutableOffsetsByConsumers())["future-consumer"] = 11;
+    auto message = MakeCompressed(env.Factory.Session(0).Partition, 0, payload.SerializeAsString());
+    message.GetMessageMeta()->Fields.emplace_back("_ydb_service_replication_message", "true");
+    std::vector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> messages;
+    messages.push_back(std::move(message));
+    env.Factory.Session(0).PushEvent(TReadSessionEvent::TDataReceivedEvent(
+        {}, std::move(messages), env.Factory.Session(0).Partition));
+    env.Dispatch();
+
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1u);
+    const auto& offsets = env.CapturedReplicationData.back()->OffsetsByConsumers;
+    UNIT_ASSERT_VALUES_EQUAL(offsets.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(offsets.at("available-consumer"), 10u);
+    UNIT_ASSERT_VALUES_EQUAL(offsets.at("future-consumer"), 10u);
+
+    env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 10));
+    env.Dispatch();
+    env.AckWrite(10);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2u);
+    const auto& updatedOffsets = env.CapturedReplicationData.back()->OffsetsByConsumers;
+    UNIT_ASSERT_VALUES_EQUAL(updatedOffsets.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(updatedOffsets.at("future-consumer"), 11u);
+}
+
+Y_UNIT_TEST(ReplicationDataSkipsMalformedServiceMessages) {
+    for (ui64 endOffset : {0u, 10u}) {
+        TMirrorerEnv env({.EndOffset = endOffset, .MirrorConsumerOffsets = true});
+        env.Advance(TDuration::Seconds(1));
+        env.StartSession(0, endOffset, endOffset + 1);
+
+        auto message = MakeCompressed(env.Factory.Session(0).Partition, 0, TString(1, '\xff'));
+        message.GetMessageMeta()->Fields.emplace_back("_ydb_service_replication_message", "true");
+        std::vector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> messages;
+        messages.push_back(std::move(message));
+        env.Factory.Session(0).PushEvent(TReadSessionEvent::TDataReceivedEvent(
+            {}, std::move(messages), env.Factory.Session(0).Partition));
+        env.Dispatch();
+        UNIT_ASSERT(env.CapturedRequests.empty());
+        UNIT_ASSERT(env.CapturedReplicationData.empty());
+
+        // Skipping a malformed control payload must leave the regular read offset unchanged.
+        env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, endOffset));
+        env.Dispatch();
+        env.AckWrite(endOffset);
+        env.PushReplicationData(endOffset + 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), endOffset + 1);
+    }
+}
+
+Y_UNIT_TEST(ReplicationDataRequiresTrueServiceAttribute) {
+    TMirrorerEnv env({.MirrorConsumerOffsets = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 1);
+
+    NKikimrPQ::TReplicationDataPayload payload;
+    (*payload.MutableOffsetsByConsumers())["consumer"] = 0;
+    auto message = MakeCompressed(env.Factory.Session(0).Partition, 0, payload.SerializeAsString());
+    message.GetMessageMeta()->Fields.emplace_back("_ydb_service_replication_message", "false");
+    std::vector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> messages;
+    messages.push_back(std::move(message));
+    env.Factory.Session(0).PushEvent(TReadSessionEvent::TDataReceivedEvent(
+        {}, std::move(messages), env.Factory.Session(0).Partition));
+    env.Dispatch();
+    UNIT_ASSERT(env.CapturedReplicationData.empty());
+    UNIT_ASSERT(env.FindRequest(1));
+    env.AckWrite(0);
+}
+
+Y_UNIT_TEST(ReplicationDataWaitsForPersistedMessages) {
+    TMirrorerEnv env({.MirrorConsumerOffsets = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 2);
+    env.PushReplicationData(1);
+    env.PushReplicationData(2);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), 0u);
+
+    env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 0));
+    env.Dispatch();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1u);
+    env.AckWrite(0);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), 1u);
+
+    env.Factory.Session(0).PushEvent(MakeDataEvent(env.Factory.Session(0).Partition, 1));
+    env.Dispatch();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2u);
+    env.AckWrite(1);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 3u);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), 2u);
+}
+
+Y_UNIT_TEST(ReplicationDataForEmptySourceDoesNotWaitForMessages) {
+    TMirrorerEnv env({.MirrorConsumerOffsets = true});
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 0);
+    env.PushReplicationData();
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), 0);
+    UNIT_ASSERT(env.CapturedRequests.empty());
+}
+
+>>>>>>> 28796270489 (replicate mlp consumer offsets (#57984))
 Y_UNIT_TEST(SplitMergeChildrenSendsNeedSplit) {
     TMirrorerEnv env;
     env.Advance(TDuration::Seconds(1));

@@ -1348,6 +1348,14 @@ struct TEvPQ {
         ui64 Cookie;
     };
 
+<<<<<<< HEAD
+=======
+    struct TEvReplicationData : public TEventLocal<TEvReplicationData, EvReplicationData> {
+        THashMap<TString, ui64> OffsetsByConsumers;
+        TMaybe<ui64> MirroredOffset;
+    };
+
+>>>>>>> 28796270489 (replicate mlp consumer offsets (#57984))
     struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {
         TEvPartitionScaleStatusChanged() = default;
 
@@ -1813,6 +1821,10 @@ struct TEvPQ {
 
         ui32 GetPartitionId() const {
             return Record.GetPartitionId();
+        }
+
+        std::optional<ui64> GetToOffset() const {
+            return Record.HasToOffset() ? std::make_optional(Record.GetToOffset()) : std::nullopt;
         }
     };
 

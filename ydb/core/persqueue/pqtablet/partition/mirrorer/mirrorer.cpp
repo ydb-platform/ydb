@@ -348,9 +348,22 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
         YDB_LOG_NOTICE("[STATE] next offset to read current end offset",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"offsetToRead", OffsetToRead},
+<<<<<<< HEAD
             {"endOffset", EndOffset});
         YDB_LOG_NOTICE("[STATE] bytes in flight messages in write request queue",
             {"logPrefix", NPQ_LOG_PREFIX},
+=======
+            {"endOffset", EndOffset}
+        );
+        LOG_N(
+            "[STATE] replication offsets",
+            {"replicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
+            {"offsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
+            {"lastReplicationDataTimestamp", LastReplicationDataTimestamp}
+        );
+        LOG_N(
+            "[STATE] bytes in flight messages in write request queue",
+>>>>>>> 28796270489 (replicate mlp consumer offsets (#57984))
             {"bytesInFlight", BytesInFlight},
             {"writeInFlightSize", WriteInFlight.size()},
             {"toWrite", Queue.size()});
@@ -501,12 +514,60 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
     EndPartitionSessionEvent = std::nullopt;
 }
 
+<<<<<<< HEAD
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx) {
     if (ev->Cookie != 0 && ev->Cookie != CredentialsGeneration) {
         YDB_LOG_DEBUG("Ignoring stale credentials init",
             {"logPrefix", NPQ_LOG_PREFIX}, {"cookie", ev->Cookie}, {"generation", CredentialsGeneration});
         return;
     }
+=======
+void TMirrorer::TryToSendReplicationData(const TActorContext& ctx) {
+    if (OffsetsByConsumers.empty() && !MirroredOffsetToSend) {
+        return;
+    }
+
+    y_absl::flat_hash_map<TString, ui64> offsetsByConsumersToSend;
+    for (auto& [consumer, offset] : OffsetsByConsumers) {
+        auto offsetToSend = Min(offset, EndOffset);
+        if (ReplicatedOffsetsByConsumers.contains(consumer) && ReplicatedOffsetsByConsumers[consumer] == offsetToSend) {
+            continue;
+        }
+        
+        offsetsByConsumersToSend[consumer] = offsetToSend;
+    }
+
+    if (offsetsByConsumersToSend.empty() && !MirroredOffsetToSend.Defined()) {
+        return;
+    }
+
+    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+    for (const auto& [consumer, offset] : offsetsByConsumersToSend) {
+        (event->OffsetsByConsumers)[consumer] = offset;
+
+        ReplicatedOffsetsByConsumers[consumer] = offset;
+
+        if (offset == OffsetsByConsumers[consumer]) {
+            OffsetsByConsumers.erase(consumer);
+        }
+    }
+
+    LOG_D("Sending replication data to consumers",
+        {"offsetsByConsumersToSend", FormatOffsetsByConsumers(offsetsByConsumersToSend)},
+        {"ReplicatedOffsetsByConsumers", FormatOffsetsByConsumers(ReplicatedOffsetsByConsumers)},
+        {"OffsetsByConsumers", FormatOffsetsByConsumers(OffsetsByConsumers)},
+        {"MirroredOffsetToSend", MirroredOffsetToSend ? ToString(*MirroredOffsetToSend) : "none"});
+
+    if (MirroredOffsetToSend) {
+        event->MirroredOffset = *MirroredOffsetToSend;
+        MirroredOffsetToSend = Nothing();
+    }
+
+    ctx.Send(PartitionActor, event.Release());
+}
+
+void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
+>>>>>>> 28796270489 (replicate mlp consumer offsets (#57984))
     if (CredentialsRequestInFlight) {
         YDB_LOG_WARN("Credentials request already inflight",
             {"logPrefix", NPQ_LOG_PREFIX});

@@ -3524,6 +3524,9 @@ public:
                         "Adding VIRTUAL GENERATED columns together with columns requiring a build is not supported"));
                     return SyncError();
                 }
+                if (hasGeneratedColumns) {
+                    table.Metadata->ToMessage(alterTableRequest.mutable_table_metadata());
+                }
                 future = Gateway->AlterTable(cluster, std::move(alterTableRequest), requestType, alterTableFlags,
                     std::move(indexBuildSettings));
             }

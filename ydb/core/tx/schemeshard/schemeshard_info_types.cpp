@@ -862,6 +862,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         }
     }
 
+    // Validate supplied dependency metadata. Its correspondence to ExprText is the
+    // producer's responsibility (see TDefaultExpressionColumnDescription).
     for (const auto& column : op.GetColumns()) {
         if (!column.HasDefaultFromExpression()) {
             continue;

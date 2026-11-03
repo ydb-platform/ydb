@@ -683,6 +683,13 @@ public:
             return result;
         }
 
+        // Check the validated identity even when the old path has already been removed.
+        TString errStr;
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
+
         TPath path = pathId
             ? TPath::Init(pathId, context.SS)
             : TPath::Resolve(parentPathStr, context.SS).Dive(name);
@@ -745,13 +752,6 @@ public:
                 // and stores it verbatim, so insert the same (possibly relative) form.
                 localSequences.insert(defaultFromSequence);
             }
-        }
-
-        TString errStr;
-
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
-            return result;
         }
 
         if (!context.SS->CheckLocks(path.Base()->PathId, Transaction, errStr)) {

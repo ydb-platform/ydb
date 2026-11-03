@@ -7,6 +7,8 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -35,6 +37,14 @@ public:
 
 
     void Bootstrap(const TActorContext& ctx) {
+        const auto& scheme = this->Request->Record.GetTransaction().GetModifyScheme();
+        RetryOnSchemaChange = scheme.GetAlterTable().HasPathId()
+            && AnyOf(scheme.GetApplyIf(), [](const auto& condition) {
+                return condition.HasPathVersion() && condition.GetCheckEntityVersion();
+            })
+            && AnyOf(scheme.GetAlterTable().GetColumns(), [](const auto& column) {
+                return column.HasDefaultFromExpression();
+            });
         TActorId txproxy = MakeTxProxyID();
         ctx.Send(txproxy, this->Request.Release(), 0, 0, NWilson::TTraceId(this->TraceId));
 
@@ -130,7 +140,8 @@ public:
                     Promise.SetValue(std::move(result));
                     this->Die(ctx);
                 } else {
-                    Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
+                    Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(RetryOnSchemaChange
+                        ? NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED : NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
                         response.GetSchemeShardReason(), {}));
                     this->Die(ctx);
                 }
@@ -184,7 +195,12 @@ public:
                     }
 
                     case NKikimrScheme::EStatus::StatusPreconditionFailed: {
-                        Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                        // Retry schema changes without masking unrelated precondition failures.
+                        const bool schemaChanged = RetryOnSchemaChange
+                            && (response.GetSchemeShardReason().StartsWith("fail user constraint in ApplyIf section:")
+                                || response.GetSchemeShardReason().StartsWith("fail user constraint: ApplyIf section:"));
+                        Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(schemaChanged
+                            ? NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED : NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                             response.GetSchemeShardReason(), {}));
                         this->Die(ctx);
                         return;
@@ -259,6 +275,7 @@ private:
     TString OperationId;
     bool FailedOnAlreadyExists = false;
     bool SuccessOnNotExist = false;
+    bool RetryOnSchemaChange = false;
 };
 
 } // namespace NKqp

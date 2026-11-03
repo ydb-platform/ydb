@@ -2276,6 +2276,7 @@ private:
 
         TMap<TString, TKikimrColumnMetadata> addedColumnMetadata;
         TExprNode::TListType addedColumns;
+        bool hasAddedGeneratedColumns = false;
 
         for (const auto& action : node.Actions()) {
             auto name = action.Name().Value();
@@ -2348,6 +2349,7 @@ private:
                     }
 
                     if (columnMeta.IsDefaultFromExpression()) {
+                        hasAddedGeneratedColumns = true;
                         if (table->Metadata->IsOlap()) {
                             ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()),
                                 "Generated columns are not supported in column tables"));
@@ -2707,7 +2709,7 @@ private:
             }
         }
 
-        if (!addedColumns.empty()) {
+        if (hasAddedGeneratedColumns) {
             TKikimrTableMetadata metadata(table->Metadata->Cluster, table->Metadata->Name);
             metadata.Columns = table->Metadata->Columns;
             metadata.KeyColumnNames = table->Metadata->KeyColumnNames;

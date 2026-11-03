@@ -21,6 +21,8 @@
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/metadata/manager/abstract.h>
 
+#include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/overloaded.h>
 
 namespace NKikimr::NKqp {
@@ -1424,6 +1426,19 @@ public:
 
                 auto &phyQuery =
                     *sessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+                const bool hasPriorAlter = alterReq.has_table_metadata() && AnyOf(phyQuery.GetTransactions(), [&](const auto& prior) {
+                    const auto& operation = prior.GetSchemeOperation();
+                    if (operation.HasBuildOperation()) {
+                        return operation.GetBuildOperation().source_path() == alterReq.path();
+                    }
+                    if (operation.HasAlterTable()
+                        && operation.GetAlterTable().GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterTable)
+                    {
+                        const auto& modify = operation.GetAlterTable();
+                        return JoinPath({modify.GetWorkingDir(), modify.GetAlterTable().GetName()}) == alterReq.path();
+                    }
+                    return false;
+                });
                 auto &phyTx = *phyQuery.AddTransactions();
                 phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
@@ -1439,6 +1454,46 @@ public:
                     errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
                     tablePromise.SetValue(errResult);
                     return;
+                }
+
+                if (alterReq.has_table_metadata() && alterReq.table_metadata().GetSchemaVersion() && !hasPriorAlter) {
+                    const auto& metadata = alterReq.table_metadata();
+                    const TPathId pathId(metadata.GetPathId().GetOwnerId(), metadata.GetPathId().GetTableId());
+                    pathId.ToProto(modifyScheme.MutableAlterTable()->MutablePathId());
+                    auto& applyIf = *modifyScheme.AddApplyIf();
+                    applyIf.SetPathId(pathId.LocalPathId);
+                    applyIf.SetPathVersion(metadata.GetSchemaVersion());
+                    applyIf.SetCheckEntityVersion(true);
+                } else if (alterReq.has_table_metadata()) {
+                    const auto& metadata = alterReq.table_metadata();
+                    auto& expected = *phyTx.MutableSchemeOperation()->MutableExpectedTableSchema();
+                    expected.SetName(metadata.GetName());
+                    if (metadata.GetSchemaVersion()) {
+                        TPathId(metadata.GetPathId().GetOwnerId(), metadata.GetPathId().GetTableId())
+                            .ToProto(expected.MutablePathId());
+                    }
+                    THashSet<TString> dependencies;
+                    for (const auto& column : modifyScheme.GetAlterTable().GetColumns()) {
+                        for (const auto& name : column.GetDefaultFromExpression().GetDependencyColumnNames()) {
+                            dependencies.insert(name);
+                        }
+                    }
+                    for (const auto& column : metadata.GetColumns()) {
+                        if (!dependencies.contains(column.GetName())) {
+                            continue;
+                        }
+                        auto& copy = *expected.AddColumns();
+                        copy.SetName(column.GetName());
+                        copy.SetTypeId(column.GetTypeId());
+                        if (column.HasTypeInfo()) {
+                            copy.MutableTypeInfo()->CopyFrom(column.GetTypeInfo());
+                        }
+                        copy.SetNotNull(column.GetNotNull());
+                        if (column.GetDefaultKind() == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION) {
+                            copy.MutableDefaultFromExpression();
+                        }
+                    }
+                    expected.MutableKeyColumnNames()->CopyFrom(metadata.GetKeyColunmNames());
                 }
 
                 if (buildSettings.has_column_build_operation()) {

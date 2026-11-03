@@ -110,6 +110,7 @@ RECURSE(
 RECURSE_FOR_TESTS(
     hooks/abstract
     ut_cut_history
+    ut_memory
     ut_rw
     ut_schema
     backup

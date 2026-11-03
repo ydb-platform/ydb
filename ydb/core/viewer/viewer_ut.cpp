@@ -1467,7 +1467,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
         std::unordered_set<ui32> NameserviceDeadNodeIndexes;
     };
 
-    NJson::TJsonValue GetClusterBridgeInfo(const TClusterBridgeOptions& options) {
+    NJson::TJsonValue GetClusterBridgeInfo(const TClusterBridgeOptions& options,
+            std::unordered_set<ui32>* remoteNodesQueriedOverInterconnect = nullptr) {
         TPortManager ports;
         auto settings = Tests::TServerSettings(ports.GetPort())
             .SetNodeCount(6)
@@ -1526,10 +1527,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto isClusterActor = [&](const TActorId& actorId) {
             return dynamic_cast<TJsonCluster*>(runtime.FindActor(actorId)) != nullptr;
         };
-        auto addSystemState = [&](NKikimrWhiteboard::TEvSystemStateResponse& response, ui32 nodeId) {
-            if (options.LocalState == NKikimrBridge::TClusterState::DISCONNECTED) {
-                UNIT_ASSERT_C(nodeId - firstNodeId < 4, "Whiteboard request crossed the disconnected pile boundary");
+        auto observeWhiteboardRequest = [&](ui32 senderNodeId, ui32 nodeId) {
+            if (senderNodeId == runtime.GetNodeId(options.ServingNodeIndex)) {
+                if (options.LocalState == NKikimrBridge::TClusterState::DISCONNECTED) {
+                    UNIT_ASSERT_C(nodeId - firstNodeId < 4, "Whiteboard request crossed the disconnected pile boundary");
+                }
+                if (remoteNodesQueriedOverInterconnect && nodeId - firstNodeId >= 4) {
+                    remoteNodesQueriedOverInterconnect->insert(nodeId - firstNodeId);
+                }
+            } else {
+                UNIT_ASSERT_C(nodeId - firstNodeId >= 4, "The remote viewer queried a node outside its pile");
             }
+        };
+        auto addSystemState = [&](NKikimrWhiteboard::TEvSystemStateResponse& response, ui32 nodeId) {
             if (options.AliveNodeIndexes.contains(nodeId - firstNodeId)) {
                 auto* state = response.AddSystemStateInfo();
                 state->SetNodeId(nodeId);
@@ -1645,11 +1655,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     if (!isClusterActor(ev->Sender)) {
                         break;
                     }
+                    observeWhiteboardRequest(ev->Sender.NodeId(), ev->Recipient.NodeId());
                     if (!options.DropWhiteboard && !(options.DropRemoteWhiteboard && ev->Sender.NodeId() - firstNodeId >= 4)) {
                         auto response = std::make_unique<TEvWhiteboard::TEvSystemStateResponse>();
-                        if (options.Https && ev->Sender.NodeId() - firstNodeId >= 4) {
-                            UNIT_ASSERT(ev->Recipient.NodeId() - firstNodeId >= 4);
-                        }
                         addSystemState(response->Record, ev->Recipient.NodeId());
                         runtime.Send(new IEventHandle(ev->Sender, ev->Recipient, response.release(), 0, ev->Cookie),
                             ev->Sender.NodeId() - firstNodeId);
@@ -1659,6 +1667,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 case NViewer::TEvViewer::EvViewerRequest: {
                     if (!isClusterActor(ev->Sender)) {
                         break;
+                    }
+                    for (ui32 nodeId : ev->Get<NViewer::TEvViewer::TEvViewerRequest>()->Record.GetLocation().GetNodeId()) {
+                        observeWhiteboardRequest(ev->Sender.NodeId(), nodeId);
                     }
                     if (!options.DropWhiteboard) {
                         auto response = std::make_unique<NViewer::TEvViewer::TEvViewerResponse>();
@@ -1784,6 +1795,57 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& pile = json["BridgeInfo"]["Piles"][1];
         AssertBridgePileCounts(pile, 1, 1);
         AssertBridgePileUnknownAliveCounts(pile);
+    }
+
+    Y_UNIT_TEST(ClusterBridgePileQueryMatrix) {
+        using TState = NKikimrBridge::TClusterState;
+        constexpr TState::EPileState states[] = {
+            TState::SYNCHRONIZED,
+            TState::NOT_SYNCHRONIZED_1,
+            TState::NOT_SYNCHRONIZED_2,
+            TState::SUSPENDED,
+            TState::DISCONNECTED,
+            TState::INACTIVE,
+        };
+        enum ETransport { IC, HTTPS, None };
+        // Rows: serving pile; columns: remote pile, both in the order above.
+        constexpr ETransport expected[][std::size(states)] = {
+            {IC,    IC,    IC,    IC,    HTTPS, None},
+            {IC,    IC,    IC,    IC,    HTTPS, None},
+            {IC,    IC,    IC,    IC,    HTTPS, None},
+            {IC,    IC,    IC,    IC,    HTTPS, None},
+            {HTTPS, HTTPS, HTTPS, HTTPS, HTTPS, None},
+            {HTTPS, HTTPS, HTTPS, HTTPS, HTTPS, None},
+        };
+        for (size_t local = 0; local < std::size(states); ++local) {
+            for (size_t remote = 0; remote < std::size(states); ++remote) {
+                const TString context = TStringBuilder()
+                    << "Serving pile: " << TState::EPileState_Name(states[local])
+                    << ", remote pile: " << TState::EPileState_Name(states[remote]);
+                Cerr << context << Endl;
+                const auto transport = expected[local][remote];
+                std::unordered_set<ui32> remoteNodesQueriedOverInterconnect;
+                const auto json = GetClusterBridgeInfo({
+                    .OffloadMerge = true,
+                    .Https = true,
+                    .ExpectedHttpsRequests = transport == HTTPS ? 1u : 0u,
+                    .LocalState = states[local],
+                    .RemoteState = states[remote],
+                    .AliveNodeIndexes = {0, 1, 2, 4, 5},
+                }, &remoteNodesQueriedOverInterconnect);
+                const std::unordered_set<ui32> expectedInterconnectNodes = transport == IC
+                    ? std::unordered_set<ui32>{4, 5} : std::unordered_set<ui32>{};
+                UNIT_ASSERT_C(remoteNodesQueriedOverInterconnect == expectedInterconnectNodes, context);
+                const auto& pile = json["BridgeInfo"]["Piles"][1];
+                UNIT_ASSERT_VALUES_EQUAL_C(pile["Name"].GetStringSafe(), "pile2", context);
+                AssertBridgePileCounts(pile, 1, 1);
+                if (transport == None) {
+                    AssertBridgePileUnknownAliveCounts(pile);
+                } else {
+                    AssertBridgePileAliveCounts(pile, 1, 1);
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST_TWIN(ClusterBridgeHttpsDisconnectedPile, sessionCookie) {

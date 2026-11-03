@@ -323,7 +323,7 @@ message TBridgePileInfo {
     optional uint32 PileId = 1;
     optional string Name = 2;
     optional Ydb.Bridge.PileState.State State = 3;
-    optional uint32 Nodes = 4; // Nodes known to nameservice, not the number of running processes.
+    optional uint32 Nodes = 4;
     map<string, uint32> GroupStatuses = 5; // UNKNOWN (grey), FULL (green), PARTIAL (yellow), DEGRADED (yellow), DISINTEGRATED (red)
     // Alive means a node returned whiteboard system state and was not disconnected during collection.
     // Alive counters are absent (unknown, not zero) when collection is incomplete or the pile

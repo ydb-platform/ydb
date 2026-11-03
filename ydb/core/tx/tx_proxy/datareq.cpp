@@ -1116,7 +1116,7 @@ void TDataReq::ContinueFlatMKQLResolve(const TActorContext &ctx) {
 
         TxProxyMon->MiniKQLResolveSentToShard->Inc();
 
-        YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "SEND TEvProposeTransaction to datashard with bytes program affected shards followers",
+        YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "SEND TEvProposeTransaction to datashard",
             {"actor", ctx.SelfID},
             {"txid", TxId},
             {"shardId", shardData.ShardId},
@@ -1257,8 +1257,8 @@ TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> TDataReq::PrepareFlatMKQLReque
         if (keyd->RowOperation != TKeyDesc::ERowOperation::Read || keyd->ReadTarget.GetMode() != TReadTarget::EMode::Follower) {
             CanUseFollower = false;
             YDB_LOG_DEBUG_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Actor txid disallow followers cause of operation read target mode",
-                {"selfId", ctx.SelfID},
-                {"txId", TxId},
+                {"actor", ctx.SelfID},
+                {"txid", TxId},
                 {"rowOperation", (ui32)keyd->RowOperation},
                 {"mode", (ui32)keyd->ReadTarget.GetMode()});
         }
@@ -1796,7 +1796,7 @@ void TDataReq::HandlePrepare(TEvPipeCache::TEvDeliveryProblem::TPtr &ev, const T
 
     // Disconnected while waiting for initial propose response
     if (perTablet->TabletStatus == TPerTablet::ETabletStatus::StatusWait) {
-        YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard delivery problem (waiting",
+        YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard delivery problem (waiting not delivered)",
             {"actor", ctx.SelfID},
             {"txid", TxId},
             {"tabletId", msg->TabletId},
@@ -2242,11 +2242,11 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionAttachResult::TP
         return;
     }
 
-    YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard transaction lost during",
+    YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "Shard transaction lost during reconnect",
         {"actor", ctx.SelfID},
         {"txid", TxId},
         {"tabletId", tabletId},
-        {"reconnect", record.GetStatus()});
+        {"status", record.GetStatus()});
 
     ComplainingDatashards.push_back(tabletId);
     CancelProposal(tabletId);
@@ -2880,10 +2880,10 @@ ui64 TDataReq::SelectCoordinator(NSchemeCache::TSchemeCacheRequest &cacheRequest
 }
 
 void TDataReq::FailProposedRequest(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, TString errMsg, const TActorContext &ctx) {
-    YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "",
+    YDB_LOG_ERROR_CTX_COMP_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, "FailProposedRequest",
         {"actor", ctx.SelfID},
         {"txid", TxId},
-        {"failProposedRequest", errMsg},
+        {"errMsg", errMsg},
         {"status", status});
 
     DatashardErrors = errMsg;

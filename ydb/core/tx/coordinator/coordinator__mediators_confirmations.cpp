@@ -48,7 +48,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
                 }
 
                 if (unconfirmed.empty()) {
-                    FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Acknowledged",
+                    FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Acknowledged for mediator",
                         {"selfId", Self->TabletID()},
                         {"internalTxGen", internalTxGen},
                         {"internalTxStep", internalTxStep},
@@ -58,7 +58,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
                 }
 
                 if (it->second.UnconfirmedAffectedSet.empty()) {
-                    FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Acknowledged",
+                    FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Acknowledged fully",
                         {"selfId", Self->TabletID()},
                         {"internalTxGen", internalTxGen},
                         {"internalTxStep", internalTxStep},
@@ -98,7 +98,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
             }
 
             if (unconfirmed.empty()) {
-                FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Acknowledged",
+                FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Acknowledged for mediator",
                     {"selfId", Self->TabletID()},
                     {"internalTxGen", internalTxGen},
                     {"internalTxStep", internalTxStep},
@@ -108,7 +108,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
             }
 
             if (it->second.UnconfirmedAffectedSet.empty()) {
-                FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Acknowledged",
+                FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Acknowledged fully",
                     {"selfId", Self->TabletID()},
                     {"internalTxGen", internalTxGen},
                     {"internalTxStep", internalTxStep},

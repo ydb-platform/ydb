@@ -495,8 +495,9 @@ namespace NKikimr::NBsController {
                     }
                     const auto copy = ObserveBridgeStorageCopy(context, *BridgeInfo->GetPile(pileId),
                                                                syncStates.at(pileId), pool.BridgeMode);
-                    const TString& pileName = !pool.BridgeMode && !context.AuthorityPileId ? NoPileName : pile.Name;
-                    const bool matching = (query.GetPileName().empty() || pileName.empty() || query.GetPileName() == pileName) &&
+                    const bool unplacedOrdinary = !pool.BridgeMode && !context.AuthorityPileId;
+                    const TString& pileName = unplacedOrdinary ? NoPileName : pile.Name;
+                    const bool matching = (query.GetPileName().empty() || unplacedOrdinary || query.GetPileName() == pileName) &&
                                           IncludeStorageCopy(query, copy.State);
                     if (matching && result.GroupsSize() == StoragePageSize(query)) {
                         continuation();

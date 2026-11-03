@@ -520,6 +520,58 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_VALUES_EQUAL(service.ListCalls.load(), 2);
     }
 
+    Y_UNIT_TEST_F(UnavailableContinuationKeepsTheCursorAndPreviousObservationInJson, TBridgeCliFixture) {
+        auto& storage = PrepareStorage(Ydb::Bridge::StorageQuery::DATABASES);
+        auto& service = Service<TBridgeService>();
+        storage.set_next_page_token("resume-page");
+        service.ListPages.push_back({*service.ExpectedStorageQuery, service.ListResult});
+        auto next = service.ListPages.front();
+        next.Query.set_page_token("resume-page");
+        next.Result.set_generation(43);
+        auto* unavailable = next.Result.mutable_storage_state();
+        unavailable->set_generation(43);
+        unavailable->clear_next_page_token();
+        unavailable->set_unavailable_reason("Storage generations differ; retry the query");
+        service.ListPages.push_back(std::move(next));
+
+        ExpectFail();
+        TString error;
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--databases", "--format", "json"}, &error), &json));
+        UNIT_ASSERT_VALUES_EQUAL(json["generation"].GetUInteger(), 42);
+        const auto& previous = json["storage_state"];
+        UNIT_ASSERT_VALUES_EQUAL(previous["generation"].GetUInteger(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(previous["next_page_token"].GetString(), "resume-page");
+        UNIT_ASSERT(previous["unavailable_reason"].GetString().empty());
+        UNIT_ASSERT_VALUES_EQUAL(json["incomplete_reason"].GetString(),
+            "Storage page diagnostics unavailable: Storage generations differ; retry the query");
+        UNIT_ASSERT_STRING_CONTAINS(error, "Storage generations differ; retry the query");
+        UNIT_ASSERT_VALUES_EQUAL(service.ListCalls.load(), 2);
+    }
+
+    Y_UNIT_TEST_F(UnavailableContinuationReturnsThePreviousCursorAndReasonInCsv, TBridgeCliFixture) {
+        auto& storage = PrepareStorage(Ydb::Bridge::StorageQuery::GROUPS);
+        auto& service = Service<TBridgeService>();
+        service.ExpectedStorageQuery->set_database_path("/Root/app");
+        storage.set_next_page_token("resume-page");
+        service.ListPages.push_back({*service.ExpectedStorageQuery, service.ListResult});
+        auto next = service.ListPages.front();
+        next.Query.set_page_token("resume-page");
+        auto* unavailable = next.Result.mutable_storage_state();
+        unavailable->clear_next_page_token();
+        unavailable->set_unavailable_reason("Storage controller is unavailable");
+        service.ListPages.push_back(std::move(next));
+
+        ExpectFail();
+        TString error;
+        UNIT_ASSERT_VALUES_EQUAL(RunList({"--groups", "--db-path", "/Root/app", "--format", "csv"}, &error),
+            "group_id,part_group_id,storage_pool_name,pile_name,state\n");
+        UNIT_ASSERT_STRING_CONTAINS(error, "Next page token: resume-page\n");
+        UNIT_ASSERT_STRING_CONTAINS(error,
+            "Bridge storage listing incomplete: Storage page diagnostics unavailable: Storage controller is unavailable\n");
+        UNIT_ASSERT_VALUES_EQUAL(service.ListCalls.load(), 2);
+    }
+
     Y_UNIT_TEST_F(InitialRpcErrorIsReportedWithoutPrintingSuccessfulState, TBridgeCliFixture) {
         PrepareStorage(Ydb::Bridge::StorageQuery::PILES);
         auto& service = Service<TBridgeService>();

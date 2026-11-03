@@ -311,6 +311,130 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         checker.CheckAll();
     }
 
+    Y_UNIT_TEST(StorageDiagnosticsPileFilterDistinguishesEmptyNameFromUnplacedOrdinary) {
+        TEnvironmentSetup env({
+            .NodeCount = 18,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .ConfigPreprocessor = [](ui32, TNodeWardenConfig& config) {
+                // The environment's YAML builder emits an empty name as null; preserve the actual empty string.
+                auto yaml = YAML::Load(config.StartupConfigYaml);
+                auto main = yaml["config"];
+                main["bridge_config"]["piles"][0]["name"] = "";
+                for (auto host : main["hosts"]) {
+                    auto location = host["location"];
+                    if (location["bridge_pile_name"].IsNull()) {
+                        location["bridge_pile_name"] = "";
+                    }
+                }
+                config.StartupConfigYaml = TString(YAML::Dump(yaml));
+            },
+            .PrepareRuntime = [](TTestActorSystem& runtime) {
+                auto& bridge = runtime.GetAppDataBridgeConfig();
+                bridge.SetEnableNonUniformStorage(true);
+                bridge.MutablePiles(0)->SetName("");
+                bridge.MutablePiles(1)->SetName("b");
+            },
+            .LocationGenerator = [](ui32 nodeId) {
+                NActorsInterconnect::TNodeLocation location;
+                const ui32 pile = (nodeId - 1) / 9 + 1;
+                location.SetDataCenter(TStringBuilder() << "dc_" << pile);
+                location.SetBridgePileName(pile == 1 ? "" : "b");
+                location.SetRack(TStringBuilder() << "rack_" << nodeId);
+                location.SetUnit(TStringBuilder() << "unit_" << nodeId);
+                return TNodeLocation(location);
+            },
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        });
+        env.CreatePool(2);
+        CreateOrdinaryPool(env, 2, 1, 1);
+        const auto groups = GetLogicalPoolGroups(env, 1);
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 2);
+        WaitUntil(env, [&] {
+            return std::ranges::all_of(groups, [&](ui32 groupId) {
+                return IsFullyBridged(GetGroupInfo(env, groupId));
+            });
+        }, "groups synchronized before querying diagnostics with an empty pile name");
+        env.Sim(TDuration::Seconds(6));
+
+        const auto config = QueryStorageConfig(env);
+        const auto& registry = config.GetClusterStateDetails().GetPileRegistry();
+        UNIT_ASSERT(registry.GetPiles(0).HasName());
+        UNIT_ASSERT_VALUES_EQUAL(registry.GetPiles(0).GetName(), "");
+        UNIT_ASSERT_VALUES_EQUAL(registry.GetPiles(1).GetName(), "b");
+        UNIT_ASSERT(TBridgePileId::FromProto(&config.GetClusterState(), &NKikimrBridge::TClusterState::GetPrimaryPile) ==
+            TBridgePileId::FromPileIndex(0));
+
+        auto queryStorage = [&](const NKikimrBridge::TStorageQuery& query) {
+            const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            auto request = std::make_unique<TEvBlobStorage::TEvControllerQueryBridgeStorage>();
+            request->Record.CopyFrom(query);
+            env.Runtime->SendToPipe(env.TabletId, edge, request.release(), 0,
+                TTestActorSystem::GetPipeConfigWithRetries());
+            auto response = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerQueryBridgeStorageResult>(edge, false);
+            UNIT_ASSERT_C(response->Get()->Record.GetUnavailableReason().empty(), response->Get()->Record.DebugString());
+            return response->Get()->Record;
+        };
+
+        NKikimrBridge::TStorageQuery query;
+        query.SetView(NKikimrBridge::TStorageQuery::GROUPS);
+        query.SetStoragePool(ReadStoragePool(env, 1).GetName());
+        const auto allCopies = queryStorage(query);
+        UNIT_ASSERT_VALUES_EQUAL(allCopies.GroupsSize(), groups.size() * 2);
+        UNIT_ASSERT_VALUES_EQUAL(std::ranges::count_if(allCopies.GetGroups(), [](const auto& row) {
+            return row.GetPileName().empty();
+        }), groups.size());
+
+        query.SetPileName("b");
+        query.SetPageSize(1);
+        std::set<ui32> selectedGroups;
+        do {
+            const auto page = queryStorage(query);
+            UNIT_ASSERT_VALUES_EQUAL(page.GroupsSize(), 1);
+            const auto& row = page.GetGroups(0);
+            UNIT_ASSERT_VALUES_EQUAL(row.GetPileName(), "b");
+            UNIT_ASSERT(row.GetState() == NKikimrBridge::TStorageGroup::SYNCED);
+            UNIT_ASSERT(selectedGroups.insert(row.GetGroupId()).second);
+            UNIT_ASSERT(selectedGroups.size() <= groups.size());
+            const auto info = GetGroupInfo(env, row.GetGroupId());
+            const auto* part = NBridge::GetGroupPile(info.GetBridgeGroupState(), TBridgePileId::FromPileIndex(1));
+            UNIT_ASSERT(part);
+            UNIT_ASSERT_VALUES_EQUAL(row.GetPartGroupId(), part->GetGroupId());
+            query.SetPageToken(page.GetNextPageToken());
+        } while (!query.GetPageToken().empty());
+        UNIT_ASSERT_VALUES_EQUAL(selectedGroups.size(), groups.size());
+
+        query.SetStoragePool("pool_2");
+        const auto unplaced = queryStorage(query);
+        UNIT_ASSERT_VALUES_EQUAL(unplaced.GroupsSize(), 1);
+        UNIT_ASSERT(unplaced.GetGroups(0).GetPileName().empty());
+        UNIT_ASSERT(unplaced.GetGroups(0).GetState() == NKikimrBridge::TStorageGroup::NOT_REQUIRED);
+        UNIT_ASSERT(unplaced.GetNextPageToken().empty());
+
+        // Ordinary groups retaining a real copy in the empty-named primary pile still obey the filter.
+        const auto ordinary = ChangeStoragePoolBridgeMode(env, 1, false);
+        UNIT_ASSERT_C(ordinary.GetSuccess(), ordinary.GetErrorDescription());
+        WaitUntil(env, [&] {
+            return std::ranges::all_of(groups, [&](ui32 groupId) {
+                return HasOnlyPart(env, GetGroupInfo(env, groupId), 0);
+            });
+        }, "ordinary groups retain the copy in the empty-named primary pile");
+        env.Sim(TDuration::Seconds(6));
+        query.SetStoragePool(ReadStoragePool(env, 1).GetName());
+        const auto retainedOutsideFilter = queryStorage(query);
+        UNIT_ASSERT_VALUES_EQUAL(retainedOutsideFilter.GroupsSize(), 0);
+        UNIT_ASSERT(retainedOutsideFilter.GetNextPageToken().empty());
+        query.ClearPileName();
+        query.ClearPageSize();
+        const auto retained = queryStorage(query);
+        UNIT_ASSERT_VALUES_EQUAL(retained.GroupsSize(), groups.size());
+        for (const auto& row : retained.GetGroups()) {
+            UNIT_ASSERT(row.GetPileName().empty());
+            UNIT_ASSERT(row.GetState() == NKikimrBridge::TStorageGroup::NOT_REQUIRED);
+        }
+    }
+
     Y_UNIT_TEST(StorageDiagnosticsCountLogicalGroupsAndPaginateFilteredCopies) {
         TEnvironmentSetup env(MakeTwoPileSettings());
         env.CreatePool(2);

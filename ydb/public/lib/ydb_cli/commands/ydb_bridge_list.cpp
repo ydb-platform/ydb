@@ -391,6 +391,9 @@ namespace NYdb::NConsoleClient {
                     return {std::move(result), TStringBuilder() << "Storage page request failed: " << next.GetIssues().ToString()};
                 }
                 NStatusHelpers::ThrowOnErrorOrPrintIssues(next);
+                if (const auto& storage = next.GetStorageState(); storage && !storage->UnavailableReason.empty()) {
+                    return {std::move(result), TStringBuilder() << "Storage page diagnostics unavailable: " << storage->UnavailableReason};
+                }
                 result = std::move(next);
             }
             return {std::move(result), {}};

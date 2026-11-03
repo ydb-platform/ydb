@@ -22,13 +22,52 @@ void TTxScan::SendError(const TString& problem, const TString& details, const TA
     SendScanError(Self->TabletID(), Ev->Sender, request.GetGeneration(), request.GetTablePath(), problem, details, ctx);
 }
 
-TSnapshot TTxScan::GetSnapshot(const NColumnShard::TColumnShard& self, const NKikimrTxDataShard::TEvKqpScan& request,
+namespace {
+
+const TVersionedPresetSchemas& GetPresetSchemas(NColumnShard::TColumnShard& shard) {
+    static TVersionedPresetSchemas defaultSchemas(
+        0, shard.GetStoragesManager(), shard.GetTablesManager().GetSchemaObjectsCache().GetObjectPtrVerified());
+    return shard.GetIndexOptional() ? shard.GetIndexAs<TColumnEngineForLogs>().GetVersionedSchemas() : defaultSchemas;
+}
+
+TSnapshot GetSnapshot(const NColumnShard::TColumnShard& shard, const NKikimrTxDataShard::TEvKqpScan& request,
     const NColumnShard::TSchemeShardLocalPathId& ssPathId) {
     TSnapshot snapshot(request.GetSnapshot().GetStep(), request.GetSnapshot().GetTxId());
     if (snapshot.IsZero()) {
-        snapshot = self.GetLastTxSnapshot();
+        snapshot = shard.GetLastTxSnapshot();
     }
-    return self.TablesManager.ResolveReadSnapshot(ssPathId, snapshot);
+    return shard.GetTablesManager().ResolveReadSnapshot(ssPathId, snapshot);
+}
+
+TConclusion<std::shared_ptr<TPKRangesFilter>> MakeRanges(
+    NColumnShard::TColumnShard& shard, const NKikimrTxDataShard::TEvKqpScan& request, const ITableMetadataAccessor& tableMetadataAccessor) {
+    if (!request.RangesSize()) {
+        return std::make_shared<TPKRangesFilter>(TPKRangesFilter::BuildEmpty());
+    }
+    const TVersionedPresetSchemas& schemas = GetPresetSchemas(shard);
+    auto filterConclusion = TPKRangesFilter::BuildFromProto(
+        request, tableMetadataAccessor.GetPrimaryKeyInfo(schemas), tableMetadataAccessor.GetPrimaryKeyScheme(schemas));
+    if (filterConclusion.IsFail()) {
+        return TConclusionStatus::Fail(filterConclusion.GetErrorMessage());
+    }
+    return std::make_shared<TPKRangesFilter>(filterConclusion.DetachResult());
+}
+
+}   // namespace
+
+TConclusion<TScanTarget> BuildScanTarget(NColumnShard::TColumnShard& shard, const NKikimrTxDataShard::TEvKqpScan& request) {
+    const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
+    const TSnapshot snapshot = GetSnapshot(shard, request, ssPathId);
+    auto accessor =
+        shard.GetTablesManager().BuildTableMetadataAccessor(request.GetTablePath() ? request.GetTablePath() : "undefined", ssPathId, snapshot);
+    if (accessor.IsFail()) {
+        return TConclusionStatus::Fail("cannot build table metadata accessor for request: " + accessor.GetErrorMessage());
+    }
+    auto ranges = MakeRanges(shard, request, *accessor.GetResult());
+    if (ranges.IsFail()) {
+        return TConclusionStatus::Fail("cannot build ranges filter: " + ranges.GetErrorMessage());
+    }
+    return TScanTarget{ snapshot, accessor.DetachResult(), ranges.DetachResult() };
 }
 
 ERequestSorting TTxScan::GetRequestSorting() const {
@@ -77,12 +116,6 @@ std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> TTxScan::GetSchedulerPool() 
     };
 }
 
-const TVersionedPresetSchemas& TTxScan::GetPresetSchemas(NColumnShard::TColumnShard& self) {
-    static TVersionedPresetSchemas defaultSchemas(
-        0, self.GetStoragesManager(), self.GetTablesManager().GetSchemaObjectsCache().GetObjectPtrVerified());
-    return self.GetIndexOptional() ? self.GetIndexAs<TColumnEngineForLogs>().GetVersionedSchemas() : defaultSchemas;
-}
-
 TReadDescription TTxScan::MakeReadDescription(const TSnapshot& snapshot, const ERequestSorting requestSorting,
     const std::shared_ptr<NLWTrace::TOrbit>& orbit, const EReaderClass readerClass,
     const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const {
@@ -101,20 +134,6 @@ TReadDescription TTxScan::MakeReadDescription(const TSnapshot& snapshot, const E
     read.ColumnIds.assign(request.GetColumnTags().begin(), request.GetColumnTags().end());
     read.StatsMode = request.GetStatsMode();
     return read;
-}
-
-TConclusion<std::shared_ptr<TPKRangesFilter>> TTxScan::MakeRanges(
-    NColumnShard::TColumnShard& self, const NKikimrTxDataShard::TEvKqpScan& request, const ITableMetadataAccessor& tableMetadataAccessor) {
-    if (!request.RangesSize()) {
-        return std::make_shared<TPKRangesFilter>(TPKRangesFilter::BuildEmpty());
-    }
-    const TVersionedPresetSchemas& schemas = GetPresetSchemas(self);
-    auto filterConclusion = TPKRangesFilter::BuildFromProto(
-        request, tableMetadataAccessor.GetPrimaryKeyInfo(schemas), tableMetadataAccessor.GetPrimaryKeyScheme(schemas));
-    if (filterConclusion.IsFail()) {
-        return TConclusionStatus::Fail(filterConclusion.GetErrorMessage());
-    }
-    return std::make_shared<TPKRangesFilter>(filterConclusion.DetachResult());
 }
 
 // The order the scan being resumed used. Read straight off the request: the field sits at the top of

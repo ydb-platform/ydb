@@ -17,8 +17,6 @@ private:
 
     void SendError(const TString& problem, const TString& details, const TActorContext& ctx) const;
 
-    static const TVersionedPresetSchemas& GetPresetSchemas(NColumnShard::TColumnShard& self);
-
     // Properties of the request. Each reads the request and the tablet, and nothing else.
     ERequestSorting GetRequestSorting() const;
     bool GetDeduplicationEnabled(const TSnapshot& snapshot) const;
@@ -45,11 +43,6 @@ private:
 public:
     using TReadMetadataPtr = TReadMetadataBase::TConstPtr;
 
-    static TSnapshot GetSnapshot(const NColumnShard::TColumnShard& self, const NKikimrTxDataShard::TEvKqpScan& request,
-        const NColumnShard::TSchemeShardLocalPathId& ssPathId);
-    static TConclusion<std::shared_ptr<TPKRangesFilter>> MakeRanges(
-        NColumnShard::TColumnShard& self, const NKikimrTxDataShard::TEvKqpScan& request, const ITableMetadataAccessor& tableMetadataAccessor);
-
     TTxScan(NColumnShard::TColumnShard* self, TEvDataShard::TEvKqpScan::TPtr& ev, TScanTarget&& target)
         : TBase(self)
         , Ev(ev)
@@ -68,5 +61,7 @@ private:
     TEvDataShard::TEvKqpScan::TPtr Ev;
     const TScanTarget Target;
 };
+
+TConclusion<TScanTarget> BuildScanTarget(NColumnShard::TColumnShard& shard, const NKikimrTxDataShard::TEvKqpScan& request);
 
 }   // namespace NKikimr::NOlap::NReader

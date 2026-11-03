@@ -37,26 +37,13 @@ void TColumnShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContex
         return;
     }
 
-    const auto sendError = [&](const TString& problem, const TString& details) {
-        NOlap::NReader::SendScanError(TabletID(), ev->Sender, record.GetGeneration(), record.GetTablePath(), problem, details, ctx);
-    };
-
-    const TSchemeShardLocalPathId ssPathId = TSchemeShardLocalPathId::FromProto(record);
-    const NOlap::TSnapshot readSnapshot = NOlap::NReader::TTxScan::GetSnapshot(*this, record, ssPathId);
-
-    auto accessor =
-        TablesManager.BuildTableMetadataAccessor(record.GetTablePath() ? record.GetTablePath() : "undefined", ssPathId, readSnapshot);
-    if (accessor.IsFail()) {
-        return sendError("cannot build table metadata accessor for request: " + accessor.GetErrorMessage(),
-            AppDataVerified().ColumnShardConfig.GetReaderClassName());
+    auto targetConclusion = NOlap::NReader::BuildScanTarget(*this, record);
+    if (targetConclusion.IsFail()) {
+        NOlap::NReader::SendScanError(TabletID(), ev->Sender, record.GetGeneration(), record.GetTablePath(), "cannot build scan target",
+            targetConclusion.GetErrorMessage(), ctx);
+        return;
     }
-
-    auto ranges = NOlap::NReader::TTxScan::MakeRanges(*this, record, *accessor.GetResult());
-    if (ranges.IsFail()) {
-        return sendError("cannot build ranges filter", ranges.GetErrorMessage());
-    }
-
-    NOlap::NReader::TScanTarget target{ readSnapshot, accessor.DetachResult(), ranges.DetachResult() };
+    NOlap::NReader::TScanTarget target = targetConclusion.DetachResult();
     if (!ScanGate.PassLoadedPortions(ev, GetIndexOptional(), target)) {
         return;
     }

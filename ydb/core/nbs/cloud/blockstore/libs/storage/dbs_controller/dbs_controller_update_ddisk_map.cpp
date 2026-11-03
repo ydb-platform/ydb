@@ -255,7 +255,7 @@ bool TDbsControllerActor::PrepareRemoveTabletDDiskMap(
             [id = args.PartitionTabletId](const auto& x)
             { return x.GetPartitionTabletId() == id; });
         if (removed != 1) {
-            YDB_LOG_ERROR_CTX(ctx, "partition tablet id DDiskId",
+            YDB_LOG_ERROR_CTX(ctx, "Database integrity failure: expected 1 record for tablet",
                 {"removed", removed},
                 {"partitionTabletId", args.PartitionTabletId},
                 {"key", key});

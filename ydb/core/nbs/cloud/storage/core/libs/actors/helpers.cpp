@@ -22,7 +22,7 @@ TString EventInfo(const IEventHandle& ev)
     int component,
     const TString& location)
 {
-    YDB_LOG_ERROR_CTX(*TlsActivationContext, "Unexpected event: (0x%08X)",
+    YDB_LOG_ERROR_CTX(*TlsActivationContext, "Unexpected event",
         {"evType", ev.GetTypeRewrite()},
         {"evInfo", EventInfo(ev)},
         {"location", location});

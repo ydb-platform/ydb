@@ -1,3 +1,5 @@
+* Topic and PersQueue writers now send RAW-codec messages on the configured compression executor, keeping request construction off the caller thread when the executor is asynchronous.
+
 * Added `TGetClusterStateSettings::IncludePileConnectivity()` and `TGetClusterStateResult::GetPileConnectivity()` for optional bridge static-node connectivity reports.
 
 * Added `TUpdateClusterStateSettings::ExpectedGeneration()` to apply a bridge cluster state update only if the cluster state still has the given generation.

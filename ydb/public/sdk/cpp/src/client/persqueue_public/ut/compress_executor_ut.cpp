@@ -1,10 +1,82 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
+#include <ydb/public/sdk/cpp/tests/integration/topic/utils/managed_executor.h>
+
 #include <atomic>
 
 namespace NYdb::NPersQueue::NTests {
+namespace {
+
+TContinuationToken WaitForWriteToken(IWriteSession& session) {
+    while (true) {
+        UNIT_ASSERT_C(session.WaitEvent().Wait(TDuration::Seconds(30)), "timeout waiting for write token");
+        for (auto& event : session.GetEvents()) {
+            if (auto* ready = std::get_if<TWriteSessionEvent::TReadyToAcceptEvent>(&event)) {
+                return std::move(ready->ContinuationToken);
+            }
+            if (auto* closed = std::get_if<TSessionClosedEvent>(&event)) {
+                UNIT_FAIL("write session closed unexpectedly: " << closed->GetIssues().ToString());
+            }
+        }
+    }
+}
+
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(CompressExecutor) {
+    Y_UNIT_TEST(RawWritesUseCompressionExecutor) {
+        TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+        auto executor = NTopic::NTests::CreateThreadPoolManagedExecutor(1);
+        auto settings = setup.GetWriteSessionSettings();
+        settings.Codec(ECodec::RAW)
+            .BatchFlushInterval(TDuration::Zero())
+            .CompressionExecutor(executor);
+        auto writer = setup.GetPersQueueClient().CreateWriteSession(settings);
+
+        writer->Write(WaitForWriteToken(*writer), "first", 1);
+        writer->Write(WaitForWriteToken(*writer), "second", 2);
+        UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);
+
+        executor->RunAllTasks();
+        ui64 nextSeqNo = 1;
+        while (nextSeqNo <= 2) {
+            UNIT_ASSERT_C(writer->WaitEvent().Wait(TDuration::Seconds(30)), "timeout waiting for write acknowledgements");
+            for (auto& event : writer->GetEvents()) {
+                if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
+                    for (const auto& ack : acks->Acks) {
+                        UNIT_ASSERT_VALUES_EQUAL(ack.SeqNo, nextSeqNo++);
+                        UNIT_ASSERT_VALUES_EQUAL(ack.State, TWriteSessionEvent::TWriteAck::EES_WRITTEN);
+                    }
+                } else if (auto* closed = std::get_if<TSessionClosedEvent>(&event)) {
+                    UNIT_FAIL("write session closed unexpectedly: " << closed->GetIssues().ToString());
+                }
+            }
+        }
+        UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
+    }
+
+    Y_UNIT_TEST(CloseWithQueuedRawSend) {
+        TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+        auto executor = NTopic::NTests::CreateThreadPoolManagedExecutor(1);
+        auto settings = setup.GetWriteSessionSettings();
+        settings.Codec(ECodec::RAW)
+            .BatchFlushInterval(TDuration::Zero())
+            .CompressionExecutor(executor);
+        auto writer = setup.GetPersQueueClient().CreateWriteSession(settings);
+        writer->Write(WaitForWriteToken(*writer), "message");
+        UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);
+
+        UNIT_ASSERT(!writer->Close(TDuration::Zero()));
+        writer.reset();
+
+        auto drained = NThreading::NewPromise<void>();
+        executor->Post([drained]() mutable {
+            drained.SetValue();
+        });
+        executor->RunAllTasks();
+        UNIT_ASSERT_C(drained.GetFuture().Wait(TDuration::Seconds(30)), "executor did not drain after session destruction");
+    }
+
     Y_UNIT_TEST(TestReorderedExecutor) {
         auto queue = std::make_shared<TLockFreeQueue<ui64>>();
         TYdbPqWriterTestHelper helper(TEST_CASE_NAME, queue);

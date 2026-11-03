@@ -2,6 +2,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
+#include <ydb/public/sdk/cpp/tests/integration/topic/utils/managed_executor.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NYdb::inline Dev::NTopic::NTests {
@@ -24,6 +26,55 @@ TContinuationToken WaitForWriteToken(IWriteSession& session) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(WriteSessionFlush) {
+    Y_UNIT_TEST(RawWritesUseCompressionExecutor) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        auto client = setup.MakeClient();
+        auto executor = CreateThreadPoolManagedExecutor(1);
+        auto session = client.CreateWriteSession(
+            TWriteSessionSettings()
+                .Path(setup.GetTopicPath())
+                .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+                .Codec(ECodec::RAW)
+                .CompressionExecutor(executor)
+                .BatchFlushInterval(TDuration::Zero()));
+
+        session->Write(WaitForWriteToken(*session), "first");
+        session->Write(WaitForWriteToken(*session), "second");
+        UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);
+
+        auto flushed = session->Flush();
+        UNIT_ASSERT(!flushed.HasValue());
+        executor->RunAllTasks();
+        UNIT_ASSERT_C(flushed.Wait(TDuration::Seconds(30)), "RAW writes did not flush after running the executor");
+        UNIT_ASSERT(flushed.GetValue());
+        UNIT_ASSERT(session->Close(TDuration::Seconds(30)));
+    }
+
+    Y_UNIT_TEST(CloseWithQueuedRawSend) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        auto client = setup.MakeClient();
+        auto executor = CreateThreadPoolManagedExecutor(1);
+        auto session = client.CreateWriteSession(
+            TWriteSessionSettings()
+                .Path(setup.GetTopicPath())
+                .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+                .Codec(ECodec::RAW)
+                .CompressionExecutor(executor)
+                .BatchFlushInterval(TDuration::Zero()));
+        session->Write(WaitForWriteToken(*session), "message");
+        UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);
+
+        UNIT_ASSERT(!session->Close(TDuration::Zero()));
+        session.reset();
+
+        auto drained = NThreading::NewPromise<void>();
+        executor->Post([drained]() mutable {
+            drained.SetValue();
+        });
+        executor->RunAllTasks();
+        UNIT_ASSERT_C(drained.GetFuture().Wait(TDuration::Seconds(30)), "executor did not drain after session destruction");
+    }
+
     Y_UNIT_TEST(CloseImmediatelyAfterFlush) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
         auto client = setup.MakeClient();

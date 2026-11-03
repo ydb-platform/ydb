@@ -811,7 +811,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 ContinuationTokenIssued = true;
             }
             // Kickstart send after session reestablishment
-            SendImpl();
+            ScheduleSendImpl();
             break;
         }
         case TServerMessage::kBatchWriteResponse: {
@@ -1026,7 +1026,7 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
     (*Counters->BytesInflightCompressed) += block.Data.size();
 
     PackedMessagesToSend.emplace(std::move(block));
-    SendImpl();
+    ScheduleSendImpl();
     return memoryUsage;
 }
 
@@ -1131,7 +1131,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     }
     CurrentBatch.Reset();
     if (skipCompression) {
-        SendImpl();
+        ScheduleSendImpl();
     }
     return size;
 }
@@ -1313,6 +1313,27 @@ void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& 
     TClientMessage clientMessage;
     clientMessage.mutable_update_token_request()->set_token(TStringType{token});
     Processor->Write(std::move(clientMessage));
+}
+
+void TWriteSessionImpl::ScheduleSendImpl() {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    if (Settings.Codec_ != ECodec::RAW || !CompressionExecutor->IsAsync()) {
+        SendImpl();
+        return;
+    }
+    if (SendImplScheduled || !IsReadyToSendNextImpl()) {
+        return;
+    }
+
+    SendImplScheduled = true;
+    CompressionExecutor->Post([cbContext = SelfContext] {
+        if (auto self = cbContext->LockShared()) {
+            std::lock_guard guard(self->Lock);
+            self->SendImplScheduled = false;
+            self->SendImpl();
+        }
+    });
 }
 
 void TWriteSessionImpl::SendImpl() {

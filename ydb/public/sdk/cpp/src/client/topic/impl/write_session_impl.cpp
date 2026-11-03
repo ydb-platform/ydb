@@ -1389,7 +1389,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 ContinuationTokenIssued = true;
             }
             // Kickstart send after session reestablishment
-            SendImpl();
+            ScheduleSendImpl();
             break;
         }
         case TServerMessage::kWriteResponse: {
@@ -1833,7 +1833,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     }
     CurrentBatch.Reset();
     if (skipCompression) {
-        SendImpl();
+        ScheduleSendImpl();
     }
     return size;
 }
@@ -2046,6 +2046,26 @@ void TWriteSessionImpl::SendStandardBlock(
             }
         }
     }
+}
+
+void TWriteSessionImpl::ScheduleSendImpl() {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    if (Settings.Codec_ != ECodec::RAW || !CompressionExecutor->IsAsync()) {
+        SendImpl();
+        return;
+    }
+    if (!IsReadyToSendNextImpl() || SendImplScheduled.exchange(true)) {
+        return;
+    }
+
+    CompressionExecutor->Post([cbContext = SelfContext] {
+        if (auto self = cbContext->LockShared()) {
+            std::lock_guard guard(self->Lock);
+            self->SendImplScheduled.store(false);
+            self->SendImpl();
+        }
+    });
 }
 
 void TWriteSessionImpl::SendImpl() {

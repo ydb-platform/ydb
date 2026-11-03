@@ -3,6 +3,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/deferred_publications.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/executor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 
@@ -77,9 +78,9 @@ public:
     {
         Settings_.Path(topicPath);
         Settings_.ProducerId("deferred-producer");
-        // RAW: sync SendImpl per write so consecutive Writes are not coalesced into one
-        // write_request (GZIP async compress can batch them and hit unsorted seqNo).
-        Settings_.Codec(ECodec::RAW);
+        // Keep sends synchronous so consecutive writes with custom seqNo values
+        // are not coalesced into one write_request.
+        Settings_.Codec(ECodec::RAW).CompressionExecutor(NTopic::CreateSyncExecutor());
         Session_ = Client_.CreateWriteSession(Settings_);
     }
 

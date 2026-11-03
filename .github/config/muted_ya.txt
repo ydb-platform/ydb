@@ -21,6 +21,7 @@ ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.Cu
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.SyncLogDuplicateFreeChunkRealPDiskWithoutRestart
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.SyncLogUsesMemAndDiskLimits
 ydb/core/client/ut TObjectStorageListingTest.TestSkipShards
+ydb/core/cms/console/ut_console TConsoleHandshakeTest.QueuedCommitRejectedAfterSessionReplacement
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestDeleteQueueMultiConsumer
@@ -31,7 +32,6 @@ ydb/core/kqp/ut/olap KqpOlapTiering.TieringViaIndex-SchemeObjectDisabled
 ydb/core/kqp/ut/olap KqpOlapTiering.TieringViaIndex-SchemeObjectEnabled
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
-ydb/core/kqp/ut/query KqpStats.RequestUnitForSuccessExplicitPrepare
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultColumnsCannotBeCombined+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultColumnsCannotBeCombined-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexCoverColumn+EnableCompileTimeDefaults
@@ -47,7 +47,6 @@ ydb/core/mind/bscontroller/ut_bscontroller BsControllerGroupState.RecoveryTarget
 ydb/core/mind/hive/ut THiveTest.TestLockTabletExecutionReconnect
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_ut TPartitionDirectTest.ShouldReplayAddHostAfterCompaction
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerTests.FetchThrottledAtMinMessages
-ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
 ydb/core/quoter/ut QuoterWithKesusTest.FailsToGetBigQuota
 ydb/core/sys_view/ut AuthSystemView.AuthGroups_Access
 ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
@@ -63,7 +62,6 @@ ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/postgresql py3test.sole chunk
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.GetAllStartPartitionSessions
 ydb/services/metadata/secret/ut Secret.Simple
-ydb/services/metadata/secret/ut Secret.SimpleQueryService
 ydb/services/persqueue_v1/ut TPersQueueTest.PreferredCluster_DisabledRemoteClusterAndWriteSessionsWithDifferentPreferredClusterAndLaterRemoteClusterEnabled_SessionWithMismatchedClusterDiesAfterPreferredClusterEnabledAndOtherSessionsAlive
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootBalancerOnlyCombinedStress
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartReadSessionTest.RebootBothTabletsCombinedStress
@@ -136,18 +134,12 @@ ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_prestable-27-1-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_stable-26-4-1-False]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_stable-26-4-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-3-1_to_stable-26-4-1-False]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-3-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_prestable-27-1-1-False]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_prestable-27-1-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-3-1-False]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-3-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-4-1-False]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_prestable-27-1-1_to_stable-26-4-1-False]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_prestable-27-1-1_to_stable-26-4-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_stable-26-3-1_to_stable-26-4-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_stable-26-4-1_to_stable-26-3-1-True]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_column_alias[restart_prestable-27-1-1_to_stable-26-4-1-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_column_alias[restart_prestable-27-1-1_to_stable-26-4-1-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_prestable-27-1-1_to_stable-26-4-1-codec0-ROW]
@@ -275,7 +267,6 @@ ydb/tests/fq/multi_plane py3test.[test_retry_high_rate.py] chunk
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping_with_row_dispatcher
 ydb/tests/fq/multi_plane test_retry.py.TestRetry.test_low_rate[kikimr0]
 ydb/tests/fq/multi_plane test_retry_high_rate.py.TestRetry.test_high_rate[kikimr0]
-ydb/tests/fq/restarts test_insert_restarts.py.TestS3.test_atomic_upload_commit[v1-client0]
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_increase[local]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[recreate-output-row]
@@ -283,6 +274,7 @@ ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_raw_format[Fals
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_raw_format[False-partition_balancing]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_raw_format[True-partition_balancing]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_large_topic_message[external-kikimr0]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_large_topic_message[local-kikimr0]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_early_events_policy[2-no_shared-False]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_late_events_policy[DROP-expected0-True-2-no_shared]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_wm_after_parsing[False-2-no_shared]

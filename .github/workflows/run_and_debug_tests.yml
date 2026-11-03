@@ -50,7 +50,7 @@ on:
 jobs:
   dispatch_remote:
     if: inputs.executor == 'remote'
-    runs-on: [self-hosted, tiny-worker]
+    runs-on: [self-hosted, runner-waiter]
     # Must outlive the fat-runner executor when wait_for_remote=true.
     timeout-minutes: 400
     steps:
@@ -63,7 +63,7 @@ jobs:
 
       - name: Dispatch executor workflow on remote_executor_ref
         env:
-          # GITHUB_TOKEN does not start new workflow runs; tiny-worker has no gh CLI.
+          # GITHUB_TOKEN does not start new workflow runs; use PAT + curl (no gh required).
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           EXECUTOR_REF: ${{ inputs.remote_executor_ref }}
           CODE_REF: ${{ inputs.code_ref || github.sha }}

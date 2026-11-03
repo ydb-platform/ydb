@@ -227,6 +227,7 @@ private:
                                const TWriteMsg& p,
                                NPersQueue::NErrorCode::EErrorCode errorCode);
     void CreateMirrorerActor();
+    void NotifyMirrorerPersistDone();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);
@@ -1276,6 +1277,13 @@ private:
 
     ui64 GetStartOffset() const;
     ui64 GetEndOffset() const;
+<<<<<<< HEAD
+=======
+    ui64 GetMirroredOffset() const;
+    // EndOffset is the last persisted offset. Accepted writes can sit in NewHead
+    // before persist; ResetOffset must be able to commit up to that exclusive end.
+    ui64 GetAcceptedEndOffset() const;
+>>>>>>> 89b4da99a0b (Move StartOffset & EndOffset to MirroredOffset in case of empty mirrored partition)
 
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
     TDeque<NWilson::TTraceId> TxForPersistTraceIds;
@@ -1384,6 +1392,10 @@ inline ui64 TPartition::GetStartOffset() const {
 
 inline ui64 TPartition::GetEndOffset() const {
     return BlobEncoder.EndOffset;
+}
+
+inline ui64 TPartition::GetMirroredOffset() const {
+    return BlobEncoder.MirroredOffset;
 }
 
 bool IsImportant(const NKikimrPQ::TPQTabletConfig::TConsumer& consumer);

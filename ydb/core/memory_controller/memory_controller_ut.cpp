@@ -419,9 +419,7 @@ Y_UNIT_TEST(SharedCache) {
     UNIT_ASSERT_DOUBLES_EQUAL(server->SharedPageCacheCounters->ActiveBytes->Val(), static_cast<i64>(32_KB), static_cast<i64>(5_KB));
     UNIT_ASSERT_VALUES_EQUAL(server->SharedPageCacheCounters->PassiveBytes->Val(), 0);
     const auto sharedCacheConsumption = [&] {
-        const auto& counters = *server->SharedPageCacheCounters;
-        return counters.ActiveBytes->Val() + counters.PassiveBytes->Val() + counters.LoadInFlyBytes->Val() +
-               counters.MetadataBytes->Val();
+        return server->SharedPageCacheCounters->UsedBytes->Val();
     };
     UNIT_ASSERT_GT(server->SharedPageCacheCounters->MetadataBytes->Val(), 0);
     UNIT_ASSERT_VALUES_EQUAL(sharedCacheConsumption(),

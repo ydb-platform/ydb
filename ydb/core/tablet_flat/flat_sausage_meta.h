@@ -6,6 +6,13 @@
 
 #include <ydb/library/actors/util/shared_data.h>
 
+#include <atomic>
+
+namespace NKikimr::NSharedCache {
+class TMetadataAccounting;
+class TMetadataRecord;
+} // namespace NKikimr::NSharedCache
+
 namespace NKikimr {
 namespace NPageCollection {
 
@@ -63,6 +70,10 @@ namespace NPageCollection {
         const char *InboundData = nullptr;
         TVector<ui64> Steps; /* Cumulative blob end offsets */
         ui32 SkippedPages_ = 0;
+
+    private:
+        friend class NSharedCache::TMetadataAccounting;
+        mutable std::atomic<NSharedCache::TMetadataRecord*> MetadataAccounts_{ nullptr };
     };
 
 }

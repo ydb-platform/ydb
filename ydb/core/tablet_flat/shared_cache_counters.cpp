@@ -32,6 +32,7 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , Owners(counters->GetCounter("Owners"))
     , PageCollectionOwners(counters->GetCounter("PageCollectionOwners"))
     , MetadataBytes(counters->GetCounter("MetadataBytes"))
+    , UsedBytes(counters->GetCounter("UsedBytes"))
     , CollectionMetadataBytes(counters->GetCounter("CollectionMetadataBytes"))
     , DetachedCollectionMetadataBytes(counters->GetCounter("DetachedCollectionMetadataBytes"))
     , DetachedPageCollections(counters->GetCounter("DetachedPageCollections"))
@@ -39,6 +40,6 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , PendingRequests(counters->GetCounter("PendingRequests"))
     , SucceedRequests(counters->GetCounter("SucceedRequests", true))
     , FailedRequests(counters->GetCounter("FailedRequests", true))
-{ }
+{}
 
 } // namespace NKikimr::NSharedCache

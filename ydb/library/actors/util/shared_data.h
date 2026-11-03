@@ -33,6 +33,11 @@ namespace NActors {
             virtual void* FindAllocationTag(const void*) const noexcept {
                 return nullptr;
             }
+
+        protected:
+            // For owners installed on buffers from the builtin allocator
+            static size_t BuiltinAllocationSize(const char* data) noexcept;
+            static void DeallocateBuiltin(char* data) noexcept;
         };
 
         struct TPrivateHeader {
@@ -129,6 +134,9 @@ namespace NActors {
             }
             return reinterpret_cast<const TPrivateHeader*>(Data_ - OverheadSize)->AllocSize;
         }
+
+        // Replaces only the builtin owner; caller owns the buffer and keeps owner alive until Deallocate
+        bool TrySetBuiltinOwner(IOwner& owner) const noexcept;
 
         template <class TTag>
         static const void* AllocationTagKey() noexcept {

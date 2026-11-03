@@ -4,6 +4,7 @@
 using namespace NActors;
 
 Y_UNIT_TEST_SUITE(TProcStat) {
+    // smoke touch for graph_compare / #58008
     Y_UNIT_TEST(Fill) {
         TProcStat procStat;
 

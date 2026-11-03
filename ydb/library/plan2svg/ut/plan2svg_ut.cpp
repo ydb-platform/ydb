@@ -1429,7 +1429,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
     }
 
     Y_UNIT_TEST(MetaStatsSemanticLabelsPreserveVariantsAndNamedInputs) {
-        auto svg = RenderScans(R"([
+        auto svg = RenderScans(R"json([
             {"StatsScanId":"a","TabletId":"10","ReaderKind":"TRIVIAL","Finished":true,"Steps":[
                 {"StepId":1,"StepKind":"Filter","MetaStep":"Filter","OwnedExecutionDuration":1,"Operation":"Filter((column_a > 10) AND (column_c < 300))"},
                 {"StepId":2,"StepKind":"FetchColumns","MetaStep":"FetchOtherColumns","OwnedExecutionDuration":1,"Details":{"Columns":["payload","category"]}},
@@ -1437,7 +1437,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
                 {"StepId":4,"StepKind":"Projection","MetaStep":"Projection","OwnedExecutionDuration":1,"Details":{"OutputColumns":["category","SUM(metric)"]}}]},
             {"StatsScanId":"b","TabletId":"11","ReaderKind":"TRIVIAL","Finished":true,"Steps":[
                 {"StepId":1,"StepKind":"Filter","MetaStep":"Filter","OwnedExecutionDuration":1,"Operation":"Filter(column_a = 5)"}]}
-        ])");
+        ])json");
         const auto filter = CsRow(svg, "Filter", "", "Filter");
         UNIT_ASSERT_C(filter.Contains("column_a") && filter.Contains("column_c"), filter);
         UNIT_ASSERT_C(filter.Contains(" | "), filter);

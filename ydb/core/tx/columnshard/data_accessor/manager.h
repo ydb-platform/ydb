@@ -92,14 +92,14 @@ private:
         };
 
         NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::AskObjects(request->GetConsumer(),
-            request->BuildAddresses(GetTabletActorId(), TabletId),
+            request->BuildAddresses(GetTabletActorId(), TabletId, KeepCacheAcrossRestarts),
             std::make_shared<TAdapterCallback>(request->ExtractSubscriber(), request->GetRequestId()));
     }
 
     virtual void DoAddPortion(const std::shared_ptr<TPortionDataAccessor>& accessor) override {
         THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>> add;
         THashSet<NGeneralCache::TGlobalPortionAddress> remove;
-        NGeneralCache::TGlobalPortionAddress address(GetTabletActorId(), TabletId, accessor->GetPortionInfo());
+        NGeneralCache::TGlobalPortionAddress address(GetTabletActorId(), TabletId, accessor->GetPortionInfo(), KeepCacheAcrossRestarts);
         add.emplace(address, std::move(accessor));
         NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(
             TabletId, std::move(add), std::move(remove));
@@ -108,17 +108,19 @@ private:
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portion) override {
         THashMap<NGeneralCache::TGlobalPortionAddress, std::shared_ptr<TPortionDataAccessor>> add;
         THashSet<NGeneralCache::TGlobalPortionAddress> remove;
-        remove.emplace(NGeneralCache::TGlobalPortionAddress(GetTabletActorId(), TabletId, *portion));
+        remove.emplace(NGeneralCache::TGlobalPortionAddress(GetTabletActorId(), TabletId, *portion, KeepCacheAcrossRestarts));
         NKikimr::NGeneralCache::TServiceOperator<NGeneralCache::TPortionsMetadataCachePolicy>::ModifyObjects(
             TabletId, std::move(add), std::move(remove));
     }
 
     const ui64 TabletId;
+    const bool KeepCacheAcrossRestarts;
 
 public:
-    TActorAccessorsManager(const NActors::TActorId& tabletActorId, const ui64 tabletId)
+    TActorAccessorsManager(const NActors::TActorId& tabletActorId, const ui64 tabletId, const bool keepCacheAcrossRestarts)
         : TBase(tabletActorId)
         , TabletId(tabletId)
+        , KeepCacheAcrossRestarts(keepCacheAcrossRestarts)
     {
         AFL_VERIFY(!!tabletActorId);
         AFL_VERIFY(TabletId);

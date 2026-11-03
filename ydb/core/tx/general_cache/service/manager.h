@@ -32,7 +32,6 @@ private:
     YDB_READONLY(ui64, RequestId, Counter.Inc());
     YDB_READONLY(TMonotonic, Created, TMonotonic::Now());
     YDB_READONLY(TMonotonic, StartRequest, TMonotonic::Zero());
-    THashSet<ui64> Cookies;
     THashMap<TSourceId, THashSet<TAddress>> Wait;
     THashMap<TAddress, TObject> Result;
     THashSet<TAddress> Removed;
@@ -149,8 +148,6 @@ private:
 
     const TSourceId SourceId;
     const NActors::TActorId Owner;
-    static inline TAtomicCounter Counter = 0;
-    const ui64 Cookie = Counter.Inc();
     struct TWeightedQueue {
         ui32 Weight = 0;
         ui64 Inflight = 0;
@@ -158,19 +155,14 @@ private:
     };
 
     THashMap<TAddress, std::vector<std::shared_ptr<TRequest>>> RequestedObjects;
-    std::map<ui32, std::map<ui64, TWeightedQueue>> WeightedQueues;
-    std::map<ui32, std::deque<std::shared_ptr<TRequest>>> UnweightedQueues;
-    THashMap<TAddress, std::pair<ui32, ui64>> InflightOwner;
+    std::map<ui64, TWeightedQueue> WeightedQueues;
+    std::deque<std::shared_ptr<TRequest>> UnweightedQueue;
+    THashMap<TAddress, ui64> InflightQueue;
     YDB_READONLY_DEF(THashSet<ui64>, RequestsInProgress);
-    THashMap<ui64, std::vector<std::shared_ptr<TRequest>>> RequestsByCookies;
     const std::shared_ptr<TManagerCounters> Counters;
     const std::shared_ptr<NSource::IObjectsProcessor<TPolicy>> ObjectsProcessor;
 
 public:
-    ui64 GetCookie() const {
-        return Cookie;
-    }
-
     const NActors::TActorId& GetOwner() const {
         return Owner;
     }
@@ -204,37 +196,30 @@ public:
         Counters->GetQueueObjectsCount()->Add(request->GetWaitBySource(SourceId).size());
         const auto requestClass = ClassOf(request->GetConsumer());
         if (requestClass.Weight == 0) {
-            UnweightedQueues[requestClass.Priority].emplace_back(request);
+            UnweightedQueue.emplace_back(request);
             return;
         }
-        auto& queue = WeightedQueues[requestClass.Priority][requestClass.QueueId];
+        auto& queue = WeightedQueues[requestClass.QueueId];
         queue.Weight = requestClass.Weight;
         queue.Requests.emplace_back(request);
     }
 
     void ReleaseInflight(const TAddress& address) {
-        const auto owner = InflightOwner.find(address);
-        if (owner == InflightOwner.end()) {
+        const auto owner = InflightQueue.find(address);
+        if (owner == InflightQueue.end()) {
             return;
         }
-        const auto [priority, queueId] = owner->second;
-        InflightOwner.erase(owner);
-        const auto band = WeightedQueues.find(priority);
-        if (band == WeightedQueues.end()) {
-            return;
-        }
-        const auto queue = band->second.find(queueId);
-        if (queue == band->second.end()) {
+        const ui64 queueId = owner->second;
+        InflightQueue.erase(owner);
+        const auto queue = WeightedQueues.find(queueId);
+        if (queue == WeightedQueues.end()) {
             return;
         }
         if (queue->second.Inflight > 0) {
             --queue->second.Inflight;
         }
         if (queue->second.Requests.empty() && queue->second.Inflight == 0) {
-            band->second.erase(queue);
-        }
-        if (band->second.empty()) {
-            WeightedQueues.erase(band);
+            WeightedQueues.erase(queue);
         }
     }
 
@@ -327,20 +312,13 @@ public:
             }
             queue.clear();
         };
-        for (auto& [priority, queues] : WeightedQueues) {
-            Y_UNUSED(priority);
-            for (auto& [queueId, queue] : queues) {
-                Y_UNUSED(queueId);
-                abortQueue(queue.Requests);
-            }
+        for (auto& [queueId, queue] : WeightedQueues) {
+            Y_UNUSED(queueId);
+            abortQueue(queue.Requests);
         }
         WeightedQueues.clear();
-        for (auto& [priority, queue] : UnweightedQueues) {
-            Y_UNUSED(priority);
-            abortQueue(queue);
-        }
-        UnweightedQueues.clear();
-        InflightOwner.clear();
+        abortQueue(UnweightedQueue);
+        InflightQueue.clear();
         for (auto&& [objAddr, requests] : RequestedObjects) {
             for (auto&& r : requests) {
                 Counters->FailedObject->Inc();
@@ -359,29 +337,17 @@ public:
         AFL_VERIFY(RequestedObjects.empty() || NActors::TActorSystem::IsStopped());
     }
 
-    std::optional<ui32> HighestWaitingPriority() const {
-        std::optional<ui32> priority;
-        for (const auto& [band, queues] : WeightedQueues) {
-            for (const auto& [queueId, queue] : queues) {
-                Y_UNUSED(queueId);
-                if (!queue.Requests.empty()) {
-                    priority = std::max(priority.value_or(band), band);
-                }
+    bool HasWeightedWaiting() const {
+        for (const auto& [queueId, queue] : WeightedQueues) {
+            Y_UNUSED(queueId);
+            if (!queue.Requests.empty()) {
+                return true;
             }
         }
-        for (const auto& [band, queue] : UnweightedQueues) {
-            if (!queue.empty()) {
-                priority = std::max(priority.value_or(band), band);
-            }
-        }
-        return priority;
+        return false;
     }
 
-    std::optional<std::pair<ui64, ui64>> PickWeighted(const ui32 priority, const ui64 sourceLimit) const {
-        const auto band = WeightedQueues.find(priority);
-        if (band == WeightedQueues.end()) {
-            return std::nullopt;
-        }
+    std::optional<std::pair<ui64, ui64>> PickWeighted(const ui64 sourceLimit) const {
         struct TCandidate {
             ui64 QueueId = 0;
             ui32 Weight = 0;
@@ -391,7 +357,7 @@ public:
         };
         std::vector<TCandidate> candidates;
         ui64 sumWeight = 0;
-        for (const auto& [queueId, queue] : band->second) {
+        for (const auto& [queueId, queue] : WeightedQueues) {
             if (queue.Requests.empty() || queue.Weight == 0) {
                 continue;
             }
@@ -451,7 +417,7 @@ public:
     };
 
     TDispatchResult DispatchFront(std::deque<std::shared_ptr<TRequest>>& queue, const ui64 newAddressLimit,
-        const std::optional<std::pair<ui32, ui64>>& weightedSlot, THashMap<EConsumer, THashSet<TAddress>>& requestedAddresses,
+        const std::optional<ui64> weightedQueueId, THashMap<EConsumer, THashSet<TAddress>>& requestedAddresses,
         const TMonotonic now) {
         if (queue.empty() || newAddressLimit == 0) {
             return {};
@@ -505,9 +471,9 @@ public:
                 AFL_VERIFY(consumerAddresses.emplace(addr).second);
                 Counters->DirectObjects->Inc();
                 ++newAddresses;
-                if (weightedSlot) {
-                    InflightOwner.emplace(addr, *weightedSlot);
-                    WeightedQueues[weightedSlot->first][weightedSlot->second].Inflight++;
+                if (weightedQueueId) {
+                    InflightQueue.emplace(addr, *weightedQueueId);
+                    WeightedQueues[*weightedQueueId].Inflight++;
                 }
             }
             itAddress->second.emplace_back(request);
@@ -526,64 +492,32 @@ public:
         const TMonotonic now = TMonotonic::Now();
 
         while (RequestedObjects.size() < sourceLimit && Counters->CheckTotalLimit()) {
-            const auto priority = HighestWaitingPriority();
-            if (!priority) {
-                break;
-            }
-            bool weightedWaiting = false;
-            if (const auto band = WeightedQueues.find(*priority); band != WeightedQueues.end()) {
-                for (const auto& [queueId, queue] : band->second) {
-                    Y_UNUSED(queueId);
-                    if (!queue.Requests.empty()) {
-                        weightedWaiting = true;
-                        break;
-                    }
-                }
-            }
-            if (const auto chosen = PickWeighted(*priority, sourceLimit)) {
-                auto& queue = WeightedQueues[*priority][chosen->first];
+            if (const auto chosen = PickWeighted(sourceLimit)) {
+                auto& queue = WeightedQueues[chosen->first];
                 const ui64 budget = std::min(chosen->second, sourceLimit - RequestedObjects.size());
-                const auto dispatched =
-                    DispatchFront(queue.Requests, budget, std::make_pair(*priority, chosen->first), requestedAddresses, now);
+                const auto dispatched = DispatchFront(queue.Requests, budget, chosen->first, requestedAddresses, now);
                 if (dispatched.PutBack && dispatched.NewAddresses == 0) {
                     break;
                 }
                 continue;
             }
-            if (weightedWaiting) {
+            // Weight 0 sends nothing while a weighted consumer has queued requests, even if its share is full.
+            if (HasWeightedWaiting() || UnweightedQueue.empty()) {
                 break;
             }
-            auto unweighted = UnweightedQueues.find(*priority);
-            if (unweighted == UnweightedQueues.end() || unweighted->second.empty()) {
-                break;
-            }
-            const auto dispatched = DispatchFront(unweighted->second, sourceLimit - RequestedObjects.size(), std::nullopt, requestedAddresses, now);
+            const auto dispatched = DispatchFront(UnweightedQueue, sourceLimit - RequestedObjects.size(), std::nullopt, requestedAddresses, now);
             if (dispatched.PutBack) {
                 break;
             }
         }
-        for (auto band = WeightedQueues.begin(); band != WeightedQueues.end();) {
-            for (auto queue = band->second.begin(); queue != band->second.end();) {
-                if (queue->second.Requests.empty() && queue->second.Inflight == 0) {
-                    queue = band->second.erase(queue);
-                } else {
-                    ++queue;
-                }
-            }
-            if (band->second.empty()) {
-                band = WeightedQueues.erase(band);
+        for (auto queue = WeightedQueues.begin(); queue != WeightedQueues.end();) {
+            if (queue->second.Requests.empty() && queue->second.Inflight == 0) {
+                queue = WeightedQueues.erase(queue);
             } else {
-                ++band;
+                ++queue;
             }
         }
-        for (auto it = UnweightedQueues.begin(); it != UnweightedQueues.end();) {
-            if (it->second.empty()) {
-                it = UnweightedQueues.erase(it);
-            } else {
-                ++it;
-            }
-        }
-        ObjectsProcessor->AskData(std::move(requestedAddresses), ObjectsProcessor, Cookie);
+        ObjectsProcessor->AskData(std::move(requestedAddresses), ObjectsProcessor);
         Counters->ObjectsQueueSize->Set(Counters->GetQueueObjectsCount()->Val());
         Counters->ObjectsInFlight->Set(Counters->GetTotalInFlight()->Val());
     }
@@ -694,15 +628,16 @@ public:
     }
 
     void CleanUseless(const ui32 countLimit) {
-        if constexpr (!TPolicy::EvictCacheWhenSourceGone) {
-            return;
-        }
         for (ui32 idx = 0; idx < countLimit; ++idx) {
             auto it = Cache.FindOldest();
             if (it == Cache.End()) {
                 break;
             }
-            if (!SourcesInfo.contains(TPolicy::GetSourceId(it.Key()))) {
+            if (!TPolicy::EvictCacheWhenSourceGone(it.Key())) {
+                break;
+            }
+            const auto source = SourcesInfo.find(TPolicy::GetSourceId(it.Key()));
+            if (source == SourcesInfo.end() || source->second.GetOwner() != TPolicy::GetRequestOwner(it.Key())) {
                 Counters->UselessCleaningCount->Inc();
                 Cache.Erase(it);
             } else {
@@ -711,14 +646,13 @@ public:
         }
     }
 
-    TSourceId GetSourceByCookie(const ui64 cookie) const {
-        for (auto&& i : SourcesInfo) {
-            if (i.second.GetCookie() == cookie) {
-                return i.first;
+    void AbortSourceOfOwner(const NActors::TActorId& owner) {
+        for (auto&& [sourceId, sourceInfo] : SourcesInfo) {
+            if (sourceInfo.GetOwner() == owner) {
+                AbortSource(sourceId);
+                return;
             }
         }
-        AFL_VERIFY(false);
-        return TSourceId();
     }
 
     void AbortSource(const TSourceId sourceId) {
@@ -811,11 +745,11 @@ public:
     }
 
     void OnRequestResult(const TSourceId sourceId, THashMap<TAddress, TObject>&& add, THashSet<TAddress>&& removed,
-        THashMap<TAddress, TString>&& failed, const ui64 sourceCookie) {
+        THashMap<TAddress, TString>&& failed, const NActors::TActorId& owner) {
         YDB_LOG_DEBUG_COMP(NKikimrServices::GENERAL_CACHE, "",
             {"event", "on_result"});
         auto* sourceInfo = MutableSourceInfoOptional(sourceId);
-        if (!sourceInfo || sourceInfo->GetCookie() != sourceCookie) {
+        if (!sourceInfo || sourceInfo->GetOwner() != owner) {
             return;
         }
         const TMonotonic now = TMonotonic::Now();

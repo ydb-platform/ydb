@@ -67,7 +67,9 @@ public:
     using TSourceId = ui64;
     using EConsumer = NGeneralCacheUt::EConsumer;
 
-    static constexpr bool EvictCacheWhenSourceGone = Evict;
+    static bool EvictCacheWhenSourceGone(const TAddress& /*address*/) {
+        return Evict;
+    }
 
     static TSourceId GetSourceId(const TAddress& address) {
         return address.Source;
@@ -98,7 +100,11 @@ public:
 template <bool Evict>
 struct TAsk {
     THashMap<EConsumer, THashSet<TAddress>> Addresses;
-    ui64 Cookie = 0;
+
+    NActors::TActorId Owner() const {
+        UNIT_ASSERT(!Addresses.empty());
+        return TPolicy<Evict>::GetRequestOwner(*Addresses.begin()->second.begin());
+    }
 
     THashSet<ui64> Ids() const {
         THashSet<ui64> ids;
@@ -117,16 +123,15 @@ class TProcessor: public NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPol
 private:
     using TSelf = NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPolicy<Evict>>;
 
-    void DoAskData(const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>&,
-        const ui64 cookie) const override {
+    void DoAskData(const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>&) const override {
         if (objectAddressesByConsumer.empty()) {
             return;
         }
-        Asks.push_back(TAsk<Evict>{ objectAddressesByConsumer, cookie });
+        Asks.push_back(TAsk<Evict>{ objectAddressesByConsumer });
     }
 
-    void DoOnReceiveData(
-        const ui64, const ui64, THashMap<TAddress, TString>&&, THashSet<TAddress>&&, THashMap<TAddress, TString>&&) const override {
+    void DoOnReceiveData(const ui64, const NActors::TActorId&, THashMap<TAddress, TString>&&, THashSet<TAddress>&&,
+        THashMap<TAddress, TString>&&) const override {
     }
 
 public:
@@ -176,7 +181,6 @@ public:
 
     struct TQuota {
         const char* Name = "";
-        ui32 Priority = 0;
         ui32 Weight = 0;
     };
 
@@ -188,7 +192,6 @@ public:
         for (const auto& quota : quotas) {
             auto* consumer = proto.AddConsumers();
             consumer->SetName(quota.Name);
-            consumer->SetPriority(quota.Priority);
             consumer->SetWeight(quota.Weight);
         }
         auto config = NKikimr::NGeneralCache::NPublic::TConfig::BuildFromProto(proto);
@@ -223,7 +226,7 @@ public:
             }
         }
         UNIT_ASSERT(!objects.empty());
-        Manager->OnRequestResult(source, std::move(objects), {}, {}, ask.Cookie);
+        Manager->OnRequestResult(source, std::move(objects), {}, {}, ask.Owner());
     }
 };
 
@@ -237,7 +240,7 @@ void AssertIds(const THashSet<ui64>& ids, const std::vector<ui64>& allowed, cons
 }   // namespace NGeneralCacheUt
 
 Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
-    Y_UNIT_TEST(EqualPrioritiesStayInOneFifo) {
+    Y_UNIT_TEST(WithoutWeightsConsumersShareOneFifo) {
         NGeneralCacheUt::THarness<false> harness(2);
         harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 1, 2, 3, 4, 5 });
         auto scan = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 20 });
@@ -270,7 +273,7 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
     }
 
     Y_UNIT_TEST(ScanAndCompactionGoAheadOfPrefetchTail) {
-        NGeneralCacheUt::THarness<false> harness(2, { { "SCAN", 1, 1 }, { "COMPACTION", 1, 1 } });
+        NGeneralCacheUt::THarness<false> harness(2, { { "SCAN", 1 }, { "COMPACTION", 1 } });
         auto prefetch = harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 1, 2, 3, 4, 5 });
         const auto prefetchAsk = harness.Processor->Asks.at(0);
         NGeneralCacheUt::AssertIds(prefetchAsk.Ids(), { 1, 2, 3, 4, 5 }, 2);
@@ -316,7 +319,7 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
     }
 
     Y_UNIT_TEST(WeightsShareTheSourceLimit) {
-        NGeneralCacheUt::THarness<false> harness(4, { { "SCAN", 1, 3 }, { "COMPACTION", 1, 1 } });
+        NGeneralCacheUt::THarness<false> harness(4, { { "SCAN", 3 }, { "COMPACTION", 1 } });
         auto scan = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1, 2, 3 });
         NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(0).Ids(), { 1, 2, 3 }, 3);
 
@@ -336,36 +339,30 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         UNIT_ASSERT(!extra->Ready);
     }
 
-    Y_UNIT_TEST(HigherPriorityRunsBeforeAHeavierLowerOne) {
-        NGeneralCacheUt::THarness<false> harness(2, { { "SCAN", 2, 1 }, { "COMPACTION", 1, 100 } });
-        auto scan = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1, 2, 3 });
-        NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(0).Ids(), { 1, 2, 3 }, 2);
+    Y_UNIT_TEST(ZeroWeightWaitsWhileWeightedRequestsAreQueued) {
+        NGeneralCacheUt::THarness<false> harness(2, { { "SCAN", 1 } });
+        auto scan = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1, 2, 3, 4, 5 });
+        auto prefetch = harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 10 });
+        NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(0).Ids(), { 1, 2, 3, 4, 5 }, 2);
 
-        auto compaction = harness.Add(1, NGeneralCacheUt::EConsumer::COMPACTION, { 10 });
-        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 1);
-        UNIT_ASSERT(!compaction->Ready);
-
-        const auto firstChunk = harness.Processor->Asks.at(0).Ids();
         harness.Finish(harness.Processor->Asks.at(0));
         UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 2);
-        const auto rest = harness.Processor->Asks.at(1).Ids();
-        UNIT_ASSERT_VALUES_EQUAL(rest.size(), 2);
-        UNIT_ASSERT(rest.contains(10));
-        ui64 scanLeft = 0;
-        for (const ui64 id : { 1, 2, 3 }) {
-            if (!firstChunk.contains(id)) {
-                scanLeft = id;
-            }
-        }
-        UNIT_ASSERT(rest.contains(scanLeft));
+        NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(1).Ids(), { 1, 2, 3, 4, 5 }, 2);
+        UNIT_ASSERT(!prefetch->Ready);
 
         harness.Finish(harness.Processor->Asks.at(1));
+        UNIT_ASSERT_VALUES_EQUAL(harness.Processor->Asks.size(), 3);
+        const auto tail = harness.Processor->Asks.at(2).Ids();
+        UNIT_ASSERT_VALUES_EQUAL(tail.size(), 2);
+        UNIT_ASSERT(tail.contains(10));
+
+        harness.Finish(harness.Processor->Asks.at(2));
         UNIT_ASSERT(scan->Ready);
-        UNIT_ASSERT(compaction->Ready);
+        UNIT_ASSERT(prefetch->Ready);
     }
 
-    Y_UNIT_TEST(AbortedHigherUnweightedDoesNotStallLower) {
-        NGeneralCacheUt::THarness<false> harness(1, { { "SCAN", 1, 0 }, { "COMPACTION", 0, 0 } });
+    Y_UNIT_TEST(AbortedWeightedRequestDoesNotStallZeroWeight) {
+        NGeneralCacheUt::THarness<false> harness(1, { { "SCAN", 1 } });
         auto scan = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1 });
         NGeneralCacheUt::AssertIds(harness.Processor->Asks.at(0).Ids(), { 1 }, 1);
 
@@ -383,41 +380,42 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         UNIT_ASSERT(!aborted->Ready);
     }
 
-    Y_UNIT_TEST(StaleSourceCookieDoesNotTouchTheNewSource) {
+    Y_UNIT_TEST(ResultFromOldOwnerDoesNotTouchTheNewSource) {
         NGeneralCacheUt::THarness<false> harness(2);
-        auto first = harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 1 });
+        auto first = harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 1 }, 1);
         const auto oldAsk = harness.Processor->Asks.at(0);
-        const NGeneralCacheUt::TAddress address = *oldAsk.Addresses.begin()->second.begin();
+        const NGeneralCacheUt::TAddress oldAddress = *oldAsk.Addresses.begin()->second.begin();
         harness.Manager->AbortSource(1);
         UNIT_ASSERT(first->Ready);
         UNIT_ASSERT(first->HasErrors);
 
         THashMap<NGeneralCacheUt::TAddress, TString> whileAbsent;
-        whileAbsent.emplace(address, "stale");
-        harness.Manager->OnRequestResult(1, std::move(whileAbsent), {}, {}, oldAsk.Cookie);
+        whileAbsent.emplace(oldAddress, "stale");
+        harness.Manager->OnRequestResult(1, std::move(whileAbsent), {}, {}, oldAsk.Owner());
 
-        auto second = harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 1 });
+        auto second = harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 1 }, 2);
         const auto freshAsk = harness.Processor->Asks.back();
-        UNIT_ASSERT(freshAsk.Cookie != oldAsk.Cookie);
+        UNIT_ASSERT(freshAsk.Owner() != oldAsk.Owner());
+        const NGeneralCacheUt::TAddress address = *freshAsk.Addresses.begin()->second.begin();
         UNIT_ASSERT(!second->Ready);
 
         THashMap<NGeneralCacheUt::TAddress, TString> errors;
         errors.emplace(address, "relocation of the tablet");
-        harness.Manager->OnRequestResult(1, {}, {}, std::move(errors), oldAsk.Cookie);
+        harness.Manager->OnRequestResult(1, {}, {}, std::move(errors), oldAsk.Owner());
         UNIT_ASSERT(!second->Ready);
         UNIT_ASSERT(!second->HasErrors);
 
         THashMap<NGeneralCacheUt::TAddress, TString> cached;
         cached.emplace(address, "cached");
-        harness.Manager->OnRequestResult(1, std::move(cached), {}, {}, oldAsk.Cookie);
+        harness.Manager->OnRequestResult(1, std::move(cached), {}, {}, oldAsk.Owner());
         UNIT_ASSERT(!second->Ready);
 
-        auto third = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1 });
+        auto third = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1 }, 2);
         UNIT_ASSERT(!third->Ready);
 
         THashMap<NGeneralCacheUt::TAddress, TString> real;
         real.emplace(address, "real");
-        harness.Manager->OnRequestResult(1, std::move(real), {}, {}, freshAsk.Cookie);
+        harness.Manager->OnRequestResult(1, std::move(real), {}, {}, freshAsk.Owner());
         UNIT_ASSERT(second->Ready);
         UNIT_ASSERT(third->Ready);
         UNIT_ASSERT(!third->HasErrors);
@@ -434,7 +432,7 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
 
         THashSet<NGeneralCacheUt::TAddress> removed;
         removed.insert(address);
-        harness.Manager->OnRequestResult(1, {}, std::move(removed), {}, ask.Cookie);
+        harness.Manager->OnRequestResult(1, {}, std::move(removed), {}, ask.Owner());
 
         const size_t asks = harness.Processor->Asks.size();
         auto again = harness.Add(1, NGeneralCacheUt::EConsumer::FETCH_ON_LOAD, { 1 });
@@ -492,6 +490,17 @@ Y_UNIT_TEST_SUITE(TGeneralCacheRequestQueue) {
         UNIT_ASSERT(!current->Ready);
 
         harness.Manager->AbortSource(1, NActors::TActorId(2, 1));
+        UNIT_ASSERT(current->Ready);
+        UNIT_ASSERT(current->HasErrors);
+    }
+
+    Y_UNIT_TEST(UndeliveredAbortsOnlyTheSourceOfThatActor) {
+        NGeneralCacheUt::THarness<false> harness(2);
+        auto current = harness.Add(1, NGeneralCacheUt::EConsumer::SCAN, { 1 }, 2);
+        harness.Manager->AbortSourceOfOwner(NActors::TActorId(1, 1));
+        UNIT_ASSERT(!current->Ready);
+
+        harness.Manager->AbortSourceOfOwner(NActors::TActorId(2, 1));
         UNIT_ASSERT(current->Ready);
         UNIT_ASSERT(current->HasErrors);
     }

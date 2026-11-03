@@ -17,6 +17,8 @@ private:
     YDB_READONLY(ui64, TabletId, 0);
     TPortionAddress InternalPortionAddress;
     YDB_READONLY(ui64, ContentStamp, 0);
+    // Empty: the entry outlives the tablet actor. Otherwise only this actor can hit it.
+    YDB_READONLY_DEF(NActors::TActorId, Incarnation);
 
 public:
     const TPortionAddress& GetInternalPortionAddress() const;
@@ -25,10 +27,10 @@ public:
 
     TInternalPathId GetPathId() const;
 
-    TGlobalPortionAddress(
-        const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress, const ui64 contentStamp = 0);
+    TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress,
+        const ui64 contentStamp = 0, const bool keepAcrossRestarts = true);
 
-    TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionInfo& portion);
+    TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionInfo& portion, const bool keepAcrossRestarts);
 
     bool operator==(const TGlobalPortionAddress& item) const;
 
@@ -44,7 +46,9 @@ public:
     using TSourceId = ui64;
     using EConsumer = NOlap::NBlobOperations::EConsumer;
 
-    static constexpr bool EvictCacheWhenSourceGone = false;
+    static bool EvictCacheWhenSourceGone(const TAddress& address) {
+        return !!address.GetIncarnation();
+    }
 
     static TSourceId GetSourceId(const TAddress& address);
 

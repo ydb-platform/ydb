@@ -65,7 +65,9 @@ public:
     using EConsumer = NOlap::NBlobOperations::EConsumer;
     using TSourceId = TActorId;
 
-    static constexpr bool EvictCacheWhenSourceGone = true;
+    static bool EvictCacheWhenSourceGone(const TAddress& /*address*/) {
+        return true;
+    }
 
     static TSourceId GetSourceId(const TAddress& address) {
         return address.GetTabletActorId();

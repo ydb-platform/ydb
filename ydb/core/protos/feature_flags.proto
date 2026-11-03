@@ -457,4 +457,8 @@ message TFeatureFlags {
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
     optional bool EnableCompileCacheV2 = 369 [default = false];
+    // Keeps cached column shard portions metadata on the node after the tablet restarts there.
+    optional bool EnableCsPortionsCacheAcrossRestarts = 370 [default = false];
+    // Shares the general cache source inflight between consumers by Consumers weights.
+    optional bool EnableCsGeneralCacheConsumerWeights = 371 [default = false];
 }

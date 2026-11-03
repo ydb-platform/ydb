@@ -1788,7 +1788,6 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
         NOlap::TPortionAddress Portion;
         TActorId Owner;
         NOlap::ISnapshotSchema::TPtr Schema;
-        const ui64 Cookie;
 
         virtual bool IsAborted() const override {
             return false;
@@ -1814,7 +1813,7 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
                 }
             }
 
-            CacheCallback->OnReceiveData(Owner, Cookie, std::move(result), {}, {});
+            CacheCallback->OnReceiveData(Owner, Owner, std::move(result), {}, {});
         }
 
         virtual void DoOnError(const TString& errorMessage) override {
@@ -1822,18 +1821,16 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
             for (const ui32 columnId : Schema->GetColumnIds()) {
                 errorAddresses.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(Owner, Portion, columnId), errorMessage);
             }
-            CacheCallback->OnReceiveData(Owner, Cookie, {}, {}, std::move(errorAddresses));
+            CacheCallback->OnReceiveData(Owner, Owner, {}, {}, std::move(errorAddresses));
         }
 
     public:
         TExecutor(const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>>&
-                      cacheCallback, const NOlap::TPortionAddress& portion, const TActorId& owner, const NOlap::ISnapshotSchema::TPtr& schema,
-            const ui64 cookie)
+                      cacheCallback, const NOlap::TPortionAddress& portion, const TActorId& owner, const NOlap::ISnapshotSchema::TPtr& schema)
             : CacheCallback(cacheCallback)
             , Portion(portion)
             , Owner(owner)
             , Schema(schema)
-            , Cookie(cookie)
         {
         }
     };
@@ -1854,7 +1851,7 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
                 errorAddresses.emplace(NOlap::NGeneralCache::TGlobalColumnAddress(SelfId(), address, columnId),
                     TStringBuilder() << "portion " << address.DebugString() << " not found");
             }
-            ev->Get()->GetCallback()->OnReceiveData(SelfId(), ev->Get()->GetCookie(), {}, {}, std::move(errorAddresses));
+            ev->Get()->GetCallback()->OnReceiveData(SelfId(), SelfId(), {}, {}, std::move(errorAddresses));
             continue;
         }
         NOlap::NDataFetcher::TRequestInput rInput({ portionInfo }, actualIndexInfo, portion.GetConsumer(), "", nullptr, TabletID());
@@ -1863,8 +1860,8 @@ void TColumnShard::Handle(NColumnShard::TEvPrivate::TEvAskColumnData::TPtr& ev, 
         NOlap::NDataFetcher::TPortionsDataFetcher::StartAssembledColumnsFetchingNoAllocation(std::move(rInput),
             std::make_shared<NOlap::NReader::NCommon::TColumnsSetIds>(columns),
             std::make_shared<TExecutor>(ev->Get()->GetCallback(), address, SelfId(),
-                std::make_shared<NOlap::TFilteredSnapshotSchema>(portionInfo->GetSchema(*actualIndexInfo), columns), ev->Get()->GetCookie()),
-            env, NConveyorComposite::ESpecialTaskCategory::Deduplication);
+                std::make_shared<NOlap::TFilteredSnapshotSchema>(portionInfo->GetSchema(*actualIndexInfo), columns)), env,
+            NConveyorComposite::ESpecialTaskCategory::Deduplication);
     }
 }
 

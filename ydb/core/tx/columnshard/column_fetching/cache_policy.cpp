@@ -19,8 +19,8 @@ private:
 
     const NActors::TActorId ServiceActorId;
 
-    virtual void DoAskData(const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr,
-        const ui64 cookie) const override {
+    virtual void DoAskData(
+        const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr) const override {
         THashMap<TActorId, THashMap<NColumnShard::TEvPrivate::TEvAskColumnData::TPortionRequest, std::set<ui32>>> columns;
         for (const auto& [consumer, addresses] : objectAddressesByConsumer) {
             for (const auto& address : addresses) {
@@ -31,16 +31,15 @@ private:
             }
         }
         for (auto&& [tablet, request] : columns) {
-            NActors::TActivationContext::Send(
-                tablet, std::make_unique<NColumnShard::TEvPrivate::TEvAskColumnData>(std::move(request), selfPtr, cookie));
+            NActors::TActivationContext::Send(tablet, std::make_unique<NColumnShard::TEvPrivate::TEvAskColumnData>(std::move(request), selfPtr));
         }
     }
 
-    virtual void DoOnReceiveData(const TSourceId sourceId, const ui64 sourceCookie, THashMap<TAddress, TObject>&& objectAddresses,
+    virtual void DoOnReceiveData(const TSourceId sourceId, const NActors::TActorId& owner, THashMap<TAddress, TObject>&& objectAddresses,
         THashSet<TAddress>&& removedAddresses, THashMap<TAddress, TString>&& errorAddresses) const override {
         NActors::TActivationContext::Send(
             ServiceActorId, std::make_unique<NKikimr::NGeneralCache::NSource::TEvents<TColumnDataCachePolicy>::TEvObjectsInfo>(
-                                sourceId, sourceCookie, std::move(objectAddresses), std::move(removedAddresses), std::move(errorAddresses)));
+                                sourceId, owner, std::move(objectAddresses), std::move(removedAddresses), std::move(errorAddresses)));
     }
 
 public:

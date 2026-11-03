@@ -14,7 +14,6 @@ namespace NKikimrConfig {
 namespace NKikimr::NGeneralCache::NPublic {
 
 struct TCacheRequestClass {
-    ui32 Priority = 0;
     ui32 Weight = 0;
     ui64 QueueId = 0;
 };

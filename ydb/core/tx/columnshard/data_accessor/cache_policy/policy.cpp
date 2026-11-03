@@ -16,7 +16,6 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
     private:
         const NActors::TActorId OwnerActorId;
         const ui64 TabletId;
-        const ui64 Cookie;
         const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>> Callback;
         THashSet<TAddress> RequestedAddresses;
 
@@ -41,16 +40,15 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                     AFL_VERIFY(objects.emplace(address, i).second);
                 }
             }
-            Callback->OnReceiveData(TabletId, Cookie, std::move(objects), std::move(RequestedAddresses), {});
+            Callback->OnReceiveData(TabletId, OwnerActorId, std::move(objects), std::move(RequestedAddresses), {});
         }
 
     public:
-        TAccessorsCallback(const NActors::TActorId& ownerActorId, const ui64 tabletId, const ui64 cookie,
+        TAccessorsCallback(const NActors::TActorId& ownerActorId, const ui64 tabletId,
             const std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>>& callback,
             THashSet<TAddress>&& requestedAddresses)
             : OwnerActorId(ownerActorId)
             , TabletId(tabletId)
-            , Cookie(cookie)
             , Callback(callback)
             , RequestedAddresses(std::move(requestedAddresses))
         {
@@ -63,7 +61,7 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                     errorAddresses[addr] = TStringBuilder{} << "Unprocessed address " << addr.Debug()
                                                             << ". The main reason is the relocation of the tablet.";
                 }
-                Callback->OnReceiveData(TabletId, Cookie, {}, {}, std::move(errorAddresses));
+                Callback->OnReceiveData(TabletId, OwnerActorId, {}, {}, std::move(errorAddresses));
             }
         }
     };
@@ -98,8 +96,8 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
             }
         };
 
-        virtual void DoAskData(const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr,
-            const ui64 cookie) const override {
+        virtual void DoAskData(
+            const THashMap<EConsumer, THashSet<TAddress>>& objectAddressesByConsumer, const std::shared_ptr<TSelf>& selfPtr) const override {
             THashMap<NActors::TActorId, TActorRequestData> requests;
             for (auto&& [c, addresses] : objectAddressesByConsumer) {
                 for (auto&& a : addresses) {
@@ -115,18 +113,18 @@ TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& ser
                 }
                 NActors::TActivationContext::Send(
                     i.first, std::make_unique<NColumnShard::TEvPrivate::TEvAskTabletDataAccessors>(i.second.ExtractRequest(),
-                                 std::make_shared<TAccessorsCallback>(i.first, tabletId, cookie, selfPtr, std::move(requested))), 0, cookie);
+                                 std::make_shared<TAccessorsCallback>(i.first, tabletId, selfPtr, std::move(requested))));
             }
         }
 
-        virtual void DoOnReceiveData(const TSourceId sourceId, const ui64 sourceCookie, THashMap<TAddress, TObject>&& objectAddresses,
+        virtual void DoOnReceiveData(const TSourceId sourceId, const NActors::TActorId& owner, THashMap<TAddress, TObject>&& objectAddresses,
             THashSet<TAddress>&& removedAddresses, THashMap<TAddress, TString>&& errors) const override {
             if (NActors::TActorSystem::IsStopped()) {
                 return;
             }
             NActors::TActivationContext::Send(
                 ServiceActorId, std::make_unique<NKikimr::NGeneralCache::NSource::TEvents<TPortionsMetadataCachePolicy>::TEvObjectsInfo>(
-                                    sourceId, sourceCookie, std::move(objectAddresses), std::move(removedAddresses), std::move(errors)));
+                                    sourceId, owner, std::move(objectAddresses), std::move(removedAddresses), std::move(errors)));
         }
 
     public:
@@ -189,23 +187,26 @@ ui64 PortionContentStamp(const TPortionInfo& portion) {
 
 }   // namespace
 
-TGlobalPortionAddress::TGlobalPortionAddress(
-    const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress, const ui64 contentStamp)
+TGlobalPortionAddress::TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress,
+    const ui64 contentStamp, const bool keepAcrossRestarts)
     : TabletActorId(actorId)
     , TabletId(tabletId)
     , InternalPortionAddress(internalAddress)
     , ContentStamp(contentStamp)
+    , Incarnation(keepAcrossRestarts ? NActors::TActorId() : actorId)
 {
     AFL_VERIFY(TabletId);
 }
 
-TGlobalPortionAddress::TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionInfo& portion)
-    : TGlobalPortionAddress(actorId, tabletId, portion.GetAddress(), PortionContentStamp(portion))
+TGlobalPortionAddress::TGlobalPortionAddress(
+    const NActors::TActorId& actorId, const ui64 tabletId, const TPortionInfo& portion, const bool keepAcrossRestarts)
+    : TGlobalPortionAddress(actorId, tabletId, portion.GetAddress(), PortionContentStamp(portion), keepAcrossRestarts)
 {
 }
 
 bool TGlobalPortionAddress::operator==(const TGlobalPortionAddress& item) const {
-    return TabletId == item.TabletId && InternalPortionAddress == item.InternalPortionAddress && ContentStamp == item.ContentStamp;
+    return TabletId == item.TabletId && InternalPortionAddress == item.InternalPortionAddress && ContentStamp == item.ContentStamp &&
+           Incarnation == item.Incarnation;
 }
 
 TGlobalPortionAddress::operator size_t() const {
@@ -213,8 +214,8 @@ TGlobalPortionAddress::operator size_t() const {
 }
 
 const TString TGlobalPortionAddress::Debug() const {
-    return TStringBuilder{} << "TabletId: " << TabletId << ", TabletActorId: " << TabletActorId << ", ContentStamp: " << ContentStamp
-                            << ", InternalPortionAddress: {" << InternalPortionAddress.Debug() << "}";
+    return TStringBuilder{} << "TabletId: " << TabletId << ", TabletActorId: " << TabletActorId << ", Incarnation: " << Incarnation
+                            << ", ContentStamp: " << ContentStamp << ", InternalPortionAddress: {" << InternalPortionAddress.Debug() << "}";
 }
 
 TPortionsMetadataCachePolicy::TSourceId TPortionsMetadataCachePolicy::GetSourceId(const TAddress& address) {

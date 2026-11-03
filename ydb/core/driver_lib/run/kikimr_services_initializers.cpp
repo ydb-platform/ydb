@@ -2755,12 +2755,39 @@ void TCompPrioritiesInitializer::InitializeServices(NActors::TActorSystemSetup* 
     }
 }
 
+namespace {
+
+NKikimrConfig::TGeneralCacheConfig ApplyCacheConsumerWeights(
+    NKikimrConfig::TGeneralCacheConfig config, const bool weightsEnabled, const bool scansOverCompactionByDefault) {
+    if (!weightsEnabled) {
+        config.ClearConsumers();
+        return config;
+    }
+    if (scansOverCompactionByDefault && config.ConsumersSize() == 0) {
+        using EConsumer = NOlap::NBlobOperations::EConsumer;
+        const std::pair<EConsumer, ui32> defaults[] = {
+            { EConsumer::SCAN, 8 },
+            { EConsumer::SYS_VIEW_SCAN, 8 },
+            { EConsumer::GENERAL_COMPACTION, 2 },
+        };
+        for (const auto& [consumer, weight] : defaults) {
+            auto* item = config.AddConsumers();
+            item->SetName(::ToString(consumer));
+            item->SetWeight(weight);
+        }
+    }
+    return config;
+}
+
+}   // namespace
+
 TGeneralCachePortionsMetadataInitializer::TGeneralCachePortionsMetadataInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig) {
 }
 
 void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetPortionsMetadataCache());
+    auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(ApplyCacheConsumerWeights(
+        Config.GetPortionsMetadataCache(), appData->FeatureFlags.GetEnableCsGeneralCacheConsumerWeights(), true));
     if (serviceConfig.IsFail()) {
         YDB_LOG_ERROR("",
             {"error", "cannot parse portions metadata cache config"},
@@ -2797,7 +2824,8 @@ TGeneralCacheColumnDataInitializer::TGeneralCacheColumnDataInitializer(const TKi
 }
 
 void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(Config.GetColumnDataCache());
+    auto serviceConfig = NGeneralCache::NPublic::TConfig::BuildFromProto(ApplyCacheConsumerWeights(
+        Config.GetColumnDataCache(), appData->FeatureFlags.GetEnableCsGeneralCacheConsumerWeights(), false));
     if (serviceConfig.IsFail()) {
         YDB_LOG_ERROR("",
             {"error", "cannot parse column data cache config"},

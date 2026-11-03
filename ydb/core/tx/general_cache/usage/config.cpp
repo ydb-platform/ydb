@@ -26,7 +26,6 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TGeneralCac
             return TConclusionStatus::Fail(TStringBuilder() << "duplicate general cache consumer " << name);
         }
         TCacheRequestClass requestClass;
-        requestClass.Priority = consumer.GetPriority();
         requestClass.Weight = consumer.GetWeight();
         if (requestClass.Weight > 0) {
             requestClass.QueueId = nextQueueId++;
@@ -76,10 +75,10 @@ TString TConfig::DebugString() const {
     sb << "DirectInflightSourceLimit=" << DirectInflightSourceLimit << ";";
     sb << "DirectInflightGlobalLimit=" << DirectInflightGlobalLimit << ";";
     for (const auto& [name, requestClass] : Consumers) {
-        sb << name << "{Priority=" << requestClass.Priority << ";Weight=" << requestClass.Weight << ";};";
+        sb << name << "{Weight=" << requestClass.Weight << ";};";
     }
     if (AnyConsumer) {
-        sb << "*{Priority=" << AnyConsumer->Priority << ";Weight=" << AnyConsumer->Weight << ";};";
+        sb << "*{Weight=" << AnyConsumer->Weight << ";};";
     }
     sb << "}";
     return sb;

@@ -68,13 +68,19 @@ private:
                       const NKikimrClient::TPersQueuePartitionResponse& partitionResponse)
     {
         if (isDirectRead) {
+            ui64 readOffset = InitialReadOffset;
+            const auto& preparedReadResult = PreparedResponse->GetPartitionResponse().GetCmdReadResult();
+            if (preparedReadResult.ResultSize() > 0) {
+                readOffset = preparedReadResult.GetResult(0).GetOffset();
+            }
+
             auto* prepareResponse = Response->Record.MutablePartitionResponse()->MutableCmdPrepareReadResult();
             auto sizeEstimate = Request.GetPartitionRequest().GetCmdRead().GetSizeEstimate();
             sizeEstimate = sizeEstimate ? sizeEstimate : PreparedResponse->GetPartitionResponse().ByteSize();
             PreparedResponse->MutablePartitionResponse()->MutableCmdPrepareReadResult()->SetBytesSizeEstimate(sizeEstimate);
             prepareResponse->SetBytesSizeEstimate(sizeEstimate);
             prepareResponse->SetDirectReadId(DirectReadKey.ReadId);
-            prepareResponse->SetReadOffset(readResult.GetRealReadOffset());
+            prepareResponse->SetReadOffset(readOffset);
             prepareResponse->SetLastOffset(readResult.GetLastOffset());
             prepareResponse->SetEndOffset(readResult.GetEndOffset());
 

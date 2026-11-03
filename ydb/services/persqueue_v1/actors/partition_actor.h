@@ -16,6 +16,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
 
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
 
@@ -78,7 +79,7 @@ public:
                      const ui64 tabletID, const TTopicCounters& counters,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
                      EProtocol protocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-                     const std::unordered_set<ui64>& notCommitedToFinishParents, const std::unordered_set<ui64>& skippedParents, ui64 partitionMaxInFlightBytes, bool canReadBatches);
+                     const absl::flat_hash_set<ui64>& notCommitedToFinishParents, const absl::flat_hash_set<ui64>& skippedParents, ui64 partitionMaxInFlightBytes, bool canReadBatches);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
@@ -297,8 +298,8 @@ private:
     bool DataDelivered = false;
     bool ReadingFinishedSent;
 
-    std::unordered_set<ui64> NotCommitedToFinishParents;
-    const std::unordered_set<ui64> SkippedParents; // Ancestors that finished without delivering any data to the consumer
+    absl::flat_hash_set<ui64> NotCommitedToFinishParents;
+    const absl::flat_hash_set<ui64> SkippedParents; // Ancestors that finished without delivering any data to the consumer
 
     inline bool IsPartitionDataReady() const;
     inline bool IsNeedMorePartitionData() const;

@@ -1345,7 +1345,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& e
         return CloseSession(PersQueue::ErrorCode::ERROR, error, ctx);
     }
 
-    std::unordered_set<ui64> notCommitedToFinishParents;
+    absl::flat_hash_set<ui64> notCommitedToFinishParents;
     for (auto& parent: partitionNode->DirectParents) {
         for (auto& [_, actorInfo]: Partitions) { // TODO: map
             if (actorInfo.Partition.Partition == parent->Id && actorInfo.Topic->GetInternalName() == name && !actorInfo.IsLastOffsetCommitted()) {
@@ -1354,7 +1354,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPersQueue::TEvLockPartition::TPtr& e
         }
     }
 
-    const std::unordered_set<ui64> skippedParents(record.GetSkippedParentPartitions().begin(), record.GetSkippedParentPartitions().end());
+    const absl::flat_hash_set<ui64> skippedParents(record.GetSkippedParentPartitions().begin(), record.GetSkippedParentPartitions().end());
 
     const auto database = topic->DbPath;
     const TActorId actorId = ctx.Register(new TPartitionActor(

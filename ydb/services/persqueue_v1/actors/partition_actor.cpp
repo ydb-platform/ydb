@@ -34,7 +34,7 @@ TPartitionActor::TPartitionActor(
         const ui64 tabletID, const TTopicCounters& counters,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
         bool directRead, EProtocol protocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-        const std::unordered_set<ui64>& notCommitedToFinishParents, const std::unordered_set<ui64>& skippedParents, ui64 partitionMaxInFlightBytes, bool canReadBatches
+        const absl::flat_hash_set<ui64>& notCommitedToFinishParents, const absl::flat_hash_set<ui64>& skippedParents, ui64 partitionMaxInFlightBytes, bool canReadBatches
 )
     : TBase(NKikimrServices::PQ_READ_PROXY)
     , ParentId(parentId)

@@ -12,8 +12,6 @@ on:
   pull_request:
     paths:
       - 'ydb/docs/**'
-<<<<<<< HEAD
-=======
       - 'ydb/**/*.proto'
       - 'yql/**/*.proto'
       - 'library/**/*.proto'
@@ -23,7 +21,6 @@ on:
       - '.github/workflows/docs_build_core.yaml'
       - '.github/workflows/docs_release.yaml'
       - '.github/workflows/docs_release_core.yaml'
->>>>>>> 914d20a3217 (Respect feature flag defaults switch in documentation CI (#57866))
   workflow_dispatch:
     inputs:
       pull_number:

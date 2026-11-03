@@ -6,6 +6,9 @@
 
 namespace NKikimr::NIamDelegation {
 
+TVector<EDelegationFailureReason> ExtractIamFailureReasons(const google::rpc::Status&) { return {}; }
+TVector<EDelegationFailureReason> ExtractIamFailureReasons(const NYdbGrpc::TGrpcStatus&) { return {}; }
+
 bool IsRetryableGrpcStatus(const NYdbGrpc::TGrpcStatus& status) {
     if (status.InternalError) {
         return true;

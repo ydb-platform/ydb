@@ -79,6 +79,7 @@ PEERDIR(
     ydb/core/tx/conveyor_composite/service
     ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/coordinator
+    ydb/core/security/iam_delegation/tablet
     ydb/core/tx/limiter/grouped_memory/usage
     ydb/core/tx/long_tx_service
     ydb/core/tx/mediator

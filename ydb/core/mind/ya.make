@@ -71,6 +71,7 @@ PEERDIR(
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/test_tablet
+    ydb/core/security/iam_delegation/tablet
     ydb/core/tx/replication/controller
     ydb/core/tx/scheme_board
     ydb/core/tx/scheme_cache

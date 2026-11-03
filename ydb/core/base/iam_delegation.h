@@ -11,6 +11,12 @@
 
 namespace NKikimr::NIamDelegation {
 
+enum class EDelegationFailureReason {
+    WrongCloud, ServiceNotEnabled, CloudNotFound, ServiceAccountNotFound,
+    SubjectNotDelegatable, AuthenticationFailed, PermissionDenied,
+};
+
+
 // Parameters of one IAM delegation: "the agent service account of YDB in cloud CloudId may impersonate
 // ServiceAccountId; the delegation is referenced by ReferrerId". The IAM types of the cloud and of the
 // referrer are constants of the service (TIamDelegationSettings), not part of a delegation's record.

@@ -176,6 +176,7 @@
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/security/iam_delegation/tablet/iam_delegation.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
@@ -1469,6 +1470,7 @@ void TLocalServiceInitializer::InitializeServices(
     addToLocalConfig(TTabletTypes::GraphShard, &NGraph::CreateGraphShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BackupController, &NBackup::CreateBackupController, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::WasmCompileController, &NUdfStore::CreateWasmCompileController, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::IamDelegation, &NIamDelegation::CreateIamDelegationTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
     addToLocalConfig(TTabletTypes::BlockStoreVolumeDirect, &NYdb::NBS::NStorage::CreateVolumeTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BlockStorePartitionDirect, &NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);

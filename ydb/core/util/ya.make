@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    async_backoff.cpp
     actor_monotonic_time_provider.cpp
     actor_monotonic_time_provider.h
     activeactors.h
@@ -70,6 +71,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/actors/async
     ydb/library/actors/core
     ydb/library/actors/util
     ydb/library/actors/wilson
@@ -90,6 +92,7 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
+    async_backoff_ut
     btree_benchmark
     ut
 )

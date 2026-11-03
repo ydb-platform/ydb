@@ -473,6 +473,8 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 
         ClearInfosByReplica(groupIdx, idx);
         replica.Infos.clear();
+        // the replica may get back without the node disconnecting, so the subscription keeps trying it
+        ReconnectReplica(groupIdx, idx);
         CheckCompletion();
     }
 
@@ -504,6 +506,8 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
         ClearInfosByReplica(groupIdx, idx);
         replica.Infos.clear();
 
+        // the replica actor may be registered later on a node that stays connected, so try it again
+        ReconnectReplica(groupIdx, idx);
         CheckCompletion();
     }
 

@@ -713,6 +713,12 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
                 Stream << del << "vector_type=\"int8\"";
                 break;
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT4:
+                Stream << del << "vector_type=\"uint4\"";
+                break;
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT4:
+                Stream << del << "vector_type=\"int4\"";
+                break;
             case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
                 Stream << del << "vector_type=\"uint8\"";
                 break;

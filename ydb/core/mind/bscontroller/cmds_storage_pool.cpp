@@ -1293,8 +1293,16 @@ namespace NKikimr::NBsController {
                         return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
                             << " is writing to an excluded datacenter; repair its fail realm state first");
                     }
-                    const TFailRealm::EState target = excludedRealms[realm] ? TFailRealm::Excluded : TFailRealm::Recovering;
-                    states[realm] = target;
+                    const std::optional<TMirror3dcFailRealmStates> next = excludedRealms[realm]
+                        ? TakeDownFailRealm(states, realm) : ReturnFailRealm(states, realm);
+                    if (next) {
+                        states = *next;
+                    } else if (suppressFailModelChecking) {
+                        states[realm] = excludedRealms[realm] ? TFailRealm::F : TFailRealm::R;
+                    } else {
+                        return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
+                            << ": invalid mirror-3-dc data center transition");
+                    }
                     GroupContentChanged.insert(groupId);
                 }
             }

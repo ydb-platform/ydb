@@ -13,6 +13,9 @@
 #include <util/generic/map.h>
 
 namespace NKikimr {
+
+struct TTableId;
+
 namespace NDataShard {
 
 using NTabletFlatExecutor::TTransactionContext;
@@ -154,6 +157,11 @@ public:
     void SetKeepSnapshotTimeout(NIceDb::TNiceDb& db, ui64 keepSnapshotTimeout);
 
     TRowVersion GetLowWatermark() const;
+
+    // Retention may allow reads below LowWatermark, but never resurrects removed
+    // history. locallyAcquired protects an already admitted iterator from registry updates.
+    bool IsSnapshotReadable(NTable::TDatabase& db, const TTableId& tableId,
+        const TRowVersion& version, bool locallyAcquired = false) const;
 
     void SetLowWatermark(NIceDb::TNiceDb &db, TRowVersion watermark);
 

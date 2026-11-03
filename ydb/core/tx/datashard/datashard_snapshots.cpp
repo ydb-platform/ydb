@@ -408,11 +408,43 @@ TSnapshotRetentionPolicy TSnapshotManager::GetSnapshotRetentionPolicy() const {
         AppData()->SnapshotRegistryHolder, AppData()->LongTxServiceConfig);
 }
 
+bool TSnapshotManager::IsSnapshotReadable(NTable::TDatabase& db, const TTableId& tableId,
+    const TRowVersion& version, bool locallyAcquired) const
+{
+    if (version >= LowWatermark) {
+        return true;
+    }
+
+    // Followers keep their existing read window. Their local registry does not
+    // prove that the leader preserved this version.
+    if (Self->IsFollower()) {
+        return false;
+    }
+
+    if (!locallyAcquired && !GetSnapshotRetentionPolicy().ShouldRetain(tableId, version)) {
+        return false;
+    }
+
+    const auto* table = Self->GetUserTables().FindPtr(tableId.PathId.LocalPathId);
+    if (tableId.PathId.OwnerId != Self->GetPathOwnerId() || !table) {
+        return false;
+    }
+
+    return !db.GetRemovedRowVersions((*table)->LocalTid).Contains(version, version.Next());
+}
+
 TRowVersion TSnapshotManager::GetLeastAcquiredSnapshot() const {
     TRowVersion leastAcquired = TRowVersion::Max();
     for (const auto& [txId, op] : Self->Pipeline.GetImmediateOps()) {
         if (op->IsMvccSnapshotRead()) {
             leastAcquired = Min(leastAcquired, op->GetMvccSnapshot());
+        }
+    }
+    // An iterator may wait for an ACK with no operation left in the pipeline.
+    // Keep its admitted version until completion, cancellation or disconnect.
+    for (const auto& [readId, state] : Self->ReadIterators) {
+        if (state.SnapshotAcquired && !state.IsFinished) {
+            leastAcquired = Min(leastAcquired, state.ReadVersion);
         }
     }
     return leastAcquired;

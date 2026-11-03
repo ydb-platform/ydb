@@ -6,6 +6,7 @@
 #include <util/string/printf.h>
 
 #include <iterator>
+#include <memory>
 #include <optional>
 
 namespace NKikimr::NDataShard {
@@ -86,6 +87,38 @@ public:
         const auto ranges = GetRemovedRowVersions(Server, shard);
         UNIT_ASSERT(!ranges.empty());
         return std::prev(ranges.end())->Upper;
+    }
+
+    std::unique_ptr<TEvDataShard::TEvReadResult> ReadSnapshot(ui64 shard, const TTableId& tableId,
+        const TRowVersion& snapshot, ui64 readId = 1, ui64 maxRows = Max<ui64>())
+    {
+        auto request = std::make_unique<TEvDataShard::TEvRead>();
+        auto& record = request->Record;
+        record.SetReadId(readId);
+        record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+        record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+        record.AddColumns(1);
+        record.AddColumns(2);
+        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+        record.SetMaxRows(maxRows);
+        snapshot.ToProto(record.MutableSnapshot());
+        AddFullRangeQuery(*request);
+        return SendRead(Server, shard, request.release(), Sender);
+    }
+
+    void AckRead(ui64 shard, const NKikimrTxDataShard::TEvReadResult& result) {
+        auto request = std::make_unique<TEvDataShard::TEvReadAck>();
+        request->Record.SetReadId(result.GetReadId());
+        request->Record.SetSeqNo(result.GetSeqNo());
+        request->Record.SetMaxRows(100);
+        request->Record.SetMaxBytes(Max<ui64>());
+        GetRuntime().SendToPipe(shard, Sender, request.release());
+    }
+
+    void CancelRead(ui64 shard, ui64 readId) {
+        auto request = std::make_unique<TEvDataShard::TEvReadCancel>();
+        request->Record.SetReadId(readId);
+        GetRuntime().SendToPipe(shard, Sender, request.release());
     }
 
 public:
@@ -299,6 +332,167 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionCleanup) {
         test.PublishRegistry();
         test.RunCleanup();
         UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+    }
+}
+
+Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionRead) {
+    Y_UNIT_TEST(DelayedFirstReadSurvivesCompactionAndRestart) {
+        TSnapshotRetentionTest test;
+        const auto snapshot = test.WriteVersion(1);
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(1));
+        test.WriteVersion(2);
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        test.RunCleanup();
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardA));
+
+        const auto compaction = CompactTable(test.GetRuntime(), test.ShardA, test.TableA, false);
+        UNIT_ASSERT_VALUES_EQUAL(compaction.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        RebootTablet(test.GetRuntime(), test.ShardA, test.Sender);
+
+        const auto retained = test.ReadSnapshot(test.ShardA, test.TableA, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(retained.get()), "1, 1\n");
+        UNIT_ASSERT(retained->Record.GetFinished());
+
+        // The same version was not retained for the other table.
+        const auto removed = test.ReadSnapshot(test.ShardB, test.TableB, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(removed->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+
+        test.PublishRegistry();
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+        const auto released = test.ReadSnapshot(test.ShardA, test.TableA, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(released->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(RegistrationCannotResurrectRemovedHistory) {
+        TSnapshotRetentionTest test;
+        const auto snapshot = test.WriteVersion(1);
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(1));
+        test.WriteVersion(2);
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry();
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+
+        test.PublishRegistry({snapshot}, {test.TableA});
+        const auto result = test.ReadSnapshot(test.ShardA, test.TableA, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(MissingRegistryDoesNotResurrectRemovedHistory) {
+        TSnapshotRetentionTest test;
+        const auto snapshot = test.WriteVersion(1);
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(1));
+        test.WriteVersion(2);
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        test.RunCleanup();
+
+        test.GetRuntime().GetAppData(0).SnapshotRegistryHolder->Set(nullptr);
+        const auto retained = test.ReadSnapshot(test.ShardA, test.TableA, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(retained.get()), "1, 1\n");
+        const auto removed = test.ReadSnapshot(test.ShardB, test.TableB, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(removed->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(DisabledRetentionRejectsOldSnapshot) {
+        TSnapshotRetentionTest test;
+        const auto snapshot = test.WriteVersion(1);
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(1));
+        test.WriteVersion(2);
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        test.RunCleanup();
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardA));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+
+        test.GetRuntime().GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(false);
+        const auto result = test.ReadSnapshot(test.ShardA, test.TableA, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST_TWIN(IteratorKeepsSnapshotAfterRegistryRelease, DisableRetention) {
+        TSnapshotRetentionTest test;
+        ExecSQL(test.Server, test.Sender,
+            "UPSERT INTO `/Root/table-a` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        const auto snapshot = AcquireReadSnapshot(test.GetRuntime(), "/Root");
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(1));
+        ExecSQL(test.Server, test.Sender,
+            "UPSERT INTO `/Root/table-a` (key, value) VALUES (2, 20);"
+            "DELETE FROM `/Root/table-a` WHERE key = 3;");
+        test.WriteVersion(10);
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        test.RunCleanup();
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardA));
+
+        const auto first = test.ReadSnapshot(test.ShardA, test.TableA, snapshot, 1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(first.get()), "1, 1\n");
+        UNIT_ASSERT(!first->Record.GetFinished());
+
+        test.PublishRegistry();
+        if (DisableRetention) {
+            test.GetRuntime().GetAppData(0).FeatureFlags.SetEnableSnapshotsLocking(false);
+        }
+        test.RunCleanup();
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+        const auto compaction = CompactTable(test.GetRuntime(), test.ShardA, test.TableA, false);
+        UNIT_ASSERT_VALUES_EQUAL(compaction.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+
+        test.AckRead(test.ShardA, first->Record);
+        const auto rest = WaitReadResult(test.Server);
+        UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(rest.get()), "2, 2\n3, 3\n");
+        UNIT_ASSERT(rest->Record.GetFinished());
+
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+    }
+
+    Y_UNIT_TEST(LastCancelledIteratorReleasesSnapshot) {
+        TSnapshotRetentionTest test;
+        ExecSQL(test.Server, test.Sender,
+            "UPSERT INTO `/Root/table-a` (key, value) VALUES (1, 1), (2, 2);");
+        const auto snapshot = AcquireReadSnapshot(test.GetRuntime(), "/Root");
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(1));
+        test.WriteVersion(10);
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        test.RunCleanup();
+
+        for (ui64 readId : {1, 2}) {
+            const auto result = test.ReadSnapshot(test.ShardA, test.TableA, snapshot, readId, 1);
+            UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(result.get()), "1, 1\n");
+            UNIT_ASSERT(!result->Record.GetFinished());
+        }
+
+        test.PublishRegistry();
+        test.CancelRead(test.ShardA, 1);
+        test.RunCleanup();
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+
+        test.CancelRead(test.ShardA, 2);
+        test.RunCleanup();
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+    }
+
+    Y_UNIT_TEST(TruncateInvalidatesRetainedPointBelowWatermark) {
+        TSnapshotRetentionTest test;
+        const auto snapshot = test.WriteVersion(1);
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(1));
+        test.WriteVersion(2);
+        test.GetRuntime().SimulateSleep(TDuration::Seconds(3));
+        test.PublishRegistry({snapshot}, {test.TableA});
+        test.RunCleanup();
+        UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardA));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardA, snapshot));
+
+        const auto txId = AsyncTruncateTable(test.Server, test.Sender, "/Root", "table-a");
+        WaitTxNotification(test.Server, test.Sender, txId);
+        UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
+
+        const auto result = test.ReadSnapshot(test.ShardA, test.TableA, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
     }
 }
 

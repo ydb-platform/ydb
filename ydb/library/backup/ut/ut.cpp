@@ -730,6 +730,35 @@ Y_UNIT_TEST(PathParseTest) {
     UNIT_CHECK_GENERATED_EXCEPTION(RelPathFromAbsolute("/ru/my_db", ""), yexception);
 }
 
+Y_UNIT_TEST(BackupMetadataPaths) {
+    const struct {
+        TString Base;
+        TString Path;
+        TString Expected;
+    } cases[] = {
+        {"/Root", "mydb", "/Root/mydb"},
+        {"/Root", "Root/mydb", "/Root/Root/mydb"},
+        {"/Root", "/Other/mydb", "/Other/mydb"},
+        {"/Root/mydb", "", "/Root/mydb"},
+        {"/Root/mydb", "table", "/Root/mydb/table"},
+        {"/Root/mydb", "mydb/table", "/Root/mydb/mydb/table"},
+        {"/Root/mydb", "Root/mydb/table", "/Root/mydb/Root/mydb/table"},
+        {"/Root/mydb", "/Root/mydb/table", "/Root/mydb/table"},
+        {"/Root/mydb", "Root/Root/mydb/table", "/Root/mydb/Root/Root/mydb/table"},
+        {"/Root/mydb", "Root2/table", "/Root/mydb/Root2/table"},
+        {"/Root/mydb", "/Other/table", "/Other/table"},
+        {"/Root/mydb", "/", "/"},
+        {"/Root/Root/mydb", "", "/Root/Root/mydb"},
+        {"/", "table", "/table"},
+        {"", "", ""},
+        {"", "/Root/mydb/table", "/Root/mydb/table"},
+    };
+    for (const auto& [base, path, expected] : cases) {
+        UNIT_ASSERT_VALUES_EQUAL_C(ResolveBackupPath(base, path), expected, base << ": " << path);
+    }
+    UNIT_CHECK_GENERATED_EXCEPTION(ResolveBackupPath("mydb", "table"), yexception);
+}
+
 Y_UNIT_TEST(UnknownFieldsHidden) {
     Ydb::Table::CreateTableRequest proto;
     proto.set_path("/my_db/my_table");

@@ -63,7 +63,8 @@ jobs:
     if: inputs.wait
     needs: dispatch
     runs-on: [self-hosted, runner-waiter]
-    timeout-minutes: 400
+    # Match run_tests.yml / long regression; must cover executor job wall time.
+    timeout-minutes: 1200
     steps:
       - name: Checkout
         uses: actions/checkout@v5

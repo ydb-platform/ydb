@@ -187,7 +187,8 @@ def cmd_wait():
 
     status = ""
     conclusion = ""
-    for _ in range(720):
+    # 2400 * 30s = 20h — aligns with dispatch_remote.yml wait job timeout (1200m).
+    for _ in range(2400):
         _, state = gh("GET", f"{api()}/actions/runs/{run_id}")
         status = state.get("status") or ""
         conclusion = state.get("conclusion") or ""

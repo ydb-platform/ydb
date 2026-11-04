@@ -1195,7 +1195,7 @@ namespace NKikimr {
             auto checkStatus = Hull->CheckBlockCmdAndAllocLsn(tabletId, gen, issuerGuid, &actGen, &seg);
             NKikimrProto::EReplyStatus status = checkStatus.Status;
             bool postponed = checkStatus.Postponed;
-            bool postponeUntilLsn = checkStatus.Lsn;
+            ui64 postponeUntilLsn = checkStatus.Lsn;
             TEvBlobStorage::TEvVBlockResult::TTabletActGen act(tabletId, actGen);
             std::unique_ptr<TEvBlobStorage::TEvVBlockResult> result(CreateResult(VCtx, status, checkStatus.ErrorReason, &act,
                 ev, now, SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid()));

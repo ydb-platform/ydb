@@ -585,6 +585,10 @@ message TFinalizeBuildIndex {
     optional uint64 BuildIndexId = 5;
 
     optional NKikimrSchemeOp.TBuildIndexOutcome Outcome = 6;
+
+    // Additional snapshot to remove in the same transaction (vector index delta scan).
+    optional uint64 ExtraSnapshotStep = 7;
+    optional uint64 ExtraSnapshotTxId = 8;
 }
 
 message TDropIndexNotice {
@@ -1590,6 +1594,7 @@ message TEvEraseRowsRequest {
     repeated bytes KeyColumns = 3; // SerilializedCellVector
     optional uint64 SchemaVersion = 5;
     optional uint64 OverloadSubscribe = 6;
+    optional bool WriteToTableShadow = 7;
 
     oneof Condition {
         TExpirationCondition Expiration = 4;
@@ -2035,6 +2040,70 @@ message TEvPrefixKMeansRequest {
 }
 
 message TEvPrefixKMeansResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 RequestSeqNoGeneration = 4;
+    optional uint64 RequestSeqNoRound = 5;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 6;
+    repeated Ydb.Issue.IssueMessage Issues = 7;
+
+    reserved 8 to 11;
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+
+    optional bytes LastKeyAck = 13;
+}
+
+// Applies main table changes in (FromSnapshot, ToSnapshot] to the shadow copy of
+// a vector index posting table. Changed rows are resolved into clusters via the
+// already built level tables: old posting rows are erased, new ones are inserted,
+// and newly discovered prefixes are added to the prefix table.
+//
+// The scan is queued at ToSnapshot, so the whole row version history down to
+// FromSnapshot has to be retained.
+message TEvDeltaKMeansRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 FromSnapshotTxId = 4;
+    optional uint64 FromSnapshotStep = 5;
+    optional uint64 ToSnapshotTxId = 6;
+    optional uint64 ToSnapshotStep = 7;
+
+    optional uint64 SeqNoGeneration = 8;
+    optional uint64 SeqNoRound = 9;
+
+    optional Ydb.Table.VectorIndexSettings Settings = 10;
+
+    optional string LevelName = 11;
+    optional string OutputName = 12;
+    // Empty for a non-prefixed index.
+    optional string PrefixName = 13;
+    // Number of leading index key columns forming the prefix, 0 for a non-prefixed index.
+    optional uint32 PrefixColumns = 14;
+
+    optional string EmbeddingColumn = 15;
+    repeated string DataColumns = 16;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 17;
+    optional string DatabaseName = 18;
+
+    optional uint32 OverlapClusters = 19;
+    optional double OverlapRatio = 20;
+
+    optional NKikimrTx.TKeyRange KeyRange = 21;
+
+    // Names of the index prefix columns, in the index key order. Empty for a
+    // non-prefixed index; when empty, PrefixColumns leading table key columns are used.
+    repeated string PrefixColumnNames = 22;
+}
+
+message TEvDeltaKMeansResponse {
     optional uint64 Id = 1;
 
     optional uint64 TabletId = 2;

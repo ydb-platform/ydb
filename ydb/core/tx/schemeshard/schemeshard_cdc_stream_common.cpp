@@ -35,16 +35,21 @@ void MaybeGuardIndexWithBaseCdcScanLock(
 
     const auto baseId = basePath.Base()->PathId;
     const auto lock = context.SS->LockedPaths.find(baseId);
-    const auto snapshot = context.SS->TablesWithSnapshots.find(baseId);
     const bool hasLock = lock != context.SS->LockedPaths.end();
-    const bool hasSnapshot = snapshot != context.SS->TablesWithSnapshots.end();
+    const auto snapshots = context.SS->TablesWithSnapshots.find(baseId);
+    const bool hasSnapshots = snapshots != context.SS->TablesWithSnapshots.end();
 
-    if (!hasLock || !hasSnapshot) {
+    if (!hasLock || !hasSnapshots) {
         return;
     }
 
-    const bool matchingSnapshot = lock->second == snapshot->second
-        && context.SS->SnapshotsStepIds.contains(snapshot->second);
+    bool matchingSnapshot = false;
+    for (const auto& snap: snapshots->second) {
+        if (snap == lock->second && context.SS->SnapshotsStepIds.contains(snap)) {
+            matchingSnapshot = true;
+            break;
+        }
+    }
 
     if (!matchingSnapshot) {
         return;

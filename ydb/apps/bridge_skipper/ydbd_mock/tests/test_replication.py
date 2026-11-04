@@ -261,10 +261,8 @@ class StaleReplicaTest(ReplicationCase):
         started = inst2.events.query(kind="start")[0]
         self.assertTrue(started["loaded"])
         await wait_until(
-            lambda: any(e["kind"] == "pull.refused" for e in h.instances[0].events.query()) or
-            h.instances[0].reach.last_generation.get(1) == 1,
-            message="heartbeats exchanged")
-        await asyncio.sleep(0.3)
+            lambda: "pull.refused" in inst2.events.kinds(),
+            message="disconnected pile refusing the newer state")
         self.assertEqual(inst2.state.generation, 1, "a DISCONNECTED pile must not be pulled to")
         self.assertEqual(inst2.state.per_pile, [S, S])
         self.assertIn("pull.refused", inst2.events.kinds())

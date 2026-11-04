@@ -7,6 +7,7 @@ namespace NKikimr::NStat {
 struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
     NKikimrStat::TEvSchemeShardStats Record;
     std::shared_ptr<TString> UpdatedStats;
+    TBaseStatisticsTotals UpdatedTotals;
 
     TTxSchemeShardStats(TSelf* self, NKikimrStat::TEvSchemeShardStats&& record)
         : TTxBase(self)
@@ -41,7 +42,12 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
             !statRecord.HasAreAllStatsFull() || statRecord.GetAreAllStatsFull())
         {
             UpdatedStats = std::make_shared<TString>(stats);
+<<<<<<< HEAD
         } else {
+=======
+            UpdatedTotals = CalculateBaseStatisticsTotals(statRecord);
+        } else if (existingStats.Latest) {
+>>>>>>> 03ddd4b6aa4 (Avoid full statistics rescans after each SchemeShard report (#58061))
             NKikimrStat::TSchemeShardStats oldStatRecord;
             Y_PROTOBUF_SUPPRESS_NODISCARD oldStatRecord.ParseFromString(*existingStats.Latest);
 
@@ -81,6 +87,7 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
 
             UpdatedStats = std::make_shared<TString>();
             Y_PROTOBUF_SUPPRESS_NODISCARD newStatRecord.SerializeToString(UpdatedStats.get());
+            UpdatedTotals = CalculateBaseStatisticsTotals(newStatRecord);
         }
 
         db.Table<Schema::BaseStatistics>().Key(schemeShardId).Update(
@@ -135,8 +142,24 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("TTxSchemeShardStats::Complete",
             {"tabletId", Self->TabletID()});
+<<<<<<< HEAD
         Self->BaseStatistics[Record.GetSchemeShardId()].Committed = UpdatedStats;
         Self->ReportBaseStatisticsCounters();
+=======
+        if (UpdatedStats) {
+            auto& stats = Self->BaseStatistics[Record.GetSchemeShardId()];
+            // Latest may already contain a later transaction's update.
+            Self->BaseStatisticsTotals.RowCount -= stats.CommittedTotals.RowCount;
+            Self->BaseStatisticsTotals.BytesSize -= stats.CommittedTotals.BytesSize;
+            Self->BaseStatisticsTotals.RowCount += UpdatedTotals.RowCount;
+            Self->BaseStatisticsTotals.BytesSize += UpdatedTotals.BytesSize;
+            stats.Committed = UpdatedStats;
+            stats.CommittedTotals = UpdatedTotals;
+            Self->ReportBaseStatisticsCounters();
+        }
+
+        Self->InvalidateCachedChangeCounters();
+>>>>>>> 03ddd4b6aa4 (Avoid full statistics rescans after each SchemeShard report (#58061))
     }
 };
 

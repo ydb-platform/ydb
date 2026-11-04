@@ -328,6 +328,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         Self->SubscribeForConfigChanges(ctx);
 
         Self->Schedule(Self->GetPropagateInterval(), new TEvPrivate::TEvPropagate());
+        Self->Schedule(Self->AnalyzeCountersReportPeriod, new TEvPrivate::TEvReportAnalyzeCounters());
 
         if (Self->EnableColumnStatistics) {
             Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
@@ -352,7 +353,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             Self->Navigate();
         }
 
-        Self->ReportBaseStatisticsCounters();
+        Self->RebuildBaseStatisticsCounters();
         Self->Become(&TThis::StateWork);
     }
 };

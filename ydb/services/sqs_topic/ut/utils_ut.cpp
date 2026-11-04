@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
             false
         );
 
-        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "ydb_sqs_consumer");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "shared/ydb_sqs_consumer");
     }
 
     Y_UNIT_TEST(ConvertOldConsumerNameForNonSharedConsumerInFederation) {
@@ -359,7 +359,7 @@ Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
             false
         );
 
-        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "account@dir--topic");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "account/dir--topic");
     }
 
     Y_UNIT_TEST(DoesNotPrefixSharedForAlreadyConvertedConsumerInFederation) {
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
         );
 
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(fromPath, "consumer"), pathForm);
-        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(fromConfigName, "consumer"), "crowdplatform@ycs-tasks@sqs@push2yt@push2yt_consumer");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(fromConfigName, "consumer"), pathForm);
 
         const auto shared = CollectRequestMessageCountMetricsLabels(
             runtime,
@@ -414,7 +414,7 @@ Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
         };
 
         assertConsumer(false, pathForm, pathForm);
-        assertConsumer(false, configName, configName);
+        assertConsumer(false, configName, pathForm);
         assertConsumer(false, "shared/ydb_sqs_consumer", "shared/ydb_sqs_consumer");
         assertConsumer(true, pathForm, pathForm);
         assertConsumer(true, configName, configName);

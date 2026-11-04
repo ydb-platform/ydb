@@ -21,7 +21,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/test_connection/test_connection.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
+#include <ydb/library/yql/providers/pq/gateway/native/topic_client_settings.h>
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/actors/http/http_proxy.h>
@@ -170,7 +170,7 @@ void Init(const NFq::NConfig::TConfig& protoConfig, ui32 nodeId, const TActorReg
 
     const NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory =
         NYql::CreateStructuredTokenCredentialsFactory(securedCredentialsFactory);
-    auto commonTopicClientSettings = NKqp::MakeCommonTopicClientSettings(
+    auto commonTopicClientSettings = NYql::MakeCommonTopicClientSettings(
         commonConfig.GetTopicClientHandlersExecutorThreadsNum(), commonConfig.GetTopicClientCompressionExecutorThreadsNum());
 
     if (protoConfig.GetRowDispatcher().GetEnabled()) {

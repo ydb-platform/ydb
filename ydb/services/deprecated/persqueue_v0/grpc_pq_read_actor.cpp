@@ -4,6 +4,7 @@
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
@@ -690,14 +691,13 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
 
     // ToDo[migration] - consider separate consumer conversion logic - ?
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-        ClientPath = init.GetClientId();
-        ExternalClientId = ClientPath;
+        ExternalClientId = init.GetClientId();
         InternalClientId = ConvertNewConsumerName(init.GetClientId());
     } else {
-        ClientPath = StripLeadSlash(MakeConsumerPath(init.GetClientId()));
-        ExternalClientId = ClientPath;
+        ExternalClientId = StripLeadSlash(MakeConsumerPath(init.GetClientId()));
         InternalClientId = ConvertNewConsumerName(init.GetClientId());
     }
+    ClientPath = NKikimr::NPQ::MetricsConsumerName(init.GetClientId());
 
     Auth = event->Request.GetCredentials();
     event->Request.ClearCredentials();

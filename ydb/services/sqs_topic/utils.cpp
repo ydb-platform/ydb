@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/base/iface.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
@@ -15,19 +16,6 @@
 #include <format>
 
 namespace NKikimr::NSqsTopic {
-
-    namespace {
-
-        // QueueUrl stores ConvertOldConsumerName(config name). Converting that path again
-        // sees no '@' and prefixes "shared/". Restore the config name and convert once,
-        // same as topic.committed_lag_messages.
-        TString MetricsConsumerName(const TString& consumer) {
-            const auto& pqConfig = AppData()->PQConfig;
-            const TString canonical = NPersQueue::ConvertNewConsumerName(consumer, pqConfig);
-            return NPersQueue::ConvertOldConsumerName(canonical, pqConfig);
-        }
-
-    } // namespace
 
     TQueueNameWithConsumer SplitExtendedQueueName(TStringBuf queueNameExt) {
         TQueueNameWithConsumer result;
@@ -110,7 +98,11 @@ namespace NKikimr::NSqsTopic {
         }
         common.emplace_back("method", method);
         common.emplace_back("topic", adjustedTopicPath);
-        common.emplace_back("consumer", MetricsConsumerName(consumerName));
+        // QueueUrl stores the path form. MetricsConsumerName converts the config name,
+        // so restore that name before applying the label function.
+        NKikimrPQ::TPQTabletConfig::TConsumer consumer;
+        consumer.SetName(NPersQueue::ConvertNewConsumerName(consumerName, AppData()->PQConfig));
+        common.emplace_back("consumer", NPQ::MetricsConsumerName(consumer));
         std::move(labels.begin(), labels.end(), std::back_inserter(common));
         return common;
     }

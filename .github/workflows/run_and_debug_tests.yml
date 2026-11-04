@@ -61,7 +61,9 @@ jobs:
             .github/scripts/ci
           sparse-checkout-cone-mode: false
 
+      # Own step so "what launched" lands in Job summary before the long wait.
       - name: Dispatch executor workflow on remote_executor_ref
+        id: dispatch
         env:
           # GITHUB_TOKEN does not start new workflow runs; use PAT + curl (no gh required).
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
@@ -69,12 +71,22 @@ jobs:
           CODE_REF: ${{ inputs.code_ref || github.sha }}
           TEST_TARGETS: ${{ inputs.test_targets }}
           BUILD_PRESET: ${{ inputs.build_preset }}
-          WAIT_FOR_REMOTE: ${{ inputs.wait_for_remote }}
+          WAIT_MODE: ${{ inputs.wait_for_remote && 'wait+mirror' || 'fire-and-forget' }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: bash .github/scripts/ci/dispatch_remote_executor.sh start
+
+      - name: Wait and mirror executor summary
+        if: inputs.wait_for_remote
+        env:
+          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          EXECUTOR_RUN_ID: ${{ steps.dispatch.outputs.executor_run_id }}
+          EXECUTOR_RUN_URL: ${{ steps.dispatch.outputs.executor_run_url }}
           REPO: ${{ github.repository }}
           AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
           AWS_BUCKET: ${{ vars.AWS_BUCKET }}
         shell: bash
-        run: bash .github/scripts/ci/dispatch_remote_executor.sh
+        run: bash .github/scripts/ci/dispatch_remote_executor.sh wait
 
   prepare:
     if: inputs.executor == 'ydb_yc'

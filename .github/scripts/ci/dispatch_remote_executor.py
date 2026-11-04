@@ -180,10 +180,8 @@ def cmd_start():
 def cmd_wait():
     run_id = env("EXECUTOR_RUN_ID")
     run_url = os.environ.get("EXECUTOR_RUN_URL") or f"https://github.com/{env('REPO')}/actions/runs/{run_id}"
-    print(f"Waiting for executor run {run_id} ...")
-    append_summary(
-        f"### Waiting for remote executor\n- **executor run:** [{run_id}]({run_url})\n"
-    )
+    # Link already in the dispatch job summary; only log here.
+    print(f"Waiting for executor run {run_id} ({run_url}) ...")
 
     status = ""
     conclusion = ""

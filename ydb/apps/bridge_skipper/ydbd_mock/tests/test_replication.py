@@ -84,11 +84,10 @@ class Harness:
 
 async def wait_until(predicate, timeout=4.0, step=0.01, message="condition"):
     deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return
+    while not predicate():
+        if time.monotonic() >= deadline:
+            raise AssertionError("timed out waiting for %s" % message)
         await asyncio.sleep(step)
-    raise AssertionError("timed out waiting for %s" % message)
 
 
 class ReplicationCase(unittest.IsolatedAsyncioTestCase):

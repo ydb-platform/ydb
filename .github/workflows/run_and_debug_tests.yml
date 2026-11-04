@@ -77,7 +77,7 @@ jobs:
           REPO: ${{ github.repository }}
           WORKFLOW_NAME: ${{ github.workflow }}
         shell: bash
-        run: bash .github/scripts/ci/dispatch_remote_executor.sh start
+        run: python3 .github/scripts/ci/dispatch_remote_executor.py start
 
   wait_remote:
     if: inputs.executor == 'remote' && inputs.wait_for_remote
@@ -102,7 +102,7 @@ jobs:
           AWS_BUCKET: ${{ vars.AWS_BUCKET }}
           WORKFLOW_NAME: ${{ github.workflow }}
         shell: bash
-        run: bash .github/scripts/ci/dispatch_remote_executor.sh wait
+        run: python3 .github/scripts/ci/dispatch_remote_executor.py wait
 
   prepare:
     if: inputs.executor == 'ydb_yc'

@@ -86,16 +86,28 @@ do_start() {
     --arg build_preset "$preset" \
     '{ref:$ref, inputs:{code_ref:$code_ref, test_targets:$test_targets, build_preset:$build_preset}}')"
 
-  local before_epoch http_code
+  local before_epoch http_code attempt
   before_epoch="$(date -u +%s)"
-  http_code="$(curl_gh -sS -o /tmp/dispatch_resp.txt -w '%{http_code}' -X POST \
-    "${api}/actions/workflows/${workflow_id}/dispatches" \
-    -d "$payload")"
-  if [ "$http_code" != "204" ]; then
+  http_code=""
+  for attempt in 1 2 3 4 5; do
+    http_code="$(curl_gh -sS -o /tmp/dispatch_resp.txt -w '%{http_code}' -X POST \
+      "${api}/actions/workflows/${workflow_id}/dispatches" \
+      -d "$payload" || true)"
+    if [ "$http_code" = "204" ]; then
+      break
+    fi
+    # GitHub occasionally returns 5xx/429 on workflow_dispatch (seen in smoke).
+    if [[ "$http_code" =~ ^(429|5[0-9][0-9])$ ]] && [ "$attempt" -lt 5 ]; then
+      echo "dispatch HTTP ${http_code}, retry ${attempt}/5 ..."
+      cat /tmp/dispatch_resp.txt || true
+      sleep $((attempt * 5))
+      before_epoch="$(date -u +%s)"
+      continue
+    fi
     echo "::error::dispatch failed HTTP ${http_code}"
     cat /tmp/dispatch_resp.txt || true
     exit 1
-  fi
+  done
 
   local run_id="" run_url="" attempt
   for attempt in $(seq 1 30); do

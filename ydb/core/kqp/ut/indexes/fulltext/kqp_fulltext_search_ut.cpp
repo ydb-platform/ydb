@@ -7,6 +7,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/core/tx/schemeshard/index/build_index.h>
@@ -390,6 +391,13 @@ Y_UNIT_TEST(SelectWithFulltextMatchEmpty) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    auto result = db.ExecuteQuery(R"sql(
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE FulltextMatch(Text, "");
+    )sql", NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    UNIT_ASSERT(result.GetIssues().ToString().find("No search terms were extracted from the query") != std::string::npos);
 }
 
 // Regression: a cached fulltext query plan pins the index impl-table schema version at
@@ -1562,8 +1570,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardSingleStar) {
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 
@@ -1693,15 +1701,10 @@ void DoSelectWithFulltextMatchAndNgramWildcard(bool relevance, bool edge, bool c
             ORDER BY `Key`;
         )sql";
         const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        if (edge) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CompareYson(R"([
-                [[0u];["Arena Allocation"]]
-            ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
-        }
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [[0u];["Arena Allocation"]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 
@@ -1918,8 +1921,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardBoundaries) {
             ORDER BY `Key`;
         )sql", q.c_str());
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 
@@ -1981,8 +1984,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardUtf8Size) {
             ORDER BY `Key`;
         )sql", q.c_str());
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
 
     DoValidateWildcardMatchQuery(db, "%4️⃣", R"([
@@ -2175,12 +2178,12 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchAndNgramWildcardUnicode, RELEVANCE, UTF8
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "%🐶%")  -- should fail with BAD_REQUEST: query shorter than ngrams, no search terms extracted
+            WHERE FulltextMatch(`Text`, "%🐶%")  -- Shorter than the n-grams: no index matches.
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 
@@ -2240,8 +2243,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndEdgeNgramWildcard) {
             ORDER BY `Key`;
         )sql";
         const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 
@@ -2304,14 +2307,12 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardVariableSize) {
     DropIndex(db);
     AddIndexNGram(db, 4, 4);
 
-    auto singleRetryQuery = [&](auto& db, const TString& query, const EStatus expected = EStatus::SUCCESS) {
+    auto singleRetryQuery = [&](auto& db, const TString& query) {
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        if (result.GetStatus() != expected) {
+        if (result.GetStatus() != EStatus::SUCCESS) {
             result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expected, result.GetIssues().ToString());
-            return result;
         }
-
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         return result;
     };
 
@@ -2323,7 +2324,6 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardVariableSize) {
         )sql";
 
         auto result = singleRetryQuery(db, query);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([
             [[1u];["Area Renaissance"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
@@ -2339,9 +2339,9 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardVariableSize) {
             WHERE FulltextMatch(`Text`, "lu%aed%", "Wildcard" as Mode)
             ORDER BY `Key`;
         )sql";
-        auto result = singleRetryQuery(db, query, EStatus::BAD_REQUEST);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
+        auto result = singleRetryQuery(db, query);
+        CompareYson(R"([[[3u];["Bern city"]]])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[4u];["lusedaedae"]];[[5u];["lusedaeda"]]])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
     }
 
     DropIndex(db);
@@ -2362,7 +2362,6 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardVariableSize) {
             ORDER BY `Key`;
         )sql";
         auto result = singleRetryQuery(db, query);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([
             [[1u];["Area Renaissance"]]
@@ -2398,7 +2397,6 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardVariableSize) {
             ORDER BY `Key`;
         )sql";
         auto result = singleRetryQuery(db, query);
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         CompareYson(R"([
             [[1u];["Area Renaissance"]]
@@ -2452,21 +2450,333 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchShorterThanMinNgram, RELEVANCE, UTF8) {
             WHERE FulltextMatch(`Text`, "%at%");
         )sql");
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson("[]", NYdb::FormatResultSetYson(result.GetResultSet(1)));
     }
+}
 
-    for (const TString& q : {"at", "\%at\%"}) {
+Y_UNIT_TEST(NgramScanFallback) {
+    auto kikimr = KikimrWithCompact(true);
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db, true);
+    UpsertTexts(db);
+    auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text) VALUES
+            (0, NULL), (1, ""), (2, "unrelated"), (500, "ab"), (600, "é");
+    )sql", NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+
+    const auto settings = NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Basic);
+    const auto execute = [&](const TString& view, const TString& predicate, const std::string& pattern) {
         const TString query = std::format(R"sql(
-            SELECT *
-            FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "{}")
-            LIMIT 100;
-        )sql", q.c_str());
-        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
+            DECLARE $pattern AS String;
+            SELECT Key FROM `/Root/Texts` VIEW {} WHERE {} ORDER BY Key;
+        )sql", view.c_str(), predicate.c_str());
+        const auto params = TParamsBuilder().AddParam("$pattern").String(pattern).Build().Build();
+        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx(), params, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetStats());
+        return result;
+    };
+
+    for (bool edge : {false, true}) {
+        AddIndexNGram(db, 3, 3, false, edge);
+        bool first = true;
+        // Reuse one cached query while switching between scan and index reads.
+        for (const std::string& pattern : {"%at%", "cat%", "%é%", "missing%", "%a%b%", "%", "", "%at%"}) {
+            const auto result = execute("fulltext_idx", "FulltextMatch(Text, $pattern, \"Wildcard\" AS Mode)", pattern);
+            const auto primary = execute("PRIMARY KEY", "Text ILIKE $pattern", pattern);
+            CompareYson(FormatResultSetYson(primary.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(0)), TString(pattern));
+            const auto& stats = TProtoAccessor::GetProto(*result.GetStats());
+            if (!first) {
+                UNIT_ASSERT(stats.compilation().from_cache());
+            }
+            first = false;
+            if (pattern == "missing%") {
+                // Indexable, but no hits: any main-table rows would come from an unwanted scan.
+                AssertTableStats(result, "/Root/Texts", {.ExpectedReads = 0});
+            }
+        }
+
+        const auto point = execute("fulltext_idx",
+            "Key = 200 AND FulltextMatch(Text, $pattern, \"Wildcard\" AS Mode)", "%at%");
+        CompareYson("[[[200u]]]", FormatResultSetYson(point.GetResultSet(0)));
+        AssertTableStats(point, "/Root/Texts", {.ExpectedReads = 1});
+
+        const auto points = execute("fulltext_idx",
+            "Key IN (100, 200) AND FulltextMatch(Text, $pattern, \"Wildcard\" AS Mode)", "%at%");
+        CompareYson("[[[100u]];[[200u]]]", FormatResultSetYson(points.GetResultSet(0)));
+        AssertTableStats(points, "/Root/Texts", {.ExpectedReads = 2});
+
+        for (const auto& [predicate, pattern] : std::vector<std::pair<TString, std::string>>{
+                {"Text LIKE $pattern", "%é%"}, {"Text ILIKE $pattern", "%AT%"},
+                {"StartsWith(Text, $pattern)", "a"}, {"EndsWith(Text, $pattern)", "b"},
+                {"YQL::StringContains(Text, $pattern)", "é"}, {"Text = $pattern", "ab"}}) {
+            const auto result = execute("fulltext_idx", predicate, pattern);
+            const auto primary = execute("PRIMARY KEY", predicate, pattern);
+            CompareYson(FormatResultSetYson(primary.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(0)), predicate);
+        }
+
+        // The matching row follows non-matching rows; LIMIT must apply after filtering.
+        auto limited = db.ExecuteQuery(R"sql(
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+            WHERE FulltextMatch(Text, "%é%", "Wildcard" AS Mode) LIMIT 1;
+        )sql", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(limited.GetStatus(), EStatus::SUCCESS, limited.GetIssues().ToString());
+        CompareYson("[[[600u]]]", FormatResultSetYson(limited.GetResultSet(0)));
+        DropIndex(db);
     }
+}
+
+Y_UNIT_TEST(PrefixedNgramScanFallback) {
+    auto kikimr = KikimrPrefix(true);
+    auto db = kikimr.GetQueryClient();
+    for (const TString primaryKey : {"Key", "Data, Key"}) {
+        auto create = db.ExecuteQuery(std::format(R"sql(
+            CREATE TABLE `/Root/Texts` (
+                Data String, Key Uint64, Text String, PRIMARY KEY ({})
+            );
+        )sql", primaryKey.c_str()), NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+        UpsertTexts(db);
+        auto add = db.ExecuteQuery(R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain ON (Data, Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true,
+                    use_filter_ngram=true, filter_ngram_min_length=3, filter_ngram_max_length=3);
+        )sql", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(add.GetStatus(), EStatus::SUCCESS, add.GetIssues().ToString());
+
+        const auto params = TParamsBuilder().AddParam("$prefix").String("dogs data").Build()
+            .AddParam("$pattern").String("%at%").Build().Build();
+        const auto settings = NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Basic);
+        auto result = db.ExecuteQuery(R"sql(
+            DECLARE $prefix AS String;
+            DECLARE $pattern AS String;
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+            WHERE Data = $prefix AND FulltextMatch(Text, $pattern, "Wildcard" AS Mode);
+            SELECT Key FROM `/Root/Texts` VIEW PRIMARY KEY
+            WHERE Data = $prefix AND Text ILIKE $pattern;
+        )sql", NQuery::TTxControl::NoTx(), params, settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[[[200u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(FormatResultSetYson(result.GetResultSet(1)), FormatResultSetYson(result.GetResultSet(0)));
+        if (primaryKey != "Key") {
+            // The prefix range bounds both reads to one row; the other schema needs the prefix filter.
+            UNIT_ASSERT(result.GetStats());
+            AssertTableStats(result, "/Root/Texts", {.ExpectedReads = 2});
+        }
+        auto drop = db.ExecuteQuery("DROP TABLE `/Root/Texts`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(drop.GetStatus(), EStatus::SUCCESS, drop.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST(SubstringSuggest) {
+    auto kikimr = KikimrWithCompact(true);
+    auto db = kikimr.GetQueryClient();
+
+    auto create = db.ExecuteQuery(R"sql(
+        CREATE TABLE `/Root/Texts` (
+            Text String NOT NULL,
+            Key Uint64,
+            Data String,
+            PRIMARY KEY (Text)
+        );
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+    UpsertTexts(db);
+    // Exact matches, including values too short to appear in the n-gram index.
+    auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text) VALUES
+            (500, "Cat"), (600, "Ca"), (700, "C");
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+
+    AddIndexNGram(db);
+
+    const std::vector<std::pair<std::string, TString>> cases = {
+        {"Cat", "[[[500u]];[[100u]];[[300u]];[[200u]]]"}, // Exact, prefixes, substring.
+        {"Ca", "[[[600u]];[[100u]];[[300u]];[[500u]];[[200u]]]"}, // Short target also finds substrings.
+        {"C", "[[[700u]];[[100u]];[[300u]];[[500u]];[[600u]]]"},
+        {"ats", "[[[100u]];[[200u]];[[300u]]]"}, // Substrings only.
+        {"at", "[[[100u]];[[200u]];[[300u]];[[500u]]]"},
+        {"missing", "[]"},
+    };
+    const TString query = R"sql(
+        DECLARE $target AS String;
+        DECLARE $pattern AS String;
+
+        -- Exact strings precede their extensions in primary-key order.
+        -- Each branch supplies at most five rows before deduplication and ranking.
+        SELECT Key FROM (
+            (SELECT Key, Text FROM `/Root/Texts`
+             WHERE StartsWith(Text, $target)
+             ORDER BY Text LIMIT 5)
+            UNION
+            (SELECT Key, Text FROM `/Root/Texts` VIEW fulltext_idx
+             WHERE FulltextMatch(Text, $pattern, "Wildcard" AS Mode)
+             LIMIT 5)
+        )
+        ORDER BY Text = $target DESC, StartsWith(Text, $target) DESC, Key
+        LIMIT 5;
+    )sql";
+    for (const auto& [target, expected] : cases) {
+        const auto params = NYdb::TParamsBuilder()
+            .AddParam("$target").String(target).Build()
+            .AddParam("$pattern").String("%" + target + "%").Build()
+            .Build();
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(expected, NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(FulltextMatchReadBatches) {
+    const auto oldMaxSegment = NDataShard::gFulltextMaxSegment;
+    const auto oldRead = GetDefaultReadSettings();
+    const auto oldAck = GetDefaultReadAckSettings();
+    Y_DEFER {
+        NDataShard::gFulltextMaxSegment = oldMaxSegment;
+        SetDefaultReadSettings(oldRead->Record);
+        SetDefaultReadAckSettings(oldAck->Record);
+    };
+    NDataShard::gFulltextMaxSegment = 512;
+
+    auto kikimr = KikimrWithCompact(true, false);
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    auto db = kikimr.GetQueryClient();
+    kikimr.RunCall([&] {
+        CreateTexts(db);
+        auto upsert = db.ExecuteQuery(R"sql(
+            $rows = ListMap(ListFromRange(1ul, 2001ul), ($key) -> (
+                AsStruct($key AS Key, "Cats crowd" AS Text)
+            ));
+            UPSERT INTO `/Root/Texts` SELECT * FROM AS_TABLE($rows);
+            UPSERT INTO `/Root/Texts` (Key, Text) VALUES (3000, "Cats  crowd");
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+        AddIndexNGram(db);
+    });
+    SetDefaultIteratorQuotaSettings(1, 1024);
+
+    const auto sender = runtime.AllocateEdgeActor();
+    const auto mainShards = GetTableShards(&kikimr.GetTestServer(), sender, "/Root/Texts");
+    const auto postingShards = GetTableShards(&kikimr.GetTestServer(), sender,
+        TStringBuilder() << "/Root/Texts/fulltext_idx/" << NTableIndex::ImplTable);
+    UNIT_ASSERT_VALUES_EQUAL(mainShards.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(postingShards.size(), 1);
+    ui32 postingAcks = 0;
+    ui32 postingReads = 0;
+    ui32 postingCancels = 0;
+    auto observer = runtime.AddObserver<TEvPipeCache::TEvForward>([&](auto& ev) {
+        const auto* forward = ev->Get();
+        if (forward->TabletId == postingShards.front()) {
+            postingAcks += forward->Ev->Type() == TEvDataShard::TEvReadAck::EventType;
+            postingReads += forward->Ev->Type() == TEvDataShard::TEvRead::EventType;
+            postingCancels += forward->Ev->Type() == TEvDataShard::TEvReadCancel::EventType;
+        }
+    });
+    NActors::TBlockEvents<TEvPipeCache::TEvForward> blockedReads(runtime, [&](const auto& ev) {
+        const auto* forward = ev->Get();
+        return forward->TabletId == mainShards.front() && forward->Ev->Type() == TEvDataShard::TEvRead::EventType;
+    });
+
+    // Check a complete read, LIMIT, and a match after 2,000 false positives.
+    auto future = kikimr.RunInThreadPool([&] {
+        return db.ExecuteQuery(R"sql(
+            SELECT COUNT(*) FROM `/Root/Texts` VIEW fulltext_idx
+            WHERE FulltextMatch(Text, "%Cats%", "Wildcard" AS Mode);
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+            WHERE FulltextMatch(Text, "%Cats%", "Wildcard" AS Mode)
+            LIMIT 5;
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+            WHERE FulltextMatch(Text, "%Cats  crowd%", "Wildcard" AS Mode)
+            LIMIT 5;
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    });
+    runtime.WaitFor("fulltext main-table read blocked", [&] { return !blockedReads.empty(); });
+    runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    // Buffered candidates must pause posting reads until the lookups can complete.
+    UNIT_ASSERT_VALUES_EQUAL(postingAcks, 0);
+
+    // Retrying a posting read must also wait until the buffered candidates are consumed.
+    const ui32 readsBeforeRetry = postingReads;
+    runtime.Send(new IEventHandle(blockedReads.front()->Sender, sender,
+        new TEvPipeCache::TEvDeliveryProblem(postingShards.front(), true)));
+    runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(postingReads, readsBeforeRetry);
+    UNIT_ASSERT_VALUES_EQUAL(postingAcks, 0);
+    UNIT_ASSERT(postingCancels > 0);
+
+    blockedReads.Stop().Unblock();
+    auto result = runtime.WaitFuture(future);
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson("[[2001u]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(1).RowsCount(), 5);
+    CompareYson("[[[3000u]]]", NYdb::FormatResultSetYson(result.GetResultSet(2)));
+    UNIT_ASSERT(postingAcks > 0);
+}
+
+Y_UNIT_TEST(FulltextRelevanceTopKReadBatches) {
+    const auto oldRead = GetDefaultReadSettings();
+    const auto oldAck = GetDefaultReadAckSettings();
+    Y_DEFER {
+        SetDefaultReadSettings(oldRead->Record);
+        SetDefaultReadAckSettings(oldAck->Record);
+    };
+
+    auto kikimr = KikimrWithCompact(true);
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    UpsertTexts(db);
+    AddIndex(db, "fulltext_relevance");
+    SetDefaultIteratorQuotaSettings(1, 1024);
+
+    // The best-scoring document arrives in a later document-length batch.
+    auto result = db.ExecuteQuery(R"sql(
+        SELECT Key, FulltextScore(Text, "cats") AS Relevance
+        FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE FulltextScore(Text, "cats") > 0
+        ORDER BY Relevance DESC LIMIT 1;
+    )sql", NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 1);
+    TResultSetParser parser(result.GetResultSet(0));
+    UNIT_ASSERT(parser.TryNextRow());
+    UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser("Key").GetOptionalUint64(), 300);
+}
+
+Y_UNIT_TEST(FulltextMatchReadBatchesRowId) {
+    auto kikimr = KikimrWithCompact(true);
+    auto db = kikimr.GetQueryClient();
+    auto create = db.ExecuteQuery(R"sql(
+        CREATE TABLE `/Root/Texts` (Key String NOT NULL, Text String, PRIMARY KEY (Key));
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+    auto upsert = db.ExecuteQuery(R"sql(
+        $rows = ListMap(ListFromRange(1ul, 1201ul), ($key) -> (
+            AsStruct(CAST($key AS String) AS Key,
+                IF($key % 3ul = 0ul, "Cats dogs", IF($key % 3ul = 1ul, "Cats", "Dogs foxes")) AS Text)
+        ));
+        UPSERT INTO `/Root/Texts` SELECT * FROM AS_TABLE($rows);
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+    AddIndex(db);
+
+    // Resume the default merge and row-ID resolution, with and without main-table reads.
+    auto result = db.ExecuteQuery(R"sql(
+        SELECT COUNT(*), COUNT(DISTINCT Key), COUNT(DISTINCT Text) FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE FulltextMatch(Text, "cats dogs foxes", "Or" AS DefaultOperator);
+        SELECT COUNT(*), COUNT(DISTINCT Key) FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE FulltextMatch(Text, "cats dogs foxes", "Or" AS DefaultOperator, "2" AS MinimumShouldMatch);
+        SELECT COUNT(*), COUNT(DISTINCT Key) FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE FulltextMatch(Text, "+cats dogs foxes", "Or" AS DefaultOperator, "1" AS MinimumShouldMatch);
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson("[[1200u;1200u;3u]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    CompareYson("[[800u;800u]]", NYdb::FormatResultSetYson(result.GetResultSet(1)));
+    CompareYson("[[400u;400u]]", NYdb::FormatResultSetYson(result.GetResultSet(2)));
 }
 
 Y_UNIT_TEST(ExplainFulltextIndexLongUTF8) {
@@ -2744,6 +3054,7 @@ Y_UNIT_TEST_QUAD(FullTextReadResultStatusRetry, LimitRowsPerRequest, EnableIndex
     kikimr.RunCall([&]() { AddIndex(db, "fulltext_relevance"); return true; });
 
     int errorsInjected = 0;
+    int errorsToInject = 6;
 
     auto observer = [&](TAutoPtr<NActors::IEventHandle>& ev) -> TTestActorRuntimeBase::EEventAction {
         if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvReadResult::EventType) {
@@ -2755,7 +3066,7 @@ Y_UNIT_TEST_QUAD(FullTextReadResultStatusRetry, LimitRowsPerRequest, EnableIndex
                     case 1: errorCode = Ydb::StatusIds::INTERNAL_ERROR; break;
                     default: errorCode = Ydb::StatusIds::NOT_FOUND; break;
                 }
-                if (errorsInjected < 6) {
+                if (errorsInjected < errorsToInject) {
                     Cerr << "Injecting " << Ydb::StatusIds::StatusCode_Name(errorCode)
                          << " for ReadId=" << msg->Record.GetReadId() << Endl;
                     msg->Record.MutableStatus()->SetCode(errorCode);
@@ -2771,14 +3082,14 @@ Y_UNIT_TEST_QUAD(FullTextReadResultStatusRetry, LimitRowsPerRequest, EnableIndex
     };
     runtime.SetObserverFunc(observer);
 
+    const TString query = R"sql(
+        SELECT Key, Text, FulltextScore(Text, "cats") as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
+        WHERE FulltextScore(Text, "cats") > 0
+        ORDER BY Relevance DESC
+        LIMIT 10
+    )sql";
     auto result = kikimr.RunCall([&]() {
-        TString query = R"sql(
-            SELECT Key, Text, FulltextScore(Text, "cats") as Relevance FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextScore(Text, "cats") > 0
-            ORDER BY Relevance DESC
-            LIMIT 10
-        )sql";
-        return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), NoRetryExecuteQuerySettings()).ExtractValueSync();
     });
 
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2788,6 +3099,15 @@ Y_UNIT_TEST_QUAD(FullTextReadResultStatusRetry, LimitRowsPerRequest, EnableIndex
 
     UNIT_ASSERT(errorsInjected > 0);
     Cerr << "Test completed successfully, errors injected: " << errorsInjected << Endl;
+
+    // Replacing the last read on a shard must not reset its retry budget.
+    errorsInjected = 0;
+    errorsToInject = static_cast<int>(MaxShardRetries() + 2);
+    auto exhausted = kikimr.RunCall([&]() {
+        return db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), NoRetryExecuteQuerySettings()).ExtractValueSync();
+    });
+    UNIT_ASSERT_VALUES_UNEQUAL(exhausted.GetStatus(), EStatus::SUCCESS);
+    UNIT_ASSERT_C(exhausted.GetIssues().ToString().find("Max retries") != std::string::npos, exhausted.GetIssues().ToString());
 }
 
 Y_UNIT_TEST(FullTextReadResultStatusAbort) {

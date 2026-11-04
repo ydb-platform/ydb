@@ -34,7 +34,8 @@ on:
 
 jobs:
   dispatch:
-    runs-on: ubuntu-latest
+    # When waiting, stay on runner-waiter (same pool as wait job). Fire-and-forget uses ubuntu-latest.
+    runs-on: ${{ inputs.wait && fromJSON('["self-hosted", "runner-waiter"]') || fromJSON('["ubuntu-latest"]') }}
     timeout-minutes: 15
     outputs:
       executor_run_id: ${{ steps.dispatch.outputs.executor_run_id }}

@@ -100,7 +100,8 @@ on:
 jobs:
   remote_payload:
     if: inputs.executor == 'remote'
-    runs-on: ubuntu-latest
+    # wait path shares runner-waiter with dispatch/wait; fire-and-forget stays on GitHub-hosted.
+    runs-on: ${{ inputs.wait_for_remote && fromJSON('["self-hosted", "runner-waiter"]') || fromJSON('["ubuntu-latest"]') }}
     timeout-minutes: 5
     outputs:
       inputs_json: ${{ steps.payload.outputs.inputs_json }}

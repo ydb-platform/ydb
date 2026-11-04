@@ -24,14 +24,9 @@ PEERDIR(
 )
 
 SRCS(
-<<<<<<< HEAD
+    ut_base_statistics_counters.cpp
     ut_analyze_datashard.cpp
     ut_analyze_columnshard.cpp
-=======
-    ut_base_statistics_counters.cpp
-    ut_analyze.cpp
-    ut_traverse.cpp
->>>>>>> 03ddd4b6aa4 (Avoid full statistics rescans after each SchemeShard report (#58061))
     ut_analyze_op.cpp
     ut_traverse_datashard.cpp
     ut_traverse_columnshard.cpp

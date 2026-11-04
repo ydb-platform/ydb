@@ -84,11 +84,6 @@ private:
             EvSendAnalyze,
             EvAnalyzeDeliveryProblem,
             EvAnalyzeDeadline,
-<<<<<<< HEAD
-=======
-            EvScheduleForceTraversal,
-            EvReportAnalyzeCounters,
->>>>>>> 03ddd4b6aa4 (Avoid full statistics rescans after each SchemeShard report (#58061))
 
             EvEnd
         };
@@ -103,7 +98,6 @@ private:
         struct TEvSendAnalyze : public TEventLocal<TEvSendAnalyze, EvSendAnalyze> {};
         struct TEvAnalyzeDeliveryProblem : public TEventLocal<TEvAnalyzeDeliveryProblem, EvAnalyzeDeliveryProblem> {};
         struct TEvAnalyzeDeadline : public TEventLocal<TEvAnalyzeDeadline, EvAnalyzeDeadline> {};
-        struct TEvReportAnalyzeCounters : public TEventLocal<TEvReportAnalyzeCounters, EvReportAnalyzeCounters> {};
 
         struct TEvAckTimeout : public TEventLocal<TEvAckTimeout, EvAckTimeout> {
             size_t SeqNo = 0;
@@ -176,7 +170,6 @@ private:
     void Handle(TEvStatistics::TEvAnalyzeOpCancelRequest::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeOpForgetRequest::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeActorProgress::TPtr& ev);
-    void Handle(TEvPrivate::TEvReportAnalyzeCounters::TPtr& ev);
 
     void PassAway() final;
 
@@ -269,7 +262,6 @@ private:
             hFunc(TEvStatistics::TEvAnalyzeOpCancelRequest, Handle);
             hFunc(TEvStatistics::TEvAnalyzeOpForgetRequest, Handle);
             hFunc(TEvStatistics::TEvAnalyzeActorProgress, Handle);
-            hFunc(TEvPrivate::TEvReportAnalyzeCounters, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
@@ -287,23 +279,7 @@ private:
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
 
-<<<<<<< HEAD
     TInstant AggregationRequestBeginTime;
-=======
-    // Dynamic counters for background ANALYZE monitoring (with status label via GetSubgroup)
-    NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzePendingCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzeCompletedCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzeFailedCounter;
-    bool AnalyzeCountersDirty = true;
-    static constexpr TDuration AnalyzeCountersReportPeriod = TDuration::Seconds(1);
-
-    // Cached parsed change counters (pathId -> TChangeCounters).
-    // Invalidated when BaseStatistics is updated (TTxSchemeShardStats::Complete)
-    // or when a traversal finishes (FinishTraversal). This avoids re-parsing
-    // all BaseStatistics protobuf blobs on every 1-second scheduling tick.
-    THashMap<TPathId, TChangeCounters> CachedChangeCounters;
-    bool CachedChangeCountersValid = false;
->>>>>>> 03ddd4b6aa4 (Avoid full statistics rescans after each SchemeShard report (#58061))
 
     bool EnableStatistics = false;
     bool EnableColumnStatistics = false;

@@ -123,9 +123,9 @@ Y_UNIT_TEST_SUITE(BaseStatisticsCounters) {
     Y_UNIT_TEST(ReplacementsAndPartialReports) {
         TCountersEnv env;
 
-        // An incomplete first snapshot must not bootstrap the totals.
+        // The first snapshot is persisted as received, even if incomplete.
         env.UpdateStats(1, {{1, 77, 770, false}, {2, 9, 90}}, false);
-        env.CheckCounters(0, 0);
+        env.CheckCounters(86, 860);
 
         env.UpdateStats(1, {{1, 10, 100}, {2, 20, 200}});
         env.CheckCounters(30, 300);

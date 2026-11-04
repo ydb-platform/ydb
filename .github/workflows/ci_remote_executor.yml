@@ -12,11 +12,9 @@ on:
         type: string
         default: ''
       job:
-        description: 'Which job to run on the fat executor'
+        description: 'Executor job name (string; first implemented: build_and_test_ya)'
         required: false
-        type: choice
-        options:
-          - build_and_test_ya
+        type: string
         default: build_and_test_ya
       job_inputs:
         description: 'JSON object of public params for the selected job (no secrets)'

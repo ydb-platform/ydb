@@ -23,6 +23,30 @@ except ImportError:  # pragma: no cover
 LOCAL_WF_USES = re.compile(r"^\./\.github/workflows/([^@\s]+)")
 
 
+def _gha_yaml_loader():
+    """SafeLoader without YAML-1.1 bools (on/off/yes/no) — otherwise `on:` becomes True."""
+    _require_yaml()
+
+    class GHALoader(yaml.SafeLoader):
+        pass
+
+    GHALoader.yaml_implicit_resolvers = {
+        first: [(tag, regexp) for tag, regexp in resolvers if tag != "tag:yaml.org,2002:bool"]
+        for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+    }
+    return GHALoader
+
+
+def load_workflow_yaml(raw: str) -> dict:
+    doc = yaml.load(raw, Loader=_gha_yaml_loader())
+    if not isinstance(doc, dict):
+        die("workflow YAML is not a mapping")
+    # Belt-and-suspenders if an older loader still coerced the trigger key.
+    if True in doc and "on" not in doc:
+        doc["on"] = doc.pop(True)
+    return doc
+
+
 def die(msg):
     print(f"::error::{msg}", file=sys.stderr)
     sys.exit(1)
@@ -225,11 +249,11 @@ def collect_patched_workflows(
         seen.add(path)
         raw = fetch_text(path)
         try:
-            doc = yaml.safe_load(raw)
+            doc = load_workflow_yaml(raw)
+        except SystemExit:
+            raise
         except Exception as e:
             die(f"failed to parse YAML {path}: {e}")
-        if not isinstance(doc, dict):
-            die(f"workflow {path} is not a mapping")
         doc, nested, n = patch_workflow_doc(doc, runs_on, self_hosted_only)
         total_jobs += n
         if n or path == root_workflow_path:
@@ -629,12 +653,16 @@ jobs:
         self_hosted_only=True,
     )
     assert nested in out, out.keys()
-    doc = yaml.safe_load(out[nested])
+    doc = load_workflow_yaml(out[nested])
+    assert "on" in doc and True not in doc
     assert doc["jobs"]["heavy"]["runs-on"] == [
         "self-hosted",
         "build-preset-relwithdebinfo-fat",
     ]
     assert doc["jobs"]["light"]["runs-on"] == "ubuntu-latest"
+    root_doc = load_workflow_yaml(out[root])
+    assert "on" in root_doc and True not in root_doc
+    assert "true:" not in out[root].splitlines()[0:10]
     print("self-test-patch OK")
 
 

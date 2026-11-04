@@ -78,16 +78,6 @@ void TWriteTask::Abort(
     }
     auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(owner->TabletID(), TxId, status, reason);
     owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
-    if (status == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED && OverloadSubscribeSeqNo) {
-        result->Record.SetOverloadSubscribed(*OverloadSubscribeSeqNo);
-        ctx.Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
-            std::make_unique<NOverload::TEvOverloadSubscribe>(
-                NOverload::TColumnShardInfo{ .ColumnShardId = owner->SelfId(), .TabletId = owner->TabletID() },
-                NOverload::TPipeServerInfo{
-                    .PipeServerId = RecipientId, .InterconnectSessionId = owner->PipeServersInterconnectSessions[RecipientId] },
-                NOverload::TOverloadSubscriberInfo{
-                    .PipeServerId = RecipientId, .OverloadSubscriberId = SourceId, .SeqNo = *OverloadSubscribeSeqNo }));
-    }
     ctx.Send(SourceId, result.release(), 0, Cookie);
 }
 
@@ -102,16 +92,7 @@ void TWriteTask::FailByOverload(TColumnShard* owner, const EOverloadStatus overl
     auto result =
         NEvents::TDataEvents::TEvWriteResult::BuildError(owner->TabletID(), TxId, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, reason);
     owner->Counters.GetWritesMonitor()->OnFinishWrite(ArrowData->GetSize());
-    if (OverloadSubscribeSeqNo) {
-        result->Record.SetOverloadSubscribed(*OverloadSubscribeSeqNo);
-        ctx.Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
-            std::make_unique<NOverload::TEvOverloadSubscribe>(
-                NOverload::TColumnShardInfo{ .ColumnShardId = owner->SelfId(), .TabletId = owner->TabletID() },
-                NOverload::TPipeServerInfo{
-                    .PipeServerId = RecipientId, .InterconnectSessionId = owner->PipeServersInterconnectSessions[RecipientId] },
-                NOverload::TOverloadSubscriberInfo{
-                    .PipeServerId = RecipientId, .OverloadSubscriberId = SourceId, .SeqNo = *OverloadSubscribeSeqNo }));
-    }
+    // only a timeout answers here, and the writer gives up at the same deadline: a subscription would reach nobody
     owner->OverloadWriteFail(overloadStatus, NEvWrite::TWriteMeta(0, PathId, SourceId, {}, TGUID::CreateTimebased().AsGuidString(),
                                                  owner->Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters()), ArrowData->GetSize(),
         Cookie, std::move(result), ctx);

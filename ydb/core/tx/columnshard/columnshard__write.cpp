@@ -619,9 +619,8 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     trackStart(rawPathId, arrowData->GetSize(), modificationType, isBulk);
     LWTRACK(WriteEnqueued, *orbit, rawPathId, TabletID(), record.GetTxId(), cookie, TMonotonic::Now() - receivedAt);
 
-    GetWriteGate().AddToWriteQueue(TWriteTask(arrowData, schema, source, ev->Recipient, granuleShardingVersionId, pathId, cookie, mvccSnapshot,
-        lockId, record.GetLockNodeId(), lockMode, *mType, behaviour, writeTimeout, record.GetTxId(), isBulk,
-        record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>(), std::move(orbit), receivedAt));
+    GetWriteGate().AddToWriteQueue(TWriteTask(arrowData, schema, source, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId,
+        record.GetLockNodeId(), lockMode, *mType, behaviour, writeTimeout, record.GetTxId(), isBulk, std::move(orbit), receivedAt));
     DrainWriteQueue(ctx);
 }
 

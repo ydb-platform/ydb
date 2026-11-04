@@ -58,7 +58,7 @@ TUserInfo::TUserInfo(
     const std::optional<TString>& committedMetadata
 )
     : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, anyCommits, important, availabilityPeriod,
-                    readFromTimestamp, partitionSession, pipeClient, committedMetadata}
+                    readFromTimestamp, partitionSession, pipeClient, {}, committedMetadata}
     , ActualTimestamps(false)
     , WriteTimestamp(TInstant::Zero())
     , CreateTimestamp(TInstant::Zero())
@@ -590,7 +590,7 @@ TUserInfoBase TUsersInfoStorage::CreateUserInfo(const TString& user,
                                             TMaybe<ui64> readRuleGeneration) const
 {
     return TUserInfoBase{user, readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration,
-                          "", 0, 0, 0, false, false, TDuration::Zero(), {}, 0, {}};
+                          "", 0, 0, 0, false, false, TDuration::Zero(), {}, 0, {}, {}};
 }
 
 TUserInfo& TUsersInfoStorage::Create(

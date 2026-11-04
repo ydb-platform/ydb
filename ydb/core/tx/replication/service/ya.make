@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    contrib/libs/rapidjson
     library/cpp/json
     library/cpp/string_utils/base64
     ydb/core/base

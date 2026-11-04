@@ -45,6 +45,9 @@ public:
         for (const auto& quorumPile : quorumPiles) {
             request.add_quorum_piles(quorumPile);
         }
+        if (settings.ExpectedGeneration_) {
+            request.set_expected_generation(*settings.ExpectedGeneration_);
+        }
 
         return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::UpdateClusterStateRequest, Ydb::Bridge::UpdateClusterStateResponse>(
             std::move(request),
@@ -113,6 +116,18 @@ public:
             TRpcRequestSettings::Make(settings));
     }
 
+    TAsyncStatus SetDatabaseBridgeMode(const std::string& databasePath, bool bridgeMode, const TSetDatabaseBridgeModeSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::SetDatabaseBridgeModeRequest>(settings);
+        request.set_database_path(databasePath);
+        request.set_bridge_mode(bridgeMode);
+        request.set_retain_pile_name(settings.RetainPileName_);
+
+        return RunSimple<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::SetDatabaseBridgeModeRequest, Ydb::Bridge::SetDatabaseBridgeModeResponse>(
+            std::move(request),
+            &Ydb::Bridge::V1::BridgeService::Stub::AsyncSetDatabaseBridgeMode,
+            TRpcRequestSettings::Make(settings));
+    }
+
     TAsyncStatus RemovePile(const std::string& pileName, const TRemovePileSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Bridge::RemovePileRequest>(settings);
         request.set_pile_name(pileName);
@@ -145,6 +160,11 @@ TAsyncStatus TBridgeClient::ConvertToBridge(const TConvertToBridgeSettings& sett
 
 TAsyncStatus TBridgeClient::AddPile(const std::string& pileName, const TAddPileSettings& settings) {
     return Impl_->AddPile(pileName, settings);
+}
+
+TAsyncStatus TBridgeClient::SetDatabaseBridgeMode(const std::string& databasePath, bool bridgeMode,
+        const TSetDatabaseBridgeModeSettings& settings) {
+    return Impl_->SetDatabaseBridgeMode(databasePath, bridgeMode, settings);
 }
 
 TAsyncStatus TBridgeClient::RemovePile(const std::string& pileName, const TRemovePileSettings& settings) {

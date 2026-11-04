@@ -67,7 +67,7 @@ TEST(FailRealmStates, LegacyNodeWardenCacheTextFormat) {
     }
 }
 
-TEST(FailRealmStates, Rfc190TransitionTable) {
+TEST(FailRealmStates, Mirror3dcTransitionGraph) {
     struct TCase {
         TFailRealmStates Before;
         TFailRealmStates After;
@@ -75,28 +75,34 @@ TEST(FailRealmStates, Rfc190TransitionTable) {
     };
     const TCase cases[] = {
         {{R::Invariant0, R::Invariant0, R::Invariant0}, {R::Invariant0, R::Invariant0, R::Excluded}, true},
-        {{R::Invariant0, R::Invariant0, R::Excluded}, {R::Invariant0, R::Excluded, R::Excluded}, false},
+        {{R::Invariant0, R::Invariant0, R::Excluded}, {R::Invariant0, R::Excluded, R::Excluded}, true},
         {{R::Invariant1, R::Invariant1, R::Excluded}, {R::Invariant1, R::Excluded, R::Excluded}, true},
         {{R::Invariant2, R::Invariant2, R::Excluded}, {R::Invariant2, R::Excluded, R::Excluded}, true},
         {{R::Invariant1, R::Recovering, R::Excluded}, {R::Invariant1, R::Excluded, R::Excluded}, true},
-        // Recovery can always be aborted, even when repairing a state installed with force.
-        {{R::Recovering, R::Excluded, R::Excluded}, {R::Excluded, R::Excluded, R::Excluded}, true},
-        {{R::Recovering, R::Recovering, R::Excluded}, {R::Excluded, R::Recovering, R::Excluded}, true},
+        // Unsupported forced states require the explicit validation bypass even for recovery aborts.
+        {{R::Recovering, R::Excluded, R::Excluded}, {R::Excluded, R::Excluded, R::Excluded}, false},
+        {{R::Recovering, R::Recovering, R::Excluded}, {R::Excluded, R::Recovering, R::Excluded}, false},
         {{R::Invariant1, R::Excluded, R::Excluded}, {R::Invariant1, R::Recovering, R::Excluded}, true},
         {{R::Invariant1, R::Recovering, R::Excluded}, {R::Invariant1, R::Excluded, R::Recovering}, false},
         {{R::Invariant0, R::Invariant0, R::Excluded}, {R::Invariant0, R::Invariant0, R::Recovering}, true},
         {{R::Invariant0, R::Invariant0, R::Recovering}, {R::Invariant0, R::Invariant0, R::Invariant0}, true},
         {{R::Invariant1, R::Invariant1, R::Recovering}, {R::Invariant0, R::Invariant0, R::Invariant0}, true},
-        {{R::Invariant2, R::Invariant2, R::Recovering}, {R::Invariant0, R::Invariant0, R::Invariant0}, true},
-        {{R::Invariant1, R::Invariant1, R::Recovering}, {R::Invariant1, R::Invariant1, R::Invariant0}, false},
+        {{R::Invariant2, R::Invariant2, R::Recovering}, {R::Invariant0, R::Invariant0, R::Invariant0}, false},
+        {{R::Invariant1, R::Invariant1, R::Recovering}, {R::Invariant1, R::Invariant1, R::Invariant0}, true},
         {{R::Invariant1, R::Recovering, R::Excluded}, {R::Invariant1, R::Invariant1, R::Excluded}, true},
-        {{R::Invariant2, R::Recovering, R::Excluded}, {R::Invariant2, R::Invariant2, R::Excluded}, true},
-        {{R::Invariant1, R::Recovering, R::Excluded}, {R::Invariant1, R::Invariant2, R::Excluded}, false},
+        {{R::Invariant2, R::Recovering, R::Excluded}, {R::Invariant2, R::Invariant2, R::Excluded}, false},
+        {{R::Invariant1, R::Recovering, R::Excluded}, {R::Invariant1, R::Invariant2, R::Excluded}, true},
         {{R::Invariant0, R::Invariant0, R::Excluded}, {R::Invariant1, R::Invariant1, R::Excluded}, true},
-        {{R::Invariant0, R::Invariant0, R::Excluded}, {R::Invariant2, R::Invariant2, R::Excluded}, true},
+        {{R::Invariant0, R::Invariant0, R::Excluded}, {R::Invariant2, R::Invariant2, R::Excluded}, false},
         {{R::Invariant0, R::Invariant0, R::Excluded}, {R::Invariant1, R::Invariant0, R::Excluded}, false},
         {{R::Invariant1, R::Invariant1, R::Excluded}, {R::Invariant2, R::Invariant2, R::Excluded}, true},
         {{R::Invariant2, R::Invariant2, R::Excluded}, {R::Invariant1, R::Invariant1, R::Excluded}, false},
+        {{R::Invariant2, R::Invariant2, R::Excluded}, {R::Invariant1, R::Invariant1, R::Recovering}, true},
+        {{R::Invariant2, R::Invariant1, R::Excluded}, {R::Invariant1, R::Invariant1, R::Recovering}, true},
+        {{R::Invariant2, R::Invariant0, R::Excluded}, {R::Invariant1, R::Invariant0, R::Recovering}, true},
+        {{R::Invariant2, R::Invariant2, R::Excluded}, {R::Invariant1, R::Invariant2, R::Recovering}, false},
+        {{R::Invariant2, R::Excluded, R::Excluded}, {R::Invariant1, R::Recovering, R::Excluded}, false},
+        {{R::Invariant2, R::Recovering, R::Excluded}, {R::Invariant1, R::Invariant1, R::Excluded}, true},
         {{R::Invariant0, R::Invariant0, R::Recovering}, {R::Invariant1, R::Invariant1, R::Recovering}, false},
         {{R::Invariant0, R::Invariant0, R::Excluded}, {R::Invariant0, R::Invariant0, R::Invariant0}, false},
         {{R::Invariant0, R::Invariant0, R::Invariant0}, {R::Invariant0, R::Invariant0, R::Recovering}, false},
@@ -104,6 +110,12 @@ TEST(FailRealmStates, Rfc190TransitionTable) {
         {{R::Invariant1, R::Invariant1, R::Excluded}, {R::Invariant0, R::Invariant0, R::Excluded}, false},
         {{R::Invariant1, R::Excluded, R::Excluded}, {R::Invariant1, R::Recovering, R::Recovering}, false},
         {{R::Invariant1, R::Excluded, R::Excluded}, {R::Excluded, R::Excluded, R::Excluded}, false},
+        {{R::Invariant0, R::Invariant0, R::Invariant0}, {R::Invariant0, R::Invariant0, R::Invariant0}, true},
+        {{R::Invariant1, R::Invariant1, R::Recovering}, {R::Invariant1, R::Invariant1, R::Recovering}, true},
+        {{R::Invariant2, R::Recovering, R::Excluded}, {R::Invariant2, R::Recovering, R::Excluded}, true},
+        {{R::Excluded, R::Excluded, R::Excluded}, {R::Excluded, R::Excluded, R::Excluded}, false},
+        {{R::Recovering, R::Recovering, R::Recovering}, {R::Recovering, R::Recovering, R::Recovering}, false},
+        {{R::Invariant2, R::Invariant2, R::Recovering}, {R::Invariant2, R::Invariant2, R::Recovering}, false},
     };
     for (const auto& test : cases) {
         std::array<unsigned, 3> permutation{0, 1, 2};
@@ -119,15 +131,7 @@ TEST(FailRealmStates, Rfc190TransitionTable) {
     }
 }
 
-TEST(FailRealmStates, IdempotencyAndUnknownStates) {
-    for (int first = 0; first < 5; ++first) {
-        for (int second = 0; second < 5; ++second) {
-            for (int third = 0; third < 5; ++third) {
-                const TFailRealmStates states{static_cast<R::EState>(first), static_cast<R::EState>(second), static_cast<R::EState>(third)};
-                EXPECT_TRUE(ValidateFailRealmStateTransition(states, states).has_value());
-            }
-        }
-    }
+TEST(FailRealmStates, UnknownStates) {
     const TFailRealmStates normal{R::Invariant0, R::Invariant0, R::Invariant0};
     const TFailRealmStates invalid{R::Invariant0, R::Invariant0, static_cast<R::EState>(77)};
     EXPECT_FALSE(ValidateFailRealmStateTransition(normal, invalid).has_value());

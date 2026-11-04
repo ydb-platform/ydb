@@ -293,4 +293,74 @@ constexpr bool IsAllowedMirror3dcFailRealmStateTransition(
     return false;
 }
 
+// Build the next configuration for one physical realm, including required guarantee changes.
+// Unsupported inputs, transitions, and out-of-range indexes return nullopt.
+constexpr std::optional<TMirror3dcFailRealmStates> ReturnFailRealm(
+        const TMirror3dcFailRealmStates& states, unsigned returnedFailRealmIdx) {
+    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    if (returnedFailRealmIdx >= states.size()) {
+        return std::nullopt;
+    }
+    TMirror3dcFailRealmStates next = states;
+    next[returnedFailRealmIdx] = TFailRealm::R;
+    bool hasFailedRealm = false;
+    for (EMirror3dcFailRealmState realmState : next) {
+        hasFailedRealm |= realmState == TFailRealm::F;
+    }
+    if (!hasFailedRealm) {
+        // Three-realm recovery accepts 1+1+1 writes, so N2 is no longer sustainable.
+        for (EMirror3dcFailRealmState& realmState : next) {
+            if (realmState == TFailRealm::N2) {
+                realmState = TFailRealm::N1;
+            }
+        }
+    }
+    if (!IsAllowedMirror3dcFailRealmStateTransition(states, next)) {
+        return std::nullopt;
+    }
+    return next;
+}
+
+constexpr std::optional<TMirror3dcFailRealmStates> TakeDownFailRealm(
+        const TMirror3dcFailRealmStates& states, unsigned takeDownFailRealmIdx) {
+    if (takeDownFailRealmIdx >= states.size()) {
+        return std::nullopt;
+    }
+    TMirror3dcFailRealmStates next = states;
+    next[takeDownFailRealmIdx] = NKikimrBlobStorage::TGroupInfo::TFailRealm::F;
+    if (!IsAllowedMirror3dcFailRealmStateTransition(states, next)) {
+        return std::nullopt;
+    }
+    return next;
+}
+
+// The caller must confirm replication of the R realm before completing recovery.
+// Returning to NORMAL also requires a first-copy guarantee in both normal realms.
+constexpr std::optional<TMirror3dcFailRealmStates> RecoveringComplete(const TMirror3dcFailRealmStates& states) {
+    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    std::optional<unsigned> recoveringRealm;
+    bool hasFailedRealm = false;
+    bool hasNormalRealmWithoutCopyGuarantee = false;
+    for (unsigned realm = 0; realm < states.size(); ++realm) {
+        if (states[realm] == TFailRealm::R) {
+            recoveringRealm = realm;
+        }
+        hasFailedRealm |= states[realm] == TFailRealm::F;
+        hasNormalRealmWithoutCopyGuarantee |= states[realm] == TFailRealm::N0;
+    }
+    if (!recoveringRealm || (!hasFailedRealm && hasNormalRealmWithoutCopyGuarantee)) {
+        return std::nullopt;
+    }
+    TMirror3dcFailRealmStates next = states;
+    if (hasFailedRealm) {
+        next[*recoveringRealm] = TFailRealm::N1;
+    } else {
+        next.fill(TFailRealm::N0);
+    }
+    if (!IsAllowedMirror3dcFailRealmStateTransition(states, next)) {
+        return std::nullopt;
+    }
+    return next;
+}
+
 } // namespace NKikimr

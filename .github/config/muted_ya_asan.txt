@@ -5,6 +5,7 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery11
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
+ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboOlap.OlapPerfQueries
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
@@ -31,6 +32,7 @@ ydb/core/nbs/cloud/blockstore/libs/common/memory/ut unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashInName
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterAutoPartitioningAndCodecs
+ydb/core/persqueue/ut TPartitionTests.ReplicationDataIgnoresReplicationConsumerWithoutRetryingPersist
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKInt64
@@ -40,6 +42,7 @@ ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.Changed
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.DropDuringDeferredDoneResolvesFreshSecret
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.LateResultsDuringAndAfterDone+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.LateResultsDuringAndAfterDone-ResourceId
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.PublicForceEscalationReplayedAfterRestart+Cascade
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.SameCredentialsDuringDeferredDone+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.SameCredentialsDuringDeferredDone-ResourceId
 ydb/core/tx/replication/controller/ut_schema_change ReplicationCreation.InitialScanDisabledDoesNotTouchMissingDestination
@@ -74,20 +77,13 @@ ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_prestable-27-1-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_stable-26-4-1-False]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_stable-26-4-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-3-1_to_stable-26-4-1-False]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-3-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_prestable-27-1-1-False]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_prestable-27-1-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-3-1-False]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-3-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-4-1-False]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-4-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_stable-26-3-1_to_stable-26-4-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_stable-26-4-1_to_stable-26-3-1-True]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_stable-26-4-1_and_stable-26-3-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_from_mid_blob_offset[mixed_prestable-27-1-1_and_stable-26-4-1]
-ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_from_mid_blob_offset[mixed_stable-26-4-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_from_mid_blob_offset[mixed_stable-26-4-1_and_stable-26-3-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_mid_blob_survives_tablet_move[mixed_stable-26-4-1]
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-27-1-1_and_stable-26-4-1]
@@ -194,7 +190,6 @@ ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tp
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[20]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[21]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[22]
-ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[2]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[3]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[4]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[5]

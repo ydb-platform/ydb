@@ -197,6 +197,8 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         cache = delta.HasCache() ? CacheFromProto(delta.GetCache()) : cache;
         ui32 small = delta.HasSmall() ? delta.GetSmall() : family.Small;
         ui32 large = delta.HasLarge() ? delta.GetLarge() : family.Large;
+        bool keyIndexInDescriptor = delta.HasKeyIndexInDescriptor() ? delta.GetKeyIndexInDescriptor() : family.KeyIndexInDescriptor;
+        bool groupIndexesInDescriptor = delta.HasGroupIndexesInDescriptor() ? delta.GetGroupIndexesInDescriptor() : family.GroupIndexesInDescriptor;
 
         auto cacheMode = delta.HasCacheMode() ? CacheModeFromProto(delta.GetCacheMode()) : family.CacheMode;
         if (family.CacheMode != cacheMode) {
@@ -211,6 +213,8 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         changes |= ChangeTableSetting(table, family.Small, small);
         changes |= ChangeTableSetting(table, family.Large, large);
         changes |= ChangeTableSetting(table, family.CacheMode, cacheMode);
+        changes |= ChangeTableSetting(table, family.KeyIndexInDescriptor, keyIndexInDescriptor);
+        changes |= ChangeTableSetting(table, family.GroupIndexesInDescriptor, groupIndexesInDescriptor);
     } else if (action == TAlterRecord::AddColumnToFamily) {
         changes |= AddColumnToFamily(table, delta.GetColumnId(), delta.GetFamilyId());
     } else if (action == TAlterRecord::SetRoom) {

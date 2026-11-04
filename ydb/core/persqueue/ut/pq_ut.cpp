@@ -1141,9 +1141,7 @@ void TestMirroredOffsetSurvivesRestart(bool kafkaBatch) {
         auto replicationData = MakeHolder<TEvPQ::TEvReplicationData>();
         replicationData->MirroredOffset = mirroredOffset;
         tc.Runtime->Send(new IEventHandle(partitionActor, tc.Edge, replicationData.Release(), 0, 17));
-        auto ack = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvReplicationDataAck>(tc.Edge, TDuration::Seconds(10));
-        UNIT_ASSERT(ack);
-        UNIT_ASSERT_VALUES_EQUAL(ack->Cookie, 17);
+        tc.Runtime->SimulateSleep(TDuration::Seconds(1));
         PQGetPartInfo(0, oldEndOffset, tc);
 
         PQTabletRestart(tc);

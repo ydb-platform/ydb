@@ -325,6 +325,113 @@ TMirror3dcFailRealmStates DecodeRealmStates(unsigned code) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMirror3dcStateTransitionTest) {
+    Y_UNIT_TEST(ReturnAndTakeDownFailRealm) {
+        using TAction = std::optional<TMirror3dcFailRealmStates> (*)(const TMirror3dcFailRealmStates&, unsigned);
+        struct TCase {
+            TAction Action;
+            TMirror3dcFailRealmStates Before;
+            unsigned Realm;
+            TMirror3dcFailRealmStates After;
+        };
+        const TCase cases[] = {
+            {ReturnFailRealm, {TFailRealm::N0, TFailRealm::N0, TFailRealm::F}, 2,
+                {TFailRealm::N0, TFailRealm::N0, TFailRealm::R}},
+            {ReturnFailRealm, {TFailRealm::N2, TFailRealm::N2, TFailRealm::F}, 2,
+                {TFailRealm::N1, TFailRealm::N1, TFailRealm::R}},
+            {ReturnFailRealm, {TFailRealm::N2, TFailRealm::N1, TFailRealm::F}, 2,
+                {TFailRealm::N1, TFailRealm::N1, TFailRealm::R}},
+            {ReturnFailRealm, {TFailRealm::N2, TFailRealm::N0, TFailRealm::F}, 2,
+                {TFailRealm::N1, TFailRealm::N0, TFailRealm::R}},
+            {ReturnFailRealm, {TFailRealm::N0, TFailRealm::F, TFailRealm::F}, 1,
+                {TFailRealm::N0, TFailRealm::R, TFailRealm::F}},
+            {ReturnFailRealm, {TFailRealm::N1, TFailRealm::F, TFailRealm::F}, 1,
+                {TFailRealm::N1, TFailRealm::R, TFailRealm::F}},
+            {ReturnFailRealm, {TFailRealm::N2, TFailRealm::F, TFailRealm::F}, 1,
+                {TFailRealm::N2, TFailRealm::R, TFailRealm::F}},
+            {ReturnFailRealm, {TFailRealm::N1, TFailRealm::N1, TFailRealm::R}, 2,
+                {TFailRealm::N1, TFailRealm::N1, TFailRealm::R}},
+            {TakeDownFailRealm, {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}, 2,
+                {TFailRealm::N0, TFailRealm::N0, TFailRealm::F}},
+            {TakeDownFailRealm, {TFailRealm::N0, TFailRealm::N0, TFailRealm::F}, 1,
+                {TFailRealm::N0, TFailRealm::F, TFailRealm::F}},
+            {TakeDownFailRealm, {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}, 1,
+                {TFailRealm::N1, TFailRealm::F, TFailRealm::F}},
+            {TakeDownFailRealm, {TFailRealm::N2, TFailRealm::N2, TFailRealm::F}, 1,
+                {TFailRealm::N2, TFailRealm::F, TFailRealm::F}},
+            {TakeDownFailRealm, {TFailRealm::N1, TFailRealm::N1, TFailRealm::R}, 2,
+                {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}},
+            {TakeDownFailRealm, {TFailRealm::N2, TFailRealm::R, TFailRealm::F}, 1,
+                {TFailRealm::N2, TFailRealm::F, TFailRealm::F}},
+            {TakeDownFailRealm, {TFailRealm::N0, TFailRealm::N0, TFailRealm::F}, 2,
+                {TFailRealm::N0, TFailRealm::N0, TFailRealm::F}},
+        };
+        for (const TCase& test : cases) {
+            std::array<unsigned, 3> permutation{0, 1, 2};
+            do {
+                TMirror3dcFailRealmStates before{};
+                TMirror3dcFailRealmStates expected{};
+                unsigned targetRealm = 0;
+                for (unsigned realm = 0; realm < 3; ++realm) {
+                    before[realm] = test.Before[permutation[realm]];
+                    expected[realm] = test.After[permutation[realm]];
+                    if (permutation[realm] == test.Realm) {
+                        targetRealm = realm;
+                    }
+                }
+                const std::optional<TMirror3dcFailRealmStates> next = test.Action(before, targetRealm);
+                UNIT_ASSERT(next && *next == expected);
+            } while (std::next_permutation(permutation.begin(), permutation.end()));
+        }
+    }
+
+    Y_UNIT_TEST(RecoveringComplete) {
+        struct TCase {
+            TMirror3dcFailRealmStates Before;
+            TMirror3dcFailRealmStates After;
+        };
+        const TCase cases[] = {
+            {{TFailRealm::N1, TFailRealm::N1, TFailRealm::R},
+                {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}},
+            {{TFailRealm::N0, TFailRealm::R, TFailRealm::F},
+                {TFailRealm::N0, TFailRealm::N1, TFailRealm::F}},
+            {{TFailRealm::N1, TFailRealm::R, TFailRealm::F},
+                {TFailRealm::N1, TFailRealm::N1, TFailRealm::F}},
+            {{TFailRealm::N2, TFailRealm::R, TFailRealm::F},
+                {TFailRealm::N2, TFailRealm::N1, TFailRealm::F}},
+        };
+        for (const TCase& test : cases) {
+            std::array<unsigned, 3> permutation{0, 1, 2};
+            do {
+                TMirror3dcFailRealmStates before{};
+                TMirror3dcFailRealmStates expected{};
+                for (unsigned realm = 0; realm < 3; ++realm) {
+                    before[realm] = test.Before[permutation[realm]];
+                    expected[realm] = test.After[permutation[realm]];
+                }
+                const std::optional<TMirror3dcFailRealmStates> next = NKikimr::RecoveringComplete(before);
+                UNIT_ASSERT(next && *next == expected);
+            } while (std::next_permutation(permutation.begin(), permutation.end()));
+        }
+        UNIT_ASSERT(!NKikimr::RecoveringComplete({TFailRealm::N0, TFailRealm::N0, TFailRealm::R}));
+        UNIT_ASSERT(!NKikimr::RecoveringComplete({TFailRealm::N1, TFailRealm::N0, TFailRealm::R}));
+        UNIT_ASSERT(!NKikimr::RecoveringComplete({TFailRealm::N2, TFailRealm::N2, TFailRealm::R}));
+        UNIT_ASSERT(!NKikimr::RecoveringComplete({TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}));
+        UNIT_ASSERT(!NKikimr::RecoveringComplete({TFailRealm::R, TFailRealm::R, TFailRealm::R}));
+    }
+
+    Y_UNIT_TEST(RealmActionsRejectInvalidTransitions) {
+        const TMirror3dcFailRealmStates normal{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
+        UNIT_ASSERT(!ReturnFailRealm(normal, 0));
+        UNIT_ASSERT(!ReturnFailRealm(normal, 3));
+        UNIT_ASSERT(!TakeDownFailRealm(normal, 3));
+        UNIT_ASSERT(!ReturnFailRealm({TFailRealm::N1, TFailRealm::R, TFailRealm::F}, 2));
+        UNIT_ASSERT(!TakeDownFailRealm({TFailRealm::N2, TFailRealm::R, TFailRealm::F}, 0));
+        UNIT_ASSERT(!TakeDownFailRealm({TFailRealm::N0, TFailRealm::F, TFailRealm::F}, 0));
+        UNIT_ASSERT(!ReturnFailRealm({TFailRealm::F, TFailRealm::F, TFailRealm::F}, 0));
+        UNIT_ASSERT(!ReturnFailRealm({TFailRealm::N2, TFailRealm::N2, TFailRealm::R}, 2));
+        UNIT_ASSERT(!TakeDownFailRealm({UnknownRealm, TFailRealm::N0, TFailRealm::N0}, 0));
+    }
+
     Y_UNIT_TEST(AllOrderedTransitionsPreservePhysicalRealms) {
         for (unsigned beforeCode = 0; beforeCode < 125; ++beforeCode) {
             const TMirror3dcFailRealmStates before = DecodeRealmStates(beforeCode);

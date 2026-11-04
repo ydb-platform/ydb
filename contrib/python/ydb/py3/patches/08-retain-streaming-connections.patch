@@ -35,7 +35,27 @@
  
      @classmethod
      def ready_factory(cls, endpoint, driver_config, ready_timeout=10, endpoint_options=None):
-@@ -604,12 +609,11 @@
+@@ -584,7 +589,7 @@
+     def __exit__(self, exc_type, exc_val, exc_tb):
+         self.close()
+ 
+-    def close(self):
++    def close(self, force=False):
+         """
+         Closes the underlying gRPC channel
+         :return: None
+@@ -596,20 +601,18 @@
+             for callback in self._cleanup_callbacks:
+                 callback(self)
+ 
+-            # potentially we should cancel in-flight calls here but currently
+-            # it is not required since gRPC can successfully cancel these calls manually.
+-
+-            if self.calls == 0:
++            if force:
++                threading.Thread(target=self.destroy, daemon=True).start()
++            elif self.calls == 0:
+                 # everything is cancelled/completed and channel can be destroyed
                  self.destroy()
  
      def destroy(self):
@@ -51,3 +71,69 @@
  
      def ready_future(self):
          """
+--- a/ydb/pool.py
++++ b/ydb/pool.py
+@@ -7,6 +7,7 @@
+ from concurrent import futures
+ import collections
+ import random
++import weakref
+ from typing import Any, Callable, ContextManager, List, Optional, Set, Tuple, TYPE_CHECKING
+ 
+ from . import connection as connection_impl, issues, resolver, _utilities, tracing
+@@ -28,6 +29,7 @@
+     def __init__(self, use_all_nodes: bool = False, tracer: tracing.Tracer = tracing.Tracer(None)) -> None:
+         self.tracer = tracer
+         self.lock = threading.RLock()
++        self._all_connections = weakref.WeakSet()
+         self.connections: collections.OrderedDict[str, Connection] = collections.OrderedDict()
+         self.connections_by_node_id: collections.OrderedDict[Optional[int], Connection] = collections.OrderedDict()
+         self.outdated: collections.OrderedDict[str, Connection] = collections.OrderedDict()
+@@ -44,6 +46,7 @@
+ 
+         connection.add_cleanup_callback(self.remove)
+         with self.lock:
++            self._all_connections.add(connection)
+             if preferred:
+                 self.preferred[connection.endpoint] = connection
+ 
+@@ -93,15 +96,15 @@
+     def cleanup_outdated(self) -> "ConnectionsCache":
+         with self.lock:
+             outdated_connections = list(self.outdated.values())
+-            for outdated_connection in outdated_connections:
+-                outdated_connection.close()
++        for outdated_connection in outdated_connections:
++            outdated_connection.close()
+         return self
+ 
+     def cleanup(self) -> None:
+         with self.lock:
+-            actual_connections = list(self.connections.values())
+-            for connection in actual_connections:
+-                connection.close()
++            actual_connections = list(self._all_connections)
++        for connection in actual_connections:
++            connection.close(force=True)
+ 
+     def complete_discovery(self, error: Optional[Exception]) -> None:
+         with self.lock:
+@@ -155,10 +158,14 @@
+ 
+     def remove(self, connection: Connection) -> None:
+         with self.lock:
+-            self.connections_by_node_id.pop(connection.node_id, None)
+-            self.preferred.pop(connection.endpoint, None)
+-            self.connections.pop(connection.endpoint, None)
+-            self.outdated.pop(connection.endpoint, None)
++            for cache, key in (
++                (self.connections_by_node_id, connection.node_id),
++                (self.preferred, connection.endpoint),
++                (self.connections, connection.endpoint),
++                (self.outdated, connection.endpoint),
++            ):
++                if cache.get(key) is connection:
++                    cache.pop(key)
+ 
+     def get_connection_by_node_id(self, node_id: Optional[int]) -> Optional[Connection]:
+         with self.lock:

@@ -8,6 +8,8 @@ from common import BridgeKiKiMRTest
 
 def test_stop_driver_during_disconnect(monkeypatch):
     channel = Mock()
+    channel_closed = threading.Event()
+    channel.close.side_effect = channel_closed.set
     monkeypatch.setattr(connection, "channel_factory", lambda *args, **kwargs: channel)
     monkeypatch.setattr(connection, "_stubs_list", [])
     cached_connection = connection.Connection("localhost:1")
@@ -26,10 +28,10 @@ def test_stop_driver_during_disconnect(monkeypatch):
     cache.make_outdated(cached_connection)
     original_close = connection.Connection.close
 
-    def close(self):
+    def close(self, *args, **kwargs):
         if threading.current_thread() is stop_thread:
             stop_entered.set()
-        return original_close(self)
+        return original_close(self, *args, **kwargs)
 
     monkeypatch.setattr(connection.Connection, "close", close)
     driver = Mock()
@@ -60,4 +62,5 @@ def test_stop_driver_during_disconnect(monkeypatch):
     assert not cache.connections_by_node_id
     assert not cache.outdated
     driver.stop.assert_called_once()
+    assert channel_closed.wait(5), "driver shutdown did not close the channel"
     channel.close.assert_called_once()

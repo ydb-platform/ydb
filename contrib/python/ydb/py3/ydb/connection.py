@@ -589,7 +589,7 @@ class Connection(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def close(self):
+    def close(self, force=False):
         """
         Closes the underlying gRPC channel
         :return: None
@@ -601,10 +601,9 @@ class Connection(object):
             for callback in self._cleanup_callbacks:
                 callback(self)
 
-            # potentially we should cancel in-flight calls here but currently
-            # it is not required since gRPC can successfully cancel these calls manually.
-
-            if self.calls == 0:
+            if force:
+                threading.Thread(target=self.destroy, daemon=True).start()
+            elif self.calls == 0:
                 # everything is cancelled/completed and channel can be destroyed
                 self.destroy()
 

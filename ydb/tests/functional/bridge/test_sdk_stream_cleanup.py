@@ -113,6 +113,57 @@ class TestStreamConnectionCleanup(unittest.TestCase):
         self.assert_finished()
         self.assert_closed()
 
+    def test_terminal_cleanup_cancels_active_stream(self):
+        response = StreamCall()
+        self.call(response)
+        self.assertEqual(self.connection.calls, 1)
+
+        def close_channel():
+            response.cancel()
+            self.closed.set()
+
+        self.channel.close.side_effect = close_channel
+        self.cache.cleanup()
+        self.assert_closed()
+        self.assertTrue(response.completed)
+        self.assert_finished()
+        self.assertFalse(self.cache.connections)
+
+    def test_terminal_cleanup_cancels_retired_stream(self):
+        response = StreamCall()
+        self.call(response)
+        self.cleanup_outdated()
+        self.channel.close.assert_not_called()
+
+        def close_channel():
+            response.cancel()
+            self.closed.set()
+
+        self.channel.close.side_effect = close_channel
+        self.cache.cleanup()
+        self.assert_closed()
+        self.assertTrue(response.completed)
+        self.assert_finished()
+
+    def test_stale_remove_preserves_replacement(self):
+        response = StreamCall()
+        self.call(response)
+        self.cleanup_outdated()
+        with patch.object(connection, "channel_factory", return_value=Mock()):
+            replacement = connection.Connection(self.connection.endpoint)
+        self.cache.add(replacement, preferred=True)
+        self.cache.make_outdated(replacement)
+        self.connection.close()
+        for mapping, key in (
+            (self.cache.connections, replacement.endpoint),
+            (self.cache.connections_by_node_id, replacement.node_id),
+            (self.cache.preferred, replacement.endpoint),
+            (self.cache.outdated, replacement.endpoint),
+        ):
+            self.assertIs(mapping.get(key), replacement)
+        response.cancel()
+        self.assert_closed()
+
     def test_already_completed_rpc_releases_once(self):
         self.call(StreamCall(completed=True))
         self.assert_finished()
@@ -152,6 +203,37 @@ class TestStreamConnectionCleanup(unittest.TestCase):
         def close_channel():
             if not callback_returned.wait(5):
                 errors.append("channel.close blocked its completion callback")
+            self.closed.set()
+
+        self.channel.close.side_effect = close_channel
+
+        def complete():
+            try:
+                response.complete()
+            finally:
+                callback_returned.set()
+
+        completion = threading.Thread(target=complete, daemon=True)
+        completion.start()
+        self.assertTrue(callback_returned.wait(5), "completion callback blocked on channel.close")
+        completion.join(5)
+        self.assertFalse(completion.is_alive())
+        self.assert_closed()
+        self.assertFalse(errors, errors)
+        self.assert_finished()
+
+    def test_terminal_cleanup_callback_does_not_wait_for_channel_drain(self):
+        response, active = StreamCall(), StreamCall()
+        self.call(response)
+        self.call(active)
+        response.add_callback(self.cache.cleanup)
+        callback_returned = threading.Event()
+        errors = []
+
+        def close_channel():
+            if not callback_returned.wait(5):
+                errors.append("channel.close blocked its completion callback")
+            active.cancel()
             self.closed.set()
 
         self.channel.close.side_effect = close_channel

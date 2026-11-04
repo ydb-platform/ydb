@@ -651,6 +651,12 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
                 Stream << del << "vector_type=\"float\"";
                 break;
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3:
+                Stream << del << "vector_type=\"float8_e4m3\"";
+                break;
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2:
+                Stream << del << "vector_type=\"float8_e5m2\"";
+                break;
             default:
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::VectorIndexSettings");
         }

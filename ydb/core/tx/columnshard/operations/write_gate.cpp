@@ -224,6 +224,9 @@ bool TWriteGate::HasWaitingDeadline() const {
 }
 
 TWriteGate::EBatchDecision TWriteGate::PassPreparedBatch(NOlap::TEvPassWriteGate::TPtr& ev, const TActorContext& ctx) {
+    if (!IsTableWritable(ev->Get()->GetWriteData().GetWriteMeta().GetPathId().InternalPathId)) {
+        return EBatchDecision::TableDropped;
+    }
     if (const std::optional<ui64> lockId = ev->Get()->GetContext().GetLockId(); lockId && IsLockAborted(*lockId)) {
         return EBatchDecision::LockAborted;
     }

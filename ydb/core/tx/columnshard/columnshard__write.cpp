@@ -677,6 +677,9 @@ void TColumnShard::Handle(NOlap::TEvPassWriteGate::TPtr& ev, const TActorContext
             return;
         case TWriteGate::EBatchDecision::Hold:
             return;
+        case TWriteGate::EBatchDecision::TableDropped:
+            FailStartedWrite(*ev->Get(), NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, "table is dropped", ctx);
+            return;
         case TWriteGate::EBatchDecision::LockAborted:
             FailStartedWrite(*ev->Get(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "transaction is aborted", ctx);
             return;

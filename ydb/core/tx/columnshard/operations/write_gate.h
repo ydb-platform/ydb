@@ -97,6 +97,7 @@ public:
     enum class EBatchDecision {
         Pass,
         Hold,
+        TableDropped,
         LockAborted
     };
     EBatchDecision PassPreparedBatch(NOlap::TEvPassWriteGate::TPtr& ev, const TActorContext& ctx);

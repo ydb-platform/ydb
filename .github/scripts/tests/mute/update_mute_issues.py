@@ -36,16 +36,8 @@ GITHUB_QUERY_MAX_ATTEMPTS = 6
 GITHUB_QUERY_TIMEOUT_SECONDS = 60
 GITHUB_QUERY_MAX_BACKOFF_SECONDS = 30
 GITHUB_QUERY_RETRY_STATUSES = {429, 500, 502, 503, 504}
-# Transient GraphQL failures GitHub returns with HTTP 200 (e.g. "Something went
-# wrong while executing your query"). Retry only when every error carries this
-# explicit type; auth / validation / not-found stay fail-fast.
-GITHUB_QUERY_RETRY_ERROR_TYPES = frozenset({'UNKNOWN'})
-
-
-class GithubGraphQLError(Exception):
-    def __init__(self, message, retryable=False):
-        super().__init__(message)
-        self.retryable = retryable
+# HTTP 200 + GraphQL type UNKNOWN — GitHub transient internal error.
+GITHUB_QUERY_RETRY_ERROR_TYPES = {'UNKNOWN'}
 
 def truncate_issue_body(body):
     """Truncates issue body if it exceeds GitHub's maximum length.
@@ -77,17 +69,18 @@ def handle_github_errors(response):
 
     formatted_errors = []
     has_insufficient_scopes = False
-    retryable = True
     for raw_error in errors:
         if isinstance(raw_error, dict):
             extensions = raw_error.get('extensions') or {}
             extensions_code = extensions.get('code')
-            explicit_type = raw_error.get('type')
-            error_type = explicit_type or extensions_code or 'UNKNOWN'
+            error_type = (
+                raw_error.get('type')
+                or extensions_code
+                or 'UNKNOWN'
+            )
             message = raw_error.get('message') or 'Unknown error'
         else:
             extensions_code = None
-            explicit_type = None
             error_type = 'UNKNOWN'
             message = str(raw_error) if raw_error is not None else 'Unknown error'
 
@@ -95,22 +88,31 @@ def handle_github_errors(response):
         # alongside ``type: FORBIDDEN`` in ``extensions.code`` — check both.
         if 'INSUFFICIENT_SCOPES' in (error_type, extensions_code):
             has_insufficient_scopes = True
-            retryable = False
-        elif explicit_type not in GITHUB_QUERY_RETRY_ERROR_TYPES:
-            retryable = False
         formatted_errors.append(f"{error_type}: {message}")
 
     if has_insufficient_scopes:
-        raise GithubGraphQLError(
+        raise Exception(
             "Insufficient scopes. Please update your token's scopes. "
-            + " | ".join(formatted_errors),
-            retryable=False,
+            + " | ".join(formatted_errors)
         )
 
-    raise GithubGraphQLError(
-        "GraphQL Error(s): " + " | ".join(formatted_errors),
-        retryable=retryable,
-    )
+    raise Exception("GraphQL Error(s): " + " | ".join(formatted_errors))
+
+
+def _github_graphql_errors_retryable(response):
+    errors = response.get('errors') or []
+    if not errors:
+        return False
+    for raw_error in errors:
+        if not isinstance(raw_error, dict):
+            return False
+        extensions = raw_error.get('extensions') or {}
+        error_type = raw_error.get('type')
+        if 'INSUFFICIENT_SCOPES' in (error_type, extensions.get('code')):
+            return False
+        if error_type not in GITHUB_QUERY_RETRY_ERROR_TYPES:
+            return False
+    return True
 
 
 def _retry_backoff_seconds(attempt, response=None):
@@ -153,15 +155,15 @@ def run_query(query, variables=None):
 
         if request.status_code == 200:
             body = request.json()
-            try:
-                handle_github_errors(body)
-            except GithubGraphQLError as exc:
-                if exc.retryable and attempt < GITHUB_QUERY_MAX_ATTEMPTS - 1:
-                    backoff_seconds = _retry_backoff_seconds(attempt)
-                    print(f"GitHub GraphQL error: {exc}. Retrying in {backoff_seconds}s")
-                    time.sleep(backoff_seconds)
-                    continue
-                raise
+            if (
+                _github_graphql_errors_retryable(body)
+                and attempt < GITHUB_QUERY_MAX_ATTEMPTS - 1
+            ):
+                backoff_seconds = _retry_backoff_seconds(attempt)
+                print(f"GitHub GraphQL returned UNKNOWN error. Retrying in {backoff_seconds}s")
+                time.sleep(backoff_seconds)
+                continue
+            handle_github_errors(body)
             return body
 
         if (

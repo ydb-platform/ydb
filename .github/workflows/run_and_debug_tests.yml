@@ -22,12 +22,12 @@ on:
         type: string
         default: ''
       test_targets:
-        description: 'Build/test target (remote: build_target; ydb_yc: test paths)'
+        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/"); remote: also used as build_target'
         required: false
         type: string
         default: 'ydb/tests/olap/'
       build_preset:
-        description: 'Build preset (comma-separated for ydb_yc; single for remote)'
+        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo"); remote uses the first value'
         required: false
         type: string
         default: 'relwithdebinfo, release-asan'
@@ -82,12 +82,12 @@ on:
         type: boolean
         default: true
       branches:
-        description: 'Branches to test (ydb_yc only)'
+        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path); ydb_yc only'
         required: false
         type: string
         default: ''
       use_branches_config:
-        description: 'Use stable_tests_branches.json (ydb_yc only)'
+        description: 'If true, use branches from .github/config/stable_tests_branches.json; ydb_yc only'
         required: false
         type: boolean
         default: false
@@ -175,15 +175,18 @@ jobs:
         id: format-branches
         run: |
           if [ -z "${{ inputs.branches }}" ]; then
+            # Empty - will use branches_config_path or default
             echo "branches_json=" >> $GITHUB_OUTPUT
           elif [[ "${{ inputs.branches }}" == \[* ]]; then
+            # Already JSON array
             echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
           else
+            # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
             IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
             JSON_BRANCHES="["
             FIRST=true
             for branch in "${BRANCHES[@]}"; do
-              branch=$(echo "$branch" | xargs)
+              branch=$(echo "$branch" | xargs)  # trim whitespace
               if [ -n "$branch" ]; then
                 if [ "$FIRST" = true ]; then
                   FIRST=false
@@ -195,6 +198,7 @@ jobs:
             done
             JSON_BRANCHES+="]"
             echo "branches_json=$JSON_BRANCHES" >> $GITHUB_OUTPUT
+            echo "Converted '${{ inputs.branches }}' to $JSON_BRANCHES"
           fi
 
       - name: Format build presets
@@ -204,14 +208,17 @@ jobs:
           if [ -z "$BUILD_PRESET_INPUT" ]; then
             BUILD_PRESET_INPUT="relwithdebinfo"
           fi
+          
+          # Check if already JSON array
           if [[ "$BUILD_PRESET_INPUT" == \[* ]]; then
             echo "build_preset_array=$BUILD_PRESET_INPUT" >> $GITHUB_OUTPUT
           else
+            # Comma-separated format: "relwithdebinfo, release-asan" -> ["relwithdebinfo", "release-asan"]
             IFS=',' read -ra PRESETS <<< "$BUILD_PRESET_INPUT"
             JSON_PRESETS="["
             FIRST=true
             for preset in "${PRESETS[@]}"; do
-              preset=$(echo "$preset" | xargs)
+              preset=$(echo "$preset" | xargs)  # trim whitespace
               if [ -n "$preset" ]; then
                 if [ "$FIRST" = true ]; then
                   FIRST=false
@@ -223,6 +230,7 @@ jobs:
             done
             JSON_PRESETS+="]"
             echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
+            echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
           fi
 
   main:

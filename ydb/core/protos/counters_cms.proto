@@ -49,7 +49,7 @@ enum EPercentileCounters {
 
 enum ETxTypes {
     TXTYPE_INIT_SCHEMA = 0                                [(TxTypeOpts) = {Name: "TxInitSchema"}];
-    TXTYPE_INIT = 1                                       [(TxTypeOpts) = {Name: "TxInit"}];
+    TXTYPE_INIT_DEPRECATED = 1                            [deprecated = true];
     TXTYPE_GET_LOG_TAIL = 2                               [(TxTypeOpts) = {Name: "TxGetLogTail"}];
     TXTYPE_LOAD_STATE = 3                                 [(TxTypeOpts) = {Name: "TxLoadState"}];
     TXTYPE_LOG_AND_SEND = 4                               [(TxTypeOpts) = {Name: "TxLogAndSend"}];

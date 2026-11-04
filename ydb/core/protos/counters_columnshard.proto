@@ -174,8 +174,8 @@ enum ETxTypes {
     TXTYPE_INIT = 0                                         [(TxTypeOpts) = {Name: "TxInit"}];
     TXTYPE_INIT_SCHEMA = 1                                  [(TxTypeOpts) = {Name: "TxInitSchema"}];
     TXTYPE_UPDATE_SCHEMA = 2                                [(TxTypeOpts) = {Name: "TxUpdateSchema"}];
-    TXTYPE_WRITE = 3                                        [(TxTypeOpts) = {Name: "TxWrite"}];
-    TXTYPE_READ = 4                                         [(TxTypeOpts) = {Name: "TxRead"}];
+    TXTYPE_WRITE_DEPRECATED = 3                             [deprecated = true];
+    TXTYPE_READ_DEPRECATED = 4                              [deprecated = true];
     TXTYPE_PROPOSE = 5                                      [(TxTypeOpts) = {Name: "TxPropose"}];
     TXTYPE_WRITE_INDEX = 6                                  [(TxTypeOpts) = {Name: "TxWriteIndex"}];
     TXTYPE_PLANSTEP = 7                                     [(TxTypeOpts) = {Name: "TxPlanStep"}];
@@ -183,11 +183,11 @@ enum ETxTypes {
     TXTYPE_PROPOSE_CANCEL = 9                               [(TxTypeOpts) = {Name: "TxProposeCancel"}];
     TXTYPE_PROGRESS = 10                                    [(TxTypeOpts) = {Name: "TxProgress"}];
     TXTYPE_START_SCAN = 11                                  [(TxTypeOpts) = {Name: "TxStartScan"}];
-    TXTYPE_READ_BLOB_RANGES = 12                            [(TxTypeOpts) = {Name: "TxReadBlobRanges"}];
-    TXTYPE_EXPORT = 13                                      [(TxTypeOpts) = {Name: "TxExport"}];
-    TXTYPE_FORGET = 14                                      [(TxTypeOpts) = {Name: "TxForget"}];
+    TXTYPE_READ_BLOB_RANGES_DEPRECATED = 12                 [deprecated = true];
+    TXTYPE_EXPORT_DEPRECATED = 13                           [deprecated = true];
+    TXTYPE_FORGET_DEPRECATED = 14                           [deprecated = true];
     TXTYPE_WRITE_DRAFT = 15                                 [(TxTypeOpts) = {Name: "TxWriteDraft"}];
-    TXTYPE_CLEANUP_INSERT_TABLE = 16                        [(TxTypeOpts) = {Name: "TxInsertTableCleanup"}];
+    TXTYPE_CLEANUP_INSERT_TABLE_DEPRECATED = 16             [deprecated = true];
     TXTYPE_GC_FINISHED = 17                                 [(TxTypeOpts) = {Name: "TxGarbageCollectionFinished"}];
     TXTYPE_DELETE_SHARED_BLOBS = 18                         [(TxTypeOpts) = {Name: "TxDeleteSharedBlobs"}];
     TXTYPE_DATA_SHARING_FINISH_ACK_TO_SOURCE = 19           [(TxTypeOpts) = {Name: "TxDataSharingFinishAckToSource"}];
@@ -200,7 +200,7 @@ enum ETxTypes {
     TXTYPE_DATA_SHARING_CONFIRM_FROM_INITIATOR = 26         [(TxTypeOpts) = {Name: "TxDataSharingConfirmFromInitiator"}];
     TXTYPE_DATA_SHARING_APPLY_LINKS_MODIFICATION = 27       [(TxTypeOpts) = {Name: "TxDataSharingApplyLinksModification"}];
     TXTYPE_DATA_SHARING_WRITE_SOURCE_CURSOR = 28            [(TxTypeOpts) = {Name: "TxDataSharingWriteSourceCursor"}];
-    TXTYPE_EXPORT_SAVE_CURSOR = 29                          [(TxTypeOpts) = {Name: "TxExportSaveCursor"}];
+    TXTYPE_EXPORT_SAVE_CURSOR_DEPRECATED = 29               [deprecated = true];
     TXTYPE_REMOVE_BACKGROUND_SESSION = 30                   [(TxTypeOpts) = {Name: "TxRemoveBackgroundSession"}];
     TXTYPE_ADD_BACKGROUND_SESSION = 31                      [(TxTypeOpts) = {Name: "TxAddBackgroundSession"}];
     TXTYPE_SAVE_BACKGROUND_SESSION_PROGRESS = 32            [(TxTypeOpts) = {Name: "TxSaveBackgroundSessionProgress"}];

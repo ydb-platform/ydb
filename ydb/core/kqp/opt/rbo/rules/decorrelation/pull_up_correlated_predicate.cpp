@@ -8,7 +8,7 @@ namespace NKqp {
 
 namespace {
 
-struct TExistsCall {
+struct TSubplanCall {
     TInfoUnitId Binding;
     const TSubplanEntry& Entry;
     bool Negated;
@@ -21,8 +21,8 @@ struct TPulledUpSubplan {
     TVector<TExpression> Filters;
 };
 
-// Matches [NOT] call, where call is a correlated EXISTS subplan.
-std::optional<TExistsCall> MatchCorrelatedExists(const TExpression& conjunct, const TPlanProps& props) {
+// Matches [NOT] call, where call is a correlated EXISTS or IN subplan.
+std::optional<TSubplanCall> MatchCorrelatedCall(const TExpression& conjunct, const TPlanProps& props) {
     auto body = conjunct.GetExpressionBody();
     const bool negated = TCoNot::Match(body.Get());
     if (negated) {
@@ -36,10 +36,11 @@ std::optional<TExistsCall> MatchCorrelatedExists(const TExpression& conjunct, co
 
     const auto binding = GetMemberId(*body);
     const auto* entry = props.Subplans.Find(binding);
-    if (!entry || entry->Type != ESubplanType::EXISTS || !HasFreeCorrelation(entry->Plan, entry->DependentIUs)) {
+    if (!entry || (entry->Type != ESubplanType::EXISTS && entry->Type != ESubplanType::IN_SUBPLAN)
+        || !HasFreeCorrelation(entry->Plan, entry->DependentIUs)) {
         return std::nullopt;
     }
-    return TExistsCall{binding, *entry, negated};
+    return TSubplanCall{binding, *entry, negated};
 }
 
 // Predicates on the subplan's own columns stay on its input, the rest become join conditions.
@@ -143,15 +144,35 @@ bool CanUseJoinFilters(const IOperator& left, const IOperator& right, const TJoi
     });
 }
 
-TIntrusivePtr<IOperator> TryBuildPulledUpJoin(const TIntrusivePtr<IOperator>& left, const TExistsCall& call, TPositionHandle pos, TRBOContext& ctx, TPlanProps& props) {
-    auto subplan = TryPullUpSubplan(call.Entry, left->GetOutputIUs(), props);
+// An anti join keeps a row without a match, but NOT IN is unknown when either side of its
+// comparison is null and the subplan is not empty. Without nulls the two are the same.
+bool CanUseAntiJoinForNotIn(const TIntrusivePtr<IOperator>& left, const TSubplanEntry& entry, TExprContext& ctx) {
+    return !IsNullableIU(left, entry.Tuple.Items()[0], ctx) && !IsNullableIU(entry.Plan, *entry.ResultIU, ctx);
+}
+
+TIntrusivePtr<IOperator> TryBuildPulledUpJoin(const TIntrusivePtr<IOperator>& left, const TSubplanCall& call, TPositionHandle pos, TRBOContext& ctx, TPlanProps& props) {
+    const auto& entry = call.Entry;
+    const bool isIn = entry.Type == ESubplanType::IN_SUBPLAN;
+    Y_ENSURE(!isIn || (entry.Tuple.Items().size() == 1 && entry.ResultIU), "IN requires one lookup column and one result");
+    if (isIn && call.Negated && !CanUseAntiJoinForNotIn(left, entry, ctx.ExprCtx)) {
+        return nullptr;
+    }
+
+    auto subplan = TryPullUpSubplan(entry, left->GetOutputIUs(), props);
+    if (!subplan) {
+        return nullptr;
+    }
+    if (isIn) {
+        subplan->Keys.Add(entry.Tuple.Items()[0], *entry.ResultIU);
+    }
+
     // Semi and anti joins without an equality stay on the dependent join path.
-    if (!subplan || subplan->Keys.Items().empty()) {
+    if (subplan->Keys.Items().empty()) {
         return nullptr;
     }
 
     // Rebuilt operators have no inferred type yet, but the original subplan has the same IDs.
-    if (!subplan->Filters.empty() && !CanUseJoinFilters(*left, *call.Entry.Plan, subplan->Keys, ctx)) {
+    if (!subplan->Filters.empty() && !CanUseJoinFilters(*left, *entry.Plan, subplan->Keys, ctx)) {
         return nullptr;
     }
     return MakeIntrusive<TOpJoin>(left, subplan->Input, pos, call.Negated ? "LeftOnly" : "LeftSemi", subplan->Keys, subplan->Filters);
@@ -159,26 +180,27 @@ TIntrusivePtr<IOperator> TryBuildPulledUpJoin(const TIntrusivePtr<IOperator>& le
 
 } // anonymous namespace
 
-bool TPullUpCorrelatedExistsRule::QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps& props) const {
+bool TPullUpCorrelatedPredicateRule::QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps& props) const {
     if (input->Kind != EOperator::Filter || props.Subplans.Empty()) {
         return false;
     }
 
     return AnyOf(input->GetSubplanIUs(props.Subplans), [&](TInfoUnitId iu) {
-        return props.Subplans.At(iu).Type == ESubplanType::EXISTS;
+        const auto type = props.Subplans.At(iu).Type;
+        return type == ESubplanType::EXISTS || type == ESubplanType::IN_SUBPLAN;
     });
 }
 
-bool TPullUpCorrelatedExistsRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+bool TPullUpCorrelatedPredicateRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
     return input->Kind == EOperator::Filter;
 }
 
-TIntrusivePtr<IOperator> TPullUpCorrelatedExistsRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+TIntrusivePtr<IOperator> TPullUpCorrelatedPredicateRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     auto filter = CastOperator<TOpFilter>(input);
     auto conjuncts = filter->GetFilterExpression().SplitConjunct();
 
     for (size_t i = 0; i < conjuncts.size(); ++i) {
-        const auto call = MatchCorrelatedExists(conjuncts[i], props);
+        const auto call = MatchCorrelatedCall(conjuncts[i], props);
         if (!call) {
             continue;
         }

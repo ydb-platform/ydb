@@ -158,6 +158,21 @@ def cmd_start():
     print(f"executor_run_id={run_id}")
     print(f"executor_run_url={run_url}")
     set_outputs(executor_run_id=run_id, executor_run_url=run_url)
+
+    # Pretty-print for summary: expand nested JSON strings (e.g. job_inputs).
+    pretty = {}
+    for k, v in inputs.items():
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+            except json.JSONDecodeError:
+                pretty[k] = v
+            else:
+                pretty[k] = parsed if isinstance(parsed, (dict, list)) else v
+        else:
+            pretty[k] = v
+    pretty_json = json.dumps(pretty, ensure_ascii=False, indent=2)
+
     append_summary(
         "\n".join(
             [
@@ -166,7 +181,14 @@ def cmd_start():
                 f"- **executor ref:** `{executor_ref}`",
                 f"- **executor run:** [{run_id}]({run_url})",
                 f"- **mode:** `{wait_mode}`",
-                f"- **inputs:** `{json.dumps(inputs, ensure_ascii=False)}`",
+                "",
+                "<details><summary>inputs</summary>",
+                "",
+                "```json",
+                pretty_json,
+                "```",
+                "",
+                "</details>",
                 "",
             ]
         )

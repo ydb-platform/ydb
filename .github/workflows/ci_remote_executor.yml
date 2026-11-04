@@ -1,0 +1,34 @@
+# Stub on platform/main so workflow_dispatch API can resolve this workflow file.
+# Real implementation lives on the executor ref (dev/ci-remote-executor / nebius).
+# Dispatch with --ref <executor-ref> to run the fat executor version.
+name: CI remote executor
+
+on:
+  workflow_dispatch:
+    inputs:
+      code_ref:
+        description: 'YDB ref/SHA to build and test (empty = this workflow SHA)'
+        required: false
+        type: string
+        default: ''
+      job:
+        description: 'Which job to run on the fat executor'
+        required: false
+        type: choice
+        options:
+          - build_and_test_ya
+        default: build_and_test_ya
+      job_inputs:
+        description: 'JSON object of public params for the selected job (no secrets)'
+        required: false
+        type: string
+        default: '{}'
+
+jobs:
+  stub:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stub only
+        run: |
+          echo "::error::CI remote executor stub on this ref — dispatch with remote_executor_ref / --ref pointing at the fat executor branch or nebius repo."
+          exit 1

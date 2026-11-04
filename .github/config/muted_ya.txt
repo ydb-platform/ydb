@@ -281,6 +281,7 @@ ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_large_topi
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_large_topic_message[local-kikimr0]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_csv_with_names[True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_stop_after_restart[kikimr0-True]
+ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_precompute_recovery[True]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_early_events_policy[2-no_shared-False]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_late_events_policy[DROP-expected0-True-2-no_shared]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_wm_after_parsing[False-2-no_shared]
@@ -325,6 +326,7 @@ ydb/tests/functional/bridge test_state_storage_selfheal_piles.py.TestBridgeState
 ydb/tests/functional/bridge test_state_storage_selfheal_piles.py.TestBridgeStateStorageSelfHealPileTransitions.test_two_offline_piles_and_partial_recovery[reassign]
 ydb/tests/functional/bridge test_state_storage_selfheal_root_restart.py.TestBridgeSelfHealRootRestart.test_root_restart_during_selfheal[reassign-disabled]
 ydb/tests/functional/bridge/chaos test_bridge_chaos.py.TestBridgeChaos.test_bridge_chaos
+ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[index_predicate_point.sql-plan]
 ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[pk_predicate/pk_predicate_ranges_rp.sql-result_sets]
 ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[pure/trivial_6.sql-result_sets]
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationFromV1.test_migration_from_v1_to_v2_to_v1_to_v2

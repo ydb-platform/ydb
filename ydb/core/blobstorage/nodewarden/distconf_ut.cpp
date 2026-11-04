@@ -2421,6 +2421,36 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         CheckRootAfterNodeLoss(true);
     }
 
+    Y_UNIT_TEST(ConfigChangeWithoutScepterIsRetryable) {
+        const auto config = MakeStorageConfig(3);
+        TNodeWardenTestState state;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        runtime.StopNode(2);
+        runtime.StopNode(3);
+        const TActorId keeper = RegisterKeeper(runtime, config, 1, state);
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableRemoveBridgePile()->SetPileName("pile1");
+        runtime.Send(new IEventHandle(keeper, edge, request.release()), 1);
+        const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        const auto& record = response->Get()->Record;
+        UNIT_ASSERT_EQUAL_C(record.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE,
+            record.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(record.GetErrorReason(), "No scepter");
+        UNIT_ASSERT(!record.HasScepter());
+
+        std::vector<TActorId> keepers{keeper};
+        for (ui32 nodeId : {2, 3}) {
+            runtime.StartNode(nodeId);
+            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers).has_value(); }));
+        const auto root = FindConvergedRoot(runtime, keepers);
+        UNIT_ASSERT(QueryKeeper(runtime, keepers[*root - 1]).HasScepter());
+    }
+
     Y_UNIT_TEST(OfflineLowerPeerDoesNotBlockBinding) {
         const auto config = MakeStorageConfig(3, 1, {3});
         TNodeWardenTestState state;

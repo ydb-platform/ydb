@@ -44,22 +44,20 @@ jobs:
         uses: actions/checkout@v5
         with:
           sparse-checkout: |
-            .github/scripts/ci
-            .github/actions/dispatch_remote_executor
+            .github/scripts/ci/dispatch_remote_executor.py
           sparse-checkout-cone-mode: false
 
       - name: Dispatch remote executor
         id: dispatch
-        uses: ./.github/actions/dispatch_remote_executor
-        with:
-          command: start
-          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          repository: ${{ inputs.repository != '' && inputs.repository || github.repository }}
-          workflow_file: ${{ inputs.workflow_file }}
-          workflow_name: ${{ inputs.workflow_name }}
-          executor_ref: ${{ inputs.executor_ref }}
-          inputs_json: ${{ inputs.inputs_json }}
-          wait_mode: ${{ inputs.wait && 'wait+mirror' || 'fire-and-forget' }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          REPO: ${{ inputs.repository != '' && inputs.repository || github.repository }}
+          WORKFLOW_FILE: ${{ inputs.workflow_file }}
+          WORKFLOW_NAME: ${{ inputs.workflow_name }}
+          EXECUTOR_REF: ${{ inputs.executor_ref }}
+          INPUTS_JSON: ${{ inputs.inputs_json }}
+          WAIT_MODE: ${{ inputs.wait && 'wait+mirror' || 'fire-and-forget' }}
+        run: python3 .github/scripts/ci/dispatch_remote_executor.py start
 
   wait:
     if: inputs.wait
@@ -71,31 +69,28 @@ jobs:
         uses: actions/checkout@v5
         with:
           sparse-checkout: |
-            .github/scripts/ci
-            .github/actions/dispatch_remote_executor
+            .github/scripts/ci/dispatch_remote_executor.py
           sparse-checkout-cone-mode: false
 
       - name: Wait and mirror executor summary
-        uses: ./.github/actions/dispatch_remote_executor
-        with:
-          command: wait
-          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          repository: ${{ inputs.repository != '' && inputs.repository || github.repository }}
-          workflow_file: ${{ inputs.workflow_file }}
-          workflow_name: ${{ inputs.workflow_name }}
-          executor_run_id: ${{ needs.dispatch.outputs.executor_run_id }}
-          executor_run_url: ${{ needs.dispatch.outputs.executor_run_url }}
-          aws_endpoint: ${{ vars.AWS_ENDPOINT }}
-          aws_bucket: ${{ vars.AWS_BUCKET }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          REPO: ${{ inputs.repository != '' && inputs.repository || github.repository }}
+          WORKFLOW_FILE: ${{ inputs.workflow_file }}
+          WORKFLOW_NAME: ${{ inputs.workflow_name }}
+          EXECUTOR_RUN_ID: ${{ needs.dispatch.outputs.executor_run_id }}
+          EXECUTOR_RUN_URL: ${{ needs.dispatch.outputs.executor_run_url }}
+          AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
+          AWS_BUCKET: ${{ vars.AWS_BUCKET }}
+        run: python3 .github/scripts/ci/dispatch_remote_executor.py wait
 
       - name: Cancel executor on caller cancel
         if: cancelled() && needs.dispatch.outputs.executor_run_id != ''
-        uses: ./.github/actions/dispatch_remote_executor
-        with:
-          command: cancel
-          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          repository: ${{ inputs.repository != '' && inputs.repository || github.repository }}
-          workflow_file: ${{ inputs.workflow_file }}
-          workflow_name: ${{ inputs.workflow_name }}
-          executor_run_id: ${{ needs.dispatch.outputs.executor_run_id }}
-          executor_run_url: ${{ needs.dispatch.outputs.executor_run_url }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          REPO: ${{ inputs.repository != '' && inputs.repository || github.repository }}
+          WORKFLOW_FILE: ${{ inputs.workflow_file }}
+          WORKFLOW_NAME: ${{ inputs.workflow_name }}
+          EXECUTOR_RUN_ID: ${{ needs.dispatch.outputs.executor_run_id }}
+          EXECUTOR_RUN_URL: ${{ needs.dispatch.outputs.executor_run_url }}
+        run: python3 .github/scripts/ci/dispatch_remote_executor.py cancel

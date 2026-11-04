@@ -48,7 +48,7 @@ on:
         default: true
 
 jobs:
-  # Completes in seconds so Job summary ("what launched") is visible while wait runs.
+  # Short job: summary/notice appear before wait_remote finishes.
   dispatch_remote:
     if: inputs.executor == 'remote'
     runs-on: ubuntu-latest
@@ -67,7 +67,7 @@ jobs:
       - name: Dispatch executor workflow on remote_executor_ref
         id: dispatch
         env:
-          # GITHUB_TOKEN does not start new workflow runs; use PAT + curl (no gh required).
+          # GITHUB_TOKEN cannot start new workflow runs.
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           EXECUTOR_REF: ${{ inputs.remote_executor_ref }}
           CODE_REF: ${{ inputs.code_ref || github.sha }}
@@ -75,6 +75,7 @@ jobs:
           BUILD_PRESET: ${{ inputs.build_preset }}
           WAIT_MODE: ${{ inputs.wait_for_remote && 'wait+mirror' || 'fire-and-forget' }}
           REPO: ${{ github.repository }}
+          WORKFLOW_NAME: ${{ github.workflow }}
         shell: bash
         run: bash .github/scripts/ci/dispatch_remote_executor.sh start
 
@@ -82,7 +83,6 @@ jobs:
     if: inputs.executor == 'remote' && inputs.wait_for_remote
     needs: dispatch_remote
     runs-on: [self-hosted, runner-waiter]
-    # Must outlive the fat-runner executor.
     timeout-minutes: 400
     steps:
       - name: Checkout dispatch helpers
@@ -100,6 +100,7 @@ jobs:
           REPO: ${{ github.repository }}
           AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
           AWS_BUCKET: ${{ vars.AWS_BUCKET }}
+          WORKFLOW_NAME: ${{ github.workflow }}
         shell: bash
         run: bash .github/scripts/ci/dispatch_remote_executor.sh wait
 

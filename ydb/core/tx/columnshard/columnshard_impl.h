@@ -26,6 +26,7 @@
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
+#include "operations/write_gate.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
@@ -140,7 +141,6 @@ class TOperationsManager;
 class TWaitEraseTablesTxSubscriber;
 class TTxBlobsWritingFinished;
 class TTxBlobsWritingFailed;
-class TWriteTasksQueue;
 class TWriteTask;
 class TCommitOperation;
 class IScanSnapshotGuard;
@@ -278,7 +278,6 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class NLoading::TSpecialValuesInitializer;
     friend class NLoading::TTablesManagerInitializer;
     friend class NLoading::TTiersManagerInitializer;
-    friend class TWriteTasksQueue;
     friend class TWriteTask;
 
     class TTxProgressTx;
@@ -305,6 +304,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(NOlap::TEvPassWriteGate::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorContext& ctx);
@@ -443,11 +443,11 @@ public:
     }
 
 private:
+    void DrainWriteQueue(const TActorContext& ctx, const bool isRetryWakeup = false);
+    void FailStartedWrite(const NOlap::TEvPassWriteGate& batch, const NKikimrDataEvents::TEvWriteResult::EStatus status, const TString& reason,
+        const TActorContext& ctx);
     void OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize, const ui64 cookie,
         std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx);
-    TOverloadStatus ResourcesStatusToOverloadStatus(const NOverload::EResourcesStatus status) const;
-    TOverloadStatus CheckOverloadedImmediate(const TInternalPathId tableId) const;
-    EOverloadStatus CheckOverloadedWait(const TInternalPathId tableId) const;
 
 protected:
     STFUNC(StateInit) {
@@ -475,7 +475,6 @@ private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
     TCountersManager Counters;
     TStartupTimeline StartupTimeline;
-    std::unique_ptr<TWriteTasksQueue> WriteTasksQueue;
 
     std::unique_ptr<TTxController> ProgressTxController;
     std::unique_ptr<TOperationsManager> OperationsManager;
@@ -536,6 +535,7 @@ private:
     bool ProgressTxScheduled = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
     NOlap::NReader::TScanGate ScanGate;
+    std::optional<TWriteGate> WriteGate;
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;
@@ -712,6 +712,11 @@ public:
     TOperationsManager& GetOperationsManager() const {
         AFL_VERIFY(OperationsManager);
         return *OperationsManager;
+    }
+
+    TWriteGate& GetWriteGate() {
+        AFL_VERIFY(WriteGate);
+        return *WriteGate;
     }
 
     bool HasIndex() const {

@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/operations/events.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_writer.h>
+#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
@@ -256,6 +257,33 @@ Y_UNIT_TEST_SUITE(TColumnShardNotProposedTransactions) {
         shard.PassReadWindow();
         shard.TryCleanupTables(pathId, 60);
         UNIT_ASSERT(!shard.HasTable(pathId));
+    }
+
+    Y_UNIT_TEST(QueuedWriteOfAbortedLockFails) {
+        TShardFixture shard;
+        Y_UNUSED(shard.WriteUnderLock());
+        PlanCommit(shard.Runtime, shard.Sender, shard.Writer.StartCommit(TxId), TxId);
+        // a write of the lock in progress keeps its abort pending
+        TBlockEvents<NPrivateEvents::NWrite::TEvWritePortionResult> blockedWrittenPortions(shard.Runtime);
+        shard.SendWriteUnderLock();
+        shard.Runtime.WaitFor("portion written", [&] {
+            return !blockedWrittenPortions.empty();
+        }, TDuration::Seconds(30));
+        // any loaded portion is over a zero metadata limit, so the queue holds the next write
+        shard.Runtime.GetAppData().ColumnShardConfig.MutableIndexMetadataMemoryLimit()->SetAbsoluteValue(0);
+        shard.SendWriteUnderLock();
+
+        shard.NotifyTransactionGone();
+        shard.Runtime.WaitFor("lock marked for abort", [&] {
+            return shard.Shard().GetOperationsManager().GetLockOptional(LockId)->NeedsAborting();
+        }, TDuration::Seconds(30));
+        // the queue's own retry is a scheduled wakeup, which the test runtime drops
+        ForwardToTablet(shard.Runtime, TTestTxConfig::TxTablet0, shard.Sender, new TEvents::TEvWakeup(1));
+
+        // a queue answer carries the request's tx id, not the lock id the writer checks
+        TAutoPtr<IEventHandle> handle;
+        const auto result = shard.Runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
     }
 }
 

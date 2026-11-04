@@ -49,8 +49,20 @@ bool TLoadedKeyRanges::Covers(const TPKRangesFilter& ranges) const {
         return false;
     }
     return std::all_of(ranges.begin(), ranges.end(), [&](const TPKRangeFilter& range) {
-        return StartsAtOrAbove(range.GetPredicateFrom(), *From);
+        return StartsAtOrAbove(range.GetPredicateFrom(), *FromPosition);
     });
+}
+
+bool TLoadedKeyRanges::CoversFrom(const NArrow::TSimpleRow& key) const {
+    switch (State) {
+        case EState::Nothing:
+            return false;
+        case EState::Everything:
+            return true;
+        case EState::From:
+            break;
+    }
+    return key >= *From;
 }
 
 }   // namespace NKikimr::NOlap

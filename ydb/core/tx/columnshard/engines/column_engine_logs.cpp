@@ -814,6 +814,11 @@ bool TColumnEngineForLogs::ArePortionsLoaded(const TInternalPathId pathId, const
     return !granule || granule->GetLoadedKeyRanges().Covers(ranges);
 }
 
+bool TColumnEngineForLogs::ArePortionsLoadedFrom(const TInternalPathId pathId, const NArrow::TSimpleRow& key) const {
+    const auto granule = GetGranuleOptional(pathId);
+    return !granule || granule->GetLoadedKeyRanges().CoversFrom(key);
+}
+
 bool TColumnEngineForLogs::AreAllPortionsLoaded(const std::optional<TInternalPathId> pathId) const {
     if (pathId) {
         const auto granule = GetGranuleOptional(*pathId);

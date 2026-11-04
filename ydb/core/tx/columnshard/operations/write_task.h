@@ -41,8 +41,13 @@ public:
         return std::tie(Created, PathId.GetInternalPathId(), TaskId) < std::tie(item.Created, item.PathId.GetInternalPathId(), item.TaskId);
     }
 
+    std::optional<TMonotonic> GetDeadline() const {
+        return Timeout ? std::optional<TMonotonic>(Created + *Timeout) : std::nullopt;
+    }
+
     bool IsDeprecated(const TMonotonic now) const {
-        return Timeout ? (Created + *Timeout <= now) : false;
+        const std::optional<TMonotonic> deadline = GetDeadline();
+        return deadline && *deadline <= now;
     }
 
     TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
@@ -77,6 +82,10 @@ public:
         return PathId.InternalPathId;
     }
 
+    ui64 GetLockId() const {
+        return LockId;
+    }
+
     const TMonotonic& GetCreatedMonotonic() const {
         return Created;
     }
@@ -85,25 +94,6 @@ public:
     void Abort(TColumnShard* owner, const TString& reason, const TActorContext& ctx,
         const NKikimrDataEvents::TEvWriteResult::EStatus& status = NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR) const;
     void FailByOverload(TColumnShard* owner, const EOverloadStatus overloadStatus, const TActorContext& ctx) const;
-};
-
-class TWriteTasksQueue {
-private:
-    bool WriteTasksOverloadCheckerScheduled = false;
-    bool CompactionOverloadReported = false;
-    std::set<TWriteTask> WriteTasks;
-    TColumnShard* Owner;
-
-public:
-    TWriteTasksQueue(TColumnShard* owner)
-        : Owner(owner)
-    {
-    }
-
-    ~TWriteTasksQueue();
-
-    void Enqueue(TWriteTask&& task);
-    bool Drain(const bool onWakeup, const TActorContext& ctx);
 };
 
 }   // namespace NKikimr::NColumnShard

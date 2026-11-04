@@ -12,7 +12,7 @@
 #include "transactions/operators/ev_write/secondary.h"
 #include "transactions/operators/ev_write/sync.h"
 
-#include <ydb/core/tx/columnshard/tablet/write_queue.h>
+#include <ydb/core/tx/columnshard/operations/write_task.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tracing/write_orbit.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
@@ -66,24 +66,6 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
         {"reason", overloadReason});
 
     ctx.Send(writeMeta.GetSource(), event.release(), 0, cookie);
-}
-
-TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalPathId pathId) const {
-    if (AppDataVerified().FeatureFlags.GetEnableSmallBlobsQuotaEnforcement() && SpaceWatcher->SubDomainSmallBlobsQuotaExceeded) {
-        return EOverloadStatus::SmallBlobsQuota;
-    }
-    Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
-    if (TablesManager.GetPrimaryIndex()) {
-        if (TablesManager.GetPrimaryIndex()->IsOverloadedByMetadata(NOlap::IColumnEngine::GetMetadataLimit())) {
-            return EOverloadStatus::OverloadMetadata;
-        }
-        auto& engineForLogs = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
-        auto badPortionsCounter = engineForLogs.GetBadPortionsCounter();
-        if (engineForLogs.GetGranuleVerified(pathId).GetOptimizerPlanner().IsOverloaded(badPortionsCounter)) {
-            return EOverloadStatus::OverloadCompaction;
-        }
-    }
-    return EOverloadStatus::None;
 }
 
 void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& ev, const TActorContext& ctx) {
@@ -427,11 +409,9 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         ctx.Send(source, result.release(), 0, cookie);
     };
 
-    if (behaviour == EOperationBehaviour::WriteWithLock) {
-        if (auto lock = OperationsManager->GetLockOptional(record.GetLockTxId()); lock && lock->NeedsAborting()) {
-            sendError("lock is already aborted", NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
-            return;
-        }
+    if (behaviour == EOperationBehaviour::WriteWithLock && GetWriteGate().IsLockAborted(record.GetLockTxId())) {
+        sendError("transaction is aborted", NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+        return;
     }
 
     const auto inFlightLocksRangesBytes = NOlap::TPKRangesFilter::GetFiltersTotalMemorySize();
@@ -531,12 +511,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE, "",
             {"event", "unknown_table"},
             {"pathId", schemeShardLocalPathId});
-        sendError("unknown table", NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, 0, 0, "", operation.GetIsBulk());
+        sendError("unknown table", NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, 0, 0, "", operation.GetIsBulk());
         return;
     }
     const auto& pathId = TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId);
-    if (!TablesManager.IsReadyForStartWrite(*internalPathId, false)) {
-        sendError("table not writable", NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, internalPathId->GetRawValue(), 0, "",
+    if (!GetWriteGate().IsTableWritable(*internalPathId)) {
+        sendError("table is dropped", NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED, internalPathId->GetRawValue(), 0, "",
             operation.GetIsBulk());
         return;
     }
@@ -563,26 +543,11 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
 
     const bool isDelete = *mType == NEvWrite::EModificationType::Delete;
-    const bool outOfSpace = SpaceWatcher->SubDomainOutOfSpace && !isDelete;
-    if (outOfSpace) {
-        YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-            {"event", "skip_writing"},
-            {"reason", "quota_exceeded"},
-            {"source", "dataevent"});
-    }
-    auto overloadStatus = outOfSpace ? TOverloadStatus{ EOverloadStatus::Disk,
-        "The disk quota has been exhausted. Please increase the available database disk resources or delete unused data." }
-                                     : CheckOverloadedImmediate(*internalPathId);
-    if (overloadStatus.Status == EOverloadStatus::None) {
-        overloadStatus = ResourcesStatusToOverloadStatus(Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize()));
-    }
-    if (overloadStatus.Status != EOverloadStatus::None) {
-        const NKikimrDataEvents::TEvWriteResult::EStatus writeStatus =
-            outOfSpace ? NKikimrDataEvents::TEvWriteResult::STATUS_DATABASE_DISK_SPACE_QUOTA_EXCEEDED
-                       : NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
-        trackFailed(internalPathId->GetRawValue(), arrowData->GetSize(), "", operation.GetIsBulk(), "immediate error", ToString(writeStatus),
-            "overload data error " + ToString(overloadStatus.Status));
-        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, writeStatus,
+    if (const std::optional<TWriteGate::TRejection> rejection = GetWriteGate().TryStartWrite(isDelete, arrowData->GetSize())) {
+        const TOverloadStatus& overloadStatus = rejection->Overload;
+        trackFailed(internalPathId->GetRawValue(), arrowData->GetSize(), "", operation.GetIsBulk(), "immediate error",
+            ToString(rejection->Answer), "overload data error " + ToString(overloadStatus.Status));
+        auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), 0, rejection->Answer,
             TStringBuilder{} << "Column shard " << TabletID() << " is overloaded. Reason: " << overloadStatus.Reason);
 
         if ((overloadStatus.Status == EOverloadStatus::ShardWritesSizeInFly || overloadStatus.Status == EOverloadStatus::ShardWritesInFly) &&
@@ -654,10 +619,68 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     trackStart(rawPathId, arrowData->GetSize(), modificationType, isBulk);
     LWTRACK(WriteEnqueued, *orbit, rawPathId, TabletID(), record.GetTxId(), cookie, TMonotonic::Now() - receivedAt);
 
-    WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, ev->Recipient, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId,
-        record.GetLockNodeId(), lockMode, *mType, behaviour, writeTimeout, record.GetTxId(), isBulk,
+    GetWriteGate().AddToWriteQueue(TWriteTask(arrowData, schema, source, ev->Recipient, granuleShardingVersionId, pathId, cookie, mvccSnapshot,
+        lockId, record.GetLockNodeId(), lockMode, *mType, behaviour, writeTimeout, record.GetTxId(), isBulk,
         record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>(), std::move(orbit), receivedAt));
-    WriteTasksQueue->Drain(false, ctx);
+    DrainWriteQueue(ctx);
+}
+
+void TColumnShard::DrainWriteQueue(const TActorContext& ctx, const bool isRetryWakeup) {
+    TWriteGate::TDrainedWrites drained = GetWriteGate().DrainWriteQueue(ctx, isRetryWakeup);
+    for (const TWriteTask& task : drained.TableDropped) {
+        task.Abort(this, "table is dropped", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_SCHEME_CHANGED);
+    }
+    for (const TWriteTask& task : drained.LockAborted) {
+        task.Abort(this, "transaction is aborted", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+    }
+    for (const auto& [task, overload] : drained.TimedOut) {
+        if (overload != EOverloadStatus::None) {
+            task.FailByOverload(this, overload, ctx);
+        } else {
+            task.Abort(this, "timeout", ctx, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
+        }
+    }
+    for (const NOlap::TEvPassWriteGate::TPtr& ev : drained.TimedOutWaitingForLoadedPortions) {
+        FailStartedWrite(*ev->Get(), NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "timeout", ctx);
+    }
+    for (const TWriteTask& task : drained.ToStart) {
+        task.Execute(this, ctx);
+    }
+}
+
+void TColumnShard::FailStartedWrite(const NOlap::TEvPassWriteGate& batch, const NKikimrDataEvents::TEvWriteResult::EStatus status,
+    const TString& reason, const TActorContext& ctx) {
+    const NEvWrite::TWriteData& writeData = batch.GetWriteData();
+    const NEvWrite::TWriteMeta& writeMeta = writeData.GetWriteMeta();
+    const TWriteOperation::TPtr operation = OperationsManager->GetOperationVerified((TOperationWriteId)writeMeta.GetWriteId());
+    OperationsManager->SetOperationFinished(operation->GetWriteId());
+    Counters.GetWritesMonitor()->OnFinishWrite(writeData.GetSize(), 1);
+    TrackWriteFailed(writeMeta, "wait_loaded_portions", ToString(status), reason);
+    writeMeta.OnStage(NEvWrite::EWriteStage::Replied);
+    ctx.Send(writeMeta.GetSource(),
+        NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), operation->GetLockId(), status, reason).release(), 0,
+        operation->GetCookie());
+    writeMeta.OnStage(NEvWrite::EWriteStage::Aborted);
+    // only an ephemeral lock is ours to drop; a pending abort of a transaction waits for its operations to finish, as after a landed write
+    if (operation->GetBehaviour() == EOperationBehaviour::NoTxWrite) {
+        TransactionToAbort(operation->GetLockId());
+    } else {
+        MaybeAbortTransaction(operation->GetLockId());
+    }
+}
+
+void TColumnShard::Handle(NOlap::TEvPassWriteGate::TPtr& ev, const TActorContext& ctx) {
+    switch (GetWriteGate().PassPreparedBatch(ev, ctx)) {
+        case TWriteGate::EBatchDecision::Pass:
+            NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(std::make_shared<NOlap::TStartWritingPreparedBatchTask>(
+                std::move(ev->Get()->MutableWriteData()), ev->Get()->GetBatch(), ev->Get()->GetContext()));
+            return;
+        case TWriteGate::EBatchDecision::Hold:
+            return;
+        case TWriteGate::EBatchDecision::LockAborted:
+            FailStartedWrite(*ev->Get(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "transaction is aborted", ctx);
+            return;
+    }
 }
 
 }   // namespace NKikimr::NColumnShard

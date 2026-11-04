@@ -837,9 +837,9 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         UNIT_ASSERT_C(!state.NodeWardenConfigs.contains(5), "unresolvable local pile was accepted");
         UNIT_ASSERT(FindConvergedRoot(runtime, keepers) == 1);
 
-        // Correcting the node's startup location allows a replacement keeper to accept the same cluster config.
-        runtime.Send(new IEventHandle(invalid, {}, new TEvents::TEvPoison), 5);
-        UNIT_ASSERT(SimUntil(runtime, [&] { return !runtime.GetActor(invalid); }));
+        // Correcting the startup location requires a node restart, including its interconnect sessions.
+        runtime.StopNode(5);
+        runtime.StartNode(5);
         RegisterKeeper(runtime, config, 5, state, {}, &bridge, nullptr, "pile1");
         UNIT_ASSERT(SimUntil(runtime, [&] { return state.NodeWardenConfigs.contains(5); }));
         UNIT_ASSERT_VALUES_EQUAL(state.NodeWardenConfigs.at(5)->GetFingerprint(), config.GetFingerprint());

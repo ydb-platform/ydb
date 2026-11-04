@@ -168,18 +168,24 @@ def local_workflow_path_from_uses(uses: str) -> str | None:
     return f".github/workflows/{m.group(1).lstrip('/')}"
 
 
-def patch_workflow_doc(doc: dict, runs_on: list, self_hosted_only: bool) -> tuple[dict, list[str], int]:
+def _fmt_runs_on(value) -> str:
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False)
+
+
+def patch_workflow_doc(doc: dict, runs_on: list, self_hosted_only: bool) -> tuple[dict, list[str], list[dict]]:
     """
     Patch job runs-on in a loaded workflow document.
-    Returns (doc, nested_local_workflow_paths, n_jobs_patched).
+    Returns (doc, nested_local_workflow_paths, changes[{job, from, to}]).
     """
     nested: list[str] = []
-    patched = 0
+    changes: list[dict] = []
     jobs = doc.get("jobs")
     if not isinstance(jobs, dict):
-        return doc, nested, patched
+        return doc, nested, changes
 
-    for _name, job in jobs.items():
+    for name, job in jobs.items():
         if not isinstance(job, dict):
             continue
         uses = job.get("uses")
@@ -193,9 +199,9 @@ def patch_workflow_doc(doc: dict, runs_on: list, self_hosted_only: bool) -> tupl
         cur = job["runs-on"]
         if self_hosted_only and not runs_on_looks_self_hosted(cur):
             continue
+        changes.append({"job": name, "from": cur, "to": list(runs_on)})
         job["runs-on"] = runs_on
-        patched += 1
-    return doc, nested, patched
+    return doc, nested, changes
 
 
 def dump_workflow_yaml(doc: dict) -> str:
@@ -223,16 +229,16 @@ def collect_patched_workflows(
     root_workflow_path: str,
     runs_on: list,
     self_hosted_only: bool = True,
-) -> dict[str, str]:
+) -> tuple[dict[str, str], list[dict]]:
     """
-    Fetch root workflow (+ nested local reusable workflows), patch runs-on, return path→new YAML.
-    fetch_text(path) -> str (raw file contents at source ref).
+    Fetch root workflow (+ nested local reusable workflows), patch runs-on.
+    Returns (path→new YAML, patch_report[{file, job, from, to}]).
     """
     _require_yaml()
     out: dict[str, str] = {}
+    report: list[dict] = []
     queue = [root_workflow_path]
     seen: set[str] = set()
-    total_jobs = 0
 
     while queue:
         path = queue.pop(0)
@@ -246,22 +252,23 @@ def collect_patched_workflows(
             raise
         except Exception as e:
             die(f"failed to parse YAML {path}: {e}")
-        doc, nested, n = patch_workflow_doc(doc, runs_on, self_hosted_only)
-        total_jobs += n
-        if n or path == root_workflow_path:
+        doc, nested, changes = patch_workflow_doc(doc, runs_on, self_hosted_only)
+        for ch in changes:
+            report.append({"file": path, "job": ch["job"], "from": ch["from"], "to": ch["to"]})
+        if changes or path == root_workflow_path:
             # Always rewrite root so the tmp ref is distinct; nested only if patched.
             out[path] = dump_workflow_yaml(doc)
         for npath in nested:
             if npath not in seen:
                 queue.append(npath)
 
-    if total_jobs == 0:
+    if not report:
         die(
             f"no self-hosted runs-on jobs patched under {root_workflow_path} "
             f"(self_hosted_only={self_hosted_only}); refuse empty patch"
         )
-    print(f"Patched {total_jobs} job runs-on across {len(out)} workflow file(s)")
-    return out
+    print(f"Patched {len(report)} job runs-on across {len(out)} workflow file(s)")
+    return out, report
 
 
 def workflow_repo_path(workflow_file: str) -> str:
@@ -357,8 +364,8 @@ def delete_branch(branch: str) -> None:
     print(f"delete branch {branch}: HTTP {code}")
 
 
-def prepare_patched_ref(workflow_file: str, source_ref: str, runs_on: list) -> str:
-    """Create tmp branch with patched workflows; return branch name."""
+def prepare_patched_ref(workflow_file: str, source_ref: str, runs_on: list) -> tuple[str, list[dict], str]:
+    """Create tmp branch with patched workflows; return (branch, patch_report, base_sha)."""
     root = workflow_repo_path(workflow_file)
     base_sha = resolve_commit_sha(source_ref)
     self_hosted_only = _truthy_env("PATCH_SELF_HOSTED_ONLY", "true")
@@ -366,7 +373,7 @@ def prepare_patched_ref(workflow_file: str, source_ref: str, runs_on: list) -> s
     def fetch_text(path: str) -> str:
         return fetch_file_at_ref(path, base_sha)
 
-    files = collect_patched_workflows(fetch_text, root, runs_on, self_hosted_only=self_hosted_only)
+    files, report = collect_patched_workflows(fetch_text, root, runs_on, self_hosted_only=self_hosted_only)
     # Prefer dev/ prefix — matches platform branch conventions (pr_check, mute bots).
     branch = f"dev/ci-remote-tmp/{uuid.uuid4().hex[:12]}"
     create_tmp_branch_with_files(
@@ -378,7 +385,7 @@ def prepare_patched_ref(workflow_file: str, source_ref: str, runs_on: list) -> s
             f"from {source_ref} ({base_sha[:12]})"
         ),
     )
-    return branch
+    return branch, report, base_sha
 
 
 def cmd_start():
@@ -390,6 +397,9 @@ def cmd_start():
     runs_on_raw = (os.environ.get("RUNS_ON") or "").strip()
     tmp_branch = ""
     dispatch_ref = executor_ref
+    patch_report: list[dict] = []
+    source_ref = ""
+    source_sha = ""
 
     if runs_on_raw:
         try:
@@ -400,8 +410,13 @@ def cmd_start():
             die("runs_on must be a non-empty JSON array of strings")
         source_ref = (os.environ.get("SOURCE_REF") or "").strip() or executor_ref
         print(f"Approach A: patch runs-on={runs_on!r} from source_ref={source_ref}")
-        tmp_branch = prepare_patched_ref(wf_file, source_ref, runs_on)
+        tmp_branch, patch_report, source_sha = prepare_patched_ref(wf_file, source_ref, runs_on)
         dispatch_ref = tmp_branch
+        for row in patch_report:
+            print(
+                f"  patch {row['file']} job={row['job']}: "
+                f"{_fmt_runs_on(row['from'])} -> {_fmt_runs_on(row['to'])}"
+            )
 
     print(f"Dispatching {wf_file} --ref {dispatch_ref}")
     print(f"inputs={json.dumps(inputs, ensure_ascii=False)}")
@@ -481,17 +496,45 @@ def cmd_start():
 
     summary_lines = [
         "### Dispatched remote executor",
-        f"- **workflow:** `{wf_file}`",
-        f"- **dispatch ref:** `{dispatch_ref}`",
+        f"- **what we run:** `{wf_file}` (`{env('WORKFLOW_NAME')}`)",
         f"- **executor run:** [{run_id}]({run_url})",
         f"- **mode:** `{wait_mode}`",
     ]
     if runs_on_raw:
-        summary_lines.append(f"- **approach A runs_on:** `{runs_on_raw}`")
-        summary_lines.append(f"- **tmp branch:** `{tmp_branch}`")
-        summary_lines.append(f"- **source ref:** `{(os.environ.get('SOURCE_REF') or executor_ref)}`")
+        files_touched = sorted({r["file"] for r in patch_report})
+        summary_lines.extend(
+            [
+                "",
+                "#### Approach A — tmp-branch shell",
+                (
+                    f"Copy `{wf_file}` (+ nested local reusable workflows) from "
+                    f"`{source_ref}` (`{source_sha[:12]}`), rewrite self-hosted "
+                    f"`runs-on`, push as `{tmp_branch or dispatch_ref}`, then "
+                    f"`workflow_dispatch` that same filename on the tmp ref. "
+                    "The tmp branch is only a shell for the runner override; "
+                    "job graph / steps stay from the source workflow."
+                ),
+                f"- **source ref (original YAML):** `{source_ref}`",
+                f"- **dispatch ref (patched shell):** `{dispatch_ref}`",
+                f"- **files rewritten:** {', '.join(f'`{f}`' for f in files_touched)}",
+                "",
+                "| file | job | original runs-on | actual runs-on |",
+                "|---|---|---|---|",
+            ]
+        )
+        for row in patch_report:
+            summary_lines.append(
+                f"| `{row['file']}` | `{row['job']}` | "
+                f"`{_fmt_runs_on(row['from'])}` | `{_fmt_runs_on(row['to'])}` |"
+            )
     else:
-        summary_lines.append(f"- **executor ref:** `{executor_ref}`")
+        summary_lines.extend(
+            [
+                f"- **dispatch ref:** `{dispatch_ref}`",
+                f"- **executor ref:** `{executor_ref}`",
+                "- **runner override:** none (workflow runs as written on the ref)",
+            ]
+        )
     summary_lines.extend(
         [
             "",
@@ -639,13 +682,14 @@ jobs:
     def fetch(path: str) -> str:
         return files[path]
 
-    out = collect_patched_workflows(
+    out, report = collect_patched_workflows(
         fetch,
         root,
         ["self-hosted", "build-preset-relwithdebinfo-fat"],
         self_hosted_only=True,
     )
     assert nested in out, out.keys()
+    assert any(r["file"] == nested and r["job"] == "heavy" for r in report), report
     doc = load_workflow_yaml(out[nested])
     assert "on" in doc and True not in doc
     assert doc["jobs"]["heavy"]["runs-on"] == [

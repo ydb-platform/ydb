@@ -271,6 +271,7 @@ ydb/tests/fq/s3 test_inflight.py.TestS3.test_inflight[v1-client0-kikimr_params2]
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_increase[local]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_csv_no_header_select_price[True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_csv_with_names_projection_column_order[True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[drop-native_join-row]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[recreate-output-row]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_raw_format[False-no_partition_balancing]
@@ -339,6 +340,7 @@ ydb/tests/functional/mirror3dc test_mirror3dc.py.TestMirror3dc.test_exclude_one_
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
 ydb/tests/functional/restarts test_restarts.py.TestRestartMultipleMirror3DC.test_tablets_are_successfully_started_after_few_killed_nodes
 ydb/tests/functional/restarts test_restarts.py.TestRestartSingleBlock42.test_restart_single_node_is_ok
+ydb/tests/functional/restarts test_restarts.py.TestRestartSingleMirror3DC.test_restart_single_node_is_ok
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/sqs/common test_queues_managing.py.TestQueuesManagingWithTenant.test_delete_queue[tables_format_v1-std]
 ydb/tests/functional/sqs/migration/compatibility/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor

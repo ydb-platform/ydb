@@ -9,6 +9,8 @@
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
 
+#include <optional>
+
 namespace NKikimrReplication {
     class TStaticCredentials;
     class TIamCredentials;
@@ -229,19 +231,25 @@ struct TEvYdbProxy {
         explicit TStartTopicReadingSessionResult(const NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event)
             : ReadSessionId(event.GetPartitionSession()->GetReadSessionId())
             , CommittedOffset(event.GetCommittedOffset())
+            , ReadOffset(event.GetReadOffset())
+            , RetainedStartOffset(event.GetRetainedStartOffset())
         {
         }
 
-        explicit TStartTopicReadingSessionResult(const TString& readSessionId, ui64 committedOffset = 0)
+        TStartTopicReadingSessionResult(const TString& readSessionId, ui64 committedOffset, std::optional<ui64> retainedStartOffset)
             : ReadSessionId(readSessionId)
             , CommittedOffset(committedOffset)
+            , ReadOffset(committedOffset)
+            , RetainedStartOffset(retainedStartOffset)
         {
         }
 
         void Out(IOutputStream& out) const;
 
         TString ReadSessionId;
-        ui64 CommittedOffset = 0;
+        ui64 CommittedOffset;
+        ui64 ReadOffset;
+        std::optional<ui64> RetainedStartOffset;
     };
 
     struct TEvStartTopicReadingSession: public TGenericResponse<TEvStartTopicReadingSession, EvStartTopicReadingSession, TStartTopicReadingSessionResult> {

@@ -105,7 +105,7 @@ jobs:
             echo "### CI remote executor"
             echo "- **code ref:** \`$code_ref\`"
             echo "- **ci ref:** \`${{ github.sha }}\`"
-            echo "- **analytics branch:** \`${{ steps.ya.outputs.custom_branch_name || '(unset → github.ref_name)' }}\`"
+            echo "- **analytics branch:** \`${{ steps.ya.outputs.custom_branch_name }}\`"
             echo "- **preset:** \`${{ steps.ya.outputs.build_preset }}\`"
             echo "- **target:** \`${{ steps.ya.outputs.build_target }}\`"
             echo "- **runs_on:** \`${{ inputs.runs_on }}\`"

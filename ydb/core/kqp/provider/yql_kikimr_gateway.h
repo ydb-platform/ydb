@@ -1266,6 +1266,8 @@ struct TAlterDatabaseSettings {
     std::optional<TString> Owner;
     std::optional<NKikimrSubDomains::TSchemeLimits> SchemeLimits;
     std::optional<NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel> TablesMetricsLevel;
+    // SQL setting names; an absent value removes the database override.
+    THashMap<TString, std::optional<bool>> FeatureFlags;
 };
 
 struct TTruncateTableSettings {
@@ -1819,7 +1821,8 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> SendSchemeExecuterRequest(const TString& cluster,
         const TMaybe<TString>& requestType,
-        const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder> &phyTx) = 0;
+        const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder> &phyTx,
+        const TString& requestId = {}, TInstant deadline = TInstant::Max()) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterTable(const TString& cluster, NKikimrKqp::TKqpAlterTableRequest&& req,
         const TMaybe<TString>& requestType, ui64 flags, NKikimrIndexBuilder::TIndexBuildSettings&& buildSettings) = 0;

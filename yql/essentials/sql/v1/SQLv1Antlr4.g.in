@@ -776,8 +776,10 @@ alter_database_stmt: ALTER DATABASE an_id_schema alter_database_action;
 alter_database_action:
     OWNER TO role_name
   | set_database_settings
+  | reset_database_settings
 ;
 set_database_settings: SET LPAREN database_settings RPAREN;
+reset_database_settings: RESET LPAREN an_id (COMMA an_id)* RPAREN;
 database_settings: database_setting (COMMA database_setting)*;
 database_setting: an_id EQUALS database_setting_value;
 database_setting_value:

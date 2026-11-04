@@ -1267,6 +1267,7 @@ namespace Tests {
             auto *dispatcher = NConsole::CreateConfigsDispatcher(
                     NKikimr::NConfig::TConfigsDispatcherInitInfo {
                         .InitialConfig = initial,
+                        .Labels = {{"tenant", canonicalTenantName}},
                     });
             auto aid = Runtime->Register(dispatcher, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConsole::MakeConfigsDispatcherID(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);

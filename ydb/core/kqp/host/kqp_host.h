@@ -36,6 +36,7 @@ public:
         i32 RuntimeParameterSizeLimit = 0;
         bool RuntimeParameterSizeLimitSatisfied = false;
         TMaybe<NSQLTranslation::EYqlSelect> YqlSelect;
+        NYql::TKikimrQueryDeadlines Deadlines;
 
         TString ToString() const {
             return TStringBuilder() << "TExecSettings{"

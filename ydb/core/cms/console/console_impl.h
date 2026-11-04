@@ -110,6 +110,7 @@ private:
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsManager);
             HFuncTraced(TEvConsole::TEvGetConfigRequest, Handle);
             FFunc(TEvConsole::EvReplaceYamlConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvPatchDatabaseConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetNodeLabelsRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvSetYamlConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvDropConfigRequest, ForwardToConfigsManager);

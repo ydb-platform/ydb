@@ -1,5 +1,6 @@
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/base/database_feature_flags.h>
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/docapi/traits.h>
@@ -123,6 +124,15 @@ namespace {
 
         for (auto setting : alterDatabase.Settings()) {
             const auto& name = setting.Name().Value();
+
+            if (NKikimr::FindDatabaseSqlFeatureFlag(name)) {
+                std::optional<bool> value;
+                if (!setting.Value().Maybe<TCoVoid>()) {
+                    value = setting.Value().Cast<TCoBool>().Literal().Value() == "true";
+                }
+                alterDatabaseSettings.FeatureFlags.emplace(TString(name), value);
+                continue;
+            }
 
             if (name == "owner") {
                 alterDatabaseSettings.Owner = setting.Value().Cast<TCoAtom>().StringValue();

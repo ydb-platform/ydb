@@ -6,6 +6,8 @@ option java_package = "ru.yandex.kikimr.proto";
 extend google.protobuf.FieldOptions {
     // Flags marked with (RequireRestart) = true are not updated at runtime when config changes
     optional bool RequireRestart = 56681;
+    // Runtime flags that database administrators may change with ALTER DATABASE.
+    optional bool AllowInDatabaseSql = 56683 [default = false];
 }
 
 message TFeatureFlags {
@@ -455,7 +457,7 @@ message TFeatureFlags {
     optional bool EnableColumnShardExtendedTtlTypes = 366 [default = false];
     optional bool EnableColumnShardSetNotNull = 367 [default = false];
     // Allows client data writes and schema modifications.
-    optional bool EnableClientModifications = 368 [default = true];
+    optional bool EnableClientModifications = 368 [default = true, (AllowInDatabaseSql) = true];
     optional bool EnableCompileCacheV2 = 369 [default = false];
     optional bool EnableComputeSchedulerMemory = 370 [default = true, (RequireRestart) = true];
     optional bool EnableAddColumnGeneratedVirtual = 371 [default = false];

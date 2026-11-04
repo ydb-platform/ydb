@@ -25,6 +25,7 @@ SRCS(
     counters.h
     database_kind.cpp
     database_kind.h
+    database_feature_flags.h
     defs.h
     domain.cpp
     domain.h
@@ -111,6 +112,7 @@ PEERDIR(
     library/cpp/logger
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
+    library/cpp/protobuf/json
     library/cpp/random_provider
     library/cpp/svnversion
     library/cpp/threading/atomic_shared_ptr

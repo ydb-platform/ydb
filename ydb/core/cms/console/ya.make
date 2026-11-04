@@ -31,6 +31,9 @@ SRCS(
     console__add_config_subscription.cpp
     console__alter_tenant.cpp
     console__replace_yaml_config.cpp
+    console__patch_database_config.cpp
+    database_config_patch.cpp
+    database_config_patch.h
     console__cleanup_subscriptions.cpp
     console__configure.cpp
     console__create_tenant.cpp
@@ -103,6 +106,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
+    ydb/core/tx/scheme_cache
     ydb/core/util
     ydb/library/aclib
     ydb/library/protobuf_printer

@@ -2,6 +2,8 @@
 #include "kqp_executer_impl.h"
 
 #include <ydb/core/base/auth.h>
+#include <ydb/core/base/tabletid.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/gateway/actors/analyze_actor.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/local_rpc/helper.h>
@@ -926,9 +928,75 @@ public:
         }
     }
 
+    void StartPatchDatabaseConfig() {
+        const auto now = TAppData::TimeProvider->Now();
+        const auto deadline = Deadline == TInstant::Max() ? now + TDuration::Minutes(1) : Deadline;
+        if (deadline <= now) {
+            return ReplyErrorAndDie(Ydb::StatusIds::TIMEOUT, "ALTER DATABASE deadline exceeded");
+        }
+
+        const auto& patch = PhyTx->GetSchemeOperation().GetPatchDatabaseConfig();
+        auto request = std::make_unique<NConsole::TEvConsole::TEvPatchDatabaseConfigRequest>();
+        auto& record = request->Record;
+        record.SetDatabase(patch.GetDatabase());
+        for (const auto& change : patch.GetChanges()) {
+            auto& requestedChange = *record.AddChanges();
+            requestedChange.SetName(change.GetName());
+            if (change.HasValue()) {
+                requestedChange.SetValue(change.GetValue());
+            }
+        }
+        if (UserToken) {
+            record.SetUserToken(UserToken->GetSerializedToken());
+        }
+        record.SetPeerName(ClientAddress);
+        record.SetRequestId(RequestContext->TraceId.empty()
+            ? TString(TStringBuilder() << SelfId()) : RequestContext->TraceId);
+        record.SetDeadlineUnixMilliSeconds(deadline.MilliSeconds());
+
+        NTabletPipe::TClientConfig clientConfig;
+        clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        SchemePipeActorId_ = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), MakeConsoleID(), clientConfig));
+        Become(&TKqpSchemeExecuter::PatchDatabaseConfigState);
+        Schedule(deadline - now, new TEvents::TEvWakeup());
+        NTabletPipe::SendData(SelfId(), SchemePipeActorId_, request.release(), 0, NWilson::TTraceId(TraceId));
+    }
+
+    void HandlePatchDatabaseConfig(NConsole::TEvConsole::TEvPatchDatabaseConfigResponse::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        ReplyErrorAndDie(record.GetYdbStatus(), record.MutableIssues());
+    }
+
+    void HandlePatchDatabaseConfig(NConsole::TEvConsole::TEvGenericError::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        ReplyErrorAndDie(record.GetYdbStatus(), record.MutableIssues());
+    }
+
+    STATEFN(PatchDatabaseConfigState) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(NConsole::TEvConsole::TEvPatchDatabaseConfigResponse, HandlePatchDatabaseConfig);
+                hFunc(NConsole::TEvConsole::TEvGenericError, HandlePatchDatabaseConfig);
+                hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+                hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                case TEvents::TEvWakeup::EventType:
+                    ReplyErrorAndDie(Ydb::StatusIds::TIMEOUT, "Timed out waiting for database configuration update");
+                    break;
+                default:
+                    UnexpectedEvent("PatchDatabaseConfigState", ev->GetTypeRewrite());
+                    break;
+            }
+        } catch (const yexception& e) {
+            InternalError(e.what());
+        }
+    }
+
     void Bootstrap() {
         const auto& schemeOp = PhyTx->GetSchemeOperation();
-        if (schemeOp.HasKillSession()) {
+        if (schemeOp.HasPatchDatabaseConfig()) {
+            StartPatchDatabaseConfig();
+        } else if (schemeOp.HasKillSession()) {
             StartKillSession();
         } else if (schemeOp.GetObjectType()) {
             MakeObjectRequest();

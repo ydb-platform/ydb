@@ -5,6 +5,7 @@
 #include <ydb/core/formats/arrow/serializer/parsing.h>
 #include <ydb/core/formats/arrow/serializer/utils.h>
 #include <ydb/core/grpc_services/table_settings.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/protos/set_column_constraint.pb.h>
@@ -977,6 +978,12 @@ public:
             return result;
         }
 
+        if (!settings.FeatureFlags.empty()) {
+            TGenericResult result;
+            result.SetSuccess();
+            return result;
+        }
+
         TGenericResult result;
         result.SetStatus(TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST);
         result.AddIssue(TIssue("Cannot execute ALTER DATABASE with these settings.").SetCode(result.Status(), TSeverityIds_ESeverityId_S_ERROR));
@@ -995,6 +1002,42 @@ public:
             if (!preparation.Success()) {
                 return MakeFuture<TGenericResult>(preparation);
             }
+
+            if (!settings.FeatureFlags.empty()) {
+                auto fillTransaction = [&](NKqpProto::TKqpPhyTx& tx) {
+                    tx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                    auto& patch = *tx.MutableSchemeOperation()->MutablePatchDatabaseConfig();
+                    patch.SetDatabase(settings.DatabasePath);
+                    for (const auto& [name, value] : settings.FeatureFlags) {
+                        auto& change = *patch.AddChanges();
+                        change.SetName(name);
+                        if (value) {
+                            change.SetValue(*value);
+                        }
+                    }
+                };
+
+                if (IsPrepare()) {
+                    fillTransaction(*SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->AddTransactions());
+                    return MakeFuture<TGenericResult>(preparation);
+                }
+
+                auto query = std::make_unique<NKikimrKqp::TPreparedQuery>();
+                fillTransaction(*query->MutablePhysicalQuery()->AddTransactions());
+                auto preparedQuery = std::make_shared<TPreparedQueryHolder>(query.release(), nullptr);
+                const auto& context = SessionCtx->GetUserRequestContext();
+                const auto& deadlines = SessionCtx->Query().Deadlines;
+                auto deadline = TInstant::Max();
+                if (deadlines.TimeoutAt) {
+                    deadline = Min(deadline, deadlines.TimeoutAt);
+                }
+                if (deadlines.CancelAt) {
+                    deadline = Min(deadline, deadlines.CancelAt);
+                }
+                return Gateway->SendSchemeExecuterRequest(cluster, Nothing(), preparedQuery->GetPhyTx(0),
+                    context ? context->TraceId : TString(), deadline);
+            }
+
             if (IsPrepare()) {
                 auto& phyTx = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->AddTransactions();
                 phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
@@ -1468,9 +1511,10 @@ public:
     }
 
     TFuture<TGenericResult> SendSchemeExecuterRequest(const TString& cluster, const TMaybe<TString>& requestType,
-        const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder> &phyTx) override
+        const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder> &phyTx,
+        const TString& requestId = {}, TInstant deadline = TInstant::Max()) override
     {
-        return Gateway->SendSchemeExecuterRequest(cluster, requestType, phyTx);
+        return Gateway->SendSchemeExecuterRequest(cluster, requestType, phyTx, requestId, deadline);
     }
 
     TFuture<TGenericResult> AlterTable(const TString& cluster, NKikimrKqp::TKqpAlterTableRequest&& req,

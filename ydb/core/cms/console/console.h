@@ -107,6 +107,7 @@ namespace TEvConsole {
         EvFetchStartupConfigRequest,
         EvGetConfigurationVersionRequest,
         EvGetNodeConfigurationVersionRequest,
+        EvPatchDatabaseConfigRequest,
         // responses
         EvCreateTenantResponse = EvCreateTenantRequest + 1024,
         EvAlterTenantResponse,
@@ -155,6 +156,7 @@ namespace TEvConsole {
         EvFetchStartupConfigResponse,
         EvGetConfigurationVersionResponse,
         EvGetNodeConfigurationVersionResponse,
+        EvPatchDatabaseConfigResponse,
 
         EvEnd
     };
@@ -234,6 +236,12 @@ namespace TEvConsole {
 
     struct TEvReplaceYamlConfigRequest : public TEventShortDebugPB<TEvReplaceYamlConfigRequest, NKikimrConsole::TReplaceYamlConfigRequest, EvReplaceYamlConfigRequest> {
         using TResponse = TEvReplaceYamlConfigResponse;
+    };
+
+    struct TEvPatchDatabaseConfigResponse : public TEventShortDebugPB<TEvPatchDatabaseConfigResponse, NKikimrConsole::TPatchDatabaseConfigResponse, EvPatchDatabaseConfigResponse> {};
+
+    struct TEvPatchDatabaseConfigRequest : public TEventShortDebugPB<TEvPatchDatabaseConfigRequest, NKikimrConsole::TPatchDatabaseConfigRequest, EvPatchDatabaseConfigRequest> {
+        using TResponse = TEvPatchDatabaseConfigResponse;
     };
 
     struct TEvDropConfigResponse : public TEventShortDebugPB<TEvDropConfigResponse, NKikimrConsole::TDropConfigResponse, EvDropConfigResponse> {};

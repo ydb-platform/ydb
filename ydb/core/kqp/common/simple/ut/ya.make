@@ -1,6 +1,7 @@
 UNITTEST()
 
 SRCS(
+    database_config_audit_ut.cpp
     session_id_ut.cpp
 )
 

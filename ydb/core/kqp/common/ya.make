@@ -72,5 +72,6 @@ RECURSE(
     events
     result_set_format
     simple
+    sql_audit
     ut
 )

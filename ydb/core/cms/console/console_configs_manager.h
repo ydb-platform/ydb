@@ -13,6 +13,7 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/cms/console/util/config_index.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -71,6 +72,7 @@ public:
             EvStateLoaded = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
             EvCleanupSubscriptions,
             EvCleanupLog,
+            EvPatchDatabaseConfigAuthorized,
             EvEnd
         };
 
@@ -81,6 +83,18 @@ public:
         struct TEvCleanupSubscriptions : public TEventLocal<TEvCleanupSubscriptions, EvCleanupSubscriptions> {};
 
         struct TEvCleanupLog : public TEventLocal<TEvCleanupLog, EvCleanupLog> {};
+
+        struct TEvPatchDatabaseConfigAuthorized
+            : public TEventLocal<TEvPatchDatabaseConfigAuthorized, EvPatchDatabaseConfigAuthorized>
+        {
+            TEvPatchDatabaseConfigAuthorized(TEvConsole::TEvPatchDatabaseConfigRequest::TPtr request, TPathId domainId)
+                : Request(std::move(request))
+                , DomainId(domainId)
+            {}
+
+            TEvConsole::TEvPatchDatabaseConfigRequest::TPtr Request;
+            TPathId DomainId;
+        };
     };
 
 public:
@@ -165,6 +179,7 @@ private:
     class TTxReplaceYamlConfigBase;
     class TTxReplaceMainYamlConfig;
     class TTxReplaceDatabaseYamlConfig;
+    class TTxPatchDatabaseConfig;
     class TTxDropYamlConfig;
     class TTxGetYamlConfig;
     class TTxGetYamlMetadata;
@@ -183,6 +198,8 @@ private:
     ITransaction *CreateTxLogCleanup();
     ITransaction *CreateTxReplaceMainYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev);
     ITransaction *CreateTxReplaceDatabaseYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev);
+    ITransaction *CreateTxPatchDatabaseConfig(TEvConsole::TEvPatchDatabaseConfigRequest::TPtr &ev,
+        TPathId expectedDomainId = {});
     ITransaction *CreateTxSetMainYamlConfig(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev);
     ITransaction *CreateTxSetDatabaseYamlConfig(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev);
     ITransaction *CreateTxDropYamlConfig(TEvConsole::TEvDropConfigRequest::TPtr &ev);
@@ -209,6 +226,8 @@ private:
     void Handle(TEvConsole::TEvRemoveVolatileConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
+    void Handle(TEvConsole::TEvPatchDatabaseConfigRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvPatchDatabaseConfigAuthorized::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvConsole::TEvGetConfigurationVersionRequest::TPtr & ev, const TActorContext & ctx);
@@ -293,6 +312,8 @@ private:
             HFunc(TEvConsole::TEvRemoveVolatileConfigRequest, HandleWithRights);
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsProvider);
             HFuncTraced(TEvConsole::TEvReplaceYamlConfigRequest, HandleWithRights);
+            HFuncTraced(TEvConsole::TEvPatchDatabaseConfigRequest, Handle);
+            HFunc(TEvPrivate::TEvPatchDatabaseConfigAuthorized, Handle);
             HFuncTraced(TEvConsole::TEvSetYamlConfigRequest, HandleWithRights);
             HFuncTraced(TEvConsole::TEvDropConfigRequest, HandleWithRights);
             FFunc(TEvConsole::EvGetConfigSubscriptionRequest, ForwardToConfigsProvider);

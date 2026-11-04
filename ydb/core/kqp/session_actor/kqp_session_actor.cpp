@@ -4,6 +4,7 @@
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
 
+#include <ydb/core/audit/audit_log.h>
 #include <ydb/core/kqp/common/buffer/buffer.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
@@ -17,6 +18,8 @@
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/gateway.h>
 #include <ydb/core/kqp/common/simple/query_ast.h>
+#include <ydb/core/kqp/common/simple/helpers.h>
+#include <ydb/core/kqp/common/sql_audit/database_config_audit.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/executer_actor/kqp_locks_helper.h>
@@ -38,6 +41,7 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 
 #include <ydb/core/util/ulid.h>
+#include <ydb/core/util/address_classifier.h>
 #include <ydb/core/util/stlog.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
@@ -378,6 +382,16 @@ public:
             WorkerId = RegisterWithSameMailbox(workerActor.release());
         }
         WorkerStatsMode = QueryState->GetStatsMode();
+        ForwardedSqlForAudit.clear();
+        if (NAudit::AUDIT_LOG_ENABLED.load() && IsSqlQuery(QueryState->GetType())
+            && QueryState->GetSyntax() != Ydb::Query::SYNTAX_PG)
+        {
+            // The worker owns the request after forwarding. Retain its SQL for
+            // failure auditing, without parsing successful requests a second time.
+            ForwardedSqlForAudit = QueryState->GetQuery();
+        }
+        // Keep the session-generated correlation id when no client id was supplied.
+        QueryState->RequestEv->SetUserRequestContext(QueryState->UserRequestContext);
         TlsActivationContext->Send(new IEventHandle(*WorkerId, SelfId(), QueryState->RequestEv.release(), ev->Flags, ev->Cookie,
                     nullptr, QueryState->KqpSessionSpan.GetTraceId()));
         Become(&TKqpSessionActor::ExecuteState);
@@ -385,6 +399,11 @@ public:
 
     void ForwardResponse(TEvKqp::TEvQueryResponse::TPtr& ev) {
         QueryResponse = std::unique_ptr<TEvKqp::TEvQueryResponse>(ev->Release().Release());
+        if (QueryResponse->Record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+            AuditDatabaseConfigFailure(QueryResponse->Record.GetYdbStatus(),
+                Join(", ", QueryResponse->Record.GetResponse().GetQueryIssues()), "REQUEST");
+        }
+        ForwardedSqlForAudit.clear();
         AddWorkerQueryResultAttributes(QueryState->KqpSessionSpan, QueryState->TraceDescription,
             QueryResponse->Record, QueryResponse->WorkerStats.get(),
             WorkerStatsMode >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
@@ -3591,10 +3610,71 @@ public:
         CompileStatement();
     }
 
+    void AuditDatabaseConfigFailure(Ydb::StatusIds::StatusCode status, const TString& reason, TStringBuf phase) {
+        if (!NAudit::AUDIT_LOG_ENABLED.load()) {
+            return;
+        }
+        if (!QueryState->RequestEv) {
+            if (!ForwardedSqlForAudit.empty()) {
+                AuditDatabaseConfigSettingsFailure(CollectDatabaseConfigAuditSettingsFromSql(ForwardedSqlForAudit),
+                    status, reason, phase);
+            }
+            return;
+        }
+        TVector<TDatabaseConfigAuditSettings> settings;
+        bool hasAst = false;
+        const auto& compileResult = QueryState->CompileResult;
+        if (compileResult) {
+            if (const auto ast = compileResult->GetAst()) {
+                hasAst = ast->Root != nullptr;
+                settings = CollectDatabaseConfigAuditSettings(ast->Root);
+            }
+        }
+        if (!hasAst && IsSqlQuery(QueryState->GetType()) && QueryState->GetSyntax() != Ydb::Query::SYNTAX_PG) {
+            const auto& query = compileResult && compileResult->Query
+                ? compileResult->Query->Text : QueryState->GetQuery();
+            settings = CollectDatabaseConfigAuditSettingsFromSql(query);
+        }
+        AuditDatabaseConfigSettingsFailure(settings, status, reason, phase);
+    }
+
+    void AuditDatabaseConfigSettingsFailure(const TVector<TDatabaseConfigAuditSettings>& settings,
+        Ydb::StatusIds::StatusCode status, const TString& reason, TStringBuf phase)
+    {
+        if (!NAudit::AUDIT_LOG_ENABLED.load()) {
+            return;
+        }
+        const auto peer = NAddressClassifier::ExtractAddress(QueryState->ClientAddress);
+        const auto& token = QueryState->UserToken;
+        const auto requestId = QueryState->UserRequestContext->TraceId.empty()
+            ? TString(TStringBuilder() << SelfId() << ':' << QueryId)
+            : QueryState->UserRequestContext->TraceId;
+        for (const auto& setting : settings) {
+            AUDIT_LOG(
+                AUDIT_PART("component", "kqp")
+                AUDIT_PART("operation", "ALTER DATABASE FEATURE FLAGS")
+                AUDIT_PART("phase", phase)
+                AUDIT_PART("remote_address", peer.empty() ? "{none}" : peer)
+                AUDIT_PART("subject", token ? token->GetUserSID() : "{none}")
+                AUDIT_PART("sanitized_token", token ? token->GetSanitizedToken() : "{none}")
+                AUDIT_PART(setting.DatabaseIsExpression ? "database_expression" : "database", setting.Database)
+                AUDIT_PART("connection_database", QueryState->Database)
+                AUDIT_PART("changes", setting.Changes)
+                AUDIT_PART("request_id", requestId)
+                AUDIT_PART("status", "ERROR")
+                AUDIT_PART("detailed_status", Ydb::StatusIds::StatusCode_Name(status))
+                AUDIT_PART("reason", reason)
+            );
+        }
+    }
+
     void ReplyQueryCompileError() {
         YQL_ENSURE(QueryState);
         QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
         FillCompileStatus(QueryState->CompileResult, QueryResponse->Record);
+
+        AuditDatabaseConfigFailure(QueryState->CompileResult->Status,
+            QueryState->CompileResult->Issues.ToOneLineString(), "VALIDATION");
 
         auto txId = TTxId();
         if (QueryState->HasTxControl()) {
@@ -4144,6 +4224,7 @@ public:
             ExecuterId = TActorId{};
             bool doNotKeepSession = QueryState && !QueryState->KeepSession;
             QueryState.reset();
+            ForwardedSqlForAudit.clear();
             QueryClassifier.reset();
             if (doNotKeepSession) {
                 // TEvCloseSessionRequest was received in final=false CleanupState, so actor should rerun Cleanup with final=true
@@ -4196,6 +4277,12 @@ public:
         if (message) {
             IssueToMessage(TIssue{message}, response->AddQueryIssues());
         }
+
+        // Includes request failures before the scheme executor is started,
+        // such as an attempt to change configuration inside a transaction.
+        // Console separately records authoritative commit outcomes.
+        AuditDatabaseConfigFailure(ydbStatus,
+            Join(", ", response->GetQueryIssues()), "REQUEST");
 
         if (QueryState->TxCtx) {
             QueryState->TxCtx->OnEndQuery();
@@ -4578,6 +4665,7 @@ private:
     TKqpSettings::TConstPtr KqpSettings;
     std::optional<TActorId> WorkerId;
     Ydb::Table::QueryStatsCollection::Mode WorkerStatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+    TString ForwardedSqlForAudit;
     TActorId ExecuterId;
 
     std::shared_ptr<TKqpQueryState> QueryState;

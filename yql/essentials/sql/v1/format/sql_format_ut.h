@@ -37,7 +37,10 @@ Y_UNIT_TEST(AlterDatabase) {
     TCases cases{
         {"use plato;alter database `/Root/test` owner to user1;", "USE plato;\n\nALTER DATABASE `/Root/test` OWNER TO user1;\n"},
         {"use plato;alter database `/Root/test` set (key1 = 1);", "USE plato;\n\nALTER DATABASE `/Root/test` SET (key1 = 1);\n"},
-        {"use plato;alter database `/Root/test` set (\n\tkey1 = 1,\n\tkey2 = \"2\"\n);", "USE plato;\n\nALTER DATABASE `/Root/test` SET (key1 = 1, key2 = '2');\n"}};
+        {"use plato;alter database `/Root/test` set (\n\tkey1 = 1,\n\tkey2 = \"2\"\n);", "USE plato;\n\nALTER DATABASE `/Root/test` SET (key1 = 1, key2 = '2');\n"},
+        {"use plato;alter database `/Root/test` set (enable_client_modifications = false);", "USE plato;\n\nALTER DATABASE `/Root/test` SET (enable_client_modifications = FALSE);\n"},
+        {"use plato;alter database `/Root/test` reset (enable_client_modifications);", "USE plato;\n\nALTER DATABASE `/Root/test` RESET (enable_client_modifications);\n"},
+        {"use plato;alter database `/Root/test` reset (flag1,\nflag2);", "USE plato;\n\nALTER DATABASE `/Root/test` RESET (flag1, flag2);\n"}};
 
     TSetup setup;
     setup.Run(cases);

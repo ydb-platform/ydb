@@ -13,10 +13,12 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/audit
     ydb/core/kqp/tracing
     ydb/core/docapi
     ydb/core/engine
     ydb/core/kqp/common
+    ydb/core/kqp/common/sql_audit
     ydb/core/kqp/federated_query
     ydb/core/path_aliasing
     ydb/library/security

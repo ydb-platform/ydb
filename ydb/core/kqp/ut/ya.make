@@ -7,6 +7,7 @@ RECURSE_FOR_TESTS(
     cost
     data
     data_integrity
+    database_feature_flags
     discovery
     effects
     federated_query

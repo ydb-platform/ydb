@@ -609,7 +609,8 @@ public:
     using TResult = IKqpGateway::TGenericResult;
 
     TKqpSchemeExecuterRequestHandler(TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TMaybe<TString>& requestType, const TString& database,
-        const TString& databaseId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, TString clientAddress, TPromise<TResult> promise, NWilson::TTraceId traceId)
+        const TString& databaseId, TIntrusiveConstPtr<NACLib::TUserToken> userToken, TString clientAddress, TPromise<TResult> promise,
+        NWilson::TTraceId traceId, const TString& requestId, TInstant deadline)
         : PhyTx(std::move(phyTx))
         , QueryType(queryType)
         , Database(database)
@@ -619,13 +620,16 @@ public:
         , Promise(promise)
         , RequestType(requestType)
         , TraceId(std::move(traceId))
+        , RequestId(requestId)
+        , Deadline(deadline)
     {}
 
     void Bootstrap() {
         auto ctx = MakeIntrusive<TUserRequestContext>();
         ctx->DatabaseId = DatabaseId;
+        ctx->TraceId = RequestId;
         IActor* actor = CreateKqpSchemeExecuter(PhyTx, QueryType, nullptr, SelfId(), RequestType, Database, UserToken, ClientAddress, false /* temporary */, false /* createTmpDir */, false /* isCreateTableAs */, TString() /* tempDirName */, ctx,
-            false, nullptr, TActorId(), std::move(TraceId));
+            false, nullptr, TActorId(), std::move(TraceId), Deadline);
         Register(actor);
         Become(&TThis::WaitState);
     }
@@ -643,6 +647,7 @@ public:
         if (response->GetStatus() == Ydb::StatusIds::SUCCESS) {
             result.SetSuccess();
         } else {
+            result.SetStatus(NYql::YqlStatusFromYdbStatus(response->GetStatus()));
             for (auto& issue : response->GetIssues()) {
                 result.AddIssue(NYql::IssueFromMessage(issue));
             }
@@ -662,6 +667,8 @@ private:
     TPromise<TResult> Promise;
     const TMaybe<TString> RequestType;
     NWilson::TTraceId TraceId;
+    const TString RequestId;
+    const TInstant Deadline;
 };
 
 class TKqpExecLiteralRequestHandler: public TActorBootstrapped<TKqpExecLiteralRequestHandler> {
@@ -2346,10 +2353,12 @@ private:
         return promise.GetFuture();
     }
 
-    TFuture<TGenericResult> SendSchemeExecuterRequest(const TString&, const TMaybe<TString>& requestType, const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder>& phyTx) override {
+    TFuture<TGenericResult> SendSchemeExecuterRequest(const TString&, const TMaybe<TString>& requestType,
+        const std::shared_ptr<const NKikimr::NKqp::TKqpPhyTxHolder>& phyTx,
+        const TString& requestId = {}, TInstant deadline = TInstant::Max()) override {
         auto promise = NewPromise<TGenericResult>();
         IActor* requestHandler = new TKqpSchemeExecuterRequestHandler(phyTx, QueryType, requestType, Database, DatabaseId, UserToken, ClientAddress, promise,
-            GetTraceParent());
+            GetTraceParent(), requestId, deadline);
         RegisterActor(requestHandler);
         return promise.GetFuture();
     }

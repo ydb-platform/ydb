@@ -1649,6 +1649,55 @@ Y_UNIT_TEST(AlterDatabaseTablesMetricsLevel) {
     UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
 }
 
+Y_UNIT_TEST(AlterDatabaseFeatureFlag) {
+    auto res = SqlToYql("USE ydb; ALTER DATABASE `/Root/test` SET (enable_client_modifications = false);");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "'('\"ENABLE_CLIENT_MODIFICATIONS\" (Bool '\"false\"))");
+        }
+    };
+    TWordCountHive elementStat = {{"Write!"}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+}
+
+Y_UNIT_TEST(AlterDatabaseResetSettings) {
+    auto res = SqlToYql("USE ydb; ALTER DATABASE `/Root/test` RESET (enable_client_modifications, OTHER_FLAG);");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "(Key '('databasePath (String '\"/Root/test\")))");
+            UNIT_ASSERT_STRING_CONTAINS(line, "'('\"ENABLE_CLIENT_MODIFICATIONS\" (Void))");
+            UNIT_ASSERT_STRING_CONTAINS(line, "'('\"OTHER_FLAG\" (Void))");
+        }
+    };
+    TWordCountHive elementStat = {{"Write!"}};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+}
+
+Y_UNIT_TEST(AlterDatabaseDuplicateSettings) {
+    for (const TString& action : {
+            "SET (ENABLE_CLIENT_MODIFICATIONS = true, enable_client_modifications = false)",
+            "RESET (ENABLE_CLIENT_MODIFICATIONS, enable_client_modifications)"}) {
+        auto res = SqlToYql("USE ydb; ALTER DATABASE `/Root/test` " + action + ";");
+        UNIT_ASSERT(!res.IsOk());
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Duplicate setting: ENABLE_CLIENT_MODIFICATIONS");
+    }
+}
+
+Y_UNIT_TEST(AlterDatabaseInvalidReset) {
+    for (const TString& action : {
+            "RESET ()", "RESET (ENABLE_CLIENT_MODIFICATIONS = true)",
+            "RESET (ENABLE_CLIENT_MODIFICATIONS,)"}) {
+        auto res = SqlToYql("USE ydb; ALTER DATABASE `/Root/test` " + action + ";");
+        UNIT_ASSERT(!res.IsOk());
+    }
+}
+
 Y_UNIT_TEST(AlterDatabaseTopicsMetricsLevel) {
     // No proto field backs TOPICS_METRICS_LEVEL yet; this pins the YQL-layer passthrough only.
     // The key is upper-cased by ParseDatabaseSetting, the value is kept verbatim.

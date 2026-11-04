@@ -662,6 +662,17 @@ message TKqpKillSession {
     }
 }
 
+// Caller identity and audit context are supplied when the prepared operation
+// executes, never stored in the cached physical query.
+message TKqpPatchDatabaseConfig {
+    message TChange {
+        string Name = 1;
+        optional bool Value = 2;
+    }
+    string Database = 1;
+    repeated TChange Changes = 2;
+}
+
 message TKqpSchemeOperation {
     enum EFlags {
         FLAG_UNSPECIFIED = 0;
@@ -740,6 +751,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme TruncateTable = 62;
         NKikimrForcedCompaction.TForcedCompactionSettings CompactTable = 63;
         TKqpKillSession KillSession = 64;
+        TKqpPatchDatabaseConfig PatchDatabaseConfig = 65;
     }
 }
 

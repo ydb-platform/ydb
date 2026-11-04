@@ -301,6 +301,27 @@ message TReplaceYamlConfigResponse {
     repeated Ydb.Issue.IssueMessage Issues = 1;
 }
 
+message TFeatureFlagChange {
+    // SQL UPPER_SNAKE_CASE name. An absent value removes the database override.
+    optional string Name = 1;
+    optional bool Value = 2;
+}
+
+message TPatchDatabaseConfigRequest {
+    optional string Database = 1;
+    repeated TFeatureFlagChange Changes = 2;
+    optional bytes UserToken = 3 [(Ydb.sensitive) = true];
+    optional string PeerName = 4;
+    optional string RequestId = 5;
+    optional uint64 DeadlineUnixMilliSeconds = 6;
+}
+
+message TPatchDatabaseConfigResponse {
+    optional Ydb.StatusIds.StatusCode YdbStatus = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional uint64 Version = 3;
+}
+
 message TDropConfigRequest {
     optional Ydb.DynamicConfig.DropConfigRequest Request = 1;
     optional bytes UserToken = 2 [(Ydb.sensitive) = true];

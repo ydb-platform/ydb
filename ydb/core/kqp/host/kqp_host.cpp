@@ -1588,6 +1588,7 @@ private:
 
     IAsyncQueryResultPtr ExecuteSchemeQueryInternal(const TKqpQueryRef& query, bool isSql, const TExecSettings& settings, TExprContext& ctx) {
         SetupYqlTransformer(EKikimrQueryType::Ddl);
+        SessionCtx->Query().Deadlines = settings.Deadlines;
 
         if (settings.DocumentApiRestricted) {
             SessionCtx->Query().DocumentApiRestricted = *settings.DocumentApiRestricted;

@@ -608,6 +608,7 @@ private:
         switch (type) {
             case NKikimrKqp::QUERY_TYPE_SQL_DDL: {
                 IKqpHost::TExecSettings execSettings;
+                execSettings.Deadlines = QueryState->QueryDeadlines;
                 switch (QueryState->RequestEv->GetSyntax()) {
                     case Ydb::Query::Syntax::SYNTAX_YQL_V1:
                         execSettings.UsePgParser = false;

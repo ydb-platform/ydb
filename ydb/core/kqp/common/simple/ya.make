@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 SRCS(
+    database_config_audit.cpp
     helpers.cpp
     kqp_event_ids.cpp
     query_id.cpp

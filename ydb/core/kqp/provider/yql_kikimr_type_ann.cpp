@@ -4,6 +4,7 @@
 #include "yql_kikimr_type_ann_pg.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/database_feature_flags.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
@@ -3134,13 +3135,31 @@ private:
             "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR", "TABLES_METRICS_LEVEL"
         };
 
+        bool hasFeatureFlags = false;
+        bool hasSchemeSettings = false;
         for (const auto& setting : node.Settings()) {
             auto name = setting.Name().Value();
             auto value = setting.Value();
 
             if (!supportedSettings.contains(name)) {
+                if (!NKikimr::FindDatabaseSqlFeatureFlag(name)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Unknown or unsupported ALTER DATABASE feature flag: " << name));
+                    return TStatus::Error;
+                }
+                if (!value.Maybe<TCoBool>() && !value.Maybe<TCoVoid>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(value.Ref().Pos()),
+                        TStringBuilder() << "Value of " << name << " must be a Boolean literal."));
+                    return TStatus::Error;
+                }
+                hasFeatureFlags = true;
+                continue;
+            }
+
+            hasSchemeSettings = true;
+            if (value.Maybe<TCoVoid>()) {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    TStringBuilder() << "Unknown ALTER DATABASE setting: " << name));
+                    TStringBuilder() << "RESET is only supported for ALTER DATABASE feature flags: " << name));
                 return TStatus::Error;
             }
 
@@ -3185,6 +3204,12 @@ private:
                     return TStatus::Error;
                 }
             }
+        }
+
+        if (hasFeatureFlags && hasSchemeSettings) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                "Feature flags cannot be mixed with other ALTER DATABASE settings."));
+            return TStatus::Error;
         }
 
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());

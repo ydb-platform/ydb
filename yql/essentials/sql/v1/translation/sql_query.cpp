@@ -1424,6 +1424,28 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     }
                     break;
                 }
+                case TRule_alter_database_action::kAltAlterDatabaseAction3: {
+                    // RESET ( name, ... ); Void distinguishes resetting a setting from SET.
+                    const auto& settings = action.GetAlt_alter_database_action3().GetRule_reset_database_settings1();
+                    auto addReset = [&](const TRule_an_id& id) {
+                        const auto name = to_upper(Id(id, *this));
+                        if (params.DatabaseSettings.contains(name)) {
+                            Ctx_.Error() << "Duplicate setting: " << name;
+                            return false;
+                        }
+                        params.DatabaseSettings.emplace(name, BuildLiteralVoid(Ctx_.Pos()));
+                        return true;
+                    };
+                    if (!addReset(settings.GetRule_an_id3())) {
+                        return false;
+                    }
+                    for (const auto& entry : settings.GetBlock4()) {
+                        if (!addReset(entry.GetRule_an_id2())) {
+                            return false;
+                        }
+                    }
+                    break;
+                }
                 case TRule_alter_database_action::ALT_NOT_SET:
                     YQL_ENSURE(false, "Unreachable");
             }

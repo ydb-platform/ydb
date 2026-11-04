@@ -144,7 +144,9 @@ void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescriptio
 }
 
 bool Validate(const TAlterDatabaseSettings& settings, TIssue& error) {
-    const int settingsToAlter = (settings.Owner ? 1 : 0) + ((settings.SchemeLimits || settings.TablesMetricsLevel) ? 1 : 0);
+    const int settingsToAlter = (settings.Owner ? 1 : 0)
+        + ((settings.SchemeLimits || settings.TablesMetricsLevel) ? 1 : 0)
+        + (!settings.FeatureFlags.empty() ? 1 : 0);
     if (settingsToAlter > 1) {
         error.SetMessage("Multiple setting classes cannot be altered simultaneously.");
         error.SetCode(TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST, TSeverityIds_ESeverityId_S_ERROR);

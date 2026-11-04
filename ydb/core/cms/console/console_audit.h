@@ -2,7 +2,17 @@
 
 #include <util/generic/string.h>
 
+#include <ydb/core/protos/console.pb.h>
+#include <ydb/core/protos/console_config.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
 namespace NKikimr::NConsole {
+
+void AuditLogPatchDatabaseConfig(
+    const NKikimrConsole::TPatchDatabaseConfigRequest& request,
+    const NKikimrConsole::TDatabaseFeatureFlagsChange& change,
+    Ydb::StatusIds::StatusCode status,
+    const TString& reason);
 
 void AuditLogReplaceConfigTransaction(
     const TString& peer,

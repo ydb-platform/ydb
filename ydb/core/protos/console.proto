@@ -44,6 +44,16 @@ message TDatabaseYamlConfigChange {
     optional string NewYamlConfig = 3;
 }
 
+message TDatabaseFeatureFlagsChange {
+    optional string Database = 1;
+    repeated TFeatureFlagChange Changes = 2;
+    // Absent values represent inheritance from the cluster configuration.
+    repeated TFeatureFlagChange OldOverrides = 3;
+    repeated TFeatureFlagChange NewOverrides = 4;
+    optional uint64 Version = 5;
+    optional string RequestId = 6;
+}
+
 message TLogRecordData {
     // Old configs
     optional TConfigureRequest Action = 1;
@@ -52,6 +62,7 @@ message TLogRecordData {
     // New configs
     optional TMainYamlConfigChange MainYamlConfigChange = 4;
     optional TDatabaseYamlConfigChange DatabaseYamlConfigChange = 5;
+    optional TDatabaseFeatureFlagsChange DatabaseFeatureFlagsChange = 6;
 }
 
 message TLogRecord {

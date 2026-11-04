@@ -10,8 +10,6 @@
 set -euo pipefail
 
 mode="${1:-start}"
-preset="${BUILD_PRESET%%,*}"
-preset="$(echo "$preset" | xargs)"
 api="https://api.github.com/repos/${REPO}"
 
 # Keep -H values quoted — do not expand via $(...) or quotes are lost.
@@ -100,6 +98,9 @@ mirror_executor_summary() {
 }
 
 do_start() {
+  local preset="${BUILD_PRESET%%,*}"
+  preset="$(echo "$preset" | xargs)"
+
   echo "Dispatching \"Run and debug tests\" --ref ${EXECUTOR_REF}"
   echo "code_ref=${CODE_REF} preset=${preset} targets=${TEST_TARGETS}"
 

@@ -36,6 +36,16 @@ GITHUB_QUERY_MAX_ATTEMPTS = 6
 GITHUB_QUERY_TIMEOUT_SECONDS = 60
 GITHUB_QUERY_MAX_BACKOFF_SECONDS = 30
 GITHUB_QUERY_RETRY_STATUSES = {429, 500, 502, 503, 504}
+# Transient GraphQL failures GitHub returns with HTTP 200 (e.g. "Something went
+# wrong while executing your query"). Retry only when every error carries this
+# explicit type; auth / validation / not-found stay fail-fast.
+GITHUB_QUERY_RETRY_ERROR_TYPES = frozenset({'UNKNOWN'})
+
+
+class GithubGraphQLError(Exception):
+    def __init__(self, message, retryable=False):
+        super().__init__(message)
+        self.retryable = retryable
 
 def truncate_issue_body(body):
     """Truncates issue body if it exceeds GitHub's maximum length.
@@ -67,18 +77,17 @@ def handle_github_errors(response):
 
     formatted_errors = []
     has_insufficient_scopes = False
+    retryable = True
     for raw_error in errors:
         if isinstance(raw_error, dict):
             extensions = raw_error.get('extensions') or {}
             extensions_code = extensions.get('code')
-            error_type = (
-                raw_error.get('type')
-                or extensions_code
-                or 'UNKNOWN'
-            )
+            explicit_type = raw_error.get('type')
+            error_type = explicit_type or extensions_code or 'UNKNOWN'
             message = raw_error.get('message') or 'Unknown error'
         else:
             extensions_code = None
+            explicit_type = None
             error_type = 'UNKNOWN'
             message = str(raw_error) if raw_error is not None else 'Unknown error'
 
@@ -86,15 +95,22 @@ def handle_github_errors(response):
         # alongside ``type: FORBIDDEN`` in ``extensions.code`` — check both.
         if 'INSUFFICIENT_SCOPES' in (error_type, extensions_code):
             has_insufficient_scopes = True
+            retryable = False
+        elif explicit_type not in GITHUB_QUERY_RETRY_ERROR_TYPES:
+            retryable = False
         formatted_errors.append(f"{error_type}: {message}")
 
     if has_insufficient_scopes:
-        raise Exception(
+        raise GithubGraphQLError(
             "Insufficient scopes. Please update your token's scopes. "
-            + " | ".join(formatted_errors)
+            + " | ".join(formatted_errors),
+            retryable=False,
         )
 
-    raise Exception("GraphQL Error(s): " + " | ".join(formatted_errors))
+    raise GithubGraphQLError(
+        "GraphQL Error(s): " + " | ".join(formatted_errors),
+        retryable=retryable,
+    )
 
 
 def _retry_backoff_seconds(attempt, response=None):
@@ -137,7 +153,15 @@ def run_query(query, variables=None):
 
         if request.status_code == 200:
             body = request.json()
-            handle_github_errors(body)
+            try:
+                handle_github_errors(body)
+            except GithubGraphQLError as exc:
+                if exc.retryable and attempt < GITHUB_QUERY_MAX_ATTEMPTS - 1:
+                    backoff_seconds = _retry_backoff_seconds(attempt)
+                    print(f"GitHub GraphQL error: {exc}. Retrying in {backoff_seconds}s")
+                    time.sleep(backoff_seconds)
+                    continue
+                raise
             return body
 
         if (

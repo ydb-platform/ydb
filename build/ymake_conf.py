@@ -1352,7 +1352,7 @@ class GnuToolchain(Toolchain):
 
         if target.is_zephyr_armv7_cortex_a35:
             self.c_flags_platform.append('-march=armv8-a -mthumb -mabi=aapcs -mfpu=neon-fp-armv8 -mfloat-abi=hard')
-            self.setup_zephyr_armv7()
+            self.setup_zephyr()
 
         if target.is_riscv32_esp32p4:
             self.c_flags_platform.extend([
@@ -1447,8 +1447,8 @@ class GnuToolchain(Toolchain):
     def setup_actions_zephyr_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/actions_zephyr')
 
-    def setup_zephyr_armv7(self):
-        self.platform_projects.insert(0, 'build/internal/platform/zephyr_armv7')
+    def setup_zephyr(self):
+        self.platform_projects.insert(0, 'build/internal/platform/zephyr')
 
     def setup_allwinner_rtos_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/allwinner_rtos')

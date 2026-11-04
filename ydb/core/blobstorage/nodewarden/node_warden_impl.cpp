@@ -600,7 +600,8 @@ void TNodeWarden::Bootstrap() {
         CreateSyncBrokerActor(MaxInProgressSyncCount)));
 
     // create bridge syncer rate quoter
-    SyncRateQuoter = std::make_shared<TReplQuoter>(Cfg->BlobStorageConfig->GetBridgeSyncRateBytesPerSecond());
+    SyncRateConfigLimit = Cfg->BlobStorageConfig->GetBridgeSyncRateBytesPerSecond();
+    SyncRateQuoter = std::make_shared<TReplQuoter>(SyncRateConfigLimit);
 
     // start compaction broker
     actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(
@@ -1150,6 +1151,11 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
             yaml.HasStorageConfigVersion() ? std::make_optional(yaml.GetStorageConfigVersion()) : std::nullopt);
 
         ExpectedSaveConfigCookie++;
+    }
+
+    if (record.HasBridgeSyncNodeRateBytesPerSecond()) {
+        SyncRateControllerLimit = record.GetBridgeSyncNodeRateBytesPerSecond();
+        UpdateSyncRateQuoter();
     }
 
     if (record.GetUpdateSyncers()) {

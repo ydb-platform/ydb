@@ -21,6 +21,11 @@ on:
         required: false
         type: string
         default: ''
+      analytics_branch:
+        description: 'remote: branch name for test history / ya GIT_BRANCH (e.g. main); empty = main when code_ref looks like a SHA, else code_ref'
+        required: false
+        type: string
+        default: ''
       test_targets:
         description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/"); remote: also used as build_target'
         required: false
@@ -115,6 +120,7 @@ jobs:
         id: payload
         env:
           CODE_REF: ${{ inputs.code_ref || github.sha }}
+          ANALYTICS_BRANCH: ${{ inputs.analytics_branch }}
           BUILD_TARGET: ${{ inputs.test_targets }}
           BUILD_PRESET: ${{ inputs.build_preset }}
           RUN_TESTS: ${{ inputs.run_tests }}
@@ -129,9 +135,14 @@ jobs:
           COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
         run: |
           python3 - <<'PY'
-          import json, os
+          import json, os, re
           preset = os.environ["BUILD_PRESET"].split(",")[0].strip() or "relwithdebinfo"
           increment = os.environ["INCREMENT"]
+          code_ref = os.environ["CODE_REF"]
+          analytics = (os.environ.get("ANALYTICS_BRANCH") or "").strip()
+          if not analytics:
+              # SHA-like → default history owner main; otherwise treat code_ref as a branch name.
+              analytics = "main" if re.fullmatch(r"[0-9a-fA-F]{7,40}", code_ref) else code_ref
           job_inputs = {
               "build_target": os.environ["BUILD_TARGET"],
               "build_preset": preset,
@@ -146,9 +157,10 @@ jobs:
               "test_retry_count": os.environ["TEST_RETRY_COUNT"],
               "put_build_results_to_cache": os.environ["PUT_BUILD_RESULTS_TO_CACHE"],
               "collect_coredumps": os.environ["COLLECT_COREDUMPS"],
+              "custom_branch_name": analytics,
           }
           payload = {
-              "code_ref": os.environ["CODE_REF"],
+              "code_ref": code_ref,
               "job_inputs": json.dumps(job_inputs, separators=(",", ":")),
           }
           out = os.environ["GITHUB_OUTPUT"]

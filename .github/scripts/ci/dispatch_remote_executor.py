@@ -177,9 +177,15 @@ def cmd_start():
     )
 
 
+def _truthy_env(name, default="true"):
+    v = os.environ.get(name, default)
+    return str(v).lower() in ("1", "true", "yes")
+
+
 def cmd_wait():
     run_id = env("EXECUTOR_RUN_ID")
     run_url = os.environ.get("EXECUTOR_RUN_URL") or f"https://github.com/{env('REPO')}/actions/runs/{run_id}"
+    fail_on_remote = _truthy_env("FAIL_ON_REMOTE_FAILURE", "true")
     # Link already in the dispatch job summary; only log here.
     print(f"Waiting for executor run {run_id} ({run_url}) ...")
 
@@ -197,6 +203,7 @@ def cmd_wait():
     if status != "completed":
         die(f"timed out waiting for executor run {run_id} (last status={status})")
 
+    set_outputs(executor_conclusion=conclusion or "")
     append_summary(
         f"## Executor summary\n\n"
         f"_Mirrored from [{run_id}]({run_url}) (conclusion=`{conclusion}`)._\n\n"
@@ -217,7 +224,10 @@ def cmd_wait():
     if conclusion == "success":
         print("Executor succeeded")
         return
-    die(f"executor finished with conclusion={conclusion}")
+    msg = f"executor finished with conclusion={conclusion}"
+    if fail_on_remote:
+        die(msg)
+    print(f"::warning::{msg} (fail_on_remote_failure=false; caller stays green)")
 
 
 def cmd_cancel():

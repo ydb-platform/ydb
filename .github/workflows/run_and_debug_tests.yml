@@ -96,6 +96,11 @@ on:
         required: false
         type: boolean
         default: true
+      fail_on_remote_failure:
+        description: 'remote only: when waiting, fail this run if executor conclusion is not success'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   remote_payload:
@@ -164,6 +169,7 @@ jobs:
       executor_ref: ${{ inputs.remote_executor_ref }}
       inputs_json: ${{ needs.remote_payload.outputs.inputs_json }}
       wait: ${{ inputs.wait_for_remote }}
+      fail_on_remote_failure: ${{ inputs.fail_on_remote_failure }}
 
   prepare:
     if: inputs.executor == 'ydb_yc'

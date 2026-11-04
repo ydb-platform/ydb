@@ -27,11 +27,13 @@ if [ -z "$workflow_id" ] || [ "$workflow_id" = "null" ]; then
 fi
 echo "workflow_id=${workflow_id}"
 
+# code_ref = which YDB SHA/ref the executor checkouts and tests (not the executor YAML branch).
 payload="$(jq -n \
   --arg ref "$EXECUTOR_REF" \
+  --arg code_ref "$CODE_REF" \
   --arg test_targets "$TEST_TARGETS" \
   --arg build_preset "$preset" \
-  '{ref:$ref, inputs:{test_targets:$test_targets, build_preset:$build_preset}}')"
+  '{ref:$ref, inputs:{code_ref:$code_ref, test_targets:$test_targets, build_preset:$build_preset}}')"
 
 before_epoch="$(date -u +%s)"
 http_code="$(curl_gh -sS -o /tmp/dispatch_resp.txt -w '%{http_code}' -X POST \

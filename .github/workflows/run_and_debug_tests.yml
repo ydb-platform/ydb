@@ -17,7 +17,7 @@ on:
         type: string
         default: 'dev/ci-remote-executor'
       code_ref:
-        description: 'Git ref/SHA for the executor to checkout (empty = this run SHA)'
+        description: 'YDB ref/SHA for executor to checkout+test (empty = this dispatch run SHA); not the executor YAML branch'
         required: false
         type: string
         default: ''
@@ -42,7 +42,7 @@ on:
         type: boolean
         default: false
       wait_for_remote:
-        description: 'If true (with executor=remote), wait for executor and mirror its job summary here'
+        description: 'remote only: true = wait+mirror summary (runner-waiter); false = fire-and-forget link only (ubuntu-latest)'
         required: false
         type: boolean
         default: true
@@ -50,9 +50,9 @@ on:
 jobs:
   dispatch_remote:
     if: inputs.executor == 'remote'
-    runs-on: [self-hosted, runner-waiter]
-    # Must outlive the fat-runner executor when wait_for_remote=true.
-    timeout-minutes: 400
+    # wait+mirror can outlive a fat build; fire-and-forget is seconds on hosted.
+    runs-on: ${{ inputs.wait_for_remote && fromJSON('["self-hosted","runner-waiter"]') || 'ubuntu-latest' }}
+    timeout-minutes: ${{ inputs.wait_for_remote && 400 || 15 }}
     steps:
       - name: Checkout dispatch helpers
         uses: actions/checkout@v5

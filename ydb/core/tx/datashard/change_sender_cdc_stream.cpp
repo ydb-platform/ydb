@@ -296,6 +296,8 @@ public:
             .ShardId = DataShard.TabletId,
             .UserSIDs = stream.UserSIDs,
             .TraceIds = stream.TraceIds,
+            .Compression = stream.Compression,
+            .CompressionLevel = stream.CompressionLevel,
         }))
     {
     }

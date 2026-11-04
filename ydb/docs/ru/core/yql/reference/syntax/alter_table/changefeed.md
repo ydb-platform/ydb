@@ -29,6 +29,8 @@
 * `VIRTUAL_TIMESTAMPS` — включение-выключение {% if oss == true and backend_name == "YDB" %}[виртуальных меток времени](../../../../concepts/cdc.md#virtual-timestamps){% else %}виртуальных меток времени{% endif %}.
 * `USER_SIDS` — включение-выключение выгрузки идентификаторов безопасности [SID](../../../../concepts/cdc.md#record-structure). По умолчанию выключено.
 * `TRACE_IDS` — включение-выключение [идентификатора трассировки OpenTelemetry](../../../../concepts/cdc.md#record-structure). По умолчанию выключено.
+* `COMPRESSION` — сжатие каждого сообщения потока изменений в JSON-формате. Допустимые значения: `NONE` (по умолчанию) и `ZSTD`.
+* `COMPRESSION_LEVEL` — уровень сжатия Zstandard от `1` до `22`. Параметр можно указать только вместе с `COMPRESSION = 'ZSTD'`; уровень по умолчанию — `3`.
 * `BARRIERS_INTERVAL` — периодичность выгрузки [барьеров](../../../../concepts/cdc.md#barriers). Тип значения — `Interval`. По умолчанию выключено.
 * `RETENTION_PERIOD` — {% if oss == true and backend_name == "YDB" %}[время хранения записей](../../../../concepts/cdc.md#retention-period){% else %}время хранения записей{% endif %}. Тип значения — `Interval`, значение по умолчанию — 24 часа (`Interval('PT24H')`).
 * `TOPIC_AUTO_PARTITIONING` — {% if oss == true and backend_name == "YDB" %}[режим автопартиционирования топика](../../../../concepts/cdc.md#topic-partitions){% else %}режим автопартиционирования топика{% endif %}:

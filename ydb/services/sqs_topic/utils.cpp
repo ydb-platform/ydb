@@ -78,7 +78,8 @@ namespace NKikimr::NSqsTopic {
         TVector<std::pair<TString, TString>>&& labels,
         const TString& databaseId,
         const TString& cloudId,
-        const TString& folderId
+        const TString& folderId,
+        const NKikimrPQ::TPQConfig* pqConfig
     ) {
         TString fullDatabasePath = databasePath + "/";
         TString adjustedTopicPath;
@@ -100,9 +101,9 @@ namespace NKikimr::NSqsTopic {
         common.emplace_back("topic", adjustedTopicPath);
         // QueueUrl stores the path form. MetricsConsumerName converts the config name,
         // so restore that name before applying the label function.
-        const auto& pqConfig = AppData()->PQConfig;
+        const auto& resolvedPqConfig = pqConfig ? *pqConfig : AppData()->PQConfig;
         common.emplace_back("consumer", NPQ::MetricsConsumerName(
-            NPersQueue::ConvertNewConsumerName(consumerName, pqConfig), pqConfig));
+            NPersQueue::ConvertNewConsumerName(consumerName, resolvedPqConfig), resolvedPqConfig));
         std::move(labels.begin(), labels.end(), std::back_inserter(common));
         return common;
     }
@@ -111,7 +112,8 @@ namespace NKikimr::NSqsTopic {
         const TString& databasePath,
         const TString& topicPath,
         const TString& consumer,
-        const TString& method
+        const TString& method,
+        const NKikimrPQ::TPQConfig* pqConfig
     ) {
         return GetMetricsLabels(
             databasePath,
@@ -120,7 +122,11 @@ namespace NKikimr::NSqsTopic {
             method,
             {
                 {"name", "api.sqs.request.message_count"}
-            }
+            },
+            {},
+            {},
+            {},
+            pqConfig
         );
     }
 
@@ -129,7 +135,8 @@ namespace NKikimr::NSqsTopic {
         const TString& topicPath,
         const TString& consumer,
         const TString& method,
-        const TString& status
+        const TString& status,
+        const NKikimrPQ::TPQConfig* pqConfig
     ) {
         return GetMetricsLabels(
             databasePath,
@@ -139,7 +146,11 @@ namespace NKikimr::NSqsTopic {
             {
                 {"name", "api.sqs.response.message_count"},
                 {"status", status}
-            }
+            },
+            {},
+            {},
+            {},
+            pqConfig
         );
     }
 
@@ -147,7 +158,8 @@ namespace NKikimr::NSqsTopic {
         const TString& databasePath,
         const TString& topicPath,
         const TString& consumer,
-        const TString& method
+        const TString& method,
+        const NKikimrPQ::TPQConfig* pqConfig
     ) {
         return GetMetricsLabels(
             databasePath,
@@ -156,7 +168,11 @@ namespace NKikimr::NSqsTopic {
             method,
             {
                 {"name", "api.sqs.response.empty_count"}
-            }
+            },
+            {},
+            {},
+            {},
+            pqConfig
         );
     }
 
@@ -164,7 +180,8 @@ namespace NKikimr::NSqsTopic {
         const TString& databasePath,
         const TString& topicPath,
         const TString& consumer,
-        const TString& method
+        const TString& method,
+        const NKikimrPQ::TPQConfig* pqConfig
     ) {
         return GetMetricsLabels(
             databasePath,
@@ -173,7 +190,11 @@ namespace NKikimr::NSqsTopic {
             method,
             {
                 {"name", "api.sqs.request.bytes"}
-            }
+            },
+            {},
+            {},
+            {},
+            pqConfig
         );
     }
 

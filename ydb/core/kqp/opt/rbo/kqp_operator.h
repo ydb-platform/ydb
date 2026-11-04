@@ -114,7 +114,9 @@ struct TPhysicalOpProps {
         Analysis.Clear();
     }
 
-    std::optional<int> StageId;
+    std::optional<TStageId> StageId;
+    // Physical boundary bindings, indexed by operator child.
+    TVector<std::optional<TStageEdgeId>> StageInputEdges;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
 
@@ -141,6 +143,7 @@ struct TPhysicalOpProps {
 private:
     void CopyPhysicalFrom(const TPhysicalOpProps& other) {
         StageId = other.StageId;
+        StageInputEdges = other.StageInputEdges;
         Algorithm = other.Algorithm;
         OrderEnforcer = other.OrderEnforcer;
         Metadata = other.Metadata;

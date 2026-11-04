@@ -18,6 +18,12 @@ namespace NKikimr::NDataShard {
 
     class TReplicationSourceOffsetsDb : public IReplicationSourceOffsetsDb {
     public:
+        enum class ECleanupStatus {
+            NotReady,
+            More,
+            Done,
+        };
+
         TReplicationSourceOffsetsDb(NTabletFlatExecutor::TTransactionContext& txc)
             : Txc(txc)
         { }
@@ -27,7 +33,11 @@ namespace NKikimr::NDataShard {
         void PersistSplitKeyOffset(const TPathId& pathId, ui64 sourceId, ui64 splitKeyId, i64 offset) override;
         void PersistSplitKeyDelete(const TPathId& pathId, ui64 sourceId, ui64 splitKeyId) override;
 
+        ECleanupStatus RemoveTableBatch(const TPathId& pathId);
+
     private:
+        class TCleanupBatch;
+
         NTabletFlatExecutor::TTransactionContext& Txc;
     };
 

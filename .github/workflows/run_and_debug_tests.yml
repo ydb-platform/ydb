@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       executor:
-        description: 'ydb_yc = local runners; remote = CI remote executor workflow'
+        description: 'ydb_yc = local runners; remote = dispatch fat executor on remote_executor_ref'
         required: false
         type: choice
         options:
@@ -12,10 +12,10 @@ on:
           - remote
         default: ydb_yc
       remote_executor_ref:
-        description: 'Git ref hosting ci_remote_executor.yml (empty = this branch)'
+        description: 'Git ref whose Run and debug tests.yml is the fat executor (default: dev/ci-remote-executor)'
         required: false
         type: string
-        default: ''
+        default: 'dev/ci-remote-executor'
       code_ref:
         description: 'YDB ref/SHA for executor to checkout+test (empty = this run SHA)'
         required: false
@@ -111,9 +111,9 @@ jobs:
           command: start
           token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           repository: ${{ github.repository }}
-          workflow_file: ci_remote_executor.yml
-          workflow_name: CI remote executor
-          executor_ref: ${{ inputs.remote_executor_ref || github.ref_name }}
+          workflow_file: run_and_debug_tests.yml
+          workflow_name: Run and debug tests
+          executor_ref: ${{ inputs.remote_executor_ref }}
           code_ref: ${{ inputs.code_ref || github.sha }}
           build_target: ${{ inputs.test_targets }}
           build_preset: ${{ inputs.build_preset }}
@@ -147,8 +147,8 @@ jobs:
           command: wait
           token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           repository: ${{ github.repository }}
-          workflow_file: ci_remote_executor.yml
-          workflow_name: CI remote executor
+          workflow_file: run_and_debug_tests.yml
+          workflow_name: Run and debug tests
           executor_run_id: ${{ needs.dispatch_remote.outputs.executor_run_id }}
           executor_run_url: ${{ needs.dispatch_remote.outputs.executor_run_url }}
           aws_endpoint: ${{ vars.AWS_ENDPOINT }}
@@ -161,8 +161,8 @@ jobs:
           command: cancel
           token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           repository: ${{ github.repository }}
-          workflow_file: ci_remote_executor.yml
-          workflow_name: CI remote executor
+          workflow_file: run_and_debug_tests.yml
+          workflow_name: Run and debug tests
           executor_run_id: ${{ needs.dispatch_remote.outputs.executor_run_id }}
           executor_run_url: ${{ needs.dispatch_remote.outputs.executor_run_url }}
 

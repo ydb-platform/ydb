@@ -37,13 +37,41 @@ TString GetMonUserForLog(const NMon::TEvRemoteHttpInfo* ev) {
 TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev, THive* self)
     : Index(++self->OperationsLogIndex)
     , User(GetMonUser(ev->Get()))
+    , LogPrefix(self->GetLogPrefix())
 {}
 
-void TLoggedMonTransaction::WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op) {
+// JSON object -> structured log fields: a nested object becomes "key.subkey" fields, an array is written as JSON text
+static NActors::NStructuredLog::TStructuredMessage JsonToStructuredMessage(const NJson::TJsonValue& json) {
+    using namespace NActors::NStructuredLog;
+    TStructuredMessage message;
+    for (const auto& [key, value] : json.GetMap()) {
+        switch (value.GetType()) {
+            case NJson::JSON_UNDEFINED:
+            case NJson::JSON_NULL:
+                break;
+            case NJson::JSON_MAP:
+                message.AppendSubMessage(TKeyName(key), JsonToStructuredMessage(value));
+                break;
+            case NJson::JSON_STRING:
+                message.AppendValue({TKeyName(key)}, value.GetString());
+                break;
+            default:
+                message.AppendValue({TKeyName(key)}, NJson::WriteJson(value, false));
+                break;
+        }
+    }
+    return message;
+}
+
+void TLoggedMonTransaction::WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op, TStringBuf description) {
     TStringStream str;
     NJson::WriteJson(&str, &op);
     TInstant timestamp = TActivationContext::Now();
     db.Table<Schema::OperationsLog>().Key(Index).Update<Schema::OperationsLog::User, Schema::OperationsLog::OperationTimestamp, Schema::OperationsLog::Operation>(User, timestamp.MilliSeconds(), str.Str());
+    YDB_LOG_INFO(description,
+        {"logPrefix", LogPrefix},
+        {"user", GetUserForLog()},
+        JsonToStructuredMessage(op));
 }
 
 TCgiParameters GetParams(const NMon::TEvRemoteHttpInfo* ev) {
@@ -837,7 +865,7 @@ public:
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     bool ChangeRequest = false;
     std::optional<TString> Status;
-    TStringBuilder Changes; // applied changes in "Name: from -> to" form, for the log
+    TStringBuilder Changes; // applied changes in "Name: from -> to" form, for the operations log
 
     TTxMonEvent_Settings(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
         : TBase(hive)
@@ -1179,18 +1207,15 @@ public:
         }
 
         if (ChangeRequest) {
-            WriteOperation(db, jsonOperation);
+            if (!Changes.empty()) {
+                jsonOperation["Changes"] = TString(Changes);
+            }
+            WriteOperation(db, jsonOperation, "Hive UI: settings changed");
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        if (!Changes.empty()) {
-            YDB_LOG_INFO("Hive UI: settings changed",
-                {"logPrefix", GetLogPrefix()},
-                {"user", GetUserForLog()},
-                {"changes", Changes});
-        }
         if (ChangeRequest) {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"status\":\"" << Status.value_or("ok") << "\"}"));
         } else {
@@ -1626,7 +1651,6 @@ public:
     bool ChangeRequest = false;
     TNodeId NodeId;
     TNodeInfo* Node = nullptr;
-    TString Details;
 
     TTxMonEvent_TabletAvailability(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
         : TBase(hive)
@@ -1703,8 +1727,7 @@ public:
             Self->ObjectDistributions.RemoveNode(*Node);
             Self->ObjectDistributions.AddNode(*Node);
             Self->ProcessWaitQueue();
-            WriteOperation(db, jsonOperation);
-            Details = StripStringRight(TString(eventDetails));
+            WriteOperation(db, jsonOperation, "Hive UI: tablet availability restrictions changed");
             Self->RecordNodeEvent(*Node, EHiveEventType::AvailabilityChanged, EHiveEventReason::MonitoringRequest, eventDetails << "user=" << GetUserForLog());
         }
         return true;
@@ -1712,11 +1735,6 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (ChangeRequest) {
-            YDB_LOG_INFO("Hive UI: tablet availability restrictions changed",
-                {"logPrefix", GetLogPrefix()},
-                {"user", GetUserForLog()},
-                {"nodeId", NodeId},
-                {"details", Details});
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"status":"ok"})"));
         } else {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(R"({"status":"error"})"));
@@ -3174,7 +3192,7 @@ public:
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
             jsonOperation["Down"] = Down;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: node down state changed");
             Response = "{\"NodeId\":" + ToString(NodeId) + ',' + "\"Down\":" + (Down ? "true" : "false") + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
@@ -3184,13 +3202,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        if (Status == THttpStatus::OK) {
-            YDB_LOG_INFO("Hive UI: node down state changed",
-                {"logPrefix", GetLogPrefix()},
-                {"user", GetUserForLog()},
-                {"nodeId", NodeId},
-                {"down", Down});
-        } else {
+        if (Status != THttpStatus::OK) {
             YDB_LOG_DEBUG("THive::TTxMonEvent_SetDown::Complete",
                 {"logPrefix", GetLogPrefix()},
                 {"nodeId", NodeId},
@@ -3235,7 +3247,7 @@ public:
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
             jsonOperation["Freeze"] = Freeze;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: node freeze state changed");
             Response = "{\"NodeId\":" + ToString(NodeId) + ',' + "\"Freeze\":" + (Freeze ? "true" : "false") + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
@@ -3245,13 +3257,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        if (Status == THttpStatus::OK) {
-            YDB_LOG_INFO("Hive UI: node freeze state changed",
-                {"logPrefix", GetLogPrefix()},
-                {"user", GetUserForLog()},
-                {"nodeId", NodeId},
-                {"freeze", Freeze});
-        } else {
+        if (Status != THttpStatus::OK) {
             YDB_LOG_DEBUG("THive::TTxMonEvent_SetFreeze::Complete",
                 {"logPrefix", GetLogPrefix()},
                 {"nodeId", NodeId},
@@ -3755,15 +3761,11 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         NJson::TJsonValue jsonOperation;
         jsonOperation["Reassign"] = description;
-        WriteOperation(db, jsonOperation);
+        jsonOperation["TabletsCount"] = operations.size();
+        jsonOperation["MaxInFlight"] = MaxInFlight;
+        jsonOperation["Async"] = Async;
+        WriteOperation(db, jsonOperation, "Hive UI: reassign requested");
 
-        YDB_LOG_INFO("Hive UI: reassign requested",
-            {"logPrefix", GetLogPrefix()},
-            {"user", GetUserForLog()},
-            {"description", description},
-            {"tabletsCount", operations.size()},
-            {"maxInFlight", MaxInFlight},
-            {"async", Async});
         Self->StartReassignActor(std::move(operations), Wait ? Source : TActorId(), MaxInFlight, description, std::make_unique<TMonitoringReassignCallback>());
         return true;
     }
@@ -3891,14 +3893,10 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         NJson::TJsonValue jsonOperation;
         jsonOperation["MoveData"] = description;
-        WriteOperation(db, jsonOperation);
+        jsonOperation["TabletsCount"] = TabletsFound;
+        jsonOperation["MaxInFlight"] = MaxInFlight;
+        WriteOperation(db, jsonOperation, "Hive UI: move data requested");
 
-        YDB_LOG_INFO("Hive UI: move data requested",
-            {"logPrefix", GetLogPrefix()},
-            {"user", GetUserForLog()},
-            {"description", description},
-            {"tabletsCount", TabletsFound},
-            {"maxInFlight", MaxInFlight});
         Self->StartMoveDataActor(std::move(tablets), GroupIds, Wait ? Source : TActorId(), MaxInFlight, description, std::make_unique<TMonitoringMoveDataCallback>(), false);
         return true;
     }
@@ -4283,16 +4281,12 @@ public:
                 waitActorId = ctx.RegisterWithSameMailbox(waitActor);
                 Self->SubActors.emplace_back(waitActor);
             }
-            YDB_LOG_INFO("Hive UI: tablet stop requested",
-                {"logPrefix", GetLogPrefix()},
-                {"user", GetUserForLog()},
-                {"tabletId", TabletId});
             Self->Execute(Self->CreateStopTablet(TabletId, waitActorId));
             NIceDb::TNiceDb db(txc.DB);
             NJson::TJsonValue jsonOperation;
             jsonOperation["Tablet"] = TabletId;
             jsonOperation["Stop"] = true;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: tablet stop requested");
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
@@ -4349,12 +4343,7 @@ public:
             NJson::TJsonValue jsonOperation;
             jsonOperation["SubDomain"] = TStringBuilder() << DomainId;
             jsonOperation["Stop"] = Stop;
-            WriteOperation(db, jsonOperation);
-            YDB_LOG_INFO("Hive UI: domain stop state changed",
-                {"logPrefix", GetLogPrefix()},
-                {"user", GetUserForLog()},
-                {"domain", DomainId},
-                {"stop", Stop});
+            WriteOperation(db, jsonOperation, "Hive UI: domain stop state changed");
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"OK\"}"));
         } else {
             ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Domain not found"})"));
@@ -4447,16 +4436,12 @@ public:
                 waitActorId = ctx.RegisterWithSameMailbox(waitActor);
                 Self->SubActors.emplace_back(waitActor);
             }
-            YDB_LOG_INFO("Hive UI: tablet resume requested",
-                {"logPrefix", GetLogPrefix()},
-                {"user", GetUserForLog()},
-                {"tabletId", TabletId});
             Self->Execute(Self->CreateResumeTablet(TabletId, waitActorId));
             NIceDb::TNiceDb db(txc.DB);
             NJson::TJsonValue jsonOperation;
             jsonOperation["Tablet"] = TabletId;
             jsonOperation["Stop"] = false;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: tablet resume requested");
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
@@ -5117,14 +5102,9 @@ public:
             db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::ObjectDomain>(tablet->ObjectDomain);
             NJson::TJsonValue jsonOperation;
             jsonOperation["Tablet"] = TabletId;
+            jsonOperation["OldObjectDomain"] = TStringBuilder() << oldDomain;
             jsonOperation["ObjectDomain"] = TStringBuilder() << newDomain;
-            WriteOperation(db, jsonOperation);
-            YDB_LOG_INFO("Hive UI: tablet object domain changed",
-                {"logPrefix", GetLogPrefix()},
-                {"user", GetUserForLog()},
-                {"tabletId", TabletId},
-                {"fromDomain", oldDomain},
-                {"toDomain", newDomain});
+            WriteOperation(db, jsonOperation, "Hive UI: tablet object domain changed");
             Success = true;
         } else {
             ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"status\": \"ERROR\", \"error\":\"Tablet not found\"}"));

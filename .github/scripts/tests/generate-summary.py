@@ -546,7 +546,13 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         fp.write(content)
 
 
-def write_summary(summary: TestSummary, public_dir: str = None):
+def write_summary(summary: TestSummary, job_summary_md: str = None):
+    """Write test table to this step's GITHUB_STEP_SUMMARY and to durable job_summary.md.
+
+    GITHUB_STEP_SUMMARY is per-step and cannot be read by later steps. job_summary.md
+    (usually $JOB_SUMMARY_MD / $PUBLIC_DIR/job_summary.md) is overwritten with the
+    latest table; the build_and_test_ya s3 step appends artifact links afterward.
+    """
     lines = [f"{line}\n" for line in summary.render(add_footnote=True)]
     lines.append("\n")
 
@@ -557,10 +563,9 @@ def write_summary(summary: TestSummary, public_dir: str = None):
     else:
         sys.stdout.writelines(lines)
 
-    # Durable S3 mirror for remote dispatch (overwrite; final links appended later).
-    if public_dir:
-        os.makedirs(public_dir, exist_ok=True)
-        with open(os.path.join(public_dir, "job_summary.md"), "wt", encoding="utf-8") as fp:
+    if job_summary_md:
+        os.makedirs(os.path.dirname(job_summary_md) or ".", exist_ok=True)
+        with open(job_summary_md, "wt", encoding="utf-8") as fp:
             fp.writelines(lines)
 
 
@@ -750,7 +755,8 @@ def main():
                           workflow_run_id=args.workflow_run_id,
                           oom_dmesg_log=args.oom_dmesg_log,
                           )
-    write_summary(summary, public_dir=args.public_dir)
+    job_summary_md = os.environ.get("JOB_SUMMARY_MD") or os.path.join(args.public_dir, "job_summary.md")
+    write_summary(summary, job_summary_md=job_summary_md)
 
     if summary.is_failed and not args.is_test_result_ignored:
         overall_status = "failure"

@@ -6,10 +6,6 @@
 namespace NKikimr::NPQ {
 
 TString MetricsConsumerName(const TString& consumerName, const NKikimrPQ::TPQConfig& pqConfig) {
-    // CLIENTID_WITHOUT_CONSUMER. A read without a consumer has an empty metric label.
-    if (consumerName == "$without_consumer") {
-        return {};
-    }
     return NPersQueue::ConvertOldConsumerName(consumerName, pqConfig);
 }
 

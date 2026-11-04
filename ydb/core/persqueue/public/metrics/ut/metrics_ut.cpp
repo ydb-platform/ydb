@@ -56,10 +56,4 @@ Y_UNIT_TEST(FirstClassCitizenKeepsName) {
     }
 }
 
-Y_UNIT_TEST(WithoutConsumerIsEmpty) {
-    for (bool topicsAreFirstClassCitizen : {false, true}) {
-        Expect("$without_consumer", "", PqConfig(topicsAreFirstClassCitizen));
-    }
-}
-
 } // Y_UNIT_TEST_SUITE(MetricsConsumerName)

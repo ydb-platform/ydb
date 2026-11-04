@@ -21,7 +21,6 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/counters
-    ydb/core/persqueue/public/metrics
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/library/aclib

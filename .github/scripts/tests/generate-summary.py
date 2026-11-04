@@ -557,11 +557,10 @@ def write_summary(summary: TestSummary, public_dir: str = None):
     else:
         sys.stdout.writelines(lines)
 
-    # Durable copy for remote dispatch / cross-repo mirrors (survives step boundaries
-    # and lands on S3 with the rest of PUBLIC_DIR).
+    # Durable S3 mirror for remote dispatch (overwrite; final links appended later).
     if public_dir:
         os.makedirs(public_dir, exist_ok=True)
-        with open(os.path.join(public_dir, "job_summary.md"), "at", encoding="utf-8") as fp:
+        with open(os.path.join(public_dir, "job_summary.md"), "wt", encoding="utf-8") as fp:
             fp.writelines(lines)
 
 

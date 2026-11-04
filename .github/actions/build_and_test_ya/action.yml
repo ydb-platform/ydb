@@ -900,16 +900,14 @@ runs:
         echo "::group::s3-sync"
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
         echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
-        # Append the same footer links into the durable S3-backed summary used by
-        # remote dispatch (generate-summary already wrote the test table there).
         LINKS_LINE="$(cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))')"
-        {
-          echo ""
-          echo "$LINKS_LINE"
-          echo ""
-          echo "_Job summary generated at run-time_"
-        } >> "$PUBLIC_DIR/job_summary.md"
+        # job_summary.md = test table (generate-summary) + links; also at run-root S3
+        # so remote dispatch does not encode the ya-* leaf path.
+        touch "$PUBLIC_DIR/job_summary.md"
+        printf '\n%s\n' "$LINKS_LINE" >> "$PUBLIC_DIR/job_summary.md"
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+        s3cmd put --acl-public --no-progress --no-mime-magic --guess-mime-type \
+          "$PUBLIC_DIR/job_summary.md" "${S3_BUCKET_PATH%/*}/job_summary.md"
         echo "$LINKS_LINE" >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"
 

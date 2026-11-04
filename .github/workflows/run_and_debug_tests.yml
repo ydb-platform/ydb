@@ -1,13 +1,12 @@
-# Branch-local rewrite: this file on THIS branch acts as the remote CI executor.
-# Dispatch from another branch via (workflow already exists on main, so --ref works):
-#   gh workflow run "Run and debug tests" --ref <this-branch> -f test_targets=... -f code_ref=...
+# Same-repo bootstrap executor: workflow YAML from this branch; tested code from code_ref.
+# Dispatcher: workflow_dispatch this file --ref <executor-branch> with inputs below.
 name: Run and debug tests
 
 on:
   workflow_dispatch:
     inputs:
       code_ref:
-        description: 'Git ref or SHA to checkout and test (empty = this workflow SHA)'
+        description: 'YDB ref/SHA to build and test (empty = this workflow SHA)'
         required: false
         type: string
         default: ''
@@ -17,7 +16,7 @@ on:
         type: string
         default: 'ydb/library/actors/util/ut'
       build_preset:
-        description: 'Build preset (single value; match main input name for API dispatch)'
+        description: 'Build preset (single value)'
         required: false
         type: string
         default: 'relwithdebinfo'
@@ -47,7 +46,7 @@ jobs:
     runs-on: [self-hosted, build-preset-relwithdebinfo-fat]
     timeout-minutes: 360
     steps:
-      - name: Resolve checkout ref
+      - name: Resolve refs
         id: ref
         shell: bash
         run: |
@@ -55,21 +54,46 @@ jobs:
           if [ -z "$code_ref" ]; then
             code_ref='${{ github.sha }}'
           fi
-          echo "value=$code_ref" >> "$GITHUB_OUTPUT"
+          echo "code=$code_ref" >> "$GITHUB_OUTPUT"
+          # Workflow SHA keeps CI scripts/actions even when code_ref is older/main.
+          echo "ci=${{ github.sha }}" >> "$GITHUB_OUTPUT"
           {
             echo "### CI remote executor"
             echo "- **code ref:** \`$code_ref\`"
+            echo "- **ci ref:** \`${{ github.sha }}\`"
             echo "- **preset:** \`${{ inputs.build_preset }}\`"
             echo "- **targets:** \`${{ inputs.test_targets }}\`"
             echo "- **kind:** \`${{ inputs.kind }}\`"
             echo "- **runner:** \`build-preset-relwithdebinfo-fat\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Checkout
+      - name: Checkout YDB code
         uses: actions/checkout@v5
         with:
-          ref: ${{ steps.ref.outputs.value }}
+          ref: ${{ steps.ref.outputs.code }}
           fetch-depth: 2
+
+      - name: Overlay CI from executor workflow ref
+        if: steps.ref.outputs.code != steps.ref.outputs.ci
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.ref.outputs.ci }}
+          sparse-checkout: |
+            .github/actions
+            .github/scripts
+            .github/config
+          sparse-checkout-cone-mode: false
+          path: .executor-ci
+
+      - name: Apply CI overlay
+        if: steps.ref.outputs.code != steps.ref.outputs.ci
+        shell: bash
+        run: |
+          set -euo pipefail
+          rsync -a .executor-ci/.github/actions/ .github/actions/
+          rsync -a .executor-ci/.github/scripts/ .github/scripts/
+          rsync -a .executor-ci/.github/config/ .github/config/
+          rm -rf .executor-ci
 
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
@@ -94,14 +118,3 @@ jobs:
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
-
-      # Durable summary lives on S3 as $PUBLIC_DIR/job_summary.md (primary for
-      # remote dispatch / cross-repo). Optional GH artifact for same-repo debug.
-      - name: Upload job_summary.md artifact
-        if: always() && env.PUBLIC_DIR != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: executor-summary
-          path: ${{ env.PUBLIC_DIR }}/job_summary.md
-          if-no-files-found: warn
-          retention-days: 14

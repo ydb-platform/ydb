@@ -2,7 +2,6 @@ import functools
 import hashlib
 import shlex
 import os
-from enum import auto, StrEnum
 from typing import Any, TYPE_CHECKING
 
 # noinspection PyUnresolvedReferences
@@ -10,22 +9,13 @@ import ymake
 
 import _dart_fields as df
 import ytest
-from _common import (
-    rootrel_arc_src,
-    sort_uniq,
-)
+from _common import rootrel_arc_src
 from _dart_fields import create_dart_record
 
 if TYPE_CHECKING:
     from lib.nots.erm_json_lite import ErmJsonLite
     from lib.nots.package_manager import PackageManager
     from lib.nots.semver import Version
-
-# 1 is 60 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
-# 0.5 is 120 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
-# 0.2 is 300 files per chunk for TIMEOUT(60) - default timeout for SIZE(SMALL)
-# 0.0 - not to use chunks
-ESLINT_FILE_PROCESSING_TIME_DEFAULT = 0.0  # seconds per file
 
 REQUIRED_MISSING = "~~required~~"
 
@@ -71,116 +61,6 @@ class COLORS:
     yellow = _wrap_color(33)
     cyan = _wrap_color(36)
     reset = _wrap_color(49)
-
-
-class TsTestType(StrEnum):
-    ESLINT = auto()
-    HERMIONE = auto()
-    JEST = auto()
-    VITEST = auto()
-    PLAYWRIGHT = auto()
-    PLAYWRIGHT_LARGE = auto()
-    TSC_TYPECHECK = auto()
-    TS_STYLELINT = auto()
-    TS_BIOME = auto()
-    TS_CHECK = auto()
-
-
-TS_TEST_FIELDS_BASE = (
-    df.BinaryPath.normalized,
-    df.BuildFolderPath.normalized,
-    df.ForkMode.test_fork_mode,
-    df.NodejsRootVarName.value,
-    df.ScriptRelPath.first_flat,
-    df.SourceFolderPath.normalized,
-    df.SplitFactor.from_unit,
-    df.TestData.from_unit,
-    df.TestedProjectName.filename_without_ext,
-    df.TestEnv.value,
-    df.TestName.value,
-    df.TestRecipes.value,
-    df.TestTimeout.from_unit,
-    df.TsConfigPath.from_unit,
-)
-
-TS_TEST_SPECIFIC_FIELDS = {
-    TsTestType.ESLINT: (
-        df.Size.from_unit,
-        df.TestCwd.moddir,
-        df.Tag.from_unit,
-        df.Requirements.from_unit,
-        df.EslintConfigPath.value,
-    ),
-    TsTestType.HERMIONE: (
-        df.Tag.from_unit_fat_external_no_retries,
-        df.Requirements.from_unit_with_full_network,
-        df.ConfigPath.value,
-        df.TsTestDataDirs.value,
-        df.TsTestDataDirsRename.value,
-        df.TsResources.value,
-        df.TsTestForPath.value,
-    ),
-    TsTestType.JEST: (
-        df.Size.from_unit,
-        df.Tag.from_unit,
-        df.Requirements.from_unit,
-        df.ConfigPath.value,
-        df.TsTestDataDirs.value,
-        df.TsTestDataDirsRename.value,
-        df.TsResources.value,
-        df.TsTestForPath.value,
-        df.DockerImage.value,
-    ),
-    TsTestType.VITEST: (
-        df.Size.from_unit,
-        df.Tag.from_unit,
-        df.Requirements.from_unit,
-        df.ConfigPath.value,
-        df.TsTestDataDirs.value,
-        df.TsTestDataDirsRename.value,
-        df.TsResources.value,
-        df.TsTestForPath.value,
-        df.DockerImage.value,
-    ),
-    TsTestType.PLAYWRIGHT: (
-        df.Size.from_unit,
-        df.Tag.from_unit,
-        df.Requirements.from_unit,
-        df.ConfigPath.value,
-        df.TsTestDataDirs.value,
-        df.TsTestDataDirsRename.value,
-        df.TsResources.value,
-        df.TsTestForPath.value,
-        df.DockerImage.value,
-    ),
-    TsTestType.PLAYWRIGHT_LARGE: (
-        df.ConfigPath.value,
-        df.Size.from_unit,
-        df.Tag.from_unit_fat_external_no_retries,
-        df.Requirements.from_unit_with_full_network,
-        df.TsResources.value,
-        df.TsTestDataDirs.value,
-        df.TsTestDataDirsRename.value,
-        df.TsTestForPath.value,
-    ),
-    TsTestType.TSC_TYPECHECK: (
-        df.Size.from_unit,
-        df.TestCwd.moddir,
-        df.Tag.from_unit,
-        df.Requirements.from_unit,
-    ),
-    TsTestType.TS_STYLELINT: (
-        df.Size.from_unit,
-        df.TsStylelintConfig.value,
-        df.TestFiles.stylesheets,
-        df.NodeModulesBundleFilename.value,
-    ),
-    TsTestType.TS_BIOME: (
-        df.TsBiomeConfig.value,
-        df.TestFiles.ts_biome_srcs,
-        df.NodeModulesBundleFilename.value,
-    ),
-}
 
 
 class PluginLogger(object):
@@ -511,24 +391,6 @@ def __strip_prefix(prefix: str, line: str) -> str:
     return line
 
 
-@ymake.macro
-@_with_report_configure_error
-def _TS_LEGACY_CHECKS_CONFIGURE(unit: ymake.Unit) -> None:
-    _setup_eslint(unit)
-    _setup_tsc_typecheck(unit)
-    _setup_stylelint(unit)
-    _setup_biome(unit)
-
-
-@ymake.macro
-def _TS_TSC_BUILD_COMMAND(unit: ymake.Unit) -> None:
-    commands = [
-        "tsc --project {} --incremental false --composite false --pretty".format(tsconfig_path)
-        for tsconfig_path in unit.get("TS_CONFIG_PATH").split()
-    ]
-    _set_ts_build_command(unit, " && ".join(commands))
-
-
 def _set_ts_build_command(unit: ymake.Unit, command: str) -> None:
     unit.set(["_TS_BUILD_COMMAND", command])
     unit.set(["_TS_BUILD_COMMAND_ARG", '--build-command "{}"'.format(command.replace('"', '\\"'))])
@@ -536,212 +398,6 @@ def _set_ts_build_command(unit: ymake.Unit, command: str) -> None:
 
 def _is_tests_enabled(unit: ymake.Unit) -> bool:
     return unit.get("CPP_ANALYSIS_MODE") != "yes"
-
-
-def _setup_eslint(unit: ymake.Unit) -> None:
-    if not _is_tests_enabled(unit):
-        return
-
-    if unit.get("_NO_LINT_VALUE") == "none":
-        return
-
-    test_files = df.TestFiles.ts_lint_srcs(unit, (), {})
-    if not test_files:
-        return
-
-    user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
-    pm = _create_pm(unit)
-
-    unit.on_setup_install_node_modules_recipe(pm.module_path)
-
-    test_type = TsTestType.ESLINT
-
-    from lib.nots.package_manager import constants
-
-    peers = _create_pm(unit).get_local_peers_from_package_json()
-    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
-
-    if deps:
-        unit.ondepends(deps)
-
-    flat_args = (test_type, "MODDIR")
-
-    dart_record = create_dart_record(
-        TS_TEST_FIELDS_BASE + TS_TEST_SPECIFIC_FIELDS[test_type],
-        unit,
-        flat_args,
-        {},
-    )
-    dart_record[df.TestFiles.KEY] = test_files
-    dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
-
-    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
-    dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
-
-    if unit.get("TS_LOCAL_CLI") != "yes":
-        # disable chunks for `ya tool nots`
-        dart_record[df.LintFileProcessingTime.KEY] = str(ESLINT_FILE_PROCESSING_TIME_DEFAULT)
-
-    data = ytest.dump_test(unit, dart_record)
-    if data:
-        unit.set_property(["DART_DATA", data])
-    unit.set(["TEST_RECIPES_VALUE", user_recipes])
-
-
-@_with_report_configure_error
-def _setup_tsc_typecheck(unit: ymake.Unit) -> None:
-    if not _is_tests_enabled(unit):
-        return
-
-    if unit.get("_TS_TYPECHECK_VALUE") == "none":
-        return
-
-    test_files = df.TestFiles.ts_check_srcs(unit, (), {})
-    if not test_files:
-        return
-
-    tsconfig_paths = unit.get("_TS_TYPECHECK_TSCONFIG").split(" ")
-    if len(tsconfig_paths) > 1:
-        raise Exception(
-            f"You have set several tsconfig files for TS_TYPECHECK: {tsconfig_paths}. "
-            f"Only one tsconfig is allowed for `TS_TYPECHECK(<config_filename>)` macro."
-        )
-
-    tsconfig_path = tsconfig_paths[0]
-    if not tsconfig_path:
-        tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
-        if len(tsconfig_paths) > 1:
-            macros = " or ".join([f"TS_TYPECHECK({p})" for p in tsconfig_paths])
-            raise Exception(f"Module uses several tsconfig files, specify which one to use for typecheck: {macros}")
-
-        tsconfig_path = tsconfig_paths[0]
-
-    abs_tsconfig_path = _arc_path(unit, tsconfig_path)
-    if not abs_tsconfig_path:
-        raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
-
-    user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
-    pm = _create_pm(unit)
-
-    unit.on_setup_install_node_modules_recipe(pm.module_path)
-
-    test_type = TsTestType.TSC_TYPECHECK
-
-    from lib.nots.package_manager import constants
-
-    peers = _create_pm(unit).get_local_peers_from_package_json()
-    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
-
-    if deps:
-        unit.ondepends(deps)
-
-    flat_args = (test_type,)
-
-    dart_record = create_dart_record(
-        TS_TEST_FIELDS_BASE + TS_TEST_SPECIFIC_FIELDS[test_type],
-        unit,
-        flat_args,
-        {},
-    )
-    dart_record[df.TestFiles.KEY] = test_files
-    dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
-
-    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
-    dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
-    dart_record[df.TsConfigPath.KEY] = tsconfig_path
-
-    data = ytest.dump_test(unit, dart_record)
-    if data:
-        unit.set_property(["DART_DATA", data])
-    unit.set(["TEST_RECIPES_VALUE", user_recipes])
-
-
-@_with_report_configure_error
-def _setup_stylelint(unit: ymake.Unit) -> None:
-    if not _is_tests_enabled(unit):
-        return
-
-    if unit.get("_TS_STYLELINT_VALUE") == "no":
-        return
-
-    test_files = df.TestFiles.stylesheets(unit, (), {})
-    if not test_files:
-        return
-
-    from lib.nots.package_manager import constants
-
-    recipes_value = unit.get_subst("TEST_RECIPES_VALUE")
-    pm = _create_pm(unit)
-
-    unit.on_setup_install_node_modules_recipe(pm.module_path)
-
-    test_type = TsTestType.TS_STYLELINT
-
-    peers = pm.get_local_peers_from_package_json()
-
-    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
-    if deps:
-        unit.ondepends(deps)
-
-    flat_args = (test_type,)
-    spec_args = dict(nm_bundle=constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME)
-
-    dart_record = create_dart_record(
-        TS_TEST_FIELDS_BASE + TS_TEST_SPECIFIC_FIELDS[test_type], unit, flat_args, spec_args
-    )
-
-    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
-    dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
-
-    data = ytest.dump_test(unit, dart_record)
-    if data:
-        unit.set_property(["DART_DATA", data])
-
-    unit.set(["TEST_RECIPES_VALUE", recipes_value])
-
-
-@_with_report_configure_error
-def _setup_biome(unit: ymake.Unit) -> None:
-    if not _is_tests_enabled(unit):
-        return
-
-    if unit.get("_TS_BIOME_VALUE") == "no":
-        return
-
-    test_files = df.TestFiles.ts_biome_srcs(unit, (), {})
-    if not test_files:
-        return
-
-    from lib.nots.package_manager import constants
-
-    recipes_value = unit.get("TEST_RECIPES_VALUE")
-    pm = _create_pm(unit)
-    unit.on_setup_install_node_modules_recipe(pm.module_path)
-    unit.on_setup_extract_output_tars_recipe([unit.get("MODDIR")])
-
-    test_type = TsTestType.TS_BIOME
-
-    peers = _create_pm(unit).get_local_peers_from_package_json()
-
-    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
-    if deps:
-        unit.ondepends(deps)
-
-    flat_args = (test_type,)
-    spec_args = dict(nm_bundle=constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME)
-
-    dart_record = create_dart_record(
-        TS_TEST_FIELDS_BASE + TS_TEST_SPECIFIC_FIELDS[test_type], unit, flat_args, spec_args
-    )
-
-    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
-    dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
-
-    data = ytest.dump_test(unit, dart_record)
-    if data:
-        unit.set_property(["DART_DATA", data])
-
-    unit.set(["TEST_RECIPES_VALUE", recipes_value])
 
 
 def _set_resource_vars(
@@ -1082,7 +738,7 @@ def _TS_LIBRARY_CONFIGURE(unit: ymake.Unit) -> None:
         if not found:
             missing_outputs.append(output)
 
-    if missing_outputs and unit.get("_TS_LEGACY_FACADE") != "yes" and unit.get("_TS_LIBRARY_FOR") != "yes":
+    if missing_outputs and unit.get("_TS_LIBRARY_FOR") != "yes":
         ymake.report_configure_error(
             "\n"
             f"Directories from {COLORS.cyan}TS_BUILD_OUTPUTS(){COLORS.reset} are expected to be listed in {COLORS.cyan}package.json#files{COLORS.reset}.\n"
@@ -1287,75 +943,6 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
                     )
 
 
-@ymake.macro
-@_with_report_configure_error
-def _TS_TEST_FOR_CONFIGURE(unit: ymake.Unit, test_runner: str, default_config: str, node_modules_filename: str) -> None:
-    test_runner = TsTestType(test_runner)
-    if not _is_tests_enabled(unit):
-        return
-
-    if unit.enabled('TS_COVERAGE'):
-        unit.on_peerdir_ts_resource("nyc")
-
-    for_mod_path = df.TsTestForPath.value(unit, (), {})
-    unit.onpeerdir([for_mod_path])
-
-    # user-defined recipes should be in the end
-    user_recipes = unit.get_subst("TEST_RECIPES_VALUE").strip()
-    unit.set(["TEST_RECIPES_VALUE", ""])
-
-    if test_runner in [TsTestType.JEST, TsTestType.VITEST]:
-        unit.on_setup_install_node_modules_recipe([for_mod_path])
-    else:
-        unit.on_setup_extract_node_modules_recipe([for_mod_path])
-
-    unit.on_setup_extract_output_tars_recipe([for_mod_path])
-
-    __set_append(unit, "TEST_RECIPES_VALUE", user_recipes)
-
-    build_root = "$B" if test_runner in [TsTestType.HERMIONE, TsTestType.PLAYWRIGHT_LARGE] else "$(BUILD_ROOT)"
-    unit.set(["TS_TEST_NM", os.path.join(build_root, for_mod_path, node_modules_filename)])
-
-    config_path = unit.get("TS_TEST_CONFIG_PATH")
-    if not config_path:
-        config_path = os.path.join(for_mod_path, default_config)
-        unit.set(["TS_TEST_CONFIG_PATH", config_path])
-
-    test_files = df.TestFiles.ts_test_srcs(unit, (), {})
-    if not test_files:
-        ymake.report_configure_error(f"No tests found for {test_runner}")
-        return
-
-    from lib.nots.package_manager import constants
-
-    peers = _create_pm(unit).get_local_peers_from_package_json()
-    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
-
-    if deps:
-        unit.ondepends(deps)
-
-    flat_args = (test_runner, "TS_FOR_PATH")
-    spec_args = {'erm_json': _create_erm_json(unit)}
-
-    dart_record = create_dart_record(
-        TS_TEST_FIELDS_BASE + TS_TEST_SPECIFIC_FIELDS[test_runner],
-        unit,
-        flat_args,
-        spec_args,
-    )
-    dart_record[df.TestFiles.KEY] = test_files
-    dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
-
-    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
-    dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
-    if test_runner in [TsTestType.HERMIONE, TsTestType.PLAYWRIGHT_LARGE]:
-        dart_record[df.Size.KEY] = "LARGE"
-
-    data = ytest.dump_test(unit, dart_record)
-    if data:
-        unit.set_property(["DART_DATA", data])
-
-
 # noinspection PyUnusedLocal
 @ymake.macro
 @_with_report_configure_error
@@ -1392,26 +979,6 @@ def _SET_TS_FOR_VARS(unit: ymake.Unit, for_mod: str) -> None:
     unit.set(["TS_FOR_PATH", rootrel_arc_src(for_mod, unit)])
 
 
-def __on_ts_files(unit: ymake.Unit, files_in: list[str], files_out: list[str]) -> None:
-    for f in files_in:
-        if f.startswith(".."):
-            ymake.report_configure_error(
-                "TS_FILES* macroses are only allowed to use files inside the project directory.\n"
-                f"Got path '{f}'.\n"
-                "Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-files."
-            )
-
-    new_items = _build_cmd_input_paths(paths=files_in, hide=True, disable_include_processor=True)
-    __set_append(unit, "_TS_FILES_INOUTS", new_items)
-
-
-@ymake.macro
-@_with_report_configure_error
-def _TS_FILES(unit: ymake.Unit, *files: str) -> None:
-    files = list(files)
-    __on_ts_files(unit, files, files)
-
-
 @ymake.macro
 @_with_report_configure_error
 def _TS_LARGE_FILES(unit: ymake.Unit, destination: str, *files: str) -> None:
@@ -1435,7 +1002,8 @@ def _TS_LARGE_FILES(unit: ymake.Unit, destination: str, *files: str) -> None:
     new_items = [f'$MOVE_FILE {i} {o}' for (i, o) in zip(in_files, out_files)]
     __set_append(unit, "_TS_PROJECT_SETUP_CMD", new_items, " && ")
 
-    __on_ts_files(unit, in_files, out_files)
+    inputs = _build_cmd_input_paths(paths=in_files, hide=True, disable_include_processor=True)
+    __set_append(unit, "_TS_LARGE_FILES_INPUTS", inputs)
 
 
 @ymake.macro

@@ -10,7 +10,7 @@ on:
         required: true
         type: string
       workflow_name:
-        description: Executor workflow name: value (S3 key segment for job_summary.md)
+        description: "Executor workflow 'name:' value (S3 key segment for job_summary.md)"
         required: true
         type: string
       executor_ref:

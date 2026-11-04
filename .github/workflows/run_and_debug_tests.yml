@@ -75,6 +75,7 @@ jobs:
           BUILD_PRESET: ${{ inputs.build_preset }}
           WAIT_MODE: ${{ inputs.wait_for_remote && 'wait+mirror' || 'fire-and-forget' }}
           REPO: ${{ github.repository }}
+          WORKFLOW_FILE: run_and_debug_tests.yml
           WORKFLOW_NAME: ${{ github.workflow }}
         shell: bash
         run: python3 .github/scripts/ci/dispatch_remote_executor.py start

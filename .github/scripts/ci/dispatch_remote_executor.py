@@ -8,11 +8,6 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-API = f"https://api.github.com/repos/{os.environ['REPO']}"
-WF_FILE = os.environ.get("WORKFLOW_FILE", "run_and_debug_tests.yml")
-WF_NAME = os.environ.get("WORKFLOW_NAME", "Run and debug tests")
-
-
 def die(msg):
     print(f"::error::{msg}", file=sys.stderr)
     sys.exit(1)
@@ -23,6 +18,10 @@ def env(name, default=None):
     if v is None or v == "":
         die(f"missing env {name}")
     return v
+
+
+def api():
+    return f"https://api.github.com/repos/{env('REPO')}"
 
 
 def append_summary(text):
@@ -81,7 +80,10 @@ def http_get(url):
 
 
 def job_summary_url(run_id):
-    base = f"{env('AWS_ENDPOINT')}/{env('AWS_BUCKET')}/{env('REPO')}/{WF_NAME}/{run_id}/job_summary.md"
+    base = (
+        f"{env('AWS_ENDPOINT')}/{env('AWS_BUCKET')}/{env('REPO')}/"
+        f"{env('WORKFLOW_NAME')}/{run_id}/job_summary.md"
+    )
     return urllib.parse.quote(base, safe=":/")
 
 
@@ -90,15 +92,16 @@ def cmd_start():
     executor_ref = env("EXECUTOR_REF")
     code_ref = env("CODE_REF")
     targets = env("TEST_TARGETS")
-    wait_mode = os.environ.get("WAIT_MODE", "unknown")
+    wf_file = env("WORKFLOW_FILE")
+    wait_mode = env("WAIT_MODE")
 
-    print(f"Dispatching {WF_FILE} --ref {executor_ref}")
+    print(f"Dispatching {wf_file} --ref {executor_ref}")
     print(f"code_ref={code_ref} preset={preset} targets={targets}")
 
-    _, wf = gh("GET", f"{API}/actions/workflows/{WF_FILE}")
+    _, wf = gh("GET", f"{api()}/actions/workflows/{wf_file}")
     workflow_id = wf.get("id")
     if not workflow_id:
-        die(f"workflow {WF_FILE} not found")
+        die(f"workflow {wf_file} not found")
 
     payload = {
         "ref": executor_ref,
@@ -111,7 +114,7 @@ def cmd_start():
     before = datetime.now(timezone.utc).timestamp() - 5
     code, _ = gh(
         "POST",
-        f"{API}/actions/workflows/{workflow_id}/dispatches",
+        f"{api()}/actions/workflows/{workflow_id}/dispatches",
         body=payload,
         retries=5,
     )
@@ -124,7 +127,7 @@ def cmd_start():
         time.sleep(2)
         _, runs = gh(
             "GET",
-            f"{API}/actions/workflows/{workflow_id}/runs"
+            f"{api()}/actions/workflows/{workflow_id}/runs"
             f"?branch={urllib.parse.quote(executor_ref)}&event=workflow_dispatch&per_page=10",
         )
         for r in runs.get("workflow_runs") or []:
@@ -172,7 +175,7 @@ def cmd_wait():
     status = ""
     conclusion = ""
     for _ in range(720):
-        _, state = gh("GET", f"{API}/actions/runs/{run_id}")
+        _, state = gh("GET", f"{api()}/actions/runs/{run_id}")
         status = state.get("status") or ""
         conclusion = state.get("conclusion") or ""
         print(f"{time.strftime('%H:%M:%S', time.gmtime())} status={status} conclusion={conclusion or 'none'}")

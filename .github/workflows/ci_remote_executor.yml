@@ -1,26 +1,31 @@
-# Thin fat-runner CI remote executor (nebius-path prep).
-# Own workflow file so it can move to nebius/ydb without hijacking Run and debug.
-# Protocol: code_ref + job + job_inputs JSON; secrets/vars stay in the host repo.
+# Universal CI remote executor (nebius-path prep).
+# Protocol only: code_ref + job + job_inputs + runs_on.
+# Job-specific logic lives under `if: inputs.job == '…'` blocks below.
 name: CI remote executor
 
 on:
   workflow_dispatch:
     inputs:
       code_ref:
-        description: 'YDB ref/SHA to build and test (empty = this workflow SHA)'
+        description: 'Git ref/SHA to checkout as the code under test (empty = this workflow SHA)'
         required: false
         type: string
         default: ''
       job:
-        description: 'Executor job name (string; first implemented: build_and_test_ya)'
+        description: 'Which job to run (string). Implemented today: build_and_test_ya'
         required: false
         type: string
-        default: build_and_test_ya
+        default: ''
       job_inputs:
         description: 'JSON object of public params for the selected job (no secrets)'
         required: false
         type: string
         default: '{}'
+      runs_on:
+        description: 'JSON array of GitHub runs-on labels'
+        required: false
+        type: string
+        default: '["self-hosted","build-preset-relwithdebinfo-fat"]'
 
 concurrency:
   group: ci-remote-executor-${{ inputs.code_ref || github.sha }}-${{ inputs.job }}-${{ inputs.job_inputs }}
@@ -28,13 +33,12 @@ concurrency:
 
 jobs:
   execute:
-    name: Remote · ${{ inputs.job }} · ${{ inputs.code_ref || github.sha }}
-    runs-on: [self-hosted, build-preset-relwithdebinfo-fat]
-    # Match run_tests.yml / long regression wall time.
+    name: Remote · ${{ inputs.job || 'unset' }} · ${{ inputs.code_ref || github.sha }}
+    runs-on: ${{ fromJSON(inputs.runs_on) }}
     timeout-minutes: 1200
     steps:
-      - name: Validate job and parse job_inputs
-        id: job
+      - name: Validate protocol inputs
+        id: proto
         env:
           JOB: ${{ inputs.job }}
           JOB_INPUTS: ${{ inputs.job_inputs }}
@@ -43,10 +47,9 @@ jobs:
           python3 - <<'PY'
           import json, os, sys
 
-          job = os.environ.get("JOB") or "build_and_test_ya"
-          known = {"build_and_test_ya"}
-          if job not in known:
-              print(f"::error::unknown job={job!r}; known={sorted(known)}")
+          job = (os.environ.get("JOB") or "").strip()
+          if not job:
+              print("::error::job is required")
               sys.exit(1)
 
           raw = os.environ.get("JOB_INPUTS") or "{}"
@@ -59,39 +62,23 @@ jobs:
               print("::error::job_inputs must be a JSON object")
               sys.exit(1)
 
-          def as_str(key, default=""):
-              if key not in data or data[key] is None:
-                  return default
-              v = data[key]
-              if isinstance(v, bool):
-                  return "true" if v else "false"
-              return str(v)
-
-          # Defaults aligned with prior executor / build_and_test_ya.
-          defaults = {
-              "build_target": "ydb/",
-              "build_preset": "relwithdebinfo",
-              "run_tests": "true",
-              "increment": "false",
-              "test_size": "small,medium",
-              "test_type": "",
-              "test_threads": "64",
-              "link_threads": "2",
-              "test_retry_count": "",
-              "additional_ya_make_args": "",
-              "put_build_results_to_cache": "true",
-              "collect_coredumps": "false",
-          }
-          out = {k: as_str(k, d) for k, d in defaults.items()}
+          # Optional generic keys for the shell (any job may set them).
+          fetch_depth = data.get("fetch_depth", 2)
+          try:
+              fetch_depth = int(fetch_depth)
+          except (TypeError, ValueError):
+              print(f"::error::job_inputs.fetch_depth must be int, got {fetch_depth!r}")
+              sys.exit(1)
 
           path = os.environ["GITHUB_OUTPUT"]
           with open(path, "a", encoding="utf-8") as f:
-              f.write(f"name={job}\n")
-              for k, v in out.items():
-                  f.write(f"{k}={v}\n")
-
-          print(f"job={job}")
-          print(json.dumps(out, ensure_ascii=False, indent=2))
+              f.write(f"job={job}\n")
+              f.write(f"fetch_depth={fetch_depth}\n")
+              f.write("job_inputs<<EOF\n")
+              f.write(json.dumps(data, ensure_ascii=False))
+              f.write("\nEOF\n")
+          print(f"job={job} fetch_depth={fetch_depth}")
+          print(json.dumps(data, ensure_ascii=False, indent=2))
           PY
 
       - name: Resolve refs
@@ -104,29 +91,19 @@ jobs:
           fi
           echo "code=$code_ref" >> "$GITHUB_OUTPUT"
           echo "ci=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          if [ '${{ steps.job.outputs.increment }}' = 'true' ]; then
-            echo "fetch_depth=0" >> "$GITHUB_OUTPUT"
-          else
-            echo "fetch_depth=2" >> "$GITHUB_OUTPUT"
-          fi
           {
             echo "### CI remote executor"
             echo "- **code ref:** \`$code_ref\`"
             echo "- **ci ref:** \`${{ github.sha }}\`"
-            echo "- **job:** \`${{ steps.job.outputs.name }}\`"
-            echo "- **preset:** \`${{ steps.job.outputs.build_preset }}\`"
-            echo "- **target:** \`${{ steps.job.outputs.build_target }}\`"
-            echo "- **increment:** \`${{ steps.job.outputs.increment }}\`"
-            echo "- **run_tests:** \`${{ steps.job.outputs.run_tests }}\`"
-            echo "- **test_size:** \`${{ steps.job.outputs.test_size }}\`"
-            echo "- **runner:** \`build-preset-relwithdebinfo-fat\`"
+            echo "- **job:** \`${{ steps.proto.outputs.job }}\`"
+            echo "- **runs_on:** \`${{ inputs.runs_on }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Checkout YDB code
+      - name: Checkout code
         uses: actions/checkout@v5
         with:
           ref: ${{ steps.ref.outputs.code }}
-          fetch-depth: ${{ steps.ref.outputs.fetch_depth }}
+          fetch-depth: ${{ steps.proto.outputs.fetch_depth }}
 
       - name: Overlay CI from executor workflow ref
         if: steps.ref.outputs.code != steps.ref.outputs.ci
@@ -150,30 +127,80 @@ jobs:
           rsync -a .executor-ci/.github/config/ .github/config/
           rm -rf .executor-ci
 
+      # ----- job: build_and_test_ya -----
+      - name: Prepare build_and_test_ya inputs
+        id: ya
+        if: steps.proto.outputs.job == 'build_and_test_ya'
+        env:
+          JOB_INPUTS: ${{ steps.proto.outputs.job_inputs }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+
+          data = json.loads(os.environ.get("JOB_INPUTS") or "{}")
+
+          def as_str(key, default=""):
+              if key not in data or data[key] is None:
+                  return default
+              v = data[key]
+              if isinstance(v, bool):
+                  return "true" if v else "false"
+              return str(v)
+
+          defaults = {
+              "build_target": "ydb/",
+              "build_preset": "relwithdebinfo",
+              "run_tests": "true",
+              "increment": "false",
+              "test_size": "small,medium",
+              "test_type": "",
+              "test_threads": "64",
+              "link_threads": "2",
+              "test_retry_count": "",
+              "additional_ya_make_args": "",
+              "put_build_results_to_cache": "true",
+              "collect_coredumps": "false",
+          }
+          out = {k: as_str(k, d) for k, d in defaults.items()}
+          path = os.environ["GITHUB_OUTPUT"]
+          with open(path, "a", encoding="utf-8") as f:
+              for k, v in out.items():
+                  f.write(f"{k}={v}\n")
+          print(json.dumps(out, ensure_ascii=False, indent=2))
+          PY
+
       - name: Setup ydb access
-        if: steps.job.outputs.name == 'build_and_test_ya'
+        if: steps.proto.outputs.job == 'build_and_test_ya'
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
       - name: Build and test
-        if: steps.job.outputs.name == 'build_and_test_ya'
+        if: steps.proto.outputs.job == 'build_and_test_ya'
         uses: ./.github/actions/build_and_test_ya
         with:
-          build_preset: ${{ steps.job.outputs.build_preset }}
-          build_target: ${{ steps.job.outputs.build_target }}
-          run_tests: ${{ steps.job.outputs.run_tests }}
-          increment: ${{ steps.job.outputs.increment }}
-          test_size: ${{ steps.job.outputs.test_size }}
-          test_type: ${{ steps.job.outputs.test_type }}
-          test_threads: ${{ steps.job.outputs.test_threads }}
-          link_threads: ${{ steps.job.outputs.link_threads }}
-          test_retry_count: ${{ steps.job.outputs.test_retry_count }}
-          put_build_results_to_cache: ${{ steps.job.outputs.put_build_results_to_cache }}
-          collect_coredumps: ${{ steps.job.outputs.collect_coredumps }}
-          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ steps.job.outputs.additional_ya_make_args }}
+          build_preset: ${{ steps.ya.outputs.build_preset }}
+          build_target: ${{ steps.ya.outputs.build_target }}
+          run_tests: ${{ steps.ya.outputs.run_tests }}
+          increment: ${{ steps.ya.outputs.increment }}
+          test_size: ${{ steps.ya.outputs.test_size }}
+          test_type: ${{ steps.ya.outputs.test_type }}
+          test_threads: ${{ steps.ya.outputs.test_threads }}
+          link_threads: ${{ steps.ya.outputs.link_threads }}
+          test_retry_count: ${{ steps.ya.outputs.test_retry_count }}
+          put_build_results_to_cache: ${{ steps.ya.outputs.put_build_results_to_cache }}
+          collect_coredumps: ${{ steps.ya.outputs.collect_coredumps }}
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ steps.ya.outputs.additional_ya_make_args }}
           secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+
+      - name: Fail on unknown job
+        if: steps.proto.outputs.job != 'build_and_test_ya'
+        shell: bash
+        run: |
+          echo "::error::unknown job='${{ steps.proto.outputs.job }}' (no implementation in this workflow yet)"
+          exit 1

@@ -468,4 +468,5 @@ message TFeatureFlags {
     optional bool EnableSourceTopicMutateRestricted = 376 [default = false];
     optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
     optional bool EnableMLPConsumerInFlightMutateDisabled = 378 [default = false];
+    optional bool EnableCoroutineCompactionSelector = 379 [default = false];
 }

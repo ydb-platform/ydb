@@ -29,8 +29,18 @@ class PilePromotionTest(object):
                 extra_grpc_services=["bridge"],
                 bridge_config={"piles": [{"name": "r1"}, {"name": "r2"}]},
                 additional_log_configs={
-                    # Use YDB_ADDITIONAL_LOG_CONFIGS for verbose component logs when debugging.
+                    "BS_NODE": LogLevels.DEBUG,
+                    "CMS_TENANTS": LogLevels.DEBUG,
+                    "FLAT_TX_SCHEMESHARD": LogLevels.DEBUG,
                     "INTERCONNECT": LogLevels.INFO,
+                    "KQP_COMPILE_ACTOR": LogLevels.DEBUG,
+                    "KQP_GATEWAY": LogLevels.DEBUG,
+                    "KQP_SESSION": LogLevels.DEBUG,
+                    "SCHEME_BOARD_POPULATOR": LogLevels.DEBUG,
+                    "SCHEME_BOARD_REPLICA": LogLevels.DEBUG,
+                    "SCHEME_BOARD_SUBSCRIBER": LogLevels.TRACE,
+                    "TX_PROXY": LogLevels.DEBUG,
+                    "TX_PROXY_SCHEME_CACHE": LogLevels.DEBUG,
                 },
             )
         )

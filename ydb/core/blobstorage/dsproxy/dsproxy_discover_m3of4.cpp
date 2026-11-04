@@ -295,16 +295,16 @@ public:
         Y_ABORT_UNLESS(BlobMetadata.empty());
 
         // handle NODATA situation when all the disks are finished
-        bool allFinished = true;
+        bool issuedMoreQueries = false;
         for (TDiskState& disk : DiskState) {
             if (disk.State == EDiskState::IDLE) {
                 Y_ABORT_UNLESS(disk.Replied);
                 Y_ABORT_UNLESS(disk.From != MaxBlobId);
                 IssueRangeReadQuery(disk);
+                issuedMoreQueries = true;
             }
-            allFinished &= disk.State == EDiskState::FINISHED;
         }
-        if (allFinished) {
+        if (!issuedMoreQueries) {
             SendResponseAndDie(std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::NODATA, MinGeneration,
                 BlockedGeneration));
         }

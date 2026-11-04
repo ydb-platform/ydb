@@ -3,8 +3,6 @@
 #include "defs.h"
 #include "mood.h"
 
-#include <ydb/core/protos/blobstorage_config.pb.h>
-
 namespace NKikimr {
 
 namespace NBsController {
@@ -76,8 +74,6 @@ struct Schema : NIceDb::Schema {
         struct GroupSizeInUnits : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; };
         struct BridgePileId : Column<17, NScheme::NTypeIds::Uint32> { using Type = TBridgePileId; static constexpr Type Default = TBridgePileId(); };
 
-        struct FailRealmStates : Column<18, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TFailRealmStates; };
-
         // VirtualGroup management code
         struct VirtualGroupName  : Column<112, NScheme::NTypeIds::Utf8>   {}; // unique name of the virtual group
         struct VirtualGroupState : Column<102, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EVirtualGroupState; };
@@ -94,7 +90,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
               SeenOperational, DecommitStatus, GroupSizeInUnits, BridgePileId, VirtualGroupName, VirtualGroupState,
-              HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo, FailRealmStates>;
+              HiveId, Database, BlobDepotConfig, BlobDepotId, ErrorReason, NeedAlter, Metrics, BridgeGroupInfo>;
     };
 
     struct State : Table<1> {
@@ -127,7 +123,6 @@ struct Schema : NIceDb::Schema {
         struct StorageYamlConfig : Column<27, NScheme::NTypeIds::String> {};
         struct ExpectedStorageYamlConfigVersion : Column<28, NScheme::NTypeIds::Uint64> {};
         struct EnableConfigV2 : Column<29, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
-        struct DataCenterStates : Column<32, NScheme::NTypeIds::String> { using Type = NKikimrBlobStorage::TDefineDataCenterStates; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
@@ -135,7 +130,7 @@ struct Schema : NIceDb::Schema {
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
               GroupLayoutSanitizer, NextVirtualGroupId, AllowMultipleRealmsOccupation, CompatibilityInfo,
               UseSelfHealLocalPolicy, TryToRelocateBrokenDisksLocallyFirst, YamlConfig, ShredState, StorageYamlConfig,
-              ExpectedStorageYamlConfigVersion, EnableConfigV2, DataCenterStates>;
+              ExpectedStorageYamlConfigVersion, EnableConfigV2>;
     };
 
     struct VSlot : Table<5> {

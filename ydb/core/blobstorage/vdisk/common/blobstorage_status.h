@@ -30,7 +30,6 @@ namespace NKikimr {
             const TActorId &notifyId,
             const TInstant &now,
             bool replDone,
-            bool durabilityReplDone,
             bool isReadOnly);
 
 } // NKikimr

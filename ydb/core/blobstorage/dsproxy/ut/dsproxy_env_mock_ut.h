@@ -49,8 +49,7 @@ struct TDSProxyEnv {
     }
 
     void Configure(TTestActorRuntime& runtime, TBlobStorageGroupType type, ui64 groupId, ui64 nodeIndex,
-            TBlobStorageGroupInfo::EEncryptionMode encryptionMode = TBlobStorageGroupInfo::EEM_ENC_V1,
-            const TVector<TBlobStorageGroupInfo::TDynamicInfo::EFailRealmState>& failRealmStates = {})
+            TBlobStorageGroupInfo::EEncryptionMode encryptionMode = TBlobStorageGroupInfo::EEM_ENC_V1)
     {
         GroupId = groupId;
         NodeIdx = nodeIndex;
@@ -65,13 +64,6 @@ struct TDSProxyEnv {
             Info = new TBlobStorageGroupInfo(type.GetErasure(), 1, 3, 3, &VDisks, encryptionMode);
         } else {
             Info = new TBlobStorageGroupInfo(type.GetErasure(), 1, type.BlobSubgroupSize(), 1, &VDisks, encryptionMode);
-        }
-
-        if (!failRealmStates.empty()) {
-            auto dynamic = Info->GetDynamicInfo();
-            dynamic.FailRealmStates = failRealmStates;
-            Info = MakeIntrusive<TBlobStorageGroupInfo>(Info->PickTopology(), std::move(dynamic), "",
-                TMaybe<TKikimrScopeId>{}, NPDisk::DEVICE_TYPE_UNKNOWN);
         }
 
         RealProxyActorId = MakeBlobStorageProxyID(groupId);
@@ -211,8 +203,7 @@ struct TDSProxyEnv {
                 }));
     }
 
-    std::unique_ptr<IActor> CreatePatchRequestActor(TEvBlobStorage::TEvPatch::TPtr &ev, bool useVPatch = false,
-            bool enableVPatchForTesting = false) {
+    std::unique_ptr<IActor> CreatePatchRequestActor(TEvBlobStorage::TEvPatch::TPtr &ev, bool useVPatch = false) {
         return std::unique_ptr<IActor>(CreateBlobStorageGroupPatchRequest(
             TBlobStorageGroupPatchParameters{
                 .Common = {
@@ -228,8 +219,7 @@ struct TDSProxyEnv {
                     .Event = ev->Get(),
                     .ExecutionRelay = ev->Get()->ExecutionRelay
                 },
-                .UseVPatch = useVPatch,
-                .EnableVPatchForTesting = enableVPatchForTesting,
+                .UseVPatch = useVPatch
             }));
     }
 };

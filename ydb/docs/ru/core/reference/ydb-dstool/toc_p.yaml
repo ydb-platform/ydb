@@ -7,5 +7,3 @@ items:
     href: global-options.md
   - name: Список устройств
     href: device-list.md
-  - name: Изменение режима пула bridge
-    href: pool-set-bridge-mode.md

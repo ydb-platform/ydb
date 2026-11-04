@@ -23,12 +23,9 @@
 Команда / подкоманда | Краткое описание
 --- | ---
 admin cluster bootstrap | Инициализация подготовленного [кластера](../../../concepts/glossary.md#cluster)
-[admin cluster bridge add-pile](../commands/bridge/add-pile.md) | Добавление неактивного [pile](../../../concepts/glossary.md#pile) и выделение частей групп хранения
-[admin cluster bridge convert](../commands/bridge/convert.md) | Преобразование обычного кластера в кластер в [режиме bridge](../../../concepts/bridge.md) с одним pile
 [admin cluster bridge failover](../commands/bridge/failover.md) | Аварийное переключение при недоступности [pile](../../../concepts/glossary.md#pile)
 [admin cluster bridge list](../commands/bridge/list.md) | Список состояния каждого [pile](../../../concepts/glossary.md#pile) в [режиме bridge](../../../concepts/bridge.md)
 [admin cluster bridge rejoin](../commands/bridge/rejoin.md) | Возвращение [pile](../../../concepts/glossary.md#pile) в [кластер](../../../concepts/glossary.md#cluster) после обслуживания или восстановления
-[admin cluster bridge remove-pile](../commands/bridge/remove-pile.md) | Удаление отключённого [pile](../../../concepts/glossary.md#pile) и его частей групп хранения
 [admin cluster bridge switchover](../commands/bridge/switchover.md) | Плановая смена `PRIMARY` [pile](../../../concepts/glossary.md#pile)
 [admin cluster bridge takedown](../commands/bridge/takedown.md) | Вывод [pile](../../../concepts/glossary.md#pile) из [кластера](../../../concepts/glossary.md#cluster) для обслуживания
 [admin cluster config fetch](../commands/configuration/cluster/fetch.md) | Получение текущей динамической конфигурации [кластера](../../../concepts/glossary.md#cluster)
@@ -152,7 +149,7 @@ workload mixed clean | Удаление [таблиц](../../../concepts/glossar
 [workload stock run put-same-order](../commands/workload/stock.md#submit-same-order) | Отправка заказов с одинаковыми продуктами в `Stock` нагрузке
 [workload stock run rand-user-hist](../commands/workload/stock.md#get-random-customer-history) | Выборка заказов случайного клиента в `Stock` нагрузке
 [workload stock run user-hist](../commands/workload/stock.md#get-customer-history) | Выборка заказов 10000-го клиента в `Stock` нагрузке
-[workload stock clean](../commands/workload/stock.md) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Stock` нагрузки
+[workload stock clean](../commands/workload/stock.md#clean) | Удаление [таблиц](../../../concepts/glossary.md#table), созданных на этапе инициализации `Stock` нагрузки
 [workload topic init](../workload-topic.md#init) | Создание и инициализация [топика](../../../concepts/glossary.md#topic) для `Topic` нагрузки
 [workload topic run full](../workload-topic.md#run-full) | Выполнение полной нагрузки на [топик](../../../concepts/glossary.md#topic) с одновременным чтением и записью сообщений в `Topic` нагрузке
 [workload topic run read](../workload-topic.md#run-read) | Выполнение нагрузки на чтение сообщений из [топика](../../../concepts/glossary.md#topic) в `Topic` нагрузке

@@ -5,7 +5,6 @@
 #include "syncer_job_actor.h"
 #include "syncer_job_task.h"
 #include "blobstorage_syncquorum.h"
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_osiris.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
@@ -47,26 +46,20 @@ namespace NKikimr {
     public:
         TSyncFullRecoverState(const TString& logPrefix,
                               const TVDiskIdShort &self,
-                              const TIntrusivePtr<TBlobStorageGroupInfo>& info)
+                              const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top)
             : VDiskLogPrefix(logPrefix)
-            , Neighbors(self, info->PickTopology())
-            , QuorumTracker(self, info->PickTopology(), false)
-            , SyncedDisks(&info->GetTopology())
+            , Neighbors(self, top)
+            , QuorumTracker(self, top, false)
             , Sublog(false, self.ToString() + ": ")
         {}
 
-        bool FullSyncedWithPeer(const TVDiskIdShort& vdisk, const TActorId& proxyId) {
+        void FullSyncedWithPeer(const TVDiskIdShort &vdisk) {
             Y_VERIFY_S(Neighbors[vdisk].VDiskIdShort == vdisk, VDiskLogPrefix);
 
-            if (Neighbors[vdisk].Get().ProxyId != proxyId) {
-                return false; // A reply from an earlier configuration's proxy.
-            }
             Sublog.Log() << "RESPONSE: vdisk# " << vdisk.ToString() << " full synced";
 
             Neighbors[vdisk].Get().FullSyncDone();
             QuorumTracker.Update(vdisk);
-            SyncedDisks |= TBlobStorageGroupInfo::TGroupVDisks(SyncedDisks.GetTopology(), vdisk);
-            return true;
         }
 
         void RunFullSync(std::function<void(TVDiskInfo<TPeerState>&)> func) {
@@ -85,26 +78,14 @@ namespace NKikimr {
             }
         }
 
-        bool GotQuorum(const TBlobStorageGroupInfo& info) const {
-            if (info.Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
-                return TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, SyncedDisks);
-            }
+        bool GotQuorum() const {
             return QuorumTracker.HasQuorum();
-        }
-
-        void ResetSynced(const TBlobStorageGroupInfo& info) {
-            SyncedDisks = TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology());
-            QuorumTracker.Clear();
-            for (TVDiskInfo<TPeerState>& peer : Neighbors) {
-                peer.Get().ProxyId = {};
-            }
         }
 
     private:
         const TString VDiskLogPrefix;
         NSync::TVDiskNeighbors<TPeerState> Neighbors;
         NSync::TQuorumTracker QuorumTracker;
-        TBlobStorageGroupInfo::TGroupVDisks SyncedDisks;
         TSublog<> Sublog;
     };
 
@@ -159,9 +140,6 @@ namespace NKikimr {
             // run full sync proxy for every VDisk in the group
             auto runProxyForVDisk = [this, &ctx] (TVDiskInfo<TPeerState>& x) {
                 auto vd = GInfo->GetVDiskId(x.OrderNumber);
-                if (GInfo->IsFailedFailRealm(vd.FailRealm)) {
-                    return;
-                }
                 auto aid = GInfo->GetActorId(x.OrderNumber);
                 auto proxyActor = CreateProxyForFullSyncWithPeer(SyncerCtx, x.Get().PeerSyncState,
                                                                  CommitterId, ctx.SelfID,
@@ -177,30 +155,17 @@ namespace NKikimr {
         void Handle(TEvSyncerFullSyncedWithPeer::TPtr &ev, const TActorContext &ctx) {
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: TEvSyncerFullSyncedWithPeer"));
             auto *msg = ev->Get();
-            if (!State.FullSyncedWithPeer(msg->VDiskId, ev->Sender)) {
-                return;
-            }
-            if (State.GotQuorum(*GInfo)) {
+            State.FullSyncedWithPeer(msg->VDiskId);
+            if (State.GotQuorum()) {
                 StopAllRunningProxy(ctx);
                 CallOsiris(ctx);
             }
         }
 
-        void HandleDuringFullSync(TEvVGenerationChange::TPtr& ev, const TActorContext& ctx) {
-            if (ev->Get()->NewInfo->GroupGeneration <= GInfo->GroupGeneration) {
-                return;
-            }
-            StopAllRunningProxy(ctx);
-            GInfo = ev->Get()->NewInfo;
-            JobCtx = TSjCtx::Create(SyncerCtx, GInfo);
-            State.ResetSynced(*GInfo);
-            RunFullSync(ctx);
-        }
-
         STRICT_STFUNC(FullSyncStateFunc,
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvSyncerFullSyncedWithPeer, Handle)
-            HFunc(TEvVGenerationChange, HandleDuringFullSync)
+            HFunc(TEvVGenerationChange, Handle)
         )
 
         ////////////////////////////////////////////////////////////////////////
@@ -303,7 +268,7 @@ namespace NKikimr {
             : TActorBootstrapped<TSyncerRecoverLostDataActor>()
             , SyncerCtx(sc)
             , GInfo(info)
-            , State(SyncerCtx->VCtx->VDiskLogPrefix, SyncerCtx->VCtx->ShortSelfVDisk, info)
+            , State(SyncerCtx->VCtx->VDiskLogPrefix, SyncerCtx->VCtx->ShortSelfVDisk, SyncerCtx->VCtx->Top)
             , CommitterId(committerId)
             , NotifyId(notifyId)
             , Guid(guid)

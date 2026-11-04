@@ -15,19 +15,6 @@ public:
     TCommandBridge(bool allowEmptyDatabase);
 };
 
-class TCommandBridgeSetDatabaseMode : public TYdbCommand {
-public:
-    TCommandBridgeSetDatabaseMode();
-    void Config(TConfig& config) override;
-    void Parse(TConfig& config) override;
-    int Run(TConfig& config) override;
-
-private:
-    TString TargetDatabase;
-    bool Bridged = false;
-    TString RetainPile;
-};
-
 class TCommandBridgeUpdate : public TYdbCommand {
 public:
     TCommandBridgeUpdate(bool allowEmptyDatabase);
@@ -95,9 +82,9 @@ private:
     TString NewPrimaryPile;
 };
 
-class TCommandBridgeJoinPile : public TYdbCommand {
+class TCommandBridgeRejoin : public TYdbCommand {
 public:
-    TCommandBridgeJoinPile(bool allowEmptyDatabase);
+    TCommandBridgeRejoin(bool allowEmptyDatabase);
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
@@ -119,9 +106,9 @@ private:
     bool SkipStoragePoolConversion = false;
 };
 
-class TCommandBridgeProvisionPile : public TYdbCommand {
+class TCommandBridgeAddPile : public TYdbCommand {
 public:
-    TCommandBridgeProvisionPile(bool allowEmptyDatabase);
+    TCommandBridgeAddPile(bool allowEmptyDatabase);
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
@@ -131,9 +118,9 @@ private:
     TString Pile;
 };
 
-class TCommandBridgeDestroyPile : public TYdbCommand {
+class TCommandBridgeRemovePile : public TYdbCommand {
 public:
-    TCommandBridgeDestroyPile(bool allowEmptyDatabase);
+    TCommandBridgeRemovePile(bool allowEmptyDatabase);
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     bool Prompt(TConfig& config) override;

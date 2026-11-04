@@ -9,8 +9,6 @@ PEERDIR(
 )
 
 SRCS(
-    data_center_states.cpp
-    data_center_states.h
     batched_vec.h
     blobstorage_events.cpp
     blobstorage_events.h

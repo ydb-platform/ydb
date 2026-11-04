@@ -1,13 +1,8 @@
-* Renamed `ydb admin cluster bridge rejoin` to `ydb admin cluster bridge join-pile`; `rejoin` remains available as an alias.
-* Added pending pile operation information and the `INACTIVE` state to the output of `ydb admin cluster bridge list`.
-* Added `ydb admin cluster bridge set-database-mode` to enable or disable bridge mode for the database selected with `--target-database`. Use `bridged` or `ordinary` as the required mode argument, and optionally `--retain-pile` with `ordinary`.
-* Added `ydb admin cluster bridge destroy-pile` command to destroy a DISCONNECTED pile along with all its data (asks for confirmation unless `-y` is given).
-* Added `ydb admin cluster bridge provision-pile` command to provision a pile listed in the bridge config in a running bridged cluster.
 * Added `--skip-storage-pool-conversion` option to `ydb admin cluster bridge convert` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one; only static storage groups are converted then.
 * Added `ydb admin cluster bridge remove-pile` command to remove a DISCONNECTED pile from a bridged cluster along with all its data (asks for confirmation unless `-y` is given).
 * Added `ydb admin cluster bridge add-pile` command to add a pile listed in the bridge config to a running bridged cluster, and the pending pile operation to the output of `ydb admin cluster bridge list`.
 
-* Added `ydb admin cluster bridge convert` to migrate an ordinary cluster to single-pile bridge mode.
+* Added `ydb bridge convert` to migrate an ordinary cluster to single-pile bridge mode.
 
 * Added support for repeating `--pile` in `ydb admin cluster bridge failover` to disconnect multiple failed piles in one operation.
 

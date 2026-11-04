@@ -11,7 +11,6 @@ ENDIF()
 
 SRCS(
     main.cpp
-    group_state_ut.cpp
 )
 
 PEERDIR(

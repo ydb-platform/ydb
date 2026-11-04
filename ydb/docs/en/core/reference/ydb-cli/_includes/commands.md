@@ -22,12 +22,9 @@ Any command can be run from the command line with the `--help` option to get hel
 
 Command / subcommand | Brief description
 --- | ---
-| [admin cluster bridge add-pile](../commands/bridge/add-pile.md) | Add an inactive [pile](../../../concepts/glossary.md#pile) and allocate its storage group parts |
-| [admin cluster bridge convert](../commands/bridge/convert.md) | Convert a non-bridged cluster to a single-pile [bridge mode](../../../concepts/bridge.md) cluster |
 | [admin cluster bridge failover](../commands/bridge/failover.md) | Emergency switchover when [pile](../../../concepts/glossary.md#pile) is unavailable |
 | [admin cluster bridge list](../commands/bridge/list.md) | List state of each [pile](../../../concepts/glossary.md#pile) in [bridge mode](../../../concepts/bridge.md) |
 | [admin cluster bridge rejoin](../commands/bridge/rejoin.md) | Returning [pile](../../../concepts/glossary.md#pile) to the [cluster](../../../concepts/glossary.md#cluster) after maintenance or recovery |
-| [admin cluster bridge remove-pile](../commands/bridge/remove-pile.md) | Remove a disconnected [pile](../../../concepts/glossary.md#pile) and delete its storage group parts |
 | [admin cluster bridge switchover](../commands/bridge/switchover.md) | Planned `PRIMARY` [pile](../../../concepts/glossary.md#pile) change |
 | [admin cluster bridge takedown](../commands/bridge/takedown.md) | Taking [pile](../../../concepts/glossary.md#pile) out of the [cluster](../../../concepts/glossary.md#cluster) for maintenance |
 | [admin cluster config fetch](../commands/configuration/cluster/fetch.md) | Getting the current dynamic configuration of the [cluster](../../../concepts/glossary.md#cluster) |
@@ -151,7 +148,7 @@ Command / subcommand | Brief description
 || [workload stock run put-same-order](../commands/workload/stock.md#submit-same-order) | Submitting orders with the same products in the `Stock` workload |
 || [workload stock run rand-user-hist](../commands/workload/stock.md#get-random-customer-history) | Selecting orders for a random customer in the `Stock` workload |
 || [workload stock run user-hist](../commands/workload/stock.md#get-customer-history) | Selecting orders for the 10,000th customer in the `Stock` workload |
-|| [workload stock clean](../commands/workload/stock.md) | Deleting [tables](../../../concepts/glossary.md#table) created during the `Stock` workload initialization |
+|| [workload stock clean](../commands/workload/stock.md#clean) | Deleting [tables](../../../concepts/glossary.md#table) created during the `Stock` workload initialization |
 || [workload topic init](../workload-topic.md#init) | Creating and initializing a [topic](../../../concepts/glossary.md#topic) for the `Topic` workload |
 || [workload topic run full](../workload-topic.md#run-full) | Performing a full load on a [topic](../../../concepts/glossary.md#topic) with simultaneous message reading and writing in the `Topic` workload |
 || [workload topic run read](../workload-topic.md#run-read) | Performing a load for reading messages from a [topic](../../../concepts/glossary.md#topic) in the `Topic` workload |

@@ -3,29 +3,123 @@ name: Run and debug tests
 on:
   workflow_dispatch:
     inputs:
+      executor:
+        description: 'ydb_yc = local runners; remote = CI remote executor workflow'
+        required: false
+        type: choice
+        options:
+          - ydb_yc
+          - remote
+        default: ydb_yc
+      remote_executor_ref:
+        description: 'Git ref hosting ci_remote_executor.yml (empty = this branch)'
+        required: false
+        type: string
+        default: ''
+      code_ref:
+        description: 'YDB ref/SHA for executor to checkout+test (empty = this run SHA)'
+        required: false
+        type: string
+        default: ''
       test_targets:
-        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
+        description: 'Paths to tests (e.g., "ydb/library/actors/util/ut")'
         required: false
         type: string
         default: 'ydb/tests/olap/'
       build_preset:
-        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
+        description: 'Build preset (comma-separated for ydb_yc; single for remote)'
         required: false
         type: string
         default: 'relwithdebinfo, release-asan'
       branches:
-        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path)'
+        description: 'Branches to test (ydb_yc only)'
         required: false
         type: string
         default: ''
       use_branches_config:
-        description: 'If true, use branches from .github/config/stable_tests_branches.json'
+        description: 'Use stable_tests_branches.json (ydb_yc only)'
         required: false
         type: boolean
         default: false
+      wait_for_remote:
+        description: 'remote only: true = wait+mirror on runner-waiter; false = fire-and-forget'
+        required: false
+        type: boolean
+        default: true
 
 jobs:
+  dispatch_remote:
+    if: inputs.executor == 'remote'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      executor_run_id: ${{ steps.dispatch.outputs.executor_run_id }}
+      executor_run_url: ${{ steps.dispatch.outputs.executor_run_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts/ci
+            .github/actions/dispatch_remote_executor
+          sparse-checkout-cone-mode: false
+
+      - name: Dispatch CI remote executor
+        id: dispatch
+        uses: ./.github/actions/dispatch_remote_executor
+        with:
+          command: start
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          repository: ${{ github.repository }}
+          workflow_file: ci_remote_executor.yml
+          workflow_name: CI remote executor
+          executor_ref: ${{ inputs.remote_executor_ref || github.ref_name }}
+          code_ref: ${{ inputs.code_ref || github.sha }}
+          test_targets: ${{ inputs.test_targets }}
+          build_preset: ${{ inputs.build_preset }}
+          wait_mode: ${{ inputs.wait_for_remote && 'wait+mirror' || 'fire-and-forget' }}
+
+  wait_remote:
+    if: inputs.executor == 'remote' && inputs.wait_for_remote
+    needs: dispatch_remote
+    runs-on: [self-hosted, runner-waiter]
+    timeout-minutes: 400
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts/ci
+            .github/actions/dispatch_remote_executor
+          sparse-checkout-cone-mode: false
+
+      - name: Wait and mirror executor summary
+        uses: ./.github/actions/dispatch_remote_executor
+        with:
+          command: wait
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          repository: ${{ github.repository }}
+          workflow_file: ci_remote_executor.yml
+          workflow_name: CI remote executor
+          executor_run_id: ${{ needs.dispatch_remote.outputs.executor_run_id }}
+          executor_run_url: ${{ needs.dispatch_remote.outputs.executor_run_url }}
+          aws_endpoint: ${{ vars.AWS_ENDPOINT }}
+          aws_bucket: ${{ vars.AWS_BUCKET }}
+
+      - name: Cancel executor on caller cancel
+        if: cancelled() && needs.dispatch_remote.outputs.executor_run_id != ''
+        uses: ./.github/actions/dispatch_remote_executor
+        with:
+          command: cancel
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          repository: ${{ github.repository }}
+          workflow_file: ci_remote_executor.yml
+          workflow_name: CI remote executor
+          executor_run_id: ${{ needs.dispatch_remote.outputs.executor_run_id }}
+          executor_run_url: ${{ needs.dispatch_remote.outputs.executor_run_url }}
+
   prepare:
+    if: inputs.executor == 'ydb_yc'
     runs-on: ubuntu-latest
     outputs:
       branches_json: ${{ steps.format-branches.outputs.branches_json }}
@@ -35,18 +129,15 @@ jobs:
         id: format-branches
         run: |
           if [ -z "${{ inputs.branches }}" ]; then
-            # Empty - will use branches_config_path or default
             echo "branches_json=" >> $GITHUB_OUTPUT
           elif [[ "${{ inputs.branches }}" == \[* ]]; then
-            # Already JSON array
             echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
           else
-            # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
             IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
             JSON_BRANCHES="["
             FIRST=true
             for branch in "${BRANCHES[@]}"; do
-              branch=$(echo "$branch" | xargs)  # trim whitespace
+              branch=$(echo "$branch" | xargs)
               if [ -n "$branch" ]; then
                 if [ "$FIRST" = true ]; then
                   FIRST=false
@@ -58,7 +149,6 @@ jobs:
             done
             JSON_BRANCHES+="]"
             echo "branches_json=$JSON_BRANCHES" >> $GITHUB_OUTPUT
-            echo "Converted '${{ inputs.branches }}' to $JSON_BRANCHES"
           fi
 
       - name: Format build presets
@@ -68,17 +158,14 @@ jobs:
           if [ -z "$BUILD_PRESET_INPUT" ]; then
             BUILD_PRESET_INPUT="relwithdebinfo"
           fi
-          
-          # Check if already JSON array
           if [[ "$BUILD_PRESET_INPUT" == \[* ]]; then
             echo "build_preset_array=$BUILD_PRESET_INPUT" >> $GITHUB_OUTPUT
           else
-            # Comma-separated format: "relwithdebinfo, release-asan" -> ["relwithdebinfo", "release-asan"]
             IFS=',' read -ra PRESETS <<< "$BUILD_PRESET_INPUT"
             JSON_PRESETS="["
             FIRST=true
             for preset in "${PRESETS[@]}"; do
-              preset=$(echo "$preset" | xargs)  # trim whitespace
+              preset=$(echo "$preset" | xargs)
               if [ -n "$preset" ]; then
                 if [ "$FIRST" = true ]; then
                   FIRST=false
@@ -90,11 +177,11 @@ jobs:
             done
             JSON_PRESETS+="]"
             echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
-            echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
           fi
 
   main:
     name: Run and debug tests
+    if: inputs.executor == 'ydb_yc'
     needs: prepare
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
@@ -111,5 +198,5 @@ jobs:
 
   collect_combined_summary:
     needs: main
-    if: always()
+    if: always() && inputs.executor == 'ydb_yc'
     uses: ./.github/workflows/collect_combined_summary.yml

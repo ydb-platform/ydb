@@ -219,6 +219,7 @@ ydb/core/tx/schemeshard/ut_login TSchemeShardLoginTest.CheckThatLockedOutParamet
 ydb/core/tx/schemeshard/ut_serverless TSchemeShardServerLess.StorageBilling
 ydb/core/tx/schemeshard/ut_serverless unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.TestViewer.test_async_replication_describe
+ydb/core/ymq/actor/cloud_events/cloud_events_ut unittest.sole chunk
 ydb/library/actors/interconnect/ut DynamicProxy.RaceCheck10
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithBackpressure
 ydb/library/yql/providers/generic/actors/ut unittest.sole chunk
@@ -233,6 +234,7 @@ ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTa
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestAllFnxClustersHiddenWithoutBalancer
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestTrackerDoesNotAlterClusterSchema
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestTrackerRecreatesDroppedBalancerTable
+ydb/services/test_shard/ut unittest.sole chunk
 ydb/tests/datashard/set_column_constraint/functional py3test.[test_set_not_null.py */*] chunk
 ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSetNotNull.test_drop_not_null
 ydb/tests/datashard/truncate/concurrency py3test.[test_truncate_table_concurrency.py */*] chunk

@@ -790,8 +790,16 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         TEvTablet::TEvTabletDead *msg = ev->Get();
         const auto tabletId = msg->TabletID;
         const ui32 generation = msg->Generation;
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvTablet::TEvTabletDead tabletId:"
-                    << tabletId << " generation:" << generation << " reason:" << (ui32)msg->Reason);
+        // a poison pill is a requested stop and a demotion happens when a new instance takes over (e.g. on a tablet move),
+        // any other reason is a failure worth seeing in the node's log
+        const bool regularDeath = msg->Reason == TEvTablet::TEvTabletDead::ReasonPill
+            || msg->Reason == TEvTablet::TEvTabletDead::ReasonDemotedByStateStorage
+            || msg->Reason == TEvTablet::TEvTabletDead::ReasonDemotedByBlobStorage;
+        LOG_LOG_S(ctx, regularDeath ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_NOTICE, NKikimrServices::LOCAL,
+            "Tablet is dead. nodeId: " << ctx.SelfID.NodeId() <<
+            " tabletId: " << tabletId <<
+            " generation: " << generation <<
+            " reason: " << msg->Reason);
 
         switch (msg->Reason) {
         case TEvTablet::TEvTabletDead::ReasonBootLocked:

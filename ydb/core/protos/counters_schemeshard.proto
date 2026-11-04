@@ -537,6 +537,12 @@ enum ECumulativeCounters {
     // The deferral is direction-aware in the demand-tracking state, but this counter is
     // intentionally unified across directions and reasons.
     COUNTER_SPLIT_MERGE_DEFERRALS = 154 [(CounterOpts) = {Name: "SplitMergeDeferrals"}];
+
+    // Monotonic: a table describe zero-filled stats elements for shards
+    // missing from PartitionStats entirely (counted per build). Partitioning
+    // changes seed every shard, so nonzero = seeding bug; a lost report keeps
+    // its entry (zeroed values) and is not counted.
+    COUNTER_DESCRIBE_TABLE_ZERO_FILLED_STATS_ELEMENTS = 155 [(CounterOpts) = {Name: "Describe/TableZeroFilledStatsElements"}];
 }
 
 enum EPercentileCounters {

@@ -26,59 +26,12 @@ void FillPartitionConfig(const NKikimrSchemeOp::TPartitionConfig& in, NKikimrSch
 namespace NKikimr {
 namespace NSchemeShard {
 
-static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartitionStats& tableStats) {
-    stats->SetRowCount(tableStats.RowCount);
-    stats->SetDataSize(tableStats.DataSize);
-    stats->SetIndexSize(tableStats.IndexSize);
-    stats->SetByKeyFilterSize(tableStats.ByKeyFilterSize);
-    stats->SetLastAccessTime(tableStats.LastAccessTime.MilliSeconds());
-    stats->SetLastUpdateTime(tableStats.LastUpdateTime.MilliSeconds());
-    stats->SetImmediateTxCompleted(tableStats.ImmediateTxCompleted);
-    stats->SetPlannedTxCompleted(tableStats.PlannedTxCompleted);
-    stats->SetTxRejectedByOverload(tableStats.TxRejectedByOverload);
-    stats->SetTxRejectedBySpace(tableStats.TxRejectedBySpace);
-    stats->SetTxCompleteLagMsec(tableStats.TxCompleteLag.MilliSeconds());
-    stats->SetInFlightTxCount(tableStats.InFlightTxCount);
-
-    stats->SetRowUpdates(tableStats.RowUpdates);
-    stats->SetRowDeletes(tableStats.RowDeletes);
-    stats->SetRowReads(tableStats.RowReads);
-    stats->SetRangeReads(tableStats.RangeReads);
-    stats->SetRangeReadRows(tableStats.RangeReadRows);
-
-    stats->SetLocksAcquired(tableStats.LocksAcquired);
-    stats->SetLocksWholeShard(tableStats.LocksWholeShard);
-    stats->SetLocksBroken(tableStats.LocksBroken);
-
-    stats->SetPartCount(tableStats.PartCount);
-    stats->SetHasSchemaChanges(tableStats.HasSchemaChanges);
-
-    auto* storagePoolsStats = stats->MutableStoragePools()->MutablePoolsUsage();
-    for (const auto& [poolKind, stats] : tableStats.StoragePoolsStats) {
-        auto* storagePoolStats = storagePoolsStats->Add();
-        storagePoolStats->SetPoolKind(poolKind);
-        storagePoolStats->SetDataSize(stats.DataSize);
-        storagePoolStats->SetIndexSize(stats.IndexSize);
-    }
-}
-
-static void FillTableMetrics(NKikimrTabletBase::TMetrics* metrics, const TPartitionStats& tableStats) {
-    metrics->SetCPU(tableStats.GetCurrentRawCpuUsage());
-    metrics->SetMemory(tableStats.Memory);
-    metrics->SetNetwork(tableStats.Network);
-    metrics->SetStorage(tableStats.Storage);
-    metrics->SetReadThroughput(tableStats.ReadThroughput);
-    metrics->SetWriteThroughput(tableStats.WriteThroughput);
-    metrics->SetReadIops(tableStats.ReadIops);
-    metrics->SetWriteIops(tableStats.WriteIops);
-}
-
 static void FillAggregatedStats(NKikimrSchemeOp::TPathDescription& pathDescription, const TAggregatedStats& stats) {
     FillTableStats(pathDescription.MutableTableStats(), stats.Aggregated);
     FillTableMetrics(pathDescription.MutableTabletMetrics(), stats.Aggregated);
 }
 
-static void FillTableStats(NKikimrSchemeOp::TPathDescription& pathDescription, const TPartitionStats& stats) {
+static void FillTableStatsAndMetrics(NKikimrSchemeOp::TPathDescription& pathDescription, const TPartitionStats& stats) {
     FillTableStats(pathDescription.MutableTableStats(), stats);
     FillTableMetrics(pathDescription.MutableTabletMetrics(), stats);
 }
@@ -365,23 +318,74 @@ void TPathDescriber::DescribeDir(const TPath& path) {
    DescribeChildren(path);
 }
 
+static void FillBoundaryKeyPrefix(
+    const TTableInfo& tableInfo,
+    const TTableShardInfo& p,
+    NKikimrMiniKQL::TValue* boundary
+) {
+    // Zero copy: cells point into p.EndOfRange
+    TVector<TCell> cells;
+    Y_ABORT_UNLESS(TSerializedCellVec::TryParseCells(p.EndOfRange, cells));
+    TString errStr;
+    for (ui32 ki = 0; ki < cells.size(); ++ki) {
+        auto type = tableInfo.Columns.at(tableInfo.KeyColumnIds[ki]).PType;
+        bool ok = NMiniKQL::CellToValue(type, cells[ki], *boundary->AddTuple(), errStr);
+        Y_ABORT_UNLESS(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
+    }
+}
+
 void FillTableBoundaries(
     google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>* result,
     const TTableInfo& tableInfo
 ) {
-    TString errStr;
     // Number of split boundaries equals to number of partitions - 1
     result->Reserve(tableInfo.GetPartitions().size() - 1);
     for (ui32 pi = 0; pi < tableInfo.GetPartitions().size() - 1; ++pi) {
-        const auto* p = tableInfo.GetPartitions()[pi];
-        TSerializedCellVec endKey(p->EndOfRange);
-        auto boundary = result->Add()->MutableKeyPrefix();
-        for (ui32 ki = 0;  ki < endKey.GetCells().size(); ++ki){
-            const auto& c = endKey.GetCells()[ki];
-            auto type = tableInfo.Columns.at(tableInfo.KeyColumnIds[ki]).PType;
-            bool ok = NMiniKQL::CellToValue(type, c, *boundary->AddTuple(), errStr);
-            Y_ABORT_UNLESS(ok, "Failed to build key tuple at position %" PRIu32 " error: %s", ki, errStr.data());
-        }
+        FillBoundaryKeyPrefix(tableInfo, *tableInfo.GetPartitions()[pi], result->Add()->MutableKeyPrefix());
+    }
+}
+
+static void BuildTableBoundaryElem(
+    const TTableInfo& tableInfo,
+    const TTableShardInfo& p,
+    NKikimrSchemeOp::TTableDescription& wrap,
+    TString& entry
+) {
+    // One Table.SplitBoundary element as a ready wire entry: [tag + len + payload]
+    wrap.Clear();
+    FillBoundaryKeyPrefix(tableInfo, p, wrap.AddSplitBoundary()->MutableKeyPrefix());
+    Y_PROTOBUF_SUPPRESS_NODISCARD wrap.SerializeToString(&entry);
+}
+
+static void FillTablePartition(
+    const TTableShardInfo& p,
+    const THashMap<TShardIdx, TShardInfo>& shardInfos,
+    bool includeKeys,
+    bool allowMissingTabletId,
+    NKikimrSchemeOp::TTablePartition* part
+) {
+    const TShardInfo& shardInfo = shardInfos.at(p.ShardIdx);
+    if (allowMissingTabletId) {
+        // In-flux table (create/copy in flight): shards may not have tablet ids
+        // yet - the old code served the InvalidTabletId sentinel here, and the
+        // describe self-clears its caches, so nothing pins the placeholder
+    } else {
+        // The validity tokens cannot see tablet-id assignment; a cached element
+        // would pin InvalidTabletId forever (ids are assigned in schemeshard__operation_common.cpp)
+        Y_ABORT_UNLESS(
+            shardInfo.TabletID != InvalidTabletId,
+            "Describing a finished table whose datashard has no tablet id"
+        );
+    }
+    const ui64 tabletId = ui64(shardInfo.TabletID);
+
+    part->SetDatashardId(tabletId);
+    if (includeKeys) {
+        // Currently we only support uniform partitioning where each range is [start, end)
+        // +inf as the end of the last range is represented by empty TCell vector
+        part->SetIsPoint(false);
+        part->SetIsInclusive(false);
+        part->SetEndOfRangeKeyPrefix(p.EndOfRange);
     }
 }
 
@@ -389,42 +393,350 @@ void FillTablePartitions(
     google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TTablePartition>* result,
     const TTableInfo& tableInfo,
     const THashMap<TShardIdx, TShardInfo>& shardInfos,
-    bool includeKeys
+    bool includeKeys,
+    bool allowMissingTabletId
 ) {
     result->Reserve(tableInfo.GetPartitions().size());
     for (const auto* p : tableInfo.GetPartitions()) {
-        const auto& tabletId = ui64(shardInfos.at(p->ShardIdx).TabletID);
-        const auto& key = p->EndOfRange;
-
-        auto part = result->Add();
-        part->SetDatashardId(tabletId);
-        if (includeKeys) {
-            // Currently we only support uniform partitioning where each range is [start, end)
-            // +inf as the end of the last range is represented by empty TCell vector
-            part->SetIsPoint(false);
-            part->SetIsInclusive(false);
-            part->SetEndOfRangeKeyPrefix(key);
-        }
+        FillTablePartition(*p, shardInfos, includeKeys, allowMissingTabletId, result->Add());
     }
 }
 
-const TString& GetSerializedTablePartitions(
+static void BuildTablePartitionElem(
+    const TTableShardInfo& p,
+    const THashMap<TShardIdx, TShardInfo>& shardInfos,
+    bool includeKeys,
+    bool allowMissingTabletId,
+    NKikimrSchemeOp::TPathDescription& wrap,
+    TString& entry
+) {
+    // One TablePartitions element as a ready wire entry (see the assembly block below)
+    wrap.Clear();
+    FillTablePartition(p, shardInfos, includeKeys, allowMissingTabletId, wrap.AddTablePartitions());
+    Y_PROTOBUF_SUPPRESS_NODISCARD wrap.SerializeToString(&entry);
+}
+
+// Why hand-assembly at all: a describe would otherwise re-fill and
+// re-serialize the whole protobuf response every time, and caching the
+// serialized response as a whole does not help: split/merge of a single
+// shard re-keys the partitioning and invalidates the entire blob — on every
+// step of a split campaign, exactly when clients are polling describes.
+// So the response is cached per element: the describe reuses every
+// untouched shard and rebuilds only the touched positions. Each cache
+// slot holds one ready wire entry — [tag + length + payload], the exact
+// bytes protobuf writes for one repeated-field element. The builders
+// above get these bytes from protobuf itself: they serialize a wrapper
+// message containing exactly one element, and the wrapper's repeated
+// field is literally the element's wire entry.
+//
+// The describe concatenates the cached entries of all requested sections
+// into a single PathDescription part of the response, in field-number order
+// as a regular serialization would. The result is byte-identical to
+// serializing a complete message after one conventional fill — pinned
+// byte-for-byte by the wire UT (ut_base/ut_table_describe_parts.cpp).
+//
+// The only bytes written without protobuf's help are the section headers
+// (tag + total-length varints of PathDescription and of Table). Protobuf
+// cannot write them for us: its length prefix is always derived from a
+// message object it owns, and the one API that accepts raw bytes,
+// UnknownFieldSet::AddLengthDelimited, takes the payload by value — one
+// copy into the set, another copy out at serialization. For a
+// multi-megabyte PathDescription section that doubles the full-payload
+// copying and measured 3.5x slower than appending two short varints by
+// hand.
+
+// Wrapper field numbers resolved from the schema: a renumber fails loudly
+// on first use instead of corrupting the wire. The assembly emits sections in
+// ascending field order, so the numbers must stay strictly increasing for
+// byte-exactness with a single fill.
+struct TDescribeWireNumbers {
+    int ResultPathDescription; // TEvDescribeSchemeResult::PathDescription
+    int PdTable;               // TPathDescription::Table
+    int PdTablePartitions;     // TPathDescription::TablePartitions
+    int PdStats;               // TPathDescription::TablePartitionStats
+    int PdMetrics;             // TPathDescription::TablePartitionMetrics
+};
+
+const TDescribeWireNumbers& DescribeWireNumbers() {
+    static const TDescribeWireNumbers numbers = [] {
+        const auto* resultPd = NKikimrScheme::TEvDescribeSchemeResult::descriptor()
+            ->FindFieldByName("PathDescription");
+        const auto* pdTable = NKikimrSchemeOp::TPathDescription::descriptor()
+            ->FindFieldByName("Table");
+        const auto* pdPartitions = NKikimrSchemeOp::TPathDescription::descriptor()
+            ->FindFieldByName("TablePartitions");
+        const auto* pdStats = NKikimrSchemeOp::TPathDescription::descriptor()
+            ->FindFieldByName("TablePartitionStats");
+        const auto* pdMetrics = NKikimrSchemeOp::TPathDescription::descriptor()
+            ->FindFieldByName("TablePartitionMetrics");
+        Y_ABORT_UNLESS(resultPd, "TEvDescribeSchemeResult.PathDescription is missing in the schema");
+        Y_ABORT_UNLESS(pdTable, "TPathDescription.Table is missing in the schema");
+        Y_ABORT_UNLESS(pdPartitions, "TPathDescription.TablePartitions is missing in the schema");
+        Y_ABORT_UNLESS(pdStats, "TPathDescription.TablePartitionStats is missing in the schema");
+        Y_ABORT_UNLESS(pdMetrics, "TPathDescription.TablePartitionMetrics is missing in the schema");
+        TDescribeWireNumbers numbers{
+            resultPd->number(), pdTable->number(), pdPartitions->number(),
+            pdStats->number(), pdMetrics->number()};
+        Y_ABORT_UNLESS(
+            numbers.PdTable < numbers.PdTablePartitions
+            && numbers.PdTablePartitions < numbers.PdStats
+            && numbers.PdStats < numbers.PdMetrics,
+            "TPathDescription section numbers are no longer ascending;"
+            " the assembly order in BuildTableDescribe must be updated");
+        // Protobuf serializes known fields in declaration order, so the numeric
+        // ascending order above is only sufficient if the declaration order
+        // matches - assert that too
+        auto declIndex = [pd = NKikimrSchemeOp::TPathDescription::descriptor()](const void* field) {
+            for (int i = 0; i < pd->field_count(); ++i) {
+                if (pd->field(i) == field) {
+                    return i;
+                }
+            }
+            return -1;
+        };
+        Y_ABORT_UNLESS(
+            declIndex(pdTable) < declIndex(pdPartitions)
+            && declIndex(pdPartitions) < declIndex(pdStats)
+            && declIndex(pdStats) < declIndex(pdMetrics),
+            "TPathDescription sections are no longer declared in ascending"
+            " field-number order; the assembly order in BuildTableDescribe"
+            " must be updated");
+        return numbers;
+    }();
+    return numbers;
+}
+
+static size_t VarintLen(ui64 value) {
+    size_t len = 1;
+    while (value >= 0x80) {
+        ++len;
+        value >>= 7;
+    }
+    return len;
+}
+
+// Length-delimited section header: tag + size varints, byte-identical to a
+// known-field serialization.
+static void AppendSectionHeader(TString& out, int fieldNumber, size_t length) {
+    char header[20];
+    size_t i = 0;
+    ui64 v = (ui64(ui32(fieldNumber)) << 3) | 2;
+    while (v >= 0x80) {
+        header[i++] = char(0x80 | (v & 0x7F));
+        v >>= 7;
+    }
+    header[i++] = char(v);
+    v = length;
+    while (v >= 0x80) {
+        header[i++] = char(0x80 | (v & 0x7F));
+        v >>= 7;
+    }
+    header[i++] = char(v);
+    out.append(header, i);
+}
+
+static size_t SectionHeaderLen(int fieldNumber, size_t length) {
+    return VarintLen((ui64(ui32(fieldNumber)) << 3) | 2) + VarintLen(length);
+}
+
+size_t BuildTableDescribe(
+    TEvSchemeShard::TEvDescribeSchemeResultBuilder& result,
     TTableInfo& tableInfo,
     const THashMap<TShardIdx, TShardInfo>& shardInfos,
-    bool returnRangeKey
+    const TTableDescribeOptions& opts
 ) {
-    TString& cache = (returnRangeKey
-        ? tableInfo.PreserializedTablePartitions
-        : tableInfo.PreserializedTablePartitionsNoKeys
-    );
+    const size_t partitionsCount = tableInfo.GetPartitions().size();
+    size_t zeroFilledStatsElements = 0;
 
-    if (cache.empty()) {
-        NKikimrScheme::TEvDescribeSchemeResult result;
-        FillTablePartitions(result.MutablePathDescription()->MutableTablePartitions(), tableInfo, shardInfos, returnRangeKey);
-        Y_PROTOBUF_SUPPRESS_NODISCARD result.SerializeToString(&cache);
+    // Pass 1: build missing entries lazily, sum section sizes; a wrong cache
+    // size means stale — drop and rebuild.
+    size_t tableBlockSize = 0; // framed SplitBoundary entries
+    size_t partitionsSize = 0; // framed TablePartitions entries
+    size_t statsSize = 0;       // framed TablePartitionStats entries
+    size_t metricsSize = 0;     // framed TablePartitionMetrics entries
+
+    if (opts.ReturnBoundaries && partitionsCount >= 2) {
+        // split keys without shard tablet-ids, one entry per position
+        auto& elems = tableInfo.PreserializedTableSplitBoundariesElems;
+        auto& compact = tableInfo.PreserializedTableSplitBoundariesCompact;
+        // A valid compact (built since the last mutation, which always clears
+        // it) implies every entry is present: pass 1 shrinks to its size
+        if (!compact.empty() && elems.size() == partitionsCount) {
+            tableBlockSize = compact.size();
+        } else {
+            if (elems.size() != partitionsCount) {
+                elems.clear();
+                elems.resize(partitionsCount);
+            }
+            // Clear() retains one cleared element, so bulk rebuilds do not allocate per element
+            NKikimrSchemeOp::TTableDescription boundaryWrap;
+            const size_t boundaryCount = partitionsCount - 1;
+            for (size_t i = 0; i < boundaryCount; ++i) {
+                TString& entry = elems[i];
+                if (entry.empty()) {
+                    BuildTableBoundaryElem(tableInfo, *tableInfo.GetPartitions()[i], boundaryWrap, entry);
+                    compact.clear();
+                }
+                tableBlockSize += entry.size();
+            }
+        }
     }
 
-    return cache;
+    if (opts.ReturnPartitioning && partitionsCount) {
+        // shard tablet-ids with/without range keys
+        auto& elems = opts.ReturnRangeKey
+            ? tableInfo.PreserializedTablePartitionsElems
+            : tableInfo.PreserializedTablePartitionsNoKeysElems;
+        auto& compact = opts.ReturnRangeKey
+            ? tableInfo.PreserializedTablePartitionsCompact
+            : tableInfo.PreserializedTablePartitionsNoKeysCompact;
+        // A valid compact (built since the last mutation, which always clears
+        // it) implies every entry is present: pass 1 shrinks to its size
+        if (!compact.empty() && elems.size() == partitionsCount) {
+            partitionsSize = compact.size();
+        } else {
+            if (elems.size() != partitionsCount) {
+                elems.clear();
+                elems.resize(partitionsCount);
+            }
+            // Clear() retains one cleared element, so bulk rebuilds do not allocate per element
+            NKikimrSchemeOp::TPathDescription partitionWrap;
+            for (size_t i = 0; i < partitionsCount; ++i) {
+                TString& entry = elems[i];
+                if (entry.empty()) {
+                    BuildTablePartitionElem(
+                        *tableInfo.GetPartitions()[i], shardInfos, opts.ReturnRangeKey,
+                        !opts.CreateFinished, partitionWrap, entry
+                    );
+                    compact.clear();
+                }
+                partitionsSize += entry.size();
+            }
+        }
+    }
+
+    if (opts.ReturnPartitionStats && partitionsCount) {
+        auto& elems = tableInfo.PreserializedTablePartitionStatsElems;
+        if (elems.size() != partitionsCount) {
+            elems.clear();
+            elems.resize(partitionsCount);
+        }
+        // Clear() retains one cleared element, so bulk rebuilds do not allocate per element
+        NKikimrSchemeOp::TPathDescription wrap;
+        for (size_t i = 0; i < partitionsCount; ++i) {
+            TShardStatsElems& e = elems[i];
+            if (e.Stats.empty() || e.Metrics.empty()) {
+                // No stats entry - should not happen: every partitioning
+                // change seeds entries. Either half missing rebuilds both,
+                // so a slot can never stay half-built.
+                const auto* stats = tableInfo.GetStats().PartitionStats.FindPtr(tableInfo.GetPartitions()[i]->ShardIdx);
+                if (!stats) {
+                    ++zeroFilledStatsElements;
+                }
+                // lvalue fallback: a ternary with a prvalue arm would copy *stats
+                static const TPartitionStats emptyStats;
+                const TPartitionStats& s = stats ? *stats : emptyStats;
+                e.Stats.clear();
+                e.Metrics.clear();
+                TString statsEntry, metricsEntry;
+                FillTableStats(wrap.AddTablePartitionStats(), s);
+                Y_PROTOBUF_SUPPRESS_NODISCARD wrap.SerializeToString(&statsEntry);
+                wrap.Clear();
+                FillTableMetrics(wrap.AddTablePartitionMetrics(), s);
+                Y_PROTOBUF_SUPPRESS_NODISCARD wrap.SerializeToString(&metricsEntry);
+                wrap.Clear();
+                e.Stats = std::move(statsEntry);
+                e.Metrics = std::move(metricsEntry);
+            }
+            statsSize += e.Stats.size();
+            metricsSize += e.Metrics.size();
+        }
+    }
+
+    // Pass 2: single exact-size buffer; sections in field-number order
+    // (ascending order asserted by DescribeWireNumbers), byte-exact with one fill.
+    const bool hasTableBlock = tableBlockSize > 0;
+    const size_t contentSize = tableBlockSize + partitionsSize + statsSize + metricsSize;
+    if (contentSize) {
+        const auto& numbers = DescribeWireNumbers();
+        const size_t tableHeaderLen = hasTableBlock ? SectionHeaderLen(numbers.PdTable, tableBlockSize) : 0;
+        const size_t pdContentSize = tableHeaderLen + contentSize;
+        result.PreSerializedData.reserve(
+            result.PreSerializedData.size()
+            + SectionHeaderLen(numbers.ResultPathDescription, pdContentSize)
+            + pdContentSize
+        );
+        AppendSectionHeader(result.PreSerializedData, numbers.ResultPathDescription, pdContentSize);
+        // In-flux tables self-clear their caches after every describe, so a
+        // compact would be built and immediately discarded - append the
+        // entries directly instead
+        const bool useCompact = opts.CreateFinished;
+        if (hasTableBlock) {
+            AppendSectionHeader(result.PreSerializedData, numbers.PdTable, tableBlockSize);
+            auto& elems = tableInfo.PreserializedTableSplitBoundariesElems;
+            auto& compact = tableInfo.PreserializedTableSplitBoundariesCompact;
+            if (useCompact && compact.size() == tableBlockSize) {
+                result.PreSerializedData += compact;
+            } else if (useCompact) {
+                compact.clear();
+                compact.reserve(tableBlockSize);
+                for (size_t i = 0; i < partitionsCount - 1; ++i) {
+                    compact += elems[i];
+                }
+                result.PreSerializedData += compact;
+            } else {
+                for (size_t i = 0; i < partitionsCount - 1; ++i) {
+                    result.PreSerializedData += elems[i];
+                }
+            }
+        }
+        if (partitionsSize) {
+            auto& elems = opts.ReturnRangeKey
+                ? tableInfo.PreserializedTablePartitionsElems
+                : tableInfo.PreserializedTablePartitionsNoKeysElems;
+            auto& compact = opts.ReturnRangeKey
+                ? tableInfo.PreserializedTablePartitionsCompact
+                : tableInfo.PreserializedTablePartitionsNoKeysCompact;
+            if (useCompact && compact.size() == partitionsSize) {
+                result.PreSerializedData += compact;
+            } else if (useCompact) {
+                compact.clear();
+                compact.reserve(partitionsSize);
+                for (size_t i = 0; i < partitionsCount; ++i) {
+                    compact += elems[i];
+                }
+                result.PreSerializedData += compact;
+            } else {
+                for (size_t i = 0; i < partitionsCount; ++i) {
+                    result.PreSerializedData += elems[i];
+                }
+            }
+        }
+        if (statsSize || metricsSize) {
+            auto& elems = tableInfo.PreserializedTablePartitionStatsElems;
+            for (size_t i = 0; i < partitionsCount; ++i) {
+                result.PreSerializedData += elems[i].Stats;
+            }
+            for (size_t i = 0; i < partitionsCount; ++i) {
+                result.PreSerializedData += elems[i].Metrics;
+            }
+        }
+    }
+
+    FillAggregatedStats(*result.Record.MutablePathDescription(), tableInfo.GetStats());
+
+    // KIKIMR-4337: table info is in flux until table is finally created
+    if (!opts.CreateFinished) {
+        tableInfo.PreserializedTablePartitionsElems.clear();
+        tableInfo.PreserializedTablePartitionsNoKeysElems.clear();
+        tableInfo.PreserializedTableSplitBoundariesElems.clear();
+        tableInfo.PreserializedTablePartitionStatsElems.clear();
+        tableInfo.PreserializedTablePartitionsCompact.clear();
+        tableInfo.PreserializedTablePartitionsNoKeysCompact.clear();
+        tableInfo.PreserializedTableSplitBoundariesCompact.clear();
+    }
+
+    return zeroFilledStatsElements;
 }
 
 void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPathElement::TPtr pathEl) {
@@ -455,42 +767,17 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
     entry->SetName(pathEl->Name);
     entry->SetPartitionCount(tableInfo.GetPartitions().size());
 
-    if (returnBoundaries) {
-        // split boundaries (split keys without shard's tablet-ids)
-        if (tableInfo.PreserializedTableSplitBoundaries.empty()) {
-            NKikimrScheme::TEvDescribeSchemeResult preSerializedResult;
-            auto& tableDesc = *preSerializedResult.MutablePathDescription()->MutableTable();
-            FillTableBoundaries(tableDesc.MutableSplitBoundary(), tableInfo);
-            Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&tableInfo.PreserializedTableSplitBoundaries);
-        }
-        Result->PreSerializedData += tableInfo.PreserializedTableSplitBoundaries;
-    }
-
-    if (returnPartitioning) {
-        // partitions (shard tablet-ids with range keys)
-        Result->PreSerializedData += GetSerializedTablePartitions(tableInfo, Self->ShardInfos, returnRangeKey);
-    }
-
-    // KIKIMR-4337: table info is in flux until table is finally created
-    if (!pathEl->IsCreateFinished()) {
-        tableInfo.PreserializedTablePartitions.clear();
-        tableInfo.PreserializedTablePartitionsNoKeys.clear();
-        tableInfo.PreserializedTableSplitBoundaries.clear();
-    }
-
-    FillAggregatedStats(*Result->Record.MutablePathDescription(), tableInfo.GetStats());
-
-    if (returnPartitionStats) {
-        NKikimrSchemeOp::TPathDescription& pathDescription = *Result->Record.MutablePathDescription();
-        pathDescription.MutableTablePartitionStats()->Reserve(tableInfo.GetPartitions().size());
-        for (const auto* p : tableInfo.GetPartitions()) {
-            const auto* stats = tableInfo.GetStats().PartitionStats.FindPtr(p->ShardIdx);
-            Y_ABORT_UNLESS(stats);
-            auto pbStats = pathDescription.AddTablePartitionStats();
-            FillTableStats(pbStats, *stats);
-            auto pbMetrics = pathDescription.AddTablePartitionMetrics();
-            FillTableMetrics(pbMetrics, *stats);
-        }
+    TTableDescribeOptions describeOpts{
+        .CreateFinished = pathEl->IsCreateFinished(),
+        .ReturnBoundaries = returnBoundaries,
+        .ReturnPartitioning = returnPartitioning,
+        .ReturnPartitionStats = returnPartitionStats,
+        .ReturnRangeKey = returnRangeKey,
+    };
+    const size_t zeroFilledStatsElements = BuildTableDescribe(*Result, tableInfo, Self->ShardInfos, describeOpts);
+    if (zeroFilledStatsElements) {
+        Self->TabletCounters->Cumulative()[COUNTER_DESCRIBE_TABLE_ZERO_FILLED_STATS_ELEMENTS]
+            .Increment(zeroFilledStatsElements);
     }
 
     if (returnBackupInfo) {
@@ -662,9 +949,9 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
             description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
         }
         if (tableInfo->GetStats().TableStats.contains(pathId)) {
-            FillTableStats(*pathDescription, tableInfo->GetStats().TableStats.at(pathId).Aggregated);
+            FillTableStatsAndMetrics(*pathDescription, tableInfo->GetStats().TableStats.at(pathId).Aggregated);
         } else {
-            FillTableStats(*pathDescription, TPartitionStats());
+            FillTableStatsAndMetrics(*pathDescription, TPartitionStats());
         }
     }
 

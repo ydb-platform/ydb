@@ -560,6 +560,17 @@ private:
     ui64 CPU = 0;
 };
 
+// Fill the protobuf stats / metrics of a single shard from TPartitionStats.
+void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartitionStats& tableStats);
+void FillTableMetrics(NKikimrTabletBase::TMetrics* metrics, const TPartitionStats& tableStats);
+
+// Per-shard ready wire entries of TablePartitionStats/TablePartitionMetrics
+// (see BuildTableDescribe); element-wise so a stats report renews one shard.
+struct TShardStatsElems {
+    TString Stats;
+    TString Metrics;
+};
+
 // History of a partition (key range). Keyed in the map by the shard that currently backs it;
 // subdivided/merged along the partition lineage in ApplySplitMerge (children inherit the parent).
 // In-memory only; recorded only when EnableSplitMergeDemandTracking is on.
@@ -707,7 +718,9 @@ struct TTableAggregatedStats {
         return Aggregated.PartCount && UpdatedStats.size() == Aggregated.PartCount;
     }
 
-    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
+    // Returns whether the shard's stored stats were changed by the update
+    // (reports with stale SeqNo are ignored).
+    bool UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
 
     /**
      * Update the statistics data for the given shard and the given follower
@@ -994,11 +1007,28 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     TMap<TTxId, TBackupRestoreResult> BackupHistory;
     TMap<TTxId, TBackupRestoreResult> RestoreHistory;
 
-    // Preserialized TDescribeSchemeResult with PathDescription.TablePartitions field filled
-    TString PreserializedTablePartitions;
-    TString PreserializedTablePartitionsNoKeys;
-    // Preserialized TDescribeSchemeResult with PathDescription.Table.SplitBoundary field filled
-    TString PreserializedTableSplitBoundaries;
+    // Per-partition ready wire entries that the describe concatenates into
+    // one PathDescription chunk (BuildTableDescribe). Boundaries are
+    // partition-aligned (last slot unused). Empty entries rebuild lazily;
+    // split/merge splices so only touched positions rebuild.
+    //
+    // Compacts: the sections concatenated in assembly order (see the members
+    // below), rebuilt lazily after any mutation.
+    TVector<TString> PreserializedTablePartitionsElems;
+    TVector<TString> PreserializedTablePartitionsNoKeysElems;
+    TVector<TString> PreserializedTableSplitBoundariesElems;
+    // The sections above concatenated in assembly order, rebuilt lazily after
+    // any mutation; lets a warm describe append the whole section in one bulk
+    // copy instead of per entry. Cleared by every mutation path, so a stale
+    // compact cannot match the section size (the validity token at use).
+    TString PreserializedTablePartitionsCompact;
+    TString PreserializedTablePartitionsNoKeysCompact;
+    TString PreserializedTableSplitBoundariesCompact;
+    // Positional twin of the caches above, for TablePartitionStats/Metrics.
+    // Renewed eagerly on leader stats reports (RenewShardStatsElems); not on
+    // follower reports (TopCpuUsage is not serialized).
+    TVector<TShardStatsElems> PreserializedTablePartitionStatsElems;
+
 
     THashMap<TShardIdx, NKikimrSchemeOp::TPartitionConfig> PerShardPartitionConfig;
 
@@ -1374,6 +1404,10 @@ public:
         const TShardIdx& shardIdx,
         const TPartitionStats& newStats
     );
+
+    // Rebuild the shard's cached wire entries from its stored stats; called
+    // where a leader report changed the stats.
+    void RenewShardStatsElems(const TShardIdx& shardIdx);
 
     void RegisterSplitMergeOp(TOperationId txId, const TTxState& txState);
 

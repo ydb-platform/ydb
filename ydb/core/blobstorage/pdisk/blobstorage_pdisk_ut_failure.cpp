@@ -280,6 +280,61 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
         UNIT_ASSERT_C(firstPieceLostLastWritten > 0, "no attempt lost the first piece and wrote the last one");
     }
 
+    Y_UNIT_TEST(TestLogWriteFailsIfAnyBufferFails) {
+        // A log record larger than a buffer is written in several buffers, and only the last one carries the completion
+        // that answers the VDisk. If an earlier buffer fails, the record must not be reported as written.
+        ui32 writesWithFailedBuffers = 0;
+        for (ui32 attempt = 0; attempt < 30 && writesWithFailedBuffers < 10; ++attempt) {
+            TActorTestContext testCtx({
+                .DiskMode = NPDisk::NSectorMap::DM_HDD,
+                .UseSectorMap = true,
+                .EnableSectorEncryption = true,
+            });
+
+            // Let all buffers of the record leave in the same PDisk cycle.
+            auto cfg = testCtx.GetPDiskConfig();
+            cfg->UseNoopScheduler = true;
+            testCtx.UpdateConfigRecreatePDisk(cfg);
+
+            TVDiskMock vdisk(&testCtx);
+            vdisk.InitFull();
+
+            // Spans three buffers.
+            const ui32 size = 2 * testCtx.GetPDisk()->Cfg->BufferPoolBufferSizeBytes;
+
+            {
+                auto *runtime = testCtx.GetRuntime();
+                auto &appData = runtime->GetAppData();
+                TAtomic prevValue = 0;
+                const ui32 pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
+                TString controlName = Sprintf("PDisk_%u_SectorMapWriteErrorProbability", pdiskId);
+                const TAtomicBase halfProb = 500000000;
+                appData.Dcb->SetValue(controlName, halfProb, prevValue);
+            }
+
+            auto* failureProbs = testCtx.TestCtx.SectorMap->GetFailureProbabilities();
+            UNIT_ASSERT(failureProbs != nullptr);
+            for (ui32 i = 0; failureProbs->WriteErrorProbability.load() < 0.49; ++i) {
+                UNIT_ASSERT_C(i < 1000, "the write error probability did not reach the SectorMap");
+                Sleep(TDuration::MilliSeconds(10));
+            }
+
+            auto& sectorMap = *testCtx.TestCtx.SectorMap;
+            const ui64 errorsBefore = sectorMap.EmulatedWriteErrors.load();
+            testCtx.Send(new NPDisk::TEvLog(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound, 0,
+                    TRcBuf(PrepareData(size)), vdisk.GetLsnSeg(), nullptr));
+            const auto res = testCtx.Recv<NPDisk::TEvLogResult>();
+            const ui64 failedDeviceWrites = sectorMap.EmulatedWriteErrors.load() - errorsBefore;
+
+            if (failedDeviceWrites) {
+                ++writesWithFailedBuffers;
+                UNIT_ASSERT_C(res->Status != NKikimrProto::OK, "attempt# " << attempt
+                        << " failedDeviceWrites# " << failedDeviceWrites << " result# " << res->ToString());
+            }
+        }
+        UNIT_ASSERT(writesWithFailedBuffers > 0);
+    }
+
     Y_UNIT_TEST(TestReadReplayPDisk) {
         TActorTestContext testCtx({.DiskMode = NPDisk::NSectorMap::DM_HDD, .UseSectorMap = true});
 

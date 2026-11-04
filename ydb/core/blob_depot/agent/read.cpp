@@ -216,7 +216,7 @@ namespace NKikimr::NBlobDepot {
                 partContext->Offsets.push_back(outputOffset);
             }
 
-            auto event = std::make_unique<TEvBlobStorage::TEvGet>(q, sz, TInstant::Max(), context->ReadArg.GetHandleClass);
+            auto event = std::make_unique<TEvBlobStorage::TEvGet>(q, sz, Deadline, context->ReadArg.GetHandleClass);
             event->ReaderTabletData = context->ReadArg.ReaderTabletData;
             YDB_LOG_DEBUG("Issuing TEvGet",
                 {"marker", "BDA39"},
@@ -291,6 +291,7 @@ namespace NKikimr::NBlobDepot {
                 auto *item = resolve.AddItems();
                 item->SetExactKey(readContext.ReadArg.Key);
                 item->SetMustRestoreFirst(readContext.ReadArg.MustRestoreFirst);
+                SetResolveDeadline(resolve);
                 YDB_LOG_DEBUG("Issuing extra resolve",
                     {"marker", "BDA48"},
                     {"agent", Agent.LogId},
@@ -377,7 +378,7 @@ namespace NKikimr::NBlobDepot {
             if (value.Blob) {
                 const auto& [blobId, groupId] = *value.Blob;
                 auto event = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(
-                    blobId, TInstant::Max(), checkContext->ReadArg.GetHandleClass);
+                    blobId, Deadline, checkContext->ReadArg.GetHandleClass);
 
                 YDB_LOG_DEBUG("Issuing TEvCheckIntegrity",
                     {"marker", "BDA63"},
@@ -455,6 +456,7 @@ namespace NKikimr::NBlobDepot {
             NKikimrBlobDepot::TEvResolve resolve;
             auto *item = resolve.AddItems();
             item->SetExactKey(checkContext.ReadArg.Key);
+            SetResolveDeadline(resolve);
             YDB_LOG_DEBUG("Issuing extra resolve to check integrity",
                 {"marker", "BDA71"},
                 {"agentId", Agent.LogId},
@@ -511,10 +513,10 @@ namespace NKikimr::NBlobDepot {
                 result->Status = NKikimrProto::NODATA;
             }
             break;
-        case NKikimrProto::ERROR:
-            result->Status = NKikimrProto::ERROR;
+        case NKikimrProto::OK:
             break;
         default:
+            result->Status = msg.Status;
             break;
         }
 

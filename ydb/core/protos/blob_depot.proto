@@ -233,6 +233,9 @@ message TEvResolve {
     }
 
     repeated TItem Items = 1;
+
+    // Wall clock deadline of the requesting query; unset means no deadline.
+    optional uint64 DeadlineUs = 3;
 }
 
 message TEvResolveResult {

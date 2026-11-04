@@ -2,6 +2,7 @@
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <util/system/type_name.h>
 
@@ -68,6 +69,162 @@ namespace {
 } // anonymous
 
 Y_UNIT_TEST_SUITE(BridgeDataKind) {
+
+    Y_UNIT_TEST(EncryptionWorksWithInterpileTrafficOptimization) {
+        TFeatureFlags featureFlags;
+        featureFlags.SetEnableInterpileTrafficOptimization(true);
+
+        const ui8 keyData[32] = "Hello, I'm your new key";
+        const TEncryptionKey key{
+            .Key = {keyData, sizeof(keyData)},
+            .Version = 1,
+            .Id = "tenant key",
+        };
+
+        TEnvironmentSetup env{{
+            .NodeCount = 8 * 3,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Encryption = true,
+            .ConfigPreprocessor = [key](ui32, TNodeWardenConfig& config) { config.TenantKey = key; },
+            .LocationGenerator = GetBridgedLocation,
+            .FeatureFlags = featureFlags,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        env.CreatePool();
+        const ui32 groupId = env.GetGroups().front();
+
+        ui32 step = 1;
+        auto put = [&](const TString& data) {
+            const TLogoBlobID id(100500, 1, step++, 0, data.size(), 0);
+            const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            return id;
+        };
+
+        put("warmup");
+        env.Sim(TDuration::Seconds(5));
+
+        size_t encryptedInterpilePuts = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvInterpilePut) {
+                for (const auto& item : ev->Get<TEvInterpilePut>()->Record.GetItems()) {
+                    encryptedInterpilePuts += item.GetAlreadyEncrypted();
+                }
+            }
+            return true;
+        };
+
+        const TString data(1_MB + 1, 'x');
+        const TLogoBlobID id = put(data);
+
+        env.Runtime->FilterFunction = nullptr;
+
+        const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->WrapInActorContext(sender, [&] {
+            SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::EGetHandleClass::FastRead));
+        });
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(sender, false);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer.ConvertToString(), data);
+        UNIT_ASSERT_C(encryptedInterpilePuts, "no encrypted write reached a remote pile the interpile way");
+    }
+
+    Y_UNIT_TEST_TWIN(InterpileBatchKeepsIndividualDeadlines, expireWholeBatch) {
+        ui32 bridgeGroupId;
+        auto env = MakeInterpileEnv(bridgeGroupId);
+        const ui32 groupId = NBridgeTest::GetPileGroups(*env, bridgeGroupId).at(1);
+        const ui32 groupGeneration = env->GetGroupInfo(groupId)->GroupGeneration;
+        const auto proxy = env->Runtime->GetNode(1)->ActorSystem->LookupLocalService(MakeBlobStorageProxyID(groupId));
+        UNIT_ASSERT(proxy);
+        const auto edge = env->Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const TString data = "batched remote write";
+        const TInstant start = env->Runtime->GetClock();
+        std::map<ui64, NKikimrProto::EReplyStatus> results;
+        std::unique_ptr<IEventHandle> stopBatching;
+        std::unique_ptr<IEventHandle> heldResult;
+        TActorId batchActor;
+        ui32 putsReceived = 0;
+        bool hold = true;
+        bool batchReady = false;
+        env->Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == edge && ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult) {
+                UNIT_ASSERT_C(results.emplace(ev->Cookie, ev->Get<TEvBlobStorage::TEvPutResult>()->Status).second,
+                    "duplicate put result");
+                return false;
+            }
+            if (!hold) {
+                return true;
+            }
+            if (ev->GetRecipientRewrite() == proxy) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+                    ++putsReceived;
+                } else if (!batchReady && ev->GetTypeName().Contains("TEvStopBatchingPutRequests")) {
+                    UNIT_ASSERT(!stopBatching);
+                    stopBatching = std::move(ev);
+                    return false;
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvInterpilePut) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvInterpilePut>()->Record.ItemsSize(), 2);
+                batchActor = ev->Sender;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvInterpilePutResult &&
+                    ev->GetRecipientRewrite() == batchActor) {
+                UNIT_ASSERT(!heldResult);
+                heldResult = std::move(ev);
+                return false;
+            }
+            return true;
+        };
+        auto put = [&](ui64 cookie, TInstant deadline) {
+            env->Runtime->WrapInActorContext(edge, [&] {
+                auto request = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
+                    .BlobId = TLogoBlobID(100500, 1, 10 + cookie, 0, data.size(), 0),
+                    .Buffer = TRope(data),
+                    .Deadline = deadline,
+                    .ReduceInterpileTraffic = true,
+                });
+                request->ForceGroupGeneration = groupGeneration;
+                SendToBSProxy(edge, groupId, request.release(), cookie);
+            });
+        };
+        put(1, start + TDuration::Seconds(5));
+        put(2, start + TDuration::Seconds(20));
+        NBridgeTest::WaitUntil(*env, [&] { return stopBatching && putsReceived == 2; }, "queued batch",
+            TDuration::MilliSeconds(10), 100);
+        // Release exactly one batching cycle with both requests already admitted.
+        batchReady = true;
+        env->Runtime->Send(stopBatching.release(), 1);
+        NBridgeTest::WaitUntil(*env, [&] { return bool(heldResult); }, "remote batch response",
+            TDuration::MilliSeconds(10), 100);
+        env->Sim(TDuration::Seconds(6));
+        UNIT_ASSERT_C(results.contains(1), "optimized batch ignored the first blob's deadline");
+        UNIT_ASSERT_VALUES_EQUAL(results.at(1), NKikimrProto::DEADLINE);
+        UNIT_ASSERT(!results.contains(2));
+        if (expireWholeBatch) {
+            env->Sim(TDuration::Seconds(15));
+            UNIT_ASSERT_C(results.contains(2), "optimized batch ignored the second blob's deadline");
+            UNIT_ASSERT_VALUES_EQUAL(results.at(2), NKikimrProto::DEADLINE);
+        }
+        hold = false;
+        env->Runtime->Send(heldResult.release(), 1);
+        NBridgeTest::WaitUntil(*env, [&] { return results.contains(2); }, "second blob result",
+            TDuration::MilliSeconds(10), 100);
+        UNIT_ASSERT_VALUES_EQUAL(results.at(2), expireWholeBatch ? NKikimrProto::DEADLINE : NKikimrProto::OK);
+        env->Sim(TDuration::Seconds(30)); // both old deadlines and the late response are harmless now
+        put(3, TInstant::Max());
+        NBridgeTest::WaitUntil(*env, [&] { return results.contains(3); }, "write after timeout",
+            TDuration::MilliSeconds(10), 100);
+        UNIT_ASSERT_VALUES_EQUAL(results.at(3), NKikimrProto::OK);
+        env->Runtime->FilterFunction = {};
+    }
 
     // the remote pile's answer to the interpile put tells everything the VDisks of the pile would, had the blob been
     // written to them from here: status flags and free space, the blob written beyond the barrier, and the generation

@@ -219,31 +219,11 @@ void TActor::OnSessionProgressSaved() {
         Stage = EStage::Finished;
         StageStartTime = TInstant::Now();
         SaveSessionState();
-<<<<<<< HEAD
-    } else if (PendingAbortReason) {
-        // The cursor save has finished; no read or write is in flight here.
-        FinishAbortExport(*std::exchange(PendingAbortReason, std::nullopt));
-    } else if (ExportSession->GetCursor().IsFinished()) {
-        if (ExportSession->IsStarted()) {
-            ExportSession->Finish();
-        }
-        SaveSessionState();
-        SwitchStage(EStage::WaitSaveCursor, EStage::Finished);
-    } else {
-        AFL_VERIFY(Stage == EStage::WaitSaveCursor)("real", (ui32)Stage);
-        SwitchStage(EStage::WaitSaveCursor, EStage::WaitData);
-        AFL_VERIFY(ScanActorId);
-        Counters.OnReadStarted();
-        Counters.OnAckSent();
-        ReadStartTime = TInstant::Now();
-        TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, (ui64)TabletId, 1));
-=======
         return;
     }
     if (PendingAbortReason) {
-        // Leave the cursor-save stage so AbortExport can finish the deferred abort.
-        SwitchStage(Stage, EStage::WaitData);
-        AbortExport(*std::exchange(PendingAbortReason, std::nullopt));
+        // The cursor save has finished; no read or write is in flight here.
+        FinishAbortExport(*std::exchange(PendingAbortReason, std::nullopt));
         return;
     }
     switch (Stage) {
@@ -271,7 +251,6 @@ void TActor::OnSessionProgressSaved() {
             return;
         default:
             AFL_VERIFY(false)("stage", StageToString(Stage));
->>>>>>> d03e71b2491 (reset has been supported (#57915))
     }
 }
 

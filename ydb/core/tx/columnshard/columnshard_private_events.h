@@ -92,18 +92,8 @@ struct TEvPrivate {
         EvBackupImportRecordBatch,
         EvBackupImportRecordBatchResult,
 
-<<<<<<< HEAD
-=======
-        EvRetryConfigSubscription,
-        EvUpdateChannelApproximateFreeSpace,
-
-        EvContinueFindEmptyHistoryIntervals,
-        EvFindEmptyHistoryIntervalsPortionsReady,
-        EvPrefetchPortionsMetadata,
-
         EvBackupExportReset,
 
->>>>>>> d03e71b2491 (reset has been supported (#57915))
         EvEnd
     };
 

@@ -1,6 +1,7 @@
 #include "hive_impl.h"
 
 #include <library/cpp/json/json_value.h>
+#include <library/cpp/html/pcdata/pcdata.h>
 
 namespace NKikimr {
 namespace NHive {
@@ -150,6 +151,9 @@ TString GetResourceValuesText(const TTabletInfo& tablet) {
                    GetBytesPerSecond(values.Network),
                    Find(allowedMetricIds, NKikimrTabletBase::TMetrics::kNetworkFieldNumber) == allowedMetricIds.end()),
                resource == NMetrics::EResource::Network);
+    if (!values.NamedResources.Empty()) {
+        str << ",&nbsp;" << EncodeHtmlPcdata(values.NamedResources.ToString());
+    }
     str << ')';
     return str.Str();
 }

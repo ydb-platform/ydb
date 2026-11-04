@@ -45,7 +45,10 @@ namespace NTabletFlatExecutor {
         using IOps = NActors::IActorOps;
 
     public:
-        TBroker(IOps* ops, TIntrusivePtr<TIdEmitter> emitter);
+        /**
+         * followerId must outlive TBroker, see TScans.
+         */
+        TBroker(IOps* ops, TIntrusivePtr<TIdEmitter> emitter, ui64 tabletId, const ui32& followerId);
 
         // API implementation
         TTaskId SubmitTask(TString name, TResourceParams params, TResourceConsumer consumer) override;
@@ -62,6 +65,8 @@ namespace NTabletFlatExecutor {
     private:
         IOps* const Ops;
         TIntrusivePtr<TIdEmitter> const Emitter;
+        const ui64 TabletId;
+        const ui32& FollowerId;
         THashMap<TTaskId, TResourceConsumer> Submitted;
     };
 

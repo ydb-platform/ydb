@@ -43,6 +43,7 @@ struct TEvPrivate {
         EvReassignInactiveGroupsComplete,
         EvMoveDataComplete,
         EvLogHangingRequests,
+        EvCheckNamedResourceEstimates,
         EvEnd
     };
 
@@ -166,6 +167,14 @@ struct TEvPrivate {
     };
 
     struct TEvLogHangingRequests : TEventLocal<TEvLogHangingRequests, EvLogHangingRequests> {};
+
+    struct TEvCheckNamedResourceEstimates : TEventLocal<TEvCheckNamedResourceEstimates, EvCheckNamedResourceEstimates> {
+        TFullTabletId TabletId;
+
+        explicit TEvCheckNamedResourceEstimates(TFullTabletId tabletId)
+            : TabletId(tabletId)
+        {}
+    };
 };
 
 } // NHive

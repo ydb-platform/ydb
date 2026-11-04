@@ -1,0 +1,101 @@
+name: Dispatch remote executor
+
+# Reusable remote path: start → optional wait+mirror / cancel-on-caller-cancel.
+# Call sites only map their contract into inputs_json.
+on:
+  workflow_call:
+    inputs:
+      workflow_file:
+        description: Executor workflow filename (e.g. run_and_debug_tests.yml)
+        required: true
+        type: string
+      workflow_name:
+        description: Executor workflow name: value (S3 key segment for job_summary.md)
+        required: true
+        type: string
+      executor_ref:
+        description: Git ref that hosts the executor workflow YAML
+        required: true
+        type: string
+      inputs_json:
+        description: JSON object of workflow_dispatch inputs for the executor
+        required: true
+        type: string
+      wait:
+        description: true = wait+mirror on runner-waiter; false = fire-and-forget
+        required: false
+        type: boolean
+        default: true
+      repository:
+        description: owner/repo (empty = github.repository)
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      executor_run_id: ${{ steps.dispatch.outputs.executor_run_id }}
+      executor_run_url: ${{ steps.dispatch.outputs.executor_run_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts/ci
+            .github/actions/dispatch_remote_executor
+          sparse-checkout-cone-mode: false
+
+      - name: Dispatch remote executor
+        id: dispatch
+        uses: ./.github/actions/dispatch_remote_executor
+        with:
+          command: start
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          repository: ${{ inputs.repository != '' && inputs.repository || github.repository }}
+          workflow_file: ${{ inputs.workflow_file }}
+          workflow_name: ${{ inputs.workflow_name }}
+          executor_ref: ${{ inputs.executor_ref }}
+          inputs_json: ${{ inputs.inputs_json }}
+          wait_mode: ${{ inputs.wait && 'wait+mirror' || 'fire-and-forget' }}
+
+  wait:
+    if: inputs.wait
+    needs: dispatch
+    runs-on: [self-hosted, runner-waiter]
+    timeout-minutes: 400
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts/ci
+            .github/actions/dispatch_remote_executor
+          sparse-checkout-cone-mode: false
+
+      - name: Wait and mirror executor summary
+        uses: ./.github/actions/dispatch_remote_executor
+        with:
+          command: wait
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          repository: ${{ inputs.repository != '' && inputs.repository || github.repository }}
+          workflow_file: ${{ inputs.workflow_file }}
+          workflow_name: ${{ inputs.workflow_name }}
+          executor_run_id: ${{ needs.dispatch.outputs.executor_run_id }}
+          executor_run_url: ${{ needs.dispatch.outputs.executor_run_url }}
+          aws_endpoint: ${{ vars.AWS_ENDPOINT }}
+          aws_bucket: ${{ vars.AWS_BUCKET }}
+
+      - name: Cancel executor on caller cancel
+        if: cancelled() && needs.dispatch.outputs.executor_run_id != ''
+        uses: ./.github/actions/dispatch_remote_executor
+        with:
+          command: cancel
+          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          repository: ${{ inputs.repository != '' && inputs.repository || github.repository }}
+          workflow_file: ${{ inputs.workflow_file }}
+          workflow_name: ${{ inputs.workflow_name }}
+          executor_run_id: ${{ needs.dispatch.outputs.executor_run_id }}
+          executor_run_url: ${{ needs.dispatch.outputs.executor_run_url }}

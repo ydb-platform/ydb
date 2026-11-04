@@ -98,22 +98,13 @@ on:
         default: true
 
 jobs:
-  dispatch_remote:
+  remote_payload:
     if: inputs.executor == 'remote'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     outputs:
-      executor_run_id: ${{ steps.dispatch.outputs.executor_run_id }}
-      executor_run_url: ${{ steps.dispatch.outputs.executor_run_url }}
+      inputs_json: ${{ steps.payload.outputs.inputs_json }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          sparse-checkout: |
-            .github/scripts/ci
-            .github/actions/dispatch_remote_executor
-          sparse-checkout-cone-mode: false
-
       - name: Build executor inputs JSON
         id: payload
         env:
@@ -161,57 +152,17 @@ jobs:
           print(json.dumps(payload, ensure_ascii=False, indent=2))
           PY
 
-      - name: Dispatch CI remote executor
-        id: dispatch
-        uses: ./.github/actions/dispatch_remote_executor
-        with:
-          command: start
-          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          repository: ${{ github.repository }}
-          workflow_file: run_and_debug_tests.yml
-          workflow_name: Run and debug tests
-          executor_ref: ${{ inputs.remote_executor_ref }}
-          inputs_json: ${{ steps.payload.outputs.inputs_json }}
-          wait_mode: ${{ inputs.wait_for_remote && 'wait+mirror' || 'fire-and-forget' }}
-
-  wait_remote:
-    if: inputs.executor == 'remote' && inputs.wait_for_remote
-    needs: dispatch_remote
-    runs-on: [self-hosted, runner-waiter]
-    timeout-minutes: 400
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          sparse-checkout: |
-            .github/scripts/ci
-            .github/actions/dispatch_remote_executor
-          sparse-checkout-cone-mode: false
-
-      - name: Wait and mirror executor summary
-        uses: ./.github/actions/dispatch_remote_executor
-        with:
-          command: wait
-          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          repository: ${{ github.repository }}
-          workflow_file: run_and_debug_tests.yml
-          workflow_name: Run and debug tests
-          executor_run_id: ${{ needs.dispatch_remote.outputs.executor_run_id }}
-          executor_run_url: ${{ needs.dispatch_remote.outputs.executor_run_url }}
-          aws_endpoint: ${{ vars.AWS_ENDPOINT }}
-          aws_bucket: ${{ vars.AWS_BUCKET }}
-
-      - name: Cancel executor on caller cancel
-        if: cancelled() && needs.dispatch_remote.outputs.executor_run_id != ''
-        uses: ./.github/actions/dispatch_remote_executor
-        with:
-          command: cancel
-          token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          repository: ${{ github.repository }}
-          workflow_file: run_and_debug_tests.yml
-          workflow_name: Run and debug tests
-          executor_run_id: ${{ needs.dispatch_remote.outputs.executor_run_id }}
-          executor_run_url: ${{ needs.dispatch_remote.outputs.executor_run_url }}
+  remote:
+    if: inputs.executor == 'remote'
+    needs: remote_payload
+    uses: ./.github/workflows/dispatch_remote.yml
+    secrets: inherit
+    with:
+      workflow_file: run_and_debug_tests.yml
+      workflow_name: Run and debug tests
+      executor_ref: ${{ inputs.remote_executor_ref }}
+      inputs_json: ${{ needs.remote_payload.outputs.inputs_json }}
+      wait: ${{ inputs.wait_for_remote }}
 
   prepare:
     if: inputs.executor == 'ydb_yc'

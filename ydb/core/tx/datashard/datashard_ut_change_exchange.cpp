@@ -8,8 +8,10 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -3429,6 +3431,277 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     Y_UNIT_TEST_TWIN(UniqueIndexStream, InitialScan) {
         IndexStream(NKikimrSchemeOp::EIndexTypeGlobalUnique, InitialScan);
+    }
+
+    void InitialScanTopicSplitRecovery(bool topicAutoPartitioning, bool rebootPq, bool pauseAutoPartitioning = false, bool delayedPrepared = false) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+        );
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10), (2, 20), (3, 30);
+        )");
+
+        std::vector<std::unique_ptr<IEventHandle>> scans;
+        auto blockScans = runtime.AddObserver<TEvDataShard::TEvCdcStreamScanRequest>([&](auto& ev) {
+            scans.emplace_back(ev.Release());
+        });
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithTopicAutoPartitioning(topicAutoPartitioning,
+                WithInitialScan(Updates(NKikimrSchemeOp::ECdcStreamFormatJson)))));
+        WaitFor(runtime, [&]{ return !scans.empty(); }, "initial scan request");
+        const auto schemeShard = scans.front()->Get<TEvDataShard::TEvCdcStreamScanRequest>()
+            ->Record.GetTablePathId().GetOwnerId();
+
+        if (pauseAutoPartitioning) {
+            constexpr ui64 pauseTxId = 99999;
+            AsyncSend(runtime, schemeShard, InternalTransaction(AlterPQGroupRequest(pauseTxId, "/Root/Table/Stream", R"(
+                Name: "streamImpl"
+                PQTabletConfig {
+                    PartitionConfig {}
+                    PartitionStrategy { PartitionStrategyType: PAUSED }
+                }
+            )")));
+            TestModificationResults(runtime, pauseTxId, {NKikimrScheme::StatusAccepted});
+            WaitTxNotification(server, edgeActor, pauseTxId);
+        }
+
+        auto checkDisabledScaling = [&] {
+            const auto topic = GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream");
+            auto request = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>(0, NKikimrPQ::EScaleStatus::NEED_SPLIT);
+            request->Record.SetSplitBoundary("a");
+            runtime.SendToPipe(topic.GetBalancerTabletID(), edgeActor, request.Release(), 0, GetPipeConfigWithRetries());
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream").PartitionsSize(), 1);
+        };
+        if (!topicAutoPartitioning) {
+            checkDisabledScaling();
+        }
+
+        constexpr ui64 splitTxId = 100000;
+        THashSet<ui64> preparedTablets;
+        ui64 minStep = 0;
+        TActorId schemeShardActor;
+        std::unique_ptr<IEventHandle> duplicatePrepared;
+        auto observePrepared = runtime.AddObserver<TEvPersQueue::TEvProposeTransactionResult>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTxId() == splitTxId && record.GetStatus() == NKikimrPQ::TEvProposeTransactionResult::PREPARED) {
+                preparedTablets.insert(record.GetOrigin());
+                minStep = Max(minStep, record.GetMinStep());
+                schemeShardActor = ev->Recipient;
+                if (delayedPrepared && !duplicatePrepared) {
+                    auto duplicate = MakeHolder<TEvPersQueue::TEvProposeTransactionResult>();
+                    duplicate->Record.CopyFrom(record);
+                    duplicatePrepared = std::make_unique<IEventHandle>(ev->Recipient, ev->Sender, duplicate.Release());
+                }
+            }
+        });
+        std::vector<std::unique_ptr<IEventHandle>> plans;
+        TActorId initialProposer;
+        auto blockPlans = runtime.AddObserver<TEvTxProxy::TEvProposeTransaction>([&](auto& ev) {
+            if (ev->Get()->Record.GetTransaction().GetTxId() == splitTxId) {
+                if (!initialProposer) {
+                    initialProposer = ev->Sender;
+                }
+                plans.emplace_back(ev.Release());
+            }
+        });
+
+        std::unique_ptr<IEventHandle> proposeProgress;
+        bool heldProposeProgress = false;
+        auto delayProgress = runtime.AddObserver<NSchemeShard::TEvPrivate::TEvProgressOperation>([&](auto& ev) {
+            if (delayedPrepared && !heldProposeProgress && schemeShardActor
+                    && ev->Recipient == schemeShardActor && ev->Get()->TxId == splitTxId) {
+                heldProposeProgress = true;
+                proposeProgress.reset(ev.Release());
+            }
+        });
+        bool splitCompleted = false;
+        auto observeCompletion = runtime.AddObserver<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>([&](auto& ev) {
+            if (ev->Get()->Record.GetTxId() == splitTxId) {
+                splitCompleted = true;
+            }
+        });
+
+        AsyncSend(runtime, schemeShard, InternalTransaction(AlterPQGroupRequest(splitTxId, "/Root/Table/Stream", R"(
+            Name: "streamImpl"
+            Split {
+                Partition: 0
+                SplitBoundary: 'a'
+            }
+        )")));
+        TestModificationResults(runtime, splitTxId, {topicAutoPartitioning
+            ? NKikimrScheme::StatusAccepted : NKikimrScheme::StatusInvalidParameter});
+
+        if (delayedPrepared) {
+            WaitFor(runtime, [&]{ return bool(proposeProgress); }, "Propose state before its first progress event");
+            UNIT_ASSERT(duplicatePrepared);
+            UNIT_ASSERT(plans.empty());
+            const auto notifyEdge = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(schemeShard, notifyEdge,
+                new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(splitTxId), 0, GetPipeConfigWithRetries());
+            runtime.Send(duplicatePrepared.release(), 0, true);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_C(!splitCompleted, "Split completed after a duplicate PREPARED, before any coordinator proposal");
+            UNIT_ASSERT(plans.empty());
+            delayProgress.Remove();
+            runtime.Send(proposeProgress.release(), 0, true);
+        }
+        delayProgress.Remove();
+
+        if (topicAutoPartitioning) {
+            WaitFor(runtime, [&]{ return !plans.empty(); }, "split waiting for coordinator");
+            UNIT_ASSERT_C(!preparedTablets.empty(), "The split must prepare real PQ config transactions");
+            UNIT_ASSERT_C(minStep > 0, "Prepared PQ participants must constrain the plan step");
+        } else {
+            UNIT_ASSERT(preparedTablets.empty());
+            UNIT_ASSERT(plans.empty());
+            UNIT_ASSERT_VALUES_EQUAL(GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream").PartitionsSize(), 1);
+        }
+
+        ui32 enqueued = 0;
+        auto observeEnqueued = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>([&](auto&) {
+            ++enqueued;
+        });
+        blockScans.Remove();
+        for (auto& ev : scans) {
+            runtime.Send(ev.release(), 0, true);
+        }
+        WaitFor(runtime, [&]{ return enqueued > 0; }, "scan produces CDC records");
+
+        // Lose the outgoing proposal and recover from persisted SchemeShard state.
+        plans.clear();
+        if (rebootPq) {
+            const auto participants = preparedTablets;
+            for (ui64 tablet : participants) {
+                RebootTablet(runtime, tablet, edgeActor);
+            }
+        }
+        RebootTablet(runtime, schemeShard, edgeActor);
+        IEventHandle* recoveredPlan = nullptr;
+        if (topicAutoPartitioning) {
+            WaitFor(runtime, [&] {
+                for (const auto& plan : plans) {
+                    if (plan->Sender != initialProposer) {
+                        recoveredPlan = plan.get();
+                        return true;
+                    }
+                }
+                return false;
+            }, "split proposal from the recovered SchemeShard actor");
+            const auto& proposal = recoveredPlan->Get<TEvTxProxy::TEvProposeTransaction>()->Record.GetTransaction();
+            UNIT_ASSERT_C(proposal.GetMinStep() >= minStep, "Recovery must preserve the prepared minimum step");
+            THashSet<ui64> affected;
+            for (const auto& entry : proposal.GetAffectedSet()) {
+                affected.insert(entry.GetTabletId());
+            }
+            UNIT_ASSERT(affected.contains(schemeShard));
+            for (ui64 tablet : preparedTablets) {
+                UNIT_ASSERT_C(affected.contains(tablet), "A prepared PQ tablet was omitted from the recovered plan");
+            }
+        }
+        blockPlans.Remove();
+        for (auto& ev : plans) {
+            // An old actor's delayed proposal must not rescue a broken recovery path.
+            if (ev->Sender != initialProposer) {
+                runtime.Send(ev.release(), 0, true);
+            }
+        }
+        if (topicAutoPartitioning) {
+            WaitTxNotification(server, edgeActor, splitTxId);
+        }
+
+        // CDC preserves key order, but records from different topic partitions may interleave.
+        auto waitForRecords = [&](const TVector<TString>& expected) {
+            for (ui32 attempt = 0; attempt < 100; ++attempt) {
+                TVector<TString> actual;
+                const auto topic = GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream");
+                for (const auto& partition : topic.GetPartitions()) {
+                    for (const auto& record : GetRecords(runtime, edgeActor, "/Root/Table/Stream", partition.GetPartitionId())) {
+                        actual.push_back(record.second);
+                    }
+                }
+                UNIT_ASSERT_C(actual.size() <= expected.size(), "Unexpected or duplicated CDC records");
+                TVector<bool> matched(expected.size(), false);
+                for (const auto& record : actual) {
+                    bool found = false;
+                    for (size_t i = 0; i < expected.size(); ++i) {
+                        if (!matched[i] && AreJsonsEqual(record, expected[i])) {
+                            matched[i] = found = true;
+                            break;
+                        }
+                    }
+                    UNIT_ASSERT_C(found, "Unexpected CDC record: " << record);
+                }
+                if (actual.size() == expected.size()) {
+                    return;
+                }
+                runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_FAIL("CDC records did not arrive across the recovered topic partitions");
+        };
+        waitForRecords({
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+        });
+        // CDC hashes the JSON key, then the topic chooser hashes that partition key.
+        // These updates route to opposite children of the 'a' boundary.
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES (1, 11), (8, 80);
+        )");
+        waitForRecords({
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
+            R"({"update":{"value":11},"key":[1]})",
+            R"({"update":{"value":80},"key":[8]})",
+        });
+        UNIT_ASSERT_VALUES_EQUAL(GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream").PartitionsSize(),
+            topicAutoPartitioning ? 3 : 1);
+        if (topicAutoPartitioning) {
+            UNIT_ASSERT_C(!GetRecords(runtime, edgeActor, "/Root/Table/Stream", 1).empty(), "Left child must serve CDC records");
+            UNIT_ASSERT_C(!GetRecords(runtime, edgeActor, "/Root/Table/Stream", 2).empty(), "Right child must serve CDC records");
+        }
+        if (!topicAutoPartitioning) {
+            checkDisabledScaling();
+        }
+        for (ui32 attempt = 0; attempt < 100; ++attempt) {
+            const auto describe = DescribePrivatePath(runtime, schemeShard, "/Root/Table/Stream");
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetStatus(), NKikimrScheme::StatusSuccess);
+            UNIT_ASSERT(describe.GetPathDescription().HasCdcStreamDescription());
+            if (describe.GetPathDescription().GetCdcStreamDescription().GetState() == NKikimrSchemeOp::ECdcStreamStateReady) {
+                return;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Initial scan did not complete after recovery");
+    }
+
+    Y_UNIT_TEST(InitialScanTopicSplitAfterSchemeShardRecovery) {
+        InitialScanTopicSplitRecovery(true, false);
+    }
+
+    Y_UNIT_TEST(InitialScanTopicSplitAfterParticipantRecovery) {
+        InitialScanTopicSplitRecovery(true, true);
+    }
+
+    Y_UNIT_TEST(InitialScanTopicSplitDisabledAfterRecovery) {
+        InitialScanTopicSplitRecovery(false, false);
+    }
+
+    Y_UNIT_TEST(InitialScanTopicSplitPausedAfterRecovery) {
+        InitialScanTopicSplitRecovery(true, true, true);
+    }
+
+    Y_UNIT_TEST(InitialScanTopicSplitDelayedPreparedBeforePropose) {
+        InitialScanTopicSplitRecovery(true, false, false, true);
     }
 
     Y_UNIT_TEST(InitialScanDebezium) {

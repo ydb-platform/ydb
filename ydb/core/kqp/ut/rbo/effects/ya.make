@@ -12,6 +12,7 @@ SRCS(
     kqp_inplace_update_ut.cpp
     kqp_overload_ut.cpp
     kqp_reattach_ut.cpp
+    kqp_returning_ut.cpp
     kqp_write_ut.cpp
 )
 

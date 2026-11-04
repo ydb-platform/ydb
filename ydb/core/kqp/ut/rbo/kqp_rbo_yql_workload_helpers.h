@@ -23,7 +23,7 @@ inline void Replace(std::string& s, const std::string& from, const std::string& 
 }
 
 inline TString GetFullPath(const TString& prefix, const TString& filePath) {
-    TString fullPath = ArcadiaFromCurrentLocation("ydb/core/kqp/ut/rbo/kqp_rbo_yql_workload_helpers.h", prefix + filePath);
+    TString fullPath = ArcadiaFromCurrentLocation(__SOURCE_FILE__, prefix + filePath);
 
     std::ifstream file(fullPath);
 

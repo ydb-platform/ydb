@@ -22,7 +22,7 @@ on:
         type: string
         default: ''
       test_targets:
-        description: 'Paths to tests (e.g., "ydb/library/actors/util/ut")'
+        description: 'Build/test target (remote: build_target; ydb_yc: test paths)'
         required: false
         type: string
         default: 'ydb/tests/olap/'
@@ -31,6 +31,46 @@ on:
         required: false
         type: string
         default: 'relwithdebinfo, release-asan'
+      increment:
+        description: 'remote only: compare graphs with previous commit (affected tests)'
+        required: false
+        type: boolean
+        default: false
+      test_size:
+        description: 'remote only: test size filter'
+        required: false
+        type: string
+        default: 'small,medium'
+      test_type:
+        description: 'remote only: test type filter (empty = all)'
+        required: false
+        type: string
+        default: ''
+      test_threads:
+        description: 'remote only: test threads'
+        required: false
+        type: string
+        default: '64'
+      additional_ya_make_args:
+        description: 'remote only: extra ya make args'
+        required: false
+        type: string
+        default: ''
+      test_retry_count:
+        description: 'remote only: max attempts (empty = action default)'
+        required: false
+        type: string
+        default: ''
+      collect_coredumps:
+        description: 'remote only: collect coredumps'
+        required: false
+        type: boolean
+        default: false
+      run_tests:
+        description: 'remote only: run tests'
+        required: false
+        type: boolean
+        default: true
       branches:
         description: 'Branches to test (ydb_yc only)'
         required: false
@@ -75,8 +115,16 @@ jobs:
           workflow_name: CI remote executor
           executor_ref: ${{ inputs.remote_executor_ref || github.ref_name }}
           code_ref: ${{ inputs.code_ref || github.sha }}
-          test_targets: ${{ inputs.test_targets }}
+          build_target: ${{ inputs.test_targets }}
           build_preset: ${{ inputs.build_preset }}
+          run_tests: ${{ inputs.run_tests }}
+          increment: ${{ inputs.increment }}
+          test_size: ${{ inputs.test_size }}
+          test_type: ${{ inputs.test_type }}
+          test_threads: ${{ inputs.test_threads }}
+          additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
+          test_retry_count: ${{ inputs.test_retry_count }}
+          collect_coredumps: ${{ inputs.collect_coredumps }}
           wait_mode: ${{ inputs.wait_for_remote && 'wait+mirror' || 'fire-and-forget' }}
 
   wait_remote:

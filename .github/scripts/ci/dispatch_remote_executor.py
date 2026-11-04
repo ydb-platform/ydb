@@ -91,30 +91,56 @@ def job_summary_url(run_id):
     return urllib.parse.quote(base, safe=":/")
 
 
+def _opt(name):
+    v = os.environ.get(name, "")
+    return v if v != "" else None
+
+
+def _opt_bool(name):
+    v = os.environ.get(name, "")
+    if v == "":
+        return None
+    return "true" if v.lower() in ("1", "true", "yes") else "false"
+
+
 def cmd_start():
     preset = env("BUILD_PRESET").split(",")[0].strip()
     executor_ref = env("EXECUTOR_REF")
     code_ref = env("CODE_REF")
-    targets = env("TEST_TARGETS")
+    build_target = env("BUILD_TARGET")
     wf_file = env("WORKFLOW_FILE")
     wait_mode = env("WAIT_MODE")
 
     print(f"Dispatching {wf_file} --ref {executor_ref}")
-    print(f"code_ref={code_ref} preset={preset} targets={targets}")
+    print(f"code_ref={code_ref} preset={preset} build_target={build_target}")
 
     _, wf = gh("GET", f"{api()}/actions/workflows/{wf_file}")
     workflow_id = wf.get("id")
     if not workflow_id:
         die(f"workflow {wf_file} not found")
 
-    payload = {
-        "ref": executor_ref,
-        "inputs": {
-            "code_ref": code_ref,
-            "test_targets": targets,
-            "build_preset": preset,
-        },
+    # workflow_dispatch API: all input values are strings (incl. bools).
+    inputs = {
+        "code_ref": code_ref,
+        "build_target": build_target,
+        "build_preset": preset,
     }
+    for key, val in (
+        ("run_tests", _opt_bool("RUN_TESTS")),
+        ("increment", _opt_bool("INCREMENT")),
+        ("test_size", _opt("TEST_SIZE")),
+        ("test_type", _opt("TEST_TYPE")),
+        ("test_threads", _opt("TEST_THREADS")),
+        ("link_threads", _opt("LINK_THREADS")),
+        ("test_retry_count", _opt("TEST_RETRY_COUNT")),
+        ("additional_ya_make_args", _opt("ADDITIONAL_YA_MAKE_ARGS")),
+        ("put_build_results_to_cache", _opt_bool("PUT_BUILD_RESULTS_TO_CACHE")),
+        ("collect_coredumps", _opt_bool("COLLECT_COREDUMPS")),
+    ):
+        if val is not None:
+            inputs[key] = val
+
+    payload = {"ref": executor_ref, "inputs": inputs}
     before = datetime.now(timezone.utc).timestamp() - 5
     code, _ = gh(
         "POST",
@@ -155,7 +181,8 @@ def cmd_start():
                 f"- **executor ref:** `{executor_ref}`",
                 f"- **code ref:** `{code_ref}`",
                 f"- **preset:** `{preset}`",
-                f"- **targets:** `{targets}`",
+                f"- **build_target:** `{build_target}`",
+                f"- **increment:** `{inputs.get('increment', '')}`",
                 f"- **executor run:** [{run_id}]({run_url})",
                 f"- **mode:** `{wait_mode}`",
                 "",
@@ -164,7 +191,7 @@ def cmd_start():
     )
     print(
         f"::notice title=Remote executor dispatched::{run_url} "
-        f"(code_ref={code_ref}, preset={preset}, mode={wait_mode})"
+        f"(code_ref={code_ref}, preset={preset}, target={build_target}, mode={wait_mode})"
     )
 
 

@@ -24,10 +24,40 @@ inputs:
     description: YDB ref/SHA for the executor to checkout (start)
     required: false
     default: ''
-  test_targets:
+  build_target:
     required: false
     default: ''
   build_preset:
+    required: false
+    default: ''
+  run_tests:
+    required: false
+    default: ''
+  increment:
+    required: false
+    default: ''
+  test_size:
+    required: false
+    default: ''
+  test_type:
+    required: false
+    default: ''
+  test_threads:
+    required: false
+    default: ''
+  link_threads:
+    required: false
+    default: ''
+  test_retry_count:
+    required: false
+    default: ''
+  additional_ya_make_args:
+    required: false
+    default: ''
+  put_build_results_to_cache:
+    required: false
+    default: ''
+  collect_coredumps:
     required: false
     default: ''
   wait_mode:
@@ -68,8 +98,18 @@ runs:
         WORKFLOW_NAME: ${{ inputs.workflow_name }}
         EXECUTOR_REF: ${{ inputs.executor_ref }}
         CODE_REF: ${{ inputs.code_ref }}
-        TEST_TARGETS: ${{ inputs.test_targets }}
+        BUILD_TARGET: ${{ inputs.build_target }}
         BUILD_PRESET: ${{ inputs.build_preset }}
+        RUN_TESTS: ${{ inputs.run_tests }}
+        INCREMENT: ${{ inputs.increment }}
+        TEST_SIZE: ${{ inputs.test_size }}
+        TEST_TYPE: ${{ inputs.test_type }}
+        TEST_THREADS: ${{ inputs.test_threads }}
+        LINK_THREADS: ${{ inputs.link_threads }}
+        TEST_RETRY_COUNT: ${{ inputs.test_retry_count }}
+        ADDITIONAL_YA_MAKE_ARGS: ${{ inputs.additional_ya_make_args }}
+        PUT_BUILD_RESULTS_TO_CACHE: ${{ inputs.put_build_results_to_cache }}
+        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
         WAIT_MODE: ${{ inputs.wait_mode }}
         EXECUTOR_RUN_ID: ${{ inputs.executor_run_id }}
         EXECUTOR_RUN_URL: ${{ inputs.executor_run_url }}

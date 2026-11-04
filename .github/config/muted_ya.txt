@@ -58,6 +58,7 @@ ydb/core/viewer/tests test.py.TestViewer.test_topic_data_cdc
 ydb/core/viewer/ut Viewer.TabletMerging
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedClusterTableFailsGetClustersList
+ydb/services/ydb/backup_ut EncryptedExportTest.EncryptedExportAndImportWithLargeDataBatch-WithCompression-DirectPartImport
 ydb/tests/fq/restarts test_insert_restarts.py.TestS3.test_atomic_upload_commit[v1-client0]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk

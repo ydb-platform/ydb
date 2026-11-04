@@ -679,7 +679,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     TVector<std::unique_ptr<IRule>> inlineSimpleSubPlanStageRules;
     // At first try to pull correlated predicates up. The rules below create a dependent join for the rest.
-    inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TPullUpCorrelatedExistsRule>());
+    inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TPullUpCorrelatedPredicateRule>());
     inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TInlineSimpleInExistsSubplanRule>());
     inlineSimpleSubPlanStageRules.emplace_back(std::make_unique<TInlineGenericInExistsSubplanRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline in/exists subplans", std::move(inlineSimpleSubPlanStageRules)));

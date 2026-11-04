@@ -57,13 +57,13 @@ class TInlineScalarSubplanRule : public IRule {
 };
 
 /**
- * Rewrites a correlated EXISTS or NOT EXISTS conjunct into a semi or anti join: the
+ * Rewrites a correlated [NOT] EXISTS or [NOT] IN conjunct into a semi or anti join: the
  * correlated predicates become join keys and join filters, so no dependent join is needed.
  * Runs before the other inlining rules, which decorrelate whatever this rule leaves.
  */
-class TPullUpCorrelatedExistsRule : public ISimplifiedRule {
+class TPullUpCorrelatedPredicateRule : public ISimplifiedRule {
   public:
-    TPullUpCorrelatedExistsRule() : ISimplifiedRule("Pull up correlated exists", ERuleProperties::RequireTypes) {}
+    TPullUpCorrelatedPredicateRule() : ISimplifiedRule("Pull up correlated predicate", ERuleProperties::RequireTypes) {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps& props) const override;
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;

@@ -103,17 +103,19 @@ TInfoUnitId PortId(TOpReplicate& port, TInfoUnitId source) {
     return port.IsPrimary() ? source : *port.GetRebindings().Find(source);
 }
 
-// A caller and an EXISTS subplan that reads the caller's Outer column through Capture.
-struct TExistsFixture : NTests::TIdTestContext {
+// A caller and a subplan that reads the caller's Outer column through Capture.
+struct TPullUpFixture : NTests::TIdTestContext {
     const bool Nullable;
     const TInfoUnitId Outer = Id();
     const TInfoUnitId Inner = Id();
     const TInfoUnitId Capture = Id();
+    const TInfoUnitId Lookup = Id();
+    const TInfoUnitId Result = Id();
     const TInfoUnitId Call = Id();
-    const TIntrusivePtr<IOperator> Left = Read({Outer});
-    const TIntrusivePtr<IOperator> Input = Read({Inner});
+    const TIntrusivePtr<IOperator> Left = Read({Outer, Lookup});
+    const TIntrusivePtr<IOperator> Input = Read({Inner, Result});
 
-    explicit TExistsFixture(bool nullable = false)
+    explicit TPullUpFixture(bool nullable = false)
         : Nullable(nullable)
     {
         SetTypes(*Left);
@@ -151,8 +153,18 @@ struct TExistsFixture : NTests::TIdTestContext {
         AddExists(std::move(body), Call);
     }
 
+    void AddIn(TIntrusivePtr<IOperator> body, TInfoUnitId result) {
+        SetTypes(*body);
+        Props.Subplans.Add(Call, std::move(body), ESubplanType::IN_SUBPLAN, {Lookup}, result);
+        Props.Subplans.RefreshDependencies(Call);
+    }
+
+    void AddIn(TIntrusivePtr<IOperator> body) {
+        AddIn(std::move(body), Result);
+    }
+
     TIntrusivePtr<IOperator> PullUp(const TExpression& predicate) {
-        auto result = TPullUpCorrelatedExistsRule().SimpleMatchAndApply(MakeIntrusive<TOpFilter>(Left, Pos, predicate), RboCtx, Props);
+        auto result = TPullUpCorrelatedPredicateRule().SimpleMatchAndApply(MakeIntrusive<TOpFilter>(Left, Pos, predicate), RboCtx, Props);
         NTests::AssertIdInvariants(*result, Props);
         return result;
     }
@@ -160,7 +172,7 @@ struct TExistsFixture : NTests::TIdTestContext {
     void AssertDeclined(const TExpression& predicate) {
         auto filter = MakeIntrusive<TOpFilter>(Left, Pos, predicate);
         const auto* original = filter.get();
-        auto result = TPullUpCorrelatedExistsRule().SimpleMatchAndApply(filter, RboCtx, Props);
+        auto result = TPullUpCorrelatedPredicateRule().SimpleMatchAndApply(filter, RboCtx, Props);
         UNIT_ASSERT(result.get() == original);
         UNIT_ASSERT(Props.Subplans.Contains(Call));
     }
@@ -170,6 +182,12 @@ void AssertOnlyKey(const TOpJoin& join, TInfoUnitId caller, TInfoUnitId subplan)
     UNIT_ASSERT_VALUES_EQUAL(join.JoinKeys.Items().size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(join.JoinKeys.Items()[0].first, caller);
     UNIT_ASSERT_VALUES_EQUAL(join.JoinKeys.Items()[0].second, subplan);
+}
+
+bool HasKey(const TOpJoin& join, TInfoUnitId caller, TInfoUnitId subplan) {
+    return AnyOf(join.JoinKeys.Items(), [&](const auto& key) {
+        return key.first == caller && key.second == subplan;
+    });
 }
 
 } // anonymous namespace
@@ -487,7 +505,7 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
 
     Y_UNIT_TEST(ExistsPullUpTurnsPredicatesIntoJoinConditions) {
         for (const bool negated : {false, true}) {
-            TExistsFixture f;
+            TPullUpFixture f;
             f.AddExists(f.Correlated(MakeConjunction({f.Compare("=="), f.Compare("!=")})));
 
             auto result = f.PullUp(negated ? MakeNegation(f.Column(f.Call)) : f.Column(f.Call));
@@ -504,7 +522,7 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
     }
 
     Y_UNIT_TEST(ExistsPullUpOrientsJoinKeys) {
-        TExistsFixture f;
+        TPullUpFixture f;
         f.AddExists(f.Correlated(MakeBinaryPredicate("==", f.Column(f.Capture), f.Column(f.Inner))));
 
         auto result = f.PullUp(f.Column(f.Call));
@@ -513,7 +531,7 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
     }
 
     Y_UNIT_TEST(ExistsPullUpKeepsLocalPredicatesOnTheInput) {
-        TExistsFixture f;
+        TPullUpFixture f;
         f.AddExists(f.Correlated(MakeConjunction({f.Compare("=="), MakeBinaryPredicate(">", f.Column(f.Inner), f.Constant())})));
 
         auto result = f.PullUp(f.Column(f.Call));
@@ -526,7 +544,7 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
     }
 
     Y_UNIT_TEST(ExistsPullUpKeepsCallerOnlyPredicatesInTheJoin) {
-        TExistsFixture f;
+        TPullUpFixture f;
         f.AddExists(f.Correlated(MakeConjunction({f.Compare("=="), MakeBinaryPredicate(">", f.Column(f.Capture), f.Constant())})));
 
         auto result = f.PullUp(f.Column(f.Call));
@@ -538,7 +556,7 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
     }
 
     Y_UNIT_TEST(ExistsPullUpLooksThroughMaps) {
-        TExistsFixture f;
+        TPullUpFixture f;
         const auto alias = f.Id();
         auto map = f.Copies(f.Correlated(f.Compare("==")), {{alias, f.Inner}});
         f.AddExists(MakeIntrusive<TOpFilter>(map, f.Pos, MakeBinaryPredicate("!=", f.Column(alias), f.Column(f.Capture))));
@@ -553,7 +571,7 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
     }
 
     Y_UNIT_TEST(ExistsPullUpUsesPlainKeysForNullableColumns) {
-        TExistsFixture f(/*nullable=*/true);
+        TPullUpFixture f(/*nullable=*/true);
         f.AddExists(f.Correlated(MakeConjunction({f.Compare("=="), f.Compare("!=")})));
 
         auto result = f.PullUp(f.Column(f.Call));
@@ -564,7 +582,7 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
     }
 
     Y_UNIT_TEST(ExistsPullUpKeepsTheUncorrelatedInputWhole) {
-        TExistsFixture f;
+        TPullUpFixture f;
         const auto value = f.Id();
         TAggregationIUs functions;
         functions.Add(f.Id(), TOpAggregationTraits{value, "avg"});
@@ -582,7 +600,7 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
     }
 
     Y_UNIT_TEST(ExistsPullUpSkipsConjunctsItCannotRewrite) {
-        TExistsFixture f;
+        TPullUpFixture f;
         const auto key = f.Id(), capture = f.Id(), rewritable = f.Id();
         f.AddExists(f.Correlated(f.Compare(">")));
         f.AddExists(MakeIntrusive<TOpFilter>(f.Captured(f.Read({key}), capture), f.Pos,
@@ -598,19 +616,19 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
     }
 
     Y_UNIT_TEST(ExistsPullUpDeclinesWithoutEquality) {
-        TExistsFixture f;
+        TPullUpFixture f;
         f.AddExists(f.Correlated(f.Compare(">")));
         f.AssertDeclined(f.Column(f.Call));
     }
 
     Y_UNIT_TEST(ExistsPullUpDeclinesCorrelationBelowLimit) {
-        TExistsFixture f;
+        TPullUpFixture f;
         f.AddExists(MakeIntrusive<TOpLimit>(f.Correlated(f.Compare("==")), f.Pos, f.Constant(), EOpPhase::Undefined));
         f.AssertDeclined(f.Column(f.Call));
     }
 
     Y_UNIT_TEST(ExistsPullUpDeclinesCorrelationBelowAggregate) {
-        TExistsFixture f;
+        TPullUpFixture f;
         TAggregationIUs functions;
         functions.Add(f.Id(), TOpAggregationTraits{f.Inner, "count"});
         f.AddExists(MakeIntrusive<TOpAggregate>(f.Correlated(f.Compare("==")), std::move(functions), TOrderedIUs<>{},
@@ -619,21 +637,21 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
     }
 
     Y_UNIT_TEST(ExistsPullUpDeclinesVolatilePredicates) {
-        TExistsFixture f;
+        TPullUpFixture f;
         f.AddExists(f.Correlated(MakeConjunction({f.Compare("=="),
             MakeBinaryPredicate(">", MakeUnaryCallable("Random", f.Column(f.Inner)), f.Constant())})));
         f.AssertDeclined(f.Column(f.Call));
     }
 
     Y_UNIT_TEST(ExistsPullUpDeclinesFiltersWithoutBlockHashJoin) {
-        TExistsFixture f;
+        TPullUpFixture f;
         f.Config->SetUseBlockHashJoin(false);
         f.AddExists(f.Correlated(MakeConjunction({f.Compare("=="), f.Compare("!=")})));
         f.AssertDeclined(f.Column(f.Call));
     }
 
     Y_UNIT_TEST(ExistsPullUpDeclinesFiltersOnNonDataKeys) {
-        TExistsFixture f;
+        TPullUpFixture f;
         TIntrusivePtr<IOperator> body = f.Correlated(MakeConjunction({f.Compare("=="), f.Compare("!=")}));
         f.AddExists(body);
         const auto* listType = f.ExprCtx.MakeType<TListExprType>(f.ExprCtx.MakeType<TDataExprType>(EDataSlot::Int32));
@@ -643,26 +661,101 @@ Y_UNIT_TEST_SUITE(KqpRboDecorrelation) {
     }
 
     Y_UNIT_TEST(ExistsPullUpDeclinesRepeatedCalls) {
-        TExistsFixture f;
+        TPullUpFixture f;
         f.AddExists(f.Correlated(f.Compare("==")));
         f.AssertDeclined(MakeConjunction({f.Column(f.Call),
             MakeBinaryPredicate("==", f.Column(f.Call), MakeConstant("Bool", "true", f.Pos, &f.ExprCtx))}));
     }
 
     Y_UNIT_TEST(ExistsPullUpDeclinesUncorrelatedExists) {
-        TExistsFixture f;
+        TPullUpFixture f;
         f.Props.Subplans.Add(f.Call, f.Input, ESubplanType::EXISTS);
         f.AssertDeclined(f.Column(f.Call));
     }
 
-    Y_UNIT_TEST(ExistsPullUpDeclinesInSubplans) {
-        TExistsFixture f;
-        f.Props.Subplans.Add(f.Call, f.Input, ESubplanType::IN_SUBPLAN, {f.Outer}, f.Inner);
+    Y_UNIT_TEST(InPullUpAddsTheLookupKey) {
+        for (const bool negated : {false, true}) {
+            TPullUpFixture f;
+            f.AddIn(f.Correlated(f.Compare("==")));
+
+            auto result = f.PullUp(negated ? MakeNegation(f.Column(f.Call)) : f.Column(f.Call));
+
+            auto& join = CastOperator<TOpJoin>(*result);
+            UNIT_ASSERT_VALUES_EQUAL(join.JoinKind, negated ? "LeftOnly" : "LeftSemi");
+            UNIT_ASSERT(join.GetRightInput() == f.Input);
+            UNIT_ASSERT_VALUES_EQUAL(join.JoinKeys.Items().size(), 2);
+            UNIT_ASSERT(HasKey(join, f.Outer, f.Inner));
+            UNIT_ASSERT(HasKey(join, f.Lookup, f.Result));
+            UNIT_ASSERT(join.JoinFilters.empty());
+            UNIT_ASSERT(!f.Props.Subplans.Contains(f.Call));
+        }
+    }
+
+    Y_UNIT_TEST(InPullUpNeedsNoEqualityInTheSubplan) {
+        TPullUpFixture f;
+        f.AddIn(f.Correlated(f.Compare(">")));
+
+        auto result = f.PullUp(f.Column(f.Call));
+
+        auto& join = CastOperator<TOpJoin>(*result);
+        AssertOnlyKey(join, f.Lookup, f.Result);
+        UNIT_ASSERT_VALUES_EQUAL(join.JoinFilters.size(), 1);
+        UNIT_ASSERT(join.JoinFilters[0].GetRawInputIUs() == (TUnorderedIUs{f.Inner, f.Outer}));
+    }
+
+    Y_UNIT_TEST(InPullUpAllowsNullableColumns) {
+        TPullUpFixture f(/*nullable=*/true);
+        f.AddIn(f.Correlated(f.Compare("==")));
+
+        auto result = f.PullUp(f.Column(f.Call));
+
+        auto& join = CastOperator<TOpJoin>(*result);
+        UNIT_ASSERT_VALUES_EQUAL(join.JoinKind, "LeftSemi");
+        UNIT_ASSERT(!HasEqualNullsKey(join.JoinKeys));
+    }
+
+    Y_UNIT_TEST(InPullUpDeclinesUncorrelatedSubplans) {
+        TPullUpFixture f;
+        f.Props.Subplans.Add(f.Call, f.Input, ESubplanType::IN_SUBPLAN, {f.Lookup}, f.Result);
         f.AssertDeclined(f.Column(f.Call));
     }
 
+    Y_UNIT_TEST(InPullUpDeclinesResultReadingTheCaller) {
+        TPullUpFixture f;
+        const auto result = f.Id();
+        f.AddIn(f.Copies(f.Correlated(f.Compare("==")), {{result, f.Capture}}), result);
+        f.AssertDeclined(f.Column(f.Call));
+    }
+
+    Y_UNIT_TEST(NotInPullUpAllowsNullableCorrelationColumns) {
+        TPullUpFixture f;
+        f.SetType(*f.Left, {f.Outer});
+        auto body = f.Correlated(f.Compare("=="));
+        f.AddIn(body);
+        f.SetType(*body, {f.Inner, f.Capture});
+
+        auto result = f.PullUp(MakeNegation(f.Column(f.Call)));
+
+        UNIT_ASSERT_VALUES_EQUAL(CastOperator<TOpJoin>(*result).JoinKind, "LeftOnly");
+    }
+
+    Y_UNIT_TEST(NotInPullUpDeclinesNullableLookup) {
+        TPullUpFixture f;
+        f.SetType(*f.Left, {f.Lookup});
+        f.AddIn(f.Correlated(f.Compare("==")));
+        f.AssertDeclined(MakeNegation(f.Column(f.Call)));
+    }
+
+    Y_UNIT_TEST(NotInPullUpDeclinesNullableResult) {
+        TPullUpFixture f;
+        auto body = f.Correlated(f.Compare("=="));
+        f.AddIn(body);
+        f.SetType(*body, {f.Result});
+        f.AssertDeclined(MakeNegation(f.Column(f.Call)));
+    }
+
     Y_UNIT_TEST(ExistsPullUpLeavesTheSubplanIntactForTheDependentJoin) {
-        TExistsFixture f;
+        TPullUpFixture f;
         auto correlated = f.Correlated(f.Compare("=="));
         const auto captured = correlated->GetInput();
         // The map reads the capture, so the rule declines only after reaching the filter below it.

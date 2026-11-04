@@ -100,9 +100,9 @@ namespace NKikimr::NSqsTopic {
         common.emplace_back("topic", adjustedTopicPath);
         // QueueUrl stores the path form. MetricsConsumerName converts the config name,
         // so restore that name before applying the label function.
-        NKikimrPQ::TPQTabletConfig::TConsumer consumer;
-        consumer.SetName(NPersQueue::ConvertNewConsumerName(consumerName, AppData()->PQConfig));
-        common.emplace_back("consumer", NPQ::MetricsConsumerName(consumer));
+        const auto& pqConfig = AppData()->PQConfig;
+        common.emplace_back("consumer", NPQ::MetricsConsumerName(
+            NPersQueue::ConvertNewConsumerName(consumerName, pqConfig), pqConfig));
         std::move(labels.begin(), labels.end(), std::back_inserter(common));
         return common;
     }

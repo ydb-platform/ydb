@@ -276,7 +276,8 @@ jobs:
     needs: prepare
     name: ${{ matrix.branch }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
-    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
+    # Temporary: pin to large-disk keep runner (no tmp/coredump cleanup) for disk usage measurement.
+    runs-on: [ self-hosted, auto-provisioned, build-preset-release-asan-large-disk-keep ]
     strategy:
       fail-fast: false
       matrix:

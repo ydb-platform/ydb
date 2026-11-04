@@ -811,11 +811,11 @@ runs:
             break
           fi
 
-          # Free the bounded coredump volume for the next try (ya already postprocessed dumps).
+          # Keep /coredumps across retries for end-of-run disk measurement (dev/large_runner_keep_tmp).
           if [ "${COLLECT_COREDUMPS}" = "true" ]; then
-            echo "Cleaning /coredumps before retry $((RETRY + 1))"
-            sudo find /coredumps -mindepth 1 -delete || true
+            echo "Keeping /coredumps before retry $((RETRY + 1))"
             df -h /coredumps || true
+            sudo du -xh -s /coredumps 2>/dev/null || true
           fi
 
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
@@ -824,10 +824,11 @@ runs:
           fi
         done;
 
-        # Drop dump files after the last try; volume teardown is in a dedicated always() step.
+        # Keep dump files after the last try for end-of-run disk measurement.
         if [ "${COLLECT_COREDUMPS}" = "true" ]; then
-          echo "Cleaning /coredumps after all test tries"
-          sudo find /coredumps -mindepth 1 -delete || true
+          echo "Keeping /coredumps after all test tries"
+          df -h /coredumps || true
+          sudo du -xh -s /coredumps 2>/dev/null || true
         fi
 
         if [ $BUILD_FAILED = 0 ]; then
@@ -925,26 +926,22 @@ runs:
       shell: bash
       run: df -h
 
-    - name: cleanup coredump volume
+    - name: report coredump volume (keep, no cleanup)
       if: always() && steps.prepare_s3cmd.outcome == 'success'
       shell: bash
       env:
         COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != 'false' }}
       run: |
-        if [ "${COLLECT_COREDUMPS}" != "true" ]; then
-          exit 0
-        fi
+        set +e
         set -x
         COREDUMP_MNT="${COREDUMP_MNT:-/coredumps}"
         COREDUMP_IMG="${COREDUMP_IMG:-/var/lib/ydb-ci-coredumps.img}"
-
-        # No-op if volume was never created (collect disabled or setup failed early).
+        echo "COLLECT_COREDUMPS=${COLLECT_COREDUMPS}"
+        df -h / "$COREDUMP_MNT" 2>/dev/null || true
         if mountpoint -q "$COREDUMP_MNT"; then
-          sudo find "$COREDUMP_MNT" -mindepth 1 -delete || true
-          sudo umount "$COREDUMP_MNT" || true
+          sudo du -xh --max-depth=1 "$COREDUMP_MNT" 2>/dev/null | sort -hr | head -20
         fi
-        sudo rm -f "$COREDUMP_IMG" || true
-        df -h / || true
+        ls -lh "$COREDUMP_IMG" 2>/dev/null || true
 
     - name: build_stats
       shell: bash
@@ -999,15 +996,17 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
       run:  echo "Check cancelled" | .github/scripts/tests/comment-pr.py --color black
 
-    - name: cleanup tmp
+    - name: report tmp (keep, no cleanup)
       if: always() && steps.prepare_s3cmd.outcome == 'success'
       shell: bash
       run: |
         set +e
         set -x
-        if [ -n "${TMP_DIR:-}" ]; then
-          rm -rf "$TMP_DIR"
+        df -h / /tmp /var/tmp /dev/shm 2>/dev/null || true
+        echo "TMP_DIR=${TMP_DIR:-}"
+        if [ -n "${TMP_DIR:-}" ] && [ -d "${TMP_DIR}" ]; then
+          sudo du -xh --max-depth=1 "$TMP_DIR" 2>/dev/null | sort -hr | head -20
         fi
-        # mktemp / graph_compare leftovers; does not match /tmp/systemd-private-*
-        rm -rf /tmp/tmp*
-        df -h / || true
+        sudo du -xh -s /tmp /var/tmp /home/runner/.ya/tmp 2>/dev/null || true
+        sudo du -xh --max-depth=1 /tmp 2>/dev/null | sort -hr | head -20
+        sudo du -xh --max-depth=1 /home/runner/.ya 2>/dev/null | sort -hr | head -15

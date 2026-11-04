@@ -2707,7 +2707,8 @@ Y_UNIT_TEST_SUITE(StreamResultFreshness) {
 }
 
 Y_UNIT_TEST_SUITE(StreamRetry) {
-    void RetryPausedBootstrapWithPublicConfig(bool failConsumer, bool changeCredentials) {
+    void RetryPausedBootstrapWithPublicConfig(bool failConsumer, bool changeCredentials,
+            TDuration responseDelay = TDuration::Zero()) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         CreateSourceTable(env, "bootstrap");
@@ -2734,6 +2735,7 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
 
         bool rejectSource = true;
         bool holdResults = true;
+        THashSet<TActorId> delayedCreators;
         TVector<TAutoPtr<IEventHandle>> pending;
         auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
             if (!ev->HasEvent()) {
@@ -2765,6 +2767,14 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
                 return;
             }
 
+            if (responseDelay && delayedCreators.insert(ev->Sender).second) {
+                // Visit a timestamp past the old deadline before delivering the result.
+                runtime.Schedule(new IEventHandle(env.GetSender(), env.GetSender(), new TEvents::TEvWakeup()),
+                    responseDelay - TDuration::Seconds(1));
+                runtime.Schedule(ev.Release(), responseDelay);
+                return;
+            }
+
             pending.push_back(std::move(ev));
         });
         const auto info = StartReplication(
@@ -2776,12 +2786,13 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
             NKikimrSchemeOp::EIndexTypeGlobal,
             true,
             false);
+        // Source setup uses real SDK callbacks, independently of simulated
+        // time. The test runner's wall-clock timeout bounds these waits.
         runtime.WaitFor(
             "failed PAUSED source setup",
             [&] {
                 return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
-            },
-            TDuration::Seconds(30));
+            });
         const auto failed = DescribeReplication(env, info);
         UNIT_ASSERT_VALUES_EQUAL(failed->Get()->Record.TargetsSize(), 1);
         const TWorkerId worker(1, failed->Get()->Record.GetTargets(0).GetId(), 0);
@@ -2815,8 +2826,7 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
         UNIT_ASSERT_C(altered.IsSuccess(), altered.GetIssues().ToString());
         runtime.WaitFor(
             "retried source setup result",
-            [&] { return pending.size() == 1; },
-            TDuration::Seconds(30));
+            [&] { return pending.size() == 1; });
         UNIT_ASSERT_VALUES_EQUAL(readStream(TReplication::EStreamState::Creating), stream);
         UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasPaused());
 
@@ -2824,8 +2834,8 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
         RestartController(env, info.ControllerId);
         runtime.WaitFor(
             "retried source setup after restart",
-            [&] { return pending.size() == 2; },
-            TDuration::Seconds(30));
+            [&] { return pending.size() == 2; });
+        UNIT_ASSERT_VALUES_EQUAL(delayedCreators.size(), responseDelay ? 2 : 0);
         UNIT_ASSERT_VALUES_EQUAL(readStream(TReplication::EStreamState::Creating), stream);
         holdResults = false;
         runtime.Send(pending.back().Release());
@@ -2873,6 +2883,10 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
 
     Y_UNIT_TEST(PausedBootstrapCredentialRetry) {
         RetryPausedBootstrapWithPublicConfig(false, true);
+    }
+
+    Y_UNIT_TEST(PausedBootstrapCredentialRetryWithDelayedSourceResults) {
+        RetryPausedBootstrapWithPublicConfig(false, true, TDuration::Minutes(1));
     }
 
     Y_UNIT_TEST(PausedBootstrapUnchangedCredentialRetryAfterConsumerFailure) {

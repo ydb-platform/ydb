@@ -174,6 +174,9 @@ do_start() {
     echo "- **executor run:** [${run_id}](${run_url})"
     echo "- **mode:** \`${WAIT_MODE:-unknown}\`"
   } >> "${GITHUB_STEP_SUMMARY}"
+
+  # Visible on the run page Annotations while other jobs are still running.
+  echo "::notice title=Remote executor dispatched::${run_url} (code_ref=${CODE_REF}, preset=${preset}, mode=${WAIT_MODE:-unknown})"
 }
 
 do_wait() {

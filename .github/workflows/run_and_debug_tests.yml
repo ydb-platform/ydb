@@ -42,17 +42,20 @@ on:
         type: boolean
         default: false
       wait_for_remote:
-        description: 'remote only: true = wait+mirror summary (runner-waiter); false = fire-and-forget link only (ubuntu-latest)'
+        description: 'remote only: true = second job wait+mirror on runner-waiter; false = fire-and-forget after dispatch on ubuntu-latest'
         required: false
         type: boolean
         default: true
 
 jobs:
+  # Completes in seconds so Job summary ("what launched") is visible while wait runs.
   dispatch_remote:
     if: inputs.executor == 'remote'
-    # wait+mirror can outlive a fat build; fire-and-forget is seconds on hosted.
-    runs-on: ${{ inputs.wait_for_remote && fromJSON('["self-hosted","runner-waiter"]') || 'ubuntu-latest' }}
-    timeout-minutes: ${{ inputs.wait_for_remote && 400 || 15 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      executor_run_id: ${{ steps.dispatch.outputs.executor_run_id }}
+      executor_run_url: ${{ steps.dispatch.outputs.executor_run_url }}
     steps:
       - name: Checkout dispatch helpers
         uses: actions/checkout@v5
@@ -61,7 +64,6 @@ jobs:
             .github/scripts/ci
           sparse-checkout-cone-mode: false
 
-      # Own step so "what launched" lands in Job summary before the long wait.
       - name: Dispatch executor workflow on remote_executor_ref
         id: dispatch
         env:
@@ -76,12 +78,25 @@ jobs:
         shell: bash
         run: bash .github/scripts/ci/dispatch_remote_executor.sh start
 
+  wait_remote:
+    if: inputs.executor == 'remote' && inputs.wait_for_remote
+    needs: dispatch_remote
+    runs-on: [self-hosted, runner-waiter]
+    # Must outlive the fat-runner executor.
+    timeout-minutes: 400
+    steps:
+      - name: Checkout dispatch helpers
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts/ci
+          sparse-checkout-cone-mode: false
+
       - name: Wait and mirror executor summary
-        if: inputs.wait_for_remote
         env:
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          EXECUTOR_RUN_ID: ${{ steps.dispatch.outputs.executor_run_id }}
-          EXECUTOR_RUN_URL: ${{ steps.dispatch.outputs.executor_run_url }}
+          EXECUTOR_RUN_ID: ${{ needs.dispatch_remote.outputs.executor_run_id }}
+          EXECUTOR_RUN_URL: ${{ needs.dispatch_remote.outputs.executor_run_url }}
           REPO: ${{ github.repository }}
           AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
           AWS_BUCKET: ${{ vars.AWS_BUCKET }}

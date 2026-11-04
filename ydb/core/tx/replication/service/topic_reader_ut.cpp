@@ -546,6 +546,26 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
 
         s.AssertStartupDataLoss(reader);
     }
+
+    Y_UNIT_TEST(TeardownWithPendingReadSessionKeepsGrpcServiceAlive) {
+        TRetentionGapTest s;
+        auto& runtime = s.Env.GetRuntime();
+
+        TVector<TAutoPtr<IEventHandle>> heldReads;
+        auto readObserver = runtime.AddObserver<NGRpcProxy::V1::TEvPQProxy::TEvRead>([&](NGRpcProxy::V1::TEvPQProxy::TEvRead::TPtr& ev) {
+            heldReads.emplace_back(ev.Release());
+        });
+
+        const auto reader = s.StartReader();
+        s.Env.SendAsync(reader, new TEvWorker::TEvPoll());
+
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] {
+            return !heldReads.empty();
+        };
+        runtime.DispatchEvents(options, TDuration::Seconds(30));
+        UNIT_ASSERT(!heldReads.empty());
+    }
 }
 
 }

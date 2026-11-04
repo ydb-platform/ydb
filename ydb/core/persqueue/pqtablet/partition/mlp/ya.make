@@ -14,9 +14,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/iterator
-    ydb/core/base
     ydb/core/persqueue/common
-    ydb/library/persqueue/topic_parser
     ydb/core/persqueue/common/proxy
     ydb/core/persqueue/events
     ydb/core/persqueue/pqtablet/common

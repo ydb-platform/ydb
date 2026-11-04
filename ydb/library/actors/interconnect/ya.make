@@ -99,6 +99,7 @@ IF (OS_LINUX)
 ENDIF()
 
 RECURSE_FOR_TESTS(
+    address
     ut
     ut_fat
     ut_huge_cluster

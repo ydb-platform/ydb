@@ -1528,6 +1528,58 @@ namespace NActors {
             }
         }
 
+        NInterconnect::NRdma::TRdmaCtx* GetRdmaCtx() {
+            using namespace NInterconnect::NRdma;
+            TRdmaCtx* rdmaCtx = nullptr;
+
+            if (Common->Settings.RdmaAddress) {
+                const NInterconnect::TAddress address(Common->Settings.RdmaAddress, 0);
+                rdmaCtx = NLinkMgr::GetCtx(address);
+                if (rdmaCtx) {
+                    LOG_TRACE_IC("ICRDMA", "Found verbs context for specified RDMA address: %s",
+                        Common->Settings.RdmaAddress.data());
+                } else {
+                    const TString fallbackTarget = Common->Settings.RdmaInterface
+                        ? "the specified RDMA interface"
+                        : "the local TCP socket address";
+                    LOG_WARN_IC("ICRDMA", "Unable to find verbs context for specified RDMA address: %s. Falling back to %s",
+                        Common->Settings.RdmaAddress.data(), fallbackTarget.data());
+                }
+            }
+
+            if (!rdmaCtx && Common->Settings.RdmaInterface) {
+                rdmaCtx = NLinkMgr::GetCtxByInterface(Common->Settings.RdmaInterface);
+                if (rdmaCtx) {
+                    LOG_TRACE_IC("ICRDMA", "Found verbs context for specified RDMA interface: %s",
+                        Common->Settings.RdmaInterface.data());
+                } else {
+                    LOG_WARN_IC("ICRDMA", "Unable to find verbs context for specified RDMA interface: %s. Falling back to the local TCP socket address",
+                        Common->Settings.RdmaInterface.data());
+                }
+            }
+
+            if (!rdmaCtx) {
+                auto sockname = MainChannel.GetSocketRef()->GetSockName();
+                if (const NInterconnect::TAddress* addr = std::get_if<NInterconnect::TAddress>(&sockname)) {
+                    rdmaCtx = NLinkMgr::GetCtx(*addr);
+                    if (rdmaCtx) {
+                        LOG_TRACE_IC("ICRDMA", "Found verbs context for local TCP address: %s",
+                            addr->ToString().data());
+                    } else {
+                        LOG_WARN_IC("ICRDMA", "Unable to find verbs context using local TCP address: %s",
+                            addr->ToString().data());
+                    }
+                } else if (int* err = get_if<int>(&sockname)) {
+                    LOG_ERROR_IC("ICRDMA", "Unable to get local address of the TCP socket: %d, err: %d. RDMA will not be used",
+                        (int)(*MainChannel.GetSocketRef()), *err);
+                } else {
+                    LOG_CRIT_IC("ICRDMA", "Unknown GetSockName return type for socket: %d. It is a BUG. RDMA will not be used",
+                        (int)(*MainChannel.GetSocketRef()));
+                }
+            }
+            return rdmaCtx;
+        }
+
         void CreateRdmaPrimitives() {
             using namespace NInterconnect::NRdma;
             // Rdma disabled
@@ -1535,26 +1587,7 @@ namespace NActors {
                 return;
             }
 
-            auto sockname = MainChannel.GetSocketRef()->GetSockName();
-
-            TRdmaCtx* rdmaCtx = nullptr;
-
-            if (const NInterconnect::TAddress* addr = std::get_if<NInterconnect::TAddress>(&sockname)) {
-                rdmaCtx = NLinkMgr::GetCtx(*addr);
-                if (rdmaCtx) {
-                    LOG_TRACE_IC("ICRDMA", "Found verbs fontext for address %s",
-                        std::get<0>(sockname).ToString().data());
-                } else {
-                    LOG_WARN_IC("ICRDMA", "Unable to find verbs context using address %s",
-                        std::get<0>(sockname).ToString().data());
-                }
-            } else if (int* err = get_if<int>(&sockname)) {
-                LOG_ERROR_IC("ICRDMA", "Unable to get local address for socket: %d, err: %d. Rdma will not be used",
-                    (int)(*MainChannel.GetSocketRef()), *err);
-            } else {
-                LOG_CRIT_IC("ICRDMA", "Unknown getsockname return type for socket: %d. Rdma will not be used",
-                    (int)(*MainChannel.GetSocketRef()));
-            }
+            TRdmaCtx* rdmaCtx = GetRdmaCtx();
 
             if (rdmaCtx) {
                 if (ICq::TPtr cqPtr = CreateRdmaCq(rdmaCtx)) {

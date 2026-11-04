@@ -258,39 +258,6 @@ namespace NKikimr {
             const double rateThreshold = Config->HullCompLevelRateThreshold;
             auto fullCompactionAttrs = FullCompactionState.GetFullCompactionAttrsForLevelCompactionSelector(RTCtx);
             NHullComp::TSelectorParams params = {Boundaries, rateThreshold, TInstant::Seconds(0), fullCompactionAttrs};
-            params.AppendBlockSize = RTCtx->PDiskCtx->Dsk->AppendBlockSize;
-            // Same placement as THullCompaction::UseStripeSst: Blocks and Barriers go into
-            // the stripe heap, LogoBlobs stay in exclusive chunks.
-            // A planned compaction writes exclusive chunks only.
-            if constexpr (!std::is_same_v<TKey, TKeyLogoBlob>) {
-                if (Config->HeapAllocatorMaxSstInBytes > 0 &&
-                        Config->UseHeapAllocator && !InPlannedMode() && !Planned.Leased) {
-                    params.StripeSstBytes = Config->HeapAllocatorMaxSstInBytes;
-                }
-            }
-            {
-                const auto& oos = HullDs->HullCtx->VCtx->GetOutOfSpaceState();
-                const ui32 reserve = ui32(Config->HullCompEmergencyChunkReserve);
-                // What PDisk will really let this owner allocate, which is not its nominal
-                // personal share. LocalTotalChunks is that share and LocalUsedChunks the
-                // chunks the owner physically holds, so an owner legitimately past its
-                // share -- its personal colour is capped and the shared pool still has
-                // room -- came out with a budget of zero and could not run even the small
-                // reclaiming compaction that would bring it back under. Headroom below
-                // BLACK is the boundary AllocateChunkForOwner() actually enforces. Left
-                // unbounded until the first space observation arrives.
-                if (const TSpaceHeadroom headroom = oos.GetSpaceHeadroom(); headroom.Valid) {
-                    // AllocatableToBlack, not ToBlack: compaction output is housekeeping and
-                    // PDisk lets it past the static group reserve. Budgeting it against the
-                    // admission headroom instead would read zero on exactly the disks that
-                    // need compacting most, and nothing would ever reclaim anything.
-                    const ui64 room = headroom.AllocatableToBlack;
-                    const ui64 budget = room > reserve ? room - reserve : 0;
-                    params.FreeChunksBudget = ui32(Min<ui64>(budget, Max<ui32>() - 1));
-                }
-                params.EmergencyMode = oos.GetLocalColor() >= static_cast<ESpaceColor>(
-                    ui64(Config->HullCompEmergencyEnableAtColor));
-            }
             IActor* selector;
             if (AppData()->FeatureFlags.GetEnableCoroutineCompactionSelector()) {
                 selector = new TSelectorActorCoro(HullDs->HullCtx, params, std::move(levelSnap),
@@ -299,7 +266,7 @@ namespace NKikimr {
                 selector = new TSelectorActor(HullDs->HullCtx, params, std::move(levelSnap),
                     std::move(barriersSnap), ctx.SelfID, std::move(CompactionTask), AllowGarbageCollection);
             }
-            auto aid = RunInBatchPool(ctx, selector.release());
+            auto aid = RunInBatchPool(ctx, selector);
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             return true;
         }

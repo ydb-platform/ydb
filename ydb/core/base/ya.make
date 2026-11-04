@@ -158,11 +158,9 @@ RECURSE(
     generated
 )
 
-IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
 RECURSE_FOR_TESTS(
     ut
     ut_auth
     ut_board_subscriber
     ut_statestorage_proxy
 )
-ENDIF()

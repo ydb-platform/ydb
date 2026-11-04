@@ -328,6 +328,9 @@ namespace NKikimr::NBlobDepot {
             }
             NTabletPipe::CloseAndForgetClient(SelfId(), PipeId);
             ReleaseS3Wrapper();
+            if (ProxyId) {
+                Send(ProxyId, new TEvents::TEvPoison);
+            }
             TActor::PassAway();
         }
 
@@ -451,6 +454,8 @@ namespace NKikimr::NBlobDepot {
             const ui64 QueryId;
             mutable TString QueryIdString;
             const TMonotonic StartTime;
+            const TInstant Deadline;
+            const TMonotonic DeadlineMonotonic;
             std::multimap<TMonotonic, TQuery*>::iterator QueryWatchdogMapIter;
             NLog::EPriority WatchdogPriority = NLog::PRI_WARN;
             bool Destroyed = false;
@@ -468,6 +473,8 @@ namespace NKikimr::NBlobDepot {
             virtual ~TQuery();
 
             void CheckQueryExecutionTime(TMonotonic now);
+            bool CheckDeadline(TMonotonic now);
+            void SetResolveDeadline(NKikimrBlobDepot::TEvResolve& resolve) const;
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason);
             void EndWithSuccess(std::unique_ptr<IEventBase> response);

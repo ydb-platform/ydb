@@ -244,15 +244,7 @@ TWriteGate::EBatchDecision TWriteGate::PassPreparedBatch(NOlap::TEvPassWriteGate
 }
 
 void TWriteGate::DrainWaitingForLoadedPortions(const TMonotonic now, TDrainedWrites& drained) {
-    const auto firstLoaded =
-        std::stable_partition(WaitingForLoadedPortions.begin(), WaitingForLoadedPortions.end(), [&](const TWaitingForLoadedPortions& waiting) {
-            return !ArePortionsLoaded(*waiting.Event->Get());
-        });
-    for (auto it = firstLoaded; it != WaitingForLoadedPortions.end(); ++it) {
-        TActivationContext::Send(it->Event.Release());
-    }
-    WaitingForLoadedPortions.erase(firstLoaded, WaitingForLoadedPortions.end());
-
+    // expired first: a write past its deadline is answered, even if its portions are loaded by now
     const auto firstTimedOut =
         std::stable_partition(WaitingForLoadedPortions.begin(), WaitingForLoadedPortions.end(), [&](const TWaitingForLoadedPortions& waiting) {
             return !waiting.Deadline || now < *waiting.Deadline;
@@ -262,6 +254,15 @@ void TWriteGate::DrainWaitingForLoadedPortions(const TMonotonic now, TDrainedWri
         drained.TimedOutWaitingForLoadedPortions.push_back(it->Event.Release());
     }
     WaitingForLoadedPortions.erase(firstTimedOut, WaitingForLoadedPortions.end());
+
+    const auto firstLoaded =
+        std::stable_partition(WaitingForLoadedPortions.begin(), WaitingForLoadedPortions.end(), [&](const TWaitingForLoadedPortions& waiting) {
+            return !ArePortionsLoaded(*waiting.Event->Get());
+        });
+    for (auto it = firstLoaded; it != WaitingForLoadedPortions.end(); ++it) {
+        TActivationContext::Send(it->Event.Release());
+    }
+    WaitingForLoadedPortions.erase(firstLoaded, WaitingForLoadedPortions.end());
     Counters.GetTabletCounters()->SetCounter(COUNTER_WRITES_WAITING_LOADED_PORTIONS, WaitingForLoadedPortions.size());
 }
 

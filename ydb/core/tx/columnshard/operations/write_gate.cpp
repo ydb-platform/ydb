@@ -262,14 +262,22 @@ void TWriteGate::DrainWaitingForLoadedPortions(const TMonotonic now, TDrainedWri
     Counters.GetTabletCounters()->SetCounter(COUNTER_WRITES_WAITING_LOADED_PORTIONS, WaitingForLoadedPortions.size());
 }
 
-std::vector<NOlap::TEvPassWriteGate::TPtr> TWriteGate::ExtractWaitingForLock(const ui64 lockId) {
+TWriteGate::TWritesOfLock TWriteGate::ExtractWritesOfLock(const ui64 lockId) {
+    TWritesOfLock extracted;
+    for (auto it = WriteQueue.begin(); it != WriteQueue.end();) {
+        const auto task = it++;
+        if (task->GetLockId() == lockId) {
+            extracted.WaitingForCompaction.push_back(std::move(WriteQueue.extract(task).value()));
+        }
+    }
+    Counters.GetCSCounters().WritingCounters->QueueWaitSize->Sub(extracted.WaitingForCompaction.size());
+
     const auto firstOfLock =
         std::stable_partition(WaitingForLoadedPortions.begin(), WaitingForLoadedPortions.end(), [&](const TWaitingForLoadedPortions& waiting) {
             return waiting.Event->Get()->GetContext().GetLockId() != lockId;
         });
-    std::vector<NOlap::TEvPassWriteGate::TPtr> extracted;
     for (auto it = firstOfLock; it != WaitingForLoadedPortions.end(); ++it) {
-        extracted.push_back(it->Event.Release());
+        extracted.WaitingForLoadedPortions.push_back(it->Event.Release());
     }
     WaitingForLoadedPortions.erase(firstOfLock, WaitingForLoadedPortions.end());
     Counters.GetTabletCounters()->SetCounter(COUNTER_WRITES_WAITING_LOADED_PORTIONS, WaitingForLoadedPortions.size());

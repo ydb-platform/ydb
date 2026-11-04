@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(TColumnShardNotProposedTransactions) {
         TShardFixture shard;
         Y_UNUSED(shard.WriteUnderLock());
         PlanCommit(shard.Runtime, shard.Sender, shard.Writer.StartCommit(TxId), TxId);
-        // a write of the lock in progress keeps its abort pending
+        // a write of the lock in progress keeps the lock registered
         TBlockEvents<NPrivateEvents::NWrite::TEvWritePortionResult> blockedWrittenPortions(shard.Runtime);
         shard.SendWriteUnderLock();
         shard.Runtime.WaitFor("portion written", [&] {
@@ -272,17 +272,16 @@ Y_UNIT_TEST_SUITE(TColumnShardNotProposedTransactions) {
         // any loaded portion is over a zero metadata limit, so the queue holds the next write
         shard.Runtime.GetAppData().ColumnShardConfig.MutableIndexMetadataMemoryLimit()->SetAbsoluteValue(0);
         shard.SendWriteUnderLock();
+        // in the queue before the abort, not rejected on arrival
+        shard.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
 
+        // the abort answers the queued write itself: the queue is not drained again
         shard.NotifyTransactionGone();
-        shard.Runtime.WaitFor("lock marked for abort", [&] {
-            return shard.Shard().GetOperationsManager().GetLockOptional(LockId)->NeedsAborting();
-        }, TDuration::Seconds(30));
-        // the queue's own retry is a scheduled wakeup, which the test runtime drops
-        ForwardToTablet(shard.Runtime, TTestTxConfig::TxTablet0, shard.Sender, new TEvents::TEvWakeup(1));
 
         // a queue answer carries the request's tx id, not the lock id the writer checks
         TAutoPtr<IEventHandle> handle;
-        const auto result = shard.Runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(handle);
+        const auto result = shard.Runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(handle, TDuration::Seconds(30));
+        UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
     }
 }

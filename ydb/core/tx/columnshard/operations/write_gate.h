@@ -36,6 +36,13 @@ public:
         std::vector<NOlap::TEvPassWriteGate::TPtr> TimedOutWaitingForLoadedPortions;
     };
 
+    struct TWritesOfLock {
+        // not started yet: no write operation
+        std::vector<TWriteTask> WaitingForCompaction;
+        // started: the write operation exists
+        std::vector<NOlap::TEvPassWriteGate::TPtr> WaitingForLoadedPortions;
+    };
+
 private:
     const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor& Executor;
     const TTablesManager& TablesManager;
@@ -93,7 +100,7 @@ public:
         LockAborted
     };
     EBatchDecision PassPreparedBatch(NOlap::TEvPassWriteGate::TPtr& ev, const TActorContext& ctx);
-    std::vector<NOlap::TEvPassWriteGate::TPtr> ExtractWaitingForLock(const ui64 lockId);
+    [[nodiscard]] TWritesOfLock ExtractWritesOfLock(const ui64 lockId);
 
     ui64 GetMemoryUsage() const;
 };

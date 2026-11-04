@@ -1,181 +1,115 @@
-# Thin fat-runner executor (nebius path). Branch-local rewrite of Run and debug tests
-# so workflow_dispatch --ref works without a new WF file on main.
-# Protocol: code_ref + job + job_inputs JSON; secrets/vars stay local to this WF.
 name: Run and debug tests
 
 on:
   workflow_dispatch:
     inputs:
-      code_ref:
-        description: 'YDB ref/SHA to build and test (empty = this workflow SHA)'
+      test_targets:
+        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
+        required: false
+        type: string
+        default: 'ydb/tests/olap/'
+      build_preset:
+        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
+        required: false
+        type: string
+        default: 'relwithdebinfo, release-asan'
+      branches:
+        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path)'
         required: false
         type: string
         default: ''
-      job:
-        description: 'Which job to run on the fat executor'
+      use_branches_config:
+        description: 'If true, use branches from .github/config/stable_tests_branches.json'
         required: false
-        type: choice
-        options:
-          - build_and_test_ya
-        default: build_and_test_ya
-      job_inputs:
-        description: 'JSON object of public params for the selected job (no secrets)'
-        required: false
-        type: string
-        default: '{}'
-
-concurrency:
-  group: ci-remote-executor-${{ inputs.code_ref || github.sha }}-${{ inputs.job }}-${{ inputs.job_inputs }}
-  cancel-in-progress: false
+        type: boolean
+        default: false
 
 jobs:
-  execute:
-    name: Remote · ${{ inputs.job }} · ${{ inputs.code_ref || github.sha }}
-    runs-on: [self-hosted, build-preset-relwithdebinfo-fat]
-    # Match run_tests.yml / long regression wall time.
-    timeout-minutes: 1200
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      branches_json: ${{ steps.format-branches.outputs.branches_json }}
+      build_preset_array: ${{ steps.format-build-preset.outputs.build_preset_array }}
     steps:
-      - name: Validate job and parse job_inputs
-        id: job
-        env:
-          JOB: ${{ inputs.job }}
-          JOB_INPUTS: ${{ inputs.job_inputs }}
-        shell: bash
+      - name: Format branches
+        id: format-branches
         run: |
-          python3 - <<'PY'
-          import json, os, sys
-
-          job = os.environ.get("JOB") or "build_and_test_ya"
-          known = {"build_and_test_ya"}
-          if job not in known:
-              print(f"::error::unknown job={job!r}; known={sorted(known)}")
-              sys.exit(1)
-
-          raw = os.environ.get("JOB_INPUTS") or "{}"
-          try:
-              data = json.loads(raw)
-          except json.JSONDecodeError as e:
-              print(f"::error::job_inputs is not valid JSON: {e}")
-              sys.exit(1)
-          if not isinstance(data, dict):
-              print("::error::job_inputs must be a JSON object")
-              sys.exit(1)
-
-          def as_str(key, default=""):
-              if key not in data or data[key] is None:
-                  return default
-              v = data[key]
-              if isinstance(v, bool):
-                  return "true" if v else "false"
-              return str(v)
-
-          # Defaults aligned with prior executor / build_and_test_ya.
-          defaults = {
-              "build_target": "ydb/",
-              "build_preset": "relwithdebinfo",
-              "run_tests": "true",
-              "increment": "false",
-              "test_size": "small,medium",
-              "test_type": "",
-              "test_threads": "64",
-              "link_threads": "2",
-              "test_retry_count": "",
-              "additional_ya_make_args": "",
-              "put_build_results_to_cache": "true",
-              "collect_coredumps": "false",
-          }
-          out = {k: as_str(k, d) for k, d in defaults.items()}
-
-          path = os.environ["GITHUB_OUTPUT"]
-          with open(path, "a", encoding="utf-8") as f:
-              f.write(f"name={job}\n")
-              for k, v in out.items():
-                  f.write(f"{k}={v}\n")
-
-          print(f"job={job}")
-          print(json.dumps(out, ensure_ascii=False, indent=2))
-          PY
-
-      - name: Resolve refs
-        id: ref
-        shell: bash
-        run: |
-          code_ref='${{ inputs.code_ref }}'
-          if [ -z "$code_ref" ]; then
-            code_ref='${{ github.sha }}'
-          fi
-          echo "code=$code_ref" >> "$GITHUB_OUTPUT"
-          echo "ci=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          if [ '${{ steps.job.outputs.increment }}' = 'true' ]; then
-            echo "fetch_depth=0" >> "$GITHUB_OUTPUT"
+          if [ -z "${{ inputs.branches }}" ]; then
+            # Empty - will use branches_config_path or default
+            echo "branches_json=" >> $GITHUB_OUTPUT
+          elif [[ "${{ inputs.branches }}" == \[* ]]; then
+            # Already JSON array
+            echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
           else
-            echo "fetch_depth=2" >> "$GITHUB_OUTPUT"
+            # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
+            IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
+            JSON_BRANCHES="["
+            FIRST=true
+            for branch in "${BRANCHES[@]}"; do
+              branch=$(echo "$branch" | xargs)  # trim whitespace
+              if [ -n "$branch" ]; then
+                if [ "$FIRST" = true ]; then
+                  FIRST=false
+                else
+                  JSON_BRANCHES+=", "
+                fi
+                JSON_BRANCHES+="\"$branch\""
+              fi
+            done
+            JSON_BRANCHES+="]"
+            echo "branches_json=$JSON_BRANCHES" >> $GITHUB_OUTPUT
+            echo "Converted '${{ inputs.branches }}' to $JSON_BRANCHES"
           fi
-          {
-            echo "### CI remote executor"
-            echo "- **code ref:** \`$code_ref\`"
-            echo "- **ci ref:** \`${{ github.sha }}\`"
-            echo "- **job:** \`${{ steps.job.outputs.name }}\`"
-            echo "- **preset:** \`${{ steps.job.outputs.build_preset }}\`"
-            echo "- **target:** \`${{ steps.job.outputs.build_target }}\`"
-            echo "- **increment:** \`${{ steps.job.outputs.increment }}\`"
-            echo "- **run_tests:** \`${{ steps.job.outputs.run_tests }}\`"
-            echo "- **test_size:** \`${{ steps.job.outputs.test_size }}\`"
-            echo "- **runner:** \`build-preset-relwithdebinfo-fat\`"
-          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Checkout YDB code
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ steps.ref.outputs.code }}
-          fetch-depth: ${{ steps.ref.outputs.fetch_depth }}
-
-      - name: Overlay CI from executor workflow ref
-        if: steps.ref.outputs.code != steps.ref.outputs.ci
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ steps.ref.outputs.ci }}
-          sparse-checkout: |
-            .github/actions
-            .github/scripts
-            .github/config
-          sparse-checkout-cone-mode: false
-          path: .executor-ci
-
-      - name: Apply CI overlay
-        if: steps.ref.outputs.code != steps.ref.outputs.ci
-        shell: bash
+      - name: Format build presets
+        id: format-build-preset
         run: |
-          set -euo pipefail
-          rsync -a .executor-ci/.github/actions/ .github/actions/
-          rsync -a .executor-ci/.github/scripts/ .github/scripts/
-          rsync -a .executor-ci/.github/config/ .github/config/
-          rm -rf .executor-ci
+          BUILD_PRESET_INPUT="${{ inputs.build_preset }}"
+          if [ -z "$BUILD_PRESET_INPUT" ]; then
+            BUILD_PRESET_INPUT="relwithdebinfo"
+          fi
+          
+          # Check if already JSON array
+          if [[ "$BUILD_PRESET_INPUT" == \[* ]]; then
+            echo "build_preset_array=$BUILD_PRESET_INPUT" >> $GITHUB_OUTPUT
+          else
+            # Comma-separated format: "relwithdebinfo, release-asan" -> ["relwithdebinfo", "release-asan"]
+            IFS=',' read -ra PRESETS <<< "$BUILD_PRESET_INPUT"
+            JSON_PRESETS="["
+            FIRST=true
+            for preset in "${PRESETS[@]}"; do
+              preset=$(echo "$preset" | xargs)  # trim whitespace
+              if [ -n "$preset" ]; then
+                if [ "$FIRST" = true ]; then
+                  FIRST=false
+                else
+                  JSON_PRESETS+=", "
+                fi
+                JSON_PRESETS+="\"$preset\""
+              fi
+            done
+            JSON_PRESETS+="]"
+            echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
+            echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
+          fi
 
-      - name: Setup ydb access
-        if: steps.job.outputs.name == 'build_and_test_ya'
-        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
-        with:
-          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+  main:
+    name: Run and debug tests
+    needs: prepare
+    uses: ./.github/workflows/run_tests.yml
+    secrets: inherit
+    strategy:
+      fail-fast: false
+      matrix:
+        build_preset: ${{ fromJson(needs.prepare.outputs.build_preset_array) }}
+    with:
+      test_targets: ${{ inputs.test_targets }}
+      test_size: small,medium
+      build_preset: ${{ matrix.build_preset }}
+      branches: ${{ needs.prepare.outputs.branches_json || '' }}
+      branches_config_path: ${{ inputs.use_branches_config && '.github/config/stable_tests_branches.json' || '' }}
 
-      - name: Build and test
-        if: steps.job.outputs.name == 'build_and_test_ya'
-        uses: ./.github/actions/build_and_test_ya
-        with:
-          build_preset: ${{ steps.job.outputs.build_preset }}
-          build_target: ${{ steps.job.outputs.build_target }}
-          run_tests: ${{ steps.job.outputs.run_tests }}
-          increment: ${{ steps.job.outputs.increment }}
-          test_size: ${{ steps.job.outputs.test_size }}
-          test_type: ${{ steps.job.outputs.test_type }}
-          test_threads: ${{ steps.job.outputs.test_threads }}
-          link_threads: ${{ steps.job.outputs.link_threads }}
-          test_retry_count: ${{ steps.job.outputs.test_retry_count }}
-          put_build_results_to_cache: ${{ steps.job.outputs.put_build_results_to_cache }}
-          collect_coredumps: ${{ steps.job.outputs.collect_coredumps }}
-          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ steps.job.outputs.additional_ya_make_args }}
-          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
-            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
-          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
-            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+  collect_combined_summary:
+    needs: main
+    if: always()
+    uses: ./.github/workflows/collect_combined_summary.yml

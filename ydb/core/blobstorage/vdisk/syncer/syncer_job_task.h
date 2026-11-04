@@ -88,6 +88,9 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TSyncerJobTask {
         public:
+            bool RequireAppliedConfig = false;
+            bool AppliedConfigConfirmed = false;
+
             // from protobuf
             using ESyncStatus = NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus;
             using TSyncStatusVal = NKikimrVDiskData::TSyncerVDiskEntry;

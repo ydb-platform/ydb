@@ -141,6 +141,9 @@ namespace NKikimr {
             Y_VERIFY_S(status != TSyncStatusVal::Running,
                 Ctx->SyncerCtx->VCtx->VDiskLogPrefix << Sublog.Get());
             auto now = TAppData::TimeProvider->Now();
+            if (RequireAppliedConfig && NSyncer::TPeerSyncState::Good(status) && !AppliedConfigConfirmed) {
+                status = TSyncStatusVal::NotReady;
+            }
             Current.LastSyncStatus = status;
             Current.LastTry = now;
             if (NSyncer::TPeerSyncState::Good(status))
@@ -282,6 +285,8 @@ namespace NKikimr {
             BytesReceived += bytesReceived;
 
             const NKikimrBlobStorage::TEvVSyncResult &record = ev->Get()->Record;
+            AppliedConfigConfirmed = record.HasAppliedConfigGeneration()
+                && record.GetAppliedConfigGeneration() == VDiskId.GroupGeneration;
             TVDiskID fromVDisk = VDiskIDFromVDiskID(record.GetVDiskID());
             if (!Ctx->SelfVDiskId.SameGroupAndGeneration(fromVDisk)) {
                 return ReplyAndDie(TSyncStatusVal::Race);

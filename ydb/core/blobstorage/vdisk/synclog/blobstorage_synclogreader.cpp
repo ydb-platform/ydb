@@ -164,6 +164,7 @@ namespace NKikimr {
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(status, SelfVDiskId,
                     TSyncState(VDiskIncarnationGuid, lsn), finished, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(),
                     Now, SlCtx->IFaceMonGroup.SyncReadResMsgsPtr(), nullptr, Ev->GetChannel());
+                result->Record.SetAppliedConfigGeneration(SelfVDiskId.GroupGeneration);
                 if (DiskReads) {
                     NKikimrBlobStorage::TEvVSyncResult::TStat *stat = nullptr;
                     stat = result->Record.MutableStat();

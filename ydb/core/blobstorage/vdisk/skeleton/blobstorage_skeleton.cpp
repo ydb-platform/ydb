@@ -2026,9 +2026,31 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVSync::TPtr &ev, const TActorContext &ctx) {
-            if (!Config->BaseInfo.DonorMode) {
-                ctx.Send(ev->Forward(Db->SyncLogID));
+            if (Config->BaseInfo.DonorMode) {
+                return;
             }
+            const TVDiskID source = VDiskIDFromVDiskID(ev->Get()->Record.GetSourceVDiskID());
+            const TVDiskID target = VDiskIDFromVDiskID(ev->Get()->Record.GetTargetVDiskID());
+            if (!SelfVDiskId.SameGroupAndGeneration(source) || !SelfVDiskId.SameDisk(target)) {
+                return ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx,
+                    TAppData::TimeProvider->Now());
+            }
+            if (AppliedConfigLsn > Db->LsnMngr->GetConfirmedLsnForHull()) {
+                // Retried sync jobs replace their previous request while the config prefix is pending.
+                for (auto it = PendingConfigSyncs.begin(); it != PendingConfigSyncs.end(); ++it) {
+                    const TVDiskID previousSource =
+                        VDiskIDFromVDiskID(it->second->Get()->Record.GetSourceVDiskID());
+                    if (TVDiskIdShort(previousSource) == TVDiskIdShort(source)) {
+                        ReplyError(NKikimrProto::ERROR, "sync request superseded", it->second, ctx,
+                            TAppData::TimeProvider->Now());
+                        PendingConfigSyncs.erase(it);
+                        break;
+                    }
+                }
+                PendingConfigSyncs.emplace_back(AppliedConfigLsn, ev.Release());
+                return;
+            }
+            ctx.Send(ev->Forward(Db->SyncLogID));
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -2347,38 +2369,9 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVSyncFull::TPtr &ev, const TActorContext &ctx) {
-            ProcessFullSync(ev, ctx, true);
-        }
-
-        void ProcessFullSync(TEvBlobStorage::TEvVSyncFull::TPtr& ev, const TActorContext& ctx, bool waitForLog) {
-            if (Config->BaseInfo.DonorMode) {
-                return; // this is a race; donor disk can't answer TEvVSyncFull queries
+            if (!Config->BaseInfo.DonorMode) {
+                ctx.Send(ev->Forward(Db->SyncFullHandlerID));
             }
-            const TVDiskID source = VDiskIDFromVDiskID(ev->Get()->Record.GetSourceVDiskID());
-            const TVDiskID target = VDiskIDFromVDiskID(ev->Get()->Record.GetTargetVDiskID());
-            if (!SelfVDiskId.SameGroupAndGeneration(source) || !SelfVDiskId.SameDisk(target)) {
-                return ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx,
-                    TAppData::TimeProvider->Now());
-            }
-            if (const std::optional<ui64> lsn = LoggedRecsVault.GetLastLsnInFlight();
-                    waitForLog && ev->Get()->IsInitial() && lsn) {
-                // Keep one pending initial request per peer when its sync job retries.
-                for (auto it = PendingFullSyncs.begin(); it != PendingFullSyncs.end(); ++it) {
-                    const TVDiskID previousSource =
-                        VDiskIDFromVDiskID(it->second->Get()->Record.GetSourceVDiskID());
-                    if (TVDiskIdShort(previousSource) == TVDiskIdShort(source)) {
-                        ReplyError(NKikimrProto::ERROR, "full sync request superseded", it->second, ctx,
-                            TAppData::TimeProvider->Now());
-                        PendingFullSyncs.erase(it);
-                        break;
-                    }
-                }
-                // The initial full-sync snapshot must include writes already admitted to the recovery log.
-                PendingFullSyncs.emplace_back(*lsn, ev.Release());
-                return;
-            }
-            Y_VERIFY(Db->SyncFullHandlerID);
-            ctx.Send(ev->Forward(Db->SyncFullHandlerID));
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -2413,11 +2406,11 @@ namespace NKikimr {
                 // Recheck the generation, but do not wait for writes admitted after this request.
                 ProcessAssimilation(request, ctx, false);
             }
-            while (!PendingFullSyncs.empty()
-                    && PendingFullSyncs.front().first <= Db->LsnMngr->GetConfirmedLsnForHull()) {
-                TEvBlobStorage::TEvVSyncFull::TPtr request = std::move(PendingFullSyncs.front().second);
-                PendingFullSyncs.pop_front();
-                ProcessFullSync(request, ctx, false);
+            while (!PendingConfigSyncs.empty()
+                    && PendingConfigSyncs.front().first <= Db->LsnMngr->GetConfirmedLsnForHull()) {
+                TEvBlobStorage::TEvVSync::TPtr request = std::move(PendingConfigSyncs.front().second);
+                PendingConfigSyncs.pop_front();
+                Handle(request, ctx);
             }
             if (ev->Get()->StatusFlags & ui32(NKikimrBlobStorage::StatusIsValid)) {
                 i64 count = ev->Get()->LogChunkCount;
@@ -3261,6 +3254,7 @@ namespace NKikimr {
             auto *msg = ev->Get();
 
             if (msg->NewInfo->GroupGeneration > GInfo->GroupGeneration) {
+                AppliedConfigLsn = LoggedRecsVault.GetLastLsnInFlight().value_or(0);
                 const std::optional<EMirror3dcLayout> previousDurability = GetDurabilityLayout(*GInfo);
                 const std::optional<EMirror3dcLayout> nextDurability = GetDurabilityLayout(*msg->NewInfo);
                 if (previousDurability && nextDurability && previousDurability != nextDurability) {
@@ -3392,7 +3386,7 @@ namespace NKikimr {
             for (auto& [lsn, request] : std::exchange(PendingAssimilations, {})) {
                 ReplyError(NKikimrProto::ERROR, "VDisk is going away", request, ctx, TAppData::TimeProvider->Now());
             }
-            for (auto& [lsn, request] : std::exchange(PendingFullSyncs, {})) {
+            for (auto& [lsn, request] : std::exchange(PendingConfigSyncs, {})) {
                 ReplyError(NKikimrProto::ERROR, "VDisk is going away", request, ctx,
                     TAppData::TimeProvider->Now());
             }
@@ -4033,7 +4027,8 @@ namespace NKikimr {
         std::shared_ptr<std::atomic_uint64_t> PDiskWriteBytes = std::make_shared<std::atomic_uint64_t>();
         TLoggedRecsVault LoggedRecsVault;
         std::deque<std::pair<ui64, TEvBlobStorage::TEvVAssimilate::TPtr>> PendingAssimilations;
-        std::deque<std::pair<ui64, TEvBlobStorage::TEvVSyncFull::TPtr>> PendingFullSyncs;
+        ui64 AppliedConfigLsn = 0;
+        std::deque<std::pair<ui64, TEvBlobStorage::TEvVSync::TPtr>> PendingConfigSyncs;
         bool CommenceRepl = false;
         TActorId ScrubId;
         TActorId DefragId;

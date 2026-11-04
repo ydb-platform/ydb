@@ -777,6 +777,8 @@ message TEvVSyncResult {
     }
     optional TStat Stat = 7;
     optional uint32 StatusFlags = 8;
+    // The source has applied the recovery-log prefix preceding this configuration.
+    optional uint32 AppliedConfigGeneration = 9;
 }
 
 enum ESyncFullStage {

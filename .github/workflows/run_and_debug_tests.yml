@@ -131,11 +131,13 @@ jobs:
           python3 - <<'PY'
           import json, os
           preset = os.environ["BUILD_PRESET"].split(",")[0].strip() or "relwithdebinfo"
+          increment = os.environ["INCREMENT"]
           job_inputs = {
               "build_target": os.environ["BUILD_TARGET"],
               "build_preset": preset,
               "run_tests": os.environ["RUN_TESTS"],
-              "increment": os.environ["INCREMENT"],
+              "increment": increment,
+              "fetch_depth": 0 if increment.lower() in ("1", "true", "yes") else 2,
               "test_size": os.environ["TEST_SIZE"],
               "test_type": os.environ["TEST_TYPE"],
               "test_threads": os.environ["TEST_THREADS"],

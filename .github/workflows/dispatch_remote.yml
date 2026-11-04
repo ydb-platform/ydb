@@ -2,11 +2,15 @@ name: Dispatch remote executor
 
 # Reusable remote path: start → optional wait+mirror / cancel-on-caller-cancel.
 # Call sites only map their contract into inputs_json.
+#
+# Approach A (optional): when runs_on is non-empty, copy workflow_file (+ nested
+# local reusable workflows) from source_ref onto a tmp branch, rewrite self-hosted
+# job runs-on, dispatch that ref, then delete the branch after wait/cancel.
 on:
   workflow_call:
     inputs:
       workflow_file:
-        description: Executor workflow filename (e.g. run_and_debug_tests.yml)
+        description: Executor workflow filename (e.g. run_tests.yml); must exist on default branch
         required: true
         type: string
       workflow_name:
@@ -14,7 +18,7 @@ on:
         required: true
         type: string
       executor_ref:
-        description: Git ref that hosts the executor workflow YAML
+        description: Git ref that hosts the executor workflow YAML (used as dispatch ref when runs_on is empty; fallback source_ref for approach A)
         required: true
         type: string
       inputs_json:
@@ -36,6 +40,26 @@ on:
         required: false
         type: string
         default: ''
+      runs_on:
+        description: 'Approach A: JSON array of runs-on labels; empty = dispatch executor_ref as-is (no tmp branch)'
+        required: false
+        type: string
+        default: ''
+      source_ref:
+        description: 'Approach A: ref to copy workflow YAML from (empty = executor_ref)'
+        required: false
+        type: string
+        default: ''
+      cleanup_tmp_branch:
+        description: 'Approach A: delete ci-remote-tmp/* branch after wait/cancel'
+        required: false
+        type: boolean
+        default: true
+      patch_self_hosted_only:
+        description: 'Approach A: only rewrite runs-on that look self-hosted/auto-provisioned (keep ubuntu-latest)'
+        required: false
+        type: boolean
+        default: true
     outputs:
       executor_run_id:
         description: Dispatched executor run id
@@ -46,6 +70,9 @@ on:
       executor_conclusion:
         description: Executor run conclusion after wait (empty if fire-and-forget)
         value: ${{ jobs.wait.outputs.executor_conclusion }}
+      tmp_branch:
+        description: Approach A tmp branch (empty if unused)
+        value: ${{ jobs.dispatch.outputs.tmp_branch }}
 
 jobs:
   dispatch:
@@ -55,6 +82,7 @@ jobs:
     outputs:
       executor_run_id: ${{ steps.dispatch.outputs.executor_run_id }}
       executor_run_url: ${{ steps.dispatch.outputs.executor_run_url }}
+      tmp_branch: ${{ steps.dispatch.outputs.tmp_branch }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -62,6 +90,12 @@ jobs:
           sparse-checkout: |
             .github/scripts/ci/dispatch_remote_executor.py
           sparse-checkout-cone-mode: false
+
+      - name: Install PyYAML
+        if: inputs.runs_on != ''
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ci-remote-venv"
+          "$RUNNER_TEMP/ci-remote-venv/bin/pip" install pyyaml
 
       - name: Dispatch remote executor
         id: dispatch
@@ -73,7 +107,16 @@ jobs:
           EXECUTOR_REF: ${{ inputs.executor_ref }}
           INPUTS_JSON: ${{ inputs.inputs_json }}
           WAIT_MODE: ${{ inputs.wait && 'wait+mirror' || 'fire-and-forget' }}
-        run: python3 .github/scripts/ci/dispatch_remote_executor.py start
+          RUNS_ON: ${{ inputs.runs_on }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          PATCH_SELF_HOSTED_ONLY: ${{ inputs.patch_self_hosted_only }}
+        run: |
+          if [ -n "${{ inputs.runs_on }}" ]; then
+            PYTHON="$RUNNER_TEMP/ci-remote-venv/bin/python"
+          else
+            PYTHON=python3
+          fi
+          "$PYTHON" .github/scripts/ci/dispatch_remote_executor.py start
 
   wait:
     if: inputs.wait
@@ -100,6 +143,8 @@ jobs:
           WORKFLOW_NAME: ${{ inputs.workflow_name }}
           EXECUTOR_RUN_ID: ${{ needs.dispatch.outputs.executor_run_id }}
           EXECUTOR_RUN_URL: ${{ needs.dispatch.outputs.executor_run_url }}
+          TMP_BRANCH: ${{ needs.dispatch.outputs.tmp_branch }}
+          CLEANUP_TMP_BRANCH: ${{ inputs.cleanup_tmp_branch }}
           AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
           AWS_BUCKET: ${{ vars.AWS_BUCKET }}
           FAIL_ON_REMOTE_FAILURE: ${{ inputs.fail_on_remote_failure }}
@@ -114,4 +159,6 @@ jobs:
           WORKFLOW_NAME: ${{ inputs.workflow_name }}
           EXECUTOR_RUN_ID: ${{ needs.dispatch.outputs.executor_run_id }}
           EXECUTOR_RUN_URL: ${{ needs.dispatch.outputs.executor_run_url }}
+          TMP_BRANCH: ${{ needs.dispatch.outputs.tmp_branch }}
+          CLEANUP_TMP_BRANCH: ${{ inputs.cleanup_tmp_branch }}
         run: python3 .github/scripts/ci/dispatch_remote_executor.py cancel

@@ -4,20 +4,31 @@ on:
   workflow_dispatch:
     inputs:
       executor:
-        description: 'ydb_yc = local runners; remote = dispatch fat executor on remote_executor_ref'
+        description: 'ydb_yc = local; remote = fat executor ref; remote_patch = approach A (tmp-branch runs-on patch of run_tests.yml)'
         required: false
         type: choice
         options:
           - ydb_yc
           - remote
+          - remote_patch
         default: ydb_yc
       remote_executor_ref:
-        description: 'Git ref with fat Run and debug / later ci_remote_executor (default: dev/ci-remote-executor)'
+        description: 'remote: git ref with fat Run and debug / ci_remote_executor (default: dev/ci-remote-executor)'
         required: false
         type: string
         default: 'dev/ci-remote-executor'
+      remote_source_ref:
+        description: 'remote_patch: ref to copy run_tests.yml from (empty = this run SHA)'
+        required: false
+        type: string
+        default: ''
+      remote_runs_on:
+        description: 'remote_patch: JSON runs-on labels written into self-hosted jobs on the tmp branch'
+        required: false
+        type: string
+        default: '["self-hosted","build-preset-relwithdebinfo-fat"]'
       code_ref:
-        description: 'YDB ref/SHA for executor to checkout+test (empty = this run SHA)'
+        description: 'YDB ref/SHA for executor to checkout+test (empty = this run SHA); remote_patch passes it as run_tests branches'
         required: false
         type: string
         default: ''
@@ -32,22 +43,22 @@ on:
         type: string
         default: 'relwithdebinfo, release-asan'
       increment:
-        description: 'remote only: compare graphs with previous commit (affected tests)'
+        description: 'remote / remote_patch: compare graphs with previous commit (affected tests); remote_patch ignores (run_tests has no increment)'
         required: false
         type: boolean
         default: false
       test_size:
-        description: 'remote only: test size filter'
+        description: 'remote / remote_patch: test size filter'
         required: false
         type: string
         default: 'small,medium'
       test_type:
-        description: 'remote only: test type filter (empty = all)'
+        description: 'remote / remote_patch: test type filter (empty = all)'
         required: false
         type: string
         default: ''
       test_threads:
-        description: 'remote only: test threads'
+        description: 'remote / remote_patch: test threads'
         required: false
         type: string
         default: '64'
@@ -57,7 +68,7 @@ on:
         type: string
         default: '2'
       additional_ya_make_args:
-        description: 'remote only: extra ya make args'
+        description: 'remote / remote_patch: extra ya make args'
         required: false
         type: string
         default: ''
@@ -72,7 +83,7 @@ on:
         type: boolean
         default: true
       collect_coredumps:
-        description: 'remote only: collect coredumps'
+        description: 'remote / remote_patch: collect coredumps'
         required: false
         type: boolean
         default: false
@@ -92,12 +103,12 @@ on:
         type: boolean
         default: false
       wait_for_remote:
-        description: 'remote only: true = wait+mirror on runner-waiter; false = fire-and-forget'
+        description: 'remote / remote_patch: true = wait+mirror on runner-waiter; false = fire-and-forget'
         required: false
         type: boolean
         default: true
       fail_on_remote_failure:
-        description: 'remote only: when waiting, fail this run if executor conclusion is not success'
+        description: 'remote / remote_patch: when waiting, fail this run if executor conclusion is not success'
         required: false
         type: boolean
         default: true
@@ -169,6 +180,77 @@ jobs:
       workflow_name: Run and debug tests
       executor_ref: ${{ inputs.remote_executor_ref }}
       inputs_json: ${{ needs.remote_payload.outputs.inputs_json }}
+      wait: ${{ inputs.wait_for_remote }}
+      fail_on_remote_failure: ${{ inputs.fail_on_remote_failure }}
+
+  remote_patch_payload:
+    if: inputs.executor == 'remote_patch'
+    runs-on: ${{ inputs.wait_for_remote && fromJSON('["self-hosted", "runner-waiter"]') || fromJSON('["ubuntu-latest"]') }}
+    timeout-minutes: 5
+    outputs:
+      inputs_json: ${{ steps.payload.outputs.inputs_json }}
+      source_ref: ${{ steps.payload.outputs.source_ref }}
+    steps:
+      - name: Build run_tests.yml dispatch inputs for approach A
+        id: payload
+        env:
+          SOURCE_REF: ${{ inputs.remote_source_ref }}
+          CODE_REF: ${{ inputs.code_ref }}
+          FALLBACK_SOURCE: ${{ github.sha }}
+          BUILD_TARGET: ${{ inputs.test_targets }}
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          TEST_SIZE: ${{ inputs.test_size }}
+          TEST_TYPE: ${{ inputs.test_type }}
+          TEST_THREADS: ${{ inputs.test_threads }}
+          ADDITIONAL_YA_MAKE_ARGS: ${{ inputs.additional_ya_make_args }}
+          COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          preset = os.environ["BUILD_PRESET"].split(",")[0].strip() or "relwithdebinfo"
+          # run_tests workflow_dispatch build_preset is a closed choice.
+          allowed = {"relwithdebinfo", "release-asan", "release-msan", "release-tsan"}
+          if preset not in allowed:
+              raise SystemExit(f"remote_patch build_preset {preset!r} not in {sorted(allowed)}")
+          # Prefer explicit remote_source_ref, else code_ref, else caller SHA.
+          source_ref = (
+              (os.environ.get("SOURCE_REF") or "").strip()
+              or (os.environ.get("CODE_REF") or "").strip()
+              or os.environ["FALLBACK_SOURCE"]
+          )
+          # run_tests workflow_dispatch has no `branches` input; prepare falls back
+          # to github.ref_name (= tmp branch), whose tree is source_ref + patched YAML.
+          payload = {
+              "test_targets": os.environ["BUILD_TARGET"],
+              "test_type": os.environ["TEST_TYPE"],
+              "test_size": os.environ["TEST_SIZE"],
+              "additional_ya_make_args": os.environ["ADDITIONAL_YA_MAKE_ARGS"],
+              "build_preset": preset,
+              "collect_coredumps": os.environ["COLLECT_COREDUMPS"],
+              "test_threads": os.environ["TEST_THREADS"],
+          }
+          out = os.environ["GITHUB_OUTPUT"]
+          with open(out, "a", encoding="utf-8") as f:
+              f.write("inputs_json<<EOF\n")
+              f.write(json.dumps(payload, ensure_ascii=False))
+              f.write("\nEOF\n")
+              f.write(f"source_ref={source_ref}\n")
+          print(json.dumps({"source_ref": source_ref, "inputs": payload}, ensure_ascii=False, indent=2))
+          PY
+
+  remote_patch:
+    if: inputs.executor == 'remote_patch'
+    needs: remote_patch_payload
+    uses: ./.github/workflows/dispatch_remote.yml
+    secrets: inherit
+    with:
+      workflow_file: run_tests.yml
+      workflow_name: Run-tests
+      # executor_ref is unused as dispatch ref when runs_on is set; still required.
+      executor_ref: ${{ needs.remote_patch_payload.outputs.source_ref }}
+      source_ref: ${{ needs.remote_patch_payload.outputs.source_ref }}
+      runs_on: ${{ inputs.remote_runs_on }}
+      inputs_json: ${{ needs.remote_patch_payload.outputs.inputs_json }}
       wait: ${{ inputs.wait_for_remote }}
       fail_on_remote_failure: ${{ inputs.fail_on_remote_failure }}
 

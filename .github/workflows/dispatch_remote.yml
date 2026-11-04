@@ -94,8 +94,10 @@ jobs:
       - name: Install PyYAML
         if: inputs.runs_on != ''
         run: |
-          python3 -m venv "$RUNNER_TEMP/ci-remote-venv"
-          "$RUNNER_TEMP/ci-remote-venv/bin/pip" install pyyaml
+          # runner-waiter often lacks python3-venv; --target works with system pip.
+          mkdir -p "$RUNNER_TEMP/ci-remote-pydeps"
+          python3 -m pip install --target "$RUNNER_TEMP/ci-remote-pydeps" pyyaml
+          echo "PYTHONPATH=$RUNNER_TEMP/ci-remote-pydeps${PYTHONPATH:+:$PYTHONPATH}" >> "$GITHUB_ENV"
 
       - name: Dispatch remote executor
         id: dispatch
@@ -110,13 +112,7 @@ jobs:
           RUNS_ON: ${{ inputs.runs_on }}
           SOURCE_REF: ${{ inputs.source_ref }}
           PATCH_SELF_HOSTED_ONLY: ${{ inputs.patch_self_hosted_only }}
-        run: |
-          if [ -n "${{ inputs.runs_on }}" ]; then
-            PYTHON="$RUNNER_TEMP/ci-remote-venv/bin/python"
-          else
-            PYTHON=python3
-          fi
-          "$PYTHON" .github/scripts/ci/dispatch_remote_executor.py start
+        run: python3 .github/scripts/ci/dispatch_remote_executor.py start
 
   wait:
     if: inputs.wait

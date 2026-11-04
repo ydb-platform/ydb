@@ -40,7 +40,7 @@ def set_outputs(**kwargs):
             f.write(f"{k}={v}\n")
 
 
-def gh(method, url, body=None, retries=1):
+def gh(method, url, body=None, retries=1, ok_codes=(200, 201, 202, 204)):
     data = None if body is None else json.dumps(body).encode()
     headers = {
         "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
@@ -56,10 +56,14 @@ def gh(method, url, body=None, retries=1):
             with urllib.request.urlopen(req) as resp:
                 raw = resp.read()
                 code = resp.status
+                if code not in ok_codes:
+                    die(f"GitHub {method} {url} -> HTTP {code}")
                 return code, json.loads(raw) if raw else None
         except urllib.error.HTTPError as e:
             raw = e.read()
             last_err = (e.code, raw.decode(errors="replace"))
+            if e.code in ok_codes:
+                return e.code, json.loads(raw) if raw else None
             if e.code in (429, 500, 502, 503, 504) and attempt < retries:
                 print(f"HTTP {e.code}, retry {attempt}/{retries} ...")
                 print(last_err[1])
@@ -208,13 +212,27 @@ def cmd_wait():
     die(f"executor finished with conclusion={conclusion}")
 
 
+def cmd_cancel():
+    run_id = env("EXECUTOR_RUN_ID")
+    run_url = os.environ.get("EXECUTOR_RUN_URL") or f"https://github.com/{env('REPO')}/actions/runs/{run_id}"
+    print(f"Caller cancelled — cancelling executor run {run_id} ...")
+    # 409 = already completed / not cancellable.
+    code, _ = gh(
+        "POST",
+        f"{api()}/actions/runs/{run_id}/cancel",
+        retries=3,
+        ok_codes=(202, 204, 409),
+    )
+    print(f"cancel HTTP {code}")
+    append_summary(
+        f"### Caller cancelled\n- cancelled executor run [{run_id}]({run_url}) (HTTP {code})\n"
+    )
+
+
 def main():
-    if len(sys.argv) != 2 or sys.argv[1] not in ("start", "wait"):
-        die("usage: dispatch_remote_executor.py start|wait")
-    if sys.argv[1] == "start":
-        cmd_start()
-    else:
-        cmd_wait()
+    if len(sys.argv) != 2 or sys.argv[1] not in ("start", "wait", "cancel"):
+        die("usage: dispatch_remote_executor.py start|wait|cancel")
+    {"start": cmd_start, "wait": cmd_wait, "cancel": cmd_cancel}[sys.argv[1]]()
 
 
 if __name__ == "__main__":

@@ -105,6 +105,16 @@ jobs:
         shell: bash
         run: python3 .github/scripts/ci/dispatch_remote_executor.py wait
 
+      - name: Cancel executor on caller cancel
+        if: cancelled() && needs.dispatch_remote.outputs.executor_run_id != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          EXECUTOR_RUN_ID: ${{ needs.dispatch_remote.outputs.executor_run_id }}
+          EXECUTOR_RUN_URL: ${{ needs.dispatch_remote.outputs.executor_run_url }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: python3 .github/scripts/ci/dispatch_remote_executor.py cancel
+
   prepare:
     if: inputs.executor == 'ydb_yc'
     runs-on: ubuntu-latest

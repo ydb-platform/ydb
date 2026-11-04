@@ -100,7 +100,7 @@ jobs:
       - name: Dispatch remote executor
         id: dispatch
         env:
-          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
           REPO: ${{ inputs.repository != '' && inputs.repository || github.repository }}
           WORKFLOW_FILE: ${{ inputs.workflow_file }}
           WORKFLOW_NAME: ${{ inputs.workflow_name }}
@@ -137,7 +137,7 @@ jobs:
       - name: Wait and mirror executor summary
         id: wait
         env:
-          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
           REPO: ${{ inputs.repository != '' && inputs.repository || github.repository }}
           WORKFLOW_FILE: ${{ inputs.workflow_file }}
           WORKFLOW_NAME: ${{ inputs.workflow_name }}
@@ -153,7 +153,7 @@ jobs:
       - name: Cancel executor on caller cancel
         if: cancelled() && needs.dispatch.outputs.executor_run_id != ''
         env:
-          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
           REPO: ${{ inputs.repository != '' && inputs.repository || github.repository }}
           WORKFLOW_FILE: ${{ inputs.workflow_file }}
           WORKFLOW_NAME: ${{ inputs.workflow_name }}

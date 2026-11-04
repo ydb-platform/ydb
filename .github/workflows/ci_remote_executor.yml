@@ -1,6 +1,9 @@
-# Universal CI remote executor (nebius-path prep).
-# Protocol only: code_ref + job + job_inputs + runs_on.
-# Job-specific logic lives under `if: inputs.job == '…'` blocks below.
+# Concrete remote host for build_and_test_ya on a chosen runner pool.
+# Universality is NOT this file: platform dispatch_remote.yml already takes any
+# workflow_file + inputs_json. Other workloads = other workflow files (same pattern:
+# checkout code_ref → overlay CI from this ref → call the action).
+#
+# This file is what we move to nebius/ydb (swap default runs_on to Nebius labels).
 name: CI remote executor
 
 on:
@@ -11,13 +14,8 @@ on:
         required: false
         type: string
         default: ''
-      job:
-        description: 'Which job to run (string). Implemented today: build_and_test_ya'
-        required: false
-        type: string
-        default: ''
       job_inputs:
-        description: 'JSON object of public params for the selected job (no secrets)'
+        description: 'JSON object of build_and_test_ya public params (no secrets)'
         required: false
         type: string
         default: '{}'
@@ -28,29 +26,23 @@ on:
         default: '["self-hosted","build-preset-relwithdebinfo-fat"]'
 
 concurrency:
-  group: ci-remote-executor-${{ inputs.code_ref || github.sha }}-${{ inputs.job }}-${{ inputs.job_inputs }}
+  group: ci-remote-executor-${{ inputs.code_ref || github.sha }}-${{ inputs.job_inputs }}
   cancel-in-progress: false
 
 jobs:
   execute:
-    name: Remote · ${{ inputs.job || 'unset' }} · ${{ inputs.code_ref || github.sha }}
+    name: build_and_test_ya · ${{ inputs.code_ref || github.sha }}
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     timeout-minutes: 1200
     steps:
-      - name: Validate protocol inputs
-        id: proto
+      - name: Parse job_inputs
+        id: ya
         env:
-          JOB: ${{ inputs.job }}
           JOB_INPUTS: ${{ inputs.job_inputs }}
         shell: bash
         run: |
           python3 - <<'PY'
           import json, os, sys
-
-          job = (os.environ.get("JOB") or "").strip()
-          if not job:
-              print("::error::job is required")
-              sys.exit(1)
 
           raw = os.environ.get("JOB_INPUTS") or "{}"
           try:
@@ -62,23 +54,38 @@ jobs:
               print("::error::job_inputs must be a JSON object")
               sys.exit(1)
 
-          # Optional generic keys for the shell (any job may set them).
-          fetch_depth = data.get("fetch_depth", 2)
-          try:
-              fetch_depth = int(fetch_depth)
-          except (TypeError, ValueError):
-              print(f"::error::job_inputs.fetch_depth must be int, got {fetch_depth!r}")
-              sys.exit(1)
+          def as_str(key, default=""):
+              if key not in data or data[key] is None:
+                  return default
+              v = data[key]
+              if isinstance(v, bool):
+                  return "true" if v else "false"
+              return str(v)
+
+          defaults = {
+              "build_target": "ydb/",
+              "build_preset": "relwithdebinfo",
+              "run_tests": "true",
+              "increment": "false",
+              "fetch_depth": "2",
+              "test_size": "small,medium",
+              "test_type": "",
+              "test_threads": "64",
+              "link_threads": "2",
+              "test_retry_count": "",
+              "additional_ya_make_args": "",
+              "put_build_results_to_cache": "true",
+              "collect_coredumps": "false",
+          }
+          out = {k: as_str(k, d) for k, d in defaults.items()}
+          if out["increment"].lower() in ("1", "true", "yes"):
+              out["fetch_depth"] = "0"
 
           path = os.environ["GITHUB_OUTPUT"]
           with open(path, "a", encoding="utf-8") as f:
-              f.write(f"job={job}\n")
-              f.write(f"fetch_depth={fetch_depth}\n")
-              f.write("job_inputs<<EOF\n")
-              f.write(json.dumps(data, ensure_ascii=False))
-              f.write("\nEOF\n")
-          print(f"job={job} fetch_depth={fetch_depth}")
-          print(json.dumps(data, ensure_ascii=False, indent=2))
+              for k, v in out.items():
+                  f.write(f"{k}={v}\n")
+          print(json.dumps(out, ensure_ascii=False, indent=2))
           PY
 
       - name: Resolve refs
@@ -95,7 +102,8 @@ jobs:
             echo "### CI remote executor"
             echo "- **code ref:** \`$code_ref\`"
             echo "- **ci ref:** \`${{ github.sha }}\`"
-            echo "- **job:** \`${{ steps.proto.outputs.job }}\`"
+            echo "- **preset:** \`${{ steps.ya.outputs.build_preset }}\`"
+            echo "- **target:** \`${{ steps.ya.outputs.build_target }}\`"
             echo "- **runs_on:** \`${{ inputs.runs_on }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -103,7 +111,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ steps.ref.outputs.code }}
-          fetch-depth: ${{ steps.proto.outputs.fetch_depth }}
+          fetch-depth: ${{ steps.ya.outputs.fetch_depth }}
 
       - name: Overlay CI from executor workflow ref
         if: steps.ref.outputs.code != steps.ref.outputs.ci
@@ -127,58 +135,13 @@ jobs:
           rsync -a .executor-ci/.github/config/ .github/config/
           rm -rf .executor-ci
 
-      # ----- job: build_and_test_ya -----
-      - name: Prepare build_and_test_ya inputs
-        id: ya
-        if: steps.proto.outputs.job == 'build_and_test_ya'
-        env:
-          JOB_INPUTS: ${{ steps.proto.outputs.job_inputs }}
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import json, os
-
-          data = json.loads(os.environ.get("JOB_INPUTS") or "{}")
-
-          def as_str(key, default=""):
-              if key not in data or data[key] is None:
-                  return default
-              v = data[key]
-              if isinstance(v, bool):
-                  return "true" if v else "false"
-              return str(v)
-
-          defaults = {
-              "build_target": "ydb/",
-              "build_preset": "relwithdebinfo",
-              "run_tests": "true",
-              "increment": "false",
-              "test_size": "small,medium",
-              "test_type": "",
-              "test_threads": "64",
-              "link_threads": "2",
-              "test_retry_count": "",
-              "additional_ya_make_args": "",
-              "put_build_results_to_cache": "true",
-              "collect_coredumps": "false",
-          }
-          out = {k: as_str(k, d) for k, d in defaults.items()}
-          path = os.environ["GITHUB_OUTPUT"]
-          with open(path, "a", encoding="utf-8") as f:
-              for k, v in out.items():
-                  f.write(f"{k}={v}\n")
-          print(json.dumps(out, ensure_ascii=False, indent=2))
-          PY
-
       - name: Setup ydb access
-        if: steps.proto.outputs.job == 'build_and_test_ya'
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
       - name: Build and test
-        if: steps.proto.outputs.job == 'build_and_test_ya'
         uses: ./.github/actions/build_and_test_ya
         with:
           build_preset: ${{ steps.ya.outputs.build_preset }}
@@ -197,10 +160,3 @@ jobs:
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
             vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
-
-      - name: Fail on unknown job
-        if: steps.proto.outputs.job != 'build_and_test_ya'
-        shell: bash
-        run: |
-          echo "::error::unknown job='${{ steps.proto.outputs.job }}' (no implementation in this workflow yet)"
-          exit 1

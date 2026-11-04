@@ -14,21 +14,34 @@
 namespace NKikimr {
 namespace NHive {
 
-TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev, THive* self) {
-    Index = ++self->OperationsLogIndex;
-
-    const auto& query = ev->Get()->ExtendedQuery;
-    if (query) {
-        NACLib::TUserToken token(query->GetUserToken());
-        User = token.GetUserSID();
+TString GetMonUser(const NMon::TEvRemoteHttpInfo* ev) {
+    const auto& query = ev->ExtendedQuery;
+    if (!query) {
+        return {};
     }
+    NACLib::TUserToken token(query->GetUserToken());
+    return token.GetUserSID();
 }
 
-void TLoggedMonTransaction::WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op) {
+TString GetMonUserForLog(const NMon::TEvRemoteHttpInfo* ev) {
+    TString user = GetMonUser(ev);
+    return user.empty() ? TString("anonymous") : user;
+}
+
+TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev, THive* self)
+    : Index(++self->OperationsLogIndex)
+    , User(GetMonUser(ev->Get()))
+    , LogPrefix(self->GetLogPrefix())
+{}
+
+void TLoggedMonTransaction::WriteOperation(NIceDb::TNiceDb& db, const NJson::TJsonValue& op, TStringBuf description) {
     TStringStream str;
     NJson::WriteJson(&str, &op);
     TInstant timestamp = TActivationContext::Now();
     db.Table<Schema::OperationsLog>().Key(Index).Update<Schema::OperationsLog::User, Schema::OperationsLog::OperationTimestamp, Schema::OperationsLog::Operation>(User, timestamp.MilliSeconds(), str.Str());
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::HIVE, LogPrefix << description
+        << " user=" << GetUserForLog()
+        << " operation=" << str.Str());
 }
 
 TCgiParameters GetParams(const NMon::TEvRemoteHttpInfo* ev) {
@@ -808,6 +821,7 @@ public:
     TAutoPtr<NMon::TEvRemoteHttpInfo> Event;
     bool ChangeRequest = false;
     std::optional<TString> Status;
+    TStringBuilder Changes; // applied changes in "Name: from -> to" form, for the operations log
 
     TTxMonEvent_Settings(const TActorId &source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf *hive)
         : TBase(hive)
@@ -892,12 +906,33 @@ public:
         }
     }
 
+    void AddChange(const TString& change) {
+        Changes << (Changes.empty() ? "" : "; ") << change;
+    }
+
+    static TString GetAllowedMetricsText(const TVector<i64>& metrics) {
+        const auto* descriptor = NKikimrTabletBase::TMetrics::descriptor();
+        TStringBuilder result;
+        for (auto metricNum : metrics) {
+            const auto* field = descriptor->FindFieldByNumber(metricNum);
+            result << (result.empty() ? "" : ",");
+            if (field) {
+                result << field->name();
+            } else {
+                result << metricNum;
+            }
+        }
+        return result.empty() ? TString("none") : TString(result);
+    }
+
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto params(GetParams(Event.Get()));
         NIceDb::TNiceDb db(txc.DB);
 
         NJson::TJsonValue jsonOperation;
         auto& configUpdates = jsonOperation["ConfigUpdates"];
+        const NKikimrConfig::THiveConfig previousConfig = Self->CurrentConfig;
+        const NKikimrConfig::THiveConfig previousDatabaseConfig = Self->DatabaseConfig;
 
         UpdateConfig(db, "MaxTabletsScheduled", configUpdates, TSchemeIds::State::MaxTabletsScheduled);
         UpdateConfig(db, "MaxBootBatchSize", configUpdates, TSchemeIds::State::MaxBootBatchSize);
@@ -1036,6 +1071,24 @@ public:
             Self->BuildCurrentConfig();
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
             Self->ProcessWaitQueue();
+            const google::protobuf::Descriptor* descriptor = NKikimrConfig::THiveConfig::GetDescriptor();
+            const google::protobuf::Reflection* reflection = NKikimrConfig::THiveConfig::GetReflection();
+            for (int i = 0; i < descriptor->field_count(); ++i) {
+                const google::protobuf::FieldDescriptor* field = descriptor->field(i);
+                // a database override that appeared or disappeared is logged even when the effective value is the same:
+                // an added override pins the value against later CMS changes, a reset one lets them through again
+                const bool hadOverride = !field->is_repeated() && reflection->HasField(previousDatabaseConfig, field);
+                const bool hasOverride = !field->is_repeated() && reflection->HasField(Self->DatabaseConfig, field);
+                const bool added = !hadOverride && hasOverride;
+                const bool reset = hadOverride && !hasOverride;
+                TString from = GetHiveConfigFieldText(previousConfig, field);
+                TString to = GetHiveConfigFieldText(Self->CurrentConfig, field);
+                if (from != to || added || reset) {
+                    AddChange(TStringBuilder() << field->name() << ": " << from << " -> " << to
+                        << (added ? " (override added)" : "")
+                        << (reset ? " (reset to default)" : ""));
+                }
+            }
         }
         if (params.contains("resetAllowedMetrics")) {
             ChangeRequest = true;
@@ -1044,9 +1097,10 @@ public:
                 return true;
             }
             auto& jsonReset = jsonOperation["AllowedMetricsReset"];
-            for (const auto& [type, _] : Self->TabletTypeAllowedMetrics) {
+            for (const auto& [type, metrics] : Self->TabletTypeAllowedMetrics) {
                 jsonReset.AppendValue(GetTabletTypeShortName(type));
                 db.Table<Schema::TabletTypeMetrics>().Key(type).Delete();
+                AddChange(TStringBuilder() << "AllowedMetrics[" << GetTabletTypeShortName(type) << "]: " << GetAllowedMetricsText(metrics) << " -> default");
             }
             Self->TabletTypeAllowedMetrics.clear();
         }
@@ -1064,6 +1118,7 @@ public:
                     };
                     if (tabletAllowedMetrics.size() == metricsPos.size()) {
                         TVector<i64> metrics = Self->GetTabletTypeAllowedMetricIds(type);
+                        const TString previousMetrics = GetAllowedMetricsText(metrics);
                         bool changed = false;
                         for (ui32 pos = 0; pos < metricsPos.size(); ++pos) {
                             auto id = metricsPos[pos];
@@ -1098,6 +1153,7 @@ public:
                             jsonAllowedMetrics.AppendValue(std::move(jsonUpdate));
                             db.Table<Schema::TabletTypeMetrics>().Key(type).Update<Schema::TabletTypeMetrics::AllowedMetricIDs>(metrics);
                             Self->TabletTypeAllowedMetrics[type] = metrics;
+                            AddChange(TStringBuilder() << "AllowedMetrics[" << tabletType << "]: " << previousMetrics << " -> " << GetAllowedMetricsText(metrics));
                         }
                     }
                 }
@@ -1105,7 +1161,10 @@ public:
         }
 
         if (ChangeRequest) {
-            WriteOperation(db, jsonOperation);
+            if (!Changes.empty()) {
+                jsonOperation["Changes"] = TString(Changes);
+            }
+            WriteOperation(db, jsonOperation, "Hive UI: settings changed");
         }
         return true;
     }
@@ -1620,7 +1679,7 @@ public:
             Self->ObjectDistributions.RemoveNode(*Node);
             Self->ObjectDistributions.AddNode(*Node);
             Self->ProcessWaitQueue();
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: tablet availability restrictions changed");
             Self->RecordNodeEvent(*Node, EHiveEventType::AvailabilityChanged, EHiveEventReason::MonitoringRequest, eventDetails << "user=" << GetUserForLog());
         }
         return true;
@@ -1737,6 +1796,7 @@ public:
         out << "<tr><td>" << "Tablets:" << "</td><td id='runningTablets'>" << runningTablets << "</td></tr>";
         out << "<tr><td>" << "Boot Queue:" << "</td><td id='bootQueue'>" << Self->BootQueue.BootQueue.size() << "</td></tr>";
         out << "<tr><td>" << "Wait Queue:" << "</td><td id='waitQueue'>" << Self->BootQueue.WaitQueue.size() << "</td></tr>";
+        out << "<tr><td>" << "Hive Uptime:" << "</td><td id='hiveUptime'>" << GetDurationString(TActivationContext::Now() - Self->StartTime()) << "</td></tr>";
         out << "</table></div>";
         out << "<div style='width:180px'><table class='simple-table1'>";
         out << "<tr><th colspan='2'>Totals</th></tr>";
@@ -2356,6 +2416,7 @@ function fillDataShort(result) {
             $('#aliveNodes').html(result.AliveNodes);
             $('#bootQueue').html(result.BootQueueSize);
             $('#waitQueue').html(result.WaitQueueSize);
+            $('#hiveUptime').html(result.HiveUptime);
             $('#maxUsage').html(result.MaxUsage);
             $('#objectImbalance').html(result.ObjectImbalance);
             $('#storageScatter').html(result.StorageScatter);
@@ -2721,6 +2782,7 @@ public:
         jsonData["ResourceVariance"] = GetResourceValuesJson(Self->GetStDevResourceValues());
         jsonData["BootQueueSize"] = Self->BootQueue.BootQueue.size();
         jsonData["WaitQueueSize"] = Self->BootQueue.WaitQueue.size();
+        jsonData["HiveUptime"] = GetDurationString(TActivationContext::Now() - Self->StartTime());
         jsonData["Balancers"] = Self->GetBalancerProgressJson();
         jsonData["MaxUsage"] =  GetValueWithColoredGlyph(stats.MaxUsage, Self->GetMaxNodeUsageToKick()) ;
         auto scatterHtml = convert(stats.ScatterByResource, Self->GetMinScatterToBalance(), GetValueWithColoredGlyph);
@@ -2859,7 +2921,7 @@ public:
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
             jsonOperation["Down"] = Down;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: node down state changed");
             Response = "{\"NodeId\":" + ToString(NodeId) + ',' + "\"Down\":" + (Down ? "true" : "false") + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
@@ -2869,7 +2931,12 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_SetDown(" << NodeId << ")::Complete Response=" << Response);
+        if (Status != THttpStatus::OK) {
+            BLOG_D("THive::TTxMonEvent_SetDown::Complete"
+                << " nodeId=" << NodeId
+                << " down=" << Down
+                << " response=" << Response);
+        }
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2908,7 +2975,7 @@ public:
             NJson::TJsonValue jsonOperation;
             jsonOperation["NodeId"] = NodeId;
             jsonOperation["Freeze"] = Freeze;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: node freeze state changed");
             Response = "{\"NodeId\":" + ToString(NodeId) + ',' + "\"Freeze\":" + (Freeze ? "true" : "false") + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
@@ -2918,7 +2985,12 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_SetFreeze(" << NodeId << ")::Complete Response=" << Response);
+        if (Status != THttpStatus::OK) {
+            BLOG_D("THive::TTxMonEvent_SetFreeze::Complete"
+                << " nodeId=" << NodeId
+                << " freeze=" << Freeze
+                << " response=" << Response);
+        }
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -2927,6 +2999,7 @@ class TTxMonEvent_KickNode : public TTransactionBase<THive> {
 public:
     const TActorId Source;
     const TNodeId NodeId;
+    ui64 Kicked = 0;
     TString Response;
     TString Status = THttpStatus::OK;
     THolder<NMon::TEvRemoteHttpInfo> Event;
@@ -2953,6 +3026,7 @@ public:
                 tablet->Kick();
                 ++kicked;
             }
+            Kicked = kicked;
             Response = "{\"TabletsKicked\":" + ToString(kicked) + "}";
         } else {
             Response = "{\"error\":\"Node " + ToString(NodeId) + " not found\"}";
@@ -2962,7 +3036,16 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxMonEvent_KickNode(" << NodeId << ")::Complete Response=" << Response);
+        if (Status == THttpStatus::OK) {
+            BLOG_I("Hive UI: node tablets kicked"
+                << " user=" << GetMonUserForLog(Event.Get())
+                << " nodeId=" << NodeId
+                << " tabletsKicked=" << Kicked);
+        } else {
+            BLOG_D("THive::TTxMonEvent_KickNode::Complete"
+                << " nodeId=" << NodeId
+                << " response=" << Response);
+        }
         ctx.Send(Source, MakeRawHttpEvent(Status, Response));
     }
 };
@@ -3048,6 +3131,10 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Ok) {
+            BLOG_I("Hive UI: node drain requested"
+                << " user=" << GetMonUserForLog(Event.Get())
+                << " nodeId=" << NodeId
+                << " wait=" << Wait);
             if (Wait) {
                 Self->Execute(Self->CreateSwitchDrainOn(NodeId, {}, WaitActorId));
             } else {
@@ -3087,11 +3174,16 @@ public:
             Status = THttpStatus::BAD_REQUEST;
             return true;
         }
-        Self->StartHiveBalancer({
+        bool started = Self->StartHiveBalancer({
             .Type = EBalancerType::Manual,
             .MaxMovements = MaxMovements,
             .MaxInFlight = MaxInFlight,
         });
+        BLOG_I("Hive UI: manual rebalance requested"
+            << " user=" << GetMonUserForLog(Event.Get())
+            << " maxMovements=" << MaxMovements
+            << " maxInFlight=" << MaxInFlight
+            << " started=" << started);
         return true;
     }
 
@@ -3127,7 +3219,13 @@ public:
             Status = THttpStatus::BAD_REQUEST;
             return true;
         }
-        Self->StartHiveStorageBalancer(Settings);
+        bool started = Self->StartHiveStorageBalancer(Settings);
+        BLOG_I("Hive UI: storage rebalance requested"
+            << " user=" << GetMonUserForLog(Event.Get())
+            << " storagePool=" << Settings.StoragePool
+            << " numReassigns=" << Settings.NumReassigns
+            << " maxInFlight=" << Settings.MaxInFlight
+            << " started=" << started);
         return true;
     }
 
@@ -3169,6 +3267,10 @@ public:
         if (Event->GetMethod() != HTTP_METHOD_POST) {
             return true;
         }
+        BLOG_I("Hive UI: rebalance from scratch requested, restarting all tablets"
+            << " user=" << GetMonUserForLog(Event.Get())
+            << " tenantName=" << TenantName
+            << " tabletsCount=" << Self->Tablets.size());
         for (const auto& tablet : Self->Tablets) {
             Self->Execute(Self->CreateForceRestartTablet(tablet.second.GetFullTabletId()));
         }
@@ -3496,6 +3598,7 @@ public:
             Self->SubActors.emplace_back(waitActor);
         }
         // TODO: pass arguments as post data json
+        BLOG_I("Hive UI: migration requested user=" << GetMonUserForLog(Event.Get()));
         ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new TEvHive::TEvInitMigration()));
         return true;
     }
@@ -3671,6 +3774,11 @@ public:
         }
         TInstant now = TActivationContext::Now();
         tablet->MakeBalancerDecision(now);
+        BLOG_I("Hive UI: tablet move requested"
+            << " user=" << GetMonUserForLog(Event.Get())
+            << " tabletId=" << TabletId
+            << " fromNodeId=" << tablet->NodeId
+            << " toNodeId=" << NodeId);
         Self->RecordTabletEvent(*tablet, EHiveEventType::Moved, EHiveEventReason::ManualMove,
             TStringBuilder() << "from=" << tablet->NodeId << " to=" << NodeId);
         Self->Execute(Self->CreateRestartTablet(tablet->GetFullTabletId(), NodeId));
@@ -3763,7 +3871,7 @@ public:
             NJson::TJsonValue jsonOperation;
             jsonOperation["Tablet"] = TabletId;
             jsonOperation["Stop"] = true;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: tablet stop requested");
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
@@ -3820,7 +3928,7 @@ public:
             NJson::TJsonValue jsonOperation;
             jsonOperation["SubDomain"] = TStringBuilder() << DomainId;
             jsonOperation["Stop"] = Stop;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: domain stop state changed");
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"OK\"}"));
         } else {
             ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, R"({"error":"Domain not found"})"));
@@ -3918,7 +4026,7 @@ public:
             NJson::TJsonValue jsonOperation;
             jsonOperation["Tablet"] = TabletId;
             jsonOperation["Stop"] = false;
-            WriteOperation(db, jsonOperation);
+            WriteOperation(db, jsonOperation, "Hive UI: tablet resume requested");
             if (!Wait) {
                 ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{}"));
             }
@@ -4469,14 +4577,16 @@ class TTxMonEvent_ResetTablet : public TTransactionBase<THive> {
 public:
     const TActorId Source;
     TTabletId TabletId = 0;
+    TString User;
     TString Error;
     TIntrusivePtr<TTabletStorageInfo> Info;
     ui32 KnownGeneration = 0;
 
-    TTxMonEvent_ResetTablet(const TActorId& source, TTabletId tabletId, TSelf* hive)
+    TTxMonEvent_ResetTablet(const TActorId& source, TTabletId tabletId, TString user, TSelf* hive)
         : TBase(hive)
         , Source(source)
         , TabletId(tabletId)
+        , User(std::move(user))
     {
     }
 
@@ -4498,6 +4608,10 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Info) {
+            BLOG_I("Hive UI: tablet reset requested"
+                << " user=" << User
+                << " tabletId=" << TabletId
+                << " knownGeneration=" << KnownGeneration);
             ctx.Register(new TResetter(std::move(Info), Source, KnownGeneration));
         } else if (Error) {
             ctx.Send(Source, MakeRawHttpEvent(THttpStatus::BAD_REQUEST, TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
@@ -5679,7 +5793,7 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     if (page == "ResetTablet") {
         if (IsSafeOperation(ev, ctx)) {
             TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);
-            return Execute(new TTxMonEvent_ResetTablet(ev->Sender, tabletId, this), ctx);
+            return Execute(new TTxMonEvent_ResetTablet(ev->Sender, tabletId, GetMonUserForLog(httpInfo), this), ctx);
         }
     }
     if (page == "DeleteTablet") {
@@ -5687,9 +5801,16 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
             if (cgi.Has("owner") && cgi.Has("owner_idx")) {
                 ui64 owner = FromStringWithDefault<ui64>(cgi.Get("owner"), 0);
                 ui64 ownerIdx = FromStringWithDefault<ui64>(cgi.Get("owner_idx"), 0);
+                BLOG_I("Hive UI: tablet delete requested"
+                    << " user=" << GetMonUserForLog(httpInfo)
+                    << " owner=" << owner
+                    << " ownerIdx=" << ownerIdx);
                 ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, owner, ownerIdx, this));
             } else if (cgi.Has("tablet")) {
                 TTabletId tabletId = FromStringWithDefault<TTabletId>(cgi.Get("tablet"), 0);
+                BLOG_I("Hive UI: tablet delete requested"
+                    << " user=" << GetMonUserForLog(httpInfo)
+                    << " tabletId=" << tabletId);
                 ctx.RegisterWithSameMailbox(new TDeleteTabletActor(ev->Sender, tabletId, this));
             } else {
                 ctx.Send(ev->Sender, new NMon::TEvRemoteJsonInfoRes(R"({"error":"tablet or (owner, owner_idx) params must be specified"})"));
@@ -5724,6 +5845,9 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
             if (cgi.Get("network")) {
                 metrics.MutableResourceUsage()->SetNetwork(FromStringWithDefault<ui64>(cgi.Get("network"), 0));
             }
+            BLOG_I("Hive UI: tablet resource usage update requested"
+                << " user=" << GetMonUserForLog(httpInfo)
+                << " metrics=" << metrics.ShortDebugString());
             ctx.RegisterWithSameMailbox(new TUpdateResourcesActor(ev->Sender, SelfId(), metrics));
             return;
         }

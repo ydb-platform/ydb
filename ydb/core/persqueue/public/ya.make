@@ -3,6 +3,7 @@ YQL_LIBRARY()
 SRCS(
     config.cpp
     inflight_limiter.cpp
+    metrics.cpp
     pq_database.cpp
     pq_rl_helpers.cpp
     pqdata_transaction_compat.cpp
@@ -16,11 +17,16 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/persqueue/public/cloud_events
     ydb/core/protos
+    ydb/library/persqueue/topic_parser
     ydb/core/tx/scheme_board
     ydb/library/actors/core
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)
 
 RECURSE(
     cluster_tracker

@@ -2372,7 +2372,11 @@ void THive::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev)
     const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
     ClusterConfig = record.GetConfig().GetHiveConfig();
     NodeBrokerEpoch = TDuration::MicroSeconds(record.GetConfig().GetNodeBrokerConfig().GetEpochDuration());
+    const NKikimrConfig::THiveConfig previousConfig = CurrentConfig;
     BuildCurrentConfig();
+    if (TString changes = GetHiveConfigDiffText(previousConfig, CurrentConfig)) {
+        BLOG_I("Handle TEvConsole::TEvConfigNotificationRequest: effective config changed changes=" << changes);
+    }
     BLOG_D("Merged config: " << CurrentConfig);
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }

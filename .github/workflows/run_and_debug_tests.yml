@@ -32,7 +32,8 @@ jobs:
   execute:
     name: Remote · ${{ inputs.job }} · ${{ inputs.code_ref || github.sha }}
     runs-on: [self-hosted, build-preset-relwithdebinfo-fat]
-    timeout-minutes: 360
+    # Match run_tests.yml / long regression wall time.
+    timeout-minutes: 1200
     steps:
       - name: Validate job and parse job_inputs
         id: job

@@ -495,46 +495,29 @@ def cmd_start():
     pretty_json = json.dumps(pretty, ensure_ascii=False, indent=2)
 
     summary_lines = [
-        "### Dispatched remote executor",
-        f"- **what we run:** `{wf_file}` (`{env('WORKFLOW_NAME')}`)",
-        f"- **executor run:** [{run_id}]({run_url})",
+        "### Remote dispatch",
+        f"- **run:** `{wf_file}` → [{run_id}]({run_url})",
         f"- **mode:** `{wait_mode}`",
     ]
     if runs_on_raw:
-        files_touched = sorted({r["file"] for r in patch_report})
         summary_lines.extend(
             [
+                f"- **YAML from:** `{source_ref}` (`{source_sha[:12]}`)",
+                f"- **patched on:** `{dispatch_ref}` (tmp shell; same jobs, new runners)",
                 "",
-                "#### Approach A — tmp-branch shell",
-                (
-                    f"Copy `{wf_file}` (+ nested local reusable workflows) from "
-                    f"`{source_ref}` (`{source_sha[:12]}`), rewrite self-hosted "
-                    f"`runs-on`, push as `{tmp_branch or dispatch_ref}`, then "
-                    f"`workflow_dispatch` that same filename on the tmp ref. "
-                    "The tmp branch is only a shell for the runner override; "
-                    "job graph / steps stay from the source workflow."
-                ),
-                f"- **source ref (original YAML):** `{source_ref}`",
-                f"- **dispatch ref (patched shell):** `{dispatch_ref}`",
-                f"- **files rewritten:** {', '.join(f'`{f}`' for f in files_touched)}",
-                "",
-                "| file | job | original runs-on | actual runs-on |",
-                "|---|---|---|---|",
+                "| job | was | now |",
+                "|---|---|---|",
             ]
         )
         for row in patch_report:
+            job = row["job"]
+            if row["file"] != workflow_repo_path(wf_file):
+                job = f"{row['file']} / {job}"
             summary_lines.append(
-                f"| `{row['file']}` | `{row['job']}` | "
-                f"`{_fmt_runs_on(row['from'])}` | `{_fmt_runs_on(row['to'])}` |"
+                f"| `{job}` | `{_fmt_runs_on(row['from'])}` | `{_fmt_runs_on(row['to'])}` |"
             )
     else:
-        summary_lines.extend(
-            [
-                f"- **dispatch ref:** `{dispatch_ref}`",
-                f"- **executor ref:** `{executor_ref}`",
-                "- **runner override:** none (workflow runs as written on the ref)",
-            ]
-        )
+        summary_lines.append(f"- **ref:** `{dispatch_ref}` (no runner patch)")
     summary_lines.extend(
         [
             "",

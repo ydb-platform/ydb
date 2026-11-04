@@ -548,10 +548,10 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
     }
 
     Y_UNIT_TEST(TeardownWithPendingReadSessionKeepsGrpcServiceAlive) {
+        TVector<TAutoPtr<IEventHandle>> heldReads;
         TRetentionGapTest s;
         auto& runtime = s.Env.GetRuntime();
 
-        TVector<TAutoPtr<IEventHandle>> heldReads;
         auto readObserver = runtime.AddObserver<NGRpcProxy::V1::TEvPQProxy::TEvRead>([&](NGRpcProxy::V1::TEvPQProxy::TEvRead::TPtr& ev) {
             heldReads.emplace_back(ev.Release());
         });

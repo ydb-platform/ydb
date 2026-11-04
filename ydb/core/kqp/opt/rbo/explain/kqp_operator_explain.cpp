@@ -647,6 +647,18 @@ TString TOpCBOTree::ToString(TExprContext& ctx, const TInfoUnitRegistry& registr
     return res;
 }
 
+TString TOpSequencer::ToString(TExprContext& ctx, const TInfoUnitRegistry& registry) {
+    Y_UNUSED(ctx);
+    TStringBuilder result;
+    result << "Sequencer [";
+    TStringBuf separator;
+    for (const auto& [id, name] : GeneratedColumns_.Items()) {
+        result << separator << registry.GetDebugName(id) << " := " << name;
+        separator = ", ";
+    }
+    return result << "]";
+}
+
 TString TOpTableEffect::GetExplainName() const {
     switch (EffectType) {
         case EEffectType::InsertRows:

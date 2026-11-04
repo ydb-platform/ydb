@@ -10,6 +10,15 @@
 namespace NKikimr {
 namespace NKqp {
 
+class TExpandInsertRevertRule final: public IRule {
+public:
+    TExpandInsertRevertRule()
+        : IRule("Expand INSERT OR REVERT", ERuleProperties::RequireOutputIUs) {}
+
+    bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
 // A Replicate becomes a stage with several outputs, which needs channel spilling.
 // Give each non-primary port a copy when separate evaluation is safe; the last
 // port reads the producer itself. Enable after logical rewrites and pruning,

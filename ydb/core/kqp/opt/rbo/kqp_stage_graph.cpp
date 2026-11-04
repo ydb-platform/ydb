@@ -118,6 +118,17 @@ TExprNode::TPtr TStreamLookupConnection::BuildConnection(TExprNode::TPtr inputSt
     // clang-format on
 }
 
+TExprNode::TPtr TSequencerConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos,
+    TExprContext& ctx, const TPhysicalNames&) {
+    return Build<TKqpCnSequencer>(ctx, pos)
+        .Output().Stage(inputStage).Index().Build(ToString(OutputIndex)).Build()
+        .Table(Table)
+        .Columns(Columns)
+        .DefaultConstraintColumns(GeneratedColumns)
+        .InputItemType(InputType)
+        .Done().Ptr();
+}
+
 ui32 TStageGraph::AddStage() {
     ui32 newStageId = StageCounter++;
     StageIds.push_back(newStageId);

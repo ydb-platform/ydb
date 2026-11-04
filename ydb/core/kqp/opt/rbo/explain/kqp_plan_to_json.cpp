@@ -581,13 +581,51 @@ TString SerializeRBOAnalyzePlan(const TVector<const TString>& txPlans, const NKq
     YQL_CLOG(TRACE, CoreDq) << "Serialize analyze plan";
 
 
-    if (txPlans.empty()) {
+    // Commit-only transactions may have no plan. Each other transaction has
+    // the same query plan, with statistics for its own stages filled in.
+    NJson::TJsonValue txPlanJson;
+    THashMap<TString, NJson::TJsonValue> stageStats;
+    auto collectStats = [&](const auto& self, const NJson::TJsonValue& node) -> void {
+        if (node.IsMap()) {
+            if (node.Has("StageGuid") && node.Has("Stats")) {
+                stageStats[node["StageGuid"].GetStringSafe()] = node["Stats"];
+            }
+            for (const auto& [key, value] : node.GetMapSafe()) {
+                self(self, value);
+            }
+        } else if (node.IsArray()) {
+            for (const auto& value : node.GetArraySafe()) {
+                self(self, value);
+            }
+        }
+    };
+    for (const auto& plan : txPlans) {
+        if (plan.empty()) {
+            continue;
+        }
+        NJson::ReadJsonTree(plan, &txPlanJson, true);
+        collectStats(collectStats, txPlanJson);
+    }
+    if (!txPlanJson.IsDefined()) {
         return "";
     }
-
-    auto txPlan = txPlans.back();
-    NJson::TJsonValue txPlanJson;
-    NJson::ReadJsonTree(txPlan, &txPlanJson, true);
+    auto applyStats = [&](const auto& self, NJson::TJsonValue& node) -> void {
+        if (node.IsMap()) {
+            if (node.Has("StageGuid")) {
+                if (const auto it = stageStats.find(node["StageGuid"].GetStringSafe()); it != stageStats.end()) {
+                    node["Stats"] = it->second;
+                }
+            }
+            for (auto& [key, value] : node.GetMapSafe()) {
+                self(self, value);
+            }
+        } else if (node.IsArray()) {
+            for (auto& value : node.GetArraySafe()) {
+                self(self, value);
+            }
+        }
+    };
+    applyStats(applyStats, txPlanJson);
 
     AddStatsToSimplifiedPlan(txPlanJson);
     return SerializeRBOExplainPlan(txPlanJson);

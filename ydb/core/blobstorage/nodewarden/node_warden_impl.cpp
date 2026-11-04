@@ -1946,6 +1946,12 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         bsTo->ClearBscSettings();
     }
 
+    if (bsFrom.HasBridgeSyncRateBytesPerSecond()) {
+        bsTo->SetBridgeSyncRateBytesPerSecond(bsFrom.GetBridgeSyncRateBytesPerSecond());
+    } else {
+        bsTo->ClearBridgeSyncRateBytesPerSecond();
+    }
+
     // copy PDiskConfig from DefineHostConfig/DefineBox if this section is managed automatically
     if (!hasStaticGroupInfo(bsFrom.GetServiceSet()) && config->GetSelfManagementConfig().GetEnabled()) {
         THashMap<std::tuple<ui32, TString>, NKikimrBlobStorage::TPDiskConfig> pdiskConfigs;

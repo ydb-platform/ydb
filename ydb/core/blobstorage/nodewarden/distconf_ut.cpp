@@ -11369,6 +11369,32 @@ Y_UNIT_TEST_SUITE(TDeriveStorageConfigBridgeTest) {
         UNIT_ASSERT_STRING_CONTAINS(error, "mandatory pile name is missing for node 1");
     }
 
+    // node warden takes the rate of its syncer quoter from the derived config, so a value lost here is replaced with the
+    // default one as soon as distconf provides the config
+    Y_UNIT_TEST(BridgeSyncRateBytesPerSecond) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableNameserviceConfig();
+        auto *bsFrom = appConfig.MutableBlobStorageConfig();
+        NKikimrBlobStorage::TStorageConfig config;
+        const auto& bsTo = *config.MutableBlobStorageConfig();
+        TString error;
+
+        bsFrom->SetBridgeSyncRateBytesPerSecond(123'000'000);
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(appConfig, &config, &error), error);
+        UNIT_ASSERT_VALUES_EQUAL(bsTo.GetBridgeSyncRateBytesPerSecond(), 123'000'000);
+
+        // zero turns the throttling off, it isn't the same as the value being unset
+        bsFrom->SetBridgeSyncRateBytesPerSecond(0);
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(appConfig, &config, &error), error);
+        UNIT_ASSERT(bsTo.HasBridgeSyncRateBytesPerSecond());
+        UNIT_ASSERT_VALUES_EQUAL(bsTo.GetBridgeSyncRateBytesPerSecond(), 0);
+
+        // the value dropped from the new config doesn't stick from the previous one
+        bsFrom->ClearBridgeSyncRateBytesPerSecond();
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(appConfig, &config, &error), error);
+        UNIT_ASSERT(!bsTo.HasBridgeSyncRateBytesPerSecond());
+    }
+
     // parts of static groups get new generations when the pile becomes unsynced; donors and VDisks being destroyed are
     // separate entries of older generations, which must stay as they are (otherwise they look as active ones)
     Y_UNIT_TEST(ResetStaticGroupPilePartsKeepsDonors) {

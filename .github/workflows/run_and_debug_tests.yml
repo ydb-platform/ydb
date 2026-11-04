@@ -149,7 +149,6 @@ jobs:
           }
           payload = {
               "code_ref": os.environ["CODE_REF"],
-              "job": "build_and_test_ya",
               "job_inputs": json.dumps(job_inputs, separators=(",", ":")),
           }
           out = os.environ["GITHUB_OUTPUT"]

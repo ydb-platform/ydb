@@ -12,7 +12,7 @@ on:
           - remote
         default: ydb_yc
       remote_executor_ref:
-        description: 'Git ref whose ci_remote_executor.yml is the fat executor (default: dev/ci-remote-executor)'
+        description: 'Git ref with fat Run and debug / later ci_remote_executor (default: dev/ci-remote-executor)'
         required: false
         type: string
         default: 'dev/ci-remote-executor'
@@ -164,8 +164,8 @@ jobs:
     uses: ./.github/workflows/dispatch_remote.yml
     secrets: inherit
     with:
-      workflow_file: ci_remote_executor.yml
-      workflow_name: CI remote executor
+      workflow_file: run_and_debug_tests.yml
+      workflow_name: Run and debug tests
       executor_ref: ${{ inputs.remote_executor_ref }}
       inputs_json: ${{ needs.remote_payload.outputs.inputs_json }}
       wait: ${{ inputs.wait_for_remote }}

@@ -57,7 +57,7 @@ git config --get user.email
 
 If either value is missing or incorrect, set `git config --local user.name` and `git config --local user.email` with your own name and email before continuing.
 
-All PRs in this table were open when the recipe was checked. Fetch their public refs, then cherry-pick the exact commits below rather than moving PR heads.
+The first seven PRs in this table were open when the pinned recipe was checked on October 22. The additional fix #58144 was checked on November 4 and applies only to later source revisions containing #57603. Fetch their public refs, then cherry-pick the exact commits below rather than moving PR heads.
 
 | PR | Purpose |
 | --- | --- |
@@ -68,6 +68,7 @@ All PRs in this table were open when the recipe was checked. Fetch their public 
 | [#56501](https://github.com/ydb-platform/ydb/pull/56501) | Exclude Darwin from the GNU Bison linker workaround; draft pending upstream integration. |
 | [#56502](https://github.com/ydb-platform/ydb/pull/56502) | Work around the missing Darwin ARM64 cryptography Rust archive using the existing 3.3.2 fallback instead of 41.0.6; draft temporary workaround with different APIs and dependencies. |
 | [#56503](https://github.com/ydb-platform/ydb/pull/56503) | Use loopback hostnames for dynamic nodes in local macOS test clusters. |
+| [#58144](https://github.com/ydb-platform/ydb/pull/58144) | Fix int4 SSE loads with sse2neon on ARM by using an explicit `__m128i` intermediate. Only needed on later revisions containing #57603; see the separate step below. |
 
 ```bash
 git fetch official \
@@ -77,7 +78,8 @@ git fetch official \
   pull/55893/head:refs/remotes/official/pr-55893 \
   pull/56501/head:refs/remotes/official/pr-56501 \
   pull/56502/head:refs/remotes/official/pr-56502 \
-  pull/56503/head:refs/remotes/official/pr-56503
+  pull/56503/head:refs/remotes/official/pr-56503 \
+  pull/58144/head:refs/remotes/official/pr-58144
 
 git cherry-pick \
   f9b173456a22932c2da98a96f71d6805a9b52af4 \
@@ -91,6 +93,20 @@ git cherry-pick \
 ```
 
 If a PR has been rewritten and an exact commit is unavailable, recheck this recipe against that PR. Do not silently substitute its new head. On a conflict, stop and inspect the base and existing changes; `git cherry-pick --abort` cancels the current sequence.
+
+### Additional fix for newer source revisions: int4 SSE loads
+
+Skip this step for the pinned October 22 revision above: it does not contain the affected file. If adapting the recipe to a newer revision containing #57603, check whether [#58144](https://github.com/ydb-platform/ydb/pull/58144) is already included. Before that fix, ARM builds of targets depending on `ydb/library/vector_distance` fail in `int4_distance_sse_impl.h` with `no viable overloaded '='` when assigning the result of `_mm_sub_epi32`.
+
+For an affected revision, after the fetch above, apply:
+
+```bash
+git cherry-pick 74b34773b60334e549e7a44c9ac3315ab52d6a2f
+```
+
+This changes the reassigned intermediate from `auto` to `__m128i`. On ARM, sse2neon returns different convertible wrapper types for different intrinsics; the explicit vector type permits the assignment. On x86 the deduced type was already `__m128i`. Do not cherry-pick the fix again if it is already present.
+
+The fix PR reports 24 passing tests in `ydb/library/vector_distance/ut`, including signed and unsigned `SseLoad`, on macOS ARM64 at base `d512b14ef7870a128d2642442d14080307d3bdbb`. This validates the targeted fix, not the entire recipe on that newer base.
 
 ## 4. Check the compiler and SDK
 

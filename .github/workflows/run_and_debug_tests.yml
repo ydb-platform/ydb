@@ -72,10 +72,17 @@ jobs:
               "additional_ya_make_args": "",
               "put_build_results_to_cache": "true",
               "collect_coredumps": "false",
+              # Test-history / ya GIT_BRANCH identity (must NOT be executor ref name).
+              "custom_branch_name": "",
           }
           out = {k: as_str(k, d) for k, d in defaults.items()}
           if out["increment"].lower() in ("1", "true", "yes"):
               out["fetch_depth"] = "0"
+          if not out["custom_branch_name"]:
+              print(
+                  "::warning::job_inputs.custom_branch_name is empty; "
+                  "analytics may attribute this run to the executor workflow ref"
+              )
 
           path = os.environ["GITHUB_OUTPUT"]
           with open(path, "a", encoding="utf-8") as f:
@@ -98,6 +105,7 @@ jobs:
             echo "### CI remote executor"
             echo "- **code ref:** \`$code_ref\`"
             echo "- **ci ref:** \`${{ github.sha }}\`"
+            echo "- **analytics branch:** \`${{ steps.ya.outputs.custom_branch_name || '(unset → github.ref_name)' }}\`"
             echo "- **preset:** \`${{ steps.ya.outputs.build_preset }}\`"
             echo "- **target:** \`${{ steps.ya.outputs.build_target }}\`"
             echo "- **runs_on:** \`${{ inputs.runs_on }}\`"
@@ -151,6 +159,7 @@ jobs:
           test_retry_count: ${{ steps.ya.outputs.test_retry_count }}
           put_build_results_to_cache: ${{ steps.ya.outputs.put_build_results_to_cache }}
           collect_coredumps: ${{ steps.ya.outputs.collect_coredumps }}
+          custom_branch_name: ${{ steps.ya.outputs.custom_branch_name }}
           additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ steps.ya.outputs.additional_ya_make_args }}
           secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}

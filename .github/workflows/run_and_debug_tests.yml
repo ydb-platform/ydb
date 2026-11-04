@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       executor:
-        description: 'ydb_yc = local; remote = fat executor ref; remote_patch = approach A (tmp-branch runs-on patch of run_tests.yml)'
+        description: 'ydb_yc = local; remote = fat executor ref; remote_patch = approach A (tmp-branch runs-on patch via registered run_and_debug_tests.yml)'
         required: false
         type: choice
         options:
@@ -18,7 +18,7 @@ on:
         type: string
         default: 'dev/ci-remote-executor'
       remote_source_ref:
-        description: 'remote_patch: ref to copy run_tests.yml from (empty = this run SHA)'
+        description: 'remote_patch: ref to copy run_and_debug_tests.yml (+ nested) from (empty = this run SHA)'
         required: false
         type: string
         default: ''
@@ -28,7 +28,7 @@ on:
         type: string
         default: '["self-hosted","build-preset-relwithdebinfo-fat"]'
       code_ref:
-        description: 'YDB ref/SHA for executor to checkout+test (empty = this run SHA); remote_patch passes it as run_tests branches'
+        description: 'YDB ref/SHA for executor to checkout+test (empty = this run SHA); remote_patch uses it as source default'
         required: false
         type: string
         default: ''
@@ -191,7 +191,7 @@ jobs:
       inputs_json: ${{ steps.payload.outputs.inputs_json }}
       source_ref: ${{ steps.payload.outputs.source_ref }}
     steps:
-      - name: Build run_tests.yml dispatch inputs for approach A
+      - name: Build run_and_debug_tests.yml dispatch inputs for approach A
         id: payload
         env:
           SOURCE_REF: ${{ inputs.remote_source_ref }}
@@ -199,37 +199,52 @@ jobs:
           FALLBACK_SOURCE: ${{ github.sha }}
           BUILD_TARGET: ${{ inputs.test_targets }}
           BUILD_PRESET: ${{ inputs.build_preset }}
+          BRANCHES: ${{ inputs.branches }}
+          USE_BRANCHES_CONFIG: ${{ inputs.use_branches_config }}
+          INCREMENT: ${{ inputs.increment }}
           TEST_SIZE: ${{ inputs.test_size }}
           TEST_TYPE: ${{ inputs.test_type }}
           TEST_THREADS: ${{ inputs.test_threads }}
+          LINK_THREADS: ${{ inputs.link_threads }}
           ADDITIONAL_YA_MAKE_ARGS: ${{ inputs.additional_ya_make_args }}
+          TEST_RETRY_COUNT: ${{ inputs.test_retry_count }}
+          PUT_BUILD_RESULTS_TO_CACHE: ${{ inputs.put_build_results_to_cache }}
           COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
+          RUN_TESTS: ${{ inputs.run_tests }}
         run: |
           python3 - <<'PY'
           import json, os
-          preset = os.environ["BUILD_PRESET"].split(",")[0].strip() or "relwithdebinfo"
-          # run_tests workflow_dispatch build_preset is a closed choice.
-          allowed = {"relwithdebinfo", "release-asan", "release-msan", "release-tsan"}
-          if preset not in allowed:
-              raise SystemExit(f"remote_patch build_preset {preset!r} not in {sorted(allowed)}")
           # Prefer explicit remote_source_ref, else code_ref, else caller SHA.
           source_ref = (
               (os.environ.get("SOURCE_REF") or "").strip()
               or (os.environ.get("CODE_REF") or "").strip()
               or os.environ["FALLBACK_SOURCE"]
           )
-          # run_tests workflow_dispatch has no `branches` input; prepare falls back
-          # to github.ref_name (= tmp branch), whose tree is source_ref + patched YAML.
-          # workflow_dispatch API requires every declared input key, even optionals.
+          # Registered interface: dispatch run_and_debug_tests.yml @ tmp.
+          # Force ydb_yc so the tmp run executes prepare→run_tests (patched runners),
+          # not remote/remote_patch again.
           payload = {
-              "pull_number": "",
+              "executor": "ydb_yc",
+              "remote_executor_ref": "dev/ci-remote-executor",
+              "remote_source_ref": "",
+              "remote_runs_on": '["self-hosted","build-preset-relwithdebinfo-fat"]',
+              "code_ref": "",
               "test_targets": os.environ["BUILD_TARGET"],
-              "test_type": os.environ["TEST_TYPE"],
+              "build_preset": os.environ["BUILD_PRESET"],
+              "increment": os.environ["INCREMENT"],
               "test_size": os.environ["TEST_SIZE"],
-              "additional_ya_make_args": os.environ["ADDITIONAL_YA_MAKE_ARGS"],
-              "build_preset": preset,
-              "collect_coredumps": os.environ["COLLECT_COREDUMPS"],
+              "test_type": os.environ["TEST_TYPE"],
               "test_threads": os.environ["TEST_THREADS"],
+              "link_threads": os.environ["LINK_THREADS"],
+              "additional_ya_make_args": os.environ["ADDITIONAL_YA_MAKE_ARGS"],
+              "test_retry_count": os.environ["TEST_RETRY_COUNT"],
+              "put_build_results_to_cache": os.environ["PUT_BUILD_RESULTS_TO_CACHE"],
+              "collect_coredumps": os.environ["COLLECT_COREDUMPS"],
+              "run_tests": os.environ["RUN_TESTS"],
+              "branches": os.environ.get("BRANCHES") or "",
+              "use_branches_config": os.environ["USE_BRANCHES_CONFIG"],
+              "wait_for_remote": "true",
+              "fail_on_remote_failure": "true",
           }
           out = os.environ["GITHUB_OUTPUT"]
           with open(out, "a", encoding="utf-8") as f:
@@ -246,9 +261,9 @@ jobs:
     uses: ./.github/workflows/dispatch_remote.yml
     secrets: inherit
     with:
-      workflow_file: run_tests.yml
-      workflow_name: Run-tests
-      # executor_ref is unused as dispatch ref when runs_on is set; still required.
+      # Filename registered on default; body on tmp is patched run_and_debug (+ nested run_tests).
+      workflow_file: run_and_debug_tests.yml
+      workflow_name: Run and debug tests
       executor_ref: ${{ needs.remote_patch_payload.outputs.source_ref }}
       source_ref: ${{ needs.remote_patch_payload.outputs.source_ref }}
       runs_on: ${{ inputs.remote_runs_on }}

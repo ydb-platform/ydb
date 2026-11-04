@@ -97,13 +97,9 @@ struct TEvPrivate {
 
         EvContinueFindEmptyHistoryIntervals,
         EvFindEmptyHistoryIntervalsPortionsReady,
-<<<<<<< HEAD
-=======
-        EvPrefetchPortionsMetadata,
 
         EvBackupExportReset,
 
->>>>>>> d03e71b2491 (reset has been supported (#57915))
         EvEnd
     };
 

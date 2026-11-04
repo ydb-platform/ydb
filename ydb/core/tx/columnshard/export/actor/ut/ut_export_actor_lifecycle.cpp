@@ -235,16 +235,9 @@ void WriteAndCommitToMain(TTestBasicRuntime& runtime, TActorId& sender, ui64& tx
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
-<<<<<<< HEAD
     Y_UNIT_TEST(StopExportClearsInflight, EExportInflightTestCase) {
         const auto operation = Arg<0>();
         NTestUtils::CreateBucket("test");
-=======
-    Y_UNIT_TEST(RetriesExportAfterS3ThrottlingMidUpload) {
-        auto s3Client = NTestUtils::MakeS3Client();
-        NTestUtils::CreateBucket("test", s3Client);
-
->>>>>>> d03e71b2491 (reset has been supported (#57915))
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
         const ui64 tableId = 1;
@@ -253,7 +246,6 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
             NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
             NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)),
         };
-<<<<<<< HEAD
         auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto planStep = PrepareTablet(runtime, tableId, schema, 2);
         ui64 txId = 111;
@@ -349,7 +341,20 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         UNIT_ASSERT_VALUES_EQUAL(histogramSamples("Histogram/Export/Read/DurationMs/Histogram"), readSamples);
         UNIT_ASSERT_VALUES_EQUAL(histogramSamples("Histogram/Export/Write/DurationMs/Histogram"), writeSamples);
         UNIT_ASSERT_VALUES_EQUAL(histogramSamples("Histogram/Export/SaveCursor/DurationMs/Histogram"), saveSamples);
-=======
+    }
+
+    Y_UNIT_TEST(RetriesExportAfterS3ThrottlingMidUpload) {
+        auto s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket("test", s3Client);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = {
+            NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)),
+        };
         auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         auto planStep = PrepareTablet(runtime, tableId, schema, 2);
         ui64 txId = 111;
@@ -450,7 +455,6 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         UNIT_ASSERT_VALUES_EQUAL(GetExportAckInflight(runtime), 0);
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorCounter(runtime, "Value/Export/Write/Inflight")->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorCounter(runtime, "Value/Export/SaveCursor/Inflight")->Val(), 0);
->>>>>>> d03e71b2491 (reset has been supported (#57915))
     }
 
     void TestScanPings(bool allowPings, bool savingCursor, bool failDuringSave = false) {

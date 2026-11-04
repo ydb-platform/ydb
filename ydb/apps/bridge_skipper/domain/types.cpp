@@ -3,6 +3,30 @@
 #include <util/string/builder.h>
 
 namespace NBridgeSkipper {
+
+TString ToString(EMode mode) {
+    switch (mode) {
+        case EMode::Observe: return "observe";
+        case EMode::Manual: return "manual";
+        case EMode::Auto: return "auto";
+    }
+    return "observe";
+}
+
+TString ToString(EOperationKind kind) {
+    switch (kind) {
+        case EOperationKind::Failover: return "failover";
+        case EOperationKind::Switchover: return "switchover";
+        case EOperationKind::TakeOffline: return "take_offline";
+        case EOperationKind::Rejoin: return "rejoin";
+    }
+    return "unknown";
+}
+
+TString ToString(EDispatchOrigin origin) {
+    return origin == EDispatchOrigin::Manual ? "manual" : "auto";
+}
+
 namespace {
 
 TString Unknown(ui32 value) {

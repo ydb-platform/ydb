@@ -46,8 +46,9 @@ class StandaloneTest(unittest.TestCase):
                     try:
                         status, state, _ = http_request("http://127.0.0.1:%d/api/state" % port)
                         if status == 200 and state["view"] is not None:
-                            self.assertEqual(state["mode"], "manual")
+                            self.assertEqual(state["mode"], "observe")
                             config = json.loads(next(Path(run).glob("bridge_skipper/*/config.json")).read_text())
+                            self.assertNotIn("mode", config)
                             self.assertEqual(state["cluster_id"], config["cluster_id"])
                             self.assertEqual({endpoint["uri"] for endpoint in state["endpoints"]},
                                              {"grpc://" + node.endpoint for node in topology.all_nodes()})

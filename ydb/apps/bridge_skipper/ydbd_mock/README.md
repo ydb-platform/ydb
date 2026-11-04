@@ -36,9 +36,11 @@ $S/skipper.sh
 ```
 
 The launcher writes a JSON config (valid YAML) containing every direct node
-endpoint grouped by pile. It runs the built `bridge_skipper` in `manual` mode
-and serves its UI/API at <http://127.0.0.1:8080>. Use `--mode auto` to enable
-mutations or `--listen 127.0.0.1:18080` to change the HTTP address.
+endpoint grouped by pile. A fresh state directory starts the built
+`bridge_skipper` in Observe and serves its UI/API at <http://127.0.0.1:8080>.
+Enable Manual or Auto through that UI/API; mode is persisted, so restarts restore
+it. The launcher has no `--mode` configuration override. Use
+`--listen 127.0.0.1:18080` to change the HTTP address.
 `BRIDGE_SKIPPER_BINARY` overrides the executable path.
 
 The config and controller state live in `run/bridge_skipper/<cluster_id>/`.

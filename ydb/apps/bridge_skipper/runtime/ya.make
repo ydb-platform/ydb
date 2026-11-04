@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    diagnostics.cpp
     state_file.cpp
     ydb_clients.cpp
     skipper.cpp

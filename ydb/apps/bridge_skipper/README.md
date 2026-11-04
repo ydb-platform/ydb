@@ -4,12 +4,15 @@ Skipper is one external failover controller for one YDB bridge cluster. It
 observes `GetClusterState`, pile connectivity and whole-cluster `SelfCheck`
 through the public C++ SDK. When failed piles are confirmed, it plans one
 guarded update that disconnects them all and, if needed, promotes a survivor.
-In `manual` mode it publishes that plan as a CLI command; `auto` mode sends the
-same plan. Operators perform planned lifecycle and membership operations with
-the YDB CLI.
+A fresh state directory starts in Observe: observation continues with no dispatch.
+The embedded web UI at `/` enables Manual reviewed failover, switchover, take
+offline and rejoin, or Auto policy-approved failover. Manual and Auto use the
+same guarded failover planner. Mode and typed pending work are persisted;
+configuration has no `mode` key. Membership and conversion remain external CLI
+operations.
 
-* [Operator runbook](docs/operations.md): deployment, configuration, manual
-  failover, Auto, lifecycle operations, pending mutations and recovery.
+* [Operator runbook](docs/operations.md): deployment, configuration, reviewed
+  commands, Auto, lifecycle operations, pending mutations and recovery.
 * [Monitoring](docs/monitoring.md) and [example alerts](docs/alerts.yaml):
   `/api/state`, metrics, logs and alerts.
 * [Configuration example](config/example.yaml).
@@ -26,6 +29,7 @@ the YDB CLI.
 - Failed needs every fresh BSC-mode reply to report a RED group part for the pile. Lost needs fresh settled connectivity reports (sent while the reporter's root was not binding) from other piles at the current generation that all show the pile in config quorum without node quorum, and no report from the pile itself that shows its node quorum; a report sent while binding counts only for positive claims (the reporter's own node quorum, participation and survivor visibility). When every outside report stays binding and BSC cannot be observed, no Lost verdict forms and a silent primary loss needs manual action from the published state; whether binding persists on a real cluster is measurement M1 below.
 - A Down primary is replaced only by an eligible survivor: Healthy, or, with no fresh BSC-mode reply anywhere, self quorum and no fresh fallback-mode reply attributing a RED or GREY group part to it (the PROMOTED pile first, else the first eligible SYNCHRONIZED pile by name). A primary that is not Down stays primary whatever its verdict. Connectivity does not verify survivor disks, so the no-BSC rule rests on measurement M3 below.
 - Endpoints are static configuration keyed by pile, a documented deviation from the design overview's FetchConfig/ListEndpoints inventory: a configured pile absent from the selected view is ignored with a `configured_endpoint_ignored` warning, and a membership change needs a configuration change and a restart.
+- Zero data loss remains the product invariant. Reviews describe quorum participation and application availability; uncertain outcomes do not change that invariant.
 - Every update carries `expected_generation`. A persisted high-water mark and pending record ensure that only the identical update, or a plan that keeps its primary and adds DISCONNECTED targets, is ever sent at a generation.
 - Client certificates are the recommended production credentials. A token file is re-read before every update and after any UNAUTHORIZED reply, so rotation normally needs no restart. A rejected mutation stops Auto at that generation even after the token changes; fix the cause and restart, or wait for a newer generation, as described in the [runbook](docs/operations.md#pending-mutations-and-state-overrides).
 - A generation guard cannot choose between divergent histories after a partition.

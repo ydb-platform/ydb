@@ -65,6 +65,7 @@ struct TUpdateResult {
 
 // Ephemeral launch permission; never persisted with the same-generation overlay.
 struct TUpdateAuthorization {
+    // At this instant the supporting evidence is already expired.
     TMonotonic ValidUntil;
 };
 
@@ -96,7 +97,7 @@ public:
     explicit TRedactor(std::shared_ptr<const TTokenSource> tokens);
     // A fixed token, for callers without a token file.
     explicit TRedactor(const TLoadedCredentials& credentials);
-    TString Redact(TStringBuf text) const;
+    TString Redact(TStringBuf text, size_t limit = 4096) const;
     TString Issues(const NYdb::TStatus& status) const;
 
 private:

@@ -1008,7 +1008,6 @@ def cmd_skipper(cluster: Cluster, args) -> int:
     manifest = cluster.manifest()
     config = {
         "cluster_id": manifest["cluster_id"],
-        "mode": args.mode,
         "endpoints": {pile.name: ["grpc://" + node.endpoint for node in pile.nodes] for pile in topo.piles},
         "http": {"listen": args.listen},
     }
@@ -1113,7 +1112,6 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("manifest", help="print versioned logical identities and dial endpoints").set_defaults(fn=cmd_manifest)
     skipper = sub.add_parser("skipper", help="launch the C++ bridge_skipper against this mock cluster")
     skipper.add_argument("--binary", required=True, help="path to the built bridge_skipper executable")
-    skipper.add_argument("--mode", choices=("manual", "auto"), default="manual")
     skipper.add_argument("--listen", default="127.0.0.1:8080")
     skipper.add_argument("--state-dir", default=None, help="override the state directory per mock session")
     skipper.set_defaults(fn=cmd_skipper)

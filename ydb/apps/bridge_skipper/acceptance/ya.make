@@ -1,2 +1,5 @@
 RECURSE(lib)
-RECURSE_FOR_TESTS(tests)
+RECURSE_FOR_TESTS(
+    tests
+    browser
+)

@@ -22,7 +22,8 @@ on:
         default: '["self-hosted","build-preset-relwithdebinfo-fat"]'
 
 concurrency:
-  group: ci-remote-executor-${{ inputs.code_ref || github.sha }}-${{ inputs.job_inputs }}
+  # Keep under GitHub's 400-char limit (do not embed full job_inputs JSON).
+  group: ci-remote-executor-${{ inputs.code_ref || github.sha }}-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:

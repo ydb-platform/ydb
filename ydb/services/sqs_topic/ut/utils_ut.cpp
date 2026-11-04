@@ -197,7 +197,7 @@ namespace {
 } // namespace
 
 Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
-    Y_UNIT_TEST(ConvertOldConsumerNameForFirstClassCitizen) {
+    Y_UNIT_TEST(KeepsConsumerNameForFirstClassCitizen) {
         NKikimr::TTestActorRuntime runtime(1, false);
         InitRuntime(runtime);
 
@@ -266,30 +266,32 @@ Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(folderOnly, "folder_id"), "folder4");
     }
 
-    Y_UNIT_TEST(ConvertOldConsumerNameForSharedConsumerInFederation) {
+    Y_UNIT_TEST(KeepsConsumerNameInFederation) {
         NKikimr::TTestActorRuntime runtime(1, false);
         InitRuntime(runtime);
 
-        const auto labels = CollectRequestMessageCountMetricsLabels(
+        const auto shared = CollectRequestMessageCountMetricsLabels(
             runtime,
             "ydb_sqs_consumer",
             false
         );
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(shared, "consumer"), "ydb_sqs_consumer");
 
-        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "shared/ydb_sqs_consumer");
-    }
-
-    Y_UNIT_TEST(ConvertOldConsumerNameForNonSharedConsumerInFederation) {
-        NKikimr::TTestActorRuntime runtime(1, false);
-        InitRuntime(runtime);
-
-        const auto labels = CollectRequestMessageCountMetricsLabels(
+        const auto withAt = CollectRequestMessageCountMetricsLabels(
             runtime,
             "account@dir--topic",
             false
         );
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(withAt, "consumer"), "account@dir--topic");
 
-        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "account/dir--topic");
+        const auto pathForm = CollectRequestMessageCountMetricsLabels(
+            runtime,
+            "crowdplatform/ycs-tasks/sqs/push2yt/push2yt_consumer",
+            false
+        );
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetLabelValue(pathForm, "consumer"),
+            "crowdplatform/ycs-tasks/sqs/push2yt/push2yt_consumer");
     }
 }
 

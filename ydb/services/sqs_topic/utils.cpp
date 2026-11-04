@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/base/iface.h>
-#include <ydb/core/persqueue/public/metrics.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
@@ -97,7 +96,7 @@ namespace NKikimr::NSqsTopic {
         }
         common.emplace_back("method", method);
         common.emplace_back("topic", adjustedTopicPath);
-        common.emplace_back("consumer", NPQ::MetricsConsumerName(consumerName));
+        common.emplace_back("consumer", consumerName);
         std::move(labels.begin(), labels.end(), std::back_inserter(common));
         return common;
     }

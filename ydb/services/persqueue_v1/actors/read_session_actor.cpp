@@ -975,7 +975,7 @@ void TReadSessionActor<Protocol>::SetupBytesReadByUserAgentCounter() {
     BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", protocol)
-        ->GetSubgroup("consumer", ReadWithoutConsumer ? ClientPath : NPQ::MetricsConsumerName(ClientId))
+        ->GetSubgroup("consumer", NPQ::MetricsConsumerName(ClientId))
         ->GetSubgroup("sdk_build_info", CleanupCounterValueString(SdkBuildInfo))
         ->GetSubgroup("user_agent", DropUserAgentSuffix(CleanupCounterValueString(UserAgent)))
         ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);

@@ -304,7 +304,7 @@ void TDirectReadSessionActor::SetupCounters() {
 
     auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession");
     subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup(
-        "ConsumerPath", ReadWithoutConsumer ? ClientPath : NPQ::MetricsConsumerName(ClientId));
+        "ConsumerPath", NPQ::MetricsConsumerName(ClientId));
     const TString name = "sensor";
 
     Errors = subGroup->GetExpiringNamedCounter(name, "Errors", true);

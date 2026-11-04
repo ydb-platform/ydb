@@ -338,8 +338,12 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         auto it = Self->ChangeRecordsToRemove.begin();
-        if (Self->IsDatabaseFrozen() && Self->DatabaseFreeze.GetDeliveryLost()) {
+        if (Self->IsDatabaseFrozen() && Self->DatabaseFreeze.GetDeliveryLost()
+            && Self->DatabaseFreezeDeliveryLostPersistedEpoch != Self->DatabaseFreeze.GetEpoch())
+        {
+            // Commit the first loss atomically with removal of its records.
             Self->PersistSys(db, Schema::Sys_DatabaseFreeze, Self->DatabaseFreeze.SerializeAsString());
+            PersistedDeliveryLostEpoch = Self->DatabaseFreeze.GetEpoch();
         }
         while (RemovedCount < BucketSize && it != Self->ChangeRecordsToRemove.end()) {
             Self->RemoveChangeRecord(db, *it);
@@ -357,6 +361,10 @@ public:
             {"removed", RemovedCount},
             {"left", Self->ChangeRecordsToRemove.size()},
             {"tabletId", Self->TabletID()});
+
+        if (PersistedDeliveryLostEpoch && Self->DatabaseFreeze.GetEpoch() == PersistedDeliveryLostEpoch) {
+            Self->DatabaseFreezeDeliveryLostPersistedEpoch = PersistedDeliveryLostEpoch;
+        }
 
         if (Self->ChangeRecordsToRemove) {
             Self->Execute(new TTxRemoveChangeRecords(Self), ctx);
@@ -380,6 +388,7 @@ public:
 private:
     static constexpr size_t BucketSize = 1000;
     size_t RemovedCount = 0;
+    ui64 PersistedDeliveryLostEpoch = 0;
     THashSet<ui64> ActivationList;
     bool ChangeExchangeSplit = false;
 

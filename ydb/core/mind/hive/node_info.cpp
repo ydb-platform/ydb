@@ -502,7 +502,7 @@ void TNodeInfo::UpdateResourceMaximum(const NKikimrTabletBase::TMetrics& metrics
     Hive.UpdateTotalResourceValues(nullptr, nullptr, {}, {}, {}, normalizedValues - oldNormalizedValues);
 }
 
-double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty) const {
+double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty, bool includeNamed) const {
     // what it would like when tablet will run on this node?
     auto maximum = GetResourceMaximumValues();
     TResourceRawValues nodeValues = GetResourceCurrentValues();
@@ -524,12 +524,29 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbou
         }
         usage = std::max(usage, reserved);
     }
+    if (includeNamed) {
+        usage = std::max(usage, GetNamedUsageForTablet(tablet));
+    }
     if (Hive.GetSpreadNeighbours() && usage < 1 && neighbourPenalty) {
         auto neighbours = GetTabletNeighboursCount(tablet);
         if (neighbours > 0) {
             auto remain = 1 - usage;
             auto cost = remain / (neighbours + 1);
             usage += cost * neighbours; // n / (n + 1)
+        }
+    }
+    return usage;
+}
+
+double TNodeInfo::GetNamedUsageForTablet(const TTabletInfo& tablet) const {
+    const bool alreadyHere = tablet.IsPresentOnLocal(Local);
+    double usage = 0;
+    for (const auto& v : tablet.GetResourceValues().NamedResources) {
+        if (!Hive.GetNamedResourceSettings(v.Name).IsBalanced()) {
+            continue;
+        }
+        if (auto namedUsage = GetNamedResourceUsage(v.Name, alreadyHere ? 0 : v.Value)) {
+            usage = std::max(usage, *namedUsage);
         }
     }
     return usage;

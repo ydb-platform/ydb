@@ -121,7 +121,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     // Resource broker queue usage, reported to Hive as named resources
     struct TQueueUsageValue {
         ui64 Value = 0;
-        ui64 Transferable = 0;
+        bool Transferable = true; // nothing is running yet
 
         bool operator==(const TQueueUsageValue&) const = default;
     };
@@ -310,7 +310,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         HandlePipeDestroyed(ctx);
     }
 
-    static void SetNamedResource(NKikimrTabletBase::TMetrics& metrics, const TString& name, ui64 value, std::optional<ui64> transferable = std::nullopt) {
+    static void SetNamedResource(NKikimrTabletBase::TMetrics& metrics, const TString& name, ui64 value, bool transferable = true) {
         NKikimrTabletBase::TNamedResource* resource = nullptr;
         for (auto& r : *metrics.MutableNamedResources()) {
             if (r.GetName() == name) {
@@ -324,9 +324,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
         resource->SetValue(value);
         if (transferable) {
-            resource->SetTransferable(*transferable);
+            resource->ClearTransferable(); // the default
         } else {
-            resource->ClearTransferable();
+            resource->SetTransferable(false);
         }
     }
 
@@ -647,8 +647,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 }
             }
             for (const auto& v : metrics.GetNamedResources()) {
-                SetNamedResource(it->second.ResourceValues, v.GetName(), v.GetValue(),
-                    v.HasTransferable() ? std::optional<ui64>(v.GetTransferable()) : std::nullopt);
+                SetNamedResource(it->second.ResourceValues, v.GetName(), v.GetValue(), v.GetTransferable());
             }
             auto after = it->second.ResourceValues.ByteSize();
             if (after == 0 && before == 0) {
@@ -764,7 +763,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 }
                 currentUsage[tabletId][name] = TQueueUsageValue{
                     .Value = tablet.Waiting + tablet.Running,
-                    .Transferable = tablet.Waiting,
+                    .Transferable = tablet.Running == 0, // a move would restart running tasks
                 };
             }
         }
@@ -912,7 +911,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
         OnlineTablets.emplace(tabletId, inbootIt->second);
         InbootTablets.erase(inbootIt);
-        // Hive resets named resources of a (re)started tablet, so everything has to be reported again
+        // Hive only has estimates for a (re)started tablet until it is reported, so everything has to be reported again
         ReportedQueueUsage.erase(tabletId);
     }
 

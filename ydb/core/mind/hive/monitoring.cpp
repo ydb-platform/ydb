@@ -1824,7 +1824,7 @@ public:
                         continue;
                     }
                     total += node.NamedResourceValues.GetValue(name);
-                    transferable += node.NamedResourceValues.GetTransferable(name);
+                    transferable += node.NamedResourceValues.GetTransferableValue(name);
                     if (auto usage = node.GetNamedResourceUsage(name)) {
                         maxUsage = std::max(maxUsage, *usage);
                         overCapacity += *usage > 1;

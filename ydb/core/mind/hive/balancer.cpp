@@ -132,10 +132,6 @@ protected:
     const ui32 RunId; // see CountTablet
     using TTabletCounters = TBalancerRunStats::TTabletCounters;
     using ETabletCounter = TBalancerRunStats::ETabletCounter;
-    // For named resource balancing: moves in flight, tablet -> {target node, amount of the resource}.
-    // Until the tablet starts on the target node, its usage is not accounted there.
-    THashMap<TFullTabletId, std::pair<TNodeId, ui64>> NamedResourceMovesInFlight;
-
     bool IsNamedResourceBalancer() const {
         return !Settings.NamedResource.empty();
     }
@@ -322,8 +318,9 @@ protected:
             return false;
         }
         if (IsNamedResourceBalancer()) {
-            // only the part which moves with the tablet without losing work is worth moving
-            if (tablet->GetResourceValues().NamedResources.GetTransferable(Settings.NamedResource) == 0) {
+            // only the tablets which a move would not interrupt
+            const auto* value = tablet->GetResourceValues().NamedResources.Find(Settings.NamedResource);
+            if (value == nullptr || !value->IsTransferable()) {
                 CountTablet(tablet, &TTabletCounters::SkippedNoMetric, ETabletCounter::SkippedNoMetric);
                 return false;
             }
@@ -357,7 +354,7 @@ protected:
         if (IsNamedResourceBalancer()) {
             const TString& name = Settings.NamedResource;
             std::stable_sort(first, last, [&name](const TTabletInfo* a, const TTabletInfo* b) -> bool {
-                return a->GetResourceValues().NamedResources.GetTransferable(name) > b->GetResourceValues().NamedResources.GetTransferable(name);
+                return a->GetResourceValues().NamedResources.GetValue(name) > b->GetResourceValues().NamedResources.GetValue(name);
             });
             return;
         }
@@ -466,13 +463,7 @@ protected:
                 {"logPrefix", GetLogPrefix()},
                 {"tablet", tablet->ToString()});
             CountTablet(tablet, &TTabletCounters::TabletsExamined, ETabletCounter::TabletsExamined);
-            THive::TNodeFilterFunc nodeFilter;
-            if (IsNamedResourceBalancer()) {
-                nodeFilter = [this, tablet](const TNodeInfo& node) -> bool {
-                    return Hive->CheckNamedResourceMoveExpediency(*tablet, node, Settings.NamedResource, GetNamedResourceMovedTo(node.Id)).Expedient;
-                };
-            }
-            THive::TBestNodeResult result = Hive->FindBestNode(*tablet, 0, nodeFilter);
+            THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
             if (std::holds_alternative<THive::TNotEnoughResources>(result)) {
                 CountTablet(tablet, &TTabletCounters::RejectedNotEnoughResources, ETabletCounter::RejectedNotEnoughResources);
             } else if (std::holds_alternative<THive::TTooManyTabletsStarting>(result)) {
@@ -484,9 +475,7 @@ protected:
                 TNodeInfo* node = std::get<TNodeInfo*>(result);
                 THive::TMoveExpediency expediency; // not expedient
                 if (node != tablet->Node) {
-                    expediency = IsNamedResourceBalancer()
-                        ? Hive->CheckNamedResourceMoveExpediency(*tablet, *node, Settings.NamedResource, GetNamedResourceMovedTo(node->Id))
-                        : Hive->CheckTabletMoveExpediency(*tablet, *node);
+                    expediency = Hive->CheckTabletMoveExpediency(*tablet, *node);
                     if (!expediency.Expedient) {
                         CountTablet(tablet, &TTabletCounters::RejectedNotExpedient, ETabletCounter::RejectedNotExpedient);
                     }
@@ -509,12 +498,11 @@ protected:
                     details << "balancer=" << EBalancerTypeName(Settings.Type);
                     if (IsNamedResourceBalancer()) {
                         const TString& name = Settings.NamedResource;
-                        const ui64 transferable = tablet->GetResourceValues().NamedResources.GetTransferable(name);
+                        const ui64 value = tablet->GetResourceValues().NamedResources.GetValue(name);
                         details << " resource=" << name
                             << " sourceUsage=" << Sprintf("%.3f", tablet->Node->GetNamedResourceUsage(name).value_or(0))
-                            << " targetUsageWithTablet=" << Sprintf("%.3f", node->GetNamedResourceUsage(name, GetNamedResourceMovedTo(node->Id) + transferable).value_or(0))
-                            << " tabletTransferable=" << transferable;
-                        NamedResourceMovesInFlight[tablet->GetFullTabletId()] = {node->Id, transferable};
+                            << " targetUsageWithTablet=" << Sprintf("%.3f", node->GetNamedResourceUsage(name, value).value_or(0))
+                            << " tabletValue=" << value;
                     }
                     details
                         << " computeResource=" << EResourceToBalanceName(Settings.ResourceToBalance)
@@ -523,9 +511,14 @@ protected:
                         << " targetUsageWithTablet=" << Sprintf("%.3f", node->GetNodeUsageForTablet(*tablet))
                         << " tabletWeight=" << Sprintf("%.3f", tablet->GetWeight(Settings.ResourceToBalance))
                         << " tabletUsageImpact=" << Sprintf("%.3f", tablet->GetUsageImpact());
-                    if (expediency.Reason == EHiveEventReason::ResourceStDevImproved) {
+                    if (expediency.Reason == EHiveEventReason::ResourceStDevImproved || expediency.Reason == EHiveEventReason::NamedResourceImproved) {
                         details << " stdevBefore=" << Sprintf("%.3f", expediency.StDevBefore)
                             << " stdevAfter=" << Sprintf("%.3f", expediency.StDevAfter);
+                    }
+                    if (!expediency.NamedResource.empty()) {
+                        details << " named=" << expediency.NamedResource
+                            << " namedBefore=" << Sprintf("%.3f", expediency.NamedBefore)
+                            << " namedAfter=" << Sprintf("%.3f", expediency.NamedAfter);
                     }
                     details << " movement=" << Movements;
                     if (Settings.MaxMovements != 0) {
@@ -544,16 +537,6 @@ protected:
         }
     }
 
-    ui64 GetNamedResourceMovedTo(TNodeId nodeId) const {
-        ui64 result = 0;
-        for (const auto& [tabletId, move] : NamedResourceMovesInFlight) {
-            if (move.first == nodeId) {
-                result += move.second;
-            }
-        }
-        return result;
-    }
-
     void Handle(TEvPrivate::TEvRestartComplete::TPtr& ev) {
         YDB_LOG_DEBUG("Balancer received TEvRestartComplete for tablet",
             {"logPrefix", GetLogPrefix()},
@@ -562,8 +545,6 @@ protected:
             {"tabletId", ev->Get()->TabletId});
         --KickInFlight;
         ++RunStats.Passes;
-        // once restarted, the tablet carries its transferable usage to the new node by itself
-        NamedResourceMovesInFlight.erase(ev->Get()->TabletId);
         BalanceNodes();
         KickNextTablet();
     }

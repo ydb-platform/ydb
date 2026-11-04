@@ -284,7 +284,11 @@ public:
         return ResourceMaximumValues;
     }
 
-    double GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty = true) const;
+    // includeNamed adds the balanced named resources of the tablet: they rank nodes for the tablet,
+    // but must not make a node unable to run it, as a full queue only means the work has to wait
+    double GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty = true, bool includeNamed = false) const;
+    // The highest usage among the balanced named resources of the tablet if it runs on this node, 0 if none
+    double GetNamedUsageForTablet(const TTabletInfo& tablet) const;
     double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
     double GetNodeUsage(const TResourceNormalizedValues& normValues,
                         EResourceToBalance resource = EResourceToBalance::ComputeResources) const;

@@ -24,10 +24,13 @@ namespace NHive {
 struct TNamedResourceValue {
     TString Name;
     ui64 Value = 0;
-    // Part of Value which moves with the tablet without losing work
-    ui64 Transferable = 0;
-    // Non-zero for values estimated by Hive rather than reported, see CarryOverTransferable
+    // The part of Value which belongs to transferable tablets, i.e. which a move would not interrupt.
+    // For a single tablet it is either Value or 0, for sums over tablets anything in between.
+    ui64 TransferableValue = 0;
+    // Non-zero for values estimated by Hive rather than reported, see CarryOverAsEstimate
     TInstant EstimateDeadline;
+
+    bool IsTransferable() const { return TransferableValue == Value; }
 
     bool operator==(const TNamedResourceValue&) const = default;
 };
@@ -39,13 +42,13 @@ public:
 
     const TNamedResourceValue* Find(TStringBuf name) const;
     ui64 GetValue(TStringBuf name) const;
-    ui64 GetTransferable(TStringBuf name) const;
+    ui64 GetTransferableValue(TStringBuf name) const;
 
-    // Removes the resource when value is 0, transferable is capped by value
-    void Set(const TString& name, ui64 value, ui64 transferable, TInstant estimateDeadline = TInstant::Zero());
-    // For a restarted tablet: only the transferable part survives a restart, and it is only an estimate
-    // until the new incarnation reports it. Returns true if anything changed.
-    bool CarryOverTransferable(TInstant estimateDeadline);
+    // Removes the resource when value is 0
+    void Set(const TString& name, ui64 value, bool transferable, TInstant estimateDeadline = TInstant::Zero());
+    // For a restarted tablet: the work follows the tablet to the new node, but the values are only an estimate
+    // until the new incarnation reports them. Returns true if anything changed.
+    bool CarryOverAsEstimate(TInstant estimateDeadline);
     // Removes estimates with deadline before now. Returns true if anything changed.
     bool DropExpiredEstimates(TInstant now);
     // The earliest deadline among estimates, Zero if there are no estimates
@@ -58,7 +61,7 @@ public:
     TStorage::const_iterator begin() const { return Values.begin(); }
     TStorage::const_iterator end() const { return Values.end(); }
 
-    // Transferable is written only when it differs from value
+    // Transferable is written only when it is false (or, for sums, when not all of the value is transferable)
     void ToProto(::google::protobuf::RepeatedPtrField<NKikimrTabletBase::TNamedResource>* proto) const;
     void FromProto(const ::google::protobuf::RepeatedPtrField<NKikimrTabletBase::TNamedResource>& proto);
     TString ToString() const;

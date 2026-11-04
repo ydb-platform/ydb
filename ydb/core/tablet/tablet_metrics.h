@@ -55,14 +55,14 @@ public:
     // Resources identified by name (see NKikimrTabletBase::TNamedResource).
     struct TNamedValue {
         ui64 Value = 0;
-        std::optional<ui64> Transferable; // not set means the whole value is transferable
+        std::optional<bool> Transferable; // not set means transferable
 
         bool operator==(const TNamedValue&) const = default;
     };
     THashMap<TString, TNamedValue> Named;
 
     // Setting value to 0 reports 0 once and then forgets the resource.
-    void SetNamed(const TString& name, ui64 value, std::optional<ui64> transferable = std::nullopt);
+    void SetNamed(const TString& name, ui64 value, std::optional<bool> transferable = std::nullopt);
 
     void Fill(NKikimrTabletBase::TMetrics& metrics) const;
 };

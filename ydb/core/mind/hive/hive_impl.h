@@ -690,9 +690,7 @@ protected:
     struct TNotEnoughResources {};
     using TBestNodeResult = std::variant<TNodeInfo*, TNoNodeFound, TTooManyTabletsStarting, TNotEnoughResources>;
 
-    using TNodeFilterFunc = std::function<bool(const TNodeInfo&)>;
-    // nodeFilter, if set, additionally restricts candidate nodes
-    TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0, const TNodeFilterFunc& nodeFilter = {});
+    TBestNodeResult FindBestNode(const TTabletInfo& tablet, TNodeId suggestedNodeId = 0);
 
     struct TSelectedNode {
         double Usage;
@@ -1150,15 +1148,31 @@ protected:
         EHiveEventReason Reason = EHiveEventReason::ResourceStDevImproved; // meaningful only when Expedient
         double StDevBefore = 0; // set only when the decision was made by resource stdev
         double StDevAfter = 0;
+        // the named resource which the move improves (or, if none, the one it worsens), with its
+        // imbalance before and after the move, see CheckNamedResourcesMoveEffect
+        TString NamedResource;
+        double NamedBefore = 0;
+        double NamedAfter = 0;
     };
+    // The move has to improve at least one of the built-in resources (as a whole) and the balanced
+    // named resources of the tablet, and must not worsen any of them
     TMoveExpediency CheckTabletMoveExpediency(const TTabletInfo& tablet, const TNodeInfo& node) const;
-    // Whether moving the tablet to the node improves distribution of the named resource.
-    // targetExtra is the amount of the resource already moved to the node, but not reported by it yet.
-    TMoveExpediency CheckNamedResourceMoveExpediency(const TTabletInfo& tablet, const TNodeInfo& node, const TString& name, ui64 targetExtra = 0) const;
+    struct TNamedResourcesMoveEffect {
+        bool Improved = false;
+        bool Worsened = false;
+        TString Resource;
+        double Before = 0;
+        double After = 0;
+    };
+    // How moving the tablet to the node changes the imbalance of each balanced named resource of the tablet:
+    // the total amount over capacity for SATURATION, the usage stdev for SCATTER
+    TNamedResourcesMoveEffect CheckNamedResourcesMoveEffect(const TTabletInfo& tablet, const TNodeInfo& node) const;
 public:
     // How long the transferable part of named resources of a restarted tablet is assumed to stay with it
     // until reported by the new incarnation
     static constexpr TDuration NAMED_RESOURCE_ESTIMATE_TIMEOUT = TDuration::Minutes(2);
+    // growth of the built-in resources stdev that a move is allowed to cause when it improves something else
+    static constexpr double BUILTIN_STDEV_WORSENING_TOLERANCE = 0.01;
     void ScheduleNamedResourceEstimatesCheck(TFullTabletId tabletId, TInstant deadline);
     void Handle(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev);
     void HandleInit(TEvPrivate::TEvCheckNamedResourceEstimates::TPtr& ev);

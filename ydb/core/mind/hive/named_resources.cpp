@@ -35,12 +35,12 @@ ui64 TNamedResourceValues::GetValue(TStringBuf name) const {
     return value ? value->Value : 0;
 }
 
-ui64 TNamedResourceValues::GetTransferable(TStringBuf name) const {
+ui64 TNamedResourceValues::GetTransferableValue(TStringBuf name) const {
     const auto* value = Find(name);
-    return value ? value->Transferable : 0;
+    return value ? value->TransferableValue : 0;
 }
 
-void TNamedResourceValues::Set(const TString& name, ui64 value, ui64 transferable, TInstant estimateDeadline) {
+void TNamedResourceValues::Set(const TString& name, ui64 value, bool transferable, TInstant estimateDeadline) {
     auto it = LowerBound(name);
     bool found = it != Values.end() && it->Name == name;
     if (value == 0) {
@@ -49,28 +49,21 @@ void TNamedResourceValues::Set(const TString& name, ui64 value, ui64 transferabl
         }
         return;
     }
-    transferable = std::min(transferable, value);
+    const ui64 transferableValue = transferable ? value : 0;
     if (found) {
         it->Value = value;
-        it->Transferable = transferable;
+        it->TransferableValue = transferableValue;
         it->EstimateDeadline = estimateDeadline;
     } else {
-        Values.insert(it, TNamedResourceValue{.Name = name, .Value = value, .Transferable = transferable, .EstimateDeadline = estimateDeadline});
+        Values.insert(it, TNamedResourceValue{.Name = name, .Value = value, .TransferableValue = transferableValue, .EstimateDeadline = estimateDeadline});
     }
 }
 
-bool TNamedResourceValues::CarryOverTransferable(TInstant estimateDeadline) {
+bool TNamedResourceValues::CarryOverAsEstimate(TInstant estimateDeadline) {
     bool changed = false;
-    for (auto it = Values.begin(); it != Values.end();) {
-        if (it->Transferable == 0) {
-            it = Values.erase(it);
-            changed = true;
-            continue;
-        }
-        changed |= it->Value != it->Transferable || it->EstimateDeadline != estimateDeadline;
-        it->Value = it->Transferable;
-        it->EstimateDeadline = estimateDeadline;
-        ++it;
+    for (auto& v : Values) {
+        changed |= v.EstimateDeadline != estimateDeadline;
+        v.EstimateDeadline = estimateDeadline;
     }
     return changed;
 }
@@ -102,18 +95,18 @@ void TNamedResourceValues::Apply(const TNamedResourceValues& other, bool subtrac
                 continue;
             }
             it->Value -= std::min(it->Value, v.Value);
-            it->Transferable -= std::min(it->Transferable, v.Transferable);
+            it->TransferableValue -= std::min(it->TransferableValue, v.TransferableValue);
             if (it->Value == 0) {
                 Values.erase(it);
             } else {
-                it->Transferable = std::min(it->Transferable, it->Value);
+                it->TransferableValue = std::min(it->TransferableValue, it->Value);
             }
         } else if (found) {
             it->Value += v.Value;
-            it->Transferable += v.Transferable;
+            it->TransferableValue += v.TransferableValue;
         } else {
             // sums are not estimates by themselves
-            Values.insert(it, TNamedResourceValue{.Name = v.Name, .Value = v.Value, .Transferable = v.Transferable});
+            Values.insert(it, TNamedResourceValue{.Name = v.Name, .Value = v.Value, .TransferableValue = v.TransferableValue});
         }
     }
 }
@@ -132,8 +125,8 @@ void TNamedResourceValues::ToProto(::google::protobuf::RepeatedPtrField<NKikimrT
         auto* resource = proto->Add();
         resource->SetName(v.Name);
         resource->SetValue(v.Value);
-        if (v.Transferable != v.Value) {
-            resource->SetTransferable(v.Transferable);
+        if (!v.IsTransferable()) {
+            resource->SetTransferable(false);
         }
         if (v.EstimateDeadline) {
             resource->SetEstimateDeadline(v.EstimateDeadline.MilliSeconds());
@@ -144,8 +137,7 @@ void TNamedResourceValues::ToProto(::google::protobuf::RepeatedPtrField<NKikimrT
 void TNamedResourceValues::FromProto(const ::google::protobuf::RepeatedPtrField<NKikimrTabletBase::TNamedResource>& proto) {
     Values.clear();
     for (const auto& resource : proto) {
-        Set(resource.GetName(), resource.GetValue(), resource.HasTransferable() ? resource.GetTransferable() : resource.GetValue(),
-            TInstant::MilliSeconds(resource.GetEstimateDeadline()));
+        Set(resource.GetName(), resource.GetValue(), resource.GetTransferable(), TInstant::MilliSeconds(resource.GetEstimateDeadline()));
     }
 }
 
@@ -156,8 +148,10 @@ TString TNamedResourceValues::ToString() const {
             result << ", ";
         }
         result << v.Name << "=" << v.Value;
-        if (v.Transferable != v.Value) {
-            result << "(" << v.Transferable << " transferable)";
+        if (v.TransferableValue == 0) {
+            result << "(not transferable)";
+        } else if (!v.IsTransferable()) {
+            result << "(" << v.TransferableValue << " transferable)";
         }
         if (v.EstimateDeadline) {
             result << "(estimate)";

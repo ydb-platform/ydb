@@ -20,12 +20,12 @@ static void FillNamedResource(NKikimrTabletBase::TMetrics& metrics, const TStrin
     auto& resource = *metrics.AddNamedResources();
     resource.SetName(name);
     resource.SetValue(value.Value);
-    if (value.Transferable) {
-        resource.SetTransferable(*value.Transferable);
+    if (!value.Transferable.value_or(true)) {
+        resource.SetTransferable(false); // true is the default
     }
 }
 
-void TResourceMetricsValues::SetNamed(const TString& name, ui64 value, std::optional<ui64> transferable) {
+void TResourceMetricsValues::SetNamed(const TString& name, ui64 value, std::optional<bool> transferable) {
     Named[name] = TNamedValue{.Value = value, .Transferable = transferable};
 }
 

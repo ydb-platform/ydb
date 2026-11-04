@@ -479,8 +479,7 @@ void TTabletInfo::UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics
     for (const auto& resource : metrics.GetNamedResources()) {
         // instantaneous values, no windowed maximum: e.g. queue usage must disappear as soon as the work is done.
         // Estimate deadline is present only in metrics persisted by Hive itself.
-        ResourceValues.NamedResources.Set(resource.GetName(), resource.GetValue(),
-            resource.HasTransferable() ? resource.GetTransferable() : resource.GetValue(),
+        ResourceValues.NamedResources.Set(resource.GetName(), resource.GetValue(), resource.GetTransferable(),
             TInstant::MilliSeconds(resource.GetEstimateDeadline()));
         namedEstimatesLoaded |= resource.HasEstimateDeadline();
         if (resource.GetValue() != 0) {
@@ -516,7 +515,7 @@ void TTabletInfo::CarryOverNamedResources() {
     }
     auto before = ResourceValues;
     const TInstant deadline = TActivationContext::Now() + THive::NAMED_RESOURCE_ESTIMATE_TIMEOUT;
-    if (!ResourceValues.NamedResources.CarryOverTransferable(deadline)) {
+    if (!ResourceValues.NamedResources.CarryOverAsEstimate(deadline)) {
         return;
     }
     if (Node != nullptr && IsResourceDrainingState(VolatileState)) {

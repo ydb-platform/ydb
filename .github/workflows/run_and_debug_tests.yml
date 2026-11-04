@@ -51,6 +51,11 @@ on:
         required: false
         type: string
         default: '64'
+      link_threads:
+        description: 'remote only: link threads'
+        required: false
+        type: string
+        default: '2'
       additional_ya_make_args:
         description: 'remote only: extra ya make args'
         required: false
@@ -61,6 +66,11 @@ on:
         required: false
         type: string
         default: ''
+      put_build_results_to_cache:
+        description: 'remote only: put build results to cache'
+        required: false
+        type: boolean
+        default: true
       collect_coredumps:
         description: 'remote only: collect coredumps'
         required: false
@@ -104,6 +114,53 @@ jobs:
             .github/actions/dispatch_remote_executor
           sparse-checkout-cone-mode: false
 
+      - name: Build executor inputs JSON
+        id: payload
+        env:
+          CODE_REF: ${{ inputs.code_ref || github.sha }}
+          BUILD_TARGET: ${{ inputs.test_targets }}
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          RUN_TESTS: ${{ inputs.run_tests }}
+          INCREMENT: ${{ inputs.increment }}
+          TEST_SIZE: ${{ inputs.test_size }}
+          TEST_TYPE: ${{ inputs.test_type }}
+          TEST_THREADS: ${{ inputs.test_threads }}
+          LINK_THREADS: ${{ inputs.link_threads }}
+          ADDITIONAL_YA_MAKE_ARGS: ${{ inputs.additional_ya_make_args }}
+          TEST_RETRY_COUNT: ${{ inputs.test_retry_count }}
+          PUT_BUILD_RESULTS_TO_CACHE: ${{ inputs.put_build_results_to_cache }}
+          COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          preset = os.environ["BUILD_PRESET"].split(",")[0].strip() or "relwithdebinfo"
+          job_inputs = {
+              "build_target": os.environ["BUILD_TARGET"],
+              "build_preset": preset,
+              "run_tests": os.environ["RUN_TESTS"],
+              "increment": os.environ["INCREMENT"],
+              "test_size": os.environ["TEST_SIZE"],
+              "test_type": os.environ["TEST_TYPE"],
+              "test_threads": os.environ["TEST_THREADS"],
+              "link_threads": os.environ["LINK_THREADS"],
+              "additional_ya_make_args": os.environ["ADDITIONAL_YA_MAKE_ARGS"],
+              "test_retry_count": os.environ["TEST_RETRY_COUNT"],
+              "put_build_results_to_cache": os.environ["PUT_BUILD_RESULTS_TO_CACHE"],
+              "collect_coredumps": os.environ["COLLECT_COREDUMPS"],
+          }
+          payload = {
+              "code_ref": os.environ["CODE_REF"],
+              "job": "build_and_test_ya",
+              "job_inputs": json.dumps(job_inputs, separators=(",", ":")),
+          }
+          out = os.environ["GITHUB_OUTPUT"]
+          with open(out, "a", encoding="utf-8") as f:
+              f.write("inputs_json<<EOF\n")
+              f.write(json.dumps(payload, ensure_ascii=False))
+              f.write("\nEOF\n")
+          print(json.dumps(payload, ensure_ascii=False, indent=2))
+          PY
+
       - name: Dispatch CI remote executor
         id: dispatch
         uses: ./.github/actions/dispatch_remote_executor
@@ -114,17 +171,7 @@ jobs:
           workflow_file: run_and_debug_tests.yml
           workflow_name: Run and debug tests
           executor_ref: ${{ inputs.remote_executor_ref }}
-          code_ref: ${{ inputs.code_ref || github.sha }}
-          build_target: ${{ inputs.test_targets }}
-          build_preset: ${{ inputs.build_preset }}
-          run_tests: ${{ inputs.run_tests }}
-          increment: ${{ inputs.increment }}
-          test_size: ${{ inputs.test_size }}
-          test_type: ${{ inputs.test_type }}
-          test_threads: ${{ inputs.test_threads }}
-          additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
-          test_retry_count: ${{ inputs.test_retry_count }}
-          collect_coredumps: ${{ inputs.collect_coredumps }}
+          inputs_json: ${{ steps.payload.outputs.inputs_json }}
           wait_mode: ${{ inputs.wait_for_remote && 'wait+mirror' || 'fire-and-forget' }}
 
   wait_remote:

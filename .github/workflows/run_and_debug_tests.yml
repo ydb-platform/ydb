@@ -220,7 +220,9 @@ jobs:
           )
           # run_tests workflow_dispatch has no `branches` input; prepare falls back
           # to github.ref_name (= tmp branch), whose tree is source_ref + patched YAML.
+          # workflow_dispatch API requires every declared input key, even optionals.
           payload = {
+              "pull_number": "",
               "test_targets": os.environ["BUILD_TARGET"],
               "test_type": os.environ["TEST_TYPE"],
               "test_size": os.environ["TEST_SIZE"],

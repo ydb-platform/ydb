@@ -375,7 +375,8 @@ def prepare_patched_ref(workflow_file: str, source_ref: str, runs_on: list) -> s
         return fetch_file_at_ref(path, base_sha)
 
     files = collect_patched_workflows(fetch_text, root, runs_on, self_hosted_only=self_hosted_only)
-    branch = f"ci-remote-tmp/{uuid.uuid4().hex[:12]}"
+    # Prefer dev/ prefix — matches platform branch conventions (pr_check, mute bots).
+    branch = f"dev/ci-remote-tmp/{uuid.uuid4().hex[:12]}"
     create_tmp_branch_with_files(
         base_sha,
         branch,

@@ -23,6 +23,11 @@ def _dedupe_history_rows(rows):
 BASE_DATE = datetime.date(1970, 1, 1)
 DEFAULT_DAYS_BACK = 30  # cold start when branch has no flaky_tests_window history
 MAX_RESUME_GAP_DAYS = 180  # safety cap on incremental resume if collection was paused a long time
+# Reprocess this many calendar days before max(date_window) on incremental runs.
+# Late Nightly/Large uploads (~23:xx UTC) often land after the day was first written as
+# no_runs; without a lookback those rows stay frozen once max advances to "today".
+# Mirrors tests_monitor.py reprocessing the last recorded day.
+INCREMENTAL_LOOKBACK_DAYS = 1
 
 
 def parse_arguments():
@@ -90,11 +95,12 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
     
     Logic:
     1. If start_date_override is provided, use it (must be <= end_date)
-    2. If history exists, continue from max(date_window) (incremental; no cold-start cap),
-       but never look back further than MAX_RESUME_GAP_DAYS even if collection was
-       paused for a long time — avoids re-creating the unbounded-backfill problem this
-       cold-start rework was meant to fix, at the cost of leaving an un-backfilled gap
-       in the rare case collection was dormant that long.
+    2. If history exists, resume from max(date_window) - INCREMENTAL_LOOKBACK_DAYS
+       (reprocess recent days for late-arriving runs), but never look back further
+       than MAX_RESUME_GAP_DAYS even if collection was paused for a long time —
+       avoids re-creating the unbounded-backfill problem this cold-start rework
+       was meant to fix, at the cost of leaving an un-backfilled gap in the rare
+       case collection was dormant that long.
     3. If no history, check test_runs_table for min_run_date, capped at DEFAULT_DAYS_BACK
     4. Default cold start to DEFAULT_DAYS_BACK ago from end_date
     """
@@ -112,12 +118,12 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
     max_date_window = get_max_date_from_history(ydb_wrapper, flaky_tests_table, build_type, branch)
     
     if max_date_window is not None:
-        # Incremental resume: continue from the last stored day (do not apply cold-start
-        # lookback), capped so a long-dormant branch cannot trigger an unbounded backfill.
-        start_date = min(max_date_window, end_date)
+        # Incremental resume: reprocess last stored day(s) so late Large/Nightly
+        # uploads are not stuck as no_runs once max advances to today.
+        start_date = min(max_date_window, end_date) - datetime.timedelta(days=INCREMENTAL_LOOKBACK_DAYS)
         if start_date < max_resume_start_date:
             print(
-                f'⚠️  Last recorded date_window ({start_date}) is more than {MAX_RESUME_GAP_DAYS} days '
+                f'⚠️  Last recorded date_window ({max_date_window}) is more than {MAX_RESUME_GAP_DAYS} days '
                 f'old — history collection looks paused. Capping resume start to '
                 f'{max_resume_start_date} instead of backfilling the full gap.'
             )

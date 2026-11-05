@@ -4009,7 +4009,17 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
     for (auto& user : AffectedUsers) {
         if (auto* actual = GetPendingUserIfExists(user)) {
             TUserInfo& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
+<<<<<<< HEAD
             bool offsetHasChanged = (userInfo.Offset != actual->Offset);
+=======
+            const auto previousOffset = userInfo.Offset;
+            if (userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
+                && !actual->Session.empty() && actual->ReadSessionActor
+                && (userInfo.Session != actual->Session || userInfo.Generation != actual->Generation
+                    || userInfo.Step != actual->Step || userInfo.ReadSessionActor != actual->ReadSessionActor)) {
+                replicationSessionEstablished = true;
+            }
+>>>>>>> 5da12a8a66f (fix offsets replication for consumers with availability period (#58279))
 
             userInfo.Session = actual->Session;
             userInfo.Generation = actual->Generation;
@@ -4033,6 +4043,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 userInfo.Offset = GetStartOffset();
             }
 
+            const bool offsetHasChanged = userInfo.Offset != previousOffset;
             if (offsetHasChanged && !userInfo.UpdateTimestampFromCache()) {
                 userInfo.ActualTimestamps = false;
                 ReadTimestampForOffset(user, userInfo, ctx);

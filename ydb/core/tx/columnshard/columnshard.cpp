@@ -16,16 +16,11 @@
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/diagnostics/scan_diagnostics_actor.h>
-#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
-#include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
-#include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
-
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
@@ -104,6 +99,8 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
         EnqueueProgressTx(ctx);
         OnTieringModified();
     }
+    // the request for every portion takes long to build, so it is not part of the start
+    ctx.Send(SelfId(), new TEvPrivate::TEvPrefetchPortionsMetadata());
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
     BackgroundSessionsManager->Start();
@@ -115,18 +112,18 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     ScheduleBaseStatistics();
 
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
-    AFL_VERIFY(!!StartInstant);
-    Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
+    ui64 portionsCount = 0;
+    if (TablesManager.HasPrimaryIndex()) {
+        for (auto&& [_, granule] : TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetTables()) {
+            portionsCount += granule->GetPortions().size();
+        }
+    }
+    StartupTimeline.OnSwitchedToWork(portionsCount);
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
-    using namespace NOlap::NReader;
-    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_SCAN));
-    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_DATA_SOURCE));
-    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS));
-    StartInstant = TMonotonic::Now();
-    Counters.GetCSCounters().Initialization.OnActivateExecutor(TMonotonic::Now() - CreateInstant);
+    StartupTimeline.OnExecutorActivated();
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
         {"tabletId", TabletID()},
         {"selfId", SelfId()});
@@ -328,6 +325,18 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
     }
 }
 
+void TColumnShard::Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& /*ev*/) {
+    if (TablesManager.HasPrimaryIndex()) {
+        TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().PrefetchPortionsMetadata();
+    }
+}
+
+void TColumnShard::Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev) {
+    auto& engine = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    engine.GetGranulePtrVerified(ev->Get()->PathId)->SetLoadedKeyRanges(std::move(ev->Get()->LoadedKeyRanges));
+    ScanGate.ReleaseLoadedPortions(engine);
+}
+
 void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const TActorContext& ctx) {
     const TDuration stalenessLivetime = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness();
     const TDuration stalenessInMem = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStalenessInMem();
@@ -465,8 +474,7 @@ void TColumnShard::UpdateIndexCounters() {
 }
 
 ui64 TColumnShard::MemoryUsage() const {
-    ui64 memory = ProgressTxController->GetMemoryUsage() + ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
-                  (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*));
+    ui64 memory = ProgressTxController->GetMemoryUsage() + ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) + ScanGate.GetMemoryUsage();
     memory += TablesManager.GetMemoryUsage();
     return memory;
 }

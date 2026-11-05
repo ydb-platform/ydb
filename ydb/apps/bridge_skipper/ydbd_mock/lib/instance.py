@@ -41,7 +41,7 @@ async def _finish_on_cancel(awaitable):
 
 
 def _server_credentials(tls: typing.Optional[dict]):
-    """Best-effort TLS: `tls: {cert_file: ..., key_file: ...}` in the topology. None means plaintext."""
+    """Read server identity and optional client trust roots. None means plaintext."""
     if not tls:
         return None
     try:
@@ -49,9 +49,14 @@ def _server_credentials(tls: typing.Optional[dict]):
             cert = f.read()
         with open(tls["key_file"], "rb") as f:
             key = f.read()
+        roots = None
+        if tls.get("root_cert_file"):
+            with open(tls["root_cert_file"], "rb") as f:
+                roots = f.read()
     except (KeyError, OSError) as e:
-        raise TopologyError("tls needs readable cert_file and key_file: %s" % e)
-    return grpc.ssl_server_credentials([(key, cert)])
+        raise TopologyError("tls needs readable certificate/key/trust files: %s" % e)
+    return grpc.ssl_server_credentials([(key, cert)], root_certificates=roots,
+                                       require_client_auth=tls.get("require_client_auth", False))
 
 
 class NodeServer:

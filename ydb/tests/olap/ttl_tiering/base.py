@@ -38,6 +38,7 @@ class TllTieringTestBase(object):
             ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
             logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
             config = KikimrConfigGenerator(
+                disabled_feature_flags=["disable_old_secret_creation"],
                 extra_feature_flags={
                     "enable_external_data_sources": True,
                     "enable_write_portions_on_insert": True,

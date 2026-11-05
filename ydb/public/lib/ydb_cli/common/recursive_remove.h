@@ -1,13 +1,14 @@
 #pragma once
 
 #include "progress_bar.h"
+#include "recursive_list.h"
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
+#include <util/generic/vector.h>
+
+#include <functional>
+#include <memory>
 #include <ranges>
 
 namespace NYdb::NConsoleClient {
@@ -24,6 +25,7 @@ struct TRemoveDirectoryRecursiveSettings : public NScheme::TRemoveDirectorySetti
     FLUENT_SETTING_DEFAULT(bool, NotExistsIsOk, false);
     FLUENT_SETTING_DEFAULT(bool, RemoveSelf, true);
     FLUENT_SETTING_DEFAULT(bool, CreateProgressBar, false);
+    FLUENT_SETTING_DEFAULT(ERecursiveListSkipMode, SkipMode, ERecursiveListSkipMode::Internal);
     FLUENT_SETTING_DEFAULT(ERecursiveRemovePrompt, Prompt, ERecursiveRemovePrompt::Never);
 };
 
@@ -46,11 +48,7 @@ namespace NInternal {
     using TRemover = std::function<TStatus(const NScheme::TSchemeEntry&)>;
 
     TRemover CreateDefaultRemover(
-        NScheme::TSchemeClient& schemeClient,
-        NTable::TTableClient& tableClient,
-        NTopic::TTopicClient& topicClient,
-        NQuery::TQueryClient& queryClient,
-        NCoordination::TClient& coordinationClient,
+        const TDriver& driver,
         const TRemoveDirectoryRecursiveSettings& settings
     );
 
@@ -93,20 +91,11 @@ namespace NInternal {
 
 template <typename TIterator>
 TStatus RemovePathsRecursive(
-    NScheme::TSchemeClient& schemeClient,
-    NTable::TTableClient& tableClient,
-    NTopic::TTopicClient& topicClient,
-    NQuery::TQueryClient& queryClient,
-    NCoordination::TClient& coordinationClient,
     TIterator begin,
     TIterator end,
-    const TRemoveDirectoryRecursiveSettings& settings = {},
-    // overloading of the remover is used only for tests
-    NInternal::TRemover&& remover = {}
+    NInternal::TRemover& remover,
+    const TRemoveDirectoryRecursiveSettings& settings = {}
 ) {
-    if (!remover) {
-        remover = NInternal::CreateDefaultRemover(schemeClient, tableClient, topicClient, queryClient, coordinationClient, settings);
-    }
     std::unique_ptr<TProgressBar> progressBar;
     if (settings.CreateProgressBar_) {
         progressBar = std::make_unique<TProgressBar>(end - begin);

@@ -6,7 +6,7 @@ LICENSE(MIT)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.1.0)
+VERSION(1.2.0)
 
 ADDINCL(
     GLOBAL contrib/libs/brotli/c/include
@@ -15,10 +15,6 @@ ADDINCL(
 NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
-
-CFLAGS(
-    -DBROTLI_HAVE_LOG2=1
-)
 
 SRCS(
     constants.c

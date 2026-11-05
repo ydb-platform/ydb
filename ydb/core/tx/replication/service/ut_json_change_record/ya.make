@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 SIZE(SMALL)
 
 PEERDIR(
+    library/cpp/json/yson
     ydb/core/testlib/pg
     yql/essentials/public/udf/service/exception_policy
     library/cpp/testing/unittest

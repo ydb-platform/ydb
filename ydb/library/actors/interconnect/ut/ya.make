@@ -2,7 +2,7 @@ UNITTEST()
 
 FORK_SUBTESTS()
 SPLIT_FACTOR(8)
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:2)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -17,6 +17,8 @@ SRCS(
     event_holder_pool_ut.cpp
     event_output_channel_ut.cpp
     interconnect_session_pool_mapping_ut.cpp
+    interconnect_uring_engine_client_ut.cpp
+    interconnect_uring_engine_ut.cpp
     interconnect_ut.cpp
     large.cpp
     outgoing_stream_ut.cpp

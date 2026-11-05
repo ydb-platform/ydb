@@ -33,7 +33,8 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
         self.epoch = 0
         super().setup_method()
         try:
-            assert all(len(nodes) == 8 for nodes in self.pile_nodes.values())
+            assert self.nodes_count % len(self.pile_names) == 0
+            assert all(len(nodes) == self.nodes_count // len(self.pile_names) for nodes in self.pile_nodes.values())
             assert self.configurator.yaml_config["erasure"] == "block-4-2"
             self.wait_states()
         except Exception:
@@ -98,6 +99,7 @@ class TestBridgeThreePiles(BridgeKiKiMRTest):
             if (response.operation.status == StatusIds.INTERNAL_ERROR
                     and any(issue in str(response.operation.issues) for issue in (
                         "No quorum to start propose/commit configuration", "Hop node disconnected",
+                        "No quorum for bridge configuration collection",
                     ))):
                 self.logger.warning("Retrying bridge update after transient error: %s", response.operation.issues)
                 raise AssertionError(response)

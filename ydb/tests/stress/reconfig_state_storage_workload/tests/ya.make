@@ -1,5 +1,4 @@
 PY3TEST()
-FORK_TEST_FILES()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(STRESS_TEST_UTILITY="ydb/tests/stress/reconfig_state_storage_workload/reconfig_state_storage_workload")
 
@@ -10,6 +9,7 @@ TEST_SRCS(
     test_state_storage_workload.py
 )
 
+FORK_TEST_FILES()
 REQUIREMENTS(ram:32 cpu:4)
 
 IF (SANITIZER_TYPE)

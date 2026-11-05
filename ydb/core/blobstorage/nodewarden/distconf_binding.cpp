@@ -112,7 +112,16 @@ namespace NKikimr::NStorage {
     };
 
     void TDistributedConfigKeeper::CheckBindingLiveness() {
-        if (Binding && Binding->RootNodeId && Binding->SessionId && !BindingLivenessActorId) {
+        // Keep ordinary V1 clusters independent of keeper liveness. The startup flag applies only
+        // before bootstrap, so a committed disable also stops an already running watchdog.
+        const bool bootstrapping = BaseConfig->GetSelfManagementConfig().GetEnabled()
+            && (!StorageConfig || !StorageConfig->GetGeneration());
+        if (!SelfManagementEnabled && !bootstrapping) {
+            CancelBindingLiveness();
+            return;
+        }
+        if (Binding && Binding->RootNodeId && Binding->SessionId && Binding->SupportsDirectRootQueries
+            && !BindingLivenessActorId) {
             BindingLivenessActorId = RegisterWithSameMailbox(new TBindingLivenessActor(this, *Binding));
         }
     }
@@ -469,7 +478,7 @@ namespace NKikimr::NStorage {
     void TDistributedConfigKeeper::IssueNextBindRequest() {
         Y_DEBUG_ABORT_UNLESS(IsSelfStatic);
 
-        if (Binding || RootProbe || RootState == ERootState::ERROR_TIMEOUT) {
+        if (Binding || RootProbe || RootState == ERootState::ERROR_TIMEOUT || Halted) {
             return;
         }
 
@@ -734,8 +743,9 @@ namespace NKikimr::NStorage {
 
         // abort or restart scatter tasks issued to newly added nodes
         const TMonotonic now = TActivationContext::Monotonic();
-        for (auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0}); it != AddedNodesScatterTasks.end(); ) {
-            const auto& [nodeId, cookie] = *it;
+        for (auto it = AddedNodesScatterTasks.lower_bound({nodeId, 0});
+                it != AddedNodesScatterTasks.end() && std::get<0>(*it) == nodeId; ) {
+            const ui64 cookie = std::get<1>(*it);
 
             // find matching scatter task
             const auto jt = ScatterTasks.find(cookie);
@@ -743,8 +753,9 @@ namespace NKikimr::NStorage {
             TScatterTask& task = jt->second;
 
             if (task.StartTimestamp + TDuration::Seconds(3) <= now) { // task has timed out -- abort it
+                AddedNodesScatterTasks.erase(it);
                 AbortScatterTask(cookie, nodeId);
-                it = AddedNodesScatterTasks.erase(it);
+                it = AddedNodesScatterTasks.lower_bound({nodeId, 0});
             } else { // restart scatter task for this node
                 IssueAddedNodeScatterTask(nodeId, cookie, task);
                 ++it;
@@ -927,6 +938,10 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(!Binding || Binding->RootNodeId != SelfId().NodeId());
 
             if (Binding) {
+                Binding->SupportsDirectRootQueries = record.GetSupportsDirectRootQueries();
+                if (!Binding->SupportsDirectRootQueries) {
+                    CancelBindingLiveness();
+                }
                 BindFailuresStreak = 0;
                 LastUnboundWarnAt = TInstant::Zero();
             }
@@ -1105,6 +1120,9 @@ namespace NKikimr::NStorage {
 
         if (!knownNode) {
             // node has been already deleted from the config, but new subscription is coming through -- ignoring it
+            SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
+            return;
+        } else if (Halted) {
             SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
             return;
         }

@@ -1,4 +1,9 @@
-/* syntax version 1 */
+$input = [
+    <|TestField: Just("{}")|>,
+    <|TestField: Just(@@{"inner":{}}@@)|>,
+    <|TestField: Just(@@{"inner":{"i":{}}@@)|>,
+    <|TestField: Just(@@{"inner":{"i":{"a":""}}@@)|>,
+];
 
 /*
 syntax='proto3';
@@ -19,5 +24,4 @@ $config = @@{"name":"Test","syntax":{"aware":true},"lists":{"optional":false},"f
 $udf = Udf(Protobuf::Parse, $config as TypeConfig);
 
 SELECT $udf(TestField) AS Profile
-FROM plato.Input;
-
+FROM AS_TABLE($input);

@@ -23,6 +23,9 @@ def kikimr(request):
     config = get_ydb_config(request)
     config.set_binary_paths([main_binary_path])
 
+    if max_message_size := param.get("max_message_size"):
+        config.yaml_config["grpc_config"]["max_message_size"] = max_message_size
+        config.yaml_config["pqconfig"]["max_message_size_bytes"] = max_message_size
     kikimr = Kikimr(
         config,
         main_binary_path=main_binary_path,

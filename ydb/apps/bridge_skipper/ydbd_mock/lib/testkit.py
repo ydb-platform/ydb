@@ -51,10 +51,12 @@ class LiveCluster:
         state_root: typing.Optional[str] = None,
         tls: typing.Optional[dict] = None,
         root_certificates: typing.Optional[bytes] = None,
+        initial: typing.Optional[dict] = None,
+        pile_names: typing.Optional[typing.Sequence[str]] = None,
     ) -> None:
-        names = ["pile%d" % (i + 1) for i in range(piles)]
+        names = list(pile_names) if pile_names is not None else ["pile%d" % (i + 1) for i in range(piles)]
         self.topo = Topology.with_free_ports(
-            names, nodes, timings=timings or tiny_timings(), policies=policies or Policies(), tls=tls)
+            names, nodes, timings=timings or tiny_timings(), policies=policies or Policies(), tls=tls, initial=initial)
         self.root_certificates = root_certificates
         self.state_root = state_root
         self.procs: typing.Dict[str, MockProcess] = {}

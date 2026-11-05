@@ -19,8 +19,10 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/arrow/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_backup.h>
@@ -30,6 +32,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
+#include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/types/binary_json/write.h>
@@ -10813,10 +10816,220 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationAvailabilityPeriod, UseQueryService) {
+        NKikimrConfig::TFeatureFlags flags;
+        flags.SetEnableTopicDiskSubDomainQuota(true);
+        TKikimrRunner kikimr(flags);
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        TReplicationClient replication(kikimr.GetDriver());
+        TTopicClient topics(kikimr.GetDriver());
+        using EKind = TReplicationDescription::EAvailabilityPeriodKind;
+        const TVector<TString> options = {"", "'UNLIMITED'", "Interval('PT0.000001S')", "Interval('PT10.001S')"};
+        for (ui32 i = 0; i < options.size(); ++i) {
+            const TString source = TStringBuilder() << "/Root/table" << i;
+            const TString target = TStringBuilder() << "/Root/replica" << i;
+            const TString path = TStringBuilder() << "/Root/replication" << i;
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(
+                "CREATE TABLE `%s` (Key Uint64, PRIMARY KEY (Key));", source.c_str()));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            TString availabilityOption;
+            if (!options[i].empty()) {
+                availabilityOption = TStringBuilder() << ", AVAILABILITY_PERIOD = " << options[i];
+            }
+            result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
+                CREATE ASYNC REPLICATION `%s` FOR `%s` AS `%s`
+                WITH (ENDPOINT = '%s', DATABASE = '/Root'%s);
+            )", path.c_str(), source.c_str(), target.c_str(), kikimr.GetEndpoint().c_str(), availabilityOption.c_str()));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const bool unlimited = i < 2;
+            const auto duration = i == 2 ? TDuration::MilliSeconds(1) : TDuration::MilliSeconds(10001);
+            bool ready = false;
+            const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+            while (!ready && TInstant::Now() < deadline) {
+                const auto description = replication.DescribeReplication(path).ExtractValueSync();
+                UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+                const auto& desc = description.GetReplicationDescription();
+                UNIT_ASSERT(desc.GetAvailabilityPeriodKind() == (unlimited ? EKind::Unlimited : EKind::Finite));
+                if (!unlimited) {
+                    UNIT_ASSERT_VALUES_EQUAL(*desc.GetAvailabilityPeriod(), duration);
+                }
+                if (desc.GetState() == TReplicationDescription::EState::Error) {
+                    UNIT_FAIL(desc.GetErrorState().GetIssues().ToString());
+                }
+                const auto& items = desc.GetItems();
+                if (items.empty() || !items.front().SrcChangefeedName) {
+                    continue;
+                }
+                const TString stream = TStringBuilder() << source << "/" << *items.front().SrcChangefeedName;
+                const auto topic = topics.DescribeTopic(stream).ExtractValueSync();
+                if (!topic.IsSuccess()) {
+                    continue;
+                }
+                const auto& config = topic.GetTopicDescription();
+                if (config.GetConsumers().empty() || config.GetRetentionPeriod() != TDuration::Seconds(1)) {
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers().front().GetImportant(), unlimited);
+                UNIT_ASSERT_VALUES_EQUAL(config.GetConsumers().front().GetAvailabilityPeriod(),
+                    unlimited ? TDuration::Zero() : duration);
+                ready = true;
+            }
+            UNIT_ASSERT_C(ready, TStringBuilder() << "Source consumer did not install availability policy for " << path);
+            result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(
+                "ALTER ASYNC REPLICATION `%s` SET (AVAILABILITY_PERIOD = 'UNLIMITED');", path.c_str()));
+            UNIT_ASSERT(!result.IsSuccess());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "AVAILABILITY_PERIOD is not supported in ALTER");
+        }
+    }
+
+    Y_UNIT_TEST(RestoreLegacyReplicationAvailabilityPeriod) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableReplicationConfig()->SetConsumerAvailabilityPeriodSeconds(7201);
+        config.MutableFeatureFlags()->SetEnableTopicDiskSubDomainQuota(true);
+        TKikimrRunner kikimr(TKikimrSettings(config)
+            .SetFeatureFlags(config.GetFeatureFlags())
+            .SetUseRealThreads(false));
+        auto session = kikimr.RunCall([&] {
+            return kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        });
+        auto queryClient = kikimr.GetQueryClient();
+        TReplicationClient replication(kikimr.GetDriver());
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        ui32 legacyConfigs = 0;
+        auto observer = runtime.AddObserver<NKikimr::NReplication::TEvController::TEvCreateReplication>([&](const auto& ev) {
+            ev->Get()->Record.MutableConfig()->ClearAvailabilityPeriod();
+            ++legacyConfigs;
+        });
+        auto status = kikimr.RunCall([&] {
+            return session.ExecuteSchemeQuery("CREATE TABLE `/Root/source` (Key Uint64, PRIMARY KEY (Key));").GetValueSync();
+        });
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        status = kikimr.RunCall([&] {
+            return session.ExecuteSchemeQuery(Sprintf(R"(
+                CREATE ASYNC REPLICATION `/Root/legacy` FOR `/Root/source` AS `/Root/replica`
+                WITH (ENDPOINT = '%s', DATABASE = '/Root');
+            )", kikimr.GetEndpoint().c_str())).GetValueSync();
+        });
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        observer.Remove();
+        UNIT_ASSERT_C(legacyConfigs > 0, "Legacy controller config was not injected");
+
+        std::optional<Ydb::Replication::DescribeReplicationResult> proto;
+        const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+        while (TInstant::Now() < deadline) {
+            const auto result = kikimr.RunCall([&] {
+                return replication.DescribeReplication("/Root/legacy").ExtractValueSync();
+            });
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& desc = result.GetReplicationDescription();
+            UNIT_ASSERT(desc.GetAvailabilityPeriodKind() == TReplicationDescription::EAvailabilityPeriodKind::Finite);
+            UNIT_ASSERT_VALUES_EQUAL(*desc.GetAvailabilityPeriod(), TDuration::Seconds(7201));
+            if (desc.GetState() == TReplicationDescription::EState::Error) {
+                UNIT_FAIL(desc.GetErrorState().GetIssues().ToString());
+            }
+            if (desc.GetItems().empty()) {
+                continue;
+            }
+
+            proto = NDraft::TProtoAccessor::GetProto(result);
+            break;
+        }
+        UNIT_ASSERT(proto);
+        enum class EPolicy {
+            Legacy,
+            Missing,
+            Invalid,
+            LastValid,
+            OutsideSqlRange,
+            RoundedOutsideSqlRange,
+        };
+        const TVector<EPolicy> policies = {EPolicy::Legacy, EPolicy::Missing, EPolicy::Invalid,
+            EPolicy::LastValid, EPolicy::OutsideSqlRange, EPolicy::RoundedOutsideSqlRange};
+        const auto lastValid = TDuration::MilliSeconds((NYql::NUdf::MAX_TIMESTAMP - 1) / 1000);
+        using EKind = TReplicationDescription::EAvailabilityPeriodKind;
+        for (ui32 i = 0; i < policies.size(); ++i) {
+            const auto policy = policies[i];
+            auto dumped = *proto;
+            const TString path = TStringBuilder() << "/Root/restored" << i;
+            dumped.mutable_items(0)->set_destination_path(path + "_replica");
+            if (policy == EPolicy::Missing) {
+                dumped.clear_availability_period();
+            } else if (policy == EPolicy::Invalid) {
+                dumped.mutable_availability_period()->Clear();
+            } else if (policy != EPolicy::Legacy) {
+                const auto value = policy == EPolicy::LastValid ? lastValid
+                    : policy == EPolicy::OutsideSqlRange ? TDuration::MicroSeconds(NYql::NUdf::MAX_TIMESTAMP)
+                    : lastValid + TDuration::MicroSeconds(1);
+                auto& duration = *dumped.mutable_availability_period()->mutable_duration();
+                duration.set_seconds(value.Seconds());
+                duration.set_nanos(value.NanoSecondsOfSecond());
+            }
+
+            const TReplicationDescription source(dumped);
+            const auto sourceKind = policy == EPolicy::Missing ? EKind::Unknown
+                : policy == EPolicy::Invalid ? EKind::Invalid : EKind::Finite;
+            UNIT_ASSERT(source.GetAvailabilityPeriodKind() == sourceKind);
+            const bool preserveFinite = policy == EPolicy::Legacy || policy == EPolicy::LastValid;
+            const auto expectedPeriod = policy == EPolicy::Legacy ? TDuration::Seconds(7201) : lastValid;
+            const auto query = NYdb::NDump::BuildCreateReplicationQuery("/Root", "/Root", path, source);
+            if (preserveFinite) {
+                UNIT_ASSERT_STRING_CONTAINS(query, TStringBuilder() << "AVAILABILITY_PERIOD = Interval('PT"
+                    << expectedPeriod.Seconds() << (policy == EPolicy::LastValid ? ".999" : "") << "S')");
+            } else {
+                UNIT_ASSERT(!query.Contains("AVAILABILITY_PERIOD"));
+            }
+            const auto restored = kikimr.RunCall([&] {
+                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(restored.IsSuccess(), restored.GetIssues().ToString());
+            const auto description = kikimr.RunCall([&] {
+                return replication.DescribeReplication(path).ExtractValueSync();
+            });
+            UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+            const auto& desc = description.GetReplicationDescription();
+            const auto expected = preserveFinite ? EKind::Finite : EKind::Unlimited;
+            UNIT_ASSERT(desc.GetAvailabilityPeriodKind() == expected);
+            if (preserveFinite) {
+                UNIT_ASSERT_VALUES_EQUAL(*desc.GetAvailabilityPeriod(), expectedPeriod);
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationInvalidAvailabilityPeriod, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        const auto created = ExecuteGeneric<UseQueryService>(queryClient, session,
+            "CREATE TABLE `/Root/table` (Key Uint64, PRIMARY KEY (Key));");
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto lastValid = TDuration::MilliSeconds((NYql::NUdf::MAX_TIMESTAMP - 1) / 1000);
+        const TVector<std::pair<TString, TString>> cases = {
+            {"Interval('PT0S')", "Availability period must be positive"},
+            {"Interval('-PT1S')", "Availability period must be positive"},
+            {TStringBuilder() << "Interval('PT" << lastValid.Seconds() << ".999999S')",
+                "Availability period cannot be represented as SQL Interval after rounding to milliseconds"},
+            {"'FOREVER'", "Unknown availability period"},
+            {"1", "UNLIMITED or a literal of Interval type is expected"},
+            {"TRUE", "UNLIMITED or a literal of Interval type is expected"},
+        };
+        for (const auto& [value, issue] : cases) {
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
+                CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/table` AS `/Root/replica`
+                WITH (ENDPOINT = '%s', DATABASE = '/Root', AVAILABILITY_PERIOD = %s);
+            )", kikimr.GetEndpoint().c_str(), value.c_str()));
+            UNIT_ASSERT_C(!result.IsSuccess(), value);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), issue);
+        }
+    }
+
     Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithTokenSecret, UseSchemaSecrets) {
         using namespace NReplication;
 
-        TKikimrRunner kikimr("root@builtin");
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetDisableOldSecretCreation(false);
+        TKikimrRunner kikimr(featureFlags, "root@builtin");
         if (UseSchemaSecrets) {
             kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
         }
@@ -10898,7 +11111,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithPasswordSecret, UseSchemaSecrets) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetDisableOldSecretCreation(false);
+        TKikimrRunner kikimr(featureFlags);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -10922,7 +11137,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST_QUAD(CreateAsyncReplicationWithIamAuth, UseQueryService, UseSchemaSecrets) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetDisableOldSecretCreation(false);
+        TKikimrRunner kikimr(featureFlags);
         auto queryClient = kikimr.GetQueryClient();
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -11046,10 +11263,53 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(AsyncReplicationCommitIntervalBoundary, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
+
+        for (const auto* interval : {"-PT1S", "PT0S", "PT0.000001S", "PT0.001S", "PT0.999999S"}) {
+            const auto query = Sprintf(R"(
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://%s/?database=/Root",
+                    CONSISTENCY_LEVEL = "GLOBAL",
+                    COMMIT_INTERVAL = Interval("%s")
+                );
+            )", kikimr.GetEndpoint().c_str(), interval);
+
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "commit_interval must be at least 1 second", interval);
+        }
+
+        const auto query = Sprintf(R"(
+            CREATE ASYNC REPLICATION `/Root/replication` FOR
+                `/Root/table` AS `/Root/replica`
+            WITH (
+                CONNECTION_STRING = "grpc://%s/?database=/Root",
+                CONSISTENCY_LEVEL = "GLOBAL",
+                COMMIT_INTERVAL = Interval("PT1S")
+            );
+        )", kikimr.GetEndpoint().c_str());
+
+        const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        const auto desc = repl.DescribeReplication("/Root/replication").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(desc.GetStatus(), EStatus::SUCCESS, desc.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetReplicationDescription().GetGlobalConsistency().GetCommitInterval(), TDuration::Seconds(1));
+    }
+
     Y_UNIT_TEST(AlterAsyncReplication) {
         using namespace NReplication;
 
-        TKikimrRunner kikimr;
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetDisableOldSecretCreation(false);
+        TKikimrRunner kikimr(featureFlags);
         auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -12316,6 +12576,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         using namespace NReplication;
 
         TKikimrSettings serverSettings;
+        serverSettings.FeatureFlags.SetDisableOldSecretCreation(false);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
@@ -12687,6 +12948,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         using namespace NReplication;
 
         TKikimrSettings serverSettings;
+        serverSettings.FeatureFlags.SetDisableOldSecretCreation(false);
         serverSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
         TKikimrRunner kikimr(serverSettings);
         auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
@@ -14171,7 +14433,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto ydb = NWorkloadManager::TYdbSetupSettings()
             .CreateSampleTenants(true)
             .EnableMetadataObjectsOnServerless(false)
-            .Create();
+            .Create([](Tests::TServerSettings& settings) {
+                settings.FeatureFlags.SetDisableOldSecretCreation(false);
+            });
 
         auto checkDisabled = [](const auto& result) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());

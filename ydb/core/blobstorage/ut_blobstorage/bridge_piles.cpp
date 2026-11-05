@@ -1,6 +1,9 @@
 #include "bridge_config_yaml.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+
+#include <util/system/type_name.h>
 
 using namespace NBridgeTest;
 
@@ -117,6 +120,20 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
         checker.Write(groupId);
         using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
 
+        auto waitForWorkingRoot = [&] {
+            const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+            for (;;) {
+                const auto response = InvokeDistconf(env, [](auto& record) {
+                    record.MutableQueryConfig();
+                }, 1, deadline);
+                if (response.GetStatus() == TResult::OK && response.HasScepter()) {
+                    return;
+                }
+                UNIT_ASSERT_C(env.Runtime->GetClock() < deadline, response.DebugString());
+                env.Sim(TDuration::Seconds(1));
+            }
+        };
+
         // INACTIVE pile has no part in static groups and state storage, and the nodes of active piles keep all VDisks
         auto checkInactivePile = [&] {
             const auto config = QueryStorageConfig(env);
@@ -142,6 +159,7 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
             Cerr << "*** cycle " << cycle << Endl;
 
             // the pile is added to the config of running cluster
+            waitForWorkingRoot();
             auto res = AddThirdPileToConfig(env);
             UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
             env.Sim(TDuration::Seconds(10));
@@ -192,12 +210,14 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
             checker.CheckAll();
 
             // INACTIVE pile is removed from the config along with its nodes; active piles can't be removed
+            waitForWorkingRoot();
             res = DropPileFromConfig(env, "pile_2");
             UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::ERROR, res.GetErrorReason());
             UNIT_ASSERT_STRING_CONTAINS(res.GetErrorReason(), "pile 'pile_2' in state SYNCHRONIZED can't be removed");
             for (ui32 nodeId = FirstThirdPileNodeId; nodeId <= LastThirdPileNodeId; ++nodeId) {
                 env.StopNode(nodeId);
             }
+            waitForWorkingRoot();
             res = DropPileFromConfig(env, "pile_3");
             UNIT_ASSERT_EQUAL_C(res.GetStatus(), TResult::OK, res.GetErrorReason());
             env.Sim(TDuration::Seconds(10));
@@ -298,6 +318,67 @@ Y_UNIT_TEST_SUITE(BridgePiles) {
             NKikimrBridge::TGroupState::SYNCED);
         checker.Write(groupId);
         checker.CheckAll();
+    }
+
+
+    // the DS proxy started before the node knew the group was bridged forwards requests to the bridge proxy it has put
+    // in front of itself, and the bunch of puts delivered to it directly (as restarted puts are) goes there too
+    Y_UNIT_TEST(ForwardingProxyPassesBunchOfEvents) {
+        TEnvironmentSetup env(MakeTwoPileSettings());
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+
+        // catch the DS proxy getting the bridged group info on the node which hasn't served the group yet
+        const ui32 nodeId = 16;
+        TActorId forwarderId;
+        env.Runtime->FilterFunction = [&](ui32 recipientNodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (recipientNodeId == nodeId && ev->GetTypeRewrite() == TEvBlobStorage::EvConfigureProxy && ev->HasEvent()) {
+                const auto& info = ev->Get<TEvBlobStorage::TEvConfigureProxy>()->Info;
+                IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite());
+                if (info && info->IsBridged() && info->GroupID == TGroupId::FromValue(groupId) && actor &&
+                        TypeName(*actor).Contains("TBlobStorageGroupProxy")) {
+                    forwarderId = ev->GetRecipientRewrite();
+                }
+            }
+            return true;
+        };
+        TDataChecker checker(env);
+        checker.Write(groupId, nodeId);
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_C(forwarderId, "the DS proxy wasn't started for the bridged group");
+
+        const TActorId edge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        const TString data = "put of the bunch";
+        auto bunch = std::make_unique<TEvBlobStorage::TEvBunchOfEvents>();
+        std::vector<TLogoBlobID> ids;
+        for (ui32 step = 1; step <= 2; ++step) {
+            const TLogoBlobID id(100700, 1, step, 0, data.size(), 0);
+            ids.push_back(id);
+            bunch->Bunch.emplace_back(new IEventHandle(forwarderId, edge, new TEvBlobStorage::TEvPut(id, data,
+                TInstant::Max()), 0, step));
+        }
+        std::vector<NKikimrProto::EReplyStatus> statuses;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == edge && ev->GetTypeRewrite() == TEvBlobStorage::EvPutResult) {
+                statuses.push_back(ev->Get<TEvBlobStorage::TEvPutResult>()->Status);
+                return false;
+            }
+            return true;
+        };
+        env.Runtime->Send(new IEventHandle(forwarderId, edge, bunch.release()), nodeId);
+        WaitUntil(env, [&] { return statuses.size() == ids.size(); }, "results of puts of the bunch",
+            TDuration::Seconds(1), 60);
+        env.Runtime->FilterFunction = {};
+        for (const auto status : statuses) {
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+        }
+        for (const auto& id : ids) {
+            env.Runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                    NKikimrBlobStorage::FastRead));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Responses[0].Status, NKikimrProto::OK, res->Get()->ToString());
+        }
     }
 
 }

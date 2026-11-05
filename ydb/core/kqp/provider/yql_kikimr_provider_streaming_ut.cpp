@@ -12,6 +12,10 @@
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/yql/dq/constraints/dq_constraints.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_datasource_constraints.h>
+#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
@@ -33,6 +37,72 @@
 namespace NYql {
 
 namespace {
+
+struct TWatermarkConstraintsTest {
+    TExprContext Ctx;
+    const TStructExprType* RowType = Ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+        Ctx.MakeType<TItemExprType>("event_time", Ctx.MakeType<TDataExprType>(EDataSlot::Timestamp)),
+        Ctx.MakeType<TItemExprType>("t", Ctx.MakeType<TDataExprType>(EDataSlot::Timestamp))});
+    const TFlowExprType* FlowType = Ctx.MakeType<TFlowExprType>(RowType);
+
+    TExprNode::TPtr Atom(TStringBuf value) {
+        return Ctx.NewAtom(TPositionHandle(), value);
+    }
+
+    TExprNode::TPtr List(TExprNodeList children = {}) {
+        return Ctx.NewList(TPositionHandle(), std::move(children));
+    }
+
+    TExprNode::TPtr Input(const TStreamingConstraintNode* streaming) {
+        auto input = Ctx.NewArgument(TPositionHandle(), "input");
+        input->SetTypeAnn(FlowType);
+        input->SetState(TExprNode::EState::ConstrComplete);
+        if (streaming) {
+            input->AddConstraint(streaming);
+        }
+        return input;
+    }
+
+    enum class ETimeExpression { Direct, Computed, Watermark };
+
+    TExprNode::TPtr Extractor(ETimeExpression expression = ETimeExpression::Direct) {
+        auto arg = Ctx.NewArgument(TPositionHandle(), "row");
+        arg->SetTypeAnn(RowType);
+        arg->SetState(TExprNode::EState::TypeComplete);
+        auto body = Ctx.NewCallable(arg->Pos(), "Member", {arg, Atom("t")});
+        body->SetTypeAnn(Ctx.MakeType<TDataExprType>(EDataSlot::Timestamp));
+        if (expression != ETimeExpression::Direct) {
+            const auto interval = Ctx.NewCallable(arg->Pos(), "Interval", {Atom("8000000")});
+            body = Ctx.NewCallable(arg->Pos(), expression == ETimeExpression::Watermark
+                ? NNodes::TCoSub::CallableName() : NNodes::TCoAdd::CallableName(), {body, interval});
+            body->SetTypeAnn(Ctx.MakeType<TDataExprType>(EDataSlot::Timestamp));
+        }
+        body->SetState(TExprNode::EState::ConstrComplete);
+        auto lambda = Ctx.NewLambda(arg->Pos(), Ctx.NewArguments(arg->Pos(), {arg}), std::move(body));
+        lambda->SetTypeAnn(Ctx.MakeType<TDataExprType>(EDataSlot::Timestamp));
+        lambda->SetState(TExprNode::EState::ConstrComplete);
+        return lambda;
+    }
+
+    TExprNode::TPtr PhysicalGenerator(const TStreamingConstraintNode* streaming,
+        ETimeExpression expression = ETimeExpression::Direct)
+    {
+        auto partitionArg = Ctx.NewArgument(TPositionHandle(), "row");
+        partitionArg->SetTypeAnn(RowType);
+        auto partitionKey = Ctx.NewCallable(partitionArg->Pos(), "AsStruct", {});
+        partitionKey->SetTypeAnn(Ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{}));
+        partitionKey->SetState(TExprNode::EState::ConstrComplete);
+        auto partitionExtractor = Ctx.NewLambda(partitionArg->Pos(), Ctx.NewArguments(partitionArg->Pos(), {partitionArg}), std::move(partitionKey));
+        partitionExtractor->SetTypeAnn(Ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{}));
+        partitionExtractor->SetState(TExprNode::EState::ConstrComplete);
+        auto node = Ctx.NewCallable(TPositionHandle(), NNodes::TDqPhyWatermarkGenerator::CallableName(), {
+            Input(streaming), Extractor(expression), partitionExtractor, Extractor(), List(),
+            Ctx.NewCallable(TPositionHandle(), "Void", {})});
+        node->SetTypeAnn(FlowType);
+        node->SetState(TExprNode::EState::TypeComplete);
+        return node;
+    }
+};
 
 struct TStreamingAggregationTypeAnnTest {
     TExprContext Ctx;
@@ -258,6 +328,191 @@ NKikimr::NKqp::TKikimrRunner GetKikimrRunnerWithStreamingQueries() {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
+    Y_UNIT_TEST_TWIN(WatermarkTopicSourceAssignsEventTime, Physical) {
+        using namespace NNodes;
+        TWatermarkConstraintsTest test;
+        auto state = MakeIntrusive<TPqState>("watermark-constraints-test");
+        state->EnablePqConstraintsTransformer = true;
+        state->EnableWatermarksAdvanced = true;
+        const auto watermark = test.Extractor(TWatermarkConstraintsTest::ETimeExpression::Watermark);
+        auto node = Physical
+            ? test.Ctx.NewCallable(watermark->Pos(), TDqPqTopicSource::CallableName(), {
+                test.Ctx.NewWorld(watermark->Pos()), test.Atom("topic"), test.List(), test.List(),
+                test.Atom("token"), test.Atom(""), test.List(), test.List(), test.Atom(""), test.Atom(""), watermark})
+            : test.Ctx.NewCallable(watermark->Pos(), TPqReadTopic::CallableName(), {
+                test.Ctx.NewWorld(watermark->Pos()), test.Atom("source"), test.Atom("topic"), test.List(),
+                test.Atom("json_each_row"), test.Atom(""), test.List(), test.List(), watermark});
+        const auto* rowsType = test.Ctx.MakeType<TListExprType>(test.RowType);
+        if (Physical) {
+            node->SetTypeAnn(rowsType);
+        } else {
+            node->SetTypeAnn(test.Ctx.MakeType<TTupleExprType>(TVector<const TTypeAnnotationNode*>{
+                test.Ctx.MakeType<TWorldExprType>(), rowsType}));
+        }
+        node->SetState(TExprNode::EState::TypeComplete);
+        auto transformer = CreatePqDataSourceConstraintTransformer(state);
+        TExprNode::TPtr output;
+        UNIT_ASSERT_VALUES_EQUAL_C(transformer->Transform(node, output, test.Ctx), IGraphTransformer::TStatus::Ok,
+            test.Ctx.IssueManager.GetIssues().ToString());
+        const auto* streaming = node->GetConstraint<TStreamingConstraintNode>();
+        UNIT_ASSERT(streaming);
+        UNIT_ASSERT(streaming->GetEventTime());
+        UNIT_ASSERT(*streaming->GetEventTime() == TPartOfConstraintBase::TPathType{"t"});
+    }
+
+    Y_UNIT_TEST(WatermarkDqPhyGeneratorAssignsEventTime) {
+        TWatermarkConstraintsTest test;
+        auto node = test.PhysicalGenerator(test.Ctx.MakeConstraint<TStreamingConstraintNode>());
+        auto transformer = NDq::CreateDqConstraintsTransformer();
+        TExprNode::TPtr output;
+        UNIT_ASSERT_VALUES_EQUAL_C(transformer->Transform(node, output, test.Ctx), IGraphTransformer::TStatus::Ok,
+            test.Ctx.IssueManager.GetIssues().ToString());
+        const auto* streaming = node->GetConstraint<TStreamingConstraintNode>();
+        UNIT_ASSERT(streaming);
+        UNIT_ASSERT(streaming->GetEventTime());
+        UNIT_ASSERT(*streaming->GetEventTime() == TPartOfConstraintBase::TPathType{"t"});
+    }
+
+    Y_UNIT_TEST(WatermarkDqPhyGeneratorRejectsNonMaterializedEventTime) {
+        TWatermarkConstraintsTest test;
+        auto node = test.PhysicalGenerator(test.Ctx.MakeConstraint<TStreamingConstraintNode>(),
+            TWatermarkConstraintsTest::ETimeExpression::Computed);
+        auto transformer = NDq::CreateDqConstraintsTransformer();
+        TExprNode::TPtr output;
+        UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(node, output, test.Ctx), IGraphTransformer::TStatus::Error);
+        UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(), "must be materialized");
+    }
+
+    Y_UNIT_TEST(WatermarkDqPhyGeneratorRejectsBoundedInput) {
+        TWatermarkConstraintsTest test;
+        auto node = test.PhysicalGenerator(nullptr);
+        auto transformer = NDq::CreateDqConstraintsTransformer();
+        TExprNode::TPtr output;
+        UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(node, output, test.Ctx), IGraphTransformer::TStatus::Error);
+        UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(), "requires streaming input");
+    }
+
+    Y_UNIT_TEST(WatermarkDqPhyGeneratorRejectsAlreadyAssignedEventTime) {
+        TWatermarkConstraintsTest test;
+        auto node = test.PhysicalGenerator(test.Ctx.MakeConstraint<TStreamingConstraintNode>(
+            TPartOfConstraintBase::TPathType{"t"}));
+        auto transformer = NDq::CreateDqConstraintsTransformer();
+        TExprNode::TPtr output;
+        UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(node, output, test.Ctx), IGraphTransformer::TStatus::Error);
+        UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(), "already assigned");
+    }
+
+    Y_UNIT_TEST(KqpProgramRestoresArgumentConstraints) {
+        TWatermarkConstraintsTest test;
+        auto arg = test.Ctx.NewArgument(TPositionHandle(), "rows");
+        arg->SetTypeAnn(test.FlowType);
+        arg->SetState(TExprNode::EState::TypeComplete);
+        auto lambda = test.Ctx.NewLambda(arg->Pos(), test.Ctx.NewArguments(arg->Pos(), {arg}), TExprNode::TPtr(arg));
+        lambda->SetTypeAnn(test.FlowType);
+        lambda->SetState(TExprNode::EState::ConstrComplete);
+        auto node = test.Ctx.NewCallable(arg->Pos(), NNodes::TKqpProgram::CallableName(), {
+            lambda, ExpandType(arg->Pos(), *test.Ctx.MakeType<TTupleExprType>(TVector<const TTypeAnnotationNode*>{test.FlowType}), test.Ctx),
+            test.List({test.Atom(R"({"Streaming"={"event_time"="t";"aliases"=["t";"event_time"]}})")})});
+        node->SetTypeAnn(test.FlowType);
+        const auto config = MakeIntrusive<TKikimrConfiguration>();
+        config->_KqpYqlConstraintsTransformerEnabled = true;
+        const auto registry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
+        const auto session = MakeIntrusive<TKikimrSessionContext>(registry.Get(), config,
+            CreateDefaultTimeProvider(), CreateDeterministicRandomProvider(1), nullptr);
+        auto transformer = CreateKiSinkConstraintsTransformer(session);
+        TExprNode::TPtr output;
+        UNIT_ASSERT_VALUES_EQUAL_C(transformer->Transform(node, output, test.Ctx), IGraphTransformer::TStatus::Ok,
+            test.Ctx.IssueManager.GetIssues().ToString());
+        const auto* streaming = node->Head().Head().Head().GetConstraint<TStreamingConstraintNode>();
+        UNIT_ASSERT(streaming);
+        UNIT_ASSERT(streaming->IsEventTimePath(TPartOfConstraintBase::TPathType{"t"}));
+        UNIT_ASSERT(streaming->IsEventTimePath(TPartOfConstraintBase::TPathType{"event_time"}));
+    }
+
+    Y_UNIT_TEST(WatermarkWideChannelLineage) {
+        using namespace NNodes;
+        TWatermarkConstraintsTest test;
+        const auto* named = test.Ctx.MakeConstraint<TStreamingConstraintNode>(TPartOfConstraintBase::TPathType{"t"},
+            TPartOfConstraintBase::TSetType{TPartOfConstraintBase::TPathType{"t"}, TPartOfConstraintBase::TPathType{"event_time"}});
+        const auto* positional = test.Ctx.MakeConstraint<TStreamingConstraintNode>(TPartOfConstraintBase::TPathType{"1"},
+            TPartOfConstraintBase::TSetType{TPartOfConstraintBase::TPathType{"0"}, TPartOfConstraintBase::TPathType{"1"}});
+        const auto* wideType = test.Ctx.MakeType<TFlowExprType>(test.Ctx.MakeType<TMultiExprType>(
+            TVector<const TTypeAnnotationNode*>{test.RowType->GetItems()[0]->GetItemType(), test.RowType->GetItems()[1]->GetItemType()}));
+        const auto upstream = test.Ctx.NewCallable(TPositionHandle(), TDqOutput::CallableName(), {});
+        auto connection = test.Ctx.NewCallable(upstream->Pos(), TDqCnMap::CallableName(), {upstream});
+        connection->SetTypeAnn(test.FlowType);
+        connection->AddConstraint(named);
+        auto arg = test.Ctx.NewArgument(connection->Pos(), "wide");
+        arg->SetTypeAnn(wideType);
+        arg->SetState(TExprNode::EState::TypeComplete);
+        auto program = test.Ctx.NewLambda(arg->Pos(), test.Ctx.NewArguments(arg->Pos(), {arg}), TExprNode::TPtr(arg));
+        program->SetTypeAnn(wideType);
+        program->AddConstraint(positional);
+        program->SetState(TExprNode::EState::ConstrComplete);
+        auto stage = test.Ctx.NewCallable(arg->Pos(), TDqPhyStage::CallableName(), {test.List({connection}), program, test.List()});
+        stage->SetTypeAnn(test.Ctx.MakeType<TTupleExprType>(TVector<const TTypeAnnotationNode*>{test.FlowType}));
+        UNIT_ASSERT_VALUES_EQUAL(NDq::ConstraintDqStage(stage, test.Ctx), IGraphTransformer::TStatus::Ok);
+        UNIT_ASSERT_EQUAL(arg->GetConstraint<TStreamingConstraintNode>(), positional);
+        UNIT_ASSERT_EQUAL(stage->GetConstraint<TStreamingConstraintNode>(), named);
+        auto output = test.Ctx.NewCallable(arg->Pos(), TDqOutput::CallableName(), {stage, test.Atom("0")});
+        output->SetTypeAnn(test.FlowType);
+        UNIT_ASSERT_VALUES_EQUAL(NDq::ConstraintDqOutput(output, test.Ctx), IGraphTransformer::TStatus::Ok);
+        UNIT_ASSERT_EQUAL(output->GetConstraint<TStreamingConstraintNode>(), named);
+    }
+
+    Y_UNIT_TEST(WatermarkWideSourceWrapLineage) {
+        using namespace NNodes;
+        TWatermarkConstraintsTest test;
+        const auto input = test.Input(test.Ctx.MakeConstraint<TStreamingConstraintNode>(TPartOfConstraintBase::TPathType{"t"}));
+        const auto rowType = ExpandType(input->Pos(), *test.RowType, test.Ctx);
+        rowType->SetTypeAnn(test.Ctx.MakeType<TTypeExprType>(test.RowType));
+        const auto dataSource = test.Ctx.NewCallable(input->Pos(), "DataSource", {test.Atom("kikimr"), test.Atom("db")});
+        auto node = test.Ctx.NewCallable(input->Pos(), TDqSourceWideWrap::CallableName(), {input, dataSource, rowType, test.List()});
+        node->SetTypeAnn(test.Ctx.MakeType<TFlowExprType>(test.Ctx.MakeType<TMultiExprType>(
+            TVector<const TTypeAnnotationNode*>{test.RowType->GetItems()[0]->GetItemType(), test.RowType->GetItems()[1]->GetItemType()})));
+        const auto config = MakeIntrusive<TKikimrConfiguration>();
+        config->_KqpYqlConstraintsTransformerEnabled = true;
+        const auto registry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
+        const auto session = MakeIntrusive<TKikimrSessionContext>(registry.Get(), config,
+            CreateDefaultTimeProvider(), CreateDeterministicRandomProvider(1), nullptr);
+        session->Query().Type = EKikimrQueryType::Query;
+        auto transformer = CreateKiSourceConstraintsTransformer(session);
+        TExprNode::TPtr output;
+        UNIT_ASSERT_VALUES_EQUAL_C(transformer->Transform(node, output, test.Ctx), IGraphTransformer::TStatus::Ok,
+            test.Ctx.IssueManager.GetIssues().ToString());
+        const auto* streaming = node->GetConstraint<TStreamingConstraintNode>();
+        UNIT_ASSERT(streaming);
+        UNIT_ASSERT(streaming->IsEventTimePath(TPartOfConstraintBase::TPathType{"1"}));
+        UNIT_ASSERT(streaming->IsApplicableToType(*node->GetTypeAnn()));
+    }
+
+    Y_UNIT_TEST(DqSortConsolidationConstraints) {
+        using namespace NNodes;
+        TWatermarkConstraintsTest test;
+        const auto body = test.Input(nullptr);
+        const auto* sorted = test.Ctx.MakeConstraint<TSortedConstraintNode>(
+            TSortedConstraintNode::TContainerType{
+                std::pair{TPartOfConstraintBase::TSetType{TPartOfConstraintBase::TPathType{"t"}}, true}});
+        body->AddConstraint(sorted);
+        auto program = test.Ctx.NewLambda(body->Pos(), test.Ctx.NewArguments(body->Pos(), {}), TExprNode::TPtr(body));
+        program->SetTypeAnn(test.FlowType);
+        program->AddConstraint(sorted);
+        auto settings = NDq::TDqStageSettings::New();
+        settings.SetPartitionMode(NDq::TDqStageSettings::EPartitionMode::Single);
+        auto stage = test.Ctx.NewCallable(body->Pos(), TDqPhyStage::CallableName(), {
+            test.List(), program, settings.BuildNode(test.Ctx, body->Pos()).Ptr()});
+        stage->SetTypeAnn(test.Ctx.MakeType<TTupleExprType>(TVector<const TTypeAnnotationNode*>{test.FlowType}));
+        UNIT_ASSERT_VALUES_EQUAL(NDq::ConstraintDqStage(stage, test.Ctx, true), IGraphTransformer::TStatus::Ok);
+        UNIT_ASSERT_EQUAL(stage->GetConstraint<TSortedConstraintNode>(), sorted);
+        auto output = test.Ctx.NewCallable(body->Pos(), TDqOutput::CallableName(), {stage, test.Atom("0")});
+        output->SetTypeAnn(test.FlowType);
+        UNIT_ASSERT_VALUES_EQUAL(NDq::ConstraintDqOutput(output, test.Ctx, true), IGraphTransformer::TStatus::Ok);
+        auto connection = test.Ctx.NewCallable(body->Pos(), TDqCnUnionAll::CallableName(), {output});
+        connection->SetTypeAnn(test.FlowType);
+        UNIT_ASSERT_VALUES_EQUAL(NDq::ConstraintDqConnection(connection, test.Ctx, true), IGraphTransformer::TStatus::Ok);
+        UNIT_ASSERT_EQUAL(connection->GetConstraint<TSortedConstraintNode>(), sorted);
+    }
+
     Y_UNIT_TEST(KqpPureExprExcludesReads) {
         TExprContext ctx;
         for (const TStringBuf callable : {"KqlReadTable", "KqlReadTableIndex", "KqpReadTable",
@@ -2096,7 +2351,7 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
             output->AddConstraint(test.Ctx.MakeConstraint<TDistinctConstraintNode>(std::vector<std::string_view>{"key"}));
             output->AddConstraint(test.Ctx.MakeConstraint<TEmptyConstraintNode>());
             if (Streaming) {
-                test.MarkStreaming(output);
+                output->AddConstraint(test.Ctx.MakeConstraint<TStreamingConstraintNode>(TPartOfConstraintBase::TPathType{"key"}));
             }
             TExprNodeList children = {output, test.Atom(Labeled ? "left" : ""), rows, test.Atom("right"),
                 test.Atom("Left"), test.List({}), test.List({}), test.List({}),
@@ -2109,6 +2364,10 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
             connection->SetState(TExprNode::EState::TypeComplete);
             UNIT_ASSERT_VALUES_EQUAL(NDq::ConstraintDqConnection(connection, test.Ctx), IGraphTransformer::TStatus::Ok);
             UNIT_ASSERT_VALUES_EQUAL(!!connection->GetConstraint<TStreamingConstraintNode>(), Streaming);
+            if (Streaming) {
+                UNIT_ASSERT(connection->GetConstraint<TStreamingConstraintNode>()->IsEventTimePath(
+                    TPartOfConstraintBase::TPathType{Labeled ? "left.key" : "key"}));
+            }
             UNIT_ASSERT(connection->GetConstraint<TEmptyConstraintNode>());
             UNIT_ASSERT_VALUES_EQUAL(!!connection->GetConstraint<TUniqueConstraintNode>(), multiMatches != "true");
             UNIT_ASSERT_VALUES_EQUAL(!!connection->GetConstraint<TDistinctConstraintNode>(), multiMatches != "true");
@@ -2140,6 +2399,32 @@ Y_UNIT_TEST_SUITE(KikimrProviderStreaming) {
         UNIT_ASSERT_VALUES_EQUAL(test.BuildStreamingFlow(tx, output, streamingResults, tables), IGraphTransformer::TStatus::Error);
         UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(),
             "Assigned streaming aggregation output state table is no longer eligible");
+    }
+
+    Y_UNIT_TEST(StreamingAggregationEventTimeConstraints) {
+        for (const TStringBuf mode : {"keys", "projected_key", "keyless"}) {
+            TStreamingAggregationTypeAnnTest test;
+            test.Config->_KqpYqlConstraintsTransformerEnabled = true;
+            auto node = test.Aggregation(ETypeAnnotationKind::Flow,
+                mode == "keyless" ? TExprNodeList{} : TExprNodeList{test.Atom("key")}, {},
+                mode == "projected_key" ? TExprNodeList{test.List({test.Atom("output_columns"), test.List({})})} : TExprNodeList{});
+            const auto* rowType = test.Ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+                test.Ctx.MakeType<TItemExprType>("key", test.Ctx.MakeType<TDataExprType>(EDataSlot::Timestamp))});
+            node->HeadPtr()->SetTypeAnn(test.Ctx.MakeType<TFlowExprType>(rowType));
+            test.CheckType(node);
+            node->HeadPtr()->AddConstraint(test.Ctx.MakeConstraint<TStreamingConstraintNode>(TPartOfConstraintBase::TPathType{"key"}));
+            node->HeadPtr()->SetState(TExprNode::EState::ConstrComplete);
+            const auto registry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
+            const auto session = MakeIntrusive<TKikimrSessionContext>(registry.Get(), test.Config,
+                CreateDefaultTimeProvider(), CreateDeterministicRandomProvider(1), nullptr);
+            auto transformer = CreateKiSinkConstraintsTransformer(session);
+            TExprNode::TPtr output;
+            UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(node, output, test.Ctx), IGraphTransformer::TStatus::Ok);
+            const auto* streaming = node->GetConstraint<TStreamingConstraintNode>();
+            UNIT_ASSERT(streaming);
+            UNIT_ASSERT_VALUES_EQUAL(streaming->GetEventTime().Defined(), mode == "keys");
+            UNIT_ASSERT(streaming->IsApplicableToType(*node->GetTypeAnn()));
+        }
     }
 
     Y_UNIT_TEST_QUAD(StreamingAggregationConstraints, Streaming, Empty) {

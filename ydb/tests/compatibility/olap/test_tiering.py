@@ -16,6 +16,9 @@ class TieringTestBase(RestartToAnotherVersionFixture):
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self, tree):
+        if (tree or self.requires_prefix_alter) and min(self.versions) < (26, 4):
+            pytest.skip("Tiering object key tree is only available since 26-4")
+
         flags = ["enable_tiering_in_column_shard", "enable_external_data_sources"]
         if tree or self.requires_prefix_alter:
             flags.append("enable_tiering_object_key_tree")

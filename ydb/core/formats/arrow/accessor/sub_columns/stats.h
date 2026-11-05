@@ -315,16 +315,12 @@ struct TResolvedPathMatch {
 };
 
 inline TConclusion<std::optional<TResolvedPathMatch>> ResolveBestPath(
-    const TDictStats& columnsStats, const TDictStats& othersStats, const TJsonPathBuf path) {
-    auto parsed = ParseJsonPath(path);
-    if (parsed.IsFail()) {
-        return TConclusionStatus::Fail(parsed.GetErrorMessage());
-    }
-    auto columnsResult = columnsStats.ResolvePath(parsed.GetResult());
+    const TDictStats& columnsStats, const TDictStats& othersStats, const TParsedJsonPath& path) {
+    auto columnsResult = columnsStats.ResolvePath(path);
     if (columnsResult.IsFail()) {
         return TConclusionStatus::Fail(columnsResult.GetErrorMessage());
     }
-    auto othersResult = othersStats.ResolvePath(parsed.GetResult());
+    auto othersResult = othersStats.ResolvePath(path);
     if (othersResult.IsFail()) {
         return TConclusionStatus::Fail(othersResult.GetErrorMessage());
     }
@@ -334,6 +330,15 @@ inline TConclusion<std::optional<TResolvedPathMatch>> ResolveBestPath(
         return columnsPath ? std::optional<TResolvedPathMatch>(TResolvedPathMatch{ *columnsPath, true }) : std::nullopt;
     }
     return TResolvedPathMatch{ *othersPath, false };
+}
+
+inline TConclusion<std::optional<TResolvedPathMatch>> ResolveBestPath(
+    const TDictStats& columnsStats, const TDictStats& othersStats, const TJsonPathBuf path) {
+    auto parsed = ParseJsonPath(path);
+    if (parsed.IsFail()) {
+        return TConclusionStatus::Fail(parsed.GetErrorMessage());
+    }
+    return ResolveBestPath(columnsStats, othersStats, parsed.GetResult());
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

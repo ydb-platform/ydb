@@ -7,9 +7,9 @@ import yql_utils
 import yatest.common
 from yql_utils import execute, get_tables, get_files, get_http_files, \
     KSV_ATTR, yql_binary_path, is_xfail, is_xsqlfail, is_canonize_peephole, is_peephole_use_blocks, is_canonize_lineage, \
-    is_skip_forceblocks, get_param, normalize_source_code_path, replace_vals, get_gateway_cfg_suffix, \
+    is_skip_forceblocks, get_param, normalize_source_code_path, replace_vals, \
     do_custom_query_check, stable_result_file, stable_table_file, is_with_final_result_issues, \
-    normalize_result, get_langver, get_gateway_cfg_patch
+    normalize_result, get_langver, get_gateway_cfg_patch, get_udfs
 from yqlrun import YQLRun
 
 from test_utils import get_config, get_parameters_json, get_case_file
@@ -38,9 +38,6 @@ def mode_expander(lst):
 
 
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
-    if get_gateway_cfg_suffix() != '' and what not in ('Results','LLVM','Blocks'):
-        pytest.skip('non-trivial gateways.conf')
-
     config = get_config(suite, case, cfg, data_path = DATA_PATH)
 
     langver = get_langver(config)
@@ -67,7 +64,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         extra_final_args += ['--with-final-issues']
     (res, tables_res) = run_file('pure', suite, case, cfg, config, yql_http_file_server, MINIRUN_PATH,
                                  extra_args=extra_final_args, allow_llvm=False, data_path=DATA_PATH,
-                                 langver=langver, fuzz_universal=True, patch_cfg_file=patch_cfg_file)
+                                 langver=langver, fuzz_universal=True, patch_cfg_file=patch_cfg_file, udfs=get_udfs(config))
 
     to_canonize = []
     assert xfail or os.path.exists(res.results_file)
@@ -84,7 +81,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         (res, tables_res) = run_file_no_cache('pure', suite, case, cfg, config, yql_http_file_server,
                                               force_blocks=force_blocks, extra_args=['--peephole'],
                                               data_path=DATA_PATH, yqlrun_binary=MINIRUN_PATH,
-                                              langver=langver)
+                                              langver=langver, udfs=get_udfs(config))
         return [yatest.common.canonical_file(res.opt_file, diff_tool=ASTDIFF_PATH)]
 
     if what == 'Results':
@@ -129,6 +126,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
             langver=langver,
             extra_args=["--compile-only","--test-partial-typecheck"] if is_typecheck else [],
             patch_cfg_file=patch_cfg_file,
+            udfs=get_udfs(config),
         )
 
         opt_res, opt_tables_res = execute(

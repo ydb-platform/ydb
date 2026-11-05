@@ -35,11 +35,7 @@ using std::string;
 // the original relative prefix.
 inline string GetSampleDataPrefix() {
 #ifdef NMSLIB_ARCADIA_TEST
-  return string(ArcadiaSourceRoot().c_str()) +
-         PATH_SEPARATOR + string("ydb") +
-         PATH_SEPARATOR + string("library") +
-         PATH_SEPARATOR + string("nmslib") +
-         PATH_SEPARATOR + string("sample_data") + PATH_SEPARATOR;
+  return string(ArcadiaFromCurrentLocation(__SOURCE_FILE__, "../sample_data").c_str()) + PATH_SEPARATOR;
 #else
   return string("..") + PATH_SEPARATOR + string("sample_data") + PATH_SEPARATOR;
 #endif

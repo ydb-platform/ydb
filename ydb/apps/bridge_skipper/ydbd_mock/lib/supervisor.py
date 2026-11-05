@@ -12,6 +12,10 @@ Run directory (YDBD_MOCK_RUN_DIR, default ~/ydbd_mock_work/run):
     logs/<pile>.events.jsonl    event log, survives a kill
 """
 import argparse
+import asyncio
+import hashlib
+import heapq
+import ipaddress
 import json
 import os
 import signal
@@ -21,6 +25,9 @@ import time
 import typing
 import urllib.error
 import urllib.request
+import uuid
+
+from aiohttp import web
 
 from ydb.apps.bridge_skipper.ydbd_mock.lib.topology import Topology, TopologyError
 
@@ -29,6 +36,32 @@ DEFAULT_WORK = os.path.join(os.path.expanduser("~"), "ydbd_mock_work")
 
 class SupervisorError(Exception):
     pass
+
+
+class PartialMutationError(SupervisorError):
+    """The command has started changing the cluster; an error is not proof of rollback."""
+
+    def __init__(self, message: str, report: dict) -> None:
+        super().__init__(message)
+        self.report = report
+
+
+class _MutationReport:
+    def __init__(self, action: str, piles: typing.Sequence[str]) -> None:
+        self.data = {"ok": False, "action": action, "stage": "starting", "piles": list(piles),
+                     "attempted": {}, "results": {}, "errors": {}, "uncertain": True}
+
+    def step(self, stage: str, target: str, call):
+        if not self.data["errors"]:
+            self.data["stage"] = stage
+        self.data["attempted"].setdefault(stage, []).append(target)
+        try:
+            result = call()
+        except Exception as e:
+            self.data["errors"].setdefault(stage, {})[target] = str(e)
+            raise PartialMutationError(str(e), self.data) from e
+        self.data["results"].setdefault(stage, {})[target] = result
+        return result
 
 
 def default_run_dir() -> str:
@@ -119,7 +152,8 @@ class Cluster:
         if pid is None or not pid_alive(pid):
             return False
         argv = command_line(pid) + " "
-        return ("--topology %s --pile %s " % (self.path("topology.yaml"), pile)) in argv
+        prefix = "--topology %s --pile" % self.path("topology.yaml")
+        return (prefix + "=%s " % pile) in argv or (bool(pile) and (prefix + " %s " % pile) in argv)
 
     def _config(self) -> dict:
         with open(self.path("cluster.json")) as f:
@@ -134,7 +168,7 @@ class Cluster:
         argv = list(config["argv_prefix"]) + [
             "run",
             "--topology", self.path("topology.yaml"),
-            "--pile", pile,
+            "--pile=%s" % pile,
             "--state-dir", self.path("state", pile),
             "--log-events", self.path("logs", "%s.events.jsonl" % pile),
             "--log-level", config.get("log_level", "INFO"),
@@ -204,6 +238,36 @@ class Cluster:
     def live_piles(self) -> typing.List[str]:
         return [p for p in self.piles() if self.alive(p)]
 
+    def manifest(self, supervisor_id: typing.Optional[str] = None) -> dict:
+        """Public dial inventory: callers must keep logical identity separate from transport addresses."""
+        topo = self.topology
+        nodes = [{"node_id": node.node_id, "label": node.label, "pile": node.pile_name,
+                  "dial_endpoint": node.endpoint, "tls": bool(topo.tls)} for node in topo.all_nodes()]
+        inventory = {"cluster_name": topo.cluster_name, "nodes": nodes,
+                     "piles": [{"name": p.name, "control_endpoint": p.control_endpoint} for p in topo.piles]}
+        digest = hashlib.sha256(json.dumps(inventory, sort_keys=True).encode()).hexdigest()
+        try:
+            config = self._config()
+        except (OSError, ValueError):
+            config = {}
+        cluster_id = config.get("cluster_id") or uuid.uuid5(uuid.NAMESPACE_URL, self.run + digest).hex
+        return {"schema_version": 1, "kind": "ydbd_mock", "cluster_id": cluster_id,
+                "supervisor_id": supervisor_id, "topology_sha256": digest,
+                "endpoint_map": topo.endpoint_map(), **inventory}
+
+    def aggregate_state(self) -> dict:
+        out = {}
+        for pile in self.piles():
+            row = {"pid": self.pid(pile), "alive": self.alive(pile), "responsive": False}
+            if row["alive"]:
+                try:
+                    row["state"] = self.request(pile, "GET", "/state", timeout=1.0)
+                    row["responsive"] = True
+                except SupervisorError as e:
+                    row["error"] = str(e)
+            out[pile] = row
+        return {"schema_version": 1, "cluster_id": self.manifest()["cluster_id"], "instances": out}
+
     # ----- macros bookkeeping -----
 
     def _macros(self) -> typing.List[dict]:
@@ -236,7 +300,11 @@ def cmd_up(cluster: Cluster, args) -> int:
     if args.topology:
         topology = Topology.load(args.topology)
     else:
-        piles = [p for p in args.piles.split(",") if p]
+        piles = args.piles.split(",")
+        if any(not name for name in piles):
+            raise SupervisorError(
+                '--piles must contain nonempty names separated by commas; '
+                'for an explicit empty pile name, use --topology with YAML piles: [named, ""]')
         topology = Topology(
             piles, args.nodes_per_pile, cluster_name=args.cluster_name,
             control_base_port=args.control_base_port, grpc_base_port=args.grpc_base_port)
@@ -262,9 +330,12 @@ def cmd_up(cluster: Cluster, args) -> int:
     with open(cluster.path("endpoint_map.json"), "w") as f:
         json.dump(topology.endpoint_map(), f, indent=2, sort_keys=True)
     with open(cluster.path("cluster.json"), "w") as f:
-        json.dump({"argv_prefix": argv_prefix(), "log_level": args.log_level}, f)
+        json.dump({"argv_prefix": argv_prefix(), "log_level": args.log_level,
+                   "cluster_id": uuid.uuid4().hex}, f)
     cluster._save_macros([])
     cluster._topo = None
+    with open(cluster.path("endpoint_manifest.json"), "w") as f:
+        json.dump(cluster.manifest(), f, indent=2, sort_keys=True)
     for w in topology.warnings:
         sys.stderr.write("warning: %s\n" % w)
 
@@ -357,7 +428,7 @@ def cmd_status(cluster: Cluster, args) -> int:
 
 
 def cmd_state(cluster: Cluster, args) -> int:
-    if args.pile:
+    if args.pile is not None:
         _print(cluster.request(cluster.pile(args.pile), "GET", "/state"))
     else:
         out = {}
@@ -387,7 +458,7 @@ def read_events(cluster: Cluster, pile: str) -> typing.List[dict]:
 
 
 def cmd_events(cluster: Cluster, args) -> int:
-    piles = [cluster.pile(args.pile)] if args.pile else cluster.piles()
+    piles = [cluster.pile(args.pile)] if args.pile is not None else cluster.piles()
     merged = []
     for pile in piles:
         for event in read_events(cluster, pile):
@@ -521,7 +592,7 @@ def cmd_fault(cluster: Cluster, args) -> int:
         if args.methods:
             body["methods"] = [m for m in args.methods.split(",") if m]
     elif args.op in ("storage", "connectivity"):
-        body["piles"] = [] if args.off else [p for p in (args.piles or "").split(",") if p]
+        body["piles"] = [] if args.off or args.piles is None else args.piles.split(",")
     elif args.op == "self_check":
         body["value"] = None if args.off else args.value
     cluster.request(pile, "POST", "/control", _control_body(kind, args.target, body))
@@ -537,8 +608,21 @@ def cmd_node(cluster: Cluster, args, on: bool) -> int:
 
 
 def _groups(spec: str, piles: typing.Sequence[str]) -> typing.List[typing.List[str]]:
-    groups = [[p.strip() for p in g.split(",") if p.strip()] for g in spec.split("|")]
-    groups = [g for g in groups if g]
+    has_empty = "" in piles
+    groups = []
+    for raw in spec.split("|"):
+        tokens = raw.split(",")
+        if has_empty:
+            if raw == "":
+                groups.append([""])
+                continue
+            if any(not t.strip() for t in tokens):
+                raise SupervisorError(
+                    'ambiguous blank pile name in partition group %r; write the empty pile name as a group '
+                    'by itself, e.g. "|pile1"' % raw)
+        group = [t.strip() for t in tokens if t.strip()]
+        if group:
+            groups.append(group)
     if len(groups) < 2:
         raise SupervisorError('partition needs at least two groups separated by "|", e.g. "pile1|pile2"')
     seen = set()
@@ -554,36 +638,50 @@ def _groups(spec: str, piles: typing.Sequence[str]) -> typing.List[typing.List[s
 
 def cmd_partition(cluster: Cluster, args) -> int:
     groups = _groups(args.spec, cluster.piles())
+    progress = _MutationReport("partition", cluster.piles())
+    # Record intent before sending links: a failed/lost reply must still be undoable by heal.
+    progress.step("record", "supervisor", lambda: cluster.record_macro({"kind": "partition", "spec": args.spec}))
+    failures = []
     for i, group in enumerate(groups):
         others = [p for j, g in enumerate(groups) if j != i for p in g]
         for pile in group:
             if cluster.alive(pile):
-                cluster.request(pile, "POST", "/link", {"block": others})
-    cluster.record_macro({"kind": "partition", "spec": args.spec})
-    _scenario(cluster, "partition", groups[0][0], spec=args.spec)
+                try:
+                    progress.step("links", pile, lambda: cluster.request(pile, "POST", "/link", {"block": others}))
+                except PartialMutationError as e:
+                    failures.append(str(e))
+            else:
+                progress.data["results"].setdefault("links", {})[pile] = {"deferred_until_revive": True}
+    if failures:
+        raise PartialMutationError("could not partition every peer: %s" % "; ".join(failures), progress.data)
+    progress.step("scenario", "supervisor", lambda: _scenario(cluster, "partition", groups[0][0], spec=args.spec))
     return 0
 
 
 def cmd_heal(cluster: Cluster, args) -> int:
     macros = cluster._macros()
-    link_errors = []
+    progress = _MutationReport("heal", cluster.piles())
+    errors = []
     for pile in cluster.live_piles():
         try:
-            cluster.request(pile, "POST", "/link", {"set": []})
-        except SupervisorError as e:
-            link_errors.append(str(e))
+            progress.step("links", pile, lambda: cluster.request(pile, "POST", "/link", {"set": []}))
+        except PartialMutationError as e:
+            errors.append(str(e))
     for macro in macros:
         if macro["kind"] == "keeper_split" and cluster.alive(macro["pile"]):
             for node in cluster.topology.pile(macro["pile"]).nodes:
                 if node.label not in macro.get("already", []):
-                    cluster.request(macro["pile"], "POST", "/control",
-                                    {"label": node.label, "op": "unavailable", "on": False})
-    if link_errors:
-        raise SupervisorError("could not heal peer links: %s" % "; ".join(link_errors))
+                    try:
+                        progress.step("keeper_faults", node.label, lambda: cluster.request(
+                            macro["pile"], "POST", "/control", {"label": node.label, "op": "unavailable", "on": False}))
+                    except PartialMutationError as e:
+                        errors.append(str(e))
+    if errors:
+        raise PartialMutationError("could not heal every fault: %s" % "; ".join(errors), progress.data)
     # Keep the records until every undo succeeds, so a failed heal can be retried.
     # Dead processes have no faults left; forgetting their macros keeps revival healed.
-    cluster._save_macros([])
-    _scenario(cluster, "heal", cluster.piles()[0])
+    progress.step("record", "supervisor", lambda: cluster._save_macros([]))
+    progress.step("scenario", "supervisor", lambda: _scenario(cluster, "heal", cluster.piles()[0]))
     return 0
 
 
@@ -638,49 +736,267 @@ def cmd_settings(cluster: Cluster, args, path: str) -> int:
     return 0
 
 
-def cmd_reset(cluster: Cluster, args) -> int:
+def reset_cluster(cluster: Cluster) -> dict:
     piles = cluster.piles()
-    for pile in piles:
-        if not cluster.alive(pile):
-            revive_pile(cluster, pile)
-        else:
-            _signal(cluster.pid(pile), signal.SIGCONT)
+    progress = _MutationReport("reset", piles)
     prepared = []
+    failure = None
     try:
+        for pile in piles:
+            if not cluster.alive(pile):
+                progress.step("revive", pile, lambda: revive_pile(cluster, pile))
+            else:
+                progress.step("revive", pile, lambda: _signal(cluster.pid(pile), signal.SIGCONT))
         # Freeze every source of new decisions before sampling. Previously committed traffic can still
         # arrive, but its generation is bounded by the originating replica's persisted watermark.
         for pile in piles:
             prepared.append(pile)   # a lost reply may still mean that the barrier was entered
-            cluster.request(pile, "POST", "/reset-prepare", {})
+            progress.step("prepare", pile, lambda: cluster.request(pile, "POST", "/reset-prepare", {}))
         generations = []
         for pile in piles:
-            state = cluster.request(pile, "GET", "/state")
-            generations.append(state.get("max_generation", state["generation"]))
+            generation = progress.step("sample", pile, lambda: _reset_generation(cluster, pile))
+            generations.append(generation)
         new_generation = max(generations) + 1
+        progress.data["generation"] = new_generation
         for pile in piles:
-            cluster.request(pile, "POST", "/reset-local", {"generation": new_generation})
+            progress.step("install", pile, lambda: cluster.request(pile, "POST", "/reset-local", {"generation": new_generation}))
+    except PartialMutationError as e:
+        failure = e
     finally:
-        failed = sys.exc_info()[0] is not None
         errors = []
         for pile in prepared:
             try:
-                cluster.request(pile, "POST", "/reset-cancel", {})
-            except SupervisorError as e:
+                progress.step("resume", pile, lambda: cluster.request(pile, "POST", "/reset-cancel", {}))
+            except PartialMutationError as e:
                 errors.append(str(e))
         if errors:
             message = "could not resume piles after reset: %s" % "; ".join(errors)
-            if failed:
+            if failure is not None:
                 sys.stderr.write("warning: %s\n" % message)
             else:
-                raise SupervisorError(message)
-    cluster._save_macros([])
-    _scenario(cluster, "reset", piles[0], generation=new_generation)
-    _print({"reset": True, "generation": new_generation})
+                failure = PartialMutationError(message, progress.data)
+    if failure is not None:
+        raise failure
+    progress.step("record", "supervisor", lambda: cluster._save_macros([]))
+    progress.step("scenario", "supervisor", lambda: _scenario(cluster, "reset", piles[0], generation=new_generation))
+    return {"reset": True, "generation": new_generation}
+
+
+def _reset_generation(cluster: Cluster, pile: str) -> int:
+    state = cluster.request(pile, "GET", "/state")
+    generation = state.get("max_generation", state["generation"])
+    if isinstance(generation, bool) or not isinstance(generation, int) or generation < 0:
+        raise SupervisorError("invalid generation returned by %s" % pile)
+    return generation
+
+
+def cmd_reset(cluster: Cluster, args) -> int:
+    _print(reset_cluster(cluster))
     return 0
 
 
 def cmd_endpoints(cluster: Cluster, args) -> int:
     _print(cluster.topology.endpoint_map())
+    return 0
+
+
+def cmd_manifest(cluster: Cluster, args) -> int:
+    _print(cluster.manifest())
+    return 0
+
+
+def _body_fields(body: dict, allowed: typing.Set[str], required: typing.Set[str] = frozenset()) -> None:
+    if set(body) - allowed:
+        raise SupervisorError("unknown fields: %s" % ", ".join(sorted(set(body) - allowed)))
+    if required - set(body):
+        raise SupervisorError("missing fields: %s" % ", ".join(sorted(required - set(body))))
+
+
+def _broadcast(cluster: Cluster, path: str, body: dict) -> dict:
+    results, errors = {}, {}
+    for pile in cluster.piles():
+        if not cluster.alive(pile):
+            errors[pile] = "instance is not running; change was not applied"
+            continue
+        try:
+            results[pile] = cluster.request(pile, "POST", path, body)
+        except SupervisorError as e:
+            errors[pile] = str(e)
+    return {"ok": not errors, "instances": results, "errors": errors}
+
+
+def _http_action(cluster: Cluster, action: str, body: dict) -> dict:
+    """Finite command allowlist; no supplied URL, filesystem path or shell command is executed."""
+    if action == "process":
+        _body_fields(body, {"pile", "action"}, {"pile", "action"})
+        handlers = {"kill": cmd_kill, "revive": cmd_revive, "stop": cmd_stop, "cont": cmd_cont}
+        if body["action"] not in handlers:
+            raise SupervisorError("process action must be kill, revive, stop or cont")
+        handlers[body["action"]](cluster, argparse.Namespace(pile=cluster.pile(body["pile"])))
+    elif action in ("fault", "failpoints", "response-override", "rpc-override"):
+        fields = {"fault": {"target", "op", "on", "max", "seconds", "methods", "piles", "value"},
+                  "failpoints": {"target", "method", "stage", "action", "once"},
+                  "response-override": {"target", "method", "result"},
+                  "rpc-override": {"target", "method", "response", "raw_result", "once"}}
+        _body_fields(body, fields[action], {"target"})
+        pile, kind = _resolve_target(cluster, body["target"])
+        args = {k: v for k, v in body.items() if k != "target"}
+        path = "/control" if action == "fault" else "/" + action
+        return cluster.request(pile, "POST", path, _control_body(kind, body["target"], args))
+    elif action == "replica":
+        _body_fields(body, {"pile", "clear", "generation", "states", "detach"}, {"pile"})
+        return cluster.request(body["pile"], "POST", "/replica", {k: v for k, v in body.items() if k != "pile"})
+    elif action == "partition":
+        _body_fields(body, {"spec"}, {"spec"})
+        if not isinstance(body["spec"], str):
+            raise SupervisorError("partition spec must be a string")
+        cmd_partition(cluster, argparse.Namespace(spec=body["spec"]))
+    elif action in ("heal", "reset"):
+        _body_fields(body, set())
+        if action == "reset":
+            return reset_cluster(cluster)
+        cmd_heal(cluster, argparse.Namespace())
+    elif action in ("timings", "policies"):
+        _body_fields(body, {"values"}, {"values"})
+        if not isinstance(body["values"], dict):
+            raise SupervisorError("values must be an object")
+        return _broadcast(cluster, "/" + action, body["values"])
+    elif action == "followups":
+        _body_fields(body, {"hold", "release", "error_reason"})
+        return _broadcast(cluster, "/followups", body)
+    elif action == "topology":
+        _body_fields(body, {"pile", "configured_piles", "bridged", "self_management"})
+        pile = body.get("pile")
+        if pile is None:
+            live = cluster.live_piles()
+            if not live:
+                raise SupervisorError("no live instance to configure topology")
+            pile = live[0]
+        return cluster.request(pile, "POST", "/topology", {k: v for k, v in body.items() if k != "pile"})
+    else:
+        raise SupervisorError("unknown supervisor action")
+    return {"ok": True}
+
+
+def _http_events(cluster: Cluster, cursors: dict, limit: int, kind: typing.Optional[str]) -> dict:
+    if set(cursors) - set(cluster.piles()):
+        raise SupervisorError("event cursor names an unknown pile")
+    if any(isinstance(v, bool) or not isinstance(v, int) or v < 0 for v in cursors.values()):
+        raise SupervisorError("event cursors must be nonnegative integers")
+    if not 1 <= limit <= 10000:
+        raise SupervisorError("event limit must be between 1 and 10000")
+    streams, reset = {}, []
+    next_cursors = {p: cursors.get(p, 0) for p in cluster.piles()}
+    for pile in cluster.piles():
+        events = read_events(cluster, pile)
+        last = max((e["seq"] for e in events), default=0)
+        if next_cursors[pile] > last:
+            next_cursors[pile] = 0
+            reset.append(pile)
+        streams[pile] = iter(sorted((e for e in events if e["seq"] > next_cursors[pile] and (
+            not kind or e["kind"].startswith(kind))), key=lambda e: e["seq"]))
+    heap = []
+
+    def advance(pile):
+        event = next(streams[pile], None)
+        if event is not None:
+            heapq.heappush(heap, (event["ts"], pile, event["seq"], event))
+
+    for pile in streams:
+        advance(pile)
+    selected = []
+    while heap and len(selected) < limit:
+        _, pile, _, event = heapq.heappop(heap)
+        selected.append(event)
+        advance(pile)
+    for event in selected:
+        next_cursors[event["pile"]] = max(next_cursors[event["pile"]], event["seq"])
+    return {"events": selected, "cursors": next_cursors, "has_more": bool(heap), "reset_piles": reset}
+
+
+def build_http_app(cluster: Cluster, supervisor_id: typing.Optional[str] = None) -> web.Application:
+    """Cluster-level Lab API. Blocking process/control operations run outside the HTTP event loop."""
+    identity = supervisor_id or uuid.uuid4().hex
+    mutation_lock = asyncio.Lock()
+
+    @web.middleware
+    async def errors(request, handler):
+        try:
+            # A local browser cannot turn a hostile web page into a process-control client.
+            origin = request.headers.get("Origin")
+            if origin and origin != "%s://%s" % (request.scheme, request.host):
+                return web.json_response({"error": "cross-origin requests are forbidden"}, status=403)
+            host = request.host.rsplit(":", 1)[0].strip("[]")
+            bound = request.transport.get_extra_info("sockname")[0]
+            if host != "localhost":
+                try:
+                    address = ipaddress.ip_address(host)
+                except ValueError:
+                    return web.json_response({"error": "Host must name the listening address"}, status=403)
+                if not address.is_loopback and host != bound:
+                    return web.json_response({"error": "Host must name the listening address"}, status=403)
+            return await handler(request)
+        except PartialMutationError as e:
+            return web.json_response(dict(e.report, error=str(e)), status=207)
+        except (SupervisorError, TopologyError, ValueError, TypeError, KeyError) as e:
+            return web.json_response({"error": str(e)}, status=400)
+
+    app = web.Application(middlewares=[errors], client_max_size=1024 * 1024)
+
+    async def manifest(request):
+        return web.json_response(cluster.manifest(identity))
+
+    async def state(request):
+        out = await asyncio.to_thread(cluster.aggregate_state)
+        out["supervisor_id"] = identity
+        return web.json_response(out)
+
+    async def events(request):
+        cursors = json.loads(request.query.get("cursors", "{}"))
+        if not isinstance(cursors, dict):
+            raise SupervisorError("cursors must be a JSON object")
+        out = await asyncio.to_thread(_http_events, cluster, cursors,
+                                      int(request.query.get("limit", "1000")), request.query.get("kind"))
+        out.update({"schema_version": 1, "cluster_id": cluster.manifest()["cluster_id"],
+                    "supervisor_id": identity})
+        return web.json_response(out)
+
+    async def mutate(request):
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise SupervisorError("body must be a JSON object")
+        async with mutation_lock:
+            # Cancellation must not release serialization while a worker is still changing the cluster.
+            task = asyncio.create_task(asyncio.to_thread(_http_action, cluster, request.match_info["action"], body))
+            cancelled = False
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    cancelled = True
+            out = task.result()
+            if cancelled:
+                raise asyncio.CancelledError
+        return web.json_response(out, status=200 if out.get("ok", True) else 207)
+
+    app.router.add_get("/api/v1/manifest", manifest)
+    app.router.add_get("/api/v1/state", state)
+    app.router.add_get("/api/v1/events", events)
+    actions = "process|fault|failpoints|response-override|rpc-override|replica|partition|heal|reset|timings|policies|followups|topology"
+    app.router.add_post("/api/v1/{action:%s}" % actions, mutate)
+    return app
+
+
+def cmd_serve(cluster: Cluster, args) -> int:
+    if args.host != "localhost":
+        try:
+            local = ipaddress.ip_address(args.host).is_loopback
+        except ValueError:
+            local = False
+        if not local and not args.allow_remote:
+            raise SupervisorError("supervisor control has no authentication; use a loopback host or --allow-remote")
+    cluster.topology   # validate before starting the HTTP server
+    web.run_app(build_http_app(cluster), host=args.host, port=args.port, access_log=None)
     return 0
 
 
@@ -691,7 +1007,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     up = sub.add_parser("up", help="start one instance per pile")
     up.add_argument("--topology", default=None, help="use this topology file instead of the flags below")
-    up.add_argument("--piles", default="pile1,pile2")
+    up.add_argument("--piles", default="pile1,pile2",
+                    help="comma-separated nonempty pile names; use --topology for an explicit empty name")
     up.add_argument("--nodes-per-pile", type=int, default=3)
     up.add_argument("--cluster-name", default="mock-bridge")
     up.add_argument("--control-base-port", type=int, default=22000)
@@ -768,6 +1085,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("reset", help="revive everything and install a fresh snapshot at max generation + 1"
                    ).set_defaults(fn=cmd_reset)
     sub.add_parser("endpoints", help="print the label -> endpoint map").set_defaults(fn=cmd_endpoints)
+    sub.add_parser("manifest", help="print versioned logical identities and dial endpoints").set_defaults(fn=cmd_manifest)
+    serve = sub.add_parser("serve", help="serve the cluster Lab HTTP API in the foreground")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=21999)
+    serve.add_argument("--allow-remote", action="store_true")
+    serve.set_defaults(fn=cmd_serve)
     return parser
 
 

@@ -175,7 +175,53 @@ void TestMaxAllowedFailures(TBlobStorageGroupType::EErasureSpecies erasure) {
 
 } // namespace
 
+namespace {
+
+void CheckMirror3dcRealms(const TVector<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState>& realms,
+        bool failNormalDisk, NKikimrProto::EReplyStatus expected) {
+    using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    TTestBasicRuntime runtime(1, false);
+    runtime.SetDispatchTimeout(TDuration::Seconds(10));
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, TBlobStorageGroupType(TErasureType::ErasureMirror3dc), 0, 0,
+        TBlobStorageGroupInfo::EEM_NONE, DormantTimeoutDefaultControl, false, realms);
+    TTestState state(runtime, env.Info);
+    const ui64 tabletId = 123456;
+    auto query = std::make_unique<TEvBlobStorage::TEvGetBlock>(tabletId, TInstant::Max());
+    runtime.Send(new IEventHandle(env.RealProxyActorId, state.EdgeActor, query.release()), 0);
+    ui32 requests = 0;
+    for (;;) {
+        TAutoPtr<IEventHandle> handle;
+        auto [getBlock, result] = runtime.GrabEdgeEventsRethrow<TEvBlobStorage::TEvVGetBlock,
+            TEvBlobStorage::TEvGetBlockResult>(handle);
+        if (result) {
+            UNIT_ASSERT_VALUES_EQUAL(result->Status, expected);
+            UNIT_ASSERT(requests > 0);
+            break;
+        }
+        UNIT_ASSERT(getBlock);
+        ++requests;
+        const auto vd = VDiskIDFromVDiskID(getBlock->Record.GetVDiskID());
+        UNIT_ASSERT(realms[vd.FailRealm] != R::F);
+        const bool error = realms[vd.FailRealm] == R::R || (failNormalDisk && vd.FailDomain == 0);
+        TEvBlobStorage::TEvVGetBlock::TPtr request(
+            static_cast<TEventHandle<TEvBlobStorage::TEvVGetBlock>*>(handle.Release()));
+        auto response = state.CreateEventResultPtr(request, error ? NKikimrProto::ERROR : NKikimrProto::OK, tabletId);
+        runtime.Send(response.Release(), 0);
+    }
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(TDSProxyGetBlockQuorumTest) {
+    Y_UNIT_TEST(Mirror3dcSkipsFailedRealmsAndIgnoresRecoveryErrors) {
+        using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        CheckMirror3dcRealms({R::N1, R::R, R::F}, false, NKikimrProto::OK);
+        CheckMirror3dcRealms({R::F, R::N2, R::R}, true, NKikimrProto::OK);
+        CheckMirror3dcRealms({R::R, R::F, R::N1}, true, NKikimrProto::ERROR);
+    }
+
 
 #define UNIT_TEST_QUORUM_RESPONSE(ERASURE) \
     Y_UNIT_TEST(QuorumResponse##ERASURE) { \

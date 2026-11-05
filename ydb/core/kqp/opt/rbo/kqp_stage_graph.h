@@ -128,6 +128,25 @@ struct TStreamLookupConnection: public TConnection {
     NYql::TExprNode::TPtr Settings;
 };
 
+struct TSequencerConnection: public TConnection {
+    TSequencerConnection(ui32 outputIndex, NYql::TExprNode::TPtr table, NYql::TExprNode::TPtr columns,
+        NYql::TExprNode::TPtr generatedColumns, NYql::TExprNode::TPtr inputType)
+        : TConnection("Sequencer", outputIndex)
+        , Table(std::move(table))
+        , Columns(std::move(columns))
+        , GeneratedColumns(std::move(generatedColumns))
+        , InputType(std::move(inputType))
+    {}
+
+    NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos,
+        NYql::TExprContext& ctx, const TPhysicalNames& names) override;
+
+    NYql::TExprNode::TPtr Table;
+    NYql::TExprNode::TPtr Columns;
+    NYql::TExprNode::TPtr GeneratedColumns;
+    NYql::TExprNode::TPtr InputType;
+};
+
 template <typename T>
 bool IsConnection(TIntrusivePtr<TConnection> connection) {
     return dynamic_cast<T*>(connection.get());

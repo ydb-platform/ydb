@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    contrib/libs/rapidjson
     library/cpp/json
     ydb/core/base
     ydb/core/change_exchange

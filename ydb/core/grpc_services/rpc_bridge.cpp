@@ -175,6 +175,15 @@ public:
     }
 
 private:
+    void PassAway() override {
+        if (IsDisconnectingRequest) {
+            IsDisconnectingRequest = false;
+            Send(NKikimr::MakeGRpcServersManagerId(SelfId().NodeId()),
+                new NKikimr::TEvGRpcServersManager::TEvDisconnectRequestFinished());
+        }
+        TBase::PassAway();
+    }
+
     STFUNC(StateWaitForConfig) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvNodeWardenStorageConfig, Handle);
@@ -205,6 +214,25 @@ private:
         }
 
         const auto& currentClusterState = config->GetClusterState();
+
+        // Compare-and-set: a request based on another generation is reported as such before any state-dependent
+        // validation, so that the client replans instead of treating it as malformed.
+        const auto& request = *GetProtoRequest();
+        if (request.has_expected_generation()) {
+            const ui64 expected = request.expected_generation();
+            const ui64 current = currentClusterState.GetGeneration();
+            if (current > expected) {
+                self->Reply(Ydb::StatusIds::ABORTED, TStringBuilder() << "Cluster state generation# " << current
+                    << " differs from expected_generation# " << expected << ", the update was not applied",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                return;
+            } else if (current < expected) {
+                self->Reply(Ydb::StatusIds::UNAVAILABLE, TStringBuilder() << "Node has cluster state generation# "
+                    << current << " older than expected_generation# " << expected << ", the update was not applied",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                return;
+            }
+        }
 
         for (const auto& update : GetProtoRequest()->updates()) {
             if (nameToId.find(update.pile_name()) == nameToId.end()) {
@@ -315,8 +343,29 @@ private:
         finalPromoted->CopyToProto(&newClusterState, &NKikimrBridge::TClusterState::SetPromotedPile);
         newClusterState.SetGeneration(currentClusterState.GetGeneration() + 1);
 
-        // check if current node is transitioning to DISCONNECTED state
-        // if so, notify GRpcServersManager to wait for this request before shutting down
+        auto invokeRequest = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        auto *cmd = invokeRequest->Record.MutableSwitchBridgeClusterState();
+        cmd->MutableNewClusterState()->CopyFrom(newClusterState);
+        if (request.has_expected_generation()) {
+            cmd->SetExpectedGeneration(request.expected_generation());
+        }
+
+        // quorum_piles is deprecated and doesn't change the quorum of the update, but the names are still checked, as
+        // they were when the request was accepted with them
+        for (const auto& name : GetProtoRequest()->quorum_piles()) {
+            if (const auto it = nameToId.find(name); it != nameToId.end()) {
+                if (newClusterState.GetPerPileState(it->second.GetPileIndex()) == NKikimrBridge::TClusterState::SUSPENDED) {
+                    self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "quorum cannot include suspended pile: " << name,
+                        NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                    return;
+                }
+            } else {
+                self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown pile name in quorum: " << name,
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                return;
+            }
+        }
+
         const auto selfNodePileId = bridgeInfo->SelfNodePile->BridgePileId;
         if (selfNodePileId.GetPileIndex() < newClusterState.PerPileStateSize()) {
             const auto newSelfState = newClusterState.GetPerPileState(selfNodePileId.GetPileIndex());
@@ -328,26 +377,7 @@ private:
             }
         }
 
-        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        auto *cmd = request->Record.MutableSwitchBridgeClusterState();
-        cmd->MutableNewClusterState()->CopyFrom(newClusterState);
-
-        for (const auto& name : GetProtoRequest()->quorum_piles()) {
-            if (const auto it = nameToId.find(name); it != nameToId.end()) {
-                if (newClusterState.GetPerPileState(it->second.GetPileIndex()) == NKikimrBridge::TClusterState::SUSPENDED) {
-                    self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "quorum cannot include suspended pile: " << name,
-                        NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
-                    return;
-                }
-                it->second.CopyToProto(cmd, &std::decay_t<decltype(*cmd)>::AddSpecificBridgePileIds);
-            } else {
-                self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown pile name in quorum: " << name,
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
-                return;
-            }
-        }
-
-        self->ActorContext().Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), request.release());
+        self->ActorContext().Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), invokeRequest.release());
         self->Become(&TThis::StateWaitForPropose);
     }
 
@@ -362,28 +392,27 @@ private:
         const auto& response = ev->Get()->Record;
         auto* self = Self();
         const bool success = response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK;
-        auto notifyDisconnectFinished = [&]() {
-            if (IsDisconnectingRequest) {
-                self->ActorContext().Send(NKikimr::MakeGRpcServersManagerId(self->SelfId().NodeId()),
-                    new NKikimr::TEvGRpcServersManager::TEvDisconnectRequestFinished());
-            }
-        };
-
+        if (response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::GENERATION_MISMATCH) {
+            // the guard failed in distconf: this request was not applied and will never be
+            self->Reply(Ydb::StatusIds::ABORTED, response.GetErrorReason(),
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+            return;
+        }
         if (!success) {
-            notifyDisconnectFinished();
             self->Reply(Ydb::StatusIds::INTERNAL_ERROR, response.GetErrorReason(),
                 NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
             return;
         }
         Ydb::Bridge::UpdateClusterStateResult result;
         self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
-        notifyDisconnectFinished();
     }
 };
 
 class TGetClusterStateRequest : public TBridgeRequestGrpc<TGetClusterStateRequest, TEvGetClusterStateRequest,
     Ydb::Bridge::GetClusterStateResult> {
     using TBase = TBridgeRequestGrpc<TGetClusterStateRequest, TEvGetClusterStateRequest, Ydb::Bridge::GetClusterStateResult>;
+
+    Ydb::Bridge::GetClusterStateResult Result;
 
 public:
     using TBase::TBase;
@@ -400,6 +429,7 @@ public:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvNodeWardenStorageConfig, Handle);
+            hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
             default: return TBase::StateFuncBase(ev); // operation timeout and client cancellation
         }
     }
@@ -421,14 +451,50 @@ private:
             self->Reply(Ydb::StatusIds::UNAVAILABLE, NoBridgeConfigError, NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                 self->ActorContext());
         } else if (config->HasClusterState()) {
-            Ydb::Bridge::GetClusterStateResult result;
-            CopyFromInternalClusterState(config->GetClusterState(), *bridgeInfo, result);
-            CopyFromInternalClusterStateDetails(config->GetClusterStateDetails(), *bridgeInfo, result);
-            self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
+            CopyFromInternalClusterState(config->GetClusterState(), *bridgeInfo, Result);
+            CopyFromInternalClusterStateDetails(config->GetClusterStateDetails(), *bridgeInfo, Result);
+            if (GetProtoRequest()->include_pile_connectivity()) {
+                auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+                request->Record.MutableQueryPileConnectivity();
+                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
+            } else {
+                self->ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, self->ActorContext());
+            }
         } else {
             self->Reply(Ydb::StatusIds::NOT_FOUND, "Bridge cluster state is not configured",
                 NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
         }
+    }
+
+    void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
+        using TResult = NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult;
+        const auto& record = ev->Get()->Record;
+        if (record.GetStatus() != TResult::OK) {
+            ReplyWithInvokeError(record);
+            return;
+        }
+        if (!record.HasPileConnectivity()) {
+            Reply(Ydb::StatusIds::GENERIC_ERROR, "Missing pile connectivity report",
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ActorContext());
+            return;
+        }
+        const auto& report = record.GetPileConnectivity();
+        auto *result = Result.mutable_pile_connectivity();
+        result->set_reporter_node_id(report.GetReporterNodeId());
+        result->set_reporter_is_root(report.GetHasScepter());
+        result->set_binding_in_progress(report.GetBindingInProgress());
+        result->set_generation(report.GetClusterStateGeneration());
+        for (const auto& pile : report.GetPiles()) {
+            auto *item = result->add_piles();
+            // Names travel with the measurements: the local registry may have changed or reused a slot.
+            item->set_pile_name(pile.GetPileName());
+            item->set_static_nodes(pile.GetNumStaticNodes());
+            item->set_connected_static_nodes(pile.GetNumConnectedStaticNodes());
+            item->set_has_node_quorum(pile.GetHasNodeQuorum());
+            item->set_in_config_quorum(pile.GetRequiresConfigQuorum());
+            item->set_in_data_quorum(pile.GetRequiresDataQuorum());
+        }
+        ReplyWithResult(Ydb::StatusIds::SUCCESS, Result, ActorContext());
     }
 };
 
@@ -446,7 +512,8 @@ public:
     void SendRequest(const TActorContext& ctx) {
         // all the preconditions are checked by distconf on the root node
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        request->Record.MutableConvertToBridge();
+        request->Record.MutableConvertToBridge()->SetSkipStoragePoolConversion(
+            GetProtoRequest()->skip_storage_pool_conversion());
         ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), request.release());
     }
 

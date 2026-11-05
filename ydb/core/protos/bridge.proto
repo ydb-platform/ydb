@@ -29,6 +29,9 @@ message TClusterState {
 message TPileRegistry {
     message TPile {
         optional string Name = 1; // as written in BridgeConfig and node locations, may be empty; unset for a free slot
+        // cluster state generation the pile was last added to the cluster in (by add-pile); unset for the piles the
+        // cluster got bridged with; nodes having older cluster state belong to the pile removed since then
+        optional uint64 AddedGeneration = 2;
     }
     repeated TPile Piles = 1; // pile with BridgePileId = i + 1 is Piles[i], in sync with TClusterState.PerPileState
     uint32 ImplicitPileId = 2; // pile of nodes without pile name and of groups without pile id; 0 if there is none
@@ -83,6 +86,9 @@ message TClusterStateDetails {
     // static group ids are never reused, as nodes ignore group info with generation lower than the one they know; this is
     // the lowest id for the parts of static groups allocated when piles are added, set once some of them are removed
     uint32 NextStaticGroupId = 6;
+
+    // Persisted opt-in; requires nodes supporting mixed ordinary/bridged storage pools.
+    bool NonUniformStorageEnabled = 7;
 }
 
 message TGroupState {
@@ -110,4 +116,9 @@ message TGroupState {
     // stages of piles are valid with, so the group can't be served with the cluster state older than that (requests are
     // routed by both); 0 when not known
     uint64 ClusterStateGeneration = 2;
+
+    // pile whose part is the only one sure to hold everything written to the group, while the group is being made fully
+    // bridged one (its other parts are synced from this one) or ordinary one (it loses its other parts); nothing is
+    // written to the group without this part, which is never reset; the only part of the group is such one implicitly
+    uint32 AuthorityPileId = 3;
 }

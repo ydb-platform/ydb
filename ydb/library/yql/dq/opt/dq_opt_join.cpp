@@ -852,32 +852,63 @@ const TTypeAnnotationNode* SkipTagged(const TTypeAnnotationNode* type) {
     return type;
 }
 
-// Tz types are packed as tuples, but their values are embedded scalars
-bool IsScalarConverterDataType(const TTypeAnnotationNode* type) {
-    return type->GetKind() == ETypeAnnotationKind::Data
-        && !(NUdf::GetDataTypeInfo(type->Cast<TDataExprType>()->GetSlot()).Features & NUdf::TzDateType);
-}
-
-// Only flat columns are safe in the scalar layout converter: it drops the null state
-// of optional tuples, misplaces fields after strings in tuples and loses nested optionals.
-// Pg on the nullable side becomes Optional<Pg>, which is a nested optional too
-bool IsSupportedByScalarConverter(const TTypeAnnotationNode* type, bool nullableSide) {
-    type = SkipTagged(type);
+bool IsScalarColumnType(const TTypeAnnotationNode* type) {
     switch (type->GetKind()) {
         case ETypeAnnotationKind::Data:
-            return IsScalarConverterDataType(type);
-        case ETypeAnnotationKind::Optional:
-            return IsScalarConverterDataType(SkipTagged(type->Cast<TOptionalExprType>()->GetItemType()));
         case ETypeAnnotationKind::Pg:
-            return !nullableSide;
+        case ETypeAnnotationKind::Void:
+        case ETypeAnnotationKind::Null:
+        case ETypeAnnotationKind::EmptyList:
+        case ETypeAnnotationKind::EmptyDict:
+            return true;
+        case ETypeAnnotationKind::Optional:
+            return IsScalarColumnType(type->Cast<TOptionalExprType>()->GetItemType());
+        case ETypeAnnotationKind::Tagged:
+            return IsScalarColumnType(type->Cast<TTaggedExprType>()->GetBaseType());
+        case ETypeAnnotationKind::List:
+            return IsScalarColumnType(type->Cast<TListExprType>()->GetItemType());
+        case ETypeAnnotationKind::Dict: {
+            const auto* dict = type->Cast<TDictExprType>();
+            return IsScalarColumnType(dict->GetKeyType()) && IsScalarColumnType(dict->GetPayloadType());
+        }
+        case ETypeAnnotationKind::Tuple:
+            for (const auto* item : type->Cast<TTupleExprType>()->GetItems()) {
+                if (!IsScalarColumnType(item)) {
+                    return false;
+                }
+            }
+            return true;
+        case ETypeAnnotationKind::Struct:
+            for (const auto* item : type->Cast<TStructExprType>()->GetItems()) {
+                if (!IsScalarColumnType(item->GetItemType())) {
+                    return false;
+                }
+            }
+            return true;
+        case ETypeAnnotationKind::Variant:
+            return IsScalarColumnType(type->Cast<TVariantExprType>()->GetUnderlyingType());
         default:
             return false;
     }
 }
 
+// Keep the existing Pg key path: types without presort need IHash/IEquate.
+bool IsScalarKeyType(const TTypeAnnotationNode* type, bool nullableSide) {
+    type = SkipTagged(type);
+    if (type->GetKind() == ETypeAnnotationKind::Pg) {
+        return !nullableSide;
+    }
+    if (type->GetKind() == ETypeAnnotationKind::Optional
+        && SkipTagged(type->Cast<TOptionalExprType>()->GetItemType())->GetKind() == ETypeAnnotationKind::Pg)
+    {
+        return false;
+    }
+    return IsScalarColumnType(type);
+}
+
 } // anonymous namespace
 
-bool DqCanUseScalarHashJoinForMap(const TDqJoin& join, TExprContext& ctx) {
+bool DqCanUseScalarHashJoin(const TDqJoin& join, TExprContext& ctx) {
     const auto joinType = join.JoinType().Value();
     if (joinType != "Inner"sv && joinType != "Left"sv && joinType != "LeftSemi"sv && joinType != "LeftOnly"sv) {
         return false;
@@ -898,13 +929,13 @@ bool DqCanUseScalarHashJoinForMap(const TDqJoin& join, TExprContext& ctx) {
     const auto* rightStructType = rightItemType->Cast<TStructExprType>();
 
     for (const auto* item : leftStructType->GetItems()) {
-        if (!IsSupportedByScalarConverter(item->GetItemType(), false)) {
+        if (!IsScalarColumnType(item->GetItemType())) {
             return false;
         }
     }
     const bool rightNullable = joinType == "Left"sv;
     for (const auto* item : rightStructType->GetItems()) {
-        if (!IsSupportedByScalarConverter(item->GetItemType(), rightNullable)) {
+        if (!IsScalarColumnType(item->GetItemType())) {
             return false;
         }
     }
@@ -914,6 +945,11 @@ bool DqCanUseScalarHashJoinForMap(const TDqJoin& join, TExprContext& ctx) {
         const auto* leftKeyType = leftStructType->FindItemType(leftJoinKeys[i].Value());
         const auto* rightKeyType = rightStructType->FindItemType(rightJoinKeys[i].Value());
         if (!leftKeyType || !rightKeyType) {
+            return false;
+        }
+        if (!IsScalarKeyType(leftKeyType, false)
+            || !IsScalarKeyType(rightKeyType, rightNullable))
+        {
             return false;
         }
         bool hasOptional = false;
@@ -1531,7 +1567,8 @@ TExprBase DqBuildHashJoin(
     bool shuffleElimination,
     bool shuffleEliminationWithMap,
     bool useBlockHashJoin,
-    bool blockHashJoinBuildSideLeft
+    bool blockHashJoinBuildSideLeft,
+    bool useScalarHashJoin
 ) {
 
     Y_UNUSED(blockHashJoinBuildSideLeft);
@@ -1925,6 +1962,9 @@ TExprBase DqBuildHashJoin(
                         .Add(joinSettings)
                         .Build()
                     .Done().Ptr();
+                if (useScalarHashJoin && DqCanUseScalarHashJoin(join, ctx)) {
+                    hashJoin = ctx.RenameNode(*hashJoin, TDqPhyHashJoin::CallableName());
+                }
                 break;
             }
 

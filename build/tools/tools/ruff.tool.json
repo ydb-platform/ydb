@@ -1,0 +1,12 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "An extremely fast Python linter, written in Rust.",
+        "definition": {
+            "executable": [
+                "bin",
+                "ruff"
+            ]
+        }
+    }
+}

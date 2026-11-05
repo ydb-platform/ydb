@@ -4131,6 +4131,8 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     }
 
     if (!Pipeline.CheckInflightLimit()) {
+        // Advance admitted work before replying to overload/retry traffic.
+        Executor()->TryExecuteReadyTransaction();
         replyWithError(
             Ydb::StatusIds::OVERLOADED,
             TStringBuilder() << "Request " << readId.ReadId << " rejected, MaxTxInFly was exceeded"

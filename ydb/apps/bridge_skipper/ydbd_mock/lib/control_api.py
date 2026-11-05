@@ -1,7 +1,10 @@
 """HTTP JSON control API and peer API of one instance (aiohttp, on the control port)."""
+import base64
+import binascii
 import json
 import os
 import typing
+from google.protobuf import json_format
 
 from aiohttp import web
 
@@ -205,8 +208,93 @@ def build_app(process) -> web.Application:
     async def post_policies(request):
         body = await _body(request)
         inst.policies.update(body)
-        inst.events.append("policies", values={k: v for k, v in body.items() if k != "admin_token"})
+        inst.events.append("policies", values={k: v for k, v in body.items() if k not in ("admin_token", "read_token")})
         inst.on_nodes_changed()
+        return web.json_response(inst.state_json())
+
+    async def post_topology(request):
+        outcome = await inst.configure_topology(await _body(request))
+        if outcome.error:
+            raise ApiError(outcome.error.message, 409)
+        return web.json_response(inst.state_json())
+
+    async def post_followups(request):
+        inst.control_followups(await _body(request))
+        return web.json_response(inst.state_json())
+
+    async def post_failpoints(request):
+        body = await _body(request)
+        targets = target_nodes(body)
+        method, stage, action = body.get("method"), body.get("stage"), body.get("action", "hold")
+        # Validate once before changing any selected node.
+        if not isinstance(method, str) or not method.startswith("/") or method.count("/") != 2 or stage not in (
+                "after_snapshot", "after_acceptance", "after_commit"):
+            raise ApiError("failpoint requires full RPC method and a known stage")
+        if action not in ("hold", "unavailable", "release"):
+            raise ApiError("action must be hold, unavailable or release")
+        once = body.get("once", False)
+        if not isinstance(once, bool):
+            raise ApiError("once must be a boolean")
+        for i in targets:
+            runtime = process.runtimes[i]
+            if action == "release":
+                runtime.release_failpoint(method, stage)
+            else:
+                runtime.configure_failpoint(method, stage, action, once=once)
+        return web.json_response({"nodes": [{"label": process.runtimes[i].node.label,
+                                            "failpoints": process.runtimes[i].failpoints_json()} for i in targets]})
+
+    async def post_response_override(request):
+        body = await _body(request)
+        targets = target_nodes(body)
+        method, result = body.get("method"), body.get("result")
+        from ydb.apps.bridge_skipper.ydbd_mock.lib.services import (
+            ydb_bridge_pb2, ydb_monitoring_pb2, ydb_config_pb2, ydb_discovery_pb2)
+        types = {"GetClusterState": ydb_bridge_pb2.GetClusterStateResult,
+                 "SelfCheck": ydb_monitoring_pb2.SelfCheckResult,
+                 "FetchConfig": ydb_config_pb2.FetchConfigResult,
+                 "ListEndpoints": ydb_discovery_pb2.ListEndpointsResult}
+        if method not in types or (result is not None and not isinstance(result, dict)):
+            raise ApiError("response override requires a supported read method and an object or null result")
+        if result is not None:
+            try:
+                json_format.ParseDict(result, types[method]())
+            except json_format.ParseError as e:
+                raise ApiError(str(e))
+        for i in targets:
+            process.runtimes[i].set_response_override(method, result)
+        return web.json_response(inst.state_json())
+
+    async def post_rpc_override(request):
+        body = await _body(request)
+        targets = target_nodes(body)
+        method, response, once = body.get("method"), body.get("response"), body.get("once", False)
+        from ydb.apps.bridge_skipper.ydbd_mock.lib.services import (
+            ydb_bridge_pb2, ydb_monitoring_pb2, ydb_config_pb2, ydb_discovery_pb2)
+        modules = {"GetClusterState": ydb_bridge_pb2, "UpdateClusterState": ydb_bridge_pb2,
+                   "ConvertToBridge": ydb_bridge_pb2, "AddPile": ydb_bridge_pb2, "RemovePile": ydb_bridge_pb2,
+                   "SelfCheck": ydb_monitoring_pb2, "FetchConfig": ydb_config_pb2,
+                   "ListEndpoints": ydb_discovery_pb2}
+        if method not in modules or not isinstance(once, bool) or (
+                response is not None and not isinstance(response, dict)):
+            raise ApiError("rpc override needs a supported method, response object or null, and boolean once")
+        if response is not None:
+            try:
+                json_format.ParseDict(response, getattr(modules[method], method + "Response")())
+            except json_format.ParseError as e:
+                raise ApiError(str(e))
+            raw = body.get("raw_result")
+            if raw is not None:
+                if not isinstance(raw, dict) or not isinstance(raw.get("type_url"), str) or not isinstance(
+                        raw.get("value_base64"), str):
+                    raise ApiError("raw_result needs type_url and value_base64 strings")
+                try:
+                    base64.b64decode(raw["value_base64"], validate=True)
+                except (ValueError, binascii.Error):
+                    raise ApiError("raw_result.value_base64 must be valid base64")
+                response = dict(response, _raw_result=dict(raw))
+        for i in targets:
+            process.runtimes[i].set_rpc_override(method, response, once=once)
         return web.json_response(inst.state_json())
 
     async def post_reset_prepare(request):
@@ -261,6 +349,11 @@ def build_app(process) -> web.Application:
     app.router.add_post("/replica", post_replica)
     app.router.add_post("/timings", post_timings)
     app.router.add_post("/policies", post_policies)
+    app.router.add_post("/topology", post_topology)
+    app.router.add_post("/followups", post_followups)
+    app.router.add_post("/failpoints", post_failpoints)
+    app.router.add_post("/response-override", post_response_override)
+    app.router.add_post("/rpc-override", post_rpc_override)
     app.router.add_post("/reset-prepare", post_reset_prepare)
     app.router.add_post("/reset-cancel", post_reset_cancel)
     app.router.add_post("/reset-local", post_reset_local)

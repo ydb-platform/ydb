@@ -9,10 +9,10 @@ namespace NYql {
 using namespace NCommon;
 
 TPqConfiguration::TPqConfiguration(bool strictConfigValidation)
-    : NCommon::TSettingDispatcher(PqProviderName, TQContext(), strictConfigValidation)
+    : NCommon::TDispatcherAndSettings<TPqSettings>(PqProviderName, TQContext(), strictConfigValidation)
 {
-    REGISTER_SETTING(*this, Auth).ValueSetter([this](const TString&, const TString& value) {
-        Auth = value;
+    REGISTER_SETTING(*this, Auth).ValueSetter([this](TPqSettings& settings, const TString&, const TString& value) {
+        settings.Auth = value;
         for (auto& clusterSetting : ClustersConfigurationSettings) {
             clusterSetting.second.AuthToken = value;
         }

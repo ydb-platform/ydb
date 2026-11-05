@@ -1,5 +1,3 @@
-ALLOCATOR(J)
-
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/udfs/common/python/sanitizer_suppressions.inc)
 
 SRCS(
@@ -15,12 +13,10 @@ ENDIF()
 PEERDIR(
     yt/cpp/mapreduce/client
     yql/essentials/public/udf/service/terminate_policy
-    yql/essentials/providers/common/gateway
     yql/essentials/utils/backtrace
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
     yt/yql/providers/yt/job
-    yt/yql/providers/yt/codec/codegen
     yt/yql/providers/yt/comp_nodes/llvm16
     yql/essentials/minikql/computation/llvm16
     yql/essentials/minikql/invoke_builtins/llvm16

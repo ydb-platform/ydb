@@ -19,8 +19,8 @@ public:
     NYdb::NTopic::TTopicClient Client;
     std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> Stub;
 
-    TTopicReplicationEnv()
-        : Setup("TopicReplication", NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings(), false)
+    explicit TTopicReplicationEnv(const Tests::TServerSettings& settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings())
+        : Setup("TopicReplication", settings, false)
         , Driver(Setup.MakeDriverConfig())
         , Client(Driver)
         , Stub(Ydb::PersQueue::V1::PersQueueService::NewStub(grpc::CreateChannel(
@@ -84,13 +84,14 @@ public:
         UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), expectedStatus, response.operation().ShortDebugString());
     }
 
-    void EnableMirroring(const TString& source, const TString& destination) {
+    void EnableMirroring(const TString& source, const TString& destination, TInstant readFrom = TInstant::Zero()) {
         auto settings = Describe(destination);
         auto* mirror = settings.mutable_remote_mirror_rule();
         mirror->set_endpoint(Setup.GetEndpoint());
         mirror->set_database(Setup.GetDatabase());
         mirror->set_topic_path(source);
         mirror->set_consumer_name("replicator");
+        mirror->set_starting_message_timestamp_ms(readFrom.MilliSeconds());
         mirror->mutable_credentials()->set_oauth_token("");
         (*settings.mutable_attributes())["_ydb_mirror_consumer_offsets"] = "true";
         Alter(destination, settings);
@@ -110,11 +111,20 @@ public:
         return partitions.front();
     }
 
+    NYdb::NTopic::TPartitionInfo DescribePartition(const TString& path) {
+        // DescribeConsumer filters partition status by consumer and omits PartitionSize.
+        const auto result = Client.DescribePartition(path, 0,
+            NYdb::NTopic::TDescribePartitionSettings().IncludeStats(true)).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        return result.GetPartitionDescription().GetPartition();
+    }
+
     void WaitForOffsets(const TString& path, ui64 expectedCommittedOffset, ui64 expectedEndOffset,
-        const TString& consumer = "reader") {
+        const TString& consumer = "reader", TMaybe<ui64> expectedStartOffset = Nothing()) {
         const auto deadline = TInstant::Now() + TDuration::Seconds(90);
         ui64 committedOffset = 0;
         ui64 endOffset = 0;
+        ui64 startOffset = 0;
         while (TInstant::Now() < deadline) {
             const auto partition = DescribePartition(path, consumer);
             const auto& consumerStats = partition.GetPartitionConsumerStats();
@@ -122,7 +132,9 @@ public:
             if (consumerStats && partitionStats) {
                 committedOffset = consumerStats->GetCommittedOffset();
                 endOffset = partitionStats->GetEndOffset();
-                if (committedOffset == expectedCommittedOffset && endOffset == expectedEndOffset) {
+                startOffset = partitionStats->GetStartOffset();
+                if (committedOffset == expectedCommittedOffset && endOffset == expectedEndOffset
+                    && (!expectedStartOffset.Defined() || startOffset == *expectedStartOffset)) {
                     return;
                 }
             }
@@ -133,6 +145,57 @@ public:
             << ", endOffset=" << endOffset << ", expectedEndOffset=" << expectedEndOffset);
         UNIT_ASSERT_VALUES_EQUAL_C(endOffset, expectedEndOffset,
             "Timed out waiting for mirrored messages: topic=" << path << ", consumer=" << consumer);
+        if (expectedStartOffset.Defined()) {
+            UNIT_ASSERT_VALUES_EQUAL_C(startOffset, *expectedStartOffset,
+                "Timed out waiting for start offset: topic=" << path);
+        }
+    }
+
+    void AssertEmpty(const TString& path, ui64 committedOffset, ui64 endOffset) {
+        const auto partition = DescribePartition(path);
+        UNIT_ASSERT(partition.GetPartitionStats());
+        const auto& stats = *partition.GetPartitionStats();
+        UNIT_ASSERT_VALUES_EQUAL(stats.GetStartOffset(), endOffset);
+        UNIT_ASSERT_VALUES_EQUAL(stats.GetEndOffset(), endOffset);
+
+        using TEvent = NYdb::NTopic::TReadSessionEvent;
+        auto reader = Client.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
+            .ConsumerName("reader").AppendTopics(NYdb::NTopic::TTopicReadSettings(path)));
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        NYdb::NTopic::TPartitionSession::TPtr session;
+        bool reachedEnd = false;
+        while (!reachedEnd && TInstant::Now() < deadline) {
+            if (session) {
+                session->RequestStatus();
+            }
+            if (!reader->WaitEvent().Wait(TDuration::MilliSeconds(200))) {
+                continue;
+            }
+            auto event = reader->GetEvent(false);
+            if (!event) {
+                continue;
+            }
+            if (auto* start = std::get_if<TEvent::TStartPartitionSessionEvent>(&*event)) {
+                UNIT_ASSERT_VALUES_EQUAL(start->GetCommittedOffset(), committedOffset);
+                UNIT_ASSERT_VALUES_EQUAL(start->GetEndOffset(), endOffset);
+                session = start->GetPartitionSession();
+                // StartOffset == EndOffset was checked above. Reading from zero
+                // would be rejected because it is below the replicated commit.
+                start->Confirm(stats.GetStartOffset());
+            } else if (auto* data = std::get_if<TEvent::TDataReceivedEvent>(&*event)) {
+                UNIT_ASSERT_VALUES_EQUAL_C(data->GetMessagesCount(), 0, "Unexpected data in " << path);
+            } else if (auto* status = std::get_if<TEvent::TPartitionSessionStatusEvent>(&*event)) {
+                UNIT_ASSERT_VALUES_EQUAL(status->GetEndOffset(), endOffset);
+                reachedEnd = status->GetReadOffset() == endOffset;
+            } else if (auto* stop = std::get_if<TEvent::TStopPartitionSessionEvent>(&*event)) {
+                session.Reset();
+                stop->Confirm();
+            } else if (auto* closed = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                UNIT_FAIL(closed->DebugString());
+            }
+        }
+        UNIT_ASSERT_C(reachedEnd, "Reader did not reach the end of empty topic " << path);
+        UNIT_ASSERT(reader->Close(TDuration::Seconds(10)));
     }
 
     void Write(const TString& path, ui64 first, ui64 count, const TString& payloadSuffix = {}) {
@@ -347,6 +410,49 @@ Y_UNIT_TEST_SUITE(TTopicReplication) {
 
         env.Write(destination, 1000, 100);
         env.Read(destination, 600, 500, 1100);
+    }
+
+    Y_UNIT_TEST(ReplicateOffsetsWithoutMessages) {
+        constexpr ui64 sourceStartOffset = 300000000000;
+        constexpr ui64 sourceEndOffset = sourceStartOffset + 3;
+        constexpr ui64 consumerOffset = sourceStartOffset + 2;
+        auto settings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetMinOffset(sourceStartOffset);
+        settings.PQConfig.MutableMirrorConfig()->SetRewindCommitDelaySeconds(0);
+        NKikimrConfig::TFeatureFlags flags;
+        flags.SetEnableSkipMessagesWithObsoleteTimestamp(true);
+        settings.SetFeatureFlags(flags);
+        TTopicReplicationEnv env(settings);
+        const TString source = "/Root/old_replication_source";
+        const TString destination = "/Root/empty_replication_destination";
+        env.Create(source, true);
+        env.Create(destination, false);
+        env.Write(source, sourceStartOffset, 3);
+        // Verify that the source actually contains readable messages. StoreSizeBytes
+        // is a metering value and can be zero for a small nonempty partition.
+        env.Commit(source, sourceStartOffset);
+        env.Read(source, sourceStartOffset, 2, sourceEndOffset);
+        env.WaitForOffsets(source, consumerOffset, sourceEndOffset, "reader", sourceStartOffset);
+        env.WaitForOffsets(destination, 0, 0, "reader", 0);
+
+        // All existing writes precede the mirror's read timestamp. This models
+        // an idle source without waiting for messages to age in wall-clock time.
+        // No messages are written after mirroring starts.
+        env.EnableMirroring(source, destination, TInstant::Now() + TDuration::Seconds(1));
+        env.WaitForOffsets(destination, consumerOffset, sourceEndOffset, "reader", sourceEndOffset);
+        env.AssertEmpty(destination, consumerOffset, sourceEndOffset);
+
+        // Consumer offsets must keep replicating even though no data was mirrored.
+        env.Commit(source, sourceEndOffset);
+        env.WaitForOffsets(destination, sourceEndOffset, sourceEndOffset, "reader", sourceEndOffset);
+
+        auto destinationSettings = env.Describe(destination);
+        destinationSettings.clear_remote_mirror_rule();
+        destinationSettings.mutable_attributes()->erase("_ydb_mirror_consumer_offsets");
+        env.Alter(destination, destinationSettings);
+        env.Setup.GetServer().KillTopicPqTablets(destination);
+        env.WaitForOffsets(destination, sourceEndOffset, sourceEndOffset, "reader", sourceEndOffset);
+        env.AssertEmpty(destination, sourceEndOffset, sourceEndOffset);
     }
 
     void TestReplicateInitialAndUpdatedMLPConsumerOffsets(bool largeMessages) {

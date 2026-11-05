@@ -525,6 +525,12 @@ def s3cmd_put(local: Path, s3_uri: str) -> None:
 
 
 def main() -> None:
+    # Opaque config from dispatch_remote.yml (same blob resolve_remote_execution emits).
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from remote_dispatch_config import apply_to_environ
+
+    apply_to_environ()
+
     run_id = env("EXECUTOR_RUN_ID")
     run_url = env_opt("EXECUTOR_RUN_URL") or f"https://github.com/{env('REPO')}/actions/runs/{run_id}"
     workspace = Path(env("WORKSPACE")).resolve()

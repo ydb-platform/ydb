@@ -319,6 +319,11 @@ def cmd_cancel():
 def main():
     if len(sys.argv) != 2 or sys.argv[1] not in ("start", "wait", "cancel"):
         die("usage: dispatch_remote_executor.py start|wait|cancel")
+    # Opaque config from dispatch_remote.yml → env used below.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from remote_dispatch_config import apply_to_environ
+
+    apply_to_environ()
     {"start": cmd_start, "wait": cmd_wait, "cancel": cmd_cancel}[sys.argv[1]]()
 
 

@@ -4,125 +4,32 @@ on:
   workflow_dispatch:
     inputs:
       executor:
-        description: 'ydb_yc = local runners; remote = dispatch ci_remote_executor on remote_repository'
+        description: 'ydb_yc = local runners; remote = dispatch via opaque remote JSON'
         required: false
         type: choice
         options:
           - ydb_yc
           - remote
         default: ydb_yc
-      remote_repository:
-        description: 'remote: owner/repo hosting the executor WF'
-        required: false
-        type: string
-        default: 'nebius/ydb'
-      remote_workflow_file:
-        description: 'remote: executor workflow filename'
-        required: false
-        type: string
-        default: 'ci_remote_executor.yml'
-      remote_workflow_name:
-        description: "remote: executor workflow name: (S3 path segment for job_summary.md)"
-        required: false
-        type: string
-        default: 'CI remote executor'
-      remote_executor_ref:
-        description: 'remote: ref on remote_repository with the executor WF'
-        required: false
-        type: string
-        default: 'nebius-ci'
-      remote_runs_on:
-        description: 'remote: JSON array of runner labels for the remote executor'
-        required: false
-        type: string
-        default: '["self-hosted","linux","amd64-large"]'
-      remote_summary_s3_endpoint:
-        description: 'remote: public S3 endpoint for wait/mirror job_summary.md'
-        required: false
-        type: string
-        default: 'https://s3.us-east-1.amazonaws.com'
-      remote_summary_s3_bucket:
-        description: 'remote: public S3 bucket for wait/mirror job_summary.md'
-        required: false
-        type: string
-        default: 'ydb-nebius-ci-public-609722444123-us-east-1'
-      code_ref:
-        description: 'YDB ref/SHA for executor to checkout+test (empty = this run SHA)'
+      remote:
+        description: >
+          remote only: JSON override for host/dispatch/job (empty = script defaults).
+          Agents / other workflows pass the full blob; humans rarely edit this in UI.
         required: false
         type: string
         default: ''
-      analytics_branch:
-        description: 'remote: branch name for test history / ya GIT_BRANCH (e.g. main); empty = main when code_ref looks like a SHA, else code_ref'
-        required: false
-        type: string
-        default: ''
-      analytics_job_name:
-        description: 'remote: mute/BI job_name override (empty = CI remote executor host name)'
-        required: false
-        type: string
-        default: 'Run and debug tests'
       test_targets:
-        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/"); remote: also used as build_target'
+        description: 'ydb_yc: paths to tests; also default remote.job.build_target when remote JSON omits it'
         required: false
         type: string
         default: 'ydb/tests/olap/'
       build_preset:
-        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo"); remote uses the first value'
+        description: 'ydb_yc: presets (comma-separated); remote uses remote.job.build_preset or first value via resolve defaults'
         required: false
         type: string
         default: 'relwithdebinfo, release-asan'
-      increment:
-        description: 'remote only: compare graphs with previous commit (affected tests)'
-        required: false
-        type: boolean
-        default: false
-      test_size:
-        description: 'remote only: test size filter'
-        required: false
-        type: string
-        default: 'small,medium'
-      test_type:
-        description: 'remote only: test type filter (empty = all)'
-        required: false
-        type: string
-        default: ''
-      test_threads:
-        description: 'remote only: test threads'
-        required: false
-        type: string
-        default: '64'
-      link_threads:
-        description: 'remote only: link threads'
-        required: false
-        type: string
-        default: '2'
-      additional_ya_make_args:
-        description: 'remote only: extra ya make args'
-        required: false
-        type: string
-        default: ''
-      test_retry_count:
-        description: 'remote only: max attempts (empty = action default)'
-        required: false
-        type: string
-        default: ''
-      put_build_results_to_cache:
-        description: 'remote only: put build results to cache'
-        required: false
-        type: boolean
-        default: true
-      collect_coredumps:
-        description: 'remote only: collect coredumps'
-        required: false
-        type: boolean
-        default: false
-      run_tests:
-        description: 'remote only: run tests'
-        required: false
-        type: boolean
-        default: true
       branches:
-        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path); ydb_yc only'
+        description: 'Branches to test (comma-separated or JSON array); ydb_yc only'
         required: false
         type: string
         default: ''
@@ -131,114 +38,46 @@ on:
         required: false
         type: boolean
         default: false
-      wait_for_remote:
-        description: 'remote only: true = wait+mirror on runner-waiter; false = fire-and-forget'
-        required: false
-        type: boolean
-        default: true
-      fail_on_remote_failure:
-        description: 'remote only: when waiting, fail this run if executor conclusion is not success'
-        required: false
-        type: boolean
-        default: true
 
 jobs:
-  remote_payload:
+  resolve_remote:
     if: inputs.executor == 'remote'
     # wait path shares runner-waiter with dispatch/wait; fire-and-forget stays on GitHub-hosted.
-    runs-on: ${{ inputs.wait_for_remote && fromJSON('["self-hosted", "runner-waiter"]') || fromJSON('["ubuntu-latest"]') }}
+    # wait flag is inside remote JSON — default true, so prefer waiter; fire-and-forget still ok on waiter.
+    runs-on: [self-hosted, runner-waiter]
     timeout-minutes: 5
     outputs:
-      inputs_json: ${{ steps.payload.outputs.inputs_json }}
+      config: ${{ steps.resolve.outputs.config }}
+      wait: ${{ steps.resolve.outputs.wait }}
     steps:
-      - name: Build executor inputs JSON
-        id: payload
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts/ci/resolve_remote_execution.py
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve remote execution config
+        id: resolve
         env:
-          CODE_REF: ${{ inputs.code_ref || github.sha }}
-          ANALYTICS_BRANCH: ${{ inputs.analytics_branch }}
-          BUILD_TARGET: ${{ inputs.test_targets }}
-          BUILD_PRESET: ${{ inputs.build_preset }}
-          RUN_TESTS: ${{ inputs.run_tests }}
-          INCREMENT: ${{ inputs.increment }}
-          TEST_SIZE: ${{ inputs.test_size }}
-          TEST_TYPE: ${{ inputs.test_type }}
-          TEST_THREADS: ${{ inputs.test_threads }}
-          LINK_THREADS: ${{ inputs.link_threads }}
-          ADDITIONAL_YA_MAKE_ARGS: ${{ inputs.additional_ya_make_args }}
-          TEST_RETRY_COUNT: ${{ inputs.test_retry_count }}
-          PUT_BUILD_RESULTS_TO_CACHE: ${{ inputs.put_build_results_to_cache }}
-          COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
-          ANALYTICS_JOB_NAME: ${{ inputs.analytics_job_name }}
-          REMOTE_RUNS_ON: ${{ inputs.remote_runs_on }}
+          REMOTE_JSON: ${{ inputs.remote }}
+          CODE_REF: ${{ github.sha }}
+          CALLER_WORKFLOW: ${{ github.workflow }}
           SOURCE_EVENT_NAME: ${{ github.event_name }}
           SOURCE_RUN_ID: ${{ github.run_id }}
           PULL_NUMBER: ${{ github.event.pull_request.number || github.event.number || '' }}
-        run: |
-          python3 - <<'PY'
-          import json, os, re
-          preset = os.environ["BUILD_PRESET"].split(",")[0].strip() or "relwithdebinfo"
-          increment = os.environ["INCREMENT"]
-          code_ref = os.environ["CODE_REF"]
-          analytics = (os.environ.get("ANALYTICS_BRANCH") or "").strip()
-          if not analytics:
-              # SHA-like → default history owner main; otherwise treat code_ref as a branch name.
-              analytics = "main" if re.fullmatch(r"[0-9a-fA-F]{7,40}", code_ref) else code_ref
-          job_inputs = {
-              "build_target": os.environ["BUILD_TARGET"],
-              "build_preset": preset,
-              "run_tests": os.environ["RUN_TESTS"],
-              "increment": increment,
-              "fetch_depth": 0 if increment.lower() in ("1", "true", "yes") else 2,
-              "test_size": os.environ["TEST_SIZE"],
-              "test_type": os.environ["TEST_TYPE"],
-              "test_threads": os.environ["TEST_THREADS"],
-              "link_threads": os.environ["LINK_THREADS"],
-              "additional_ya_make_args": os.environ["ADDITIONAL_YA_MAKE_ARGS"],
-              "test_retry_count": os.environ["TEST_RETRY_COUNT"],
-              "put_build_results_to_cache": os.environ["PUT_BUILD_RESULTS_TO_CACHE"],
-              "collect_coredumps": os.environ["COLLECT_COREDUMPS"],
-              "custom_branch_name": analytics,
-              "analytics_job_name": (os.environ.get("ANALYTICS_JOB_NAME") or "").strip(),
-              # Caller event/run: remote host is always workflow_dispatch.
-              "source_event_name": (os.environ.get("SOURCE_EVENT_NAME") or "").strip(),
-              "source_run_id": (os.environ.get("SOURCE_RUN_ID") or "").strip(),
-              "pull_number": (os.environ.get("PULL_NUMBER") or "").strip(),
-              # Force buffer under PUBLIC_DIR for caller ingest (host has no YDB QA).
-              "enable_ydb_qa": "false",
-          }
-          runs_on = os.environ.get("REMOTE_RUNS_ON") or '["self-hosted","linux","amd64-large"]'
-          # Validate JSON array early so dispatch fails here, not on the host.
-          json.loads(runs_on)
-          payload = {
-              "code_ref": code_ref,
-              "job_inputs": json.dumps(job_inputs, separators=(",", ":")),
-              "runs_on": runs_on,
-          }
-          out = os.environ["GITHUB_OUTPUT"]
-          with open(out, "a", encoding="utf-8") as f:
-              f.write("inputs_json<<EOF\n")
-              f.write(json.dumps(payload, ensure_ascii=False))
-              f.write("\nEOF\n")
-          print(json.dumps(payload, ensure_ascii=False, indent=2))
-          PY
+          # Seed job.build_* when remote JSON omits them.
+          DEFAULT_BUILD_TARGET: ${{ inputs.test_targets }}
+          DEFAULT_BUILD_PRESET: ${{ inputs.build_preset }}
+        run: python3 .github/scripts/ci/resolve_remote_execution.py
 
   remote:
     if: inputs.executor == 'remote'
-    needs: remote_payload
+    needs: resolve_remote
     uses: ./.github/workflows/dispatch_remote.yml
     secrets: inherit
     with:
-      repository: ${{ inputs.remote_repository }}
-      workflow_file: ${{ inputs.remote_workflow_file }}
-      workflow_name: ${{ inputs.remote_workflow_name }}
-      executor_ref: ${{ inputs.remote_executor_ref }}
-      inputs_json: ${{ needs.remote_payload.outputs.inputs_json }}
-      wait: ${{ inputs.wait_for_remote }}
-      fail_on_remote_failure: ${{ inputs.fail_on_remote_failure }}
-      summary_s3_endpoint: ${{ inputs.remote_summary_s3_endpoint }}
-      summary_s3_bucket: ${{ inputs.remote_summary_s3_bucket }}
-      analytics_job_name: ${{ inputs.analytics_job_name }}
-      caller_workflow: ${{ github.workflow }}
+      config: ${{ needs.resolve_remote.outputs.config }}
 
   prepare:
     if: inputs.executor == 'ydb_yc'

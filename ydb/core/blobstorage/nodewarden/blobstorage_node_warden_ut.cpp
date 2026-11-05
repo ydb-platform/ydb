@@ -1264,58 +1264,69 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TestInferPDiskSlotCount(17999'117'418'496, c_2000GB, 24, 9, 1u, 0.001);
     }
 
-    void CheckInferredPDiskSettings(TTestBasicRuntime& runtime, TActorId fakeWhiteboard, TActorId fakeNodeWarden,
-            ui32 pdiskId, ui32 expectedSlotCount, ui32 expectedSlotSizeInUnits,
+    void WaitForPDiskInitialization(TTestBasicRuntime& runtime, ui32 pdiskId) {
+        const auto pdisk = MakeBlobStoragePDiskID(runtime.GetNodeId(0), pdiskId);
+        runtime.WaitFor("PDisk service registration", [&] {
+            return bool(runtime.GetLocalServiceId(pdisk));
+        }, TDuration::Seconds(10));
+
+        // The stranding decorator holds simulated progress until this request
+        // completes. Unlike periodic metrics, metadata reads wait for startup.
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(pdisk, sender, new NPDisk::TEvReadMetadata()));
+        const auto response = runtime.GrabEdgeEventRethrow<NPDisk::TEvReadMetadataResult>(sender);
+        const auto outcome = response->Get()->Outcome;
+        UNIT_ASSERT_C(outcome == NPDisk::EPDiskMetadataOutcome::OK
+            || outcome == NPDisk::EPDiskMetadataOutcome::NO_METADATA,
+            "PDisk metadata read failed while waiting for initialization");
+    }
+
+    void CheckInferredPDiskSettings(TTestBasicRuntime& runtime, TActorId fakeWhiteboard,
+            TActorId fakeNodeWarden, ui32 pdiskId, ui32 expectedSlotCount, ui32 expectedSlotSizeInUnits,
             TDuration simTimeout = TDuration::Seconds(10)) {
-        const int maxAttempts = 10;
-        for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
-            // Check EvPDiskStateUpdate sent from PDiskActor to Whiteboard
-            const auto ev = runtime.GrabEdgeEventRethrow<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>(fakeWhiteboard, simTimeout);
-            VERBOSE_COUT(" Got TEvPDiskStateUpdate# " << ev->ToString());
+        WaitForPDiskInitialization(runtime, pdiskId);
+        const auto deadline = TMonotonic::Now() + DEFAULT_DISPATCH_TIMEOUT;
+        TString lastReport;
+        auto timeout = runtime.AddObserver<IEventHandle>([&](auto&) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline,
+                "PDisk# " << pdiskId << " settings did not converge: " << lastReport);
+        });
+        const auto matches = [&](const auto& info, ui64 slotCount) {
+            lastReport = info.ShortDebugString();
+            return info.GetPDiskId() == pdiskId
+                && info.GetState() == NKikimrBlobStorage::TPDiskState::Normal
+                && slotCount == expectedSlotCount
+                && info.GetSlotSizeInUnits() == expectedSlotSizeInUnits;
+        };
+        using TWhiteboardUpdate = NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate;
+        TWhiteboardUpdate::TPtr whiteboard;
+        do {
+            whiteboard = runtime.GrabEdgeEventRethrow<TWhiteboardUpdate>(fakeWhiteboard, simTimeout);
+        } while (!matches(whiteboard->Get()->Record, whiteboard->Get()->Record.GetExpectedSlotCount()));
+        const auto& pdiskInfo = whiteboard->Get()->Record;
+        UNIT_ASSERT(pdiskInfo.HasExpectedSlotCount());
+        UNIT_ASSERT(pdiskInfo.HasSlotSizeInUnits());
+        UNIT_ASSERT(pdiskInfo.HasAvailableSize());
+        UNIT_ASSERT(pdiskInfo.HasTotalSize());
+        UNIT_ASSERT(pdiskInfo.HasPDiskUsage());
+        UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskUsage(), 0.0);
+        UNIT_ASSERT(pdiskInfo.HasPDiskCapacityAlert());
+        UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
 
-            NKikimrWhiteboard::TPDiskStateInfo pdiskInfo = ev->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskId(), pdiskId);
-            if (pdiskInfo.GetState() != NKikimrBlobStorage::TPDiskState::Normal) {
-                UNIT_ASSERT_LT_C(attempt, maxAttempts, "last attempt failed");
-                continue;
-            }
-            UNIT_ASSERT(pdiskInfo.HasExpectedSlotCount());
-            UNIT_ASSERT(pdiskInfo.HasSlotSizeInUnits());
-            UNIT_ASSERT(pdiskInfo.HasAvailableSize());
-            UNIT_ASSERT(pdiskInfo.HasTotalSize());
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetExpectedSlotCount(), expectedSlotCount);
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
-            UNIT_ASSERT(pdiskInfo.HasPDiskUsage());
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskUsage(), 0.0);
-            UNIT_ASSERT(pdiskInfo.HasPDiskCapacityAlert());
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
-            break;
-        }
-
-        for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
-            // Check EvControllerUpdateDiskStatus sent from PDiskActor to NodeWarden
-            const auto ev = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerUpdateDiskStatus>(fakeNodeWarden, simTimeout);
-            VERBOSE_COUT(" Got TEvControllerUpdateDiskStatus# " << ev->ToString());
-
-            NKikimrBlobStorage::TEvControllerUpdateDiskStatus diskStatus = ev->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(diskStatus.PDisksMetricsSize(), 1);
-
-            const NKikimrBlobStorage::TPDiskMetrics &metrics = diskStatus.GetPDisksMetrics(0);
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskId(), pdiskId);
-            if (metrics.GetState() != NKikimrBlobStorage::TPDiskState::Normal) {
-                UNIT_ASSERT_LT_C(attempt, maxAttempts, "last attempt failed");
-                continue;
-            }
-            UNIT_ASSERT(metrics.HasSlotCount());
-            UNIT_ASSERT(metrics.HasSlotSizeInUnits());
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotCount(), expectedSlotCount);
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
-            UNIT_ASSERT(metrics.HasPDiskUsage());
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskUsage(), 0.0);
-            UNIT_ASSERT(metrics.HasPDiskCapacityAlert());
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
-            break;
-        }
+        TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr nodeWarden;
+        do {
+            nodeWarden = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerUpdateDiskStatus>(fakeNodeWarden,
+                simTimeout);
+            UNIT_ASSERT_VALUES_EQUAL(nodeWarden->Get()->Record.PDisksMetricsSize(), 1);
+        } while (!matches(nodeWarden->Get()->Record.GetPDisksMetrics(0),
+            nodeWarden->Get()->Record.GetPDisksMetrics(0).GetSlotCount()));
+        const auto& metrics = nodeWarden->Get()->Record.GetPDisksMetrics(0);
+        UNIT_ASSERT(metrics.HasSlotCount());
+        UNIT_ASSERT(metrics.HasSlotSizeInUnits());
+        UNIT_ASSERT(metrics.HasPDiskUsage());
+        UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskUsage(), 0.0);
+        UNIT_ASSERT(metrics.HasPDiskCapacityAlert());
+        UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
     }
 
     TActorId SetupNodeWardenForMetadataTest(TTestActorSystem& runtime,
@@ -1414,6 +1425,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             auto& old = warden.LocalVDisks[slot];
             fill(old);
             old.RuntimeData.emplace();
+            old.RuntimeData->GroupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
             old.RuntimeData->ActorId = oldActor;
             warden.VDiskIdByActor.emplace(oldActor, slot);
             warden.Groups[vdiskId.GroupID.GetRawId()].VDisksOfGroup.PushBack(&old);
@@ -1422,6 +1434,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             auto& replacement = warden.LocalVDisks[slot];
             fill(replacement);
             replacement.RuntimeData.emplace();
+            replacement.RuntimeData->GroupInfo = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::ErasureNone);
             replacement.RuntimeData->ActorId = newActor;
         });
         runtime.RegisterService(slot.GetVDiskServiceId(), newActor);

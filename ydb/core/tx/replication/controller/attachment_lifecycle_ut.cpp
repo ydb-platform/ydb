@@ -569,9 +569,6 @@ TImportedReplicationInfo StartImportedReplication(TTestEnv& env) {
 
 void AssertEventuallyDone(TTestEnv& env, const TReplicationTestInfo& info) {
     UNIT_ASSERT_C(WaitFor([&] {
-        if (!env.GetRuntime().IsRealThreads()) {
-            env.GetRuntime().SimulateSleep(TDuration::MilliSeconds(100));
-        }
         return DescribeReplication(env, info)->Get()->Record.GetState().HasDone();
     }, 150), DescribeReplication(env, info)->Get()->Record.GetState().DebugString());
 }
@@ -1298,8 +1295,6 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         const auto info = StartPausedReplicationWithSourceStreams(env);
-        const auto targetId = DescribeReplication(env, info)->Get()->Record.GetTargets(0).GetId();
-        CompleteDestinationImport(env, info, targetId);
         TCredentialResultGate credentials(env);
         auto done = MakeResolutionRequest(info, 134, false);
         done->Record.MutableSwitchState()->MutableDone()->SetFailoverMode(

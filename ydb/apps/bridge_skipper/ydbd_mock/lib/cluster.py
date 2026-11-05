@@ -154,9 +154,34 @@ class PileInstance:
         return self.replica.state
 
     def ready(self) -> bool:
-        """A strict majority of the nodes of this pile are not down."""
+        """Approximate the static-group erasure quorum with a configured node count."""
         up = sum(1 for f in self.node_faults if not f.down)
-        return up * 2 > len(self.node_faults)
+        return up >= self.topo.static_quorum[self.name]
+
+    def connected_static_nodes(self, pile: int) -> int:
+        if pile == self.index:
+            return sum(1 for f in self.node_faults if not f.down)
+        if not self.reach.reachable(pile):
+            return 0
+        return self.reach.last_static_up.get(pile, 0)
+
+    def has_static_quorum(self, pile: int) -> bool:
+        return (self.state.stored(pile) != Stored.INACTIVE and
+                self.connected_static_nodes(pile) >= self.topo.static_quorum[self.names[pile]])
+
+    def node_health(self) -> typing.List[str]:
+        """Synthetic whiteboard outcomes: only `down` refuses; silence also remains a client RPC fault."""
+        outcomes = []
+        for faults in self.node_faults:
+            methods = faults.silence_methods
+            if faults.down:
+                outcomes.append("refused")
+            elif faults.silence and (methods is None or "SelfCheck" in methods or
+                                     "/Ydb.Monitoring.V1.MonitoringService/SelfCheck" in methods):
+                outcomes.append("silent")
+            else:
+                outcomes.append("up")
+        return outcomes
 
     def connected(self, pile: int) -> bool:
         return self.reach.connected(pile)
@@ -243,6 +268,7 @@ class PileInstance:
         updates: typing.Sequence[validator.Update],
         quorum_piles: typing.Sequence[str] = (),
         accepted: typing.Optional[typing.Callable] = None,
+        expected_generation: typing.Optional[int] = None,
     ) -> Outcome:
         if self._reset_pending:
             error = MockError(model.INTERNAL_ERROR, "mock: reset is in progress")
@@ -254,6 +280,17 @@ class PileInstance:
             if not cur.bridged:
                 return MockError(model.PRECONDITION_FAILED,
                                  "Bridge cluster state is not configured or not available")
+            # Compare-and-set: before any state-dependent validation, so a stale request is told to replan.
+            if expected_generation is not None:
+                if cur.generation > expected_generation:
+                    return MockError(model.ABORTED, "Cluster state generation# %d differs from "
+                                     "expected_generation# %d, the update was not applied" % (
+                                         cur.generation, expected_generation))
+                if cur.generation < expected_generation:
+                    # this replica has not received the generation yet
+                    return MockError(model.UNAVAILABLE, "Node has cluster state generation# %d older than "
+                                     "expected_generation# %d, the update was not applied" % (
+                                         cur.generation, expected_generation))
             result = validator.validate_update(cur, updates, quorum_piles, self.names)
             return result.state if result.ok else result.error
 
@@ -391,6 +428,11 @@ class PileInstance:
         reset_epoch = self._reset_epoch
         old = self.replica.state
         required, observers = self._participants(old, new)
+        if cause == followups.SUSPEND and self.policies.enforce_config_quorum:
+            # Admission needs the old global quorum, including the suspended pile.
+            # A loss after these prepares were accepted may still allow this commit.
+            required = sorted(set(required) | set(model.required_set(old)))
+            observers = [p for p in observers if p not in required]
         asked = sorted(set(required) | set(observers))
         proposal_id = self._new_proposal_id()
         snapshot = new.to_json()
@@ -632,7 +674,9 @@ class PileInstance:
         state = self.replica.state
         if op == "ping":
             return {"pile": self.name, "generation": state.generation, "revision": state.revision,
-                    "ready": self.ready()}
+                    "ready": self.ready(), "static_up": self.connected_static_nodes(self.index),
+                    "node_health": self.node_health(),
+                    "connected_piles": [self.connected(p) for p in range(len(self.names))]}
         if op == "state":
             return state.to_json()
         if op == "prepare":
@@ -679,7 +723,10 @@ class PileInstance:
                 reply = await self._call(peer, "ping", {})
             except PeerError:
                 return
-            self.reach.record_ok(peer, reply.get("ready", True), int(reply.get("generation", 0)))
+            static_up = reply.get("static_up")
+            self.reach.record_ok(peer, reply.get("ready", True), int(reply.get("generation", 0)),
+                                 int(static_up) if static_up is not None else None, reply.get("node_health"),
+                                 reply.get("connected_piles"))
             self._peer_versions[peer] = (int(reply.get("generation", 0)), int(reply.get("revision", 0)))
 
         await asyncio.gather(*(ping(p) for p in peers))
@@ -821,7 +868,7 @@ class PileInstance:
         self._rearm()
 
     def prepare_reset(self) -> None:
-        """Stop new decisions before the supervisor chooses a generation above all committed snapshots."""
+        """Stop new decisions before the caller chooses a generation above all committed snapshots."""
         if self._reset_pending:
             return
         self._reset_pending = True

@@ -17,6 +17,7 @@ PEERDIR(
     ydb/library/signals
 )
 
+GENERATE_ENUM_SERIALIZATION(import_actor.h)
 GENERATE_ENUM_SERIALIZATION(session.h)
 
 END()

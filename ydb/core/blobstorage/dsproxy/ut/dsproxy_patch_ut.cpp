@@ -980,7 +980,6 @@ EFaultToleranceCase GetFaultToleranceCaseForBlock4Plus2(const TDSProxyEnv &env, 
 EFaultToleranceCase GetFaultToleranceCaseForMirror3dc(const TDSProxyEnv &env, const TTestArgs &args) {
     UNIT_ASSERT_VALUES_EQUAL(args.PartPlacement.size(), args.ErrorVDisks.size());
     UNIT_ASSERT_VALUES_EQUAL(args.PartPlacement.size(), env.Info->Type.BlobSubgroupSize());
-    TSubgroupPartLayout layout;
     constexpr ui32 dcCnt = 3;
     ui32 replInDc[dcCnt] = {0, 0, 0};
     for (ui32 vdiskIdx = 0; vdiskIdx < env.Info->Type.BlobSubgroupSize(); ++vdiskIdx) {

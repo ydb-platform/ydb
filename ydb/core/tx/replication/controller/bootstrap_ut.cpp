@@ -49,7 +49,8 @@ void WaitForOperation(NYdb::NOperation::TOperationClient& client, const TOperati
     }, "S3 operation");
 }
 
-void TestBootstrap(bool withIndex, bool materialized, bool directImport) {
+void TestBootstrap(bool withIndex, bool materialized, bool directImport,
+        bool globalConsistency = true, bool dropCascade = false) {
     InitAwsAPI();
     Y_DEFER { ShutdownAwsAPI(); };
     TPortManager ports;
@@ -109,14 +110,16 @@ void TestBootstrap(bool withIndex, bool materialized, bool directImport) {
     scheme(Sprintf(R"(
         CREATE ASYNC REPLICATION `/Root/replication` FOR `/Root/source` AS `/Root/replica`
         WITH (CONNECTION_STRING="grpc://%s/?database=/Root", TOKEN="root@builtin",
-              CONSISTENCY_LEVEL="GLOBAL", COMMIT_INTERVAL=Interval("PT1S"), INITIAL_SCAN=FALSE);
-    )", env.GetEndpoint().c_str()));
+              CONSISTENCY_LEVEL="%s"%s, INITIAL_SCAN=FALSE);
+    )", env.GetEndpoint().c_str(), globalConsistency ? "GLOBAL" : "ROW",
+        globalConsistency ? ", COMMIT_INTERVAL=Interval(\"PT1S\")" : ""));
 
     const auto checkConfig = [&](const TString& path, auto state) {
         const auto description = env.GetDescription(path);
         const auto& config = description.GetPathDescription().GetTable().GetReplicationConfig();
         return config.GetMode() == TReplicationConfig::REPLICATION_MODE_READ_ONLY
-            && config.GetConsistencyLevel() == TReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
+            && config.GetConsistencyLevel() == (globalConsistency
+                ? TReplicationConfig::CONSISTENCY_LEVEL_GLOBAL : TReplicationConfig::CONSISTENCY_LEVEL_ROW)
             && config.GetImportState() == state;
     };
     WaitFor([&] {
@@ -219,6 +222,28 @@ void TestBootstrap(bool withIndex, bool materialized, bool directImport) {
     execute(R"(UPDATE `/Root/source` SET value="after-standby"u WHERE key=1u;)");
     waitForData();
     UNIT_ASSERT(checkConfig("/Root/replica", TReplicationConfig::IMPORTED));
+
+    if (dropCascade) {
+        // A restored CDC stream is removed with its replica, but cannot be
+        // removed independently while the table is attached.
+        const auto dropCdc = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/replica` DROP CHANGEFEED updates;
+        )").ExtractValueSync();
+        UNIT_ASSERT(!dropCdc.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(dropCdc.GetIssues().ToString(), "path is an async replica table");
+
+        scheme("DROP ASYNC REPLICATION `/Root/replication` CASCADE;");
+        for (const auto* path : {
+                "/Root/replication",
+                "/Root/replica",
+                "/Root/replica/updates",
+                "/Root/replica/updates/streamImpl"}) {
+            const auto description = env.GetDescription(path);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                description.GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist,
+                "CASCADE left a destination path: " << path << ": " << description.DebugString());
+        }
+    }
 }
 
 } // anonymous namespace
@@ -230,6 +255,10 @@ Y_UNIT_TEST_SUITE(BootstrapImport) {
 
     Y_UNIT_TEST_TWIN(SourceWithCdc, DirectImport) {
         TestBootstrap(false, false, DirectImport);
+    }
+
+    Y_UNIT_TEST_TWIN(DropCascadeWithDestinationCdc, GlobalConsistency) {
+        TestBootstrap(false, false, false, GlobalConsistency, true);
     }
 }
 

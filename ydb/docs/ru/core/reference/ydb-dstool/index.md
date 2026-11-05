@@ -24,7 +24,6 @@
 | group take-snapshot | Сделать снапшот метаданных группы хранения. |
 | group list | Вывести список групп хранения. |
 | pool list | Вывести список пулов. |
-| [pool set-bridge-mode](pool-set-bridge-mode.md) | Переключить пул между режимом bridge и обычным режимом. |
 | box list | Вывести список наборов PDisk'ов. |
 | node list | Вывести список узлов. |
 | cluster balance | Переместить VDisk'и с перегруженных PDisk'ов. |

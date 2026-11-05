@@ -4,6 +4,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/persqueue/common/percentiles.h>
 #include <ydb/core/persqueue/events/topic_sqs_action_metrics.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/core/protos/counters_pq.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/actors/core/actor.h>
@@ -250,13 +251,13 @@ void TTopicMetricsHandler::Initialize(const NKikimrPQ::TPQTabletConfig& tabletCo
     PartitionLabeledCounters = InitializeCounters<EPartitionLabeledCounters_descriptor>(DynamicCounters);
     PartitionExtendedLabeledCounters = InitializeCounters<EPartitionExtendedLabeledCounters_descriptor>(DynamicCounters, {}, true);
     InitializeKeyCompactionCounters(tabletConfig);
-    InitializeConsumerCounters(tabletConfig, ctx);
+    InitializeConsumerCounters(tabletConfig);
     InitializeSqsQueueMetrics(tabletConfig, ctx);
 }
 
-void TTopicMetricsHandler::InitializeConsumerCounters(const NKikimrPQ::TPQTabletConfig& tabletConfig, const NActors::TActorContext& ctx) {
+void TTopicMetricsHandler::InitializeConsumerCounters(const NKikimrPQ::TPQTabletConfig& tabletConfig) {
     for (const auto& consumer : tabletConfig.GetConsumers()) {
-        auto metricsConsumerName = NPersQueue::ConvertOldConsumerName(consumer.GetName(), ctx);
+        auto metricsConsumerName = MetricsConsumerName(consumer);
 
         auto& counters = ConsumerCounters[consumer.GetName()];
         counters.ClientLabeledCounters = InitializeCounters<EClientLabeledCounters_descriptor>(DynamicCounters, {{"consumer", metricsConsumerName}});
@@ -308,7 +309,7 @@ void TTopicMetricsHandler::UpdateConfig(const NKikimrPQ::TPQTabletConfig& tablet
     }
 
     InitializeKeyCompactionCounters(tabletConfig);
-    InitializeConsumerCounters(tabletConfig, ctx);
+    InitializeConsumerCounters(tabletConfig);
     InitializeSqsQueueMetrics(tabletConfig, ctx);
 
     size_t inactiveCount = std::count_if(tabletConfig.GetAllPartitions().begin(), tabletConfig.GetAllPartitions().end(), [](auto& p) {

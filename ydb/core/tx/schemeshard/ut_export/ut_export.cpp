@@ -937,7 +937,10 @@ namespace {
             Run(Runtime(), Env(), tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
         }
 
-        ui64 CreateExportKesus() {
+        ui64 CreateExportKesus(bool enableExport = true) {
+            if (enableExport) {
+                TControlBoard::SetValue(1, Runtime().GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
+            }
             TestCreateKesus(Runtime(), 100, "/MyRoot", R"(
                 Name: "Coordination"
                 Config {
@@ -1162,7 +1165,7 @@ namespace {
         void TestKesusExportIcb(bool isFs) {
             Env();
             Runtime().GetAppData().FeatureFlags.SetEnableFsBackups(true);
-            CreateExportKesus();
+            CreateExportKesus(false);
 
             TTempDir tempDir;
             NKikimrExport::TCreateExportRequest request;
@@ -1182,7 +1185,7 @@ namespace {
             }
 
             auto& control = Runtime().GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport;
-            TControlBoard::SetValue(0, control);
+            UNIT_ASSERT_VALUES_EQUAL(control.AtomicLoad()->Get(), 0);
             TestExport(Runtime(), 101, "/MyRoot", request.DebugString(), "", "", Ydb::StatusIds::BAD_REQUEST);
 
             // The shared control must take effect without rebooting SchemeShard.
@@ -1195,6 +1198,9 @@ namespace {
             } else {
                 UNIT_ASSERT(HasS3File("/coordination/create_coordination_node.pb"));
             }
+
+            TControlBoard::SetValue(0, control);
+            TestExport(Runtime(), 103, "/MyRoot", request.DebugString(), "", "", Ydb::StatusIds::BAD_REQUEST);
         }
 
         void TestKesusRebootChangesResources(bool empty) {
@@ -5330,7 +5336,6 @@ state: STATE_ENABLED
     Y_UNIT_TEST(KesusExportToYtIsRejected) {
         Env();
         CreateExportKesus();
-        TControlBoard::SetValue(1, Runtime().GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
         TestExport(Runtime(), 101, "/MyRoot", R"(
             ExportToYtSettings {
                 host: "localhost"

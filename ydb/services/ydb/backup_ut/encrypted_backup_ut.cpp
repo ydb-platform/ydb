@@ -1098,7 +1098,9 @@ protected:
         if (isFsBackup) {
             tempDirHolder = MakeHolder<TTempDir>();
             basePath = tempDirHolder->Path();
-            Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+            auto& runtime = *Server().GetRuntime();
+            runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+            NKikimr::TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
         }
         // Create different objects with names that are expected to be hidden (anonymized) in encrypted exports
         // Create two object of each type in order to verify that we don't duplicate IVs

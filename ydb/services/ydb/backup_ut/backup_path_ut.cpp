@@ -279,7 +279,9 @@ struct TBackupTraits<NExport::TExportToFsSettings> {
 template <typename TExportSettings, typename TBackupTestFixture>
 void ExportKesusImpl(TBackupTestFixture& f, bool throughDirectory) {
     TBackupTraits<TExportSettings> traits;
-    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+    auto& runtime = *f.Server().GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+    NKikimr::TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
 
     auto status = f.YdbSchemeClient().MakeDirectory("/Root/KesusExport").GetValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
@@ -407,7 +409,7 @@ void ExportKesusIcbImpl(TBackupTestFixture& f, bool throughDirectory) {
         ? "Coordination/create_coordination_node.pb" : "create_coordination_node.pb";
 
     auto& control = runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport;
-    NKikimr::TControlBoard::SetValue(0, control);
+    UNIT_ASSERT_VALUES_EQUAL(control.AtomicLoad()->Get(), 0);
     const auto disabled = traits.Export(f, settings);
     if (throughDirectory) {
         // RPC must exclude Kesus before sending the expanded item list to SchemeShard.

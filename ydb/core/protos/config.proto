@@ -2585,7 +2585,7 @@ message TImmediateControlsConfig {
                 Description: "Enable Kesus export",
                 MinValue: 0,
                 MaxValue: 1,
-                DefaultValue: 1 }];
+                DefaultValue: 0 }];
 
         }
 

@@ -60,12 +60,34 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  enable_ydb_qa:
+    type: boolean
+    default: true
+    description: "Read/write YDB QA analytics DB; false (or host nebius/ydb) sets CI_DISABLE_YDB_QA"
+  analytics_job_name:
+    type: string
+    required: false
+    description: "Override analytics job_name (remote executor / workflow_dispatch); empty = resolve from github.workflow"
 defaults:
   run:
     shell: bash
 runs:
   using: "composite"
   steps:
+    - name: Resolve YDB QA access
+      shell: bash
+      env:
+        ENABLE_YDB_QA: ${{ inputs.enable_ydb_qa }}
+        HOST_REPOSITORY: ${{ github.repository }}
+      run: |
+        # Nebius host must not touch YC YDB QA (read or write), even if secrets appear later.
+        if [ "$ENABLE_YDB_QA" = "false" ] || [ "$HOST_REPOSITORY" = "nebius/ydb" ]; then
+          echo "CI_DISABLE_YDB_QA=1" >> "$GITHUB_ENV"
+          echo "YDB QA disabled (enable_ydb_qa=$ENABLE_YDB_QA host=$HOST_REPOSITORY)"
+        else
+          echo "YDB QA enabled (enable_ydb_qa=$ENABLE_YDB_QA host=$HOST_REPOSITORY)"
+        fi
+
     - name: Configure runner limits
       shell: bash
       run: |
@@ -147,12 +169,17 @@ runs:
         WORKFLOW_NAME: ${{ github.workflow }}
         BUILD_PRESET: ${{ inputs.build_preset }}
         EVENT_NAME: ${{ github.event_name }}
+        ANALYTICS_JOB_NAME_OVERRIDE: ${{ inputs.analytics_job_name }}
         GITHUB_NUMERIC_JOB_ID: ${{ job.check_run_id }}
         GITHUB_TOKEN: ${{ github.token }}
         # Env values are not shell-parsed — safe for untrusted PR titles.
         PR_TITLE: ${{ github.event.pull_request.title || '' }}
       run: |
-        ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
+        if [ -n "$ANALYTICS_JOB_NAME_OVERRIDE" ]; then
+          ANALYTICS_JOB_NAME="$ANALYTICS_JOB_NAME_OVERRIDE"
+        else
+          ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
+        fi
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
         echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
         # Random delimiter so a hostile title cannot close the GITHUB_ENV block.

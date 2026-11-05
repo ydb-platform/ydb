@@ -36,6 +36,16 @@ on:
         required: false
         type: string
         default: ''
+      summary_s3_endpoint:
+        description: Public S3 endpoint for job_summary.md mirror (empty = vars.AWS_ENDPOINT)
+        required: false
+        type: string
+        default: ''
+      summary_s3_bucket:
+        description: Public S3 bucket for job_summary.md mirror (empty = vars.AWS_BUCKET)
+        required: false
+        type: string
+        default: ''
     outputs:
       executor_run_id:
         description: Dispatched executor run id
@@ -100,8 +110,9 @@ jobs:
           WORKFLOW_NAME: ${{ inputs.workflow_name }}
           EXECUTOR_RUN_ID: ${{ needs.dispatch.outputs.executor_run_id }}
           EXECUTOR_RUN_URL: ${{ needs.dispatch.outputs.executor_run_url }}
-          AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
-          AWS_BUCKET: ${{ vars.AWS_BUCKET }}
+          # Nebius artifacts live on the host bucket (public HTTPS), not platform YC S3.
+          AWS_ENDPOINT: ${{ inputs.summary_s3_endpoint != '' && inputs.summary_s3_endpoint || vars.AWS_ENDPOINT }}
+          AWS_BUCKET: ${{ inputs.summary_s3_bucket != '' && inputs.summary_s3_bucket || vars.AWS_BUCKET }}
           FAIL_ON_REMOTE_FAILURE: ${{ inputs.fail_on_remote_failure }}
         run: python3 .github/scripts/ci/dispatch_remote_executor.py wait
 

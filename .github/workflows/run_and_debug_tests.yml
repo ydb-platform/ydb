@@ -4,18 +4,48 @@ on:
   workflow_dispatch:
     inputs:
       executor:
-        description: 'ydb_yc = local runners; remote = dispatch fat executor on remote_executor_ref'
+        description: 'ydb_yc = local runners; remote = dispatch Nebius ci_remote_executor (override via remote_* inputs)'
         required: false
         type: choice
         options:
           - ydb_yc
           - remote
         default: ydb_yc
-      remote_executor_ref:
-        description: 'Git ref with fat Run and debug / later ci_remote_executor (default: dev/ci-remote-executor)'
+      remote_repository:
+        description: 'remote: owner/repo hosting the executor WF (default: nebius/ydb)'
         required: false
         type: string
-        default: 'dev/ci-remote-executor'
+        default: 'nebius/ydb'
+      remote_workflow_file:
+        description: 'remote: executor workflow filename'
+        required: false
+        type: string
+        default: 'ci_remote_executor.yml'
+      remote_workflow_name:
+        description: "remote: executor workflow name: (S3 path segment for job_summary.md)"
+        required: false
+        type: string
+        default: 'CI remote executor'
+      remote_executor_ref:
+        description: 'remote: ref on remote_repository with the executor WF (default: nebius-ci)'
+        required: false
+        type: string
+        default: 'nebius-ci'
+      remote_runs_on:
+        description: 'remote: JSON array of runner labels for Nebius executor'
+        required: false
+        type: string
+        default: '["self-hosted","linux","amd64-large"]'
+      remote_summary_s3_endpoint:
+        description: 'remote: public S3 endpoint for wait/mirror job_summary.md'
+        required: false
+        type: string
+        default: 'https://s3.us-east-1.amazonaws.com'
+      remote_summary_s3_bucket:
+        description: 'remote: public S3 bucket for wait/mirror job_summary.md'
+        required: false
+        type: string
+        default: 'ydb-nebius-ci-public-609722444123-us-east-1'
       code_ref:
         description: 'YDB ref/SHA for executor to checkout+test (empty = this run SHA)'
         required: false
@@ -26,6 +56,11 @@ on:
         required: false
         type: string
         default: ''
+      analytics_job_name:
+        description: 'remote: mute/BI job_name override (empty = CI remote executor host name)'
+        required: false
+        type: string
+        default: 'Run and debug tests'
       test_targets:
         description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/"); remote: also used as build_target'
         required: false
@@ -133,6 +168,8 @@ jobs:
           TEST_RETRY_COUNT: ${{ inputs.test_retry_count }}
           PUT_BUILD_RESULTS_TO_CACHE: ${{ inputs.put_build_results_to_cache }}
           COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
+          ANALYTICS_JOB_NAME: ${{ inputs.analytics_job_name }}
+          REMOTE_RUNS_ON: ${{ inputs.remote_runs_on }}
         run: |
           python3 - <<'PY'
           import json, os, re
@@ -158,10 +195,15 @@ jobs:
               "put_build_results_to_cache": os.environ["PUT_BUILD_RESULTS_TO_CACHE"],
               "collect_coredumps": os.environ["COLLECT_COREDUMPS"],
               "custom_branch_name": analytics,
+              "analytics_job_name": (os.environ.get("ANALYTICS_JOB_NAME") or "").strip(),
           }
+          runs_on = os.environ.get("REMOTE_RUNS_ON") or '["self-hosted","linux","amd64-large"]'
+          # Validate JSON array early so dispatch fails here, not on the host.
+          json.loads(runs_on)
           payload = {
               "code_ref": code_ref,
               "job_inputs": json.dumps(job_inputs, separators=(",", ":")),
+              "runs_on": runs_on,
           }
           out = os.environ["GITHUB_OUTPUT"]
           with open(out, "a", encoding="utf-8") as f:
@@ -177,12 +219,15 @@ jobs:
     uses: ./.github/workflows/dispatch_remote.yml
     secrets: inherit
     with:
-      workflow_file: run_and_debug_tests.yml
-      workflow_name: Run and debug tests
+      repository: ${{ inputs.remote_repository }}
+      workflow_file: ${{ inputs.remote_workflow_file }}
+      workflow_name: ${{ inputs.remote_workflow_name }}
       executor_ref: ${{ inputs.remote_executor_ref }}
       inputs_json: ${{ needs.remote_payload.outputs.inputs_json }}
       wait: ${{ inputs.wait_for_remote }}
       fail_on_remote_failure: ${{ inputs.fail_on_remote_failure }}
+      summary_s3_endpoint: ${{ inputs.remote_summary_s3_endpoint }}
+      summary_s3_bucket: ${{ inputs.remote_summary_s3_bucket }}
 
   prepare:
     if: inputs.executor == 'ydb_yc'

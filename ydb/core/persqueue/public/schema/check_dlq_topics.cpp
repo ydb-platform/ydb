@@ -1,9 +1,9 @@
 #include "check_dlq_topics.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/aclib/aclib.h>
@@ -41,10 +41,6 @@ TString GetSchemeDlqTopicPath(const NKikimrPQ::TPQTabletConfig_TConsumer& consum
         return {};
     }
     return dlq;
-}
-
-TString NormalizeDlqTopicPath(const TString& dlq, const TString& database) {
-    return NormalizePath(CanonizePath(database), CanonizePath(dlq));
 }
 
 bool IsCdcDlqTarget(const NDescriber::TTopicInfo& info) {

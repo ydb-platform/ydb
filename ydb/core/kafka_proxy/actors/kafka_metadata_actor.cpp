@@ -62,6 +62,7 @@ public:
             {
                 .UserToken = userToken,
                 .AccessRights = NACLib::EAccessRights::DescribeSchema,
+                .EnableRelativePaths = true,
             }));
         Become(&TTopicLocationActor::StateWork);
     }

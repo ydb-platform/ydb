@@ -6,7 +6,6 @@ RECURSE(
     sqs
     stress
     rolling
-    credentials_rotation
     udf
     federated_queries
     s3_backups

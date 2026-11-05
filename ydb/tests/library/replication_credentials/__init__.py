@@ -2,14 +2,8 @@
 
 from contextlib import contextmanager
 from enum import Enum
-from functools import lru_cache
-import hashlib
-import json
-import os
 from pathlib import Path
 import socket
-import subprocess
-import sys
 import threading
 import time
 
@@ -58,106 +52,78 @@ def transient(error):
                               ydb.ConnectionLost, ydb.DeadlineExceed))
 
 
-@lru_cache(maxsize=None)
-def executable_manifest(path, size, modified_ns):
-    # Include stat identity in the key so a rebuilt executable is never confused
-    # with an earlier process using the same harness path.
-    digest = hashlib.sha256()
-    with open(path, "rb") as executable:
-        for chunk in iter(lambda: executable.read(8 * 1024**2), b""):
-            digest.update(chunk)
-    version = subprocess.run([path, "-V"], capture_output=True, text=True, timeout=30, check=True)
-    return {"resolved_binary": path, "binary_sha256": digest.hexdigest(),
-            "binary_version": version.stdout + version.stderr}
-
-
 @contextmanager
 def rejecting_source_endpoint(source):
-    """Observe only a gRPC connection preface, then cause a transport failure."""
+    """Observe a destination connection while the real source is stopped."""
     preface = b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
-    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    connected = threading.Event()
     stopped = threading.Event()
-    lock = threading.Lock()
-    observations = []
-    errors = []
-    thread = None
-
-    def accept_connections():
-        while not stopped.is_set():
-            try:
-                connection, _ = listener.accept()
-            except socket.timeout:
-                continue
-            except OSError as error:
-                if not stopped.is_set():
-                    errors.append(type(error).__name__)
-                return
-            with connection:
-                connection.settimeout(1)
-                received = b""
-                try:
-                    while len(received) < len(preface):
-                        chunk = connection.recv(len(preface) - len(received))
-                        if not chunk:
-                            break
-                        received += chunk
-                except (socket.timeout, OSError):
-                    continue
-                if received == preface:
-                    with lock:
-                        observations.append(time.time())
-                # Read no request headers or payload. Closing this connection
-                # produces a real transport error for the destination SDK.
-
-    def snapshot():
-        assert not errors, f"Cold source listener failed: {errors}"
-        with lock:
-            return {"connection_count": len(observations), "timestamps": list(observations)}
-
-    try:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         listener.bind((source.cluster.nodes[1].host, source.cluster.nodes[1].port))
         listener.listen()
         listener.settimeout(0.2)
-        thread = threading.Thread(target=accept_connections, name="cold-source-preface", daemon=True)
+
+        def accept_connections():
+            while not stopped.is_set():
+                try:
+                    connection, _ = listener.accept()
+                except socket.timeout:
+                    continue
+                except OSError:
+                    return  # The context closes the listener during teardown.
+                with connection:
+                    connection.settimeout(1)
+                    received = b""
+                    try:
+                        while len(received) < len(preface):
+                            chunk = connection.recv(len(preface) - len(received))
+                            if not chunk:
+                                break
+                            received += chunk
+                    except (socket.timeout, OSError):
+                        continue
+                    if received == preface:
+                        connected.set()  # Read no request headers or credentials.
+
+        thread = threading.Thread(target=accept_connections, daemon=True)
         thread.start()
-        yield snapshot
-    finally:
-        stopped.set()
-        listener.close()
-        if thread is not None:
+        try:
+            yield connected
+        finally:
+            stopped.set()
+            listener.close()
             thread.join(timeout=2)
             assert not thread.is_alive(), "Cold source listener did not stop"
 
 
 class Database:
-    def __init__(self, name, *, binary_paths=None, nodes=1, extra_flags=(), disabled_flags=(), tenant_slots=0, replication_log_level=7, account_lockout_attempt_threshold=None, enable_audit_log=False):
+    def __init__(self, name, *, cluster=None, config=None, binary_paths=None,
+                 extra_flags=(), disabled_flags=(), replication_log_level=7,
+                 account_lockout_attempt_threshold=None):
         self.name = name
-        self.database_path = f"{DATABASE}/tenant" if tenant_slots else DATABASE
-        self.tenant_slots = tenant_slots
-        self.directory = Path(yatest.common.output_path(name))
-        self.directory.mkdir(exist_ok=True)
-        self.config = KikimrConfigGenerator(
-            nodes=nodes, erasure=Erasure.NONE, binary_paths=binary_paths,
-            output_path=str(self.directory), pdisk_store_path=str(self.directory),
-            static_pdisk_size=16 * 1024**3, use_in_memory_pdisks=False,
-            extra_grpc_services=["replication"], default_clusteradmin=ADMIN,
-            additional_log_configs={"REPLICATION_SERVICE": replication_log_level,
-                                    "REPLICATION_CONTROLLER": replication_log_level},
-            enforce_user_token_requirement=True, enable_audit_log=enable_audit_log,
-            extra_feature_flags=["enable_schema_secrets", *extra_flags],
-            disabled_feature_flags=["disable_old_secret_creation", "disable_old_secrets", *disabled_flags],
-        )
-        if account_lockout_attempt_threshold is not None:
-            self.config.yaml_config.setdefault("auth_config", {})["account_lockout"] = {
-                "attempt_threshold": account_lockout_attempt_threshold}
-        if tenant_slots:
-            # Dynamic nodes authenticate their Console config fetch separately
-            # from source replication. Match the existing security fixtures.
-            self.config.yaml_config.setdefault("auth_config", {})["staff_api_user_token"] = ADMIN
-        self.cluster = KiKiMR(self.config, cluster_name=name)
-        self.disk_paths = [Path(disk["pdisk_path"]) for disk in self.config.pdisks_info]
-        assert self.disk_paths and all(path.parent.resolve() == self.directory.resolve() for path in self.disk_paths)
+        self.database_path = DATABASE
+        if cluster is None:
+            directory = Path(yatest.common.output_path(name))
+            directory.mkdir(exist_ok=True)
+            config = KikimrConfigGenerator(
+                nodes=1, erasure=Erasure.NONE, binary_paths=binary_paths,
+                output_path=str(directory), pdisk_store_path=str(directory),
+                static_pdisk_size=16 * 1024**3, use_in_memory_pdisks=False,
+                extra_grpc_services=["replication"], default_clusteradmin=ADMIN,
+                additional_log_configs={"REPLICATION_SERVICE": replication_log_level,
+                                        "REPLICATION_CONTROLLER": replication_log_level},
+                enforce_user_token_requirement=True,
+                extra_feature_flags=["enable_schema_secrets", *extra_flags],
+                disabled_feature_flags=["disable_old_secret_creation", "disable_old_secrets", *disabled_flags],
+            )
+            if account_lockout_attempt_threshold is not None:
+                config.yaml_config.setdefault("auth_config", {})["account_lockout"] = {
+                    "attempt_threshold": account_lockout_attempt_threshold}
+            cluster = KiKiMR(config, cluster_name=name)
+        self.cluster = cluster
+        self.disk_paths = [Path(disk["pdisk_path"]) for disk in config.pdisks_info]
+        assert self.disk_paths
         self.driver = None
         self.pool = None
         self.channel = None
@@ -165,7 +131,6 @@ class Database:
         self.last_state = None
         self.last_issue = ""
         self.last_rows = None
-        self.phase = "setup"
         self.saved_logs = set()
         self.restart_sequence = 0
 
@@ -254,7 +219,6 @@ class Database:
         return result
 
     def poll(self, phase, predicate, *, allow_missing=False):
-        self.phase = phase
         deadline = time.monotonic() + PHASE_TIMEOUT
         last_error = None
         while time.monotonic() < deadline:
@@ -269,7 +233,7 @@ class Database:
             time.sleep(min(0.25, max(0, deadline - time.monotonic())))
         raise AssertionError(f"{self.name}: {phase} timed out; last_observed_state={self.last_state}; "
                              f"issue={self.last_issue}; rows={self.last_rows}; error={last_error}; "
-                             f"nodes/logs={self.node_manifest()}")
+                             f"logs={list(self.log_offsets())}")
 
     def wait_state(self, state):
         def ready(timeout):
@@ -311,29 +275,6 @@ class Database:
         return {"replication": identity(replication), "destination": identity(destination),
                 "controller": int(replication["ReplicationDescription"]["ControllerId"])}
 
-    def node_manifest(self):
-        result = []
-        for node in self.processes():
-            binary = Path(node.binary_path).resolve()
-            stat = binary.stat()
-            pid = node.pid if node.is_alive() else None
-            live_executable = None
-            if pid is not None and sys.platform.startswith("linux"):
-                proc_exe = Path(f"/proc/{pid}/exe")
-                live_executable = os.readlink(proc_exe)
-                assert os.path.samefile(proc_exe, binary), "Live executable differs from configured binary"
-            result.append({"harness_node": node.node_id, "binary": node.binary_path,
-                           **executable_manifest(str(binary), stat.st_size, stat.st_mtime_ns),
-                           "alive": pid is not None, "pid": pid, "live_executable": live_executable,
-                           "stdout": node.stdout_file_name, "stderr": node.stderr_file_name,
-                           "log": node.ydbd_log_file_path})
-        return result
-
-    def record(self, phase, **values):
-        with (self.directory / "credential-stages.jsonl").open("a") as output:
-            output.write(json.dumps({"phase": phase, "time": time.time(), "nodes": self.node_manifest(),
-                                     "storage": self.storage_identity(), **values}) + "\n")
-
     def log_offsets(self):
         return {path: Path(path).stat().st_size
                 for node in self.processes()
@@ -347,20 +288,6 @@ class Database:
                         log.seek(offsets.get(path, 0))
                         for line in log:
                             yield path, line.decode(errors="replace")
-
-    def wait_cold_source_attempt(self, offsets, connection_probe):
-        def observed(timeout):
-            assert self.replication(timeout).WhichOneof("state") != "error"
-            connections = connection_probe()
-            if not connections["connection_count"]:
-                return False
-            for path, line in self.log_lines_after(offsets):
-                if "Handshake with reader" in line and "actorClassName=Worker " in line:
-                    self.record("cold-replication-attempt", log=path, event=self.redact(line.strip()),
-                                **connections)
-                    return True
-            return False
-        self.poll("cold worker reader handshake and source connection", observed)
 
     def assert_no_secrets(self, issue="", extra_tokens=()):
         secrets = [P1, P2, *self.tokens, *extra_tokens]
@@ -377,11 +304,6 @@ def database(name, **options):
     instance = Database(name, **options)
     try:
         instance.cluster.start()
-        if instance.tenant_slots:
-            instance.cluster.create_database(instance.database_path, storage_pool_units_count={"hdd": 1},
-                                             timeout_seconds=60, token=ADMIN)
-            instance.cluster.register_and_start_slots(instance.database_path, instance.tenant_slots)
-            instance.cluster.wait_tenant_up(instance.database_path, token=ADMIN)
         instance.connect()
         yield instance
     finally:
@@ -419,7 +341,6 @@ def write_secret(destination, kind, password, *, create=False, name="pw"):
                 assert identity == (before["Self"]["SchemeshardId"], before["Self"]["PathId"])
                 if version <= int(before["SecretDescription"]["Version"]):
                     return False
-            destination.record("schema-secret-visible", path=path, identity=identity, version=version)
             return True
         destination.poll("completed schema secret version visible", changed)
 
@@ -430,7 +351,6 @@ def create_replication(source, destination, kind):
     source.query("CREATE TABLE t (id Uint64 NOT NULL, value Utf8, PRIMARY KEY(id));")
     source.login(P1, ydb_status_codes_pb2.StatusIds.SUCCESS)
     write_secret(destination, kind, P1, create=True)
-    write_secret(destination, kind, P1, create=True, name="alternatepw")
     destination.query(
         'CREATE ASYNC REPLICATION r FOR t AS t WITH ('
         f'CONNECTION_STRING="grpc://{source.endpoint}/?database={source.database_path}", '
@@ -441,16 +361,14 @@ def create_replication(source, destination, kind):
     destination.wait_rows([(1, "initial"), (2, "remove-me")])
     destination.wait_state("running")
     identities = destination.identities()
-    destination.record("initial", identities=identities)
     return identities
 
 
 def cleanup_objects(source, destination, kind):
     # Shutdown remains unconditional even if a broken cluster cannot execute DDL.
     commands = [(destination, "DROP ASYNC REPLICATION r CASCADE;"), (source, "DROP TABLE t;")]
-    for name in ("pw", "alternatepw"):
-        command = f"DROP OBJECT {name} (TYPE SECRET);" if kind == SecretKind.LEGACY else f"DROP SECRET `{destination.database_path}/{name}`;"
-        commands.append((destination, command))
+    commands.append((destination, "DROP OBJECT pw (TYPE SECRET);" if kind == SecretKind.LEGACY
+                     else f"DROP SECRET `{destination.database_path}/pw`;"))
     for db, command in commands:
         if db.pool is not None:
             try:
@@ -459,30 +377,45 @@ def cleanup_objects(source, destination, kind):
                 pass
 
 
-def rotate_to_error(source, destination, identities):
+def rotate_to_error(source, destination, identities, *, paused=False):
+    if paused:
+        destination.query('ALTER ASYNC REPLICATION r SET (STATE="PAUSED");')
+        destination.wait_state("paused")
     source.query(f"ALTER USER {USER} PASSWORD '{P2}';")
     source.login(P2, ydb_status_codes_pb2.StatusIds.SUCCESS)
     source.login(P1, ydb_status_codes_pb2.StatusIds.UNAUTHORIZED)
-    destination.restart()
+    if paused:
+        offsets = destination.log_offsets()
+        destination.query('ALTER ASYNC REPLICATION r SET (STATE="STANDBY");')
+
+        def registrar_rejected(timeout):
+            lines = [line for _, line in destination.log_lines_after(offsets)]
+            assert not any("Run worker" in line and "actorClassName=TReplicationService" in line
+                           for line in lines), "Worker started before registrar authentication failure"
+            return any("TableWorkerRegistar" in line and "CLIENT_UNAUTHENTICATED" in line for line in lines)
+        destination.poll("registrar authentication rejection before a fresh worker", registrar_rejected)
+        rows = source.query(f"SELECT IsLockedOut FROM `/Root/.sys/auth_users` WHERE Sid = '{USER}';")[0].rows
+        assert len(rows) == 1 and not rows[0]["IsLockedOut"]
+    else:
+        destination.restart()
     source.query('UPSERT INTO t (id, value) VALUES (1002u, "during-error");')
     result = destination.wait_state("error")
     issue = str(result.error.issues)
     assert issue and "auth" in issue.lower(), "Public Error lacks useful authentication cause"
+    if paused:
+        assert "registration" in issue.lower(), issue
     destination.assert_no_secrets(issue, source.tokens)
     assert destination.identities() == identities
-    destination.record("error", identities=identities, issue=destination.redact(issue))
     destination.restart()
     result = destination.wait_state("error")
     assert result.error.issues, "Persisted Error lost its issue"
     assert destination.identities() == identities
-    destination.record("error-after-restart", identities=identities)
 
 
 def recover(source, destination, kind, identities, extra_rows=()):
     initial_state = destination.replication().WhichOneof("state")
     assert initial_state in ("error", "paused"), f"Unexpected recovery starting state: {initial_state}"
     write_secret(destination, kind, P2)
-    write_secret(destination, kind, P2, name="alternatepw")
     # ALTER completion precedes credential reset. Legacy TEvAskSnapshot forces a
     # refresh and waits for snapshot actuality >= request time. Schema ALTER is
     # followed by a visible version increment with the same secret path identity;
@@ -490,9 +423,6 @@ def recover(source, destination, kind, identities, extra_rows=()):
     if initial_state == "error":
         destination.query('ALTER ASYNC REPLICATION r SET (STATE="PAUSED");')
     destination.wait_state("paused")
-    destination.record("paused", identities=destination.identities())
-    for name in ("alternatepw", "pw"):
-        destination.query(f'ALTER ASYNC REPLICATION r SET ({secret_option(kind)}="{secret_name(kind, name, destination.database_path)}");')
     destination.query('ALTER ASYNC REPLICATION r SET (STATE="STANDBY");')
     destination.wait_state("running")
     destination.wait_rows(sorted([(1, "initial"), (2, "remove-me"), (1002, "during-error"), *extra_rows]))
@@ -509,4 +439,3 @@ def recover(source, destination, kind, identities, extra_rows=()):
     assert destination.identities() == identities
     destination.assert_no_secrets(extra_tokens=source.tokens)
     source.assert_no_secrets()
-    destination.record("recovered-after-restart", identities=identities, rows=destination.last_rows)

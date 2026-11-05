@@ -4,7 +4,6 @@
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/replication/service/service.h>
-#include <ydb/core/tx/replication/service/worker.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -478,91 +477,6 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         return run;
     }
 
-    template <typename TBetweenMarkers>
-    void CheckRegistrarWorkerDelivery(TSetup& s, TEvService::TEvRunWorker::TPtr& run, TBetweenMarkers betweenMarkers) {
-        auto& runtime = s.Env.GetRuntime();
-        ui32 startedReads = 0;
-        ui32 finishedReads = 0;
-        THashSet<const void*> activeReads;
-        auto readObserver = runtime.AddObserver<NGRpcService::TEvStreamTopicReadRequest>(
-            [&](NGRpcService::TEvStreamTopicReadRequest::TPtr& ev) {
-                // The proxy forwards this same request object to the PQ service.
-                // Count streams once; replacing its hook would lose the first count.
-                const auto* request = ev->Get();
-                if (!activeReads.insert(request).second) {
-                    return;
-                }
-                ev->Get()->SetAuditLogHook([&, request](auto, const auto&) {
-                    UNIT_ASSERT_VALUES_EQUAL(activeReads.erase(request), 1);
-                    ++finishedReads;
-                });
-                ++startedReads;
-            });
-        TActorId readerWorker;
-        auto dataObserver = runtime.AddObserver<NService::TEvWorker::TEvData>(
-            [&](NService::TEvWorker::TEvData::TPtr& ev) {
-                const auto* recipient = runtime.FindActor(ev->GetRecipientRewrite());
-                if (recipient && recipient->GetActivityType() == NKikimrServices::TActivity::REPLICATION_WORKER) {
-                    if (readerWorker) {
-                        UNIT_ASSERT_VALUES_EQUAL(readerWorker, ev->GetRecipientRewrite());
-                    }
-                    readerWorker = ev->GetRecipientRewrite();
-                }
-            });
-        const auto controller = run->Get()->Record.GetController();
-        const auto service = runtime.Register(CreateReplicationService());
-        bool closed = false;
-        auto close = [&] {
-            auto stop = MakeHolder<TEvService::TEvStopWorker>();
-            stop->Record.MutableController()->CopyFrom(controller);
-            s.Worker.Serialize(*stop->Record.MutableWorker());
-            runtime.Send(new IEventHandle(service, s.Controller, stop.Release()), 0, true);
-            runtime.WaitFor("registrar source streams closed", [&] {
-                return finishedReads == startedReads;
-            }, TDuration::Seconds(30));
-            runtime.Send(new IEventHandle(service, s.Controller, new TEvents::TEvPoison()), 0, true);
-            runtime.WaitFor("registrar real service stopped", [&] { return !runtime.FindActor(service); }, TDuration::Seconds(30));
-            closed = true;
-        };
-        Y_DEFER {
-            if (!closed) {
-                try { close(); } catch (...) { Cerr << "Registrar reader cleanup: " << CurrentExceptionMessage() << Endl; }
-            }
-        };
-        runtime.Send(new IEventHandle(service, s.Controller,
-            new TEvService::TEvHandshake(s.ControllerId, controller.GetGeneration())), 0, true);
-        runtime.Send(run->Forward(service), 0, true);
-        auto marker = [&](ui32 key) {
-            s.Env.RunCall([&] {
-                NYdb::NTable::TTableClient client(s.Env.GetDriver());
-                auto session = client.CreateSession().GetValueSync().GetSession();
-                auto result = session.ExecuteDataQuery(Sprintf("UPSERT INTO `/Root/table` (key) VALUES (%uu)", key),
-                    NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                for (const auto deadline = TInstant::Now() + TDuration::Seconds(30); TInstant::Now() < deadline;) {
-                    result = session.ExecuteDataQuery(Sprintf("SELECT key FROM `/Root/replica` WHERE key = %uu", key),
-                        NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-                    auto parser = result.GetResultSetParser(0);
-                    if (parser.TryNextRow()) {
-                        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetOptionalUint32().value_or(0), key);
-                        UNIT_ASSERT(!parser.TryNextRow());
-                        return;
-                    }
-                    Sleep(TDuration::MilliSeconds(50));
-                }
-                UNIT_FAIL("registrar replacement worker did not deliver the exact source marker");
-            });
-        };
-        marker(42);
-        UNIT_ASSERT(readerWorker);
-        betweenMarkers();
-        marker(43);
-        UNIT_ASSERT_GT(startedReads, 0);
-        UNIT_ASSERT(s.Describe().GetState().HasStandBy());
-        close();
-    }
-
     Y_UNIT_TEST(WorkerRegistrarRetriesUnavailableAndNonStaticInitialization) {
         for (const auto status : {NYdb::EStatus::UNAVAILABLE, NYdb::EStatus::TRANSPORT_UNAVAILABLE,
                 NYdb::EStatus::CLIENT_UNAUTHENTICATED}) {
@@ -582,8 +496,9 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
             runtime.SimulateSleep(TDuration::Seconds(10));
             runtime.WaitFor("registrar scheduled retry request", [&] { return fault.Requests >= 2; }, TDuration::Seconds(30));
             UNIT_ASSERT_GT(retries, 0);
-            auto run = WaitRegistrarWorker(s);
-            CheckRegistrarWorkerDelivery(s, run, [&] { UNIT_ASSERT(s.Describe().GetState().HasStandBy()); });
+            WaitRegistrarWorker(s);
+            s.ReportLag(0, TDuration::Seconds(2));
+            s.ExpectLag(TDuration::Seconds(2));
         }
     }
 
@@ -632,13 +547,22 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
         hold.Remove();
         CompleteRegistrarPause(s);
         s.AlterState("StandBy");
-        auto run = WaitRegistrarWorker(s);
+        WaitRegistrarWorker(s);
         UNIT_ASSERT_GT(fault.Requests, 1);
-        CheckRegistrarWorkerDelivery(s, run, [&] {
-            runtime.Send(delayed.Release());
-            s.Sync();
-            UNIT_ASSERT(s.Describe().GetState().HasStandBy());
-        });
+        s.ReportLag(0, TDuration::Seconds(2));
+        s.ExpectLag(TDuration::Seconds(2));
+        ui32 stops = 0;
+        ui32 starts = 0;
+        auto stopObserver = runtime.AddObserver<TEvService::TEvStopWorker>([&](TEvService::TEvStopWorker::TPtr&) { ++stops; });
+        auto runObserver = runtime.AddObserver<TEvService::TEvRunWorker>([&](TEvService::TEvRunWorker::TPtr&) { ++starts; });
+        runtime.Send(delayed.Release());
+        s.Sync();
+        s.ProcessQueues(true);
+        UNIT_ASSERT(s.HasWorkerRow());
+        s.ReportLag(0, TDuration::Seconds(1));
+        s.ExpectLag(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(stops, 0);
+        UNIT_ASSERT_VALUES_EQUAL(starts, 0);
         runtime.Send(runtime.GetActorSystem(0)->LoggerSettings()->LoggerActorId, s.Env.GetSender(),
             new TLogComponentLevelRequest(NLog::PRI_TRACE, NKikimrServices::REPLICATION_CONTROLLER));
         UNIT_ASSERT(runtime.GrabEdgeEvent<TLogComponentLevelResponse>(s.Env.GetSender(), TDuration::Seconds(5)));

@@ -15,6 +15,7 @@
 namespace NKikimr::NSecret {
 
 struct TDescribeSecretSettings {
+    // Overrides both stages. If unset, SchemeCache uses short retries and SchemeShard uses long retries.
     IRetryPolicy<>::TPtr RetryPolicy;
 };
 

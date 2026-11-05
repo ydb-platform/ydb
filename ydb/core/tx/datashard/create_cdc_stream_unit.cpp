@@ -3,6 +3,9 @@
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
+#include "cdc_schema_change.h"
+
+#include <ydb/core/base/table_index.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -117,10 +120,36 @@ public:
             DataShard.AddSchemaSnapshot(pathId, schemaVersion, op->GetStep(), op->GetTxId(), txc, ctx);
         }
 
+        if (schemeTx.HasCreateCdcStreamNotice() && AppData()->FeatureFlags.GetEnableFulltextIndexReplication()) {
+            const auto& stream = schemeTx.GetCreateCdcStreamNotice().GetStreamDescription();
+            if (stream.GetSchemaChanges()) {
+                NKikimrSchemeOp::TTableDescription schema;
+                tableInfo->GetSchema(schema);
+                for (const auto& index : schema.GetTableIndexes()) {
+                    const bool rowId = index.GetName() == NTableIndex::NFulltext::RowIdUniqueIndexName
+                        && index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique && index.KeyColumnNamesSize() == 1
+                        && index.GetKeyColumnNames(0) == NTableIndex::NFulltext::RowIdColumn;
+                    if (index.GetState() == NKikimrSchemeOp::EIndexStateReady
+                        && (NTableIndex::IsFulltextOrJsonIndex(index.GetType()) || rowId))
+                    {
+                        // Discovery precedes stream creation. Capture indexes
+                        // finalized in between in the new stream's first record.
+                        PersistCdcSchemaChange(DataShard, txc, op, pathId, *tableInfo, TPathId::FromProto(stream.GetPathId()));
+                        break;
+                    }
+                }
+            }
+        }
+
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
+    }
+
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
+        TCdcStreamUnitBase::Complete(op, ctx);
+        DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
     }
 };
 

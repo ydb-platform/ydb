@@ -1543,6 +1543,9 @@ message TBuildIndexOutcome {
 
     reserved 1; // Apply type was changed from Empty to TApply
 
+    // Source CDC builds do not own a destination snapshot.
+    optional bool SkipLocalSnapshot = 4;
+
     oneof Result {
         TCancel Cancel = 2;
         TApply Apply = 3;

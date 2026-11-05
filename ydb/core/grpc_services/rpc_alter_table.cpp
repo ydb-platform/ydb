@@ -8,6 +8,7 @@
 #include "service_table.h"
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
@@ -207,6 +208,8 @@ private:
 
         auto& entry = navigate->ResultSet.emplace_back();
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+        entry.ShowPrivatePath = IsChangefeedOperation(OpType)
+            && NTableIndex::IsImplTable(paths.back());
         entry.Path = std::move(paths);
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate));

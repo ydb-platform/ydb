@@ -428,27 +428,38 @@ namespace NKikimr::NBridge {
     }
 
     void TSyncerActor::SendQuery(std::unique_ptr<IEventHandle> handle, ui64 quoterBytes) {
-        // The quota is taken here and not when the query is issued, so a query waiting for its turn holds no quota and is
-        // charged at the current rate, though behind the backlog taken at the old one. A delayed query keeps its in-flight
-        // slot, which bounds this backlog.
-        const TDuration timeout = SyncRateQuoter && quoterBytes
-            ? SyncRateQuoter->Take(TActivationContext::Monotonic(), quoterBytes)
-            : TDuration::Zero();
-        if (timeout != TDuration::Zero()) {
-            const ui64 cookie = handle->Cookie;
-            // Own throttled requests until dispatch so terminating this attempt also cancels delayed writes/reads.
-            DelayedQueries.emplace(cookie, std::move(handle));
-            Schedule(timeout, new TEvents::TEvWakeup(cookie));
+        if (SyncRateQuoter && quoterBytes) {
+            QuotaQueue.emplace_back(std::move(handle), quoterBytes);
+            ProcessQuotaQueue();
         } else {
             TActivationContext::Send(handle.release());
         }
     }
 
-    void TSyncerActor::Handle(TEvents::TEvWakeup::TPtr ev) {
-        if (const auto it = DelayedQueries.find(ev->Get()->Tag); it != DelayedQueries.end()) {
-            TActivationContext::Send(it->second.release());
-            DelayedQueries.erase(it);
+    void TSyncerActor::ProcessQuotaQueue() {
+        // The quota is taken for one query at a time, as it can't be returned: a syncer getting restarted would leave the
+        // quota of queries it hasn't sent to the next one, and all queries but one get charged at the current rate. Queries
+        // keep their in-flight slots here, and a stopped syncer doesn't send them.
+        while (!WaitingForQuota && !QuotaQueue.empty()) {
+            auto& [handle, quoterBytes] = QuotaQueue.front();
+            const TDuration timeout = SyncRateQuoter->Take(TActivationContext::Monotonic(), quoterBytes);
+            if (timeout != TDuration::Zero()) {
+                WaitingForQuota = true;
+                Schedule(timeout, new TEvents::TEvWakeup);
+            } else {
+                TActivationContext::Send(handle.release());
+                QuotaQueue.pop_front();
+            }
         }
+    }
+
+    void TSyncerActor::Handle(TEvents::TEvWakeup::TPtr) {
+        Y_ABORT_UNLESS(WaitingForQuota && !QuotaQueue.empty());
+        WaitingForQuota = false;
+        auto& [handle, quoterBytes] = QuotaQueue.front();
+        TActivationContext::Send(handle.release());
+        QuotaQueue.pop_front();
+        ProcessQuotaQueue();
     }
 
     void TSyncerActor::Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {

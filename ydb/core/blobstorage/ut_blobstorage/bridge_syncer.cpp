@@ -569,7 +569,7 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
         syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source->GroupID, target->GroupID,
             std::make_shared<NBridge::TSyncerDataStats>(), quoter), 1);
 
-        // the first read goes at once; those having an in-flight slot wait at the old rate, the others hold no quota yet
+        // the first read goes at once and the second one waits for the time it has been charged; others hold no quota yet
         WaitUntil(env, [&] { return !reads.empty(); }, "first read", TDuration::Seconds(1), 60);
         quoter->UpdateBytesPerSecond(1'000'000);
         WaitUntil(env, [&] { return bool(completion); }, "sync completion", TDuration::Seconds(1), 300);
@@ -579,9 +579,66 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
         UNIT_ASSERT_VALUES_EQUAL(reads.size(), numBlobs);
         const TDuration gap = reads[1] - reads[0];
         UNIT_ASSERT_C(TDuration::Seconds(9) <= gap && gap <= TDuration::Seconds(11), gap);
-        // charged when issued, the last read would go at 190 s
+        // the time of two reads at the old rate, and the others take about 1 s at the new one; when charged for all the
+        // reads having in-flight slots it would be 150 s
         const TDuration span = reads.back() - reads.front();
-        UNIT_ASSERT_C(TDuration::Seconds(130) <= span && span <= TDuration::Seconds(175), span);
+        UNIT_ASSERT_C(span <= TDuration::Seconds(25), span);
+    }
+
+    // The quota can't be returned, so what a stopped syncer has taken delays the next one. The syncer gets restarted whenever
+    // another part of its group changes the stage.
+    Y_UNIT_TEST(StoppedSyncerLeavesLittleQuotaTaken) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        auto group = GetGroupInfo(env, groupId);
+        auto *state = group.MutableBridgeGroupState();
+        const auto source = env.GetGroupInfo(state->GetPile(0).GetGroupId());
+        const auto target = env.GetGroupInfo(state->GetPile(1).GetGroupId());
+        state->MutablePile(1)->SetStage(NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA);
+        const auto info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        UNIT_ASSERT(info);
+
+        constexpr ui32 numBlobs = 20;
+        const TString data(64_KB, 'x');
+        for (ui32 i = 0; i < numBlobs; ++i) {
+            const TLogoBlobID id(100500, 1, i + 1, 0, data.size(), 0);
+            auto put = QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, source->GroupID.GetRawId(), 1,
+                new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+            UNIT_ASSERT_VALUES_EQUAL(put->Status, NKikimrProto::OK);
+        }
+
+        auto quoter = std::make_shared<TReplQuoter>(data.size() / 10); // ten seconds per blob
+        TActorId syncer;
+        ui32 numReads = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            numReads += ev->Sender == syncer && ev->GetTypeRewrite() == TEvBlobStorage::EvGet &&
+                !ev->Get<TEvBlobStorage::TEvGet>()->IsIndexOnly;
+            return true;
+        };
+        syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source->GroupID, target->GroupID,
+            std::make_shared<NBridge::TSyncerDataStats>(), quoter), 1);
+        WaitUntil(env, [&] { return numReads != 0; }, "first read", TDuration::Seconds(1), 60);
+        const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        env.Runtime->Send(new IEventHandle(syncer, edge, new TEvents::TEvPoison), 1);
+        env.Sim(TDuration::Seconds(1));
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL(numReads, 1);
+
+        TDuration wait;
+        env.Runtime->WrapInActorContext(edge, [&] {
+            wait = quoter->Take(TActivationContext::Monotonic(), 0);
+        });
+        // the read sent and the one waiting for its time; when charged for all the reads having in-flight slots it would be
+        // 150 s
+        UNIT_ASSERT_C(wait <= TDuration::Seconds(25), wait);
     }
 
     // All the blobs are in the target already, so nothing but metadata comes from the source pile.

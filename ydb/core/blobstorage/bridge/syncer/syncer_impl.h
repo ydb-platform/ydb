@@ -63,7 +63,8 @@ namespace NKikimr::NBridge {
         const ui32 MaxQueriesInFlight = 16;
         ui32 QueriesInFlight = 0;
         THashMap<ui64, TQueryPayload> Payloads;
-        THashMap<ui64, std::unique_ptr<IEventHandle>> DelayedQueries;
+        std::deque<std::tuple<std::unique_ptr<IEventHandle>, ui64>> QuotaQueue; // queries with in-flight slots waiting for quota
+        bool WaitingForQuota = false; // the first query in QuotaQueue has its quota taken and waits for the time to come
         std::deque<std::tuple<std::unique_ptr<IEventHandle>, ui64>> PendingQueries; // handle and bytes to charge
         ui64 NextCookie = 1;
 
@@ -82,6 +83,7 @@ namespace NKikimr::NBridge {
         void IssueQuery(TGroupId groupId, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {},
             ui64 quoterBytes = 0);
         void SendQuery(std::unique_ptr<IEventHandle> handle, ui64 quoterBytes);
+        void ProcessQuotaQueue();
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);

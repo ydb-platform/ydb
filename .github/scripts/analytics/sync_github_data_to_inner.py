@@ -29,12 +29,13 @@ def sync(source, destination):
 
 def main():
     # Separate credentials: cloud service account for reads, internal token for writes.
-    token = os.environ.get("YDB_INNER_TOKEN")
-    if not token:
-        raise RuntimeError("YDB_INNER_TOKEN is required")
+    for name in ("YDB_INNER_TOKEN", "YDB_INNER_ENDPOINT", "YDB_INNER_DATABASE"):
+        if not os.environ.get(name):
+            raise RuntimeError(f"{name} is required")
+    token = os.environ["YDB_INNER_TOKEN"]
     config = {"databases": {"main": {
-        "endpoint": os.environ.get("YDB_INNER_ENDPOINT", "grpc://vault-klg.ydb.yandex.net:2135"),
-        "path": os.environ.get("YDB_INNER_DATABASE", "/vault-klg/kikimr/prod/ydb-qa-db-inner"),
+        "endpoint": os.environ["YDB_INNER_ENDPOINT"],
+        "path": os.environ["YDB_INNER_DATABASE"],
     }}}
     with YDBWrapper() as source, YDBWrapper(
         config=config, credentials=ydb.AccessTokenCredentials(token), enable_statistics=False,

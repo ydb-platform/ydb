@@ -397,6 +397,6 @@ jobs:
     - name: Sync GitHub dashboard data
       env:
         YDB_INNER_TOKEN: ${{ secrets.YDB_INNER_TOKEN }}
-        YDB_INNER_ENDPOINT: ${{ vars.YDB_INNER_ENDPOINT || 'grpc://vault-klg.ydb.yandex.net:2135' }}
-        YDB_INNER_DATABASE: ${{ vars.YDB_INNER_DATABASE || '/vault-klg/kikimr/prod/ydb-qa-db-inner' }}
+        YDB_INNER_ENDPOINT: ${{ vars.YDB_INNER_ENDPOINT }}
+        YDB_INNER_DATABASE: ${{ vars.YDB_INNER_DATABASE }}
       run: python3 .github/scripts/analytics/sync_github_data_to_inner.py

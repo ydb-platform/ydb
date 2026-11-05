@@ -61,11 +61,22 @@ class SyncTest(unittest.TestCase):
                     self.assertEqual(dict(os.environ),
                                      {"YDB_QA_CONFIG": "invalid cloud config"})
 
-    def test_missing_token_fails_before_opening_database(self):
-        with patch.dict("os.environ", {}, clear=True):
-            with self.assertRaisesRegex(RuntimeError, "YDB_INNER_TOKEN"):
-                self.module.main()
+    def test_missing_destination_settings_fail_before_opening_database(self):
+        values = {"YDB_INNER_TOKEN": "test", "YDB_INNER_ENDPOINT": "grpc://inner:2135",
+                  "YDB_INNER_DATABASE": "/inner"}
+        for missing in values:
+            for empty in (None, ""):
+                with self.subTest(missing=missing, empty=empty):
+                    env = dict(values)
+                    if empty is None:
+                        del env[missing]
+                    else:
+                        env[missing] = empty
+                    with patch.dict("os.environ", env, clear=True):
+                        with self.assertRaisesRegex(RuntimeError, missing):
+                            self.module.main()
         self.module.YDBWrapper.assert_not_called()
+
 
 
 if __name__ == "__main__":

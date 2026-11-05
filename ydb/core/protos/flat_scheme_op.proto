@@ -306,8 +306,16 @@ message TTableReplicationConfig {
         CONSISTENCY_LEVEL_ROW = 2;
     }
 
+    enum EImportState {
+        IMPORT_STATE_NONE = 0;
+        WAITING_IMPORT = 1;
+        IMPORTING = 2;
+        IMPORTED = 3;
+    }
+
     optional EReplicationMode Mode = 1;
     optional EConsistencyLevel ConsistencyLevel = 2;
+    optional EImportState ImportState = 3;
 }
 
 message TTableIncrementalBackupConfig {

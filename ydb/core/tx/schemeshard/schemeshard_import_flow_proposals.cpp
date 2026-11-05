@@ -99,6 +99,82 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
             return nullptr;
         }
 
+<<<<<<< HEAD
+=======
+        // Indexes whose materialized data in the backup does not fit the layout created in this
+        // database (e.g. a compact fulltext index restored with EnableCompactFulltextIndex off) are
+        // not created materialized here. Instead they are left out of the create request and built
+        // from the restored table data afterwards (see PrepareNextBuildableIndex).
+        if (indexedTable.IndexDescriptionSize()) {
+            const auto& baseTable = indexedTable.GetTableDescription();
+
+            // An index is materialized if the backup has impl tables for it. Before the impl-table
+            // items are created this is known from the downloaded schemes; afterwards (and after a
+            // restart) - from the already created impl-table child items.
+            THashSet<TString> materializedIndexes;
+            if (item.MaterializedIndexes.empty()) {
+                const TString prefix = TStringBuilder() << item.DstPathName << "/";
+                for (ui32 childIdx : item.ChildItems) {
+                    if (childIdx >= importInfo.Items.size()) {
+                        continue;
+                    }
+                    const TString& childPath = importInfo.Items[childIdx].DstPathName;
+                    if (!childPath.StartsWith(prefix)) {
+                        continue;
+                    }
+                    const auto start = prefix.size();
+                    const auto end = childPath.find('/', start);
+                    materializedIndexes.insert(childPath.substr(start, end == TString::npos ? end : end - start));
+                }
+            } else {
+                for (const auto& [metadata, scheme] : item.MaterializedIndexes) {
+                    auto pos = metadata.ImplTablePrefix.find('/');
+                    materializedIndexes.insert(pos == TStringBuf::npos ? metadata.ImplTablePrefix : metadata.ImplTablePrefix.substr(0, pos));
+                }
+            }
+
+            std::vector<NKikimrSchemeOp::TIndexCreationConfig> compatible;
+            compatible.reserve(indexedTable.IndexDescriptionSize());
+            for (const auto& indexDesc : indexedTable.GetIndexDescription()) {
+                TString indexError;
+                bool ok = materializedIndexes.contains(indexDesc.GetName());
+                if (ok && !item.MaterializedIndexes.empty()) {
+                    ok = CheckIndexMaterializationCompatible(baseTable, indexDesc, item, indexError);
+                }
+                if (ok) {
+                    compatible.push_back(indexDesc);
+                } else {
+                    indexesToBuild.push_back(indexDesc.GetName());
+                    YDB_LOG_WARN("TImport: will build an index instead of restoring it",
+                        {"index", indexDesc.GetName()},
+                        {"reason", indexError},
+                    );
+                }
+            }
+            if (compatible.size() != static_cast<size_t>(indexedTable.IndexDescriptionSize())) {
+                auto* descs = indexedTable.MutableIndexDescription();
+                descs->Clear();
+                for (auto& desc : compatible) {
+                    *descs->Add() = desc;
+                }
+            }
+        }
+
+        if (item.ReplicationConfig) {
+            auto config = *item.ReplicationConfig;
+            config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTING);
+            *tableDesc.MutableReplicationConfig() = config;
+            for (auto& index : *indexedTable.MutableIndexDescription()) {
+                // Match the index types with independent replication targets in
+                // replication/controller/target_discoverer.cpp.
+                if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobal
+                        || index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+                    *index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig() = config;
+                }
+            }
+        }
+
+>>>>>>> 60f721ec0a0 (KIKIMR-27460: Track replication bootstrap import state (#57704))
         if (!FillDefaultValues(item, indexedTable, error)) {
             return nullptr;
         }
@@ -370,6 +446,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
 
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
+    modifyScheme.SetInternal(true);
     auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
 
     const TPath dstPath = TPath::Init(item.DstPathId, ss);

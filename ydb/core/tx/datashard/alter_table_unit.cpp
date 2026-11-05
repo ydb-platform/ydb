@@ -2,8 +2,8 @@
 #include "cdc_schema_change.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
-#include "execution_unit_ctors.h"
 #include "datashard_repl_offsets.h"
+#include "execution_unit_ctors.h"
 
 #include <utility>
 

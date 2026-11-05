@@ -620,8 +620,8 @@ namespace NKikimr {
 
     static THashMap<TString, ui64> GetTabletCumulativeCounters(TTestActorRuntime& runtime, ui64 tabletId, ui32 nodeIndex) {
         const TActorId sender = runtime.AllocateEdgeActor(nodeIndex);
-        ForwardToTablet(runtime, tabletId, sender, new TEvTablet::TEvGetCounters(), nodeIndex);
-        auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
+        runtime.SendToPipe(tabletId, sender, new TEvTablet::TEvGetCounters(), nodeIndex, GetPipeConfigWithRetries());
+        auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(sender);
         THashMap<TString, ui64> result;
         for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
             result[counter.GetName()] = counter.GetValue();

@@ -452,7 +452,7 @@ protected:
     // The partition resets its cumulative counters each time it flushes them to the tablet
     ui64 GetCumulativeCounter(TPartition& partition, ui32 counter);
 
-    THashMap<ui32, ui64> FlushedCumulativeCounters;
+    THashMap<TActorId, THashMap<ui32, ui64>> FlushedCumulativeCounters;
     TTestActorRuntimeBase::TEventObserverHolder FlushedCountersObserver;
 };
 
@@ -465,16 +465,19 @@ void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
     Ctx->Runtime->SetScheduledLimit(5'000);
 
     FlushedCountersObserver = Ctx->Runtime->AddObserver<TEvPQ::TEvPartitionCounters>([this](auto& ev) {
-        const auto& counters = ev->Get()->Counters.Cumulative();
+        auto& flushed = FlushedCumulativeCounters[ev->Sender];
+        auto& counters = ev->Get()->Counters.Cumulative();
         for (ui32 i = 0; i < counters.Size(); ++i) {
-            FlushedCumulativeCounters[i] += counters[i].Get();
+            flushed[i] += counters[i].Get();
         }
+        // Events parked in an edge mailbox are observed again on every dispatch
+        counters.ResetCounters();
     });
 }
 
 ui64 TPartitionFixture::GetCumulativeCounter(TPartition& partition, ui32 counter)
 {
-    return FlushedCumulativeCounters[counter] + TPartitionTestWrapper::GetCumulativeCounter(partition, counter);
+    return FlushedCumulativeCounters[partition.SelfId()][counter] + TPartitionTestWrapper::GetCumulativeCounter(partition, counter);
 }
 
 TActorId TPartitionFixture::CreateFakePartition() const {

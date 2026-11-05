@@ -194,15 +194,14 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto table2snapshot = DoReadColumns(server, "/Root/table-2", snapshot);
         UNIT_ASSERT_VALUES_EQUAL(table2snapshot, "key = 10, value = 10\nkey = 20, value = 20\nkey = 30, value = 30\n");
 
-        // The snapshot reference is released after the scan finishes, in its own tx
-        SimulateSleep(runtime, TDuration::Seconds(1));
-        UNIT_ASSERT_GT(GetTabletTxCompleted(runtime, GetTableShards(server, sender, "/Root/table-1").at(0),
-            "DataShard/TxReleaseSnaphotReference"), 0);
-
         auto table1head = DoReadColumns(server, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(table1head, "key = 1, value = 11\nkey = 2, value = 22\nkey = 3, value = 33\nkey = 4, value = 44\n");
         auto table2head = DoReadColumns(server, "/Root/table-2");
         UNIT_ASSERT_VALUES_EQUAL(table2head, "key = 10, value = 11\nkey = 20, value = 22\nkey = 30, value = 33\nkey = 40, value = 44\n");
+
+        // The snapshot reference is released in its own tx after the scan finishes; the reads above let it run
+        UNIT_ASSERT_GT(GetTabletTxCompleted(runtime, GetTableShards(server, sender, "/Root/table-1").at(0),
+            "DataShard/TxReleaseSnaphotReference"), 0);
 
         // Split/merge would fail otherwise :(
         SetSplitMergePartCountLimit(server->GetRuntime(), -1);

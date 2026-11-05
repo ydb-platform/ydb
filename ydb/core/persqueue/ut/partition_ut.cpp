@@ -310,6 +310,7 @@ protected:
                        bool strict = false);
     void SendGetOffset(ui64 cookie,
                        const TString& clientId);
+    void TestReplicateOffsetClampedToStart(bool important);
     void WaitCmdWrite(const TCmdWriteMatcher& matcher = {});
     void WaitCmdWriteTx(const TCmdWriteTxMatcher& matcher = {});
     void SendCmdWriteResponse(NMsgBusProxy::EResponseStatus status);
@@ -2369,6 +2370,193 @@ Y_UNIT_TEST_F(DisabledReplicationAllowsMirroringWithoutConsumerOffsets, TPartiti
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 11);
 }
 
+Y_UNIT_TEST_F(WriteAssignsOffsetAfterMirroredOffset, TPartitionFixture)
+{
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+        .FillHead = true});
+    auto& encoder = TPartitionTestWrapper::BlobEncoder(*partition);
+    encoder.MirroredOffset = 20;
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 10);
+
+    auto write = [&](ui64 cookie, TMaybe<ui64> offset, ui64 expected) {
+        SendWrite(cookie, 0, "owner", offset, "message", false, cookie, true);
+        WaitCmdWrite();
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(5));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Cookie, cookie);
+        UNIT_ASSERT_VALUES_EQUAL(response->Response->GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        const auto& result = response->Response->GetPartitionResponse();
+        UNIT_ASSERT_VALUES_EQUAL(result.CmdWriteResultSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetCmdWriteResult(0).GetOffset(), expected);
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), expected + 1);
+    };
+
+    Ctx->Runtime->GetAppData(0).PQConfig.SetMinOffset(15);
+    write(101, Nothing(), 20);
+    encoder.MirroredOffset = 5;
+    write(102, Nothing(), 21);
+    Ctx->Runtime->GetAppData(0).PQConfig.SetMinOffset(30);
+    write(103, Nothing(), 30);
+    encoder.MirroredOffset = 50;
+    write(104, 40, 40);
+    write(105, Nothing(), 50);
+}
+
+Y_UNIT_TEST_F(ReplicationDataSentOnlyForSessionStartAndChangedOffsets, TPartitionFixture)
+{
+    const TConfigParams initialConfig{.Version = 1, .Consumers = {
+        {.Consumer = "reader", .Offset = 1}, {.Consumer = "other", .Offset = 4},
+        {.Consumer = "replication"}}};
+    CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
+        .Config = initialConfig, .FillHead = true}, initialConfig);
+    Config.SetVersion(2);
+    GetConsumer(Config, "replication")->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged();
+
+    TVector<NKikimrPQ::TReplicationDataPayload> payloads;
+    TActorId replicationRecipient;
+    Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == TEvPersQueue::TEvReplicationData::EventType) {
+            replicationRecipient = event->Recipient;
+            auto& payload = payloads.emplace_back();
+            UNIT_ASSERT(payload.ParseFromString(event->Get<TEvPersQueue::TEvReplicationData>()->Record.GetPayload()));
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    const auto readSessionActor = Ctx->Runtime->AllocateEdgeActor();
+    auto establishSession = [&](ui64 cookie, ui32 step) {
+        auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(cookie, "replication", 0, "replication-session-" + ToString(step),
+            1, 1, step, Ctx->Edge, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION);
+        event->ReadSessionActor = readSessionActor;
+        SendEvent(event.Release());
+        WaitCmdWrite();
+        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+        WaitProxyResponse({.Cookie = cookie});
+    };
+    auto drain = [&] { Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100)); };
+
+    establishSession(101, 1);
+    drain();
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("other"), 4);
+    UNIT_ASSERT_VALUES_EQUAL(replicationRecipient, readSessionActor);
+
+    SendWrite(102, 0, "owner", Nothing(), "message", false, 1, true);
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 102});
+    drain();
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 1);
+
+    SendSetOffset(103, "reader", 3, "");
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 103});
+    drain();
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 3);
+
+    SendSetOffset(104, "reader", 3, "");
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 104});
+    drain();
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 2);
+
+    establishSession(105, 2);
+    drain();
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 3);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("other"), 4);
+    Ctx->Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
+}
+
+void TPartitionFixture::TestReplicateOffsetClampedToStart(bool important)
+{
+    const TConfigParams initialConfig{.Version = 1, .Consumers = {
+        {.Consumer = "reader", .Offset = 5}, {.Consumer = "replication"}}};
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 5, .End = 10,
+        .Config = initialConfig, .FillHead = true}, initialConfig);
+    Config.SetVersion(2);
+    GetConsumer(Config, "replication")->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+    if (important) {
+        GetConsumer(Config, "reader")->SetImportant(true);
+    } else {
+        GetConsumer(Config, "reader")->SetAvailabilityPeriodMs(TDuration::Days(1).MilliSeconds());
+    }
+    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged();
+
+    TVector<NKikimrPQ::TReplicationDataPayload> payloads;
+    Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == TEvPersQueue::TEvReplicationData::EventType) {
+            auto& payload = payloads.emplace_back();
+            UNIT_ASSERT(payload.ParseFromString(event->Get<TEvPersQueue::TEvReplicationData>()->Record.GetPayload()));
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(101, "replication", 0, "replication-session",
+        1, 1, 1, Ctx->Edge, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION);
+    event->ReadSessionActor = Ctx->Runtime->AllocateEdgeActor();
+    SendEvent(event.Release());
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 101});
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 5);
+
+    // Model retention moving the lower boundary past the saved consumer offset.
+    auto& compactionEncoder = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    auto& encoder = compactionEncoder.IsEmpty()
+        ? TPartitionTestWrapper::BlobEncoder(*partition) : compactionEncoder;
+    encoder.StartOffset = 7;
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), 7);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "reader")->Offset, 5);
+
+    // Creating a reader session does not change the pending offset. The effective
+    // offset is raised to StartOffset only when applying the persisted user info.
+    SendCreateSession(102, "reader", "reader-session", 1, 1);
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 102});
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "reader")->Offset, 7);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 7);
+
+    SendSetOffset(103, "reader", 7, "reader-session");
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 103});
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 2);
+    Ctx->Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
+}
+
+Y_UNIT_TEST_F(ReplicationDataIncludesOffsetClampedForAvailabilityPeriod, TPartitionFixture)
+{
+    TestReplicateOffsetClampedToStart(false);
+}
+
+Y_UNIT_TEST_F(ReplicationDataIncludesOffsetClampedForImportantConsumer, TPartitionFixture)
+{
+    TestReplicateOffsetClampedToStart(true);
+}
+
 void TPartitionFixture::TestRestoreReadSessionActor(bool hasDataRequest)
 {
     const TString session = "replication-session";
@@ -3612,115 +3800,6 @@ Y_UNIT_TEST_F(ShadowPartitionCountersRestore, TPartitionFixture) {
     wrapper.LoadMeta(countersProto);
     metaStep.Reset();
     initializer.Reset();
-}
-
-Y_UNIT_TEST_F(WriteAssignsOffsetAfterMirroredOffset, TPartitionFixture)
-{
-    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
-        .FillHead = true});
-    auto& encoder = TPartitionTestWrapper::BlobEncoder(*partition);
-    encoder.MirroredOffset = 20;
-    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 10);
-
-    auto write = [&](ui64 cookie, TMaybe<ui64> offset, ui64 expected) {
-        SendWrite(cookie, 0, "owner", offset, "message", false, cookie, true);
-        WaitCmdWrite();
-        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>(TDuration::Seconds(5));
-        UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL(response->Cookie, cookie);
-        UNIT_ASSERT_VALUES_EQUAL(response->Response->GetStatus(), NMsgBusProxy::MSTATUS_OK);
-        const auto& result = response->Response->GetPartitionResponse();
-        UNIT_ASSERT_VALUES_EQUAL(result.CmdWriteResultSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetCmdWriteResult(0).GetOffset(), expected);
-        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), expected + 1);
-    };
-
-    Ctx->Runtime->GetAppData(0).PQConfig.SetMinOffset(15);
-    write(101, Nothing(), 20);
-    encoder.MirroredOffset = 5;
-    write(102, Nothing(), 21);
-    Ctx->Runtime->GetAppData(0).PQConfig.SetMinOffset(30);
-    write(103, Nothing(), 30);
-    encoder.MirroredOffset = 50;
-    write(104, 40, 40);
-    write(105, Nothing(), 50);
-}
-
-Y_UNIT_TEST_F(ReplicationDataSentOnlyForSessionStartAndChangedOffsets, TPartitionFixture)
-{
-    const TConfigParams initialConfig{.Version = 1, .Consumers = {
-        {.Consumer = "reader", .Offset = 1}, {.Consumer = "other", .Offset = 4},
-        {.Consumer = "replication"}}};
-    CreatePartition({.Partition = TPartitionId{0}, .Begin = 0, .End = 10,
-        .Config = initialConfig, .FillHead = true}, initialConfig);
-    Config.SetVersion(2);
-    GetConsumer(Config, "replication")->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
-    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
-    WaitCmdWrite();
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitPartitionConfigChanged();
-
-    TVector<NKikimrPQ::TReplicationDataPayload> payloads;
-    TActorId replicationRecipient;
-    Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
-        if (event->GetTypeRewrite() == TEvPersQueue::TEvReplicationData::EventType) {
-            replicationRecipient = event->Recipient;
-            auto& payload = payloads.emplace_back();
-            UNIT_ASSERT(payload.ParseFromString(event->Get<TEvPersQueue::TEvReplicationData>()->Record.GetPayload()));
-            return TTestActorRuntimeBase::EEventAction::DROP;
-        }
-        return TTestActorRuntimeBase::EEventAction::PROCESS;
-    });
-
-    const auto readSessionActor = Ctx->Runtime->AllocateEdgeActor();
-    auto establishSession = [&](ui64 cookie, ui32 step) {
-        auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(cookie, "replication", 0, "replication-session-" + ToString(step),
-            1, 1, step, Ctx->Edge, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION);
-        event->ReadSessionActor = readSessionActor;
-        SendEvent(event.Release());
-        WaitCmdWrite();
-        SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-        WaitProxyResponse({.Cookie = cookie});
-    };
-    auto drain = [&] { Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100)); };
-
-    establishSession(101, 1);
-    drain();
-    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 1);
-    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("other"), 4);
-    UNIT_ASSERT_VALUES_EQUAL(replicationRecipient, readSessionActor);
-
-    SendWrite(102, 0, "owner", Nothing(), "message", false, 1, true);
-    WaitCmdWrite();
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProxyResponse({.Cookie = 102});
-    drain();
-    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 1);
-
-    SendSetOffset(103, "reader", 3, "");
-    WaitCmdWrite();
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProxyResponse({.Cookie = 103});
-    drain();
-    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 3);
-
-    SendSetOffset(104, "reader", 3, "");
-    WaitCmdWrite();
-    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
-    WaitProxyResponse({.Cookie = 104});
-    drain();
-    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 2);
-
-    establishSession(105, 2);
-    drain();
-    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 3);
-    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 3);
-    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("other"), 4);
-    Ctx->Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
 }
 
 Y_UNIT_TEST_F(DataTxCalcPredicateOk, TPartitionTxTestHelper)

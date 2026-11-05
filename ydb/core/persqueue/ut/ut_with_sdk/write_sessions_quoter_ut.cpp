@@ -9,9 +9,9 @@ namespace {
 using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
 
-void CheckConcurrentWriteSessions(ui32 maxConcurrentInitializations, bool directWrite, size_t sessionCount, bool restartTablet = false) {
+void CheckConcurrentWriteSessions(ui32 writeSessionsInitRps, bool directWrite, size_t sessionCount, bool restartTablet = false) {
     auto serverSettings = TTopicSdkTestSetup::MakeServerSettings();
-    serverSettings.PQConfig.SetMaxConcurrentWriteSessionInitializations(maxConcurrentInitializations);
+    serverSettings.PQConfig.SetWriteSessionsInitRps(writeSessionsInitRps);
     TTopicSdkTestSetup setup("WriteSessionsQuoter", serverSettings, false);
 
     setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
@@ -43,8 +43,8 @@ void CheckConcurrentWriteSessions(ui32 maxConcurrentInitializations, bool direct
         sessions.push_back(std::move(session));
     }
 
-    // More sessions than slots must finish while earlier sessions stay open:
-    // quota covers initialization, not the lifetime of a write session.
+    // Sessions exceeding the initial burst must finish as quota refills,
+    // while earlier sessions stay open.
     for (auto& future : initialized) {
         const auto now = TMonotonic::Now();
         const auto remaining = now < deadline ? deadline - now : TDuration::Zero();
@@ -64,11 +64,11 @@ void CheckConcurrentWriteSessions(ui32 maxConcurrentInitializations, bool direct
 }
 
 Y_UNIT_TEST_SUITE(WriteSessionsQuoterWithSDK) {
-    Y_UNIT_TEST(ConcurrentDirectSessionsWithOneInitializationSlot) {
+    Y_UNIT_TEST(ConcurrentDirectSessionsWithOneInitializationPerSecond) {
         CheckConcurrentWriteSessions(1, true, 8);
     }
 
-    Y_UNIT_TEST(ConcurrentDirectSessionsWithThreeInitializationSlots) {
+    Y_UNIT_TEST(ConcurrentDirectSessionsWithThreeInitializationsPerSecond) {
         CheckConcurrentWriteSessions(3, true, 12);
     }
 
@@ -76,11 +76,11 @@ Y_UNIT_TEST_SUITE(WriteSessionsQuoterWithSDK) {
         CheckConcurrentWriteSessions(0, false, 12);
     }
 
-    Y_UNIT_TEST(ConcurrentDirectSessionsAfterRestartWithOneInitializationSlot) {
+    Y_UNIT_TEST(ConcurrentDirectSessionsAfterRestartWithOneInitializationPerSecond) {
         CheckConcurrentWriteSessions(1, true, 8, true);
     }
 
-    Y_UNIT_TEST(ConcurrentDirectSessionsAfterRestartWithThreeInitializationSlots) {
+    Y_UNIT_TEST(ConcurrentDirectSessionsAfterRestartWithThreeInitializationsPerSecond) {
         CheckConcurrentWriteSessions(3, true, 12, true);
     }
 }

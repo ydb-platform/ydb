@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/util/counted_leaky_bucket.h>
 
 namespace NKikimr::NPQ {
 
@@ -47,49 +48,61 @@ public:
 
     void Handle(TEvWriteSessionsQuoter::TEvNotify::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvWriteSessionsQuoter::TEvAcquireQuota::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvWriteSessionsQuoter::TEvReleaseQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvWriteSessionsQuoter::TEvRemove::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void PassAway() override;
 
 private:
     STFUNC(StateWork);
 
-    void ProcessHolders(std::list<TActorId>& holders, const TKey& key, const TActorContext& ctx);
+    void ProcessPending(TCountedLeakyBucket& bucket, const TKey& key, const TActorContext& ctx);
     void AddPending(const TKey& key, const TActorId& actorId);
     void RemoveFrontPending(const TKey& key);
-    ui64 GetMaxConcurrentInitializations(const TActorContext& ctx);
-    void AddHolder(const TKey& key, const TActorId& actorId);
-    void RemoveHolder(const TActorId& actorId);
+    ui64 GetWriteSessionsInitRps(const TActorContext& ctx);
 
     struct TIndexItem {
         TKey Key;
         std::list<TActorId>::iterator Iterator;
     };
 
-    absl::flat_hash_map<TKey, std::list<TActorId>> Holders;
-    absl::flat_hash_map<TActorId, TIndexItem> HoldersIndex;
+    struct TPendingItem {
+        TActorId ActorId;
+        TInstant StartPending;
+    };
+
+    absl::flat_hash_map<TKey, TCountedLeakyBucket> Buckets;
     absl::flat_hash_map<TKey, std::list<TActorId>> Pending;
     absl::flat_hash_map<TActorId, TIndexItem> PendingIndex;
 };
 
-void TWriteSessionsQuoter::Bootstrap(const TActorContext&) {
+void TWriteSessionsQuoter::Bootstrap(const TActorContext& ctx) {
     Become(&TWriteSessionsQuoter::StateWork);
+    ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
 }
 
-ui64 TWriteSessionsQuoter::GetMaxConcurrentInitializations(const TActorContext& ctx) {
-    return AppData(ctx)->PQConfig.GetMaxConcurrentWriteSessionInitializations();
+void TWriteSessionsQuoter::Handle(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
+    const auto now = ctx.Now();
+    for (auto& [key, bucket] : Buckets) {
+        bucket.Update(now);
+        ProcessPending(bucket, key, ctx);
+    }
+    ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
 }
 
-void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvNotify::TPtr& ev, const TActorContext&) {
+ui64 TWriteSessionsQuoter::GetWriteSessionsInitRps(const TActorContext& ctx) {
+    return AppData(ctx)->PQConfig.GetWriteSessionsInitRps();
+}
+
+void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvNotify::TPtr& ev, const TActorContext& ctx) {
     const auto& msg = *ev->Get();
 
-    Holders.emplace(
+    Buckets.try_emplace(
         TKey{
             .Topic = msg.Topic,
             .Partition = msg.Partition,
             .Generation = msg.Generation
         },
-        std::list<TActorId>()
+        GetWriteSessionsInitRps(ctx), TDuration::Seconds(1), ctx.Now()
     );
 }
 
@@ -101,7 +114,8 @@ void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvAcquireQuota::TPtr&
         .Generation = msg.Generation
     };
 
-    if (!Holders.contains(key)) {
+    auto bucket = Buckets.find(key);
+    if (bucket == Buckets.end()) {
         LOG_W("Received TEvAcquireQuota for unknown topic-partition-generation");
 
         ctx.Send(ev->Sender, new TEvWriteSessionsQuoter::TEvQuotaDeclined());
@@ -109,14 +123,13 @@ void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvAcquireQuota::TPtr&
     }
 
     // Each session can have at most one outstanding quota request.
-    if (HoldersIndex.contains(ev->Sender) || PendingIndex.contains(ev->Sender)) {
+    if (PendingIndex.contains(ev->Sender)) {
         return;
     }
 
-    auto& holders = Holders[key];
-    ProcessHolders(holders, key, ctx);
+    ProcessPending(bucket->second, key, ctx);
 
-    if (holders.size() >= GetMaxConcurrentInitializations(ctx)) {
+    if (!bucket->second.TryPush(ctx.Now(), 1)) {
         auto pending = Pending.find(key);
         if (pending != Pending.end() && pending->second.size() >= MAX_PENDING_REQUESTS) {
             LOG_W("Max pending requests reached for topic-partition-generation");
@@ -126,49 +139,15 @@ void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvAcquireQuota::TPtr&
 
         AddPending(key, ev->Sender);
     } else {
-        AddHolder(key, ev->Sender);
         ctx.Send(ev->Sender, new TEvWriteSessionsQuoter::TEvQuotaAcquired());
     }
-}
-
-void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvReleaseQuota::TPtr& ev, const TActorContext& ctx) {
-    const auto& msg = *ev->Get();
-    const auto key = TKey{msg.Topic, msg.Partition, msg.Generation};
-
-    if (auto pending = PendingIndex.find(ev->Sender); pending != PendingIndex.end()) {
-        if (pending->second.Key != key) {
-            return;
-        }
-
-        auto queue = Pending.find(key);
-        queue->second.erase(pending->second.Iterator);
-        PendingIndex.erase(pending);
-        if (queue->second.empty()) {
-            Pending.erase(queue);
-        }
-        return;
-    }
-
-    auto holder = HoldersIndex.find(ev->Sender);
-    if (holder == HoldersIndex.end() || holder->second.Key != key) {
-        // Repeated releases and releases for removed generations are harmless.
-        return;
-    }
-
-    RemoveHolder(ev->Sender);
-    ProcessHolders(Holders[key], key, ctx);
 }
 
 void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvRemove::TPtr& ev, const TActorContext& ctx) {
     const auto& msg = *ev->Get();
     const auto key = TKey{msg.Topic, msg.Partition, msg.Generation};
 
-    if (auto holders = Holders.find(key); holders != Holders.end()) {
-        for (const auto& actorId : holders->second) {
-            HoldersIndex.erase(actorId);
-        }
-        Holders.erase(holders);
-    }
+    Buckets.erase(key);
 
     if (auto pending = Pending.find(key); pending != Pending.end()) {
         for (const auto& actorId : pending->second) {
@@ -188,17 +167,16 @@ void TWriteSessionsQuoter::PassAway() {
     NActors::TActorBootstrapped<TWriteSessionsQuoter>::PassAway();
 }
 
-void TWriteSessionsQuoter::ProcessHolders(std::list<TActorId>& holders, const TKey& key, const TActorContext& ctx) {
+void TWriteSessionsQuoter::ProcessPending(TCountedLeakyBucket& bucket, const TKey& key, const TActorContext& ctx) {
     auto pending = Pending.find(key);
     if (pending == Pending.end()) {
         return;
     }
 
-    const auto limit = GetMaxConcurrentInitializations(ctx);
-    while (!pending->second.empty() && holders.size() < limit) {
+    const auto now = ctx.Now();
+    while (!pending->second.empty() && bucket.TryPush(now, 1)) {
         const auto actorId = pending->second.front();
         RemoveFrontPending(key);
-        AddHolder(key, actorId);
         ctx.Send(actorId, new TEvWriteSessionsQuoter::TEvQuotaAcquired());
     }
 
@@ -219,24 +197,12 @@ void TWriteSessionsQuoter::RemoveFrontPending(const TKey& key) {
     pending.pop_front();
 }
 
-void TWriteSessionsQuoter::AddHolder(const TKey& key, const TActorId& actorId) {
-    auto& holders = Holders[key];
-    holders.push_back(actorId);
-    HoldersIndex.emplace(actorId, TIndexItem{key, std::prev(holders.end())});
-}
-
-void TWriteSessionsQuoter::RemoveHolder(const TActorId& actorId) {
-    auto holder = HoldersIndex.find(actorId);
-    Holders[holder->second.Key].erase(holder->second.Iterator);
-    HoldersIndex.erase(holder);
-}
-
 STFUNC(TWriteSessionsQuoter::StateWork) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvWriteSessionsQuoter::TEvNotify, Handle);
         HFunc(TEvWriteSessionsQuoter::TEvAcquireQuota, Handle);
-        HFunc(TEvWriteSessionsQuoter::TEvReleaseQuota, Handle);
         HFunc(TEvWriteSessionsQuoter::TEvRemove, Handle);
+        HFunc(TEvents::TEvWakeup, Handle);
         sFunc(NActors::TEvents::TEvPoison, PassAway);
     }
 }

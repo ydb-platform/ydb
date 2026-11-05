@@ -293,8 +293,6 @@ void TWriteSessionActor<Protocol>::Die(const TActorContext& ctx) {
         return;
     }
 
-    ReleaseWriteSessionQuota(ctx);
-
     if (SessionsActive) {
         SessionsActive.Dec();
         if (BytesInflight && BytesInflightTotal) {
@@ -707,7 +705,6 @@ void TWriteSessionActor<Protocol>::DiscoverPartition(const NActors::TActorContex
 
     if (ExpectedGeneration) {
         State = ES_WAIT_WRITE_SESSION_QUOTA;
-        WriteSessionQuotaRequested = true;
         ctx.Send(
             NPQ::MakeWriteSessionsQuoterId(),
             new TEvWriteSessionsQuoter::TEvAcquireQuota(
@@ -743,25 +740,6 @@ void TWriteSessionActor<Protocol>::Handle(TEvWriteSessionsQuoter::TEvQuotaDeclin
 }
 
 template <EProtocol Protocol>
-void TWriteSessionActor<Protocol>::ReleaseWriteSessionQuota(const TActorContext& ctx) {
-    if (!WriteSessionQuotaRequested) {
-        return;
-    }
-
-    ctx.Send(
-        NPQ::MakeWriteSessionsQuoterId(),
-        new TEvWriteSessionsQuoter::TEvReleaseQuota(
-            FullConverter->GetClientsideName(),
-            PreferedPartition,
-            *ExpectedGeneration),
-        0,
-        0,
-        InitSpan.GetTraceId()
-    );
-    WriteSessionQuotaRequested = false;
-}
-
-template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::CreatePartitionChooser(const TActorContext& ctx) {
     State = ES_WAIT_PARTITION;
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
@@ -784,15 +762,11 @@ void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionChooser::TEvChooseRes
     InitialSeqNo = r->SeqNo;
     LastSourceIdUpdate = ctx.Now();
 
-    ReleaseWriteSessionQuota(ctx);
-
     ProceedPartition(r->PartitionId, ctx);
 }
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionChooser::TEvChooseError::TPtr& ev, const NActors::TActorContext& ctx) {
-    ReleaseWriteSessionQuota(ctx);
-
     CloseSession(ev->Get()->ErrorMessage, ev->Get()->Code, ctx);
 }
 

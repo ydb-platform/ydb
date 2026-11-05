@@ -123,6 +123,58 @@ async function pendingOff(browser) {
   await context.close();
 }
 
+async function mockControlFocus(browser) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  failOnPageError(page);
+  const piles = ['pile1', 'pile2'];
+  const nodes = piles.flatMap(pile => [1, 2, 3].map(number => ({
+    label: `mock-${pile}-${number}`, pile, dial_endpoint: `127.0.0.1:${22100 + piles.indexOf(pile) * 10 + number - 1}`,
+  })));
+  const manifest = { cluster_id: 'focus-fixture', piles: piles.map(name => ({ name })), nodes };
+  const state = { cluster_id: manifest.cluster_id, instances: Object.fromEntries(piles.map((pile, index) => [pile, {
+    alive: true, responsive: true, state: {
+      piles: [{ name: pile, public: index === 0 ? 'PRIMARY' : 'SYNCHRONIZED' }],
+      nodes: nodes.filter(node => node.pile === pile).map(node => ({ label: node.label, faults: {} })),
+    },
+  }])) };
+  const actions = [];
+  await page.route(url + '/', route => route.fulfill({
+    contentType: 'text/html', body: fs.readFileSync(path.join(artifacts, 'mock-control.html'), 'utf8'),
+  }));
+  await page.route('**/api/v1/**', async route => {
+    const endpoint = new URL(route.request().url()).pathname;
+    let body;
+    if (endpoint === '/api/v1/manifest') body = manifest;
+    else if (endpoint === '/api/v1/state') body = state;
+    else {
+      assert.equal(endpoint, '/api/v1/fault');
+      const action = route.request().postDataJSON();
+      actions.push(action);
+      const node = nodes.find(node => node.label === action.target);
+      assert.ok(node, 'keyboard action targets a fixture host');
+      state.instances[node.pile].state.nodes.find(status => status.label === node.label).faults.down = action.on;
+      body = { ok: true };
+    }
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+  });
+  await page.goto(url);
+  const host = 'mock-pile2-2';
+  const row = page.getByRole('row').filter({ has: page.getByRole('cell', { name: host, exact: true }) });
+  const crash = row.getByRole('button', { name: 'Crash', exact: true });
+  await crash.waitFor();
+  await crash.focus();
+  const updated = await page.locator('#updated').textContent();
+  await until(async () => await page.locator('#updated').textContent() !== updated, 'control table refresh completed');
+  assert.equal(await crash.evaluate(element => element === document.activeElement), true,
+    'a background refresh preserves the focused host action');
+  await page.keyboard.press('Enter');
+  await until(async () => await row.getByRole('cell', { name: 'Crashed', exact: true }).count() === 1,
+    'keyboard Crash is reflected in host status');
+  assert.deepEqual(actions, [{ target: host, op: 'down', on: true }], 'Enter sends exactly the focused host action');
+  await context.close();
+}
+
 function fixtures(original, count, expired = false) {
   const data = structuredClone(original);
   data.controller_boot_id = 'fixture';
@@ -1718,7 +1770,7 @@ async function time(browser) {
 (async () => {
   const browser = await playwright.chromium.launch({ headless: true, executablePath: process.env.SKIPPER_BROWSER_EXECUTABLE });
   try {
-    const scenarios = { manual, auto_off: autoOff, pending_off: pendingOff, presentation, time, review_race: reviewRace, disabled_failover: disabledFailover,
+    const scenarios = { manual, auto_off: autoOff, pending_off: pendingOff, presentation, mock_control_focus: mockControlFocus, time, review_race: reviewRace, disabled_failover: disabledFailover,
       log_filter_race: logFilterRace, log_selection_retention: logSelectionRetention,
       log_predicates: logPredicates, default_info_debug: defaultInfoDebug, rejoin_retained_evidence: rejoinRetainedEvidence,
       review_alternates: reviewAlternates, canonical_presentation: canonicalPresentation, canonical_labels: canonicalLabels,

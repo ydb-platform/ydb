@@ -14,6 +14,7 @@ import uuid
 import yatest.common
 
 from ydb.apps.bridge_skipper.acceptance.lib.harness import Environment
+from ydb.apps.bridge_skipper.ydbd_mock.lib.control_ui import PAGE as MOCK_CONTROL_PAGE
 
 
 SOURCE = "ydb/apps/bridge_skipper/acceptance/browser"
@@ -192,6 +193,11 @@ class BrowserTest(unittest.IsolatedAsyncioTestCase):
     async def test_viewports_themes_many_piles_focus_and_logs(self):
         await self.make()
         await self.run_browser("presentation")
+
+    async def test_mock_control_poll_preserves_keyboard_focus(self):
+        environment = await self.make()
+        (environment.root / "mock-control.html").write_text(MOCK_CONTROL_PAGE)
+        await self.run_browser("mock_control_focus")
 
     async def test_incident_failover_uses_canonical_disabled_reason(self):
         await self.make()

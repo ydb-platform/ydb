@@ -32,6 +32,10 @@ TSnapshotRetentionPolicy::TSnapshotRetentionPolicy(bool enabled, const IImmutabl
     CleanupBoundary_ = std::min(TRowVersion(freshnessFloor.MilliSeconds(), 0), Registry_->GetBorder());
 }
 
+bool TSnapshotRetentionPolicy::IsWaitingForRegistry() const {
+    return Enabled_ && !Registry_;
+}
+
 TRowVersion TSnapshotRetentionPolicy::GetCleanupBoundary(const TRowVersion& proposed) const {
     return Enabled_ ? std::min(proposed, CleanupBoundary_) : proposed;
 }
@@ -40,8 +44,13 @@ bool TSnapshotRetentionPolicy::ShouldRetain(const TTableId& tableId, const TRowV
     return Enabled_ && (!Registry_ || version >= CleanupBoundary_ || Registry_->HasSnapshot(tableId, version));
 }
 
-TSet<TRowVersion> TSnapshotRetentionPolicy::GetRetainedSnapshots(const TTableId& tableId) const {
-    return Registry_ ? Registry_->GetActiveSnapshots(tableId) : TSet<TRowVersion>{};
+void TSnapshotRetentionPolicy::ForEachRetainedSnapshot(const TTableId& tableId,
+    const TRowVersion& from, const TRowVersion& to,
+    TFunctionRef<void(const TRowVersion&)> visitor) const
+{
+    if (Registry_) {
+        Registry_->ForEachActiveSnapshot(tableId, from, to, visitor);
+    }
 }
 
 } // namespace NKikimr::NDataShard

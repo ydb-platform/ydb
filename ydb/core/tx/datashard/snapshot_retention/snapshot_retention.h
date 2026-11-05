@@ -15,6 +15,9 @@ public:
     TSnapshotRetentionPolicy(bool enabled, const IImmutableSnapshotRegistryHolderPtr& holder,
         const NKikimrConfig::TLongTxServiceConfig& config);
 
+    // Distinguishes missing registry state from a ready registry with a zero boundary.
+    bool IsWaitingForRegistry() const;
+
     // Limits an existing cleanup candidate. Cleanup may remove versions strictly
     // below this boundary, except for individually retained snapshots.
     TRowVersion GetCleanupBoundary(const TRowVersion& proposed) const;
@@ -24,9 +27,12 @@ public:
     // callers must still reject versions whose history has already been removed.
     bool ShouldRetain(const TTableId& tableId, const TRowVersion& version) const;
 
-    // Explicit points only: the continuous protected range is represented by
-    // GetCleanupBoundary(). Includes registrations covering all tables.
-    TSet<TRowVersion> GetRetainedSnapshots(const TTableId& tableId) const;
+    // Visit explicit points in [from, to) in ascending order without duplicates
+    // or copying the registry. Includes all-table registrations; the continuous
+    // protected range is represented by GetCleanupBoundary().
+    void ForEachRetainedSnapshot(const TTableId& tableId,
+        const TRowVersion& from, const TRowVersion& to,
+        TFunctionRef<void(const TRowVersion&)> visitor) const;
 
 private:
     const bool Enabled_;

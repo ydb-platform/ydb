@@ -105,6 +105,7 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                     }
                 } else {
                     // Old CopyTable sources did not preserve registry snapshots.
+                    // Restore this guarantee even while the registry is unready.
                     removedRowVersions.Add(TRowVersion::Min(), lowWatermark);
                 }
 
@@ -133,9 +134,11 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
     for (const auto& range : removedRowVersions) {
         txc.DB.RemoveRowVersions(userTable->LocalTid, range.Lower, range.Upper);
     }
-    // Use the destination table identity. Source-only registrations must not
-    // hold history in the copy, while registrations for all tables still apply.
-    DataShard.GetSnapshotManager().EnsureRemovedRowVersions(txc.DB, TRowVersion::Min(), minVersion);
+    // Source deletions were restored unconditionally above. The watermark alone
+    // does not prove that retained points in this or other user tables are gone.
+    // Additional cleanup uses each destination table identity and deliberately
+    // waits for registry readiness when retention is enabled.
+    DataShard.GetSnapshotManager().CleanupUnretainedRowVersions(txc.DB, TRowVersion::Min(), minVersion);
 
     if (hasOpenTxs && loanedTables) {
         // We must wait for loan to complete, so ReceiveSnapshotCleanup would

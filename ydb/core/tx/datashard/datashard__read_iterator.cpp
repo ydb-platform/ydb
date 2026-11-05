@@ -2119,7 +2119,7 @@ public:
 
                 // Switch to repeatable read at the same version
                 SetMvccSnapshot(state.ReadVersion, /* isRepeatable */ true);
-                state.SnapshotAcquired |= AppData()->FeatureFlags.GetEnableSnapshotsLocking();
+                state.SnapshotAcquired |= Self->GetSnapshotManager().IsSnapshotRetentionEnabled();
 
                 // We may have had repeatable read conflicts, promote them
                 PromoteRepeatableReadConflicts();
@@ -3489,7 +3489,7 @@ public:
             if (state.PathId.OwnerId == Self->GetPathOwnerId() && !state.IsHeadRead && !Self->IsFollower()) {
                 // Admission and local protection happen in the same transaction.
                 // The iterator outlives its initial pipeline operation.
-                state.SnapshotAcquired = AppData()->FeatureFlags.GetEnableSnapshotsLocking();
+                state.SnapshotAcquired = Self->GetSnapshotManager().IsSnapshotRetentionEnabled();
             }
 
             Op = new TReadOperation(Self, ctx.Now(), LocalReadId);

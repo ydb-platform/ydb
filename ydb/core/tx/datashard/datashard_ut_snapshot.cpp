@@ -718,8 +718,9 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         TPortManager pm;
         TServerSettings::TControls controls;
         NKikimrConfig::TAppConfig app;
-        // Exercise expiration without retention by the open KQP transaction.
-        app.MutableFeatureFlags()->SetEnableSnapshotsLocking(false);
+        // Exercise expiration with DataShard retention disabled, while KQP can
+        // still register snapshots through the common snapshots-locking flag.
+        app.MutableFeatureFlags()->SetEnableDataShardSnapshotLocking(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)

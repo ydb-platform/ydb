@@ -115,6 +115,9 @@ EExecutionStatus TCheckDataTxUnit::Execute(TOperation::TPtr op,
                     }
                 }
             }
+            // Reject empty or system-table-only key sets: there is no user
+            // table identity against which retention could be checked. True
+            // means every referenced user table passed IsSnapshotReadable above.
             return hasUserTable;
         };
         if (DataShard.IsFollower()) {

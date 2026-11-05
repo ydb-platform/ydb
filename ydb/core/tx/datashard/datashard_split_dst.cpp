@@ -262,7 +262,8 @@ public:
 
         if (restoreLegacyRemovedRowVersions) {
             // Old sources only guaranteed persistent snapshots below their
-            // watermark. A new registry entry cannot restore missing history.
+            // watermark. Restore those read guarantees even if the registry is
+            // unready, independently of optional additional cleanup below.
             Self->GetSnapshotManager().RemoveRowVersions(txc.DB, TRowVersion::Min(), lowWatermark);
         }
 
@@ -347,7 +348,10 @@ public:
         if (Self->ReceiveSnapshotsFrom.empty()) {
             const auto minVersion = Self->GetSnapshotManager().GetLowWatermark();
 
-            Self->GetSnapshotManager().EnsureRemovedRowVersions(txc.DB, TRowVersion::Min(), minVersion);
+            // Source deletions (or the legacy fallback) were restored above
+            // without consulting retention. Only additional cleanup is gated:
+            // the merged watermark may still contain retained snapshot points.
+            Self->GetSnapshotManager().CleanupUnretainedRowVersions(txc.DB, TRowVersion::Min(), minVersion);
 
             for (auto& kv : Self->ReplicatedTables) {
                 TReplicationSourceOffsetsDb rdb(txc);

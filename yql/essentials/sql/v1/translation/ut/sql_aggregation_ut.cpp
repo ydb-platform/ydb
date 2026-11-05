@@ -108,17 +108,17 @@ Y_UNIT_TEST(AggregationBySessionStateIsNotSupportedYet) {
                         "<main>:1:17: Error: SessionState with GROUP BY is not supported yet\n");
 }
 
-Y_UNIT_TEST(SessionWindowInRtmr) {
+Y_UNIT_TEST(SessionWindowInPq) {
     NYql::TAstParseResult res = SqlToYql(
         "SELECT * FROM plato.Input GROUP BY SessionWindow(ts, 10);",
-        10, TString(NYql::RtmrProviderName));
+        10, TString(NYql::PqProviderName));
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:54: Error: Streaming group by query must have a hopping window specification.\n");
 
     res = SqlToYql(R"(
             SELECT key, SUM(value) AS value FROM plato.Input
             GROUP BY key, HOP(subkey, "PT10S", "PT30S", "PT20S"), SessionWindow(ts, 10);
-    )", 10, TString(NYql::RtmrProviderName));
+    )", 10, TString(NYql::PqProviderName));
 
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:13: Error: SessionWindow is unsupported for streaming sources\n");

@@ -269,12 +269,14 @@ class StaleReplicaTest(ReplicationCase):
         self.assertEqual(inst2.state.per_pile, [S, S])
         self.assertIn("pull.refused", inst2.events.kinds())
 
-        # rejoin pushes to the returning pile, which jumps by more than one
-        self.assertTrue((await h.instances[0].admin_update([("pile2", NOTSYNC)])).ok)
-        await wait_until(lambda: inst2.state.generation >= 3, message="rejoin push")
-        pushes = [e for e in inst2.events.query(kind="commit") if e["via"] == "push"]
-        self.assertTrue(pushes)
-        self.assertEqual(pushes[0]["generation"], 3)
+        # Rejoin must recover through the push path here; an anti-entropy pull
+        # could otherwise install the same generation before that push arrives.
+        with mock.patch.object(inst2.policies, "anti_entropy", False):
+            self.assertTrue((await h.instances[0].admin_update([("pile2", NOTSYNC)])).ok)
+            await wait_until(lambda: inst2.state.generation >= 3, message="rejoin push")
+            pushes = [e for e in inst2.events.query(kind="commit") if e["via"] == "push"]
+            self.assertTrue(pushes)
+            self.assertEqual(pushes[0]["generation"], 3)
 
         # then the automatic _1 -> _2 -> SYNCHRONIZED chain
         await wait_until(lambda: h.gens() == [5, 5], message="chain finished")

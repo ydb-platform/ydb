@@ -184,6 +184,7 @@ class TestFollowerRegistration(unittest.TestCase):
             for role in before:
                 self.assertEqual(current[role][1]["NodeId"], before[role][1]["NodeId"])
                 self.assertEqual(current[role][1]["Generation"], before[role][1]["Generation"])
+                self.assertEqual(current[role][1]["ChangeTime"], before[role][1]["ChangeTime"])
             return html
 
         self.evidence["state_storage_after_recovery"] = self.wait(
@@ -207,6 +208,7 @@ class TestFollowerRegistration(unittest.TestCase):
         for role in before:
             self.assertEqual(after[role][1]["NodeId"], before[role][1]["NodeId"])
             self.assertEqual(after[role][1]["Generation"], before[role][1]["Generation"])
+            self.assertEqual(after[role][1]["ChangeTime"], before[role][1]["ChangeTime"])
 
         leader, follower = after["leader"][0], after["follower"][0]
         reader = self.session(follower)
@@ -221,6 +223,19 @@ class TestFollowerRegistration(unittest.TestCase):
             query, commit_tx=True, settings=settings,
         )
         self.assertEqual(warmup[0].rows[0].value, "committed")
+        # The first stale lookup may use the leader while the resolver refreshes
+        # its follower list. Let the normal 30-second follower pipe cache expire
+        # before warming it again, so pausing the leader tests follower access.
+        time.sleep(31)
+        warmup = reader.transaction(ydb.StaleReadOnly()).execute(
+            query, commit_tx=True, settings=settings,
+        )
+        self.assertEqual(warmup[0].rows[0].value, "committed")
+        current = self.incarnations(tablet_id)
+        for role in before:
+            for field in ("NodeId", "Generation", "ChangeTime"):
+                self.assertEqual(current[role][1][field], before[role][1][field])
+        self.evidence["before_leader_pause"] = {role: item[1] for role, item in current.items()}
         self.evidence["stale_read_before_pause"] = "committed"
         self.save_evidence()
 

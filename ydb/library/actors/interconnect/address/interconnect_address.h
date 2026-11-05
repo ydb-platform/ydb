@@ -26,6 +26,7 @@ namespace NInterconnect {
         ::sockaddr* SockAddr() noexcept;
         const ::sockaddr* SockAddr() const noexcept;
         ui16 GetPort() const noexcept;
+        bool IsLinkLocal() const noexcept;
         TString GetAddress() const;
         TString ToString() const;
 

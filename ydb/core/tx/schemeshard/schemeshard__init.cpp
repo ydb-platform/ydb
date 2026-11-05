@@ -4061,6 +4061,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                         txState.ShardStatuses[shardIdx] = TTxState::TShardStatus(success, error, bytes, rows);
                     }
+                } else if (txState.TxType == TTxState::TxDropReplication || txState.TxType == TTxState::TxDropReplicationCascade) {
+                    if (!extraData.empty()) {
+                        NKikimrSchemeOp::TDrop drop;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(drop, extraData));
+                        txState.ReplicationSourceCleanup = drop.GetReplicationSourceCleanup();
+                    }
                 } else if (txState.TxType == TTxState::TxForceDropSubDomain || txState.TxType == TTxState::TxForceDropExtSubDomain) {
                     forceDropOpIds.push_back(operationId);
                 } else if (txState.TxType == TTxState::TxAlterUserAttributes) {

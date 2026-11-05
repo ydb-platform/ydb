@@ -2105,7 +2105,6 @@ private:
 
         auto solomonState = MakeIntrusive<TSolomonState>(TypesCtx->StrictConfigValidation);
 
-        solomonState->SupportRtmrMode = false;
         solomonState->WriteThroughDqIntegration = true;
         solomonState->Types = TypesCtx.Get();
         solomonState->Gateway = NYql::CreateSolomonGateway(FederatedQuerySetup->SolomonGatewayConfig);

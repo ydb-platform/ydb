@@ -1,3 +1,5 @@
+## v3.27.0
+
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
 
 * Added `TGetClusterStateSettings::IncludePileConnectivity()` and `TGetClusterStateResult::GetPileConnectivity()` for optional bridge static-node connectivity reports.

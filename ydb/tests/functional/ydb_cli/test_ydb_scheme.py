@@ -3,11 +3,10 @@ import pytest
 
 import yatest
 
-from ydb.tests.functional.ydb_cli.ydb_cli_helpers import ydb_bin, set_ydb_cli_test_canondata_root
-from ydb.tests.library.fixtures import ydb_database_ctx
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import execute_ydb_cli_command, set_ydb_cli_test_canondata_root
 
 CLUSTER_CONFIG = dict(
-    extra_feature_flags=["enable_views", "enable_external_data_sources", "enable_relative_paths"],
+    extra_feature_flags=["enable_views", "enable_external_data_sources"],
     extra_grpc_services=["view"],
     query_service_config=dict(available_external_data_sources=["ObjectStorage"]),
 )
@@ -18,13 +17,6 @@ def canonical_result(output_result, tmp_path):
     with output_path.open("w") as f:
         f.write(output_result)
     return yatest.common.canonical_file(output_path, local=True, universal_lines=True)
-
-
-def execute_ydb_cli_command(node, database, args, stdin=None):
-    execution = yatest.common.execute(
-        [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}", "--database", database] + args, stdin=stdin
-    )
-    return execution.std_out.decode("utf-8")
 
 
 def create_view(session, view, query="SELECT 42"):
@@ -81,49 +73,6 @@ def alter_secret(session, secret_name, value):
         ALTER SECRET `{secret_name}` WITH ( value = '{value}' );
         """
     )
-
-
-@pytest.fixture(params=["mydb", "folder/mydb"], ids=["root", "nested"])
-def relative_database_paths(ydb_cluster, ydb_root, request):
-    with ydb_database_ctx(ydb_cluster, f"{ydb_root}/{request.param}") as database:
-        yield database, request.param
-
-
-def test_relative_database_select_from_table(ydb_cluster, relative_database_paths, tmp_path):
-    tenant_node = next(iter(ydb_cluster.slots.values()))
-    database, relative_database = relative_database_paths
-    table_path = f"{database}/relative_database_table"
-
-    # Set up with absolute paths; exercise CLI commands through the relative database.
-    for query in (
-        f"CREATE TABLE `{table_path}` (key Uint32, value Utf8, PRIMARY KEY (key));",
-        f'UPSERT INTO `{table_path}` (key, value) VALUES (1, "from-tenant-root");',
-    ):
-        execute_ydb_cli_command(tenant_node, database, ["sql", "-s", query])
-
-    output = execute_ydb_cli_command(
-        tenant_node,
-        relative_database,
-        ["sql", "-s", "SELECT key, value FROM relative_database_table;", "--format", "json-unicode-array"],
-    )
-    assert json.loads(output) == [{"key": 1, "value": "from-tenant-root"}]
-    for path in ([], ["."]):
-        listing = execute_ydb_cli_command(tenant_node, relative_database, ["scheme", "ls", "-1"] + path)
-        assert "relative_database_table" in listing
-    execute_ydb_cli_command(tenant_node, relative_database, ["scheme", "describe", "./relative_database_table"])
-    execute_ydb_cli_command(tenant_node, relative_database, ["scheme", "describe", "."])
-    execute_ydb_cli_command(tenant_node, relative_database, ["scheme", "permissions", "list", "."])
-    listing = execute_ydb_cli_command(tenant_node, relative_database, ["scheme", "ls", "/", "-1"])
-    assert database.split("/")[1] in listing
-    for name, path in (("database", []), ("table", ["--path", "./relative_database_table"])):
-        output_dir = tmp_path / name
-        execute_ydb_cli_command(tenant_node, relative_database, [
-            "tools", "dump", "--scheme-only", "--exclude", ".sys", "--output", str(output_dir),
-        ] + path)
-        assert (output_dir / "relative_database_table" / "scheme.pb").is_file()
-        execute_ydb_cli_command(tenant_node, relative_database, [
-            "tools", "restore", "--dry-run", "--path", ".", "--input", str(output_dir),
-        ])
 
 
 class TestSchemeDescribe:

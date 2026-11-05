@@ -62,7 +62,7 @@ struct TJsonParserBuffer: public TNonCopyable {
     bool Finished = false;
     TInstant CreationStartTime = TInstant::Now();
     TParserVector<ui64> Offsets = {};   // Offsets in topics (seqno).
-    TParserVector<ui32> MessageOffsets = {};   // Message positions in Values.
+    TParserVector<ui32> MessageOffsets = {};   // Message boundaries in Values; Finish() appends the final boundary.
 
     bool IsReady() const {
         return !Finished && NumberValues > 0;
@@ -74,7 +74,7 @@ struct TJsonParserBuffer: public TNonCopyable {
 
     void Reserve(size_t size, size_t numberValues) {
         Values.reserve(size + simdjson::SIMDJSON_PADDING);
-        MessageOffsets.reserve(numberValues);
+        MessageOffsets.reserve(numberValues + 1);
         Offsets.reserve(numberValues);
     }
 
@@ -109,6 +109,7 @@ struct TJsonParserBuffer: public TNonCopyable {
     std::pair<const char*, size_t> Finish() {
         Y_ENSURE(!Finished, "Cannot finish buffer twice");
         Finished = true;
+        MessageOffsets.emplace_back(Values.size());
         Values.resize(Values.size() + simdjson::SIMDJSON_PADDING, ' ');
         return { Values.data(), Values.size() - simdjson::SIMDJSON_PADDING };
     }
@@ -1062,13 +1063,12 @@ protected:
         auto [values, size] = Buffer.Finish();
         OutputOffsets.clear();
         ParsingFailedRowCount = 0;
-        // Keep the common path to one SIMD scan. Nothing is delivered to the
-        // consumer until the whole batch succeeds, so a failed attempt can be retried.
+
         if (Buffer.NumberValues == 1 || ParseDocuments(values, size, Buffer.Offsets.front(), true).IsFail()) {
             ClearParsedData();
             for (size_t messageId = 0; messageId < Buffer.NumberValues; ++messageId) {
                 const size_t begin = Buffer.MessageOffsets[messageId];
-                const size_t end = messageId + 1 < Buffer.NumberValues ? Buffer.MessageOffsets[messageId + 1] : size;
+                const size_t end = Buffer.MessageOffsets[messageId + 1];
                 if (auto status = ParseDocuments(values + begin, end - begin, Buffer.Offsets[messageId]); status.IsFail()) {
                     return status;
                 }
@@ -1142,7 +1142,7 @@ private:
         if (batch) {
             for (size_t messageId = 0; messageId < Buffer.NumberValues; ++messageId) {
                 const size_t begin = Buffer.MessageOffsets[messageId];
-                const size_t end = messageId + 1 < Buffer.NumberValues ? Buffer.MessageOffsets[messageId + 1] : size;
+                const size_t end = Buffer.MessageOffsets[messageId + 1];
                 if (!std::all_of(values + begin, values + end, isJsonWhitespace)) {
                     ++expectedMessages;
                 }
@@ -1184,7 +1184,7 @@ private:
                     ++messageId;
                 }
                 offset = Buffer.Offsets[messageId];
-                const size_t end = messageId + 1 < Buffer.NumberValues ? Buffer.MessageOffsets[messageId + 1] : size;
+                const size_t end = Buffer.MessageOffsets[messageId + 1];
                 // source() includes the closing brace/bracket; inspect it before
                 // consuming any fields. current_index() alone is insufficient:
                 // the first document's index may include leading whitespace.

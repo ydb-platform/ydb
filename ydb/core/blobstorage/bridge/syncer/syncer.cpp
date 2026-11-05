@@ -662,7 +662,8 @@ namespace NKikimr::NBridge {
             (SkipBlobsUpTo, state.SkipBlobsUpTo ? state.SkipBlobsUpTo->ToString() : "<none>"));
 
         // The size of a page is known only after it has come, so a page gets charged when the next one is requested. There
-        // is one such request at a time, so this can't let much through. The last page is left uncharged.
+        // is one such request at a time, so this can't let much through. Reading ends with a result having no items, and it
+        // is the only one left uncharged, unless the syncer gets stopped between pages.
         IssueQuery(toTargetGroup, std::make_unique<TEvBlobStorage::TEvAssimilate>(
             state.SkipBlocksUpTo, state.SkipBarriersUpTo, state.SkipBlobsUpTo,
             /*ignoreDecommitState=*/ true, /*reverse=*/ true),

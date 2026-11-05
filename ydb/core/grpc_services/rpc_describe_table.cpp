@@ -6,6 +6,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/sequenceproxy/public/events.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver.h>
 #include <ydb/core/kqp/executer_actor/shards_resolver/kqp_shards_resolver_events.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -32,6 +33,8 @@ class TDescribeTableRPC : public TRpcSchemeRequestActor<TDescribeTableRPC, TEvDe
     bool NeedResolveShards = false;
     //ShardId -> NodeId
     TMap<ui64, ui64> ShardNodes;
+    Ydb::Table::DescribeTableResult SequenceDescribeResult;
+    TSet<ui64> PendingSequenceColumns;
 
     static bool ShowPrivatePath(const TString& path) {
         if (AppData()->AllowPrivateTableDescribeForTest) {
@@ -83,6 +86,7 @@ private:
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(NKqp::NShardResolver::TEvShardsResolveStatus, Handle);
+            HFunc(NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult, Handle);
             default: TBase::StateWork(ev);
         }
     }
@@ -237,6 +241,35 @@ private:
                 FillReadReplicasSettings(describeTableResult, tableDescription);
                 FillMetricsSettings(describeTableResult, tableDescription);
 
+                if (GetProtoRequest()->include_set_val()
+                    && AppData()->FeatureFlags.GetEnableFulltextIndexReplication())
+                {
+                    for (int i = 0; i < describeTableResult.columns_size(); ++i) {
+                        const auto& column = describeTableResult.columns(i);
+                        if ((column.name() != NTableIndex::NFulltext::GenColumn
+                            && column.name() != NTableIndex::NFulltext::RowIdColumn) || !column.has_from_sequence())
+                        {
+                            continue;
+                        }
+                        for (const auto& sequence : tableDescription.GetSequences()) {
+                            if (sequence.GetName() != column.from_sequence().name()) {
+                                continue;
+                            }
+                            auto request = MakeHolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequence>(
+                                Request_->GetDatabaseName().GetOrElse(""), TPathId::FromProto(sequence.GetPathId()));
+                            if (Request_->GetInternalToken()) {
+                                request->UserToken = new NACLib::TUserToken(Request_->GetSerializedToken());
+                            }
+                            PendingSequenceColumns.insert(i);
+                            ctx.Send(NSequenceProxy::MakeSequenceProxyServiceID(), request.Release(), 0, i);
+                            break;
+                        }
+                    }
+                    if (!PendingSequenceColumns.empty()) {
+                        SequenceDescribeResult = std::move(describeTableResult);
+                        return;
+                    }
+                }
                 return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeTableResult, ctx);
             }
 
@@ -256,6 +289,23 @@ private:
             default: {
                 return Reply(Ydb::StatusIds::GENERIC_ERROR, ctx);
             }
+        }
+    }
+
+    void Handle(NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult::TPtr& ev, const TActorContext& ctx) {
+        if (!PendingSequenceColumns.erase(ev->Cookie)) {
+            return;
+        }
+        const auto& result = *ev->Get();
+        if (result.Status != Ydb::StatusIds::SUCCESS) {
+            Request_->RaiseIssues(result.Issues);
+            return Reply(result.Status, ctx);
+        }
+        auto* watermark = SequenceDescribeResult.mutable_columns(ev->Cookie)->mutable_from_sequence()->mutable_set_val();
+        watermark->set_next_value(result.NextValue);
+        watermark->set_next_used(result.NextUsed);
+        if (PendingSequenceColumns.empty()) {
+            ReplyWithResult(Ydb::StatusIds::SUCCESS, SequenceDescribeResult, ctx);
         }
     }
 

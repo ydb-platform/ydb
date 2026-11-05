@@ -42,6 +42,20 @@ struct TIndexColumns {
 
 inline constexpr const char* ImplTable = "indexImplTable";
 
+inline bool IsFulltextOrJsonIndex(NKikimrSchemeOp::EIndexType type) {
+    switch (type) {
+    case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+    case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+    case NKikimrSchemeOp::EIndexTypeGlobalJson:
+    case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+    case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+    case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+        return true;
+    default:
+        return false;
+    }
+}
+
 bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index, TString& explain);
 TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, const TTableColumns& table, const TIndexColumns& index);
 

@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "index_replication.h"
 #include "dst_schema_changer.h"
 
 #include <ydb/core/base/path.h>
@@ -60,6 +61,20 @@ bool TController::IsJoinedIndexBuild(const TBuild& build, const TRowVersion& ver
     return !IsCancelledIndexBuild(build)
         && build.GetPhase() != TBuild::FILLING
         && version >= TRowVersion::FromProto(build.GetJoinVersion());
+}
+
+TVector<std::pair<ui64, ui64>> TController::GetIndexBuildGroup(const std::pair<ui64, ui64>& key) const {
+    const auto& build = IndexBuilds.at(key);
+    if (!build.HasIndexGroupId()) {
+        return {key};
+    }
+    TVector<std::pair<ui64, ui64>> result;
+    for (const auto& [peerKey, peer] : IndexBuilds) {
+        if (peerKey.first == key.first && peer.GetIndexGroupId() == build.GetIndexGroupId()) {
+            result.push_back(peerKey);
+        }
+    }
+    return result;
 }
 
 void TController::SaveIndexBuild(NIceDb::TNiceDb& db, const std::pair<ui64, ui64>& key, const TBuild& build) {
@@ -359,7 +374,16 @@ class TController::TTxIndexBuild: public TTxBase {
                 continue;
             }
 
-            if (build.GetPhase() == TBuild::FILLING && heartbeat > maxVersion && !Self->AllocatedTxIds.empty()) {
+            if (build.GetPhase() == TBuild::FILLING && heartbeat > maxVersion
+                && !replication->GetConfig().GetConsistencySettings().HasGlobal())
+            {
+                build.SetPhase(TBuild::MAKING_READY);
+                Self->SaveIndexBuild(db, key, build);
+            }
+
+            if (build.GetPhase() == TBuild::FILLING && heartbeat > maxVersion && !Self->AllocatedTxIds.empty()
+                && replication->GetConfig().GetConsistencySettings().HasGlobal())
+            {
                 const auto interval = GetCommitInterval(*replication);
                 // Every already issued interval ends before or at C. Taking
                 // the next boundary after the last global interval also
@@ -480,6 +504,32 @@ void TController::StartIndexReady(const std::pair<ui64, ui64>& key, const TActor
     }
 
     const auto& build = IndexBuilds.at(key);
+    if (target->GetConfig()->IsSrcIndexTable() && build.GetPhase() != TBuild::CANCELLING) {
+        for (const auto* peer : replication->GetTargets()) {
+            if (!peer->GetConfig()->IsRowIdIndex() || replication->FindBaseTableTarget(*peer) != base) {
+                continue;
+            }
+            const auto dependency = IndexBuilds.find({key.first, peer->GetId()});
+            if (dependency != IndexBuilds.end() && dependency->second.GetPhase() != TBuild::READY) {
+                return;
+            }
+        }
+    }
+    if (build.HasIndexGroupId()) {
+        const auto leader = std::make_pair(key.first, build.GetIndexGroupId());
+        if (leader != key) {
+            return StartIndexReady(leader, ctx);
+        }
+        for (const auto& peerKey : GetIndexBuildGroup(key)) {
+            const auto& peer = IndexBuilds.at(peerKey);
+            const auto* peerTarget = replication->FindTarget(peerKey.second);
+            if (!peerTarget || peer.GetPhase() != build.GetPhase()
+                || (build.GetPhase() == TBuild::CANCELLING && !peerTarget->GetWorkers().empty()))
+            {
+                return;
+            }
+        }
+    }
     const bool cancelling = build.GetPhase() == TBuild::CANCELLING;
     const bool finishing = replication->GetDesiredState() == TReplication::EState::Done;
     const auto state = replication->GetState();
@@ -498,8 +548,8 @@ void TController::StartIndexReady(const std::pair<ui64, ui64>& key, const TActor
 
     const TSchemaChangeDstAlterSettings settings{
         .TxId = build.GetReadyTxId(),
-        .GlobalConsistency = true,
-        .IndexName = SplitPath(target->GetSrcPath()).back(),
+        .GlobalConsistency = replication->GetConfig().GetConsistencySettings().HasGlobal(),
+        .IndexName = build.HasIndexName() ? build.GetIndexName() : SplitPath(target->GetSrcPath()).back(),
         .SnapshotTxId = build.GetSnapshotTxId(),
         .CancelIndex = cancelling,
     };
@@ -587,6 +637,31 @@ public:
                     }
                 } else {
                     build.SetPhase(TBuild::READY);
+                }
+                for (const auto& peerKey : Self->GetIndexBuildGroup(key)) {
+                    if (peerKey == key) {
+                        continue;
+                    }
+                    auto& peer = Self->IndexBuilds.at(peerKey);
+                    peer.SetPhase(build.GetPhase());
+                    if (build.GetPhase() == TBuild::CANCELLED) {
+                        peer.ClearAssignments();
+                        auto* peerTarget = Replication->FindTarget(peerKey.second);
+                        peerTarget->SetDstPathId({});
+                        db.Table<Schema::Targets>().Key(peerKey.first, peerKey.second).Update(
+                            NIceDb::TUpdate<Schema::Targets::DstPathOwnerId>(InvalidOwnerId),
+                            NIceDb::TUpdate<Schema::Targets::DstPathLocalId>(InvalidLocalPathId));
+                        for (auto progress = Self->IndexBuildProgress.begin(); progress != Self->IndexBuildProgress.end();) {
+                            const auto& id = progress->first;
+                            if (id.ReplicationId() == peerKey.first && id.TargetId() == peerKey.second) {
+                                db.Table<Schema::IndexBuildWorkers>().Key(peerKey.first, peerKey.second, id.WorkerId()).Delete();
+                                Self->IndexBuildProgress.erase(progress++);
+                            } else {
+                                ++progress;
+                            }
+                        }
+                    }
+                    Self->SaveIndexBuild(db, peerKey, peer);
                 }
             } else {
                 target->SetDstState(TReplication::EDstState::Error);

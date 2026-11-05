@@ -490,8 +490,9 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
 
     const auto& config = replication->GetConfig();
     const auto& consistency = config.GetConsistencySettings();
-    const auto resolvedTimestamps = consistency.HasGlobal()
-        ? std::make_optional(TDuration::MilliSeconds(consistency.GetGlobal().GetCommitIntervalMilliSeconds()))
+    const auto resolvedTimestamps = consistency.HasGlobal() || target->IsIndexBuild()
+        ? std::make_optional(TDuration::MilliSeconds(consistency.HasGlobal()
+            ? consistency.GetGlobal().GetCommitIntervalMilliSeconds() : 1000))
         : std::nullopt;
     const bool needCreate = !config.HasTransferSpecific() || !config.GetTransferSpecific().GetTarget().HasConsumerName();
     const bool supportsTopicAutopartitioning = !consistency.HasGlobal() && AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication();

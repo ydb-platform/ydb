@@ -87,6 +87,7 @@ END()
 RECURSE_FOR_TESTS(
     ut_assign_tx_id
     ut_dst_creator
+    ut_fulltext_replication
     ut_replication
     ut_schema_change
     ut_stream_creator

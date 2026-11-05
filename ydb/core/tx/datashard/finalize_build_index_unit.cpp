@@ -77,25 +77,30 @@ public:
 
         ui64 step = params.GetSnapshotStep();
         ui64 txId = params.GetSnapshotTxId();
-        Y_ENSURE(step != 0);
+        Y_ENSURE(step != 0 || tableInfo->ReplicationConfig.Mode
+            != NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
 
         const ui64 buildIndexId = params.GetBuildIndexId();
-        if (const auto* record = DataShard.GetScanManager().Get(buildIndexId)) {
-            for (auto scanId : record->ScanIds) {
-                DataShard.CancelScan(tableInfo->LocalTid, scanId);
+        if (buildIndexId) {
+            if (const auto* record = DataShard.GetScanManager().Get(buildIndexId)) {
+                for (auto scanId : record->ScanIds) {
+                    DataShard.CancelScan(tableInfo->LocalTid, scanId);
+                }
+                DataShard.GetScanManager().Drop(buildIndexId);
             }
-            DataShard.GetScanManager().Drop(buildIndexId);
+
+            NIceDb::TNiceDb db(txc.DB);
+            const auto& scans = DataShard.GetBuildIndexScanManager().GetScans();
+            if (const auto* info = scans.FindPtr(buildIndexId)) {
+                DataShard.GetBuildIndexScanManager().PersistRemove(db, buildIndexId, info->SeqNoGeneration, info->SeqNoRound);
+            }
+            DataShard.ClearPendingBuildIndexFinalResponse(buildIndexId);
         }
 
-        NIceDb::TNiceDb db(txc.DB);
-        const auto& scans = DataShard.GetBuildIndexScanManager().GetScans();
-        if (const auto* info = scans.FindPtr(buildIndexId)) {
-            DataShard.GetBuildIndexScanManager().PersistRemove(db, buildIndexId, info->SeqNoGeneration, info->SeqNoRound);
+        if (step) {
+            const TSnapshotKey key(pathId, step, txId);
+            DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
         }
-        DataShard.ClearPendingBuildIndexFinalResponse(buildIndexId);
-
-        const TSnapshotKey key(pathId, step, txId);
-        DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());

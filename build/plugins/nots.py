@@ -159,12 +159,6 @@ def _build_cmd_input_paths(paths: list[str] | tuple[str], hide=False, disable_in
     return _build_directives([hide_part, disable_ip_part, input_part], paths)
 
 
-def _build_cmd_output_paths(paths: list[str] | tuple[str], hide=False):
-    hide_part = "hide" if hide else ""
-
-    return _build_directives([hide_part, "output"], paths)
-
-
 def _arc_path(unit: ymake.Unit, path: str) -> str:
     return unit.resolve(unit.resolve_arc_path(path))
 
@@ -906,41 +900,19 @@ def _NODE_MODULES_CONFIGURE(unit: ymake.Unit) -> None:
         if pj.get_use_prebuilder():
             _setup_prebuilder_resource(unit)
 
-            # YATOOL_PREBUILDER_0_7_0_RESOURCE_GLOBAL
-            prebuilder_major = unit.get("YATOOL_PREBUILDER-ROOT-VAR-NAME").split("_")[2]
-            logger.info(f"Detected prebuilder {COLORS.green}{prebuilder_major}.x.x{COLORS.reset}")
+            from lib.nots.package_manager.common_config import load_common_config
 
-            if prebuilder_major == "0":
-                # TODO: FBP-1408
-                is_valid, invalid_keys = lf.validate_has_addons_flags()
+            _, _, settings = load_common_config(pj, pm.sources_root, include_settings=True)
+            is_valid, validation_messages = pj.validate_prebuilds(settings.get("overrides", {}))
 
-                if not is_valid:
-                    ymake.report_configure_error(
-                        "Project is configured to use @yatool/prebuilder. \n"
-                        + "Some packages in the pnpm-lock.yaml are misconfigured.\n"
-                        + f"Run {COLORS.green}`ya tool nots update-lockfile`{COLORS.reset} to fix lockfile.\n"
-                        + "All packages with `requiresBuild:true` have to be marked with `hasAddons:true/false`.\n"
-                        + "Misconfigured keys: \n"
-                        + "  - "
-                        + "\n  - ".join(invalid_keys)
-                    )
-            else:
-                requires_build_packages = lf.get_requires_build_packages()
-                from lib.nots.package_manager.common_config import load_common_config
-
-                _, _, settings = load_common_config(pj, pm.sources_root, include_settings=True)
-                is_valid, validation_messages = pj.validate_prebuilds(
-                    requires_build_packages, settings.get("overrides", {})
+            if not is_valid:
+                ymake.report_configure_error(
+                    "Project is configured to use @yatool/prebuilder. \n"
+                    + "Some packages are misconfigured.\n"
+                    + f"Run {COLORS.green}ya tool nots update-lockfile{COLORS.reset} to fix pnpm-lock.yaml and package.json.\n"
+                    + "Validation details: \n"
+                    + "\n".join(validation_messages)
                 )
-
-                if not is_valid:
-                    ymake.report_configure_error(
-                        "Project is configured to use @yatool/prebuilder. \n"
-                        + "Some packages are misconfigured.\n"
-                        + f"Run {COLORS.green}`ya tool nots update-lockfile`{COLORS.reset} to fix pnpm-lock.yaml and package.json.\n"
-                        + "Validation details: \n"
-                        + "\n".join(validation_messages)
-                    )
 
 
 # noinspection PyUnusedLocal

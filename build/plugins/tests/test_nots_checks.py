@@ -7,6 +7,29 @@ import pytest
 from nots import _library_for_paths, _parse_ts_checks, _ts_check_size
 
 
+@pytest.mark.parametrize(
+    ("for_mod", "expected_error"),
+    [
+        ("devtools/dummy_arcadia/typescript/simple_jest", None),
+        (".", "Tests should be for parent module"),
+        ("./", "Tests should be for parent module"),
+        ("../simple_jest", "You are using a relative path for a module"),
+    ],
+)
+def test_ts_test_for_validates_target_path(monkeypatch, for_mod, expected_error):
+    errors = []
+    unit = SimpleNamespace(get=lambda name: "no" if name == "_ALLOW_REL_FOR_PATH" else "")
+    monkeypatch.setattr(nots.ymake, "report_configure_error", errors.append, raising=False)
+
+    nots._VALIDATE_TS_TEST_FOR_ARGS(unit, for_mod, "${ARCADIA_ROOT}")
+
+    if expected_error:
+        assert len(errors) == 1
+        assert expected_error in errors[0]
+    else:
+        assert errors == []
+
+
 def test_parse_ts_checks_preserves_command_with_spaces_and_multiple_checks():
     raw = (
         "$_TS_CHECK_LIST~~~nots:lint lint no "

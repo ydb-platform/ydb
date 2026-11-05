@@ -93,8 +93,7 @@ Table of comparison of Java types descriptions with [{{ ydb-short-name }} types]
 | `bool`, `Boolean`                                                              | `Bool`                      |
 | `String`, enum with annotation `@Enumerated(EnumType.STRING)`                  | `Text` (synonym `Utf8`)     |
 | `java.time.LocalDate`                                                          | `Date`                      |
-| `java.math.BigDecimal`                                                       | `Decimal(22,9)`             |
-| `java.math.BigInteger`                                                       | `Decimal(22,0)` (Hibernate 6 and 7), `Decimal(22,9)` (Hibernate 5) |
+| `java.math.BigDecimal`, `java.math.BigInteger`                                 | `Decimal(22,9)`             |
 | `double`, `Double`                                                             | `Double`                    |
 | `float`, `Float`                                                               | `Float`                     |
 | `int`, `java.lang.Integer`                                                     | `Int32`                     |
@@ -252,77 +251,7 @@ For example, for `@OneToMany` generates a SQL script:
 
 {% endlist %}
 
-## Native {{ ydb-short-name }} types {#native-types}
-
-The table above describes the default mappings. To select native date and interval types explicitly, use the `@JdbcTypeCode` annotation from `org.hibernate.annotations` with constants from `tech.ydb.hibernate.dialect.code.YdbJdbcCode`. Decimal precision and scale are configured separately with `@Column`.
-
-The following examples target Hibernate 6 and 7. Extended date and interval support requires `hibernate-ydb-dialect` version 1.5.1 or later for Hibernate 6, or version 1.7.0 or later for Hibernate 7, with [JDBC driver](../../reference/languages-and-apis/jdbc-driver/maven.md) version 2.3.11 or later. Arbitrary Decimal parameters also require the support described [below](#decimal). The separate Hibernate 5 dialect does not register these codes, and the Hibernate 5 API does not provide `@JdbcTypeCode`.
-
-### Extended date and interval types {#extended-datetime}
-
-To store dates outside the range of `Date`, `Datetime`, and `Timestamp`, or extended intervals, select the corresponding JDBC code:
-
-| Java type | Annotation | {{ ydb-short-name }} type |
-|---|---|---|
-| `java.time.LocalDate` | `@JdbcTypeCode(YdbJdbcCode.DATE_32)` | `Date32` |
-| `java.time.LocalDateTime` | `@JdbcTypeCode(YdbJdbcCode.DATETIME_64)` | `Datetime64` |
-| `java.time.Instant` | `@JdbcTypeCode(YdbJdbcCode.TIMESTAMP_64)` | `Timestamp64` |
-| `java.time.Duration` | `@JdbcTypeCode(YdbJdbcCode.INTERVAL_64)` | `Interval64` |
-
-For example, add the following fields to an entity class:
-
-```java
-@JdbcTypeCode(YdbJdbcCode.DATE_32)
-private LocalDate eventDate;
-
-@JdbcTypeCode(YdbJdbcCode.DATETIME_64)
-private LocalDateTime eventDatetime;
-
-@JdbcTypeCode(YdbJdbcCode.TIMESTAMP_64)
-private Instant eventTimestamp;
-
-@JdbcTypeCode(YdbJdbcCode.INTERVAL_64)
-private Duration eventInterval;
-```
-
-The annotation selects the type for both schema generation and JDBC parameter binding. For example, `eventDate` can store `LocalDate.of(1960, 1, 1)`, which falls outside the `Date` range.
-
-Using only `@Column(columnDefinition = "Date32")` changes the generated column definition without selecting the required parameter binding. Use `@JdbcTypeCode` for existing tables created with Liquibase or Flyway as well, matching the field's type to the column's type.
-
-The extended range does not increase precision: `Datetime64` stores seconds, while `Timestamp64` and `Interval64` store microseconds. `LocalDateTime` values are interpreted in UTC. For value ranges, see [Date and time](../../yql/reference/types/primitive.md#datetime).
-
-### Decimal precision and scale {#decimal}
-
-`java.math.BigDecimal` maps to `Decimal(22,9)` by default, while `java.math.BigInteger` maps to `Decimal(22,0)`. To select different parameters, use the `@Column` annotation from `jakarta.persistence`:
-
-```java
-@Column(precision = 35, scale = 10)
-private BigDecimal amount;
-```
-
-Here, `BigDecimal` is `java.math.BigDecimal`. The annotation selects `Decimal(35,10)` for both schema generation and JDBC parameter binding. Valid parameters are `1 ≤ precision ≤ 35` and `0 ≤ scale ≤ precision`; see [Primitive data types](../../yql/reference/types/primitive.md#numeric).
-
-To select the type automatically from `precision` and `scale`, use `@Column` without `@JdbcTypeCode` on the same field. An explicit JDBC code, including `SqlTypes.DECIMAL` or `SqlTypes.NUMERIC`, bypasses this mechanism.
-
-{% note info %}
-
-Configuring JDBC binding through `@Column(precision = ..., scale = ...)` requires a Hibernate dialect build that includes [parameterized Decimal support](https://github.com/ydb-platform/ydb-java-dialects/pull/274). In earlier releases, this annotation changes only the generated column definition, while standard JDBC binding of `BigDecimal` continues to use `Decimal(22,9)`.
-
-{% endnote %}
-
-Using only `@Column(columnDefinition = "Decimal(35,10)")` does not set the precision and scale of JDBC parameters. If the column definition is specified explicitly, add `precision = 35` and `scale = 10` to the same annotation.
-
-For an existing table created with [Liquibase](../migration/liquibase.md#decimal) or Flyway, set `@Column` precision and scale to match the physical column, even when Hibernate does not manage the schema. For example, a Liquibase column declared with `type="Decimal(35,10)"` corresponds to the `amount` field shown above.
-
-The build with parameterized Decimal support removes the previous Decimal constants from `YdbJdbcCode`. When upgrading, replace `@JdbcTypeCode(YdbJdbcCode.DECIMAL_p_s)` with `@Column(precision = p, scale = s)`, preserving the column's precision and scale. For example, update an entity field mapped to `Decimal(31,9)` as follows:
-
-```diff
--@JdbcTypeCode(YdbJdbcCode.DECIMAL_31_9)
-+@Column(precision = 31, scale = 9)
- private BigDecimal amount;
-```
-
-## Example with Spring Data JPA
+### Example with Spring Data JPA
 
 Configure [Spring Data JPA](https://spring.io/projects/spring-data-jpa/) with Hibernate to use custom {{ ydb-short-name }} dialect by updating your `application.properties`:
 

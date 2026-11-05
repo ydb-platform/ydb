@@ -16,15 +16,10 @@ class TestCredentialsRotation:
             destination = cleanup.enter_context(database("destination", replication_log_level=8))
             cleanup.callback(cleanup_objects, source, destination, kind)
             identities = create_replication(source, destination, kind)
-            try:
-                # A settings change is rejected while Running; recovery below
-                # changes only the value of the original secret.
+            # A settings change is rejected while Running; recovery below
+            # changes only the value of the original secret.
+            with pytest.raises(ydb.BadRequest):
                 destination.query(f'ALTER ASYNC REPLICATION r SET ({secret_option(kind)}="unused-secret");')
-            except ydb.Error as error:
-                diagnostic = destination.redact(error)
-                assert all(word in diagnostic for word in ("Running", "STANDBY", "PAUSED")), diagnostic
-            else:
-                pytest.fail("Running replication accepted a settings change")
             assert destination.identities() == identities
             # Legacy cold boot exercises the service; completed schema pause
             # exercises registrar rejection before a fresh worker can start.

@@ -641,15 +641,13 @@ struct TEvBlobStorage {
         EvIncrHugeReadLogResult,
         EvIncrHugeScanResult,
 
-<<<<<<< HEAD
-=======
-        // Device overestimation sample transport (DDisk/PersistentBuffer -> PDisk)
-        EvDeviceOverestimationSamples,
+        // Skipped during backport
+        // // Device overestimation sample transport (DDisk/PersistentBuffer -> PDisk)
+        // EvDeviceOverestimationSamples,
 
-        EvVRestorePart,
+        EvVRestorePart = EvIncrHugeScanResult + 2,
         EvVRestorePartResult,
 
->>>>>>> fd1d742399d (Impl EvVRestorePart with /restore_part http handle (#57072))
         EvEnd
     };
 

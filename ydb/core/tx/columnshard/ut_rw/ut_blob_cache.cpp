@@ -109,8 +109,11 @@ Y_UNIT_TEST_SUITE(TBlobCache) {
         auto collector = std::make_shared<NScanStats::TCollector>(1);
         collector->BindScanId("cache-hit");
         auto parent = collector->Start(NScanStats::TStep::FetchColumns, "FETCH", "price");
-        auto result =
-            fixture.ReadRange(MakeRange(1, 100, 10, 20), true, { parent, NKqpProto::TColumnShardStepDetails::TStorageRead::data, collector });
+        NOlap::TReadStatsContext readStats;
+        readStats.Parent = parent;
+        readStats.DataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::data;
+        readStats.Collector = collector;
+        auto result = fixture.ReadRange(MakeRange(1, 100, 10, 20), true, std::move(readStats));
         UNIT_ASSERT(result->Get()->FromCache);
         parent->Finish();
         const auto report = collector->Drain(true);
@@ -137,8 +140,12 @@ Y_UNIT_TEST_SUITE(TBlobCache) {
             collectors[i] = std::make_shared<NScanStats::TCollector>(1);
             collectors[i]->BindScanId(ToString(i));
             parents[i] = collectors[i]->Start(NScanStats::TStep::FetchColumns, "FETCH", "price");
-            auto event = new TEvBlobCache::TEvReadBlobRange(range, TReadBlobRangeOptions{ .CacheAfterRead = false, .IsBackgroud = false },
-                { parents[i], NKqpProto::TColumnShardStepDetails::TStorageRead::data, collectors[i] });
+            NOlap::TReadStatsContext readStats;
+            readStats.Parent = parents[i];
+            readStats.DataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::data;
+            readStats.Collector = collectors[i];
+            auto event = new TEvBlobCache::TEvReadBlobRange(
+                range, TReadBlobRangeOptions{ .CacheAfterRead = false, .IsBackgroud = false }, std::move(readStats));
             fixture.Runtime.Send(new IEventHandle(fixture.ActorId, fixture.Sender, event), 0, true);
             fixture.Runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         }
@@ -190,8 +197,12 @@ Y_UNIT_TEST_SUITE(TBlobCache) {
         std::shared_ptr<NScanStats::TOperation> parents[2];
         for (ui32 i = 0; i < 2; ++i) {
             parents[i] = collector->Start(NScanStats::TStep::FetchColumns, "FETCH", "price");
-            auto event = new TEvBlobCache::TEvReadBlobRange(range, TReadBlobRangeOptions{ .CacheAfterRead = true, .IsBackgroud = false },
-                { parents[i], NKqpProto::TColumnShardStepDetails::TStorageRead::data, collector });
+            NOlap::TReadStatsContext readStats;
+            readStats.Parent = parents[i];
+            readStats.DataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::data;
+            readStats.Collector = collector;
+            auto event = new TEvBlobCache::TEvReadBlobRange(
+                range, TReadBlobRangeOptions{ .CacheAfterRead = true, .IsBackgroud = false }, std::move(readStats));
             fixture.Runtime.Send(new IEventHandle(fixture.ActorId, fixture.Sender, event), 0, true);
             fixture.Runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         }
@@ -222,8 +233,12 @@ Y_UNIT_TEST_SUITE(TBlobCache) {
         auto collector = std::make_shared<NScanStats::TCollector>(1);
         collector->BindScanId("failure");
         auto parent = collector->Start(NScanStats::TStep::FetchColumns, "FETCH", "price");
-        auto event = new TEvBlobCache::TEvReadBlobRange(range, TReadBlobRangeOptions{ .CacheAfterRead = false, .IsBackgroud = false },
-            { parent, NKqpProto::TColumnShardStepDetails::TStorageRead::data, collector });
+        NOlap::TReadStatsContext readStats;
+        readStats.Parent = parent;
+        readStats.DataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::data;
+        readStats.Collector = collector;
+        auto event = new TEvBlobCache::TEvReadBlobRange(
+            range, TReadBlobRangeOptions{ .CacheAfterRead = false, .IsBackgroud = false }, std::move(readStats));
         fixture.Runtime.Send(new IEventHandle(fixture.ActorId, fixture.Sender, event), 0, true);
         fixture.Runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         auto* reply = new TEvBlobStorage::TEvGetResult(NKikimrProto::ERROR, 1, 0u);

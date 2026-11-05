@@ -7,22 +7,19 @@
 
 namespace NKikimr {
 
-// Derived mirror-3-dc group states. The group state is determined by the failrealm
-// states and their copy guarantees. The administrator selects I/X per realm.
-// I = Include, X = Exclude: ADMINISTRATIVE states selected by the administrator.
-// N0/N1/N2, F and R are INTERNAL states: NoFailure with a minimum copy count,
-// Failure DC, and Recovery respectively. N0 does not mean that the realm is empty.
-// N1/N2 mean at least one/two copies of every confirmed blob in that failrealm.
+// Mirror-3-dc group state diagram. The group state is authoritative.
+// Realm roles: I = Included, X = Excluded, R = Recovering.
+// Copy guarantees and pending progress are represented by the group state and D/W/E.
 // E = Layout Ensurance: guaranteed layouts for confirmed blobs.
 // D = Layout Durability: background replication target.
 // W = Write Layout: layouts sufficient to acknowledge a new write.
 // OR separates alternative layouts; + combines copy counts in distinct failrealms.
-// Each box contains internal states, the administrative I/X mask, D, W and E.
+// Each box contains realm roles and D, W and E.
 // Columns describe logical roles; transitions retain physical failrealm identities.
 //
 //     +---------------------------------+
 // +-->|              NORMAL             |
-// |   | N0/N0/N0                  I/I/I |------------------------------+
+// |   | I/I/I                           |------------------------------+
 // |   | D: 1+1+1                        |                              |
 // |   | W: 1+1+1 OR 2+2                 |                              |
 // |   | E: 1+1+1 OR 2+2                 |                              |
@@ -40,7 +37,7 @@ namespace NKikimr {
 // |                                                                    v       v                                                                                               |
 // |   +---------------------------------+             +----------------+-------+--------+             +---------------------------------+             +------------------------+--------+
 // +<--|           DC_RECOVERY           |<----------->|            DC_FAILURE           |------------>|         DC_SOLO_DISASTER        |<----------->|         DC_SOLO_RECOVERY        |
-// |   | N0/N0/R                   I/I/I |             | N0/N0/F                   I/I/X |             | N0/F/F                    I/X/X |             | N0/R/F                    I/I/X |
+// |   | I/I/R                           |             | I/I/X                           |             | I/X/X                           |             | I/R/X                           |
 // |   | D: 1+1+1                        |             | D: 1+1                          |             | D: 1                            |             | D: 1+1                          |
 // |   | W: 1+1+1 OR 2+2                 |             | W: 2+2                          |             | W: 2                            |             | W: 2+2                          |
 // |   | E: 1+1 OR 2                     |             | E: 1+1 OR 2                     |------+      | E: 0                            |             | E: 0                            |
@@ -61,7 +58,7 @@ namespace NKikimr {
 // |                                                                    v       v                               v       v                                               v       |
 // |   +---------------------------------+             +----------------+-------+--------+             +--------+-------+----------------+             +----------------+-------+--------+
 // +<--|         DC_RECOVERY_INV1        |<----------->|         DC_FAILURE_INV1         |------------>|           DC_SOLO_INV1          |<----------->|      DC_SOLO_RECOVERY_INV1      |
-//     | N1/N1/R                   I/I/I |             | N1/N1/F                   I/I/X |             | N1/F/F                    I/X/X |             | N1/R/F                    I/I/X |
+//     | I/I/R                           |             | I/I/X                           |             | I/X/X                           |             | I/R/X                           |
 //     | D: 1+1+1                        |<-----+      | D: 2+2                          |             | D: 2                            |             | D: 1+1                          |
 //     | W: 1+1+1 OR 2+2                 |      |      | W: 2+2                          |             | W: 2                            |             | W: 2+2                          |
 //     | E: 1+1                          |      |      | E: 1+1                          |------+      | E: 1                            |             | E: 1                            |
@@ -82,18 +79,17 @@ namespace NKikimr {
 //                                              |                       v                                       v       v                                                       |
 //                                              |      +----------------+----------------+             +--------+-------+----------------+             +------------------------+--------+
 //                                              +------|         DC_FAILURE_INV2         |------------>|           DC_SOLO_INV2          |<----------->|      DC_SOLO_RECOVERY_INV2      |
-//                                                     | N2/N2/F                   I/I/X |             | N2/F/F                    I/X/X |             | N2/R/F                    I/I/X |
+//                                                     | I/I/X                           |             | I/X/X                           |             | I/R/X                           |
 //                                                     | D: 2+2                          |             | D: 2                            |             | D: 1+1                          |
 //                                                     | W: 2+2                          |             | W: 2                            |             | W: 2+2                          |
 //                                                     | E: 2+2                          |             | E: 2                            |             | E: 2                            |
 //                                                     +---------------------------------+             +---------------------------------+             +---------------------------------+
 //
-//     ADMIN: I/I/I                                    ADMIN: I/I/X                                    ADMIN: I/X/X                                    ADMIN: I/I/X
 //
 // + marks turns/junctions; = is a crossing WITHOUT a connection.
 // Optional (opt) transitions require the target guarantee in the selected surviving realm
 // before completing the transition.
-// Internal progress may change N/F/R, D and E without changing administrative I/X.
+// Internal progress may change I/X/R, D and E without an administrator action.
 // A transition arrow does not itself replicate data; target guarantees must be established.
 //
 enum class EMirror3dcGroupState {

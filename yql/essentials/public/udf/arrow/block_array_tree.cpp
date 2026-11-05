@@ -18,18 +18,18 @@ struct TBlockArrayTreeState {
     TVector<Ptr> Children;
 };
 
-TBlockArrayTreeState MakeTreeStateImpl(const TBlockArrayTree& tree, std::shared_ptr<arrow::ArrayData> emptyPayload, arrow::MemoryPool* pool) {
+TBlockArrayTreeState MakeTreeStateImpl(const TBlockArrayTree& tree, std::shared_ptr<arrow::ArrayData> emptyPayload) {
     TBlockArrayTreeState state;
     Y_ENSURE(tree.Children.size() == emptyPayload->child_data.size());
     for (size_t i = 0; i < tree.Children.size(); ++i) {
-        state.Children.push_back(MakeTreeStateImpl(*tree.Children[i], emptyPayload->child_data[i], pool));
+        state.Children.push_back(MakeTreeStateImpl(*tree.Children[i], emptyPayload->child_data[i]));
     }
-    state.EmptyPayloadSlice = emptyPayload;
+    state.EmptyPayloadSlice = std::move(emptyPayload);
     return state;
 }
 
-TBlockArrayTreeState MakeTreeState(const TBlockArrayTree& tree, arrow::MemoryPool* pool) {
-    return MakeTreeStateImpl(tree, MakeEmptyArray(tree.Payload.front()->type, pool), pool);
+TBlockArrayTreeState MakeTreeState(const TBlockArrayTree& tree, const std::shared_ptr<arrow::ArrayData>& emptyPayload) {
+    return MakeTreeStateImpl(tree, emptyPayload);
 }
 
 size_t CalcSliceSize(const TBlockArrayTree& tree, TBlockArrayTreeState& state);
@@ -164,7 +164,11 @@ std::shared_ptr<arrow::ArrayData> Slice(
 } // namespace
 
 arrow::Datum ToChunkedArray(TBlockArrayTree& tree, arrow::MemoryPool* pool) {
-    auto state = MakeTreeState(tree, pool);
+    return ToChunkedArray(tree, MakeEmptyArray(tree.Payload.front()->type, pool));
+}
+
+arrow::Datum ToChunkedArray(TBlockArrayTree& tree, const std::shared_ptr<arrow::ArrayData>& emptyPayload) {
+    auto state = MakeTreeState(tree, emptyPayload);
     TVector<std::shared_ptr<arrow::ArrayData>> chunks;
     while (size_t size = CalcSliceSize(tree, state)) {
         chunks.push_back(Slice(tree, state, size));

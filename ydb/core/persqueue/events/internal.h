@@ -254,7 +254,11 @@ struct TEvPQ {
         EvResetOffsetResponse,
         EvReplicationData,
         EvReplicationDataAck,
+<<<<<<< HEAD
 >>>>>>> 805b685e01e (LOGBROKER-10371 Add consumer offsets mirroring (#57493))
+=======
+        EvPersistDone,
+>>>>>>> 3ef01186b99 (Move end offset & start offset to mirrored offset (#58014))
         EvEnd,
     };
 
@@ -1362,6 +1366,14 @@ struct TEvPQ {
     struct TEvReplicationData : public TEventLocal<TEvReplicationData, EvReplicationData> {
         THashMap<TString, ui64> OffsetsByConsumers;
         TMaybe<ui64> MirroredOffset;
+    };
+
+    struct TEvPersistDone : public TEventLocal<TEvPersistDone, EvPersistDone> {
+        explicit TEvPersistDone(ui64 endOffset)
+            : EndOffset(endOffset)
+        {}
+
+        ui64 EndOffset;
     };
 
     struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {

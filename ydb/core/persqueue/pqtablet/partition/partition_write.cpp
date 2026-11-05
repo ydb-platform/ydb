@@ -508,6 +508,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     OnProcessTxsAndUserActsWriteComplete(ctx);
     CompleteReplicationDataWrite(ctx);
     HandleWriteResponse(ctx);
+    NotifyMirrorerPersistDone();
     ProcessTxsAndUserActs(ctx);
     TryRunCompaction();
 

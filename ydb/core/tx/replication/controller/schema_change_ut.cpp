@@ -4770,6 +4770,73 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
             true);
     }
 
+    Y_UNIT_TEST_TWIN(DropCascadeWithDestinationCdc, GlobalConsistency) {
+        TTestEnv env;
+        CreateSourceTable(env, "replica1");
+        auto client = CreateTableClient(env);
+        auto session = CreateTableSession(env, client);
+        const auto cdc = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/replica1` ADD CHANGEFEED restored_cdc
+            WITH (FORMAT = "JSON", MODE = "UPDATES");
+        )").GetValueSync();
+        UNIT_ASSERT_C(cdc.IsSuccess(), cdc.GetIssues().ToString());
+
+        const auto info = StartReplication(
+            env, 1, "root@builtin", GlobalConsistency, false,
+            NKikimrSchemeOp::EIndexTypeGlobal, false, false);
+        WaitForPaused(env, info);
+        UNIT_ASSERT_C(WaitFor([&] {
+            return SourceStreamsReady(env, info, 1);
+        }), "Source stream setup did not finish before resuming replication");
+
+        const auto resumed = session.ExecuteSchemeQuery(R"(
+            ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = "STANDBY");
+        )").GetValueSync();
+        UNIT_ASSERT_C(resumed.IsSuccess(), resumed.GetIssues().ToString());
+
+        const auto write = session.ExecuteDataQuery(
+            "UPSERT INTO `/Root/table1` (key, value) VALUES (1, 'delivered');",
+            NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
+        UNIT_ASSERT_C(WaitFor([&] {
+            const auto read = session.ExecuteDataQuery(
+                "SELECT key FROM `/Root/replica1` WHERE key = 1 AND value = 'delivered';",
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            if (read.GetStatus() == NYdb::EStatus::SCHEME_ERROR || read.GetStatus() == NYdb::EStatus::ABORTED) {
+                return false;
+            }
+            UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
+            return read.GetResultSet(0).RowsCount() == 1;
+        }, 300), "Replication did not deliver the row to the destination with CDC");
+        AssertDestinationMode(
+            env, "/Root/replica1",
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.GetDescription("/Root/replica1/restored_cdc").GetSchemeStatus(),
+            NKikimrScheme::StatusSuccess);
+
+        // An independent CDC change on an active replica must remain forbidden.
+        const auto dropCdc = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/replica1` DROP CHANGEFEED restored_cdc;
+        )").GetValueSync();
+        UNIT_ASSERT(!dropCdc.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(dropCdc.GetIssues().ToString(), "path is an async replica table");
+
+        const auto dropped = session.ExecuteSchemeQuery(
+            "DROP ASYNC REPLICATION `/Root/replication` CASCADE;").GetValueSync();
+        UNIT_ASSERT_C(dropped.IsSuccess(), dropped.GetIssues().ToString());
+        for (const auto* path : {
+                "/Root/replication",
+                "/Root/replica1",
+                "/Root/replica1/restored_cdc",
+                "/Root/replica1/restored_cdc/streamImpl"}) {
+            const auto description = env.GetDescription(path);
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                description.GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist,
+                "CASCADE left a destination path: " << path << ": " << description.DebugString());
+        }
+    }
+
     Y_UNIT_TEST(DropCascadeWithFullyAttachedIndex) {
         DropWithAttachedIndex(TReplication::EDstState::Ready, true);
     }

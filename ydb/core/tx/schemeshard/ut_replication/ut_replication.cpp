@@ -816,6 +816,68 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
         });
     }
 
+    Y_UNIT_TEST_FLAG(DropReplicatedTableWithCdc, GlobalConsistency) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // A destination may already have a CDC stream before attachment.
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto consistency = GlobalConsistency
+            ? NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL
+            : NKikimrSchemeOp::TTableReplicationConfig::CONSISTENCY_LEVEL_ROW;
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, InternalTransaction(AlterTableRequest(++txId, "/MyRoot", Sprintf(R"(
+            Name: "Table"
+            ReplicationConfig {
+              Mode: REPLICATION_MODE_READ_ONLY
+              ConsistencyLevel: %s
+            }
+        )", NKikimrSchemeOp::TTableReplicationConfig::EConsistencyLevel_Name(consistency).c_str()))));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY),
+        });
+        for (const auto* path : {"/MyRoot/Table/Stream", "/MyRoot/Table/Stream/streamImpl"}) {
+            TestDescribeResult(DescribePrivatePath(runtime, path), {NLs::PathExist});
+        }
+
+        // Standalone CDC removal on an active replica must remain forbidden.
+        TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream"
+        )", {{NKikimrScheme::StatusSchemeError, "path is an async replica table"}});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathExist});
+
+        // This is the internal table drop issued by replication CASCADE.
+        AsyncSend(runtime, TTestTxConfig::SchemeShard,
+            InternalTransaction(DropTableRequest(++txId, "/MyRoot", "Table")));
+        TestModificationResults(runtime, txId, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        for (const auto* path : {"/MyRoot/Table", "/MyRoot/Table/Stream", "/MyRoot/Table/Stream/streamImpl"}) {
+            TestDescribeResult(DescribePrivatePath(runtime, path), {NLs::PathNotExist});
+        }
+    }
+
     Y_UNIT_TEST(AlterReplicatedIndexTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

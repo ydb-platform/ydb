@@ -5,9 +5,9 @@
 #include "ydb/core/viewer/json_local_rpc.h"
 
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
+#include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/core/kqp/script_executions/table_queries/kqp_script_executions.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
@@ -529,8 +529,7 @@ public:
                 CheckOperationStatus();
             } else if (!ExecutionId.empty()) {
                 // If we have execution_id but no operation_id, we can directly fetch results
-                Register(NKqp::CreateGetScriptExecutionResultActor(
-                    SelfId(),
+                Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(
                     Database,
                     ExecutionId,
                     GetUserSID(),
@@ -1129,8 +1128,7 @@ private:
                     return ReplyWithJsonAndPassAway("OperationResponse", std::move(json));
                 }
 
-                Register(NKqp::CreateGetScriptExecutionResultActor(
-                    SelfId(),
+                Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(
                     Database,
                     ExecutionId,
                     GetUserSID(),
@@ -1180,8 +1178,7 @@ private:
         }
         if (TotalRows < LimitRows) {
             if (ev->Get()->HasMoreResults) {
-                Register(NKqp::CreateGetScriptExecutionResultActor(
-                    SelfId(),
+                Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(
                     Database,
                     ExecutionId,
                     GetUserSID(),
@@ -1194,8 +1191,7 @@ private:
             } else if (FetchResultSetIndex + 1 < FetchResultSets) {
                 ++FetchResultSetIndex;
                 FetchResultRowsOffset = 0;
-                Register(NKqp::CreateGetScriptExecutionResultActor(
-                    SelfId(),
+                Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvFetchScriptResultsRequest(
                     Database,
                     ExecutionId,
                     GetUserSID(),

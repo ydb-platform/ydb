@@ -40,6 +40,10 @@ bool MirroringEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.GetPartitionConfig().HasMirrorFrom();
 }
 
+bool ReplicationEnabled(const NKikimrPQ::TPQTabletConfig& config) {
+    return MirroringEnabled(config) && config.GetPartitionConfig().GetMirrorFrom().GetMirrorConsumerOffsets();
+}
+
 bool SplitMergeEnabled(const NKikimrPQ::TPQTabletConfig& config) {
     return config.has_partitionstrategy() && config.partitionstrategy().has_partitionstrategytype() && config.partitionstrategy().partitionstrategytype() != ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_DISABLED;
 }

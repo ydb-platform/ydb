@@ -170,13 +170,41 @@ Y_UNIT_TEST_SUITE(ServiceCredentials) {
         env.Finish();
     }
 
+    Y_UNIT_TEST(IamCredentialsReuseProxyByAccountAndResource) {
+        TCredentialCacheEnv env;
+        NKikimrReplication::TConnectionParams credentials;
+        credentials.MutableIamCredentials()->SetServiceAccountId("account1");
+        credentials.MutableIamCredentials()->SetResourceId("resource1");
+        const auto original = env.Start(1, credentials);
+        UNIT_ASSERT_VALUES_EQUAL(env.Start(2, credentials), original);
+        credentials.MutableIamCredentials()->SetServiceAccountId("account2");
+        UNIT_ASSERT(env.Start(3, credentials) != original);
+        credentials.MutableIamCredentials()->SetServiceAccountId("account1");
+        credentials.MutableIamCredentials()->SetResourceId("resource2");
+        UNIT_ASSERT(env.Start(4, credentials) != original);
+        env.Finish();
+    }
+
+    Y_UNIT_TEST(OAuthCredentialsReuseProxyByToken) {
+        TCredentialCacheEnv env;
+        NKikimrReplication::TConnectionParams credentials;
+        credentials.MutableOAuthToken()->SetToken("token1");
+        const auto original = env.Start(1, credentials);
+        UNIT_ASSERT_VALUES_EQUAL(env.Start(2, credentials), original);
+        credentials.MutableOAuthToken()->SetToken("token2");
+        UNIT_ASSERT(env.Start(3, credentials) != original);
+        env.Finish();
+    }
+
     Y_UNIT_TEST(CredentialKindsUseSeparateProxies) {
         TCredentialCacheEnv env;
         NKikimrReplication::TConnectionParams credentials;
-        credentials.MutableStaticCredentials()->SetUser("same-identity");
+        // Static and OAuth have equal identity/fingerprint payloads in the old
+        // key representation, so their separation requires the credential kind.
+        credentials.MutableStaticCredentials()->SetUser("");
         credentials.MutableStaticCredentials()->SetPassword("");
         const auto staticProxy = env.Start(1, credentials);
-        credentials.MutableOAuthToken()->SetToken("same-identity");
+        credentials.MutableOAuthToken()->SetToken("");
         const auto oauthProxy = env.Start(2, credentials);
         credentials.MutableIamCredentials()->SetServiceAccountId("same-identity");
         credentials.MutableIamCredentials()->SetResourceId("test-resource");

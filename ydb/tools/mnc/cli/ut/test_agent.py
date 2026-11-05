@@ -1,10 +1,17 @@
 import argparse
 import types
 import unittest
+from pathlib import Path
 from unittest import mock
+
+import yatest.common
 
 from ydb.tools.mnc.cli.commands import agent
 from ydb.tools.mnc.cli.ut.helpers import Console, MyProgress, RunStepsResult
+
+
+_YDB_RELATIVE_ROOT = Path(yatest.common.test_source_path()).parents[3].relative_to(yatest.common.source_path())
+_AGENT_PROJECT = (_YDB_RELATIVE_ROOT / "tools" / "mnc" / "agent").as_posix()
 
 
 class AgentCommandTest(unittest.IsolatedAsyncioTestCase):
@@ -123,7 +130,7 @@ class AgentCommandTest(unittest.IsolatedAsyncioTestCase):
             )
 
         titles = self.step_titles(steps)
-        self.assertEqual(titles[0], "[bold cyan]build[/] [yellow]ydb/tools/mnc/agent[/]")
+        self.assertEqual(titles[0], f"[bold cyan]build[/] [yellow]{_AGENT_PROJECT}[/]")
         self.assertIn("[bold blue]Start agents[/]", titles)
         self.assertIn("[bold blue]Waiting[/] [yellow]3s[/]", titles)
         self.assertEqual(titles[-1], "[bold blue]Check agents on hosts")
@@ -140,7 +147,7 @@ class AgentCommandTest(unittest.IsolatedAsyncioTestCase):
             )
 
         titles = self.step_titles(steps)
-        self.assertNotIn("[bold cyan]build[/] [yellow]ydb/tools/mnc/agent[/]", titles)
+        self.assertNotIn(f"[bold cyan]build[/] [yellow]{_AGENT_PROJECT}[/]", titles)
         self.assertNotIn("[bold blue]Start agents[/]", titles)
         self.assertNotIn("[bold blue]Check agents on hosts", titles)
         self.assertEqual(titles, [

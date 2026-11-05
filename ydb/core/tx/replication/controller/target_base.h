@@ -67,8 +67,6 @@ public:
 
     const TPathId& GetDstPathId() const override;
     void SetDstPathId(const TPathId& value) override;
-    const TPathId& GetPendingDstPathId() const override;
-    void SetPendingDstPathId(const TPathId& value) override;
 
     const TString& GetStreamName() const override;
     void SetStreamName(const TString& value) override;
@@ -104,7 +102,6 @@ private:
 
     EDstState DstState = EDstState::Creating;
     TPathId DstPathId;
-    TPathId PendingDstPathId;
     TString StreamName;
     TString StreamConsumerName;
     EStreamState StreamState = EStreamState::Ready;

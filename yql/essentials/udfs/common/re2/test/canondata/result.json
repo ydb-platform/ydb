@@ -54,6 +54,31 @@
             "uri": "file://test.test_LikeEscape-Results_/results.txt"
         }
     ],
+    "test.test[LikeSpark-Results]": [
+        {
+            "uri": "file://test.test_LikeSpark-Results_/results.txt"
+        }
+    ],
+    "test.test[LikeSparkEmptyEscape-Results]": [
+        {
+            "uri": "file://test.test_LikeSparkEmptyEscape-Results_/extracted"
+        }
+    ],
+    "test.test[LikeSparkInvalidEscape-Results]": [
+        {
+            "uri": "file://test.test_LikeSparkInvalidEscape-Results_/extracted"
+        }
+    ],
+    "test.test[LikeSparkLongEscape-Results]": [
+        {
+            "uri": "file://test.test_LikeSparkLongEscape-Results_/extracted"
+        }
+    ],
+    "test.test[LikeSparkTrailingEscape-Results]": [
+        {
+            "uri": "file://test.test_LikeSparkTrailingEscape-Results_/extracted"
+        }
+    ],
     "test.test[MultipleCaptureGroups-Results]": [
         {
             "uri": "file://test.test_MultipleCaptureGroups-Results_/extracted"

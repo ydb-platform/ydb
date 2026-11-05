@@ -52,6 +52,8 @@ enum ESimpleCounters {
     COUNTER_TX_COMPLETE_LAG = 42                            [(CounterOpts) = {Name: "TxCompleteLag"}];
     COUNTER_DATA_BYTES = 43                                 [(CounterOpts) = {Name: "DataBytes"}];
     COUNTER_INDEX_BYTES = 44                                [(CounterOpts) = {Name: "IndexBytes"}];
+    COUNTER_SCANS_WAITING_SNAPSHOT = 45                     [(CounterOpts) = {Name: "ScansWaitingSnapshot"}];
+    COUNTER_SCANS_WAITING_LOADED_PORTIONS = 46              [(CounterOpts) = {Name: "ScansWaitingLoadedPortions"}];
 }
 
 enum ECumulativeCounters {

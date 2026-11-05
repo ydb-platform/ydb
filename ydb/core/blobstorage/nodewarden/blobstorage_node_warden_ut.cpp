@@ -1402,82 +1402,51 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     void CheckInferredPDiskSettings(TTestBasicRuntime& runtime, TActorId fakeWhiteboard,
             TActorId fakeNodeWarden, ui32 pdiskId, ui32 expectedSlotCount, ui32 expectedSlotSizeInUnits,
-            std::optional<ui64> expectedSlotSize = std::nullopt,
-            TDuration simTimeout = TDuration::Seconds(10), bool waitForSettings = true) {
+            std::optional<ui64> expectedSlotSize = std::nullopt) {
         WaitForPDiskInitialization(runtime, pdiskId);
-        const int maxAttempts = 10;
-        for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
-            // Check EvPDiskStateUpdate sent from PDiskActor to Whiteboard
-            const auto ev = runtime.GrabEdgeEventRethrow<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>(fakeWhiteboard, simTimeout);
-            VERBOSE_COUT(" Got TEvPDiskStateUpdate# " << ev->ToString());
+        const auto deadline = TMonotonic::Now() + DEFAULT_DISPATCH_TIMEOUT;
+        TString lastReport;
+        auto timeout = runtime.AddObserver<IEventHandle>([&](auto&) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline,
+                "PDisk# " << pdiskId << " settings did not converge: " << lastReport);
+        });
+        const auto matches = [&](const auto& info) {
+            lastReport = info.ShortDebugString();
+            return info.GetPDiskId() == pdiskId
+                && info.GetState() == NKikimrBlobStorage::TPDiskState::Normal
+                && info.GetExpectedSlotCount() == expectedSlotCount
+                && info.GetSlotSizeInUnits() == expectedSlotSizeInUnits
+                && info.GetExpectedSlotSize() == expectedSlotSize.value_or(0);
+        };
+        using TWhiteboardUpdate = NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate;
+        TWhiteboardUpdate::TPtr whiteboard;
+        do {
+            whiteboard = runtime.GrabEdgeEventRethrow<TWhiteboardUpdate>(fakeWhiteboard);
+        } while (!matches(whiteboard->Get()->Record));
+        const auto& pdiskInfo = whiteboard->Get()->Record;
+        UNIT_ASSERT(pdiskInfo.HasExpectedSlotCount());
+        UNIT_ASSERT(pdiskInfo.HasSlotSizeInUnits());
+        UNIT_ASSERT(pdiskInfo.HasAvailableSize());
+        UNIT_ASSERT(pdiskInfo.HasTotalSize());
+        UNIT_ASSERT(pdiskInfo.HasExpectedSlotSize());
+        UNIT_ASSERT(pdiskInfo.HasPDiskUsage());
+        UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskUsage(), 0.0);
+        UNIT_ASSERT(pdiskInfo.HasPDiskCapacityAlert());
+        UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
 
-            NKikimrWhiteboard::TPDiskStateInfo pdiskInfo = ev->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskId(), pdiskId);
-            if (pdiskInfo.GetState() != NKikimrBlobStorage::TPDiskState::Normal) {
-                UNIT_ASSERT_LT_C(attempt, maxAttempts, "last attempt failed");
-                continue;
-            }
-            if (waitForSettings && (pdiskInfo.GetExpectedSlotCount() != expectedSlotCount
-                    || pdiskInfo.GetSlotSizeInUnits() != expectedSlotSizeInUnits
-                    || pdiskInfo.GetExpectedSlotSize() != expectedSlotSize.value_or(0))) {
-                UNIT_ASSERT_LT_C(attempt, maxAttempts, "PDisk settings did not reach Whiteboard");
-                continue;
-            }
-            UNIT_ASSERT(pdiskInfo.HasExpectedSlotCount());
-            UNIT_ASSERT(pdiskInfo.HasSlotSizeInUnits());
-            UNIT_ASSERT(pdiskInfo.HasAvailableSize());
-            UNIT_ASSERT(pdiskInfo.HasTotalSize());
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetExpectedSlotCount(), expectedSlotCount);
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
-            // the field is always present in whiteboard updates; 0 means 'not set'
-            UNIT_ASSERT(pdiskInfo.HasExpectedSlotSize());
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetExpectedSlotSize(), expectedSlotSize.value_or(0));
-            UNIT_ASSERT(pdiskInfo.HasPDiskUsage());
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskUsage(), 0.0);
-            UNIT_ASSERT(pdiskInfo.HasPDiskCapacityAlert());
-            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
-            break;
-        }
-
-        for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
-            // Check EvControllerUpdateDiskStatus sent from PDiskActor to NodeWarden
-            const auto ev = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerUpdateDiskStatus>(fakeNodeWarden, simTimeout);
-            VERBOSE_COUT(" Got TEvControllerUpdateDiskStatus# " << ev->ToString());
-
-            NKikimrBlobStorage::TEvControllerUpdateDiskStatus diskStatus = ev->Get()->Record;
-            UNIT_ASSERT_VALUES_EQUAL(diskStatus.PDisksMetricsSize(), 1);
-
-            const NKikimrBlobStorage::TPDiskMetrics &metrics = diskStatus.GetPDisksMetrics(0);
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskId(), pdiskId);
-            if (metrics.GetState() != NKikimrBlobStorage::TPDiskState::Normal) {
-                UNIT_ASSERT_LT_C(attempt, maxAttempts, "last attempt failed");
-                continue;
-            }
-            if (waitForSettings && (metrics.GetExpectedSlotCount() != expectedSlotCount
-                    || metrics.GetSlotSizeInUnits() != expectedSlotSizeInUnits
-                    || metrics.GetExpectedSlotSize() != expectedSlotSize.value_or(0))) {
-                UNIT_ASSERT_LT_C(attempt, maxAttempts, "PDisk settings did not reach NodeWarden metrics");
-                continue;
-            }
-            // metrics are replaced as a whole on the receiving side, so zero values are
-            // reported by omitting the field, except ExpectedSlotCount with fixed quotas.
-            UNIT_ASSERT_VALUES_EQUAL(metrics.HasExpectedSlotCount(), expectedSlotCount != 0 || expectedSlotSize.value_or(0) != 0);
-            UNIT_ASSERT(metrics.HasSlotSizeInUnits());
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetExpectedSlotCount(), expectedSlotCount);
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
-            if (expectedSlotSize.value_or(0)) {
-                UNIT_ASSERT(metrics.HasExpectedSlotSize());
-                UNIT_ASSERT_VALUES_EQUAL(metrics.GetExpectedSlotSize(), *expectedSlotSize);
-            } else {
-                UNIT_ASSERT(!metrics.HasExpectedSlotSize());
-                UNIT_ASSERT_VALUES_EQUAL(metrics.GetExpectedSlotSize(), 0);
-            }
-            UNIT_ASSERT(metrics.HasPDiskUsage());
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskUsage(), 0.0);
-            UNIT_ASSERT(metrics.HasPDiskCapacityAlert());
-            UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
-            break;
-        }
+        TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr nodeWarden;
+        do {
+            nodeWarden = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerUpdateDiskStatus>(fakeNodeWarden);
+            UNIT_ASSERT_VALUES_EQUAL(nodeWarden->Get()->Record.PDisksMetricsSize(), 1);
+        } while (!matches(nodeWarden->Get()->Record.GetPDisksMetrics(0)));
+        const auto& metrics = nodeWarden->Get()->Record.GetPDisksMetrics(0);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.HasExpectedSlotCount(), expectedSlotCount != 0 || expectedSlotSize.value_or(0) != 0);
+        UNIT_ASSERT(metrics.HasSlotSizeInUnits());
+        UNIT_ASSERT_VALUES_EQUAL(metrics.HasExpectedSlotSize(), expectedSlotSize.value_or(0) != 0);
+        UNIT_ASSERT(metrics.HasPDiskUsage());
+        UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskUsage(), 0.0);
+        UNIT_ASSERT(metrics.HasPDiskCapacityAlert());
+        UNIT_ASSERT_VALUES_EQUAL(metrics.GetPDiskCapacityAlert(), NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
     }
 
     TActorId SetupNodeWardenOnly(TTestBasicRuntime& runtime, bool useFixedVDiskSlotSize = false,
@@ -2970,7 +2939,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             auto checkSettings = [&](ui32 expectedSlotCount, ui32 expectedSlotSizeInUnits,
                     std::optional<ui64> expectedSlotSize = std::nullopt) {
                 CheckInferredPDiskSettings(runtime, whiteboard, fakeNodeWarden, pdiskId,
-                    expectedSlotCount, expectedSlotSizeInUnits, expectedSlotSize, TDuration::Seconds(10), true);
+                    expectedSlotCount, expectedSlotSizeInUnits, expectedSlotSize);
             };
 
             NKikimrBlobStorage::TPDiskConfig config;

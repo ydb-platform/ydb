@@ -145,7 +145,7 @@ class PrSyncCreator:
         return [line for line in output.splitlines() if line]
 
     def overwrite_paths_from_head(self):
-        self.overwrite_paths_from_ref(f"refs/remotes/origin/{self.head_branch}")
+        self.overwrite_paths_from_ref(self.head_branch)
 
     def overwrite_paths_from_ref(self, source_ref):
         """Overwrite top-level paths from source_ref, then restore overwrite_exclude from base. Does not commit."""
@@ -164,11 +164,15 @@ class PrSyncCreator:
         dev_branch_name = f"robots/branch-sync/merge-{self.head_branch}-{self.dtm}"
         commit_msg = f"Sync branches {self.dtm}"
         source_name = f"tag {self.head_tag}" if self.head_tag else self.head_branch
-        source_ref = self.head_tag_sha if self.head_tag else f"refs/remotes/origin/{self.head_branch}"
+        source_ref = self.head_tag_sha if self.head_tag else self.head_branch
         pr_title = f"Sync branches {self.dtm}: {source_name} to {self.base_branch}"
 
         self.git_run("clone", f"https://{self.token}@github.com/{self.repo_name}.git", "ydb-new-pr")
         os.chdir("ydb-new-pr")
+        if self.head_tag:
+            self.git_run("switch", "--detach", source_ref)
+        else:
+            self.git_run("checkout", self.head_branch)
 
         self.git_run("checkout", self.base_branch)
         self.git_run("checkout", "-b", dev_branch_name)

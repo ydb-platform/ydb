@@ -281,6 +281,7 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         ListScriptExecutionOperations,
         CancelScriptExecutionOperation,
         GetScriptExecutionPhysicalGraph,
+        FetchScriptResults,
     };
 
 public:
@@ -2055,6 +2056,10 @@ private:
             case EDelayedRequestType::GetScriptExecutionPhysicalGraph:
                 HandleDelayedScriptRequestError<TEvGetScriptPhysicalGraphResponse>(std::move(requestEvent), status, std::move(issues));
                 break;
+
+            case EDelayedRequestType::FetchScriptResults:
+                HandleDelayedScriptRequestError<TEvFetchScriptResultsResponse>(std::move(requestEvent), status, std::move(issues));
+                break;
         }
     }
 
@@ -2163,9 +2168,11 @@ private:
     }
 
     void Handle(TEvFetchScriptResultsRequest::TPtr& ev) {
-        auto& request = *ev->Get();
-        Register(CreateGetScriptExecutionResultActor(ev->Sender, std::move(request.Database), std::move(request.ExecutionId),
-            std::move(request.UserSID), request.ResultSetIndex, request.Offset, request.RowsLimit, request.SizeLimit, request.Deadline));
+        if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::FetchScriptResults)) {
+            auto& request = *ev->Get();
+            Register(CreateGetScriptExecutionResultActor(ev->Sender, std::move(request.Database), std::move(request.ExecutionId),
+                std::move(request.UserSID), request.ResultSetIndex, request.Offset, request.RowsLimit, request.SizeLimit, request.Deadline));
+        }
     }
 
     void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {

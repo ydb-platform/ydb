@@ -305,10 +305,10 @@ struct TEvSaveScriptResultFinished : public TEventLocal<TEvSaveScriptResultFinis
     const NYql::TIssues Issues;
 };
 
-struct TEvFetchScriptResultsRequest : public TEventLocal<TEvFetchScriptResultsRequest, TKqpScriptExecutionEvents::EvFetchScriptResultsRequest> {
+struct TEvFetchScriptResultsRequest : public TEventWithDatabaseId<TEvFetchScriptResultsRequest, TKqpScriptExecutionEvents::EvFetchScriptResultsRequest> {
     TEvFetchScriptResultsRequest(TString database, TString executionId, std::optional<TString> userSID, i32 resultSetIndex,
         i64 offset, i64 rowsLimit, i64 sizeLimit, TInstant deadline)
-        : Database(std::move(database))
+        : TEventWithDatabaseId(std::move(database))
         , ExecutionId(std::move(executionId))
         , UserSID(std::move(userSID))
         , ResultSetIndex(resultSetIndex)
@@ -318,7 +318,6 @@ struct TEvFetchScriptResultsRequest : public TEventLocal<TEvFetchScriptResultsRe
         , Deadline(deadline)
     {}
 
-    TString Database;
     TString ExecutionId;
     std::optional<TString> UserSID;
     const i32 ResultSetIndex;
@@ -334,6 +333,10 @@ struct TEvFetchScriptResultsResponse : public TEventLocal<TEvFetchScriptResultsR
         , ResultSet(std::move(resultSet))
         , HasMoreResults(hasMoreResults)
         , Issues(std::move(issues))
+    {}
+
+    TEvFetchScriptResultsResponse(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+        : TEvFetchScriptResultsResponse(status, std::nullopt, false, std::move(issues))
     {}
 
     const Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;

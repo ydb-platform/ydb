@@ -1,14 +1,17 @@
-#include "../ydb_common_ut.h"
+#include "ydb_relative_database_ut.h"
 
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <chrono>
+#include <google/protobuf/util/message_differencer.h>
 
 using namespace NKikimr;
 using namespace NKikimr::Tests;
@@ -17,46 +20,11 @@ using namespace NYdb;
 namespace {
 
 const TString TenantPath = "/Root/mydb";
-const TString TenantPoolKind = "mydb";
 
 template <class TResult>
 void AssertSuccess(const TResult& result) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
-
-struct TResourceFixture {
-    TKikimrWithGrpcAndRootSchema Server;
-    ui16 Port;
-    TString Endpoint;
-
-    explicit TResourceFixture(const TString& database)
-        : Server({}, {}, {}, false, nullptr, [&](auto& settings) {
-            settings.FeatureFlags.SetEnableRelativePaths(true);
-            settings.StoragePoolTypes.clear();
-            settings.AddStoragePool(TenantPoolKind, database + ':' + TenantPoolKind);
-        })
-    {
-        if (const auto parent = database.substr(0, database.rfind('/')); parent != "/Root") {
-            TDriver rootDriver(TDriverConfig()
-                .SetEndpoint(TStringBuilder() << "localhost:" << Server.GetPort()).SetDatabase("/Root")
-                .SetDiscoveryMode(EDiscoveryMode::Sync));
-            AssertSuccess(NYdb::NScheme::TSchemeClient(rootDriver).MakeDirectory(parent).GetValueSync());
-        }
-        Ydb::Cms::CreateDatabaseRequest request;
-        request.set_path(database);
-        auto* storage = request.mutable_resources()->add_storage_units();
-        storage->set_unit_kind(TenantPoolKind);
-        storage->set_count(1);
-        Server.Tenants_->CreateTenant(std::move(request));
-        Port = Server.GetPortManager().GetPort();
-        Server.GetServer().EnableGRpc(Port, Server.Tenants_->List(database).front(), database);
-        Endpoint = TStringBuilder() << "localhost:" << Port;
-    }
-
-    TDriver CreateDriver(const TString& database) const {
-        return TDriver(TDriverConfig().SetEndpoint(Endpoint).SetDatabase(database).SetDiscoveryMode(EDiscoveryMode::Sync));
-    }
-};
 
 void AssertPayload(const TResultSet& resultSet, const TString& expected) {
     TResultSetParser parser(resultSet);
@@ -150,7 +118,7 @@ Y_UNIT_TEST_TWIN(RateLimiterCoordinationPathsRespectFlag, enableRelativePaths) {
 }
 
 Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
-    TResourceFixture fixture(TenantPath);
+    TRelativeDatabaseFixture fixture(TenantPath);
     auto driver = fixture.CreateDriver("mydb");
     NYdb::NScheme::TSchemeClient schemeClient(driver);
     AssertSuccess(schemeClient.MakeDirectory("relative_dir").GetValueSync());
@@ -245,7 +213,7 @@ Y_UNIT_TEST(RelativeDatabaseWorksForDiscoveryAndSubsequentRequests) {
 
 Y_UNIT_TEST(NestedDatabaseResourcePaths) {
     for (const TString database : {"/Root/mydb", "/Root/team/mydb", "/Root/Root/mydb"}) {
-        TResourceFixture fixture(database);
+        TRelativeDatabaseFixture fixture(database);
         auto driver = fixture.CreateDriver(database);
         NYdb::NScheme::TSchemeClient scheme(driver);
         NYdb::NTable::TTableClient table(driver);
@@ -304,6 +272,52 @@ Y_UNIT_TEST(NestedDatabaseResourcePaths) {
             }
         }
     }
+}
+
+Y_UNIT_TEST(DescribeExternalObjectsWithRelativePaths) {
+    NKikimrConfig::TAppConfig config;
+    config.MutableFeatureFlags()->SetEnableRelativePaths(true);
+    config.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+    TKikimrWithGrpcAndRootSchema server(config);
+    TDriver driver(TDriverConfig()
+        .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()).SetDatabase("/Root"));
+    NYdb::NTable::TTableClient client(driver);
+    const auto sessionResult = client.CreateSession().GetValueSync();
+    AssertSuccess(sessionResult);
+    auto session = sessionResult.GetSession();
+    AssertSuccess(session.ExecuteSchemeQuery(R"(
+        CREATE EXTERNAL DATA SOURCE `/Root/externalDataSource` WITH (
+            SOURCE_TYPE = "ObjectStorage",
+            LOCATION = "localhost:1",
+            AUTH_METHOD = "NONE"
+        );
+        CREATE EXTERNAL TABLE `/Root/externalTable` (key Uint64) WITH (
+            DATA_SOURCE = "/Root/externalDataSource",
+            LOCATION = "folder",
+            FORMAT = "csv_with_names"
+        );
+    )").GetValueSync());
+
+    auto compareDescriptions = [](const auto& relative, const auto& absolute) {
+        google::protobuf::util::MessageDifferencer differencer;
+        differencer.IgnoreField(relative.GetDescriptor()->FindFieldByName("self"));
+        UNIT_ASSERT_C(differencer.Compare(relative, absolute), relative.DebugString());
+    };
+    const auto relativeSource = session.DescribeExternalDataSource("externalDataSource").GetValueSync();
+    const auto absoluteSource = session.DescribeExternalDataSource("/Root/externalDataSource").GetValueSync();
+    AssertSuccess(relativeSource);
+    AssertSuccess(absoluteSource);
+    compareDescriptions(TProtoAccessor::GetProto(relativeSource.GetExternalDataSourceDescription()),
+        TProtoAccessor::GetProto(absoluteSource.GetExternalDataSourceDescription()));
+
+    const auto relativeTable = session.DescribeExternalTable("externalTable").GetValueSync();
+    const auto absoluteTable = session.DescribeExternalTable("/Root/externalTable").GetValueSync();
+    AssertSuccess(relativeTable);
+    AssertSuccess(absoluteTable);
+    const auto description = TProtoAccessor::GetProto(relativeTable.GetExternalTableDescription());
+    compareDescriptions(description, TProtoAccessor::GetProto(absoluteTable.GetExternalTableDescription()));
+    UNIT_ASSERT_VALUES_EQUAL(description.data_source_path(), "/Root/externalDataSource");
+    UNIT_ASSERT_VALUES_EQUAL(description.location(), "folder");
 }
 
 } // YdbRelativeResourcePaths

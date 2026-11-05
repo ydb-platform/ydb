@@ -71,6 +71,13 @@ def post_install(self):
     )
 
     with self.yamakes["."] as m:
+        # Brotli's shared include directory also maps to its CLI PROGRAM.
+        # Keep only the decoder/encoder libraries; they already depend on common.
+        m.PEERDIR -= {
+            "contrib/libs/brotli/c/common",
+            "contrib/libs/brotli/c/tools",
+        }
+
         m.before("CFLAGS", "DEFAULT(ARCADIA_CURL_DNS_RESOLVER ARES)")
         m.CFLAGS = [
             GLOBAL("-DCURL_STATICLIB"),

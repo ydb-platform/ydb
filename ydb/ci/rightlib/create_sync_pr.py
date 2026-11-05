@@ -233,7 +233,10 @@ class PrSyncCreator:
         if not pr:
             if self.head_tag:
                 self.head_tag_sha = self.repo.get_commit(f"refs/tags/{self.head_tag}").sha
-            cur_sha = self.head_tag_sha or self.rightlib_latest_repo_sha()
+            if self.head_tag_sha:
+                cur_sha = self.head_tag_sha
+            else:
+                cur_sha = self.rightlib_latest_repo_sha()
             self.logger.info("cur_sha=%s", cur_sha)
 
             if self.is_commit_present_on_branch(cur_sha, self.base_branch) is False:

@@ -852,8 +852,10 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, Ydb::StatusIds::NOT_FOUND, result->Get()->Issues.ToString());
         UNIT_ASSERT(!result->Get()->ResultSet);
-        UNIT_ASSERT(!result->Get()->HasMoreResults);
-        if (!UnknownDatabase) {
+        if (UnknownDatabase) {
+            UNIT_ASSERT(!result->Get()->HasMoreResults);
+            UNIT_ASSERT_STRING_CONTAINS(result->Get()->Issues.ToString(), "Failed to describe database");
+        } else {
             UNIT_ASSERT_STRING_CONTAINS(result->Get()->Issues.ToString(), "Script execution not found");
         }
     }

@@ -35,10 +35,30 @@ jobs:
             .github
             ydb/ci/
 
+      - name: Read source tag override
+        id: source
+        env:
+          BASE_BRANCH: ${{ matrix.branches.base }}
+        run: |
+          # A missing, null or empty entry leaves the stable branch as the source.
+          tag=$(jq -ers --arg branch "$BASE_BRANCH" '
+            if length != 1 or (.[0] | type) != "object" then error("expected an object keyed by NBS branch")
+            else .[0][$branch] end |
+            if . == null then ""
+            elif type == "string" and (test("[[:cntrl:]]") | not) then .
+            else error("expected a tag name or null")
+            end
+          ' .github/config/nbs_sync_tags.json)
+          if [[ -n "$tag" ]]; then
+            git check-ref-format "refs/tags/$tag"
+          fi
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
       - uses: ./.github/actions/rightlib_sync
         with:
           base_branch: ${{ matrix.branches.base }}
           head_branch: ${{ matrix.branches.head }}
+          head_tag: ${{ steps.source.outputs.tag }}
           label: sync-nbs
           repository: ${{ github.repository }}
           gh_personal_access_token: ${{ env.GH_TOKEN }}

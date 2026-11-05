@@ -13,9 +13,10 @@ using TCopies = std::array<ui32, 3>;
 using L = EMirror3dcLayout;
 using G = TBlobStorageGroupInfo;
 
-TBlobStorageGroupInfo MakeInfo(const TStates& states) {
+TBlobStorageGroupInfo MakeInfo(const TStates& states, std::optional<EMirror3dcGroupState> state = {}) {
     TBlobStorageGroupInfo::TDynamicInfo dynamic(TGroupId::Zero(), 1);
     dynamic.FailRealmStates.assign(states.begin(), states.end());
+    dynamic.Mirror3dcState = state;
     return TBlobStorageGroupInfo(TBlobStorageGroupInfo::TTopology(
         TBlobStorageGroupType::ErasureMirror3dc, 3, 4, 1), std::move(dynamic), "");
 }
@@ -165,6 +166,33 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         parts.AddItem(1, 1, type);
         UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 4), 0);
     }
+    Y_UNIT_TEST(PrimaryStateSelectsPolicyForIdenticalRealmTuple) {
+        using S = EMirror3dcGroupState;
+        const TStates realms{R::N2, R::R, R::F};
+        const auto pending = MakeInfo(realms, S::DC_SOLO_RECOVERY_INV2_PENDING);
+        const auto ready = MakeInfo(realms, S::DC_SOLO_RECOVERY_INV2);
+        const auto pendingChecker = TMirror3dcWriteQuorumChecker::TryCreate(pending, 0);
+        const auto readyChecker = TMirror3dcWriteQuorumChecker::TryCreate(ready, 0);
+        UNIT_ASSERT(pendingChecker && readyChecker);
+        UNIT_ASSERT(pendingChecker->GetWriteLayout() == L::LAYOUT_2);
+        UNIT_ASSERT(readyChecker->GetWriteLayout() == L::LAYOUT_22);
+        const auto soloPending = MakeInfo({R::N1, R::F, R::F}, S::DC_SOLO_INV2_PENDING);
+        const auto soloChecker = TMirror3dcWriteQuorumChecker::TryCreate(soloPending, 0);
+        UNIT_ASSERT(soloChecker);
+        UNIT_ASSERT(soloChecker->GetEnsuredLayout() == L::LAYOUT_1);
+        UNIT_ASSERT(GetMirror3dcGroupLayouts(S::DC_SOLO_INV2_PENDING)->Ensured == L::LAYOUT_2);
+        TBlobStorageGroupInfo::TVDiskIds subgroup;
+        soloPending.PickSubgroup(0, &subgroup, nullptr);
+        G::TSubgroupVDisks uncertain(&soloPending.GetTopology());
+        for (ui32 disk = 0; disk < 9; ++disk) {
+            if (subgroup[disk].FailRealm == 0) {
+                uncertain += G::TSubgroupVDisks(&soloPending.GetTopology(), disk);
+                break;
+            }
+        }
+        UNIT_ASSERT(soloChecker->GetBlobState({}, uncertain) == G::EBS_DISINTEGRATED);
+    }
+
     Y_UNIT_TEST(NormalGroupFailuresMatchLegacy) {
         const auto info = MakeInfo({R::N0, R::N0, R::N0});
         const auto& legacy = info.GetTopology().GetQuorumChecker();

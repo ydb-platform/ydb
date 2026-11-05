@@ -86,6 +86,22 @@ The composition of each group is not constant and may change while the system is
 
 As a rule, groups of two adjacent generations differ by no more than one slot.
 
+#### Mirror-3-dc group state
+
+For an ordinary three-realm `mirror-3-dc` group, the group state is authoritative. The model has 17 states, including explicit `PENDING` states. BSC persists this state with the group configuration and publishes it in `TGroupInfo` with the group generation. DS proxy and VDisk use that state to select their policies. Configurations without an explicit group state use the legacy realm-state classifier for migration.
+
+The group state determines the logical realm roles and minimum copy guarantees; their mapping retains physical failrealm identities. `N0`, `N1`, and `N2` describe normal realms with minimum per-realm copy counts, `F` is an excluded realm, and `R` is a recovering realm. `N0` does not imply an empty realm. Realm tuples alone do not identify the group state: for example, `DC_FAILURE` and `DC_FAILURE_INV1_PENDING` both use `N0/N0/F`, but only the latter starts background replication.
+
+Each state defines three layout policies:
+
+- **D** — the target of background replication.
+- **W** — the layout sufficient to acknowledge an active write.
+- **E** — the expected blob layout.
+
+A layout count refers to copies in one realm; `+` combines distinct realms and `OR` separates alternatives. Read decisions use a confirmed lower bound, which may be weaker than the expected layout during a pending transition. In `DC_SOLO_INV2_PENDING`, E is `2`, but the surviving realm still has the `N1` guarantee: absence checks must use the one-copy bound until replication establishes the second copy.
+
+The transition graph distinguishes administrator actions from system transitions. Administrator actions change availability or select a pending target; system transitions advance the state after replication completes in the realms selected by the current state. The replication target set is explicit: for example, `DC_RECOVERY` targets both normal realms and the recovering realm, whereas `DC_RECOVERY_INV1` and the solo recovery `INV1`/`INV2` states, including their pending variants, target only `R`. A nonzero D does not by itself start replication in every normal realm.
+
 #### Per-pile allocation overrides
 
 In a bridged cluster, `blob_storage_config.storage_pool_pile_overrides` selects allocation settings by pile name. Rules are stored in the distributed storage configuration, separately from pool definitions. BSC applies them to physical pile groups, including inline groups, when allocating or repairing groups and when Console resends `DefineStoragePool`, for example to increase the group count. Overrides do not rewrite the base pool definition. Ordinary groups spanning piles and DDisk groups do not use these overrides.

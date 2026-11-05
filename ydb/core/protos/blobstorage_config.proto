@@ -760,10 +760,12 @@ message TDefineFailRealmStates {
         }
 
         optional uint32 GroupId = 1;
-        // Exactly three states, indexed by physical fail realm.
+        // Physical realm roles; exactly three when supplied. May be omitted with GroupState
+        // when the existing physical roles are unchanged.
         repeated EFailRealmState FailRealmStates = 2;
         // If set, apply only to this group generation.
         optional uint32 ExpectedGroupGeneration = 3;
+        optional TMirror3dcGroupState.EState GroupState = 4;
     }
 
     repeated TGroupDefinition Groups = 1;
@@ -969,6 +971,7 @@ message TBaseConfig {
         string StoragePoolName = 13;
         // Effective mirror-3-dc realms in physical order (0/1/2); empty for other erasure species.
         repeated TFailRealmInfo FailRealms = 14;
+        optional TMirror3dcGroupState.EState Mirror3dcState = 15;
     }
     message TNode {
         uint32 NodeId = 1;

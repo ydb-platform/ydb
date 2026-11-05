@@ -3199,8 +3199,7 @@ namespace NKikimr {
             if (info.Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
                 return std::nullopt;
             }
-            const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(
-                info.GetFailRealmState(0), info.GetFailRealmState(1), info.GetFailRealmState(2));
+            const std::optional<EMirror3dcGroupState> state = info.GetMirror3dcState();
             if (!state) {
                 return std::nullopt;
             }

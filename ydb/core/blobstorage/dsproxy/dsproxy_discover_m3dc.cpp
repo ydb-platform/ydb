@@ -19,8 +19,7 @@ static bool HasZeroEnsuredLayout(const TBlobStorageGroupInfo& info) {
     if (info.GetTopology().GetTotalFailRealmsNum() != 3) {
         return false;
     }
-    const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(
-        info.GetFailRealmState(0), info.GetFailRealmState(1), info.GetFailRealmState(2));
+    const std::optional<EMirror3dcGroupState> state = info.GetMirror3dcState();
     return state && GetMirror3dcGroupLayouts(*state)->Ensured == EMirror3dcLayout::LAYOUT_0;
 }
 

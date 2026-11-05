@@ -42,7 +42,9 @@ NKikimrBlobStorage::TDefineDataCenterStates SerializeDataCenterStates(const TDat
 }
 
 std::expected<void, TString> ValidateFailRealmStateTransition(const TFailRealmStates& before, const TFailRealmStates& after) {
-    if (!IsAllowedMirror3dcFailRealmStateTransition(before, after)) {
+    const auto previous = MigrateMirror3dcGroupConfiguration(before);
+    const auto next = MigrateMirror3dcGroupConfiguration(after);
+    if (!previous || !next || !IsAllowedMirror3dcGroupTransition(*previous, *next)) {
         return std::unexpected<TString>("invalid mirror-3-dc fail realm state transition");
     }
     return {};

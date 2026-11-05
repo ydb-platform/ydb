@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
+
 #include "defs.h"
 
 #include "bsc.h"
@@ -727,6 +729,7 @@ public:
         TMaybe<Table::NeedAlter::Type> NeedAlter;
         // Persisted with the group generation by CommitConfigUpdates.
         std::optional<std::array<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState, 3>> FailRealmStates;
+        std::optional<EMirror3dcGroupState> Mirror3dcState;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
 

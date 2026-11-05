@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "blobstorage_groupinfo_mirror3dc_state.h"
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/blobstorage/crypto/crypto.h>
 #include <ydb/core/protos/blobstorage.pb.h>
@@ -349,6 +350,7 @@ public:
         TVector<TActorId> ServiceIdForOrderNumber;
         // Indexed by physical failrealm. Kept with this generation, not in cached Topology.
         TVector<EFailRealmState> FailRealmStates;
+        std::optional<EMirror3dcGroupState> Mirror3dcState;
 
         TDynamicInfo(TGroupId groupId, ui32 groupGen);
         TDynamicInfo(const TDynamicInfo&) = default;
@@ -366,6 +368,17 @@ public:
     const TDynamicInfo &GetDynamicInfo() const { return Dynamic; }
     TDynamicInfo::EFailRealmState GetFailRealmState(ui32 failRealmIdx) const {
         return Dynamic.FailRealmStates.at(failRealmIdx);
+    }
+    std::optional<EMirror3dcGroupState> GetMirror3dcState() const {
+        if (Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc || Dynamic.FailRealmStates.size() != 3) {
+            return std::nullopt;
+        }
+        if (Dynamic.Mirror3dcState) {
+            const TMirror3dcGroupConfiguration config{*Dynamic.Mirror3dcState,
+                {GetFailRealmState(0), GetFailRealmState(1), GetFailRealmState(2)}};
+            return IsValidMirror3dcGroupConfiguration(config) ? Dynamic.Mirror3dcState : std::nullopt;
+        }
+        return GetMirror3dcGroupState(GetFailRealmState(0), GetFailRealmState(1), GetFailRealmState(2));
     }
     bool IsFailedFailRealm(ui32 failRealmIdx) const {
         return GetFailRealmState(failRealmIdx) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F;

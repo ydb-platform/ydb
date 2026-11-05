@@ -674,6 +674,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGro
     Dynamic.ServiceIdForOrderNumber.resize(Topology->GetTotalVDisksNum(), TActorId());
     Dynamic.ServiceIdForOrderNumber[GetOrderNumber(vdiskId)] = actorId;
     Dynamic.FailRealmStates = info->Dynamic.FailRealmStates;
+    Dynamic.Mirror3dcState = info->Dynamic.Mirror3dcState;
 }
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TBlobStorageGroupInfo& other, TInlinePileViewTag)
@@ -736,6 +737,9 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     TBlobStorageGroupInfo::TTopology topology(type);
     TBlobStorageGroupInfo::TDynamicInfo dyn(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
         group.GetGroupGeneration());
+    if (group.HasMirror3dcState()) {
+        dyn.Mirror3dcState = static_cast<EMirror3dcGroupState>(group.GetMirror3dcState());
+    }
     topology.FailRealms.resize(group.RingsSize());
     for (ui32 ringIdx = 0; ringIdx < group.RingsSize(); ++ringIdx) {
         const auto& realm = group.GetRings(ringIdx);

@@ -89,8 +89,32 @@ enum EEntityStatus {
     RESTART = 4; // entity has changed config or changed environment and should be restarted by warden
 }
 
+// Authoritative mirror-3-dc state, persisted and published with the group generation.
+message TMirror3dcGroupState {
+    enum EState {
+        NORMAL = 0;
+        DC_FAILURE = 1;
+        DC_FAILURE_INV1 = 2;
+        DC_FAILURE_INV2 = 3;
+        DC_RECOVERY = 4;
+        DC_RECOVERY_INV1 = 5;
+        DC_SOLO_DISASTER = 6;
+        DC_SOLO_INV1 = 7;
+        DC_SOLO_INV2 = 8;
+        DC_SOLO_RECOVERY = 9;
+        DC_SOLO_RECOVERY_INV1 = 10;
+        DC_SOLO_RECOVERY_INV2 = 11;
+        DC_FAILURE_INV1_PENDING = 12;
+        DC_FAILURE_INV2_PENDING = 13;
+        DC_SOLO_INV2_PENDING = 14;
+        DC_SOLO_RECOVERY_INV1_PENDING = 15;
+        DC_SOLO_RECOVERY_INV2_PENDING = 16;
+    }
+}
+
 message TFailRealmStates {
     repeated TGroupInfo.TFailRealm.EState State = 1;
+    optional TMirror3dcGroupState.EState GroupState = 2;
 }
 
 message TFailRealmInfo {
@@ -152,6 +176,7 @@ message TGroupInfo {
     optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
     optional uint32 BridgePileId = 20;
     optional bool DDisk = 21; // is this a Direct Block Group?
+    optional TMirror3dcGroupState.EState Mirror3dcState = 22;
 }
 
 // VDiskStatus ordering is assumed to be lower for bad statuses and higher for good ones

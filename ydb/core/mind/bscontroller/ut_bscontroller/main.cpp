@@ -510,7 +510,10 @@ namespace {
                     }
                 }
             }
-            return DefineRealms(groups);
+            auto request = DefineRealms(groups);
+            // Fixture-only: these guarantees were established outside the replication actor.
+            request.SetIgnoreGroupFailModelChecks(true);
+            return request;
         }
 
         NKikimrBlobStorage::TConfigRequest CompleteRecovery() {
@@ -532,7 +535,10 @@ namespace {
                     }
                 }
             }
-            return DefineRealms(groups);
+            auto request = DefineRealms(groups);
+            // Fixture-only: complete all recovery stages with externally confirmed guarantees.
+            request.SetIgnoreGroupFailModelChecks(true);
+            return request;
         }
 
         NKikimrBlobStorage::TConfigRequest Reset() {
@@ -643,19 +649,40 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             }
             return previousFilter(runtime, event);
         });
-        UNIT_ASSERT(env.Invoke(env.SetGroupStates(groupId, initial)).GetSuccess());
+        auto start = env.SetGroupStates(groupId, initial);
+        start.MutableCommand(0)->MutableDefineFailRealmStates()->MutableGroups(0)->SetGroupState(
+            NKikimrBlobStorage::TMirror3dcGroupState::DC_FAILURE_INV1_PENDING);
+        UNIT_ASSERT(env.Invoke(start).GetSuccess());
         NKikimrBlobStorage::TGroupInfo promoted;
         for (ui32 attempt = 0; attempt < 10; ++attempt) {
             env.Runtime->SimulateSleep(TDuration::Seconds(6));
             promoted = env.ReadGroups().at(groupId);
-            if (promoted.GetRings(0).GetState() == TFailRealm::N2 && promoted.GetRings(1).GetState() == TFailRealm::N2) {
+            if (promoted.GetMirror3dcState() == NKikimrBlobStorage::TMirror3dcGroupState::DC_FAILURE_INV1) {
                 break;
             }
         }
+        UNIT_ASSERT_VALUES_EQUAL(promoted.GetMirror3dcState(), NKikimrBlobStorage::TMirror3dcGroupState::DC_FAILURE_INV1);
+        UNIT_ASSERT_VALUES_EQUAL(promoted.GetGroupGeneration(), initialGeneration + 1);
+        UNIT_ASSERT_VALUES_EQUAL(probes, 6);
+        // Enabling the second invariant changes the state even though N1/N1/F is unchanged.
+        NKikimrBlobStorage::TConfigRequest enable;
+        auto* definition = enable.AddCommand()->MutableDefineFailRealmStates()->AddGroups();
+        definition->SetGroupId(groupId);
+        definition->SetExpectedGroupGeneration(promoted.GetGroupGeneration());
+        definition->SetGroupState(NKikimrBlobStorage::TMirror3dcGroupState::DC_FAILURE_INV2_PENDING);
+        UNIT_ASSERT(env.Invoke(enable).GetSuccess());
+        for (ui32 attempt = 0; attempt < 10; ++attempt) {
+            env.Runtime->SimulateSleep(TDuration::Seconds(6));
+            promoted = env.ReadGroups().at(groupId);
+            if (promoted.GetMirror3dcState() == NKikimrBlobStorage::TMirror3dcGroupState::DC_FAILURE_INV2) {
+                break;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(promoted.GetMirror3dcState(), NKikimrBlobStorage::TMirror3dcGroupState::DC_FAILURE_INV2);
         UNIT_ASSERT_VALUES_EQUAL(ui32(promoted.GetRings(0).GetState()), ui32(TFailRealm::N2));
         UNIT_ASSERT_VALUES_EQUAL(ui32(promoted.GetRings(1).GetState()), ui32(TFailRealm::N2));
         UNIT_ASSERT_VALUES_EQUAL(ui32(promoted.GetRings(2).GetState()), ui32(TFailRealm::F));
-        UNIT_ASSERT_VALUES_EQUAL(promoted.GetGroupGeneration(), initialGeneration + 2);
+        UNIT_ASSERT_VALUES_EQUAL(promoted.GetGroupGeneration(), initialGeneration + 3);
         UNIT_ASSERT_VALUES_EQUAL(probes, 12);
         // A delayed proposal for the previous generation must not overwrite the new state.
         NKikimrBlobStorage::TConfigRequest stale = env.SetGroupStates(groupId, initial);
@@ -668,6 +695,31 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), promoted.SerializeAsString());
         env.Runtime->SetEventFilter(previousFilter);
+    }
+
+    Y_UNIT_TEST(PrimaryGroupStatePersistsWithUnchangedRealms) {
+        using S = NKikimrBlobStorage::TMirror3dcGroupState;
+        using R = TDataCenterStatesEnv::TFailRealm;
+        TDataCenterStatesEnv env;
+        ui32 id = 0;
+        for (const auto& [groupId, group] : env.ReadGroups()) {
+            if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
+                id = groupId;
+                break;
+            }
+        }
+        UNIT_ASSERT(id);
+        auto request = env.SetGroupStates(id, {R::N0, R::N0, R::F});
+        request.MutableCommand(0)->MutableDefineFailRealmStates()->MutableGroups(0)->SetGroupState(S::DC_FAILURE_INV1_PENDING);
+        UNIT_ASSERT(env.Invoke(request).GetSuccess());
+        auto pending = env.ReadGroups().at(id);
+        UNIT_ASSERT_VALUES_EQUAL(pending.GetMirror3dcState(), S::DC_FAILURE_INV1_PENDING);
+        // A legacy idempotent request must not reclassify PENDING as DC_FAILURE.
+        UNIT_ASSERT(env.Invoke(env.SetGroupStates(id, {R::N0, R::N0, R::F})).GetSuccess());
+        pending = env.ReadGroups().at(id);
+        UNIT_ASSERT_VALUES_EQUAL(pending.GetMirror3dcState(), S::DC_FAILURE_INV1_PENDING);
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(id).SerializeAsString(), pending.SerializeAsString());
     }
 
     Y_UNIT_TEST(ForceGroupFailRealmStatesOnlyUpdatesTarget) {

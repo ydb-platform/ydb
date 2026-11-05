@@ -7,98 +7,31 @@
 
 namespace NKikimr {
 
-// Derived mirror-3-dc group states. The group state is determined by the failrealm
-// states and their copy guarantees. The administrator selects I/X per realm.
-// I = Include, X = Exclude: ADMINISTRATIVE states selected by the administrator.
-// N0/N1/N2, F and R are INTERNAL states: NoFailure with a minimum copy count,
-// Failure DC, and Recovery respectively. N0 does not mean that the realm is empty.
-// N1/N2 mean at least one/two copies of every confirmed blob in that failrealm.
-// E = Layout Ensurance: guaranteed layouts for confirmed blobs.
-// D = Layout Durability: background replication target.
-// W = Write Layout: layouts sufficient to acknowledge a new write.
-// OR separates alternative layouts; + combines copy counts in distinct failrealms.
-// Each box contains internal states, the administrative I/X mask, D and E.
-// W is shared by each column and shown below it.
-// Columns describe logical roles; transitions retain physical failrealm identities.
-//
-//     +---------------------------------+
-// +-->|              NORMAL             |
-// |   | N0/N0/N0                  I/I/I |------------------------------+
-// |   | D: 1+1+1                        |                              |
-// |   | E: 1+1+1 OR 2+2                 |                              |
-// |   +---------------------------------+                              |
-// |                                                                    |
-// |                                                                    |
-// |                                                                    |
-// |                                                                    |       +-----------------------------------------------------------------------------------------------+
-// |                                                                    v       v                                                                                               |
-// |   +---------------------------------+             +----------------+-------+--------+             +---------------------------------+             +------------------------+--------+
-// +<--|           DC_RECOVERY           |<----------->|            DC_FAILURE           |------------>|         DC_SOLO_DISASTER        |<----------->|         DC_SOLO_RECOVERY        |
-// |   | N0/N0/R                   I/I/I |             | N0/N0/F                   I/I/X |             | N0/F/F                    I/X/X |             | N0/R/F                    I/I/X |
-// |   | D: 1+1+1                        |             | D: 1+1                          |             | D: 1                            |             | D: 1+1                          |
-// |   | E: 1+1 OR 2                     |             | E: 1+1 OR 2                     |------+      | E: 0                            |             | E: 0                            |
-// |   +---------------------------------+             +----------------+----------------+      |      +----------------+----------------+             +----------------+----------------+
-// |                                                                    |                       |                       |                                               |
-// |                                                                    |                       | opt (required N1)     |                                               |
-// |                                                                    |                       |                       |                                               |
-// |                                                                    |                       |                       |                                               |
-// |                                                                    |                       +---------------+       |                                               |
-// |                                                                    |                                       |       |                                               |
-// |                                                                    |       +-------------------------------=-------=-----------------------------------------------=-------+
-// |                                                                    v       v                               v       v                                               v       |
-// |   +---------------------------------+             +----------------+-------+--------+             +--------+-------+----------------+             +----------------+-------+--------+
-// +<--|         DC_RECOVERY_INV1        |<----------->|         DC_FAILURE_INV1         |------------>|           DC_SOLO_INV1          |<----------->|      DC_SOLO_RECOVERY_INV1      |
-//     | N1/N1/R                   I/I/I |             | N1/N1/F                   I/I/X |             | N1/F/F                    I/X/X |             | N1/R/F                    I/I/X |
-//     | D: 1+1+1                        |<-----+      | D: 2+2                          |             | D: 2                            |             | D: 1+1                          |
-//     | E: 1+1                          |      |      | E: 1+1                          |------+      | E: 1                            |             | E: 1                            |
-//     +---------------------------------+      |      +----------------+-------+--------+      |      +----------------+----------------+             +---------------------------------+
-//                                              |                       |       ^               |                       |
-//                                              |                       |       |               | opt (required N2)     |
-//                                              |                       |       |               |                       |
-//                                              |                       |       |               |                       |
-//                                              |                       |       |               +---------------+       |
-//                                              |                       |       |                               |       |
-//                                              |                       |       +-------------------------------=-------=-------------------------------------------------------+
-//                                              |                       v                                       v       v                                                       |
-//                                              |      +----------------+----------------+             +--------+-------+----------------+             +------------------------+--------+
-//                                              +------|         DC_FAILURE_INV2         |------------>|           DC_SOLO_INV2          |<----------->|      DC_SOLO_RECOVERY_INV2      |
-//                                                     | N2/N2/F                   I/I/X |             | N2/F/F                    I/X/X |             | N2/R/F                    I/I/X |
-//                                                     | D: 2+2                          |             | D: 2                            |             | D: 1+1                          |
-//                                                     | E: 2+2                          |             | E: 2                            |             | E: 2                            |
-//                                                     +---------------------------------+             +---------------------------------+             +---------------------------------+
-//
-//     ADMIN: I/I/I                                    ADMIN: I/I/X                                    ADMIN: I/X/X                                    ADMIN: I/I/X
-//     W: 1+1+1 OR 2+2                                 W: 2+2                                          W: 2                                            W: 2+2
-//
-// + marks turns/junctions; = is a crossing WITHOUT a connection.
-// Optional (opt) transitions require the target guarantee in the selected surviving realm
-// before completing the transition.
-// Internal progress may change N/F/R, D and E without changing administrative I/X.
-// A transition arrow does not itself replicate data; target guarantees must be established.
-//
+// The group state is authoritative. Realm states describe physical roles and copy
+// guarantees; several states share the same realm tuple but have different policies.
 enum class EMirror3dcGroupState {
-    NORMAL,                    // N0/N0/N0; I/I/I.
-
-    DC_FAILURE,                // N0/N0/F; N1/N0/F; I/I/X.
-    DC_FAILURE_INV1,           // N1/N1/F; N2/N1/F; I/I/X.
-    DC_FAILURE_INV2,           // N2/N2/F; I/I/X.
-
-    DC_RECOVERY,               // N0/N0/R; N1/N0/R; I/I/I.
-    DC_RECOVERY_INV1,          // N1/N1/R; I/I/I.
-
-    DC_SOLO_DISASTER,          // N0/F/F; I/X/X.
-    DC_SOLO_INV1,              // N1/F/F; I/X/X.
-    DC_SOLO_INV2,              // N2/F/F; I/X/X.
-
-    DC_SOLO_RECOVERY,          // N0/R/F; I/I/X.
-    DC_SOLO_RECOVERY_INV1,     // N1/R/F; I/I/X.
-    DC_SOLO_RECOVERY_INV2,     // N2/R/F; I/I/X.
+    NORMAL = 0,
+    DC_FAILURE = 1,
+    DC_FAILURE_INV1 = 2,
+    DC_FAILURE_INV2 = 3,
+    DC_RECOVERY = 4,
+    DC_RECOVERY_INV1 = 5,
+    DC_SOLO_DISASTER = 6,
+    DC_SOLO_INV1 = 7,
+    DC_SOLO_INV2 = 8,
+    DC_SOLO_RECOVERY = 9,
+    DC_SOLO_RECOVERY_INV1 = 10,
+    DC_SOLO_RECOVERY_INV2 = 11,
+    DC_FAILURE_INV1_PENDING = 12,
+    DC_FAILURE_INV2_PENDING = 13,
+    DC_SOLO_INV2_PENDING = 14,
+    DC_SOLO_RECOVERY_INV1_PENDING = 15,
+    DC_SOLO_RECOVERY_INV2_PENDING = 16,
 };
 
 using EMirror3dcFailRealmState = NKikimrBlobStorage::TGroupInfo::TFailRealm::EState;
 using TMirror3dcFailRealmStates = std::array<EMirror3dcFailRealmState, 3>;
 
-// Each number is a minimum copy count in a distinct failrealm; OR is an alternative.
 enum class EMirror3dcLayout {
     LAYOUT_111_22,
     LAYOUT_11_2,
@@ -111,11 +44,85 @@ enum class EMirror3dcLayout {
 };
 
 struct TMirror3dcGroupLayouts {
-    EMirror3dcLayout Write;      // W: sufficient to acknowledge a new write.
-    EMirror3dcLayout Durability; // D: background replication target.
-    EMirror3dcLayout Ensured;    // E: guarantee for all confirmed blobs.
+    EMirror3dcLayout Write;
+    EMirror3dcLayout Durability;
+    EMirror3dcLayout Ensured; // Expected layout E; see GetMirror3dcReadLayout for confirmed guarantees.
 };
 
+constexpr std::optional<TMirror3dcGroupLayouts> GetMirror3dcGroupLayouts(EMirror3dcGroupState state) {
+    using G = EMirror3dcGroupState;
+    using L = EMirror3dcLayout;
+    switch (state) {
+        case G::NORMAL:
+            return TMirror3dcGroupLayouts{L::LAYOUT_111_22, L::LAYOUT_111, L::LAYOUT_111_22};
+        case G::DC_FAILURE:
+            return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_0, L::LAYOUT_11_2};
+        case G::DC_FAILURE_INV1:
+            return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_11, L::LAYOUT_11};
+        case G::DC_FAILURE_INV2:
+            return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_22, L::LAYOUT_22};
+        case G::DC_RECOVERY:
+            return TMirror3dcGroupLayouts{L::LAYOUT_111_22, L::LAYOUT_111, L::LAYOUT_11_2};
+        case G::DC_RECOVERY_INV1:
+            return TMirror3dcGroupLayouts{L::LAYOUT_111_22, L::LAYOUT_111, L::LAYOUT_11};
+        case G::DC_SOLO_DISASTER:
+            return TMirror3dcGroupLayouts{L::LAYOUT_2, L::LAYOUT_0, L::LAYOUT_0};
+        case G::DC_SOLO_INV1:
+            return TMirror3dcGroupLayouts{L::LAYOUT_2, L::LAYOUT_1, L::LAYOUT_1};
+        case G::DC_SOLO_INV2:
+            return TMirror3dcGroupLayouts{L::LAYOUT_2, L::LAYOUT_2, L::LAYOUT_2};
+        case G::DC_SOLO_RECOVERY:
+            return TMirror3dcGroupLayouts{L::LAYOUT_2, L::LAYOUT_11, L::LAYOUT_0};
+        case G::DC_SOLO_RECOVERY_INV1:
+            return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_11, L::LAYOUT_1};
+        case G::DC_SOLO_RECOVERY_INV2:
+            return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_11, L::LAYOUT_2};
+        case G::DC_FAILURE_INV1_PENDING:
+            return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_11, L::LAYOUT_11_2};
+        case G::DC_FAILURE_INV2_PENDING:
+            return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_22, L::LAYOUT_11};
+        case G::DC_SOLO_INV2_PENDING:
+            return TMirror3dcGroupLayouts{L::LAYOUT_2, L::LAYOUT_2, L::LAYOUT_2};
+        case G::DC_SOLO_RECOVERY_INV1_PENDING:
+            return TMirror3dcGroupLayouts{L::LAYOUT_2, L::LAYOUT_11, L::LAYOUT_1};
+        case G::DC_SOLO_RECOVERY_INV2_PENDING:
+            return TMirror3dcGroupLayouts{L::LAYOUT_2, L::LAYOUT_11, L::LAYOUT_2};
+    }
+    return std::nullopt;
+}
+
+// A pending two-copy target does not establish a second copy of old blobs yet.
+constexpr EMirror3dcLayout GetMirror3dcReadLayout(EMirror3dcGroupState state) {
+    return state == EMirror3dcGroupState::DC_SOLO_INV2_PENDING
+        ? EMirror3dcLayout::LAYOUT_1 : GetMirror3dcGroupLayouts(state)->Ensured;
+}
+
+constexpr std::optional<TMirror3dcFailRealmStates> GetMirror3dcRealmStates(EMirror3dcGroupState state) {
+    using G = EMirror3dcGroupState;
+    using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    switch (state) {
+        case G::NORMAL: return TMirror3dcFailRealmStates{R::N0, R::N0, R::N0};
+        case G::DC_FAILURE: return TMirror3dcFailRealmStates{R::N0, R::N0, R::F};
+        case G::DC_FAILURE_INV1: return TMirror3dcFailRealmStates{R::N1, R::N1, R::F};
+        case G::DC_FAILURE_INV2: return TMirror3dcFailRealmStates{R::N2, R::N2, R::F};
+        case G::DC_RECOVERY: return TMirror3dcFailRealmStates{R::N0, R::N0, R::R};
+        case G::DC_RECOVERY_INV1: return TMirror3dcFailRealmStates{R::N1, R::N1, R::R};
+        case G::DC_SOLO_DISASTER: return TMirror3dcFailRealmStates{R::N0, R::F, R::F};
+        case G::DC_SOLO_INV1: return TMirror3dcFailRealmStates{R::N1, R::F, R::F};
+        case G::DC_SOLO_INV2: return TMirror3dcFailRealmStates{R::N2, R::F, R::F};
+        case G::DC_SOLO_RECOVERY: return TMirror3dcFailRealmStates{R::N0, R::R, R::F};
+        case G::DC_SOLO_RECOVERY_INV1: return TMirror3dcFailRealmStates{R::N1, R::R, R::F};
+        case G::DC_SOLO_RECOVERY_INV2: return TMirror3dcFailRealmStates{R::N2, R::R, R::F};
+        case G::DC_FAILURE_INV1_PENDING: return TMirror3dcFailRealmStates{R::N0, R::N0, R::F};
+        case G::DC_FAILURE_INV2_PENDING: return TMirror3dcFailRealmStates{R::N1, R::N1, R::F};
+        case G::DC_SOLO_INV2_PENDING: return TMirror3dcFailRealmStates{R::N1, R::F, R::F};
+        case G::DC_SOLO_RECOVERY_INV1_PENDING: return TMirror3dcFailRealmStates{R::N1, R::R, R::F};
+        case G::DC_SOLO_RECOVERY_INV2_PENDING: return TMirror3dcFailRealmStates{R::N2, R::R, R::F};
+    }
+    return std::nullopt;
+}
+
+// Legacy migration only: realm states cannot distinguish PENDING states.
 // Realm identities do not affect the group classification. Mixed N states use
 // the weakest guarantee, e.g. N2/N0/F is DC_FAILURE, N2/N1/F is DC_FAILURE_INV1.
 // Unsupported combinations (including no N realm, multiple R realms, or N2 in N/N/R) return nullopt.
@@ -177,86 +184,6 @@ constexpr std::optional<EMirror3dcGroupState> GetMirror3dcGroupState(
     return G::NORMAL;
 }
 
-// Return W/D/E from the diagram. An invalid enum value has no layout policy.
-constexpr std::optional<TMirror3dcGroupLayouts> GetMirror3dcGroupLayouts(EMirror3dcGroupState state) {
-    using G = EMirror3dcGroupState;
-    using L = EMirror3dcLayout;
-    switch (state) {
-        case G::NORMAL:
-            return TMirror3dcGroupLayouts{L::LAYOUT_111_22, L::LAYOUT_111, L::LAYOUT_111_22};
-        case G::DC_FAILURE:
-            return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_11, L::LAYOUT_11_2};
-        case G::DC_FAILURE_INV1:
-            return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_22, L::LAYOUT_11};
-        case G::DC_FAILURE_INV2:
-            return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_22, L::LAYOUT_22};
-        case G::DC_RECOVERY:
-            return TMirror3dcGroupLayouts{L::LAYOUT_111_22, L::LAYOUT_111, L::LAYOUT_11_2};
-        case G::DC_RECOVERY_INV1:
-            return TMirror3dcGroupLayouts{L::LAYOUT_111_22, L::LAYOUT_111, L::LAYOUT_11};
-        case G::DC_SOLO_DISASTER:
-            return TMirror3dcGroupLayouts{L::LAYOUT_2, L::LAYOUT_1, L::LAYOUT_0};
-        case G::DC_SOLO_INV1:
-            return TMirror3dcGroupLayouts{L::LAYOUT_2, L::LAYOUT_2, L::LAYOUT_1};
-        case G::DC_SOLO_INV2:
-            return TMirror3dcGroupLayouts{L::LAYOUT_2, L::LAYOUT_2, L::LAYOUT_2};
-        case G::DC_SOLO_RECOVERY:
-            return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_11, L::LAYOUT_0};
-        case G::DC_SOLO_RECOVERY_INV1:
-            return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_11, L::LAYOUT_1};
-        case G::DC_SOLO_RECOVERY_INV2:
-            return TMirror3dcGroupLayouts{L::LAYOUT_22, L::LAYOUT_11, L::LAYOUT_2};
-    }
-    return std::nullopt;
-}
-
-struct TMirror3dcGroupStateTransition {
-    EMirror3dcGroupState From;
-    EMirror3dcGroupState To;
-};
-
-inline constexpr TMirror3dcGroupStateTransition Mirror3dcAllowedGroupTransitions[] = {
-    {EMirror3dcGroupState::NORMAL, EMirror3dcGroupState::DC_FAILURE},
-
-    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_FAILURE_INV1},
-    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_RECOVERY},
-    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_SOLO_DISASTER},
-    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_SOLO_INV1},
-
-    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_FAILURE_INV2},
-    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_RECOVERY_INV1},
-    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_SOLO_INV1},
-    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_SOLO_INV2},
-
-    {EMirror3dcGroupState::DC_FAILURE_INV2, EMirror3dcGroupState::DC_RECOVERY_INV1},
-    {EMirror3dcGroupState::DC_FAILURE_INV2, EMirror3dcGroupState::DC_SOLO_INV2},
-
-    {EMirror3dcGroupState::DC_RECOVERY, EMirror3dcGroupState::NORMAL},
-    {EMirror3dcGroupState::DC_RECOVERY, EMirror3dcGroupState::DC_FAILURE},
-
-    {EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcGroupState::NORMAL},
-    {EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcGroupState::DC_FAILURE_INV1},
-
-
-    {EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcGroupState::DC_SOLO_INV1},
-    {EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcGroupState::DC_SOLO_RECOVERY},
-
-    {EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcGroupState::DC_SOLO_INV2},
-    {EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1},
-
-    {EMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2},
-
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY, EMirror3dcGroupState::DC_FAILURE},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY, EMirror3dcGroupState::DC_SOLO_DISASTER},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1},
-
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1, EMirror3dcGroupState::DC_FAILURE_INV1},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1, EMirror3dcGroupState::DC_SOLO_INV1},
-
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2, EMirror3dcGroupState::DC_FAILURE_INV1},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2, EMirror3dcGroupState::DC_SOLO_INV2},
-};
-
 // A role change crosses an F/R boundary; changing only an N copy guarantee keeps the role.
 constexpr bool IsMirror3dcFailRealmRoleChange(EMirror3dcFailRealmState before, EMirror3dcFailRealmState after) {
     using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
@@ -265,102 +192,207 @@ constexpr bool IsMirror3dcFailRealmRoleChange(EMirror3dcFailRealmState before, E
     return before != after && (beforeHasSpecialRole || afterHasSpecialRole);
 }
 
-// Validate graph edges while retaining physical realm identities. Identical supported
-// configurations are allowed; other updates must follow a listed edge. Copy guarantees
-// required by the target state must be established separately by the caller.
-constexpr bool IsAllowedMirror3dcFailRealmStateTransition(
-        const TMirror3dcFailRealmStates& before, const TMirror3dcFailRealmStates& after) {
-    unsigned roleChanges = 0;
-    for (unsigned realm = 0; realm < before.size(); ++realm) {
-        roleChanges += IsMirror3dcFailRealmRoleChange(before[realm], after[realm]);
-    }
-    if (roleChanges > 1) {
-        return false;
-    }
-    const std::optional<EMirror3dcGroupState> from = GetMirror3dcGroupState(before[0], before[1], before[2]);
-    const std::optional<EMirror3dcGroupState> to = GetMirror3dcGroupState(after[0], after[1], after[2]);
-    if (!from || !to) {
-        return false;
-    }
-    if (before == after) {
-        return true;
-    }
-    for (const TMirror3dcGroupStateTransition& transition : Mirror3dcAllowedGroupTransitions) {
-        if (transition.From == *from && transition.To == *to) {
+// Logical roles are mapped to physical realms by the supplied tuple. All changes
+// retain realm identities, including when N2 is downgraded on return to three DCs.
+struct TMirror3dcGroupConfiguration {
+    EMirror3dcGroupState State = EMirror3dcGroupState::NORMAL;
+    TMirror3dcFailRealmStates Realms{};
+    bool operator==(const TMirror3dcGroupConfiguration&) const = default;
+};
+
+enum class EMirror3dcTransitionKind { Admin, System };
+struct TMirror3dcTransition {
+    EMirror3dcGroupState From;
+    EMirror3dcGroupState To;
+    EMirror3dcTransitionKind Kind;
+};
+
+inline constexpr TMirror3dcTransition Mirror3dcAllowedGroupTransitions[] = {
+    {EMirror3dcGroupState::NORMAL, EMirror3dcGroupState::DC_FAILURE, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_FAILURE_INV1_PENDING, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_FAILURE_INV2_PENDING, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_FAILURE_INV2, EMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_RECOVERY, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_RECOVERY, EMirror3dcGroupState::DC_FAILURE, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_FAILURE_INV2, EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_FAILURE_INV1_PENDING, EMirror3dcGroupState::DC_RECOVERY, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_FAILURE_INV2_PENDING, EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcGroupState::DC_SOLO_RECOVERY, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY, EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1, EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_FAILURE_INV1_PENDING, EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcTransitionKind::System},
+    {EMirror3dcGroupState::DC_FAILURE_INV2_PENDING, EMirror3dcGroupState::DC_FAILURE_INV2, EMirror3dcTransitionKind::System},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2_PENDING, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2, EMirror3dcTransitionKind::System},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2, EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcTransitionKind::System},
+    {EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcGroupState::DC_SOLO_INV2_PENDING, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING, EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2_PENDING, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2_PENDING, EMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2, EMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1, EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcTransitionKind::System},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1, EMirror3dcTransitionKind::System},
+    {EMirror3dcGroupState::DC_FAILURE_INV2_PENDING, EMirror3dcGroupState::DC_SOLO_INV2_PENDING, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_FAILURE_INV1_PENDING, EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcTransitionKind::Admin},
+    {EMirror3dcGroupState::DC_SOLO_INV2_PENDING, EMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcTransitionKind::System},
+    {EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcGroupState::NORMAL, EMirror3dcTransitionKind::System},
+    {EMirror3dcGroupState::DC_RECOVERY, EMirror3dcGroupState::NORMAL, EMirror3dcTransitionKind::System},
+    {EMirror3dcGroupState::DC_SOLO_RECOVERY, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING, EMirror3dcTransitionKind::System},
+};
+
+constexpr bool IsAllowedMirror3dcGroupTransition(EMirror3dcGroupState from, EMirror3dcGroupState to,
+        EMirror3dcTransitionKind kind) {
+    for (const auto& edge : Mirror3dcAllowedGroupTransitions) {
+        if (edge.From == from && edge.To == to && edge.Kind == kind) {
             return true;
         }
     }
     return false;
 }
 
-// Build the next configuration for one physical realm, including required guarantee changes.
-// Unsupported inputs, transitions, and out-of-range indexes return nullopt.
-constexpr std::optional<TMirror3dcFailRealmStates> ReturnFailRealm(
-        const TMirror3dcFailRealmStates& states, unsigned returnedFailRealmIdx) {
-    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-    if (returnedFailRealmIdx >= states.size()) {
+// Normalize copy guarantees while keeping each realm's N/R/F role in place.
+constexpr std::optional<TMirror3dcGroupConfiguration> MakeMirror3dcGroupConfiguration(
+        EMirror3dcGroupState state, const TMirror3dcFailRealmStates& roles) {
+    using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    const auto expected = GetMirror3dcRealmStates(state);
+    if (!expected) {
         return std::nullopt;
     }
-    TMirror3dcFailRealmStates next = states;
-    next[returnedFailRealmIdx] = TFailRealm::R;
-    bool hasFailedRealm = false;
-    for (EMirror3dcFailRealmState realmState : next) {
-        hasFailedRealm |= realmState == TFailRealm::F;
+    const auto role = [](EMirror3dcFailRealmState realm) {
+        return realm == R::F ? 2 : realm == R::R ? 1 : realm >= R::N0 && realm <= R::N2 ? 0 : -1;
+    };
+    TMirror3dcGroupConfiguration result{state, roles};
+    std::array<bool, 3> used{};
+    for (unsigned physical = 0; physical < 3; ++physical) {
+        bool found = false;
+        for (unsigned logical = 0; logical < 3; ++logical) {
+            if (!used[logical] && role(roles[physical]) >= 0 && role(roles[physical]) == role((*expected)[logical])) {
+                result.Realms[physical] = (*expected)[logical];
+                used[logical] = true;
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            return std::nullopt;
+        }
     }
-    if (!hasFailedRealm) {
-        // Three-realm recovery accepts 1+1+1 writes, so N2 is no longer sustainable.
-        for (EMirror3dcFailRealmState& realmState : next) {
-            if (realmState == TFailRealm::N2) {
-                realmState = TFailRealm::N1;
+    return result;
+}
+
+constexpr bool IsValidMirror3dcGroupConfiguration(const TMirror3dcGroupConfiguration& config) {
+    const auto normalized = MakeMirror3dcGroupConfiguration(config.State, config.Realms);
+    if (!normalized) {
+        return false;
+    }
+    for (unsigned realm = 0; realm < 3; ++realm) {
+        if (config.Realms[realm] < normalized->Realms[realm]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+constexpr bool IsAllowedMirror3dcGroupTransition(const TMirror3dcGroupConfiguration& before,
+        const TMirror3dcGroupConfiguration& after) {
+    if (!IsValidMirror3dcGroupConfiguration(before) || !IsValidMirror3dcGroupConfiguration(after)) {
+        return false;
+    }
+    if (before == after) {
+        return true;
+    }
+    unsigned roleChanges = 0;
+    for (unsigned realm = 0; realm < 3; ++realm) {
+        roleChanges += IsMirror3dcFailRealmRoleChange(before.Realms[realm], after.Realms[realm]);
+    }
+    return roleChanges <= 1 && (IsAllowedMirror3dcGroupTransition(before.State, after.State,
+        EMirror3dcTransitionKind::Admin) || IsAllowedMirror3dcGroupTransition(before.State, after.State,
+        EMirror3dcTransitionKind::System));
+}
+
+// Legacy configurations are classified once, before an authoritative state is persisted.
+constexpr std::optional<TMirror3dcGroupConfiguration> MigrateMirror3dcGroupConfiguration(
+        const TMirror3dcFailRealmStates& realms) {
+    const auto state = GetMirror3dcGroupState(realms[0], realms[1], realms[2]);
+    return state ? std::optional(TMirror3dcGroupConfiguration{*state, realms}) : std::nullopt;
+}
+
+constexpr bool IsMirror3dcReplicationTarget(EMirror3dcGroupState state, EMirror3dcFailRealmState realm) {
+    using G = EMirror3dcGroupState;
+    using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    switch (state) {
+        case G::NORMAL:
+        case G::DC_RECOVERY:
+        case G::DC_FAILURE_INV1_PENDING:
+        case G::DC_FAILURE_INV2_PENDING:
+        case G::DC_SOLO_INV2_PENDING:
+        case G::DC_SOLO_RECOVERY:
+            return realm != R::F;
+        case G::DC_RECOVERY_INV1:
+        case G::DC_SOLO_RECOVERY_INV1_PENDING:
+        case G::DC_SOLO_RECOVERY_INV2_PENDING:
+        case G::DC_SOLO_RECOVERY_INV1:
+        case G::DC_SOLO_RECOVERY_INV2:
+            return realm == R::R;
+        default:
+            return false;
+    }
+}
+
+constexpr std::optional<TMirror3dcGroupConfiguration> CompleteMirror3dcReplication(
+        const TMirror3dcGroupConfiguration& before) {
+    using G = EMirror3dcGroupState;
+    using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    if (!IsValidMirror3dcGroupConfiguration(before)) {
+        return std::nullopt;
+    }
+    G next;
+    switch (before.State) {
+        case G::DC_FAILURE_INV1_PENDING: next = G::DC_FAILURE_INV1; break;
+        case G::DC_FAILURE_INV2_PENDING: next = G::DC_FAILURE_INV2; break;
+        case G::DC_SOLO_INV2_PENDING: next = G::DC_SOLO_INV2; break;
+        case G::DC_SOLO_RECOVERY: next = G::DC_SOLO_RECOVERY_INV1_PENDING; break;
+        case G::DC_SOLO_RECOVERY_INV1_PENDING: next = G::DC_SOLO_RECOVERY_INV1; break;
+        case G::DC_SOLO_RECOVERY_INV2_PENDING: next = G::DC_SOLO_RECOVERY_INV2; break;
+        case G::DC_SOLO_RECOVERY_INV1:
+        case G::DC_SOLO_RECOVERY_INV2: next = G::DC_FAILURE_INV1; break;
+        case G::DC_RECOVERY:
+        case G::DC_RECOVERY_INV1: next = G::NORMAL; break;
+        default: return std::nullopt;
+    }
+    auto roles = before.Realms;
+    if (next == G::NORMAL || next == G::DC_FAILURE_INV1) {
+        for (auto& realm : roles) {
+            if (realm == R::R) {
+                realm = R::N1;
             }
         }
     }
-    if (!IsAllowedMirror3dcFailRealmStateTransition(states, next)) {
-        return std::nullopt;
-    }
-    return next;
+    return MakeMirror3dcGroupConfiguration(next, roles);
 }
 
-constexpr std::optional<TMirror3dcFailRealmStates> TakeDownFailRealm(
-        const TMirror3dcFailRealmStates& states, unsigned takeDownFailRealmIdx) {
-    if (takeDownFailRealmIdx >= states.size()) {
+constexpr std::optional<TMirror3dcGroupConfiguration> ChangeMirror3dcRealmAvailability(
+        const TMirror3dcGroupConfiguration& before, unsigned realm, bool excluded) {
+    using R = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+    if (realm >= 3 || !IsValidMirror3dcGroupConfiguration(before)
+            || (excluded ? before.Realms[realm] == R::F : before.Realms[realm] != R::F)) {
         return std::nullopt;
     }
-    TMirror3dcFailRealmStates next = states;
-    next[takeDownFailRealmIdx] = NKikimrBlobStorage::TGroupInfo::TFailRealm::F;
-    if (!IsAllowedMirror3dcFailRealmStateTransition(states, next)) {
-        return std::nullopt;
-    }
-    return next;
-}
-
-// The caller must confirm replication of the R realm before completing recovery.
-// Returning to NORMAL also requires a first-copy guarantee in both normal realms.
-constexpr std::optional<TMirror3dcFailRealmStates> RecoveringComplete(const TMirror3dcFailRealmStates& states) {
-    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-    std::optional<unsigned> recoveringRealm;
-    bool hasFailedRealm = false;
-    bool hasNormalRealmWithoutCopyGuarantee = false;
-    for (unsigned realm = 0; realm < states.size(); ++realm) {
-        if (states[realm] == TFailRealm::R) {
-            recoveringRealm = realm;
+    auto roles = before.Realms;
+    roles[realm] = excluded ? R::F : R::R;
+    for (const auto& edge : Mirror3dcAllowedGroupTransitions) {
+        if (edge.From == before.State && edge.Kind == EMirror3dcTransitionKind::Admin) {
+            const auto next = MakeMirror3dcGroupConfiguration(edge.To, roles);
+            if (next && IsAllowedMirror3dcGroupTransition(before, *next)) {
+                return next;
+            }
         }
-        hasFailedRealm |= states[realm] == TFailRealm::F;
-        hasNormalRealmWithoutCopyGuarantee |= states[realm] == TFailRealm::N0;
     }
-    if (!recoveringRealm || (!hasFailedRealm && hasNormalRealmWithoutCopyGuarantee)) {
-        return std::nullopt;
-    }
-    TMirror3dcFailRealmStates next = states;
-    if (hasFailedRealm) {
-        next[*recoveringRealm] = TFailRealm::N1;
-    } else {
-        next.fill(TFailRealm::N0);
-    }
-    if (!IsAllowedMirror3dcFailRealmStateTransition(states, next)) {
-        return std::nullopt;
-    }
-    return next;
+    return std::nullopt;
 }
 
 } // namespace NKikimr

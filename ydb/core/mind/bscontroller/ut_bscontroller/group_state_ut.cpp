@@ -39,9 +39,10 @@ public:
         }
     }
 
-    void Update(ui32 generation, const TFailRealmStates& states) {
+    void Update(ui32 generation, EMirror3dcGroupState state, const TFailRealmStates& states) {
         Info.Generation = generation;
         Info.States = states;
+        Info.GroupState = state;
         for (TGroupReplicationInfo::TVDisk& disk : Info.VDisks) {
             disk.Id.GroupGeneration = generation;
         }
@@ -81,7 +82,7 @@ public:
         }
     }
 
-    TFailRealmStates GetProposal() {
+    TMirror3dcGroupConfiguration GetProposal() {
         TEvBlobStorage::TEvControllerConfigRequest::TPtr result =
             Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigRequest>(Controller);
         const NKikimrBlobStorage::TDefineFailRealmStates& command =
@@ -92,125 +93,67 @@ public:
         for (ui32 realm = 0; realm < 3; ++realm) {
             states[realm] = static_cast<EMirror3dcFailRealmState>(command.GetGroups(0).GetFailRealmStates(realm));
         }
-        return states;
+        UNIT_ASSERT(command.GetGroups(0).HasGroupState());
+        return {static_cast<EMirror3dcGroupState>(command.GetGroups(0).GetGroupState()), states};
     }
 };
 }
 
+using G = EMirror3dcGroupState;
 Y_UNIT_TEST_SUITE(BsControllerGroupState) {
-    Y_UNIT_TEST(DurabilityTargets) {
-        const TFailRealmStates oneCopy{TFailRealm::N0, TFailRealm::N0, TFailRealm::F};
-        UNIT_ASSERT(GetReplicatedRealmState(oneCopy, 0) == TFailRealm::N1);
-        UNIT_ASSERT(!GetReplicatedRealmState(oneCopy, 2));
-        const TFailRealmStates twoCopies{TFailRealm::N1, TFailRealm::N1, TFailRealm::F};
-        UNIT_ASSERT(GetReplicatedRealmState(twoCopies, 0) == TFailRealm::N2);
-        const TFailRealmStates recovering{TFailRealm::N0, TFailRealm::R, TFailRealm::F};
-        UNIT_ASSERT(GetReplicatedRealmState(recovering, 1) == TFailRealm::N1);
-        const TFailRealmStates recoveryComplete{TFailRealm::N1, TFailRealm::N1, TFailRealm::R};
-        UNIT_ASSERT(GetReplicatedRealmState(recoveryComplete, 2) == TFailRealm::N0);
-        UNIT_ASSERT(!GetReplicatedRealmState(recoveryComplete, 0));
-        UNIT_ASSERT(GetReplicatedRealmState({TFailRealm::N0, TFailRealm::F, TFailRealm::F}, 0) == TFailRealm::N1);
-        UNIT_ASSERT(GetReplicatedRealmState({TFailRealm::N1, TFailRealm::F, TFailRealm::F}, 0) == TFailRealm::N2);
-        UNIT_ASSERT(!GetReplicatedRealmState({TFailRealm::F, TFailRealm::F, TFailRealm::F}, 0));
-    }
-
-    Y_UNIT_TEST(NormalGroupDoesNotRequestPerRealmGuarantees) {
-        const TFailRealmStates normal{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
-        for (ui32 realm = 0; realm < 3; ++realm) {
-            UNIT_ASSERT(!GetReplicatedRealmState(normal, realm));
-        }
+    Y_UNIT_TEST(StableFailureDoesNotStartReplication) {
         TGroupStateFixture fixture;
-        fixture.Update(1, normal);
-        fixture.Runtime.SimulateSleep(TDuration::Seconds(6));
+        fixture.Update(1, G::DC_FAILURE, {TFailRealm::N0, TFailRealm::N0, TFailRealm::F});
         fixture.AssertNoRequests();
     }
-
-    Y_UNIT_TEST(WriteAlternativesLimitNormalGroupGuarantees) {
+    Y_UNIT_TEST(PendingWaitsForAllTargetRealms) {
         TGroupStateFixture fixture;
-        const TFailRealmStates states{TFailRealm::N2, TFailRealm::N1, TFailRealm::N0};
-        UNIT_ASSERT(GetReplicatedRealmState(states, 0) == TFailRealm::N0);
-        UNIT_ASSERT(GetReplicatedRealmState(states, 1) == TFailRealm::N0);
-        UNIT_ASSERT(!GetReplicatedRealmState(states, 2));
-        fixture.Update(1, states);
+        fixture.Update(1, G::DC_FAILURE_INV1_PENDING, {TFailRealm::N0, TFailRealm::N0, TFailRealm::F});
+        TVDiskReplicationStatus status;
+        status.FailSecondRealm = true;
+        fixture.ReplyRound(6, status);
+        fixture.AssertNoRequests();
         fixture.ReplyRound(6);
-        const TFailRealmStates normal{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
-        UNIT_ASSERT(fixture.GetProposal() == normal);
+        const auto next = fixture.GetProposal();
+        UNIT_ASSERT(next.State == G::DC_FAILURE_INV1);
+        UNIT_ASSERT((next.Realms == TFailRealmStates{TFailRealm::N1, TFailRealm::N1, TFailRealm::F}));
     }
-
-    Y_UNIT_TEST(RecoveryTargetCountsTheReturningRealm) {
-        for (ui32 realm = 0; realm < 3; ++realm) {
-            TFailRealmStates fullyIncluded{TFailRealm::N1, TFailRealm::N1, TFailRealm::N1};
-            fullyIncluded[realm] = TFailRealm::R;
-            UNIT_ASSERT(GetReplicatedRealmState(fullyIncluded, realm) == TFailRealm::N0);
-            TFailRealmStates unsupported{TFailRealm::N2, TFailRealm::N2, TFailRealm::N2};
-            unsupported[realm] = TFailRealm::R;
-            UNIT_ASSERT(!GetReplicatedRealmState(unsupported, realm));
-            TFailRealmStates withFailure{TFailRealm::F, TFailRealm::F, TFailRealm::F};
-            withFailure[realm] = TFailRealm::R;
-            const ui32 sourceRealm = (realm + 1) % 3;
-            withFailure[sourceRealm] = TFailRealm::N2;
-            UNIT_ASSERT(GetReplicatedRealmState(withFailure, realm) == TFailRealm::N1);
-            UNIT_ASSERT(!GetReplicatedRealmState(withFailure, sourceRealm));
+    Y_UNIT_TEST(RecoveryPendingChangesPolicyWithoutChangingRealmTuple) {
+        TGroupStateFixture fixture;
+        fixture.Update(2, G::DC_SOLO_RECOVERY_INV2_PENDING, {TFailRealm::F, TFailRealm::N2, TFailRealm::R});
+        fixture.ReplyRound(3);
+        const auto next = fixture.GetProposal();
+        UNIT_ASSERT(next.State == G::DC_SOLO_RECOVERY_INV2);
+        UNIT_ASSERT(next.Realms == fixture.Info.States);
+    }
+    Y_UNIT_TEST(RecoveryQueriesOnlyR) {
+        TGroupStateFixture fixture;
+        fixture.Update(3, G::DC_RECOVERY_INV1, {TFailRealm::N1, TFailRealm::R, TFailRealm::N1});
+        fixture.ReplyRound(3);
+        const auto next = fixture.GetProposal();
+        UNIT_ASSERT(next.State == G::NORMAL);
+        UNIT_ASSERT((next.Realms == TFailRealmStates{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}));
+    }
+    Y_UNIT_TEST(StaleOrIncompleteStatusCannotFinishTransition) {
+        for (unsigned mode = 0; mode < 3; ++mode) {
+            TGroupStateFixture fixture;
+            fixture.Update(4, G::DC_SOLO_INV2_PENDING, {TFailRealm::N1, TFailRealm::F, TFailRealm::F});
+            TVDiskReplicationStatus status;
+            if (mode == 0) {
+                status.ObsoleteGeneration = true;
+            } else if (mode == 1) {
+                status.DurabilityReplicated.reset();
+            } else {
+                status.DurabilityReplicated = false;
+            }
+            fixture.ReplyRound(3, status);
+            fixture.AssertNoRequests();
         }
     }
-
-    Y_UNIT_TEST(RecoveryWaitsForAllRealmsBeforeReturningToNormal) {
-        TGroupStateFixture fixture;
-        fixture.Update(1, {TFailRealm::N0, TFailRealm::N0, TFailRealm::R});
-        // R has finished, but one normal realm still lacks its first-copy guarantee.
-        fixture.ReplyRound(9, {.FailSecondRealm = true});
-        UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N1, TFailRealm::N0, TFailRealm::R}));
-        fixture.Update(2, {TFailRealm::N1, TFailRealm::N0, TFailRealm::R});
-        // Both normal realms are now ready, but R must still confirm its own replication.
-        fixture.ReplyRound(6, {.UnreplicatedRealm = 2});
-        UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N1, TFailRealm::N1, TFailRealm::R}));
-        fixture.Update(3, {TFailRealm::N1, TFailRealm::N1, TFailRealm::R});
-        fixture.ReplyRound(3);
-        const TFailRealmStates normal{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
-        UNIT_ASSERT(fixture.GetProposal() == normal);
-        fixture.Update(4, normal);
-        fixture.Runtime.SimulateSleep(TDuration::Seconds(6));
-        fixture.AssertNoRequests();
-    }
-
-    Y_UNIT_TEST(WaitsForEveryDiskAndTracksChangedDurability) {
-        TGroupStateFixture fixture;
-        fixture.Update(1, {TFailRealm::N0, TFailRealm::N0, TFailRealm::F});
-        fixture.ReplyRound(6, {.FailSecondRealm = true});
-        UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N1, TFailRealm::N0, TFailRealm::F}));
-        fixture.Update(2, {TFailRealm::N1, TFailRealm::N0, TFailRealm::F});
-        // These replies carry the current query cookies, but an obsolete group generation.
-        fixture.ReplyRound(3, {.ObsoleteGeneration = true});
-        fixture.ReplyRound(3);
-        UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N1, TFailRealm::N1, TFailRealm::F}));
-        // D changed from 1+1 to 2+2. Completion of the old round cannot prove N2.
-        fixture.Update(3, {TFailRealm::N1, TFailRealm::N1, TFailRealm::F});
-        fixture.ReplyRound(6);
-        UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N2, TFailRealm::N2, TFailRealm::F}));
-        fixture.Runtime.Send(new IEventHandle(fixture.Actor, fixture.Controller, new TEvents::TEvPoison), 0, true);
-    }
-
-    Y_UNIT_TEST(RequiresOrdinaryAndDurabilityReplication) {
-        TGroupStateFixture fixture;
-        fixture.Update(1, {TFailRealm::N1, TFailRealm::N1, TFailRealm::F});
-        fixture.ReplyRound(6, {.DurabilityReplicated = false});
-        fixture.Runtime.SimulateSleep(TDuration::Seconds(1));
-        UNIT_ASSERT(fixture.Runtime.CaptureMailboxEvents(fixture.Controller.Hint(), fixture.Controller.NodeId()).empty());
-        // A VDisk that does not advertise the new field cannot confirm D.
-        fixture.ReplyRound(6, {.DurabilityReplicated = std::nullopt});
-        fixture.Runtime.SimulateSleep(TDuration::Seconds(1));
-        UNIT_ASSERT(fixture.Runtime.CaptureMailboxEvents(fixture.Controller.Hint(), fixture.Controller.NodeId()).empty());
-        fixture.ReplyRound(6, {.Replicated = false});
-        fixture.Runtime.SimulateSleep(TDuration::Seconds(1));
-        UNIT_ASSERT(fixture.Runtime.CaptureMailboxEvents(fixture.Controller.Hint(), fixture.Controller.NodeId()).empty());
-        fixture.ReplyRound(6);
-        UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N2, TFailRealm::N2, TFailRealm::F}));
-    }
-
     Y_UNIT_TEST(GroupUpdateKeepsOtherGroupsQueries) {
         TGroupStateFixture fixture;
         const TFailRealmStates initial{TFailRealm::N1, TFailRealm::N1, TFailRealm::F};
-        fixture.Update(1, initial);
+        fixture.Update(1, G::DC_FAILURE_INV2_PENDING, initial);
         TGroupReplicationInfo other = fixture.Info;
         for (TGroupReplicationInfo::TVDisk& disk : other.VDisks) {
             disk.Id.GroupID = TGroupId::FromValue(43);
@@ -227,7 +170,7 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
                 }
             }
         }
-        fixture.Update(2, initial);
+        fixture.Update(2, G::DC_FAILURE_INV2_PENDING, initial);
         // Late replies for group 42 are ignored; current replies for group 43 must still complete it.
         for (const TEvBlobStorage::TEvVStatus::TPtr& request : requests) {
             const TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());
@@ -244,20 +187,8 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         UNIT_ASSERT_VALUES_EQUAL(definition.GetGroupId(), 43);
         UNIT_ASSERT_VALUES_EQUAL(definition.GetExpectedGroupGeneration(), 1);
         fixture.ReplyRound(6);
-        UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N2, TFailRealm::N2, TFailRealm::F}));
+        UNIT_ASSERT((fixture.GetProposal().Realms == TFailRealmStates{TFailRealm::N2, TFailRealm::N2, TFailRealm::F}));
     }
 
-    Y_UNIT_TEST(RecoveringRealmPromotesAfterReplication) {
-        TGroupStateFixture fixture;
-        fixture.Update(1, {TFailRealm::N2, TFailRealm::R, TFailRealm::F});
-        fixture.ReplyRound(3, {.DurabilityReplicated = false});
-        fixture.Runtime.SimulateSleep(TDuration::Seconds(1));
-        UNIT_ASSERT(fixture.Runtime.CaptureMailboxEvents(fixture.Controller.Hint(), fixture.Controller.NodeId()).empty());
-        fixture.ReplyRound(3);
-        UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N2, TFailRealm::N1, TFailRealm::F}));
-        fixture.Update(2, {TFailRealm::N2, TFailRealm::N1, TFailRealm::F});
-        fixture.ReplyRound(3);
-        UNIT_ASSERT((fixture.GetProposal() == TFailRealmStates{TFailRealm::N2, TFailRealm::N2, TFailRealm::F}));
-    }
 
 }

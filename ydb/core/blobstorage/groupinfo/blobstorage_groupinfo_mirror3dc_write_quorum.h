@@ -9,15 +9,17 @@
 
 namespace NKikimr {
 
-// Write acknowledgement and FULL use W; absence checks use Ensured (E).
+// Write acknowledgement and FULL use W; absence checks use the confirmed read bound.
 class TMirror3dcWriteQuorumChecker {
     std::array<EMirror3dcFailRealmState, 3> Realms; // In subgroup part order.
+    EMirror3dcGroupState State;
     EMirror3dcLayout WriteLayout;
     EMirror3dcLayout EnsuredLayout;
 
     TMirror3dcWriteQuorumChecker(const std::array<EMirror3dcFailRealmState, 3>& realms,
-            EMirror3dcLayout writeLayout, EMirror3dcLayout ensuredLayout)
+            EMirror3dcLayout writeLayout, EMirror3dcLayout ensuredLayout, EMirror3dcGroupState state)
         : Realms(realms)
+        , State(state)
         , WriteLayout(writeLayout)
         , EnsuredLayout(ensuredLayout)
     {}
@@ -120,12 +122,12 @@ public:
         }
         const std::array<EMirror3dcFailRealmState, 3> realms = {
             info.GetFailRealmState(0), info.GetFailRealmState(1), info.GetFailRealmState(2)};
-        const auto state = GetMirror3dcGroupState(realms[0], realms[1], realms[2]);
+        const auto state = info.GetMirror3dcState();
         if (!state) {
             return false;
         }
         const auto layouts = *GetMirror3dcGroupLayouts(*state);
-        const TMirror3dcWriteQuorumChecker checker(realms, layouts.Write, layouts.Ensured);
+        const TMirror3dcWriteQuorumChecker checker(realms, layouts.Write, GetMirror3dcReadLayout(*state), *state);
         const auto failedDomains = G::TGroupFailDomains::CreateFromGroupDiskSet(
             failedDisks, G::TGroupFailDomains::EDiskCondition::ANY);
         std::array<ui32, 3> uncertain{};
@@ -137,7 +139,7 @@ public:
             }
         }
         // A range is complete only if no blob's ensured layout can hide in failed domains.
-        return !checker.CheckCounts(uncertain, layouts.Ensured);
+        return !checker.CheckCounts(uncertain, GetMirror3dcReadLayout(*state));
     }
 
     static bool CheckQuorumForFullSync(const TBlobStorageGroupInfo& info,
@@ -147,8 +149,7 @@ public:
                 || topology.GetTotalFailRealmsNum() != 3 || syncedDisks.GetTopology() != &topology) {
             return false;
         }
-        const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(info.GetFailRealmState(0),
-            info.GetFailRealmState(1), info.GetFailRealmState(2));
+        const auto state = info.GetMirror3dcState();
         if (!state) {
             return false;
         }
@@ -188,7 +189,8 @@ public:
                 || !IsValidLayout(writeLayout) || !IsValidLayout(ensuredLayout)) {
             return std::nullopt;
         }
-        return TMirror3dcWriteQuorumChecker(realms, writeLayout, ensuredLayout);
+        return TMirror3dcWriteQuorumChecker(realms, writeLayout, ensuredLayout,
+            *GetMirror3dcGroupState(realms[0], realms[1], realms[2]));
     }
 
     static std::optional<TMirror3dcWriteQuorumChecker> TryCreate(const TBlobStorageGroupInfo& info, ui32 blobHash) {
@@ -204,12 +206,12 @@ public:
             const ui32 physicalRealm = topology.GetVDiskId(subgroup[part]).FailRealm;
             realms[part] = info.GetFailRealmState(physicalRealm);
         }
-        const auto state = GetMirror3dcGroupState(realms[0], realms[1], realms[2]);
+        const auto state = info.GetMirror3dcState();
         if (!state) {
             return std::nullopt;
         }
         const auto layouts = *GetMirror3dcGroupLayouts(*state);
-        return TMirror3dcWriteQuorumChecker(realms, layouts.Write, layouts.Ensured);
+        return TMirror3dcWriteQuorumChecker(realms, layouts.Write, GetMirror3dcReadLayout(*state), *state);
     }
 
     bool CheckQuorumForSubgroup(const TBlobStorageGroupInfo::TSubgroupVDisks& disks) const {
@@ -230,15 +232,14 @@ public:
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const {
         using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         Y_ABORT_UNLESS(idxInSubgroup < 9);
-        const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(Realms[0], Realms[1], Realms[2]);
-        Y_ABORT_UNLESS(state);
-        const EMirror3dcLayout durability = GetMirror3dcGroupLayouts(*state)->Durability;
+        const EMirror3dcLayout durability = GetMirror3dcGroupLayouts(State)->Durability;
         const std::array<ui32, 3> copies = CountParts(parts);
         const ui32 localRealm = idxInSubgroup % 3;
         const bool localRealmIsFailed = Realms[localRealm] == TFailRealm::F;
         const bool durabilitySatisfied = CheckCounts(copies, durability);
         const bool localPartAlreadyPresent = (parts.GetDisksWithPart(localRealm) & (1u << idxInSubgroup)) != 0;
-        if (localRealmIsFailed || durabilitySatisfied || localPartAlreadyPresent) {
+        if (!IsMirror3dcReplicationTarget(State, Realms[localRealm])
+                || localRealmIsFailed || durabilitySatisfied || localPartAlreadyPresent) {
             return 0;
         }
 

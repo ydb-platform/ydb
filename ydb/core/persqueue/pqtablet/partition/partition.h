@@ -231,6 +231,7 @@ private:
                                const TWriteMsg& p,
                                NPersQueue::NErrorCode::EErrorCode errorCode);
     void CreateMirrorerActor();
+    void DestroyMirrorer();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
     void FilterDeadlinedWrites(const TActorContext& ctx);
@@ -675,6 +676,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPPurgeRequest, Handle);
+            IgnoreFunc(TEvPQ::TEvMLPPurgeResponse); // Replies to purges initiated by offset replication.
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
@@ -762,6 +764,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPPurgeRequest, Handle);
+            IgnoreFunc(TEvPQ::TEvMLPPurgeResponse); // Replies to purges initiated by offset replication.
             hFuncTraced(TEvPQ::TEvGetMLPConsumerStateRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerState, Handle);
             hFuncTraced(TEvPQ::TEvMLPConsumerMonRequest, Handle);
@@ -1036,6 +1039,7 @@ private:
     bool NewPartition;
     ui64 PQRBCookie = 0;
     std::optional<TEvPQ::TEvReplicationData::TPtr> PendingReplicationData;
+    bool ReplicationDataNeedsApply = false;
 
     THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners;
     THashSet<TActorId> OwnerPipes;

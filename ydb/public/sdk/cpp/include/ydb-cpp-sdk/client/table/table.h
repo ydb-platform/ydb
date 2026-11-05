@@ -343,6 +343,8 @@ public:
         BFloat16,
         Float8E4M3, // E4M3FN
         Float8E5M2,
+        Uint4 = 9, // Packed unsigned 4-bit coordinates [0, 15].
+        Int4 = 10, // Packed signed 4-bit coordinates [-8, 7].
     };
 
     EMetric Metric = EMetric::Unspecified;
@@ -377,6 +379,8 @@ public:
         BFloat16,
         Float8E4M3, // E4M3FN
         Float8E5M2,
+        Uint4 = 9, // Packed unsigned 4-bit coordinates [0, 15].
+        Int4 = 10, // Packed signed 4-bit coordinates [-8, 7].
     };
 
     TVectorIndexSettings Settings;

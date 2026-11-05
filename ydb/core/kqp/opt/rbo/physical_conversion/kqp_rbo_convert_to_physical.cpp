@@ -419,6 +419,33 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
                 stageBodies[opStageId] = currentStageBody;
                 stagePos[opStageId] = op->Pos;
                 YQL_CLOG(TRACE, CoreDq) << "Converted IndexLookupJoin " << opStageId;
+            } else if (op->Kind == EOperator::Sequencer) {
+                auto& sequencer = CastOperator<TOpSequencer>(*op);
+                const auto inputStageId = *sequencer.GetInput()->Props.StageId;
+                TVector<std::pair<TString, TString>> inputRenames;
+                TVector<std::pair<TString, TString>> outputRenames;
+                for (const auto& [id, name] : sequencer.GetInputColumns().Items()) {
+                    inputRenames.emplace_back(names.Get(id), name);
+                    outputRenames.emplace_back(name, names.Get(id));
+                }
+                for (const auto& [id, name] : sequencer.GetGeneratedColumns().Items()) {
+                    outputRenames.emplace_back(name, names.Get(id));
+                }
+                // The existing sequencer connection uses storage column names.
+                // Restore IU names immediately after it so ordinary Maps can
+                // compute expressions that depend on the generated values.
+                stageBodies[inputStageId] = NPhysicalConvertionUtils::TransformStageOutput(stageBodies.at(inputStageId),
+                    [&](const NPhysicalConvertionUtils::TStageBody& body) {
+                        return NPhysicalConvertionUtils::TStageBody::Narrow(
+                            NPhysicalConvertionUtils::BuildRenameMap(body.AsNarrow(ctx), inputRenames, ctx, /*ordered=*/true));
+                    }, GetReplicateOutputIndex(*sequencer.GetInput()), ctx);
+                auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
+                stageArgs[opStageId].push_back(stageArg);
+                auto stream = Build<TCoToStream>(ctx, op->Pos).Input(stageInput).Done().Ptr();
+                currentStageBody = NPhysicalConvertionUtils::TStageBody::Narrow(
+                    NPhysicalConvertionUtils::BuildRenameMap(stream, outputRenames, ctx, /*ordered=*/true));
+                stageBodies[opStageId] = currentStageBody;
+                stagePos[opStageId] = op->Pos;
             } else if (op->Kind == EOperator::TableEffect) {
                 auto& tableEffect = CastOperator<TOpTableEffect>(*op);
 

@@ -2,7 +2,6 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <algorithm>
 #include <map>
 
 namespace NKikimr::NBsController {
@@ -109,10 +108,12 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
     }
 
     void CheckCompletion(ui32 groupId, TGroup* group) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         if (group->ProposalCookie) {
             return;
         }
         TFailRealmStates states = group->Info.States;
+        bool recoveringRealmReplicated = false;
         for (ui32 realm = 0; realm < 3; ++realm) {
             const std::optional<EMirror3dcFailRealmState> target = GetReplicatedRealmState(group->Info.States, realm);
             if (!target) {
@@ -127,29 +128,17 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
                 }
             }
             if (disks && complete) {
-                states[realm] = *target;
+                if (group->Info.States[realm] == TFailRealm::R) {
+                    recoveringRealmReplicated = true;
+                } else {
+                    states[realm] = *target;
+                }
             }
         }
-        const auto it = std::find(states.begin(), states.end(), NKikimrBlobStorage::TGroupInfo::TFailRealm::F);
-        if (it == states.end()) {
-            using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-            for (ui32 realm = 0; realm < 3; ++realm) {
-                if (group->Info.States[realm] == TFailRealm::R && states[realm] != TFailRealm::R) {
-                    // This R has confirmed D, even though its resulting state is N0.
-                    // Establish 1+1+1 before NORMAL allows writes to omit any realm again.
-                    bool everyNormalRealmHasCopy = true;
-                    for (ui32 normalRealm = 0; normalRealm < 3; ++normalRealm) {
-                        if (normalRealm != realm && states[normalRealm] == TFailRealm::N0) {
-                            everyNormalRealmHasCopy = false;
-                        }
-                    }
-                    if (everyNormalRealmHasCopy) {
-                        states.fill(TFailRealm::N0);
-                    } else {
-                        states[realm] = TFailRealm::R;
-                    }
-                    break;
-                }
+        if (recoveringRealmReplicated) {
+            const std::optional<TMirror3dcFailRealmStates> next = RecoveringComplete(states);
+            if (next) {
+                states = *next;
             }
         }
         if (states != group->Info.States) {

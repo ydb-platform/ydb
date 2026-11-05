@@ -2115,11 +2115,19 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             });
             return !ready;
         });
-        const auto edge = runtime.AllocateEdgeActor(1);
-        runtime.Send(new IEventHandle(slot.GetVDiskServiceId(), edge,
-            new TEvBlobStorage::TEvVStatus(vdiskId)), 1);
-        const auto response = runtime.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(edge, false);
-        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrProto::VDISK_ERROR_STATE);
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        for (ui32 generation : {0u, 1u, 2u}) {
+            TVDiskID target = vdiskId;
+            target.GroupGeneration = generation;
+            runtime.Send(new IEventHandle(slot.GetVDiskServiceId(), edge,
+                new TEvBlobStorage::TEvVStatus(target)), 1);
+            const std::unique_ptr<TEventHandle<TEvBlobStorage::TEvVStatusResult>> response =
+                runtime.WaitForEdgeActorEvent<TEvBlobStorage::TEvVStatusResult>(edge, false);
+            const NKikimrProto::EReplyStatus expected = generation == vdiskId.GroupGeneration
+                ? NKikimrProto::ERROR : NKikimrProto::RACE;
+            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), expected);
+            UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(response->Get()->Record.GetVDiskID()), vdiskId);
+        }
     }
 
     CUSTOM_UNIT_TEST(TestSlayCompletesWhenPDiskIsDestroyedBeforeReply) {

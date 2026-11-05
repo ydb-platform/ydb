@@ -4168,7 +4168,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             if (LastOffsetHasBeenCommited(userInfo)) {
                 SendReadingFinished(user);
             }
-            if (offsetHasChanged && userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING) {
+            if (offsetHasChanged) {
                 changedUsers.push_back(&userInfo);
             }
         } else if (user != CLIENTID_WITHOUT_CONSUMER) {
@@ -5123,6 +5123,7 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
         user->SetCreateTimestampMS(createTimestamp.MilliSeconds());
     }
     user->SetEndOffset(GetEndOffset());
+    user->SetStartOffset(GetStartOffset());
     user->SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
     if (IsActive() || (offset > -1 && offset < (i64)GetEndOffset())) {
         user->SetSizeLag(GetSizeLag(offset));
@@ -5241,6 +5242,13 @@ void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
         RegisterWithSameMailbox(CreateMirrorer(TabletId, TabletActorId, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, GetEndOffset(), Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters))
     );
+}
+
+void TPartition::DestroyMirrorer() {
+    if (Mirrorer) {
+        Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
+        Mirrorer.Reset();
+    }
 }
 
 bool TPartition::IsQuotingEnabled() const

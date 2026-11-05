@@ -3,7 +3,7 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
-#include <ydb/public/lib/ydb_cli/common/yql_parser/yql_parser.h>
+#include <ydb/public/lib/ydb_cli/commands/yql_parser/yql_parser.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/future/async.h>

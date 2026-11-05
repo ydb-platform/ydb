@@ -1,4 +1,4 @@
-#include <ydb/public/lib/ydb_cli/common/yql_parser/yql_parser.h>
+#include <ydb/public/lib/ydb_cli/commands/yql_parser/yql_parser.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/common/env.h>

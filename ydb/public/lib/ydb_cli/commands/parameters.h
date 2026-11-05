@@ -1,8 +1,8 @@
 #pragma once
 
-#include "examples.h"
-#include "command.h"
-#include "formats.h"
+#include <ydb/public/lib/ydb_cli/common/examples.h>
+#include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/lib/ydb_cli/common/formats.h>
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/common/csv_parser.h>

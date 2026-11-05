@@ -60,12 +60,30 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  enable_ydb_qa:
+    type: boolean
+    default: true
+    description: "Read/write YDB QA analytics DB; false (or host nebius/ydb) sets CI_DISABLE_YDB_QA"
 defaults:
   run:
     shell: bash
 runs:
   using: "composite"
   steps:
+    - name: Resolve YDB QA access
+      shell: bash
+      env:
+        ENABLE_YDB_QA: ${{ inputs.enable_ydb_qa }}
+        HOST_REPOSITORY: ${{ github.repository }}
+      run: |
+        # Nebius host must not touch YC YDB QA (read or write), even if secrets appear later.
+        if [ "$ENABLE_YDB_QA" = "false" ] || [ "$HOST_REPOSITORY" = "nebius/ydb" ]; then
+          echo "CI_DISABLE_YDB_QA=1" >> "$GITHUB_ENV"
+          echo "YDB QA disabled (enable_ydb_qa=$ENABLE_YDB_QA host=$HOST_REPOSITORY)"
+        else
+          echo "YDB QA enabled (enable_ydb_qa=$ENABLE_YDB_QA host=$HOST_REPOSITORY)"
+        fi
+
     - name: Configure runner limits
       shell: bash
       run: |

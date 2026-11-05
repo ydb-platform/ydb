@@ -23,7 +23,6 @@
 #include <unordered_set>
 #include <deque>
 
-#include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 struct TQueryReplayStats;

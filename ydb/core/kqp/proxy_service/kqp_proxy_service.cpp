@@ -19,6 +19,7 @@
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp_current_query_stats.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
+#include <ydb/core/kqp/common/kqp_module_resolver.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/simple/session_id.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -67,7 +68,6 @@
 #include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 #include <ydb/services/metadata/service.h>
 
-#include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
@@ -357,7 +357,7 @@ public:
         }
 
         RandomProvider = AppData()->RandomProvider;
-        if (!GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver)) {
+        if (!GetKqpDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver)) {
             TStringStream errorStream;
             ModuleResolverState->ExprCtx.IssueManager.GetIssues().PrintTo(errorStream);
 

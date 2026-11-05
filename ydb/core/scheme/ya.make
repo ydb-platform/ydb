@@ -31,6 +31,7 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
+    table_digest
     ut
     ut_pg
 )

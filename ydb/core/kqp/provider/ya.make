@@ -42,6 +42,7 @@ PEERDIR(
     ydb/core/util
     ydb/library/aclib
     ydb/library/aclib/protos
+    ydb/library/table_digest
     ydb/library/ydb_issue/proto
     ydb/library/yql/dq/common
     ydb/library/yql/dq/constraints

@@ -46,6 +46,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/library/grpc/server
     ydb/library/yql/dq/comp_nodes/llvm16
     ydb/library/yql/udfs/common/clickhouse/client
+    ydb/library/yql/udfs/digest
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli

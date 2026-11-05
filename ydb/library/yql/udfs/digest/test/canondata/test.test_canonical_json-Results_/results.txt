@@ -1,0 +1,88 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "nested_values_match";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "other_types_unchanged";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "null_matches";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        %true;
+                        %true
+                    ]
+                ]
+            }
+        ];
+        "Unordered" = %true
+    };
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "city64_matches";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "city128_matches";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "sha256_matches";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        %true;
+                        %true;
+                        %true
+                    ]
+                ]
+            }
+        ];
+        "Unordered" = %true
+    }
+]

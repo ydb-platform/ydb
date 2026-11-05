@@ -4,6 +4,7 @@
 
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp_module_resolver.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
@@ -11,7 +12,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
-#include <yql/essentials/core/services/mounts/yql_mounts.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
 
         TExprContext moduleCtx;
         NYql::IModuleResolver::TPtr moduleResolver;
-        YQL_ENSURE(GetYqlDefaultModuleResolver(moduleCtx, moduleResolver));
+        YQL_ENSURE(GetKqpDefaultModuleResolver(moduleCtx, moduleResolver));
         auto qp = CreateKikimrQueryProcessor(gateway, TestCluster, moduleResolver,
             server.GetRuntime()->GetAnyNodeActorSystem(), server.GetFunctionRegistry());
 
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
 
         TExprContext moduleCtx;
         NYql::IModuleResolver::TPtr moduleResolver;
-        YQL_ENSURE(GetYqlDefaultModuleResolver(moduleCtx, moduleResolver));
+        YQL_ENSURE(GetKqpDefaultModuleResolver(moduleCtx, moduleResolver));
         auto qp = CreateKikimrQueryProcessor(gateway, TestCluster, moduleResolver,
             server.GetRuntime()->GetAnyNodeActorSystem(), server.GetFunctionRegistry());
 

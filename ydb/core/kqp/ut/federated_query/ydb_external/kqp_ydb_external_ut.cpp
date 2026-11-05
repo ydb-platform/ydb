@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/common/simple/query_ref.h>
+#include <ydb/core/kqp/common/kqp_module_resolver.h>
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -13,7 +14,6 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/common/network.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <yql/essentials/core/services/mounts/yql_mounts.h>
 
 namespace NKikimr::NKqp {
 namespace {
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
 
         NYql::TExprContext moduleCtx;
         NYql::IModuleResolver::TPtr moduleResolver;
-        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleCtx, moduleResolver));
+        UNIT_ASSERT(GetKqpDefaultModuleResolver(moduleCtx, moduleResolver));
 
         auto countersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto counters = MakeIntrusive<TKqpRequestCounters>();

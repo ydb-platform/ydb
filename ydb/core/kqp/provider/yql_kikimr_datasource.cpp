@@ -10,12 +10,14 @@
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/protos/kqp_lookup_source.pb.h>
+#include <ydb/library/table_digest/aggregate.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_module_helpers.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
 #include <yql/essentials/providers/common/dq/yql_dq_integration_impl.h>
@@ -61,10 +63,99 @@ bool IsShowCreate(const TExprNode& read) {
     return !GetShowCreateSetting(*read.Child(TKiReadTable::idx_Settings)).empty();
 }
 
+TExprNode::TPtr BuildChecksum(const TExprNode::TPtr& input, TStringBuf algorithm, const TExprNode::TPtr& prefixes,
+                             TTypeAnnotationContext& types, TExprContext& ctx) {
+    const auto pos = input->Pos();
+    auto factory = ImportDeeplyCopied(ctx.GetPosition(pos), "/lib/ydb/digest.sql", "$DigestFactory", ctx, types);
+    if (!factory) {
+        return nullptr;
+    }
+
+    auto row = ctx.NewArgument(pos, "row");
+    auto value = ctx.NewCallable(pos, "RemoveSystemMembers", {row});
+    if (prefixes->ChildrenSize()) {
+        value = ctx.NewCallable(pos, "RemovePrefixMembers", {value, prefixes});
+    }
+    auto extractor = ctx.NewLambda(pos, ctx.NewArguments(pos, {row}),
+                                   ctx.NewCallable(pos, "PersistableRepr", {value}));
+    factory = ctx.NewCallable(pos, "Apply", {factory, ctx.NewCallable(pos, "String", {ctx.NewAtom(pos, algorithm)})});
+    auto itemType = ctx.NewCallable(pos, "ListItemType", {ctx.NewCallable(pos, "TypeOf", {input})});
+    auto traits = ctx.NewCallable(pos, "Apply", {factory, itemType, extractor});
+    auto handler = ctx.NewList(pos, {ctx.NewAtom(pos, "digest"), traits});
+    auto aggregate = ctx.NewCallable(pos, "Aggregate", {
+        input, ctx.NewList(pos, {}), ctx.NewList(pos, {handler}), ctx.NewList(pos, {})
+    });
+
+    auto result = ctx.NewArgument(pos, "row");
+    auto project = ctx.NewLambda(pos, ctx.NewArguments(pos, {result}),
+                                 ctx.NewCallable(pos, "Member", {result, ctx.NewAtom(pos, "digest")}));
+    ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+    return ctx.NewCallable(pos, "Map", {aggregate, project});
+}
+
+TExprNode::TPtr RewriteChecksumTable(const TExprNode::TPtr& input, TTypeAnnotationContext& types, TExprContext& ctx) {
+    if (!EnsureArgsCount(*input, 4, ctx) || !EnsureTuple(*input->Child(3), ctx)) {
+        return nullptr;
+    }
+    const auto pos = input->Pos();
+    auto settings = input->ChildPtr(3);
+    TStringBuf algorithm = "CityHash64";
+    if (const auto option = GetSetting(*settings, "algorithm")) {
+        if (!EnsureTupleSize(*option, 2, ctx) || !EnsureAtom(*option->Child(1), ctx)) {
+            return nullptr;
+        }
+        algorithm = option->Child(1)->Content();
+    }
+    try {
+        NDigest::ParseAlgorithm(algorithm);
+    } catch (const yexception&) {
+        ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+            << "Unsupported CHECKSUM TABLE algorithm: " << algorithm));
+        return nullptr;
+    }
+
+    auto prefixes = ctx.NewList(pos, {});
+    if (const auto option = GetSetting(*settings, "systemcolumnprefixes")) {
+        if (!EnsureTupleSize(*option, 2, ctx) || !EnsureTuple(*option->Child(1), ctx)) {
+            return nullptr;
+        }
+        prefixes = option->ChildPtr(1);
+        for (const auto& prefix : prefixes->Children()) {
+            if (!EnsureAtom(*prefix, ctx)) {
+                return nullptr;
+            }
+        }
+    }
+    settings = RemoveSetting(*RemoveSetting(*settings, "algorithm", ctx), "systemcolumnprefixes", ctx);
+    auto read = ctx.NewCallable(pos, "Read!", {
+        input->ChildPtr(0), input->ChildPtr(1), input->ChildPtr(2), ctx.NewCallable(pos, "Void", {}), settings
+    });
+    auto checksum = BuildChecksum(ctx.NewCallable(pos, "Right!", {read}), algorithm, prefixes, types, ctx);
+    if (!checksum) {
+        return nullptr;
+    }
+    ctx.Step.Repeat(TExprStep::DiscoveryIO)
+            .Repeat(TExprStep::Epochs)
+            .Repeat(TExprStep::Intents)
+            .Repeat(TExprStep::LoadTablesMetadata)
+            .Repeat(TExprStep::RewriteIO);
+    return ctx.NewCallable(pos, "Cons!", {ctx.NewCallable(pos, "Left!", {read}), checksum});
+}
+
 class TKiSourceIntentDeterminationTransformer: public TKiSourceVisitorTransformer {
 public:
-    TKiSourceIntentDeterminationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx)
-        : SessionCtx(sessionCtx) {}
+    TKiSourceIntentDeterminationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types)
+        : SessionCtx(sessionCtx)
+        , Types(types)
+    {}
+
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        if (input->IsCallable(TKiChecksumTable::CallableName())) {
+            output = RewriteChecksumTable(input, Types, ctx);
+            return output ? TStatus::Repeat : TStatus::Error;
+        }
+        return TKiSourceVisitorTransformer::DoTransform(input, output, ctx);
+    }
 
 private:
     TStatus HandleKiRead(TKiReadBase node, TExprContext& ctx) override {
@@ -173,6 +264,7 @@ private:
 
 private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
+    TTypeAnnotationContext& Types;
 };
 
 class TKiSourceLoadTableMetadataTransformer : public TGraphTransformerBase {
@@ -597,7 +689,7 @@ public:
         , GUCSettings(gucSettings)
         , ConfigurationTransformer(new TKikimrConfigurationTransformer(sessionCtx, types))
         , IntentDeterminationTransformer(CreateSqlPathAliasesTransformer(sessionCtx,
-            new TKiSourceIntentDeterminationTransformer(sessionCtx)))
+            new TKiSourceIntentDeterminationTransformer(sessionCtx, types)))
         , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory, isInternalCall))
         , TypeAnnotationTransformer(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types))
         , CallableExecutionTransformer(CreateKiSourceCallableExecutionTransformer(gateway, sessionCtx, types))
@@ -715,7 +807,8 @@ public:
 
         if (node.IsCallable(TKiReadTable::CallableName()) ||
             node.IsCallable(TKiReadTableScheme::CallableName()) ||
-            node.IsCallable(TKiReadTableList::CallableName()))
+            node.IsCallable(TKiReadTableList::CallableName()) ||
+            node.IsCallable(TKiChecksumTable::CallableName()))
         {
             return TKiDataSource(node.ChildPtr(1)).Category() == KikimrProviderName;
         }

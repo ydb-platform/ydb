@@ -1,5 +1,7 @@
 #include "query_replay.h"
 
+#include <ydb/core/kqp/common/kqp_module_resolver.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
@@ -38,7 +40,7 @@ public:
         , FunctionRegistry(functionRegistry)
         , ModuleResolverState(MakeIntrusive<NKikimr::NKqp::TModuleResolverState>())
     {
-        Y_ABORT_UNLESS(GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
+        Y_ABORT_UNLESS(NKikimr::NKqp::GetKqpDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
     }
 
     void Bootstrap() {
@@ -101,7 +103,7 @@ public:
         , ShardId(shardId)
         , RunId(runId)
     {
-        Y_ABORT_UNLESS(GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
+        Y_ABORT_UNLESS(NKikimr::NKqp::GetKqpDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver));
         Client = std::make_shared<NTable::TTableClient>(driver, NTable::TClientSettings());
     }
 

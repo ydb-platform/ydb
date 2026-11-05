@@ -1,5 +1,6 @@
 #include "column_type_test_base.h"
 
+#include <ydb/public/api/protos/ydb_formats.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/arrow/accessor.h>
 
 namespace NKikimr::NKqp {
@@ -73,6 +74,35 @@ TStatus BulkUpsertExplicitKey(NYdb::NTable::TTableClient& client, ELoadKind load
     Y_ABORT("Unknown load kind");
 }
 
+TStatus BulkUpsertWithoutKey(NYdb::NTable::TTableClient& client, ELoadKind load) {
+    using NYdb::NTable::EDataFormat;
+    switch (load) {
+        case ARROW: {
+            const auto batch = NTestArrow::MakeBatch({arrow::field("v", arrow::int32(), false)},
+                {NTestArrow::MakeInt32Array({10, 20})});
+            return client.BulkUpsert("/Root/T", EDataFormat::ApacheArrow,
+                NArrow::SerializeBatchNoCompression(batch), NArrow::SerializeSchema(*batch->schema())).GetValueSync();
+        }
+        case YDB_VALUE: {
+            TValueBuilder rows;
+            rows.BeginList();
+            for (i32 value : {10, 20}) {
+                rows.AddListItem().BeginStruct().AddMember("v").Int32(value).EndStruct();
+            }
+
+            return client.BulkUpsert("/Root/T", rows.EndList().Build()).GetValueSync();
+        }
+        case CSV: {
+            Ydb::Formats::CsvSettings csv;
+            csv.set_header(true);
+            return client.BulkUpsert("/Root/T", EDataFormat::CSV, "v\n10\n20\n", {},
+                NYdb::NTable::TBulkUpsertSettings().FormatSettings(csv.SerializeAsString())).GetValueSync();
+        }
+    }
+
+    Y_ABORT("Unknown load kind");
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpSerialColumnShard) {
@@ -120,6 +150,22 @@ Y_UNIT_TEST_SUITE(KqpSerialColumnShard) {
         CreateSerialTable(client, "T", columns, store);
         Execute(client, "UPSERT INTO T (v) VALUES (50)");
         CheckOrExec(helper, "SELECT id, v FROM T", "[[1;50]]", mode);
+    }
+
+    Y_UNIT_TEST(BulkUpsertRequiresSerialKey, ETableKind, ELoadKind) {
+        TKikimrRunner kikimr(SerialSettings());
+        auto client = kikimr.GetQueryClient();
+        CreateSerialTable(client, "T", "id Serial, v Int32 NOT NULL, PRIMARY KEY(id)", Arg<0>() == COLUMNSHARD ? "COLUMN" : "ROW");
+
+        auto tableClient = kikimr.GetTableClient();
+        const auto load = Arg<1>();
+        const auto result = BulkUpsertWithoutKey(tableClient, load);
+        const auto issues = result.GetIssues().ToString();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), load == CSV ? EStatus::BAD_REQUEST : EStatus::SCHEME_ERROR, issues);
+        UNIT_ASSERT_STRING_CONTAINS(issues, load == CSV ? "Missing not null column: id" : "Missing key columns: id");
+
+        Execute(client, "INSERT INTO T (v) VALUES (30)");
+        CompareYson("[[1;30]]", FormatResultSetYson(Execute(client, "SELECT id, v FROM T ORDER BY id").GetResultSet(0)));
     }
 
     Y_UNIT_TEST(RenamePreservesSequence, ESerialType) {

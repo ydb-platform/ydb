@@ -1,5 +1,6 @@
 #pragma once
 
+#include "events.h"
 #include "status.h"
 
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -25,7 +26,7 @@ struct TS3SnapshotWriterParams {
 };
 
 // Builds "<ObjectKeyPattern>/column_shard/<tabletId>/backup_<YYYYMMDDhhmmssZ>_g<gen>_s<step>",
-TString MakeBackupPath(const TString& objectKeyPattern, ui64 tabletId, ui32 generation, ui32 step, TInstant now);
+TString MakeBackupPath(const TString& objectKeyPattern, ui64 tabletId, TGeneration generation, TStep step, TInstant now);
 
 std::unique_ptr<NActors::IActor> CreateS3SnapshotWriter(const NActors::TActorId& owner, ui64 tabletId, TS3SnapshotWriterParams&& params);
 

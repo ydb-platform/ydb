@@ -12,6 +12,10 @@
 
 namespace NKikimr::NColumnShard::NLocalDbBackup {
 
+using TGeneration = ui32;
+using TStep = ui32;
+using TTableId = ui32;
+
 struct TEvStartBackup: public NActors::TEventLocal<TEvStartBackup, TEvColumnShard::EvLocalDbBackupStart> {
     NActors::TActorId Writer;
 
@@ -22,10 +26,10 @@ struct TEvStartBackup: public NActors::TEventLocal<TEvStartBackup, TEvColumnShar
 };
 
 struct TEvBackupStarted: public NActors::TEventLocal<TEvBackupStarted, TEvColumnShard::EvLocalDbBackupStarted> {
-    ui32 Generation = 0;
-    ui32 Step = 0;
+    TGeneration Generation = 0;
+    TStep Step = 0;
     std::unique_ptr<NTable::TSchemeChanges> Schema;
-    TMap<ui32, TString> Tables;   // tableId -> table name
+    TMap<TTableId, TString> Tables;
     TString BackupPath;
 };
 

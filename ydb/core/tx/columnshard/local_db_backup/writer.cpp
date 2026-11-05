@@ -63,7 +63,7 @@ class TS3SnapshotWriter: public NActors::TActorBootstrapped<TS3SnapshotWriter> {
 
     struct TChunk {
         NActors::TActorId Scan;
-        ui32 TableId = 0;
+        TTableId TableId = 0;
         TBuffer Data;
         EScanStatus Status = EScanStatus::InProgress;
     };
@@ -157,8 +157,8 @@ private:
 
     void PutObject(const TString& key, TString&& body) {
         RequestInFlight = true;
-        Send(Client, std::make_unique<TEvExternalStorage::TEvPutObjectRequest>(
-                         Aws::S3::Model::PutObjectRequest().WithKey(key), std::move(body)));
+        Send(
+            Client, std::make_unique<TEvExternalStorage::TEvPutObjectRequest>(Aws::S3::Model::PutObjectRequest().WithKey(key), std::move(body)));
     }
 
     void UploadBufferedPart(TTableState& table) {
@@ -431,14 +431,14 @@ private:
     NActors::TActorId Client;
 
     // Known since TEvBackupStarted.
-    ui32 Generation = 0;
-    ui32 Step = 0;
+    TGeneration Generation = 0;
+    TStep Step = 0;
     TString SnapshotPath;
 
     EPhase Phase = EPhase::WaitingStart;
     bool RequestInFlight = false;
 
-    TMap<ui32, TTableState> Tables;
+    TMap<TTableId, TTableState> Tables;
     size_t DoneTables = 0;
     std::deque<TChunk> Queue;
     std::optional<TChunk> Current;
@@ -451,7 +451,7 @@ private:
 }   // namespace
 
 // Same naming as NTabletFlatExecutor::NBackup::CreateBackupPath, but relative to the S3 key prefix.
-TString MakeBackupPath(const TString& objectKeyPattern, ui64 tabletId, ui32 generation, ui32 step, TInstant now) {
+TString MakeBackupPath(const TString& objectKeyPattern, ui64 tabletId, TGeneration generation, TStep step, TInstant now) {
     TString tabletTypeName = TTabletTypes::EType_Name(TTabletTypes::ColumnShard);
     NProtobufJson::ToSnakeCaseDense(&tabletTypeName);
     const TString backupDir = TStringBuilder() << "backup_" << now.FormatGmTime("%Y%m%d%H%M%SZ") << "_g" << generation << "_s" << step;

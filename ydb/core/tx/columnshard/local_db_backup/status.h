@@ -1,5 +1,7 @@
 #pragma once
 
+#include "events.h"
+
 #include <ydb/library/actors/core/actorid.h>
 
 #include <util/datetime/base.h>
@@ -38,7 +40,7 @@ class TProgress {
 public:
     using TPtr = std::shared_ptr<TProgress>;
 
-    void Init(const TMap<ui32, TString>& tables) {
+    void Init(const TMap<TTableId, TString>& tables) {
         TGuard<TMutex> guard(Lock);
         Data.Tables.clear();
         Index.clear();
@@ -59,7 +61,7 @@ public:
         Data.BytesWritten += bytes;
     }
 
-    void OnChunk(ui32 tableId, ui64 bytes) {
+    void OnChunk(TTableId tableId, ui64 bytes) {
         TGuard<TMutex> guard(Lock);
         Data.BytesWritten += bytes;
         if (auto* table = Find(tableId)) {
@@ -68,7 +70,7 @@ public:
         }
     }
 
-    void OnTableDone(ui32 tableId) {
+    void OnTableDone(TTableId tableId) {
         TGuard<TMutex> guard(Lock);
         if (auto* table = Find(tableId); table && !table->Done) {
             table->Started = true;
@@ -83,7 +85,7 @@ public:
     }
 
 private:
-    TTableProgress* Find(ui32 tableId) {
+    TTableProgress* Find(TTableId tableId) {
         auto it = Index.find(tableId);
         return it == Index.end() ? nullptr : &Data.Tables[it->second];
     }
@@ -91,7 +93,7 @@ private:
 private:
     mutable TMutex Lock;
     TProgressSnapshot Data;
-    THashMap<ui32, size_t> Index;
+    THashMap<TTableId, size_t> Index;
 };
 
 // In-memory status of the manually triggered local DB backup of a ColumnShard tablet.

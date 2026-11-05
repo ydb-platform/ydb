@@ -1,6 +1,8 @@
 #include "bridge_storage.h"
 
-#include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/core/blobstorage/base/bridge_events.h>
+#include <util/system/rusage.h>
+#include <util/stream/output.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;
@@ -10,12 +12,8 @@ using namespace NKikimr::NBsController::NBridgeStorage;
 namespace {
 
     using TGroup = NKikimrBridge::TGroupState;
-    using TStorageGroup = NKikimrBridge::TStorageGroup;
-    using TDatabase = NKikimrBridge::TStorageDatabase;
-    using TQuery = NKikimrBridge::TStorageQuery;
     using TCluster = NKikimrBridge::TClusterState;
 
-    const TBridgePileId FirstPile = TBridgePileId::FromPileIndex(0);
     const TBridgePileId SecondPile = TBridgePileId::FromPileIndex(1);
 
     TGroup MakeGroup() {
@@ -28,13 +26,6 @@ namespace {
             pile->SetBecameUnsyncedGeneration(10);
         }
         return group;
-    }
-
-    TPoolSummary MakePool(TBoxStoragePoolId id, TString name, TPathId owner, EMode mode) {
-        TPoolSummary pool{.Id = id, .Name = std::move(name), .Owner = owner, .Mode = mode, .Copies = {}};
-        pool.Copies[FirstPile];
-        pool.Copies[SecondPile];
-        return pool;
     }
 
 } // namespace
@@ -51,16 +42,16 @@ Y_UNIT_TEST_SUITE(BridgeStorageState) {
             .PileSyncState = &sync,
         };
         // The stored SYNCED stage predates this rejoin and cannot establish completion.
-        UNIT_ASSERT(ObserveCopy(context).State == TStorageGroup::PENDING);
+        UNIT_ASSERT(ObserveCopy(context).State == Ydb::Bridge::PENDING);
         context.SyncerRunning = true;
-        UNIT_ASSERT(ObserveCopy(context).State == TStorageGroup::PENDING);
+        UNIT_ASSERT(ObserveCopy(context).State == Ydb::Bridge::PENDING);
         group.MutablePile(1)->SetBecameUnsyncedGeneration(42);
         group.MutablePile(1)->SetStage(TGroup::BLOCKS);
-        UNIT_ASSERT(ObserveCopy(context).State == TStorageGroup::SYNCING);
+        UNIT_ASSERT(ObserveCopy(context).State == Ydb::Bridge::SYNCING);
         context.SyncerRunning = false;
-        UNIT_ASSERT(ObserveCopy(context).State == TStorageGroup::PENDING);
+        UNIT_ASSERT(ObserveCopy(context).State == Ydb::Bridge::PENDING);
         group.MutablePile(1)->SetStage(TGroup::SYNCED);
-        UNIT_ASSERT(ObserveCopy(context).State == TStorageGroup::SYNCED);
+        UNIT_ASSERT(ObserveCopy(context).State == Ydb::Bridge::SYNCED);
     }
 
     Y_UNIT_TEST(DisconnectedStoredCompletionIsUnknownUnlessCopyIsAuthoritative) {
@@ -70,21 +61,21 @@ Y_UNIT_TEST_SUITE(BridgeStorageState) {
             .PileId = SecondPile,
             .PileState = TCluster::DISCONNECTED,
         };
-        UNIT_ASSERT(ObserveCopy(context).State == TStorageGroup::UNKNOWN);
+        UNIT_ASSERT(ObserveCopy(context).State == Ydb::Bridge::UNKNOWN);
         context.PileState = TCluster::SUSPENDED;
-        UNIT_ASSERT(ObserveCopy(context).State == TStorageGroup::UNKNOWN);
+        UNIT_ASSERT(ObserveCopy(context).State == Ydb::Bridge::UNKNOWN);
 
         NKikimrBridge::TClusterStateDetails::TPileSyncState sync;
         sync.SetBecameUnsyncedGeneration(42);
         context.PileSyncState = &sync;
         group.SetAuthorityPileId(SecondPile.GetLocalDb());
         context.Group = TGroupContext(&group);
-        UNIT_ASSERT(ObserveCopy(context).State == TStorageGroup::SYNCED);
+        UNIT_ASSERT(ObserveCopy(context).State == Ydb::Bridge::SYNCED);
         // A sole part is authoritative even without an explicit AuthorityPileId.
         group.ClearAuthorityPileId();
         group.MutablePile(0)->SetAbsent(true);
         context.Group = TGroupContext(&group);
-        UNIT_ASSERT(ObserveCopy(context).State == TStorageGroup::SYNCED);
+        UNIT_ASSERT(ObserveCopy(context).State == Ydb::Bridge::SYNCED);
     }
 
     Y_UNIT_TEST(AbsentPartsAndOrdinaryOrInactiveStorageRemainDistinct) {
@@ -95,116 +86,119 @@ Y_UNIT_TEST_SUITE(BridgeStorageState) {
             .PileId = SecondPile,
             .PileState = TCluster::NOT_SYNCHRONIZED_1,
         };
-        UNIT_ASSERT(ObserveCopy(context).State == TStorageGroup::PENDING);
+        UNIT_ASSERT(ObserveCopy(context).State == Ydb::Bridge::PENDING);
         context.BridgeMode = false;
-        UNIT_ASSERT(ObserveCopy(context).State == TStorageGroup::NOT_REQUIRED);
+        UNIT_ASSERT(ObserveCopy(context).State == Ydb::Bridge::NOT_REQUIRED);
         context.BridgeMode = true;
         context.PileState = TCluster::INACTIVE;
-        UNIT_ASSERT(ObserveCopy(context).State == TStorageGroup::NOT_REQUIRED);
+        UNIT_ASSERT(ObserveCopy(context).State == Ydb::Bridge::NOT_REQUIRED);
         context.Group = TGroupContext();
         context.PileState = TCluster::SYNCHRONIZED;
-        UNIT_ASSERT(ObserveCopy(context).State == TStorageGroup::UNKNOWN);
+        UNIT_ASSERT(ObserveCopy(context).State == Ydb::Bridge::UNKNOWN);
     }
 
-    Y_UNIT_TEST(OwnerAggregationPreservesPoolIdentityAndSharesFilterRules) {
-        const TPathId sharedOwner(1000, 5);
-        auto bridge = MakePool({1, 1}, "ssd, fast", sharedOwner, TDatabase::BRIDGED);
-        bridge.Copies[FirstPile].Groups.Count(TStorageGroup::SYNCED);
-        bridge.Copies[SecondPile].Groups.Count(TStorageGroup::SYNCING);
-        bridge.Copies[SecondPile].LastError = "previous attempt";
-        bridge.Copies[SecondPile].LastErrorTimestamp = TInstant::MicroSeconds(123);
-        auto ordinary = MakePool({1, 2}, "hdd", sharedOwner, TDatabase::ORDINARY);
-        TPoolSummaries pools;
-        pools.emplace(bridge.Id, bridge);
-        pools.emplace(ordinary.Id, ordinary);
-        const auto all = BuildDatabaseSummaries(pools);
-        UNIT_ASSERT_VALUES_EQUAL(all.size(), 2);
-        const auto& row = all.at({{sharedOwner, {}}, SecondPile});
-        UNIT_ASSERT(row.Mode == TDatabase::MIXED);
-        UNIT_ASSERT_VALUES_EQUAL(row.StoragePools.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(row.StoragePools[0], "ssd, fast");
-        UNIT_ASSERT_VALUES_EQUAL(row.StoragePools[1], "hdd");
-        UNIT_ASSERT_VALUES_EQUAL(row.Copy.Groups.Total, 1);
-        UNIT_ASSERT_VALUES_EQUAL(row.Copy.Groups.Running, 1);
-        UNIT_ASSERT_VALUES_EQUAL(row.Copy.LastError, "previous attempt");
-
-        const std::set<TBoxStoragePoolId> ordinaryOnly{{1, 2}};
-        const auto filtered = BuildDatabaseSummaries(pools, &ordinaryOnly);
-        UNIT_ASSERT_VALUES_EQUAL(filtered.size(), 1);
-        const auto& ordinaryRow = filtered.at({{sharedOwner, {}}, {}});
-        UNIT_ASSERT(ordinaryRow.Mode == TDatabase::ORDINARY);
-        UNIT_ASSERT_VALUES_EQUAL(ordinaryRow.StoragePools.size(), 1);
-        UNIT_ASSERT(ordinaryRow.Copy.Groups.State() == TStorageGroup::NOT_REQUIRED);
-        UNIT_ASSERT_VALUES_EQUAL(ordinaryRow.Copy.Groups.Total, 0);
-
-        const std::set<TBoxStoragePoolId> allPools{{1, 1}, {1, 2}};
-        const auto fullFilter = BuildDatabaseSummaries(pools, &allPools);
-        UNIT_ASSERT_VALUES_EQUAL(fullFilter.size(), all.size());
-        UNIT_ASSERT_VALUES_EQUAL(fullFilter.at({{sharedOwner, {}}, SecondPile}).Copy.Groups.Running, 1);
+    Y_UNIT_TEST(RequiredCountsExcludeOrdinaryStorage) {
+        TCounts counts;
+        for (const auto status : {Ydb::Bridge::SYNCED, Ydb::Bridge::SYNCING, Ydb::Bridge::PENDING,
+                                  Ydb::Bridge::UNKNOWN, Ydb::Bridge::NOT_REQUIRED}) {
+            counts.Count(status);
+        }
+        Ydb::Bridge::GroupSyncCounts proto;
+        counts.ToProto(&proto);
+        UNIT_ASSERT_VALUES_EQUAL(proto.required(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(proto.synced(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(proto.syncing(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(proto.pending(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(proto.unknown(), 1);
     }
 
-    Y_UNIT_TEST(UnknownOwnersStaySeparatedAndZeroGroupPoolsRemainVisible) {
-        TPoolSummaries pools;
-        pools.emplace(TBoxStoragePoolId{1, 1}, MakePool({1, 1}, "first", TPathId(0, 0), TDatabase::ORDINARY));
-        pools.emplace(TBoxStoragePoolId{1, 2}, MakePool({1, 2}, "second", TPathId(0, 0), TDatabase::ORDINARY));
-        const auto rows = BuildDatabaseSummaries(pools);
-        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(rows.at({{TPathId(0, 0), {1, 1}}, {}}).StoragePools[0], "first");
-        UNIT_ASSERT_VALUES_EQUAL(rows.at({{TPathId(0, 0), {1, 2}}, {}}).StoragePools[0], "second");
+    Y_UNIT_TEST(AppendGroupPreservesPoolAndOptionalPlacement) {
+        Ydb::Bridge::StoragePool pool;
+        pool.mutable_id()->set_box_id(2);
+        pool.mutable_id()->set_pool_id(5);
+        pool.set_name("pool,ssd");
+        TReportBudget budget;
+        Ydb::Bridge::ListGroupSynchronizationResult result;
+        UNIT_ASSERT(AppendGroup({100, std::nullopt, pool, TStringBuf(""),
+                                 {.State = Ydb::Bridge::PENDING}}, budget, result));
+        const auto& pending = result.groups(0);
+        UNIT_ASSERT(pending.has_pile_name());
+        UNIT_ASSERT(pending.pile_name().empty());
+        UNIT_ASSERT(!pending.has_physical_group_id());
+        UNIT_ASSERT_VALUES_EQUAL(pending.storage_pool().id().box_id(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(pending.storage_pool().id().pool_id(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(pending.storage_pool().name(), "pool,ssd");
+        UNIT_ASSERT(AppendGroup({101, 101, pool, std::nullopt,
+                                 {.State = Ydb::Bridge::NOT_REQUIRED}}, budget, result));
+        UNIT_ASSERT(!result.groups(1).has_pile_name());
+        UNIT_ASSERT_VALUES_EQUAL(result.groups(1).physical_group_id(), 101);
     }
 
-    Y_UNIT_TEST(TypedCursorsAreCompactBoundToQueryAndGeneration) {
-        TQuery query;
-        query.SetView(TQuery::DATABASES);
-        query.SetPileName(TString(800, 'a'));
-        query.SetPageSize(1);
-        const TDatabaseKey key{{TPathId(1000, 5), {}}, SecondPile};
-        const TString encoded = MakePageToken(query, 42, key);
-        UNIT_ASSERT(encoded.size() < 1024);
-        query.SetPageToken(encoded);
-        NKikimrBridge::TStoragePageToken parsed;
-        UNIT_ASSERT(ParsePageToken(query, 42, parsed));
-        UNIT_ASSERT_VALUES_EQUAL(parsed.GetDatabase().GetPileId(), SecondPile.GetLocalDb());
-        UNIT_ASSERT(!ParsePageToken(query, 43, parsed));
-        query.SetPageSize(100);
-        UNIT_ASSERT(ParsePageToken(query, 42, parsed));
-        query.SetNotSynced(true);
-        UNIT_ASSERT(!ParsePageToken(query, 42, parsed));
-        query.SetNotSynced(false);
-
-        // Even a token with the correct hash must have the view's cursor type.
-        NKikimrBridge::TStoragePageToken wrongType;
-        wrongType.SetGeneration(42);
-        wrongType.SetQueryHash(QueryHash(query));
-        wrongType.MutableGroup()->SetStoragePoolId(1);
-        wrongType.MutableGroup()->SetGroupId(100);
-        query.SetPageToken(Base64Encode(wrongType.SerializeAsString()));
-        UNIT_ASSERT(!ParsePageToken(query, 42, parsed));
-        query.SetPageToken("not a token");
-        UNIT_ASSERT(!ParsePageToken(query, 42, parsed));
-        query.SetPageToken(TString(1025, 'a'));
-        UNIT_ASSERT(!ParsePageToken(query, 42, parsed));
+    Y_UNIT_TEST(LargeUpstreamErrorIsRejectedBeforeAppending) {
+        const TString error(TEvBlobStorage::TEvControllerQueryBridgeStorage::MaxResultBytes, 'x');
+        Ydb::Bridge::StoragePool pool;
+        pool.set_name("pool");
+        TReportBudget budget;
+        Ydb::Bridge::ListGroupSynchronizationResult result;
+        UNIT_ASSERT(!AppendGroup({100, 101, pool, TStringBuf("pile"),
+                                  {.State = Ydb::Bridge::PENDING, .LastError = &error}}, budget, result));
+        UNIT_ASSERT_VALUES_EQUAL(result.groups_size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(budget.Bytes, 1024);
     }
 
-    Y_UNIT_TEST(GroupCursorDistinguishesPartialAndWholeGroupPosition) {
-        TQuery query;
-        query.SetView(TQuery::GROUPS);
-        query.SetStoragePool("pool");
-        NKikimrBridge::TStoragePageToken::TGroupCursor position;
-        position.SetBoxId(1);
-        position.SetStoragePoolId(2);
-        position.SetGroupId(100);
-        position.SetLastPileId(FirstPile.GetLocalDb());
-        query.SetPageToken(MakePageToken(query, 42, position));
-        NKikimrBridge::TStoragePageToken parsed;
-        UNIT_ASSERT(ParsePageToken(query, 42, parsed));
-        UNIT_ASSERT(parsed.GetGroup().HasLastPileId());
-        position.ClearLastPileId();
-        query.SetPageToken(MakePageToken(query, 42, position));
-        UNIT_ASSERT(ParsePageToken(query, 42, parsed));
-        UNIT_ASSERT(!parsed.GetGroup().HasLastPileId());
-        position.SetLastPileId(0);
-        query.SetPageToken(MakePageToken(query, 42, position));
-        UNIT_ASSERT(!ParsePageToken(query, 42, parsed));
+    Y_UNIT_TEST(ScanBudgetStopsWithoutAContinuation) {
+        TReportBudget budget;
+        for (ui64 i = 0; i < TEvBlobStorage::TEvControllerQueryBridgeStorage::MaxVisitedCandidates; ++i) {
+            UNIT_ASSERT(budget.Visit());
+        }
+        UNIT_ASSERT(!budget.Visit());
+    }
+
+    Y_UNIT_TEST(MaterializationBenchmark10kAnd100k) {
+        // Measures the production classifier/row builder, not actor scheduling, index traversal or RPC latency.
+        for (const ui32 groupCount : {10'000u, 100'000u}) {
+            auto group = MakeGroup();
+            auto* third = group.AddPile();
+            third->SetGroupGeneration(1);
+            third->SetStage(TGroup::SYNCED);
+            third->SetBecameUnsyncedGeneration(10);
+            const TStringBuf pileNames[] = {"dc-1", "dc-2", "dc-3"};
+            Ydb::Bridge::StoragePool pool;
+            pool.mutable_id()->set_box_id(1);
+            pool.mutable_id()->set_pool_id(42);
+            pool.set_name("/Root/production/orders:ssd");
+            TReportBudget budget;
+            Ydb::Bridge::ListGroupSynchronizationResult result;
+            result.set_cluster_state_generation(42);
+            result.mutable_observed_at()->set_seconds(1'700'000'000);
+            result.mutable_observed_at()->set_nanos(123'456'000);
+            const auto usageBefore = TRusage::Get();
+            const auto rssBefore = TRusage::GetCurrentRSS();
+            const auto started = TInstant::Now();
+            for (ui32 i = 0; i < groupCount; ++i) {
+                UNIT_ASSERT(budget.Visit());
+                for (ui32 pile = 0; pile < 3; ++pile) {
+                    group.MutablePile(pile)->SetGroupId(0x83000000 + 3 * i + pile);
+                }
+                const TGroupContext context(&group);
+                for (ui32 pile = 0; pile < 3; ++pile) {
+                    UNIT_ASSERT(budget.Visit());
+                    const auto copy = ObserveCopy({.Group = context, .PileId = TBridgePileId::FromPileIndex(pile),
+                                                   .PileState = TCluster::SYNCHRONIZED});
+                    UNIT_ASSERT(AppendGroup({0x82000000 + i, copy.Part->GetGroupId(), pool,
+                                             pileNames[pile], copy}, budget, result));
+                }
+            }
+            const auto elapsed = TInstant::Now() - started;
+            const auto usageAfter = TRusage::Get();
+            UNIT_ASSERT_VALUES_EQUAL(result.groups_size(), 3 * groupCount);
+            UNIT_ASSERT(result.ByteSizeLong() < TEvBlobStorage::TEvControllerQueryBridgeStorage::MaxResultBytes);
+            Cerr << "Bridge diagnostics materialization: groups=" << groupCount << " rows=" << result.groups_size()
+                 << " protobuf_bytes=" << result.ByteSizeLong() << " protobuf_heap_bytes=" << result.SpaceUsedLong()
+                 << " elapsed_us=" << elapsed.MicroSeconds()
+                 << " cpu_us=" << ((usageAfter.Utime - usageBefore.Utime) + (usageAfter.Stime - usageBefore.Stime)).MicroSeconds()
+                 << " rss_before=" << rssBefore << " rss_after=" << TRusage::GetCurrentRSS()
+                 << " peak_rss=" << usageAfter.MaxRss << Endl;
+        }
     }
 } // Y_UNIT_TEST_SUITE(BridgeStorageState)

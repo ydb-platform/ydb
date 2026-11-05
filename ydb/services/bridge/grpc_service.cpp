@@ -34,6 +34,9 @@ void TBridgeGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     SETUP_METHOD(methodName, methodCallback, rlMode, requestType, bridge, auditMode, EEmptyDatabaseMode::EmptyDatabaseAllowed)
 
     SETUP_BRIDGE_METHOD(GetClusterState, DoGetClusterState, RLMODE(Rps), BRIDGE_GETCLUSTERSTATE, TAuditMode::NonModifying());
+    SETUP_BRIDGE_METHOD(GetSynchronizationSummary, DoGetSynchronizationSummary, RLMODE(Rps), BRIDGE_GETSYNCHRONIZATIONSUMMARY, TAuditMode::NonModifying());
+    SETUP_BRIDGE_METHOD(ListDatabaseStorage, DoListDatabaseStorage, RLMODE(Rps), BRIDGE_LISTDATABASESTORAGE, TAuditMode::NonModifying());
+    SETUP_BRIDGE_METHOD(ListGroupSynchronization, DoListGroupSynchronization, RLMODE(Rps), BRIDGE_LISTGROUPSYNCHRONIZATION, TAuditMode::NonModifying());
     SETUP_BRIDGE_METHOD(UpdateClusterState, DoUpdateClusterState, RLMODE(Rps), BRIDGE_UPDATECLUSTERSTATE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_BRIDGE_METHOD(ConvertToBridge, DoConvertToBridge, RLMODE(Rps), BRIDGE_CONVERTTOBRIDGE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_BRIDGE_METHOD(AddPile, DoAddPile, RLMODE(Rps), BRIDGE_ADDPILE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));

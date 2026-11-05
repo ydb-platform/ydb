@@ -7,10 +7,8 @@
 #include <library/cpp/json/json_writer.h>
 
 #include <util/string/cast.h>
-#include <util/string/join.h>
 
 #include <algorithm>
-#include <set>
 
 namespace NYdb::NConsoleClient {
     namespace {
@@ -49,19 +47,46 @@ namespace NYdb::NConsoleClient {
             return "UNKNOWN";
         }
 
-        TString CopySyncStateToString(NBridge::ECopySyncState state, bool pretty = false) {
-            switch (state) {
-                case NBridge::ECopySyncState::Synced:
+        TString SyncStatusToString(NBridge::ESynchronizationStatus status, bool pretty = false) {
+            switch (status) {
+                case NBridge::ESynchronizationStatus::Synced:
                     return "SYNCED";
-                case NBridge::ECopySyncState::Syncing:
+                case NBridge::ESynchronizationStatus::Syncing:
                     return "SYNCING";
-                case NBridge::ECopySyncState::Pending:
+                case NBridge::ESynchronizationStatus::Pending:
                     return "PENDING";
-                case NBridge::ECopySyncState::NotRequired:
+                case NBridge::ESynchronizationStatus::NotRequired:
                     return pretty ? "N/A" : "NOT_REQUIRED";
                 default:
                     return "UNKNOWN";
             }
+        }
+
+        NBridge::TStoragePoolId ParseStoragePoolId(TStringBuf value) {
+            TStringBuf box;
+            TStringBuf pool;
+            const auto decimal = [](TStringBuf part) {
+                return !part.empty() && std::all_of(part.begin(), part.end(), [](char c) { return c >= '0' && c <= '9'; });
+            };
+            NBridge::TStoragePoolId id;
+            if (!value.TrySplit(':', box, pool) || !decimal(box) || !decimal(pool) ||
+                !TryFromString(box, id.BoxId) || !TryFromString(pool, id.PoolId) || !id.PoolId) {
+                throw TMisuseException() << "--pool-id must be BOX:POOL with unsigned 64-bit IDs and a nonzero POOL.";
+            }
+            return id;
+        }
+
+        TString DatabaseSyncLabel(const NBridge::TGroupSyncCounts& groups) {
+            if (!groups.Required) {
+                return "N/A";
+            }
+            if (groups.Synced == groups.Required) {
+                return "SYNCED";
+            }
+            if (groups.Syncing) {
+                return "SYNCING";
+            }
+            return groups.Unknown ? "UNKNOWN" : "PENDING";
         }
 
         TString StorageModeToString(NBridge::EStorageMode mode) {
@@ -77,28 +102,39 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        TString GroupsSyncedToString(const NBridge::TGroupSyncCounts& counts) {
-            return ToString(counts.Synced) + "/" + ToString(counts.Total);
+        TString GroupsSyncedToString(const NBridge::TGroupSyncCounts& groups) {
+            return ToString(groups.Synced) + "/" + ToString(groups.Required);
         }
 
-        TString LastErrorTimeToString(uint64_t timestampUs, bool csv) {
-            if (csv) {
-                return ToString(timestampUs);
+        TString OptionalName(const std::optional<std::string>& name, bool csv) {
+            if (!name) {
+                return csv ? TString{} : TString("—");
             }
-            return timestampUs ? TInstant::MicroSeconds(timestampUs).ToString() : "—";
+            return !csv && name->empty() ? TString("\"\"") : TString(*name);
         }
 
-        TString PrettySyncStage(const std::string& stage) {
-            if (stage == "WRITE_KEEP") {
+        TString PrettySyncPhase(const std::string& phase) {
+            if (phase == "WRITE_KEEP") {
                 return "KEEP";
             }
-            if (stage == "WRITE_KEEP_BARRIER_DONOTKEEP") {
+            if (phase == "WRITE_KEEP_BARRIER_DONOTKEEP") {
                 return "GC";
             }
-            if (stage == "WRITE_KEEP_BARRIER_DONOTKEEP_DATA") {
+            if (phase == "WRITE_KEEP_BARRIER_DONOTKEEP_DATA") {
                 return "DATA";
             }
-            return TString(stage);
+            return TString(phase);
+        }
+
+        TString SyncErrorMessage(const std::optional<NBridge::TSynchronizationError>& error) {
+            return error ? TString(error->Message) : TString{};
+        }
+
+        TString SyncErrorTime(const std::optional<NBridge::TSynchronizationError>& error, bool csv) {
+            if (error && error->OccurredAt) {
+                return error->OccurredAt->ToString();
+            }
+            return csv ? TString{} : TString("—");
         }
 
         void WriteCsvRow(const TVector<TString>& columns) {
@@ -130,46 +166,72 @@ namespace NYdb::NConsoleClient {
                 for (const auto& row : rows) {
                     WriteCsvRow(row);
                 }
-            } else {
-                TPrettyTable table(headers, TPrettyTableConfig().WithoutRowDelimiters());
-                for (const auto& row : rows) {
-                    auto& out = table.AddRow();
-                    for (size_t i = 0; i < row.size(); ++i) {
-                        out.Column(i, row[i]);
-                    }
-                }
-                Cout << table;
+                return;
             }
+            TPrettyTable table(headers, TPrettyTableConfig().WithoutRowDelimiters());
+            for (const auto& row : rows) {
+                auto& out = table.AddRow();
+                for (size_t i = 0; i < row.size(); ++i) {
+                    out.Column(i, row[i]);
+                }
+            }
+            Cout << table;
         }
 
-        NJson::TJsonValue StoragePoolsToJson(const std::vector<std::string>& pools) {
+        NJson::TJsonValue StoragePoolToJson(const NBridge::TStoragePool& pool) {
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            NJson::TJsonValue id(NJson::JSON_MAP);
+            id.InsertValue("box_id", pool.Id.BoxId);
+            id.InsertValue("pool_id", pool.Id.PoolId);
+            json.InsertValue("id", id);
+            json.InsertValue("name", pool.Name);
+            return json;
+        }
+
+        NJson::TJsonValue StoragePoolsToJson(const std::vector<NBridge::TStoragePool>& pools) {
             NJson::TJsonValue json(NJson::JSON_ARRAY);
             for (const auto& pool : pools) {
-                json.AppendValue(pool);
+                json.AppendValue(StoragePoolToJson(pool));
             }
             return json;
         }
 
-        NJson::TJsonValue SyncCountsToJson(const NBridge::TGroupSyncCounts& counts) {
+        TString PoolNames(const std::vector<NBridge::TStoragePool>& pools) {
+            TString result;
+            for (const auto& pool : pools) {
+                if (!result.empty()) {
+                    result += ", ";
+                }
+                result += pool.Name;
+            }
+            return result;
+        }
+
+        NJson::TJsonValue SyncCountsToJson(const NBridge::TGroupSyncCounts& groups) {
             NJson::TJsonValue json(NJson::JSON_MAP);
-            json.InsertValue("total", counts.Total);
-            json.InsertValue("synced", counts.Synced);
-            json.InsertValue("running", counts.Running);
-            json.InsertValue("pending", counts.Pending);
-            json.InsertValue("unknown", counts.Unknown);
+            json.InsertValue("required", groups.Required);
+            json.InsertValue("synced", groups.Synced);
+            json.InsertValue("syncing", groups.Syncing);
+            json.InsertValue("pending", groups.Pending);
+            json.InsertValue("unknown", groups.Unknown);
             return json;
         }
 
-        NJson::TJsonValue StorageStateToJson(const NBridge::TStorageState& state) {
+        NJson::TJsonValue SyncErrorToJson(const NBridge::TSynchronizationError& error) {
             NJson::TJsonValue json(NJson::JSON_MAP);
-            json.InsertValue("generation", state.Generation);
-            json.InsertValue("collected_at_us", state.CollectedAtUs);
-            json.InsertValue("database_path", state.DatabasePath);
-            json.InsertValue("storage_owner_database", state.StorageOwnerDatabase);
-            json.InsertValue("unavailable_reason", state.UnavailableReason);
-            json.InsertValue("next_page_token", state.NextPageToken);
+            json.InsertValue("message", error.Message);
+            if (error.OccurredAt) {
+                json.InsertValue("occurred_at", error.OccurredAt->ToString());
+            }
+            return json;
+        }
+
+        NJson::TJsonValue SummaryToJson(const NBridge::TSynchronizationSummary& summary) {
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json.InsertValue("cluster_state_generation", summary.ClusterStateGeneration);
+            json.InsertValue("observed_at", summary.ObservedAt.ToString());
             NJson::TJsonValue piles(NJson::JSON_ARRAY);
-            for (const auto& pile : state.Piles) {
+            for (const auto& pile : summary.Piles) {
                 NJson::TJsonValue item(NJson::JSON_MAP);
                 item.InsertValue("pile_name", pile.PileName);
                 item.InsertValue("user_groups", SyncCountsToJson(pile.UserGroups));
@@ -177,39 +239,10 @@ namespace NYdb::NConsoleClient {
                 piles.AppendValue(item);
             }
             json.InsertValue("piles", piles);
-            NJson::TJsonValue databases(NJson::JSON_ARRAY);
-            for (const auto& database : state.Databases) {
-                NJson::TJsonValue item(NJson::JSON_MAP);
-                item.InsertValue("database_path", database.DatabasePath);
-                item.InsertValue("storage_pools", StoragePoolsToJson(database.StoragePools));
-                item.InsertValue("mode", StorageModeToString(database.Mode));
-                item.InsertValue("pile_name", database.PileName);
-                item.InsertValue("groups", SyncCountsToJson(database.Groups));
-                item.InsertValue("state", CopySyncStateToString(database.State));
-                item.InsertValue("last_error", database.LastError);
-                item.InsertValue("last_error_timestamp_us", database.LastErrorTimestampUs);
-                databases.AppendValue(item);
-            }
-            json.InsertValue("databases", databases);
-            NJson::TJsonValue groups(NJson::JSON_ARRAY);
-            for (const auto& group : state.Groups) {
-                NJson::TJsonValue item(NJson::JSON_MAP);
-                item.InsertValue("group_id", group.GroupId);
-                item.InsertValue("part_group_id", group.PartGroupId);
-                item.InsertValue("storage_pool_name", group.StoragePoolName);
-                item.InsertValue("pile_name", group.PileName);
-                item.InsertValue("state", CopySyncStateToString(group.State));
-                item.InsertValue("stage", group.Stage);
-                item.InsertValue("last_error", group.LastError);
-                item.InsertValue("last_error_timestamp_us", group.LastErrorTimestampUs);
-                groups.AppendValue(item);
-            }
-            json.InsertValue("groups", groups);
             return json;
         }
 
-        void PrintJson(const NBridge::TGetClusterStateResult& result, const std::vector<NBridge::TPileStateUpdate>& state,
-                       const NBridge::TStorageState* storage, const TString& incompleteReason) {
+        NJson::TJsonValue ClusterStateToJson(const NBridge::TGetClusterStateResult& result, const std::vector<NBridge::TPileStateUpdate>& state) {
             NJson::TJsonValue json(NJson::JSON_MAP);
             json.InsertValue("generation", result.GetGeneration());
             NJson::TJsonValue piles(NJson::JSON_ARRAY);
@@ -228,73 +261,130 @@ namespace NYdb::NConsoleClient {
                 item.InsertValue("error_reason", op->ErrorReason);
                 json.InsertValue("pending_pile_operation", item);
             }
-            if (storage) {
-                json.InsertValue("storage_state", StorageStateToJson(*storage));
+            return json;
+        }
+
+        NJson::TJsonValue DatabasesToJson(const std::vector<NBridge::TDatabaseStorageSummary>& databases) {
+            NJson::TJsonValue json(NJson::JSON_ARRAY);
+            for (const auto& database : databases) {
+                NJson::TJsonValue item(NJson::JSON_MAP);
+                if (database.DatabasePath) {
+                    item.InsertValue("database_path", *database.DatabasePath);
+                }
+                item.InsertValue("storage_pools", StoragePoolsToJson(database.StoragePools));
+                item.InsertValue("storage_mode", StorageModeToString(database.StorageMode));
+                if (database.PileName) {
+                    item.InsertValue("pile_name", *database.PileName);
+                }
+                item.InsertValue("groups", SyncCountsToJson(database.Groups));
+                if (database.LastSyncError) {
+                    item.InsertValue("last_sync_error", SyncErrorToJson(*database.LastSyncError));
+                }
+                json.AppendValue(item);
             }
-            if (!incompleteReason.empty()) {
-                json.InsertValue("incomplete_reason", incompleteReason);
+            return json;
+        }
+
+        NJson::TJsonValue GroupsToJson(const std::vector<NBridge::TGroupSynchronization>& groups) {
+            NJson::TJsonValue json(NJson::JSON_ARRAY);
+            for (const auto& group : groups) {
+                NJson::TJsonValue item(NJson::JSON_MAP);
+                item.InsertValue("group_id", group.GroupId);
+                if (group.PhysicalGroupId) {
+                    item.InsertValue("physical_group_id", *group.PhysicalGroupId);
+                }
+                item.InsertValue("storage_pool", StoragePoolToJson(group.StoragePool));
+                if (group.PileName) {
+                    item.InsertValue("pile_name", *group.PileName);
+                }
+                item.InsertValue("sync_status", SyncStatusToString(group.SyncStatus));
+                item.InsertValue("sync_phase", group.SyncPhase);
+                if (group.LastSyncError) {
+                    item.InsertValue("last_sync_error", SyncErrorToJson(*group.LastSyncError));
+                }
+                json.AppendValue(item);
             }
+            return json;
+        }
+
+        NJson::TJsonValue ListMetadataToJson(uint64_t generation, TInstant observedAt, const std::optional<std::string>& owner) {
+            NJson::TJsonValue json(NJson::JSON_MAP);
+            json.InsertValue("cluster_state_generation", generation);
+            json.InsertValue("observed_at", observedAt.ToString());
+            if (owner) {
+                json.InsertValue("storage_owner_database_path", *owner);
+            }
+            return json;
+        }
+
+        void PrintJson(const NJson::TJsonValue& json) {
             NJson::WriteJson(&Cout, &json, true);
             Cout << Endl;
         }
 
-        void PrintDatabaseRows(const NBridge::TStorageState& storage, bool detailed, bool csv) {
+        void PrintDatabaseRows(const std::vector<NBridge::TDatabaseStorageSummary>& databases, bool detailed, bool csv) {
             TVector<TString> headers = csv
-                                           ? TVector<TString>{"database_path", "storage_pools", "mode", "pile_name", "state", "groups_synced", "groups_total"}
-                                           : TVector<TString>{"Database", "Pools", "Mode", "Pile", "Sync", "Groups synced"};
+                                           ? TVector<TString>{"database_path", "storage_pools", "storage_mode", "pile_name", "pile_name_present", "groups_synced", "groups_required"}
+                                           : TVector<TString>{"Database", "Pools", "Mode", "Pile", "Sync", "Synced groups"};
             if (detailed) {
-                const TVector<TString> detailHeaders = csv
-                                                           ? TVector<TString>{"running", "pending", "unknown", "last_error", "last_error_timestamp_us"}
-                                                           : TVector<TString>{"Running", "Pending", "Unknown", "Last sync error", "Last error time"};
-                headers.insert(headers.end(), detailHeaders.begin(), detailHeaders.end());
+                const TVector<TString> extras = csv
+                                                    ? TVector<TString>{"groups_syncing", "groups_pending", "groups_unknown", "last_sync_error", "last_sync_error_occurred_at"}
+                                                    : TVector<TString>{"Syncing groups", "Pending groups", "Unknown groups", "Last sync error", "Last error time"};
+                headers.insert(headers.end(), extras.begin(), extras.end());
             }
             TVector<TVector<TString>> rows;
-            for (const auto& item : storage.Databases) {
-                TVector<TString> row{TString(item.DatabasePath), csv ? NJson::WriteJson(StoragePoolsToJson(item.StoragePools), false) : JoinSeq(", ", item.StoragePools),
-                                     StorageModeToString(item.Mode), TString(item.PileName), CopySyncStateToString(item.State, !csv)};
+            for (const auto& item : databases) {
+                TVector<TString> row{OptionalName(item.DatabasePath, csv),
+                                     csv ? NJson::WriteJson(StoragePoolsToJson(item.StoragePools), false, true) : PoolNames(item.StoragePools),
+                                     StorageModeToString(item.StorageMode), OptionalName(item.PileName, csv)};
                 if (csv) {
-                    row.insert(row.end(), {ToString(item.Groups.Synced), ToString(item.Groups.Total)});
+                    row.insert(row.end(), {item.PileName ? "true" : "false", ToString(item.Groups.Synced), ToString(item.Groups.Required)});
                 } else {
-                    row.push_back(item.State == NBridge::ECopySyncState::NotRequired ? "—" : GroupsSyncedToString(item.Groups));
+                    row.insert(row.end(), {DatabaseSyncLabel(item.Groups), item.Groups.Required ? GroupsSyncedToString(item.Groups) : TString("—")});
                 }
                 if (detailed) {
-                    row.insert(row.end(), {ToString(item.Groups.Running), ToString(item.Groups.Pending),
-                                           ToString(item.Groups.Unknown), TString(item.LastError), LastErrorTimeToString(item.LastErrorTimestampUs, csv)});
+                    row.insert(row.end(), {ToString(item.Groups.Syncing), ToString(item.Groups.Pending), ToString(item.Groups.Unknown),
+                                           SyncErrorMessage(item.LastSyncError), SyncErrorTime(item.LastSyncError, csv)});
                 }
                 rows.push_back(std::move(row));
             }
             PrintRows(headers, rows, csv);
         }
 
-        void PrintGroupRows(const NBridge::TStorageState& storage, bool detailed, bool csv) {
+        void PrintGroupRows(const std::vector<NBridge::TGroupSynchronization>& groups, bool detailed, bool csv) {
             TVector<TString> headers = csv
-                                           ? TVector<TString>{"group_id", "part_group_id", "storage_pool_name", "pile_name", "state"}
-                                           : TVector<TString>{"Group", "Part group", "Pool", "Pile", "Sync"};
+                                           ? TVector<TString>{"group_id", "storage_pool", "pile_name", "pile_name_present", "sync_status"}
+                                           : TVector<TString>{"Group", "Pool", "Pile", "Sync"};
             if (detailed) {
-                const TVector<TString> detailHeaders = csv
-                                                           ? TVector<TString>{"stage", "last_error", "last_error_timestamp_us"}
-                                                           : TVector<TString>{"Stage", "Last sync error", "Last error time"};
-                headers.insert(headers.end(), detailHeaders.begin(), detailHeaders.end());
+                const TVector<TString> extras = csv
+                                                    ? TVector<TString>{"physical_group_id", "sync_phase", "last_sync_error", "last_sync_error_occurred_at"}
+                                                    : TVector<TString>{"Physical group", "Phase", "Last sync error", "Last error time"};
+                headers.insert(headers.end(), extras.begin(), extras.end());
             }
             TVector<TVector<TString>> rows;
-            for (const auto& item : storage.Groups) {
-                TVector<TString> row{ToString(item.GroupId), ToString(item.PartGroupId), TString(item.StoragePoolName),
-                                     TString(item.PileName), CopySyncStateToString(item.State, !csv)};
+            for (const auto& item : groups) {
+                TVector<TString> row{ToString(item.GroupId),
+                                     csv ? NJson::WriteJson(StoragePoolToJson(item.StoragePool), false, true) : TString(item.StoragePool.Name),
+                                     OptionalName(item.PileName, csv)};
+                if (csv) {
+                    row.push_back(item.PileName ? "true" : "false");
+                }
+                row.push_back(SyncStatusToString(item.SyncStatus, !csv));
                 if (detailed) {
-                    row.insert(row.end(), {csv ? TString(item.Stage) : PrettySyncStage(item.Stage), TString(item.LastError),
-                                           LastErrorTimeToString(item.LastErrorTimestampUs, csv)});
+                    row.insert(row.end(), {item.PhysicalGroupId ? ToString(*item.PhysicalGroupId) : csv ? TString{}
+                                                                                                        : TString("—"),
+                                           csv ? TString(item.SyncPhase) : PrettySyncPhase(item.SyncPhase), SyncErrorMessage(item.LastSyncError),
+                                           SyncErrorTime(item.LastSyncError, csv)});
                 }
                 rows.push_back(std::move(row));
             }
             PrintRows(headers, rows, csv);
         }
 
-        const NBridge::TPileStorageState* FindPileStorage(const NBridge::TStorageState* storage, const std::string& pileName) {
-            if (storage && storage->UnavailableReason.empty()) {
-                const auto found = std::find_if(storage->Piles.begin(), storage->Piles.end(), [&](const auto& pile) {
-                    return pile.PileName == pileName;
-                });
-                if (found != storage->Piles.end()) {
+        const NBridge::TPileSynchronizationSummary* FindPile(const NBridge::TSynchronizationSummary* summary, const std::string& name) {
+            if (summary) {
+                const auto found = std::find_if(summary->Piles.begin(), summary->Piles.end(), [&](const auto& pile) { return pile.PileName == name; });
+                if (found != summary->Piles.end()) {
                     return &*found;
                 }
             }
@@ -302,19 +392,19 @@ namespace NYdb::NConsoleClient {
         }
 
         void PrintPiles(const NBridge::TGetClusterStateResult& result, const std::vector<NBridge::TPileStateUpdate>& state,
-                        const NBridge::TStorageState* storage, bool detailed, bool csv) {
+                        const NBridge::TSynchronizationSummary* summary, bool detailed, bool csv) {
             if (csv) {
                 WriteCsvRow(detailed
-                                ? TVector<TString>{"pile_name", "state", "groups_synced", "groups_total", "running", "pending", "unknown",
-                                                   "system_groups_synced", "system_groups_total", "generation"}
+                                ? TVector<TString>{"pile_name", "state", "groups_synced", "groups_required", "groups_syncing", "groups_pending", "groups_unknown",
+                                                   "system_groups_synced", "system_groups_required", "generation"}
                                 : TVector<TString>{"pile_name", "state", "generation"});
                 for (const auto& pile : state) {
                     TVector<TString> row{TString(pile.PileName), PileStateToString(pile.State)};
                     if (detailed) {
-                        if (const auto* counts = FindPileStorage(storage, pile.PileName)) {
-                            row.insert(row.end(), {ToString(counts->UserGroups.Synced), ToString(counts->UserGroups.Total),
-                                                   ToString(counts->UserGroups.Running), ToString(counts->UserGroups.Pending), ToString(counts->UserGroups.Unknown),
-                                                   ToString(counts->SystemGroups.Synced), ToString(counts->SystemGroups.Total)});
+                        if (const auto* counts = FindPile(summary, pile.PileName)) {
+                            row.insert(row.end(), {ToString(counts->UserGroups.Synced), ToString(counts->UserGroups.Required),
+                                                   ToString(counts->UserGroups.Syncing), ToString(counts->UserGroups.Pending), ToString(counts->UserGroups.Unknown),
+                                                   ToString(counts->SystemGroups.Synced), ToString(counts->SystemGroups.Required)});
                         } else {
                             row.insert(row.end(), 7, TString{});
                         }
@@ -324,16 +414,16 @@ namespace NYdb::NConsoleClient {
                 }
                 return;
             }
-            if (detailed && storage && storage->UnavailableReason.empty()) {
+            if (summary) {
                 TVector<TVector<TString>> rows;
                 for (const auto& pile : state) {
-                    if (const auto* counts = FindPileStorage(storage, pile.PileName)) {
-                        rows.push_back({TString(pile.PileName), PileStateToString(pile.State), GroupsSyncedToString(counts->UserGroups),
-                                        ToString(counts->UserGroups.Running), ToString(counts->UserGroups.Pending), ToString(counts->UserGroups.Unknown),
-                                        GroupsSyncedToString(counts->SystemGroups)});
-                    }
+                    const auto* counts = FindPile(summary, pile.PileName);
+                    rows.push_back({pile.PileName.empty() ? TString("\"\"") : TString(pile.PileName), PileStateToString(pile.State),
+                                    counts ? GroupsSyncedToString(counts->UserGroups) : TString("—"),
+                                    counts ? ToString(counts->UserGroups.Syncing) : TString("—"), counts ? ToString(counts->UserGroups.Pending) : TString("—"),
+                                    counts ? ToString(counts->UserGroups.Unknown) : TString("—"), counts ? GroupsSyncedToString(counts->SystemGroups) : TString("—")});
                 }
-                PrintRows({"Pile", "State", "Groups synced", "Running", "Pending", "Unknown", "System groups synced"}, rows, false);
+                PrintRows({"Pile", "State", "Synced groups", "Syncing groups", "Pending groups", "Unknown groups", "Synced system groups"}, rows, false);
             } else {
                 for (const auto& pile : state) {
                     Cout << "Pile " << pile.PileName << ": " << PileStateToString(pile.State) << Endl;
@@ -351,52 +441,13 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        struct TListingResult {
-            NBridge::TGetClusterStateResult Result;
-            TString IncompleteReason;
-        };
-
-        TListingResult FetchListing(NBridge::TBridgeClient& client, const std::optional<NBridge::TStorageQuery>& storageQuery) {
-            NBridge::TGetClusterStateSettings settings;
-            if (storageQuery) {
-                settings.StorageQuery(*storageQuery);
+        void PrintSelectedDatabase(const TString& requestedPath, const std::optional<std::string>& owner) {
+            if (!requestedPath.empty()) {
+                Cout << "Database: " << requestedPath << Endl;
+                if (owner && *owner != requestedPath) {
+                    Cout << "Shared storage: " << *owner << Endl;
+                }
             }
-            auto result = client.GetClusterState(settings).GetValueSync();
-            NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-            if (!storageQuery || storageQuery->View == NBridge::EStorageView::Piles) {
-                return {std::move(result), {}};
-            }
-
-            // Bounded controller scans may produce empty pages. Preserve the cursor if searching for a matching row stops.
-            auto query = *storageQuery;
-            const auto deadline = TDeadline::AfterDuration(TDuration::Seconds(30));
-            settings.Deadline(deadline);
-            std::set<std::string> visitedTokens{query.PageToken};
-            size_t emptyPages = 0;
-            while (const auto& page = result.GetStorageState()) {
-                if (!page->UnavailableReason.empty() || page->NextPageToken.empty() ||
-                    (query.View == NBridge::EStorageView::Databases ? !page->Databases.empty() : !page->Groups.empty())) {
-                    break;
-                }
-                if (!visitedTokens.insert(page->NextPageToken).second) {
-                    return {std::move(result), "Server returned a repeated storage page token"};
-                }
-                if (++emptyPages >= 32 || deadline <= TDeadline::Now()) {
-                    return {std::move(result), "Storage listing search is incomplete; continue with the returned page token"};
-                }
-                query.PageToken = page->NextPageToken;
-                settings.StorageQuery(query);
-                auto next = client.GetClusterState(settings).GetValueSync();
-                if (!next.IsSuccess()) {
-                    return {std::move(result), TStringBuilder() << "Storage page request failed: " << next.GetIssues().ToString()};
-                }
-                NStatusHelpers::ThrowOnErrorOrPrintIssues(next);
-                if (const auto& storage = next.GetStorageState(); storage && !storage->UnavailableReason.empty()) {
-                    return {std::move(result), TStringBuilder() << "Storage page diagnostics unavailable: " << storage->UnavailableReason};
-                }
-                result = std::move(next);
-            }
-            return {std::move(result), {}};
         }
 
     } // namespace
@@ -412,129 +463,152 @@ namespace NYdb::NConsoleClient {
         config.AllowEmptyDatabase = AllowEmptyDatabase;
         config.SetFreeArgsNum(0);
         AddOutputFormats(config, {EDataFormat::Pretty, EDataFormat::Json, EDataFormat::Csv});
-        config.Opts->AddLongOption("detailed", "Show group synchronization counts for piles, or additional fields for databases and groups.")
+        config.Opts->AddLongOption("detailed", "Show synchronization counts for piles, or additional fields for databases and groups.")
             .StoreTrue(&Detailed);
-        config.Opts->AddLongOption("databases", "Show database storage copies by pile. Serverless databases use their shared database's storage.")
-            .NoArgument();
-        config.Opts->AddLongOption("groups", "Show group copies in the database or pool selected with --db-path or --pool.")
-            .NoArgument();
-        config.Opts->AddLongOption("db-path", "Filter database or group copies by absolute database path. Does not change the connection database.")
+        config.Opts->AddLongOption("databases", "Show database storage summaries by pile. Serverless databases use their shared storage.").NoArgument();
+        config.Opts->AddLongOption("groups", "Show group synchronization for the scope selected with --path, --pool or --pool-id.").NoArgument();
+        config.Opts->AddLongOption("path", "Select an absolute database path. Does not change the connection database.")
             .RequiredArgument("PATH")
             .StoreResult(&DatabasePath);
-        config.Opts->AddLongOption("pool", "With --groups, select this storage pool instead of a database.")
+        config.Opts->AddLongOption("pool", "With --groups, select a uniquely named storage pool instead of a database.")
             .RequiredArgument("NAME")
             .StoreResult(&StoragePool);
-        config.Opts->AddLongOption("pile", "Show only this pile.")
+        config.Opts->AddLongOption("pool-id", "With --groups, select a storage pool by BOX:POOL ID. BOX may be zero; POOL must be nonzero.")
+            .RequiredArgument("BOX:POOL")
+            .Handler([this](const TString& value) { StoragePoolId = ParseStoragePoolId(value); });
+        config.Opts->AddLongOption("pile", "Show only this pile. An empty name is valid.")
             .RequiredArgument("NAME")
-            .StoreResult(&PileName);
-        config.Opts->AddLongOption("not-synced", "With --databases or --groups, show required copies that are not confirmed synchronized, including unknown states.")
+            .Handler([this](const TString& name) { PileName = name; });
+        config.Opts->AddLongOption("not-synced", "With --databases or --groups, show rows with incomplete required synchronization, including unknown states.")
             .StoreTrue(&NotSynced);
-        config.Opts->AddLongOption("page-size", "Maximum database or group copy rows to return (default: 1000; maximum: 10000).")
-            .RequiredArgument("NUM")
-            .StoreResult(&PageSize);
-        config.Opts->AddLongOption("page-token", "Continue a database or group listing from this page token.")
-            .RequiredArgument("STRING")
-            .StoreResult(&PageToken);
         config.Opts->MutuallyExclusive("databases", "groups");
-        config.Opts->MutuallyExclusive("db-path", "pool");
+        config.Opts->MutuallyExclusive("path", "pool");
+        config.Opts->MutuallyExclusive("path", "pool-id");
+        config.Opts->MutuallyExclusive("pool", "pool-id");
     }
 
     void TCommandBridgeList::Parse(TConfig& config) {
         TClientCommand::Parse(config);
         ParseOutputFormats();
-        View = config.ParseResult->Has("groups")      ? NBridge::EStorageView::Groups
-               : config.ParseResult->Has("databases") ? NBridge::EStorageView::Databases
-                                                      : NBridge::EStorageView::Piles;
-        if (View == NBridge::EStorageView::Groups && DatabasePath.empty() && StoragePool.empty()) {
-            throw TMisuseException() << "--groups requires --db-path or --pool.";
+        View = config.ParseResult->Has("groups") ? EView::Groups : config.ParseResult->Has("databases") ? EView::Databases
+                                                                                                        : EView::Piles;
+        if (View == EView::Groups && DatabasePath.empty() && StoragePool.empty() && !StoragePoolId) {
+            throw TMisuseException() << "--groups requires --path, --pool or --pool-id.";
         }
-        if (config.ParseResult->Has("db-path") && View == NBridge::EStorageView::Piles) {
-            throw TMisuseException() << "--db-path requires --databases or --groups.";
+        if (config.ParseResult->Has("path") && View == EView::Piles) {
+            throw TMisuseException() << "--path requires --databases or --groups.";
         }
-        if (config.ParseResult->Has("db-path") && (DatabasePath.empty() || !DatabasePath.StartsWith('/'))) {
-            throw TMisuseException() << "--db-path must be an absolute database path.";
+        if (config.ParseResult->Has("path") && (DatabasePath.empty() || !DatabasePath.StartsWith('/'))) {
+            throw TMisuseException() << "--path must be an absolute database path.";
         }
-        if (config.ParseResult->Has("pool") && (View != NBridge::EStorageView::Groups || StoragePool.empty())) {
+        if (config.ParseResult->Has("pool") && (View != EView::Groups || StoragePool.empty())) {
             throw TMisuseException() << "--pool requires --groups and a non-empty pool name.";
         }
-        if (config.ParseResult->Has("pile") && PileName.empty()) {
-            throw TMisuseException() << "--pile must not be empty.";
+        if (StoragePoolId && View != EView::Groups) {
+            throw TMisuseException() << "--pool-id requires --groups.";
         }
-        if (NotSynced && View == NBridge::EStorageView::Piles) {
+        if (NotSynced && View == EView::Piles) {
             throw TMisuseException() << "--not-synced requires --databases or --groups.";
-        }
-        if ((config.ParseResult->Has("page-size") || config.ParseResult->Has("page-token")) && View == NBridge::EStorageView::Piles) {
-            throw TMisuseException() << "--page-size and --page-token require --databases or --groups.";
-        }
-        if (PageSize == 0 || PageSize > 10000) {
-            throw TMisuseException() << "--page-size must be between 1 and 10000.";
         }
     }
 
     int TCommandBridgeList::Run(TConfig& config) {
         auto driver = CreateDriver(config);
         NBridge::TBridgeClient client(driver);
-        std::optional<NBridge::TStorageQuery> query;
-        if (Detailed || View != NBridge::EStorageView::Piles) {
-            query.emplace(NBridge::TStorageQuery{
-                .View = View,
-                .DatabasePath = DatabasePath,
-                .StoragePool = StoragePool,
-                .PileName = PileName,
-                .NotSynced = NotSynced,
-                .PageSize = PageSize,
-                .PageToken = PageToken,
-            });
-        }
-        const auto listing = FetchListing(client, query);
-        const auto& result = listing.Result;
-        auto state = result.GetState();
-        if (!PileName.empty()) {
-            std::erase_if(state, [&](const auto& pile) { return pile.PileName != PileName; });
-            if (state.empty()) {
-                throw TMisuseException() << "Unknown pile: " << PileName;
-            }
-        }
-        const auto& storageState = result.GetStorageState();
-        if (query && !storageState) {
-            throw yexception() << "Server does not support bridge storage diagnostics";
-        }
-        const auto* storage = query ? &*storageState : nullptr;
         const bool csv = OutputFormat == EDataFormat::Csv;
+        if (View == EView::Piles) {
+            auto clusterFuture = client.GetClusterState();
+            std::optional<NBridge::TAsyncGetSynchronizationSummaryResult> summaryFuture;
+            if (Detailed) {
+                summaryFuture = client.GetSynchronizationSummary();
+            }
+            const auto cluster = clusterFuture.GetValueSync();
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(cluster);
+            auto state = cluster.GetState();
+            if (PileName) {
+                std::erase_if(state, [&](const auto& pile) { return pile.PileName != *PileName; });
+                if (state.empty()) {
+                    throw TMisuseException() << "Unknown pile: " << *PileName;
+                }
+            }
+            std::optional<NBridge::TSynchronizationSummary> summary;
+            TString incompleteReason;
+            if (Detailed) {
+                const auto response = summaryFuture->GetValueSync();
+                if (!response.IsSuccess()) {
+                    incompleteReason = TStringBuilder() << "Synchronization summary unavailable: " << response.GetIssues().ToString();
+                } else if (response.GetSummary().ClusterStateGeneration != cluster.GetGeneration()) {
+                    incompleteReason = TStringBuilder() << "Synchronization summary generation " << response.GetSummary().ClusterStateGeneration
+                                                        << " differs from cluster-state generation " << cluster.GetGeneration() << "; retry the query";
+                } else {
+                    NStatusHelpers::ThrowOnErrorOrPrintIssues(response);
+                    summary = response.GetSummary();
+                    if (PileName) {
+                        std::erase_if(summary->Piles, [&](const auto& pile) { return pile.PileName != *PileName; });
+                    }
+                }
+            }
+            if (OutputFormat == EDataFormat::Json) {
+                auto json = ClusterStateToJson(cluster, state);
+                if (summary) {
+                    json.InsertValue("synchronization_summary", SummaryToJson(*summary));
+                }
+                if (!incompleteReason.empty()) {
+                    json.InsertValue("incomplete_reason", incompleteReason);
+                }
+                PrintJson(json);
+            } else {
+                PrintPiles(cluster, state, summary ? &*summary : nullptr, Detailed, csv);
+            }
+            if (!incompleteReason.empty()) {
+                Cerr << "Bridge diagnostics incomplete: " << incompleteReason << Endl;
+                return EXIT_FAILURE;
+            }
+            return EXIT_SUCCESS;
+        }
+        if (View == EView::Databases) {
+            auto settings = NBridge::TListDatabaseStorageSettings().OnlyIncomplete(NotSynced);
+            if (!DatabasePath.empty()) {
+                settings.DatabasePath(DatabasePath);
+            }
+            if (PileName) {
+                settings.PileName(*PileName);
+            }
+            const auto result = client.ListDatabaseStorage(settings).GetValueSync();
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+            if (OutputFormat == EDataFormat::Json) {
+                auto json = ListMetadataToJson(result.GetClusterStateGeneration(), result.GetObservedAt(), result.GetStorageOwnerDatabasePath());
+                json.InsertValue("databases", DatabasesToJson(result.GetDatabases()));
+                PrintJson(json);
+            } else {
+                if (!csv) {
+                    PrintSelectedDatabase(DatabasePath, result.GetStorageOwnerDatabasePath());
+                }
+                PrintDatabaseRows(result.GetDatabases(), Detailed, csv);
+            }
+            return EXIT_SUCCESS;
+        }
+        NBridge::TListGroupSynchronizationSettings settings;
+        if (PileName) {
+            settings.PileName(*PileName);
+        }
+        if (NotSynced) {
+            settings.Statuses({NBridge::ESynchronizationStatus::Syncing, NBridge::ESynchronizationStatus::Pending, NBridge::ESynchronizationStatus::Unknown});
+        }
+        const auto scope = StoragePoolId           ? NBridge::TGroupSynchronizationScope::PoolId(*StoragePoolId)
+                           : !DatabasePath.empty() ? NBridge::TGroupSynchronizationScope::Database(DatabasePath)
+                                                   : NBridge::TGroupSynchronizationScope::PoolName(StoragePool);
+        const auto result = client.ListGroupSynchronization(scope, settings).GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
         if (OutputFormat == EDataFormat::Json) {
-            PrintJson(result, state, storage, listing.IncompleteReason);
-        } else if (View == NBridge::EStorageView::Piles) {
-            PrintPiles(result, state, storage, Detailed, csv);
+            auto json = ListMetadataToJson(result.GetClusterStateGeneration(), result.GetObservedAt(), result.GetStorageOwnerDatabasePath());
+            json.InsertValue("groups", GroupsToJson(result.GetGroups()));
+            PrintJson(json);
         } else {
             if (!csv) {
-                if (!storage->DatabasePath.empty()) {
-                    Cout << "Database: " << storage->DatabasePath << Endl;
-                }
-                if (!storage->StorageOwnerDatabase.empty() && storage->StorageOwnerDatabase != storage->DatabasePath) {
-                    Cout << "Shared storage: " << storage->StorageOwnerDatabase << Endl;
-                }
+                PrintSelectedDatabase(DatabasePath, result.GetStorageOwnerDatabasePath());
             }
-            if (View == NBridge::EStorageView::Databases) {
-                PrintDatabaseRows(*storage, Detailed, csv);
-            } else {
-                PrintGroupRows(*storage, Detailed, csv);
-            }
-        }
-
-        if (storage && !storage->NextPageToken.empty()) {
-            if (csv) {
-                Cerr << "Next page token: " << storage->NextPageToken << Endl;
-            } else if (OutputFormat != EDataFormat::Json) {
-                Cout << Endl << "Next page token: " << storage->NextPageToken << Endl;
-            }
-        }
-        if (storage && !storage->UnavailableReason.empty()) {
-            Cerr << "Bridge storage diagnostics unavailable: " << storage->UnavailableReason << Endl;
-            return EXIT_FAILURE;
-        }
-        if (!listing.IncompleteReason.empty()) {
-            Cerr << "Bridge storage listing incomplete: " << listing.IncompleteReason << Endl;
-            return EXIT_FAILURE;
+            PrintGroupRows(result.GetGroups(), Detailed, csv);
         }
         return EXIT_SUCCESS;
     }

@@ -1,7 +1,7 @@
 * Added `TGetClusterStateSettings::IncludePileConnectivity()` and `TGetClusterStateResult::GetPileConnectivity()` for optional bridge static-node connectivity reports.
 
 * Added `TUpdateClusterStateSettings::ExpectedGeneration()` to apply a bridge cluster state update only if the cluster state still has the given generation.
-* Added optional storage diagnostics to draft `TBridgeClient::GetClusterState()`: `TGetClusterStateSettings::StorageQuery()` selects pile, database, or group views with filters and pagination; `TGetClusterStateResult::GetStorageState()` returns synchronization counts, copy states, and structured storage pool names when supported by the server.
+* Added draft bridge diagnostics: `TBridgeClient::GetSynchronizationSummary()`, `ListDatabaseStorage()`, and `ListGroupSynchronization()`. Typed results report required-group counts, concrete storage pool IDs, and per-pile synchronization with filters and complete selected lists. Oversized diagnostic requests fail explicitly without returning a partial list. Diagnostics use the ordinary request status independently of `GetClusterState()`.
 
 * Added draft `TBridgeClient::SetDatabaseBridgeMode()` to atomically change a database's bridge mode. `TSetDatabaseBridgeModeSettings::RetainPileName()` selects the pile to retain when disabling bridge mode.
 

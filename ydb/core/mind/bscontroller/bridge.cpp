@@ -945,7 +945,6 @@ void TBlobStorageController::UpdateBridgeSyncCounters() {
     }
 
     BridgeSyncCounters->Update(piles, values);
-    RefreshBridgeStorage();
 }
 
 void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,

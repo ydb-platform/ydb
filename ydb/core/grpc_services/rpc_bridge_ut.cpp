@@ -563,9 +563,6 @@ Y_UNIT_TEST_SUITE(BridgeGetClusterStateConnectivity) {
 namespace {
 
 struct TStorageSetup : TSetup {
-    using TGetRpc = TGrpcRequestOperationCall<Ydb::Bridge::GetClusterStateRequest,
-        Ydb::Bridge::GetClusterStateResponse>;
-
     TActorId Bsc = Runtime.AllocateEdgeActor();
     ui32 BscRequests = 0;
     bool ReverseMetadataResults = false;
@@ -574,8 +571,7 @@ struct TStorageSetup : TSetup {
         Runtime.SetObserverFunc([this](TAutoPtr<IEventHandle>& event) {
             if (event->Type == TEvBlobStorage::TEvControllerQueryBridgeStorage::EventType &&
                     event->GetRecipientRewrite() != Bsc) {
-                // The observer also sees this same handle in the edge mailbox after redirection.
-                // Count the logical request only when it first leaves the pipe route.
+                // Count the logical request before redirection, not its subsequent edge-mailbox observation.
                 ++BscRequests;
                 event->Rewrite(event->Type, Bsc);
             } else if (ReverseMetadataResults && event->Type == TEvTxProxySchemeCache::TEvNavigateKeySetResult::EventType) {
@@ -586,16 +582,28 @@ struct TStorageSetup : TSetup {
         });
     }
 
-    auto Start(const Ydb::Bridge::StorageQuery& query) {
-        Ydb::Bridge::GetClusterStateRequest request;
+    template<class TRequest, class TResponse>
+    auto StartRpc(TRequest request, void (*handler)(std::unique_ptr<IRequestOpCtx>, const IFacilityProvider&)) {
+        using TCall = TGrpcRequestOperationCall<TRequest, TResponse>;
         NRpcService::SetRequestSyncOperationMode(request);
-        request.mutable_storage_query()->CopyFrom(query);
-        auto promise = NThreading::NewPromise<TGetRpc::TResponse>();
-        using TCb = NRpcService::TPromiseWrapper<TGetRpc::TResponse>;
-        auto ctx = std::make_unique<NRpcService::TLocalRpcCtx<TGetRpc, TCb>>(
+        auto promise = NThreading::NewPromise<typename TCall::TResponse>();
+        using TCb = NRpcService::TPromiseWrapper<typename TCall::TResponse>;
+        auto ctx = std::make_unique<NRpcService::TLocalRpcCtx<TCall, TCb>>(
             std::move(request), TCb(promise), "/Root", Nothing(), Nothing(), false);
-        Runtime.Register(new TStartRequest(std::move(ctx), DoGetClusterState));
+        Runtime.Register(new TStartRequest(std::move(ctx), handler));
         return promise.GetFuture();
+    }
+
+    auto Start(const Ydb::Bridge::GetSynchronizationSummaryRequest& request) {
+        return StartRpc<Ydb::Bridge::GetSynchronizationSummaryRequest, Ydb::Bridge::GetSynchronizationSummaryResponse>(request, DoGetSynchronizationSummary);
+    }
+
+    auto Start(const Ydb::Bridge::ListDatabaseStorageRequest& request) {
+        return StartRpc<Ydb::Bridge::ListDatabaseStorageRequest, Ydb::Bridge::ListDatabaseStorageResponse>(request, DoListDatabaseStorage);
+    }
+
+    auto Start(const Ydb::Bridge::ListGroupSynchronizationRequest& request) {
+        return StartRpc<Ydb::Bridge::ListGroupSynchronizationRequest, Ydb::Bridge::ListGroupSynchronizationResponse>(request, DoListGroupSynchronization);
     }
 
     auto GrabStorageQuery() {
@@ -677,37 +685,50 @@ struct TStorageMetadataSetup : TStorageSetup {
 
     NKikimrBridge::TStorageState DatabaseSnapshot(const TPathId& owner, const TVector<TString>& pools) {
         NKikimrBridge::TStorageState state;
-        state.SetGeneration(7);
-        state.SetCollectedAtUs(123456789);
-        auto* row = state.AddDatabases();
-        row->SetOwnerSchemeShardId(owner.OwnerId);
-        row->SetOwnerPathId(owner.LocalPathId);
-        for (const auto& pool : pools) {
-            row->AddStoragePools(pool);
+        state.SetStatus(Ydb::StatusIds::SUCCESS);
+        auto* result = state.MutableDatabases();
+        result->set_cluster_state_generation(7);
+        result->mutable_observed_at()->set_seconds(123);
+        result->mutable_observed_at()->set_nanos(456789000);
+        auto* row = result->add_databases();
+        for (size_t i = 0; i < pools.size(); ++i) {
+            auto* pool = row->add_storage_pools();
+            pool->mutable_id()->set_box_id(1);
+            pool->mutable_id()->set_pool_id(i + 1);
+            pool->set_name(pools[i]);
         }
-        row->SetPileName("secondary");
-        row->SetMode(NKikimrBridge::TStorageDatabase::MIXED);
-        row->SetState(NKikimrBridge::TStorageGroup::SYNCING);
-        row->MutableGroups()->SetTotal(8);
-        row->MutableGroups()->SetSynced(3);
-        row->MutableGroups()->SetRunning(5);
-        row->SetLastError("retry");
-        row->SetLastErrorTimestampUs(99);
+        row->set_pile_name("secondary");
+        row->set_storage_mode(Ydb::Bridge::MIXED);
+        row->mutable_groups()->set_required(8);
+        row->mutable_groups()->set_synced(3);
+        row->mutable_groups()->set_syncing(5);
+        row->mutable_last_sync_error()->set_message("retry");
+        row->mutable_last_sync_error()->mutable_occurred_at()->set_nanos(99000);
+        if (owner.OwnerId && owner.LocalPathId) {
+            auto* identity = state.AddOwners();
+            identity->SetRowIndex(0);
+            identity->SetOwnerSchemeShardId(owner.OwnerId);
+            identity->SetOwnerPathId(owner.LocalPathId);
+        }
         return state;
     }
 };
 
-Ydb::Bridge::GetClusterStateResult GetStorageResult(const Ydb::Bridge::GetClusterStateResponse& response) {
-    UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS,
-        response.operation().DebugString());
-    Ydb::Bridge::GetClusterStateResult result;
+template<class TResult, class TResponse>
+TResult OperationResult(const TResponse& response) {
+    UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.operation().DebugString());
+    TResult result;
     UNIT_ASSERT(response.operation().result().UnpackTo(&result));
     return result;
 }
 
+Ydb::Bridge::ListDatabaseStorageResult GetStorageResult(const Ydb::Bridge::ListDatabaseStorageResponse& response) {
+    return OperationResult<Ydb::Bridge::ListDatabaseStorageResult>(response);
+}
+
 } // namespace
 
-Y_UNIT_TEST_SUITE(BridgeGetClusterStateStorage) {
+Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
     Y_UNIT_TEST(SelectedExternalDatabaseUsesActiveTenantRoot) {
         TStorageMetadataSetup setup;
         const TPathId owner(setup.RootSchemeShardId, 10);
@@ -715,12 +736,11 @@ Y_UNIT_TEST_SUITE(BridgeGetClusterStateStorage) {
         setup.CacheDescription("/Root/app", {setup.TenantSchemeShardId, 1},
             NKikimrSchemeOp::EPathTypeSubDomain, owner, owner, pools);
 
-        Ydb::Bridge::StorageQuery query;
-        query.set_view(Ydb::Bridge::StorageQuery::DATABASES);
+        Ydb::Bridge::ListDatabaseStorageRequest query;
         query.set_database_path("/Root/app/");
         auto future = setup.Start(query);
-        const auto rpc = setup.ReplyWithConfig(7);
         const auto request = setup.GrabStorageQuery();
+        const auto rpc = request->Sender;
         UNIT_ASSERT(request->Get()->Record.GetView() == NKikimrBridge::TStorageQuery::DATABASES);
         UNIT_ASSERT(request->Get()->Record.GetFilterPools());
         UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.PoolNamesSize(), 2);
@@ -729,25 +749,25 @@ Y_UNIT_TEST_SUITE(BridgeGetClusterStateStorage) {
         setup.ReplyWithStorage(rpc, setup.DatabaseSnapshot(owner, pools));
 
         const auto result = GetStorageResult(setup.Runtime.WaitFuture(future));
-        UNIT_ASSERT_VALUES_EQUAL(result.generation(), 7);
-        UNIT_ASSERT_VALUES_EQUAL(result.pile_states_size(), 2);
-        const auto& storage = result.storage_state();
-        UNIT_ASSERT(storage.unavailable_reason().empty());
-        UNIT_ASSERT_VALUES_EQUAL(storage.database_path(), "/Root/app");
-        UNIT_ASSERT_VALUES_EQUAL(storage.storage_owner_database(), "/Root/app");
+        UNIT_ASSERT_VALUES_EQUAL(result.cluster_state_generation(), 7);
+        const auto& storage = result;
+        UNIT_ASSERT(storage.has_storage_owner_database_path());
+        UNIT_ASSERT_VALUES_EQUAL(storage.storage_owner_database_path(), "/Root/app");
         UNIT_ASSERT_VALUES_EQUAL(storage.databases_size(), 1);
         const auto& row = storage.databases(0);
         UNIT_ASSERT_VALUES_EQUAL(row.database_path(), "/Root/app");
         UNIT_ASSERT_VALUES_EQUAL(row.storage_pools_size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(row.storage_pools(0), pools[0]);
-        UNIT_ASSERT_VALUES_EQUAL(row.storage_pools(1), pools[1]);
-        UNIT_ASSERT(row.mode() == Ydb::Bridge::DatabaseStorageState::MIXED);
-        UNIT_ASSERT(row.state() == Ydb::Bridge::GroupStorageState::SYNCING);
-        UNIT_ASSERT_VALUES_EQUAL(row.groups().total(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(row.storage_pools(0).name(), pools[0]);
+        UNIT_ASSERT_VALUES_EQUAL(row.storage_pools(1).name(), pools[1]);
+        UNIT_ASSERT_VALUES_EQUAL(row.storage_pools(0).id().box_id(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(row.storage_pools(0).id().pool_id(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(row.storage_pools(1).id().pool_id(), 2);
+        UNIT_ASSERT(row.storage_mode() == Ydb::Bridge::MIXED);
+        UNIT_ASSERT_VALUES_EQUAL(row.groups().required(), 8);
         UNIT_ASSERT_VALUES_EQUAL(row.groups().synced(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(row.groups().running(), 5);
-        UNIT_ASSERT_VALUES_EQUAL(row.last_error(), "retry");
-        UNIT_ASSERT_VALUES_EQUAL(row.last_error_timestamp_us(), 99);
+        UNIT_ASSERT_VALUES_EQUAL(row.groups().syncing(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(row.last_sync_error().message(), "retry");
+        UNIT_ASSERT_VALUES_EQUAL(row.last_sync_error().occurred_at().nanos(), 99000);
     }
 
     Y_UNIT_TEST(ServerlessDatabaseResolvesExternalSharedOwnerByGlobalId) {
@@ -762,12 +782,11 @@ Y_UNIT_TEST_SUITE(BridgeGetClusterStateStorage) {
         setup.CacheDescription("/Root/shared", shared, NKikimrSchemeOp::EPathTypeExtSubDomain,
             shared, shared, pools, true);
 
-        Ydb::Bridge::StorageQuery query;
-        query.set_view(Ydb::Bridge::StorageQuery::DATABASES);
+        Ydb::Bridge::ListDatabaseStorageRequest query;
         query.set_database_path("/Root/serverless");
         auto future = setup.Start(query);
-        const auto rpc = setup.ReplyWithConfig(7);
         const auto request = setup.GrabStorageQuery();
+        const auto rpc = request->Sender;
         UNIT_ASSERT(request->Get()->Record.GetFilterPools());
         UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.PoolNamesSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.GetPoolNames(0), pools[0]);
@@ -775,20 +794,18 @@ Y_UNIT_TEST_SUITE(BridgeGetClusterStateStorage) {
         setup.ReplyWithStorage(rpc, setup.DatabaseSnapshot(shared, pools));
 
         const auto result = GetStorageResult(setup.Runtime.WaitFuture(future));
-        const auto& storage = result.storage_state();
-        UNIT_ASSERT(storage.unavailable_reason().empty());
-        UNIT_ASSERT_VALUES_EQUAL(storage.database_path(), "/Root/serverless");
-        UNIT_ASSERT_VALUES_EQUAL(storage.storage_owner_database(), "/Root/shared");
+        const auto& storage = result;
+        UNIT_ASSERT_VALUES_EQUAL(storage.storage_owner_database_path(), "/Root/shared");
         UNIT_ASSERT_VALUES_EQUAL(storage.databases_size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).database_path(), "/Root/shared");
-        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).groups().total(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).groups().required(), 8);
         UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).groups().synced(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).storage_pools(0), pools[0]);
-        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).storage_pools(1), pools[1]);
+        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).storage_pools(0).name(), pools[0]);
+        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).storage_pools(1).name(), pools[1]);
         UNIT_ASSERT_VALUES_EQUAL(setup.BscRequests, 1);
     }
 
-    Y_UNIT_TEST(DatabasePageResolvesExternalOwnersByIdAndKeepsUnresolvedPoolNames) {
+    Y_UNIT_TEST(DatabaseStorageResolvesExternalOwnersByIdAndKeepsUnresolvedPools) {
         TStorageMetadataSetup setup;
         const TPathId first(setup.RootSchemeShardId, 10);
         const TPathId second(setup.RootSchemeShardId, 20);
@@ -805,22 +822,34 @@ Y_UNIT_TEST_SUITE(BridgeGetClusterStateStorage) {
             setup.RootId, setup.RootId, {}, true);
         setup.ReverseMetadataResults = true; // correlate owners by identity, independent of result order
 
-        Ydb::Bridge::StorageQuery query;
-        query.set_view(Ydb::Bridge::StorageQuery::DATABASES);
+        Ydb::Bridge::ListDatabaseStorageRequest query;
         auto future = setup.Start(query);
-        const auto rpc = setup.ReplyWithConfig(7);
-        setup.GrabStorageQuery();
+        const auto request = setup.GrabStorageQuery();
+        const auto rpc = request->Sender;
         auto snapshot = setup.DatabaseSnapshot(first, {"first,ssd", "first-hdd"});
-        const auto firstRow = snapshot.GetDatabases(0);
-        snapshot.AddDatabases()->CopyFrom(firstRow);
-        snapshot.MutableDatabases(1)->SetPileName("primary");
+        auto* rows = snapshot.MutableDatabases();
+        const auto firstRow = rows->databases(0);
+        rows->add_databases()->CopyFrom(firstRow);
+        rows->mutable_databases(1)->set_pile_name("primary");
+        auto* duplicate = snapshot.AddOwners();
+        duplicate->SetRowIndex(1);
+        duplicate->SetOwnerSchemeShardId(first.OwnerId);
+        duplicate->SetOwnerPathId(first.LocalPathId);
         auto addOwner = [&](const TPathId& owner, const TString& pool) {
-            auto* row = snapshot.AddDatabases();
+            const auto rowIndex = rows->databases_size();
+            auto* row = rows->add_databases();
             row->CopyFrom(firstRow);
-            row->SetOwnerSchemeShardId(owner.OwnerId);
-            row->SetOwnerPathId(owner.LocalPathId);
-            row->MutableStoragePools()->Clear();
-            row->AddStoragePools(pool);
+            row->clear_storage_pools();
+            auto* storagePool = row->add_storage_pools();
+            storagePool->mutable_id()->set_box_id(1);
+            storagePool->mutable_id()->set_pool_id(rowIndex + 1);
+            storagePool->set_name(pool);
+            if (owner.OwnerId && owner.LocalPathId) {
+                auto* identity = snapshot.AddOwners();
+                identity->SetRowIndex(rowIndex);
+                identity->SetOwnerSchemeShardId(owner.OwnerId);
+                identity->SetOwnerPathId(owner.LocalPathId);
+            }
         };
         addOwner(second, "second-ssd");
         addOwner(directory, "directory-pool");
@@ -828,21 +857,20 @@ Y_UNIT_TEST_SUITE(BridgeGetClusterStateStorage) {
         setup.ReplyWithStorage(rpc, snapshot);
 
         const auto result = GetStorageResult(setup.Runtime.WaitFuture(future));
-        const auto& storage = result.storage_state();
-        UNIT_ASSERT(storage.unavailable_reason().empty());
-        UNIT_ASSERT_VALUES_EQUAL(storage.generation(), 7);
+        const auto& storage = result;
+        UNIT_ASSERT_VALUES_EQUAL(storage.cluster_state_generation(), 7);
         UNIT_ASSERT_VALUES_EQUAL(storage.databases_size(), 5);
         UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).database_path(), "/Root/first");
         UNIT_ASSERT_VALUES_EQUAL(storage.databases(1).database_path(), "/Root/first");
         UNIT_ASSERT_VALUES_EQUAL(storage.databases(2).database_path(), "/Root/second");
-        UNIT_ASSERT(storage.databases(3).database_path().empty());
-        UNIT_ASSERT(storage.databases(4).database_path().empty());
+        UNIT_ASSERT(!storage.databases(3).has_database_path());
+        UNIT_ASSERT(!storage.databases(4).has_database_path());
         UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).storage_pools_size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).storage_pools(0), "first,ssd");
-        UNIT_ASSERT_VALUES_EQUAL(storage.databases(3).storage_pools(0), "directory-pool");
-        UNIT_ASSERT_VALUES_EQUAL(storage.databases(4).storage_pools(0), "unknown,scope");
+        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).storage_pools(0).name(), "first,ssd");
+        UNIT_ASSERT_VALUES_EQUAL(storage.databases(3).storage_pools(0).name(), "directory-pool");
+        UNIT_ASSERT_VALUES_EQUAL(storage.databases(4).storage_pools(0).name(), "unknown,scope");
         for (const auto& row : storage.databases()) {
-            UNIT_ASSERT_VALUES_EQUAL(row.groups().total(), 8);
+            UNIT_ASSERT_VALUES_EQUAL(row.groups().required(), 8);
             UNIT_ASSERT_VALUES_EQUAL(row.groups().synced(), 3);
         }
         UNIT_ASSERT_VALUES_EQUAL(setup.BscRequests, 1);
@@ -857,11 +885,10 @@ Y_UNIT_TEST_SUITE(BridgeGetClusterStateStorage) {
         setup.CacheDescription("/Root/app", owner, NKikimrSchemeOp::EPathTypeExtSubDomain,
             owner, owner, pools, true);
 
-        Ydb::Bridge::StorageQuery query;
-        query.set_view(Ydb::Bridge::StorageQuery::DATABASES);
+        Ydb::Bridge::ListDatabaseStorageRequest query;
         auto future = setup.Start(query);
-        const auto rpc = setup.ReplyWithConfig(7);
         const auto request = setup.GrabStorageQuery();
+        const auto rpc = request->Sender;
         const auto pipe = request->Recipient; // the fixture rewrites delivery while retaining the pipe address
         UNIT_ASSERT(pipe);
 
@@ -876,178 +903,244 @@ Y_UNIT_TEST_SUITE(BridgeGetClusterStateStorage) {
             [&] { return bool(ownerReply); }, TDuration::Seconds(1));
         observer.Remove();
 
-        // The controller is no longer needed; owner metadata must still finish the accepted page.
+        // The controller is no longer needed; owner metadata must still finish the accepted result.
         setup.Runtime.Send(new IEventHandle(rpc, pipe,
             new TEvTabletPipe::TEvClientDestroyed(MakeBSControllerID(), pipe, {})), 0, true);
         setup.Runtime.Send(ownerReply.Release(), 0, true);
 
         const auto result = GetStorageResult(setup.Runtime.WaitFuture(future));
-        const auto& storage = result.storage_state();
-        UNIT_ASSERT(storage.unavailable_reason().empty());
-        UNIT_ASSERT_VALUES_EQUAL(storage.generation(), 7);
-        UNIT_ASSERT_VALUES_EQUAL(storage.collected_at_us(), 123456789);
+        const auto& storage = result;
+        UNIT_ASSERT_VALUES_EQUAL(storage.cluster_state_generation(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(storage.observed_at().seconds(), 123);
         UNIT_ASSERT_VALUES_EQUAL(storage.databases_size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).database_path(), "/Root/app");
-        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).groups().total(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).groups().required(), 8);
         UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).groups().synced(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).groups().running(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).groups().syncing(), 5);
         UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).storage_pools_size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).storage_pools(0), pools[0]);
-        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).storage_pools(1), pools[1]);
+        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).storage_pools(0).name(), pools[0]);
+        UNIT_ASSERT_VALUES_EQUAL(storage.databases(0).storage_pools(1).name(), pools[1]);
     }
 
-    Y_UNIT_TEST(DefaultQueryDoesNotContactController) {
+    Y_UNIT_TEST(DefaultClusterStateDoesNotContactController) {
         TStorageSetup setup;
         auto [rpc, future] = setup.StartGet(false);
-        const auto result = GetStorageResult(setup.Runtime.WaitFuture(future));
-        UNIT_ASSERT(!result.has_storage_state());
+        const auto result = OperationResult<Ydb::Bridge::GetClusterStateResult>(setup.Runtime.WaitFuture(future));
         UNIT_ASSERT_VALUES_EQUAL(result.generation(), 1);
         UNIT_ASSERT_VALUES_EQUAL(result.pile_states_size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(setup.BscRequests, 0);
     }
 
     Y_UNIT_TEST(InvalidStorageQueriesAreRejectedBeforeStorageLookup) {
-        Ydb::Bridge::StorageQuery tooLarge;
-        tooLarge.set_view(Ydb::Bridge::StorageQuery::PILES);
-        tooLarge.set_page_size(10001);
-        Ydb::Bridge::StorageQuery invalidView;
-        invalidView.set_view(static_cast<Ydb::Bridge::StorageQuery::View>(1000));
-        Ydb::Bridge::StorageQuery unscopedGroups;
-        unscopedGroups.set_view(Ydb::Bridge::StorageQuery::GROUPS);
-        for (const auto& query : {tooLarge, invalidView, unscopedGroups}) {
-            TStorageSetup setup;
-            auto future = setup.Start(query);
+        TStorageSetup setup;
+        auto check = [&](const auto& request) {
+            auto future = setup.Start(request);
             const auto response = setup.Runtime.WaitFuture(future);
-            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::BAD_REQUEST,
-                response.operation().DebugString());
-            UNIT_ASSERT_VALUES_EQUAL(setup.BscRequests, 0);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::BAD_REQUEST, response.operation().DebugString());
+        };
+        Ydb::Bridge::ListDatabaseStorageRequest emptyDatabase;
+        emptyDatabase.set_database_path("");
+        check(emptyDatabase);
+        Ydb::Bridge::ListDatabaseStorageRequest relativeDatabase;
+        relativeDatabase.set_database_path("Root/app");
+        check(relativeDatabase);
+        Ydb::Bridge::ListGroupSynchronizationRequest unscoped;
+        check(unscoped);
+        Ydb::Bridge::ListGroupSynchronizationRequest emptyPool;
+        emptyPool.set_storage_pool_name("");
+        check(emptyPool);
+        Ydb::Bridge::ListGroupSynchronizationRequest emptyPoolId;
+        emptyPoolId.mutable_storage_pool_id()->set_box_id(1);
+        check(emptyPoolId);
+        for (const auto value : {0, 1000}) {
+            Ydb::Bridge::ListGroupSynchronizationRequest unsupportedStatus;
+            unsupportedStatus.set_storage_pool_name("pool");
+            unsupportedStatus.add_statuses(static_cast<Ydb::Bridge::SynchronizationStatus>(value));
+            check(unsupportedStatus);
         }
+        UNIT_ASSERT_VALUES_EQUAL(setup.BscRequests, 0);
     }
 
-    Y_UNIT_TEST(UnavailableControllerKeepsBaseClusterStateSuccessful) {
-        TStorageSetup setup;
-        Ydb::Bridge::StorageQuery query;
-        query.set_view(Ydb::Bridge::StorageQuery::PILES);
-        auto future = setup.Start(query);
-        const auto rpc = setup.ReplyWithConfig(7);
-        const auto request = setup.GrabStorageQuery();
-        UNIT_ASSERT(request->Get()->Record.GetView() == NKikimrBridge::TStorageQuery::PILES);
-        NKikimrBridge::TStorageState state;
-        state.SetUnavailableReason("controller unavailable");
-        setup.ReplyWithStorage(rpc, state);
-        const auto result = GetStorageResult(setup.Runtime.WaitFuture(future));
-        UNIT_ASSERT_VALUES_EQUAL(result.generation(), 7);
-        UNIT_ASSERT_VALUES_EQUAL(result.pile_states_size(), 2);
-        UNIT_ASSERT(result.has_storage_state());
-        UNIT_ASSERT_VALUES_EQUAL(result.storage_state().unavailable_reason(), "controller unavailable");
-    }
-
-    Y_UNIT_TEST(PileCountsKeepSnapshotIdentityAndSystemGroupsSeparate) {
-        TStorageSetup setup;
-        Ydb::Bridge::StorageQuery query;
-        query.set_view(Ydb::Bridge::StorageQuery::PILES);
-        auto future = setup.Start(query);
-        const auto rpc = setup.ReplyWithConfig(7);
-        setup.GrabStorageQuery();
-        NKikimrBridge::TStorageState state;
-        state.SetGeneration(7);
-        state.SetCollectedAtUs(123456789);
-        auto* pile = state.AddPiles();
-        pile->SetPileName("secondary");
-        auto* counts = pile->MutableUserGroups();
-        counts->SetTotal(100);
-        counts->SetSynced(80);
-        counts->SetRunning(10);
-        counts->SetPending(8);
-        counts->SetUnknown(2);
-        pile->MutableSystemGroups()->SetTotal(3);
-        pile->MutableSystemGroups()->SetSynced(3);
-        setup.ReplyWithStorage(rpc, state);
-        const auto result = GetStorageResult(setup.Runtime.WaitFuture(future));
-        UNIT_ASSERT_VALUES_EQUAL(result.generation(), 7);
-        UNIT_ASSERT(result.has_storage_state());
-        const auto& storage = result.storage_state();
-        UNIT_ASSERT_VALUES_EQUAL(storage.generation(), 7);
-        UNIT_ASSERT_VALUES_EQUAL(storage.collected_at_us(), 123456789);
-        UNIT_ASSERT_VALUES_EQUAL(storage.piles_size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(storage.piles(0).pile_name(), "secondary");
-        const auto& user = storage.piles(0).user_groups();
-        UNIT_ASSERT_VALUES_EQUAL(user.total(), 100);
-        UNIT_ASSERT_VALUES_EQUAL(user.synced(), 80);
-        UNIT_ASSERT_VALUES_EQUAL(user.running(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(user.pending(), 8);
-        UNIT_ASSERT_VALUES_EQUAL(user.unknown(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(storage.piles(0).system_groups().total(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(storage.piles(0).system_groups().synced(), 3);
-    }
-
-    Y_UNIT_TEST(DifferentStorageGenerationDoesNotPublishSynchronizationCounts) {
-        for (ui64 storageGeneration : {6, 8}) {
+    Y_UNIT_TEST(ControllerErrorsBecomeOrdinaryOperationStatuses) {
+        for (const auto status : {Ydb::StatusIds::BAD_REQUEST, Ydb::StatusIds::NOT_FOUND,
+                Ydb::StatusIds::PRECONDITION_FAILED, Ydb::StatusIds::UNAVAILABLE}) {
             TStorageSetup setup;
-            Ydb::Bridge::StorageQuery query;
-            query.set_view(Ydb::Bridge::StorageQuery::PILES);
-            auto future = setup.Start(query);
-            const auto rpc = setup.ReplyWithConfig(7);
-            setup.GrabStorageQuery();
+            auto future = setup.Start(Ydb::Bridge::GetSynchronizationSummaryRequest{});
+            const auto request = setup.GrabStorageQuery();
+            UNIT_ASSERT(request->Get()->Record.GetView() == NKikimrBridge::TStorageQuery::PILES);
             NKikimrBridge::TStorageState state;
-            state.SetGeneration(storageGeneration);
-            state.SetCollectedAtUs(123456789);
-            auto* pile = state.AddPiles();
-            pile->SetPileName("secondary");
-            pile->MutableUserGroups()->SetTotal(100);
-            pile->MutableUserGroups()->SetSynced(100);
-            setup.ReplyWithStorage(rpc, state);
-            const auto result = GetStorageResult(setup.Runtime.WaitFuture(future));
-            UNIT_ASSERT_VALUES_EQUAL(result.generation(), 7);
-            UNIT_ASSERT_VALUES_EQUAL(result.pile_states_size(), 2);
-            UNIT_ASSERT(result.has_storage_state());
-            UNIT_ASSERT_VALUES_EQUAL(result.storage_state().generation(), storageGeneration);
-            UNIT_ASSERT_STRING_CONTAINS(result.storage_state().unavailable_reason(), "generations");
-            UNIT_ASSERT_VALUES_EQUAL(result.storage_state().piles_size(), 0);
+            state.SetStatus(status);
+            state.SetErrorMessage("controller diagnostic error");
+            setup.ReplyWithStorage(request->Sender, state);
+            const auto response = setup.Runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), status, response.operation().DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().issues_size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().issues(0).message(), "controller diagnostic error");
+            UNIT_ASSERT(!response.operation().has_result());
         }
     }
 
-    Y_UNIT_TEST(GroupFiltersAndContinuationReachController) {
+    Y_UNIT_TEST(PileCountsKeepObservationIdentityAndSystemGroupsSeparate) {
         TStorageSetup setup;
-        Ydb::Bridge::StorageQuery query;
-        query.set_view(Ydb::Bridge::StorageQuery::GROUPS);
-        query.set_storage_pool("pool-a");
-        query.set_pile_name("secondary");
-        query.set_not_synced(true);
-        query.set_page_size(25);
-        query.set_page_token("continuation");
+        auto future = setup.Start(Ydb::Bridge::GetSynchronizationSummaryRequest{});
+        const auto request = setup.GrabStorageQuery();
+        NKikimrBridge::TStorageState state;
+        state.SetStatus(Ydb::StatusIds::SUCCESS);
+        auto* summary = state.MutableSummary();
+        summary->set_cluster_state_generation(7);
+        summary->mutable_observed_at()->set_seconds(123);
+        summary->mutable_observed_at()->set_nanos(456789000);
+        auto* pile = summary->add_piles();
+        pile->set_pile_name("");
+        auto* counts = pile->mutable_user_groups();
+        counts->set_required(100);
+        counts->set_synced(80);
+        counts->set_syncing(10);
+        counts->set_pending(8);
+        counts->set_unknown(2);
+        pile->mutable_system_groups()->set_required(3);
+        pile->mutable_system_groups()->set_synced(3);
+        setup.ReplyWithStorage(request->Sender, state);
+        const auto result = OperationResult<Ydb::Bridge::GetSynchronizationSummaryResult>(setup.Runtime.WaitFuture(future));
+        UNIT_ASSERT_VALUES_EQUAL(result.cluster_state_generation(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(result.observed_at().seconds(), 123);
+        UNIT_ASSERT_VALUES_EQUAL(result.observed_at().nanos(), 456789000);
+        UNIT_ASSERT_VALUES_EQUAL(result.piles_size(), 1);
+        const auto& row = result.piles(0);
+        UNIT_ASSERT_VALUES_EQUAL(row.pile_name(), "");
+        UNIT_ASSERT_VALUES_EQUAL(row.user_groups().required(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(row.user_groups().synced(), 80);
+        UNIT_ASSERT_VALUES_EQUAL(row.user_groups().syncing(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(row.user_groups().pending(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(row.user_groups().unknown(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(row.system_groups().required(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(row.system_groups().synced(), 3);
+    }
+
+    Y_UNIT_TEST(ControllerObservationDoesNotRequireLocalClusterState) {
+        TStorageSetup setup;
+        auto future = setup.Start(Ydb::Bridge::GetSynchronizationSummaryRequest{});
+        const auto request = setup.GrabStorageQuery();
+        NKikimrBridge::TStorageState state;
+        state.SetStatus(Ydb::StatusIds::SUCCESS);
+        state.MutableSummary()->set_cluster_state_generation(42);
+        setup.ReplyWithStorage(request->Sender, state);
+        const auto result = OperationResult<Ydb::Bridge::GetSynchronizationSummaryResult>(setup.Runtime.WaitFuture(future));
+        UNIT_ASSERT_VALUES_EQUAL(result.cluster_state_generation(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(setup.BscRequests, 1);
+    }
+
+    Y_UNIT_TEST(GroupScopeAndStatusFiltersReachController) {
+        TStorageSetup setup;
+        Ydb::Bridge::ListGroupSynchronizationRequest query;
+        query.mutable_storage_pool_id()->set_box_id(0);
+        query.mutable_storage_pool_id()->set_pool_id(25);
+        query.set_pile_name("");
+        query.add_statuses(Ydb::Bridge::SYNCING);
+        query.add_statuses(Ydb::Bridge::PENDING);
+        query.add_statuses(Ydb::Bridge::NOT_REQUIRED);
         auto future = setup.Start(query);
-        const auto rpc = setup.ReplyWithConfig();
         const auto request = setup.GrabStorageQuery();
         const auto& forwarded = request->Get()->Record;
         UNIT_ASSERT(forwarded.GetView() == NKikimrBridge::TStorageQuery::GROUPS);
-        UNIT_ASSERT_VALUES_EQUAL(forwarded.GetStoragePool(), "pool-a");
-        UNIT_ASSERT_VALUES_EQUAL(forwarded.GetPileName(), "secondary");
-        UNIT_ASSERT(forwarded.GetNotSynced());
-        UNIT_ASSERT_VALUES_EQUAL(forwarded.GetPageSize(), 25);
-        UNIT_ASSERT_VALUES_EQUAL(forwarded.GetPageToken(), "continuation");
+        UNIT_ASSERT(forwarded.HasStoragePoolId());
+        UNIT_ASSERT_VALUES_EQUAL(forwarded.GetStoragePoolId().box_id(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded.GetStoragePoolId().pool_id(), 25);
+        UNIT_ASSERT(forwarded.HasPileName());
+        UNIT_ASSERT_VALUES_EQUAL(forwarded.GetPileName(), "");
+        UNIT_ASSERT_VALUES_EQUAL(forwarded.StatusesSize(), 3);
+        UNIT_ASSERT(forwarded.GetStatuses(0) == Ydb::Bridge::SYNCING);
+        UNIT_ASSERT(forwarded.GetStatuses(1) == Ydb::Bridge::PENDING);
+        UNIT_ASSERT(forwarded.GetStatuses(2) == Ydb::Bridge::NOT_REQUIRED);
         NKikimrBridge::TStorageState state;
-        state.SetGeneration(1);
-        state.SetNextPageToken("next page");
-        setup.ReplyWithStorage(rpc, state);
-        const auto result = GetStorageResult(setup.Runtime.WaitFuture(future));
-        UNIT_ASSERT_VALUES_EQUAL(result.storage_state().next_page_token(), "next page");
+        state.SetStatus(Ydb::StatusIds::SUCCESS);
+        auto* groups = state.MutableGroups();
+        groups->set_cluster_state_generation(7);
+        groups->mutable_observed_at()->set_seconds(1);
+        auto* group = groups->add_groups();
+        group->set_group_id(10);
+        group->set_physical_group_id(20);
+        group->mutable_storage_pool()->mutable_id()->set_box_id(0);
+        group->mutable_storage_pool()->mutable_id()->set_pool_id(25);
+        group->mutable_storage_pool()->set_name("renamed-pool");
+        group->set_pile_name("");
+        group->set_sync_status(Ydb::Bridge::SYNCING);
+        group->set_sync_phase("WRITE_KEEP");
+        group->mutable_last_sync_error()->set_message("previous attempt");
+        group->mutable_last_sync_error()->mutable_occurred_at()->set_nanos(99000);
+        auto* pending = groups->add_groups();
+        pending->set_group_id(11);
+        pending->set_sync_status(Ydb::Bridge::PENDING);
+        pending->mutable_last_sync_error()->set_message("error without a timestamp");
+        auto* ordinary = groups->add_groups();
+        ordinary->set_group_id(12);
+        ordinary->set_sync_status(Ydb::Bridge::NOT_REQUIRED);
+        setup.ReplyWithStorage(request->Sender, state);
+        const auto result = OperationResult<Ydb::Bridge::ListGroupSynchronizationResult>(setup.Runtime.WaitFuture(future));
+        UNIT_ASSERT_VALUES_EQUAL(result.groups_size(), 3);
+        const auto& row = result.groups(0);
+        UNIT_ASSERT_VALUES_EQUAL(row.group_id(), 10);
+        UNIT_ASSERT(row.has_physical_group_id());
+        UNIT_ASSERT_VALUES_EQUAL(row.physical_group_id(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(row.storage_pool().id().box_id(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(row.storage_pool().id().pool_id(), 25);
+        UNIT_ASSERT_VALUES_EQUAL(row.storage_pool().name(), "renamed-pool");
+        UNIT_ASSERT(row.has_pile_name());
+        UNIT_ASSERT_VALUES_EQUAL(row.pile_name(), "");
+        UNIT_ASSERT(row.sync_status() == Ydb::Bridge::SYNCING);
+        UNIT_ASSERT_VALUES_EQUAL(row.sync_phase(), "WRITE_KEEP");
+        UNIT_ASSERT(row.has_last_sync_error());
+        UNIT_ASSERT_VALUES_EQUAL(row.last_sync_error().message(), "previous attempt");
+        UNIT_ASSERT_VALUES_EQUAL(row.last_sync_error().occurred_at().nanos(), 99000);
+        UNIT_ASSERT(!result.groups(1).has_physical_group_id());
+        UNIT_ASSERT(!result.groups(1).has_pile_name());
+        UNIT_ASSERT(result.groups(1).has_last_sync_error());
+        UNIT_ASSERT_VALUES_EQUAL(result.groups(1).last_sync_error().message(), "error without a timestamp");
+        UNIT_ASSERT(!result.groups(1).last_sync_error().has_occurred_at());
+        UNIT_ASSERT(!result.groups(2).has_last_sync_error());
     }
 
-    Y_UNIT_TEST(StorageAuthorizationFailureDoesNotHideClusterState) {
+    Y_UNIT_TEST(ResponseBudgetIsCheckedAfterOwnerMetadataEnrichment) {
+        TStorageMetadataSetup setup;
+        const TPathId owner(setup.RootSchemeShardId, 10);
+        const TString path = "/Root/" + TString(200, 'a');
+        setup.CacheDescription(path, owner, NKikimrSchemeOp::EPathTypeExtSubDomain,
+            owner, owner, {"pool"}, true);
+        auto state = setup.DatabaseSnapshot(owner, {"pool"});
+        auto* data = state.MutableDatabases();
+        auto* message = data->mutable_databases(0)->mutable_last_sync_error()->mutable_message();
+        constexpr auto budget = TEvBlobStorage::TEvControllerQueryBridgeStorage::MaxResultBytes;
+        message->assign(budget - 1024, 'x');
+        const auto initial = data->ByteSizeLong();
+        UNIT_ASSERT(initial < budget - 128);
+        message->append(budget - 128 - initial, 'x');
+        UNIT_ASSERT(data->ByteSizeLong() <= budget);
+        UNIT_ASSERT(state.ByteSizeLong() <= budget);
+
+        auto future = setup.Start(Ydb::Bridge::ListDatabaseStorageRequest{});
+        const auto request = setup.GrabStorageQuery();
+        setup.ReplyWithStorage(request->Sender, state);
+        const auto response = setup.Runtime.WaitFuture(future);
+        UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::PRECONDITION_FAILED,
+            response.operation().DebugString());
+        UNIT_ASSERT(!response.operation().has_result());
+        UNIT_ASSERT_STRING_CONTAINS(response.operation().issues(0).message(), "narrow");
+    }
+
+    Y_UNIT_TEST(StorageQueriesRequireAdministratorPrivileges) {
         TStorageSetup setup;
         setup.Runtime.GetAppData().AdministrationAllowedSIDs = {"admin"};
-        Ydb::Bridge::StorageQuery query;
-        query.set_view(Ydb::Bridge::StorageQuery::DATABASES);
-        query.set_database_path("/Root/app/");
-        auto future = setup.Start(query);
-        setup.ReplyWithConfig(7);
-        const auto result = GetStorageResult(setup.Runtime.WaitFuture(future));
-        UNIT_ASSERT_VALUES_EQUAL(result.generation(), 7);
-        UNIT_ASSERT_VALUES_EQUAL(result.pile_states_size(), 2);
-        UNIT_ASSERT(result.has_storage_state());
-        UNIT_ASSERT_VALUES_EQUAL(result.storage_state().database_path(), "/Root/app");
-        UNIT_ASSERT(!result.storage_state().unavailable_reason().empty());
+        auto check = [&](const auto& query) {
+            auto future = setup.Start(query);
+            const auto response = setup.Runtime.WaitFuture(future);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::UNAUTHORIZED, response.operation().DebugString());
+            UNIT_ASSERT(!response.operation().has_result());
+        };
+        check(Ydb::Bridge::GetSynchronizationSummaryRequest{});
+        check(Ydb::Bridge::ListDatabaseStorageRequest{});
+        Ydb::Bridge::ListGroupSynchronizationRequest groups;
+        groups.set_storage_pool_name("pool");
+        check(groups);
         UNIT_ASSERT_VALUES_EQUAL(setup.BscRequests, 0);
     }
 }

@@ -2,7 +2,10 @@ syntax = "proto3";
 
 package NKikimrBridge;
 
-// Read-only BSC diagnostics; no scheduler state or persisted operation history.
+import "ydb/public/api/protos/draft/ydb_bridge.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+
+// A read-only controller request. All observations are derived from existing bridge state.
 message TStorageQuery {
     enum EView {
         VIEW_UNSPECIFIED = 0;
@@ -12,94 +15,26 @@ message TStorageQuery {
     }
     EView View = 1;
     string StoragePool = 2;
-    string PileName = 3;
-    bool NotSynced = 4;
-    uint32 PageSize = 5;
-    string PageToken = 6;
+    optional string PileName = 3;
+    bool NotSynced = 4; // incomplete database summaries only
     repeated string PoolNames = 7;
     bool FilterPools = 8;
-}
-
-message TStorageCounts {
-    uint64 Total = 1;
-    uint64 Synced = 2;
-    uint64 Running = 3;
-    uint64 Pending = 4;
-    uint64 Unknown = 5;
-}
-
-message TStoragePile {
-    string PileName = 1;
-    TStorageCounts UserGroups = 2;
-    TStorageCounts SystemGroups = 3;
-}
-
-message TStorageGroup {
-    enum EState {
-        STATE_UNSPECIFIED = 0;
-        SYNCED = 1;
-        SYNCING = 2;
-        PENDING = 3;
-        NOT_REQUIRED = 4;
-        UNKNOWN = 5;
-    }
-    uint32 GroupId = 1;
-    uint32 PartGroupId = 2;
-    string PoolName = 3;
-    string PileName = 4;
-    EState State = 5;
-    string Stage = 6;
-    string LastError = 7;
-    uint64 LastErrorTimestampUs = 8;
-}
-
-message TStorageDatabase {
-    enum EMode {
-        MODE_UNSPECIFIED = 0;
-        BRIDGED = 1;
-        ORDINARY = 2;
-        MIXED = 3;
-    }
-    uint64 OwnerSchemeShardId = 1;
-    uint64 OwnerPathId = 2;
-    repeated string StoragePools = 3;
-    EMode Mode = 4;
-    string PileName = 5;
-    TStorageCounts Groups = 6;
-    TStorageGroup.EState State = 7;
-    string LastError = 8;
-    uint64 LastErrorTimestampUs = 9;
+    Ydb.Bridge.StoragePoolId StoragePoolId = 9;
+    repeated Ydb.Bridge.SynchronizationStatus Statuses = 10;
 }
 
 message TStorageState {
-    uint64 Generation = 1;
-    uint64 CollectedAtUs = 2;
-    repeated TStoragePile Piles = 3;
-    repeated TStorageDatabase Databases = 4;
-    repeated TStorageGroup Groups = 5;
-    string NextPageToken = 6;
-    string UnavailableReason = 7;
-}
-
-message TStoragePageToken {
-    message TDatabaseCursor {
-        uint64 OwnerSchemeShardId = 1;
-        uint64 OwnerPathId = 2;
-        uint64 BoxId = 3;
-        uint64 StoragePoolId = 4;
-        uint32 PileId = 5;
+    message TOwner {
+        uint32 RowIndex = 1;
+        uint64 OwnerSchemeShardId = 2;
+        uint64 OwnerPathId = 3;
     }
-    message TGroupCursor {
-        uint64 BoxId = 1;
-        uint64 StoragePoolId = 2;
-        uint32 GroupId = 3;
-        // Absent after a whole group (including skipped physical parts) was consumed.
-        optional uint32 LastPileId = 4;
+    Ydb.StatusIds.StatusCode Status = 1;
+    string ErrorMessage = 2;
+    oneof Result {
+        Ydb.Bridge.GetSynchronizationSummaryResult Summary = 3;
+        Ydb.Bridge.ListDatabaseStorageResult Databases = 4;
+        Ydb.Bridge.ListGroupSynchronizationResult Groups = 5;
     }
-    uint64 Generation = 1;
-    uint64 QueryHash = 2;
-    oneof Cursor {
-        TDatabaseCursor Database = 3;
-        TGroupCursor Group = 4;
-    }
+    repeated TOwner Owners = 6;
 }

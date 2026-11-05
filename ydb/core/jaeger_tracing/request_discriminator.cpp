@@ -100,6 +100,9 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
     {"Topic.Transaction", ERequestType::TOPIC_PROPOSE_TRANSACTION},
 
     {"Bridge.GetClusterState", ERequestType::BRIDGE_GETCLUSTERSTATE},
+    {"Bridge.GetSynchronizationSummary", ERequestType::BRIDGE_GETSYNCHRONIZATIONSUMMARY},
+    {"Bridge.ListDatabaseStorage", ERequestType::BRIDGE_LISTDATABASESTORAGE},
+    {"Bridge.ListGroupSynchronization", ERequestType::BRIDGE_LISTGROUPSYNCHRONIZATION},
     {"Bridge.UpdateClusterState", ERequestType::BRIDGE_UPDATECLUSTERSTATE},
     {"Bridge.ConvertToBridge", ERequestType::BRIDGE_CONVERTTOBRIDGE},
     {"Bridge.AddPile", ERequestType::BRIDGE_ADDPILE},

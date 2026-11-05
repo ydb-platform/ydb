@@ -35,8 +35,6 @@ message GetClusterStateRequest {
     // Also query static-node connectivity, without requiring BSC or tablets.
     // An older node in the forwarding path may reject this optional query.
     bool include_pile_connectivity = 2;
-    // Optional storage diagnostics. Unavailable diagnostics do not fail the cluster-state query.
-    StorageQuery storage_query = 3;
 }
 
 message GetClusterStateResponse {
@@ -54,92 +52,162 @@ message GetClusterStateResult {
     // Operation changing the set of piles of the cluster that is not finished yet
     optional PendingPileOperation pending_pile_operation = 4;
     optional PileConnectivityReport pile_connectivity = 5;
-    StorageState storage_state = 6;
 }
 
-message StorageQuery {
-    enum View {
-        VIEW_UNSPECIFIED = 0;
-        PILES = 1;
-        DATABASES = 2;
-        GROUPS = 3;
+// Bridge synchronization is observed independently of the committed pile states.
+// These methods require cluster administrator privileges. Each request reads the
+// current controller state; the result is a diagnostic observation.
+// Lists are returned in full. A request that exceeds the diagnostic size or work
+// budget fails with PRECONDITION_FAILED; narrow the database, pool, pile or status filter.
+message GetSynchronizationSummaryRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message GetSynchronizationSummaryResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message GetSynchronizationSummaryResult {
+    repeated PileSynchronizationSummary piles = 1;
+    uint64 cluster_state_generation = 2;
+    google.protobuf.Timestamp observed_at = 3;
+}
+
+message ListDatabaseStorageRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Optional absolute database path. Serverless databases select their shared storage.
+    optional string database_path = 2;
+    // When set, select only rows attributed to this pile. An empty name is valid.
+    optional string pile_name = 3;
+    // Required groups whose synchronization is not confirmed, including UNKNOWN.
+    // Ordinary storage and zero required groups do not match.
+    bool only_incomplete = 4;
+    reserved 5, 6;
+}
+
+message ListDatabaseStorageResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListDatabaseStorageResult {
+    // Storage-owner summaries, not an inventory of all logical databases.
+    repeated DatabaseStorageSummary databases = 1;
+    reserved 2;
+    uint64 cluster_state_generation = 3;
+    google.protobuf.Timestamp observed_at = 4;
+    // Resolved owner of a selected database, including an empty filtered result.
+    optional string storage_owner_database_path = 5;
+}
+
+message ListGroupSynchronizationRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Exactly one nonempty scope is required. Names must identify a unique pool;
+    // use its ID when names are ambiguous. The ID is independent of pool renames.
+    oneof scope {
+        string database_path = 2;
+        string storage_pool_name = 3;
+        StoragePoolId storage_pool_id = 4;
     }
-    View view = 1;
-    string database_path = 2;
-    string storage_pool = 3;
-    string pile_name = 4;
-    bool not_synced = 5;
-    // Default 1000, maximum 10000. Tokens are bound to the query and cluster-state generation.
-    // Pages are diagnostic observations and do not form a transactionally consistent snapshot.
-    uint32 page_size = 6;
-    string page_token = 7;
+    // Absent means all placements. Present-empty selects the pile named "".
+    optional string pile_name = 5;
+    // Empty means all statuses; otherwise OR. Order and duplicates do not matter.
+    // UNSPECIFIED and unsupported values are rejected.
+    repeated SynchronizationStatus statuses = 6;
+    reserved 7, 8;
+}
+
+message ListGroupSynchronizationResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ListGroupSynchronizationResult {
+    repeated GroupSynchronization groups = 1;
+    reserved 2;
+    uint64 cluster_state_generation = 3;
+    google.protobuf.Timestamp observed_at = 4;
+    optional string storage_owner_database_path = 5;
+}
+
+// Concrete pool identity. Names are display labels and may be ambiguous.
+message StoragePoolId {
+    uint64 box_id = 1;
+    // Must be nonzero; box_id may be zero.
+    uint64 pool_id = 2;
+}
+
+message StoragePool {
+    StoragePoolId id = 1;
+    string name = 2;
+}
+
+enum StorageMode {
+    STORAGE_MODE_UNSPECIFIED = 0;
+    BRIDGED = 1;
+    ORDINARY = 2;
+    MIXED = 3;
+}
+
+enum SynchronizationStatus {
+    SYNCHRONIZATION_STATUS_UNSPECIFIED = 0;
+    SYNCED = 1;
+    SYNCING = 2;
+    // Synchronization is required but is not currently running.
+    PENDING = 3;
+    NOT_REQUIRED = 4;
+    // The available observations cannot confirm synchronization.
+    UNKNOWN = 5;
 }
 
 message GroupSyncCounts {
-    // Required copies only. Copies with state NOT_REQUIRED are excluded.
-    uint64 total = 1;
+    // Required groups only: required = synced + syncing + pending + unknown.
+    // NOT_REQUIRED groups, including ordinary storage, are excluded.
+    uint64 required = 1;
     uint64 synced = 2;
-    uint64 running = 3;
+    uint64 syncing = 3;
     uint64 pending = 4;
     uint64 unknown = 5;
 }
 
-message PileStorageState {
+message PileSynchronizationSummary {
     string pile_name = 1;
     GroupSyncCounts user_groups = 2;
     GroupSyncCounts system_groups = 3;
 }
 
-message GroupStorageState {
-    enum State {
-        STATE_UNSPECIFIED = 0;
-        SYNCED = 1;
-        SYNCING = 2;
-        PENDING = 3;
-        NOT_REQUIRED = 4;
-        UNKNOWN = 5;
-    }
-    uint32 group_id = 1;
-    uint32 part_group_id = 2;
-    string storage_pool_name = 3;
-    string pile_name = 4;
-    State state = 5;
-    // Recorded bridge-protocol phase; synchronization activity is reported separately in state.
-    string stage = 6;
-    string last_error = 7;
-    uint64 last_error_timestamp_us = 8;
+message SynchronizationError {
+    // Error of an earlier synchronization attempt, not a failure of this RPC.
+    // It may coexist with the current SYNCING status.
+    string message = 1;
+    google.protobuf.Timestamp occurred_at = 2;
 }
 
-message DatabaseStorageState {
-    enum Mode {
-        MODE_UNSPECIFIED = 0;
-        BRIDGED = 1;
-        ORDINARY = 2;
-        MIXED = 3;
-    }
-    // Storage-owning database; empty when its pool scope cannot be resolved.
-    string database_path = 1;
-    // Names of the pools included in this summary; retained even when the database name is unavailable.
-    repeated string storage_pools = 2;
-    Mode mode = 3;
-    string pile_name = 4;
+message DatabaseStorageSummary {
+    // Best-effort name of the storage owner. Missing metadata does not discard
+    // the summary: the concrete pools remain available for further inspection.
+    optional string database_path = 1;
+    repeated StoragePool storage_pools = 2;
+    StorageMode storage_mode = 3;
+    // Absent for ordinary storage without per-pile attribution.
+    optional string pile_name = 4;
+    // For MIXED storage, counts cover only the bridged pools listed above.
     GroupSyncCounts groups = 5;
-    GroupStorageState.State state = 6;
-    string last_error = 7;
-    uint64 last_error_timestamp_us = 8;
+    SynchronizationError last_sync_error = 6;
 }
 
-message StorageState {
-    uint64 generation = 1;
-    // Observation time in microseconds since the Unix epoch. Summaries may use cached observations.
-    uint64 collected_at_us = 2;
-    string database_path = 3;
-    string storage_owner_database = 4;
-    repeated PileStorageState piles = 5;
-    repeated DatabaseStorageState databases = 6;
-    repeated GroupStorageState groups = 7;
-    string next_page_token = 8;
-    string unavailable_reason = 9;
+message GroupSynchronization {
+    // ID of the storage group used by tablets.
+    uint32 group_id = 1;
+    // ID of its physical group with VDisks, for low-level diagnostics.
+    // Absent when the required physical group has not been created yet.
+    optional uint32 physical_group_id = 2;
+    StoragePool storage_pool = 3;
+    // Absent for ordinary storage without per-pile attribution.
+    optional string pile_name = 4;
+    SynchronizationStatus sync_status = 5;
+    // Recorded protocol phase, for diagnostics only. This text is not a stable
+    // state machine; use sync_status for programmatic decisions.
+    string sync_phase = 6;
+    SynchronizationError last_sync_error = 7;
 }
 
 message PileConnectivity {

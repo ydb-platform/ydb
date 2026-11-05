@@ -90,7 +90,6 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/string_utils/base64
     ydb/library/actors/core
     ydb/library/yaml_config
     ydb/core/base

@@ -18,6 +18,15 @@ service BridgeService {
     // Useful for monitoring and decision-making before state changes
     rpc GetClusterState(Ydb.Bridge.GetClusterStateRequest) returns (Ydb.Bridge.GetClusterStateResponse);
 
+    // Read synchronization counts independently of the committed pile states.
+    rpc GetSynchronizationSummary(Ydb.Bridge.GetSynchronizationSummaryRequest) returns (Ydb.Bridge.GetSynchronizationSummaryResponse);
+
+    // List complete storage-owner summaries within the selected scope.
+    rpc ListDatabaseStorage(Ydb.Bridge.ListDatabaseStorageRequest) returns (Ydb.Bridge.ListDatabaseStorageResponse);
+
+    // Inspect group synchronization within a selected database or storage pool.
+    rpc ListGroupSynchronization(Ydb.Bridge.ListGroupSynchronizationRequest) returns (Ydb.Bridge.ListGroupSynchronizationResponse);
+
     // Update cluster state by providing a list of desired pile states
     // This is the main operation for failover and promotion scenarios
     rpc UpdateClusterState(Ydb.Bridge.UpdateClusterStateRequest) returns (Ydb.Bridge.UpdateClusterStateResponse);

@@ -1,19 +1,15 @@
 #pragma once
 
-#include "types.h"
-
 #include <ydb/core/base/bridge.h>
-#include <ydb/core/protos/bridge_storage.pb.h>
-#include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/public/api/protos/draft/ydb_bridge.pb.h>
 
-#include <map>
-#include <set>
-#include <tuple>
+#include <util/datetime/base.h>
+
+#include <optional>
 
 namespace NKikimr::NBsController::NBridgeStorage {
 
-    using ECopyState = NKikimrBridge::TStorageGroup::EState;
-    using EMode = NKikimrBridge::TStorageDatabase::EMode;
+    using ECopyState = Ydb::Bridge::SynchronizationStatus;
 
     struct TGroupContext {
         const NKikimrBridge::TGroupState* State;
@@ -35,10 +31,9 @@ namespace NKikimr::NBsController::NBridgeStorage {
         bool SyncerRunning = false;
     };
 
-    // Borrowed pointers are used only while observing the controller's current state.
-    // No transport strings are constructed until a group is included in a response.
+    // Borrowed state remains valid for the duration of one controller request.
     struct TCopyObservation {
-        ECopyState State = NKikimrBridge::TStorageGroup::UNKNOWN;
+        ECopyState State = Ydb::Bridge::UNKNOWN;
         const NKikimrBridge::TGroupState::TPile* Part = nullptr;
         bool CurrentGeneration = false;
         const TString* LastError = nullptr;
@@ -55,81 +50,28 @@ namespace NKikimr::NBsController::NBridgeStorage {
         ui64 Unknown = 0;
 
         void Count(ECopyState state);
-        void Add(const TCounts& other);
-        ECopyState State() const;
-        void ToProto(NKikimrBridge::TStorageCounts* to) const;
+        void ToProto(Ydb::Bridge::GroupSyncCounts* to) const;
     };
 
-    struct TCopySummary {
-        TCounts Groups;
-        TString LastError;
-        TInstant LastErrorTimestamp;
+    // Bound both the scan and the full serialized answer. Space is reserved for its envelope.
+    struct TReportBudget {
+        ui64 Visited = 0;
+        ui64 Bytes = 1024;
 
-        void Add(const TCopyObservation& copy);
-        void Add(const TCopySummary& copy);
+        bool Visit();
+        bool Fits(ui64 bytes) const;
+        bool Account(const google::protobuf::MessageLite& row);
     };
 
-    struct TPoolSummary {
-        TBoxStoragePoolId Id;
-        TString Name;
-        TPathId Owner = TPathId(0, 0);
-        EMode Mode = NKikimrBridge::TStorageDatabase::MODE_UNSPECIFIED;
-        std::map<TBridgePileId, TCopySummary> Copies;
+    struct TGroupRow {
+        ui32 GroupId;
+        std::optional<ui32> PhysicalGroupId;
+        const Ydb::Bridge::StoragePool& Pool;
+        std::optional<TStringBuf> PileName;
+        TCopyObservation Copy;
     };
 
-    struct TOwnerKey {
-        TPathId PathId = TPathId(0, 0);
-        TBoxStoragePoolId FallbackPool;
-
-        bool operator<(const TOwnerKey& other) const {
-            return std::tie(PathId.OwnerId, PathId.LocalPathId, FallbackPool) <
-                   std::tie(other.PathId.OwnerId, other.PathId.LocalPathId, other.FallbackPool);
-        }
-    };
-
-    struct TDatabaseKey {
-        TOwnerKey Owner;
-        TBridgePileId PileId;
-
-        bool operator<(const TDatabaseKey& other) const {
-            return std::tie(Owner, PileId) < std::tie(other.Owner, other.PileId);
-        }
-    };
-
-    struct TDatabaseSummary {
-        TVector<TString> StoragePools;
-        EMode Mode = NKikimrBridge::TStorageDatabase::MODE_UNSPECIFIED;
-        TCopySummary Copy;
-    };
-
-    struct TPileSummary {
-        TString Name;
-        TCounts UserGroups;
-        TCounts SystemGroups;
-    };
-
-    using TPoolSummaries = std::map<TBoxStoragePoolId, TPoolSummary>;
-    using TDatabaseSummaries = std::map<TDatabaseKey, TDatabaseSummary>;
-
-    struct TSnapshot {
-        ui64 Generation = 0;
-        TInstant CollectedAt;
-        std::map<TBridgePileId, TPileSummary> Piles;
-        TPoolSummaries Pools;
-        TDatabaseSummaries Databases;
-    };
-
-    // Full and filtered listings share the same owner/fallback identity and ordinary/mixed rules.
-    TDatabaseSummaries BuildDatabaseSummaries(const TPoolSummaries& pools,
-                                              const std::set<TBoxStoragePoolId>* selected = nullptr);
-
-    ui64 QueryHash(const NKikimrBridge::TStorageQuery& query);
-    bool ParsePageToken(const NKikimrBridge::TStorageQuery& query, ui64 generation,
-                        NKikimrBridge::TStoragePageToken& token);
-    TString MakePageToken(const NKikimrBridge::TStorageQuery& query, ui64 generation,
-                          const TDatabaseKey& last);
-    TString MakePageToken(const NKikimrBridge::TStorageQuery& query, ui64 generation,
-                          const NKikimrBridge::TStoragePageToken::TGroupCursor& last);
-    TDatabaseKey DatabaseCursorKey(const NKikimrBridge::TStoragePageToken::TDatabaseCursor& cursor);
+    // Used by the live controller path and the synthetic materialization benchmark.
+    bool AppendGroup(const TGroupRow& input, TReportBudget& budget, Ydb::Bridge::ListGroupSynchronizationResult& result);
 
 } // namespace NKikimr::NBsController::NBridgeStorage

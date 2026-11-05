@@ -2394,25 +2394,12 @@ private:
     ui64 BridgePileAddedOperationId = 0; // ADD operation BSC has done its part of (in memory, it is repeated on restart)
 
     void UpdateBridgeSyncCounters();
-    void RefreshBridgeStorage();
     NBridgeStorage::TCopyObservation ObserveBridgeStorageCopy(const NBridgeStorage::TGroupContext& group,
         const TBridgeInfo::TPile& pile, const NKikimrBridge::TClusterStateDetails::TPileSyncState* syncState,
         bool bridged) const;
-    NKikimrBridge::TStorageGroup DescribeBridgeStorageGroup(TGroupId groupId, const TString& pool,
-        const TString& pile, const NBridgeStorage::TCopyObservation& copy) const;
     void Handle(TEvBlobStorage::TEvControllerQueryBridgeStorage::TPtr& ev);
-    bool SelectBridgeStoragePools(const NKikimrBridge::TStorageQuery& query,
-        std::set<TBoxStoragePoolId>& selected, TString& error) const;
-    void FillBridgeStoragePiles(const NKikimrBridge::TStorageQuery& query,
-        const std::set<TBoxStoragePoolId>& selected, NKikimrBridge::TStorageState& result) const;
-    void FillBridgeStorageDatabases(const NKikimrBridge::TStorageQuery& query,
-        const NKikimrBridge::TStoragePageToken& cursor, const std::set<TBoxStoragePoolId>& selected,
-        NKikimrBridge::TStorageState& result) const;
-    void FillBridgeStorageGroups(const NKikimrBridge::TStorageQuery& query,
-        const NKikimrBridge::TStoragePageToken& cursor, const std::set<TBoxStoragePoolId>& selected,
-        NKikimrBridge::TStorageState& result);
-    // Lightweight summaries refreshed by the existing 5 s timer; requests never advance bridge work.
-    NBridgeStorage::TSnapshot BridgeStorageSnapshot;
+    Ydb::StatusIds::StatusCode SelectBridgeStoragePools(const NKikimrBridge::TStorageQuery& query,
+        std::set<TBoxStoragePoolId>& selected, NBridgeStorage::TReportBudget& budget, TString& error) const;
 
     void ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
         TSet<TGroupId>& groupIdsToRead, bool comprehensive);

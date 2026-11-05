@@ -8,7 +8,10 @@
 namespace NKikimr {
 
     struct TEvBlobStorage::TEvControllerQueryBridgeStorage: TEventPB<TEvControllerQueryBridgeStorage,
-                                                                     NKikimrBridge::TStorageQuery, TEvBlobStorage::EvControllerQueryBridgeStorage> {};
+                                                                     NKikimrBridge::TStorageQuery, TEvBlobStorage::EvControllerQueryBridgeStorage> {
+        static constexpr ui64 MaxResultBytes = 32'000'000;
+        static constexpr ui64 MaxVisitedCandidates = 1'000'000;
+    };
 
     struct TEvBlobStorage::TEvControllerQueryBridgeStorageResult: TEventPB<TEvControllerQueryBridgeStorageResult,
                                                                            NKikimrBridge::TStorageState, TEvBlobStorage::EvControllerQueryBridgeStorageResult> {};

@@ -113,7 +113,7 @@ private:
         Step = msg->Step;
         SnapshotPath = JoinKey(msg->BackupPath, "snapshot");
 
-        Send(Owner, TEvBackupProgress::Init(msg->Tables));
+        Send(Owner, TEvBackupProgress::MakeInit(msg->Tables));
         for (const auto& [tableId, name] : msg->Tables) {
             TTableState state;
             state.Name = name;
@@ -137,8 +137,8 @@ private:
         }
         SchemaSha256.Update(schema.Data(), schema.Size());
         WrittenBytes += schema.Size();
-        Send(Owner, TEvBackupProgress::Bytes(schema.Size()));
-        Send(Owner, TEvBackupProgress::Stage("Uploading schema"));
+        Send(Owner, TEvBackupProgress::MakeBytes(schema.Size()));
+        Send(Owner, TEvBackupProgress::MakeStage("Uploading schema"));
 
         Phase = EPhase::Schema;
         PutObject(JoinKey(SnapshotPath, "schema.json"), TString(schema.Str()));
@@ -204,7 +204,7 @@ private:
             table.Sha256.Update(Current->Data.Data(), Current->Data.Size());
             table.Buffer.Append(Current->Data.Data(), Current->Data.Size());
             WrittenBytes += Current->Data.Size();
-            Send(Owner, TEvBackupProgress::Chunk(Current->TableId, Current->Data.Size()));
+            Send(Owner, TEvBackupProgress::MakeChunk(Current->TableId, Current->Data.Size()));
 
             switch (Current->Status) {
                 case EScanStatus::InProgress:
@@ -311,7 +311,7 @@ private:
     void TableDone(TTableState& table) {
         table.Done = true;
         ++DoneTables;
-        Send(Owner, TEvBackupProgress::TableDone(Current->TableId));
+        Send(Owner, TEvBackupProgress::MakeTableDone(Current->TableId));
         Current.reset();
         RequestInFlight = false;
         YDB_LOG_DEBUG("LocalDbBackup: table snapshot done", {"tabletId", TabletId}, {"table", table.Name},
@@ -334,7 +334,7 @@ private:
                 return Fail("Got a PutObject response before the backup was started");
             case EPhase::Schema:
                 Phase = EPhase::Tables;
-                Send(Owner, TEvBackupProgress::Stage("Uploading tables"));
+                Send(Owner, TEvBackupProgress::MakeStage("Uploading tables"));
                 if (Tables.empty()) {
                     return Finalize();
                 }
@@ -360,7 +360,7 @@ private:
     // Same manifest as in NTabletFlatExecutor::NBackup::TSnapshotWriter::Finalize.
     void Finalize() {
         Phase = EPhase::Manifest;
-        Send(Owner, TEvBackupProgress::Stage("Writing manifest"));
+        Send(Owner, TEvBackupProgress::MakeStage("Writing manifest"));
 
         NJson::TJsonValue manifest;
         TString tabletTypeName = TTabletTypes::EType_Name(TTabletTypes::ColumnShard);
@@ -380,7 +380,7 @@ private:
         TString manifestStr = NJson::WriteJson(manifest, /*formatOutput=*/false);
         ManifestChecksum = TSha256Hasher::Hash(manifestStr);
         WrittenBytes += manifestStr.size();
-        Send(Owner, TEvBackupProgress::Bytes(manifestStr.size() + ManifestChecksum.size()));
+        Send(Owner, TEvBackupProgress::MakeBytes(manifestStr.size() + ManifestChecksum.size()));
 
         PutObject(JoinKey(SnapshotPath, "manifest.json"), std::move(manifestStr));
     }
@@ -389,14 +389,14 @@ private:
 
     void FinishSuccess() {
         YDB_LOG_NOTICE("LocalDbBackup: snapshot finalized", {"tabletId", TabletId}, {"path", SnapshotPath}, {"bytes", WrittenBytes});
-        Send(Owner, TEvBackupProgress::Stage("Completed"));
+        Send(Owner, TEvBackupProgress::MakeStage("Completed"));
         Send(Owner, std::make_unique<TEvSnapshotCompleted>(WrittenBytes));
         PassAway();
     }
 
     void Fail(const TString& error) {
         YDB_LOG_ERROR("LocalDbBackup: snapshot failed", {"tabletId", TabletId}, {"path", SnapshotPath}, {"error", error});
-        Send(Owner, TEvBackupProgress::Stage("Failed"));
+        Send(Owner, TEvBackupProgress::MakeStage("Failed"));
         AbortUploads();
         Send(Owner, std::make_unique<TEvSnapshotCompleted>(error));
         PassAway();

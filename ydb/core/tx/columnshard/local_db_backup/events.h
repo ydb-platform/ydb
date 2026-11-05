@@ -51,32 +51,32 @@ struct TEvBackupProgress: public NActors::TEventLocal<TEvBackupProgress, TEvColu
     TTableId TableId = 0;
     ui64 Bytes = 0;
 
-    static std::unique_ptr<TEvBackupProgress> Init(const TMap<TTableId, TString>& tables) {
+    static std::unique_ptr<TEvBackupProgress> MakeInit(const TMap<TTableId, TString>& tables) {
         auto ev = std::make_unique<TEvBackupProgress>(EKind::Init);
         ev->Tables = tables;
         return ev;
     }
 
-    static std::unique_ptr<TEvBackupProgress> Stage(TString stage) {
+    static std::unique_ptr<TEvBackupProgress> MakeStage(TString stage) {
         auto ev = std::make_unique<TEvBackupProgress>(EKind::Stage);
         ev->Stage = std::move(stage);
         return ev;
     }
 
-    static std::unique_ptr<TEvBackupProgress> Bytes(ui64 bytes) {
+    static std::unique_ptr<TEvBackupProgress> MakeBytes(ui64 bytes) {
         auto ev = std::make_unique<TEvBackupProgress>(EKind::Bytes);
         ev->Bytes = bytes;
         return ev;
     }
 
-    static std::unique_ptr<TEvBackupProgress> Chunk(TTableId tableId, ui64 bytes) {
+    static std::unique_ptr<TEvBackupProgress> MakeChunk(TTableId tableId, ui64 bytes) {
         auto ev = std::make_unique<TEvBackupProgress>(EKind::Chunk);
         ev->TableId = tableId;
         ev->Bytes = bytes;
         return ev;
     }
 
-    static std::unique_ptr<TEvBackupProgress> TableDone(TTableId tableId) {
+    static std::unique_ptr<TEvBackupProgress> MakeTableDone(TTableId tableId) {
         auto ev = std::make_unique<TEvBackupProgress>(EKind::TableDone);
         ev->TableId = tableId;
         return ev;

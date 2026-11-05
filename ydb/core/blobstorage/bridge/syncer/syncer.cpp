@@ -515,7 +515,7 @@ namespace NKikimr::NBridge {
                         .BlobId = r.Id,
                         .Buffer = TRope(TRcBuf(r.Buffer)),
                         .Deadline = TInstant::Max(),
-                        .HandleClass = NKikimrBlobStorage::TabletLog,
+                        .HandleClass = NKikimrBlobStorage::AsyncBlob,
                         .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                         .WriteSource = TWriteSource::SyncerMergePut,
                         .IssueKeepFlag = (r.Keep || sourceFlags.Keep) && !(r.DoNotKeep || sourceFlags.DoNotKeep),
@@ -554,7 +554,7 @@ namespace NKikimr::NBridge {
                     // we have to query this blob and do full rewrite -- there was no data for it
                     // the rate limits traffic between piles, and the read brings about one copy of the blob data across
                     IssueQuery(false, std::make_unique<TEvBlobStorage::TEvGet>(r.Id, 0, 0, TInstant::Max(),
-                        NKikimrBlobStorage::FastRead), {}, r.Id.BlobSize());
+                        NKikimrBlobStorage::AsyncRead), {}, r.Id.BlobSize());
                 } else if (r.Status == NKikimrProto::ERROR) {
                     SourceBlobFlags.erase(r.Id);
                     SyncerDataStats->BytesError += r.Id.BlobSize();
@@ -647,12 +647,14 @@ namespace NKikimr::NBridge {
                 std::get<0>(*state.SkipBarriersUpTo) << ':' << (int)std::get<1>(*state.SkipBarriersUpTo) << ']') : "<none>"),
             (SkipBlobsUpTo, state.SkipBlobsUpTo ? state.SkipBlobsUpTo->ToString() : "<none>"));
 
+        // The size of a page is known only after it has come, so a page gets charged when the next one is requested. There
+        // is one such request at a time, so this can't let much through. The last page is left uncharged.
         IssueQuery(toTargetGroup, std::make_unique<TEvBlobStorage::TEvAssimilate>(
             state.SkipBlocksUpTo, state.SkipBarriersUpTo, state.SkipBlobsUpTo,
             /*ignoreDecommitState=*/ true, /*reverse=*/ true),
             TQueryPayload{
                 .ToTargetGroup = toTargetGroup,
-            });
+            }, std::exchange(state.UnchargedReplyBytes, 0));
 
         Y_ABORT_UNLESS(!state.RequestInFlight);
         state.RequestInFlight = true;
@@ -674,6 +676,9 @@ namespace NKikimr::NBridge {
 
         Y_ABORT_UNLESS(state.RequestInFlight);
         state.RequestInFlight = false;
+        if (!payload.ToTargetGroup) { // the target group is in the pile of this syncer, so this traffic stays within the pile
+            state.UnchargedReplyBytes = msg.ReplyBytes;
+        }
 
 #define CHECK(PREV_FINISHED, WHAT, NO_NEXT, KEY) \
         if (bool& finished = state.WHAT##Finished; PREV_FINISHED && !finished) { \

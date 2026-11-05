@@ -7,102 +7,74 @@
 
 namespace NKikimr {
 
-// The group state is authoritative. Realm states describe physical roles and copy
-// guarantees; several states share the same realm tuple but have different policies.
+// Derived mirror-3-dc group states. The group state is determined by the failrealm
+// states and their copy guarantees. The administrator selects I/X per realm.
+// I = Include, X = Exclude: ADMINISTRATIVE states selected by the administrator.
+// N0/N1/N2, F and R are INTERNAL states: NoFailure with a minimum copy count,
+// Failure DC, and Recovery respectively. N0 does not mean that the realm is empty.
+// N1/N2 mean at least one/two copies of every confirmed blob in that failrealm.
+// E = Layout Ensurance: guaranteed layouts for confirmed blobs.
+// D = Layout Durability: background replication target.
+// W = Write Layout: layouts sufficient to acknowledge a new write.
+// OR separates alternative layouts; + combines copy counts in distinct failrealms.
+// Each box contains internal states, the administrative I/X mask, D and E.
+// W is shared by each column and shown below it.
+// Columns describe logical roles; transitions retain physical failrealm identities.
 //
-// Mirror-3-dc group state machine (logical roles; physical realm identities are retained).
-// A = administrator transition; S = system transition after replication completes.
-// A star on a realm marks a background replication target (the green realms in the diagram).
-// D = background replication target; W = active write; E = expected blob layout.
-// E in a pending state is not necessarily a confirmed read guarantee; see GetMirror3dcReadLayout.
+//     +---------------------------------+
+// +-->|              NORMAL             |
+// |   | N0/N0/N0                  I/I/I |------------------------------+
+// |   | D: 1+1+1                        |                              |
+// |   | E: 1+1+1 OR 2+2                 |                              |
+// |   +---------------------------------+                              |
+// |                                                                    |
+// |                                                                    |
+// |                                                                    |
+// |                                                                    |       +-----------------------------------------------------------------------------------------------+
+// |                                                                    v       v                                                                                               |
+// |   +---------------------------------+             +----------------+-------+--------+             +---------------------------------+             +------------------------+--------+
+// +<--|           DC_RECOVERY           |<----------->|            DC_FAILURE           |------------>|         DC_SOLO_DISASTER        |<----------->|         DC_SOLO_RECOVERY        |
+// |   | N0/N0/R                   I/I/I |             | N0/N0/F                   I/I/X |             | N0/F/F                    I/X/X |             | N0/R/F                    I/I/X |
+// |   | D: 1+1+1                        |             | D: 1+1                          |             | D: 1                            |             | D: 1+1                          |
+// |   | E: 1+1 OR 2                     |             | E: 1+1 OR 2                     |------+      | E: 0                            |             | E: 0                            |
+// |   +---------------------------------+             +----------------+----------------+      |      +----------------+----------------+             +----------------+----------------+
+// |                                                                    |                       |                       |                                               |
+// |                                                                    |                       | opt (required N1)     |                                               |
+// |                                                                    |                       |                       |                                               |
+// |                                                                    |                       |                       |                                               |
+// |                                                                    |                       +---------------+       |                                               |
+// |                                                                    |                                       |       |                                               |
+// |                                                                    |       +-------------------------------=-------=-----------------------------------------------=-------+
+// |                                                                    v       v                               v       v                                               v       |
+// |   +---------------------------------+             +----------------+-------+--------+             +--------+-------+----------------+             +----------------+-------+--------+
+// +<--|         DC_RECOVERY_INV1        |<----------->|         DC_FAILURE_INV1         |------------>|           DC_SOLO_INV1          |<----------->|      DC_SOLO_RECOVERY_INV1      |
+//     | N1/N1/R                   I/I/I |             | N1/N1/F                   I/I/X |             | N1/F/F                    I/X/X |             | N1/R/F                    I/I/X |
+//     | D: 1+1+1                        |<-----+      | D: 2+2                          |             | D: 2                            |             | D: 1+1                          |
+//     | E: 1+1                          |      |      | E: 1+1                          |------+      | E: 1                            |             | E: 1                            |
+//     +---------------------------------+      |      +----------------+-------+--------+      |      +----------------+----------------+             +---------------------------------+
+//                                              |                       |       ^               |                       |
+//                                              |                       |       |               | opt (required N2)     |
+//                                              |                       |       |               |                       |
+//                                              |                       |       |               |                       |
+//                                              |                       |       |               +---------------+       |
+//                                              |                       |       |                               |       |
+//                                              |                       |       +-------------------------------=-------=-------------------------------------------------------+
+//                                              |                       v                                       v       v                                                       |
+//                                              |      +----------------+----------------+             +--------+-------+----------------+             +------------------------+--------+
+//                                              +------|         DC_FAILURE_INV2         |------------>|           DC_SOLO_INV2          |<----------->|      DC_SOLO_RECOVERY_INV2      |
+//                                                     | N2/N2/F                   I/I/X |             | N2/F/F                    I/X/X |             | N2/R/F                    I/I/X |
+//                                                     | D: 2+2                          |             | D: 2                            |             | D: 1+1                          |
+//                                                     | E: 2+2                          |             | E: 2                            |             | E: 2                            |
+//                                                     +---------------------------------+             +---------------------------------+             +---------------------------------+
 //
-//                   3 DC / recovery                                                 2 active DCs                                                  1 active DC                                               Second DC returning
-// +-------------------------------------------------+
-// | NORMAL                                          |
-// | N0*/N0*/N0*                                     |
-// | D: 1+1+1  W: 1+1+1 OR 2+2  E: 1+1+1 OR 2+2      |
-// +-------------------------------------------------+
+//     ADMIN: I/I/I                                    ADMIN: I/I/X                                    ADMIN: I/X/X                                    ADMIN: I/I/X
+//     W: 1+1+1 OR 2+2                                 W: 2+2                                          W: 2                                            W: 2+2
 //
-//
-//
-// +-------------------------------------------------+           +-------------------------------------------------+           +-------------------------------------------------+           +-------------------------------------------------+
-// | DC_RECOVERY                                     |           | DC_FAILURE                                      |           | DC_SOLO_DISASTER                                |           | DC_SOLO_RECOVERY                                |
-// | N0*/N0*/R*                                      | <---A---->| N0/N0/F                                         | ----A---->| N0/F/F                                          | <---A---->| N0*/R*/F                                        |
-// | D: 1+1+1  W: 1+1+1 OR 2+2  E: 1+1 OR 2          |           | D: 0  W: 2+2  E: 1+1 OR 2                       |           | D: 0  W: 2  E: 0                                |           | D: 1+1  W: 2  E: 0                              |
-// +-------------------------------------------------+           +-------------------------------------------------+           +-------------------------------------------------+           +-------------------------------------------------+
-//                                                                                        |                                                                                                                           |
-//                                                                                        |A                                                                                                                          |S
-//                                                                                        v                                                                                                                           v
-//                                                               +-------------------------------------------------+                                                                         +-------------------------------------------------+
-//                                                               | DC_FAILURE_INV1_PENDING                         |                                                                         | DC_SOLO_RECOVERY_INV1_PENDING                   |
-//                                                               | N0*/N0*/F                                       |                                                                         | N1/R*/F                                         |
-//                                                               | D: 1+1  W: 2+2  E: 1+1 OR 2                     |                                                                         | D: 1+1  W: 2  E: 1                              |
-//                                                               +-------------------------------------------------+                                                                         +-------------------------------------------------+
-//                                                                                        |                                                                                                                           |
-//                                                                                        |S                                                                                                                          |S
-//                                                                                        v                                                                                                                           v
-// +-------------------------------------------------+           +-------------------------------------------------+           +-------------------------------------------------+           +-------------------------------------------------+
-// | DC_RECOVERY_INV1                                |           | DC_FAILURE_INV1                                 |           | DC_SOLO_INV1                                    |           | DC_SOLO_RECOVERY_INV1                           |
-// | N1/N1/R*                                        | <---A---->| N1/N1/F                                         | ----A---->| N1/F/F                                          | <---A-----| N1/R*/F                                         |
-// | D: 1+1+1  W: 1+1+1 OR 2+2  E: 1+1               |           | D: 1+1  W: 2+2  E: 1+1                          |           | D: 1  W: 2  E: 1                                |           | D: 1+1  W: 2+2  E: 1                            |
-// +-------------------------------------------------+           +-------------------------------------------------+           +-------------------------------------------------+           +-------------------------------------------------+
-//                                                                                        |                                                             |
-//                                                                                        |A                                                            |A
-//                                                                                        v                                                             v
-//                                                               +-------------------------------------------------+           +-------------------------------------------------+           +-------------------------------------------------+
-//                                                               | DC_FAILURE_INV2_PENDING                         |           | DC_SOLO_INV2_PENDING                            |           | DC_SOLO_RECOVERY_INV2_PENDING                   |
-//                                                               | N1*/N1*/F                                       | ----A---->| N1*/F/F                                         |           | N2/R*/F                                         |
-//                                                               | D: 2+2  W: 2+2  E: 1+1                          |           | D: 2  W: 2  E: 2                                |           | D: 1+1  W: 2  E: 2                              |
-//                                                               +-------------------------------------------------+           +-------------------------------------------------+           +-------------------------------------------------+
-//                                                                                        |                                                             |                                                             |
-//                                                                                        |S                                                            |S                                                            |S
-//                                                                                        v                                                             v                                                             v
-//                                                               +-------------------------------------------------+           +-------------------------------------------------+           +-------------------------------------------------+
-//                                                               | DC_FAILURE_INV2                                 |           | DC_SOLO_INV2                                    |           | DC_SOLO_RECOVERY_INV2                           |
-//                                                               | N2/N2/F                                         | ----A---->| N2/F/F                                          | <---A-----| N2/R*/F                                         |
-//                                                               | D: 2+2  W: 2+2  E: 2+2                          |           | D: 2  W: 2  E: 2                                |           | D: 1+1  W: 2+2  E: 2                            |
-//                                                               +-------------------------------------------------+           +-------------------------------------------------+           +-------------------------------------------------+
-//
-// The drawing shows the aligned transitions. The complete directed graph follows;
-// the additional routes connect different rows or return to NORMAL.
-//
-// Administrator transitions (A):
-//   NORMAL -> DC_FAILURE
-//   DC_FAILURE -> DC_FAILURE_INV1_PENDING
-//   DC_FAILURE_INV1 -> DC_FAILURE_INV2_PENDING
-//   DC_FAILURE_INV1 -> DC_SOLO_INV1
-//   DC_FAILURE_INV2 -> DC_SOLO_INV2
-//   DC_FAILURE -> DC_RECOVERY
-//   DC_RECOVERY -> DC_FAILURE
-//   DC_FAILURE_INV1 -> DC_RECOVERY_INV1
-//   DC_RECOVERY_INV1 -> DC_FAILURE_INV1
-//   DC_FAILURE_INV2 -> DC_RECOVERY_INV1
-//   DC_FAILURE -> DC_SOLO_DISASTER
-//   DC_FAILURE_INV1_PENDING -> DC_RECOVERY
-//   DC_FAILURE_INV2_PENDING -> DC_RECOVERY_INV1
-//   DC_SOLO_DISASTER -> DC_SOLO_RECOVERY
-//   DC_SOLO_RECOVERY -> DC_SOLO_DISASTER
-//   DC_SOLO_RECOVERY_INV1 -> DC_SOLO_INV1
-//   DC_SOLO_INV1 -> DC_SOLO_INV2_PENDING
-//   DC_SOLO_INV1 -> DC_SOLO_RECOVERY_INV1_PENDING
-//   DC_SOLO_RECOVERY_INV1_PENDING -> DC_SOLO_INV1
-//   DC_SOLO_INV2 -> DC_SOLO_RECOVERY_INV2_PENDING
-//   DC_SOLO_RECOVERY_INV2_PENDING -> DC_SOLO_INV2
-//   DC_SOLO_RECOVERY_INV2 -> DC_SOLO_INV2
-//   DC_FAILURE_INV2_PENDING -> DC_SOLO_INV2_PENDING
-//   DC_FAILURE_INV1_PENDING -> DC_SOLO_DISASTER
-//
-// System transitions (S):
-//   DC_FAILURE_INV1_PENDING -> DC_FAILURE_INV1
-//   DC_FAILURE_INV2_PENDING -> DC_FAILURE_INV2
-//   DC_SOLO_RECOVERY_INV2_PENDING -> DC_SOLO_RECOVERY_INV2
-//   DC_SOLO_RECOVERY_INV2 -> DC_FAILURE_INV1
-//   DC_SOLO_RECOVERY_INV1 -> DC_FAILURE_INV1
-//   DC_SOLO_RECOVERY_INV1_PENDING -> DC_SOLO_RECOVERY_INV1
-//   DC_SOLO_INV2_PENDING -> DC_SOLO_INV2
-//   DC_RECOVERY_INV1 -> NORMAL
-//   DC_RECOVERY -> NORMAL
-//   DC_SOLO_RECOVERY -> DC_SOLO_RECOVERY_INV1_PENDING
+// + marks turns/junctions; = is a crossing WITHOUT a connection.
+// Optional (opt) transitions require the target guarantee in the selected surviving realm
+// before completing the transition.
+// Internal progress may change N/F/R, D and E without changing administrative I/X.
+// A transition arrow does not itself replicate data; target guarantees must be established.
 //
 enum class EMirror3dcGroupState {
     NORMAL = 0,

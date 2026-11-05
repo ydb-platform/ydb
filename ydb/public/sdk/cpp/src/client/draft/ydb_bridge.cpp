@@ -57,6 +57,7 @@ public:
 
     TAsyncGetClusterStateResult GetClusterState(const TGetClusterStateSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Bridge::GetClusterStateRequest>(settings);
+        request.set_include_pile_connectivity(settings.IncludePileConnectivity_);
 
         auto promise = NThreading::NewPromise<TGetClusterStateResult>();
 
@@ -65,9 +66,30 @@ public:
                 uint64_t generation = 0;
                 bool conversionInProgress = false;
                 std::optional<TPendingPileOperation> pendingPileOperation;
+                std::optional<TPileConnectivityReport> pileConnectivity;
                 if (any) {
                     Ydb::Bridge::GetClusterStateResult result;
                     if (any->UnpackTo(&result)) {
+                        if (result.has_pile_connectivity()) {
+                            const auto& report = result.pile_connectivity();
+                            pileConnectivity.emplace(TPileConnectivityReport{
+                                .ReporterNodeId = report.reporter_node_id(),
+                                .ReporterIsRoot = report.reporter_is_root(),
+                                .BindingInProgress = report.binding_in_progress(),
+                                .Generation = report.generation(),
+                            });
+                            pileConnectivity->Piles.reserve(report.piles_size());
+                            for (const auto& pile : report.piles()) {
+                                pileConnectivity->Piles.push_back({
+                                    .PileName = pile.pile_name(),
+                                    .StaticNodes = pile.static_nodes(),
+                                    .ConnectedStaticNodes = pile.connected_static_nodes(),
+                                    .HasNodeQuorum = pile.has_node_quorum(),
+                                    .InConfigQuorum = pile.in_config_quorum(),
+                                    .InDataQuorum = pile.in_data_quorum(),
+                                });
+                            }
+                        }
                         state = StateFromProto(result);
                         generation = result.generation();
                         conversionInProgress = result.conversion_in_progress();
@@ -82,7 +104,7 @@ public:
                     }
                 }
                 promise.SetValue(TGetClusterStateResult(TStatus(std::move(status)), std::move(state), generation,
-                    conversionInProgress, std::move(pendingPileOperation)));
+                    conversionInProgress, std::move(pendingPileOperation), std::move(pileConnectivity)));
             };
 
         Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::GetClusterStateRequest, Ydb::Bridge::GetClusterStateResponse>(

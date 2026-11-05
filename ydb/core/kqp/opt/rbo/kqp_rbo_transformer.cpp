@@ -643,7 +643,14 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     const bool allowChannelSpilling = KqpCtx.Config->GetEnableQueryServiceSpilling()
         && (KqpCtx.IsGenericQuery() || KqpCtx.IsScanQuery()) && KqpCtx.Config->SpillingEnabled();
 
-    // Prune unused outputs before any rules that require type information.
+    // Full joins have no native filter implementation. Expand them while both
+    // input keys are still available, before pruning and read pushdown. Their
+    // shared inputs then go through the usual expansion when spilling is off.
+    TVector<std::unique_ptr<IRule>> fullJoinFilterRules;
+    fullJoinFilterRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>(/*fullJoinsOnly=*/true));
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline full join filters", std::move(fullJoinFilterRules)));
+
+    // Other plans can prune unused outputs before requiring type information.
     RBO.AddStage(std::make_unique<TGlobalPruningStage>("Early pruning"));
 
     TVector<std::unique_ptr<IRule>> effectRules;

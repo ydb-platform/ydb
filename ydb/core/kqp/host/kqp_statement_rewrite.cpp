@@ -334,7 +334,7 @@ std::optional<TCreateTableAsResult> RewriteCreateTableAs(
     }
 
     const auto insert = exprCtx.NewCallable(pos, "Write!", {
-        topLevelRead == nullptr ? exprCtx.NewWorld(pos) : exprCtx.NewCallable(pos, "Left!", {topLevelRead.Get()}),
+        topLevelRead == nullptr ? write.World().Ptr() : exprCtx.NewCallable(pos, "Left!", {topLevelRead.Get()}),
         exprCtx.NewCallable(pos, "DataSink", {
             exprCtx.NewAtom(pos, "kikimr"),
             exprCtx.NewAtom(pos, "db"),

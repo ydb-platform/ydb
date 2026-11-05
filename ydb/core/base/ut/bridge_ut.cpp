@@ -75,18 +75,19 @@ Y_UNIT_TEST_SUITE(BridgePileRegistry) {
         duplicate.MutablePiles(1)->SetName("a");
         UNIT_ASSERT(NBridge::ValidatePileRegistry(duplicate, MakeClusterState(2)));
 
-        // free slot can't be the last one, the primary, promoted or implicit pile, and it can't take part in quorums
+        // free slot can't be the last one, the primary, promoted or implicit pile, and it is INACTIVE
         auto withFree = registry;
         withFree.MutablePiles(1)->ClearName();
         auto state = MakeClusterState(2);
-        state.SetPerPileState(1, NKikimrBridge::TClusterState::DISCONNECTED);
+        state.SetPerPileState(1, NKikimrBridge::TClusterState::INACTIVE);
         UNIT_ASSERT(NBridge::ValidatePileRegistry(withFree, state));
         withFree.AddPiles()->SetName("c");
         state.AddPerPileState(NKikimrBridge::TClusterState::SYNCHRONIZED);
         UNIT_ASSERT(!NBridge::ValidatePileRegistry(withFree, state));
         UNIT_ASSERT(!NBridge::ResolvePileId(withFree, ""));
         for (const auto pileState : {NKikimrBridge::TClusterState::SYNCHRONIZED,
-                NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1, NKikimrBridge::TClusterState::SUSPENDED}) {
+                NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1, NKikimrBridge::TClusterState::SUSPENDED,
+                NKikimrBridge::TClusterState::DISCONNECTED}) {
             auto wrong = state;
             wrong.SetPerPileState(1, pileState);
             UNIT_ASSERT(NBridge::ValidatePileRegistry(withFree, wrong));
@@ -107,6 +108,154 @@ Y_UNIT_TEST_SUITE(BridgePileRegistry) {
         UNIT_ASSERT_EQUAL(NBridge::ResolvePileId(implicit, std::nullopt), TBridgePileId::FromPileIndex(1));
         TBridgePileId::FromPileIndex(2).CopyToProto(&implicit, &NKikimrBridge::TPileRegistry::SetImplicitPileId);
         UNIT_ASSERT(NBridge::ValidatePileRegistry(implicit, MakeClusterState(2)));
+
+        // nodes of the implicit pile must be able to connect
+        TBridgePileId::FromPileIndex(1).CopyToProto(&implicit, &NKikimrBridge::TPileRegistry::SetImplicitPileId);
+        auto inactive = MakeClusterState(2);
+        inactive.SetPerPileState(1, NKikimrBridge::TClusterState::INACTIVE);
+        UNIT_ASSERT(NBridge::ValidatePileRegistry(implicit, inactive));
+    }
+
+    TString States(const NKikimrBridge::TClusterState& state) {
+        TStringBuilder res;
+        for (const auto pileState : state.GetPerPileState()) {
+            res << (res.empty() ? "" : " ") << NKikimrBridge::TClusterState::EPileState_Name(pileState);
+        }
+        return res;
+    }
+
+    Y_UNIT_TEST(ApplyPileRegistryChange) {
+        const auto registry = NBridge::MakeImpliedPileRegistry(MakeBridgeConfig({"a", "b"}));
+        auto apply = [&](const NKikimrBridge::TPileRegistry& current, NKikimrBridge::TClusterState *state,
+                const TVector<TString>& names) {
+            auto next = NBridge::AssignPileIds(current, MakeBridgeConfig(names));
+            auto error = NBridge::ApplyPileRegistryChange(current, next, state);
+            if (!error) {
+                UNIT_ASSERT(!NBridge::ValidatePileRegistry(next, *state));
+            }
+            return std::make_pair(next, error);
+        };
+
+        // new piles are INACTIVE, piles keep their states wherever they are listed
+        auto state = MakeClusterState(2);
+        state.SetPerPileState(1, NKikimrBridge::TClusterState::DISCONNECTED);
+        auto [added, error] = apply(registry, &state, {"c", "b", "a", "d"});
+        UNIT_ASSERT_C(!error, *error);
+        UNIT_ASSERT_VALUES_EQUAL(Slots(added), "a b c d");
+        UNIT_ASSERT_VALUES_EQUAL(States(state), "SYNCHRONIZED DISCONNECTED INACTIVE INACTIVE");
+
+        // only INACTIVE piles can be dropped, the one in other state can't be, even being disconnected
+        for (const TVector<TString>& names : {TVector<TString>{"a", "c", "d"}, TVector<TString>{"b", "c", "d"},
+                TVector<TString>{"a", "x", "c", "d"}}) {
+            auto copy = state;
+            const auto [next, error] = apply(added, &copy, names);
+            UNIT_ASSERT(error);
+            UNIT_ASSERT_STRING_CONTAINS(*error, "can't be removed from BridgeConfig, only INACTIVE piles can");
+        }
+
+        // dropped INACTIVE pile leaves INACTIVE free slot, which the next pile takes being INACTIVE too
+        auto [dropped, error1] = apply(added, &state, {"a", "b", "d"});
+        UNIT_ASSERT_C(!error1, *error1);
+        UNIT_ASSERT_VALUES_EQUAL(Slots(dropped), "a b - d");
+        UNIT_ASSERT_VALUES_EQUAL(States(state), "SYNCHRONIZED DISCONNECTED INACTIVE INACTIVE");
+        auto [reused, error2] = apply(dropped, &state, {"a", "b", "d", "e"});
+        UNIT_ASSERT_C(!error2, *error2);
+        UNIT_ASSERT_VALUES_EQUAL(Slots(reused), "a b e d");
+        UNIT_ASSERT_VALUES_EQUAL(States(state), "SYNCHRONIZED DISCONNECTED INACTIVE INACTIVE");
+
+        // free slots at the end are trimmed along with their states
+        auto [trimmed, error3] = apply(reused, &state, {"b", "a"});
+        UNIT_ASSERT_C(!error3, *error3);
+        UNIT_ASSERT_VALUES_EQUAL(Slots(trimmed), "a b");
+        UNIT_ASSERT_VALUES_EQUAL(States(state), "SYNCHRONIZED DISCONNECTED");
+
+        // registry and cluster state must match
+        auto wrong = MakeClusterState(3);
+        UNIT_ASSERT(NBridge::ApplyPileRegistryChange(registry, registry, &wrong));
+    }
+
+    // the same pile added and dropped many times keeps the registry and cluster state of the same size
+    Y_UNIT_TEST(ApplyPileRegistryChangeCycles) {
+        auto registry = NBridge::MakeImpliedPileRegistry(MakeBridgeConfig({"a", "b"}));
+        auto state = MakeClusterState(2);
+        for (ui32 i = 0; i < 100; ++i) {
+            const TString name = TStringBuilder() << "p" << i % 3;
+            for (const TVector<TString>& names : {TVector<TString>{"a", name, "b"}, TVector<TString>{"b", "a"}}) {
+                auto next = NBridge::AssignPileIds(registry, MakeBridgeConfig(names));
+                const auto error = NBridge::ApplyPileRegistryChange(registry, next, &state);
+                UNIT_ASSERT_C(!error, *error);
+                registry = std::move(next);
+                UNIT_ASSERT(!NBridge::ValidatePileRegistry(registry, state));
+                UNIT_ASSERT_LE(state.PerPileStateSize(), 3);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(States(state), "SYNCHRONIZED SYNCHRONIZED");
+        }
+    }
+
+    Y_UNIT_TEST(InactivePileTraits) {
+        const auto traits = NBridge::PileStateTraits(NKikimrBridge::TClusterState::INACTIVE);
+        UNIT_ASSERT(!traits.RequiresDataQuorum);
+        UNIT_ASSERT(!traits.RequiresConfigQuorum);
+        UNIT_ASSERT(!traits.AllowsConnection);
+    }
+
+    // bridged group has no part in absent piles and in the piles beyond the end of its list
+    Y_UNIT_TEST(GroupPiles) {
+        NKikimrBridge::TGroupState state;
+        for (ui32 groupId : {10u, 0u, 12u}) {
+            auto *pile = state.AddPile();
+            pile->SetGroupId(groupId);
+        }
+        state.MutablePile(1)->SetAbsent(true);
+
+        UNIT_ASSERT(!NBridge::GetGroupPile(state, TBridgePileId()));
+        UNIT_ASSERT_VALUES_EQUAL(NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(0))->GetGroupId(), 10);
+        UNIT_ASSERT(!NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(1)));
+        UNIT_ASSERT_VALUES_EQUAL(NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(2))->GetGroupId(), 12);
+        UNIT_ASSERT(!NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(3)));
+        NBridge::GetGroupPile(&state, TBridgePileId::FromPileIndex(2))->SetGroupGeneration(5);
+        UNIT_ASSERT_VALUES_EQUAL(state.GetPile(2).GetGroupGeneration(), 5);
+
+        TStringBuilder visited;
+        NBridge::ForEachGroupPile(state, [&](TBridgePileId bridgePileId,
+                const NKikimrBridge::TGroupState::TPile& pile) {
+            visited << bridgePileId.GetPileIndex() << ':' << pile.GetGroupId() << ' ';
+        });
+        UNIT_ASSERT_VALUES_EQUAL(visited, "0:10 2:12 ");
+        NBridge::ForEachGroupPile(&state, [](TBridgePileId, NKikimrBridge::TGroupState::TPile& pile) {
+            pile.SetGroupGeneration(7);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(state.GetPile(0).GetGroupGeneration(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(state.GetPile(1).GetGroupGeneration(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(state.GetPile(2).GetGroupGeneration(), 7);
+    }
+
+    // removed part leaves a hole, absent parts at the end are trimmed; adding and removing parts keeps the list bounded
+    Y_UNIT_TEST(RemoveGroupPile) {
+        NKikimrBridge::TGroupState state;
+        for (ui32 groupId : {10u, 11u, 12u}) {
+            state.AddPile()->SetGroupId(groupId);
+        }
+        auto piles = [&] {
+            TStringBuilder res;
+            for (const auto& pile : state.GetPile()) {
+                res << (pile.GetAbsent() ? TString("-") : ToString(pile.GetGroupId())) << ' ';
+            }
+            return res;
+        };
+
+        NBridge::RemoveGroupPile(&state, TBridgePileId::FromPileIndex(1));
+        UNIT_ASSERT_VALUES_EQUAL(piles(), "10 - 12 ");
+        NBridge::RemoveGroupPile(&state, TBridgePileId::FromPileIndex(2));
+        UNIT_ASSERT_VALUES_EQUAL(piles(), "10 ");
+        for (ui32 i = 0; i < 3; ++i) {
+            NBridge::AddGroupPile(&state, TBridgePileId::FromPileIndex(2))->SetGroupId(20 + i);
+            UNIT_ASSERT_VALUES_EQUAL(piles(), TStringBuilder() << "10 - " << 20 + i << ' ');
+            NBridge::RemoveGroupPile(&state, TBridgePileId::FromPileIndex(2));
+            UNIT_ASSERT_VALUES_EQUAL(piles(), "10 ");
+        }
+        NBridge::RemoveGroupPile(&state, TBridgePileId::FromPileIndex(0));
+        UNIT_ASSERT_VALUES_EQUAL(state.PileSize(), 0);
     }
 
     Y_UNIT_TEST(AssignPileIds) {

@@ -6,7 +6,7 @@
 
 [Logstash](https://www.elastic.co/logstash) – инструмент сбора, фильтрации и нормализации логов. Данный продукт позволяет динамически получать, фильтровать и доставлять данные независимо от их формата и сложности. Конфигурация системы производиться с помощью плагинов различных типов - input, output и filter. Набор Logstash плагинов для работы с {{ ydb-short-name }} располагается в репозитории [ydb-logstash-plugins](https://github.com/ydb-platform/ydb-logstash-plugins):
 
-* Storage Plugin для сохранения данных в [строчной](../../concepts/datamodel/table.md#strokovye-tablicy) или [колоночной](../../concepts/datamodel/table.md#column-tables) таблице {{ ydb-short-name }};
+* Storage Plugin для сохранения данных в [строчной](../../concepts/datamodel/table.md#row-oriented-tables) или [колоночной](../../concepts/datamodel/table.md#column-oriented-tables) таблице {{ ydb-short-name }};
 * Input Topic Plugin для чтение данных из {{ ydb-short-name }} [топика](../../concepts/datamodel/topic.md);
 * Output Topic Plugin для отправки данных в {{ ydb-short-name }} [топик](../../concepts/datamodel/topic.md).
 
@@ -55,7 +55,7 @@ ydb_storage {
 
 ## Плагин {{ ydb-short-name }} Storage
 
-Данный плагин позволяет перенаправить поток данных из Logstash в таблицу {{ ydb-short-name }} для дальнейшего анализа. Для этого удобно использовать [колоночные таблицы](../../concepts/datamodel/table.md#column-tables), оптимизированные для аналитических запросов. Каждое отдельное [поле события Logstash](https://www.elastic.co/guide/en/logstash/current/event-dependent-configuration.html) будет записано в отдельный столбец таблицы. Tе поля, которые не соответствуют ни одной колонке, будут проигнорированы.
+Данный плагин позволяет перенаправить поток данных из Logstash в таблицу {{ ydb-short-name }} для дальнейшего анализа. Для этого удобно использовать [колоночные таблицы](../../concepts/datamodel/table.md#column-oriented-tables), оптимизированные для аналитических запросов. Каждое отдельное [поле события Logstash](https://www.elastic.co/guide/en/logstash/current/event-dependent-configuration.html) будет записано в отдельный столбец таблицы. Tе поля, которые не соответствуют ни одной колонке, будут проигнорированы.
 
 ### Конфигурация плагина
 

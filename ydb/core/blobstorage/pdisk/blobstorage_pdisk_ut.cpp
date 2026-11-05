@@ -2159,6 +2159,58 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         ShouldSwitchEncryptionOnOffWithoutReformatting(false);
     }
 
+    void UnformattedMetadataSurvivesRestartAndFormatting(bool encryption) {
+        // A real file rejects reads extending beyond EOF; a sector map would hide them.
+        TTestContext testCtx(false, TTestContext::EDiskMode::DM_NONE, 1_GB);
+        const TString metadata = PrepareData(5000);
+        const NPDisk::TMainKey mainKey{
+            .Keys = {NPDisk::YdbDefaultPDiskSequence},
+            .IsInitialized = true,
+        };
+        enum class EPhase { Write, Read, Format };
+        for (const auto phase : {EPhase::Write, EPhase::Read, EPhase::Format}) {
+            auto ioContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
+            TTestActorRuntime runtime(1, 1, true);
+            auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
+            appData->IoContextFactory = ioContext.get();
+            runtime.SetLogBackend(CreateNullBackend());
+            runtime.Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}, {}});
+            const auto sender = runtime.AllocateEdgeActor();
+            const bool metadataOnly = phase != EPhase::Format;
+            auto cfg = MakeIntrusive<TPDiskConfig>(testCtx.Path, ui64(metadataOnly ? 0 : 12345), ui32(1), ui64(0));
+            cfg->MetadataOnly = metadataOnly;
+            cfg->EnableFormatAndMetadataEncryption = encryption;
+            cfg->ChunkSize = NPDisk::SmallDiskMaximumChunkSize;
+            cfg->FeatureFlags.SetEnableSmallDiskOptimization(true);
+            cfg->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
+            cfg->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+            cfg->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
+            const auto pdisk = runtime.Register(CreatePDisk(cfg, mainKey,
+                MakeIntrusive<::NMonitoring::TDynamicCounters>()));
+
+            if (phase == EPhase::Write) {
+                runtime.Send(new IEventHandle(pdisk, sender, new NPDisk::TEvWriteMetadata(TRcBuf(metadata))));
+                const auto result = runtime.GrabEdgeEvent<NPDisk::TEvWriteMetadataResult>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Outcome, NPDisk::EPDiskMetadataOutcome::OK);
+                UNIT_ASSERT(!result->Get()->PDiskGuid);
+            }
+            runtime.Send(new IEventHandle(pdisk, sender, new NPDisk::TEvReadMetadata));
+            const auto result = runtime.GrabEdgeEvent<NPDisk::TEvReadMetadataResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Outcome, NPDisk::EPDiskMetadataOutcome::OK);
+            UNIT_ASSERT_VALUES_EQUAL(
+                TRcBuf(result->Get()->Metadata).ExtractUnderlyingContainerOrCopy<TString>(), metadata);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->PDiskGuid.has_value(), !metadataOnly);
+        }
+    }
+
+    Y_UNIT_TEST(UnformattedMetadataSurvivesRestartAndFormatting) {
+        UnformattedMetadataSurvivesRestartAndFormatting(true);
+    }
+
+    Y_UNIT_TEST(UnformattedMetadataSurvivesRestartAndFormattingNoEncryption) {
+        UnformattedMetadataSurvivesRestartAndFormatting(false);
+    }
+
     Y_UNIT_TEST(EmptyMetadataIsReportedAsNoMetadata) {
         TActorTestContext testCtx({});
         testCtx.GetPDisk();

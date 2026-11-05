@@ -25,6 +25,9 @@ struct TIndexObjectCounts {
 
 TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
+// Compact posting lists encode integer document ids and cannot represent NULL.
+bool IsCompactFulltextIndex(NKikimrSchemeOp::EIndexType indexType);
+
 // Fulltext index key columns are ordered [prefix..., text]; the text column is always last.
 // Returns the leading prefix columns (empty for a non-prefixed index).
 inline TVector<TString> GetFulltextPrefixColumns(const NProtoBuf::RepeatedPtrField<TString>& keyColumnNames) {
@@ -142,15 +145,13 @@ NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
-    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc);
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc);
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDictImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
@@ -175,6 +176,10 @@ NKikimrSchemeOp::TTableDescription CalcFulltextStatsImplTableDesc(
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const TVector<TString>& prefixColumns);
+
+TVector<NKikimrSchemeOp::TTableDescription> CalcIndexImplTables(
+    const NKikimrSchemeOp::TTableDescription& baseTable,
+    const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
 TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
@@ -200,7 +205,8 @@ bool IsCompatibleKeyTypes(
     bool uniformTable,
     TString& explain);
 
-// Fulltext and JSON indexes require exactly one Int64/Int32/Uint64/Uint32 primary key column
+// Fulltext and JSON indexes without RowId require exactly one Int64/Int32/Uint64/Uint32 primary key column
+bool IsSingleIntegerPrimaryKey(const TTableColumns& baseTableColumns, const TColumnTypes& baseColumnTypes);
 bool CheckSingleIntegerPrimaryKey(
     const TTableColumns& baseTableColumns,
     const TColumnTypes& baseColumnTypes,

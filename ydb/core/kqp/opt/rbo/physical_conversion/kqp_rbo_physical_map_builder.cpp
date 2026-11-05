@@ -4,17 +4,11 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
+NPhysicalConvertionUtils::TStageBody TPhysicalMapBuilder::BuildPhysicalOp(const NPhysicalConvertionUtils::TStageBody& input) {
     const auto inputColumns = NPhysicalConvertionUtils::GetLiveInputIUs(Map, 0);
     const auto liveOutputs = NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(Map), Names);
 
-    // clang-format off
-    input = Build<TCoToFlow>(Ctx, Pos)
-        .Input(input)
-    .Done().Ptr();
-    // clang-format on
-
-    input = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputColumns, Ctx, Names);
+    auto wideInput = input.AsWide(inputColumns, Ctx, Names);
 
     THashMap<TString, ui32> colNamesToIndices;
     TVector<TExprNode::TPtr> lambdaArgs;
@@ -27,8 +21,8 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
         colNamesToIndices.emplace(Names.Get(inputColumns[i]), i);
     }
 
-    for (const auto& input : inputColumns) {
-        const auto& fullName = Names.Get(input);
+    for (const auto& column : inputColumns) {
+        const auto& fullName = Names.Get(column);
         if (!liveOutputs.contains(fullName)) {
             continue;
         }
@@ -72,21 +66,14 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     auto wideLambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, std::move(lambdaArgs)), std::move(lambdaResults));
 
     // clang-format off
-    input = Build<TCoWideMap>(Ctx, Pos)
-        .Input(input)
+    auto output = Build<TCoWideMap>(Ctx, Pos)
+        .Input(wideInput)
         .Lambda(std::move(wideLambda))
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, outputColumns, liveOutputs, Ctx, Names);
+    // The wide lambda already emits exactly the live outputs, in outputColumns order.
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical map] " << KqpExprToPrettyString(TExprBase(output), Ctx);
 
-    // clang-format off
-    input = Build<TCoFromFlow>(Ctx, Pos)
-        .Input(input)
-    .Done().Ptr();
-    // clang-format on
-
-    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical map] " << KqpExprToPrettyString(TExprBase(input), Ctx);
-
-    return input;
+    return NPhysicalConvertionUtils::TStageBody::Wide(output, std::move(outputColumns));
 }

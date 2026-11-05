@@ -3,6 +3,7 @@
 #include "replace_key.h"
 #include "simple_arrays_cache.h"
 
+#include "switch/compare.h"
 #include "switch/switch_type.h"
 #include "validation/validation.h"
 #include <ydb/core/scheme_types/scheme_type_info.h>
@@ -442,34 +443,24 @@ int ScalarCompare(const arrow::Scalar& x, const arrow::Scalar& y) {
         using TScalar = typename arrow::TypeTraits<typename TWrap::T>::ScalarType;
         using TValue = std::decay_t<decltype(static_cast<const TScalar&>(x).value)>;
 
+        std::partial_ordering cmp = std::partial_ordering::equivalent;
         if constexpr (arrow::has_string_view<typename TWrap::T>()) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;
             Y_ABORT_UNLESS(xval);
             Y_ABORT_UNLESS(yval);
-            TStringBuf xBuf(reinterpret_cast<const char*>(xval->data()), xval->size());
-            TStringBuf yBuf(reinterpret_cast<const char*>(yval->data()), yval->size());
-            if (xBuf < yBuf) {
-                return -1;
-            } else if (yBuf < xBuf) {
-                return 1;
-            } else {
-                return 0;
-            }
-        }
-        if constexpr (std::is_arithmetic_v<TValue>) {
+            cmp = TComparator::CompareValueNotNull(
+                arrow::util::string_view(reinterpret_cast<const char*>(xval->data()), xval->size()),
+                arrow::util::string_view(reinterpret_cast<const char*>(yval->data()), yval->size()));
+        } else if constexpr (std::is_arithmetic_v<TValue>) {
             const auto& xval = static_cast<const TScalar&>(x).value;
             const auto& yval = static_cast<const TScalar&>(y).value;
-            if (xval < yval) {
-                return -1;
-            } else if (yval < xval) {
-                return 1;
-            } else {
-                return 0;
-            }
+            cmp = TComparator::CompareValueNotNull(xval, yval);
+        } else {
+            Y_ABORT_UNLESS(false);   // TODO: non primitive types
         }
-        Y_ABORT_UNLESS(false);   // TODO: non primitive types
-        return 0;
+        // Preserve the scalar API's treatment of unordered floating-point values as equal.
+        return int(cmp > 0) - int(cmp < 0);
     });
 }
 

@@ -197,8 +197,14 @@ struct TPlanProps {
     TSubplans Subplans;
     TColumnLineage ColumnLineage;
     bool PgSyntax = false;
+    // Logical query-block phase and write order, preserved through RBO rules.
+    ui64 PhysicalTxGroup = 0;
+    ui64 EffectPriority = 0;
     bool WithEffects = false;
     bool WithReturning = false;
+    // Public result order is independent of the read/effect transaction order.
+    std::optional<ui32> ResultIndex;
+    TExprNode::TPtr ReturningRowsLimit;
 };
 
 }

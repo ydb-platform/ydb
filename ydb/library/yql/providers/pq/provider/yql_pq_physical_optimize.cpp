@@ -33,7 +33,7 @@ TCoAtomList GetWatermarkMetadataColumns(TPositionHandle pos, const TPqState& sta
 
     auto result = Build<TCoAtomList>(ctx, pos);
     for (const auto& key : RequiredMetadataColumns) {
-        const auto descriptor = GetPqMetaFieldDescriptorByKey(TString(key), state.AddTransparentPrefixToTransparentSystemColumns,
+        const auto descriptor = GetPqMetaFieldDescriptorByKey(TString(key), state.ShouldAddTransparentPrefixToTransparentSystemColumns(),
             state.EnableUserAttributesInTopicQuery, state.ForbidYqlSysColumnsAndSystemMetadata);
         YQL_ENSURE(descriptor, "Unexpected pq metadata key: " << key);
         result.Add<TCoAtom>().Value(descriptor->SysColumn).Build();

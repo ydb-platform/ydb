@@ -2,7 +2,7 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
-#include <yql/essentials/sql/v1/translation/node.h>
+#include <yql/essentials/sql/v1/translation/ddl_streaming_query.h>
 
 namespace NKikimrSchemeOp {
 

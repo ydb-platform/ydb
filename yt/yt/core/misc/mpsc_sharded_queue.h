@@ -1,7 +1,7 @@
 #pragma once
 
+#include <library/cpp/yt/system/access_spreader.h>
 #include <library/cpp/yt/system/spin_lock.h>
-#include <library/cpp/yt/system/tscp.h>
 
 #include <vector>
 
@@ -42,12 +42,14 @@ public:
     int GetShardSize();
 
 private:
+    static constexpr int ShardCount = 64;
+
     struct alignas(2 * CacheLineSize) TShard
     {
         TSimpleMpscSpinLockQueue<TItem> Queue;
     };
 
-    std::array<TShard, NProfiling::TTscp::MaxProcessorId> Shards_;
+    std::array<TShard, ShardCount> Shards_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

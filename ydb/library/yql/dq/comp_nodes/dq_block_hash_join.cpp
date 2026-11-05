@@ -254,6 +254,7 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
             , PairFilter_(std::move(pairFilter))
+            , OutputRows_(MakeJoinOutputRowsCounter(ctx))
         {}
 
         void WriteFlushToOutput(NUdf::TUnboxedValue* output, typename TRenamesPackedTupleOutput<Join>::TFlushResult flush) {
@@ -262,6 +263,7 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
                 output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(std::move(flush.Columns[colIndex]), Ctx_->RuntimeSettings.DatumValidation.Get());
             }
             output[cols] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(flush.Rows)), Ctx_->RuntimeSettings.DatumValidation.Get());
+            OutputRows_.Add(flush.Rows);
         }
 
       private:
@@ -291,6 +293,7 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput<Join> Output_;
         std::optional<TPackedTuplePairFilter> PairFilter_;
+        NYql::NUdf::TCounter OutputRows_;
     };
 
     void RegisterDependencies() const final {
@@ -323,6 +326,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsStream(), "Expected WideStream as a left stream");
+    EnsureNoPgTypes(leftType);
     const auto leftStreamType = AS_TYPE(TStreamType, leftType);
     MKQL_ENSURE(leftStreamType->GetItemType()->IsMulti(), "Expected Multi as a left stream item type");
     const auto leftStreamComponents = GetWideComponents(leftStreamType);
@@ -333,6 +337,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
 
     const auto rightType = callable.GetInput(1).GetStaticType();
     MKQL_ENSURE(rightType->IsStream(), "Expected WideStream as a right stream");
+    EnsureNoPgTypes(rightType);
     const auto rightStreamType = AS_TYPE(TStreamType, rightType);
     MKQL_ENSURE(rightStreamType->GetItemType()->IsMulti(), "Expected Multi as a right stream item type");
     const auto rightStreamComponents = GetWideComponents(rightStreamType);

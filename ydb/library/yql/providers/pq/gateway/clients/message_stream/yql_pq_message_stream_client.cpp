@@ -22,6 +22,7 @@ NFq::EMessageStreamStatus ToStreamStatus(EStatus status) {
         case EStatus::NOT_FOUND:
             return NFq::EMessageStreamStatus::NotFound;
         case EStatus::UNAUTHORIZED:
+        case EStatus::CLIENT_UNAUTHENTICATED:
             return NFq::EMessageStreamStatus::Unauthorized;
         case EStatus::BAD_REQUEST:
             return NFq::EMessageStreamStatus::InvalidArgument;
@@ -30,16 +31,23 @@ NFq::EMessageStreamStatus ToStreamStatus(EStatus status) {
         case EStatus::PRECONDITION_FAILED:
             return NFq::EMessageStreamStatus::PreconditionFailed;
         case EStatus::UNAVAILABLE:
+        case EStatus::TRANSPORT_UNAVAILABLE:
+        case EStatus::CLIENT_DISCOVERY_FAILED:
             return NFq::EMessageStreamStatus::Unavailable;
         case EStatus::TIMEOUT:
+        case EStatus::CLIENT_DEADLINE_EXCEEDED:
             return NFq::EMessageStreamStatus::Timeout;
         case EStatus::OVERLOADED:
+        case EStatus::CLIENT_RESOURCE_EXHAUSTED:
+        case EStatus::CLIENT_LIMITS_REACHED:
             return NFq::EMessageStreamStatus::Overloaded;
         case EStatus::ABORTED:
             return NFq::EMessageStreamStatus::Aborted;
         case EStatus::CANCELLED:
+        case EStatus::CLIENT_CANCELLED:
             return NFq::EMessageStreamStatus::Cancelled;
         case EStatus::UNSUPPORTED:
+        case EStatus::CLIENT_CALL_UNIMPLEMENTED:
             return NFq::EMessageStreamStatus::Unsupported;
         case EStatus::UNDETERMINED:
             return NFq::EMessageStreamStatus::Undetermined;
@@ -56,9 +64,10 @@ NFq::EMessageStreamStatus ToStreamStatus(EStatus status) {
         case EStatus::SESSION_BUSY:
             return NFq::EMessageStreamStatus::SessionBusy;
         case EStatus::INTERNAL_ERROR:
+        case EStatus::CLIENT_INTERNAL_ERROR:
             return NFq::EMessageStreamStatus::InternalError;
         default:
-            // Client transport statuses are not Ydb::StatusIds values.
+            // Undefined statuses and end-of-stream have no matching category.
             return NFq::EMessageStreamStatus::Unknown;
     }
 }

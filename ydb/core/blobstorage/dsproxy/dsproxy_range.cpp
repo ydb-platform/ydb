@@ -39,6 +39,12 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
     };
     TVector<TBlobQueryItem> BlobsToGet;
 
+    bool CheckFailModel() const {
+        return Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
+            ? TMirror3dcWriteQuorumChecker::CheckFailModelForGroup(*Info, FailedDisks)
+            : Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks);
+    }
+
     void SendReply(std::unique_ptr<TEvBlobStorage::TEvRangeResult> reply) {
         Mon->CountRangeResponseTime(TActivationContext::Monotonic() - RequestStartTime);
         SendResponseAndDie(std::move(reply));
@@ -82,7 +88,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
             case NKikimrProto::ERROR:
             case NKikimrProto::VDISK_ERROR_STATE:
                 FailedDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
-                if (!Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks)) {
+                if (!CheckFailModel()) {
                     ErrorReason = "Failed disks check fails on non-OK event status";
                     return ReplyAndDie(NKikimrProto::ERROR);
                 }
@@ -94,7 +100,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
                     DSP_LOG_CRIT_S("DSR09", "Don't know how to interpret an empty range with IsRangeOverflow set." <<
                             " TEvVGetResult# " << ev->Get()->ToString());
                     FailedDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
-                    if (!Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks)) {
+                    if (!CheckFailModel()) {
                         ErrorReason = "Failed disks check fails on OK event status";
                         return ReplyAndDie(NKikimrProto::ERROR);
                     }
@@ -153,7 +159,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
                     from = TLogoBlobID(TabletId, generation, step, channel, 0 /* blobSize */, cookie);
                     send = send && from <= to;
                 } else {
-                    // backward query; we have to patch 'to' with predecessor of lastBlobId
+                    // backward query; we have to patch 'from' with predecessor of lastBlobId
                     if (!cookie--) {
                         cookie = TLogoBlobID::MaxCookie;
                         if (!step--) { // if the step was zero, it is set to Max<ui32> automatically and so for generation
@@ -165,7 +171,9 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
                         }
                     }
 
-                    from = TLogoBlobID(TabletId, generation, step, channel, TLogoBlobID::MaxBlobSize, cookie);
+                    // CrcMode sorts before BlobSize, so MaxBlobSize alone does not cover blobs with CRC.
+                    from = TLogoBlobID::Make(TabletId, generation, step, channel,
+                        TLogoBlobID::MaxBlobSize, cookie, TLogoBlobID::MaxCrcMode);
                     send = send && to < from;
                 }
 
@@ -184,7 +192,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor {
             for (const auto& [blobId, tracker] : BlobStatus) {
                 bool lostByIngress = false;
                 bool requiredToBePresent = false;
-                switch (tracker.GetBlobState(Info.Get(), &lostByIngress)) {
+                switch (tracker.GetBlobState(Info.Get(), &lostByIngress, &FailedDisks)) {
                     case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
                         DSP_LOG_ERROR_S("DSR02", "disintegrated");
                         ErrorReason = "BS disintegrated";
@@ -366,9 +374,18 @@ public:
         Y_ABORT_UNLESS(TabletId == From.TabletID());
         Y_ABORT_UNLESS(TabletId == To.TabletID());
 
+        if (!CheckFailModel()) {
+            ErrorReason = "Group state cannot establish range completeness";
+            return ReplyAndDie(NKikimrProto::ERROR);
+        }
+
         // issue queries to all VDisks
         for (const auto& vdisk : Info->GetVDisks()) {
-            SendQueryToVDisk(Info->GetVDiskId(vdisk.OrderNumber), From, To);
+            const auto id = Info->GetVDiskId(vdisk.OrderNumber);
+            if (Info->GetFailRealmState(id.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+                continue;
+            }
+            SendQueryToVDisk(id, From, To);
         }
 
         Become(&TBlobStorageGroupRangeRequest::StateWait);

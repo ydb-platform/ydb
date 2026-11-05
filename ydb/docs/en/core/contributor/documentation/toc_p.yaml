@@ -7,3 +7,5 @@ items:
   href: structure.md
 - name: Genres
   href: genres.md
+- name: Features controlled by feature flags
+  href: feature-flags.md

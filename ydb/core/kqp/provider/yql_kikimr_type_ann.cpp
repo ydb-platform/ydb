@@ -2934,6 +2934,8 @@ private:
                 "ca_cert",
                 "consistency_level",
                 "commit_interval",
+                "initial_scan",
+                "availability_period",
             };
             settings.insert(begin(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS), end(REPLICATION_AND_TRANSFER_SECRETS_SETTINGS));
             return settings;
@@ -3075,11 +3077,41 @@ private:
     }
 
     virtual TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext& ctx) override {
-        // there is will be checking on feature flag
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
 
         if (!node.TablePath().Value()) {
             ctx.AddError(TIssue(ctx.GetPosition(node.TablePath().Pos()), "TablePath can't be empty."));
+            return TStatus::Error;
+        }
+
+        bool unsafe = false;
+        for (const auto& setting : node.Settings()) {
+            const auto name = setting.Name().Value();
+            if (name != "UNSAFE") {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown TRUNCATE TABLE setting: " << name));
+                return TStatus::Error;
+            }
+
+            // The grammar only admits a bool literal here, so this cannot be anything else.
+            unsafe = setting.Value().Cast<TCoBool>().Literal().Value() == "true";
+        }
+
+        if (unsafe && !SessionCtx->Config().FeatureFlags.GetEnableUnsafeTruncateTable()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                "TRUNCATE TABLE ... WITH (unsafe = true) is disabled. Please contact your system administrator to enable it"));
+            return TStatus::Error;
+        }
+
+        if (unsafe && !SessionCtx->Config().EnableUnsafeTruncateTable.Get().GetOrElse(false)) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                "TRUNCATE TABLE ... WITH (unsafe = true) requires PRAGMA kikimr.EnableUnsafeTruncateTable=\"true\" in the query"));
+            return TStatus::Error;
+        }
+
+        if (unsafe && !SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()),
+            TString(node.TablePath().Value()), node.Pos(), ctx))
+        {
             return TStatus::Error;
         }
 

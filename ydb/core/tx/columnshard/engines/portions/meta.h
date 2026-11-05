@@ -84,6 +84,9 @@ public:
 
     NArrow::TSimpleRow IndexKeyEnd() const;
 
+    NArrow::TSimpleRowRef IndexKeyStartRef() const;
+    NArrow::TSimpleRowRef IndexKeyEndRef() const;
+
     NArrow::TSimpleRowViewV0 IndexKeyViewStart() const;
     NArrow::TSimpleRowViewV0 IndexKeyViewEnd() const;
     const std::shared_ptr<arrow::Schema>& GetPkSchema() const;

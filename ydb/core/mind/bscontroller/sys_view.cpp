@@ -567,9 +567,10 @@ void TBlobStorageController::UpdateSystemViews() {
                     SysViewChangedGroups.insert(*group->BridgeProxyGroupId);
                 }
                 if (group->BridgeGroupInfo) {
-                    for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                            const NKikimrBridge::TGroupState::TPile& pile) {
                         SysViewChangedGroups.insert(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
-                    }
+                    });
                 }
             }
         }
@@ -718,9 +719,12 @@ void TBlobStorageController::UpdateSystemViews() {
 
         for (auto& [groupId, g] : state.Groups) {
             if (const TGroupInfo *group = FindGroup(groupId); group && group->BridgeGroupInfo) {
-                aggr(g, group->BridgeGroupInfo->GetBridgeGroupState().GetPile() | std::views::transform([](const auto& pile) {
-                    return TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
-                }));
+                std::vector<TGroupId> pileGroupIds;
+                NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                        const NKikimrBridge::TGroupState::TPile& pile) {
+                    pileGroupIds.push_back(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+                });
+                aggr(g, pileGroupIds);
             } else if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end()) {
                 aggr(g, it->second.Info->GetBridgeGroupIds());
             }
@@ -737,9 +741,8 @@ void TBlobStorageController::UpdateSystemViews() {
             if (const TGroupInfo *group = FindGroup(groupId); group && group->BridgeProxyGroupId && group->BridgePileId) {
                 if (const TGroupInfo *proxyGroup = FindGroup(*group->BridgeProxyGroupId); proxyGroup && proxyGroup->BridgeGroupInfo) {
                     const auto& bridgeGroupState = proxyGroup->BridgeGroupInfo->GetBridgeGroupState();
-                    if (group->BridgePileId.GetPileIndex() < bridgeGroupState.PileSize()) {
-                        const auto& pile = bridgeGroupState.GetPile(group->BridgePileId.GetPileIndex());
-                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile.GetStage()));
+                    if (const auto *pile = NBridge::GetGroupPile(bridgeGroupState, group->BridgePileId)) {
+                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile->GetStage()));
                     }
                 }
             } else if (const auto it = StaticGroups.find(groupId); it != StaticGroups.end() &&
@@ -756,9 +759,8 @@ void TBlobStorageController::UpdateSystemViews() {
                     const auto& bridgeGroupState = proxyIt->second.Info->Group->GetBridgeGroupState();
                     const auto bridgePileId = TBridgePileId::FromProto(&it->second.Info->Group.value(),
                         &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
-                    if (bridgePileId.GetPileIndex() < bridgeGroupState.PileSize()) {
-                        const auto& pile = bridgeGroupState.GetPile(bridgePileId.GetPileIndex());
-                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile.GetStage()));
+                    if (const auto *pile = NBridge::GetGroupPile(bridgeGroupState, bridgePileId)) {
+                        g.SetBridgeSyncStage(NKikimrBridge::TGroupState::EStage_Name(pile->GetStage()));
                     }
                 }
             }

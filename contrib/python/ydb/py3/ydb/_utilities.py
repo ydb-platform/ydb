@@ -209,7 +209,11 @@ def get_first_message_with_timeout(status_stream: SyncResponseIterator, timeout:
     waiter = future()
 
     def get_first_response(waiter):
-        first_response = next(status_stream)
+        try:
+            first_response = next(status_stream)
+        except BaseException as e:
+            waiter.set_exception(e)
+            return
         waiter.set_result(first_response)
 
     thread = threading.Thread(

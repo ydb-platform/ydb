@@ -11,7 +11,6 @@ PEERDIR(
     library/cpp/testing/unittest
     ydb/library/actors/testlib
     ydb/library/signals
-    ydb/core/testlib/default
     ydb/core/tx/columnshard/blobs_action/counters
     ydb/core/tx/columnshard/blobs_action/abstract
     ydb/core/tx/columnshard/common

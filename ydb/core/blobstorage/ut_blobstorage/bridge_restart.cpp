@@ -1,9 +1,13 @@
 #include "bridge_common.h"
+#include "bridge_pile_ops.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 
+#include <util/system/type_name.h>
+
 using NBridgeTest::GetBridgedLocation;
+using NBridgeTest::SwitchBridgePileState;
 
 Y_UNIT_TEST_SUITE(BridgeRestart) {
     Y_UNIT_TEST(RegistrationSnapshotPrecedesDiskUpdates) {
@@ -33,29 +37,6 @@ Y_UNIT_TEST_SUITE(BridgeRestart) {
             return true;
         };
         const auto sender = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-        auto invoke = [&](std::unique_ptr<NStorage::TEvNodeConfigInvokeOnRoot> request) {
-            runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), sender, request.release()), 1);
-            auto response = env.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(sender, false,
-                runtime->GetClock() + TDuration::Seconds(30));
-            UNIT_ASSERT_C(response, "Timed out waiting for a bridge configuration command");
-            UNIT_ASSERT_C(response->Get()->Record.GetStatus() ==
-                NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, response->Get()->Record.DebugString());
-            return response->Get()->Record;
-        };
-        auto query = [&] {
-            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-            request->Record.MutableQueryConfig();
-            return invoke(std::move(request)).GetQueryConfig().GetConfig();
-        };
-        auto change = [&](ui32 index, NKikimrBridge::TClusterState::EPileState state) {
-            auto config = query();
-            auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-            auto *next = request->Record.MutableSwitchBridgeClusterState()->MutableNewClusterState();
-            next->CopyFrom(config.GetClusterState());
-            next->SetPerPileState(index, state);
-            next->SetGeneration(next->GetGeneration() + 1);
-            invoke(std::move(request));
-        };
 
         ui32 step = 0;
         auto put = [&](TString data) {
@@ -71,8 +52,8 @@ Y_UNIT_TEST_SUITE(BridgeRestart) {
         };
         put("before disconnect");
         put(TString(128_KB, 'a'));
-        change(1, NKikimrBridge::TClusterState::DISCONNECTED);
-        change(2, NKikimrBridge::TClusterState::DISCONNECTED);
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::DISCONNECTED);
         // The root's acknowledgement can precede propagation to the local bridge proxy.
         runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), sender,
             new TEvNodeWardenQueryStorageConfig(true)), 1);
@@ -97,12 +78,57 @@ Y_UNIT_TEST_SUITE(BridgeRestart) {
         for (ui32 nodeId = 9; nodeId <= 24; ++nodeId) {
             env.StartNode(nodeId);
         }
-        change(1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
-        change(2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        SwitchBridgePileState(env, 2, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
         const auto deadline = runtime->GetClock() + TDuration::Seconds(30);
         while (registeredNodes.size() != 16) {
             UNIT_ASSERT_C(runtime->GetClock() < deadline, "Timed out waiting for registration snapshots");
             env.Sim(TDuration::MilliSeconds(1));
         }
+    }
+
+    // BSC doesn't learn that the pile has been out and got back until it restarts: having loaded, it has to reset parts
+    // of its groups in the pile and sync them, otherwise nothing does it and the pile stays NOT_SYNCHRONIZED_2 forever
+    Y_UNIT_TEST(UnsyncedPileCheckedAfterLoad) {
+        using namespace NBridgeTest;
+
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+
+        bool dropBscConfigs = false;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (dropBscConfigs && ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                if (IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
+                        TypeName(*actor).Contains("TBlobStorageController")) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        dropBscConfigs = true;
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(10));
+        checker.Write(groupId); // reaches pile 0 only
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+        // the part of the group in pile 1 is still SYNCED by its previous sync
+        UNIT_ASSERT_EQUAL(GetGroupInfo(env, groupId).GetBridgeGroupState().GetPile(1).GetStage(),
+            NKikimrBridge::TGroupState::SYNCED);
+
+        dropBscConfigs = false;
+        env.RestartNode(1); // BSC resides on node 1
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        checker.CheckAll();
+        CheckPileData(env, checker, 1, 9);
     }
 }

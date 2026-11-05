@@ -292,9 +292,15 @@ IActor* CreateExportCompletionUploader(
 
 class TKesusResourcesDescriber: public TActorBootstrapped<TKesusResourcesDescriber> {
 public:
-    TKesusResourcesDescriber(TActorId owner, ui64 kesusTabletId)
+    enum class EKind {
+        RateLimiterResources,
+        Semaphores,
+    };
+
+    TKesusResourcesDescriber(TActorId owner, ui64 kesusTabletId, EKind kind = EKind::RateLimiterResources)
         : Owner(owner)
         , KesusTabletId(kesusTabletId)
+        , Kind(kind)
     {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -317,17 +323,22 @@ private:
         pipeConfig.RetryPolicy = {.RetryLimitCount = 3};
         KesusPipe = Register(NTabletPipe::CreateClient(SelfId(), KesusTabletId, pipeConfig));
 
+        Become(&TKesusResourcesDescriber::StateDescribeResources);
+        if (Kind == EKind::Semaphores) {
+            NTabletPipe::SendData(SelfId(), KesusPipe, new NKesus::TEvKesus::TEvDescribeSemaphores(), ++RequestCookie);
+            return;
+        }
+
         // An empty path/id filter with Recursive=true describes the entire resource tree
         // in one Kesus transaction, including children and their original properties.
         auto request = MakeHolder<NKesus::TEvKesus::TEvDescribeQuoterResources>();
         request->Record.SetRecursive(true);
-        Become(&TKesusResourcesDescriber::StateDescribeResources);
         NTabletPipe::SendData(SelfId(), KesusPipe, request.Release(), ++RequestCookie);
     }
 
     void HandleResources(NKesus::TEvKesus::TEvDescribeQuoterResourcesResult::TPtr& ev) {
         // A response sent before a pipe failure may arrive after reconnection.
-        if (ev->Cookie != RequestCookie) {
+        if (Kind != EKind::RateLimiterResources || ev->Cookie != RequestCookie) {
             return;
         }
         ClosePipe();
@@ -350,6 +361,29 @@ private:
         });
 
         Finish(true, std::move(resources), {});
+    }
+
+    void HandleSemaphores(NKesus::TEvKesus::TEvDescribeSemaphoresResult::TPtr& ev) {
+        if (Kind != EKind::Semaphores || ev->Cookie != RequestCookie) {
+            return;
+        }
+        auto& record = ev->Get()->Record;
+        if (record.GetError().GetStatus() != Ydb::StatusIds::SUCCESS) {
+            return Finish(false, {}, TStringBuilder() << "Cannot describe coordination node semaphores: "
+                << record.GetError().ShortDebugString());
+        }
+        auto result = MakeHolder<TEvPrivate::TEvKesusSemaphoresDescribeResult>();
+        result->Success = true;
+        result->Semaphores.reserve(record.SemaphoresSize());
+        for (auto& semaphore : *record.MutableSemaphores()) {
+            result->Semaphores.push_back(std::move(semaphore));
+        }
+        // The source is a hash map; use names for reproducible file numbering.
+        std::sort(result->Semaphores.begin(), result->Semaphores.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.name() < rhs.name();
+        });
+        Send(Owner, result.Release());
+        PassAway();
     }
 
     void HandleConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
@@ -409,13 +443,20 @@ private:
             {"success", success},
             {"error", error},
         );
-        Send(Owner, new TEvPrivate::TEvKesusResourcesDescribeResult(success, std::move(resources), std::move(error)));
+        if (Kind == EKind::Semaphores) {
+            auto result = MakeHolder<TEvPrivate::TEvKesusSemaphoresDescribeResult>();
+            result->Error = std::move(error);
+            Send(Owner, result.Release());
+        } else {
+            Send(Owner, new TEvPrivate::TEvKesusResourcesDescribeResult(success, std::move(resources), std::move(error)));
+        }
         PassAway();
     }
 
     STATEFN(StateDescribeResources) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NKesus::TEvKesus::TEvDescribeQuoterResourcesResult, HandleResources);
+            hFunc(NKesus::TEvKesus::TEvDescribeSemaphoresResult, HandleSemaphores);
             hFunc(TEvTabletPipe::TEvClientConnected, HandleConnected);
             hFunc(TEvTabletPipe::TEvClientDestroyed, HandleDestroyed);
             sFunc(TEvPrivate::TEvExportKesusTimeout, HandleTimeout);
@@ -437,6 +478,7 @@ private:
     ui64 RequestCookie = 0;
     TInstant Deadline;
     TDuration RetryDelay = TDuration::MilliSeconds(100);
+    const EKind Kind;
 }; // TKesusResourcesDescriber
 
 template <typename TSettings>
@@ -495,12 +537,12 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
         }
 
         if (PathType == NKikimrSchemeOp::EPathTypeKesus) {
-            const ui64 kesusTabletId = describeResult.GetPathDescription().GetKesus().GetKesusTabletId();
-            if (!kesusTabletId) {
+            KesusTabletId = describeResult.GetPathDescription().GetKesus().GetKesusTabletId();
+            if (!KesusTabletId) {
                 return Finish(false, "Coordination node tablet id is missing");
             }
 
-            ResourcesDescriber = this->Register(new TKesusResourcesDescriber(this->SelfId(), kesusTabletId));
+            ResourcesDescriber = this->Register(new TKesusResourcesDescriber(this->SelfId(), KesusTabletId));
             this->Become(&TThis::StateWaitResources);
         } else {
             StartUploadFiles();
@@ -518,12 +560,27 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
         }
 
         KesusResources = std::move(ev->Get()->Resources);
-        StartUploadFiles();
+        ResourcesDescriber = this->Register(new TKesusResourcesDescriber(
+            this->SelfId(), KesusTabletId, TKesusResourcesDescriber::EKind::Semaphores));
+        this->Become(&TThis::StateWaitSemaphores);
     }
 
     bool AddFileWithChecksum(const TString& name, const TString& content, NBackup::EBackupFileType fileType, ui32 fileIndex = 0) {
         return this->AddFile(name, content, MakeSchemeFileIV(IV, fileType, fileIndex))
             && (!EnableChecksums || this->AddFile(NBackup::ChecksumKey(name), NBackup::ComputeChecksum(content)));
+    }
+
+    void HandleSemaphores(TEvPrivate::TEvKesusSemaphoresDescribeResult::TPtr& ev) {
+        if (ev->Sender != ResourcesDescriber) {
+            return;
+        }
+        ResourcesDescriber = {};
+        auto& result = *ev->Get();
+        if (!result.Success) {
+            return Finish(false, result.Error);
+        }
+        KesusSemaphores = std::move(result.Semaphores);
+        StartUploadFiles();
     }
 
     void StartUploadFiles() {
@@ -536,6 +593,18 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
         }
 
         if (PathType == NKikimrSchemeOp::EPathTypeKesus) {
+            // Resource paths may occupy any top-level directory. Keep semaphore
+            // files in a separate namespace, never using semaphore names as paths.
+            TString semaphoresPrefix = "semaphores";
+            THashSet<TString> resourceDirectories;
+            if (!IV) {
+                for (const auto& resource : KesusResources) {
+                    resourceDirectories.insert(TString(TStringBuf(resource.resource_path()).Before('/')));
+                }
+            }
+            while (resourceDirectories.contains(semaphoresPrefix)) {
+                semaphoresPrefix += "_";
+            }
             std::vector<NBackup::TRateLimiterResourceMetadata> resources;
             resources.reserve(KesusResources.size());
             for (ui32 index = 0; index < KesusResources.size(); ++index) {
@@ -558,6 +627,26 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
             }
             // This list replaces the previous attempt's list, including when it is empty.
             Metadata.SetRateLimiterResources(std::move(resources));
+            KesusResources.clear();
+
+            std::vector<NBackup::TSemaphoreMetadata> semaphores;
+            semaphores.reserve(KesusSemaphores.size());
+            for (ui32 index = 0; index < KesusSemaphores.size(); ++index) {
+                const auto& semaphore = KesusSemaphores[index];
+                const TString prefix = semaphoresPrefix + "/" + Sprintf("%03u", index + 1);
+                TString content;
+                if (!NYdb::NBackup::PrintProto(semaphore, content)) {
+                    return Finish(false, "Cannot serialize coordination node semaphore");
+                }
+                if (!AddFileWithChecksum(prefix + "/" + NYdb::NDump::NFiles::CreateSemaphore().FileName,
+                        content, NBackup::EBackupFileType::CoordinationNodeCreateSemaphore, index))
+                {
+                    return;
+                }
+                semaphores.push_back({.ExportPrefix = prefix, .Name = semaphore.name()});
+            }
+            Metadata.SetSemaphores(std::move(semaphores));
+            KesusSemaphores.clear();
         }
 
         if (EnablePermissions) {
@@ -645,6 +734,13 @@ public:
         }
     }
 
+    STATEFN(StateWaitSemaphores) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvKesusSemaphoresDescribeResult, HandleSemaphores);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
 private:
     TActorId SchemeShard;
 
@@ -665,6 +761,8 @@ private:
     NBackup::TMetadata Metadata;
     TActorId ResourcesDescriber;
     TVector<Ydb::RateLimiter::Resource> KesusResources;
+    TVector<Ydb::Coordination::SessionRequest::CreateSemaphore> KesusSemaphores;
+    ui64 KesusTabletId = 0;
 }; // TSchemeUploader
 
 template <typename TSettings>

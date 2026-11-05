@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -63,6 +64,7 @@ namespace TEvPrivate {
         EvExportCompletionUploadResult,
         EvExportKesusTimeout,
         EvKesusResourcesDescribeResult,
+        EvKesusSemaphoresDescribeResult,
         EvEnd
     };
 
@@ -196,6 +198,12 @@ namespace TEvPrivate {
             , Resources(std::move(resources))
             , Error(std::move(error))
         {}
+    };
+
+    struct TEvKesusSemaphoresDescribeResult: public TEventLocal<TEvKesusSemaphoresDescribeResult, EvKesusSemaphoresDescribeResult> {
+        bool Success = false;
+        TString Error;
+        TVector<Ydb::Coordination::SessionRequest::CreateSemaphore> Semaphores;
     };
 
     struct TEvExportUploadMetadataResult: public TEventLocal<TEvExportUploadMetadataResult, EvExportUploadMetadataResult> {

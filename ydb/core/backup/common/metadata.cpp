@@ -53,6 +53,14 @@ const std::optional<std::vector<TRateLimiterResourceMetadata>>& TMetadata::GetRa
     return RateLimiterResources;
 }
 
+void TMetadata::SetSemaphores(std::vector<TSemaphoreMetadata> semaphores) {
+    Semaphores = std::move(semaphores);
+}
+
+const std::optional<std::vector<TSemaphoreMetadata>>& TMetadata::GetSemaphores() const {
+    return Semaphores;
+}
+
 void TMetadata::SetEnablePermissions(bool enablePermissions) {
     EnablePermissions = enablePermissions;
 }
@@ -118,6 +126,17 @@ TString TMetadata::Serialize() const {
         m["rate_limiter_resources"] = std::move(resources);
     }
 
+    if (Semaphores) {
+        NJson::TJsonArray semaphores;
+        for (const auto& semaphore : *Semaphores) {
+            NJson::TJsonMap semaphoreMap;
+            semaphoreMap["export_prefix"] = semaphore.ExportPrefix;
+            semaphoreMap["name"] = semaphore.Name;
+            semaphores.AppendValue(std::move(semaphoreMap));
+        }
+        m["semaphores"] = std::move(semaphores);
+    }
+
     return NJson::WriteJson(&m, false);
 }
 
@@ -165,6 +184,16 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
             result.RateLimiterResources->push_back({
                 .ExportPrefix = resource["export_prefix"].GetStringSafe(),
                 .ResourcePath = resource["resource_path"].GetStringSafe(),
+            });
+        }
+    }
+
+    if (json.Has("semaphores")) {
+        result.Semaphores.emplace();
+        for (const auto& semaphore : json["semaphores"].GetArraySafe()) {
+            result.Semaphores->push_back({
+                .ExportPrefix = semaphore["export_prefix"].GetStringSafe(),
+                .Name = semaphore["name"].GetStringSafe(),
             });
         }
     }

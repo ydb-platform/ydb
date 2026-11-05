@@ -51,6 +51,11 @@ struct TRateLimiterResourceMetadata {
     TString ResourcePath;
 };
 
+struct TSemaphoreMetadata {
+    TString ExportPrefix;
+    TString Name;
+};
+
 class TMetadata {
 public:
     TMetadata() = default;
@@ -71,6 +76,9 @@ public:
 
     void SetRateLimiterResources(std::vector<TRateLimiterResourceMetadata> resources);
     const std::optional<std::vector<TRateLimiterResourceMetadata>>& GetRateLimiterResources() const;
+
+    void SetSemaphores(std::vector<TSemaphoreMetadata> semaphores);
+    const std::optional<std::vector<TSemaphoreMetadata>>& GetSemaphores() const;
 
     void SetEnablePermissions(bool enablePermissions = true);
     bool HasEnablePermissions() const;
@@ -101,6 +109,10 @@ private:
     // Files not listed here may remain from an earlier export attempt and must be ignored.
     // The zero-based list position is the resource file's IV shard number.
     std::optional<std::vector<TRateLimiterResourceMetadata>> RateLimiterResources;
+
+    // Authoritative list, including an explicitly empty set. The zero-based list
+    // position is the semaphore file's IV shard number; unlisted files are ignored.
+    std::optional<std::vector<TSemaphoreMetadata>> Semaphores;
 
     // EnablePermissions:
     // Undefined (previous versions): we don't know if we see the export with permissions or without them, so check S3 for the permissions file existence

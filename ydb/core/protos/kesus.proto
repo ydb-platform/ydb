@@ -99,6 +99,14 @@ message TEvDescribeSemaphoreChanged {
     bool OwnersChanged = 3;
 }
 
+// Internal backup enumeration. Only persistent semaphore definitions are returned.
+message TEvDescribeSemaphores {}
+
+message TEvDescribeSemaphoresResult {
+    TKesusError Error = 1;
+    repeated Ydb.Coordination.SessionRequest.CreateSemaphore Semaphores = 2;
+}
+
 message TEvCreateSemaphore {
     string KesusPath = 1;
     uint64 ProxyGeneration = 2;

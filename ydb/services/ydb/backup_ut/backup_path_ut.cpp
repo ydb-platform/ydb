@@ -291,6 +291,21 @@ void ExportKesusImpl(TBackupTestFixture& f, bool throughDirectory) {
         NRateLimiter::TCreateResourceSettings().MaxUnitsPerSecond(100)).GetValueSync();
     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
 
+    auto sessionResult = coordination.StartSession("/Root/KesusExport/Coordination").GetValueSync();
+    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+    auto session = sessionResult.ExtractResult();
+    const std::string semaphoreData("a\0\xffz", 4);
+    status = session.CreateSemaphore("../persistent", 3, semaphoreData).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    const auto acquired = session.AcquireSemaphore("../persistent",
+        NCoordination::TAcquireSemaphoreSettings().Count(2)).GetValueSync();
+    UNIT_ASSERT_C(acquired.IsSuccess(), acquired.GetIssues().ToString());
+    UNIT_ASSERT(acquired.GetResult());
+    const auto ephemeral = session.AcquireSemaphore("ephemeral",
+        NCoordination::TAcquireSemaphoreSettings().Count(1).Ephemeral()).GetValueSync();
+    UNIT_ASSERT_C(ephemeral.IsSuccess(), ephemeral.GetIssues().ToString());
+    UNIT_ASSERT(ephemeral.GetResult());
+
     auto settings = traits.MakeExportSettingsRaw(f);
     settings.AppendItem(typename TExportSettings::TItem{
         .Src = throughDirectory ? "/Root/KesusExport" : "/Root/KesusExport/Coordination",
@@ -323,6 +338,35 @@ void ExportKesusImpl(TBackupTestFixture& f, bool throughDirectory) {
     UNIT_ASSERT(resource.coordination_node_path().empty());
     UNIT_ASSERT(resource.resource().resource_path().empty());
     UNIT_ASSERT_VALUES_EQUAL(resource.resource().hierarchical_drr().max_units_per_second(), 100);
+
+    UNIT_ASSERT(metadata.GetSemaphores());
+    UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->size(), 1);
+    const auto& semaphoreEntry = metadata.GetSemaphores()->front();
+    UNIT_ASSERT_VALUES_EQUAL(semaphoreEntry.Name, "../persistent");
+    Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
+    UNIT_ASSERT(NYdb::NBackup::ParseProto(readFile(semaphoreEntry.ExportPrefix + "/create_semaphore.pb"), semaphore));
+    UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), "../persistent");
+    UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), semaphoreData);
+    UNIT_ASSERT_VALUES_EQUAL(semaphore.req_id(), 0);
+
+    // Replay the exported public definition in a new node; no owners or waiters are restored.
+    status = coordination.CreateNode("/Root/RestoredCoordination").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    auto restoredSessionResult = coordination.StartSession("/Root/RestoredCoordination").GetValueSync();
+    UNIT_ASSERT_C(restoredSessionResult.IsSuccess(), restoredSessionResult.GetIssues().ToString());
+    auto restoredSession = restoredSessionResult.ExtractResult();
+    status = restoredSession.CreateSemaphore(semaphore.name(), semaphore.limit(), semaphore.data()).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    const auto restored = restoredSession.DescribeSemaphore(semaphore.name(),
+        NCoordination::TDescribeSemaphoreSettings().IncludeOwners().IncludeWaiters()).GetValueSync();
+    UNIT_ASSERT_C(restored.IsSuccess(), restored.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetResult().GetCount(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetResult().GetLimit(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetResult().GetData(), semaphoreData);
+    UNIT_ASSERT(!restored.GetResult().IsEphemeral());
+    UNIT_ASSERT(restored.GetResult().GetOwners().empty());
+    UNIT_ASSERT(restored.GetResult().GetWaiters().empty());
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>

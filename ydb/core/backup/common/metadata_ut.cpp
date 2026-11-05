@@ -81,4 +81,32 @@ Y_UNIT_TEST_SUITE(RateLimiterMetadataTest) {
     }
 }
 
+Y_UNIT_TEST_SUITE(SemaphoreMetadataTest) {
+    Y_UNIT_TEST(AbsentAndEmptyListsDiffer) {
+        TMetadata metadata;
+        UNIT_ASSERT(!TMetadata::Deserialize(metadata.Serialize()).GetSemaphores());
+        metadata.SetSemaphores({{.ExportPrefix = "semaphores/001", .Name = "../name"}});
+        metadata.SetSemaphores({});
+        const auto parsed = TMetadata::Deserialize(metadata.Serialize());
+        UNIT_ASSERT(parsed.GetSemaphores());
+        UNIT_ASSERT(parsed.GetSemaphores()->empty());
+    }
+
+    Y_UNIT_TEST(NamesAndPrefixesRoundTrip) {
+        TMetadata metadata;
+        metadata.SetRateLimiterResources({{.ExportPrefix = "001", .ResourcePath = "resource"}});
+        metadata.SetSemaphores({
+            {.ExportPrefix = "semaphores/001", .Name = "../name"},
+            {.ExportPrefix = "semaphores/002", .Name = "name/with/slashes"},
+        });
+        const auto parsed = TMetadata::Deserialize(metadata.Serialize());
+        UNIT_ASSERT(parsed.GetSemaphores());
+        UNIT_ASSERT_VALUES_EQUAL(parsed.GetSemaphores()->size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.GetSemaphores()->at(0).Name, "../name");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.GetSemaphores()->at(0).ExportPrefix, "semaphores/001");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.GetSemaphores()->at(1).Name, "name/with/slashes");
+        UNIT_ASSERT_VALUES_EQUAL(parsed.GetRateLimiterResources()->at(0).ResourcePath, "resource");
+    }
+}
+
 } // namespace NKikimr::NBackup

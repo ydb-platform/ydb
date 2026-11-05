@@ -23,6 +23,7 @@ enum EFilesType {
     CREATE_EXTERNAL_TABLE,
     SYSTEM_VIEW,
     CREATE_TRANSFER,
+    CREATE_SEMAPHORE,
 };
 
 static constexpr TFileInfo FILES_INFO[] = {
@@ -46,6 +47,7 @@ static constexpr TFileInfo FILES_INFO[] = {
     {"create_external_table.sql", "external table"},
     {"system_view.pb", "system view"},
     {"create_transfer.sql", "transfer"},
+    {"create_semaphore.pb", "semaphore"},
 };
 
 const TFileInfo& TableScheme() {
@@ -74,6 +76,10 @@ const TFileInfo& CreateCoordinationNode() {
 
 const TFileInfo& CreateRateLimiter() {
     return FILES_INFO[CREATE_RATE_LIMITER];
+}
+
+const TFileInfo& CreateSemaphore() {
+    return FILES_INFO[CREATE_SEMAPHORE];
 }
 
 const TFileInfo& IncompleteData() {

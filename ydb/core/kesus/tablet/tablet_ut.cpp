@@ -34,9 +34,112 @@ namespace {
         config.set_attach_consistency_mode(Ydb::Coordination::CONSISTENCY_MODE_RELAXED);
         ctx.SetConfig(12345, config, 42);
     }
+
+    NKikimrKesus::TEvDescribeSemaphoresResult DescribeSemaphoresForBackup(TTestContext& ctx) {
+        const auto edge = ctx.Runtime->AllocateEdgeActor();
+        ctx.SendFromEdge(edge, new TEvKesus::TEvDescribeSemaphores(), 123);
+        return ctx.ExpectEdgeEvent<TEvKesus::TEvDescribeSemaphoresResult>(edge, 123)->Record;
+    }
 }
 
 Y_UNIT_TEST_SUITE(TKesusTest) {
+    Y_UNIT_TEST(TestSemaphoresBackupDefinitions) {
+        TTestContext ctx;
+        ctx.Setup();
+        UNIT_ASSERT_VALUES_EQUAL(DescribeSemaphoresForBackup(ctx).SemaphoresSize(), 0);
+        const TString data("a\0\xffz", 4);
+        ctx.CreateSemaphore("../persistent", 2, data);
+        const auto proxy = ctx.Runtime->AllocateEdgeActor();
+        ctx.MustRegisterProxy(proxy, 1);
+        ctx.MustAttachSession(proxy, 1, 0, 30000);
+        ctx.MustAttachSession(proxy, 1, 0, 30000);
+        ctx.SendAcquireSemaphore(1, proxy, 1, 1, "../persistent", 2);
+        ctx.ExpectAcquireSemaphoreResult(1, proxy, 1);
+        ctx.SendAcquireSemaphore(2, proxy, 1, 2, "../persistent", 1, 60000);
+        ctx.ExpectAcquireSemaphorePending(2, proxy, 1);
+        ctx.SendAcquireLock(3, proxy, 1, 1, "ephemeral", LOCK_MODE_EXCLUSIVE);
+        ctx.ExpectAcquireLockResult(3, proxy, 1);
+
+        const auto result = DescribeSemaphoresForBackup(ctx);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), 1);
+        const auto& semaphore = result.GetSemaphores(0);
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), "../persistent");
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), data);
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.req_id(), 0);
+
+        // Replaying a definition creates a free semaphore, despite active owners/waiters at the source.
+        ctx.CreateSemaphore("restored", semaphore.limit(), semaphore.data());
+        const auto restored = ctx.DescribeSemaphore("restored", true);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Data, data);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Limit, 2);
+        UNIT_ASSERT(!restored.Ephemeral);
+        UNIT_ASSERT(restored.Owners.empty());
+        UNIT_ASSERT(restored.Waiters.empty());
+    }
+
+    Y_UNIT_TEST(TestSemaphoresBackupAllDefinitions) {
+        TTestContext ctx;
+        ctx.Setup();
+        // Exceed both former page limits: 128 entries and 4 MiB.
+        const TString data(32 * 1024, 'x');
+        constexpr ui32 count = 160;
+        for (ui32 i = 0; i < count; ++i) {
+            ctx.CreateSemaphore(ToString(i), i + 1, data);
+        }
+        const auto result = DescribeSemaphoresForBackup(ctx);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), count);
+        THashSet<TString> names;
+        for (const auto& semaphore : result.GetSemaphores()) {
+            UNIT_ASSERT(names.insert(semaphore.name()).second);
+            UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), ToString(semaphore.limit() - 1));
+            UNIT_ASSERT(semaphore.limit() >= 1 && semaphore.limit() <= count);
+            UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), data);
+        }
+    }
+
+    Y_UNIT_TEST(TestSemaphoresBackupResponseTooLarge) {
+        TTestContext ctx;
+        ctx.Setup();
+        const TString data(1024 * 1024, 'x');
+        for (ui32 i = 0; i <= NActors::EventMaxByteSize / data.size(); ++i) {
+            ctx.CreateSemaphore(ToString(i), 1, data);
+        }
+        const auto result = DescribeSemaphoresForBackup(ctx);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), 0);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetError().ShortDebugString(), "response size limit");
+    }
+
+    Y_UNIT_TEST(TestSemaphoresBackupLatestDefinitions) {
+        TTestContext ctx;
+        ctx.Setup();
+        ctx.CreateSemaphore("A", 1);
+        ctx.CreateSemaphore("B", 2, "old");
+        UNIT_ASSERT_VALUES_EQUAL(DescribeSemaphoresForBackup(ctx).SemaphoresSize(), 2);
+        ctx.DeleteSemaphore("A");
+        ctx.UpdateSemaphore("B", "changed");
+        ctx.CreateSemaphore("C", 3, "new");
+
+        for (bool reboot : {false, true}) {
+            if (reboot) {
+                ctx.RebootTablet();
+            }
+            const auto result = DescribeSemaphoresForBackup(ctx);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), 2);
+            THashSet<TString> names;
+            for (const auto& semaphore : result.GetSemaphores()) {
+                UNIT_ASSERT(names.insert(semaphore.name()).second);
+                UNIT_ASSERT(semaphore.name() == "B" || semaphore.name() == "C");
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), semaphore.name() == "B" ? 2 : 3);
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), semaphore.name() == "B" ? "changed" : "new");
+            }
+        }
+    }
+
     Y_UNIT_TEST(TestKesusConfig) {
         TTestContext ctx;
         ctx.Setup();

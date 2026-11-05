@@ -251,6 +251,7 @@ jobs:
 
   github_job_metrics:
     name: GitHub job metrics
+    needs: main
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     steps:
     - name: Probe GitHub speed
@@ -393,26 +394,6 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: python3 .github/scripts/utils/analytics/github_actions/export_runner_capacity.py
-
-  github_data_inner_sync:
-    name: Sync GitHub data to internal YDB
-    needs: main
-    concurrency:
-      group: github-data-inner-sync
-      cancel-in-progress: false
-    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v5
-      with:
-        ref: ${{ inputs.commit_sha }}
-    - name: Setup cloud YDB access
-      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
-      with:
-        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
-    - name: Install dependencies
-      run: python3 -m pip install ydb ydb[yc]
     - name: Sync GitHub dashboard data
       env:
         YDB_INNER_TOKEN: ${{ secrets.YDB_INNER_TOKEN }}

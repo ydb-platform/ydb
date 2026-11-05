@@ -7,7 +7,7 @@ Released on October 30, 2026. To update to version **2.35.0**, select the [Downl
 ### Features
 
 * Added support for recursively removing Solomon (KeyValue) volumes, resource pools, and backup collections with the `{{ ydb-cli }} scheme rmdir --recursive` [command](./reference/ydb-cli/commands/dir.md#rmdir).
-* Added the `--skip-storage-pool-conversion` option to the `{{ ydb-cli }} admin cluster bridge convert` [command](./reference/ydb-cli/commands/bridge/convert.md) to convert only static storage groups while leaving existing storage pools and their groups outside bridge mode. These pools are not replicated to added piles until converted separately. The option requires `enable_non_uniform_storage: true` in `bridge_config`.
+* Added the `--skip-storage-pool-conversion` option to the `{{ ydb-cli }} admin cluster bridge convert` command to convert only static storage groups while leaving existing storage pools and their groups outside bridge mode. These pools are not replicated to added piles until converted separately. The option requires `enable_non_uniform_storage: true` in `bridge_config`.
 * Added information about pending pile operations, including the error from the last failed attempt, to the `pretty` and `json` output formats of the `{{ ydb-cli }} admin cluster bridge list` [command](./reference/ydb-cli/commands/bridge/list.md).
 * Added support for displaying the `INACTIVE` pile state in the output of the `{{ ydb-cli }} admin cluster bridge list` [command](./reference/ydb-cli/commands/bridge/list.md).
 

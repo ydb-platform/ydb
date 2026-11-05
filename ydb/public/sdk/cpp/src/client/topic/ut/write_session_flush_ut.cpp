@@ -29,29 +29,36 @@ Y_UNIT_TEST_SUITE(WriteSessionFlush) {
     Y_UNIT_TEST(PreparedWritesUseCompressionExecutor) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
         auto client = setup.MakeClient();
-        for (const bool preEncoded : {false, true}) {
+        for (const bool mixed : {false, true}) {
             auto executor = CreateThreadPoolManagedExecutor(1);
             auto session = client.CreateWriteSession(
                 TWriteSessionSettings()
                     .Path(setup.GetTopicPath())
-                    .MessageGroupId(preEncoded ? "encoded-producer" : TEST_MESSAGE_GROUP_ID)
-                    .Codec(preEncoded ? ECodec::GZIP : ECodec::RAW)
+                    .MessageGroupId(mixed ? "mixed-producer" : TEST_MESSAGE_GROUP_ID)
+                    .Codec(mixed ? ECodec::GZIP : ECodec::RAW)
                     .CompressionExecutor(executor)
                     .BatchFlushInterval(TDuration::Zero()));
 
             const std::string_view data = "message";
-            for (const uint64_t seqNo : {1, 1, 2}) {
+            for (const uint64_t seqNo : {2, 2, 1, 3}) {
                 auto token = WaitForWriteToken(*session);
-                if (preEncoded) {
+                if (mixed && seqNo != 1) {
                     session->WriteEncoded(std::move(token), data, ECodec::RAW, static_cast<uint32_t>(data.size()), seqNo);
                 } else {
                     session->Write(std::move(token), data, seqNo);
                 }
             }
-            UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), mixed ? 2 : 1);
 
             auto flushed = session->Flush();
             UNIT_ASSERT(!flushed.HasValue());
+            if (mixed) {
+                auto compressed = NThreading::NewPromise<void>();
+                executor->Post([compressed]() mutable { compressed.SetValue(); });
+                executor->StartFuncs({1, 2});
+                UNIT_ASSERT_C(compressed.GetFuture().Wait(TDuration::Seconds(30)), "compression did not finish before the queued send");
+            }
+            UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);
             executor->RunAllTasks();
             UNIT_ASSERT_C(flushed.Wait(TDuration::Seconds(30)), "prepared writes did not flush after running the executor");
             UNIT_ASSERT(flushed.GetValue());

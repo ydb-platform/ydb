@@ -26,43 +26,54 @@ TContinuationToken WaitForWriteToken(IWriteSession& session) {
 Y_UNIT_TEST_SUITE(CompressExecutor) {
     Y_UNIT_TEST(PreparedWritesUseCompressionExecutor) {
         TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
-        for (const bool preEncoded : {false, true}) {
+        for (const bool mixed : {false, true}) {
             auto executor = NTopic::NTests::CreateThreadPoolManagedExecutor(1);
+            auto acked = NThreading::NewPromise<std::vector<TWriteSessionEvent::TWriteAck>>();
+            auto received = std::make_shared<std::vector<TWriteSessionEvent::TWriteAck>>();
             auto settings = setup.GetWriteSessionSettings();
-            settings.Codec(preEncoded ? ECodec::GZIP : ECodec::RAW)
-                .MessageGroupId(preEncoded ? "encoded-producer" : "raw-producer")
+            settings.Codec(mixed ? ECodec::GZIP : ECodec::RAW)
+                .MessageGroupId(mixed ? "mixed-producer" : "raw-producer")
                 .BatchFlushInterval(TDuration::Zero())
                 .CompressionExecutor(executor);
+            settings.EventHandlers_.HandlersExecutor(NYdb::CreateThreadPoolExecutor(1));
+            settings.EventHandlers_.AcksHandler([acked, received](TWriteSessionEvent::TAcksEvent& event) mutable {
+                for (auto& ack : event.Acks) {
+                    received->push_back(std::move(ack));
+                }
+                if (received->size() >= 4) {
+                    acked.TrySetValue(std::move(*received));
+                }
+            });
             auto writer = setup.GetPersQueueClient().CreateWriteSession(settings);
 
             const std::string_view data = "message";
-            for (const ui64 seqNo : {1, 1, 2}) {
+            for (const ui64 seqNo : {2, 2, 1, 3}) {
                 auto token = WaitForWriteToken(*writer);
-                if (preEncoded) {
+                if (mixed && seqNo != 1) {
                     writer->WriteEncoded(std::move(token), data, ECodec::RAW, static_cast<ui32>(data.size()), seqNo);
                 } else {
                     writer->Write(std::move(token), data, seqNo);
                 }
             }
+            UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), mixed ? 2 : 1);
+            if (mixed) {
+                auto compressed = NThreading::NewPromise<void>();
+                executor->Post([compressed]() mutable { compressed.SetValue(); });
+                executor->StartFuncs({1, 2});
+                UNIT_ASSERT_C(compressed.GetFuture().Wait(TDuration::Seconds(30)), "compression did not finish before the queued send");
+            }
             UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);
 
             executor->RunAllTasks();
-            size_t ackCount = 0;
-            while (ackCount < 3) {
-                UNIT_ASSERT_C(writer->WaitEvent().Wait(TDuration::Seconds(30)), "timeout waiting for write acknowledgements");
-                for (auto& event : writer->GetEvents()) {
-                    if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
-                        for (const auto& ack : acks->Acks) {
-                            UNIT_ASSERT_VALUES_EQUAL(ack.SeqNo, ackCount < 2 ? 1 : 2);
-                            UNIT_ASSERT_VALUES_EQUAL(ack.State, ackCount == 1
-                                ? TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN
-                                : TWriteSessionEvent::TWriteAck::EES_WRITTEN);
-                            ++ackCount;
-                        }
-                    } else if (auto* closed = std::get_if<TSessionClosedEvent>(&event)) {
-                        UNIT_FAIL("write session closed unexpectedly: " << closed->GetIssues().ToString());
-                    }
-                }
+            UNIT_ASSERT_C(acked.GetFuture().Wait(TDuration::Seconds(30)), "timeout waiting for write acknowledgements");
+            const auto& acks = acked.GetFuture().GetValue();
+            const ui64 expectedSeqNo[] = {2, 2, 1, 3};
+            UNIT_ASSERT_VALUES_EQUAL(acks.size(), 4);
+            for (size_t i = 0; i < acks.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(acks[i].SeqNo, expectedSeqNo[i]);
+                UNIT_ASSERT_VALUES_EQUAL(acks[i].State, (i == 0 || i == 3)
+                    ? TWriteSessionEvent::TWriteAck::EES_WRITTEN
+                    : TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN);
             }
             UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
         }

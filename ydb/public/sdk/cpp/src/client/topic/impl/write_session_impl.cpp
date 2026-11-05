@@ -1389,7 +1389,7 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                 ContinuationTokenIssued = true;
             }
             // Kickstart send after session reestablishment
-            ScheduleSendImpl();
+            SendImpl();
             break;
         }
         case TServerMessage::kWriteResponse: {
@@ -1760,6 +1760,11 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     }
 
     const bool skipCompression = Settings.Codec_ == ECodec::RAW || CurrentBatch.HasCodec();
+    // Preserve ordering before adding a duplicate or decreasing manual sequence number.
+    if (SendImplScheduled && !OriginalMessagesToSend.empty()
+        && CurrentBatch.Messages.front().Id <= OriginalMessagesToSend.back().Id) {
+        SendImpl();
+    }
     if (!skipCompression && Settings.CompressionExecutor_->IsAsync()) {
         MessagesAcquired += static_cast<uint64_t>(CurrentBatch.Acquire());
     }
@@ -2078,9 +2083,7 @@ void TWriteSessionImpl::SendImpl() {
         while (IsReadyToSendNextImpl()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
-            if (writeRequest->messages_size() > 0
-                && (prevCodec != block.CodecID
-                    || static_cast<i64>(GetSeqNoImpl(block.Offset)) <= writeRequest->messages(writeRequest->messages_size() - 1).seq_no())) {
+            if (writeRequest->messages_size() > 0 && prevCodec != block.CodecID) {
                 break;
             }
             if (TxIsChanged(writeRequest)) {

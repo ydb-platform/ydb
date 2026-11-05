@@ -1,4 +1,4 @@
-* Topic and PersQueue writers now send RAW and pre-encoded messages on the configured compression executor, keeping request construction off the caller thread when the executor is asynchronous.
+* Topic and PersQueue writers now schedule RAW and pre-encoded messages on the configured compression executor, reducing request construction on the caller thread.
 
 * Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
 

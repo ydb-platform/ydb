@@ -62,9 +62,7 @@ PEERDIR(
     ydb/services/udf_store/wasm
 )
 
-GENERATE_ENUM_SERIALIZATION(
-    kqp_executer.h
-)
+GENERATE_ENUM_SERIALIZATION(kqp_executer.h)
 
 YQL_LAST_ABI_VERSION()
 

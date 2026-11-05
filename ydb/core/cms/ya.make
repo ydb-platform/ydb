@@ -240,6 +240,7 @@ PEERDIR(
 
 GENERATE_ENUM_SERIALIZATION(services.h)
 GENERATE_ENUM_SERIALIZATION(node_checkers.h)
+GENERATE_ENUM_SERIALIZATION(cms_maintenance_api_ut_enums.h)
 
 
 END()

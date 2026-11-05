@@ -3,8 +3,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/size_literals.h>
+#include <util/generic/vector.h>
 
 #include <array>
+#include <thread>
 
 namespace NKikimr::NMiniKQL {
 
@@ -42,25 +44,25 @@ Y_UNIT_TEST(TestDeallocated) {
 
     void* p1 = TWithDefaultMiniKQLAlloc::AllocWithSize(10);
     void* p2 = TWithDefaultMiniKQLAlloc::AllocWithSize(20);
+    const auto freePages = alloc.Ref().GetFreePageCount();
     UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), TAlignedPagePool::POOL_PAGE_SIZE);
     UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetDeallocatedInPages(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 0);
     TWithDefaultMiniKQLAlloc::FreeWithSize(p1, 10);
     UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), TAlignedPagePool::POOL_PAGE_SIZE);
     UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetDeallocatedInPages(), 10 + EXTRA_ALLOCATION_SPACE);
-    UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), freePages);
     TWithDefaultMiniKQLAlloc::FreeWithSize(p2, 20);
     UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), 0);
     UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetDeallocatedInPages(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), freePages + 1);
     p1 = TWithDefaultMiniKQLAlloc::AllocWithSize(10);
     UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), TAlignedPagePool::POOL_PAGE_SIZE);
     UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetDeallocatedInPages(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), freePages);
     TWithDefaultMiniKQLAlloc::FreeWithSize(p1, 10);
     UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), 0);
     UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetDeallocatedInPages(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), freePages + 1);
 }
 
 Y_UNIT_TEST(LargeAllocationsRespectMemoryLimit) {
@@ -173,6 +175,152 @@ Y_UNIT_TEST(ArrowAllocateZeroSize) {
     delete[] ptrs;
 }
 #endif
+
+Y_UNIT_TEST(ArrowFreeWithWrongSizeIsDetected) {
+    TScopedAlloc alloc(__LOCATION__);
+
+    constexpr ui64 smallSize = 1_KB;
+    void* onArena = MKQLArrowAllocate(smallSize);
+
+    UNIT_ASSERT_EXCEPTION(MKQLArrowFree(onArena, 32_KB), yexception);
+
+    MKQLArrowFree(onArena, smallSize);
+}
+
+Y_UNIT_TEST(ArrowArenaPageOutlivesAllocator) {
+    if (TAllocState::IsDefaultArrowAllocatorUsed()) {
+        return;
+    }
+
+    constexpr ui64 smallSize = 1_KB;
+    constexpr ui64 largeSize = 32_KB; // > ArrowSizeForArena
+
+    void* escaped = nullptr;
+    {
+        TScopedAlloc alloc(__LOCATION__);
+        alloc.DisableStrictAllocationCheck(); // the page held by the escaped buffer is reported as lost memory
+        escaped = MKQLArrowAllocate(smallSize);
+    }
+
+    const void* escapedPage = TAllocState::GetPageStart(escaped);
+
+    {
+        TScopedAlloc alloc(__LOCATION__);
+        void* large = MKQLArrowAllocate(largeSize);
+        UNIT_ASSERT_VALUES_UNEQUAL(escapedPage, TAllocState::GetPageStart(large));
+
+        void* small = MKQLArrowAllocate(smallSize);
+        UNIT_ASSERT_VALUES_UNEQUAL(escapedPage, TAllocState::GetPageStart(small));
+
+        MKQLArrowFree(large, largeSize);
+        MKQLArrowFree(small, smallSize);
+    }
+
+    MKQLArrowFree(escaped, smallSize);
+}
+
+Y_UNIT_TEST(ArrowArenaPageIsReleasedOnce) {
+    if (TAllocState::IsDefaultArrowAllocatorUsed()) {
+        return;
+    }
+
+    constexpr ui64 size = 1_KB;
+    constexpr ui64 pageSize = TAllocState::POOL_PAGE_SIZE;
+
+    void* escaped = nullptr;
+    ui64 arenaPool = 0;
+    i64 allPools = 0;
+    {
+        TScopedAlloc alloc(__LOCATION__);
+        alloc.DisableStrictAllocationCheck(); // the page held by the escaped buffer is reported as lost memory
+        escaped = MKQLArrowAllocate(size);
+        arenaPool = TAlignedPagePool::GetGlobalPagePoolSize();
+        allPools = GetTotalFreeListBytes();
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(TAlignedPagePool::GetGlobalPagePoolSize(), arenaPool);
+    UNIT_ASSERT_VALUES_EQUAL(GetTotalFreeListBytes(), allPools);
+
+    MKQLArrowFree(escaped, size);
+
+    UNIT_ASSERT_VALUES_EQUAL(TAlignedPagePool::GetGlobalPagePoolSize(), arenaPool + pageSize);
+    UNIT_ASSERT_VALUES_EQUAL(GetTotalFreeListBytes(), allPools + static_cast<i64>(pageSize));
+}
+
+Y_UNIT_TEST(ArrowArenaBuffersAreFreedByForeignThread) {
+    if (TAllocState::IsDefaultArrowAllocatorUsed()) {
+        return;
+    }
+
+    constexpr ui64 size = 64;
+    constexpr size_t count = 100;
+
+    TScopedAlloc alloc(__LOCATION__);
+
+    std::array<void*, count> escaped;
+    for (auto& ptr : escaped) {
+        ptr = MKQLArrowAllocate(size);
+    }
+    const void* page = TAllocState::GetPageStart(escaped.front());
+    MKQLArrowUntrack(escaped.front());
+
+    // The owner keeps allocating on the same page while its buffers are being freed.
+    std::thread foreign([&escaped] {
+        for (void* ptr : escaped) {
+            MKQLArrowFree(ptr, size);
+        }
+    });
+
+    std::array<void*, count> own;
+    for (auto& ptr : own) {
+        ptr = MKQLArrowAllocate(size);
+    }
+    foreign.join();
+
+    for (void* ptr : escaped) {
+        UNIT_ASSERT_VALUES_EQUAL(page, TAllocState::GetPageStart(ptr));
+    }
+    for (void* ptr : own) {
+        UNIT_ASSERT_VALUES_EQUAL(page, TAllocState::GetPageStart(ptr));
+        MKQLArrowFree(ptr, size);
+    }
+}
+
+Y_UNIT_TEST(ArrowArenaPageIsReleasedByForeignThread) {
+    if (TAllocState::IsDefaultArrowAllocatorUsed()) {
+        return;
+    }
+
+    constexpr ui64 size = 1_KB;
+
+    TScopedAlloc alloc(__LOCATION__);
+
+    void* escaped = MKQLArrowAllocate(size);
+    const void* page = TAllocState::GetPageStart(escaped);
+    MKQLArrowUntrack(escaped);
+
+    // Exhaust the page, so the escaped buffer holds the last reference to it.
+    TVector<void*> own;
+    void* next = MKQLArrowAllocate(size);
+    while (TAllocState::GetPageStart(next) == page) {
+        own.push_back(next);
+        next = MKQLArrowAllocate(size);
+    }
+    for (void* ptr : own) {
+        MKQLArrowFree(ptr, size);
+    }
+
+    const auto arenaPool = TAlignedPagePool::GetGlobalPagePoolSize();
+
+    std::thread foreign([escaped] {
+        MKQLArrowFree(escaped, size);
+    });
+    foreign.join();
+
+    UNIT_ASSERT_VALUES_EQUAL(TAlignedPagePool::GetGlobalPagePoolSize(), arenaPool + TAllocState::POOL_PAGE_SIZE);
+
+    MKQLArrowFree(next, size);
+}
 
 Y_UNIT_TEST(ArrowAllocateWithDefaultArrowAllocator) {
     TScopedAlloc alloc(__LOCATION__);

@@ -37,6 +37,8 @@ public:
         return "SIMPLE";
     }
 
+    virtual bool ArePortionsLoaded(const IColumnEngine& engine, const TPKRangesFilter& ranges) const override;
+
     virtual std::optional<TGranuleShardingInfo> GetShardingInfo(
         const std::shared_ptr<const TVersionedIndex>& /*indexVersionsPointer*/, const NOlap::TSnapshot& /*ss*/) const override {
         return std::nullopt;

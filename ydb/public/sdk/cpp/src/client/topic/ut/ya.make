@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
-REQUIREMENTS(ram:32 cpu:2)
+REQUIREMENTS(ram:32 cpu:1)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
@@ -46,6 +46,7 @@ RESOURCE(
 END()
 
 RECURSE_FOR_TESTS(
+    replication
     with_direct_read_ut
     slow
 )

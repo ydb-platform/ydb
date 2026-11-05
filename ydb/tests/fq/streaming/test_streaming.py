@@ -2434,14 +2434,35 @@ FROM `{table_name}`"""
                     SCHEMA=(
                         str1 String,
                         str2 String,
+                        d Date, -- YQ-5737
+                        ts Timestamp, -- YQ-5738
+                        i Interval,
                         ev String
                     )
                 )
                 WHERE COALESCE(str1, str2) IS DISTINCT FROM "DONE"
                   AND CAST(str1 AS Utf8) NOT REGEXP "foobar" -- YQ-5727
+                  AND CAST(str1 AS Utf8) NOT LIKE "%foo%bar%" -- YQ-4054
+                  AND str1 NOT LIKE "%foo%bar%" -- YQ-4054
+                  AND str1 NOT ILIKE "%FOO%BAR%" -- YQ-4054
+                  AND str1 NOT ILIKE "%Foo%Bar!%" ESCAPE "!" -- YQ-4054
+                  AND (CAST(CAST(d AS String) AS Date) = Date("1984-01-01"))
+                  AND (i < Interval("PT3600S"))
+                  AND (i > Interval("-PT1S"))
+                  AND (ts = Timestamp("1991-08-19T05:00:00.123456Z"))
+                  AND (str1??"x" <= MAX_OF(str1??"x", str2??"x"))
+                  AND (str2??"y" >= MIN_OF(str2??"y", str1??"y"))
+                  AND (str1??"y" IN ("xop","xep","y"))
+                  AND (str1??"tep" LIKE "%p")
+                  AND (str1??"xar" LIKE "x%")
+                  AND (str1??"pat" LIKE "%p%")
+                  AND (str1??"xyp" LIKE "x%p")
+                  AND (str1??"xtp" LIKE "%x%p")
+                  AND (CAST(str1 AS Datetime) >= CAST(str2 AS Datetime) OR ev != "foobar") -- YQ-5747
                   AND (Unwrap(COALESCE(str1, Just(ev), str2)) IS DISTINCT FROM "DONE"
                     OR ToBytes(COALESCE(CAST(str1 AS Utf8), CAST(ev AS Utf8))) IS NOT DISTINCT FROM "DONE")
                 ;
+                $in = SELECT * WITHOUT d, ts, i FROM $in;
                 INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow()))) FROM $in;
             END DO;'''
 
@@ -2454,11 +2475,11 @@ FROM `{table_name}`"""
         self.wait_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count", expected_value=1)
 
         data = [
-            '{"str1":null,"str2":"DONE","ev":"skipped"}',
-            '{"str1":"xop","str2":"DONE","ev":"xep"}',
-            '{"str1":"foobar","str2":"DONE","ev":"xin"}',
-            '{"str1":null,"str2":null,"ev":"xap"}',
-            '{"str1":"xep","str2":"xip","ev":"xup"}',
+            '{"str1":null,"str2":"DONE","ev":"skipped","d":"1990-01-01","ts":"2012-01-01T12:13:14Z","i":"PT10S"}',
+            '{"str1":"xop","str2":"DONE","ev":"xep","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z","i":"PT360S"}',
+            '{"str1":"foobar","str2":"DONE","ev":"xin","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z","i":"PT102S"}',
+            '{"str1":null,"str2":null,"ev":"xap","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z","i":"PT104S"}',
+            '{"str1":"xep","str2":"xip","ev":"xup","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z","i":"PT1055S"}',
         ]
         expected_data = [
             '{"ev":"xep","str1":"xop","str2":"DONE"}',
@@ -2493,6 +2514,25 @@ FROM `{table_name}`"""
                     assert "`str1`" in filter
                     assert "`str2`" in filter
                     assert " REGEXP " in filter
+                    assert " LIKE " in filter
+                    assert " ILIKE " in filter
+                    assert " ESCAPE " in filter
+                    assert " IN (" in filter
+                    assert ">= MIN_OF(" in filter
+                    assert "<= MAX_OF(" in filter
+                    assert "1984-01-01" in filter
+                    assert "1991-08-19" in filter
+                    assert '"PT3600S"' in filter
+                    assert '"-PT1S"' in filter
+                    # validate simplified LIKE
+                    assert "EndsWith(" in filter
+                    assert "StartsWith(" in filter
+                    assert "Contains(" in filter
+                    assert '"tep"' in filter
+                    assert '"xar"' in filter
+                    assert '"pat"' in filter
+                    assert '"xyp"' in filter
+                    assert '"xtp"' in filter
                     sources += 1
         assert sources > 0
 
@@ -2993,7 +3033,7 @@ FROM `{table_name}`"""
         argvalues=[
             ("join", "row", {}),
             ("join", "column", {}),
-            ("native_join", "row", {"kqp_constraints_transformer": False}),
+            ("native_join", "row", {"enable_kqp_constraints_transformer": False}),
             ("output", "row", {}),
             ("output", "column", {}),
         ],
@@ -3426,3 +3466,71 @@ FROM `{table_name}`"""
                 # The fixture is shared: stopping processes does not immediately remove them
                 # from KQP placement snapshots. Wait before the next case creates a query.
                 kikimr.wait_kqp_node_count(original_node_count)
+
+    @pytest.mark.parametrize("kikimr", [{"max_message_size": 136314880}], indirect=True)
+    @pytest.mark.parametrize("local_topics", [True, False], ids=["local", "external"])
+    def test_read_large_topic_message(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+    ) -> None:
+        max_message_size = 136314880
+        partition_write_speed = 50 * 1024 * 1024
+        timeout = plain_or_under_sanitizer(60, 300)
+        source_name = entity_name("large_topic_message")
+        self.init_topics(source_name, endpoint=kikimr.endpoint)
+        input_name = f"`{self.input_topic}`"
+        output_name = f"`{self.output_topic}`"
+        if not local_topics:
+            # Use the same cluster through gRPC to exercise the C++ SDK driver limits.
+            self.create_source(kikimr, source_name, endpoint=kikimr.endpoint)
+            input_name = f"`{source_name}`.{input_name}"
+            output_name = f"`{source_name}`.{output_name}"
+
+        driver_config = ydb.DriverConfig(
+            endpoint=kikimr.endpoint.endpoint,
+            database=kikimr.get_database_name(),
+            auth_token="root@builtin",
+            channel_options=[
+                ("grpc.max_receive_message_length", max_message_size),
+                ("grpc.max_send_message_length", max_message_size),
+            ],
+        )
+        with ydb.Driver(driver_config) as driver:
+            driver.wait(timeout=10, fail_fast=True)
+            topic_client = driver.topic_client
+            for topic in (self.input_topic, self.output_topic):
+                topic_client.alter_topic(
+                    topic,
+                    set_partition_write_speed_bytes_per_second=partition_write_speed,
+                    set_partition_write_burst_bytes=partition_write_speed,
+                )
+
+            future = kikimr.ydb_client.query_async(
+                f"""
+                    INSERT INTO {output_name}
+                    SELECT Data FROM {input_name} WITH (
+                        STREAMING = "TRUE",
+                        FORMAT = "raw",
+                        SCHEMA = (Data String NOT NULL)
+                    )
+                    LIMIT 1;
+                """,
+                timeout=timeout,
+            )
+            data = b"x" * 130000000
+            writer = topic_client.writer(self.input_topic, codec=ydb.TopicCodec.RAW)
+            try:
+                writer.write_with_ack(data, timeout=timeout)
+            finally:
+                writer.close(flush=False, timeout=timeout)
+
+            with topic_client.reader(self.output_topic, consumer=self.consumer_name) as reader:
+                message = reader.receive_message(timeout=timeout)
+                assert len(message.data) == len(data)
+                # Keep assertion diagnostics from printing the entire 130 MB payload.
+                contents_match = message.data == data
+                assert contents_match, "Large topic message contents differ"
+                reader.commit_with_ack(message, timeout=timeout)
+            future.result(timeout=timeout)

@@ -153,7 +153,7 @@ void CheckWmAdmissionResult(ui32 issueCode, bool cancel, bool delayed = false) {
     pool.ConcurrentQueryLimit = 1;
     pool.QueueSize = 10;
     auto updater = std::make_shared<TWmSessionUpdater>();
-    updater->SetPoolContext("pool", "USER");
+    updater->SetPoolContext({"pool", "USER"});
     updater->SetStateObserver(observer, 101);
     const auto handler = runtime.Register(WM::CreatePoolHandlerActor(
         "/Root", "pool", pool, MakeIntrusive<NMonitoring::TDynamicCounters>()));

@@ -43,9 +43,12 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
+#include <ydb/core/tx/columnshard/tracing/startup_probes.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
@@ -59,7 +62,10 @@
 #include <ydb/library/actors/struct_log/log_stack.h>
 #include <ydb/services/metadata/service.h>
 
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <util/generic/object_counter.h>
+
+#include <mutex>
 
 #define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
 
@@ -82,6 +88,17 @@ NTabletPipe::TClientConfig GetPipeClientConfig() {
     return config;
 }
 
+void RegisterProbes() {
+    static std::once_flag registered;
+    std::call_once(registered, [] {
+        using namespace NOlap::NReader;
+        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_SCAN));
+        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_DATA_SOURCE));
+        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS));
+        NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_STARTUP));
+    });
+}
+
 }   // namespace
 
 TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
@@ -90,6 +107,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , TabletCountersHolder(new TProtobufTabletCounters<ESimpleCounters_descriptor, ECumulativeCounters_descriptor,
           EPercentileCounters_descriptor, ETxTypes_descriptor>())
     , Counters(*TabletCountersHolder)
+    , StartupTimeline(TabletID(), Counters.GetCSCounters().Initialization)
     , WriteTasksQueue(std::make_unique<TWriteTasksQueue>(this))
     , ProgressTxController(std::make_unique<TTxController>(*this))
     , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
@@ -103,12 +121,14 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
+    , ScanGate(Counters.GetTabletCounters())
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
     , SysLocks(this)
     , SpaceWatcher(std::unique_ptr<TSpaceWatcher>(new TSpaceWatcher(this), std::default_delete<TSpaceWatcher>()))
 {
     AFL_VERIFY(TabletActivityImpl->Inc() == 1);
+    RegisterProbes();
 }
 
 TColumnShard::~TColumnShard() = default;
@@ -172,18 +192,8 @@ void TColumnShard::SendWaitPlanStep(ui64 step) {
 }
 
 void TColumnShard::RescheduleWaitingReads() {
-    ui64 minWaitingStep = Max<ui64>();
-    NOlap::TSnapshot maxReadVersion = GetMaxReadVersion();
-    for (auto it = WaitingScans.begin(); it != WaitingScans.end();) {
-        if (maxReadVersion < it->first) {
-            minWaitingStep = Min(minWaitingStep, it->first.GetPlanStep());
-            break;
-        }
-        TActivationContext::Send(it->second.Release());
-        it = WaitingScans.erase(it);
-    }
-    if (minWaitingStep != Max<ui64>()) {
-        WaitPlanStep(minWaitingStep);
+    if (const std::optional<ui64> step = ScanGate.ReleaseReadable(GetMaxReadVersion())) {
+        WaitPlanStep(*step);
     }
 }
 
@@ -2001,6 +2011,8 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
         HFunc(NActors::TEvents::TEvWakeup, Handle);
         HFunc(TEvPrivate::TEvPingSnapshotsUsage, Handle);
+        hFunc(TEvPrivate::TEvPrefetchPortionsMetadata, Handle);
+        hFunc(TEvPrivate::TEvSetLoadedKeyRanges, Handle);
         hFunc(TEvPrivate::TEvReportBaseStatistics, Handle);
         hFunc(TEvPrivate::TEvReportExecutorStatistics, Handle);
         HFunc(NEvents::TDataEvents::TEvWrite, Handle);

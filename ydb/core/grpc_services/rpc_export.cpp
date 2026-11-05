@@ -14,6 +14,7 @@
 #include <ydb/core/ydb_convert/compression.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/naming_conventions/scheme_object_names.h>
 
 #include <util/folder/path.h>
 #include <util/generic/ptr.h>
@@ -436,12 +437,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                     const NSchemeCache::TSchemeCacheNavigate::EKind kind = child.Kind;
                     if (isRoot && kind == NSchemeCache::TSchemeCacheNavigate::KindPath) {
                         // Skip children that we don't want to export
-                        if (child.Name.StartsWith("~")
-                            || child.Name.StartsWith(".sys")
-                            || child.Name.StartsWith(".tmp")
-                            || child.Name.StartsWith(".metadata")
-                            || child.Name.StartsWith("export-"))
-                        {
+                        if (NNaming::IsInternalName(child.Name)) {
                             continue;
                         }
                     }

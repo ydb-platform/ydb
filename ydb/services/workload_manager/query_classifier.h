@@ -1,11 +1,9 @@
 #pragma once
 
-#include <ydb/core/kqp/common/simple/helpers.h>
-#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
-#include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/services/workload_manager/common/helpers.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/services/workload_manager/common/resolver.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/snapshot.h>
 
@@ -15,6 +13,7 @@ struct TAppData;
 
 namespace NKikimr::NKqp {
 struct TUserRequestContext;
+class TPreparedQueryHolder;
 }   // namespace NKikimr::NKqp
 
 namespace NKikimr::NWorkloadManager {

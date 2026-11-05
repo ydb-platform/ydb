@@ -55,6 +55,8 @@ public:
     enum EAction {
         READ = 1,
         WRITE = 2,
+        // Shards pessimistically locked via EvLock (TEvLockRows).
+        PESSIMISTIC_LOCK = 4,
     };
 
     using TActionFlags = ui8;

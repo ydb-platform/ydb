@@ -23,8 +23,12 @@ CONNECT = "connect"
 SYNC_STEP = "sync_step"
 BSC_DONE = "bsc_done"
 SYNCHRONIZED = "synchronized"
+CONVERT = "convert"
+ADD = "add"
+REMOVE = "remove"
 
-COMMITTING = (PROMOTE, SUSPEND, CONNECT, SYNCHRONIZED)
+COMMITTING = (PROMOTE, SUSPEND, CONNECT, SYNCHRONIZED, CONVERT, ADD, REMOVE)
+KINDS = COMMITTING + (SYNC_STEP, BSC_DONE)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -47,6 +51,13 @@ def due_followups(
     connected: typing.Callable[[int], bool],
 ) -> typing.List[Due]:
     out: typing.List[Due] = []
+    if not state.bridged:
+        return out
+    if state.conversion_in_progress:
+        out.append(Due(CONVERT, state.primary))
+    if state.pending_pile_operation:
+        op = state.pending_pile_operation
+        out.append(Due(op["kind"].lower(), op["pile_index"]))
     if state.promoted != state.primary and state.stored(state.promoted) == Stored.SYNCHRONIZED:
         out.append(Due(PROMOTE, state.promoted))
     for i in range(state.num_piles()):
@@ -75,6 +86,9 @@ def base_delay(kind: str, timings) -> float:
         SYNC_STEP: timings.sync_step_delay,
         BSC_DONE: timings.sync_step_delay,
         SYNCHRONIZED: 0.0,
+        CONVERT: timings.lifecycle_delay,
+        ADD: timings.lifecycle_delay,
+        REMOVE: timings.lifecycle_delay,
     }[kind]
 
 
@@ -85,6 +99,22 @@ def delay_for(due: Due, self_index: int, timings) -> float:
 
 def build_commit(state: ClusterState, due: Due) -> typing.Optional[ClusterState]:
     """The snapshot a committing follow-up proposes, or None if its condition no longer holds."""
+    if due.kind == CONVERT:
+        if not state.conversion_in_progress:
+            return None
+        new = model.derive_metadata(state)
+        new.conversion_in_progress = False
+        return new
+    if due.kind in (ADD, REMOVE):
+        op = state.pending_pile_operation
+        if not op or op["pile_index"] != due.pile or op["kind"].lower() != due.kind:
+            return None
+        new = (model.derive(state, updates={due.pile: Stored.INACTIVE}) if due.kind == REMOVE
+               else model.derive_metadata(state))
+        new.pending_pile_operation = None
+        if due.kind == REMOVE:
+            new.sync.pop(due.pile, None)
+        return new
     if due.kind == PROMOTE:
         if state.promoted != due.pile or state.promoted == state.primary:
             return None

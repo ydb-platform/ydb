@@ -9,7 +9,12 @@
 #include <yql/essentials/core/yql_statistics.h>
 #include <yql/essentials/utils/log/log.h>
 
+#include <functional>
+#include <optional>
+
 namespace NKikimr::NKqp {
+
+class TCompileTraceDependencies;
 
 using namespace NYql;
 using namespace NYql::NNodes;
@@ -26,11 +31,11 @@ struct TColumnStatisticsSharedState {
 
 void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColumnStatisticsResponse>>& futures, TKikimrTablesData& tables,
                     const TString& cluster, const TString& database, TTypeAnnotationContext& typesCtx, const NKikimr::NStat::EStatType type,
-                    const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const NYql::TColumnStatistics&)> alreadyHasStatistics);
+                    const THashMap<TString, THashSet<TString>>& columnsByTableName, std::function<bool(const NYql::TColumnStatistics&)> alreadyHasStatistics, TCompileTraceDependencies* trace = nullptr);
 
 void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColumnStatisticsResponse>>& futures, TKikimrTablesData& tables,
                     const TString& cluster, const TString& database, TTypeAnnotationContext& typesCtx, const NKikimr::NStat::EStatType type,
                     const THashMap<TString, THashMap<TString, TVector<TString>>>& columnTuplesByTableName,
-                    std::function<bool(const NYql::TMultiColumnStatistics&)> alreadyHasStatistics);
+                    std::function<bool(const NYql::TMultiColumnStatistics&)> alreadyHasStatistics, TCompileTraceDependencies* trace = nullptr);
 
 } // namespace NKikimr::NKqp

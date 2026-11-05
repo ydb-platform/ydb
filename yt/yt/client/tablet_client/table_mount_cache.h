@@ -160,6 +160,8 @@ struct TTableMountInfo final
     void ValidateReplicated() const;
     void ValidateReplicationLog() const;
 
+    bool IsUsingHunkStorage() const;
+
     TTableMountInfoPtr Clone() const;
 };
 

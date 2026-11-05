@@ -1336,6 +1336,8 @@ TFuture<TPullRowsResult> TClientBase::PullRows(
             InsertOrCrash(result.EndReplicationRowIndexes, std::pair(tabletId, rowIndex));
         }
 
+        FromProto(&result.SubrequestErrors, rsp->subrequest_errors());
+
         result.Rowset = DeserializeRowset(
             rsp->rowset_descriptor(),
             MergeRefsToRef<TRpcProxyClientBufferTag>(rsp->Attachments()),

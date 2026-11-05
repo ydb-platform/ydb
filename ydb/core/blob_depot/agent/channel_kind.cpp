@@ -68,10 +68,10 @@ namespace NKikimr::NBlobDepot {
         QueriesWaitingForId.PushBack(query);
     }
 
-    void TBlobDepotAgent::TChannelKind::ProcessQueriesWaitingForId(bool success) {
+    void TBlobDepotAgent::TChannelKind::ProcessQueriesWaitingForId(bool success, const TString& errorReason) {
         TIntrusiveList<TQuery, TPendingId> temp;
         temp.Swap(QueriesWaitingForId);
-        temp.ForEach([&](TQuery *query) { query->OnIdAllocated(success); });
+        temp.ForEach([&](TQuery *query) { query->OnIdAllocated(success, errorReason); });
     }
 
 } // NKikimr::NBlobDepot

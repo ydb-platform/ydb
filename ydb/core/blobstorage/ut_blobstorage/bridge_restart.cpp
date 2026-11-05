@@ -1,7 +1,10 @@
 #include "bridge_common.h"
+#include "bridge_pile_ops.h"
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
+
+#include <util/system/type_name.h>
 
 using NBridgeTest::GetBridgedLocation;
 using NBridgeTest::SwitchBridgePileState;
@@ -82,5 +85,50 @@ Y_UNIT_TEST_SUITE(BridgeRestart) {
             UNIT_ASSERT_C(runtime->GetClock() < deadline, "Timed out waiting for registration snapshots");
             env.Sim(TDuration::MilliSeconds(1));
         }
+    }
+
+    // BSC doesn't learn that the pile has been out and got back until it restarts: having loaded, it has to reset parts
+    // of its groups in the pile and sync them, otherwise nothing does it and the pile stays NOT_SYNCHRONIZED_2 forever
+    Y_UNIT_TEST(UnsyncedPileCheckedAfterLoad) {
+        using namespace NBridgeTest;
+
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        TDataChecker checker(env);
+        checker.Write(groupId);
+
+        bool dropBscConfigs = false;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (dropBscConfigs && ev->GetTypeRewrite() == TEvNodeWardenStorageConfig::EventType) {
+                if (IActor *actor = env.Runtime->GetActor(ev->GetRecipientRewrite()); actor &&
+                        TypeName(*actor).Contains("TBlobStorageController")) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        dropBscConfigs = true;
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(10));
+        checker.Write(groupId); // reaches pile 0 only
+        SwitchPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2);
+        // the part of the group in pile 1 is still SYNCED by its previous sync
+        UNIT_ASSERT_EQUAL(GetGroupInfo(env, groupId).GetBridgeGroupState().GetPile(1).GetStage(),
+            NKikimrBridge::TGroupState::SYNCED);
+
+        dropBscConfigs = false;
+        env.RestartNode(1); // BSC resides on node 1
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        checker.CheckAll();
+        CheckPileData(env, checker, 1, 9);
     }
 }

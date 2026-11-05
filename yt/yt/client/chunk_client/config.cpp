@@ -363,7 +363,8 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .Default(false);
 
     registrar.Parameter("use_send_blocks", &TThis::UseSendBlocks)
-        .Default(true);
+        .Default(true)
+        .DontSerializeDefault();
 
     registrar.Parameter("preallocate_disk_space", &TThis::PreallocateDiskSpace)
         .Default(false);

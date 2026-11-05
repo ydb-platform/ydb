@@ -14,6 +14,7 @@ PEERDIR(
 
 SRCS(
     replication_ut.cpp
+    worker_lag_expiry_queue_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

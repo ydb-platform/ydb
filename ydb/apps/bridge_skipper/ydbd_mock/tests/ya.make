@@ -10,6 +10,7 @@ TEST_SRCS(
     test_followups.py
     test_health.py
     test_instance.py
+    test_lifecycle.py
     test_model.py
     test_proto_contract.py
     test_replica.py
@@ -18,6 +19,7 @@ TEST_SRCS(
     test_shim.py
     test_supervisor_unit.py
     test_topology.py
+    test_transport_controls.py
     test_validator.py
 )
 

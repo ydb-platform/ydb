@@ -13,6 +13,7 @@
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yt/yql/providers/yt/gateway/fmr/yql_yt_fmr.h>
 #include <yt/yql/providers/yt/fmr/fmr_tool_lib/yql_yt_fmr_initializer.h>
+#include <yt/yql/providers/yt/fmr/job_preparer/impl/yql_yt_job_preparer_impl.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/discovery/file/yql_yt_file_service_discovery.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
@@ -30,6 +31,7 @@
 #include <library/cpp/sighandler/async_signals_handler.h>
 
 #include <util/folder/path.h>
+#include <util/generic/map.h>
 #include <util/stream/file.h>
 
 namespace {
@@ -94,6 +96,10 @@ TYtRunTool::TYtRunTool(TString name)
                         }
                         if (progress.Counters->Total) {
                             counters << TStringBuf(" (") << (100ul * progress.Counters->Completed / progress.Counters->Total) << TStringBuf("%)");
+                        }
+                        const TMap<TString, i64> custom(progress.Counters->Custom.begin(), progress.Counters->Custom.end());
+                        for (const auto& [name, value] : custom) {
+                            counters << ", " << name << '=' << value;
                         }
                     }
                     TStringBuilder waitingRemoteId;

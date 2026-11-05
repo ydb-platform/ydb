@@ -39,7 +39,9 @@ def setup_s3():
 
 class Utils:
     def __init__(self):
-        self.config = KikimrConfigGenerator(use_in_memory_pdisks=False)
+        self.config = KikimrConfigGenerator(
+            use_in_memory_pdisks=False, disabled_feature_flags=["disable_old_secret_creation"]
+        )
         self.config.yaml_config["feature_flags"]["enable_external_data_sources"] = True
         self.config.yaml_config["feature_flags"]["enable_replace_if_exists_for_external_entities"] = True
 

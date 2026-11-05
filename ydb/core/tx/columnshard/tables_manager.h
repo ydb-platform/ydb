@@ -414,10 +414,9 @@ public:
         const std::shared_ptr<TPortionIndexStats>& portionsStats, const ui64 tabletId);
 
     TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tablePath,
+        const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt) const;
+    std::shared_ptr<NOlap::ITableMetadataAccessor> BuildTableMetadataAccessor(const TString& tablePath, const TInternalPathId internalPathId,
         const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt);
-    TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> BuildTableMetadataAccessor(const TString& tablePath,
-        const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId,
-        const std::optional<NOlap::TSnapshot>& readSnapshot = std::nullopt);
 
     class TSchemaAddress {
     private:
@@ -612,7 +611,8 @@ public:
 
     bool InitFromDB(NIceDb::TNiceDb& db);
     void Init(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId tabletSchemeShardLocalPathId, const TTabletStorageInfo* info);
-    bool InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info);
+    // adds the time of each step to durations, so that a caller can sum them over attempts
+    bool InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info, TTablesLoadDurations* durations = nullptr);
 
     const TTableInfo& GetTable(const TInternalPathId pathId, const bool withDeleted = false) const;
 

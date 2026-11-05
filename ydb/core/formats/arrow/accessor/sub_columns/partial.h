@@ -129,7 +129,8 @@ public:
         return Settings;
     }
 
-    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const;
+    TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(
+        const NSubColumns::TParsedJsonPath& parsedPath, const ui32 recordsCount) const;
 
     bool NeedFetch(const std::string_view colName) const {
         auto pathResult = NSubColumns::ResolveBestPath(Header.GetColumnStats(), Header.GetOtherStats(), NSubColumns::ToJsonPath(colName));

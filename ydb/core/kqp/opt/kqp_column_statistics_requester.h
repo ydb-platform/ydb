@@ -10,6 +10,8 @@
 
 namespace NKikimr::NKqp {
 
+class TCompileTrace;
+
 using namespace NYql;
 using namespace NYql::NNodes;
 
@@ -27,7 +29,8 @@ public:
         TKikimrTablesData& tables,
         const TString& cluster,
         const TString& database,
-        TActorSystem* actorSystem
+        TActorSystem* actorSystem,
+        std::function<TCompileTrace*()> getTrace = {}
     )
         : Config(config)
         , TypesCtx(typesCtx)
@@ -35,6 +38,7 @@ public:
         , Cluster(cluster)
         , Database(database)
         , ActorSystem(actorSystem)
+        , GetTrace(std::move(getTrace))
     {}
 
     // Main method of the transformer
@@ -83,6 +87,7 @@ private:
     const TString Cluster;
     const TString Database;
     TActorSystem* ActorSystem;
+    std::function<TCompileTrace*()> GetTrace;
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpColumnStatisticsRequester(
@@ -91,7 +96,8 @@ TAutoPtr<IGraphTransformer> CreateKqpColumnStatisticsRequester(
     TKikimrTablesData& tables,
     const TString& cluster,
     const TString& database,
-    TActorSystem* actorSystem
+    TActorSystem* actorSystem,
+    std::function<TCompileTrace*()> getTrace = {}
 );
 
 } // end of NKikimr::NKqp namespace

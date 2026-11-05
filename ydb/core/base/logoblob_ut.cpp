@@ -5,6 +5,7 @@
 
 #include <array>
 #include <bit>
+#include <utility>
 
 namespace NKikimr {
     namespace {
@@ -201,6 +202,39 @@ namespace NKikimr {
 
             res = TLogoBlobID::Parse(id, "[               0:1:2:0:0  :0:0]", explanation);
             UNIT_ASSERT(res);
+
+            const std::pair<TString, TString> cases[] = {
+                {"[0:0:0:       999:0:0:0]", "BlobId out of range: channel must be <= 255"},
+                {"[0:0:0:0:9999999999:0:0]", "BlobId out of range: cookie must be <= 16777215"},
+                {"[0:0:0:0:0:9999999999:0]", "BlobId out of range: blobsize must be <= 67108863"},
+                {"[0:0:0:0:0:0:        99]", "BlobId out of range: partid must be <= 15"},
+            };
+            for (const auto& [input, expectedError] : cases) {
+                explanation.clear();
+                UNIT_ASSERT_C(!TLogoBlobID::Parse(id, input, explanation), input);
+                UNIT_ASSERT_VALUES_EQUAL_C(explanation, expectedError, input);
+            }
+        }
+
+        Y_UNIT_TEST(LogoBlobParseSurprisingResults) {
+            // TODO: check if the next behavior is expected
+            const std::pair<TString, TLogoBlobID> cases[] = {
+                {"[18446744073709551615:1:2:3:4:5:6]", TLogoBlobID(Max<i64>(), 1, 2, 3, 5, 4, 6)},
+                {"[999999999999999999999:1:2:3:4:5:6]", TLogoBlobID(Max<i64>(), 1, 2, 3, 5, 4, 6)},
+                {"[-1:1:2:3:4:5:6]", TLogoBlobID(Max<ui64>(), 1, 2, 3, 5, 4, 6)},
+                {"[0:4294967296:2:3:4:5:6]", TLogoBlobID(0, 0, 2, 3, 5, 4, 6)},
+                {"[0:1:4294967296:3:4:5:6]", TLogoBlobID(0, 1, 0, 3, 5, 4, 6)},
+                {"[0:-1:2:3:4:5:6]", TLogoBlobID(0, Max<ui32>(), 2, 3, 5, 4, 6)},
+                {"[0:1:-1:3:4:5:6]", TLogoBlobID(0, 1, Max<ui32>(), 3, 5, 4, 6)},
+                {"[::::::]", TLogoBlobID(0, 0, 0, 0, 0, 0)},
+                {TString("[0:1:2:3:4:5:6]") + '\0' + "garbage", TLogoBlobID(0, 1, 2, 3, 5, 4, 6)},
+            };
+            for (const auto& [input, expectedId] : cases) {
+                TLogoBlobID id;
+                TString explanation;
+                UNIT_ASSERT_C(TLogoBlobID::Parse(id, input, explanation), input);
+                UNIT_ASSERT_VALUES_EQUAL_C(id, expectedId, input);
+            }
         }
 
         Y_UNIT_TEST(LogoBlobCompare) {

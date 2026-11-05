@@ -32,6 +32,10 @@
 
 namespace NKikimr {
 
+namespace NWorkloadManager::NPrivate {
+    class TWorkloadManagerGateway;
+}
+
 namespace NKikimrServicesInitializers {
 
 class IKikimrServicesInitializer : public IServiceInitializer {
@@ -412,9 +416,14 @@ public:
 
 class TWorkloadManagerServiceInitializer : public IKikimrServicesInitializer {
 public:
-    TWorkloadManagerServiceInitializer(const TKikimrRunConfig& runConfig);
+    TWorkloadManagerServiceInitializer(
+        const TKikimrRunConfig& runConfig,
+        std::shared_ptr<NWorkloadManager::NPrivate::TWorkloadManagerGateway> gateway);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+
+private:
+    std::shared_ptr<NWorkloadManager::NPrivate::TWorkloadManagerGateway> Gateway_;
 };
 
 class TKqpServiceInitializer : public IKikimrServicesInitializer {

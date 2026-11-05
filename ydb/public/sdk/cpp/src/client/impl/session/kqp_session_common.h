@@ -44,9 +44,11 @@ public:
     const std::string& GetEndpoint() const;
     const TEndpointKey& GetEndpointKey() const;
     bool MarkBroken();
+    // Returns true for the first close request; idle sessions keep S_IDLE until pool removal.
     bool MarkAsClosing();
     bool MarkActive();
     bool MarkIdle();
+    bool CanReturnToPool() const;
     bool IsOwnedBySessionPool() const;
     EState GetState() const;
     void SetNeedUpdateActiveCounter(bool flag);
@@ -71,7 +73,7 @@ public:
     std::optional<TDeadline> PropagatedDeadline_;
 
 protected:
-    TAdaptiveLock Lock_;
+    mutable TAdaptiveLock Lock_;
 
 private:
     const std::string SessionId_;
@@ -79,6 +81,7 @@ private:
     const bool IsOwnedBySessionPool_;
 
     EState State_;
+    bool CloseRequested_ = false;
     // This time is used during async close session handling which does not lock the session
     // so we need to be able to read this value atomicaly
     std::atomic<TInstant> TimeToTouch_;

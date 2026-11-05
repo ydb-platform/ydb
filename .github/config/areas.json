@@ -32,7 +32,8 @@
     "area/sdk": "https://github.com/orgs/ydb-platform/teams/appteam",
     "area/security": "https://github.com/orgs/ydb-platform/teams/security",
     "area/topics": "https://github.com/orgs/ydb-platform/teams/topics",
-    "area/ui": "https://github.com/orgs/ydb-platform/teams/ui-backend"
+    "area/ui": "https://github.com/orgs/ydb-platform/teams/ui-backend",
+    "area/infra": "https://github.com/orgs/ydb-platform/teams/infra"
   },
   "no_area": "area/-",
   "unknown": "area/-",

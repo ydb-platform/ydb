@@ -680,8 +680,8 @@ private:
 
         if (rule.HasBlock13()) {
             const auto& w = rule.GetBlock13().GetRule_window_clause1();
-            if (!TSqlWindow(*this).Build(w, windows)) {
-                return std::unexpected(ESQLError::Basic);
+            if (auto status = TSqlWindow(*this).Build(w, windows); !status) {
+                return std::unexpected(status.error());
             }
         }
 

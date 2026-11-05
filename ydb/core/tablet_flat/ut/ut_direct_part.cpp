@@ -41,6 +41,8 @@ struct TEvStartDirectWrite : public TEventLocal<TEvStartDirectWrite, EvStartDire
     TString CrossValue;
     // Rewrite every blob put result to a non-OK status, forcing the writer to fail.
     bool FailPuts = false;
+    // Report yellow stop on an otherwise successful put.
+    bool YellowStopPuts = false;
     // Respect CanFeed() backpressure: feed only while the writer accepts rows and
     // resume on blob put results, instead of feeding the whole batch at once.
     bool Throttle = false;
@@ -51,6 +53,8 @@ struct TEvDirectWriteDone : public TEventLocal<TEvDirectWriteDone, EvDirectWrite
     TString Error;
     // Set when the writer refused a row via CanFeed() at least once (throttle mode).
     bool SawBackpressure = false;
+    TVector<ui32> YellowMoveChannels;
+    TVector<ui32> YellowStopChannels;
 
     explicit TEvDirectWriteDone(bool ok, TString error = {})
         : Ok(ok)
@@ -234,6 +238,12 @@ private:
                     // Simulate a storage failure for a direct-write blob.
                     ev->Status = NKikimrProto::ERROR;
                 }
+                if (YellowStopPuts) {
+                    const_cast<TStorageStatusFlags&>(ev->StatusFlags) = TStorageStatusFlags(
+                        NKikimrBlobStorage::StatusIsValid
+                        | NKikimrBlobStorage::StatusDiskSpaceLightYellowMove
+                        | NKikimrBlobStorage::StatusDiskSpaceYellowStop);
+                }
                 Writer->Handle(*ev, ActorContext());
                 if (Feeding && !Writer->HasError()) {
                     FeedSome(ActorContext());
@@ -263,6 +273,7 @@ private:
         CrossKey = msg->CrossKey;
         CrossValue = msg->CrossValue;
         FailPuts = msg->FailPuts;
+        YellowStopPuts = msg->YellowStopPuts;
         Throttle = msg->Throttle;
 
         Writer = Executor()->BeginWritePart(WriteTableId);
@@ -333,10 +344,12 @@ private:
     }
 
     void ReportFailure(const TActorContext& ctx) {
-        TString error = Writer->Error();
+        auto done = MakeHolder<TEvDirectWriteDone>(false, Writer->Error());
+        done->YellowMoveChannels = Writer->GetYellowMoveChannels();
+        done->YellowStopChannels = Writer->GetYellowStopChannels();
         Executor()->ReleaseWritePart(Writer->Step());
         Writer.Reset();
-        ctx.Send(Owner, new TEvDirectWriteDone(false, error));
+        ctx.Send(Owner, done.Release());
     }
 
     void TryComplete(const TActorContext& ctx) {
@@ -400,6 +413,7 @@ private:
     i64 CrossKey = 0;
     TString CrossValue;
     bool FailPuts = false;
+    bool YellowStopPuts = false;
 
     // Throttled (backpressure-respecting) feeding state.
     bool Throttle = false;
@@ -584,25 +598,79 @@ Y_UNIT_TEST_SUITE(TDirectPartWrite) {
         UNIT_ASSERT_VALUES_EQUAL(env.ReadAll(101).size(), 0u);
     }
 
+    Y_UNIT_TEST(YellowStopFailsWrite) {
+        TDirectWriteEnv env;
+        env.FireWriteTablet();
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }) });
+
+        auto* start = new TEvStartDirectWrite(101, MakeRows(500), ModeCommit);
+        start->YellowStopPuts = true;
+        env.SendAsync(start);
+
+        auto done = env.GrabEdgeEvent<TEvDirectWriteDone>();
+        UNIT_ASSERT(!done->Get()->Ok);
+        UNIT_ASSERT_STRING_CONTAINS(done->Get()->Error, "yellow stop");
+        // The owner must retain both channel signals when aborting the writer.
+        UNIT_ASSERT_VALUES_EQUAL(done->Get()->YellowStopChannels.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(done->Get()->YellowMoveChannels.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(done->Get()->YellowMoveChannels.front(),
+            done->Get()->YellowStopChannels.front());
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadAll(101).size(), 0u);
+        env.RestartWriteTablet();
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadAll(101).size(), 0u);
+    }
+
     Y_UNIT_TEST(EmptyInputCommits) {
         TDirectWriteEnv env;
         env.FireWriteTablet();
 
         env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }) });
 
-        // Finalize with zero rows: the commit advances the epoch but attaches no part.
+        // Finalize with zero rows: no table part switch should be persisted.
         env.SendAsync(new TEvStartDirectWrite(101, { }, ModeCommit));
         auto done = env.GrabEdgeEvent<TEvDirectWriteDone>();
         UNIT_ASSERT_C(done->Get()->Ok, done->Get()->Error);
 
         UNIT_ASSERT_VALUES_EQUAL(env.ReadAll(101).size(), 0u);
 
+        env.RestartWriteTablet();
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadAll(101).size(), 0u);
+
         // The table is still usable afterwards.
         env.Upsert(101, { {1, "one"}, {2, "two"} });
+        env.RestartWriteTablet();
         auto read = env.ReadAll(101);
         UNIT_ASSERT_VALUES_EQUAL(read.size(), 2u);
         UNIT_ASSERT_VALUES_EQUAL(read[0].second, "one");
         UNIT_ASSERT_VALUES_EQUAL(read[1].second, "two");
+    }
+
+    Y_UNIT_TEST(EmptyInputPreservesExistingRows) {
+        TDirectWriteEnv env;
+        env.FireWriteTablet();
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101, 102 }) });
+        env.Upsert(101, { {1, "one"} });
+
+        // Ignoring an empty attachment must preserve the target's redo log and
+        // still commit other writes made by the same transaction.
+        auto* start = new TEvStartDirectWrite(101, { }, ModeCommit);
+        start->HasCross = true;
+        start->CrossTableId = 102;
+        start->CrossKey = 2;
+        start->CrossValue = "two";
+        env.SendAsync(start);
+        auto done = env.GrabEdgeEvent<TEvDirectWriteDone>();
+        UNIT_ASSERT_C(done->Get()->Ok, done->Get()->Error);
+
+        env.RestartWriteTablet();
+        auto original = env.ReadAll(101);
+        UNIT_ASSERT_VALUES_EQUAL(original.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(original[0].first, 1);
+        UNIT_ASSERT_VALUES_EQUAL(original[0].second, "one");
+        auto other = env.ReadAll(102);
+        UNIT_ASSERT_VALUES_EQUAL(other.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(other[0].first, 2);
+        UNIT_ASSERT_VALUES_EQUAL(other[0].second, "two");
     }
 
     Y_UNIT_TEST(BackpressureThrottlesFeeding) {

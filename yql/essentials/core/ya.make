@@ -12,6 +12,8 @@ SRCS(
     yql_default_valid_value.h
     yql_execution.cpp
     yql_execution.h
+    yql_expr_constraint_streaming.cpp
+    yql_expr_constraint_streaming.h
     yql_expr_constraint.cpp
     yql_expr_constraint.h
     yql_expr_csee.cpp
@@ -139,6 +141,7 @@ RECURSE(
     pg_ext
     pg_settings
     poly_args
+    spark_meta
     sql_types
     url_lister
     url_preprocessing

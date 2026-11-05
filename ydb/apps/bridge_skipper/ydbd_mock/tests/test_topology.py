@@ -56,7 +56,7 @@ class ValidationTest(unittest.TestCase):
         bad = [
             dict(pile_names=[]),
             dict(pile_names=["a", "a"]),
-            dict(pile_names=["a", ""]),
+            dict(pile_names=["a", None]),
             dict(nodes_per_pile=0),
             dict(nodes_per_pile=11),
             dict(label_format="{nope}"),
@@ -116,6 +116,15 @@ class ReviewHardeningTest(unittest.TestCase):
 
 
 class SerializationTest(unittest.TestCase):
+    def test_empty_name_is_a_pile_not_a_missing_value(self):
+        t = Topology(["", "named"], 3)
+        again = Topology.from_yaml(t.to_yaml())
+        self.assertEqual(again.to_dict(), t.to_dict())
+        self.assertEqual(again.pile("").index, 0)
+        doc = yaml.safe_load(config_yaml.render(again))
+        self.assertEqual(doc["config"]["bridge_config"]["piles"], [{"name": ""}, {"name": "named"}])
+        self.assertEqual(doc["config"]["hosts"][0]["location"]["bridge_pile_name"], "")
+
     def test_yaml_round_trip(self):
         t = Topology.with_free_ports(["x", "y"], 2, timings=Timings(promote_delay=0.1),
                                      policies=Policies(admin_token="t", auto_blame_dead_piles=False))

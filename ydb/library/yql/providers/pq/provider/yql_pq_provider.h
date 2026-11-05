@@ -43,6 +43,7 @@ public:
 
     bool IsRtmrMode() const;
     bool IsYtflowEngine() const;
+    bool AllowYdbSysColumns() const;
     bool ShouldAddTransparentPrefixToTransparentSystemColumns() const;
 
 public:

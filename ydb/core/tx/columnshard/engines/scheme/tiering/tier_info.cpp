@@ -75,14 +75,9 @@ TTiering::TTieringContext TTiering::GetTierToMove(
         if (skipEviction && tierInfo.GetExternalStorageId()) {
             continue;
         }
-        const TString tierName =
-<<<<<<< HEAD
-            tierInfo.GetExternalStorageId() ? tierInfo.GetExternalStorageId()->GetConfigPath() : NTiering::NCommon::DeleteTierName;
-        auto mpiOpt = tierInfo.ScalarToInstant(max);
-=======
-            tierInfo.GetExternalStorageId() ? tierInfo.GetExternalStorageId()->ToString() : NTiering::NCommon::DeleteTierName;
+
+        const TString tierName = tierInfo.GetExternalStorageId() ? tierInfo.GetExternalStorageId()->ToString() : NTiering::NCommon::DeleteTierName;
         auto mpiOpt = tierInfo.ScalarToInstant(max, columnType);
->>>>>>> ce7e7a2db1b (Support column table TTL for DyNumber and extended date types (#55609))
         Y_ABORT_UNLESS(mpiOpt);
         const TInstant maxTieringPortionInstant = *mpiOpt;
         const TDuration dWaitLocal = maxTieringPortionInstant - tierInfo.GetEvictInstant(now);

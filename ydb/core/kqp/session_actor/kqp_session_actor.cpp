@@ -1651,12 +1651,9 @@ public:
                     return false;
                 }
                 break;
-            case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
-            case NKikimrKqp::QUERY_TYPE_AST_SCAN:
-                break;
             default:
                 ReplyQueryError(Ydb::StatusIds::BAD_REQUEST,
-                    "x-ydb-mvcc-version is only supported for data and scan queries");
+                    "x-ydb-mvcc-version is only supported for Table Service data queries");
                 return false;
         }
         QueryState->MvccVersion = *version;
@@ -1668,10 +1665,8 @@ public:
             return true;
         }
 
-        const auto type = QueryState->GetType();
-        const bool isScan = type == NKikimrKqp::QUERY_TYPE_SQL_SCAN || type == NKikimrKqp::QUERY_TYPE_AST_SCAN;
         auto& txCtx = *QueryState->TxCtx;
-        if (!isScan && txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO) {
+        if (txCtx.EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO) {
             ReplyQueryError(Ydb::StatusIds::BAD_REQUEST,
                 "x-ydb-mvcc-version requires a snapshot-read-only transaction");
             return false;

@@ -125,17 +125,10 @@ public:
         return Runtime().WaitFuture(future);
     }
 
-    TRowVersion AcquireSnapshot(bool persistent = false) {
+    TRowVersion AcquireSnapshot() {
         const auto edge = Runtime().AllocateEdgeActor();
         SnapshotManager = Runtime().Register(CreateKqpSnapshotManager("/Root", TDuration::Minutes(5)));
-        std::unique_ptr<TEvKqpSnapshot::TEvCreateSnapshotRequest> request;
-        if (persistent) {
-            TVector<NKikimrTxUserProxy::TCreateVolatileSnapshotTx::TTable> tables(1);
-            tables[0].SetTablePath("/Root/Objects");
-            request = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(std::move(tables), 1);
-        } else {
-            request = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(TVector<TTableId>{}, 1);
-        }
+        auto request = std::make_unique<TEvKqpSnapshot::TEvCreateSnapshotRequest>(TVector<TTableId>{}, 1);
         // Queue behind the manager's bootstrap instead of delivering synchronously.
         Runtime().Send(new IEventHandle(SnapshotManager, edge, request.release()), 0, true);
         auto response = Runtime().GrabEdgeEventRethrow<TEvKqpSnapshot::TEvCreateSnapshotResponse>(edge);
@@ -211,22 +204,18 @@ void AssertValues(const TResult& result, TStringBuf expected, ui32 expectedRows 
 }   // namespace
 
 Y_UNIT_TEST_SUITE(QueryActorMvccVersion) {
-    Y_UNIT_TEST_TWIN(HistoricalReads, SourceRead) {
-        TSnapshotTestEnv env(SourceRead);
-        const auto version = env.AcquireSnapshot(!SourceRead);
+    Y_UNIT_TEST(HistoricalReads) {
+        TSnapshotTestEnv env;
+        const auto version = env.AcquireSnapshot();
         env.WriteNewValues();
         ui32 creates = 0;
         auto observer = env.Runtime().AddObserver<TEvKqpSnapshot::TEvCreateSnapshotRequest>([&](auto&) {
             ++creates;
         });
         AssertValues(env.Run({ .Version = version }), "old");
-        AssertValues(env.Run({ .Version = version, .Scan = true }), "old");
         UNIT_ASSERT_VALUES_EQUAL(creates, 0);
 
         AssertValues(env.Run({}), "new");
-        const auto beforeScan = creates;
-        AssertValues(env.Run({ .Scan = true }), "new");
-        UNIT_ASSERT_VALUES_EQUAL(creates, beforeScan + 1);
     }
 
     Y_UNIT_TEST(Continuation) {
@@ -339,13 +328,19 @@ Y_UNIT_TEST_SUITE(QueryActorMvccVersion) {
             { NKikimrKqp::QUERY_ACTION_COMMIT_TX, NKikimrKqp::QUERY_TYPE_UNDEFINED },
             { NKikimrKqp::QUERY_ACTION_ROLLBACK_TX, NKikimrKqp::QUERY_TYPE_UNDEFINED },
             { NKikimrKqp::QUERY_ACTION_EXECUTE, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT },
+            { NKikimrKqp::QUERY_ACTION_EXECUTE, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY },
+            { NKikimrKqp::QUERY_ACTION_EXECUTE, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY },
+            { NKikimrKqp::QUERY_ACTION_EXECUTE, NKikimrKqp::QUERY_TYPE_SQL_SCAN },
+            { NKikimrKqp::QUERY_ACTION_EXECUTE, NKikimrKqp::QUERY_TYPE_AST_SCAN },
         };
         for (const auto& [action, type] : requests) {
             auto request = std::make_unique<TEvKqp::TEvQueryRequest>();
             auto& query = *request->Record.MutableRequest();
             query.SetDatabase("/Root");
-            query.SetSessionId(session);
-            query.SetKeepSession(true);
+            if (action != NKikimrKqp::QUERY_ACTION_EXECUTE) {
+                query.SetSessionId(session);
+                query.SetKeepSession(true);
+            }
             query.SetIsInternalCall(true);
             query.SetMvccVersion("1:1");
             query.SetAction(action);
@@ -357,15 +352,19 @@ Y_UNIT_TEST_SUITE(QueryActorMvccVersion) {
             UNIT_ASSERT_VALUES_EQUAL_C(
                 response->Get()->Record.GetYdbStatus(), Ydb::StatusIds::BAD_REQUEST, response->Get()->Record.DebugString());
             UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.DebugString(), "x-ydb-mvcc-version");
+            if (action == NKikimrKqp::QUERY_ACTION_EXECUTE) {
+                UNIT_ASSERT_STRING_CONTAINS(response->Get()->Record.DebugString(), "only supported for Table Service data queries");
+            }
         }
     }
 
-    Y_UNIT_TEST(LegacyScanRequiresPersistentSnapshot) {
-        TSnapshotTestEnv env(false);
+    Y_UNIT_TEST_TWIN(ScanRejectsExplicitSnapshot, SourceRead) {
+        TSnapshotTestEnv env(SourceRead);
         const auto version = env.AcquireSnapshot();
         const auto result = env.Run({ .Version = version, .Scan = true });
-        UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::ABORTED, result.Issues.ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(), "Snapshot is not valid");
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::BAD_REQUEST, result.Issues.ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(), "does not support an explicit MVCC snapshot version");
+        AssertValues(env.Run({ .Scan = true }), "old");
     }
 
     Y_UNIT_TEST(UnavailableSnapshotDoesNotFallBack) {
@@ -380,12 +379,10 @@ Y_UNIT_TEST_SUITE(QueryActorMvccVersion) {
             const auto vacuum = env.Runtime().GrabEdgeEventRethrow<TEvDataShard::TEvVacuumResult>(edge);
             UNIT_ASSERT_C(vacuum->Get()->Record.GetStatus() == NKikimrTxDataShard::TEvVacuumResult::OK, vacuum->Get()->Record.DebugString());
         }
-        for (bool scan : { false, true }) {
-            const auto result = env.Run({ .Version = version, .Scan = scan });
-            UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::ABORTED, result.Issues.ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(), "snapshot");
-            UNIT_ASSERT(result.ResultSets.empty());
-        }
+        const auto result = env.Run({ .Version = version });
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::ABORTED, result.Issues.ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(), "snapshot");
+        UNIT_ASSERT(result.ResultSets.empty());
     }
 }
 

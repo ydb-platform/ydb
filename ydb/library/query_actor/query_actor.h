@@ -213,8 +213,8 @@ protected:
     TString Database;
     TString SessionId;
     TMaybe<TString> RequestType;
-    // Caller-owned snapshot. Data queries must use snapshot-read-only transactions.
-    // Legacy row-table scans require a persistent snapshot at this version.
+    // Caller-owned snapshot for RunDataQuery with a snapshot-read-only transaction.
+    // RunStreamQuery does not support an explicit snapshot version.
     TMaybe<TRowVersion> MvccVersion;
     bool IsSystemUser = false;
     bool IsStreamingMode = false;

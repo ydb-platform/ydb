@@ -322,6 +322,10 @@ void TQueryBase::RunStreamQuery(TString sql, NYdb::TParamsBuilder* params, ui64 
     using TExecuteStreamQueryRequest = TGrpcRequestNoOperationCall<Table::ExecuteScanQueryRequest, Table::ExecuteScanQueryPartialResponse>;
 
     Y_ABORT_UNLESS(!RunningQuery);
+    if (MvccVersion) {
+        Finish(StatusIds::BAD_REQUEST, "RunStreamQuery does not support an explicit MVCC snapshot version");
+        return;
+    }
     YDB_LOG_DEBUG("RunStreamQuery",
         {"logPrefix", LogPrefix()},
         {"text", sql});
@@ -339,12 +343,8 @@ void TQueryBase::RunStreamQuery(TString sql, NYdb::TParamsBuilder* params, ui64 
         token = NACLib::TSystemUsers::Metadata().SerializeAsString();
     }
 
-    TMap<TString, TString> peerMeta;
-    if (MvccVersion) {
-        peerMeta.emplace(NKqp::YDB_MVCC_VERSION_HEADER, NKqp::FormatMvccVersion(*MvccVersion));
-    }
     StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(
-        std::move(request), Database, token, RequestType, ActorContext(), peerMeta, true, channelBufferSize);
+        std::move(request), Database, token, RequestType, ActorContext(), true, channelBufferSize);
     ReadNextStreamPart();
 }
 

@@ -2454,8 +2454,21 @@ void TTableInfo::UpdateSplitMergePickCache(const TShardIdx& shardIdx) {
     const ui32 weight = h->DeferredWeight();
     const TInstant candidate = h->OldestCandidate();
     auto& s = TableSplitMergeState;
+    if (s.CachedPickShardIdx == InvalidShardIdx) {
+        if (s.CachedPickNeedsRescan) {
+            // The previous winner was removed while other (possibly heavier) candidates may
+            // still be deferred: only a full rescan (PickMostDeferredPartition) may install
+            // the next winner -- a fresh light deferral must not shadow them (Finding 23).
+            return;
+        }
+        // Genuinely empty history: the first deferral wins outright.
+        s.CachedPickShardIdx = shardIdx;
+        s.CachedPickWeight = weight;
+        s.CachedPickCandidate = candidate;
+        return;
+    }
     // Most-deferred first; tie-broken by the oldest (smallest) candidate timestamp.
-    if (s.CachedPickShardIdx == InvalidShardIdx || weight > s.CachedPickWeight
+    if (weight > s.CachedPickWeight
         || (weight == s.CachedPickWeight && candidate < s.CachedPickCandidate)) {
         s.CachedPickShardIdx = shardIdx;
         s.CachedPickWeight = weight;
@@ -2466,6 +2479,10 @@ void TTableInfo::UpdateSplitMergePickCache(const TShardIdx& shardIdx) {
 void TTableInfo::InvalidateSplitMergePickCache(const TShardIdx& shardIdx) {
     if (TableSplitMergeState.CachedPickShardIdx == shardIdx) {
         TableSplitMergeState.CachedPickShardIdx = InvalidShardIdx;
+        // Other (possibly heavier) candidates may still be deferred: the next
+        // UpdateSplitMergePickCache call must not install a fresh winner without a
+        // full rescan (Finding 23).
+        TableSplitMergeState.CachedPickNeedsRescan = !TableSplitMergeState.DeferredShards.empty();
     }
 }
 
@@ -2483,6 +2500,9 @@ TShardIdx TTableInfo::PickMostDeferredPartition() {
             return tableState.CachedPickShardIdx;
         }
         tableState.CachedPickShardIdx = InvalidShardIdx;
+        // The winner's weight/candidate changed: other shards may now beat it -- the
+        // rescan below must decide, not the next UpdateSplitMergePickCache call.
+        tableState.CachedPickNeedsRescan = true;
     }
 
     TShardIdx best = InvalidShardIdx;
@@ -2513,7 +2533,7 @@ TShardIdx TTableInfo::PickMostDeferredPartition() {
             if (it == tableState.DeferredShards.end()) {
                 continue;
             }
-            if (it->second) {
+            if (it->second.WantsSplit) {
                 if (tableState.SplitDemandCount) {
                     --tableState.SplitDemandCount;
                 }
@@ -2524,6 +2544,9 @@ TShardIdx TTableInfo::PickMostDeferredPartition() {
         }
         RecomputeOldestPendingCandidateAt();
     }
+    // The rescan produced the exact winner (or proved the set empty/pruned): either way
+    // the next UpdateSplitMergePickCache call may install a fresh winner normally.
+    tableState.CachedPickNeedsRescan = false;
     if (best != InvalidShardIdx) {
         tableState.CachedPickShardIdx = best;
         tableState.CachedPickWeight = bestWeight;
@@ -2539,7 +2562,7 @@ void TTableInfo::DropFromSplitMergeState(const TShardIdx& shardIdx) {
         return;
     }
     // Decrement exactly the count that was incremented on insert (stored direction).
-    if (it->second) {
+    if (it->second.WantsSplit) {
         if (tableState.SplitDemandCount) {
             --tableState.SplitDemandCount;
         }
@@ -2548,27 +2571,57 @@ void TTableInfo::DropFromSplitMergeState(const TShardIdx& shardIdx) {
     }
     tableState.DeferredShards.erase(it);
     InvalidateSplitMergePickCache(shardIdx);
-    RecomputeOldestPendingCandidateAt();
+    if (tableState.DeferredShards.empty()) {
+        tableState.OldestPendingCandidateAt = TInstant();
+        tableState.OldestPendingCandidateAtDirty = false;
+        // The set drained: no candidates remain to shadow a fresh deferral, so the next
+        // UpdateSplitMergePickCache call may install a winner normally again (Finding 23
+        // residual -- without this the flag lingers until a pick rescan runs).
+        tableState.CachedPickNeedsRescan = false;
+    } else {
+        // Removals only increase the true minimum: mark dirty and recompute lazily on
+        // read -- draining N deferred shards must stay O(N), not O(N^2) (Finding 22).
+        tableState.OldestPendingCandidateAtDirty = true;
+    }
+}
+
+void TTableInfo::UpdateDeferredShardReason(const TShardIdx& shardIdx,
+        TPartitionSplitMergeState::EDeferralReason reason) {
+    auto& tableState = TableSplitMergeState;
+    const auto it = tableState.DeferredShards.find(shardIdx);
+    if (it == tableState.DeferredShards.end()) {
+        return;  // not deferred (e.g. user-initiated propose) -- nothing to update
+    }
+    it->second.Reason = reason;
 }
 
 void TTableInfo::RecomputeOldestPendingCandidateAt() {
     auto& tableState = TableSplitMergeState;
     if (tableState.DeferredShards.empty()) {
         tableState.OldestPendingCandidateAt = TInstant();
+        tableState.OldestPendingCandidateAtDirty = false;
         return;
     }
     TInstant oldest;
-    for (const auto& [shardIdx, wantsSplit] : tableState.DeferredShards) {
+    for (const auto& [shardIdx, deferred] : tableState.DeferredShards) {
         const auto* h = PartitionSplitMergeStates.FindPtr(shardIdx);
         if (!h) {
             continue;
         }
-        const TInstant& candidate = h->LastCandidate(wantsSplit);
+        const TInstant& candidate = h->LastCandidate(deferred.WantsSplit);
         if (candidate && (!oldest || candidate < oldest)) {
             oldest = candidate;
         }
     }
     tableState.OldestPendingCandidateAt = oldest;
+    tableState.OldestPendingCandidateAtDirty = false;
+}
+
+TInstant TTableInfo::GetOldestPendingCandidateAt() {
+    if (TableSplitMergeState.OldestPendingCandidateAtDirty) {
+        RecomputeOldestPendingCandidateAt();
+    }
+    return TableSplitMergeState.OldestPendingCandidateAt;
 }
 
 void TTableInfo::VerifyConsistency() const {

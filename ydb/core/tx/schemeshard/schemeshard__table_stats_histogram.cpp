@@ -244,6 +244,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> SplitRequest(
 
     auto& split = *propose.MutableSplitMergeTablePartitions();
     split.SetTablePath(tablePath.PathString());
+    // OwnerId/LocalId let the propose resolve the table without a path lookup and let
+    // TSplitMerge::Propose attribute a lock rejection to the deferred shards (pathId
+    // is derived from these fields, not from TablePath).
+    split.SetTableOwnerId(ui64(pathId.OwnerId));
+    split.SetTableLocalId(pathId.LocalPathId);
     split.SetSchemeshardId(ss->TabletID());
 
     split.AddSourceTabletId(ui64(datashardId));
@@ -270,10 +275,6 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     bool trySplitByLoad = HasDataForSplitByLoad(rec.GetTableStats());
 
-    if (!trySplitBySize && !trySplitByLoad) {
-        return true;
-    }
-
     const TTabletId datashardId = TTabletId(rec.GetDatashardId());
     const TPathId tableId = (rec.HasTableOwnerId())
         ? TPathId(TOwnerId(rec.GetTableOwnerId()), TLocalPathId(rec.GetTableLocalId()))
@@ -281,7 +282,8 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     // Save CPU resources when potential split will certainly be immediately rejected by Self->IgniteOperation()
     TString inflightLimitErrStr;
-    if (!Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, inflightLimitErrStr)) {
+    if ((trySplitBySize || trySplitByLoad)
+            && !Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, inflightLimitErrStr)) {
         YDB_LOG_DEBUG_CTX(ctx, "TTxPartitionHistogram Do not process detailed partition statistics",
             {"error", inflightLimitErrStr},
             {"datashard", datashardId},
@@ -298,7 +300,12 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         Self->NoteSplitMergeDeferral();
         if (DemandTracking) {
             const auto shardIt = Self->TabletIdToShardIdx.find(datashardId);
-            if (auto* table = Self->Tables.FindPtr(tableId); table && shardIt != Self->TabletIdToShardIdx.end()) {
+            if (auto* table = Self->Tables.FindPtr(tableId);
+                    table && shardIt != Self->TabletIdToShardIdx.end()
+                    // Live-partition check: a delayed histogram response can outlive the shard
+                    // (split/merge/drop reshaped the table). Recording deferral for a dead
+                    // shardIdx would pollute DeferredShards, the pick cache and the gauges.
+                    && (*table)->GetPartitionStore().contains(shardIt->second)) {
                 Self->RecordSplitDeferral(tableId, **table, shardIt->second,
                     TPartitionSplitMergeState::EDeferralReason::InFlightLimit, ctx.Now(), DemandTracking);
             }
@@ -337,6 +344,81 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     const auto& shardIdx = shardIt->second;
 
+    // Live-partition check: the revisit route (TTxRevisitSplitMerge) re-requests stats for a
+    // shard picked from cached DeferredShards, and this response can arrive after the table
+    // was reshaped (split/merge/drop). TabletIdToShardIdx still resolves the tablet until
+    // shard teardown, so a dead shardIdx would otherwise flow into the propose and into
+    // RecordSplitApplied. The main stats path is guarded at its sender
+    // (VerifySplitAndRequestStats); the revisit sender has no such guard, so the check
+    // must live here, at the point of mutation.
+    if (!tableInfo->GetPartitionStore().contains(shardIdx)) {
+        YDB_LOG_DEBUG_CTX(ctx, "TTxPartitionHistogram Shard is not a live partition of the table",
+            {"datashard", datashardId},
+            {"shardIdx", shardIdx},
+            {"pathId", tableId},
+        );
+        return true;
+    }
+
+    if (!trySplitBySize && !trySplitByLoad) {
+        // The response carries no split evidence (e.g. a revisit re-request answered by a
+        // cooled-down shard). A previously recorded deferral is stale now: expire it,
+        // otherwise the gauges freeze at stale nonzero values forever (Finding 26). The
+        // inline counter refresh is required because nothing else runs after this point
+        // when periodic stats are blocked and the revisit queue is drained.
+        //
+        // Expiry requires authoritative evidence (Review B regression (b)): only a leader's
+        // FullStatsReady response proves the shard produced its full stats and they show no
+        // split demand. A not-ready response (heavy load -- precisely the split-by-load
+        // scenario) or a follower sample must NOT drop a previously recorded deferral and
+        // the shard's queue seniority; the next periodic cycle re-records demand if it
+        // returns. And only split-wanting deferrals are expired (regression (a)): this
+        // response says nothing about merge demand, so a merge deferral must survive it.
+        const auto* deferred = tableInfo->GetTableSplitMergeState().DeferredShards.FindPtr(shardIdx);
+        if (deferred
+                && deferred->WantsSplit
+                && rec.GetFollowerId() == 0
+                && rec.GetFullStatsReady()) {
+            Self->RemoveDeferredPartition(tableId, *tableInfo, shardIdx);
+            Self->UpdateSplitMergeCounters();
+        }
+        return true;
+    }
+
+    // Borrowed-data recheck. Pre-PR the only sender of TEvGetTableStats was
+    // VerifySplitAndRequestStats, which never requests stats for a shard with borrowed
+    // parts. The revisit sender bypasses that guard (it re-requests precisely because its
+    // cached state is stale, and it is edge-triggered by global slot-free/borrowed-done
+    // events, not by this shard's own recovery). The authoritative borrowed state
+    // (UserTablePartOwners) is in this response, so the guard belongs here: a shard with
+    // borrowed parts must not be split (back-borrow chains break DataShard part
+    // ref-counting). Just defer; borrowed compaction is already enqueued by the periodic
+    // stats path, and its completion re-nudges the scheduler.
+    const bool hasBorrowedData = [&rec]() {
+        for (ui64 tabletId : rec.GetUserTablePartOwners()) {
+            if (tabletId != rec.GetDatashardId()) {
+                return true;
+            }
+        }
+        return false;
+    }();
+    if (hasBorrowedData) {
+        YDB_LOG_NOTICE_CTX(ctx, "TTxPartitionHistogram Postpone split tablet: it has borrowed parts",
+            {"datashard", datashardId},
+            {"shardIdx", shardIdx},
+            {"pathId", tableId},
+        );
+        // Count the deferral unconditionally (like every other deferral site) so the
+        // cumulative COUNTER_SPLIT_MERGE_DEFERRALS does not undercount borrowed
+        // deferrals (Finding 31b); the structured recording stays flag-gated.
+        Self->NoteSplitMergeDeferral();
+        if (DemandTracking) {
+            Self->RecordSplitDeferral(tableId, *tableInfo, shardIdx,
+                TPartitionSplitMergeState::EDeferralReason::Borrowed, ctx.Now(), DemandTracking);
+        }
+        return true;
+    }
+
     // Don't split/merge backup tables
     if (tableInfo->IsBackup) {
         YDB_LOG_NOTICE_CTX(ctx, "TTxPartitionHistogram Skip backup table",
@@ -352,6 +434,13 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
             {"datashard", datashardId},
             {"lockedBy", path.LockedBy()},
         );
+        // Record the lock as the deferral reason so the revisit path stops re-requesting
+        // stats for this shard (fresh stats cannot resolve a path lock; the drop-lock edge
+        // re-nudges the scheduler instead).
+        if (DemandTracking) {
+            tableInfo->UpdateDeferredShardReason(shardIdx,
+                TPartitionSplitMergeState::EDeferralReason::PathLocked);
+        }
         return true;
     }
 
@@ -421,6 +510,16 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
             {"datashard", datashardId},
             {"reason", splitReasonMsg},
         );
+        // Fresh split evidence says the shard no longer wants to split: a previously
+        // recorded deferral is stale -- expire it and refresh the gauges inline
+        // (Finding 26). Only split-wanting deferrals: this branch evaluates split
+        // criteria only and carries no information about merge demand, so a merge
+        // deferral must survive it (Review B regression (a)).
+        const auto* deferred = tableInfo->GetTableSplitMergeState().DeferredShards.FindPtr(shardIdx);
+        if (deferred && deferred->WantsSplit) {
+            Self->RemoveDeferredPartition(tableId, *tableInfo, shardIdx);
+            Self->UpdateSplitMergeCounters();
+        }
         return true;
     }
 

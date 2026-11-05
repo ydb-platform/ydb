@@ -826,7 +826,7 @@ Y_UNIT_TEST(History_ErasedOnRemove) {
 
     // B (1/1) is a stuck deferred candidate.
     info->MutablePartitionSplitMergeState(TShardIdx(1, 1)).SplitDeferredCount = 1;
-    info->MutableTableSplitMergeState().DeferredShards.emplace(TShardIdx(1, 1), /*wantsSplit=*/true);
+    info->MutableTableSplitMergeState().DeferredShards.emplace(TShardIdx(1, 1), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
 
     TVector<TTableShardInfo> dst;
     dst.emplace_back(TShardIdx(2, 0), TString(1, '\x01'), 0, 0);
@@ -867,17 +867,17 @@ Y_UNIT_TEST(History_InnerWeightedPick) {
     // Least stuck.
     info->MutablePartitionSplitMergeState(TShardIdx(1, 1)).SplitDeferredCount = 1;
     info->MutablePartitionSplitMergeState(TShardIdx(1, 1)).LastSplitCandidate = TInstant::Seconds(50);
-    tableState.DeferredShards.emplace(TShardIdx(1, 1), /*wantsSplit=*/true);
+    tableState.DeferredShards.emplace(TShardIdx(1, 1), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
 
     // Most stuck (weight 5), but newer candidate.
     info->MutablePartitionSplitMergeState(TShardIdx(1, 2)).SplitDeferredCount = 5;
     info->MutablePartitionSplitMergeState(TShardIdx(1, 2)).LastSplitCandidate = TInstant::Seconds(80);
-    tableState.DeferredShards.emplace(TShardIdx(1, 2), /*wantsSplit=*/true);
+    tableState.DeferredShards.emplace(TShardIdx(1, 2), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
 
     // Equally stuck (weight 5), older candidate -> wins the tie.
     info->MutablePartitionSplitMergeState(TShardIdx(1, 3)).SplitDeferredCount = 5;
     info->MutablePartitionSplitMergeState(TShardIdx(1, 3)).LastSplitCandidate = TInstant::Seconds(10);
-    tableState.DeferredShards.emplace(TShardIdx(1, 3), /*wantsSplit=*/true);
+    tableState.DeferredShards.emplace(TShardIdx(1, 3), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
 
     UNIT_ASSERT_EQUAL(info->PickMostDeferredPartition(), TShardIdx(1, 3));
 
@@ -918,7 +918,7 @@ Y_UNIT_TEST(History_DropDecrementsExactDirection) {
     auto& tableState = info->MutableTableSplitMergeState();
 
     info->MutablePartitionSplitMergeState(TShardIdx(1, 1)).MergeDeferredCount = 1;
-    tableState.DeferredShards.emplace(TShardIdx(1, 1), /*wantsSplit=*/false);
+    tableState.DeferredShards.emplace(TShardIdx(1, 1), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/false});
     tableState.MergeDemandCount = 1;
 
     info->DropFromSplitMergeState(TShardIdx(1, 1));
@@ -938,7 +938,7 @@ Y_UNIT_TEST(History_DropWithoutPerShardStateStillDecrements) {
     info->SetPartitioning(MakeShards(2));
     auto& tableState = info->MutableTableSplitMergeState();
 
-    tableState.DeferredShards.emplace(TShardIdx(1, 1), /*wantsSplit=*/true);
+    tableState.DeferredShards.emplace(TShardIdx(1, 1), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
     tableState.SplitDemandCount = 1;
 
     info->DropFromSplitMergeState(TShardIdx(1, 1));  // no per-shard state exists
@@ -955,13 +955,13 @@ Y_UNIT_TEST(History_PickPrunesStaleEntries) {
     auto& tableState = info->MutableTableSplitMergeState();
 
     // Stale: deferred but no per-shard state.
-    tableState.DeferredShards.emplace(TShardIdx(1, 1), /*wantsSplit=*/true);
+    tableState.DeferredShards.emplace(TShardIdx(1, 1), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
     tableState.SplitDemandCount = 1;
 
     // Live: deferred with per-shard state.
     info->MutablePartitionSplitMergeState(TShardIdx(1, 2)).SplitDeferredCount = 2;
     info->MutablePartitionSplitMergeState(TShardIdx(1, 2)).LastSplitCandidate = TInstant::Seconds(30);
-    tableState.DeferredShards.emplace(TShardIdx(1, 2), /*wantsSplit=*/true);
+    tableState.DeferredShards.emplace(TShardIdx(1, 2), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
     tableState.SplitDemandCount = 2;
 
     UNIT_ASSERT_EQUAL(info->PickMostDeferredPartition(), TShardIdx(1, 2));
@@ -988,7 +988,7 @@ Y_UNIT_TEST(History_PickCacheFastPath) {
         auto& h = info->MutablePartitionSplitMergeState(TShardIdx(1, shard));
         h.SplitDeferredCount = weight;
         h.LastSplitCandidate = candidate;
-        tableState.DeferredShards.emplace(TShardIdx(1, shard), /*wantsSplit=*/true);
+        tableState.DeferredShards.emplace(TShardIdx(1, shard), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
         info->UpdateSplitMergePickCache(TShardIdx(1, shard));
     };
 
@@ -1013,6 +1013,331 @@ Y_UNIT_TEST(History_PickCacheFastPath) {
     info->MutablePartitionSplitMergeState(TShardIdx(1, 3)).LastSplitCandidate = TInstant::Seconds(95);
     UNIT_ASSERT_EQUAL(info->PickMostDeferredPartition(), TShardIdx(1, 2));  // (1,2) now older
     UNIT_ASSERT_EQUAL(tableState.CachedPickShardIdx, TShardIdx(1, 2));
+}
+
+Y_UNIT_TEST(History_PartitioningOpsResetSplitMergeState) {
+    // CopyPartitioning: all-new physical shard IDs, so any history keyed by the old shard
+    // idxs is stale by definition. The op resets the whole per-table split-merge state
+    // (per-shard history map, deferred set, demand counts, pick cache) to keep the
+    // PartitionSplitMergeStates-keys-subset-of-PartitionStats invariant.
+    // NOTE: the corresponding pathId may still sit in TSchemeShard::TablesWithDeferredSplitMerge
+    // and in SplitMergeRevisitQueue with QueuedForRevisit=true; that cross-object cleanup is
+    // intentionally deferred and self-healing (see the comment in CopyPartitioning).
+    {
+        auto info = MakeTable();
+        info->SetPartitioning(MakeShards(3, 1));
+        info->MutablePartitionSplitMergeState(TShardIdx(1, 1)).SplitDeferredCount = 2;
+        auto& tableState = info->MutableTableSplitMergeState();
+        tableState.DeferredShards.emplace(TShardIdx(1, 1), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
+        tableState.SplitDemandCount = 1;
+        tableState.CachedPickShardIdx = TShardIdx(1, 1);
+        tableState.OldestPendingCandidateAt = TInstant::Seconds(10);
+
+        info->CopyPartitioning(MakeShards(3, 2));
+
+        UNIT_ASSERT(info->GetPartitionSplitMergeStates().empty());
+        const auto& copied = info->GetTableSplitMergeState();
+        UNIT_ASSERT(copied.DeferredShards.empty());
+        UNIT_ASSERT_VALUES_EQUAL(copied.SplitDemandCount, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(copied.MergeDemandCount, 0u);
+        UNIT_ASSERT_EQUAL(copied.CachedPickShardIdx, InvalidShardIdx);
+        UNIT_ASSERT(!copied.OldestPendingCandidateAt);
+    }
+    // MovePartitioning: same physical shard set (DeepCopy path), so the history keys stay
+    // valid. Documented behavior: the op does NOT reset the split-merge state.
+    {
+        auto info = MakeTable();
+        info->SetPartitioning(MakeShards(3));
+        info->MutablePartitionSplitMergeState(TShardIdx(1, 1)).SplitDeferredCount = 2;
+        auto& tableState = info->MutableTableSplitMergeState();
+        tableState.DeferredShards.emplace(TShardIdx(1, 1), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
+        tableState.SplitDemandCount = 1;
+
+        info->MovePartitioning(MakeShards(3));
+
+        UNIT_ASSERT(info->GetPartitionSplitMergeState(TShardIdx(1, 1)));
+        UNIT_ASSERT(tableState.DeferredShards.contains(TShardIdx(1, 1)));
+        UNIT_ASSERT_VALUES_EQUAL(tableState.SplitDemandCount, 1u);
+    }
+    // SetPartitioning: only valid on a fresh table (Y_ENSURE(PartitionStore.empty())), where
+    // the split-merge state is empty by construction. Documented behavior: the op does NOT
+    // reset the state -- entries keyed by shards of the new partitioning survive it.
+    {
+        auto info = MakeTable();
+        info->MutablePartitionSplitMergeState(TShardIdx(1, 1)).SplitDeferredCount = 1;
+        info->MutableTableSplitMergeState().DeferredShards.emplace(TShardIdx(1, 1),
+            TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
+
+        info->SetPartitioning(MakeShards(3));
+
+        UNIT_ASSERT(info->GetPartitionSplitMergeState(TShardIdx(1, 1)));
+        UNIT_ASSERT(info->GetTableSplitMergeState().DeferredShards.contains(TShardIdx(1, 1)));
+    }
+}
+
+Y_UNIT_TEST(History_ApplySplitMergeFlagOffCleansButDoesNotSeed) {
+    // With tracking off, the removed shard's entries are still cleaned (the keys-subset
+    // invariant must hold even after a flag toggle-off left the maps populated), but the
+    // children are NOT seeded: the lineage/demand propagation is gated by the flag.
+    {
+        auto info = MakeTable();
+        info->SetPartitioning(MakeShards(3));
+
+        // Removed shard B (1/1) carries state and is deferred; survivor A (1/0) carries state.
+        info->MutablePartitionSplitMergeState(TShardIdx(1, 0)).SplitCandidateCount = 1;
+        info->MutablePartitionSplitMergeState(TShardIdx(1, 1)).SplitDeferredCount = 1;
+        auto& tableState = info->MutableTableSplitMergeState();
+        tableState.DeferredShards.emplace(TShardIdx(1, 1), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
+        tableState.SplitDemandCount = 1;
+
+        TVector<TTableShardInfo> dst;
+        dst.emplace_back(TShardIdx(2, 0), TString(1, '\x01'), 0, 0);
+        dst.emplace_back(TShardIdx(2, 1), TString(1, '\x02'), 0, 0);
+        info->ApplySplitMerge(std::move(dst), {TShardIdx(1, 1)}, /*splitFirstIdx=*/1, TInstant::Seconds(3),
+            /*trackSplitMergeDemand=*/false, /*loadSplitLineage=*/false);
+
+        // Removed shard cleaned from both maps; the deferred count it held is returned.
+        UNIT_ASSERT(!info->GetPartitionSplitMergeState(TShardIdx(1, 1)));
+        UNIT_ASSERT(!tableState.DeferredShards.contains(TShardIdx(1, 1)));
+        UNIT_ASSERT_VALUES_EQUAL(tableState.SplitDemandCount, 0u);
+        // Survivor state untouched (cleanup is per-removed-shard only).
+        UNIT_ASSERT(info->GetPartitionSplitMergeState(TShardIdx(1, 0)));
+        // Children NOT seeded.
+        UNIT_ASSERT(!info->GetPartitionSplitMergeState(TShardIdx(2, 0)));
+        UNIT_ASSERT(!info->GetPartitionSplitMergeState(TShardIdx(2, 1)));
+    }
+    // The flag gates even the persisted by-load lineage signal: with tracking off, a
+    // loadSplitLineage op still does not seed child state.
+    {
+        auto info = MakeTable();
+        info->SetPartitioning(MakeShards(3));
+        info->MutablePartitionSplitMergeState(TShardIdx(1, 1)).LoadSplitLineageDepth = 1;
+
+        TVector<TTableShardInfo> dst;
+        dst.emplace_back(TShardIdx(2, 0), TString(1, '\x01'), 0, 0);
+        dst.emplace_back(TShardIdx(2, 1), TString(1, '\x02'), 0, 0);
+        info->ApplySplitMerge(std::move(dst), {TShardIdx(1, 1)}, /*splitFirstIdx=*/1, TInstant::Seconds(3),
+            /*trackSplitMergeDemand=*/false, /*loadSplitLineage=*/true);
+
+        UNIT_ASSERT(!info->GetPartitionSplitMergeState(TShardIdx(2, 0)));
+        UNIT_ASSERT(!info->GetPartitionSplitMergeState(TShardIdx(2, 1)));
+    }
+}
+
+Y_UNIT_TEST(History_PickReturnsHeaviestAfterCacheInvalidation) {
+    // Model property: PickMostDeferredPartition returns the most-deferred shard regardless
+    // of the internal cache state -- the cache is an optimization and must never be
+    // observable through the pick outcome.
+    // NOTE: acceptance test for Finding 23 (CachedPickNeedsRescan). After the cached
+    // winner (A) is removed the cache is invalidated with the rescan flag set, so the
+    // next UpdateSplitMergePickCache(B) refuses to install the light shard B as the
+    // winner; the pick falls through to a full rescan and returns the heaviest
+    // remaining deferred shard (C), not the freshly-deferred light one.
+    auto info = MakeTable();
+    info->SetPartitioning(MakeShards(4));
+    auto& tableState = info->MutableTableSplitMergeState();
+
+    auto defer = [&](ui32 shard, ui32 weight, TInstant candidate) {
+        auto& h = info->MutablePartitionSplitMergeState(TShardIdx(1, shard));
+        h.SplitDeferredCount = weight;
+        h.LastSplitCandidate = candidate;
+        tableState.DeferredShards.emplace(TShardIdx(1, shard), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
+        info->UpdateSplitMergePickCache(TShardIdx(1, shard));
+    };
+
+    // C: middle weight, stays deferred to the end.
+    defer(2, 3, TInstant::Seconds(40));
+    // A: heavy winner -- becomes the cached pick.
+    defer(1, 5, TInstant::Seconds(50));
+    // Removing A invalidates the cache...
+    info->DropFromSplitMergeState(TShardIdx(1, 1));
+    // ...and a later light deferral of B re-caches B.
+    defer(3, 1, TInstant::Seconds(60));
+
+    // The heaviest REMAINING deferred shard is C (weight 3 > B's 1): the pick must return
+    // C, not the freshly-cached light shard B.
+    UNIT_ASSERT_EQUAL(info->PickMostDeferredPartition(), TShardIdx(1, 2));
+}
+
+Y_UNIT_TEST(History_RemovalCostScalesLinearly) {
+    // Guards the amortized O(1)-per-removal claim for the deferred set (Finding 22): each
+    // DropFromSplitMergeState must not degrade with the size of the remaining set. A
+    // regression introducing a full O(deferred) rescan per removal (e.g. an unbatched
+    // OldestPendingCandidateAt recompute) makes draining N shards O(N^2) and blows this
+    // bound up. Companion of History_HotPathScalesLinearly, which covers the insert path.
+    auto info = MakeTable();
+    const ui32 n = 10000;
+    info->SetPartitioning(MakeShards(n));
+
+    auto& tableState = info->MutableTableSplitMergeState();
+    for (ui32 i = 0; i < n; ++i) {
+        auto& h = info->MutablePartitionSplitMergeState(TShardIdx(1, i));
+        h.SplitDeferredCount = 1;
+        h.LastSplitCandidate = TInstant::Seconds(i);
+        tableState.DeferredShards.emplace(TShardIdx(1, i), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
+    }
+    tableState.SplitDemandCount = n;
+
+    THPTimer timer;
+    for (ui32 i = 0; i < n; ++i) {
+        info->DropFromSplitMergeState(TShardIdx(1, i));
+    }
+    const double elapsed = timer.Passed();
+    // Assert an operations/sec floor instead of a wall-clock upper bound: an O(N^2)
+    // regression drops throughput by orders of magnitude, while a floor stays stable
+    // under CI load.
+    const double opsPerSec = n / (elapsed > 0.0 ? elapsed : 1e-9);
+    UNIT_ASSERT_C(opsPerSec >= 20000.0,
+        "deferred-set removal unexpectedly slow: " << opsPerSec << " ops/sec"
+        << " (elapsed " << elapsed << "s for " << n << " removals)");
+    UNIT_ASSERT(tableState.DeferredShards.empty());
+    UNIT_ASSERT_VALUES_EQUAL(tableState.SplitDemandCount, 0u);
+}
+
+Y_UNIT_TEST(History_OldestPendingCandidateAtPartialRemoval) {
+    // A partial (non-drain) removal must leave the reported OldestPendingCandidateAt at
+    // the minimum candidate among the REMAINING deferred shards: the timestamp must never
+    // reflect a shard that is no longer waiting. Removals mark the value dirty and the
+    // getter recomputes lazily (Finding 22), so the assertions go through the getter.
+    auto info = MakeTable();
+    info->SetPartitioning(MakeShards(3));
+    auto& tableState = info->MutableTableSplitMergeState();
+
+    // Three deferred shards with distinct candidate times: 10s, 20s, 30s.
+    for (ui32 i = 0; i < 3; ++i) {
+        auto& h = info->MutablePartitionSplitMergeState(TShardIdx(1, i));
+        h.SplitDeferredCount = 1;
+        h.LastSplitCandidate = TInstant::Seconds(10 * (i + 1));
+        tableState.DeferredShards.emplace(TShardIdx(1, i), TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
+    }
+
+    // Remove the NEWEST candidate (30s) -- not the oldest. The minimum of the remaining
+    // (10s, 20s) is 10s.
+    info->DropFromSplitMergeState(TShardIdx(1, 2));
+    UNIT_ASSERT_VALUES_EQUAL(info->GetOldestPendingCandidateAt(), TInstant::Seconds(10));
+
+    // Removing the oldest candidate moves the timestamp to the minimum of the remainder.
+    info->DropFromSplitMergeState(TShardIdx(1, 0));
+    UNIT_ASSERT_VALUES_EQUAL(info->GetOldestPendingCandidateAt(), TInstant::Seconds(20));
+
+    // Draining the last entry resets the timestamp.
+    info->DropFromSplitMergeState(TShardIdx(1, 1));
+    UNIT_ASSERT(!info->GetOldestPendingCandidateAt());
+}
+
+Y_UNIT_TEST(History_RemovalPathsProduceEquivalentState) {
+    // Finding 8 divergence guard: TSchemeShard::RemoveDeferredPartition delegates the per-table
+    // bookkeeping to TTableInfo::DropFromSplitMergeState (single source of truth for the
+    // stored-direction decrement + erase + cache invalidate + oldest-candidate recompute), and
+    // only adds the global TablesWithDeferredSplitMerge cleanup. This test pins the full
+    // observable contract of DropFromSplitMergeState so any future divergence between the two
+    // removal paths (e.g. re-introducing a heuristic direction decrement, forgetting the cache
+    // invalidation, or skipping the oldest-candidate recompute) breaks here.
+    //
+    // The contract is checked over a mixed-direction deferred set, one removal at a time:
+    //   1. the deferred-set entry is erased;
+    //   2. exactly the stored direction's aggregate count is decremented (never the other one);
+    //   3. the pick cache no longer points at the removed shard (rescans return a live winner);
+    //   4. OldestPendingCandidateAt reflects only the remaining shards (drain resets it).
+    auto seed = [] {
+        auto info = MakeTable();
+        info->SetPartitioning(MakeShards(3));
+        auto& tableState = info->MutableTableSplitMergeState();
+
+        // Shard 0: split-wanting, oldest candidate (10s), heaviest (3 deferrals).
+        {
+            auto& h = info->MutablePartitionSplitMergeState(TShardIdx(1, 0));
+            h.SplitDeferredCount = 3;
+            h.LastSplitCandidate = TInstant::Seconds(10);
+            tableState.DeferredShards.emplace(TShardIdx(1, 0),
+                TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
+        }
+        // Shard 1: merge-wanting, candidate 20s.
+        {
+            auto& h = info->MutablePartitionSplitMergeState(TShardIdx(1, 1));
+            h.MergeDeferredCount = 1;
+            h.LastMergeCandidate = TInstant::Seconds(20);
+            tableState.DeferredShards.emplace(TShardIdx(1, 1),
+                TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/false});
+        }
+        // Shard 2: split-wanting, newest candidate (30s), light (1 deferral).
+        {
+            auto& h = info->MutablePartitionSplitMergeState(TShardIdx(1, 2));
+            h.SplitDeferredCount = 1;
+            h.LastSplitCandidate = TInstant::Seconds(30);
+            tableState.DeferredShards.emplace(TShardIdx(1, 2),
+                TTableSplitMergeState::TDeferredShardInfo{/*wantsSplit=*/true});
+        }
+        tableState.SplitDemandCount = 2;
+        tableState.MergeDemandCount = 1;
+        tableState.OldestPendingCandidateAt = TInstant::Seconds(10);
+        return info;
+    };
+
+    // Removal of a merge-wanting shard decrements only the merge aggregate.
+    {
+        auto info = seed();
+        auto& tableState = info->MutableTableSplitMergeState();
+
+        info->DropFromSplitMergeState(TShardIdx(1, 1));
+
+        UNIT_ASSERT(!tableState.DeferredShards.contains(TShardIdx(1, 1)));
+        UNIT_ASSERT_VALUES_EQUAL(tableState.SplitDemandCount, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(tableState.MergeDemandCount, 0u);
+        // The oldest candidate (shard 0, 10s) is untouched: the timestamp stays exact.
+        UNIT_ASSERT_VALUES_EQUAL(info->GetOldestPendingCandidateAt(), TInstant::Seconds(10));
+        // The pick still returns a live deferred shard (the heaviest remaining one).
+        UNIT_ASSERT_VALUES_EQUAL(info->PickMostDeferredPartition(), TShardIdx(1, 0));
+    }
+
+    // Removal of a split-wanting shard decrements only the split aggregate and recomputes
+    // the oldest candidate from the remainder.
+    {
+        auto info = seed();
+        auto& tableState = info->MutableTableSplitMergeState();
+
+        info->DropFromSplitMergeState(TShardIdx(1, 0));
+
+        UNIT_ASSERT(!tableState.DeferredShards.contains(TShardIdx(1, 0)));
+        UNIT_ASSERT_VALUES_EQUAL(tableState.SplitDemandCount, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(tableState.MergeDemandCount, 1u);
+        // The oldest candidate was removed: the timestamp moves to the minimum of the
+        // remainder (20s), never reflecting a shard that is no longer waiting.
+        UNIT_ASSERT_VALUES_EQUAL(info->GetOldestPendingCandidateAt(), TInstant::Seconds(20));
+        UNIT_ASSERT(info->PickMostDeferredPartition() != TShardIdx(1, 0));
+    }
+
+    // Draining the set resets the oldest-candidate timestamp and the pick returns
+    // InvalidShardIdx (no deferred shards remain to service).
+    {
+        auto info = seed();
+
+        info->DropFromSplitMergeState(TShardIdx(1, 0));
+        info->DropFromSplitMergeState(TShardIdx(1, 1));
+        info->DropFromSplitMergeState(TShardIdx(1, 2));
+
+        auto& tableState = info->MutableTableSplitMergeState();
+        UNIT_ASSERT(tableState.DeferredShards.empty());
+        UNIT_ASSERT_VALUES_EQUAL(tableState.SplitDemandCount, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(tableState.MergeDemandCount, 0u);
+        UNIT_ASSERT(!info->GetOldestPendingCandidateAt());
+        UNIT_ASSERT_VALUES_EQUAL(info->PickMostDeferredPartition(), InvalidShardIdx);
+    }
+
+    // A duplicate removal is a no-op (both removal paths must tolerate stale/duplicate
+    // removals without corrupting the aggregates): the first drop removes the deferred
+    // shard, the second must not touch the remaining aggregates.
+    {
+        auto info = seed();
+        auto& tableState = info->MutableTableSplitMergeState();
+
+        info->DropFromSplitMergeState(TShardIdx(1, 1));
+        info->DropFromSplitMergeState(TShardIdx(1, 1));  // duplicate: no-op
+
+        UNIT_ASSERT_VALUES_EQUAL(tableState.SplitDemandCount, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(tableState.MergeDemandCount, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(tableState.DeferredShards.size(), 2u);
+    }
 }
 
 }

@@ -78,6 +78,8 @@ public:
             virtual const TString& GetSrcPath() const = 0;
             virtual const TString& GetDstPath() const = 0;
             virtual bool GetSrcIsImpl() const = 0;
+            virtual bool IsFulltextOrJsonIndex() const { return false; }
+            virtual bool IsRowIdIndex() const { return false; }
         };
 
         virtual ~ITarget() = default;

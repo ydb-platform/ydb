@@ -118,7 +118,9 @@ class TController::TTxInit: public TTxBase {
                 config = std::make_shared<TTargetTable::TTableConfig>(srcPath, dstPath);
                 break;
             case TReplication::ETargetKind::IndexTable:
-                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath, srcIsImpl);
+                config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath, srcIsImpl,
+                    rowset.GetValueOrDefault<Schema::Targets::RowIdIndex>(false),
+                    rowset.GetValueOrDefault<Schema::Targets::FulltextOrJsonIndex>(false));
                 break;
             case TReplication::ETargetKind::Transfer:
                 config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, replication->GetConfig());

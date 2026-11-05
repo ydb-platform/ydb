@@ -1,4 +1,5 @@
 #include "logging.h"
+#include "index_replication.h"
 #include "private_events.h"
 #include "target_discoverer.h"
 #include "target_table.h"
@@ -15,6 +16,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/naming_conventions/scheme_object_names.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -122,6 +124,12 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             YDB_LOG_DEBUG("Describe table succeeded",
                 {"path", path.first});
 
+            if (AppData()->FeatureFlags.GetEnableFulltextIndexReplication()
+                && HasBuildingFulltextIndex(NYdb::TProtoAccessor::GetProto(result.GetTableDescription())))
+            {
+                return RetryDescribe(*it);
+            }
+
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Table,
                 std::make_shared<TTargetTable::TTableConfig>(path.first, path.second));
             YDB_LOG_INFO("Add target",
@@ -129,6 +137,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 {"dstPath", target.Config->GetDstPath()},
                 {"kind", target.Kind});
 
+            const auto& sourceTable = NYdb::TProtoAccessor::GetProto(result.GetTableDescription());
+            const bool usesRowId = UsesFulltextRowId(sourceTable);
             for (const auto& index : result.GetTableDescription().GetIndexDescriptions()) {
                 const auto indexSrcPath = CanonizePath(ChildPath(SplitPath(path.first),
                     TString{index.GetIndexName()}));
@@ -139,13 +149,23 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                     // Async indexes are maintained by the destination's own change exchange.
                     // Other index types (fulltext, vector, json) are replicated as their impl
                     // tables: their names are defined by the index type and its keys.
-                    const auto indexType = NTableIndex::TryConvertIndexType(index.GetIndexType(),
+                    auto indexType = NTableIndex::TryConvertIndexType(index.GetIndexType(),
                         AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
                     if (!indexType || !NTableIndex::HasReplicatedImplTables(*indexType)) {
                         YDB_LOG_DEBUG("Skip target for local index",
                             {"path", indexSrcPath},
                             {"type", index.GetIndexType()});
                         continue;
+                    }
+
+                    const bool fulltext = NTableIndex::IsFulltextOrJsonIndex(*indexType);
+                    if (fulltext) {
+                        for (const auto& source : sourceTable.indexes()) {
+                            if (source.name() == index.GetIndexName() && HasSupportedFulltextLayout(source)) {
+                                indexType = GetFulltextIndexType(source);
+                                break;
+                            }
+                        }
                     }
 
                     TVector<TString> indexColumns;
@@ -162,7 +182,9 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                             std::make_shared<TTargetIndexTable::TIndexTableConfig>(
                                 indexSrcPath,
                                 CanonizePath(TStringBuilder() << indexDstPath << '/' << NTableIndex::ImplTable),
-                                false));
+                                false, usesRowId && *indexType == NKikimrSchemeOp::EIndexTypeGlobalUnique
+                                    && index.GetIndexName() == NTableIndex::NFulltext::RowIdUniqueIndexName
+                                    && indexColumns.size() == 1 && indexColumns.front() == NTableIndex::NFulltext::RowIdColumn));
                         YDB_LOG_INFO("Add target",
                             {"srcPath", target.Config->GetSrcPath()},
                             {"dstPath", target.Config->GetDstPath()},
@@ -176,7 +198,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                             std::make_shared<TTargetIndexTable::TIndexTableConfig>(
                                 CanonizePath(TStringBuilder() << indexSrcPath << '/' << implTable),
                                 CanonizePath(TStringBuilder() << indexDstPath << '/' << implTable),
-                                true));
+                                true, false, fulltext));
                         YDB_LOG_INFO("Add target",
                             {"srcPath", target.Config->GetSrcPath()},
                             {"dstPath", target.Config->GetDstPath()},
@@ -184,6 +206,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                     }
                 }
             }
+
         } else {
             YDB_LOG_ERROR("Describe table failed",
                 {"path", path.first},

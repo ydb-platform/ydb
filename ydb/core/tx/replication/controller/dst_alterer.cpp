@@ -1,12 +1,16 @@
 #include "dst_alterer.h"
+#include "index_replication.h"
 #include "logging.h"
 #include "private_events.h"
+#include "util.h"
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -17,6 +21,57 @@ namespace NKikimr::NReplication::NController {
 using namespace NSchemeShard;
 
 class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
+    void PrepareSequences() {
+        Send(YdbProxy, new TEvYdbProxy::TEvDescribeTableRequest(SrcPath,
+            NYdb::NTable::TDescribeTableSettings().WithSetVal(true)));
+        Become(&TThis::StateDescribeSource);
+    }
+
+    STATEFN(StateDescribeSource) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
+            sFunc(TEvents::TEvWakeup, PrepareSequences);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        if (!result.IsSuccess()) {
+            if (IsRetryableError(result)) {
+                Schedule(RetryInterval, new TEvents::TEvWakeup);
+                return;
+            }
+            return Error(NKikimrScheme::StatusPreconditionFailed,
+                TStringBuilder() << "Cannot read fulltext/JSON sequence watermarks from " << SrcPath
+                    << " before completion: " << result.GetIssues().ToString());
+        }
+        for (const auto& column : NYdb::TProtoAccessor::GetProto(result.GetTableDescription()).columns()) {
+            if ((column.name() != NTableIndex::NFulltext::GenColumn
+                && column.name() != NTableIndex::NFulltext::RowIdColumn) || !column.has_from_sequence())
+            {
+                continue;
+            }
+            const auto& source = column.from_sequence();
+            if (!source.has_set_val()) {
+                return Error(NKikimrScheme::StatusPreconditionFailed,
+                    TStringBuilder() << "Source " << SrcPath << " did not return sequence watermark for " << column.name());
+            }
+            auto& tx = SequenceAlters.emplace_back();
+            tx.SetInternal(true);
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterSequence);
+            tx.SetWorkingDir(DstPath);
+            auto* sequence = tx.MutableSequence();
+            sequence->SetName(column.name() == NTableIndex::NFulltext::RowIdColumn
+                ? TString(NTableIndex::NFulltext::RowIdSequenceName) : SplitPath(TString(source.name())).back());
+            sequence->SetRestart(true);
+            sequence->MutableSetVal()->SetNextValue(source.set_val().next_value());
+            sequence->MutableSetVal()->SetNextUsed(source.set_val().next_used());
+        }
+        AllocateTxId();
+    }
+
     void AllocateTxId() {
         TxId = 0;
         WaitingForCompletion = false;
@@ -47,6 +102,13 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         auto& tx = *ev->Record.AddTransaction();
         tx.SetInternal(true);
+
+        if (NextSequence < SequenceAlters.size()) {
+            tx.CopyFrom(SequenceAlters[NextSequence]);
+            Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
+            return Become(&TThis::StateAlterDst);
+        }
+
         if (ReplicationPathId) {
             ReplicationPathId.ToProto(tx.MutableExpectedReplicationOwnerPathId());
         }
@@ -100,6 +162,9 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             // SchemeShard completed the conditional cleanup without changes.
             return Success();
         case NKikimrScheme::StatusPathDoesNotExist:
+            if (NextSequence < SequenceAlters.size()) {
+                return Error(record.GetStatus(), record.GetReason());
+            }
             // A deleted destination has nothing left to detach.
             return Success();
         case NKikimrScheme::StatusNameConflict:
@@ -148,6 +213,10 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
             return;
         }
 
+        if (NextSequence < SequenceAlters.size()) {
+            ++NextSequence;
+            return AllocateTxId();
+        }
         Success();
     }
 
@@ -213,7 +282,8 @@ public:
             TReplication::ETargetKind kind,
             const TPathId& dstPathId,
             const TReplication::EState desiredState,
-            const TPathId& replicationPathId)
+            const TPathId& replicationPathId,
+            const TActorId& proxy, const TString& srcPath, const TString& dstPath)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , ReplicationId(rid)
@@ -223,6 +293,9 @@ public:
         , ReplicationPathId(replicationPathId)
         , DesiredState(desiredState)
         , LogPrefix(CreateActorLogPrefix("DstAlterer", ReplicationId, TargetId))
+        , YdbProxy(proxy)
+        , SrcPath(srcPath)
+        , DstPath(dstPath)
     {
     }
 
@@ -236,6 +309,9 @@ public:
                 switch (Kind) {
                 case TReplication::ETargetKind::Table:
                 case TReplication::ETargetKind::IndexTable:
+                    if (YdbProxy) {
+                        return PrepareSequences();
+                    }
                     return AllocateTxId();
                 case TReplication::ETargetKind::Transfer:
                     return Success();
@@ -274,6 +350,11 @@ private:
     bool WaitingForCompletion = false;
     TActorId PipeCache;
     TString AlterError;
+    const TActorId YdbProxy;
+    const TString SrcPath;
+    const TString DstPath;
+    TVector<NKikimrSchemeOp::TModifyScheme> SequenceAlters;
+    size_t NextSequence = 0;
     static constexpr auto RetryInterval = TDuration::Seconds(10);
 
 }; // TDstAlterer
@@ -281,16 +362,27 @@ private:
 IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorContext& ctx) {
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
+    bool needsSequences = target->GetConfig()->IsFulltextOrJsonIndex();
+    if (target->GetKind() == TReplication::ETargetKind::Table) {
+        for (const auto* peer : replication->GetTargets()) {
+            needsSequences |= peer->GetKind() == TReplication::ETargetKind::IndexTable
+                && replication->FindBaseTableTarget(*peer) == target
+                && peer->GetConfig()->IsRowIdIndex();
+        }
+    }
     return CreateDstAlterer(ctx.SelfID, replication->GetSchemeShardId(),
         replication->GetId(), target->GetId(), target->GetKind(), target->GetDstPathId(), replication->GetDesiredState(),
-        replication->GetPathId());
+        replication->GetPathId(),
+
+        needsSequences ? replication->GetYdbProxy() : TActorId{}, target->GetSrcPath(), target->GetDstPath());
 }
 
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState,
-        const TPathId& replicationPathId)
+        const TPathId& replicationPathId,
+        const TActorId& proxy, const TString& srcPath, const TString& dstPath)
 {
-    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState, replicationPathId);
+    return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState, replicationPathId, proxy, srcPath, dstPath);
 }
 
 }

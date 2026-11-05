@@ -5,7 +5,7 @@
 namespace NKikimr::NDataShard {
 
 void PersistCdcSchemaChange(TDataShard& dataShard, NTabletFlatExecutor::TTransactionContext& txc,
-    TOperation::TPtr op, const TPathId& tableId, const TUserTable& table)
+    TOperation::TPtr op, const TPathId& tableId, const TUserTable& table, const TPathId& onlyStream)
 {
     if (table.GetSchemaChangesCdcStreams().empty()) {
         return;
@@ -13,6 +13,9 @@ void PersistCdcSchemaChange(TDataShard& dataShard, NTabletFlatExecutor::TTransac
 
     NIceDb::TNiceDb db(txc.DB);
     for (const auto& streamPathId : table.GetSchemaChangesCdcStreams()) {
+        if (onlyStream && streamPathId != onlyStream) {
+            continue;
+        }
         auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::CdcSchemaChange)
             .WithOrder(dataShard.AllocateChangeRecordOrder(db))
             .WithGroup(0)

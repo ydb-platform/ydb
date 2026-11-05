@@ -1,4 +1,5 @@
 #include "schemeshard_cdc_stream_common.h"
+#include <ydb/core/base/table_index.h>
 
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
@@ -13,13 +14,8 @@ bool IsIndexTypeSupportedForCdc(NKikimrSchemeOp::EIndexType type) {
     return type == NKikimrSchemeOp::EIndexTypeGlobal
         || type == NKikimrSchemeOp::EIndexTypeGlobalUnique
         || type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
-        || type == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
-        || type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
-        || type == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
-        || type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance
         || type == NKikimrSchemeOp::EIndexTypeGlobalHnsw
-        || type == NKikimrSchemeOp::EIndexTypeGlobalJson
-        || type == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact;
+        || NTableIndex::IsFulltextOrJsonIndex(type);
 }
 
 void MaybeGuardIndexWithBaseCdcScanLock(

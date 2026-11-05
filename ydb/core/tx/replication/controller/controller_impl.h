@@ -204,6 +204,7 @@ private:
     void AllocateTxIds(const TActorContext& ctx);
     TVector<TString> GetCommitTablePaths(const TRowVersion& version) const;
     bool CanCommitIndexBuilds(const TRowVersion& version) const;
+    TVector<std::pair<ui64, ui64>> GetIndexBuildGroup(const std::pair<ui64, ui64>& key) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
     void UpdateLagCounters();
     void InvalidateLag(const TWorkerId& id);

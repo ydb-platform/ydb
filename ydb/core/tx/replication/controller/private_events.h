@@ -263,6 +263,7 @@ struct TEvPrivate {
         const ui64 ReplicationId;
         const ui64 TargetId;
         const ui64 TxId;
+        ui64 PreviousTxId = 0; // Completed row-id sequence preparation, if any.
 
         TEvSchemaChangeDstAlterTxId(ui64 rid, ui64 tid, ui64 txId);
         TString ToString() const override;

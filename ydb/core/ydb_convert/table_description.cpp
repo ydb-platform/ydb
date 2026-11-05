@@ -2549,6 +2549,23 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
         };
 
         if constexpr (std::is_same<TYdbProto, Ydb::Table::DescribeTableResult>::value) {
+            switch (tableIndex.GetType()) {
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalJson:
+                index->set_fulltext_storage_layout(Ydb::Table::TableIndexDescription::FULLTEXT_STORAGE_LAYOUT_FLAT);
+                break;
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                index->set_fulltext_storage_layout(Ydb::Table::TableIndexDescription::FULLTEXT_STORAGE_LAYOUT_COMPACT);
+                break;
+            default:
+                break;
+            }
+            if (NTableIndex::IsFulltextOrJsonIndex(tableIndex.GetType())) {
+                index->set_use_row_id_as_doc_id(tableIndex.GetFulltextIndexDescription().GetUseRowIdAsDocId());
+            }
             if (tableIndex.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
                 index->set_status(Ydb::Table::TableIndexDescription::STATUS_READY);
             } else {

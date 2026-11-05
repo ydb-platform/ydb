@@ -1765,6 +1765,7 @@ public:
             hFunc(NKqp::TEvListScriptExecutionOperations, Handle);
             hFunc(NKqp::TEvCancelScriptExecutionOperation, Handle);
             hFunc(NKqp::TEvGetScriptExecutionPhysicalGraph, Handle);
+            hFunc(NKqp::TEvFetchScriptResultsRequest, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(TEvKqp::TEvListSessionsRequest, Handle);
@@ -2159,6 +2160,12 @@ private:
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::GetScriptExecutionPhysicalGraph)) {
             Register(CreateGetScriptExecutionPhysicalGraphActor(ev->Sender, ev->Get()->Database, ev->Get()->ExecutionId));
         }
+    }
+
+    void Handle(TEvFetchScriptResultsRequest::TPtr& ev) {
+        auto& request = *ev->Get();
+        Register(CreateGetScriptExecutionResultActor(ev->Sender, std::move(request.Database), std::move(request.ExecutionId),
+            std::move(request.UserSID), request.ResultSetIndex, request.Offset, request.RowsLimit, request.SizeLimit, request.Deadline));
     }
 
     void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {

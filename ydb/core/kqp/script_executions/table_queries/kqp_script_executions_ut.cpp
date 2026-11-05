@@ -373,10 +373,11 @@ struct TScriptExecutionsYdbSetup {
         return reply;
     }
 
-    TEvFetchScriptResultsResponse::TPtr FetchScriptResults(const TString& executionId, i32 resultSetId) {
+    TEvFetchScriptResultsResponse::TPtr FetchScriptResults(
+        const TString& executionId, i32 resultSetId, i64 offset = 0, i64 rowsLimit = 0, std::optional<TString> userSID = BUILTIN_ACL_ROOT) {
         const auto edgeActor = GetRuntime()->AllocateEdgeActor();
-        GetRuntime()->Register(NKikimr::NKqp::CreateGetScriptExecutionResultActor(
-            edgeActor, TestDatabase, executionId, BUILTIN_ACL_ROOT, resultSetId, 0, 0, 0, TInstant::Max()));
+        GetRuntime()->Send(MakeKqpProxyID(GetRuntime()->GetFirstNodeId()), edgeActor,
+            new TEvFetchScriptResultsRequest(TestDatabase, executionId, std::move(userSID), resultSetId, offset, rowsLimit, 0, TInstant::Max()));
 
         auto reply = GetRuntime()->GrabEdgeEvent<TEvFetchScriptResultsResponse>(edgeActor, TestTimeout);
         UNIT_ASSERT_C(reply, "FetchScriptResults response is empty");
@@ -577,6 +578,26 @@ public:
 }   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
+    Y_UNIT_TEST(FetchScriptResultsThroughProxy) {
+        TScriptExecutionsYdbSetup ydb(false, /* secureScriptExecutions */ true);
+        const auto executionId =
+            ydb.CheckRunQueryInDb("SELECT 1 AS value UNION ALL SELECT 2 AS value UNION ALL SELECT 3 AS value ORDER BY value");
+        ydb.WaitQueryFinish(executionId);
+
+        const auto result = ydb.FetchScriptResults(executionId, 0, 1, 1);
+        const auto& response = *result->Get();
+        UNIT_ASSERT_VALUES_EQUAL_C(response.Status, Ydb::StatusIds::SUCCESS, response.Issues.ToString());
+        UNIT_ASSERT(response.HasMoreResults);
+        UNIT_ASSERT(response.ResultSet);
+        UNIT_ASSERT_VALUES_EQUAL(response.ResultSet->rows_size(), 1);
+        NYdb::TResultSetParser parser(*response.ResultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("value").GetInt32(), 2);
+
+        const auto denied = ydb.FetchScriptResults(executionId, 0, 0, 1, "another-user");
+        UNIT_ASSERT_VALUES_EQUAL(denied->Get()->Status, Ydb::StatusIds::UNAUTHORIZED);
+    }
+
     Y_UNIT_TEST(RunCheckLeaseStatus) {
         TScriptExecutionsYdbSetup ydb;
 

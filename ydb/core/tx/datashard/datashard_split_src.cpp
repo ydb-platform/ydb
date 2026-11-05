@@ -147,6 +147,27 @@ public:
 
         Y_ENSURE(Self->TxInFly() == 0, "Currently split operation shouldn't start while there are in-flight transactions");
 
+        bool hasCdcStreams = false;
+        for (const auto& [_, table] : Self->GetUserTables()) {
+            hasCdcStreams |= !table->CdcStreams.empty();
+        }
+        if (hasCdcStreams) {
+            // The source may keep publishing persisted CDC records after the
+            // snapshot is captured. A later source timecast update must not
+            // expose a write that the destination can still read past.
+            // Drain the future-write window before capturing the snapshot and
+            // transfer a persistent read floor, not just the write edge.
+            if (Self->MediatorStateWaiting) {
+                return true;
+            }
+            const auto writeEdge = Self->GetSnapshotManager().GetImmediateWriteEdge();
+            const ui64 observedStep = Self->GetMaxObservedStep();
+            if (writeEdge.Step > observedStep) {
+                Self->WaitPlanStep(writeEdge.Step);
+                return true;
+            }
+        }
+
         Self->SplitStarted = true;
 
         // We need to remove all locks that we won't be transferring to dst shards first,
@@ -296,6 +317,13 @@ public:
             if (ti.second->ShadowTid) {
                 tablesToSnapshot.push_back(ti.second->ShadowTid);
             }
+        }
+
+        if (hasCdcStreams) {
+            // All page-faulting work is finished. Persist the floor in the same
+            // transaction that captures it, so a retry cannot lose the update.
+            Self->GetSnapshotManager().PromoteCompleteEdge(
+                TRowVersion(Self->GetMaxObservedStep(), Max<ui64>()), txc);
         }
 
         TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext;

@@ -2622,7 +2622,9 @@ TDataShard::TPromotePostExecuteEdges TDataShard::PromoteImmediatePostExecuteEdge
             YDB_LOG_TRACE("PromoteImmediatePostExecuteEdges at promoting UnprotectedReadEdge",
                 {"tabletId", TabletID()},
                 {"version", version});
-            SnapshotManager.PromoteUnprotectedReadEdge(version);
+            if (SnapshotManager.PromoteUnprotectedReadEdge(version)) {
+                ChangeRecordsVisibilityChanged.NotifyAll();
+            }
 
             // Make sure pending distributed transactions are marked incomplete,
             // since we just protected up to and including version from writes,
@@ -2814,6 +2816,7 @@ void TDataShard::SendImmediateReadResult(
 }
 
 void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorContext& ctx) {
+    ChangeRecordsVisibilityChanged.NotifyAll();
     for (auto it = MediatorDelayedReplies.begin(); it != MediatorDelayedReplies.end();) {
         const ui64 step = it->first.Step;
 
@@ -2889,8 +2892,8 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
-        // nothing
+    void Complete(const TActorContext& ctx) override {
+        Self->CheckSplitCanStart(ctx);
     }
 
 private:
@@ -3984,6 +3987,7 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, 
     Pipeline.ActivateWaitingTxOps(ctx);
 
     CheckMediatorStateRestored();
+    CheckSplitCanStart(ctx);
 }
 
 void TDataShard::Handle(TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr& ev, const TActorContext& ctx) {
@@ -4024,6 +4028,7 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const 
     Pipeline.ActivateWaitingTxOps(ctx);
 
     CheckMediatorStateRestored();
+    CheckSplitCanStart(ctx);
 }
 
 void TDataShard::Handle(TEvPrivate::TEvMediatorRestoreBackup::TPtr&, const TActorContext&) {

@@ -13,7 +13,7 @@ Each column group has a `COMPRESSION` codec. Allowed values:
 
 Column groups in row-oriented tables do **not** support other algorithms, including `zstd`. Primary key columns always belong to the `default` group and cannot be moved to another group.
 
-Changes to compression codecs and storage types are not applied immediately to data already on disk: new parameters take effect during subsequent background [LSM compaction](glossary.md#compaction). If you change these parameters in an existing table with `ALTER TABLE`, disk space savings also appear gradually.
+Changes to compression codecs and storage types are not applied immediately to data already on disk: new parameters take effect during subsequent background [LSM compaction](glossary.md#compaction). If you change these parameters in an existing table with `ALTER TABLE`, disk space savings also appear gradually. To apply the new settings to existing data sooner, run a [forced compaction](../yql/reference/syntax/alter_table/compact.md) with `ALTER TABLE … COMPACT`.
 
 Creating and changing column groups:
 
@@ -30,6 +30,12 @@ Parameters:
 - `level` — compression level for the `zstd` algorithm; allowed values are `0` to `22`. This parameter is not used for other algorithms.
 
 If the `COMPRESSION()` option is specified without parameters, the column uses the default compression. Currently, the default is `lz4`.
+
+{% note info %}
+
+Unlike row-oriented tables, changing compression settings in a column-oriented table does not guarantee that existing data will be compressed. Background [compaction](glossary.md#compaction) does not rewrite everything — some data keeps its previous settings. The new settings apply only to new writes and to data that compaction processes.
+
+{% endnote %}
 
 Columnar storage often achieves strong compression because values in a column tend to be similar. You can also configure [column encoding](../yql/reference/syntax/create_table/index.md) separately from compression with the `ENCODING` option.
 

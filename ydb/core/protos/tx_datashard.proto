@@ -340,6 +340,8 @@ message TKqpReadRangesSourceSettings {
 
     optional string PoolId = 28;
     optional TReadSampling Sampling = 29;
+    // TEvRead.EHint flags selected for the current query execution.
+    optional uint32 ReadHints = 30;
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given

@@ -14,6 +14,7 @@ PEERDIR(
 )
 
 SRCS(
+    checksum_table_ut.cpp
     mvcc_version_ut.cpp
     query_actor_ut.cpp
 )

@@ -171,9 +171,13 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
-                .NotAsyncReplicaTable()
                 .IsUnderOperation()
                 .IsUnderTheSameOperation(OperationId.GetTxId());
+
+            // Dropping the table must also remove its CDC streams.
+            if (checks && !tablePath.IsUnderDeleting()) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (checks && !tablePath.IsInsideTableIndexPath()) {
                 checks.IsCommonSensePath();

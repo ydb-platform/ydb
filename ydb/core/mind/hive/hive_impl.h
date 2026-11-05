@@ -128,6 +128,12 @@ TString GetResourceValuesHtml(const TResourceRawValues& values);
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values);
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values, const TResourceRawValues& maximum);
 TString GetResourceValuesHtml(const NKikimrTabletBase::TMetrics& values);
+
+// value of a THiveConfig field in single-line text form; a repeated field is rendered as [a, b, c], an absent singular field as <unset>
+TString GetHiveConfigFieldText(const NKikimrConfig::THiveConfig& config, const google::protobuf::FieldDescriptor* field);
+
+// "Field: from -> to" for every field that differs between the two configs, "; "-separated; empty when they are equal
+TString GetHiveConfigDiffText(const NKikimrConfig::THiveConfig& from, const NKikimrConfig::THiveConfig& to);
 TString GetResourceValuesHtml(const TMetrics& values);
 NJson::TJsonValue GetResourceValuesJson(const NKikimrTabletBase::TMetrics& values);
 ui64 GetReadThroughput(const NKikimrTabletBase::TMetrics& values);
@@ -264,10 +270,10 @@ protected:
     bool IsItPossibleToStartBalancer(EBalancerType balancerType);
     // balancerType is empty when the suppression is not about a specific type
     void LogBalancerNotStarted(const TString& balancerType, EBalancerSuppressReason reason);
-    void StartHiveBalancer(TBalancerSettings&& settings);
+    bool StartHiveBalancer(TBalancerSettings&& settings);
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
-    void StartHiveStorageBalancer(TStorageBalancerSettings settings);
+    bool StartHiveStorageBalancer(TStorageBalancerSettings settings);
     // starts a new reassign for every tablet in the list
     void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
     // continues reassigns of tablets that were left in the middle of it (e.g. by a Hive restart)

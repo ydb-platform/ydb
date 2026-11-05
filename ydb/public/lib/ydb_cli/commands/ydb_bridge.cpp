@@ -145,6 +145,12 @@ void TCommandBridgeUpdate::Config(TConfig& config) {
     config.Opts->AddLongOption('f', "file", "Path to a JSON file with state updates.")
         .RequiredArgument("PATH").StoreResult(&FilePath);
     config.Opts->MutuallyExclusive("set", "file");
+    config.Opts->AddLongOption("expected-generation",
+            "Apply the update only if the cluster state still has this generation. "
+            "Otherwise the update is rejected with ABORTED and not applied.")
+        .RequiredArgument("N").Handler([this](const TString& value) {
+            ExpectedGeneration = FromString<ui64>(value);
+        });
 
     config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
@@ -197,7 +203,11 @@ int TCommandBridgeUpdate::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     auto client = NYdb::NBridge::TBridgeClient(driver);
 
-    auto result = client.UpdateClusterState(Updates, {}).GetValueSync();
+    NYdb::NBridge::TUpdateClusterStateSettings settings;
+    if (ExpectedGeneration) {
+        settings.ExpectedGeneration(*ExpectedGeneration);
+    }
+    auto result = client.UpdateClusterState(Updates, {}, settings).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     Cout << "Cluster state updated successfully." << Endl;

@@ -11,7 +11,7 @@
 namespace NYdb::inline Dev::NPersQueue {
 
 enum class EClusterDiscoveryMode {
-    Auto = 0, // enables cluster discovery only for hostname "logbroker.yandex.net" and "logbroker-prestable.yandex.net"
+    Auto = 0, // Enables discovery for main, prestable and LBK federation endpoints.
     On,
     Off
 };

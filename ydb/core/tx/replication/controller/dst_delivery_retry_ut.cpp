@@ -13,7 +13,7 @@
 namespace NKikimr::NReplication::NController {
 
 Y_UNIT_TEST_SUITE(DstDeliveryRetry) {
-    void CheckDeliveryRetry(bool alter, bool detach = false) {
+    void CheckDeliveryRetry(bool alter) {
         TTestActorRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto parent = runtime.AllocateEdgeActor();
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(DstDeliveryRetry) {
             ? CreateDstAlterer(parent, pathId.OwnerId, 1, 1,
                 TReplication::ETargetKind::Table, pathId, TReplication::EState::Done)
             : CreateDstRemover(parent, pathId.OwnerId, {}, 1, 1,
-                TReplication::ETargetKind::Table, pathId, detach ? pathId : TPathId()));
+                TReplication::ETargetKind::Table, pathId));
 
         NTxProxy::TTxProxyServices services;
         services.LeaderPipeCache = pipeCache;
@@ -73,9 +73,6 @@ Y_UNIT_TEST_SUITE(DstDeliveryRetry) {
         CheckDeliveryRetry(false);
     }
 
-    Y_UNIT_TEST(DetachRetriesOwnSchemeShard) {
-        CheckDeliveryRetry(false, true);
-    }
 }
 
 Y_UNIT_TEST_SUITE(DstAlterRetry) {
@@ -197,73 +194,6 @@ Y_UNIT_TEST_SUITE(DstAlterRetry) {
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusAccessDenied);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Error, "injected rejection");
         UNIT_ASSERT(env.Runtime.CaptureScheduledEvents().empty());
-    }
-}
-
-Y_UNIT_TEST_SUITE(DstRemoval) {
-    Y_UNIT_TEST(DetachAfterDestinationNameConflict) {
-        for (const auto status : {NKikimrScheme::StatusPathDoesNotExist,
-                NKikimrScheme::StatusSuccess, NKikimrScheme::StatusSchemeError}) {
-            TTestActorRuntime runtime;
-            runtime.Initialize(TAppPrepare().Unwrap());
-            const auto parent = runtime.AllocateEdgeActor();
-            const auto allocator = runtime.AllocateEdgeActor();
-            const auto pipeCache = runtime.AllocateEdgeActor();
-            runtime.RegisterService(MakeTxProxyID(), allocator);
-            const TPathId pendingPathId(1, 2);
-            const auto remover = runtime.Register(CreateDstRemover(
-                parent,
-                pendingPathId.OwnerId,
-                {},
-                1,
-                1,
-                TReplication::ETargetKind::Table,
-                {},
-                pendingPathId));
-
-            runtime.GrabEdgeEvent<TEvTxUserProxy::TEvAllocateTxId>(allocator);
-            NTxProxy::TTxProxyServices services;
-            services.LeaderPipeCache = pipeCache;
-            runtime.Send(
-                remover,
-                allocator,
-                new TEvTxUserProxy::TEvAllocateTxIdResult(100, services, {}));
-            const auto alter = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCache);
-            UNIT_ASSERT_VALUES_EQUAL(
-                alter->Get()->Ev->Type(),
-                NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
-            const TString error = "path is empty";
-            runtime.Send(
-                remover,
-                pipeCache,
-                new NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult(
-                    NKikimrScheme::StatusNameConflict,
-                    100,
-                    pendingPathId.OwnerId,
-                    error));
-
-            const auto describe = runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(pipeCache);
-            UNIT_ASSERT_VALUES_EQUAL(describe->Get()->TabletId, pendingPathId.OwnerId);
-            UNIT_ASSERT_VALUES_EQUAL(
-                describe->Get()->Ev->Type(),
-                NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType);
-            const auto& request = static_cast<NSchemeShard::TEvSchemeShard::TEvDescribeScheme*>(
-                describe->Get()->Ev.Get())->Record;
-            UNIT_ASSERT_VALUES_EQUAL(request.GetSchemeshardId(), pendingPathId.OwnerId);
-            UNIT_ASSERT_VALUES_EQUAL(request.GetPathId(), pendingPathId.LocalPathId);
-            auto description = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
-            description->Record.SetStatus(status);
-            runtime.Send(remover, pipeCache, description.Release());
-
-            const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvDropDstResult>(parent);
-            UNIT_ASSERT_VALUES_EQUAL(
-                result->Get()->IsSuccess(),
-                status == NKikimrScheme::StatusPathDoesNotExist);
-            if (!result->Get()->IsSuccess()) {
-                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusNameConflict);
-                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Error, error);
-            }
-        }
     }
 }
 

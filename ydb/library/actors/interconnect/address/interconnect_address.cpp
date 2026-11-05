@@ -48,6 +48,18 @@ namespace NInterconnect {
         }
     }
 
+    bool TAddress::IsLinkLocal() const noexcept {
+        switch (Addr.Generic.sa_family) {
+            case AF_INET:
+                // Check whether the IPv4 address is link-local 169.254.0.0/16 (RFC3927)
+                return (ntohl(Addr.Ipv4.sin_addr.s_addr) & 0xffff0000u) == 0xa9fe0000u;
+            case AF_INET6:
+                return IN6_IS_ADDR_LINKLOCAL(&Addr.Ipv6.sin6_addr);
+            default:
+                return false;
+        }
+    }
+
     TString TAddress::ToString() const {
         return GetAddress() + ":" + ::ToString(GetPort());
     }

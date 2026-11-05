@@ -6,6 +6,8 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <util/generic/string.h>
+
+#include <optional>
 #include <vector>
 
 namespace NYdb::NConsoleClient {
@@ -40,6 +42,7 @@ private:
 
     TVector<TString> PileStateUpdates;
     TString FilePath;
+    std::optional<ui64> ExpectedGeneration;
 
     std::vector<NYdb::NBridge::TPileStateUpdate> Updates;
 };

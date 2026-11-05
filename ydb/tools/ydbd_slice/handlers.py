@@ -733,11 +733,30 @@ mon={mon}""".format(
                 next_report = now + 30
             if now >= deadline:
                 raise RuntimeError(
-                    "timeout waiting for kikimr restart on %s (%s), current: %s "
-                    "retcode=%s stderr=%s"
-                    % (host, phase, last_stdout, last_retcode, last_stderr)
+                    "timeout waiting for kikimr restart on %s (%s %d/%d); "
+                    "hosts 1..%d in this phase may already be on the new binary/config; "
+                    "current: %s retcode=%s stderr=%s"
+                    % (
+                        host,
+                        phase,
+                        index,
+                        total,
+                        index - 1,
+                        last_stdout,
+                        last_retcode,
+                        last_stderr,
+                    )
                 )
             time.sleep(2)
+
+    def _rolling_pause(self, interval_sec, message, *args):
+        if interval_sec <= 0:
+            return
+        if getattr(self.nodes, '_dry_run', False):
+            logger.info("dry-run: skip " + message, *args)
+            return
+        logger.info(message, *args)
+        time.sleep(interval_sec)
 
     def _rolling_restart_static_host(self, host, index, total):
         list_cmd = _static_pids_command()
@@ -756,8 +775,8 @@ mon={mon}""".format(
             nodes=[host],
             retry_attempts=0,
         )
-        # Same retries as _start_static: transient SSH/start failures should not
-        # abort the whole rolling update via sys.exit.
+        # Same default retries as _start_static: covers transient SSH/start failures.
+        # Persistent start failure still ends in sys.exit from Nodes after retries.
         self.nodes.execute_async(
             "sudo service kikimr start",
             check_retcode=True,
@@ -817,7 +836,7 @@ mon={mon}""".format(
         if total == 0:
             return
         logger.info(
-            "rolling restart %s: %d hosts, pause %ss after each host is back",
+            "rolling restart %s: %d hosts, pause %ss after processes are up and stable",
             phase,
             total,
             interval_sec,
@@ -829,12 +848,17 @@ mon={mon}""".format(
                 host_assignments = (assignments_by_host or {}).get(host, [])
                 self._rolling_restart_dynamic_host(host, index, total, host_assignments)
             if index < total and interval_sec > 0:
-                logger.info("waiting %ss before the next %s host", interval_sec, phase)
-                time.sleep(interval_sec)
+                self._rolling_pause(
+                    interval_sec,
+                    "waiting %ss before the next %s host",
+                    interval_sec,
+                    phase,
+                )
 
     def _rolling_restart(self, interval_sec):
         # Same order as a full update restart: storage first across hosts, then dynamic.
         # Intentional two-phase (not per-host combined): storage should be back before dynnodes.
+        # "Back" here is PID liveness/stability only; SECONDS must cover cluster rejoin.
         did_storage = False
         if "kikimr" in self.components:
             storage_hosts = self._storage_hosts()
@@ -851,11 +875,11 @@ mon={mon}""".format(
             did_storage = bool(storage_hosts)
         if "dynamic_slots" in self.components:
             if did_storage and interval_sec > 0:
-                logger.info(
+                self._rolling_pause(
+                    interval_sec,
                     "waiting %ss between storage and dynamic rolling-restart phases",
                     interval_sec,
                 )
-                time.sleep(interval_sec)
             assignments_by_host = defaultdict(list)
             for slot, tenant, host, node_bind in self._iter_dynamic_assignments():
                 assignments_by_host[host].append((slot, tenant, host, node_bind))

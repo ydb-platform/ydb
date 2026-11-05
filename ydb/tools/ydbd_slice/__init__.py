@@ -552,7 +552,10 @@ def rolling_restart_args():
         default=None,
         help="After binaries and configs are uploaded, restart nodes one by one. "
              "Storage hosts first, then dynamic. Each host is stopped and started; "
-             "the next host is restarted only after this one is back and SECONDS have passed. "
+             "the tool waits until matching kikimr processes are up and stable "
+             "(not full cluster rejoin), then waits SECONDS before the next host "
+             "and between the storage and dynamic phases. "
+             "Choose SECONDS large enough for storage/dynnode rejoin. "
              "Without this option all nodes restart at once.",
     )
     return args
@@ -841,7 +844,9 @@ def add_update_mode(modes, walle_provider):
         "Sync binary and cfg, then restart ydbd. "
         "Without --rolling-restart stop all instances then start them. "
         "With --rolling-restart SECONDS the same storage-then-dynamic order, one host at a time: "
-        "stop, start, wait until the node is back, then wait SECONDS before the next host. "
+        "stop, start, wait until kikimr processes are up and stable (PID check only, not cluster "
+        "health), then wait SECONDS before the next host and between phases. "
+        "SECONDS must cover real storage/dynnode rejoin time. "
         "Use --hosts to specify particular hosts.",
     )
     mode.set_defaults(handler=_run)

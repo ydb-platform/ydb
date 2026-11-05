@@ -133,6 +133,7 @@ private:
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     TReplication::ITarget* FindTarget(const TWorkerId& id) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
+    void UpdateLagCounters();
     void InvalidateLag(const TWorkerId& id);
     void ScheduleLagExpiry(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvExpireWorkerLag::TPtr& ev, const TActorContext& ctx);
@@ -209,6 +210,8 @@ private:
             Y_VERIFY_S(res.second, "Duplication replication: " << pathId);
         }
 
+        replication->SetLagChangedCallback([this] { UpdateLagCounters(); });
+        UpdateLagCounters();
         return replication;
     }
 

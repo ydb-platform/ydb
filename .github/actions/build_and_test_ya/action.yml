@@ -63,11 +63,19 @@ inputs:
   enable_ydb_qa:
     type: boolean
     default: true
-    description: "Read/write YDB QA analytics DB; false (or host nebius/ydb) sets CI_DISABLE_YDB_QA"
+    description: "Read/write YDB QA analytics DB; false sets CI_DISABLE_YDB_QA"
   analytics_job_name:
     type: string
     required: false
     description: "Override analytics job_name (remote executor / workflow_dispatch); empty = resolve from github.workflow"
+  source_event_name:
+    type: string
+    required: false
+    description: "Caller event_name for analytics pull naming (remote executor is always workflow_dispatch)"
+  source_run_id:
+    type: string
+    required: false
+    description: "Caller run_id for analytics pull naming / job_id (empty = github.run_id)"
 defaults:
   run:
     shell: bash
@@ -78,14 +86,12 @@ runs:
       shell: bash
       env:
         ENABLE_YDB_QA: ${{ inputs.enable_ydb_qa }}
-        HOST_REPOSITORY: ${{ github.repository }}
       run: |
-        # Nebius host must not touch YC YDB QA (read or write), even if secrets appear later.
-        if [ "$ENABLE_YDB_QA" = "false" ] || [ "$HOST_REPOSITORY" = "nebius/ydb" ]; then
+        if [ "$ENABLE_YDB_QA" = "false" ]; then
           echo "CI_DISABLE_YDB_QA=1" >> "$GITHUB_ENV"
-          echo "YDB QA disabled (enable_ydb_qa=$ENABLE_YDB_QA host=$HOST_REPOSITORY)"
+          echo "YDB QA disabled (enable_ydb_qa=false)"
         else
-          echo "YDB QA enabled (enable_ydb_qa=$ENABLE_YDB_QA host=$HOST_REPOSITORY)"
+          echo "YDB QA enabled"
         fi
 
     - name: Configure runner limits
@@ -168,8 +174,10 @@ runs:
       env:
         WORKFLOW_NAME: ${{ github.workflow }}
         BUILD_PRESET: ${{ inputs.build_preset }}
-        EVENT_NAME: ${{ github.event_name }}
+        EVENT_NAME: ${{ inputs.source_event_name || github.event_name }}
         ANALYTICS_JOB_NAME_OVERRIDE: ${{ inputs.analytics_job_name }}
+        SOURCE_EVENT_NAME: ${{ inputs.source_event_name }}
+        SOURCE_RUN_ID: ${{ inputs.source_run_id }}
         GITHUB_NUMERIC_JOB_ID: ${{ job.check_run_id }}
         GITHUB_TOKEN: ${{ github.token }}
         # Env values are not shell-parsed — safe for untrusted PR titles.
@@ -182,6 +190,12 @@ runs:
         fi
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
         echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
+        if [ -n "$SOURCE_EVENT_NAME" ]; then
+          echo "SOURCE_EVENT_NAME=$SOURCE_EVENT_NAME" >> "$GITHUB_ENV"
+        fi
+        if [ -n "$SOURCE_RUN_ID" ]; then
+          echo "SOURCE_RUN_ID=$SOURCE_RUN_ID" >> "$GITHUB_ENV"
+        fi
         # Random delimiter so a hostile title cannot close the GITHUB_ENV block.
         # printf (not echo): titles starting with -n/-e/-E must not be echo flags.
         PR_TITLE_DELIM="ghadelimiter_$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
@@ -235,7 +249,12 @@ runs:
         echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
-        ANALYTICS_FILE=$TMP_DIR/analytics.jsonl
+        # With YDB QA off, buffer ci_metrics under PUBLIC_DIR for remote-repo S3 + caller ingest.
+        if [ "${CI_DISABLE_YDB_QA:-}" = "1" ] || [ "${CI_DISABLE_YDB_QA:-}" = "true" ]; then
+          ANALYTICS_FILE=$PUBLIC_DIR/ci_metrics.jsonl
+        else
+          ANALYTICS_FILE=$TMP_DIR/analytics.jsonl
+        fi
         export ANALYTICS_FILE
         echo "ANALYTICS_FILE=$ANALYTICS_FILE" >> $GITHUB_ENV
         mkdir -p "$(dirname "$ANALYTICS_FILE")"
@@ -802,44 +821,48 @@ runs:
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
           fi
 
-          # upload tests results to YDB
-          # Create run name based on event type and retry number
-          case "$GITHUB_EVENT_NAME" in
-            workflow_dispatch)
-              run_name="${{ github.run_id }}_manual"
-              ;;
-            pull_request | pull_request_target)
-              pr_number="${{ github.event.number }}"
-              if [ -n "$pr_number" ]; then
-                run_name="${{ github.run_id }}_PR_${pr_number}"
-              else
-                run_name="${{ github.run_id }}_PR"
-              fi
-              ;;
-            schedule)
-              run_name="${{ github.run_id }}_schedule"
-              ;;
-            push)
-              run_name="${{ github.run_id }}_POST"
-              ;;
-            *)
-              run_name="${{ github.run_id }}"
-              ;;
-          esac
-          run_name="${run_name}_attempt_${RETRY}"
-          analytics start upload_tests_results
-          # Stream logs instead of buffering and replaying them through xtrace.
-          .github/scripts/analytics/upload_tests_results.py \
-            --test-results-file "${CURRENT_REPORT}" \
-            --run-timestamp "${ATTEMPT_STARTED_AT}" \
-            --commit "${ORIGINAL_HEAD}" \
-            --build-type "${BUILD_PRESET}" \
-            --pull "${run_name}" \
-            --job-name "${ANALYTICS_JOB_NAME}" \
-            --job-id "${{ github.run_id }}" \
-            --branch "${BRANCH_NAME}"
-          analytics end upload_tests_results
-          analytics flush
+          if [ "${CI_DISABLE_YDB_QA:-}" = "1" ] || [ "${CI_DISABLE_YDB_QA:-}" = "true" ]; then
+            echo "Skipping upload_tests_results (CI_DISABLE_YDB_QA=${CI_DISABLE_YDB_QA})"
+          else
+            EFFECTIVE_EVENT_NAME="${SOURCE_EVENT_NAME:-$GITHUB_EVENT_NAME}"
+            EFFECTIVE_RUN_ID="${SOURCE_RUN_ID:-${{ github.run_id }}}"
+            case "$EFFECTIVE_EVENT_NAME" in
+              workflow_dispatch)
+                run_name="${EFFECTIVE_RUN_ID}_manual"
+                ;;
+              pull_request | pull_request_target)
+                pr_number="${PR_NUMBER:-${{ github.event.number }}}"
+                if [ -n "$pr_number" ]; then
+                  run_name="${EFFECTIVE_RUN_ID}_PR_${pr_number}"
+                else
+                  run_name="${EFFECTIVE_RUN_ID}_PR"
+                fi
+                ;;
+              schedule)
+                run_name="${EFFECTIVE_RUN_ID}_schedule"
+                ;;
+              push)
+                run_name="${EFFECTIVE_RUN_ID}_POST"
+                ;;
+              *)
+                run_name="${EFFECTIVE_RUN_ID}"
+                ;;
+            esac
+            run_name="${run_name}_attempt_${RETRY}"
+            analytics start upload_tests_results
+            # Stream logs instead of buffering and replaying them through xtrace.
+            .github/scripts/analytics/upload_tests_results.py \
+              --test-results-file "${CURRENT_REPORT}" \
+              --run-timestamp "${ATTEMPT_STARTED_AT}" \
+              --commit "${ORIGINAL_HEAD}" \
+              --build-type "${BUILD_PRESET}" \
+              --pull "${run_name}" \
+              --job-name "${ANALYTICS_JOB_NAME}" \
+              --job-id "${EFFECTIVE_RUN_ID}" \
+              --branch "${BRANCH_NAME}"
+            analytics end upload_tests_results
+            analytics flush
+          fi
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
@@ -939,10 +962,56 @@ runs:
         echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         cat "$GITHUB_STEP_SUMMARY" >> "$JOB_SUMMARY_MD"
+        # Locator for caller-side ingest (next to job_summary.md at the S3 run root).
+        REMOTE_ARTIFACTS_JSON="$PUBLIC_DIR/remote_artifacts.json"
+        REMOTE_ARTIFACTS_JSON="$REMOTE_ARTIFACTS_JSON" python3 - <<'PY'
+        import json, os
+        bucket_path = os.environ["S3_BUCKET_PATH"]  # s3://bucket/key/prefix
+        assert bucket_path.startswith("s3://"), bucket_path
+        rest = bucket_path[len("s3://"):]
+        bucket, _, key_prefix = rest.partition("/")
+        run_root_key = key_prefix.rsplit("/", 1)[0]
+        public_dir_url = os.environ["PUBLIC_DIR_URL"].rstrip("/")
+        run_root_url = public_dir_url.rsplit("/", 1)[0]
+        endpoint = os.environ.get("AWS_ENDPOINT") or os.environ.get("S3_ENDPOINT") or ""
+        if not endpoint and public_dir_url.startswith("http"):
+            parts = public_dir_url.split("/")
+            if len(parts) >= 3:
+                endpoint = "/".join(parts[:3])
+        meta = {
+            "version": 1,
+            "host_repository": os.environ.get("GITHUB_REPOSITORY", ""),
+            "s3_bucket": bucket,
+            "s3_endpoint": endpoint,
+            "artifact_key_prefix": key_prefix,
+            "run_root_key_prefix": run_root_key,
+            "public_dir_url": public_dir_url,
+            "run_root_url": run_root_url,
+            "build_preset": os.environ.get("BUILD_PRESET", ""),
+            "branch": os.environ.get("BRANCH_NAME", ""),
+            "commit": os.environ.get("ORIGINAL_HEAD", ""),
+            "analytics_job_name": os.environ.get("ANALYTICS_JOB_NAME", ""),
+            "source_event_name": os.environ.get("SOURCE_EVENT_NAME") or os.environ.get("GITHUB_EVENT_NAME", ""),
+            "source_run_id": os.environ.get("SOURCE_RUN_ID") or os.environ.get("GITHUB_RUN_ID", ""),
+            "pull_number": os.environ.get("PR_NUMBER", ""),
+            "executor_run_id": os.environ.get("GITHUB_RUN_ID", ""),
+            "executor_workflow": os.environ.get("GITHUB_WORKFLOW", ""),
+            "ci_metrics_relpath": "ci_metrics.jsonl" if (
+                os.environ.get("CI_DISABLE_YDB_QA", "").strip().lower() in ("1", "true", "yes")
+            ) else "",
+        }
+        path = os.environ["REMOTE_ARTIFACTS_JSON"]
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        print(json.dumps(meta, ensure_ascii=False, indent=2))
+        PY
         s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
         # Stable run-root URL for remote waiters (leaf is ya-*/ under the run).
         s3cmd put --acl-public --no-progress --no-mime-magic --guess-mime-type \
           "$JOB_SUMMARY_MD" "${S3_BUCKET_PATH%/*}/job_summary.md"
+        s3cmd put --acl-public --no-progress --no-mime-magic --guess-mime-type \
+          "$REMOTE_ARTIFACTS_JSON" "${S3_BUCKET_PATH%/*}/remote_artifacts.json"
         echo "::endgroup::"
 
     - name: Flush analytics JSONL
@@ -960,6 +1029,16 @@ runs:
           conclusion=failure
         fi
         analytics send --conclusion "$conclusion"
+        # Final send is after the main S3 sync; republish the buffer for caller ingest.
+        if [ "${CI_DISABLE_YDB_QA:-}" = "1" ] || [ "${CI_DISABLE_YDB_QA:-}" = "true" ]; then
+          metrics="${ANALYTICS_FILE:-}"
+          if [ -n "$metrics" ] && [ -f "$metrics" ] && [ -s "$metrics" ]; then
+            s3cmd put --acl-public --no-progress --no-mime-magic --guess-mime-type \
+              "$metrics" "$S3_BUCKET_PATH/ci_metrics.jsonl"
+            s3cmd put --acl-public --no-progress --no-mime-magic --guess-mime-type \
+              "$metrics" "${S3_BUCKET_PATH%/*}/ci_metrics.jsonl"
+          fi
+        fi
 
     - name: show free space
       if: always() && steps.prepare_s3cmd.outcome == 'success'

@@ -110,7 +110,7 @@ jobs:
           WORKFLOW_NAME: ${{ inputs.workflow_name }}
           EXECUTOR_RUN_ID: ${{ needs.dispatch.outputs.executor_run_id }}
           EXECUTOR_RUN_URL: ${{ needs.dispatch.outputs.executor_run_url }}
-          # Nebius artifacts live on the host bucket (public HTTPS), not platform YC S3.
+          # Remote-repo public S3 (may differ from caller vars.AWS_*).
           AWS_ENDPOINT: ${{ inputs.summary_s3_endpoint != '' && inputs.summary_s3_endpoint || vars.AWS_ENDPOINT }}
           AWS_BUCKET: ${{ inputs.summary_s3_bucket != '' && inputs.summary_s3_bucket || vars.AWS_BUCKET }}
           FAIL_ON_REMOTE_FAILURE: ${{ inputs.fail_on_remote_failure }}
@@ -126,3 +126,63 @@ jobs:
           EXECUTOR_RUN_ID: ${{ needs.dispatch.outputs.executor_run_id }}
           EXECUTOR_RUN_URL: ${{ needs.dispatch.outputs.executor_run_url }}
         run: python3 .github/scripts/ci/dispatch_remote_executor.py cancel
+
+  # After wait: reupload remote artifacts to caller S3, regenerate summary, upload YDB QA.
+  ingest:
+    if: >-
+      inputs.wait && always() && !cancelled() &&
+      needs.dispatch.result == 'success' &&
+      needs.dispatch.outputs.executor_run_id != '' &&
+      needs.wait.result != 'cancelled'
+    needs: [dispatch, wait]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/actions
+            .github/scripts
+            .github/config
+          sparse-checkout-cone-mode: false
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+
+      - name: Install tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq s3cmd awscli
+          python3 -m pip install --user ydb 'ydb[yc]' codeowners jinja2 pyyaml
+
+      - name: Configure caller s3cmd
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          s3_bucket: ${{ vars.AWS_BUCKET }}
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          build_preset: relwithdebinfo
+
+      - name: Ingest remote artifacts
+        env:
+          REPO: ${{ inputs.repository != '' && inputs.repository || github.repository }}
+          REMOTE_WORKFLOW_NAME: ${{ inputs.workflow_name }}
+          REMOTE_AWS_ENDPOINT: ${{ inputs.summary_s3_endpoint != '' && inputs.summary_s3_endpoint || vars.AWS_ENDPOINT }}
+          REMOTE_AWS_BUCKET: ${{ inputs.summary_s3_bucket != '' && inputs.summary_s3_bucket || vars.AWS_BUCKET }}
+          CALLER_AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
+          CALLER_AWS_BUCKET: ${{ vars.AWS_BUCKET }}
+          EXECUTOR_RUN_ID: ${{ needs.dispatch.outputs.executor_run_id }}
+          EXECUTOR_RUN_URL: ${{ needs.dispatch.outputs.executor_run_url }}
+          # Reusable workflow inherits caller event/run_id.
+          SOURCE_EVENT_NAME: ${{ github.event_name }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+          PULL_NUMBER: ${{ github.event.pull_request.number || github.event.number || '' }}
+          WORKSPACE: ${{ github.workspace }}
+        run: python3 .github/scripts/ci/ingest_remote_executor_results.py

@@ -227,8 +227,10 @@ def cmd_wait():
 
     set_outputs(executor_conclusion=conclusion or "")
     append_summary(
-        f"## Executor summary\n\n"
-        f"_Mirrored from [{run_id}]({run_url}) (conclusion=`{conclusion}`)._\n\n"
+        f"## Executor finished\n\n"
+        f"- **run:** [{run_id}]({run_url})\n"
+        f"- **conclusion:** `{conclusion}`\n\n"
+        f"_Enriched summary is attached by the ingest job after reupload._\n\n"
     )
     url = job_summary_url(run_id)
     body = None
@@ -238,10 +240,14 @@ def cmd_wait():
             break
         time.sleep(3)
     if not body:
-        append_summary(f"_Failed to mirror `job_summary.md`._\n\n[Open executor run]({run_url})\n")
+        append_summary(f"_Failed to fetch remote `job_summary.md`._\n\n[Open executor run]({run_url})\n")
         die(f"missing S3 job_summary.md at {url}")
-    print(f"Mirrored {url}")
-    append_summary(body if body.endswith("\n") else body + "\n")
+    print(f"Fetched remote job_summary.md from {url}")
+    append_summary(
+        "<details><summary>Raw remote job_summary (pre-ingest)</summary>\n\n"
+        + (body if body.endswith("\n") else body + "\n")
+        + "\n</details>\n"
+    )
 
     if conclusion == "success":
         print("Executor succeeded")

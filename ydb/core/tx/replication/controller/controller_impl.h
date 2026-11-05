@@ -202,6 +202,7 @@ private:
     TVector<TString> GetCommitTablePaths(const TRowVersion& version) const;
     bool CanCommitIndexBuilds(const TRowVersion& version) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
+    void UpdateLagCounters();
     void InvalidateLag(const TWorkerId& id);
     void ScheduleLagExpiry(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvExpireWorkerLag::TPtr& ev, const TActorContext& ctx);
@@ -307,6 +308,8 @@ private:
             Y_VERIFY_S(res.second, "Duplication replication: " << pathId);
         }
 
+        replication->SetLagChangedCallback([this] { UpdateLagCounters(); });
+        UpdateLagCounters();
         return replication;
     }
 

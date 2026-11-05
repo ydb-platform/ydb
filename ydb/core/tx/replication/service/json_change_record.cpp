@@ -6,7 +6,11 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/replication/common/family_settings.h>
 
+#include <contrib/libs/rapidjson/include/rapidjson/reader.h>
+
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/rapidjson_helpers.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
@@ -15,6 +19,80 @@
 namespace NKikimr::NReplication::NService {
 
 namespace {
+
+// NJson::ReadJson does not expose kParseFullPrecisionFlag, and its RapidJSON
+// callback adapter is private to the JSON library. This local bridge lets
+// replication parse CDC doubles exactly while retaining the existing schema
+// validation callbacks.
+class TRapidJsonCallbacks {
+public:
+    explicit TRapidJsonCallbacks(NJson::TJsonCallbacks& callbacks)
+        : Callbacks(callbacks)
+    {
+    }
+
+    bool Null() {
+        return Callbacks.OnNull();
+    }
+
+    bool Bool(bool value) {
+        return Callbacks.OnBoolean(value);
+    }
+
+    bool Int(int value) {
+        return Callbacks.OnInteger(value);
+    }
+
+    bool Uint(unsigned value) {
+        return Uint64(value);
+    }
+
+    bool Int64(i64 value) {
+        return Callbacks.OnInteger(value);
+    }
+
+    bool Uint64(ui64 value) {
+        if (value <= ui64(Max<i64>())) {
+            return Callbacks.OnInteger(i64(value));
+        }
+        return Callbacks.OnUInteger(value);
+    }
+
+    bool Double(double value) {
+        return Callbacks.OnDouble(value);
+    }
+
+    bool RawNumber(const char*, rapidjson::SizeType, bool) {
+        return false;
+    }
+
+    bool String(const char* value, rapidjson::SizeType length, bool) {
+        return Callbacks.OnString(TStringBuf(value, length));
+    }
+
+    bool StartObject() {
+        return Callbacks.OnOpenMap();
+    }
+
+    bool Key(const char* value, rapidjson::SizeType length, bool) {
+        return Callbacks.OnMapKey(TStringBuf(value, length));
+    }
+
+    bool EndObject(rapidjson::SizeType) {
+        return Callbacks.OnCloseMap();
+    }
+
+    bool StartArray() {
+        return Callbacks.OnOpenArray();
+    }
+
+    bool EndArray(rapidjson::SizeType) {
+        return Callbacks.OnCloseArray();
+    }
+
+private:
+    NJson::TJsonCallbacks& Callbacks;
+};
 
 class TSchemaKeyParser: public NJson::TParserCallbacks {
 public:
@@ -69,11 +147,53 @@ private:
 
 } // namespace
 
-bool TChangeRecordBuilder::ParseJsonBody(TStringBuf body, NJson::TJsonValue& json, TString& error) {
-    TMemoryInput input(body.data(), body.size());
-    TSchemaKeyParser parser(json);
-    if (NJson::ReadJson(&input, &parser)) {
+static bool ValidateYsonMetadata(const NJson::TJsonValue& json, TString& error) {
+    if (!json.Has("yson")) {
         return true;
+    }
+
+    error = "invalid YSON metadata";
+    if (!json["yson"].IsMap()) {
+        return false;
+    }
+
+    for (const auto& [section, columns] : json["yson"].GetMap()) {
+        const bool knownSection = section == "update" || section == "reset"
+            || section == "oldImage" || section == "newImage";
+        if (!knownSection || !columns.IsMap() || !json[section].IsMap()) {
+            return false;
+        }
+
+        for (const auto& [column, value] : columns.GetMap()) {
+            if (!json[section].Has(column) || !value.IsString()) {
+                return false;
+            }
+
+            try {
+                const auto bytes = Base64StrictDecode(value.GetString());
+                const TCell cell(bytes.data(), bytes.size());
+                if (bytes.empty() || !NFormats::CheckCellValue(cell, NScheme::TTypeInfo(NScheme::NTypeIds::Yson))) {
+                    return false;
+                }
+            } catch (const yexception&) {
+                return false;
+            }
+        }
+    }
+
+    error.clear();
+    return true;
+}
+
+bool TChangeRecordBuilder::ParseJsonBody(TStringBuf body, NJson::TJsonValue& json, TString& error) {
+    NJson::TStringBufStreamWrapper input(body);
+    TSchemaKeyParser parser(json);
+    TRapidJsonCallbacks callbacks(parser);
+    rapidjson::Reader reader;
+    // CDC emits enough digits to recover the original double exactly.
+    constexpr auto flags = rapidjson::kParseValidateEncodingFlag | rapidjson::kParseFullPrecisionFlag;
+    if (reader.Parse<flags>(input, callbacks) && parser.OnEnd()) {
+        return ValidateYsonMetadata(json, error);
     }
 
     if (parser.DuplicateName) {
@@ -187,7 +307,8 @@ static bool TransformKey(T& to,
 }
 
 static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
-        const NJson::TJsonValue::TMapType& value, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
+        const NJson::TJsonValue::TMapType& value, const NJson::TJsonValue& ysonValues,
+        TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
 {
     tags.reserve(value.size());
     cells.reserve(value.size());
@@ -197,6 +318,14 @@ static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
         Y_ABORT_UNLESS(it != schema->ValueColumns.end());
 
         tags.push_back(it->second.Tag);
+        if (it->second.Type.GetTypeId() == NScheme::NTypeIds::Yson && ysonValues.Has(column)) {
+            // ParseJsonBody validated the base64 and YSON before the writer
+            // accepted this record. An absent entry uses the legacy format.
+            const auto bytes = Base64StrictDecode(ysonValues[column].GetString());
+            cells.emplace_back(pool.Append(bytes.data(), bytes.size()), bytes.size());
+            continue;
+        }
+
         if (!NFormats::MakeCell(cells.emplace_back(), value, it->second.Type, pool, error)) {
             return false;
         }
@@ -206,11 +335,12 @@ static bool ParseValue(TVector<NTable::TTag>& tags, TVector<TCell>& cells,
 }
 
 static bool TransformValue(NKikimrTxDataShard::TEvApplyReplicationChanges::TUpdates& to,
-        const NJson::TJsonValue::TMapType& from, TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
+        const NJson::TJsonValue::TMapType& from, const NJson::TJsonValue& ysonValues,
+        TLightweightSchema::TCPtr schema, TMemoryPool& pool, TString& error)
 {
     TVector<NTable::TTag> tags;
     TVector<TCell> cells;
-    if (!ParseValue(tags, cells, from, schema, pool, error)) {
+    if (!ParseValue(tags, cells, from, ysonValues, schema, pool, error)) {
         return false;
     }
 
@@ -237,10 +367,10 @@ void TChangeRecord::Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TCh
     }
 
     if (JsonBody.Has("update") && JsonBody["update"].IsMap()) {
-        auto res = TransformValue(*record.MutableUpsert(), JsonBody["update"].GetMap(), Schema, pool, error);
+        auto res = TransformValue(*record.MutableUpsert(), JsonBody["update"].GetMap(), JsonBody["yson"]["update"], Schema, pool, error);
         Y_ABORT_UNLESS(res, "Cannot transform value: %s", error.c_str());
     } else if (JsonBody.Has("reset") && JsonBody["reset"].IsMap()) {
-        auto res = TransformValue(*record.MutableReset(), JsonBody["reset"].GetMap(), Schema, pool, error);
+        auto res = TransformValue(*record.MutableReset(), JsonBody["reset"].GetMap(), JsonBody["yson"]["reset"], Schema, pool, error);
         Y_ABORT_UNLESS(res, "Cannot transform value: %s", error.c_str());
     } else if (JsonBody.Has("erase")) {
         record.MutableErase();

@@ -11,6 +11,7 @@ enum ESimpleCounters {
     COUNTER_WORKERS = 2 [(CounterOpts) = {Name: "Workers"}];
     COUNTER_BOOT_QUEUE = 3 [(CounterOpts) = {Name: "BootQueue"}];
     COUNTER_STOP_QUEUE = 4 [(CounterOpts) = {Name: "StopQueue"}];
+    // Maximum available replication lag in milliseconds, or zero if none is available.
     COUNTER_DATA_LAG = 5 [(CounterOpts) = {Name: "DataLag"}];
     COUNTER_PENDING_VERSIONS = 6 [(CounterOpts) = {Name: "PendingVersions"}];
     COUNTER_ALLOCATED_TX_IDS = 7 [(CounterOpts) = {Name: "AllocatedTxIds"}];
@@ -18,6 +19,8 @@ enum ESimpleCounters {
     COUNTER_WORKERS_WITH_HEARTBEAT = 9 [(CounterOpts) = {Name: "WorkersWithHeartbeat"}];
     COUNTER_WORKERS_PENDING_HEARTBEAT = 10 [(CounterOpts) = {Name: "WorkersPendingHeartbeat"}];
     COUNTER_UNRESOLVED_DATABASE_REPLICATIONS = 11 [(CounterOpts) = {Name: "UnresolvedDatabaseReplications"}];
+    // Includes every replication whose aggregate lag is unavailable, regardless of state.
+    COUNTER_DATA_LAG_UNAVAILABLE_REPLICATIONS = 12 [(CounterOpts) = {Name: "DataLagUnavailableReplications"}];
 }
 
 enum ECumulativeCounters {

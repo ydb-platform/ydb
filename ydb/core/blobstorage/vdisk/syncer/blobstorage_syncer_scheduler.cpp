@@ -385,11 +385,11 @@ namespace NKikimr {
                 bool fullRecovery) {
             YDB_LOG_INFO_CTX(ctx, VDISKP(SyncerContext->VCtx->VDiskLogPrefix, "SyncerScheduler: sync job done: vDiskId# %s status# %s newSyncState# %s", vDiskId.ToString().data(), NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus_Name(peerSyncState.LastSyncStatus).data(), peerSyncState.SyncState.ToString().data()));
 
-            const ui32 peerOrderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
+            ui32 peerOrderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
             bool metadataSyncRetry = false;
             if (MetadataSyncJobs.erase(peerOrderNumber)) {
-                const bool syncSucceeded = NSyncer::TPeerSyncState::Good(peerSyncState.LastSyncStatus);
-                const bool matchingGeneration = vDiskId.GroupGeneration == MetadataSyncGeneration;
+                bool syncSucceeded = NSyncer::TPeerSyncState::Good(peerSyncState.LastSyncStatus);
+                bool matchingGeneration = vDiskId.GroupGeneration == MetadataSyncGeneration;
                 if (syncSucceeded && matchingGeneration) {
                     MetadataSyncedPeers.insert(peerOrderNumber);
                     CheckMetadataSyncDone(ctx);
@@ -398,7 +398,7 @@ namespace NKikimr {
                     metadataSyncRetry = true;
                 }
             }
-            const bool fullSyncPending = FullSyncRequested.contains(peerOrderNumber)
+            bool fullSyncPending = FullSyncRequested.contains(peerOrderNumber)
                 || MetadataSyncRequested.contains(peerOrderNumber);
             TDuration interval = !metadataSyncRetry && (fullRecovery || fullSyncPending)
                 ? TDuration::Zero() : SyncTimeInterval;

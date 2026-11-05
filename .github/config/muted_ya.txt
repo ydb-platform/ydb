@@ -28,7 +28,6 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CheckpointPro
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CheckpointPropagationAfterSubgraphFinalization-LocalTopics+ModernChannels
 ydb/core/kqp/ut/olap KqpOlapTiering.TieringViaIndex-SchemeObjectDisabled
 ydb/core/kqp/ut/olap KqpOlapTiering.TieringViaIndex-SchemeObjectEnabled
-ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultColumnsCannotBeCombined+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultColumnsCannotBeCombined-EnableCompileTimeDefaults
@@ -38,10 +37,8 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexOnColumn
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexOnColumn-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
-ydb/core/kqp/ut/tx KqpSinkMvcc.ChangeFromTheFuture-IsOlap
 ydb/core/mind/bscontroller/ut_bscontroller BsControllerGroupState.DurabilityTargets
 ydb/core/mind/bscontroller/ut_bscontroller BsControllerGroupState.RecoveryTargetCountsTheReturningRealm
-ydb/core/mind/hive/ut THiveTest.TestLockTabletExecutionReconnect
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_ut TPartitionDirectTest.ShouldReplayAddHostAfterCompaction
 ydb/core/persqueue/ut TPartitionTests.ReplicationDataIgnoresReplicationConsumerWithoutRetryingPersist
 ydb/core/sys_view/ut AuthSystemView.AuthGroups_Access
@@ -134,8 +131,6 @@ ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_prestable-27-1-1-False]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_prestable-27-1-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-4-1-False]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_prestable-27-1-1_to_stable-26-4-1-False]
 ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_prestable-27-1-1_to_stable-26-4-1-True]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_column_alias[restart_prestable-27-1-1_to_stable-26-4-1-COLUMN]
@@ -260,7 +255,6 @@ ydb/tests/datashard/set_column_constraint/concurrency py3test.[test_set_not_null
 ydb/tests/datashard/set_column_constraint/concurrency test_set_not_null_concurrency.py.TestSetNotNullConcurrency.test_set_not_null_with_concurrent_upserts
 ydb/tests/datashard/truncate/concurrency py3test.[test_truncate_table_concurrency.py */*] chunk
 ydb/tests/datashard/truncate/concurrency test_truncate_table_concurrency.py.TestTruncateTableConcurrency.test_truncate_with_concurrent_rw_operations
-ydb/tests/fq/mem_alloc test_alloc_default.py.TestAlloc.test_mkql_not_increased[kikimr0]
 ydb/tests/fq/multi_plane py3test.[test_retry_high_rate.py] chunk
 ydb/tests/fq/multi_plane test_dispatch.py.TestMapping.test_mapping_with_row_dispatcher
 ydb/tests/fq/multi_plane test_retry.py.TestRetry.test_low_rate[kikimr0]
@@ -302,7 +296,6 @@ ydb/tests/fq/streaming/generic test_join.py.TestJoinYdbStreaming.test_streamlook
 ydb/tests/fq/streaming/generic test_join.py.TestJoinYdbStreaming.test_streamlookup_watermarks[False-local-slj-2-1]
 ydb/tests/fq/streaming/generic test_join.py.TestJoinYdbStreaming.test_streamlookup_watermarks[False-local-slj-2-2]
 ydb/tests/fq/yds test_delete_read_rules_after_abort_by_system.py.TestDeleteReadRulesAfterAbortBySystem.test_delete_read_rules_after_abort_by_system
-ydb/tests/fq/yds test_disposition.py.TestDisposition.test_disposition_time_ago[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_3_sessions
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_start_new_query
 ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_stop_start_with_filter
@@ -328,7 +321,6 @@ ydb/tests/functional/bridge test_state_storage_selfheal_root_restart.py.TestBrid
 ydb/tests/functional/bridge/chaos test_bridge_chaos.py.TestBridgeChaos.test_bridge_chaos
 ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[index_predicate_point.sql-plan]
 ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[pk_predicate/pk_predicate_ranges_rp.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[pure/trivial_6.sql-result_sets]
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationFromV1.test_migration_from_v1_to_v2_to_v1_to_v2
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationFromV1WithCustomDomain.test_migration_with_custom_domain_full_cycle
 ydb/tests/functional/config test_config_migration.py.TestConfigMigrationFromV2.test_migration_from_v2_to_v1_to_v2_to_v1
@@ -355,7 +347,6 @@ ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tp
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[14]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[15]
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestTpchWMS0_1.test
-ydb/tests/functional/ydb_cli test_ydb_interactive_ai.py.TestAiCommonPexpect.test_ai_session_context_remains_after_roundtrip_switch
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/stress/kafka/tests py3test.sole chunk

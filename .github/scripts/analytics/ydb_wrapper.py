@@ -58,6 +58,8 @@ class YDBWrapper:
         silent: bool = False,
         use_local_config: bool = None,
         verbose: bool = False,
+        config: Optional[Dict[str, Any]] = None,
+        credentials=None,
     ):
         # use_local_config=None (default): YDB_QA_CONFIG env if set, else local config file
         # use_local_config=True: only local config file (ignore YDB_QA_CONFIG env)
@@ -69,11 +71,17 @@ class YDBWrapper:
             "true", "1", "yes"
         )
 
+        # Explicit settings allow a second database without changing the environment.
+        self._credentials = credentials
+
         _explicit_local = use_local_config  # remember if caller forced the choice
         if use_local_config is None:
             use_local_config = not os.environ.get("YDB_QA_CONFIG")
 
-        if use_local_config:
+        if config is not None:
+            enable_statistics = self._load_config_from_dict(config, enable_statistics)
+            self._config_source = "argument"
+        elif use_local_config:
             resolved_path = self._default_config_path(config_path)
             enable_statistics = self._load_config_from_file(resolved_path, enable_statistics)
             if _explicit_local is True:
@@ -267,6 +275,8 @@ class YDBWrapper:
     
     def _setup_credentials(self):
         """Setup YDB credentials"""
+        if self._credentials is not None:
+            return
         if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
             raise RuntimeError("Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing")
         
@@ -276,6 +286,8 @@ class YDBWrapper:
     
     def check_credentials(self):
         """Check for YDB credentials"""
+        if self._credentials is not None:
+            return True
         if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
             print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping", file=self._log_stream)
             return False
@@ -310,7 +322,7 @@ class YDBWrapper:
             self._driver = ydb.Driver(
                 endpoint=self.database_endpoint,
                 database=self.database_path,
-                credentials=ydb.credentials_from_env_variables(),
+                credentials=self._credentials if self._credentials is not None else ydb.credentials_from_env_variables(),
             )
             try:
                 self._driver.wait(timeout=self._connection_timeout, fail_fast=True)

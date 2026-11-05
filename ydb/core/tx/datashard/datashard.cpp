@@ -2622,8 +2622,10 @@ TDataShard::TPromotePostExecuteEdges TDataShard::PromoteImmediatePostExecuteEdge
             YDB_LOG_TRACE("PromoteImmediatePostExecuteEdges at promoting UnprotectedReadEdge",
                 {"tabletId", TabletID()},
                 {"version", version});
-            if (SnapshotManager.PromoteUnprotectedReadEdge(version)) {
-                ChangeRecordsVisibilityChanged.NotifyAll();
+            if (SnapshotManager.PromoteUnprotectedReadEdge(version) &&
+                !ChangeRecordsWaitingVisibility.empty())
+            {
+                ScheduleRequestChangeRecords(ActorContext());
             }
 
             // Make sure pending distributed transactions are marked incomplete,
@@ -2816,7 +2818,6 @@ void TDataShard::SendImmediateReadResult(
 }
 
 void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorContext& ctx) {
-    ChangeRecordsVisibilityChanged.NotifyAll();
     for (auto it = MediatorDelayedReplies.begin(); it != MediatorDelayedReplies.end();) {
         const ui64 step = it->first.Step;
 
@@ -2871,6 +2872,11 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorCo
         }
     }
 
+    if (!ChangeRecordsWaitingVisibility.empty()) {
+        ScheduleRequestChangeRecords(ctx);
+    }
+    CheckSplitCanStart(ctx);
+
     PromoteFollowerReadEdge();
 
     EmitHeartbeats();
@@ -2893,6 +2899,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
+        if (!Self->ChangeRecordsWaitingVisibility.empty()) {
+            Self->ScheduleRequestChangeRecords(ctx);
+        }
         Self->CheckSplitCanStart(ctx);
     }
 
@@ -3987,7 +3996,6 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, 
     Pipeline.ActivateWaitingTxOps(ctx);
 
     CheckMediatorStateRestored();
-    CheckSplitCanStart(ctx);
 }
 
 void TDataShard::Handle(TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr& ev, const TActorContext& ctx) {
@@ -4028,7 +4036,6 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const 
     Pipeline.ActivateWaitingTxOps(ctx);
 
     CheckMediatorStateRestored();
-    CheckSplitCanStart(ctx);
 }
 
 void TDataShard::Handle(TEvPrivate::TEvMediatorRestoreBackup::TPtr&, const TActorContext&) {

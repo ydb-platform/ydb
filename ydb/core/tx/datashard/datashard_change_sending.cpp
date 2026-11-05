@@ -323,7 +323,7 @@ public:
 
         Self->RequestChangeRecordsInFly = false;
         for (const auto& [recipient, version] : RecordsToWait) {
-            Self->WaitChangeRecordsVisible(recipient, version);
+            Self->ChangeRecordsWaitingVisibility[recipient] = version.Step;
         }
         Self->ScheduleRequestChangeRecords(ctx);
     }
@@ -475,36 +475,30 @@ void TDataShard::ScheduleRequestChangeRecords(const TActorContext& ctx) {
     if (RequestChangeRecordsInFly || InMemoryVarsFrozen) {
         return;
     }
+
+    if (!MediatorStateWaiting) {
+        for (auto it = ChangeRecordsWaitingVisibility.begin(); it != ChangeRecordsWaitingVisibility.end();) {
+            const ui64 step = it->second;
+            if (step > GetMaxObservedStep()) {
+                WaitPlanStep(step);
+            }
+
+            // The shared timecast entry may have advanced while subscribing.
+            if (step > GetMaxObservedStep()) {
+                ++it;
+            } else {
+                ChangeRecordsWaitingVisibility.erase(it++);
+            }
+        }
+    }
+
     for (const auto& [recipient, records] : ChangeRecordsRequested) {
         if (records && !ChangeRecordsWaitingVisibility.contains(recipient)) {
-            ctx.Send(SelfId(), new TEvPrivate::TEvRequestChangeRecords);
             RequestChangeRecordsInFly = true;
+            ctx.Send(SelfId(), new TEvPrivate::TEvRequestChangeRecords);
             return;
         }
     }
-}
-
-void TDataShard::WaitChangeRecordsVisible(TActorId recipient, TRowVersion version) {
-    if (!ChangeRecordsWaitingVisibility.insert(recipient).second) {
-        co_return;
-    }
-
-    if (MediatorStateWaiting) {
-        co_await MediatorStateWaitingCoroutines.Wait();
-    }
-    while (version.Step > GetMaxObservedStep()) {
-        WaitPlanStep(version.Step);
-        // The shared timecast entry may have advanced while subscribing.
-        if (version.Step <= GetMaxObservedStep()) {
-            break;
-        }
-        // Background CDC work must not count towards user transaction
-        // admission limits via Pipeline.WaitingCoroutinesCount().
-        co_await ChangeRecordsVisibilityChanged.Wait();
-    }
-
-    ChangeRecordsWaitingVisibility.erase(recipient);
-    ScheduleRequestChangeRecords(ActorContext());
 }
 
 void TDataShard::Handle(TEvPrivate::TEvRequestChangeRecords::TPtr&, const TActorContext& ctx) {

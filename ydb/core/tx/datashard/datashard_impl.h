@@ -1490,7 +1490,6 @@ class TDataShard
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx);
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx);
     void ScheduleRequestChangeRecords(const TActorContext& ctx);
-    void WaitChangeRecordsVisible(TActorId recipient, TRowVersion version);
     void ScheduleRemoveChangeRecords(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestChangeRecords::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRemoveChangeRecords::TPtr& ev, const TActorContext& ctx);
@@ -3200,8 +3199,7 @@ private:
 
     // out
     THashMap<TActorId, TSet<TRequestedRecord>> ChangeRecordsRequested;
-    THashSet<TActorId> ChangeRecordsWaitingVisibility;
-    TAsyncEvent ChangeRecordsVisibilityChanged;
+    THashMap<TActorId, ui64> ChangeRecordsWaitingVisibility;
     TSet<ui64> ChangeRecordsToRemove; // ui64 is order
     bool RequestChangeRecordsInFly = false;
     bool RemoveChangeRecordsInFly = false;

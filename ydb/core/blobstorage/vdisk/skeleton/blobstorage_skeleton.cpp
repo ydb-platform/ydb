@@ -2262,7 +2262,7 @@ namespace NKikimr {
             DurabilityReplDone = false;
             ReplOnlyPhantomsRemain = false;
             UpdateReplState();
-            TEvSyncerMetadataSync* request = new TEvSyncerMetadataSync(RepeatRecoveryMetadataGeneration, RepeatRecoverySourceInfo);
+            TEvSyncerMetadataSync* request = new TEvSyncerMetadataSync(RepeatRecoveryMetadataGeneration);
             ctx.Send(Db->SyncerID, request);
         }
 
@@ -2272,7 +2272,6 @@ namespace NKikimr {
                 return;
             }
             RepeatRecoveryMetadataGeneration = 0;
-            RepeatRecoverySourceInfo.Reset();
             RepeatRecoveryPending = false;
             RepeatOsirisId = StartOsiris(SelfId(), ctx);
         }
@@ -3259,9 +3258,6 @@ namespace NKikimr {
                 const std::optional<EMirror3dcLayout> nextDurability = GetDurabilityLayout(*msg->NewInfo);
                 if (previousDurability && nextDurability && previousDurability != nextDurability) {
                     RepeatRecoveryPending = true;
-                    if (!RepeatRecoverySourceInfo) {
-                        RepeatRecoverySourceInfo = GInfo;
-                    }
                 }
             }
 
@@ -4017,7 +4013,6 @@ namespace NKikimr {
         std::shared_ptr<NMonGroup::TFullSyncGroup> FullSyncGroup;
         bool RepeatRecoveryPending = false;
         ui32 RepeatRecoveryMetadataGeneration = 0;
-        TIntrusivePtr<TBlobStorageGroupInfo> RepeatRecoverySourceInfo;
         TActorId RepeatOsirisId;
         bool ReplDone = false;
         bool DurabilityReplDone = false;

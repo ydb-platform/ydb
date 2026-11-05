@@ -229,7 +229,6 @@ namespace NKikimr {
         THashSet<ui32> StartupDataSyncPeers;
         THashSet<ui32> FullSyncRequested;
         ui32 MetadataSyncGeneration = 0;
-        TIntrusivePtr<TBlobStorageGroupInfo> MetadataSyncSourceInfo;
         THashSet<ui32> MetadataSyncRequested;
         THashSet<ui32> MetadataSyncJobs;
         THashSet<ui32> MetadataSyncedPeers;
@@ -321,39 +320,12 @@ namespace NKikimr {
             Schedule(ctx);
         }
 
-        bool HasMetadataSyncQuorum(const TBlobStorageGroupInfo& info) const {
-            TBlobStorageGroupInfo::TGroupVDisks synced(&info.GetTopology());
+        bool HasMetadataSyncQuorum() const {
+            TBlobStorageGroupInfo::TGroupVDisks synced(&GInfo->GetTopology());
             for (ui32 order : MetadataSyncedPeers) {
-                synced |= TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), TVDiskIdShort(info.GetVDiskId(order)));
+                synced |= TBlobStorageGroupInfo::TGroupVDisks(&GInfo->GetTopology(), TVDiskIdShort(GInfo->GetVDiskId(order)));
             }
-            return TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, synced);
-        }
-
-        bool HasMetadataSyncSourceQuorum() const {
-            if (HasMetadataSyncQuorum(*MetadataSyncSourceInfo)) {
-                return true;
-            }
-            using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-            const TBlobStorageGroupInfo::TTopology& topology = MetadataSyncSourceInfo->GetTopology();
-            for (ui32 realm = 0; realm < topology.FailRealms.size(); ++realm) {
-                TFailRealm::EState sourceState = MetadataSyncSourceInfo->GetFailRealmState(realm);
-                bool sourceHasCopyGuarantee = sourceState == TFailRealm::N1 || sourceState == TFailRealm::N2;
-                bool isNormalRealm = !GInfo->IsFailedFailRealm(realm) && !GInfo->IsRecoveringFailRealm(realm);
-                if (!sourceHasCopyGuarantee || !isNormalRealm) {
-                    continue;
-                }
-                bool allDisksSynced = true;
-                for (const TBlobStorageGroupInfo::TFailDomain& domain : topology.FailRealms[realm].FailDomains) {
-                    for (const TBlobStorageGroupInfo::TVDiskInfo& disk : domain.VDisks) {
-                        allDisksSynced &= MetadataSyncedPeers.contains(disk.OrderNumber);
-                    }
-                }
-                // The original N1/N2 guarantee places every blob in this surviving realm.
-                if (allDisksSynced) {
-                    return true;
-                }
-            }
-            return false;
+            return TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(*GInfo, synced);
         }
 
         void CheckMetadataSyncDone(const TActorContext& ctx) {
@@ -361,15 +333,11 @@ namespace NKikimr {
             if (!currentRound) {
                 return;
             }
-            if (!HasMetadataSyncQuorum(*GInfo)) {
-                return;
-            }
-            if (!HasMetadataSyncSourceQuorum()) {
+            if (!HasMetadataSyncQuorum()) {
                 return;
             }
             ctx.Send(SyncerContext->SkeletonId, new TEvSyncerMetadataSyncDone(MetadataSyncGeneration));
             MetadataSyncGeneration = 0;
-            MetadataSyncSourceInfo.Reset();
             MetadataSyncJobs.clear();
             MetadataSyncRequested.clear();
             MetadataSyncedPeers.clear();
@@ -398,7 +366,6 @@ namespace NKikimr {
                 return;
             }
             MetadataSyncGeneration = ev->Get()->Generation;
-            MetadataSyncSourceInfo = ev->Get()->SourceInfo;
             MetadataSyncJobs.clear();
             MetadataSyncRequested.clear();
             MetadataSyncedPeers.clear();

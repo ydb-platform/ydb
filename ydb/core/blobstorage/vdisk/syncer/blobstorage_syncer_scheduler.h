@@ -3,7 +3,6 @@
 #include "defs.h"
 
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 
 namespace NKikimr {
 
@@ -17,11 +16,9 @@ namespace NKikimr {
     struct TEvSyncerMetadataSync
         : public TEventLocal<TEvSyncerMetadataSync, TEvBlobStorage::EvSyncerMetadataSync> {
         const ui32 Generation;
-        const TIntrusivePtr<TBlobStorageGroupInfo> SourceInfo;
 
-        TEvSyncerMetadataSync(ui32 generation, const TIntrusivePtr<TBlobStorageGroupInfo>& sourceInfo)
+        explicit TEvSyncerMetadataSync(ui32 generation)
             : Generation(generation)
-            , SourceInfo(sourceInfo)
         {}
     };
 

@@ -2,8 +2,8 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
-#include <ydb/core/grpc_services/base/mvcc_version.h>
 #include <ydb/core/grpc_services/service_table.h>
+#include <ydb/core/kqp/common/simple/mvcc_version.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -275,7 +275,7 @@ void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxCont
 
     TMap<TString, TString> peerMeta;
     if (MvccVersion) {
-        peerMeta.emplace(YDB_MVCC_VERSION_HEADER, FormatMvccVersion(*MvccVersion));
+        peerMeta.emplace(NKqp::YDB_MVCC_VERSION_HEADER, NKqp::FormatMvccVersion(*MvccVersion));
     }
     Subscribe<Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(
         DoLocalRpc<TExecuteDataQueryRequest>(std::move(request), Database, token, RequestType, TActivationContext::ActorSystem(), peerMeta, true));
@@ -341,7 +341,7 @@ void TQueryBase::RunStreamQuery(TString sql, NYdb::TParamsBuilder* params, ui64 
 
     TMap<TString, TString> peerMeta;
     if (MvccVersion) {
-        peerMeta.emplace(YDB_MVCC_VERSION_HEADER, FormatMvccVersion(*MvccVersion));
+        peerMeta.emplace(NKqp::YDB_MVCC_VERSION_HEADER, NKqp::FormatMvccVersion(*MvccVersion));
     }
     StreamQueryProcessor = DoLocalRpcStreamSameMailbox<TExecuteStreamQueryRequest>(
         std::move(request), Database, token, RequestType, ActorContext(), peerMeta, true, channelBufferSize);

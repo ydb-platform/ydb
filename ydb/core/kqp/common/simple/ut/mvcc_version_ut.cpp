@@ -1,8 +1,8 @@
-#include <ydb/core/grpc_services/base/mvcc_version.h>
+#include <ydb/core/kqp/common/simple/mvcc_version.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr::NGRpcService {
+namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(MvccVersionHeader) {
     Y_UNIT_TEST(RoundTrip) {
@@ -53,4 +53,4 @@ Y_UNIT_TEST_SUITE(MvccVersionHeader) {
     }
 }
 
-}   // namespace NKikimr::NGRpcService
+}   // namespace NKikimr::NKqp

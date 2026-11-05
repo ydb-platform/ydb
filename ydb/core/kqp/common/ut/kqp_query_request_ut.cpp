@@ -1,6 +1,6 @@
-#include <ydb/core/grpc_services/base/mvcc_version.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/simple/mvcc_version.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(KqpQueryRequest) {
                 auto context = std::make_shared<TContext>(Ydb::Table::ExecuteDataQueryRequest(), [](const auto&) {
                 }, "/Root", Nothing(), TString("test-request"), internal);
                 if (value) {
-                    context->PutPeerMeta(NGRpcService::YDB_MVCC_VERSION_HEADER, *value);
+                    context->PutPeerMeta(YDB_MVCC_VERSION_HEADER, *value);
                 }
                 TEvKqp::TEvQueryRequest request(NKikimrKqp::QUERY_ACTION_EXECUTE, NKikimrKqp::QUERY_TYPE_SQL_DML, TActorId(), context, "session",
                     TString("SELECT 1"), TString(), nullptr, nullptr, Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE, nullptr, nullptr);

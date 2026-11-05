@@ -1,6 +1,6 @@
-#include <ydb/core/grpc_services/base/mvcc_version.h>
 #include <ydb/core/grpc_services/service_table.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/simple/mvcc_version.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>

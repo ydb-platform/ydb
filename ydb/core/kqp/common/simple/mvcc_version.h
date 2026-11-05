@@ -6,7 +6,7 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
-namespace NKikimr::NGRpcService {
+namespace NKikimr::NKqp {
 
 // Internal calls only. The caller owns the snapshot and its retention.
 inline constexpr char YDB_MVCC_VERSION_HEADER[] = "x-ydb-mvcc-version";
@@ -42,4 +42,4 @@ inline TMaybe<TRowVersion> ParseMvccVersion(TStringBuf value) {
     return version;
 }
 
-}   // namespace NKikimr::NGRpcService
+}   // namespace NKikimr::NKqp

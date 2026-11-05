@@ -336,9 +336,9 @@ namespace NKikimr {
             using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
             const TBlobStorageGroupInfo::TTopology& topology = MetadataSyncSourceInfo->GetTopology();
             for (ui32 realm = 0; realm < topology.FailRealms.size(); ++realm) {
-                const TFailRealm::EState sourceState = MetadataSyncSourceInfo->GetFailRealmState(realm);
-                const bool sourceHasCopyGuarantee = sourceState == TFailRealm::N1 || sourceState == TFailRealm::N2;
-                const bool isNormalRealm = !GInfo->IsFailedFailRealm(realm) && !GInfo->IsRecoveringFailRealm(realm);
+                TFailRealm::EState sourceState = MetadataSyncSourceInfo->GetFailRealmState(realm);
+                bool sourceHasCopyGuarantee = sourceState == TFailRealm::N1 || sourceState == TFailRealm::N2;
+                bool isNormalRealm = !GInfo->IsFailedFailRealm(realm) && !GInfo->IsRecoveringFailRealm(realm);
                 if (!sourceHasCopyGuarantee || !isNormalRealm) {
                     continue;
                 }

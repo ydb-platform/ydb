@@ -128,7 +128,7 @@ std::optional<TTieringActualizer::TFullActualizationInfo> TTieringActualizer::Bu
         //            YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
         //                  {"pathId", PathId});
         //            YDB_LOG_VERIFY(false,
-                          {"pathId", PathId});
+        //                  {"pathId", PathId});
         //        }
         auto storagesWrite = targetSchema->GetIndexInfo().GetUsedStorageIds(IStoragesManager::DefaultStorageId);
         auto storagesRead = portionSchema->GetIndexInfo().GetUsedStorageIds(currentTierName);

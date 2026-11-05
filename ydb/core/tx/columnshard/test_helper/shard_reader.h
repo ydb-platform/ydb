@@ -133,7 +133,6 @@ public:
         TAutoPtr<IEventHandle> handle;
         auto event = Runtime.GrabEdgeEvents<NKqp::TEvKqpCompute::TEvScanInitActor, NKqp::TEvKqpCompute::TEvScanError>(handle, timeout);
         if (auto* evSuccess = std::get<0>(event)) {
-
             auto& msg = evSuccess->Record;
             ScanActorId = ActorIdFromProto(msg.GetScanActorId());
         } else if (auto* evError = std::get<1>(event)) {

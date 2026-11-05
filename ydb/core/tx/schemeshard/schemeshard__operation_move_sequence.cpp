@@ -721,6 +721,10 @@ public:
             if (checks) {
                 if (srcParentPath.Parent()->IsTableIndex()) {
                     checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                } else if (srcParentPath->IsColumnTable()) {
+                    checks.IsCommonSensePath()
+                        .IsUnderMoving()
+                        .IsUnderTheSameOperation(OperationId.GetTxId());
                 } else if (srcParentPath->IsTable()) {
                     // allow immediately inside a normal table
                     checks.IsCommonSensePath();

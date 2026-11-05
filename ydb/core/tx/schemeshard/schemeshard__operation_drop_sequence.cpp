@@ -272,6 +272,10 @@ public:
                     checks.IsInsideTableIndexPath()
                         .IsUnderDeleting()
                         .IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                } else if (parent->IsColumnTable()) {
+                    checks.IsCommonSensePath()
+                        .IsUnderDeleting()
+                        .IsUnderTheSameOperation(OperationId.GetTxId());
                 } else if (parent->IsTable()) {
                     // allow immediately inside a normal table
                     if (parent.IsUnderOperation()) {

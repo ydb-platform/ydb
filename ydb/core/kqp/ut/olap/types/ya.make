@@ -19,6 +19,7 @@ SRCS(
     dynumber_ut.cpp
     interval_ut.cpp
     json_ut.cpp
+    serial_ut.cpp
     uuid_ut.cpp
 )
 
@@ -34,6 +35,7 @@ PEERDIR(
     ydb/core/kqp/ut/olap/helpers
     ydb/core/kqp/ut/olap/combinatory
     ydb/core/tx/datashard/ut_common
+    ydb/public/sdk/cpp/src/client/arrow
     ydb/public/sdk/cpp/src/client/operation
     yql/essentials/types/dynumber
 )

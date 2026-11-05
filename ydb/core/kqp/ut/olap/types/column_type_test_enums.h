@@ -19,5 +19,11 @@ enum ELoadKind {
     CSV
 };
 
+enum class ESerialType {
+    SmallSerial,
+    Serial,
+    BigSerial
+};
+
 } // namespace NKqp
 } // namespace NKikimr

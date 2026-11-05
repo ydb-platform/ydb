@@ -220,13 +220,17 @@ private:
         }
 
         for (const auto& sequence: tableDesc.GetSequences()) {
-            auto sequencePathId = TPathId::FromProto(sequence.GetPathId());
-            CollectTableSettingsState->Sequences[sequencePathId] = nullptr;
-
-            Send(NSequenceProxy::MakeSequenceProxyServiceID(),
-                new NSequenceProxy::TEvSequenceProxy::TEvGetSequence(DatabaseName, sequencePathId)
-            );
+            RequestSequence(sequence);
         }
+    }
+
+    void RequestSequence(const NKikimrSchemeOp::TSequenceDescription& sequence) {
+        auto sequencePathId = TPathId::FromProto(sequence.GetPathId());
+        CollectTableSettingsState->Sequences[sequencePathId] = nullptr;
+
+        Send(NSequenceProxy::MakeSequenceProxyServiceID(),
+            new NSequenceProxy::TEvSequenceProxy::TEvGetSequence(DatabaseName, sequencePathId)
+        );
     }
 
     void FillBatch(NKqp::TEvKqpCompute::TEvScanData& batch, const TString& path, const TString& createQuery) {
@@ -337,6 +341,19 @@ private:
                                 return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
                             }
                             temporary = true;
+                        }
+
+                        if (!columnTableDesc.GetSerialSequences().empty()) {
+                            CollectTableSettingsState = MakeHolder<TCollectTableSettingsState>();
+                            CollectTableSettingsState->TablePath = tablePath;
+                            CollectTableSettingsState->ColumnTableDescription.emplace(columnTableDesc);
+                            CollectTableSettingsState->Temporary = temporary;
+                            for (const auto& [_, sequence] : columnTableDesc.GetSerialSequences()) {
+                                RequestSequence(sequence);
+                            }
+
+                            Become(&TShowCreate::StateCollectTableSettings);
+                            return;
                         }
 
                         TCreateTableFormatter formatter;
@@ -539,14 +556,11 @@ private:
         }
 
         TCreateTableFormatter formatter;
-        auto formatterResult = formatter.Format(
-            CollectTableSettingsState->TablePath,
-            Path,
-            CollectTableSettingsState->TableDescription,
-            CollectTableSettingsState->Temporary,
-            CollectTableSettingsState->PersQueues,
-            CollectTableSettingsState->Sequences
-        );
+        const auto& state = *CollectTableSettingsState;
+        auto formatterResult = state.ColumnTableDescription
+            ? formatter.Format(state.TablePath, Path, *state.ColumnTableDescription, state.Temporary,
+                AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject(), state.Sequences)
+            : formatter.Format(state.TablePath, Path, state.TableDescription, state.Temporary, state.PersQueues, state.Sequences);
         std::optional<TString> path;
         std::optional<TString> createQuery;
         if (formatterResult.IsSuccess()) {
@@ -575,6 +589,7 @@ private:
     struct TCollectTableSettingsState {
         TString TablePath;
         NKikimrSchemeOp::TTableDescription TableDescription;
+        std::optional<NKikimrSchemeOp::TColumnTableDescription> ColumnTableDescription;
         bool Temporary;
         THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>> PersQueues;
         ui32 CurrentPersQueuesNumber = 0;

@@ -83,7 +83,17 @@ TParts MakeDropColumnStore(const TOperation& op, const TTxTransaction& tx, TOper
 
 TParts MakeCreateColumnTable(const TOperation& op, const TTxTransaction& tx, TOperationContext& context) {
     if (tx.GetCreateColumnTable().HasCopyFromTable()) {
-        return {CreateReadOnlyCopyColumnTable(op.NextPartId(), tx)};
+        const auto& desc = tx.GetCreateColumnTable();
+        const auto source = TPath::Resolve(desc.GetCopyFromTable(), context.SS);
+        TParts result{CreateReadOnlyCopyColumnTable(op.NextPartId(), tx)};
+        if (source.IsResolved() && !source.IsDeleted() && source->IsColumnTable()) {
+            const auto destination = TPath::Resolve(tx.GetWorkingDir(), context.SS).Child(desc.GetName());
+            if (!destination.IsResolved() || destination.IsDeleted()) {
+                AddCopySequences(op.NextPartId(), tx, context, result, source, destination.PathString());
+            }
+        }
+
+        return result;
     }
     return CreateColumnTableWithLocalIndexes(op.NextPartId(), tx, context);
 }

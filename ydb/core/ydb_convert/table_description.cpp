@@ -1180,6 +1180,87 @@ template <typename TYdbProto>
 void FillMultiColumnStatisticsDescriptionImpl(TYdbProto& out,
         const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TMultiColumnStatisticsDescription>& in);
 
+static bool ExportSequenceDescription(Ydb::Table::SequenceDescription& out, const NKikimrSchemeOp::TSequenceDescription& sequenceDescription,
+    Ydb::StatusIds::StatusCode& status, TString& error) {
+    out.set_name(sequenceDescription.GetName());
+    if (sequenceDescription.HasMinValue()) {
+        out.set_min_value(sequenceDescription.GetMinValue());
+    }
+    if (sequenceDescription.HasMaxValue()) {
+        out.set_max_value(sequenceDescription.GetMaxValue());
+    }
+    if (sequenceDescription.HasStartValue()) {
+        out.set_start_value(sequenceDescription.GetStartValue());
+    }
+    if (sequenceDescription.HasCache()) {
+        out.set_cache(sequenceDescription.GetCache());
+    }
+    if (sequenceDescription.HasIncrement()) {
+        out.set_increment(sequenceDescription.GetIncrement());
+    }
+    if (sequenceDescription.HasCycle()) {
+        out.set_cycle(sequenceDescription.GetCycle());
+    }
+    if (sequenceDescription.HasSetVal()) {
+        auto* setVal = out.mutable_set_val();
+        setVal->set_next_used(sequenceDescription.GetSetVal().GetNextUsed());
+        setVal->set_next_value(sequenceDescription.GetSetVal().GetNextValue());
+    }
+    if (sequenceDescription.HasDataType()) {
+        auto* dataType = out.mutable_data_type();
+        auto typeDesc = NPg::TypeDescFromPgTypeName(sequenceDescription.GetDataType());
+        if (typeDesc) {
+            auto* pg = dataType->mutable_pg_type();
+            auto typeId = NPg::PgTypeIdFromTypeDesc(typeDesc);
+            switch (typeId) {
+                case INT2OID:
+                case INT4OID:
+                case INT8OID:
+                    break;
+                default: {
+                    TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeDesc);
+                    status = Ydb::StatusIds::BAD_REQUEST;
+                    error = Sprintf(
+                        "Invalid type name %s for sequence: %s", sequenceType.c_str(), sequenceDescription.GetName().data()
+                    );
+                    return false;
+                }
+            }
+
+            pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
+            pg->set_type_modifier(NPg::TypeModFromPgTypeName(sequenceDescription.GetDataType()));
+            pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
+            pg->set_typlen(0);
+            pg->set_typmod(0);
+        } else {
+            NYql::NProto::TypeIds protoType;
+            if (!NYql::NProto::TypeIds_Parse(sequenceDescription.GetDataType(), &protoType)) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = Sprintf(
+                    "Invalid type name %s for sequence: %s", sequenceDescription.GetDataType().data(), sequenceDescription.GetName().data()
+                );
+                return false;
+            }
+            switch (protoType) {
+                case NYql::NProto::TypeIds::Int16:
+                case NYql::NProto::TypeIds::Int32:
+                case NYql::NProto::TypeIds::Int64: {
+                    NMiniKQL::ExportPrimitiveTypeToProto(protoType, *dataType);
+                    break;
+                }
+                default: {
+                    status = Ydb::StatusIds::BAD_REQUEST;
+                    error = Sprintf(
+                        "Invalid type name %s for sequence: %s", sequenceDescription.GetDataType().data(), sequenceDescription.GetName().data()
+                    );
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 template <typename TYdbProto>
 void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTableDescription& in) {
     auto& schema = in.GetSchema();
@@ -1187,6 +1268,14 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
     for (const auto& column : schema.GetColumns()) {
         auto newColumn = out.add_columns();
         AddColumn(newColumn, column);
+        const auto sequence = in.GetSerialSequences().find(column.GetName());
+        if (sequence != in.GetSerialSequences().end()) {
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            if (!ExportSequenceDescription(*newColumn->mutable_from_sequence(), sequence->second, status, error)) {
+                ythrow yexception() << error;
+            }
+        }
 
         if (column.HasColumnFamilyName()) {
             newColumn->set_family(column.GetColumnFamilyName());
@@ -1678,9 +1767,20 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
         }
 
         if (column.has_from_sequence()) {
-            status = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Default sequences are not supported in column tables";
-            return false;
+            if constexpr (std::is_same_v<TColumnTable, NKikimrSchemeOp::TColumnTableDescription>) {
+                auto& sequence = (*out.MutableSerialSequences())[column.name()];
+                if (!FillSequenceDescription(sequence, column.from_sequence(), status, error)) {
+                    return false;
+                }
+
+                if (!sequence.HasDataType()) {
+                    sequence.SetDataType(columnDesc->GetType());
+                }
+            } else {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                error = "Default sequences are not supported in column tables";
+                return false;
+            }
         }
 
         if (column.encoding_size() > 0) {
@@ -3389,81 +3489,10 @@ bool FillSequenceDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDe
 
                 const auto& sequenceDescription = sequences.at(fromSequence->name());
 
-                if (sequenceDescription.HasMinValue()) {
-                    fromSequence->set_min_value(sequenceDescription.GetMinValue());
+                if (!ExportSequenceDescription(*fromSequence, sequenceDescription, status, error)) {
+                    return false;
                 }
-                if (sequenceDescription.HasMaxValue()) {
-                    fromSequence->set_max_value(sequenceDescription.GetMaxValue());
-                }
-                if (sequenceDescription.HasStartValue()) {
-                    fromSequence->set_start_value(sequenceDescription.GetStartValue());
-                }
-                if (sequenceDescription.HasCache()) {
-                    fromSequence->set_cache(sequenceDescription.GetCache());
-                }
-                if (sequenceDescription.HasIncrement()) {
-                    fromSequence->set_increment(sequenceDescription.GetIncrement());
-                }
-                if (sequenceDescription.HasCycle()) {
-                    fromSequence->set_cycle(sequenceDescription.GetCycle());
-                }
-                if (sequenceDescription.HasSetVal()) {
-                    auto* setVal = fromSequence->mutable_set_val();
-                    setVal->set_next_used(sequenceDescription.GetSetVal().GetNextUsed());
-                    setVal->set_next_value(sequenceDescription.GetSetVal().GetNextValue());
-                }
-                if (sequenceDescription.HasDataType()) {
-                    auto* dataType = fromSequence->mutable_data_type();
-                    auto typeDesc = NPg::TypeDescFromPgTypeName(sequenceDescription.GetDataType());
-                    if (typeDesc) {
-                        auto* pg = dataType->mutable_pg_type();
-                        auto typeId = NPg::PgTypeIdFromTypeDesc(typeDesc);
-                        switch (typeId) {
-                            case INT2OID:
-                            case INT4OID:
-                            case INT8OID:
-                                break;
-                            default: {
-                                TString sequenceType = NPg::PgTypeNameFromTypeDesc(typeDesc);
-                                status = Ydb::StatusIds::BAD_REQUEST;
-                                error = Sprintf(
-                                    "Invalid type name %s for sequence: %s", sequenceType.c_str(), sequenceDescription.GetName().data()
-                                );
-                                return false;
-                                break;
-                            }
-                        }
-                        pg->set_type_name(NPg::PgTypeNameFromTypeDesc(typeDesc));
-                        pg->set_type_modifier(NPg::TypeModFromPgTypeName(sequenceDescription.GetDataType()));
-                        pg->set_oid(NPg::PgTypeIdFromTypeDesc(typeDesc));
-                        pg->set_typlen(0);
-                        pg->set_typmod(0);
-                    } else {
-                        NYql::NProto::TypeIds protoType;
-                        if (!NYql::NProto::TypeIds_Parse(sequenceDescription.GetDataType(), &protoType)) {
-                            status = Ydb::StatusIds::BAD_REQUEST;
-                            error = Sprintf(
-                                "Invalid type name %s for sequence: %s", sequenceDescription.GetDataType().data(), sequenceDescription.GetName().data()
-                            );
-                            return false;
-                        }
-                        switch (protoType) {
-                            case NYql::NProto::TypeIds::Int16:
-                            case NYql::NProto::TypeIds::Int32:
-                            case NYql::NProto::TypeIds::Int64: {
-                                NMiniKQL::ExportPrimitiveTypeToProto(protoType, *dataType);
-                                break;
-                            }
-                            default: {
-                                status = Ydb::StatusIds::BAD_REQUEST;
-                                error = Sprintf(
-                                    "Invalid type name %s for sequence: %s", sequenceDescription.GetDataType().data(), sequenceDescription.GetName().data()
-                                );
-                                return false;
-                            }
-                        }
-                    }
-                }
+
                 break;
             }
             case Ydb::Table::ColumnMeta::kFromLiteral: {

@@ -498,6 +498,10 @@ public:
                 if (parentPath.Parent()->IsTableIndex()) {
                     checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
                     checks.IsInsideTableIndexPath();
+                } else if (parentPath->IsColumnTable()) {
+                    checks.IsCommonSensePath()
+                        .IsUnderCreating()
+                        .IsUnderTheSameOperation(OperationId.GetTxId());
                 } else if (parentPath->IsTable()) {
                     // allow immediately inside a normal table
                     checks.IsCommonSensePath();
@@ -530,7 +534,7 @@ public:
                 .NotUnderOperation();
 
             if (checks) {
-                if (!parentPath->IsTable()) {
+                if (!parentPath->IsTable() && !parentPath->IsColumnTable()) {
                     // otherwise don't allow unexpected object types
                     checks.IsLikeDirectory();
                 }
@@ -571,7 +575,7 @@ public:
             if (checks) {
                 checks.IsValidLeafName(context.UserToken.Get());
 
-                if (!parentPath->IsTable()) {
+                if (!parentPath->IsTable() && !parentPath->IsColumnTable()) {
                     checks.DepthLimit();
                 }
 

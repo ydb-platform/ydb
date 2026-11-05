@@ -547,7 +547,8 @@ bool FillAccessor(
 }
 
 template <typename T>
-bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T& metadata, Ydb::StatusIds::StatusCode& code, TString& error) {
+bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T& metadata, Ydb::StatusIds::StatusCode& code, TString& error,
+    NKikimrSchemeOp::TColumnTableDescription* tableDesc = nullptr) {
     Y_ENSURE(metadata.ColumnOrder.size() == metadata.Columns.size());
 
     if (!metadata.ColumnFamilies.empty()) {
@@ -568,9 +569,15 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         }
 
         if (columnIt->second.IsDefaultFromSequence()) {
-            code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Default sequences are not supported in column tables";
-            return false;
+            if (!tableDesc || !AppData()->FeatureFlags.GetEnableColumnshardSerial()) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "Default sequences are not supported in column tables";
+                return false;
+            }
+
+            auto& sequence = (*tableDesc->MutableSerialSequences())[name];
+            sequence.SetName(columnIt->second.DefaultFromSequence);
+            sequence.SetDataType(columnIt->second.Type);
         }
 
         if (columnIt->second.IsDefaultFromExpression()) {
@@ -2560,7 +2567,7 @@ public:
             NKikimrSchemeOp::TColumnTableDescription* tableDesc = schemeTx.MutableCreateColumnTable();
 
             tableDesc->SetName(pathPair.second);
-            if (!FillColumnTableSchema(*tableDesc->MutableSchema(), *metadata, code, error)) {
+            if (!FillColumnTableSchema(*tableDesc->MutableSchema(), *metadata, code, error, tableDesc)) {
                 IKqpGateway::TGenericResult errResult;
                 errResult.AddIssue(NYql::TIssue(error));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));

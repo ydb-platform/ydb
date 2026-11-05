@@ -4,7 +4,7 @@
 
 namespace NKikimr::NSchemeShard {
 
-TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId nextId, const TTxTransaction& tx, TOperationContext&) {
+TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
     TVector<ISubOperation::TPtr> result;
 
     const auto& createDescription = tx.GetCreateColumnTable();
@@ -48,6 +48,49 @@ TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId next
         }
     }
 
+    const auto& sequences = createDescription.GetSerialSequences();
+    if (!sequences.empty()) {
+        const auto parentPath = TPath::Resolve(workingDir, context.SS);
+        const auto tablePath = parentPath.Child(tableName);
+        if (!parentPath.IsResolved() || (tablePath.IsResolved() && !tablePath.IsDeleted())) {
+            // Let the table operation handle an existing destination, including IF NOT EXISTS.
+            return {CreateNewColumnTable(nextId, tx)};
+        }
+
+        if (!AppData()->FeatureFlags.GetEnableColumnshardSerial()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, "Serial columns are disabled for column tables")};
+        }
+
+        THashSet<TString> childNames;
+        for (const auto& config : indexConfigs) {
+            childNames.insert(config.GetName());
+        }
+
+        for (const auto& [_, sequence] : sequences) {
+            TString error;
+            const auto& name = sequence.GetName();
+            if (!tablePath.Child(name).IsValidLeafName(context.UserToken.Get(), error) ||
+                !TSequenceInfo::ValidateCreate(sequence, error)) {
+                return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, error)};
+            }
+
+            if (!childNames.insert(name).second) {
+                return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, "Duplicate child name: " + name)};
+            }
+        }
+
+        auto checks = parentPath.Check();
+        checks.FailOnRestrictedCreateInTempZone(tx.GetAllowCreateInTempDir())
+            .PathsLimit(1 + childNames.size());
+        if (!checks) {
+            return {CreateReject(nextId, checks.GetStatus(), checks.GetError())};
+        }
+
+        if (childNames.size() > parentPath.DomainInfo()->GetSchemeLimits().MaxChildrenInDir) {
+            return {CreateReject(nextId, NKikimrScheme::StatusResourceExhausted, "Too many child paths for column table")};
+        }
+    }
+
     result.push_back(CreateNewColumnTable(NextPartId(nextId, result), tx));
 
     for (auto& indexConfig : indexConfigs) {
@@ -58,6 +101,17 @@ TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId next
         *scheme.MutableCreateTableIndex() = std::move(indexConfig);
 
         result.push_back(CreateNewColumnTableLocalIndex(NextPartId(nextId, result), scheme));
+    }
+
+    for (const auto& key : createDescription.GetSchema().GetKeyColumnNames()) {
+        const auto it = sequences.find(key);
+        if (it != sequences.end()) {
+            auto scheme = TransactionTemplate(workingDir + "/" + tableName, NKikimrSchemeOp::ESchemeOpCreateSequence);
+            scheme.SetFailOnExist(tx.GetFailOnExist());
+            scheme.SetAllowCreateInTempDir(tx.GetAllowCreateInTempDir());
+            *scheme.MutableSequence() = it->second;
+            result.push_back(CreateNewSequence(NextPartId(nextId, result), scheme));
+        }
     }
 
     return result;

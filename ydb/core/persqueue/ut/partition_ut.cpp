@@ -321,6 +321,7 @@ protected:
                        bool strict = false);
     void SendGetOffset(ui64 cookie,
                        const TString& clientId);
+    void TestReplicateOffsetClampedToStart(bool important);
     void WaitCmdWrite(const TCmdWriteMatcher& matcher = {});
     void WaitCmdWriteTx(const TCmdWriteTxMatcher& matcher = {});
     void SendCmdWriteResponse(NMsgBusProxy::EResponseStatus status);
@@ -3281,6 +3282,84 @@ Y_UNIT_TEST_F(ReplicationDataSentOnlyForSessionStartAndChangedOffsets, TPartitio
     UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 3);
     UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("other"), 4);
     Ctx->Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
+}
+
+void TPartitionFixture::TestReplicateOffsetClampedToStart(bool important)
+{
+    const TConfigParams initialConfig{.Version = 1, .Consumers = {
+        {.Consumer = "reader", .Offset = 5}, {.Consumer = "replication"}}};
+    auto* partition = CreatePartition({.Partition = TPartitionId{0}, .Begin = 5, .End = 10,
+        .Config = initialConfig, .FillHead = true}, initialConfig);
+    Config.SetVersion(2);
+    GetConsumer(Config, "replication")->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION);
+    if (important) {
+        GetConsumer(Config, "reader")->SetImportant(true);
+    } else {
+        GetConsumer(Config, "reader")->SetAvailabilityPeriodMs(TDuration::Days(1).MilliSeconds());
+    }
+    SendEvent(new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitPartitionConfigChanged();
+
+    TVector<NKikimrPQ::TReplicationDataPayload> payloads;
+    Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == TEvPersQueue::TEvReplicationData::EventType) {
+            auto& payload = payloads.emplace_back();
+            UNIT_ASSERT(payload.ParseFromString(event->Get<TEvPersQueue::TEvReplicationData>()->Record.GetPayload()));
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    auto event = MakeHolder<TEvPQ::TEvSetClientInfo>(101, "replication", 0, "replication-session",
+        1, 1, 1, Ctx->Edge, TEvPQ::TEvSetClientInfo::ESCI_CREATE_SESSION);
+    event->ReadSessionActor = Ctx->Runtime->AllocateEdgeActor();
+    SendEvent(event.Release());
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 101});
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 5);
+
+    // Model retention moving the lower boundary past the saved consumer offset.
+    auto& compactionEncoder = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    auto& encoder = compactionEncoder.IsEmpty()
+        ? TPartitionTestWrapper::BlobEncoder(*partition) : compactionEncoder;
+    encoder.StartOffset = 7;
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), 7);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "reader")->Offset, 5);
+
+    // Creating a reader session does not change the pending offset. The effective
+    // offset is raised to StartOffset only when applying the persisted user info.
+    SendCreateSession(102, "reader", "reader-session", 1, 1);
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 102});
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "reader")->Offset, 7);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(payloads.back().GetOffsetsByConsumers().at("reader"), 7);
+
+    SendSetOffset(103, "reader", 7, "reader-session");
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 103});
+    Ctx->Runtime->SimulateSleep(TDuration::MilliSeconds(100));
+    UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 2);
+    Ctx->Runtime->SetObserverFunc(TTestActorRuntimeBase::DefaultObserverFunc);
+}
+
+Y_UNIT_TEST_F(ReplicationDataIncludesOffsetClampedForAvailabilityPeriod, TPartitionFixture)
+{
+    TestReplicateOffsetClampedToStart(false);
+}
+
+Y_UNIT_TEST_F(ReplicationDataIncludesOffsetClampedForImportantConsumer, TPartitionFixture)
+{
+    TestReplicateOffsetClampedToStart(true);
 }
 
 void TPartitionFixture::TestRestoreReadSessionActor(bool hasDataRequest)

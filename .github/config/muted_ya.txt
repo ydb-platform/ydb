@@ -31,6 +31,7 @@ ydb/core/persqueue/ut TPartitionTests.ReplicationDataIgnoresReplicationConsumerW
 ydb/core/sys_view/ut AuthSystemView.AuthGroups_Access
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
+ydb/core/tx/columnshard/backup/async_jobs/ut AsyncJobs.ImportSchemaOrder-parquet
 ydb/core/tx/replication/controller/ut_schema_change StreamRetry.PausedBootstrapCredentialRetry
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapAfterSessionStartWithLaterMessageReportsDataLoss
 ydb/core/tx/replication/service/ut_topic_reader RemoteTopicReader.RetentionGapBeforeSessionStartWithLaterMessageReportsDataLoss
@@ -42,6 +43,8 @@ ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
 ydb/library/yql/providers/generic/connector/tests/datasource/postgresql py3test.sole chunk
 ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.GetAllStartPartitionSessions
+ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.WriteSessionSwitchDatabases
+ydb/public/sdk/cpp/src/client/topic/ut Describe.DescribePartitionPermissions
 ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.RetryOverheadOnHappyPath
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read TxUsageQuery.DirectRead_WriteToTopic_Demo_25
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
@@ -100,9 +103,11 @@ ydb/tests/fq/s3 test_inflight.py.TestS3.test_inflight[v1-client0-kikimr_params1]
 ydb/tests/fq/s3 test_inflight.py.TestS3.test_inflight[v1-client0-kikimr_params2]
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_partition_increase[local]
+ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_twice
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_csv_no_header_select_price[True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_csv_with_names_projection_column_order[True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[drop-native_join-row]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[recreate-output-column]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[recreate-output-row]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_raw_format[False-no_partition_balancing]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_raw_format[False-partition_balancing]
@@ -110,9 +115,12 @@ ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_raw_format[True
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_large_topic_message[external-kikimr0]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_large_topic_message[local-kikimr0]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_csv_with_names[True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_issues_after_restart[kikimr0-True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_stop_after_restart[kikimr0-False]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_streaming_query_stop_after_restart[kikimr0-True]
+ydb/tests/fq/streaming test_streaming_aggregation.py.TestStreamingAggregation.test_explicit_state_table_requires_advanced_flag[memory-enabled]
+ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_precompute_recovery[False]
 ydb/tests/fq/streaming test_udfs.py.TestUdfsUsage.test_precompute_recovery[True]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_early_events_policy[2-no_shared-False]
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_late_events_policy[DROP-expected0-True-2-no_shared]
@@ -163,6 +171,7 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snap
 ydb/tests/functional/federation_test unittest.[*/*] chunk
 ydb/tests/functional/mirror3dc test_mirror3dc.py.TestMirror3dc.test_exclude_one_dc
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
+ydb/tests/functional/restarts test_restarts.py.TestRestartMultipleBlock42.test_tablets_are_successfully_started_after_few_killed_nodes
 ydb/tests/functional/restarts test_restarts.py.TestRestartMultipleMirror3DC.test_tablets_are_successfully_started_after_few_killed_nodes
 ydb/tests/functional/restarts test_restarts.py.TestRestartSingleBlock42.test_restart_single_node_is_ok
 ydb/tests/functional/restarts test_restarts.py.TestRestartSingleMirror3DC.test_restart_single_node_is_ok

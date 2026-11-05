@@ -387,13 +387,13 @@ namespace NKikimr {
 
             ui32 peerOrderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
             bool metadataSyncRetry = false;
-            if (MetadataSyncJobs.erase(peerOrderNumber)) {
+            bool matchingGeneration = MetadataSyncGeneration && vDiskId.GroupGeneration == MetadataSyncGeneration;
+            if (matchingGeneration && MetadataSyncJobs.erase(peerOrderNumber)) {
                 bool syncSucceeded = NSyncer::TPeerSyncState::Good(peerSyncState.LastSyncStatus);
-                bool matchingGeneration = vDiskId.GroupGeneration == MetadataSyncGeneration;
-                if (syncSucceeded && matchingGeneration) {
+                if (syncSucceeded) {
                     MetadataSyncedPeers.insert(peerOrderNumber);
                     CheckMetadataSyncDone(ctx);
-                } else if (MetadataSyncGeneration) {
+                } else {
                     MetadataSyncRequested.insert(peerOrderNumber);
                     metadataSyncRetry = true;
                 }
@@ -429,8 +429,9 @@ namespace NKikimr {
         void Handle(TEvSyncerJobDone::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
             TEvSyncerJobDone *msg = ev->Get();
-            if (msg->Task->IsFullRecoveryTask()) {
-                const ui32 order = GInfo->GetOrderNumber(TVDiskIdShort(msg->Task->VDiskId));
+            bool matchingMetadataGeneration = MetadataSyncGeneration && msg->Task->VDiskId.GroupGeneration == MetadataSyncGeneration;
+            if (msg->Task->IsFullRecoveryTask() && matchingMetadataGeneration) {
+                ui32 order = GInfo->GetOrderNumber(TVDiskIdShort(msg->Task->VDiskId));
                 if (MetadataSyncJobs.erase(order)) {
                     // Missing incremental history uses the ordinary full-recovery fallback;
                     // confirm the configuration with a fresh incremental sync afterwards.

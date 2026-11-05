@@ -647,6 +647,93 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CancelScriptExecution(operationId);
     }
 
+    Y_UNIT_TEST_F(StreamingQueryHopCounters, TStreamingTestFixture) {
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableStreamingQueriesCounters(true);
+        config.MutableFeatureFlags()->SetEnableHoppingWindowStartCheck(true);
+        config.MutableTableServiceConfig()->SetEnableWatermarks(false);
+        config.MutableTableServiceConfig()->SetEnableWatermarksAdvanced(false);
+
+        const auto pqGateway = SetupMockPqGateway();
+        const auto inputTopicName = MakeExternalName("hopCountersInput");
+        const auto outputTopicName = MakeExternalName("hopCountersOutput");
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
+        CreatePqSource("hopCountersSource");
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY hopCountersQuery AS DO BEGIN
+                PRAGMA ydb.MaxTasksPerStage = "2";
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": 1 }},
+                    {{ "tx": 0, "stage": 1, "tasks": 2 }}
+                ] @@;
+
+                $grouped = SELECT key, COUNT(*) AS count
+                    FROM hopCountersSource.`{input_topic}` WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA (time String, key Int32 NOT NULL)
+                    )
+                    GROUP BY HOP(CAST(time AS Timestamp), "PT1S", "PT1S", "PT0S"), key;
+
+                INSERT INTO hopCountersSource.`{output_topic}`
+                    SELECT Unwrap(CAST(key AS String) || ":" || CAST(count AS String)) FROM $grouped;
+            END DO;
+        )", "input_topic"_a = inputTopicName, "output_topic"_a = outputTopicName));
+
+        const auto queryCounters =
+            GetCounters()->GetSubgroup("subsystem", "streaming_queries")->GetSubgroup("host", "")->GetSubgroup("path", "/Root/hopCountersQuery");
+        const auto waitCounters = [&](ui64 expectedInput, ui64 expectedLate) {
+            WaitFor(TDuration::Seconds(30), "streaming query Hop counters", [&](TString& error) {
+                const auto inputEvents = queryCounters->FindCounter("hop.input_events.rate");
+                const auto lateEvents = queryCounters->FindCounter("hop.late_events.rate");
+                if (!inputEvents || !lateEvents) {
+                    error = "Hop counters have not been created";
+                    return false;
+                }
+                const auto input = inputEvents->Val();
+                const auto late = lateEvents->Val();
+                error = TStringBuilder() << "Input " << input << ", expected " << expectedInput << "; late " << late << ", expected "
+                                         << expectedLate;
+                return input == expectedInput && late == expectedLate;
+            });
+        };
+
+        const auto readSession = pqGateway->WaitReadSession(inputTopicName);
+        ui64 offset = 0;
+        const auto addEvents = [&](const char* time) {
+            for (ui32 key = 0; key < 4; ++key) {
+                readSession->AddDataReceivedEvent(offset++, fmt::format(R"({{"time":"{}","key":{}}})", time, key));
+            }
+        };
+
+        addEvents("2025-08-24T00:00:00Z");
+        addEvents("2025-08-24T00:00:20Z");   // Close the first windows in both Hop tasks.
+        waitCounters(8, 0);   // Both sensors must exist even when no events are late.
+        addEvents("2025-08-24T00:00:00Z");   // Four late events must still count as input.
+        readSession->AddDataReceivedEvent(offset++, R"({"time":null,"key":0})");
+        waitCounters(13, 4);
+        const auto inputEvents = queryCounters->FindCounter("hop.input_events.rate");
+        const auto lateEvents = queryCounters->FindCounter("hop.late_events.rate");
+
+        addEvents("2025-08-24T00:00:40Z");
+        addEvents("2025-08-24T00:00:00Z");
+        readSession->AddDataReceivedEvent(offset++, R"({"time":null,"key":0})");
+        waitCounters(22, 8);
+
+        // Further reports must not add the same accumulated values again.
+        const auto uptime = queryCounters->FindCounter("streaming.query.uptime.seconds");
+        const auto initialUptime = uptime->Val();
+        WaitFor(TEST_OPERATION_TIMEOUT, "another streaming query counters update", [&]() {
+            return uptime->Val() >= initialUptime + 3;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(inputEvents->Val(), 22);
+        UNIT_ASSERT_VALUES_EQUAL(lateEvents->Val(), 8);
+
+        ExecQuery("ALTER STREAMING QUERY hopCountersQuery SET (RUN = FALSE)");
+        CheckScriptExecutionsCount(1, 0);
+    }
+
     Y_UNIT_TEST_F(CheckpointsPropagationWithGroupByHop, TStreamingTestFixture) {
         LogSettings.Freeze = true;
         CheckpointPeriod = TDuration::Seconds(5);
@@ -2468,6 +2555,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     // Streaming queries are long-running: their table reads must not take locks,
     // because any concurrent write would break the locks and abort the query.
     Y_UNIT_TEST_F(StreamingQueryDoesNotTakeLocks, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQueriesCounters(true);
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
         const auto inputTopic = MakeExternalName("LocksInput");
@@ -2548,6 +2636,16 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         // the same read actor and are filtered out by table id.
         UNIT_ASSERT_GT(evTableReads.load(), 0u);
         UNIT_ASSERT_VALUES_EQUAL(evTableReadsWithLocks.load(), 0u);
+
+        // Wait for counter initialization before checking the absence of Hop sensors.
+        const auto queryCounters =
+            GetCounters()->GetSubgroup("subsystem", "streaming_queries")->GetSubgroup("host", "")->GetSubgroup("path", "/Root/LocksQuery");
+        WaitFor(TDuration::Seconds(30), "streaming query counters without Hop", [&]() {
+            const auto uptime = queryCounters->FindCounter("streaming.query.uptime.seconds");
+            return uptime && uptime->Val() > 0;
+        });
+        UNIT_ASSERT(!queryCounters->FindCounter("hop.input_events.rate"));
+        UNIT_ASSERT(!queryCounters->FindCounter("hop.late_events.rate"));
     }
 
     Y_UNIT_TEST_TWIN_F(ReadLargeTopicMessage, Compressed, TStreamingTestFixture) {

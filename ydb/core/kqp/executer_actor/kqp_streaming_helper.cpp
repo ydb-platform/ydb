@@ -28,6 +28,15 @@ public:
         TaskCount->Set(stats.TasksCount);
         InputBytes->Set(stats.InputBytes);
         OutputBytes->Set(stats.OutputBytes);
+        if (stats.HopInputEventsCount && !HopInputEventsCount) {
+            auto queryGroup = HostGroup->GetSubgroup("path", Path);
+            HopInputEventsCount = queryGroup->GetCounter("hop.input_events.rate", true);
+            HopLateEventsCount = queryGroup->GetCounter("hop.late_events.rate", true);
+        }
+        if (HopInputEventsCount) {
+            HopInputEventsCount->Set(stats.HopInputEventsCount);
+            HopLateEventsCount->Set(stats.HopLateEventsCount);
+        }
     }
 
 private:
@@ -53,6 +62,8 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr TaskCount;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr HopInputEventsCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr HopLateEventsCount;
     const ::NMonitoring::TDynamicCounterPtr Counters;
 };
 

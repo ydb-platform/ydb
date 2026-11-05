@@ -550,7 +550,7 @@ func readTransfer(msg any, r *bufio.Reader, maxTrailerHeaders int64) (err error)
 	}
 
 	// Trailer
-	t.Trailer, err = fixTrailer(t.Header, t.Chunked)
+	t.Trailer, err = fixTrailer(t.Header, t.Chunked, maxTrailerHeaders)
 	if err != nil {
 		return err
 	}
@@ -772,7 +772,7 @@ func shouldClose(major, minor int, header Header, removeCloseHeader bool) bool {
 }
 
 // Parse the trailer header.
-func fixTrailer(header Header, chunked bool) (Header, error) {
+func fixTrailer(header Header, chunked bool, maxHeaders int64) (Header, error) {
 	vv, ok := header["Trailer"]
 	if !ok {
 		return nil, nil
@@ -788,6 +788,12 @@ func fixTrailer(header Header, chunked bool) (Header, error) {
 		return nil, nil
 	}
 	header.Del("Trailer")
+	for _, v := range vv {
+		maxHeaders -= int64(strings.Count(v, ",") + 1)
+		if maxHeaders < 0 {
+			return nil, errTooLarge
+		}
+	}
 
 	trailer := make(Header)
 	var err error
@@ -824,11 +830,12 @@ type body struct {
 	doEarlyClose      bool          // whether Close should stop early
 	maxTrailerHeaders int64         // how many trailer header values are allowed
 
-	mu         sync.Mutex // guards following, and calls to Read and Close
-	sawEOF     bool
-	closed     bool
-	earlyClose bool   // Close called and we didn't read to the end of src
-	onHitEOF   func() // if non-nil, func to call when EOF is Read
+	mu          sync.Mutex // guards following, and calls to Read and Close
+	sawEOF      bool
+	closed      bool
+	earlyClose  bool   // Close called and we didn't read to the end of src
+	dropTrailer bool   // if true, do not populate hdr.Trailer
+	onHitEOF    func() // if non-nil, func to call when EOF is Read
 }
 
 // ErrBodyReadAfterClose is returned when reading a [Request] or [Response]
@@ -953,6 +960,13 @@ func (b *body) readTrailer() error {
 		}
 		return err
 	}
+	// When we are automatically draining a response body, let the trailer
+	// still be parsed above (so connection can be reused). However, do not
+	// actually populate b.hdr.Trailer. Doing so is racy as we do not own b.hdr
+	// anymore when automatic draining occurs.
+	if b.dropTrailer {
+		return nil
+	}
 	switch rr := b.hdr.(type) {
 	case *Request:
 		mergeSetHeader(&rr.Trailer, Header(hdr))
@@ -968,6 +982,12 @@ func mergeSetHeader(dst *Header, src Header) {
 		return
 	}
 	maps.Copy(*dst, src)
+}
+
+func (b *body) discardTrailer() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.dropTrailer = true
 }
 
 // unreadDataSizeLocked returns the number of bytes of unread input.

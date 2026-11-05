@@ -9,6 +9,15 @@ from ydb.apps.bridge_skipper.ydbd_mock.lib.topology import Policies, Timings, To
 
 
 class DefaultsTest(unittest.TestCase):
+    def test_static_quorum_defaults_to_majority_and_can_be_overridden(self):
+        t = Topology(["a", "b"], {"a": 4, "b": 3}, static_quorum={"b": 3})
+        self.assertEqual(t.static_quorum, {"a": 3, "b": 3})
+        self.assertEqual(Topology.from_yaml(t.to_yaml()).static_quorum, t.static_quorum)
+        for quorum in ({"a": 0}, {"a": 5}, {"missing": 1}, {"a": True}, {"a": 1.5}):
+            with self.subTest(quorum=quorum):
+                with self.assertRaises(TopologyError):
+                    Topology(["a", "b"], 4, static_quorum=quorum)
+
     def test_default_layout_is_two_piles_of_three_nodes_on_loopback(self):
         t = Topology()
         self.assertEqual(t.pile_names, ["pile1", "pile2"])
@@ -56,7 +65,7 @@ class ValidationTest(unittest.TestCase):
         bad = [
             dict(pile_names=[]),
             dict(pile_names=["a", "a"]),
-            dict(pile_names=["a", ""]),
+            dict(pile_names=["a", None]),
             dict(nodes_per_pile=0),
             dict(nodes_per_pile=11),
             dict(label_format="{nope}"),
@@ -116,6 +125,15 @@ class ReviewHardeningTest(unittest.TestCase):
 
 
 class SerializationTest(unittest.TestCase):
+    def test_empty_name_is_a_pile_not_a_missing_value(self):
+        t = Topology(["", "named"], 3)
+        again = Topology.from_yaml(t.to_yaml())
+        self.assertEqual(again.to_dict(), t.to_dict())
+        self.assertEqual(again.pile("").index, 0)
+        doc = yaml.safe_load(config_yaml.render(again))
+        self.assertEqual(doc["config"]["bridge_config"]["piles"], [{"name": ""}, {"name": "named"}])
+        self.assertEqual(doc["config"]["hosts"][0]["location"]["bridge_pile_name"], "")
+
     def test_yaml_round_trip(self):
         t = Topology.with_free_ports(["x", "y"], 2, timings=Timings(promote_delay=0.1),
                                      policies=Policies(admin_token="t", auto_blame_dead_piles=False))

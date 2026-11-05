@@ -41,6 +41,16 @@ public:
                 if (!groupInfo.BridgeGroupInfo) {
                     return; // this is not a bridge proxy group
                 }
+                const auto& groupState = groupInfo.BridgeGroupInfo->GetBridgeGroupState();
+                if (!NBridge::GetGroupPile(groupState, unsyncedBridgePileId)) {
+                    return;
+                } else if (NBridge::GetAuthorityPileId(groupState) == unsyncedBridgePileId) {
+                    return; // nothing is written to the group without this part, it is the one to sync others from
+                } else if (const auto it = State->StoragePools.Get().find(groupInfo.StoragePoolId);
+                        it != State->StoragePools.Get().end() &&
+                        groupInfo.IsBridgePartDropped(unsyncedBridgePileId, it->second.BridgeMode)) {
+                    return; // the part is going away, there is nothing to sync
+                }
                 TGroupInfo *info = State->Groups.FindForUpdate(groupId);
                 auto *state = info->BridgeGroupInfo->MutableBridgeGroupState();
                 if (auto *pile = NBridge::GetGroupPile(state, unsyncedBridgePileId)) {
@@ -99,7 +109,8 @@ public:
                 if (!--self->NumPendingBridgeSyncFinishedResponses) {
                     Y_ABORT_UNLESS(self->CheckingUnsyncedBridgePiles);
                     self->CheckingUnsyncedBridgePiles = false;
-                    if (self->NotifyBridgeSyncFinishedErrors) {
+                    // the check requested while the notifications were in flight didn't run, so it runs now
+                    if (self->NotifyBridgeSyncFinishedErrors || self->RecheckUnsyncedBridgePiles) {
                         self->CheckUnsyncedBridgePiles();
                     }
                 }
@@ -279,12 +290,7 @@ public:
         bool blocked = false;
         State->Groups.ForEach([&](TGroupId groupId, const TGroupInfo& groupInfo) {
             if (groupInfo.IsBridgeConversionCandidate()) {
-                TGroupInfo *group = State->Groups.FindForUpdate(groupId);
-                group->BridgePileId = NBridge::GetInlinePileId();
-                group->BridgeProxyGroupId = groupId;
-                // pile generation gets adjusted along with generation bump on commit
-                NBridge::MakeInlinePileGroupState(group->BridgeGroupInfo.emplace().MutableBridgeGroupState(), groupId,
-                    group->Generation);
+                State->Groups.FindForUpdate(groupId)->MakeInlinePile(NBridge::GetInlinePileId());
                 State->GroupContentChanged.insert(groupId);
             } else if (groupInfo.BlocksBridgeConversion()) {
                 blocked = true;
@@ -495,6 +501,9 @@ private:
     }
 
     void OnCommitted() override {
+        // groups created from now on get their parts in the pile right away
+        Self->BridgePileAddedOperationId = OperationId;
+
         // new parts are unsynced from the very beginning, they get synced when the pile rejoins
         for (const auto& [bridgeProxyGroupId, targetGroupId] : Added) {
             const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, bridgeProxyGroupId,
@@ -532,6 +541,32 @@ ITransaction* TBlobStorageController::CreateTxValidateRemoveBridgePile(TBridgePi
     return new TTxRemoveBridgePile(this, pileId, 0, std::move(response));
 }
 
+void TBlobStorageController::DropBridgeGroupPart(TConfigState& state, TGroupId proxyGroupId, TBridgePileId pileId) {
+    TGroupInfo *proxyGroup = state.Groups.FindForUpdate(proxyGroupId);
+    Y_ABORT_UNLESS(proxyGroup && proxyGroup->BridgeGroupInfo);
+    auto *groupState = proxyGroup->BridgeGroupInfo->MutableBridgeGroupState();
+    const auto *pile = NBridge::GetGroupPile(*groupState, pileId);
+    Y_ABORT_UNLESS(pile);
+    const auto pileGroupId = TGroupId::FromProto(pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+    NBridge::RemoveGroupPile(groupState, pileId);
+    if (pileGroupId == proxyGroupId) {
+        // inline pile: the group keeps its id serving as bridge proxy group only, its VDisks go away
+        for (const TVSlotInfo *vslot : proxyGroup->VDisksInGroup) {
+            state.DestroyVSlot(vslot->VSlotId);
+        }
+        proxyGroup->VDisksInGroup.clear();
+        proxyGroup->Topology = std::make_shared<TBlobStorageGroupInfo::TTopology>(proxyGroup->Topology->GType, 0, 0, 0);
+        proxyGroup->BridgePileId = TBridgePileId();
+        proxyGroup->BridgeProxyGroupId.reset();
+    } else if (const TGroupInfo *pileGroup = state.Groups.Find(pileGroupId)) {
+        // group entries are held by pointers, so deleting other groups keeps `proxyGroup` valid
+        state.DeleteExistingGroupWithVSlots(*pileGroup);
+    } else {
+        Y_DEBUG_ABORT_S("pile group not found GroupId# " << proxyGroupId << " PileGroupId# " << pileGroupId);
+    }
+    state.GroupContentChanged.insert(proxyGroupId);
+}
+
 size_t TBlobStorageController::RemoveBridgePileGroups(TConfigState& state, TBridgePileId pileId) {
     const auto& bridgeInfo = state.BridgeInfo;
     Y_ABORT_UNLESS(bridgeInfo);
@@ -551,37 +586,52 @@ size_t TBlobStorageController::RemoveBridgePileGroups(TConfigState& state, TBrid
     std::vector<TGroupId> proxyGroupIds;
     state.Groups.ForEach([&](TGroupId groupId, const TGroupInfo& group) {
         if (group.BridgeGroupInfo && NBridge::GetGroupPile(group.BridgeGroupInfo->GetBridgeGroupState(), pileId)) {
+            if (NBridge::GetAuthorityPileId(group.BridgeGroupInfo->GetBridgeGroupState()) == pileId) {
+                throw TExError() << "GroupId# " << groupId << " relies on its part in the pile solely, its data would"
+                    " be lost";
+            }
             proxyGroupIds.push_back(groupId);
         }
     });
 
     for (const TGroupId proxyGroupId : proxyGroupIds) {
-        TGroupInfo *proxyGroup = state.Groups.FindForUpdate(proxyGroupId);
-        Y_ABORT_UNLESS(proxyGroup);
-        auto *groupState = proxyGroup->BridgeGroupInfo->MutableBridgeGroupState();
-        const auto pileGroupId = TGroupId::FromProto(NBridge::GetGroupPile(*groupState, pileId),
-            &NKikimrBridge::TGroupState::TPile::GetGroupId);
-        NBridge::RemoveGroupPile(groupState, pileId);
-        if (pileGroupId == proxyGroupId) {
-            // inline pile: the group keeps its id serving as bridge proxy group only, its VDisks go away
-            for (const TVSlotInfo *vslot : proxyGroup->VDisksInGroup) {
-                state.DestroyVSlot(vslot->VSlotId);
-            }
-            proxyGroup->VDisksInGroup.clear();
-            proxyGroup->Topology = std::make_shared<TBlobStorageGroupInfo::TTopology>(proxyGroup->Topology->GType, 0, 0, 0);
-            proxyGroup->BridgePileId = TBridgePileId();
-            proxyGroup->BridgeProxyGroupId.reset();
-        } else if (const TGroupInfo *pileGroup = state.Groups.Find(pileGroupId)) {
-            // group entries are held by pointers, so deleting other groups keeps `proxyGroup` valid
-            state.DeleteExistingGroupWithVSlots(*pileGroup);
-        } else {
-            Y_DEBUG_ABORT_S("pile group not found GroupId# " << proxyGroupId << " PileGroupId# " << pileGroupId);
+        DropBridgeGroupPart(state, proxyGroupId, pileId);
+    }
+
+    // nodes of the pile can't connect until it is added again, so nobody can tell how their drives are; INACTIVE set by
+    // CMS sentinel when they went away would keep the static groups from getting their parts in the pile being added
+    std::vector<TPDiskId> inactivePDiskIds;
+    state.PDisks.ForEach([&](const TPDiskId& pdiskId, const TPDiskInfo& pdisk) {
+        const auto *pile = bridgeInfo->GetPileForNode(pdiskId.NodeId);
+        if (pile && pile->BridgePileId == pileId && pdisk.Status == NKikimrBlobStorage::EDriveStatus::INACTIVE) {
+            inactivePDiskIds.push_back(pdiskId);
         }
-        state.GroupContentChanged.insert(proxyGroupId);
+    });
+    for (const TPDiskId& pdiskId : inactivePDiskIds) {
+        TPDiskInfo *pdisk = state.PDisks.FindForUpdate(pdiskId);
+        pdisk->Status = NKikimrBlobStorage::EDriveStatus::ACTIVE;
+        pdisk->StatusTimestamp = state.Timestamp;
+        YDB_LOG_INFO("Drive of the removed pile gets ACTIVE status back",
+            {"marker", "BSCBR19"},
+            {"pileId", pileId},
+            {"PDiskId", pdiskId});
     }
 
     state.CheckConsistency();
     return proxyGroupIds.size();
+}
+
+const NKikimrBridge::TClusterStateDetails::TPileSyncState *TBlobStorageController::FindPileSyncState(
+        TBridgePileId pileId) const {
+    if (StorageConfig) {
+        for (const auto& pss : StorageConfig->GetClusterStateDetails().GetPileSyncState()) {
+            if (TBridgePileId::FromProto(&pss, &NKikimrBridge::TClusterStateDetails::TPileSyncState::GetBridgePileId) ==
+                    pileId) {
+                return &pss;
+            }
+        }
+    }
+    return nullptr;
 }
 
 TBridgePileId TBlobStorageController::GetPendingOperationPileId() const {
@@ -591,6 +641,15 @@ TBridgePileId TBlobStorageController::GetPendingOperationPileId() const {
 bool TBlobStorageController::IsBridgePileBeingRemoved(TBridgePileId pileId) const {
     return pileId && GetPendingOperationPileId() == pileId && StorageConfig->GetClusterStateDetails()
         .GetPendingPileOperation().GetKind() == NKikimrBridge::TClusterStateDetails::TPendingPileOperation::REMOVE;
+}
+
+bool TBlobStorageController::IsBridgePileAwaitingParts(TBridgePileId pileId) const {
+    if (!pileId || GetPendingOperationPileId() != pileId) {
+        return false;
+    }
+    const auto& op = StorageConfig->GetClusterStateDetails().GetPendingPileOperation();
+    return op.GetKind() == NKikimrBridge::TClusterStateDetails::TPendingPileOperation::ADD &&
+        op.GetOperationId() != BridgePileAddedOperationId;
 }
 
 void TBlobStorageController::CheckBridgePileOperation() {
@@ -657,6 +716,173 @@ void TBlobStorageController::HandleRetryBridgePileOperation() {
     CheckBridgePileOperation();
 }
 
+class TBlobStorageController::TTxUpdateBridgeGroupModes : public TTransactionBase<TBlobStorageController> {
+    std::optional<TConfigState> State;
+    bool Failed = false;
+    bool RecheckLater = false; // some parts wait to be deleted
+    std::vector<TGroupId> StoppedParts; // parts that have stopped getting requests now
+    std::vector<TGroupId> NoticedParts; // parts that have been noticed not getting requests
+    std::vector<TGroupId> DroppedParts;
+
+public:
+    TTxUpdateBridgeGroupModes(TBlobStorageController *controller)
+        : TTransactionBase(controller)
+    {}
+
+    TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_UPDATE_BRIDGE_GROUP_MODES; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
+        const TMonotonic now = TActivationContext::Monotonic();
+
+        std::vector<TGroupId> groupIds;
+        State->Groups.ForEach([&](TGroupId groupId, const TGroupInfo& group) {
+            if (group.BridgeGroupInfo && group.BridgeGroupInfo->GetBridgeGroupState().GetAuthorityPileId()) {
+                groupIds.push_back(groupId);
+            }
+        });
+
+        for (const TGroupId groupId : groupIds) {
+            const TGroupInfo *group = State->Groups.Find(groupId);
+            const auto& storagePools = State->StoragePools.Get();
+            const auto it = storagePools.find(group->StoragePoolId);
+            if (it == storagePools.end()) {
+                Y_DEBUG_ABORT();
+                continue;
+            } else if (it->second.BridgeMode) {
+                UpdateBridgedGroup(*group);
+            } else {
+                UpdateOrdinaryGroup(*group, now);
+            }
+        }
+
+        if (auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
+            YDB_LOG_ERROR("Failed to update bridged groups by the modes of their pools",
+                {"marker", "BSCBR20"},
+                {"error", *error});
+            Failed = true;
+            StoppedParts.clear();
+            NoticedParts.clear();
+            DroppedParts.clear();
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        if (State) {
+            State->ApplyConfigUpdates();
+        }
+        const TMonotonic now = TActivationContext::Monotonic();
+        for (const TGroupId groupId : StoppedParts) {
+            Self->DroppedBridgePartsSince.insert_or_assign(groupId, now);
+        }
+        for (const TGroupId groupId : NoticedParts) {
+            Self->DroppedBridgePartsSince.try_emplace(groupId, now);
+        }
+        for (const TGroupId groupId : DroppedParts) {
+            Self->DroppedBridgePartsSince.erase(groupId);
+        }
+        Self->OnBridgeGroupModesStepDone(Failed, RecheckLater);
+    }
+
+private:
+    // the group of bridged pool stops relying on the single part when it has its synced part in every pile, and every
+    // such pile is synchronized
+    void UpdateBridgedGroup(const TGroupInfo& group) {
+        const auto& state = group.BridgeGroupInfo->GetBridgeGroupState();
+        for (const auto& pile : State->BridgeInfo->Piles) {
+            if (pile.State == NKikimrBridge::TClusterState::INACTIVE) {
+                continue;
+            } else if (const auto *part = NBridge::GetGroupPile(state, pile.BridgePileId); !part ||
+                    part->GetStage() != NKikimrBridge::TGroupState::SYNCED ||
+                    pile.State != NKikimrBridge::TClusterState::SYNCHRONIZED) {
+                return;
+            }
+        }
+        State->Groups.FindForUpdate(group.ID)->BridgeGroupInfo->MutableBridgeGroupState()->ClearAuthorityPileId();
+        State->GroupContentChanged.insert(group.ID);
+    }
+
+    // parts of the group of ordinary pool, but the authority one, stop getting requests first (but blocks), then they
+    // are deleted after a while; the group doesn't need to designate the part it relies on when it is the only one
+    void UpdateOrdinaryGroup(const TGroupInfo& group, TMonotonic now) {
+        const auto& state = group.BridgeGroupInfo->GetBridgeGroupState();
+        const auto authorityPileId = TBridgePileId::FromProto(&state, &NKikimrBridge::TGroupState::GetAuthorityPileId);
+        if (!NBridge::GetGroupPile(state, authorityPileId)) {
+            Y_DEBUG_ABORT_S("authority part not found GroupId# " << group.ID);
+            return; // nothing is deleted without the part to keep
+        }
+        std::vector<TBridgePileId> stop, drop;
+        NBridge::ForEachGroupPile(state, [&](TBridgePileId pileId, const NKikimrBridge::TGroupState::TPile& part) {
+            if (pileId == authorityPileId) {
+                return;
+            }
+            const auto partGroupId = TGroupId::FromProto(&part, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+            if (part.GetStage() != NKikimrBridge::TGroupState::BLOCKS) {
+                stop.push_back(pileId);
+                StoppedParts.push_back(partGroupId);
+                RecheckLater = true;
+            } else if (const auto it = Self->DroppedBridgePartsSince.find(partGroupId);
+                    it == Self->DroppedBridgePartsSince.end()) {
+                NoticedParts.push_back(partGroupId); // BSC has been restarted, or the part has been just created
+                RecheckLater = true;
+            } else if (now < it->second + BridgePartDropDelay) {
+                RecheckLater = true;
+            } else {
+                drop.push_back(pileId);
+                DroppedParts.push_back(partGroupId);
+            }
+        });
+
+        if (!stop.empty()) {
+            auto *mutableState = State->Groups.FindForUpdate(group.ID)->BridgeGroupInfo->MutableBridgeGroupState();
+            for (const TBridgePileId pileId : stop) {
+                NBridge::GetGroupPile(mutableState, pileId)->ClearStage(); // only blocks are sent to the part then
+            }
+            State->GroupContentChanged.insert(group.ID);
+        }
+        for (const TBridgePileId pileId : drop) {
+            Self->DropBridgeGroupPart(*State, group.ID, pileId);
+        }
+
+        size_t numParts = 0;
+        NBridge::ForEachGroupPile(State->Groups.Find(group.ID)->BridgeGroupInfo->GetBridgeGroupState(),
+            [&](TBridgePileId, const NKikimrBridge::TGroupState::TPile&) { ++numParts; });
+        if (numParts == 1) {
+            State->Groups.FindForUpdate(group.ID)->BridgeGroupInfo->MutableBridgeGroupState()->ClearAuthorityPileId();
+            State->GroupContentChanged.insert(group.ID);
+        }
+    }
+};
+
+void TBlobStorageController::CheckBridgeGroupModes() {
+    if (Loaded && BridgeInfo && !BridgeInfo->IsImplicit && StartRetriableStep(BridgeGroupModesStep)) {
+        Execute(std::make_unique<TTxUpdateBridgeGroupModes>(this));
+    }
+}
+
+void TBlobStorageController::OnBridgeGroupModesStepDone(bool failed, bool recheckLater) {
+    if (FinishRetriableStep(BridgeGroupModesStep, failed)) {
+        CheckBridgeGroupModes();
+    } else if (recheckLater && !failed && !BridgeGroupModesCheckScheduled) {
+        BridgeGroupModesCheckScheduled = true;
+        TActivationContext::Schedule(BridgePartDropDelay / 3, new IEventHandle(TEvPrivate::EvCheckBridgeGroupModes, 0,
+            SelfId(), {}, nullptr, 0));
+    }
+}
+
+void TBlobStorageController::HandleRetryBridgeGroupModes() {
+    OnRetriableStepRetry(BridgeGroupModesStep);
+    CheckBridgeGroupModes();
+}
+
+void TBlobStorageController::HandleCheckBridgeGroupModes() {
+    Y_ABORT_UNLESS(BridgeGroupModesCheckScheduled);
+    BridgeGroupModesCheckScheduled = false;
+    CheckBridgeGroupModes();
+}
+
 void TBlobStorageController::CheckUnsyncedBridgePiles() {
     if (!StorageConfig->HasClusterStateDetails() || CheckingUnsyncedBridgePiles) {
         return; // no bridge mode cluster state details available
@@ -670,6 +896,55 @@ void TBlobStorageController::CheckUnsyncedBridgePiles() {
             break;
         }
     }
+}
+
+void TBlobStorageController::UpdateBridgeSyncCounters() {
+    if (!BridgeInfo || BridgeInfo->IsImplicit) {
+        return;
+    }
+
+    std::map<TString, TBridgeSyncCounters::TPileValues> piles;
+    BridgeInfo->ForEachPile([&](TBridgePileId pileId) {
+        if (const auto *pile = BridgeInfo->GetPile(pileId); !pile->IsFreeSlot) {
+            const auto *pss = FindPileSyncState(pileId);
+            piles[pile->Name] = {.State = pile->State, .UnsyncedBSC = pss && pss->GetUnsyncedBSC()};
+        }
+    });
+
+    std::map<TBridgeSyncCounters::TKey, TBridgeSyncCounters::TValues> values;
+    auto scan = [&](const NKikimrBridge::TGroupState& state, const TString& pool) {
+        NBridge::ForEachGroupPile(state, [&](TBridgePileId pileId, const NKikimrBridge::TGroupState::TPile& pile) {
+            const auto *bridgePile = BridgeInfo->FindPile(pileId);
+            if (!bridgePile) {
+                return;
+            }
+            auto& value = values[{bridgePile->Name, pool}];
+            if (static_cast<size_t>(pile.GetStage()) < value.GroupsInStage.size()) {
+                ++value.GroupsInStage[pile.GetStage()];
+            }
+            const auto it = TargetGroupToSyncerState.find(TGroupId::FromProto(&pile,
+                &NKikimrBridge::TGroupState::TPile::GetGroupId));
+            if (it != TargetGroupToSyncerState.end() && it->second.NodeIds) {
+                ++value.SyncersRunning;
+                for (const auto& [nodeId, perNodeInfo] : it->second.NodeIds) {
+                    value.BytesDone += perNodeInfo.Progress.BytesDone;
+                    value.BytesTotal += perNodeInfo.Progress.BytesTotal;
+                }
+            }
+        });
+    };
+    for (const auto& [groupId, group] : GroupMap) {
+        if (group->BridgeGroupInfo && group->BridgeGroupInfo->HasBridgeGroupState()) {
+            scan(group->BridgeGroupInfo->GetBridgeGroupState(), StoragePools.at(group->StoragePoolId).Name);
+        }
+    }
+    for (const auto& [groupId, group] : StaticGroups) {
+        if (group.Info && group.Info->Group && group.Info->Group->HasBridgeGroupState()) {
+            scan(group.Info->Group->GetBridgeGroupState(), group.Info->GetStoragePoolName());
+        }
+    }
+
+    BridgeSyncCounters->Update(piles, values);
 }
 
 void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobStorage::TEvControllerUpdateSyncerState& update,
@@ -711,6 +986,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
         NKikimrBlobStorage::TGroupInfo bridgeGroupInfo;
         bool correct = false;
         bool staticGroup = false;
+        TString pool;
         if (const TGroupInfo *group = FindGroup(groupId)) {
             if (generation < group->Generation) {
                 updateGroupInfo = true;
@@ -719,6 +995,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             } else if (group->BridgeGroupInfo && group->BridgeGroupInfo->HasBridgeGroupState()) {
                 correct = true;
                 bridgeGroupInfo.CopyFrom(*group->BridgeGroupInfo);
+                pool = StoragePools.at(group->StoragePoolId).Name;
             } else { // not a bridged group
                 Y_DEBUG_ABORT();
             }
@@ -739,6 +1016,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
                 correct = true;
                 staticGroup = true;
                 bridgeGroupInfo.MutableBridgeGroupState()->CopyFrom(group->GetBridgeGroupState());
+                pool = info->GetStoragePoolName();
             } else { // not a bridged static group
                 Y_DEBUG_ABORT();
             }
@@ -752,8 +1030,11 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             continue;
         }
 
+        // a finished syncer not assigned to this node is a repeated report, e.g. after the node re-registers
+        const bool assigned = syncerState.NodeIds.contains(nodeId);
+
         // see if we can drop this syncer in favor of already running one
-        if (!syncerState.NodeIds.contains(nodeId)) {
+        if (!assigned) {
             bool dropNewSyncer = false;
             for (auto it = syncerState.NodeIds.begin(); it != syncerState.NodeIds.end(); ) {
                 auto& [existingNodeId, item] = *it;
@@ -810,11 +1091,20 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
             updateNodeWarden = true;
 
             if (syncer.HasErrorReason()) {
+                syncerState.NotBefore = TActivationContext::Monotonic() + syncerState.RetryBackoff.Next();
                 NKikimrBridge::TGroupState::EStage stage = NKikimrBridge::TGroupState::BLOCKS;
-                const auto *pile = NBridge::FindGroupPileByGroupId(bridgeGroupInfo.GetBridgeGroupState(), targetGroupId);
+                TBridgePileId pileId;
+                const auto *pile = NBridge::FindGroupPile(bridgeGroupInfo.GetBridgeGroupState(), [&](TBridgePileId id,
+                        const NKikimrBridge::TGroupState::TPile& item) {
+                    pileId = id;
+                    return TGroupId::FromProto(&item, &NKikimrBridge::TGroupState::TPile::GetGroupId) == targetGroupId;
+                });
                 Y_DEBUG_ABORT_UNLESS(pile);
                 if (pile) {
                     stage = pile->GetStage();
+                    if (const auto *bridgePile = BridgeInfo ? BridgeInfo->FindPile(pileId) : nullptr; bridgePile && assigned) {
+                        BridgeSyncCounters->IncErrors({bridgePile->Name, pool});
+                    }
                 }
                 updates.emplace_back(targetGroupId, TTxUpdateBridgeSyncState::TRegisterError{
                     .Stage = stage,
@@ -826,6 +1116,8 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
                 // this is just a repeat
                 continue;
             }
+            syncerState.RetryBackoff.Reset();
+            syncerState.NotBefore = {};
 
             // let's update syncer state (switch it to next one)
             auto *state = bridgeGroupInfo.MutableBridgeGroupState();
@@ -887,12 +1179,19 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
 
 void TBlobStorageController::UpdateStaticGroupBridgeGroupInfo(TGroupId groupId, ui32 generation,
         NKikimrBlobStorage::TGroupInfo bridgeGroupInfo, TGroupId targetGroupId) {
+    auto& syncerState = TargetGroupToSyncerState.at(targetGroupId);
+    Y_ABORT_UNLESS(syncerState.InCommit);
+    const ui64 commitCookie = syncerState.StaticCommitCookie = ++NextStaticSyncerCommitCookie;
     NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot request;
     auto *cmd = request.MutableUpdateBridgeGroupInfo();
     groupId.CopyToProto(cmd, &std::decay_t<decltype(*cmd)>::SetGroupId);
     cmd->SetGroupGeneration(generation);
     cmd->MutableBridgeGroupInfo()->CopyFrom(bridgeGroupInfo);
-    InvokeOnRoot(std::move(request), [this, targetGroupId](NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& result) {
+    InvokeOnRoot(std::move(request), [this, targetGroupId, commitCookie](NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& result) {
+        const auto it = TargetGroupToSyncerState.find(targetGroupId);
+        if (it == TargetGroupToSyncerState.end() || it->second.StaticCommitCookie != commitCookie) {
+            return;
+        }
         if (result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
             YDB_LOG_ERROR("UpdateBridgeGroupInfo has unexpectedly failed",
                 {"marker", "BSCBR08"},
@@ -900,13 +1199,11 @@ void TBlobStorageController::UpdateStaticGroupBridgeGroupInfo(TGroupId groupId, 
             // Another pile may have advanced the group generation. Release this commit and let
             // the syncer retry using the current group configuration instead of resending stale state.
         }
-        if (const auto it = TargetGroupToSyncerState.find(targetGroupId); it != TargetGroupToSyncerState.end()) {
-            TSyncerState& syncerState = it->second;
-            Y_ABORT_UNLESS(syncerState.InCommit);
-            syncerState.InCommit = false;
-            if (!syncerState.NodeIds) {
-                SyncersRequiringAction.PushBack(&syncerState);
-            }
+        TSyncerState& syncerState = it->second;
+        Y_ABORT_UNLESS(syncerState.InCommit);
+        syncerState.InCommit = false;
+        if (!syncerState.NodeIds) {
+            SyncersRequiringAction.PushBack(&syncerState);
         }
         if (result.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
             ProcessSyncers();
@@ -941,8 +1238,29 @@ void TBlobStorageController::CheckSyncerDisconnectedNodes() {
         }
     }
 
+    UpdateBridgeSyncCounters(); // reuse this 5 s timer of the syncer machinery
+
     TActivationContext::Schedule(TDuration::Seconds(5), new IEventHandle(TEvPrivate::EvCheckSyncerDisconnectedNodes, 0,
         SelfId(), {}, nullptr, 0));
+}
+
+bool TBlobStorageController::IsBridgeUpgradeSyncer(const TSyncerState& syncerState) {
+    const TGroupInfo *proxyGroup = FindGroup(syncerState.BridgeProxyGroupId);
+    const TGroupInfo *targetGroup = FindGroup(syncerState.TargetGroupId);
+    if (!proxyGroup || !targetGroup || !proxyGroup->BridgeGroupInfo ||
+            !proxyGroup->BridgeGroupInfo->GetBridgeGroupState().GetAuthorityPileId()) {
+        return false;
+    } else if (const auto it = StoragePools.find(proxyGroup->StoragePoolId); it == StoragePools.end() ||
+            !it->second.BridgeMode) {
+        return false;
+    }
+    const auto *pile = BridgeInfo->FindPile(targetGroup->BridgePileId);
+    return pile && pile->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
+}
+
+void TBlobStorageController::HandleRetrySyncers() {
+    SyncersRetryAt = TMonotonic::Max();
+    ProcessSyncers();
 }
 
 void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
@@ -950,6 +1268,19 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
         return; // give nodes some time to connect to BSC
     }
 
+    std::optional<size_t> numUpgradeSyncersCounted;
+    auto numUpgradeSyncers = [&]() -> size_t& {
+        if (!numUpgradeSyncersCounted) {
+            numUpgradeSyncersCounted.emplace(0);
+            for (const auto& [targetGroupId, syncerState] : TargetGroupToSyncerState) {
+                *numUpgradeSyncersCounted += syncerState.NodeIds && IsBridgeUpgradeSyncer(syncerState);
+            }
+        }
+        return *numUpgradeSyncersCounted;
+    };
+
+    const TMonotonic now = TActivationContext::Monotonic();
+    TMonotonic retryAt = TMonotonic::Max();
     for (auto it = SyncersRequiringAction.begin(); it != SyncersRequiringAction.end(); ) {
         TSyncerState& syncerState = *it++;
 
@@ -957,12 +1288,21 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
             Y_FAIL_S("InCommit# " << syncerState.InCommit
                 << " NodeIds# " << FormatList(syncerState.NodeIds | std::views::keys));
         }
+        if (now < syncerState.NotBefore) {
+            retryAt = Min(retryAt, syncerState.NotBefore);
+            continue; // the syncer has failed recently, it is started later
+        }
 
         const NKikimrBlobStorage::TGroupInfo *bridgeGroupInfo = nullptr;
-        if (const TGroupInfo *group = FindGroup(syncerState.BridgeProxyGroupId)) {
+        const TGroupInfo *proxyGroup = FindGroup(syncerState.BridgeProxyGroupId);
+        bool poolBridgeMode = true;
+        if (const TGroupInfo *group = proxyGroup) {
             Y_ABORT_UNLESS(group->BridgeGroupInfo);
             Y_ABORT_UNLESS(group->BridgeGroupInfo->HasBridgeGroupState());
             bridgeGroupInfo = &group->BridgeGroupInfo.value();
+            if (const auto it = StoragePools.find(group->StoragePoolId); it != StoragePools.end()) {
+                poolBridgeMode = it->second.BridgeMode;
+            }
         } else if (const auto it = StaticGroups.find(syncerState.BridgeProxyGroupId); it != StaticGroups.end()) {
             const auto& group = it->second.Info->Group;
             Y_ABORT_UNLESS(group);
@@ -974,13 +1314,22 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
         }
 
         const auto& state = bridgeGroupInfo->GetBridgeGroupState();
+        const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(state);
+        // parts of the group being made fully bridged one get synced in synchronized piles too
+        const bool upgrading = poolBridgeMode && state.GetAuthorityPileId();
         for (size_t pileIndex = 0; pileIndex < state.PileSize(); ++pileIndex) {
-            const auto *bridgePile = BridgeInfo->FindPile(TBridgePileId::FromPileIndex(pileIndex));
-            if (!bridgePile || bridgePile->State != NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2) {
+            const auto bridgePileId = TBridgePileId::FromPileIndex(pileIndex);
+            const auto *bridgePile = BridgeInfo->FindPile(bridgePileId);
+            const bool upgradeSync = upgrading && bridgePile &&
+                bridgePile->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
+            if (!bridgePile || (!upgradeSync &&
+                    bridgePile->State != NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2)) {
                 continue; // can't start syncing yet
+            } else if (proxyGroup && proxyGroup->IsBridgePartDropped(bridgePileId, poolBridgeMode)) {
+                continue; // the part is going away
             }
 
-            const auto *groupPile = NBridge::GetGroupPile(state, TBridgePileId::FromPileIndex(pileIndex));
+            const auto *groupPile = NBridge::GetGroupPile(state, bridgePileId);
             if (!groupPile) {
                 continue; // the group has no part in this pile
             }
@@ -992,13 +1341,45 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
             if (pile.GetStage() == NKikimrBridge::TGroupState::SYNCED) {
                 continue; // this group is synced
             }
+            if (const auto *pss = FindPileSyncState(TBridgePileId::FromPileIndex(pileIndex));
+                    pss && pile.GetBecameUnsyncedGeneration() < pss->GetBecameUnsyncedGeneration()) {
+                // the part is not reset for the current sync of the pile yet, its stage and generation are the ones
+                // writers that skip the pile may be using; TTxCheckUnsynced (or distconf for static groups) resets it
+                continue;
+            }
 
-            // pick the pile to sync from
+            if (upgradeSync && MaxBridgeUpgradeSyncers <= numUpgradeSyncers()) {
+                continue; // too many groups are being made bridged ones at once, this one waits for its turn
+            }
+
+            // pick the pile to sync from, the primary one preferably; only the part of the synchronized pile is sure to
+            // hold everything written to the group, as the pile that has been out may show the SYNCED stage of its
+            // previous sync until it gets reset
+            auto isSource = [&](TBridgePileId bridgePileId, const NKikimrBridge::TGroupState::TPile& pile) {
+                const auto *bridgePile = BridgeInfo->FindPile(bridgePileId);
+                return bridgePile && bridgePile->State == NKikimrBridge::TClusterState::SYNCHRONIZED &&
+                    pile.GetStage() == NKikimrBridge::TGroupState::SYNCED;
+            };
+            const NKikimrBridge::TGroupState::TPile *source = nullptr;
+            if (authorityPileId) {
+                // the group relies on this part solely, it can't be synced while its pile is out
+                const auto *authorityPile = BridgeInfo->FindPile(authorityPileId);
+                source = NBridge::GetGroupPile(state, authorityPileId);
+                if (!authorityPile || !NBridge::PileStateTraits(authorityPile->State).RequiresDataQuorum || !source ||
+                        source->GetStage() != NKikimrBridge::TGroupState::SYNCED) {
+                    continue;
+                }
+            } else if (const auto *primary = BridgeInfo->PrimaryPile) {
+                source = NBridge::GetGroupPile(state, primary->BridgePileId);
+                if (source && !isSource(primary->BridgePileId, *source)) {
+                    source = nullptr;
+                }
+            }
+            if (!source) {
+                source = NBridge::FindGroupPile(state, isSource);
+            }
             std::optional<TGroupId> sourceGroupId;
-            if (const auto *source = NBridge::FindGroupPile(state, [](TBridgePileId,
-                    const NKikimrBridge::TGroupState::TPile& pile) {
-                return pile.GetStage() == NKikimrBridge::TGroupState::SYNCED;
-            })) {
+            if (source) {
                 sourceGroupId.emplace(TGroupId::FromProto(source, &NKikimrBridge::TGroupState::TPile::GetGroupId));
             }
             if (!sourceGroupId) {
@@ -1054,7 +1435,15 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
             NodeToSyncerState.emplace(nodeId, &syncerState);
             nodesToUpdate.insert(nodeId);
             syncerState.Unlink();
+            if (upgradeSync) {
+                ++numUpgradeSyncers();
+            }
         }
+    }
+
+    if (retryAt < SyncersRetryAt) {
+        SyncersRetryAt = retryAt;
+        TActivationContext::Schedule(retryAt, new IEventHandle(TEvPrivate::EvRetrySyncers, 0, SelfId(), {}, nullptr, 0));
     }
 
     for (TNodeId nodeId : nodesToUpdate) {

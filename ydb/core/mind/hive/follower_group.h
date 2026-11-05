@@ -49,9 +49,7 @@ struct TFollowerGroup {
 
     void SetRequireAllDataCenters(bool requireAllDataCenters) {
         RequireAllDataCenters = requireAllDataCenters;
-        if (RequireAllDataCenters) {
-            NodeFilter.MustBePrimaryPile = false;
-        }
+        NodeFilter.MustBePrimaryPile = !RequireAllDataCenters;
     }
 
     ui32 GetRawFollowerCount() const {

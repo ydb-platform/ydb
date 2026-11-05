@@ -1,6 +1,6 @@
 """Topology: piles, nodes, ports, labels, timings and policies.
 
-Every instance and the supervisor read the same YAML file. Same IP, different ports:
+Every instance reads the same topology. Same IP, different ports:
 pile `p` (0-based) has control port `control_base_port + p` and node `n` (0-based) has
 gRPC port `grpc_base_port + port_stride * p + n`, unless explicit port lists are given
 (tests use free ports).
@@ -24,6 +24,7 @@ POSITIVE_TIMINGS = ("quorum_fail_delay", "heartbeat_interval", "heartbeat_timeou
 
 @dataclasses.dataclass
 class Timings:
+    lifecycle_delay: float = 1.0
     promote_delay: float = 1.0
     suspend_delay: float = 1.0
     connect_delay: float = 1.0
@@ -63,6 +64,8 @@ class Policies:
     auto_blame_dead_piles: bool = True
     anti_entropy: bool = True
     admin_token: typing.Optional[str] = None
+    read_token: typing.Optional[str] = None
+    admin_certificate_cn: typing.List[str] = dataclasses.field(default_factory=list)
     issue_style: str = "minimal"  # minimal | realistic
     close_grpc_when_disconnected: bool = True  # run.cpp stops the gRPC servers of a pile without the config quorum trait
 
@@ -71,8 +74,12 @@ class Policies:
         for key, value in values.items():
             if key not in fields:
                 raise TopologyError("unknown policy %r, known: %s" % (key, ", ".join(sorted(fields))))
-            if key == "admin_token":
+            if key in ("admin_token", "read_token"):
                 value = None if value in (None, "") else str(value)
+            elif key == "admin_certificate_cn":
+                if not isinstance(value, list) or not all(isinstance(x, str) and x for x in value):
+                    raise TopologyError("admin_certificate_cn must be a list of nonempty certificate common names")
+                value = list(value)
             elif key == "issue_style":
                 if value not in ("minimal", "realistic"):
                     raise TopologyError("issue_style must be minimal or realistic")
@@ -135,7 +142,8 @@ class PileInfo:
 _KNOWN_KEYS = {
     "cluster_name", "host", "piles", "nodes_per_pile", "per_pile", "control_base_port", "grpc_base_port",
     "port_stride", "label_format", "timings", "policies", "tls", "control_ports", "grpc_ports",
-    "data_centers", "allow_remote",
+    "data_centers", "allow_remote", "initial",
+    "static_quorum",
 }
 
 
@@ -157,8 +165,11 @@ class Topology:
         grpc_ports: typing.Optional[typing.Sequence[typing.Sequence[int]]] = None,
         data_centers: typing.Optional[typing.Dict[str, str]] = None,
         allow_remote: bool = False,
+        initial: typing.Optional[dict] = None,
+        static_quorum: typing.Optional[typing.Dict[str, int]] = None,
     ) -> None:
         self.allow_remote = bool(allow_remote)
+        self.initial = dict(initial or {})
         self.pile_names = list(pile_names)
         self.cluster_name = cluster_name
         self.host = host
@@ -174,6 +185,13 @@ class Topology:
             self.nodes_per_pile = {name: int(nodes_per_pile.get(name, 3)) for name in self.pile_names}
         else:
             self.nodes_per_pile = {name: int(nodes_per_pile) for name in self.pile_names}
+        if static_quorum is not None and not isinstance(static_quorum, dict):
+            raise TopologyError("static_quorum must map pile names to node counts")
+        self.static_quorum = {name: count // 2 + 1 for name, count in self.nodes_per_pile.items()}
+        for name, count in (static_quorum or {}).items():
+            if name not in self.nodes_per_pile or type(count) is not int or not 1 <= count <= self.nodes_per_pile[name]:
+                raise TopologyError("static_quorum needs known piles and integer counts between 1 and the node count")
+            self.static_quorum[name] = count
         self.control_ports = list(control_ports) if control_ports is not None else None
         self.grpc_ports = [list(x) for x in grpc_ports] if grpc_ports is not None else None
         self.warnings: typing.List[str] = []
@@ -213,7 +231,8 @@ class Topology:
         policies.update(data.get("policies") or {})
         kwargs = {}
         for key in ("cluster_name", "host", "control_base_port", "grpc_base_port", "port_stride",
-                    "label_format", "tls", "control_ports", "grpc_ports", "data_centers", "allow_remote"):
+                    "label_format", "tls", "control_ports", "grpc_ports", "data_centers", "allow_remote", "initial",
+                    "static_quorum"):
             if key in data and data[key] is not None:
                 kwargs[key] = data[key]
         return Topology(piles, nodes, timings=timings, policies=policies, **kwargs)
@@ -233,6 +252,7 @@ class Topology:
             "host": self.host,
             "piles": list(self.pile_names),
             "per_pile": dict(self.nodes_per_pile),
+            "static_quorum": dict(self.static_quorum),
             "control_base_port": self.control_base_port,
             "grpc_base_port": self.grpc_base_port,
             "port_stride": self.port_stride,
@@ -249,6 +269,8 @@ class Topology:
             out["data_centers"] = dict(self.data_centers)
         if self.allow_remote:
             out["allow_remote"] = True
+        if self.initial:
+            out["initial"] = self.initial
         return out
 
     def to_yaml(self) -> str:
@@ -261,6 +283,23 @@ class Topology:
     # ----- validation -----
 
     def validate(self) -> None:
+        if self.tls is not None:
+            if not isinstance(self.tls, dict):
+                raise TopologyError("tls must be a mapping")
+            unknown = set(self.tls) - {"cert_file", "key_file", "root_cert_file", "require_client_auth"}
+            if unknown:
+                raise TopologyError("unknown tls keys: %s" % ", ".join(sorted(unknown)))
+            for key in ("cert_file", "key_file"):
+                if not isinstance(self.tls.get(key), str) or not self.tls[key]:
+                    raise TopologyError("tls needs %s" % key)
+            required = self.tls.get("require_client_auth", False)
+            if not isinstance(required, bool):
+                raise TopologyError("tls.require_client_auth must be a boolean")
+            if required and not self.tls.get("root_cert_file"):
+                raise TopologyError("tls.require_client_auth needs root_cert_file")
+            if "root_cert_file" in self.tls and (
+                    not isinstance(self.tls["root_cert_file"], str) or not self.tls["root_cert_file"]):
+                raise TopologyError("tls.root_cert_file must be a nonempty path")
         if not self.allow_remote and not _is_loopback(self.host):
             raise TopologyError(
                 "host %r is not a loopback address: the control and peer APIs have no authentication "
@@ -270,7 +309,7 @@ class Topology:
         if len(set(self.pile_names)) != len(self.pile_names):
             raise TopologyError("pile names must be unique: %s" % self.pile_names)
         for name in self.pile_names:
-            if not name or not isinstance(name, str):
+            if not isinstance(name, str):
                 raise TopologyError("invalid pile name %r" % (name,))
         try:
             self.label_format.format(pile="p", n=1)

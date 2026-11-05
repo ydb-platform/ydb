@@ -79,7 +79,6 @@ public:
                 pileInfo.Drain = true;
                 db.Table<Schema::BridgePile>().Key(pileInfo.GetId()).Update<Schema::BridgePile::Drain>(true);
             }
-            Self->StartPileDrain(pileInfo);
         }
 
         for (auto* tablet : TabletsToRestart) {
@@ -94,6 +93,7 @@ public:
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("THive::TTxUpdatePiles::Complete",
             {"logPrefix", GetLogPrefix()});
+        Self->ProcessPileDrains();
     }
 
 };

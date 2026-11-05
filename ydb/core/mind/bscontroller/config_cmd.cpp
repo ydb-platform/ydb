@@ -328,6 +328,7 @@ namespace NKikimr::NBsController {
                     .SuppressDegradedGroupsChecking = Cmd.GetIgnoreDegradedGroupsChecks(),
                     .SuppressDisintegratedGroupsChecking = Cmd.GetIgnoreDisintegratedGroupsChecks(),
                     .AllowDegradedWithSinglePhantomsOnly = SelfHeal,
+                    .TreatPhantomsOnlyVDisksAsWorking = Cmd.GetTreatPhantomsOnlyVDisksAsWorking(),
                 };
                 Success = Success && Self->ValidateConfigUpdates(*State, validationParameters, &Error, Response);
 
@@ -445,6 +446,10 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(MoveDDisk)
                     HANDLE_COMMAND(DeleteSpecificGroups)
                     HANDLE_COMMAND(UpdateStoragePoolSettings)
+                    HANDLE_COMMAND(DefineDataCenterStates)
+                    HANDLE_COMMAND(TestResetDataCenterStates)
+                    HANDLE_COMMAND(DefineFailRealmStates)
+                    HANDLE_COMMAND(ChangeStoragePoolBridgeMode)
 
                     default: break;
                 }

@@ -232,6 +232,8 @@ namespace NKikimr::NBlobDepot {
                         Response->Responses[resolveContext->QueryIdx].Status = NKikimrProto::ERROR;
                         --AnswersRemain;
                         CheckAndFinish();
+                    } else {
+                        TQuery::HandleResolveDisconnected(context);
                     }
                 } else {
                     Y_ABORT();

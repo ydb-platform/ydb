@@ -102,6 +102,10 @@ public:
         return Select(read).CanRead(read, ctx, skipIssues);
     }
 
+    bool AllowExecuteInDq(const TExprNode& node, TExprContext& ctx) override {
+        return Select(node).AllowExecuteInDq(node, ctx);
+    }
+
     TExprNode::TPtr WrapRead(const TExprNode::TPtr& read, TExprContext& ctx, const TWrapReadSettings& settings) override {
         return Select(*read).WrapRead(read, ctx, settings);
     }

@@ -97,12 +97,12 @@ class Replica:
 
     def install(self, new: ClusterState) -> bool:
         """Install a snapshot with a higher generation. Returns False if it was not newer or we are detached."""
-        if self.detached or new.generation <= self.state.generation:
+        if self.detached or new.version <= self.state.version:
             return False
         candidate = new.copy()
         self.save(candidate)
         self.state = candidate
-        if self.prepared is not None and self.prepared.state.generation <= new.generation:
+        if self.prepared is not None and self.prepared.state.version <= new.version:
             self.prepared = None
         return True
 
@@ -141,7 +141,8 @@ class Replica:
         """Returns (accepted, refusal reason). Reasons: detached, generation, busy."""
         if self.detached:
             return False, "detached"
-        if new.generation != self.state.generation + 1:
+        if new.revision != self.state.revision + 1 or new.generation not in (
+                self.state.generation, self.state.generation + 1):
             return False, "generation"
         self.expire_prepared(ttl)
         if self.prepared is not None and self.prepared.proposal_id != proposal_id:
@@ -156,7 +157,7 @@ class Replica:
     def blocks_commit(self, proposal_id: str, new: ClusterState) -> bool:
         """Another proposal holds the slot at (or beyond) the generation of a commit that was never prepared here."""
         p = self.prepared
-        return p is not None and p.proposal_id != proposal_id and p.state.generation >= new.generation
+        return p is not None and p.proposal_id != proposal_id and p.state.version >= new.version
 
     def take_prepared(self, proposal_id: str) -> typing.Optional[ClusterState]:
         if self.prepared is not None and self.prepared.proposal_id == proposal_id:

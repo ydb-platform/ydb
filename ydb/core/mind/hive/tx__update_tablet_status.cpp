@@ -67,6 +67,37 @@ public:
             NIceDb::TNiceDb db(txc.DB);
             const TInstant now = TActivationContext::Now();
             if (Status == TEvLocal::TEvTabletStatus::StatusOk) {
+                TNodeInfo* node = Self->FindNode(Local.NodeId());
+                if (node == nullptr) {
+                    // event from IC about disconnection of the node could overtake events from the node itself because of Pipe Server
+                    // KIKIMR-9614
+                    return true;
+                }
+                if (Self->BridgeInfo && !(tablet->IsLeader() && tablet->AsLeader().IsLockedToActor()) &&
+                    !tablet->GetNodeFilter().IsAllowedPile(node->BridgePileId)) {
+                    SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tablet->GetFullTabletId(), Generation));
+                    if (tablet->IsPresentOnLocal(Local) && (!tablet->IsLeader() || Generation >= tablet->GetLeader().KnownGeneration)) {
+                        if (tablet->IsStarting() && tablet->BootTime != TInstant()) {
+                            Self->UpdateCounterTabletsStarting(-1);
+                            tablet->BootTime = {};
+                        }
+                        if (tablet->IsLeader()) {
+                            db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::LeaderNode>(0);
+                        } else {
+                            db.Table<Schema::TabletFollowerTablet>().Key(TabletId, FollowerId)
+                                .Update<Schema::TabletFollowerTablet::FollowerNode>(0);
+                        }
+                        tablet->InitiateStop(SideEffects, EHiveEventReason::PileUpdate);
+                        tablet->GetLeader().TryToBoot();
+                    }
+                    return true;
+                }
+                if (tablet->IsLeader() && Generation < tablet->GetLeader().KnownGeneration) {
+                    if (tablet->AsLeader().IsLockedToActor()) {
+                        tablet->SendStopTablet(Local, SideEffects);
+                    }
+                    return true;
+                }
                 if (tablet->BootTime != TInstant()) {
                     TDuration startTime = now - tablet->BootTime;
                     if (startTime > TDuration::Seconds(30)) {
@@ -77,18 +108,7 @@ public:
                     }
                     Self->TabletCounters->Percentile()[NHive::COUNTER_TABLETS_START_TIME].IncrementFor(startTime.MilliSeconds());
                     Self->UpdateCounterTabletsStarting(-1);
-                }
-                TNodeInfo* node = Self->FindNode(Local.NodeId());
-                if (node == nullptr) {
-                    // event from IC about disconnection of the node could overtake events from the node itself because of Pipe Server
-                    // KIKIMR-9614
-                    return true;
-                }
-                if (tablet->IsLeader() && Generation < tablet->GetLeader().KnownGeneration) {
-                    if (tablet->AsLeader().IsLockedToActor()) {
-                        tablet->SendStopTablet(Local, SideEffects);
-                    }
-                    return true;
+                    tablet->BootTime = {};
                 }
                 tablet->NotifyOnRestart("OK", SideEffects);
                 for (const TActorId& actor : Self->ActorsWaitingToMoveTablets) {

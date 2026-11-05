@@ -718,6 +718,7 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
     PARTITION_ENSURE(resp.HasEndOffset())
         ("resp", resp.ShortDebugString());
     EndOffset = resp.GetEndOffset();
+    RetainedStartOffset = resp.HasStartOffset() ? MakeMaybe(resp.GetStartOffset()) : Nothing();
     SizeLag = resp.GetSizeLag();
     WriteTimestampEstimateMs = resp.GetWriteTimestampEstimateMS();
     ClientHasAnyCommits = resp.GetClientHasAnyCommits();
@@ -741,12 +742,17 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
 
 
     if (!StartReading) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset,
+        ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, RetainedStartOffset, EndOffset,
             WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset));
     } else {
         InitStartReading(ctx);
     }
 
+    // The parent must send StartPartitionSessionRequest before any replication data.
+    for (auto& event : PendingReplicationData) {
+        ctx.Send(ParentId, event.Release());
+    }
+    PendingReplicationData.clear();
     MakeCommit(ctx);
 }
 
@@ -1289,7 +1295,7 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const 
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr&, const TActorContext& ctx) {
-    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset, false));
+    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, RetainedStartOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset, false));
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvUpdateReadMetrics::TPtr&, const TActorContext& ctx) {
@@ -1656,6 +1662,21 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     WaitDataInfly.insert(WaitDataCookie);
 }
 
+void TPartitionActor::Handle(TEvPersQueue::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    if (Protocol != EProtocol::Topic || record.GetSession() != Session
+        || record.GetPartitionId() != Partition.Partition
+        || record.GetGeneration() != Generation || record.GetStep() != Step) {
+        return;
+    }
+    ev->Get()->Record.SetPartitionSessionId(Partition.AssignId);
+    if (!InitDone) {
+        PendingReplicationData.emplace_back(ev->Release().Release());
+        return;
+    }
+    ctx.Send(ParentId, ev->Release().Release());
+}
+
 void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
@@ -1726,6 +1747,9 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
         } else if (PipeClient && IsNeedMorePartitionData()) {
             WaitDataInPartition(ctx);
         }
+    } else {
+        // An inactive partition has no messages for this reader after ReadOffset, e.g. all of them are older than read_from.
+        ReadOffset = Max(ReadOffset, EndOffset);
     }
 
     if (!ReadingFinishedSent) {

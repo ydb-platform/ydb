@@ -94,6 +94,84 @@ class PidIdentityTest(unittest.TestCase):
 
 
 class SupervisorRegressionTest(unittest.TestCase):
+    def test_up_rejects_empty_csv_pile_segments_before_side_effects(self):
+        parser = supervisor.build_parser()
+        with tempfile.TemporaryDirectory() as root:
+            run = os.path.join(root, "run")
+            cluster = supervisor.Cluster(run)
+            for piles in ("", ",named", "named,", "named,,other", ","):
+                with self.subTest(piles=piles):
+                    args = parser.parse_args(["up", "--fresh", "--piles", piles])
+                    with mock.patch.object(cluster, "alive") as alive, mock.patch.object(cluster, "spawn") as spawn:
+                        with self.assertRaisesRegex(supervisor.SupervisorError, "explicit empty pile name.*--topology"):
+                            args.fn(cluster, args)
+                        alive.assert_not_called()
+                        spawn.assert_not_called()
+                    self.assertFalse(os.path.exists(run))
+
+    def test_up_empty_csv_rejection_preserves_an_existing_run(self):
+        with tempfile.TemporaryDirectory() as run:
+            topology_path = os.path.join(run, "topology.yaml")
+            Topology(["named", "other"], 3).save(topology_path)
+            with open(topology_path) as source:
+                original = source.read()
+            cluster = supervisor.Cluster(run)
+            args = supervisor.build_parser().parse_args(["up", "--fresh", "--piles", "named,"])
+            with self.assertRaises(supervisor.SupervisorError):
+                args.fn(cluster, args)
+            self.assertEqual(os.listdir(run), ["topology.yaml"])
+            with open(topology_path) as source:
+                self.assertEqual(source.read(), original)
+
+    def test_up_topology_preserves_an_explicit_empty_pile_name(self):
+        with tempfile.TemporaryDirectory() as root:
+            topology_path = os.path.join(root, "input.yaml")
+            Topology(["named", ""], 3).save(topology_path)
+            cluster = supervisor.Cluster(os.path.join(root, "run"))
+            args = supervisor.build_parser().parse_args(["up", "--topology", topology_path, "--piles", ""])
+            with mock.patch.object(cluster, "alive", return_value=True) as alive, mock.patch.object(
+                    cluster, "pid", return_value=42):
+                with self.assertRaisesRegex(supervisor.SupervisorError, "already running"):
+                    args.fn(cluster, args)
+                alive.assert_called_once_with("")
+            self.assertFalse(os.path.exists(cluster.run))
+
+    def test_empty_pile_selectors_do_not_mean_all_piles(self):
+        cluster = mock.Mock()
+        cluster.pile.side_effect = lambda name: name
+        cluster.request.return_value = {"pile": ""}
+        with mock.patch.object(supervisor, "_print") as output:
+            supervisor.cmd_state(cluster, argparse.Namespace(pile=""))
+            output.assert_called_once_with({"pile": ""})
+        cluster.request.assert_called_once_with("", "GET", "/state")
+        cluster.live_piles.assert_not_called()
+        with mock.patch.object(supervisor, "read_events", return_value=[]) as read, mock.patch.object(
+                supervisor, "_print"):
+            supervisor.cmd_events(cluster, argparse.Namespace(
+                pile="", after_ts=None, since=None, kind=None, grep=None, limit=None))
+            read.assert_called_once_with(cluster, "")
+        self.assertEqual(supervisor._groups("|named", ["", "named"]), [[""], ["named"]])
+        with self.assertRaises(supervisor.SupervisorError):
+            supervisor._groups("|named", ["named"])
+
+    def test_partition_blanks_are_ambiguous_only_with_an_empty_pile(self):
+        piles = ["", "named", "other"]
+        self.assertEqual(supervisor._groups("named|other|", piles), [["named"], ["other"], [""]])
+        for spec in ("named, |other", "named,|other", " |named", "named,,other|"):
+            with self.subTest(spec=spec):
+                with self.assertRaisesRegex(supervisor.SupervisorError, "ambiguous blank pile name"):
+                    supervisor._groups(spec, piles)
+        self.assertEqual(supervisor._groups("named, |other", ["named", "other"]), [["named"], ["other"]])
+        self.assertEqual(supervisor._groups("named||other", ["named", "other"]), [["named"], ["other"]])
+
+    def test_process_identity_retains_an_explicit_empty_pile(self):
+        cluster = supervisor.Cluster("/tmp/mock-empty")
+        with mock.patch.object(cluster, "pid", return_value=42), mock.patch.object(
+                supervisor, "pid_alive", return_value=True), mock.patch.object(
+                supervisor, "command_line", return_value="mock run --topology /tmp/mock-empty/topology.yaml --pile= --state-dir /tmp/mock-empty/state"):
+            self.assertTrue(cluster.alive(""))
+            self.assertFalse(cluster.alive("named"))
+
     def test_standalone_binary_argv_does_not_use_python_module_switch(self):
         with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(
                 supervisor.sys, "is_standalone_binary", True, create=True), mock.patch.object(

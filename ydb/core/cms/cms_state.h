@@ -76,6 +76,10 @@ struct TCmsState : public TAtomicRefCount<TCmsState> {
     TClusterInfoPtr ClusterInfo;
     THashMap<ui32, TString> InitialNodeTenants; // would be applyed to ClusterInfo at first update
 
+    // Piles of the bridged cluster along with their states, as the local node warden knows them; null until it reports
+    // them, and when the cluster has no bridge config.
+    TBridgeInfo::TPtr BridgeInfo;
+
     // Static info.
     ui64 CmsTabletId = 0;
     TActorId CmsActorId;

@@ -43,11 +43,13 @@ class NPileTest(ExtraCase):
         for pile in c.topo.pile_names:
             self.assertEqual(self.stored(c, pile, "pile4"), "DISCONNECTED")
 
-    async def test_three_piles_two_changes_in_one_request_are_refused(self):
+    async def test_three_piles_two_disconnects_in_one_request_succeed(self):
         c = await self.make(piles=3)
         op = await self.update(c, c.label("pile1"), ("pile2", DISC), ("pile3", DISC))
-        self.assertNotEqual(op.status, model.SUCCESS)
-        self.assertEqual(c.inst("pile1").state.generation, 1)
+        self.assertEqual(op.status, model.SUCCESS)
+        self.assertEqual(c.inst("pile1").state.generation, 2)
+        self.assertEqual(self.stored(c, "pile1", "pile2"), "DISCONNECTED")
+        self.assertEqual(self.stored(c, "pile1", "pile3"), "DISCONNECTED")
 
     async def test_three_piles_one_dead_pile_is_failed_over_by_the_other_two(self):
         c = await self.make(piles=3)

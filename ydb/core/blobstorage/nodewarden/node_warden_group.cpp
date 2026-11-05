@@ -308,8 +308,12 @@ namespace NKikimr::NStorage {
 
             if (const auto& info = group.Info) {
                 Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate(info));
+                TVector<TVDiskRecord*> disks;
                 for (auto& vdisk : group.VDisksOfGroup) {
-                    UpdateGroupInfoForDisk(vdisk, info);
+                    disks.push_back(&vdisk);
+                }
+                for (auto* vdisk : disks) {
+                    UpdateGroupInfoForDisk(*vdisk, info);
                 }
             }
 
@@ -327,7 +331,7 @@ namespace NKikimr::NStorage {
 
                 for (auto& [timestamp, ev] : queue) {
                     THolder<IEventHandle> tmp(ev.release());
-                    TActivationContext::Forward(tmp, ev->GetForwardOnNondeliveryRecipient());
+                    TActivationContext::Forward(tmp, tmp->GetForwardOnNondeliveryRecipient());
                 }
 
                 GroupPendingQueue.erase(it);

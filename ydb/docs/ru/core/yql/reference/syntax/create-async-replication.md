@@ -21,6 +21,15 @@ WITH (option = value [, ...])
 
 * `CONNECTION_STRING` — [строка соединения](../../../concepts/connect.md#connection_string) c базой-источником. Обязательный параметр.
 * `CA_CERT` — [корневой сертификат для TLS](../../../concepts/connect.md#tls-cert). Необязательный параметр. Может быть указан, если база-источник поддерживает режим обмена данными с шифрованием (`CONNECTION_STRING` начинается с `grpcs://`).
+* `INITIAL_SCAN`: выполнять ли [первоначальное сканирование](../../../concepts/async-replication.md#initial-scan). Необязательный параметр типа `Bool`. Если не указан, используется настройка сервера; по умолчанию `TRUE`.
+  * `TRUE`: исходные данные передаются через потоки изменений, объекты-реплики создаются автоматически.
+  * `FALSE`: репликация создаётся в состоянии `PAUSED` и подготавливает потоки изменений без первоначального сканирования. Целевые таблицы не создаются и не подключаются к репликации до перевода в `STANDBY`. Сначала создайте резервную копию источника и восстановите данные в приёмнике, затем запустите репликацию с помощью [ALTER ASYNC REPLICATION](alter-async-replication.md). К моменту запуска целевые таблицы должны существовать и соответствовать схемам источника с учётом [ограничений](../../../concepts/async-replication.md#restrictions). Порядок действий описан в [руководстве по первоначальной синхронизации](../../../devops/async-replication-initial-sync.md).
+* `AVAILABILITY_PERIOD` — [период доступности неподтверждённых изменений](../../../concepts/async-replication.md#availability-period). Необязательный параметр: положительное значение типа `Interval` или строка `'UNLIMITED'`. По умолчанию — `'UNLIMITED'`.
+  * `'UNLIMITED'`: изменения сохраняются до подтверждения их обработки репликацией.
+  * `Interval`, например `Interval('PT48H')`: неподтверждённые изменения защищены от удаления в течение заданного периода. После его истечения они могут быть удалены.
+
+  Параметр задаётся только при создании репликации. Выбрать значение поможет [сравнение вариантов хранения](../../../concepts/async-replication.md#availability-period).
+
 * Настройки для аутентификации в базе-источнике одним из способов (обязательно):
 
   {% include [x](_includes/async_replication_authentification.md) %}
@@ -117,7 +126,35 @@ WITH (
 );
 ```
 
+Создание репликации с периодом доступности неподтверждённых изменений 48 часов:
+
+```yql
+CREATE ASYNC REPLICATION my_replication_with_availability_period
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_PATH = 'my_secret',
+    AVAILABILITY_PERIOD = Interval('PT48H')
+);
+```
+
+Создание репликации для [первоначальной синхронизации с помощью резервного копирования и восстановления](../../../devops/async-replication-initial-sync.md) с сохранением неподтверждённых изменений без ограничения по возрасту:
+
+```yql
+CREATE ASYNC REPLICATION my_replication_without_initial_scan
+FOR original_table AS replica_table
+WITH (
+    CONNECTION_STRING = 'grpcs://example.com:2135/?database=/Root/another_database',
+    TOKEN_SECRET_PATH = 'my_secret',
+    INITIAL_SCAN = FALSE,
+    AVAILABILITY_PERIOD = 'UNLIMITED'
+);
+```
+
+Репликация подготавливает потоки изменений в состоянии `PAUSED`. Дождитесь их готовности, выполните резервное копирование и восстановление, затем переведите репликацию в `STANDBY` с помощью [ALTER ASYNC REPLICATION](alter-async-replication.md).
+
 ## См. также
 
+* [Первоначальная синхронизация с помощью резервного копирования и восстановления](../../../devops/async-replication-initial-sync.md)
 * [ALTER ASYNC REPLICATION](alter-async-replication.md)
 * [DROP ASYNC REPLICATION](drop-async-replication.md)

@@ -263,6 +263,9 @@ void TNodeWarden::ApplyStateStorageConfig() {
         if (const auto& current = *which) {
             for (const auto& ringGroup : current->RingGroups) {
                 for (const auto& ring : ringGroup.Rings) {
+                    if (ring.IsDisabled) {
+                        continue;
+                    }
                     for (const auto& replicaId : ring.Replicas) {
                         if (replicaId.NodeId() == LocalNodeId) {
                             YDB_LOG_INFO("Local replica found",

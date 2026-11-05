@@ -196,8 +196,12 @@ class TransitionRulesTest(Case):
         r = run(s, [("pile2", SYNC), ("pile3", SYNC)])
         self.assertError(r, model.INTERNAL_ERROR, "Can't switch to SYNCHRONIZED directly")
 
-    def test_too_many_changes(self):
+    def test_multiple_disconnects_are_allowed(self):
         r = run(st([S, S, S]), [("pile2", DISC), ("pile3", DISC)])
+        self.assertState(r, [S, D, D], 0, 0, 2)
+
+    def test_multiple_non_disconnect_changes_are_rejected(self):
+        r = run(st([S, S, S]), [("pile2", DISC), ("pile3", SUSP)])
         self.assertError(r, model.INTERNAL_ERROR, "Too many state changes in new configuration")
 
     def test_everything_can_be_disconnected(self):
@@ -211,20 +215,31 @@ class TransitionRulesTest(Case):
         r = run(st([S, S]), takedown("pile2"))
         self.assertState(r, [S, X], 0, 0, 2, sync={1: 2})
 
+    def test_pending_pile_operation_blocks_only_actual_stored_transition(self):
+        for kind, verb in (("ADD", "added to"), ("REMOVE", "removed from")):
+            state = st([S, D], pending_pile_operation={"kind": kind, "pile_name": "pile2"})
+            self.assertError(run(state, rejoin("pile2")), model.INTERNAL_ERROR,
+                             "Pile 'pile2' is being %s the cluster, its state can't be changed until BSC finishes" % verb)
+            self.assertState(run(state, failover("pile2")), [S, D], 0, 0, 2)
+
 
 class ReviewDrivenConsequencesTest(Case):
     """Cases that surprised the review. They pin behavior copied from the real server."""
 
-    def test_failover_with_a_resyncing_pile_hits_too_many_changes(self):
-        # pile2 is NOT_SYNCHRONIZED_2: any request naming another pile re-derives it as _1.
+    def test_failover_preserves_an_omitted_resyncing_pile(self):
         s = st([S, N2, S], sync={1: 2})
-        self.assertError(run(s, failover("pile3")),
-                         model.INTERNAL_ERROR, "Too many state changes in new configuration")
+        self.assertState(run(s, failover("pile3")), [S, N2, D], 0, 0, 2)
 
-    def test_switchover_silently_knocks_a_resyncing_pile_back_to_n1(self):
+    def test_switchover_preserves_an_omitted_resyncing_pile(self):
         s = st([S, S, N2], sync={2: 2}, generation=5)
         r = run(s, switchover("pile2"))
-        self.assertState(r, [S, S, N1], 0, 1, 6, sync={2: 2})
+        self.assertState(r, [S, S, N2], 0, 1, 6, sync={2: 2})
+
+    def test_omitted_inactive_pile_is_preserved_but_explicit_update_is_rejected(self):
+        s = st([S, S, Stored.INACTIVE])
+        self.assertState(run(s, switchover("pile2")), [S, S, Stored.INACTIVE], 0, 1, 2)
+        self.assertError(run(s, [("pile3", DISC)]), model.BAD_REQUEST,
+                         "pile is not added to the cluster: pile3")
 
     def test_rejoin_on_n2_moves_it_back_to_n1(self):
         s = st([S, N2], sync={1: 2})

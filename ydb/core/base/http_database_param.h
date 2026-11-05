@@ -12,8 +12,7 @@ TStringBuf TrimHttpContentTypeHeader(const TStringBuf contentTypeHeader);
 
 // Extracts the `database` HTTP parameter. Priority:
 // 1. Query parameter `database`
-// 2. JSON body field `database` for POST requests
-// Note: `database` param is never sent via application/x-www-form-urlencoded bodies.
+// 2. JSON or application/x-www-form-urlencoded body field `database` for POST requests
 TString ExtractHttpDatabaseParam(
     const TCgiParameters& queryParams,
     const TStringBuf method,

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 
 from .utils import build_pj_path
 
@@ -40,10 +41,14 @@ class PackageJson(object):
 
         self.path = path
         self.data = None
+        self.indent = "  "
 
     def read(self):
         with open(self.path, 'rb') as f:
-            self.data = json.load(f)
+            content = f.read()
+            self.data = json.loads(content)
+            indent = re.search(rb'^[ \t]+(?=")', content, re.MULTILINE)
+            self.indent = indent.group().decode('ascii') if indent else "  "
 
     def write(self, path=None):
         """
@@ -58,7 +63,7 @@ class PackageJson(object):
             os.mkdir(directory)
 
         with open(path, "w") as f:
-            json.dump(self.data, f, indent=2, ensure_ascii=False)
+            json.dump(self.data, f, indent=self.indent, ensure_ascii=False)
             f.write('\n')  # it's better for diff algorithm in arc
             logger.debug("Written {}".format(path))
 

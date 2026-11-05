@@ -407,7 +407,6 @@ public:
                 hFunc(TEvSaveScriptPhysicalGraphResponse, HandleResolve);
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
                 hFunc(TEvKqpExecuter::TEvPqTopicResolveStatus, HandleResolve);
-                hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandlePartitionStats);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 default:
@@ -903,23 +902,12 @@ private:
         }
 
         if (resolveStatus == CONTINUE) {
-            if (!TBase::GetPartitionStats()) {
-                DoExecute();
-            }
+            DoExecute();
         }
     }
 
     void HandleResolve(NShardResolver::TEvShardsResolveStatus::TPtr& ev) {
         if (TBase::HandleResolve(ev)) {
-            if (!TBase::GetPartitionStats()) {
-                DoExecute();
-            }
-        }
-    }
-
-    void HandlePartitionStats(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        TBase::ApplyPartitionStatsResult(ev);
-        if (TBase::PendingPartitionStatsRequests == 0) {
             DoExecute();
         }
     }
@@ -970,6 +958,14 @@ private:
 
     void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) {
         auto* msg = ev->Get();
+
+        if (GetUserRequestContext()->IsStreamingQuery) {
+            // Streaming queries are long-running: the snapshot must not be pinned
+            // for their whole lifetime. Reads at the acquired step stay valid via
+            // the datashard KeepSnapshotTimeout grace window and are executed
+            // right away.
+            msg->SnapshotHandle = NKqp::TSnapshotHandle();
+        }
 
         YDB_LOG_TRACE("Read snapshot result",
             {"marker", "KQPDATA"},
@@ -1441,11 +1437,13 @@ private:
                     // shards it sent EvLocks to; other shards (e.g. locked by plain
                     // reads) are registered without it.
                     if (const auto* meta = shardMetas.FindPtr(lock.GetDataShard())) {
+                        AFL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath, *meta);
+                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::PESSIMISTIC_LOCK | IKqpTransactionManager::EAction::READ, Request.QuerySpanId);
                     } else {
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath);
+                        TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
                     }
-                    TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::READ);
                     TxManager->AddLock(lock.GetDataShard(), lock, Request.QuerySpanId, deferredVictimSpanId);
                 }
 

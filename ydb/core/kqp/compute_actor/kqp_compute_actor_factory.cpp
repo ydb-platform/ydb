@@ -66,6 +66,8 @@ public:
 
         MkqlLightProgramMemoryLimit.store(config.GetMkqlLightProgramMemoryLimit());
         MkqlHeavyProgramMemoryLimit.store(config.GetMkqlHeavyProgramMemoryLimit());
+        TaskMemory.store(config.GetExecutionUnitMemory());
+        ElasticMemoryPercent.store(config.GetSpillingPercent());
         MinChannelBufferSize.store(config.GetMinChannelBufferSize());
         ChannelChunkSizeLimit.store(config.GetChannelChunkSizeLimit());
         MinMemAllocSize.store(config.GetMinMemAllocSize());
@@ -144,6 +146,7 @@ public:
         }
 
         runtimeSettings.TerminateHandler = [state=args.State, query=args.QueryQuotaManager, initialMemoryLimit=args.InitialMemoryLimit,
+                elasticMemory=args.ElasticMemory,
                 txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
             (bool success, const NYql::TIssues& issues) {
                 YDB_LOG_DEBUG("Compute actor terminated",
@@ -154,7 +157,7 @@ public:
                     {"message", issues.ToOneLineString()});
                 if (query) {
                     // the task memory is freed by now, the task quota manager returns what it grew by when it dies
-                    query->FreeTasks(1, initialMemoryLimit);
+                    query->FreeTasks(1, initialMemoryLimit, elasticMemory);
                 }
                 if (state) {
                     state->OnTaskFinished(txId, executerId, taskId, success);

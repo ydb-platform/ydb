@@ -67,15 +67,6 @@ public:
                     TStringBuilder() << "seqNo=" << node.DrainSeqNo << " tabletsRunning=" << node.GetTabletsRunning());
                 node.DrainActor = Self->StartHiveDrain(nodeId, {.Persist = true, .DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN});
             }
-            if (!wasConnected && Self->BridgeInfo) {
-                // a pending pile drain moves tablets off this node, or onto it
-                const bool primary = Self->IsPrimaryPile(node.BridgePileId);
-                for (auto& [pileId, pile] : Self->BridgePiles) {
-                    if (primary || pileId == node.BridgePileId) {
-                        Self->StartPileDrain(pile);
-                    }
-                }
-            }
             Self->ObjectDistributions.AddNode(node);
         } else {
             YDB_LOG_WARN("THive::TTxStatus::Execute killing node due to bad status",
@@ -93,6 +84,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxStatus::Complete",
             {"logPrefix", GetLogPrefix()},
             {"nodeId", nodeId});
+        Self->ProcessPileDrains();
     }
 };
 

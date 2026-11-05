@@ -7,6 +7,7 @@
 #include "predicate/filter.h"
 #include "scheme/snapshot_scheme.h"
 #include "scheme/versions/versioned_index.h"
+#include "storage/granule/loaded_key_ranges.h"
 
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
@@ -104,36 +105,52 @@ public:
 
 class IColumnEngine {
 protected:
-    virtual void DoRegisterTable(const TInternalPathId pathId) = 0;
+    virtual void DoRegisterTable(const TInternalPathId pathId, TLoadedKeyRanges&& loadedKeyRanges) = 0;
     virtual void DoFetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const = 0;
 
 public:
-    class TSchemaInitializationData {
+    class TSchemaVersionView {
     private:
-        YDB_READONLY_DEF(std::optional<NKikimrSchemeOp::TColumnTableSchema>, Schema);
-        YDB_READONLY_DEF(std::optional<NKikimrSchemeOp::TColumnTableSchemaDiff>, Diff);
+        const NKikimrSchemeOp::TColumnTableSchema* Schema = nullptr;
+        const NKikimrSchemeOp::TColumnTableSchemaDiff* Diff = nullptr;
 
     public:
+        explicit TSchemaVersionView(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info)
+            : Schema(info.HasSchema() ? &info.GetSchema() : nullptr)
+            , Diff(info.HasDiff() ? &info.GetDiff() : nullptr)
+        {
+        }
+
+        TSchemaVersionView(const NKikimrTxColumnShard::TSchemaPresetVersionInfo&&) = delete;
+
+        explicit TSchemaVersionView(const NKikimrSchemeOp::TColumnTableSchemaDiff& diff)
+            : Diff(&diff)
+        {
+        }
+
+        TSchemaVersionView(const NKikimrSchemeOp::TColumnTableSchemaDiff&&) = delete;
+
+        TSchemaVersionView(const TSchemaVersionView&) = delete;
+        TSchemaVersionView(TSchemaVersionView&&) = delete;
+        TSchemaVersionView& operator=(const TSchemaVersionView&) = delete;
+        TSchemaVersionView& operator=(TSchemaVersionView&&) = delete;
+
+        bool HasSchema() const {
+            return Schema != nullptr;
+        }
+
         const NKikimrSchemeOp::TColumnTableSchema& GetSchemaVerified() const {
             AFL_VERIFY(Schema);
             return *Schema;
         }
 
-        TSchemaInitializationData(
-            const std::optional<NKikimrSchemeOp::TColumnTableSchema>& schema, const std::optional<NKikimrSchemeOp::TColumnTableSchemaDiff>& diff)
-            : Schema(schema)
-            , Diff(diff)
-        {
-            AFL_VERIFY(Schema || Diff);
+        bool HasDiff() const {
+            return Diff != nullptr;
         }
 
-        TSchemaInitializationData(const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) {
-            if (info.HasSchema()) {
-                Schema = info.GetSchema();
-            }
-            if (info.HasDiff()) {
-                Diff = info.GetDiff();
-            }
+        const NKikimrSchemeOp::TColumnTableSchemaDiff& GetDiffVerified() const {
+            AFL_VERIFY(Diff);
+            return *Diff;
         }
 
         ui64 GetVersion() const {
@@ -175,16 +192,28 @@ public:
     virtual bool ErasePathId(const TInternalPathId pathId) = 0;
     virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) = 0;
 
+    // a new table: there is nothing on disk to load
     void RegisterTable(const TInternalPathId pathId) {
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"event", "RegisterTable"},
             {"pathId", pathId});
-        return DoRegisterTable(pathId);
+        return DoRegisterTable(pathId, TLoadedKeyRanges::BuildEverything());
+    }
+
+    // a table on disk: its portions are loaded after this
+    void RegisterTableToLoad(const TInternalPathId pathId) {
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "RegisterTableToLoad"},
+            {"pathId", pathId});
+        return DoRegisterTable(pathId, TLoadedKeyRanges::BuildNothing());
     }
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const = 0;
     virtual std::vector<TSelectedPortionInfo> Select(TInternalPathId pathId, const NReader::TReadDescription& readDescription,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
+    virtual bool ArePortionsLoaded(const TInternalPathId pathId, const TPKRangesFilter& ranges) const = 0;
+    // nullopt: every table of the shard
+    virtual bool AreAllPortionsLoaded(const std::optional<TInternalPathId> pathId) const = 0;
     virtual std::vector<std::shared_ptr<TColumnEngineChanges>> StartCompaction(
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
     virtual std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> GetNextCompactionTask(
@@ -204,9 +233,8 @@ public:
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept = 0;
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
-    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, TIndexInfo&& info) = 0;
-    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) = 0;
-    virtual void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) = 0;
+    virtual void RegisterSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) = 0;
+    virtual void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaVersionView& schema) = 0;
 
     virtual ui64 MemoryUsage() const {
         return 0;

@@ -14,6 +14,7 @@
 #include "common/path_id.h"
 #include "counters/columnshard.h"
 #include "counters/counters_manager.h"
+#include "counters/startup_timeline.h"
 #include "data_sharing/destination/events/control.h"
 #include "data_sharing/destination/events/transfer.h"
 #include "data_sharing/manager/sessions.h"
@@ -21,6 +22,7 @@
 #include "data_sharing/modification/events/change_owning.h"
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/source/events/transfer.h"
+#include "engines/reader/transaction/scan_gate.h"
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
@@ -311,6 +313,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& ev);
+    void Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev);
 
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
@@ -400,6 +404,10 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 public:
     TAtomicCounter InitShardCounter;
 
+    const TTabletCountersHandle& GetTabletCounters() const {
+        return *Counters.GetTabletCounters();
+    }
+
     ui64 BuildEphemeralTxId() {
         static TAtomicCounter Counter = 0;
         static constexpr ui64 shift = (ui64)1 << 47;
@@ -466,6 +474,7 @@ protected:
 private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
     TCountersManager Counters;
+    TStartupTimeline StartupTimeline;
     std::unique_ptr<TWriteTasksQueue> WriteTasksQueue;
 
     std::unique_ptr<TTxController> ProgressTxController;
@@ -480,8 +489,6 @@ private:
     using TSchemaPreset = TSchemaPreset;
     using TTableInfo = TTableInfo;
 
-    const TMonotonic CreateInstant = TMonotonic::Now();
-    std::optional<TMonotonic> StartInstant;
     bool IsTxInitFinished = false;
 
     ui64 CurrentSchemeShardId = 0;
@@ -528,7 +535,7 @@ private:
     ui64 InProgressTxId = 0;
     bool ProgressTxScheduled = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
-    TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
+    NOlap::NReader::TScanGate ScanGate;
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;

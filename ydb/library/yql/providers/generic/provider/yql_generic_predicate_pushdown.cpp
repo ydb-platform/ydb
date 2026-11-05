@@ -2,6 +2,7 @@
 
 #include <ydb/core/fq/libs/common/util.h>
 
+#include <ydb/library/yql/providers/common/pushdown/collection.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 
 #include <util/stream/str.h>
@@ -162,8 +163,10 @@ bool SerializeCastExpression(const TCoSafeCast& safeCast, TExpression* proto, TS
     MATCH_TYPE(Json, JSON);
     MATCH_TYPE(Timestamp, TIMESTAMP);
     MATCH_TYPE(Interval, INTERVAL);
+    MATCH_TYPE(Date, DATE);
+    // see also SerializeExpression/MATCH_ATOM
 
-    ctx.Err << "unknown data slot " << static_cast<ui64>(dataSlot) << " for safe cast";
+    ctx.Err << "unknown data slot " << NUdf::GetDataTypeInfo(dataSlot).Name << " for safe cast";
     return false;
 }
 
@@ -411,6 +414,7 @@ bool SerializeExpression(const TExprBase& expression, TExpression* proto, TSeria
     // Proto value does not have ability to store
     // ui16 type that's why uint32 is used
     MATCH_ATOM(Date, DATE, uint32, ui16);
+    // see also SerializeCastExpression/MATCH_TYPE
     MATCH_ARITHMETICAL(Sub, SUB);
     MATCH_ARITHMETICAL(Add, ADD);
     MATCH_ARITHMETICAL(Mul, MUL);
@@ -632,7 +636,20 @@ bool SerializeRegexp(const TCoUdf& regexp, const TExprNode::TListType& children,
            SerializeExpression(TExprBase(children[1]), dstProto->mutable_value(), ctx, depth + 1);
 }
 
+bool SerializeLikeExpression(const NPushdown::TLikeSettings& settings, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
+    auto* dstProto = proto->mutable_like();
+    if (settings.Escape && !SerializeExpression(TExprBase(settings.Escape), dstProto->mutable_escape(), ctx, depth + 1)) {
+        return false;
+    }
+    dstProto->set_case_sensitive(settings.CaseSensitive);
+    return SerializeExpression(TExprBase(settings.Pattern), dstProto->mutable_pattern(), ctx, depth + 1) &&
+           SerializeExpression(TExprBase(settings.Haystack), dstProto->mutable_value(), ctx, depth + 1);
+}
+
 bool SerializeApply(const TCoApply& apply, TPredicate* proto, TSerializationContext& ctx, ui64 depth) {
+    if (auto settings = NPushdown::ExtractLikeSettings(apply)) {
+        return SerializeLikeExpression(*settings, proto, ctx, depth);
+    }
     const auto& maybeUdf = apply.Callable().Maybe<TCoUdf>();
     if (!maybeUdf) {
         ctx.Err << "expected only UDF apply, but got: " << apply.Callable().Ref().Content();
@@ -798,10 +815,15 @@ TString FormatTypedValue(const Ydb::TypedValue& typedValue) {
             switch (typeId) {
                 case Ydb::Type::UUID: {
                     const auto& value = typedValue.value();
-                    if (value.value_case() == Ydb::Value::kLow128) {
-                        TStringStream uuid;
-                        NKikimr::NUuid::UuidHalfsToString(value.low_128(), value.high_128(), uuid);
-                        return TStringBuilder() << "Uuid(\"" << uuid.Str() << "\")";
+                    switch (value.value_case()) {
+                        case Ydb::Value::kLow128: {
+                            TStringStream uuid;
+                            NKikimr::NUuid::UuidHalfsToString(value.low_128(), value.high_128(), uuid);
+                            return TStringBuilder() << "Uuid(\"" << uuid.Str() << "\")";
+                        }
+                        default:
+                            throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for "
+                                               << Type_PrimitiveTypeId_Name(typeId) << " type";
                     }
                     break;
                 }
@@ -809,21 +831,45 @@ TString FormatTypedValue(const Ydb::TypedValue& typedValue) {
                     const auto& value = typedValue.value();
                     switch (value.value_case()) {
                         case Ydb::Value::kInt64Value: {
-                            const auto duration = TDuration::MicroSeconds(value.int64_value());
-                            return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << ToIso8601(duration) << "\")";
+                            auto intValue = value.int64_value();
+                            Y_ENSURE(NUdf::IsValidLayoutValue<NUdf::TInterval>(intValue));
+                            const auto duration = TDuration::MicroSeconds(
+                                intValue < 0
+                                    ? -static_cast<ui64>(intValue)
+                                    : static_cast<ui64>(
+                                          intValue));   // c++20, avoid signed overflow, handles Min<i64>() (though it's outside of Interval range)
+                            return TStringBuilder()
+                                   << FormatType(typedValue.type()) << "(\"" << (intValue < 0 ? "-" : "") << ToIso8601(duration) << "\")";
                         }
                         default:
-                            [[fallthrough]];
+                            throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for "
+                                               << Type_PrimitiveTypeId_Name(typeId) << " type";
+                    }
+                }
+                case Ydb::Type::TIMESTAMP: {
+                    const auto& value = typedValue.value();
+                    switch (value.value_case()) {
+                        case Ydb::Value::kInt64Value: {
+                            auto intValue = value.int64_value();
+                            Y_ENSURE(intValue >= 0 && NUdf::IsValidLayoutValue<NUdf::TTimestamp>(intValue));
+                            const auto instant = TInstant::MicroSeconds(static_cast<ui64>(intValue));
+                            return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << instant << "\")";
+                        }
+                        default:
+                            throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for "
+                                               << Type_PrimitiveTypeId_Name(typeId) << " type";
                     }
                 }
                 case Ydb::Type::DATE: {
                     const auto& value = typedValue.value();
                     switch (value.value_case()) {
                         case Ydb::Value::kUint32Value:
+                            Y_ENSURE(NUdf::IsValidLayoutValue<NUdf::TDate>(value.uint32_value()));
                             return TStringBuilder() << FormatType(typedValue.type()) << "(\""
-                                                    << TInstant::Days(value.uint32_value()).FormatLocalTime("%Y-%m-%d") << "\")";
+                                                    << TInstant::Days(value.uint32_value()).FormatGmTime("%Y-%m-%d") << "\")";
                         default:
-                            [[fallthrough]];
+                            throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for "
+                                               << Type_PrimitiveTypeId_Name(typeId) << " type";
                     }
                 }
                 default:
@@ -1194,6 +1240,18 @@ TString FormatRegexp(const TPredicate::TRegexp& regexp) {
     return TStringBuilder() << "(" << value << " REGEXP " << pattern << ")";
 }
 
+TString FormatLike(const TPredicate::TLike& like) {
+    const auto& value = FormatExpression(like.value());
+    const auto& pattern = FormatExpression(like.pattern());
+    auto ret = TStringBuilder() << "(" << value << (like.case_sensitive() ? " LIKE " : " ILIKE ") << pattern;
+    if (like.has_escape()) {
+        const auto& escape = FormatExpression(like.escape());
+        ret << " ESCAPE " << escape;
+    }
+    ret << ")";
+    return std::move(ret);
+}
+
 TString FormatPredicate(const TPredicate& predicate) {
     switch (predicate.payload_case()) {
         case TPredicate::PAYLOAD_NOT_SET:
@@ -1220,6 +1278,8 @@ TString FormatPredicate(const TPredicate& predicate) {
             return FormatIn(predicate.in());
         case TPredicate::kRegexp:
             return FormatRegexp(predicate.regexp());
+        case TPredicate::kLike:
+            return FormatLike(predicate.like());
         default:
             throw yexception() << "UnimplementedPredicateType, payload_case " << static_cast<ui64>(predicate.payload_case());
     }

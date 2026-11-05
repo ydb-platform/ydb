@@ -2,19 +2,19 @@
 
 #include <util/generic/singleton.h>
 #include <util/generic/vector.h>
+#include <util/generic/yexception.h>
 
 namespace NYql::NUdf {
 
-TUdfModuleWrapperList* StaticUdfModuleWrapperList() {
-    return Singleton<TUdfModuleWrapperList>();
+void AddToStaticUdfRegistry(const TYqlUdfStaticLibrary* library) {
+    Y_ENSURE(library && library->StructSize >= sizeof(TYqlUdfStaticLibrary),
+             "Invalid static UDF descriptor");
+    Y_ENSURE(library->Register, "A static UDF must provide a registration entry point");
+    Singleton<TVector<const TYqlUdfStaticLibrary*>>()->push_back(library);
 }
 
-const TUdfModuleWrapperList& GetStaticUdfModuleWrapperList() {
-    return *StaticUdfModuleWrapperList();
+const TVector<const TYqlUdfStaticLibrary*>& GetStaticUdfLibraryList() {
+    return *Singleton<TVector<const TYqlUdfStaticLibrary*>>();
 }
-
-void AddToStaticUdfRegistry(TUdfModuleWrapper&& wrapper) {
-    StaticUdfModuleWrapperList()->emplace_back(wrapper);
-};
 
 } // namespace NYql::NUdf

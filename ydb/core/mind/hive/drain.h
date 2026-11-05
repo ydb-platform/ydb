@@ -11,8 +11,6 @@ private:
     THive* const Hive;
 
 public:
-    bool SkippedNodeDrain = false;
-
     explicit TGetNodes(THive* Hive) 
         : Hive(Hive)
     {}
@@ -21,15 +19,11 @@ public:
         return {nodeId};
     }
 
-    std::unordered_set<TNodeId> operator()(TBridgePileId pileId) {
+    std::unordered_set<TNodeId> operator()(TBridgePileId pileId) const {
         std::unordered_set<TNodeId> nodes;
         for (const auto& [nodeId, node] : Hive->Nodes) {
-            if (node.BridgePileId == pileId) {
-                if (node.Drain) { // a node drain owns it; retry the pile when it ends
-                    SkippedNodeDrain = true;
-                } else {
-                    nodes.insert(nodeId);
-                }
+            if (node.BridgePileId == pileId && !node.Drain) {
+                nodes.insert(nodeId);
             }
         }
         return nodes;

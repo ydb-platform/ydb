@@ -128,6 +128,12 @@ TString GetResourceValuesHtml(const TResourceRawValues& values);
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values);
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values, const TResourceRawValues& maximum);
 TString GetResourceValuesHtml(const NKikimrTabletBase::TMetrics& values);
+
+// value of a THiveConfig field in single-line text form; a repeated field is rendered as [a, b, c], an absent singular field as <unset>
+TString GetHiveConfigFieldText(const NKikimrConfig::THiveConfig& config, const google::protobuf::FieldDescriptor* field);
+
+// "Field: from -> to" for every field that differs between the two configs, "; "-separated; empty when they are equal
+TString GetHiveConfigDiffText(const NKikimrConfig::THiveConfig& from, const NKikimrConfig::THiveConfig& to);
 TString GetResourceValuesHtml(const TMetrics& values);
 NJson::TJsonValue GetResourceValuesJson(const NKikimrTabletBase::TMetrics& values);
 ui64 GetReadThroughput(const NKikimrTabletBase::TMetrics& values);
@@ -262,11 +268,15 @@ protected:
 
     bool IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool IsItPossibleToStartBalancer(EBalancerType balancerType);
-    void StartHiveBalancer(TBalancerSettings&& settings);
+    // balancerType is empty when the suppression is not about a specific type
+    void LogBalancerNotStarted(const TString& balancerType, EBalancerSuppressReason reason);
+    bool StartHiveBalancer(TBalancerSettings&& settings);
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartPileDrain(TBridgePileInfo& pile);
+    std::unordered_set<TBridgePileId> GetPilesWithTabletsToDrain();
+    void ProcessPileDrains();
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
-    void StartHiveStorageBalancer(TStorageBalancerSettings settings);
+    bool StartHiveStorageBalancer(TStorageBalancerSettings settings);
     // starts a new reassign for every tablet in the list
     void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
     // continues reassigns of tablets that were left in the middle of it (e.g. by a Hive restart)
@@ -321,7 +331,7 @@ protected:
     ITransaction* CreateReleaseTabletsReply(TEvHive::TEvReleaseTabletsReply::TPtr event);
     ITransaction* CreateConfigureSubdomain(TEvHive::TEvConfigureHive::TPtr event);
     ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo = 0, ui64 cookie = 0);
-    ITransaction* CreateSwitchDrainOff(TDrainTarget target, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements, bool skipped);
+    ITransaction* CreateSwitchDrainOff(TDrainTarget target, NKikimrProto::EReplyStatus status, ui32 movements);
     ITransaction* CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event);
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
     ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
@@ -410,6 +420,7 @@ protected:
     TBootQueue BootQueue;
     bool ProcessWaitQueueScheduled = false;
     bool ProcessBootQueueScheduled = false;
+    bool ProcessPileDrainsScheduled = false;
     bool ProcessBootQueuePostponed = false;
     TInstant LastConnect;
     TInstant ProcessBootQueuePostponedUntil;
@@ -423,6 +434,9 @@ protected:
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     std::unordered_set<TNodeId> BalancerNodes; // all nodes, affected by running balancers
     EBalancerType LastBalancerTrigger = EBalancerType::Manual;
+    ui32 NextBalancerRunId = 0; // stamps the tablets a balancer run counted, see TTabletInfo::BalancerRunId
+    // last "balancer not started" line written at INFO, repeats of it go to DEBUG
+    std::optional<std::pair<TString, EBalancerSuppressReason>> LastBalancerSuppression;
     std::array<TBalancerStats, EBalancerTypeSize> BalancerStats;
     NKikimrHive::EMigrationState MigrationState = NKikimrHive::EMigrationState::MIGRATION_UNKNOWN;
     i32 MigrationProgress = 0;
@@ -614,6 +628,7 @@ protected:
     void Handle(TEvPrivate::TEvCheckTabletNodeAlive::TPtr&);
     void HandleInit(TEvPrivate::TEvProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessBootQueue::TPtr&);
+    void Handle(TEvPrivate::TEvProcessPileDrains::TPtr&);
     void Handle(TEvPrivate::TEvPostponeProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr&);
     void HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&);

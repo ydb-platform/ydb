@@ -5,6 +5,7 @@
 #include <ydb/core/base/events.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/maybe.h>
@@ -27,6 +28,7 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
         TString Datacenter; // is equal to cluster name at the moment
         TString Balancer;
         bool IsEnabled = false;
+        bool IsAvailable = true;
         bool IsLocal = false;
         bool IsFnx = false;
         ui64 Weight = 1000;
@@ -40,14 +42,29 @@ struct TClustersList : public TAtomicRefCount<TClustersList>, TNonCopyable {
     TString DebugString() const;
 
     const TVector<TCluster>& GetClusters(TStringBuf authority) const;
-    void MarkFnxFromBalancers();
+    // Read clusters for an account: FNX clusters from Write, plus non-FNX clusters from Read
+    // (every non-FNX cluster when Read is empty). Unknown account: every non-FNX cluster.
+    TVector<TCluster> GetReadClusters(TStringBuf account) const;
+    // Sum of PQ/Config/V2/Account.version. Each account keeps its own version.
+    i64 SumAccountVersions() const;
     void BuildVisibleClusters();
+
+    struct TAccountClusters {
+        absl::flat_hash_set<TString> Read;
+        absl::flat_hash_set<TString> Write;
+        // From PQ/Config/V2/Account.version. Independent of every other account.
+        i64 Version = 0;
+
+        bool operator==(const TAccountClusters& rhs) const = default;
+    };
 
     TVector<TCluster> Clusters;
     const TCluster* LocalCluster = nullptr;
 
     // Balancer.name -> FNX cluster names from Balancer.clusters (CM table).
     absl::flat_hash_map<TString, TVector<TString>> Balancers;
+    // Account name -> read/write cluster names from PQ/Config/V2/Account.
+    absl::flat_hash_map<TString, TAccountClusters> Accounts;
     // Non-FNX clusters: empty or unknown :authority.
     TVector<TCluster> DefaultVisibleClusters;
     // Balancer.name -> clusters visible for that host. Filled by BuildVisibleClusters().

@@ -52,6 +52,7 @@ DEFINE_REFCOUNTED_TYPE(TQuerySecret)
 struct TStartQueryOptions
     : public TTimeoutOptions
     , public TQueryTrackerOptions
+    , public TMutatingOptions
 {
     NYTree::INodePtr Settings;
     bool Draft = false;

@@ -105,6 +105,9 @@ IPrint::TPtr MakePrinter(const TType *type) {
         case TTypeBase::EKind::Tuple: {
           return new TTuplePrint(type); 
         }
+        case TTypeBase::EKind::Tagged: {
+          return MakePrinter(AS_TYPE(TTaggedType, type)->GetBaseType());
+        }
         case TTypeBase::EKind::Type:
         case TTypeBase::EKind::Variant:
         case TTypeBase::EKind::Void:
@@ -120,7 +123,6 @@ IPrint::TPtr MakePrinter(const TType *type) {
         case TTypeBase::EKind::ReservedKind:
         case TTypeBase::EKind::EmptyList:
         case TTypeBase::EKind::EmptyDict:
-        case TTypeBase::EKind::Tagged:
         case TTypeBase::EKind::Block:
         case TTypeBase::EKind::Pg:
         case TTypeBase::EKind::Multi:

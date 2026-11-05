@@ -1,0 +1,19 @@
+syntax = "proto2";
+
+package NDSTool;
+
+import "ydb/core/protos/base.proto";
+
+// Client view of TEvVRestorePartResult returned as protobuf text by POST /restore_part.
+// Keep a separate type so dstool can be built independently of the server event.
+message TRestorePartResult {
+    enum EResponseOrigin {
+        VRESTORE_PART_ACTOR = 0;
+        SKELETON_FRONT = 1;
+        MON_RESTORE_PART_REQUEST_ACTOR = 2;
+    }
+
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 2;
+    optional EResponseOrigin ResponseOrigin = 3;
+}

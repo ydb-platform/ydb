@@ -235,6 +235,7 @@ private:
     NKikimrClient::TPersQueueRequest CurrentRequest;
 
     ui64 EndOffset;
+    TMaybe<ui64> RetainedStartOffset;
     ui64 SizeLag;
 
     TString ReadGuid; // empty if not reading

@@ -2535,6 +2535,80 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), "static");
     }
 
+    Y_UNIT_TEST(NoBscResponseThenPipeFailure) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        const ui64 bscId = MakeBSControllerID();
+        std::unordered_set<TActorId> bscClients; // We can't exactly pinpoint HC actor, so we'll settle for this
+        bool bscTimeoutFired = false;
+        bool wasResult = false;
+
+        // BSC never answers
+        auto sysViewObserver = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            auto type = ev->GetTypeRewrite();
+            if (EventSpaceBegin(TKikimrEvents::ES_SYSTEM_VIEW) <= type && type <= EventSpaceEnd(TKikimrEvents::ES_SYSTEM_VIEW)) {
+                ev.Reset();
+            }
+        });
+        // hold the pipe connection result to inject failure after bsc timeout
+        auto pipeObserver = runtime.AddObserver<TEvTabletPipe::TEvClientConnected>([&](auto&& ev) {
+            if (ev->Get()->TabletId == bscId) {
+                bscClients.insert(ev->Recipient);
+                ev.Reset();
+            }
+        });
+        // first wakeup of the request actor is the bsc timeout (50% of the timeout)
+        auto wakeupObserver = runtime.AddObserver<TEvents::TEvWakeup>([&](auto&& ev) {
+            if (bscClients.contains(ev->Recipient)) {
+                bscTimeoutFired = true;
+            }
+        });
+        auto resultObserver = runtime.AddObserver<NHealthCheck::TEvSelfCheckResult>([&](auto&&) {
+            wasResult = true;
+        });
+        // keep at least one request in flight
+        TBlockEvents<TEvHive::TEvResponseHiveInfo> blockHiveInfo(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.mutable_operation_params()->mutable_operation_timeout()->set_seconds(20);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        const TInstant start = runtime.GetCurrentTime();
+
+        TDispatchOptions opts;
+        opts.CustomFinalCondition = [&]() { return bscTimeoutFired && !blockHiveInfo.empty(); };
+        runtime.DispatchEvents(opts);
+        UNIT_ASSERT(!wasResult);
+
+        // pipe to bsc fails after bsc requests were already timed out
+        for (const auto& actor : bscClients) {
+            runtime.Send(new IEventHandle(actor, actor,
+                new TEvTabletPipe::TEvClientConnected(bscId, NKikimrProto::ERROR, TActorId(), TActorId(), false, false, 0)));
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        // bsc requests must not be accounted twice, so we still wait for hive
+        UNIT_ASSERT(!wasResult);
+
+        blockHiveInfo.Stop().Unblock();
+        const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Ctest << result.ShortDebugString() << Endl;
+        UNIT_ASSERT(wasResult);
+        // reply comes after hive response, not by the final timeout
+        UNIT_ASSERT_LT(runtime.GetCurrentTime() - start, TDuration::Seconds(20));
+    }
+
     Y_UNIT_TEST(BridgeNoBscResponse) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);

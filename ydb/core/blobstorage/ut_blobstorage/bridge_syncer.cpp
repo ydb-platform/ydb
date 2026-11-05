@@ -769,6 +769,41 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
         UNIT_ASSERT_VALUES_EQUAL(numPuts, numBlobs);
     }
 
+    // Every read that has finished issues a put, so before the first put only the reads in flight may have been sent.
+    Y_UNIT_TEST(PutsGoAheadOfQueuedReads) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto state = GetGroupInfo(env, groupId).GetBridgeGroupState();
+        const TActorId sourceProxy = MakeBlobStorageProxyID(state.GetPile(0).GetGroupId());
+        const TActorId targetProxy = MakeBlobStorageProxyID(state.GetPile(1).GetGroupId());
+        constexpr ui32 maxQueriesInFlight = 16;
+        ui32 numReads = 0;
+        std::optional<ui32> readsBeforeFirstPut;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->Recipient == sourceProxy) {
+                numReads += !ev->Get<TEvBlobStorage::TEvGet>()->IsIndexOnly;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut && ev->Recipient == targetProxy && !readsBeforeFirstPut) {
+                readsBeforeFirstPut = numReads;
+            }
+            return true;
+        };
+        constexpr ui32 numBlobs = 40;
+        SyncBlobs(env, groupId, {1}, numBlobs, 1000);
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL(numReads, numBlobs);
+        UNIT_ASSERT(readsBeforeFirstPut);
+        UNIT_ASSERT_GT(*readsBeforeFirstPut, 0);
+        UNIT_ASSERT_LE(*readsBeforeFirstPut, maxQueriesInFlight);
+    }
+
     Y_UNIT_TEST(TotalRateSharedBetweenHostingNodes) {
         using namespace NBridgeTest;
         THeldSyncersEnv test;

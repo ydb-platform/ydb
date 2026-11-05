@@ -396,7 +396,8 @@ namespace NKikimr::NBridge {
                 auto& msg = static_cast<TEvBlobStorage::T##TYPE&>(*ev); \
                 STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS07, #TYPE, (LogId, LogId), (GroupId, groupId), \
                     (Msg, msg), (QueriesInFlight, QueriesInFlight), \
-                    (PendingQueries.size, PendingQueries.size()), (MaxQueriesInFlight, MaxQueriesInFlight), \
+                    (PendingQueries.size, PendingQueries.size()), (PendingPuts.size, PendingPuts.size()), \
+                    (MaxQueriesInFlight, MaxQueriesInFlight), \
                     (Payloads.size, Payloads.size())); \
                 msg.ForceGroupGeneration.emplace(pile->GetGroupGeneration()); \
                 break; \
@@ -417,13 +418,14 @@ namespace NKikimr::NBridge {
         const auto [it, inserted] = Payloads.emplace(cookie, std::move(payload));
         Y_ABORT_UNLESS(inserted);
 
+        auto& queue = ev->Type() == TEvBlobStorage::EvPut ? PendingPuts : PendingQueries;
         std::unique_ptr<IEventHandle> handle(CreateEventForBSProxy(SelfId(), groupId, ev.release(), cookie));
 
         if (QueriesInFlight < MaxQueriesInFlight) {
             SendQuery(std::move(handle), quoterBytes);
             ++QueriesInFlight;
         } else {
-            PendingQueries.emplace_back(std::move(handle), quoterBytes);
+            queue.emplace_back(std::move(handle), quoterBytes);
         }
     }
 
@@ -633,13 +635,14 @@ namespace NKikimr::NBridge {
             }
         }
 
-        if (PendingQueries.empty()) {
+        auto& queue = PendingPuts.empty() ? PendingQueries : PendingPuts;
+        if (queue.empty()) {
             --QueriesInFlight;
         } else {
             Y_ABORT_UNLESS(QueriesInFlight == MaxQueriesInFlight);
-            auto& [handle, quoterBytes] = PendingQueries.front();
+            auto& [handle, quoterBytes] = queue.front();
             SendQuery(std::move(handle), quoterBytes);
-            PendingQueries.pop_front();
+            queue.pop_front();
         }
 
         return res;

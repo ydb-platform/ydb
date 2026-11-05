@@ -66,6 +66,9 @@ namespace NKikimr::NBridge {
         std::deque<std::tuple<std::unique_ptr<IEventHandle>, ui64>> QuotaQueue; // queries with in-flight slots waiting for quota
         bool WaitingForQuota = false; // the first query in QuotaQueue has its quota taken and waits for the time to come
         std::deque<std::tuple<std::unique_ptr<IEventHandle>, ui64>> PendingQueries; // handle and bytes to charge
+        // The blobs read already go first, as a restart of the syncer loses them and reads for them are paid for. Reads don't
+        // starve, because every put comes from a read that has finished.
+        std::deque<std::tuple<std::unique_ptr<IEventHandle>, ui64>> PendingPuts;
         ui64 NextCookie = 1;
 
         bool Errors = false;

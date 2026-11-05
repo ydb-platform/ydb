@@ -465,7 +465,7 @@ public:
         return (
             type == NKikimrKqp::QUERY_TYPE_SQL_SCAN ||
             type == NKikimrKqp::QUERY_TYPE_AST_SCAN
-        ) && !TxCtx->GetSnapshot().IsValid();
+        );
     }
 
     bool NeedSnapshot(const NYql::TKikimrConfiguration& config) const {

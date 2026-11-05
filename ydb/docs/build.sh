@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Use this script to build YDB docs with open-source tools and start an HTTP server
+# Use this script to build YDB docs with open-source tools
 # You may specify the output directory as a parameter. If omitted, the docs will be generated to a TEMP subdirectory
 
 set -e
 
 check_dependency() {
-  if ! command -v $1 &> /dev/null; then
+  if ! command -v "$1" &> /dev/null; then
     echo
     echo "You need to have $2 installed to run this script, exiting"
     echo "Installation instructions: $3"
@@ -14,27 +14,37 @@ check_dependency() {
   fi
 }
 
-start_server() {
-  echo
-  echo "Starting HTTP server, open the links in your browser:"
-  echo
-  echo "- http://localhost:8888/en (English)"
-  echo "- http://localhost:8888/ru (Russian)"
-  echo
-  echo "Press Ctrl+C in this window to stop the HTTP server."
-  echo
-  python3 -m http.server 8888 -d $1
-}
-
-DIR=${1:-"$TMPDIR"docs}
-
 check_dependency "yfm" "YFM builder" "https://diplodoc.com/docs/en/tools/docs/"
-check_dependency "python3" "Python3" "https://www.python.org/downloads/"
+check_dependency "python3" "Python 3" "https://www.python.org/downloads/"
+
+DIR=${1:-"$(python3 -c "import os; print(os.path.realpath('${TMPDIR:-/tmp}'))")docs"}
+
+if ! python3 -c 'import grpc_tools, yaml' &> /dev/null; then
+  echo
+  echo "You need the feature flag generator dependencies installed to run this script, exiting"
+  echo "Installation command: python3 -m pip install -r tools/feature_flags/requirements.txt"
+  exit 1
+fi
+
+# Generate variables from the same checkout as the documentation.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PRESETS="$SCRIPT_DIR/presets.yaml"
+PRESETS_BACKUP="$(mktemp "${TMPDIR:-/tmp}/ydb-docs-presets.XXXXXX")"
+cp "$PRESETS" "$PRESETS_BACKUP"
+restore_presets() {
+  cp "$PRESETS_BACKUP" "$PRESETS"
+  rm -f "$PRESETS_BACKUP"
+}
+trap restore_presets EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+python3 "$SCRIPT_DIR/tools/feature_flags/generate.py"
 
 echo "Starting YFM builder"
 echo "Output directory: $DIR"
 
-if ! yfm -s -i . -o $DIR --allowHTML  --apply-presets; then
+if ! yfm -s -i . -o $DIR --allowHTML --apply-presets; then
   echo
   echo '================================'
   echo 'YFM build completed with ERRORS!'
@@ -43,5 +53,7 @@ if ! yfm -s -i . -o $DIR --allowHTML  --apply-presets; then
   exit 1
 fi
 
-start_server $DIR
-
+echo
+echo "Build completed successfully!"
+echo "Output directory: $DIR"
+exit 0

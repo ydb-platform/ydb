@@ -105,6 +105,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNotNullColumn_InsertOrReplace-I
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultMultipleTimes-EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpScheme.ParallelAlterStreamingQuery
 ydb/core/kqp/ut/scheme KqpScheme.ParallelDropStreamingQuery
 ydb/core/kqp/ut/tli KqpTli.Basic
 ydb/core/kqp/ut/tli KqpTli.BasicWithWilsonTracing
@@ -282,3 +283,4 @@ ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorklo
 ydb/tests/stress/vector_workload/tests py3test.sole chunk
 ydb/tests/stress/vector_workload/tests test_workload.py.TestYdbVectorWorkload.test
 ydb/tests/tools/kqprun/tests py3test.sole chunk
+ydb/tools/mnc/viewer/ut py3test.sole chunk

@@ -302,7 +302,7 @@ private BigDecimal amount;
 
 Здесь `BigDecimal` — класс `java.math.BigDecimal`. Аннотация задаёт `Decimal(35,10)` как для генерации схемы, так и для передачи параметров через JDBC. Допустимы значения `1 ≤ precision ≤ 35` и `0 ≤ scale ≤ precision`; подробнее см. [Примитивные типы данных](../../yql/reference/types/primitive.md#numeric).
 
-Для автоматического выбора типа по `precision` и `scale` используйте `@Column` без `@JdbcTypeCode` на том же поле. Явный JDBC-код, в том числе `SqlTypes.DECIMAL` или `SqlTypes.NUMERIC`, обходит этот механизм. Готовые коды `YdbJdbcCode` из таблицы ниже служат отдельным способом выбора фиксированных параметров.
+Для автоматического выбора типа по `precision` и `scale` используйте `@Column` без `@JdbcTypeCode` на том же поле. Явный JDBC-код, в том числе `SqlTypes.DECIMAL` или `SqlTypes.NUMERIC`, обходит этот механизм.
 
 {% note info %}
 
@@ -314,23 +314,13 @@ private BigDecimal amount;
 
 Для существующей таблицы, созданной с помощью [Liquibase](../migration/liquibase.md#decimal) или Flyway, укажите в `@Column` точность и масштаб физического столбца, даже если Hibernate не управляет схемой. Например, столбцу `type="Decimal(35,10)"` в Liquibase соответствует поле `amount` из примера выше.
 
-Готовые JDBC-коды диалекта также остаются доступны:
+В сборке с поддержкой параметризованного Decimal прежние константы Decimal в `YdbJdbcCode` удалены. При обновлении замените `@JdbcTypeCode(YdbJdbcCode.DECIMAL_p_s)` на `@Column(precision = p, scale = s)`, сохранив точность и масштаб столбца. Например, для `Decimal(31,9)` измените поле сущности так:
 
-| JDBC-код | Тип {{ ydb-short-name }} |
-|---|---|
-| `YdbJdbcCode.DECIMAL_22_9` | `Decimal(22,9)` |
-| `YdbJdbcCode.DECIMAL_31_9` | `Decimal(31,9)` |
-| `YdbJdbcCode.DECIMAL_35_0` | `Decimal(35,0)` |
-| `YdbJdbcCode.DECIMAL_35_9` | `Decimal(35,9)` |
-
-Например, вместо `@Column(precision = 31, scale = 9)` можно выбрать готовый тип:
-
-```java
-@JdbcTypeCode(YdbJdbcCode.DECIMAL_31_9)
-private BigDecimal amount;
+```diff
+-@JdbcTypeCode(YdbJdbcCode.DECIMAL_31_9)
++@Column(precision = 31, scale = 9)
+ private BigDecimal amount;
 ```
-
-Выбранный JDBC-код определяет точность и масштаб при генерации схемы и передаче значений. Дополнительно указывать `precision`, `scale` или `columnDefinition` не требуется.
 
 ## Пример с Spring Data JPA {#integration-with-spring-data-jpa-example}
 

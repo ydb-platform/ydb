@@ -302,7 +302,7 @@ private BigDecimal amount;
 
 Here, `BigDecimal` is `java.math.BigDecimal`. The annotation selects `Decimal(35,10)` for both schema generation and JDBC parameter binding. Valid parameters are `1 ≤ precision ≤ 35` and `0 ≤ scale ≤ precision`; see [Primitive data types](../../yql/reference/types/primitive.md#numeric).
 
-To select the type automatically from `precision` and `scale`, use `@Column` without `@JdbcTypeCode` on the same field. An explicit JDBC code, including `SqlTypes.DECIMAL` or `SqlTypes.NUMERIC`, bypasses this mechanism. The predefined `YdbJdbcCode` constants below are a separate way to select fixed parameters.
+To select the type automatically from `precision` and `scale`, use `@Column` without `@JdbcTypeCode` on the same field. An explicit JDBC code, including `SqlTypes.DECIMAL` or `SqlTypes.NUMERIC`, bypasses this mechanism.
 
 {% note info %}
 
@@ -314,23 +314,13 @@ Using only `@Column(columnDefinition = "Decimal(35,10)")` does not set the preci
 
 For an existing table created with [Liquibase](../migration/liquibase.md#decimal) or Flyway, set `@Column` precision and scale to match the physical column, even when Hibernate does not manage the schema. For example, a Liquibase column declared with `type="Decimal(35,10)"` corresponds to the `amount` field shown above.
 
-The dialect's predefined JDBC codes remain available:
+The build with parameterized Decimal support removes the previous Decimal constants from `YdbJdbcCode`. When upgrading, replace `@JdbcTypeCode(YdbJdbcCode.DECIMAL_p_s)` with `@Column(precision = p, scale = s)`, preserving the column's precision and scale. For example, update an entity field mapped to `Decimal(31,9)` as follows:
 
-| JDBC code | {{ ydb-short-name }} type |
-|---|---|
-| `YdbJdbcCode.DECIMAL_22_9` | `Decimal(22,9)` |
-| `YdbJdbcCode.DECIMAL_31_9` | `Decimal(31,9)` |
-| `YdbJdbcCode.DECIMAL_35_0` | `Decimal(35,0)` |
-| `YdbJdbcCode.DECIMAL_35_9` | `Decimal(35,9)` |
-
-For example, instead of `@Column(precision = 31, scale = 9)`, select a predefined type:
-
-```java
-@JdbcTypeCode(YdbJdbcCode.DECIMAL_31_9)
-private BigDecimal amount;
+```diff
+-@JdbcTypeCode(YdbJdbcCode.DECIMAL_31_9)
++@Column(precision = 31, scale = 9)
+ private BigDecimal amount;
 ```
-
-The selected JDBC code determines precision and scale for schema generation and value binding. No additional `precision`, `scale`, or `columnDefinition` is required.
 
 ## Example with Spring Data JPA
 

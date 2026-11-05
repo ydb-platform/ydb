@@ -17,14 +17,14 @@ namespace NKikimr {
 // D = Layout Durability: background replication target.
 // W = Write Layout: layouts sufficient to acknowledge a new write.
 // OR separates alternative layouts; + combines copy counts in distinct failrealms.
-// Each box contains internal states, the administrative I/X mask, D and E.
-// W is shared by each column and shown below it.
+// Each box contains internal states, the administrative I/X mask, D, W and E.
 // Columns describe logical roles; transitions retain physical failrealm identities.
 //
 //     +---------------------------------+
 // +-->|              NORMAL             |
 // |   | N0/N0/N0                  I/I/I |------------------------------+
 // |   | D: 1+1+1                        |                              |
+// |   | W: 1+1+1 OR 2+2                 |                              |
 // |   | E: 1+1+1 OR 2+2                 |                              |
 // |   +---------------------------------+                              |
 // |                                                                    |
@@ -42,6 +42,7 @@ namespace NKikimr {
 // +<--|           DC_RECOVERY           |<----------->|            DC_FAILURE           |------------>|         DC_SOLO_DISASTER        |<----------->|         DC_SOLO_RECOVERY        |
 // |   | N0/N0/R                   I/I/I |             | N0/N0/F                   I/I/X |             | N0/F/F                    I/X/X |             | N0/R/F                    I/I/X |
 // |   | D: 1+1+1                        |             | D: 1+1                          |             | D: 1                            |             | D: 1+1                          |
+// |   | W: 1+1+1 OR 2+2                 |             | W: 2+2                          |             | W: 2                            |             | W: 2+2                          |
 // |   | E: 1+1 OR 2                     |             | E: 1+1 OR 2                     |------+      | E: 0                            |             | E: 0                            |
 // |   +---------------------------------+             +----------------+----------------+      |      +----------------+----------------+             +----------------+----------------+
 // |                                                                    |                       |                       |                                               |
@@ -62,6 +63,7 @@ namespace NKikimr {
 // +<--|         DC_RECOVERY_INV1        |<----------->|         DC_FAILURE_INV1         |------------>|           DC_SOLO_INV1          |<----------->|      DC_SOLO_RECOVERY_INV1      |
 //     | N1/N1/R                   I/I/I |             | N1/N1/F                   I/I/X |             | N1/F/F                    I/X/X |             | N1/R/F                    I/I/X |
 //     | D: 1+1+1                        |<-----+      | D: 2+2                          |             | D: 2                            |             | D: 1+1                          |
+//     | W: 1+1+1 OR 2+2                 |      |      | W: 2+2                          |             | W: 2                            |             | W: 2+2                          |
 //     | E: 1+1                          |      |      | E: 1+1                          |------+      | E: 1                            |             | E: 1                            |
 //     +---------------------------------+      |      +----------------+-------+--------+      |      +----------------+----------------+             +---------------------------------+
 //                                              |                       |       ^               |                       |
@@ -82,11 +84,11 @@ namespace NKikimr {
 //                                              +------|         DC_FAILURE_INV2         |------------>|           DC_SOLO_INV2          |<----------->|      DC_SOLO_RECOVERY_INV2      |
 //                                                     | N2/N2/F                   I/I/X |             | N2/F/F                    I/X/X |             | N2/R/F                    I/I/X |
 //                                                     | D: 2+2                          |             | D: 2                            |             | D: 1+1                          |
+//                                                     | W: 2+2                          |             | W: 2                            |             | W: 2+2                          |
 //                                                     | E: 2+2                          |             | E: 2                            |             | E: 2                            |
 //                                                     +---------------------------------+             +---------------------------------+             +---------------------------------+
 //
 //     ADMIN: I/I/I                                    ADMIN: I/I/X                                    ADMIN: I/X/X                                    ADMIN: I/I/X
-//     W: 1+1+1 OR 2+2                                 W: 2+2                                          W: 2                                            W: 2+2
 //
 // + marks turns/junctions; = is a crossing WITHOUT a connection.
 // Optional (opt) transitions require the target guarantee in the selected surviving realm

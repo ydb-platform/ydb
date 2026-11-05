@@ -2029,21 +2029,19 @@ namespace NKikimr {
             if (Config->BaseInfo.DonorMode) {
                 return;
             }
-            const TVDiskID source = VDiskIDFromVDiskID(ev->Get()->Record.GetSourceVDiskID());
-            const TVDiskID target = VDiskIDFromVDiskID(ev->Get()->Record.GetTargetVDiskID());
+            TVDiskID source = VDiskIDFromVDiskID(ev->Get()->Record.GetSourceVDiskID());
+            TVDiskID target = VDiskIDFromVDiskID(ev->Get()->Record.GetTargetVDiskID());
             if (!SelfVDiskId.SameGroupAndGeneration(source) || !SelfVDiskId.SameDisk(target)) {
-                return ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx,
-                    TAppData::TimeProvider->Now());
+                return ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, ctx.Now());
             }
-            if (ev->Get()->Record.GetRequestTargetLsn()
-                    && AppliedConfigLsn > Db->LsnMngr->GetConfirmedLsnForHull()) {
+            bool targetLsnRequested = ev->Get()->Record.GetRequestTargetLsn();
+            bool configPrefixPending = AppliedConfigLsn > Db->LsnMngr->GetConfirmedLsnForHull();
+            if (targetLsnRequested && configPrefixPending) {
                 // Retried sync jobs replace their previous request while the config prefix is pending.
                 for (auto it = PendingConfigSyncs.begin(); it != PendingConfigSyncs.end(); ++it) {
-                    const TVDiskID previousSource =
-                        VDiskIDFromVDiskID(it->second->Get()->Record.GetSourceVDiskID());
+                    TVDiskID previousSource = VDiskIDFromVDiskID(it->second->Get()->Record.GetSourceVDiskID());
                     if (TVDiskIdShort(previousSource) == TVDiskIdShort(source)) {
-                        ReplyError(NKikimrProto::ERROR, "sync request superseded", it->second, ctx,
-                            TAppData::TimeProvider->Now());
+                        ReplyError(NKikimrProto::ERROR, "sync request superseded", it->second, ctx, ctx.Now());
                         PendingConfigSyncs.erase(it);
                         break;
                     }
@@ -2264,13 +2262,13 @@ namespace NKikimr {
             DurabilityReplDone = false;
             ReplOnlyPhantomsRemain = false;
             UpdateReplState();
-            ctx.Send(Db->SyncerID, new TEvSyncerMetadataSync(RepeatRecoveryMetadataGeneration,
-                RepeatRecoverySourceInfo));
+            TEvSyncerMetadataSync* request = new TEvSyncerMetadataSync(RepeatRecoveryMetadataGeneration, RepeatRecoverySourceInfo);
+            ctx.Send(Db->SyncerID, request);
         }
 
         void Handle(TEvSyncerMetadataSyncDone::TPtr& ev, const TActorContext& ctx) {
-            if (ev->Get()->Generation != RepeatRecoveryMetadataGeneration
-                    || ev->Get()->Generation != GInfo->GroupGeneration) {
+            ui32 generation = ev->Get()->Generation;
+            if (generation != RepeatRecoveryMetadataGeneration || generation != GInfo->GroupGeneration) {
                 return;
             }
             RepeatRecoveryMetadataGeneration = 0;
@@ -2407,8 +2405,7 @@ namespace NKikimr {
                 // Recheck the generation, but do not wait for writes admitted after this request.
                 ProcessAssimilation(request, ctx, false);
             }
-            while (!PendingConfigSyncs.empty()
-                    && PendingConfigSyncs.front().first <= Db->LsnMngr->GetConfirmedLsnForHull()) {
+            while (!PendingConfigSyncs.empty() && PendingConfigSyncs.front().first <= Db->LsnMngr->GetConfirmedLsnForHull()) {
                 TEvBlobStorage::TEvVSync::TPtr request = std::move(PendingConfigSyncs.front().second);
                 PendingConfigSyncs.pop_front();
                 Handle(request, ctx);
@@ -3388,8 +3385,7 @@ namespace NKikimr {
                 ReplyError(NKikimrProto::ERROR, "VDisk is going away", request, ctx, TAppData::TimeProvider->Now());
             }
             for (auto& [lsn, request] : std::exchange(PendingConfigSyncs, {})) {
-                ReplyError(NKikimrProto::ERROR, "VDisk is going away", request, ctx,
-                    TAppData::TimeProvider->Now());
+                ReplyError(NKikimrProto::ERROR, "VDisk is going away", request, ctx, ctx.Now());
             }
             ActiveActors.KillAndClear(ctx);
             Die(ctx);

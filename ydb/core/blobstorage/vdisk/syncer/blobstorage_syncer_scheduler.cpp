@@ -382,10 +382,11 @@ namespace NKikimr {
                 queued.push_back(SchedulerQueue.top());
                 SchedulerQueue.pop();
             }
-            const TInstant now = TAppData::TimeProvider->Now();
+            TInstant now = ctx.Now();
             for (TVDiskInfoPtr peer : queued) {
                 if (FullSyncRequested.contains(peer->OrderNumber) || MetadataSyncRequested.contains(peer->OrderNumber)) {
-                    NSyncer::TPeerSyncState& peerState = (*SyncerData->Neighbors)[GInfo->GetVDiskId(peer->OrderNumber)].Get().PeerSyncState;
+                    TVDiskID peerVDiskId = GInfo->GetVDiskId(peer->OrderNumber);
+                    NSyncer::TPeerSyncState& peerState = (*SyncerData->Neighbors)[peerVDiskId].Get().PeerSyncState;
                     peerState.SchTime = now;
                 }
                 SchedulerQueue.push(peer);

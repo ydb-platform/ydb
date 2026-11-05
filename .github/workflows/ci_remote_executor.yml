@@ -76,12 +76,15 @@ jobs:
               "test_retry_count": "",
               "additional_ya_make_args": "",
               "put_build_results_to_cache": "true",
-              "collect_coredumps": "false",
+              # Match run_tests / build_and_test_ya default.
+              "collect_coredumps": "true",
               # Test-history / ya GIT_BRANCH identity (must NOT be executor ref name).
               "custom_branch_name": "",
               # PR attribution for analytics (workflow_dispatch has no github.event.number).
               "pull_number": "",
               "add_vcs_info": "false",
+              # Mute/BI job_name when github.workflow is the thin host (e.g. Regression-run_Large).
+              "analytics_job_name": "",
           }
           out = {k: as_str(k, d) for k, d in defaults.items()}
           if out["increment"].lower() in ("1", "true", "yes"):
@@ -91,6 +94,30 @@ jobs:
                   "::warning::job_inputs.custom_branch_name is empty; "
                   "analytics may attribute this run to the executor workflow ref"
               )
+          if not out["analytics_job_name"]:
+              print(
+                  "::warning::job_inputs.analytics_job_name is empty; "
+                  "analytics job_name will be this workflow's name"
+              )
+
+          # blacklist_paths: string (newline/comma) or JSON list → temp yaml for ya.
+          raw_bl = data.get("blacklist_paths") or ""
+          if isinstance(raw_bl, list):
+              bl_paths = [str(p).strip() for p in raw_bl if str(p).strip()]
+          else:
+              bl_paths = [
+                  p.strip()
+                  for p in str(raw_bl).replace(",", "\n").splitlines()
+                  if p.strip()
+              ]
+          out["blacklist_file"] = ""
+          if bl_paths:
+              bl_path = os.path.join(os.environ.get("RUNNER_TEMP", "/tmp"), "test_blacklist.yaml")
+              with open(bl_path, "w", encoding="utf-8") as bf:
+                  for p in bl_paths:
+                      bf.write(f"- path: {p}\n")
+              out["blacklist_file"] = bl_path
+              print(f"blacklist_file={bl_path} paths={bl_paths}")
 
           path = os.environ["GITHUB_OUTPUT"]
           with open(path, "a", encoding="utf-8") as f:
@@ -114,6 +141,7 @@ jobs:
             echo "- **code ref:** \`$code_ref\`"
             echo "- **ci ref:** \`${{ github.sha }}\`"
             echo "- **analytics branch:** \`${{ steps.ya.outputs.custom_branch_name }}\`"
+            echo "- **analytics job:** \`${{ steps.ya.outputs.analytics_job_name }}\`"
             echo "- **pull number:** \`${{ steps.ya.outputs.pull_number }}\`"
             echo "- **preset:** \`${{ steps.ya.outputs.build_preset }}\`"
             echo "- **target:** \`${{ steps.ya.outputs.build_target }}\`"
@@ -171,7 +199,8 @@ jobs:
           custom_branch_name: ${{ steps.ya.outputs.custom_branch_name }}
           pull_number: ${{ steps.ya.outputs.pull_number }}
           add_vcs_info: ${{ steps.ya.outputs.add_vcs_info }}
-          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ steps.ya.outputs.additional_ya_make_args }}
+          analytics_job_name: ${{ steps.ya.outputs.analytics_job_name }}
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ steps.ya.outputs.additional_ya_make_args }} ${{ steps.ya.outputs.blacklist_file && format('--test-blacklist-path {0}', steps.ya.outputs.blacklist_file) || '' }}
           secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',

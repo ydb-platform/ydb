@@ -613,6 +613,7 @@ void DoSyncConfigApplicationTest(bool changeGeneration) {
     const TLogoBlobID blobId(100500, 1, 1, 0, data.size(), 0);
     const TLogoBlobID partId(blobId, 1);
     ui32 sourceNode = 0;
+    std::optional<TVDiskID> testPeer;
     TActorId putEdge;
     TActorId syncEdge;
     bool putAdmitted = false;
@@ -653,8 +654,14 @@ void DoSyncConfigApplicationTest(bool changeGeneration) {
         } else if (holdLog && putAdmitted && event->GetTypeRewrite() == NPDisk::TEvLogResult::EventType) {
             heldLogResults.push_back(std::move(event));
             return false;
-        } else if (event->GetTypeRewrite() == TEvBlobStorage::EvVSync && event->Sender == syncEdge) {
-            syncAdmitted = true;
+        } else if (event->GetTypeRewrite() == TEvBlobStorage::EvVSync) {
+            TVDiskID peer = VDiskIDFromVDiskID(event->Get<TEvBlobStorage::TEvVSync>()->Record.GetSourceVDiskID());
+            if (event->Sender == syncEdge) {
+                syncAdmitted = true;
+            } else if (testPeer && TVDiskIdShort(peer) == TVDiskIdShort(*testPeer)) {
+                // The test owns this peer's cursor; its background sync must not acknowledge later LSNs.
+                return false;
+            }
         }
         return true;
     };
@@ -665,6 +672,7 @@ void DoSyncConfigApplicationTest(bool changeGeneration) {
     info->GetTopology().PickSubgroup(blobId.Hash(), subgroup);
     const TVDiskID originalTarget = info->GetVDiskId(subgroup[0]);
     const TVDiskID originalPeer = info->GetVDiskId(subgroup[1]);
+    testPeer = originalPeer;
     const TActorId service = info->GetActorId(subgroup[0]);
     sourceNode = service.NodeId();
     syncEdge = env.Runtime->AllocateEdgeActor(1);

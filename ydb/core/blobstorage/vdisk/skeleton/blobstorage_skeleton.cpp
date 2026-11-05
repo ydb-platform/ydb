@@ -2368,9 +2368,11 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVSyncFull::TPtr &ev, const TActorContext &ctx) {
-            if (!Config->BaseInfo.DonorMode) {
-                ctx.Send(ev->Forward(Db->SyncFullHandlerID));
+            if (Config->BaseInfo.DonorMode) {
+                return; // this is a race; donor disk can't answer TEvVSyncFull queries
             }
+            Y_VERIFY(Db->SyncFullHandlerID);
+            ctx.Send(ev->Forward(Db->SyncFullHandlerID));
         }
 
         ////////////////////////////////////////////////////////////////////////

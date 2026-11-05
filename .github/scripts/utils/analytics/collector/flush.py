@@ -149,7 +149,17 @@ def flush_file(
             print(f"No valid metric rows in {metrics_path}, keeping local batch")
             return 0
         if is_ydb_qa_disabled():
-            print("YDB QA disabled via CI_DISABLE_YDB_QA, keeping local batch")
+            # Keep JSONL on disk for S3 publish + caller-side flush; do not advance offset.
+            export_path = (os.environ.get("ANALYTICS_EXPORT_FILE") or "").strip() or metrics_path
+            if os.path.abspath(export_path) != os.path.abspath(metrics_path):
+                parent = os.path.dirname(export_path)
+                if parent:
+                    os.makedirs(parent, exist_ok=True)
+                with open(metrics_path, "rb") as src, open(export_path, "wb") as dst:
+                    dst.write(src.read())
+                print(f"CI_DISABLE_YDB_QA: exported {len(rows)} pending row(s) to {export_path}")
+            else:
+                print(f"CI_DISABLE_YDB_QA: {len(rows)} pending row(s) kept in {metrics_path}")
             return 0
         if not has_send_credentials():
             print("Analytics YDB credentials are missing, keeping local batch")

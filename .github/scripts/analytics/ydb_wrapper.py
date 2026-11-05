@@ -37,7 +37,7 @@ _DISABLE_YDB_QA_ENV = "CI_DISABLE_YDB_QA"
 
 
 def is_ydb_qa_disabled() -> bool:
-    """True when CI must not read/write YDB QA (e.g. Nebius host, no YC access)."""
+    """True when CI must not read/write YDB QA (remote host / enable_ydb_qa=false)."""
     return os.environ.get(_DISABLE_YDB_QA_ENV, "").strip().lower() in ("1", "true", "yes")
 
 

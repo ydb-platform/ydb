@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CI_DISABLE_YDB_QA kill-switch for Nebius / non-YC hosts."""
+"""CI_DISABLE_YDB_QA kill-switch for remote hosts without YDB QA access."""
 
 from __future__ import annotations
 
@@ -77,6 +77,19 @@ class YdbQaDisableTest(unittest.TestCase):
                 uploaded = flush_file(path)
                 open_wrapper.assert_not_called()
             self.assertEqual(uploaded, 0)
+            self.assertTrue(os.path.exists(path))
+            self.assertFalse(os.path.exists(path + ".offset"))
+
+            export = os.path.join(tmp, "ci_metrics.jsonl")
+            os.environ["ANALYTICS_EXPORT_FILE"] = export
+            with mock.patch("collector.flush._open_ydb_wrapper") as open_wrapper:
+                uploaded = flush_file(path)
+                open_wrapper.assert_not_called()
+            self.assertEqual(uploaded, 0)
+            self.assertTrue(os.path.exists(export))
+            with open(export, encoding="utf-8") as handle:
+                self.assertIn('"name":"step"', handle.read())
+            os.environ.pop("ANALYTICS_EXPORT_FILE", None)
 
 
 if __name__ == "__main__":

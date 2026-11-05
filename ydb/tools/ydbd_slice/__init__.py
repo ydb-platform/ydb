@@ -533,6 +533,31 @@ def ssh_args():
     return args
 
 
+def rolling_restart_seconds(value):
+    try:
+        parsed = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("expected an integer number of seconds")
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("expected a non-negative number of seconds")
+    return parsed
+
+
+def rolling_restart_args():
+    args = argparse.ArgumentParser(add_help=False)
+    args.add_argument(
+        "--rolling-restart",
+        metavar="SECONDS",
+        type=rolling_restart_seconds,
+        default=None,
+        help="After binaries and configs are uploaded, restart nodes one by one. "
+             "Storage hosts first, then dynamic. Each host is stopped and started; "
+             "the next host is restarted only after this one is back and SECONDS have passed. "
+             "Without this option all nodes restart at once.",
+    )
+    return args
+
+
 def with_confirmation():
     args = argparse.ArgumentParser(add_help=False)
     args.add_argument(
@@ -739,6 +764,7 @@ def dispatch_run(func, args, walle_provider, need_confirmation=False):
         yav_version,
         walle_provider,
         configurator,
+        rolling_restart_sec=v.get('rolling_restart'),
     )
     func(slice)
 
@@ -809,9 +835,13 @@ def add_update_mode(modes, walle_provider):
             component_args(),
             log_args(),
             ssh_args(),
+            rolling_restart_args(),
         ],
-        description="Minor cluster update, just binary and cfg. No additional configuration is performed."
-        "Stop all ydbd instances at the nodes, sync binary and cfg, start the instances. "
+        description="Minor cluster update, just binary and cfg. No additional configuration is performed. "
+        "Sync binary and cfg, then restart ydbd. "
+        "Without --rolling-restart stop all instances then start them. "
+        "With --rolling-restart SECONDS the same storage-then-dynamic order, one host at a time: "
+        "stop, start, wait until the node is back, then wait SECONDS before the next host. "
         "Use --hosts to specify particular hosts.",
     )
     mode.set_defaults(handler=_run)

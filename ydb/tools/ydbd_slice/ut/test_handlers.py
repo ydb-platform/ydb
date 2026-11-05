@@ -201,3 +201,68 @@ static_erasure: none
         self.assertIn('config.p_dyn-a.yaml', copy_call[0][0])
         self.assertIn('/Berkanavt/kikimr_31003/config.yaml', copy_call[0][0])
         self.assertEqual(copy_call[1]['nodes'], [host])
+
+    def test_restart_after_update_uses_rolling_restart(self):
+        host = 'ydb-olap-perf-001.search.yandex.net'
+        cluster_details = SimpleNamespace(
+            hosts=[SimpleNamespace(hostname=host)],
+            grpc_config={'port': 2135},
+            host_dynamic_slot_counts={},
+            host_storage_enabled={},
+            host_storage_profile={},
+            host_dynamic_profiles={},
+        )
+
+        with mock.patch.object(handlers.config_client, 'ConfigClient'):
+            slice_obj = handlers.Slice(
+                {'kikimr': ['bin']},
+                nodes.Nodes([host]),
+                cluster_details,
+                rolling_restart_sec=60,
+            )
+
+        with mock.patch.object(slice_obj, '_deploy_slot_configs') as deploy_slots, \
+                mock.patch.object(slice_obj, '_rolling_restart') as rolling, \
+                mock.patch.object(slice_obj, 'slice_stop') as stop, \
+                mock.patch.object(slice_obj, 'slice_start') as start:
+            slice_obj._restart_after_update()
+
+        deploy_slots.assert_called_once_with()
+        rolling.assert_called_once_with(60)
+        stop.assert_not_called()
+        start.assert_not_called()
+
+    def test_rolling_restart_storage_then_dynamic_with_pause(self):
+        storage = 'storage-host.search.yandex.net'
+        compute = 'compute-host.search.yandex.net'
+        cluster_details = SimpleNamespace(
+            hosts=[
+                SimpleNamespace(hostname=storage),
+                SimpleNamespace(hostname=compute),
+            ],
+            grpc_config={'port': 2135},
+            host_dynamic_slot_counts={},
+            host_storage_enabled={compute: False},
+            host_storage_profile={},
+            host_dynamic_profiles={},
+        )
+
+        with mock.patch.object(handlers.config_client, 'ConfigClient'):
+            slice_obj = handlers.Slice(
+                {'kikimr': ['bin'], 'dynamic_slots': ['all']},
+                nodes.Nodes([storage, compute]),
+                cluster_details,
+                rolling_restart_sec=5,
+            )
+
+        with mock.patch.object(slice_obj, '_rolling_restart_static_host') as static_host, \
+                mock.patch.object(slice_obj, '_rolling_restart_dynamic_host') as dynamic_host, \
+                mock.patch.object(handlers.time, 'sleep') as sleep:
+            slice_obj._rolling_restart(5)
+
+        static_host.assert_called_once_with(storage, 1, 1)
+        self.assertEqual(
+            [call.args for call in dynamic_host.call_args_list],
+            [(storage, 1, 2), (compute, 2, 2)],
+        )
+        sleep.assert_called_once_with(5)

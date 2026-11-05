@@ -10,6 +10,9 @@ from ydb.tools.ydbd_slice import process_profiles
 
 logger = logging.getLogger(__name__)
 
+# Graceful stop/start of kikimr. Do not SIGKILL after this.
+ROLLING_RESTART_TIMEOUT_SEC = 1800
+
 
 class CalledProcessError(subprocess.CalledProcessError):
     def __init__(self, base):
@@ -21,6 +24,21 @@ class CalledProcessError(subprocess.CalledProcessError):
             self.returncode,
             self.output,
         )
+
+
+def _list_kikimr_pids_command(extra_regex=None):
+    """Remote awk: pids of /Berkanavt/kikimr/bin/kikimr, optionally filtered by args."""
+    filter_clause = ""
+    if extra_regex:
+        filter_clause = " && $0 ~ /%s/" % extra_regex.replace("/", r"\/")
+    return (
+        "ps -eo pid=,args= | awk '$0 ~ /[k]ikimr\\/bin\\/kikimr/%s && $0 !~ /awk/ {print $1}' | sort -n"
+        % filter_clause
+    )
+
+
+def _pid_count(stdout):
+    return len([part for part in (stdout or "").split() if part])
 
 
 class Slice:
@@ -35,6 +53,7 @@ class Slice:
         yav_version=None,
         walle_provider=None,
         configurator=None,
+        rolling_restart_sec=None,
     ):
         self.slice_kikimr_path = '/Berkanavt/kikimr/bin/kikimr'
         self.__slice_cfg_path = '/Berkanavt/kikimr/cfg'
@@ -48,6 +67,7 @@ class Slice:
         self.configurator = configurator
         self.do_clear_logs = do_clear_logs
         self.yav_version = yav_version
+        self.rolling_restart_sec = rolling_restart_sec
         self.walle_provider = walle_provider
         self._host_dynamic_slot_counts = getattr(cluster_details, 'host_dynamic_slot_counts', None) or {}
         self._host_storage_enabled_map = getattr(cluster_details, 'host_storage_enabled', None) or {}
@@ -596,9 +616,198 @@ mon={mon}""".format(
 
             self._deploy_secrets()
 
+        self._restart_after_update()
+
+    def _restart_after_update(self):
+        if self.rolling_restart_sec is not None:
+            self._deploy_slot_configs()
+            self._rolling_restart(self.rolling_restart_sec)
+            return
+
         self.slice_stop()
         self._deploy_slot_configs()
         self.slice_start()
+
+    def _host_stdout(self, host, command):
+        results = {}
+        self.nodes.execute_async(
+            command,
+            check_retcode=False,
+            nodes=[host],
+            results=results,
+            retry_attempts=0,
+        )
+        return ((results.get(host) or {}).get('stdout') or '').strip()
+
+    def _wait_kikimr_back(self, host, extra_regex, min_count, phase, index, total):
+        deadline = time.time() + ROLLING_RESTART_TIMEOUT_SEC
+        list_cmd = _list_kikimr_pids_command(extra_regex)
+        next_report = time.time() + 30
+        while True:
+            if getattr(self.nodes, '_dry_run', False):
+                return
+            stdout = self._host_stdout(host, list_cmd)
+            cur_n = _pid_count(stdout)
+            if cur_n >= min_count and cur_n > 0:
+                logger.info(
+                    "rolling restart %s %d/%d %s: new pids: %s",
+                    phase,
+                    index,
+                    total,
+                    host,
+                    stdout,
+                )
+                return
+            now = time.time()
+            if now >= next_report:
+                logger.info(
+                    "rolling restart %s %d/%d %s: still waiting (%ss), current: %s",
+                    phase,
+                    index,
+                    total,
+                    host,
+                    int(ROLLING_RESTART_TIMEOUT_SEC - (deadline - now)),
+                    stdout,
+                )
+                next_report = now + 30
+            if now >= deadline:
+                raise RuntimeError(
+                    "timeout waiting for kikimr restart on %s (%s), current: %s"
+                    % (host, phase, stdout)
+                )
+            time.sleep(2)
+
+    def _rolling_restart_static_host(self, host, index, total):
+        list_cmd = _list_kikimr_pids_command("--node static")
+        old = self._host_stdout(host, list_cmd)
+        old_n = _pid_count(old)
+        logger.info(
+            "rolling restart storage %d/%d %s: stop/start kikimr (old pids: %s)",
+            index,
+            total,
+            host,
+            old or "none",
+        )
+        self.nodes.execute_async(
+            "sudo service kikimr stop",
+            check_retcode=False,
+            nodes=[host],
+            retry_attempts=0,
+        )
+        self.nodes.execute_async(
+            "sudo service kikimr start",
+            check_retcode=True,
+            nodes=[host],
+            retry_attempts=0,
+        )
+        self._wait_kikimr_back(
+            host,
+            "--node static",
+            min_count=max(old_n, 1),
+            phase="storage",
+            index=index,
+            total=total,
+        )
+
+    def _rolling_restart_dynamic_host(self, host, index, total):
+        list_cmd = _list_kikimr_pids_command("--ic-port")
+        old = self._host_stdout(host, list_cmd)
+        old_n = _pid_count(old)
+        if old_n == 0:
+            # No slots were running; still try start of configured slots.
+            logger.info(
+                "rolling restart dynamic %d/%d %s: no running slots, starting configured ones",
+                index,
+                total,
+                host,
+            )
+        else:
+            logger.info(
+                "rolling restart dynamic %d/%d %s: stop/start slots (old pids: %s)",
+                index,
+                total,
+                host,
+                old,
+            )
+        stop_cmd = (
+            "find /Berkanavt/ -maxdepth 1 -type d  -name kikimr_* "
+            " | while read x; do "
+            "      sudo sh -c \"if [ -x /sbin/stop ]; "
+            "          then stop kikimr-multi slot=${x#/Berkanavt/kikimr_}; "
+            "          else systemctl stop kikimr-multi@${x#/Berkanavt/kikimr_}; fi\"; "
+            "   done"
+        )
+        start_cmd = (
+            "find /Berkanavt/ -maxdepth 1 -type d  -name kikimr_* "
+            " | while read x; do "
+            "      sudo sh -c \"if [ -x /sbin/start ]; "
+            "          then start kikimr-multi slot=${x#/Berkanavt/kikimr_}; "
+            "          else systemctl start kikimr-multi@${x#/Berkanavt/kikimr_}; fi\"; "
+            "   done"
+        )
+        self.nodes.execute_async(stop_cmd, check_retcode=False, nodes=[host], retry_attempts=0)
+        self.nodes.execute_async(start_cmd, check_retcode=False, nodes=[host], retry_attempts=0)
+        min_count = old_n if old_n > 0 else 1
+        # If the host has no slot dirs, start is a no-op; do not wait forever.
+        slot_dirs = self._host_stdout(
+            host,
+            "find /Berkanavt/ -maxdepth 1 -type d -name 'kikimr_*' | wc -l",
+        )
+        try:
+            slot_dir_count = int(slot_dirs or "0")
+        except ValueError:
+            slot_dir_count = 0
+        if slot_dir_count == 0:
+            logger.info(
+                "rolling restart dynamic %d/%d %s: no slot directories, skip wait",
+                index,
+                total,
+                host,
+            )
+            return
+        self._wait_kikimr_back(
+            host,
+            "--ic-port",
+            min_count=min_count,
+            phase="dynamic",
+            index=index,
+            total=total,
+        )
+
+    def _rolling_restart_hosts(self, hosts, interval_sec, phase):
+        hosts = list(hosts)
+        total = len(hosts)
+        if total == 0:
+            return
+        logger.info(
+            "rolling restart %s: %d hosts, pause %ss after each host is back",
+            phase,
+            total,
+            interval_sec,
+        )
+        for index, host in enumerate(hosts, 1):
+            if phase == "storage":
+                self._rolling_restart_static_host(host, index, total)
+            else:
+                self._rolling_restart_dynamic_host(host, index, total)
+            if index < total and interval_sec > 0:
+                logger.info("waiting %ss before the next %s host", interval_sec, phase)
+                time.sleep(interval_sec)
+
+    def _rolling_restart(self, interval_sec):
+        # Same order as a full update restart: storage first, then dynamic.
+        if "kikimr" in self.components:
+            self._rolling_restart_hosts(
+                self._storage_hosts(),
+                interval_sec,
+                phase="storage",
+            )
+        if "dynamic_slots" in self.components:
+            self._rolling_restart_hosts(
+                self.nodes.nodes_list,
+                interval_sec,
+                phase="dynamic",
+            )
 
     def slice_update_raw_configs(self, raw_config_path):
         self.slice_stop()

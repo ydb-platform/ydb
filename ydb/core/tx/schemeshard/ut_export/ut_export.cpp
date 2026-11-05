@@ -983,7 +983,7 @@ namespace {
 
         void AddExportKesusSemaphore(ui64 tabletId, const TString& name, ui64 limit, const TString& data = {}) {
             const auto sender = Runtime().AllocateEdgeActor();
-            Runtime().SendToPipe(tabletId, sender, new TEvKesus::TEvCreateSemaphore("", name, limit, data),
+            Runtime().SendToPipe(tabletId, sender, new TEvKesus::TEvCreateSemaphore("/MyRoot/Coordination", name, limit, data),
                 0, GetPipeConfigWithRetries());
             const auto response = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvCreateSemaphoreResult>(sender);
             UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS,
@@ -1238,6 +1238,7 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
 
             auto deleteSemaphore = MakeHolder<TEvKesus::TEvDeleteSemaphore>();
+            deleteSemaphore->Record.SetKesusPath("/MyRoot/Coordination");
             deleteSemaphore->Record.SetName("A");
             Runtime().SendToPipe(tabletId, sender, deleteSemaphore.Release(), 0, GetPipeConfigWithRetries());
             const auto deletedSemaphore = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvDeleteSemaphoreResult>(sender);

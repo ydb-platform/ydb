@@ -2,6 +2,7 @@
 #include "schemeshard_identificators.h"
 
 #include <ydb/core/base/storage_pools.h>
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -187,12 +188,12 @@ namespace TEvPrivate {
 
     struct TEvKesusResourcesDescribeResult: public TEventLocal<TEvKesusResourcesDescribeResult, EvKesusResourcesDescribeResult> {
         const bool Success;
-        TString Content;
+        TVector<Ydb::RateLimiter::Resource> Resources;
         const TString Error;
 
-        TEvKesusResourcesDescribeResult(bool success, TString content, TString error)
+        TEvKesusResourcesDescribeResult(bool success, TVector<Ydb::RateLimiter::Resource> resources, TString error)
             : Success(success)
-            , Content(std::move(content))
+            , Resources(std::move(resources))
             , Error(std::move(error))
         {}
     };

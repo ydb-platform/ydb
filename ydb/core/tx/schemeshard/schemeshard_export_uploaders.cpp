@@ -5,6 +5,7 @@
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
@@ -32,6 +33,7 @@
 #include <library/cpp/json/json_writer.h>
 
 #include <util/string/cast.h>
+#include <util/string/printf.h>
 
 #include <algorithm>
 #include <type_traits>
@@ -55,10 +57,10 @@ TString GetSchemeDestinationPrefix(const TSettings& settings, ui32 itemIdx) {
 }
 
 TMaybe<NBackup::TEncryptionIV> MakeSchemeFileIV(
-    const TMaybe<NBackup::TEncryptionIV>& itemIV, NBackup::EBackupFileType fileType)
+    const TMaybe<NBackup::TEncryptionIV>& itemIV, NBackup::EBackupFileType fileType, ui32 fileIndex = 0)
 {
     if (itemIV) {
-        return NBackup::TEncryptionIV::Combine(*itemIV, fileType, 0 /* backupItemNumber: already combined */, 0 /* shardNumber */);
+        return NBackup::TEncryptionIV::Combine(*itemIV, fileType, 0 /* backupItemNumber: already combined */, fileIndex /* shardNumber */);
     }
     return Nothing();
 }
@@ -336,27 +338,18 @@ private:
                 << record.GetError().ShortDebugString());
         }
 
-        Ydb::RateLimiter::Resources resources;
+        TVector<Ydb::RateLimiter::Resource> resources;
+        resources.reserve(record.ResourcesSize());
         for (const auto& resource : record.GetResources()) {
-            FillRateLimiterDescription(*resources.add_resources(), resource);
+            FillRateLimiterDescription(resources.emplace_back(), resource);
         }
 
-        auto& items = *resources.mutable_resources();
         // A parent path is a proper prefix of its children, so it sorts before them.
-        std::sort(items.begin(), items.end(), [](const auto& lhs, const auto& rhs) {
+        std::sort(resources.begin(), resources.end(), [](const auto& lhs, const auto& rhs) {
             return lhs.resource_path() < rhs.resource_path();
         });
 
-        TString content;
-        if (items.empty()) {
-            // PrintProto omits empty repeated fields. Keep a nonempty, valid textproto
-            // so a retry also overwrites a previously exported nonempty resource set.
-            content = "resources: []\n";
-        } else if (!NYdb::NBackup::PrintProto(resources, content)) {
-            return Finish(false, {}, "Cannot serialize coordination node resources");
-        }
-
-        Finish(true, std::move(content), {});
+        Finish(true, std::move(resources), {});
     }
 
     void HandleConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
@@ -409,14 +402,14 @@ private:
         IActor::PassAway();
     }
 
-    void Finish(bool success, TString content, TString error) {
+    void Finish(bool success, TVector<Ydb::RateLimiter::Resource> resources, TString error) {
         YDB_LOG_INFO("Finish describing coordination node resources",
             {"self", SelfId()},
             {"kesusTabletId", KesusTabletId},
             {"success", success},
             {"error", error},
         );
-        Send(Owner, new TEvPrivate::TEvKesusResourcesDescribeResult(success, std::move(content), std::move(error)));
+        Send(Owner, new TEvPrivate::TEvKesusResourcesDescribeResult(success, std::move(resources), std::move(error)));
         PassAway();
     }
 
@@ -524,12 +517,12 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
             return Finish(false, ev->Get()->Error);
         }
 
-        KesusResources = std::move(ev->Get()->Content);
+        KesusResources = std::move(ev->Get()->Resources);
         StartUploadFiles();
     }
 
-    bool AddFileWithChecksum(const TString& name, const TString& content, NBackup::EBackupFileType fileType) {
-        return this->AddFile(name, content, MakeSchemeFileIV(IV, fileType))
+    bool AddFileWithChecksum(const TString& name, const TString& content, NBackup::EBackupFileType fileType, ui32 fileIndex = 0) {
+        return this->AddFile(name, content, MakeSchemeFileIV(IV, fileType, fileIndex))
             && (!EnableChecksums || this->AddFile(NBackup::ChecksumKey(name), NBackup::ComputeChecksum(content)));
     }
 
@@ -542,10 +535,29 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
             return;
         }
 
-        if (KesusResources && !AddFileWithChecksum("rate_limiter_resources.pb", *KesusResources,
-                NBackup::EBackupFileType::CoordinationNodeCreateRateLimiter))
-        {
-            return;
+        if (PathType == NKikimrSchemeOp::EPathTypeKesus) {
+            std::vector<NBackup::TRateLimiterResourceMetadata> resources;
+            resources.reserve(KesusResources.size());
+            for (ui32 index = 0; index < KesusResources.size(); ++index) {
+                const TString resourcePath = KesusResources[index].resource_path();
+                const TString exportPrefix = IV ? Sprintf("%03u", index + 1) : resourcePath;
+                Ydb::RateLimiter::CreateResourceRequest request;
+                *request.mutable_resource() = std::move(KesusResources[index]);
+                // As in tools dump, paths are supplied by restore, not stored in the request.
+                request.mutable_resource()->clear_resource_path();
+                TString content;
+                if (!NYdb::NBackup::PrintProto(request, content)) {
+                    return Finish(false, "Cannot serialize coordination node resource");
+                }
+                if (!AddFileWithChecksum(exportPrefix + "/" + NYdb::NDump::NFiles::CreateRateLimiter().FileName,
+                        content, NBackup::EBackupFileType::CoordinationNodeCreateRateLimiter, index))
+                {
+                    return;
+                }
+                resources.push_back({.ExportPrefix = exportPrefix, .ResourcePath = resourcePath});
+            }
+            // This list replaces the previous attempt's list, including when it is empty.
+            Metadata.SetRateLimiterResources(std::move(resources));
         }
 
         if (EnablePermissions) {
@@ -558,10 +570,8 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
             }
         }
 
-        if (!Metadata) {
-            return Finish(false, TStringBuilder() << this->GetObjectKey("metadata.json", IV.Defined()) << ": empty metadata");
-        }
-        if (!AddFileWithChecksum("metadata.json", Metadata, NBackup::EBackupFileType::Metadata)) {
+        // Publish the resource list only after all its files and checksums have been uploaded.
+        if (!AddFileWithChecksum("metadata.json", Metadata.Serialize(), NBackup::EBackupFileType::Metadata)) {
             return;
         }
 
@@ -599,7 +609,7 @@ public:
         TPathId sourcePathId,
         const TSettings& settings,
         const TString& databaseRoot,
-        const TString& metadata,
+        NBackup::TMetadata metadata,
         bool enablePermissions,
         bool enableChecksums,
         const TMaybe<NBackup::TEncryptionIV>& iv
@@ -613,7 +623,7 @@ public:
         , DatabaseRoot(databaseRoot)
         , EnablePermissions(enablePermissions)
         , EnableChecksums(enableChecksums)
-        , Metadata(metadata)
+        , Metadata(std::move(metadata))
     {
     }
 
@@ -652,9 +662,9 @@ private:
     const bool EnablePermissions;
     const bool EnableChecksums;
     TString Permissions;
-    TString Metadata;
+    NBackup::TMetadata Metadata;
     TActorId ResourcesDescriber;
-    TMaybe<TString> KesusResources;
+    TVector<Ydb::RateLimiter::Resource> KesusResources;
 }; // TSchemeUploader
 
 template <typename TSettings>
@@ -772,11 +782,11 @@ private:
 
 template <typename TSettings>
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const TSettings& settings, const TString& databaseRoot, const TString& metadata,
+    const TSettings& settings, const TString& databaseRoot, NBackup::TMetadata metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 ) {
     return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot,
-        metadata, enablePermissions, enableChecksums, iv);
+        std::move(metadata), enablePermissions, enableChecksums, iv);
 }
 
 template <typename TSettings>
@@ -789,13 +799,13 @@ NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui6
 
 template IActor* CreateSchemeUploader<Ydb::Export::ExportToS3Settings>(
     TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
+    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, NBackup::TMetadata metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 
 template IActor* CreateSchemeUploader<Ydb::Export::ExportToFsSettings>(
     TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToFsSettings& settings, const TString& databaseRoot, const TString& metadata,
+    const Ydb::Export::ExportToFsSettings& settings, const TString& databaseRoot, NBackup::TMetadata metadata,
     bool enablePermissions, bool enableChecksums, const TMaybe<NBackup::TEncryptionIV>& iv
 );
 

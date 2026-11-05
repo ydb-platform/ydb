@@ -568,7 +568,7 @@ private:
 
             item.SchemeUploader = ctx.Register(CreateSchemeUploader(
                 Self->SelfId(), exportInfo.Id, itemIdx, item.SourcePathId,
-                exportSettings, databaseRoot, metadata.Serialize(),
+                exportSettings, databaseRoot, std::move(metadata),
                 exportInfo.EnablePermissions, exportInfo.EnableChecksums,
                 iv
             ));

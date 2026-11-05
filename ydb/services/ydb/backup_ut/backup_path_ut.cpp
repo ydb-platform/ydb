@@ -8,6 +8,7 @@
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 #include <ydb/library/backup/proto/proto.h>
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 
@@ -309,13 +310,19 @@ void ExportKesusImpl(TBackupTestFixture& f, bool throughDirectory) {
         }
     };
     Ydb::Coordination::CreateNodeRequest node;
-    UNIT_ASSERT(NBackup::ParseProto(readFile("create_coordination_node.pb"), node));
+    UNIT_ASSERT(NYdb::NBackup::ParseProto(readFile("create_coordination_node.pb"), node));
     UNIT_ASSERT(node.has_config());
-    Ydb::RateLimiter::Resources resources;
-    UNIT_ASSERT(NBackup::ParseProto(readFile("rate_limiter_resources.pb"), resources));
-    UNIT_ASSERT_VALUES_EQUAL(resources.resources_size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(resources.resources(0).resource_path(), "limit");
-    UNIT_ASSERT_VALUES_EQUAL(resources.resources(0).hierarchical_drr().max_units_per_second(), 100);
+    const auto metadata = NKikimr::NBackup::TMetadata::Deserialize(readFile("metadata.json"));
+    UNIT_ASSERT(metadata.GetRateLimiterResources());
+    UNIT_ASSERT_VALUES_EQUAL(metadata.GetRateLimiterResources()->size(), 1);
+    const auto& entry = metadata.GetRateLimiterResources()->front();
+    UNIT_ASSERT_VALUES_EQUAL(entry.ResourcePath, "limit");
+    UNIT_ASSERT_VALUES_EQUAL(entry.ExportPrefix, "limit");
+    Ydb::RateLimiter::CreateResourceRequest resource;
+    UNIT_ASSERT(NYdb::NBackup::ParseProto(readFile(entry.ExportPrefix + "/create_rate_limiter.pb"), resource));
+    UNIT_ASSERT(resource.coordination_node_path().empty());
+    UNIT_ASSERT(resource.resource().resource_path().empty());
+    UNIT_ASSERT_VALUES_EQUAL(resource.resource().hierarchical_drr().max_units_per_second(), 100);
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>

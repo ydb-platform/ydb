@@ -35,4 +35,57 @@ struct TEvBackupStarted: public NActors::TEventLocal<TEvBackupStarted, TEvColumn
 
 struct TEvCancelBackup: public NActors::TEventLocal<TEvCancelBackup, TEvColumnShard::EvLocalDbBackupCancel> {};
 
+// Writer -> owner. The owner applies it to its own TProgress; the snapshot is not shared.
+struct TEvBackupProgress: public NActors::TEventLocal<TEvBackupProgress, TEvColumnShard::EvLocalDbBackupProgress> {
+    enum class EKind {
+        Init,
+        Stage,
+        Bytes,
+        Chunk,
+        TableDone,
+    };
+
+    EKind Kind;
+    TMap<TTableId, TString> Tables;
+    TString Stage;
+    TTableId TableId = 0;
+    ui64 Bytes = 0;
+
+    static std::unique_ptr<TEvBackupProgress> Init(const TMap<TTableId, TString>& tables) {
+        auto ev = std::make_unique<TEvBackupProgress>(EKind::Init);
+        ev->Tables = tables;
+        return ev;
+    }
+
+    static std::unique_ptr<TEvBackupProgress> Stage(TString stage) {
+        auto ev = std::make_unique<TEvBackupProgress>(EKind::Stage);
+        ev->Stage = std::move(stage);
+        return ev;
+    }
+
+    static std::unique_ptr<TEvBackupProgress> Bytes(ui64 bytes) {
+        auto ev = std::make_unique<TEvBackupProgress>(EKind::Bytes);
+        ev->Bytes = bytes;
+        return ev;
+    }
+
+    static std::unique_ptr<TEvBackupProgress> Chunk(TTableId tableId, ui64 bytes) {
+        auto ev = std::make_unique<TEvBackupProgress>(EKind::Chunk);
+        ev->TableId = tableId;
+        ev->Bytes = bytes;
+        return ev;
+    }
+
+    static std::unique_ptr<TEvBackupProgress> TableDone(TTableId tableId) {
+        auto ev = std::make_unique<TEvBackupProgress>(EKind::TableDone);
+        ev->TableId = tableId;
+        return ev;
+    }
+
+    explicit TEvBackupProgress(EKind kind)
+        : Kind(kind)
+    {
+    }
+};
+
 }   // namespace NKikimr::NColumnShard::NLocalDbBackup

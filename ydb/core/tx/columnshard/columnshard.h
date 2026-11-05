@@ -99,6 +99,7 @@ enum EEv {
     EvLocalDbBackupStart,
     EvLocalDbBackupStarted,
     EvLocalDbBackupCancel,
+    EvLocalDbBackupProgress,
 
     EvEnd
 };

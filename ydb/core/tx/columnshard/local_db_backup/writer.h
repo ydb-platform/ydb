@@ -17,8 +17,6 @@ namespace NKikimr::NColumnShard::NLocalDbBackup {
 
 struct TS3SnapshotWriterParams {
     NKikimrSchemeOp::TS3Settings S3Settings;
-    // Optional, updated by the writer as the data is uploaded; read by the monitoring page.
-    TProgress::TPtr Progress;
     // Size of a multipart upload part. S3 requires >= 5 MiB for all parts except the last one.
     ui64 UploadPartBytes = 8ull << 20;
     // How long to wait for TEvBackupStarted from the tablet before giving up.

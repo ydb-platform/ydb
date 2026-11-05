@@ -26,8 +26,8 @@ TString RenderJson(const TStatus& status, TInstant now) {
     json["started_at"] = FormatInstant(status.LastStartedAt);
     json["elapsed"] = ToString(HumanReadable((status.IsActive() ? now : status.LastFinishedAt) - status.LastStartedAt));
 
-    if (status.Progress) {
-        const auto progress = status.Progress->Get();
+    if (status.LastStartedAt) {
+        const auto& progress = status.Progress.Snapshot;
         json["stage"] = progress.Stage;
         json["tables_total"] = progress.TablesTotal;
         json["tables_done"] = progress.TablesDone;

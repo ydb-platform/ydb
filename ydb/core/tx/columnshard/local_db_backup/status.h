@@ -9,9 +9,6 @@
 #include <util/generic/map.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/system/mutex.h>
-
-#include <memory>
 
 namespace NKikimr::NColumnShard::NLocalDbBackup {
 
@@ -34,36 +31,50 @@ struct TProgressSnapshot {
     }
 };
 
-// Progress of a running backup, shared between the S3 writer actor (producer) and the
-// tablet's monitoring page (consumer). Thread-safe.
+// Progress of the current backup. Touched only by the actor that owns TStatus:
+// the writer reports changes with TEvBackupProgress, and that actor applies them here.
 class TProgress {
 public:
-    using TPtr = std::shared_ptr<TProgress>;
+    void Apply(const TEvBackupProgress& ev) {
+        switch (ev.Kind) {
+            case TEvBackupProgress::EKind::Init:
+                Init(ev.Tables);
+                break;
+            case TEvBackupProgress::EKind::Stage:
+                Snapshot.Stage = ev.Stage;
+                break;
+            case TEvBackupProgress::EKind::Bytes:
+                Snapshot.BytesWritten += ev.Bytes;
+                break;
+            case TEvBackupProgress::EKind::Chunk:
+                OnChunk(ev.TableId, ev.Bytes);
+                break;
+            case TEvBackupProgress::EKind::TableDone:
+                OnTableDone(ev.TableId);
+                break;
+        }
+    }
 
+    void Reset() {
+        Snapshot = {};
+        Index.clear();
+    }
+
+    TProgressSnapshot Snapshot;
+
+private:
     void Init(const TMap<TTableId, TString>& tables) {
-        TGuard<TMutex> guard(Lock);
-        Data.Tables.clear();
+        Snapshot.Tables.clear();
         Index.clear();
         for (const auto& [tableId, name] : tables) {
-            Index[tableId] = Data.Tables.size();
-            Data.Tables.push_back(TTableProgress{ .Name = name });
+            Index[tableId] = Snapshot.Tables.size();
+            Snapshot.Tables.push_back(TTableProgress{ .Name = name });
         }
-        Data.TablesTotal = Data.Tables.size();
-    }
-
-    void SetStage(const TString& stage) {
-        TGuard<TMutex> guard(Lock);
-        Data.Stage = stage;
-    }
-
-    void AddBytes(ui64 bytes) {
-        TGuard<TMutex> guard(Lock);
-        Data.BytesWritten += bytes;
+        Snapshot.TablesTotal = Snapshot.Tables.size();
     }
 
     void OnChunk(TTableId tableId, ui64 bytes) {
-        TGuard<TMutex> guard(Lock);
-        Data.BytesWritten += bytes;
+        Snapshot.BytesWritten += bytes;
         if (auto* table = Find(tableId)) {
             table->Started = true;
             table->Bytes += bytes;
@@ -71,28 +82,18 @@ public:
     }
 
     void OnTableDone(TTableId tableId) {
-        TGuard<TMutex> guard(Lock);
         if (auto* table = Find(tableId); table && !table->Done) {
             table->Started = true;
             table->Done = true;
-            ++Data.TablesDone;
+            ++Snapshot.TablesDone;
         }
     }
 
-    TProgressSnapshot Get() const {
-        TGuard<TMutex> guard(Lock);
-        return Data;
-    }
-
-private:
     TTableProgress* Find(TTableId tableId) {
         auto it = Index.find(tableId);
-        return it == Index.end() ? nullptr : &Data.Tables[it->second];
+        return it == Index.end() ? nullptr : &Snapshot.Tables[it->second];
     }
 
-private:
-    mutable TMutex Lock;
-    TProgressSnapshot Data;
     THashMap<TTableId, size_t> Index;
 };
 
@@ -100,7 +101,7 @@ private:
 struct TStatus {
     NActors::TActorId WriterActorId;   // non-empty while a backup is in progress
     TString CurrentBackupPath;
-    TProgress::TPtr Progress;   // of the current (or the last) backup
+    TProgress Progress;   // of the current (or the last) backup
 
     TInstant LastStartedAt;
     TInstant LastFinishedAt;
@@ -113,10 +114,11 @@ struct TStatus {
         return !!WriterActorId;
     }
 
-    void OnStarted(const NActors::TActorId& writer, const TString& backupPath, const TProgress::TPtr& progress, TInstant now) {
+    void OnStarted(const NActors::TActorId& writer, const TString& backupPath, TInstant now) {
         WriterActorId = writer;
         CurrentBackupPath = backupPath;
-        Progress = progress;
+        Progress.Reset();
+        Progress.Snapshot.Stage = "Starting";
         LastStartedAt = now;
     }
 

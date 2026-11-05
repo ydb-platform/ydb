@@ -1096,6 +1096,30 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         UNIT_ASSERT_C(svg.Contains("shared provenance") && svg.Contains("Storage · observed sources (PARTIAL)"), svg);
     }
 
+    Y_UNIT_TEST(StorageV3UnknownOriginDoesNotMakeOtherCompleteOriginsPartial) {
+        const TString svg = RenderScans(R"json([
+          {"ExpectedContextOnly":true,"StatsGroupId":"ga","ParticipatingShards":1,"ParticipatingTablets":["1"]},
+          {"ExpectedContextOnly":true,"StatsGroupId":"gb","ParticipatingShards":1,"ParticipatingTablets":["2"]},
+          {"StatsScanId":"a","StatsGroupId":"ga","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,
+           "StorageStatsVersion":1,"TablePath":"/A","StorageReads":[
+            {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":100,"ReadCount":1},
+            {"SourceKind":"BlobCache","SourceName":"blob","ReadBytes":20,"ReadCount":1}],
+           "Steps":[{"StepId":1,"StepKind":"ReaderInit","MetaStep":"Preparation","OwnedExecutionDuration":1}]},
+          {"StatsScanId":"b","StatsGroupId":"gb","TabletId":"2","ReaderKind":"TRIVIAL","Finished":true,
+           "StorageStatsVersion":1,"TablePath":"/B","StorageReads":[
+            {"SourceKind":"BlobStorage","SourceName":"default","ReadCount":1,"UnknownByteReads":1},
+            {"SourceKind":"PortionMetadataCache","SourceName":"metadata","ReadCount":1,"UnknownByteReads":1}],
+           "Steps":[{"StepId":1,"StepKind":"ReaderInit","MetaStep":"Preparation","OwnedExecutionDuration":1}]}
+        ])json");
+        UNIT_ASSERT_C(StorageRow(svg, "read", "BlobStorage", "default", "/A").Contains("data-cs-storage-partial='false'"), svg);
+        UNIT_ASSERT_C(StorageRow(svg, "read", "BlobStorage", "default", "/B").Contains("data-cs-storage-partial='true'"), svg);
+        UNIT_ASSERT_C(StorageRow(svg, "source-total", "BlobStorage", "default").Contains("data-cs-storage-partial='true'"), svg);
+        UNIT_ASSERT_C(StorageRow(svg, "source-total", "BlobCache", "blob").Contains("data-cs-storage-partial='false'"), svg);
+        UNIT_ASSERT_C(StorageRow(svg, "source-total", "PortionMetadataCache", "metadata").Contains("data-cs-storage-partial='true'"), svg);
+        UNIT_ASSERT_C(StorageRow(svg, "grand-total").Contains("data-cs-storage-bytes='120'") &&
+            StorageRow(svg, "grand-total").Contains("data-cs-storage-partial='true'"), svg);
+    }
+
     Y_UNIT_TEST(StorageV3SourceDetailsRespectSemanticOwnersAndNormalizeReservePaths) {
         const TString svg = RenderScans(R"json([
           {"ExpectedContextOnly":true,"StatsGroupId":"g","ParticipatingShards":1,"ParticipatingTablets":["1"]},

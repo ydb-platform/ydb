@@ -34,6 +34,74 @@ Backend(const std::shared_ptr<TCollector> &collector,
 } // namespace
 
 Y_UNIT_TEST_SUITE(TColumnShardStorageV3) {
+  Y_UNIT_TEST(SourceCarriersMeasureOwnedTimeWithoutChargingParentTwice) {
+    auto collector = std::make_shared<TCollector>(1);
+    auto parent = collector->Start(TStep::FetchColumns, "FETCH_INDEX", "index");
+    parent->Update([](auto &record) {
+      record.SetMetaStep("IndexFilter");
+      record.SetCanonicalPath("");
+      record.AddIndexDescriptors()->SetIndexId(10);
+    });
+    {
+      TScope parentScope(parent, collector);
+      for (ui32 i = 0; i < 64; ++i) {
+        RecordDataSourceRead("Memory", "InlineIndex", 16, TStorage::index);
+      }
+      RecordDataSourceRead("BlobStorage", "default", std::nullopt,
+                           TStorage::data, TCapture(parent, collector), true,
+                           false);
+    }
+    parent->Finish();
+    const auto report = collector->Drain(true);
+    ui64 childOwned = 0;
+    ui64 measuredCarriers = 0;
+    for (const auto &step : report->GetSteps()) {
+      if (step.GetStepName() == "READ_SOURCE" ||
+          step.GetStepName() == "SHARED_READ") {
+        ++measuredCarriers;
+        UNIT_ASSERT(step.HasOwnedExecutionDuration());
+        UNIT_ASSERT(step.HasIntegralExecutionDuration());
+        UNIT_ASSERT_VALUES_EQUAL(step.IndexDescriptorsSize(), 1);
+        childOwned += step.GetOwnedExecutionDuration();
+      }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(measuredCarriers, 65);
+    const auto &parentRecord = report->GetSteps(report->StepsSize() - 1);
+    UNIT_ASSERT(parentRecord.HasOwnedExecutionDuration());
+    UNIT_ASSERT(parentRecord.GetIntegralExecutionDuration() >=
+                parentRecord.GetOwnedExecutionDuration() + childOwned);
+    UNIT_ASSERT_VALUES_EQUAL(Source(*report, "Memory").GetReadBytes(), 1024);
+    UNIT_ASSERT_VALUES_EQUAL(Source(*report, "Memory").GetReadCount(), 64);
+    UNIT_ASSERT_VALUES_EQUAL(report->StorageReadsSize(), 1);
+    UNIT_ASSERT(report->GetFinished());
+  }
+
+  Y_UNIT_TEST(SourceCarrierInsideRestoredContextIsStillMeasured) {
+    auto collector = std::make_shared<TCollector>(1);
+    auto parent = collector->Start(TStep::Reader, "CAPTURED", "captured");
+    parent->Update([](auto &record) {
+      record.SetMetaStep("Preparation");
+      record.SetCanonicalPath("");
+    });
+    const TCapture capture(parent, collector);
+    parent->Finish();
+    {
+      TScope restoredContext(capture);
+      RecordDataSourceRead("TabletMetadata", "resident", std::nullopt,
+                           TStorage::metadata, capture);
+    }
+    const auto report = collector->Drain(true);
+    UNIT_ASSERT_VALUES_EQUAL(report->StepsSize(), 2);
+    const auto &source = report->GetSteps(1);
+    UNIT_ASSERT_STRINGS_EQUAL(source.GetStepName(), "READ_SOURCE");
+    UNIT_ASSERT(source.HasOwnedExecutionDuration());
+    UNIT_ASSERT(source.HasIntegralExecutionDuration());
+    UNIT_ASSERT_VALUES_EQUAL(source.GetParentStepId(), parent->GetStepId());
+    UNIT_ASSERT_VALUES_EQUAL(source.GetDataSourceReads(0).GetUnknownByteReads(),
+                             1);
+    UNIT_ASSERT(report->GetFinished());
+  }
+
   Y_UNIT_TEST(BackendChunksAreOneAttemptAndCacheHitIsSeparateOrigin) {
     auto collector = std::make_shared<TCollector>(1);
     auto operation = Backend(collector);

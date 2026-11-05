@@ -280,6 +280,11 @@ TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(IDataSource& source
                         operation->Update([&](NScanStats::TStep& record) {
                             record.SetMetaStep(Program->GetStatsMetaStep(iterator->GetCurrentNodeId()));
                             record.SetCanonicalPath("");
+                            const auto indexProcessors = Program->GetStatsIndexProcessors(iterator->GetCurrentNodeId());
+                            if (!indexProcessors.empty()) {
+                                record.ClearIndexDescriptors();
+                                source.FillIndexStatsContext(indexProcessors, record);
+                            }
                         });
                         operation->Finish(NScanStats::TStep::skipped);
                     }

@@ -2900,6 +2900,7 @@ struct TColumnShardStorage {
     std::map<TString, TString> Labels;
     TColumnShardSourceTotals Total;
     bool Present = false;
+    bool PopulationPartial = false;
     bool Partial = false;
 };
 
@@ -2989,7 +2990,8 @@ TColumnShardStorage CollectColumnShardStorage(const TVisualizer& viz) {
     for (const auto& [_, cohort] : coverage.Cohorts) {
         result.Partial = result.Partial || cohort.Tablets.size() < cohort.Roster.size();
     }
-    result.Partial = result.Partial || result.Total.Unknown || result.Total.Overflow;
+    result.PopulationPartial = result.Partial;
+    result.Partial = result.PopulationPartial || result.Total.Unknown || result.Total.Overflow;
     return result;
 }
 
@@ -3007,7 +3009,7 @@ ui32 PrintColumnShardStorage(TStringBuilder& svg, const TVisualizer& viz, ui32 t
     ui32 height = 2 * rowHeight;
     auto row = [&](TStringBuf kind, const TColumnShardSourceKey& source, const TString& read,
                    const TColumnShardSourceTotals& value, const TString& readLabel) {
-        const bool partial = storage.Partial || value.Unknown || value.Overflow;
+        const bool partial = storage.PopulationPartial || value.Unknown || value.Overflow;
         TString amount = FormatBytes(value.Bytes);
         const size_t suffix = amount.find_first_not_of("0123456789.");
         const TString unit = suffix == TString::npos ? TString("B") : amount.substr(suffix);

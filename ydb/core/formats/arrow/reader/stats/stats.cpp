@@ -342,6 +342,7 @@ namespace NKikimr::NScanStats {
         }
         auto operation = capture.Collector->Start(TStep::Reader, shared ? "SHARED_READ" : "READ_SOURCE", TString(kind), capture.Operation);
         if (operation) {
+            TScope sourceScope(operation, capture.Collector);
             operation->AddDataSourceRead(kind, name, bytes, dataKind, shared, includeInStorage);
             operation->Finish();
         } else if (includeInStorage) {

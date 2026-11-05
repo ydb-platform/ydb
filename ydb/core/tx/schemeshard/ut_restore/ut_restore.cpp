@@ -3757,11 +3757,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )";
     }
 
-    TString ImportIssues(TTestBasicRuntime& runtime, ui64 id, Ydb::StatusIds::StatusCode status) {
-        return NYql::IssuesFromMessageAsString(
-            TestGetImport(runtime, id, "/MyRoot", status).GetResponse().GetEntry().GetIssues());
-    }
-
     TString Utf8KeyValueScheme() {
         return R"(
             columns {

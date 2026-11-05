@@ -822,6 +822,11 @@ public:
         TupleLayout_->ApplyEqualNulls(flattened);
     }
 
+    const TVector<ui32>& GetInnerColumns(ui32 inputColumn) const override {
+        Y_ENSURE(inputColumn < InnerMapping_.size(), "column index is out of range");
+        return InnerMapping_[inputColumn];
+    }
+
 private:
     TVector<IColumnDataExtractor::TPtr> Extractors_;
     std::vector<IColumnDataExtractor*> InnerExtractors_;

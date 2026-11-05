@@ -205,6 +205,8 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
                         return resType;
                     }
                 }());
+            } else if (joinSettings.Mark) {
+                arr.push_back(pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<bool>::Id)));
             } else {
                 auto* resType = descr.RightSource.ColumnTypes[rename.Index];
                 arr.push_back([&] {

@@ -56,8 +56,11 @@ bool ForceLeftOptional(EJoinKind kind) {
     }
 }
 
-void ValidateRenames(const TDqUserRenames& renames, EJoinKind kind, int leftTypesWidth, int rightTypesWidth) {
-    if (LeftSemiOrOnly(kind)) {
+void ValidateRenames(const TDqUserRenames& renames, EJoinKind kind, int leftTypesWidth, int rightTypesWidth,
+                     bool mark) {
+    if (mark) {
+        rightTypesWidth = 1;
+    } else if (LeftSemiOrOnly(kind)) {
         MKQL_ENSURE(std::find_if(renames.begin(), renames.end(), [&](const TIndexAndSide<EJoinSide>& data) {
                         return data.Side == EJoinSide::kRight;
                     }) == renames.end(), "right side tuple in left semi or inner join renames?");

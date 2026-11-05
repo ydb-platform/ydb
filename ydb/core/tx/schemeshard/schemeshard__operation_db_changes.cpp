@@ -174,6 +174,25 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
     for (const auto& pId : TestShardSets) {
         ss->PersistTestShardSet(db, pId);
     }
+    for (const auto& pId : OlapStores) {
+        ss->PersistOlapStore(db, pId, *ss->OlapStores.at(pId));
+    }
+
+    for (const auto& pId : AlterOlapStores) {
+        ss->PersistOlapStoreAlter(db, pId, *ss->OlapStores.at(pId)->AlterData);
+    }
+
+    for (const auto& [shardIdx, txId] : ShardTxs) {
+        ss->PersistShardTx(db, shardIdx, txId);
+    }
+
+    for (const auto& pId : LastTxIds) {
+        ss->PersistLastTxId(db, ss->PathsById.at(pId));
+    }
+
+    for (const auto& [pId, referrerPathId] : ExternalDataSourceReferences) {
+        ss->PersistExternalDataSourceReference(db, pId, TPath::Init(referrerPathId, ss));
+    }
 }
 
 }

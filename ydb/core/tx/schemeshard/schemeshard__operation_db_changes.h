@@ -67,6 +67,12 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<TPathId> TestShardSets;
 
+    TDeque<TPathId> OlapStores;
+    TDeque<TPathId> AlterOlapStores;
+    TDeque<std::pair<TShardIdx, TTxId>> ShardTxs;
+    TDeque<TPathId> LastTxIds;
+    TDeque<std::pair<TPathId, TPathId>> ExternalDataSourceReferences;
+
     //PQ part
     TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
     TDeque<std::pair<TPathId, TTopicInfo::TPtr>> PersQueueGroup;
@@ -217,6 +223,26 @@ public:
 
     void PersistTestShardSet(const TPathId& pathId) {
         TestShardSets.emplace_back(pathId);
+    }
+
+    void PersistOlapStore(const TPathId& pathId) {
+        OlapStores.emplace_back(pathId);
+    }
+
+    void PersistOlapStoreAlter(const TPathId& pathId) {
+        AlterOlapStores.emplace_back(pathId);
+    }
+
+    void PersistShardTx(const TShardIdx& shardIdx, TTxId txId) {
+        ShardTxs.emplace_back(shardIdx, txId);
+    }
+
+    void PersistLastTxId(const TPathId& pathId) {
+        LastTxIds.emplace_back(pathId);
+    }
+
+    void PersistExternalDataSourceReference(const TPathId& pathId, const TPathId& referrerPathId) {
+        ExternalDataSourceReferences.emplace_back(pathId, referrerPathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

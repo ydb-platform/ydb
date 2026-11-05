@@ -24,35 +24,45 @@ TContinuationToken WaitForWriteToken(IWriteSession& session) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(CompressExecutor) {
-    Y_UNIT_TEST(RawWritesUseCompressionExecutor) {
-        TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
-        auto executor = NTopic::NTests::CreateThreadPoolManagedExecutor(1);
-        auto settings = setup.GetWriteSessionSettings();
-        settings.Codec(ECodec::RAW)
-            .BatchFlushInterval(TDuration::Zero())
-            .CompressionExecutor(executor);
-        auto writer = setup.GetPersQueueClient().CreateWriteSession(settings);
+    Y_UNIT_TEST(PreparedWritesUseCompressionExecutor) {
+        for (const bool preEncoded : {false, true}) {
+            TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+            auto executor = NTopic::NTests::CreateThreadPoolManagedExecutor(1);
+            auto settings = setup.GetWriteSessionSettings();
+            settings.Codec(preEncoded ? ECodec::GZIP : ECodec::RAW)
+                .BatchFlushInterval(TDuration::Zero())
+                .CompressionExecutor(executor);
+            auto writer = setup.GetPersQueueClient().CreateWriteSession(settings);
 
-        writer->Write(WaitForWriteToken(*writer), "first", 1);
-        writer->Write(WaitForWriteToken(*writer), "second", 2);
-        UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);
+            ui64 seqNo = 1;
+            for (const std::string_view data : {"first", "second"}) {
+                auto token = WaitForWriteToken(*writer);
+                if (preEncoded) {
+                    writer->WriteEncoded(std::move(token), data, ECodec::RAW, static_cast<ui32>(data.size()), seqNo);
+                } else {
+                    writer->Write(std::move(token), data, seqNo);
+                }
+                ++seqNo;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);
 
-        executor->RunAllTasks();
-        ui64 nextSeqNo = 1;
-        while (nextSeqNo <= 2) {
-            UNIT_ASSERT_C(writer->WaitEvent().Wait(TDuration::Seconds(30)), "timeout waiting for write acknowledgements");
-            for (auto& event : writer->GetEvents()) {
-                if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
-                    for (const auto& ack : acks->Acks) {
-                        UNIT_ASSERT_VALUES_EQUAL(ack.SeqNo, nextSeqNo++);
-                        UNIT_ASSERT_VALUES_EQUAL(ack.State, TWriteSessionEvent::TWriteAck::EES_WRITTEN);
+            executor->RunAllTasks();
+            ui64 nextSeqNo = 1;
+            while (nextSeqNo <= 2) {
+                UNIT_ASSERT_C(writer->WaitEvent().Wait(TDuration::Seconds(30)), "timeout waiting for write acknowledgements");
+                for (auto& event : writer->GetEvents()) {
+                    if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
+                        for (const auto& ack : acks->Acks) {
+                            UNIT_ASSERT_VALUES_EQUAL(ack.SeqNo, nextSeqNo++);
+                            UNIT_ASSERT_VALUES_EQUAL(ack.State, TWriteSessionEvent::TWriteAck::EES_WRITTEN);
+                        }
+                    } else if (auto* closed = std::get_if<TSessionClosedEvent>(&event)) {
+                        UNIT_FAIL("write session closed unexpectedly: " << closed->GetIssues().ToString());
                     }
-                } else if (auto* closed = std::get_if<TSessionClosedEvent>(&event)) {
-                    UNIT_FAIL("write session closed unexpectedly: " << closed->GetIssues().ToString());
                 }
             }
+            UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
         }
-        UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
     }
 
     Y_UNIT_TEST(CloseWithQueuedRawSend) {

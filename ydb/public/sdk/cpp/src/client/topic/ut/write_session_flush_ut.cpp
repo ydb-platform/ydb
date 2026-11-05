@@ -26,28 +26,36 @@ TContinuationToken WaitForWriteToken(IWriteSession& session) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(WriteSessionFlush) {
-    Y_UNIT_TEST(RawWritesUseCompressionExecutor) {
-        TTopicSdkTestSetup setup(TEST_CASE_NAME);
-        auto client = setup.MakeClient();
-        auto executor = CreateThreadPoolManagedExecutor(1);
-        auto session = client.CreateWriteSession(
-            TWriteSessionSettings()
-                .Path(setup.GetTopicPath())
-                .MessageGroupId(TEST_MESSAGE_GROUP_ID)
-                .Codec(ECodec::RAW)
-                .CompressionExecutor(executor)
-                .BatchFlushInterval(TDuration::Zero()));
+    Y_UNIT_TEST(PreparedWritesUseCompressionExecutor) {
+        for (const bool preEncoded : {false, true}) {
+            TTopicSdkTestSetup setup(TEST_CASE_NAME);
+            auto client = setup.MakeClient();
+            auto executor = CreateThreadPoolManagedExecutor(1);
+            auto session = client.CreateWriteSession(
+                TWriteSessionSettings()
+                    .Path(setup.GetTopicPath())
+                    .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+                    .Codec(preEncoded ? ECodec::GZIP : ECodec::RAW)
+                    .CompressionExecutor(executor)
+                    .BatchFlushInterval(TDuration::Zero()));
 
-        session->Write(WaitForWriteToken(*session), "first");
-        session->Write(WaitForWriteToken(*session), "second");
-        UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);
+            for (const std::string_view data : {"first", "second"}) {
+                auto token = WaitForWriteToken(*session);
+                if (preEncoded) {
+                    session->WriteEncoded(std::move(token), data, ECodec::RAW, static_cast<uint32_t>(data.size()));
+                } else {
+                    session->Write(std::move(token), data);
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);
 
-        auto flushed = session->Flush();
-        UNIT_ASSERT(!flushed.HasValue());
-        executor->RunAllTasks();
-        UNIT_ASSERT_C(flushed.Wait(TDuration::Seconds(30)), "RAW writes did not flush after running the executor");
-        UNIT_ASSERT(flushed.GetValue());
-        UNIT_ASSERT(session->Close(TDuration::Seconds(30)));
+            auto flushed = session->Flush();
+            UNIT_ASSERT(!flushed.HasValue());
+            executor->RunAllTasks();
+            UNIT_ASSERT_C(flushed.Wait(TDuration::Seconds(30)), "prepared writes did not flush after running the executor");
+            UNIT_ASSERT(flushed.GetValue());
+            UNIT_ASSERT(session->Close(TDuration::Seconds(30)));
+        }
     }
 
     Y_UNIT_TEST(CloseWithQueuedRawSend) {

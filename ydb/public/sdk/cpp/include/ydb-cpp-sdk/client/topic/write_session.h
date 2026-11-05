@@ -143,7 +143,7 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
 
     FLUENT_SETTING_OPTIONAL(TWriterCounters::TPtr, Counters);
 
-    //! Executor for compression tasks and sending RAW-codec messages.
+    //! Executor for compression tasks and sending messages.
     //! If not set, default executor will be used.
     FLUENT_SETTING(IExecutor::TPtr, CompressionExecutor);
 

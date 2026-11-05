@@ -1026,7 +1026,7 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
     (*Counters->BytesInflightCompressed) += block.Data.size();
 
     PackedMessagesToSend.emplace(std::move(block));
-    ScheduleSendImpl();
+    SendImpl();
     return memoryUsage;
 }
 
@@ -1318,7 +1318,7 @@ void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& 
 void TWriteSessionImpl::ScheduleSendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    if (Settings.Codec_ != ECodec::RAW || !CompressionExecutor->IsAsync()) {
+    if (!CompressionExecutor->IsAsync()) {
         SendImpl();
         return;
     }

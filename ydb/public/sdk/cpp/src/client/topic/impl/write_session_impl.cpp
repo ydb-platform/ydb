@@ -1678,18 +1678,7 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
 
     PackedMessagesToSend.emplace(std::move(block));
 
-    if (!CompressionExecutor->IsAsync()) {
-        SendImpl();
-    } else if (!SendImplScheduled.exchange(true)) {
-        CompressionExecutor->Post([cbContext = SelfContext]() {
-            if (auto self = cbContext->LockShared()) {
-                self->SendImplScheduled.store(false);
-                with_lock (self->Lock) {
-                    self->SendImpl();
-                }
-            }
-        });
-    }
+    ScheduleSendImpl();
     return memoryUsage;
 }
 
@@ -2051,7 +2040,7 @@ void TWriteSessionImpl::SendStandardBlock(
 void TWriteSessionImpl::ScheduleSendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    if (Settings.Codec_ != ECodec::RAW || !CompressionExecutor->IsAsync()) {
+    if (!CompressionExecutor->IsAsync()) {
         SendImpl();
         return;
     }

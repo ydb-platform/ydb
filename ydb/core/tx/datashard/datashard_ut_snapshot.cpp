@@ -717,10 +717,14 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
     Y_UNIT_TEST(MvccSnapshotTailCleanup) {
         TPortManager pm;
         TServerSettings::TControls controls;
+        NKikimrConfig::TAppConfig app;
+        // Exercise expiration without retention by the open KQP transaction.
+        app.MutableFeatureFlags()->SetEnableSnapshotsLocking(false);
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetKeepSnapshotTimeout(TDuration::Seconds(2))
+            .SetAppConfig(app)
             .SetControls(controls);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);

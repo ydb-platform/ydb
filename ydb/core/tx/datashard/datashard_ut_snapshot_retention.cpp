@@ -4,7 +4,6 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
-#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
@@ -68,6 +67,15 @@ public:
         TableB = ResolveTableId(Server, Sender, "/Root/table-b");
         ShardA = NKqp::GetTableShards(Server, Sender, "/Root/table-a").at(0);
         ShardB = NKqp::GetTableShards(Server, Sender, "/Root/table-b").at(0);
+        if (serviceRegistry) {
+            // Establish exchange membership before using a two-second MVCC
+            // window for the snapshots acquired by the test.
+            runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+            runtime.SimulateSleep(TDuration::Seconds(10));
+            for (ui32 node = 0; node < nodeCount; ++node) {
+                UNIT_ASSERT(runtime.GetAppData(node).SnapshotRegistryHolder->Get());
+            }
+        }
     }
 
     TTestActorRuntime& GetRuntime() {
@@ -102,12 +110,24 @@ public:
         GetRuntime().SimulateSleep(TDuration::Seconds(3));
     }
 
+    NTable::TRowVersionRanges GetRemovedRanges(ui64 shard) {
+        auto& runtime = GetRuntime();
+        const auto tablet = ResolveTablet(runtime, shard);
+        const ui32 nodeIndex = tablet.NodeId() - runtime.GetFirstNodeId();
+        const auto sender = runtime.AllocateEdgeActor(nodeIndex);
+        // This diagnostic event is local-only. Send it from the tablet's node
+        // rather than forwarding it across interconnect from node zero.
+        runtime.Send(tablet, sender, new TEvDataShard::TEvGetRemovedRowVersions(TPathId{}), nodeIndex, true);
+        const auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetRemovedRowVersionsResult>(sender);
+        return ev->Get()->RemovedRowVersions;
+    }
+
     bool IsRemoved(ui64 shard, const TRowVersion& snapshot) {
-        return GetRemovedRowVersions(Server, shard).Contains(snapshot, snapshot.Next());
+        return GetRemovedRanges(shard).Contains(snapshot, snapshot.Next());
     }
 
     TRowVersion GetCleanupBoundary(ui64 shard) {
-        const auto ranges = GetRemovedRowVersions(Server, shard);
+        const auto ranges = GetRemovedRanges(shard);
         UNIT_ASSERT(!ranges.empty());
         return std::prev(ranges.end())->Upper;
     }
@@ -280,12 +300,12 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionCleanup) {
         test.PublishRegistry({snapshot}, {test.TableA});
         test.RunCleanup();
         UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardA));
-        const auto before = GetRemovedRowVersions(test.Server, test.ShardA).ToString();
+        const auto before = test.GetRemovedRanges(test.ShardA).ToString();
 
         test.GetRuntime().GetAppData(0).SnapshotRegistryHolder->Set(nullptr);
         RebootTablet(test.GetRuntime(), test.ShardA, test.Sender);
         test.RunCleanup();
-        UNIT_ASSERT_VALUES_EQUAL(GetRemovedRowVersions(test.Server, test.ShardA).ToString(), before);
+        UNIT_ASSERT_VALUES_EQUAL(test.GetRemovedRanges(test.ShardA).ToString(), before);
 
         test.PublishRegistry({snapshot}, {test.TableA});
         test.RunCleanup();
@@ -520,7 +540,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionRead) {
 }
 
 Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
-    Y_UNIT_TEST(CleanupWhilePreparingSplitSnapshotIsTransferred) {
+    Y_UNIT_TEST(CleanupWhilePreparingCopySnapshotIsTransferred) {
         TSnapshotRetentionTest test;
         auto& runtime = test.GetRuntime();
         const auto snapshot = test.WriteVersion(1);
@@ -530,30 +550,43 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
         test.PublishRegistry({snapshot}, {test.TableA});
         test.RunCleanup();
 
-        bool splitting = false;
-        auto observeSplit = runtime.AddObserver<TEvDataShard::TEvSplit>([&](auto&) {
-            splitting = true;
+        const auto localTableId = GetTablesByPathId(test.Server, test.ShardA).first.at(test.TableA.PathId).GetLocalId();
+        const auto taskName = Sprintf("gen0-table-%u-tablet-%" PRIu64, localTableId, test.ShardA);
+        TActorId executor;
+        ui64 taskId = 0;
+        auto observeCompactionTask = runtime.AddObserver<NResourceBroker::TEvResourceBroker::TEvSubmitTask>([&](auto& ev) {
+            if (ev->Get()->Task.Name == taskName) {
+                executor = ev->Sender;
+                taskId = ev->Get()->Task.TaskId;
+            }
         });
-        TBlockEvents<TEvResourceBroker::TEvResourceAllocated> compactions(runtime, [&](const auto&) {
-            return splitting;
+        using TEvAllocated = NResourceBroker::TEvResourceBroker::TEvResourceAllocated;
+        std::vector<TEvAllocated::TPtr> compactions;
+        auto blockCompactions = runtime.AddObserver<TEvAllocated>([&](auto& ev) {
+            if (ev->GetRecipientRewrite() == executor && ev->Get()->TaskId == taskId) {
+                compactions.emplace_back(std::move(ev));
+            }
         });
-        SetSplitMergePartCountLimit(test.Server->GetRuntime(), -1);
-        const auto txId = AsyncSplitTable(test.Server, test.Sender, "/Root/table-a", test.ShardA, 4);
-        runtime.WaitFor("split snapshot compaction is waiting", [&] { return !compactions.empty(); });
+        const auto txId = AsyncCreateCopyTable(test.Server, test.Sender, "/Root", "table-copy", "/Root/table-a");
+        runtime.WaitFor("copy snapshot compaction is waiting", [&] { return !compactions.empty(); });
 
-        // Cleanup still runs while the source is making its physical snapshot.
+        // CopyTable leaves the source active while its snapshot is being flushed.
         test.PublishRegistry();
         test.RunCleanup();
         UNIT_ASSERT(test.IsRemoved(test.ShardA, snapshot));
-        test.PublishRegistry({snapshot}, {test.TableA});
-        compactions.Stop().Unblock();
-        observeSplit.Remove();
-        WaitTxNotification(test.Server, test.Sender, txId);
-        for (ui64 shard : NKqp::GetTableShards(test.Server, test.Sender, "/Root/table-a")) {
-            UNIT_ASSERT(test.IsRemoved(shard, snapshot));
-            const auto result = test.ReadSnapshot(shard, test.TableA, snapshot);
-            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
+        test.PublishRegistry({snapshot});
+        blockCompactions.Remove();
+        observeCompactionTask.Remove();
+        for (auto& ev : compactions) {
+            const ui32 nodeIndex = ev->GetRecipientRewrite().NodeId() - runtime.GetFirstNodeId();
+            runtime.Send(ev.Release(), nodeIndex, true);
         }
+        WaitTxNotification(test.Server, test.Sender, txId);
+        const auto copyId = ResolveTableId(test.Server, test.Sender, "/Root/table-copy");
+        const auto copyShard = NKqp::GetTableShards(test.Server, test.Sender, "/Root/table-copy").at(0);
+        UNIT_ASSERT(test.IsRemoved(copyShard, snapshot));
+        const auto result = test.ReadSnapshot(copyShard, copyId, snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus().GetCode(), Ydb::StatusIds::PRECONDITION_FAILED);
     }
 
     Y_UNIT_TEST_TWIN(SnapshotSurvivesSplitMergeAndRestart, MissingRegistry) {
@@ -581,7 +614,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
             for (ui64 shard : shards) {
                 UNIT_ASSERT(!test.IsRemoved(shard, retained));
                 UNIT_ASSERT(test.IsRemoved(shard, removed));
-                const auto compaction = CompactTable(runtime, shard, test.TableA, false);
+                const auto compaction = CompactTable(runtime, shard, test.TableA, true);
                 UNIT_ASSERT_VALUES_EQUAL(compaction.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
                 RebootTablet(runtime, shard, test.Sender);
                 rows += FormatIntReadResult(test.ReadSnapshot(shard, test.TableA, retained).get());
@@ -641,6 +674,10 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
         pinDestinations.Remove();
         const auto sources = NKqp::GetTableShards(test.Server, test.Sender, "/Root/table-a");
         UNIT_ASSERT_VALUES_EQUAL(sources.size(), 2u);
+        for (ui64 shard : sources) {
+            const auto compaction = CompactTable(runtime, shard, test.TableA, true);
+            UNIT_ASSERT_VALUES_EQUAL(compaction.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        }
 
         // The second node has collected newer information without this snapshot.
         test.PublishRegistry({}, {}, TRowVersion::Max(), std::nullopt, 1);
@@ -704,7 +741,7 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionTransfer) {
         UNIT_ASSERT_VALUES_EQUAL(test.IsRemoved(copyShard, retained), !AllTables);
         UNIT_ASSERT(test.IsRemoved(copyShard, removed));
 
-        const auto compaction = CompactTable(runtime, copyShard, copyId, false);
+        const auto compaction = CompactTable(runtime, copyShard, copyId, true);
         UNIT_ASSERT_VALUES_EQUAL(compaction.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
         RebootTablet(runtime, copyShard, test.Sender);
         const auto result = test.ReadSnapshot(copyShard, copyId, retained);
@@ -799,10 +836,12 @@ Y_UNIT_TEST_SUITE(DataShardSnapshotRetentionIntegration) {
         }, TDuration::Seconds(30));
         test.RunCleanup();
         UNIT_ASSERT(snapshot < test.GetCleanupBoundary(test.ShardB));
+        UNIT_ASSERT(!test.IsRemoved(test.ShardB, snapshot));
 
         for (ui32 i = 0; i < 2; ++i) {
             handles[i].Reset();
             runtime.SimulateSleep(TDuration::Seconds(5));
+            UNIT_ASSERT(runtime.GetAppData(1).SnapshotRegistryHolder->Get()->HasSnapshot(test.TableB, snapshot));
             UNIT_ASSERT(!test.IsRemoved(test.ShardB, snapshot));
             UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(test.ReadSnapshot(test.ShardB, test.TableB, snapshot).get()), "1, 1\n");
         }

@@ -157,6 +157,16 @@ public:
             writeTable.Settings().Ref(),
             EYtSettingType::PrimaryKey);
 
+        if (auto producerSetting = NYql::GetSetting(writeTable.Settings().Ref(), EYtSettingType::Producer);
+            producerSetting && (isSortedTable || mode == EYtWriteMode::Replace))
+        {
+            AddIssue(ctx, TIssue(ctx.GetPosition(producerSetting->Pos()), TStringBuilder()
+                << "Setting " << ToString(EYtSettingType::Producer).Quote()
+                << " is supported only for writes into queues"));
+
+            return false;
+        }
+
         if (mode == EYtWriteMode::Replace && !primaryKeySetting) {
             AddIssue(ctx, TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
                 << "REPLACE INTO statement requires "
@@ -388,6 +398,12 @@ public:
         sourceSettings.SetPath(table.Name().StringValue());
         sourceSettings.SetRowType(NCommon::WriteTypeToYson(rowType));
 
+        if (auto consumerSetting = NYql::GetSetting(
+            table.Settings().Ref(), EYtSettingType::Consumer
+        )) {
+            sourceSettings.SetConsumerPath(TString(consumerSetting->Child(1)->Content()));
+        }
+
         settings.PackFrom(sourceSettings);
     }
 
@@ -451,6 +467,12 @@ public:
             queueSettings.SetDoesExist(doesExist);
             queueSettings.SetTruncate(truncate);
             queueSettings.SetRowType(rowTypeYson);
+
+            if (auto producerSetting = NYql::GetSetting(
+                maybeWriteTable.Cast().Settings().Ref(), EYtSettingType::Producer
+            )) {
+                queueSettings.SetProducerPath(TString(producerSetting->Child(1)->Content()));
+            }
 
             settings.PackFrom(queueSettings);
         }

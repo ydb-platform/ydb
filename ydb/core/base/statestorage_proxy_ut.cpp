@@ -1,4 +1,5 @@
 #include "statestorage_impl.h"
+#include "tablet.h"
 #include "tabletid.h"
 
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -829,6 +830,131 @@ Y_UNIT_TEST_SUITE(TStateStorageGuardianRingGroups) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetProposedGeneration(), Generation);
         UNIT_ASSERT_VALUES_EQUAL(ActorIdFromProto(record.GetProposedLeader()), leader);
         UNIT_ASSERT_VALUES_EQUAL(ActorIdFromProto(record.GetProposedLeaderTablet()), tabletLeader);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TStateStorageFollowerGuardian) {
+    Y_UNIT_TEST(RegistrationAcknowledgesUpdatesAndDuplicates) {
+        TTestActorRuntimeBase runtime{1};
+        runtime.Initialize();
+        runtime.SetDispatchTimeout(TDuration::Seconds(5));
+        runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
+            NKikimrServices::EServiceKikimr_MAX,
+            [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId guardian = runtime.AllocateEdgeActor();
+        const TActorId follower = runtime.AllocateEdgeActor();
+        const TActorId followerTablet = runtime.AllocateEdgeActor();
+        auto info = MakeIntrusive<TStateStorageInfo>();
+        const TActorId replica = runtime.Register(CreateStateStorageReplica(info, 0));
+
+        // New registration, duplicate, state update, duplicate of the update.
+        for (bool candidate : {true, true, false, false}) {
+            runtime.SendAsync(new IEventHandle(replica, guardian,
+                new TEvStateStorage::TEvReplicaRegFollower(
+                    tabletId, 1, follower, followerTablet, candidate, 0, 0)));
+            auto ping = runtime.GrabEdgeEvent<TEvTablet::TEvPing>(guardian);
+            UNIT_ASSERT_VALUES_EQUAL(ping->Sender, replica);
+            UNIT_ASSERT_VALUES_EQUAL(ping->Get()->Record.GetTabletID(), tabletId);
+        }
+    }
+
+    Y_UNIT_TEST(FollowerRecoveryClearsMissingReplica) {
+        TTestActorRuntimeBase runtime{1};
+        runtime.Initialize();
+        runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
+            NKikimrServices::EServiceKikimr_MAX,
+            [](int component) -> const TString& { return NKikimrServices::EServiceKikimr_Name(component); });
+        runtime.SetScheduledEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&,
+                                           TDuration, TInstant&) { return false; });
+        runtime.SetDispatchTimeout(TDuration::Seconds(5));
+
+        constexpr ui64 tabletId = 72075186224037888ull;
+        const TActorId follower = runtime.AllocateEdgeActor();
+        const TActorId followerTablet = runtime.AllocateEdgeActor();
+
+        auto info = MakeIntrusive<TStateStorageInfo>();
+        info->RingGroups.resize(1);
+        auto& group = info->RingGroups.front();
+        group.State = ERingGroupState::PRIMARY;
+        group.NToSelect = 3;
+        group.Rings.resize(3);
+        TVector<TActorId> replicas;
+        for (ui32 index = 0; index < 3; ++index) {
+            replicas.push_back(runtime.Register(CreateStateStorageReplica(info, index)));
+            group.Rings[index].Replicas.push_back(replicas.back());
+        }
+        const TActorId proxy = runtime.Register(CreateStateStorageProxy(info, nullptr, nullptr));
+        runtime.RegisterService(MakeStateStorageProxyID(), proxy);
+
+        THashSet<TActorId> unavailable{replicas[0]};
+        THashMap<TActorId, TActorId> guardians;
+        THashMap<TActorId, ui32> attempts;
+        THashSet<TActorId> pingedGuardians;
+        TActorId tabletGuardian;
+        bool demoted = false;
+
+        auto registrations = runtime.AddObserver<TEvStateStorage::TEvReplicaRegFollower>([&](auto& ev) {
+            if (ev->Get()->Record.GetTabletID() != tabletId) {
+                return;
+            }
+            guardians[ev->Recipient] = ev->Sender;
+            ++attempts[ev->Recipient];
+            if (unavailable.contains(ev->Recipient)) {
+                runtime.EnableScheduleForActor(ev->Sender);
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new TEvents::TEvUndelivered(TEvStateStorage::TEvReplicaRegFollower::EventType,
+                        TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie));
+                ev.Reset();
+            }
+        });
+        auto pings = runtime.AddObserver<TEvTablet::TEvPing>([&](auto& ev) {
+            if (ev->Get()->Record.GetTabletID() == tabletId) {
+                pingedGuardians.insert(ev->Recipient);
+            }
+        });
+        auto demotions = runtime.AddObserver<TEvTablet::TEvDemoted>([&](auto& ev) {
+            if (ev->Recipient == follower) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Sender, tabletGuardian);
+                UNIT_ASSERT(ev->Get()->ByIsolation);
+                demoted = true;
+            }
+        });
+
+        tabletGuardian = runtime.Register(CreateStateStorageFollowerGuardian(tabletId, 1, follower));
+        runtime.WaitFor("registration attempts at all three replicas and two acknowledgements", [&] {
+            return guardians.size() == 3 && pingedGuardians.size() == 2;
+        }, TDuration::Seconds(10));
+
+        // Keep A unavailable long enough to pass the missing-notification grace
+        // period, but recover before its guardian's 15-second downtime limit.
+        runtime.SimulateSleep(TDuration::Seconds(4));
+        UNIT_ASSERT(attempts[replicas[0]] > 1);
+        UNIT_ASSERT(!demoted);
+        unavailable.erase(replicas[0]);
+        runtime.WaitFor("the recovered replica acknowledged follower registration", [&] {
+            return pingedGuardians.contains(guardians.at(replicas[0]));
+        }, TDuration::Seconds(1));
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        // A and C are now available. A failed registration on B must not make
+        // the parent count only C and terminate the follower's guardians.
+        unavailable.insert(replicas[1]);
+        runtime.Send(new IEventHandle(tabletGuardian, follower,
+            new TEvTablet::TEvFollowerUpdateState(false, follower, followerTablet)));
+        runtime.SimulateSleep(TDuration::Seconds(4));
+        UNIT_ASSERT(attempts[replicas[1]] > 1);
+        UNIT_ASSERT_C(!demoted, "recovered replica A is still counted as missing");
+
+        // Losing C as well really leaves only A available and must still
+        // trigger isolation; recovery must not disable failure detection.
+        unavailable.insert(replicas[2]);
+        runtime.Send(new IEventHandle(tabletGuardian, follower,
+            new TEvTablet::TEvFollowerUpdateState(true, follower, followerTablet)));
+        runtime.WaitFor("isolation after losing two replicas", [&] {
+            return demoted;
+        }, TDuration::Seconds(4));
     }
 }
 

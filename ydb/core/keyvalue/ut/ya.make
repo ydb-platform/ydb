@@ -27,4 +27,6 @@ SRCS(
     keyvalue_move_data_ut.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(keyvalue_move_data_test_enums.h)
+
 END()

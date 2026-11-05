@@ -715,8 +715,40 @@ TStatus ComputeTypes(TIntrusivePtr<TOpCBOTree> cboTree, TRBOContext& ctx, TPlanP
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(TIntrusivePtr<TOpSequencer> sequencer, TRBOContext& ctx) {
+    const auto table = ResolveTable(sequencer->Table.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+    TVector<const TItemExprType*> items;
+    for (const auto& [id, name] : sequencer->GetInputColumns().Items()) {
+        const auto* type = sequencer->GetInput()->GetIUType(id, ctx.ExprCtx);
+        Y_ENSURE(type, "Missing sequencer input type for " << name);
+        items.push_back(ctx.ExprCtx.MakeType<TItemExprType>(ctx.ExprCtx.GetIndexAsString(id), type));
+    }
+    for (const auto& [id, name] : sequencer->GetGeneratedColumns().Items()) {
+        const auto* type = table.second->GetColumnType(name);
+        Y_ENSURE(type, "Missing sequence column type for " << name);
+        items.push_back(ctx.ExprCtx.MakeType<TItemExprType>(ctx.ExprCtx.GetIndexAsString(id), type));
+    }
+    sequencer->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(items));
+    return TStatus::Ok;
+}
+
 TStatus ComputeTypes(TIntrusivePtr<TOpTableEffect> tableEffect, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(props);
+    if (!tableEffect->GetReturningColumns().Items().empty()) {
+        const auto table = ResolveTable(tableEffect->Table.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
+        if (!table.second) {
+            return TStatus::Error;
+        }
+        TVector<const TItemExprType*> items;
+        for (const auto& [id, name] : tableEffect->GetReturningColumns().Items()) {
+            items.push_back(ctx.ExprCtx.MakeType<TItemExprType>(ctx.ExprCtx.GetIndexAsString(id), table.second->GetColumnType(name)));
+        }
+        tableEffect->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(items));
+        return TStatus::Ok;
+    }
     tableEffect->Type = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TResourceExprType>(KqpEffectTag));
     return TStatus::Ok;
 }
@@ -800,6 +832,8 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     }
     else if (MatchOperator<TOpCBOTree>(op)) {
         return ComputeTypes(CastOperator<TOpCBOTree>(op), ctx, props);
+    } else if (MatchOperator<TOpSequencer>(op)) {
+        return ComputeTypes(CastOperator<TOpSequencer>(op), ctx);
     } else if (MatchOperator<TOpTableEffect>(op)) {
         return ComputeTypes(CastOperator<TOpTableEffect>(op), ctx, props);
     }

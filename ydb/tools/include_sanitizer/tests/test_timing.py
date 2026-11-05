@@ -9,6 +9,8 @@ import unittest
 from pathlib import Path
 
 
+_TEST_YDB_ROOT = "ydb"
+
 HERE = Path(__file__).resolve().parent
 _REPO = HERE.parents[3]
 if str(_REPO) not in sys.path:
@@ -36,19 +38,19 @@ class ParseTraceTest(unittest.TestCase):
             {"ph": "X", "name": "Total Frontend", "dur": 700000},
             {"ph": "X", "name": "Total Backend", "dur": 300000},
             {"ph": "X", "name": "Source", "dur": 400000,
-             "args": {"detail": "/w/ydb/core/base/appdata.h"}},
+             "args": {"detail": f'/w/{_TEST_YDB_ROOT}/core/base/appdata.h'}},
             {"ph": "X", "name": "Source", "dur": 100000,
-             "args": {"detail": "/w/ydb/core/base/defs.h"}},
+             "args": {"detail": f'/w/{_TEST_YDB_ROOT}/core/base/defs.h'}},
             {"ph": "X", "name": "InstantiateClass", "dur": 50000,
              "args": {"detail": "THashMap<TString,int>"}},
             {"ph": "M", "name": "process_name", "args": {"name": "clang"}},
         ])), encoding="utf-8")
-        t = parse_trace(p, tu_name="ydb/core/base/appdata.cpp")
+        t = parse_trace(p, tu_name=f'{_TEST_YDB_ROOT}/core/base/appdata.cpp')
         self.assertIsNotNone(t)
         self.assertEqual(t.execute_us, 1000000)
         self.assertEqual(t.frontend_us, 700000)
         self.assertEqual(t.backend_us, 300000)
-        self.assertEqual(t.source_us["/w/ydb/core/base/appdata.h"], 400000)
+        self.assertEqual(t.source_us[f'/w/{_TEST_YDB_ROOT}/core/base/appdata.h'], 400000)
         self.assertEqual(t.template_us["THashMap<TString,int>"], 50000)
 
     def test_location_fallback_file_attribution(self) -> None:
@@ -58,17 +60,17 @@ class ParseTraceTest(unittest.TestCase):
             {"ph": "X", "name": "ExecuteCompiler", "dur": 800000},
             {"ph": "X", "name": "Total Frontend", "dur": 750000},
             {"ph": "X", "name": "ParseDeclarationOrFunctionDefinition", "dur": 120000,
-             "args": {"detail": "/w/ydb/core/base/appdata.h:42:1"}},
+             "args": {"detail": f'/w/{_TEST_YDB_ROOT}/core/base/appdata.h:42:1'}},
             {"ph": "X", "name": "ParseClass", "dur": 30000,
-             "args": {"detail": "/w/ydb/core/base/defs.h:10:1"}},
+             "args": {"detail": f'/w/{_TEST_YDB_ROOT}/core/base/defs.h:10:1'}},
             # a template instantiation whose detail is a TYPE, not a location:
             {"ph": "X", "name": "InstantiateClass", "dur": 5000,
              "args": {"detail": "std::map<int, int>"}},
         ])), encoding="utf-8")
         t = parse_trace(p)
         self.assertEqual(t.source_us, {})
-        self.assertEqual(t.file_us.get("/w/ydb/core/base/appdata.h"), 120000)
-        self.assertEqual(t.file_us.get("/w/ydb/core/base/defs.h"), 30000)
+        self.assertEqual(t.file_us.get(f'/w/{_TEST_YDB_ROOT}/core/base/appdata.h'), 120000)
+        self.assertEqual(t.file_us.get(f'/w/{_TEST_YDB_ROOT}/core/base/defs.h'), 30000)
         # The type-detail instantiation must NOT be mistaken for a file.
         self.assertNotIn("std::map<int, int>", t.file_us)
 
@@ -76,7 +78,7 @@ class ParseTraceTest(unittest.TestCase):
         from ydb.tools.include_sanitizer.timing.parse import _file_from_location
         # bare
         self.assertEqual(
-            _file_from_location("/w/ydb/x.h:15:3"), "/w/ydb/x.h")
+            _file_from_location(f'/w/{_TEST_YDB_ROOT}/x.h:15:3'), f'/w/{_TEST_YDB_ROOT}/x.h')
         # angle range
         self.assertEqual(
             _file_from_location("</w/lib/ordering.h:25:48, col:49>"),
@@ -117,15 +119,15 @@ class AggregateTest(unittest.TestCase):
                 {"ph": "X", "name": "Total Frontend", "dur": base_us},
                 {"ph": "X", "name": "Total Backend", "dur": 200000},
                 {"ph": "X", "name": "Source", "dur": base_us,
-                 "args": {"detail": "/w/ydb/core/base/appdata.h"}},
+                 "args": {"detail": f'/w/{_TEST_YDB_ROOT}/core/base/appdata.h'}},
             ])), encoding="utf-8")
             (tt / f"tu{i}.src").write_text(f"/w/ydb/core/base/tu{i}.cpp", encoding="utf-8")
 
         agg = collect_traces(tt)
         self.assertEqual(len(agg.tus), 2)
         # appdata.h cumulative = 400000 + 600000
-        self.assertEqual(agg.header_us["/w/ydb/core/base/appdata.h"], 1000000)
-        self.assertEqual(agg.header_tus["/w/ydb/core/base/appdata.h"], 2)
+        self.assertEqual(agg.header_us[f'/w/{_TEST_YDB_ROOT}/core/base/appdata.h'], 1000000)
+        self.assertEqual(agg.header_tus[f'/w/{_TEST_YDB_ROOT}/core/base/appdata.h'], 2)
         self.assertEqual(agg.total_frontend, 1000000)
         self.assertEqual(agg.total_backend, 400000)
 

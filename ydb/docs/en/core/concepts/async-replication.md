@@ -151,37 +151,6 @@ With `'UNLIMITED'`, replication uses an [important consumer](datamodel/topic.md#
 * During asynchronous replication, you cannot [add or delete columns](../yql/reference/syntax/alter_table/columns.md) in the source tables.
 * During asynchronous replication, replicas are available only for reading.
 
-## Full-text and JSON index changes {#fulltext-json-indexes}
-
-For new replication streams, enable `EnableAsyncReplicationSchemaChanges` and
-`EnableFulltextIndexReplication` on the source and destination to replicate
-`ADD INDEX` and `DROP INDEX` for [full-text](../dev/fulltext-indexes.md) indexes
-(`fulltext_plain`, `fulltext_relevance`) and [JSON](../dev/json-indexes.md) indexes.
-Both eventual and global consistency modes are supported for these operations.
-Existing streams retain their original schema-change behavior.
-
-After an index finishes building successfully on the source, replication creates
-the destination index and starts changefeeds with an initial scan for its backing
-tables. The destination index remains unavailable to queries until all its
-backing tables have synchronized. Other replicated tables continue to make
-progress while the index is initialized; global consistency is preserved.
-Failed or cancelled source builds do not create an index on the destination.
-
-Replication preserves analyzer settings, indexed and covering columns, and the
-source index's legacy or compact storage layout. Both databases must support the
-source layout. Unsupported or conflicting destination schemas produce an error
-that identifies the affected index.
-
-Dropping an index on the source also drops the destination index and removes its
-backing-table replication state. Keep the source available until replication
-completion finishes and destination writes are enabled. Completion reads the
-source sequence state and synchronizes compact-index generation sequences and
-document-ID sequences before enabling destination writes.
-
-These settings do not enable direct schema changes on destination replicas or
-change support for other index types. Topic autopartitioning remains disabled
-for streams that carry schema-change records.
-
 ## Error Handling During Asynchronous Replication {#error-handling}
 
 Possible errors during asynchronous replication can be grouped into the following classes:

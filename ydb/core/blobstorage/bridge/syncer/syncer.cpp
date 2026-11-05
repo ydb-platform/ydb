@@ -650,12 +650,14 @@ namespace NKikimr::NBridge {
                 std::get<0>(*state.SkipBarriersUpTo) << ':' << (int)std::get<1>(*state.SkipBarriersUpTo) << ']') : "<none>"),
             (SkipBlobsUpTo, state.SkipBlobsUpTo ? state.SkipBlobsUpTo->ToString() : "<none>"));
 
+        // The size of a page is known only after it has come, so a page gets charged when the next one is requested. There
+        // is one such request at a time, so this can't let much through. The last page is left uncharged.
         IssueQuery(toTargetGroup, std::make_unique<TEvBlobStorage::TEvAssimilate>(
             state.SkipBlocksUpTo, state.SkipBarriersUpTo, state.SkipBlobsUpTo,
             /*ignoreDecommitState=*/ true, /*reverse=*/ true),
             TQueryPayload{
                 .ToTargetGroup = toTargetGroup,
-            });
+            }, std::exchange(state.UnchargedReplyBytes, 0));
 
         Y_ABORT_UNLESS(!state.RequestInFlight);
         state.RequestInFlight = true;
@@ -677,6 +679,9 @@ namespace NKikimr::NBridge {
 
         Y_ABORT_UNLESS(state.RequestInFlight);
         state.RequestInFlight = false;
+        if (!payload.ToTargetGroup) { // the target group is in the pile of this syncer, so this traffic stays within the pile
+            state.UnchargedReplyBytes = msg.ReplyBytes;
+        }
 
 #define CHECK(PREV_FINISHED, WHAT, NO_NEXT, KEY) \
         if (bool& finished = state.WHAT##Finished; PREV_FINISHED && !finished) { \

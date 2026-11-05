@@ -108,6 +108,7 @@ namespace NKikimr::NBridge {
             std::deque<TEvBlobStorage::TEvAssimilateResult::TBlock> Blocks;
             std::deque<TEvBlobStorage::TEvAssimilateResult::TBarrier> Barriers;
             std::deque<TEvBlobStorage::TEvAssimilateResult::TBlob> Blobs;
+            ui64 UnchargedReplyBytes = 0; // the size of the last page from the source group, charged with the next request
             bool RequestInFlight = false;
             bool BlocksFinished = false;
             bool BarriersFinished = false;

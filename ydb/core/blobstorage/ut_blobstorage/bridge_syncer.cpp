@@ -239,10 +239,10 @@ void TestSyncerQuotaDelay(bool cancel) {
         new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
     UNIT_ASSERT_VALUES_EQUAL(put->Status, NKikimrProto::OK);
 
-    auto quoter = std::make_shared<TReplQuoter>(1);
+    auto quoter = std::make_shared<TReplQuoter>(1000); // metadata has to take a small part of this
     const auto edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
     env.Runtime->WrapInActorContext(edge, [&] {
-        quoter->Take(TActivationContext::Monotonic(), 600); // reserve ten minutes before the syncer's read
+        quoter->Take(TActivationContext::Monotonic(), 600'000); // reserve ten minutes before the syncer's read
     });
     TActorId syncer;
     bool targetChecked = false;
@@ -557,7 +557,7 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
         UNIT_ASSERT(info);
 
         constexpr ui32 numBlobs = 20;
-        const TString data(100, 'x');
+        const TString data(64_KB, 'x');
         for (ui32 i = 0; i < numBlobs; ++i) {
             const TLogoBlobID id(100500, 1, i + 1, 0, data.size(), 0);
             auto put = QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, source->GroupID.GetRawId(), 1,
@@ -565,7 +565,7 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
             UNIT_ASSERT_VALUES_EQUAL(put->Status, NKikimrProto::OK);
         }
 
-        auto quoter = std::make_shared<TReplQuoter>(10); // ten seconds per blob
+        auto quoter = std::make_shared<TReplQuoter>(data.size() / 10); // ten seconds per blob, metadata takes a small part of this
         TActorId syncer;
         std::vector<TInstant> reads;
         std::unique_ptr<IEventHandle> completion;
@@ -596,6 +596,101 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
         // charged when issued, the last read would go at 190 s
         const TDuration span = reads.back() - reads.front();
         UNIT_ASSERT_C(TDuration::Seconds(130) <= span && span <= TDuration::Seconds(175), span);
+    }
+
+    // All the blobs are in the target already, so nothing but metadata comes from the source pile.
+    Y_UNIT_TEST(MetadataIsCharged) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        auto group = GetGroupInfo(env, groupId);
+        auto *state = group.MutableBridgeGroupState();
+        const auto source = env.GetGroupInfo(state->GetPile(0).GetGroupId());
+        const auto target = env.GetGroupInfo(state->GetPile(1).GetGroupId());
+        state->MutablePile(1)->SetStage(NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP_DATA);
+        const auto info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
+        UNIT_ASSERT(info);
+
+        constexpr ui32 numBlobs = 200;
+        const TString data(100, 'x');
+        for (const auto& [pile, nodeId] : {std::make_pair(source, 1u), std::make_pair(target, 9u)}) {
+            for (ui32 i = 0; i < numBlobs; ++i) {
+                const TLogoBlobID id(100500, 1, i + 1, 0, data.size(), 0);
+                auto put = QueryPileGroup<TEvBlobStorage::TEvPutResult>(env, pile->GroupID.GetRawId(), nodeId,
+                    new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+                UNIT_ASSERT_VALUES_EQUAL(put->Status, NKikimrProto::OK);
+            }
+        }
+
+        constexpr ui64 rate = 1000;
+        auto quoter = std::make_shared<TReplQuoter>(rate);
+        const TActorId sourceProxy = MakeBlobStorageProxyID(source->GroupID.GetRawId());
+        TActorId syncer;
+        std::vector<ui64> sourcePageBytes; // as VDisks have sent them, for each request to the source group
+        TInstant lastSourceRequest;
+        std::multiset<ui64> resultBytes;
+        ui32 sourceReads = 0;
+        std::unique_ptr<IEventHandle> completion;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            const ui32 type = ev->GetTypeRewrite();
+            if (type == TEvBlobStorage::EvAssimilate && ev->Sender == syncer && ev->Recipient == sourceProxy) {
+                sourcePageBytes.push_back(0);
+                lastSourceRequest = env.Runtime->GetClock();
+            } else if (type == TEvBlobStorage::EvVAssimilateResult) {
+                // the reply gets here from the VDisk and from the queue, and only the latter goes to the request actor
+                const IActor *recipient = env.Runtime->GetActor(ev->GetRecipientRewrite());
+                const auto& record = ev->Get<TEvBlobStorage::TEvVAssimilateResult>()->Record;
+                if (recipient && TypeName(*recipient).Contains("AssimilateRequest") &&
+                        VDiskIDFromVDiskID(record.GetVDiskID()).GroupID == source->GroupID) {
+                    UNIT_ASSERT(!sourcePageBytes.empty());
+                    sourcePageBytes.back() += record.ByteSizeLong();
+                }
+            } else if (type == TEvBlobStorage::EvAssimilateResult && ev->Recipient == syncer) {
+                resultBytes.insert(ev->Get<TEvBlobStorage::TEvAssimilateResult>()->ReplyBytes);
+            } else if (type == TEvBlobStorage::EvGet && ev->Sender == syncer && ev->Recipient == sourceProxy) {
+                ++sourceReads;
+            } else if (type == NStorage::TEvNodeWardenNotifySyncerFinished::EventType && ev->Sender == syncer) {
+                completion = std::move(ev);
+                return false;
+            }
+            return true;
+        };
+        syncer = env.Runtime->Register(NBridge::CreateSyncerActor(info, source->GroupID, target->GroupID,
+            std::make_shared<NBridge::TSyncerDataStats>(), quoter), 1);
+        WaitUntil(env, [&] { return bool(completion); }, "sync completion", TDuration::MilliSeconds(100), 3000);
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT(!completion->Get<NStorage::TEvNodeWardenNotifySyncerFinished>()->ErrorReason);
+        UNIT_ASSERT_VALUES_EQUAL(sourceReads, 0);
+
+        UNIT_ASSERT_GE(sourcePageBytes.size(), 2);
+        ui64 charged = 0;
+        for (size_t i = 0; i + 1 < sourcePageBytes.size(); ++i) {
+            UNIT_ASSERT_C(resultBytes.contains(sourcePageBytes[i]), "page# " << i << " bytes# " << sourcePageBytes[i]);
+            charged += sourcePageBytes[i];
+        }
+        UNIT_ASSERT_GT(charged, numBlobs);
+
+        // a request doesn't wait for its own charge, so what is left to wait is the charge minus the unused capacity and
+        // the time passed since the last request
+        const TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        TDuration wait;
+        env.Runtime->WrapInActorContext(edge, [&] {
+            wait = quoter->Take(TActivationContext::Monotonic(), 0);
+        });
+        const TDuration chargedTime = TDuration::MicroSeconds(charged * 1'000'000 / rate);
+        const TDuration passed = env.Runtime->GetClock() - lastSourceRequest + TReplQuoter::GetCapacity();
+        UNIT_ASSERT_C(passed + TDuration::Seconds(1) < chargedTime, "the test has to check the wait before it is over"
+            << " passed# " << passed << " chargedTime# " << chargedTime);
+        const TDuration expected = chargedTime - passed;
+        UNIT_ASSERT_C(expected * 0.9 <= wait && wait <= expected * 1.1, "wait# " << wait << " expected# " << expected
+            << " charged# " << charged);
     }
 
     Y_UNIT_TEST(TotalRateSharedBetweenHostingNodes) {

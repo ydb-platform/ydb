@@ -24,6 +24,13 @@ def set_ydb_cli_test_canondata_root():
     set_canondata_root("ydb/tests/functional/ydb_cli/canondata")
 
 
+def execute_ydb_cli_command(node, database, args, stdin=None):
+    execution = yatest.common.execute(
+        [ydb_bin(), "--endpoint", f"grpc://{node.host}:{node.grpc_port}", "--database", database] + args, stdin=stdin
+    )
+    return execution.std_out.decode("utf-8")
+
+
 class BaseCliTestWithDatabase:
     """Base class that starts a real YDB cluster for CLI tests."""
 

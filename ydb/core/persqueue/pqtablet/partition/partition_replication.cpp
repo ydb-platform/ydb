@@ -3,6 +3,14 @@
 namespace NKikimr::NPQ {
 
 void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
+    if (AppData(ctx)->FeatureFlags.GetEnableDstTopicReplicationDisabled()) {
+        LOG_W("Replication is disabled for topic");
+
+        DestroyMirrorer();
+
+        return;
+    }
+
     if (PendingReplicationData) {
         auto& pending = *(*PendingReplicationData)->Get();
         for (const auto& [consumer, offset] : ev->Get()->OffsetsByConsumers) {

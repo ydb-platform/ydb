@@ -362,4 +362,7 @@ message TFeatureFlags {
     // Allows CDC when topics are not first-class citizens (federation).
     // Dedicated clusters do not need this: TopicsAreFirstClassCitizen is already true there.
     optional bool EnableCdcForFederation = 369 [default = false];
+    optional bool EnableSourceTopicMutateRestricted = 376 [default = false];
+    optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
+    optional bool EnableMLPConsumerInFlightMutateDisabled = 378 [default = false];
 }

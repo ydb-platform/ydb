@@ -17,6 +17,11 @@ PEERDIR(
     ydb/core/tx/tx_allocator_client
     ydb/core/util
     ydb/core/ydb_convert
+<<<<<<< HEAD
+=======
+    ydb/library/naming_conventions
+    ydb/public/api/protos
+>>>>>>> 5c5df6a4773 (Describe GLOBAL replication transactions (#57214))
     ydb/services/metadata
     yql/essentials/public/issue
     library/cpp/json

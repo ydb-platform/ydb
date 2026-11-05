@@ -472,4 +472,8 @@ message TFeatureFlags {
     // Show REPLICATING VDisks with only phantom-like blobs remaining as READY ones in node whiteboard and system views
     // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
     optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
+    // Enables policy-driven data tiering for row-oriented tables.
+    // When disabled, no new migrations to colder tiers are scheduled.
+    // Existing data in all tiers remains readable.
+    optional bool EnableDataTiering = 381 [default = false];
 }

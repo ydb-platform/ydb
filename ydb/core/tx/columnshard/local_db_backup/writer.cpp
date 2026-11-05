@@ -225,6 +225,10 @@ private:
                         // The whole table fits into a single object.
                         PutObject(table.Key, TString(table.Buffer.Data(), table.Buffer.Size()));
                         table.Buffer.Clear();
+                    } else if (table.Buffer.Size() == 0) {
+                        // Finish() sends an empty tail after the last part was already uploaded.
+                        // S3 rejects a 0-byte UploadPart.
+                        CompleteMultipartUpload(table);
                     } else {
                         UploadBufferedPart(table);
                     }
@@ -245,6 +249,19 @@ private:
         RequestInFlight = true;
         Send(Client, std::make_unique<TEvExternalStorage::TEvCreateMultipartUploadRequest>(
                          Aws::S3::Model::CreateMultipartUploadRequest().WithKey(table.Key)));
+    }
+
+    void CompleteMultipartUpload(TTableState& table) {
+        RequestInFlight = true;
+        TVector<Aws::S3::Model::CompletedPart> parts(Reserve(table.ETags.size()));
+        for (ui32 i = 0; i < table.ETags.size(); ++i) {
+            parts.emplace_back(Aws::S3::Model::CompletedPart().WithPartNumber(i + 1).WithETag(table.ETags[i]));
+        }
+        auto request = Aws::S3::Model::CompleteMultipartUploadRequest()
+                           .WithKey(table.Key)
+                           .WithUploadId(table.UploadId)
+                           .WithMultipartUpload(Aws::S3::Model::CompletedMultipartUpload().WithParts(std::move(parts)));
+        Send(Client, std::make_unique<TEvExternalStorage::TEvCompleteMultipartUploadRequest>(request));
     }
 
     void ScanFailed(const TString& tableName, const TString& error) {
@@ -279,15 +296,7 @@ private:
             return ProcessQueue();
         }
 
-        TVector<Aws::S3::Model::CompletedPart> parts(Reserve(table.ETags.size()));
-        for (ui32 i = 0; i < table.ETags.size(); ++i) {
-            parts.emplace_back(Aws::S3::Model::CompletedPart().WithPartNumber(i + 1).WithETag(table.ETags[i]));
-        }
-        auto request = Aws::S3::Model::CompleteMultipartUploadRequest()
-                           .WithKey(table.Key)
-                           .WithUploadId(table.UploadId)
-                           .WithMultipartUpload(Aws::S3::Model::CompletedMultipartUpload().WithParts(std::move(parts)));
-        Send(Client, std::make_unique<TEvExternalStorage::TEvCompleteMultipartUploadRequest>(request));
+        CompleteMultipartUpload(table);
     }
 
     void Handle(TEvExternalStorage::TEvCompleteMultipartUploadResponse::TPtr& ev) {

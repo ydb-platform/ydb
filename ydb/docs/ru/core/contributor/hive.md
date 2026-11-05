@@ -49,7 +49,7 @@ $\mathrm{MaxUsage}$ и $\mathrm{MinUsage}$ — максимум и миниму�
 
 Для таблеток, которые используют ресурс Counter, также отслеживается равномерность распределения таблеток каждого объекта (каждой таблицы) с помощью метрики `ObjectImbalance`, аналогичной описанной выше $Scatter$. При рестартах узлов равномерность может нарушаться, и тогда запускается балансировка.
 
-Количество объектов с ненулевым `ObjectImbalance` доступно в виде [сенсора](../devops/observability/monitoring.md) `MAX(Hive/ImbalancedObjects)` в подгруппе `tablets`. Дисперсия числа таблеток на узлах для объекта с наибольшим `ObjectImbalance` доступна в виде сенсора `MAX(Hive/WorstObjectVariance)` в той же подгруппе.
+[Сенсор](../devops/observability/monitoring.md) `MAX(Hive/ImbalancedObjects)` показывает максимальное среди Hive в подгруппе `tablets` количество объектов с ненулевым `ObjectImbalance`. Для каждого Hive значение `WorstObjectVariance` равно дисперсии числа таблеток по узлам у объекта с наибольшим `ObjectImbalance`; сенсор `MAX(Hive/WorstObjectVariance)` показывает максимум этих значений.
 
 ## Смотрите также
 

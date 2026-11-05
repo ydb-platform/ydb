@@ -187,6 +187,7 @@ ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tp
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[20]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[21]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[22]
+ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[2]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[3]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[4]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[5]

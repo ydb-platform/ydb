@@ -27,7 +27,7 @@
 #include <util/system/byteorder.h>
 
 #define VERIFY_RESULT_BLOB(blob, pos) \
-    YDB_LOG_ENSURE(blob.SeqNo <= (ui64)Max<i64>(),
+    YDB_LOG_ENSURE(blob.SeqNo <= (ui64)Max<i64>(), \
         {"#_SeqNo is too big", blob.SeqNo});
 
 namespace NKikimr::NPQ {

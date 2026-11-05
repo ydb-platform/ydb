@@ -1,12 +1,35 @@
-#include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include "column_type_test_base.h"
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/arrow/accessor.h>
 
 namespace NKikimr::NKqp {
+
+using NYdb::NQuery::TTxControl;
+
 namespace {
 
 using namespace NYdb;
 using namespace NYdb::NQuery;
+
+struct TSerialTypeInfo {
+    const char* SqlAlias;
+    EPrimitiveType PrimitiveType;
+    arrow::Type::type ArrowType;
+    i64 MaxValue;
+};
+
+TSerialTypeInfo GetSerialTypeInfo(ESerialType type) {
+    switch (type) {
+        case ESerialType::SmallSerial:
+            return {"Serial2", EPrimitiveType::Int16, arrow::Type::INT16, Max<i16>()};
+        case ESerialType::Serial:
+            return {"Serial4", EPrimitiveType::Int32, arrow::Type::INT32, Max<i32>()};
+        case ESerialType::BigSerial:
+            return {"Serial8", EPrimitiveType::Int64, arrow::Type::INT64, Max<i64>()};
+    }
+
+    Y_ABORT("Unknown Serial type");
+}
 
 TKikimrSettings SerialSettings() {
     auto settings = TKikimrSettings().SetWithSampleTables(false);
@@ -27,56 +50,84 @@ void CreateSerialTable(TQueryClient& client, const TString& name, const TString&
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
+TStatus BulkUpsertExplicitKey(NYdb::NTable::TTableClient& client, ELoadKind load) {
+    using NYdb::NTable::EDataFormat;
+    switch (load) {
+        case ARROW: {
+            const auto batch = NTestArrow::MakeBatch(
+                {arrow::field("id", arrow::int32(), false), arrow::field("v", arrow::int32(), false)},
+                {NTestArrow::MakeInt32Array({-200}), NTestArrow::MakeInt32Array({50})});
+            return client.BulkUpsert("/Root/T", EDataFormat::ApacheArrow,
+                NArrow::SerializeBatchNoCompression(batch), NArrow::SerializeSchema(*batch->schema())).GetValueSync();
+        }
+        case YDB_VALUE: {
+            TValueBuilder rows;
+            rows.BeginList().AddListItem().BeginStruct()
+                .AddMember("id").Int32(-200).AddMember("v").Int32(50).EndStruct().EndList();
+            return client.BulkUpsert("/Root/T", rows.Build()).GetValueSync();
+        }
+        case CSV:
+            return client.BulkUpsert("/Root/T", EDataFormat::CSV, "-200,50\n").GetValueSync();
+    }
+
+    Y_ABORT("Unknown load kind");
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpSerialColumnShard) {
-    Y_UNIT_TEST(DisabledByDefault) {
+    Y_UNIT_TEST(DisabledByDefault, ESerialType) {
         TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
         auto client = kikimr.GetQueryClient();
-        const auto result = client.ExecuteQuery("CREATE TABLE T (id Serial, PRIMARY KEY(id)) WITH (STORE = COLUMN)",
+        const auto result = client.ExecuteQuery("CREATE TABLE T (id " + ToString(Arg<0>()) + ", PRIMARY KEY(id)) WITH (STORE = COLUMN)",
             TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT(!result.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default sequences are not supported in column tables");
     }
 
-    Y_UNIT_TEST(RequiresPrimaryKey) {
+    Y_UNIT_TEST(RequiresPrimaryKey, ESerialType) {
         TKikimrRunner kikimr(SerialSettings());
         auto client = kikimr.GetQueryClient();
         const auto result = client.ExecuteQuery(
-            "CREATE TABLE T (id Int32 NOT NULL, v Serial, PRIMARY KEY(id)) WITH (STORE = COLUMN)",
+            "CREATE TABLE T (id Int32 NOT NULL, v " + ToString(Arg<0>()) + ", PRIMARY KEY(id)) WITH (STORE = COLUMN)",
             TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT(!result.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "must be a NOT NULL primary key column");
     }
 
-    Y_UNIT_TEST(GeneratedAndExplicitKeys) {
-        TKikimrRunner kikimr(SerialSettings());
+    Y_UNIT_TEST(GeneratedAndExplicitKeys, EQueryMode, ETableKind, ELoadKind) {
+        const auto mode = Arg<0>();
+        const auto store = Arg<1>() == COLUMNSHARD ? "COLUMN" : "ROW";
+        TTestHelper helper(SerialSettings());
+        auto& kikimr = helper.GetKikimr();
         auto client = kikimr.GetQueryClient();
         const TString columns = "id Serial, v Int32 NOT NULL, PRIMARY KEY(id)";
-        CreateSerialTable(client, "T", columns, "COLUMN");
+        CreateSerialTable(client, "T", columns, store);
         auto& flags = kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags;
         flags.SetEnableColumnshardSerial(false);
         Execute(client, "INSERT INTO T (v) VALUES (10)");
         Execute(client, "UPSERT INTO T (id, v) VALUES (-100, 20)");
+        auto tableClient = kikimr.GetTableClient();
+        const auto bulk = BulkUpsertExplicitKey(tableClient, Arg<2>());
+        UNIT_ASSERT_C(bulk.IsSuccess(), bulk.GetIssues().ToString());
         Execute(client, "REPLACE INTO T (v) VALUES (30)");
         Execute(client, "UPSERT INTO T (v) VALUES (40)");
-        const auto rows = Execute(client, "SELECT id, v FROM T ORDER BY id");
-        CompareYson("[[-100;20];[1;10];[2;30];[3;40]]", FormatResultSetYson(rows.GetResultSet(0)));
+        CheckOrExec(helper, "SELECT id, v FROM T ORDER BY id", "[[-200;50];[-100;20];[1;10];[2;30];[3;40]]", mode);
 
         auto drop = client.ExecuteQuery("DROP TABLE T", TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
         flags.SetEnableColumnshardSerial(true);
-        CreateSerialTable(client, "T", columns, "COLUMN");
+        CreateSerialTable(client, "T", columns, store);
         Execute(client, "UPSERT INTO T (v) VALUES (50)");
-        CompareYson("[[1;50]]", FormatResultSetYson(Execute(client, "SELECT id, v FROM T").GetResultSet(0)));
+        CheckOrExec(helper, "SELECT id, v FROM T", "[[1;50]]", mode);
     }
 
-    Y_UNIT_TEST(RenamePreservesSequence) {
+    Y_UNIT_TEST(RenamePreservesSequence, ESerialType) {
         auto settings = SerialSettings();
         settings.FeatureFlags.SetEnableMoveColumnTable(true);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
-        CreateSerialTable(client, "T", "id Serial, v Int32 NOT NULL, PRIMARY KEY(id)", "COLUMN");
+        CreateSerialTable(client, "T", "id " + ToString(Arg<0>()) + ", v Int32 NOT NULL, PRIMARY KEY(id)", "COLUMN");
         Execute(client, "UPSERT INTO T (v) VALUES (10)");
         auto rename = client.ExecuteQuery("ALTER TABLE T RENAME TO Moved", TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(rename.IsSuccess(), rename.GetIssues().ToString());
@@ -88,23 +139,24 @@ Y_UNIT_TEST_SUITE(KqpSerialColumnShard) {
         UNIT_ASSERT(parser.TryNextRow());
         const auto ddl = parser.ColumnParser("CreateQuery").GetOptionalUtf8();
         UNIT_ASSERT(ddl);
-        UNIT_ASSERT_STRING_CONTAINS(*ddl, "Serial4");
+        UNIT_ASSERT_STRING_CONTAINS(*ddl, GetSerialTypeInfo(Arg<0>()).SqlAlias);
         UNIT_ASSERT_STRING_CONTAINS(*ddl, "_serial_column_id");
         UNIT_ASSERT_STRING_CONTAINS(*ddl, "RESTART WITH 3");
     }
 
-    Y_UNIT_TEST(ArrowMatchesDataShard) {
+    Y_UNIT_TEST(ArrowMatchesDataShard, ESerialType) {
+        const auto type = Arg<0>();
+        const auto info = GetSerialTypeInfo(type);
         TKikimrRunner kikimr(SerialSettings());
         auto client = kikimr.GetQueryClient();
-        const TString columns = "a SmallSerial, b Serial2, c Serial, d Serial4, e BigSerial, f Serial8, "
-            "v Int32 NOT NULL, PRIMARY KEY(a, b, c, d, e, f)";
+        const TString columns = "a " + ToString(type) + ", b " + info.SqlAlias + ", v Int32 NOT NULL, PRIMARY KEY(a, b)";
         CreateSerialTable(client, "RowKeys", columns, "ROW");
         CreateSerialTable(client, "ColumnKeys", columns, "COLUMN");
-        Execute(client, "UPSERT INTO RowKeys (a,b,c,d,e,f,v) VALUES (-32768,32767,-2147483648,2147483647,-4294967296,4294967296,7)");
+        Execute(client, TStringBuilder() << "UPSERT INTO RowKeys (a,b,v) VALUES (" << (-info.MaxValue - 1) << "," << info.MaxValue << ",7)");
 
         const auto arrowSettings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
         const auto read = [&](const TString& table) {
-            auto result = client.ExecuteQuery("SELECT a,b,c,d,e,f,v FROM " + table + " ORDER BY a",
+            auto result = client.ExecuteQuery("SELECT a,b,v FROM " + table + " ORDER BY a",
                 TTxControl::BeginTx().CommitTx(), arrowSettings).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             return result.GetResultSet(0);
@@ -114,12 +166,10 @@ Y_UNIT_TEST_SUITE(KqpSerialColumnShard) {
         const auto& wireSchema = TArrowAccessor::GetArrowSchema(row);
         const auto schema = NArrow::DeserializeSchema(TString(wireSchema));
         UNIT_ASSERT(schema);
-        const TVector<arrow::Type::type> types = {arrow::Type::INT16, arrow::Type::INT16, arrow::Type::INT32,
-            arrow::Type::INT32, arrow::Type::INT64, arrow::Type::INT64, arrow::Type::INT32};
-        UNIT_ASSERT_VALUES_EQUAL(schema->num_fields(), types.size());
-        for (int i = 0; i < schema->num_fields(); ++i) {
-            UNIT_ASSERT_C(schema->field(i)->type()->id() == types[i], schema->field(i)->ToString());
-        }
+        UNIT_ASSERT_VALUES_EQUAL(schema->num_fields(), 3);
+        UNIT_ASSERT_C(schema->field(0)->type()->id() == info.ArrowType, schema->field(0)->ToString());
+        UNIT_ASSERT_C(schema->field(1)->type()->id() == info.ArrowType, schema->field(1)->ToString());
+        UNIT_ASSERT_C(schema->field(2)->type()->id() == arrow::Type::INT32, schema->field(2)->ToString());
 
         const auto& batches = TArrowAccessor::GetArrowBatches(row);
         UNIT_ASSERT_VALUES_EQUAL(batches.size(), 1);
@@ -136,18 +186,19 @@ Y_UNIT_TEST_SUITE(KqpSerialColumnShard) {
         UNIT_ASSERT(actual && expected && actual->Equals(*expected));
 
         Execute(client, "UPSERT INTO ColumnKeys (v) VALUES (8)");
-        const auto generated = Execute(client, "SELECT a,b,c,d,e,f FROM ColumnKeys WHERE v = 8");
-        CompareYson("[[1;1;1;1;1;1]]", FormatResultSetYson(generated.GetResultSet(0)));
+        const auto generated = Execute(client, "SELECT a,b FROM ColumnKeys WHERE v = 8");
+        CompareYson("[[1;1]]", FormatResultSetYson(generated.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(SmallSerialOverflow) {
+    Y_UNIT_TEST(SequenceOverflow, ESerialType) {
+        const auto info = GetSerialTypeInfo(Arg<0>());
         TKikimrRunner kikimr(SerialSettings());
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         NYdb::NTable::TSequenceDescription sequence;
-        sequence.SetVal = NYdb::NTable::TSequenceDescription::TSetVal{32767, false};
+        sequence.SetVal = NYdb::NTable::TSequenceDescription::TSetVal{info.MaxValue, false};
         auto description = NYdb::NTable::TTableBuilder()
             .SetStoreType(NYdb::NTable::EStoreType::Column)
-            .AddSerialColumn("id", EPrimitiveType::Int16, sequence)
+            .AddSerialColumn("id", info.PrimitiveType, sequence)
             .AddNonNullableColumn("v", EPrimitiveType::Int32)
             .SetPrimaryKeyColumn("id")
             .Build();
@@ -161,11 +212,11 @@ Y_UNIT_TEST_SUITE(KqpSerialColumnShard) {
 
         auto client = kikimr.GetQueryClient();
         Execute(client, "UPSERT INTO T (v) VALUES (1)");
-        CompareYson("[[32767]]", FormatResultSetYson(Execute(client, "SELECT id FROM T").GetResultSet(0)));
+        CompareYson(TStringBuilder() << "[[" << info.MaxValue << "]]", FormatResultSetYson(Execute(client, "SELECT id FROM T").GetResultSet(0)));
         const auto overflow = client.ExecuteQuery("UPSERT INTO T (v) VALUES (2)", TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT(!overflow.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(overflow.GetIssues().ToString(), "sequence");
-        CompareYson("[[32767;1]]", FormatResultSetYson(Execute(client, "SELECT id, v FROM T").GetResultSet(0)));
+        CompareYson(TStringBuilder() << "[[" << info.MaxValue << ";1]]", FormatResultSetYson(Execute(client, "SELECT id, v FROM T").GetResultSet(0)));
     }
 }
 

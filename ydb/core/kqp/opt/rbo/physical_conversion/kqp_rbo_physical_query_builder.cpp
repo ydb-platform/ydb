@@ -191,35 +191,25 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::LowerPhysicalStageCompatibility(
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int rootIdx) {
     TVector<TExprNode::TPtr> phyStages;
     auto& graph = Graphs[rootIdx];
-    graph.TopologicalSort();
-    const auto& stageIds = graph.StageIds;
-    const auto& stageInputIds = graph.StageInputs;
+    const auto stages = graph.TopologicalOrder();
     auto& ctx = RBOCtx.ExprCtx;
 
     THashMap<ui32, TExprNode::TPtr> finalizedStages;
-    for (const auto id : stageIds) {
+    for (const auto* graphStage : stages) {
+        const auto id = graphStage->Id();
         YQL_CLOG(TRACE, CoreDq) << "Finalizing stage " << id;
 
         TVector<TExprNode::TPtr> inputConnections;
-        THashSet<ui32> processedInputsIds;
-        for (const auto inputStageId : stageInputIds.at(id)) {
-            if (processedInputsIds.contains(inputStageId)) {
-                continue;
-            }
-            processedInputsIds.insert(inputStageId);
-
-            const auto inputStage = finalizedStages.at(inputStageId);
-            const auto connections = graph.GetConnections(inputStageId, id);
-            for (const auto& connection : connections) {
-                YQL_CLOG(TRACE, CoreDq) << "Building connection: " << inputStageId << "->" << id << ", " << connection->Type;
-                auto dqConnection = connection->BuildConnection(inputStage, StagePos[rootIdx].at(inputStageId), ctx, Names[rootIdx]);
-                YQL_CLOG(TRACE, CoreDq) << "Built connection: " << inputStageId << "->" << id << ", " << connection->Type;
-                inputConnections.push_back(dqConnection);
-            }
+        for (const auto* edge : graph.IncomingEdges(*graphStage)) {
+            const auto inputStageId = edge->Producer().Id();
+            const auto& connection = edge->Connection();
+            auto dqConnection = connection.BuildConnection(finalizedStages.at(inputStageId),
+                StagePos[rootIdx].at(inputStageId), ctx, Names[rootIdx]);
+            inputConnections.push_back(dqConnection);
         }
 
         TExprNode::TPtr stage;
-        if (graph.IsSourceStageRowType(id)) {
+        if ((graphStage->StorageType() == NYql::EStorageType::RowStorage)) {
             stage = Stages[rootIdx].at(id);
             // Want to build materialize for ranges.
             // TODO: Actually old optimizer has some machinery to compute ranges during compilation for some cases, for
@@ -244,15 +234,15 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
         } else {
             TVector<TExprNode::TPtr> stageInputConnections;
             TVector<TExprNode::TPtr> stageInputArgs;
-            if (!graph.IsSourceStageColumnType(id)) {
+            if ((graphStage->StorageType() != NYql::EStorageType::ColumnStorage)) {
                 stageInputConnections = inputConnections;
                 stageInputArgs = StageArgs[rootIdx].at(id);
             }
 
-            auto stageGUID = graph.StageGUIDs.at(id);
-            if (graph.IsSinkStage(id)) {
+            auto stageGUID = graphStage->Guid();
+            if (graphStage->IsSink()) {
                 stage = BuildDqPhySinkStage(stageInputConnections, stageInputArgs, Stages[rootIdx].at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos[rootIdx].at(id)),
-                                    graph.GetSinkSettings(id), ctx, StagePos[rootIdx].at(id));
+                                    graphStage->SinkSettings(), ctx, StagePos[rootIdx].at(id));
             }
             else {
                 stage = BuildDqPhyStage(stageInputConnections, stageInputArgs, Stages[rootIdx].at(id), NYql::NDq::TDqStageSettings().New(stageGUID).BuildNode(ctx, StagePos[rootIdx].at(id)),
@@ -262,7 +252,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
             YQL_CLOG(TRACE, CoreDq) << "Added stage " << stage->UniqueId();
         }
 
-        if (graph.IsSourceStageColumnType(id)) {
+        if ((graphStage->StorageType() == NYql::EStorageType::ColumnStorage)) {
             auto readPtr = FindNode(stage, [](const TExprNode::TPtr& node) { return !!TMaybeNode<TKqpBlockReadOlapTableRanges>(node); });
             if (readPtr) {
                 auto read = TExprBase(readPtr).Cast<TKqpBlockReadOlapTableRanges>();
@@ -288,11 +278,8 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
         YQL_CLOG(TRACE, CoreDq) << "Finalized stage " << id;
     }
 
-    // The root stage is last in the topologically sorted StageIds. It is usually also phyStages.back(),
-    // but a lone row-source stage is built into Stages without being appended to phyStages (see above),
-    // so deriving the final stage from finalizedStages is correct even when phyStages is empty.
-    Y_ENSURE(!stageIds.empty());
-    const auto maybeFinalStage = finalizedStages.at(stageIds.back());
+    // The result stage is explicit, including a lone row source.
+    const auto maybeFinalStage = finalizedStages.at(*Roots[rootIdx]->GetInput()->Props.StageId);
     const auto finalStage = GetFinalStage(maybeFinalStage);
     const bool needFinalNarrowing = NeedFinalNarrowing(rootIdx);
     const auto finalResultStage = needFinalNarrowing ? BuildFinalNarrowStage(rootIdx, finalStage) : finalStage;

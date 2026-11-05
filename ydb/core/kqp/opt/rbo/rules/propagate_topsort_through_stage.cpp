@@ -77,16 +77,16 @@ TIntrusivePtr<IOperator> EmitFinalAndIntermediateOperators(const TIntrusivePtr<T
     const auto newSort = MakeIntrusive<TOpSort>(sort->GetInput(), pos, props, sortElements, limitCond, EOpPhase::Intermediate);
     // If we have a limit we emit sort -> limit.
     if (limitCond.has_value()) {
-        return MakeIntrusive<TOpLimit>(newSort, pos, props, *limitCond, EOpPhase::Final);
+        auto finalProps = props;
+        finalProps.StageInputEdges.clear();
+        return MakeIntrusive<TOpLimit>(newSort, pos, finalProps, *limitCond, EOpPhase::Final);
     }
     return newSort;
 }
 
-bool CanPropagateOverConnection(const ui32 prevStageId, const ui32 currentStageId, TPlanProps& props) {
-    const auto connections = props.StageGraph.GetConnections(prevStageId, currentStageId);
-    Y_ENSURE(connections.size() == 1);
-    const auto connection = connections.front();
-    return (prevStageId != currentStageId && IsConnection<TUnionAllConnection>(connection));
+bool CanPropagateOverConnection(const IOperator& input, const TOpSort& sort, const TPlanProps& props) {
+    auto* edge = props.StageGraph.FindUniqueEdge(props.GetStage(input), props.GetStage(sort));
+    return edge && IsConnection<TUnionAllConnection>(edge->Connection());
 }
 
 TIntrusivePtr<IOperator> MaybePushToStageAndUpdateConnection(TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input, TExprContext& ctx,
@@ -95,16 +95,17 @@ TIntrusivePtr<IOperator> MaybePushToStageAndUpdateConnection(TIntrusivePtr<TOpSo
 
     const auto prevStageId = *(input->Props.StageId);
     const auto currentStageId = *(sort->Props.StageId);
-    if (!CanPropagateOverConnection(prevStageId, currentStageId, planProps)) {
+    if (!CanPropagateOverConnection(*input, *sort, planProps)) {
         return sort;
     }
 
-    // Merge connection always has a single consumer (i.e. outputIndex = 0)
-    const auto mergeConnection = MakeIntrusive<TMergeConnection>(sort->GetSortElements(), /*outputIndex=*/0u);
-    // Update conection type.
-    planProps.StageGraph.UpdateConnection(prevStageId, currentStageId, mergeConnection);
+    auto* edge = planProps.GetStageInputEdge(*sort, 0);
+    Y_ENSURE(edge, "Sort has no stage input");
+    edge->ReplaceConnection(MakeIntrusive<TMergeConnection>(sort->GetSortElements(), edge->OutputIndex()));
+    const auto inputBindings = sort->Props.StageInputEdges;
     // Push to stage.
     sort->Props.StageId = prevStageId;
+    sort->Props.StageInputEdges.clear();
     const auto newSort = MakeIntrusive<TOpSort>(input, sort->Pos, sort->Props, sort->GetSortElements(), sort->LimitCond, EOpPhase::Intermediate);
     // Is sort is a last op we need a map to eliminate a situation with empty stage.
     if (!IsLastOpInStage(sort)) {
@@ -112,6 +113,7 @@ TIntrusivePtr<IOperator> MaybePushToStageAndUpdateConnection(TIntrusivePtr<TOpSo
     }
     auto props = sort->Props;
     props.StageId = currentStageId;
+    props.StageInputEdges = inputBindings;
     return MakeIntrusive<TOpMap>(newSort, sort->Pos, props, TMapIUs{});
 }
 

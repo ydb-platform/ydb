@@ -192,6 +192,11 @@ private:
  * Global plan properties
  */
 struct TPlanProps {
+    const TStage& GetStage(const IOperator& op) const;
+    TStageEdge* GetStageInputEdge(const IOperator& consumer, ui32 childIndex);
+    const TStageEdge* GetStageInputEdge(const IOperator& consumer, ui32 childIndex) const;
+    void BindStageInput(IOperator& consumer, ui32 childIndex, const TStageEdge& edge);
+
     TInfoUnitRegistry InfoUnitRegistry;
     TStageGraph StageGraph;
     TSubplans Subplans;

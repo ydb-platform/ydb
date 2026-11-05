@@ -40,7 +40,9 @@ TIntrusivePtr<TOpLimit> EmitFinalAndIntermediateLimits(const TIntrusivePtr<TOpLi
     const auto pos = limit->Pos;
     const auto props = limit->Props;
     const auto intermediateLimit = MakeIntrusive<TOpLimit>(limit->GetInput(), pos, props, limitCond, EOpPhase::Intermediate);
-    return MakeIntrusive<TOpLimit>(intermediateLimit, pos, props, limitCond, EOpPhase::Final);
+    auto finalProps = props;
+    finalProps.StageInputEdges.clear();
+    return MakeIntrusive<TOpLimit>(intermediateLimit, pos, finalProps, limitCond, EOpPhase::Final);
 }
 
 } // namespace
@@ -68,12 +70,17 @@ TIntrusivePtr<IOperator> TPropagateLimitThroughStageRule::SimpleMatchAndApply(co
     if (CanPushLimitOverInput(limit, limitInput)) {
         // We can push limit over map only.
         const auto map = CastOperator<TOpMap>(limitInput);
-        const auto newLimit = MakeIntrusive<TOpLimit>(CastOperator<IUnaryOperator>(limitInput)->GetInput(), limit->Pos, limit->Props, limit->GetLimitCond(),
+        auto limitProps = limit->Props;
+        limitProps.StageInputEdges = map->Props.StageInputEdges;
+        auto mapProps = map->Props;
+        mapProps.StageInputEdges.clear();
+        const auto newLimit = MakeIntrusive<TOpLimit>(CastOperator<IUnaryOperator>(limitInput)->GetInput(), limit->Pos, limitProps, limit->GetLimitCond(),
                                                       limit->GetLimitPhase());
-        return MakeIntrusive<TOpMap>(newLimit, map->Pos, map->Props, map->GetMapElements());
+        return MakeIntrusive<TOpMap>(newLimit, map->Pos, mapProps, map->GetMapElements());
     } else if (CanPushLimitToStage(limit, limitInput)) {
         auto props = limit->Props;
         props.StageId = limitInput->Props.StageId;
+        props.StageInputEdges.clear();
         return MakeIntrusive<TOpLimit>(limitInput, limit->Pos, props, limit->GetLimitCond(), limit->GetLimitPhase());
     } else if (CanPushLimitToRead(limit, limitInput)) {
         const auto read = CastOperator<TOpRead>(limitInput);

@@ -531,27 +531,23 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
         {"error", EStatus_Name(status)}
     );
     if (IsRetryableSchemeShardStatus(status)) {
-        const auto requestIt = RequestsInFlight.find(requestId);
-        Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
-        if (requestIt->second.Request->Settings.RetryPolicy) {
-            if (ScheduleSchemeShardRetry(requestId, secretName)) {
-                return true;
-            }
-
-            YDB_LOG_NOTICE("Retry limit exceeded for secret",
-                {"event", "TEvDescribeSchemeResult"},
-                {"requestId", requestId},
-                {"secret", secretName}
-            );
-            FillResponse(
-                requestId,
-                NKqp::TEvDescribeSecretsResponse::TDescription(
-                    Ydb::StatusIds::UNAVAILABLE,
-                    { NYql::TIssue(TStringBuilder() << "Retry limit exceeded for secret `" << secretName << "`") }
-                )
-            );
+        if (ScheduleSchemeShardRetry(requestId, secretName)) {
             return true;
         }
+
+        YDB_LOG_NOTICE("Retry limit exceeded for secret",
+            {"event", "TEvDescribeSchemeResult"},
+            {"requestId", requestId},
+            {"secret", secretName}
+        );
+        FillResponse(
+            requestId,
+            NKqp::TEvDescribeSecretsResponse::TDescription(
+                Ydb::StatusIds::UNAVAILABLE,
+                { NYql::TIssue(TStringBuilder() << "Retry limit exceeded for secret `" << secretName << "`") }
+            )
+        );
+        return true;
     }
 
     const auto errorStatus = MapSchemeShardStatus(status);
@@ -595,10 +591,10 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeShardRetry(const ui64& request
     const auto requestIt = RequestsInFlight.find(requestId);
     Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
 
-    const auto& retryPolicy = requestIt->second.Request->Settings.RetryPolicy;
-    if (!retryPolicy) {
-        return false;
-    }
+    static const auto defaultSchemeShardRetryPolicy = MakeLongRetryPolicy();
+    const auto& retryPolicy = requestIt->second.Request->Settings.RetryPolicy
+        ? requestIt->second.Request->Settings.RetryPolicy
+        : defaultSchemeShardRetryPolicy;
 
     auto& retryState = requestIt->second.SchemeShardRetryStates[secretPath];
     if (!retryState) {

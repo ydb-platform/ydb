@@ -425,6 +425,34 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         AssertSecretValue(secretValue, promise);
     }
 
+    Y_UNIT_TEST(SchemeShardRetryWithDefaultPolicy) {
+        TKikimrSettings settings;
+        auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
+            /* statusOverwriteRemainingCount */ 1,
+            NKikimrScheme::EStatus::StatusNotAvailable);
+        auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
+            /* secretUpdateListener */ nullptr,
+            /* schemeCacheStatusGetter */ nullptr,
+            schemeShardStatusGetter.Get());
+        settings.SetDescribeSchemaSecretsServiceFactory(factory);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        const TString secretName = "/Root/secret-name";
+        const TString secretValue = "secret-value";
+        CreateSchemaSecret(secretName, secretValue, session);
+
+        // Bypass the helpers, which substitute a short retry policy for tests.
+        auto promise = NThreading::NewPromise<NKqp::TEvDescribeSecretsResponse::TDescription>();
+        auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetActorSystem(0);
+        actorSystem->Send(
+            MakeDescribeSchemaSecretServiceId(actorSystem->NodeId),
+            new TDescribeSchemaSecretsService::TEvResolveSecret(
+                nullptr, "/Root", {secretName}, promise));
+        AssertSecretValue(secretValue, promise);
+    }
+
     Y_UNIT_TEST(SchemeCacheAndSchemeShardRetryErrors) {
         TKikimrSettings settings;
         auto schemeCacheStatusGetter = MakeHolder<TTestSchemeCacheStatusGetter>(
@@ -541,7 +569,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         AssertBadRequest(promise, "<main>: Error: Secret `/Root/secret-name` not found\n");
     }
 
-    Y_UNIT_TEST(SchemeShardNotAvailableWithoutRetryPolicy) {
+    Y_UNIT_TEST(SchemeShardNotAvailableWithNoRetryPolicy) {
         TKikimrSettings settings;
         auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
             /* statusOverwriteRemainingCount */ 1,
@@ -558,10 +586,12 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         const TString secretName = "/Root/secret-name";
         CreateSchemaSecret(secretName, "secret-value", session);
 
-        auto promise = ResolveSecret(secretName, kikimr);
+        TDescribeSecretSettings describeSettings;
+        describeSettings.RetryPolicy = IRetryPolicy<>::GetNoRetryPolicy();
+        auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, describeSettings);
         AssertBadRequest(
             promise,
-            "<main>: Error: Schemeshard is not available for secret `/Root/secret-name`\n",
+            "<main>: Error: Retry limit exceeded for secret `/Root/secret-name`\n",
             Ydb::StatusIds::UNAVAILABLE);
     }
 

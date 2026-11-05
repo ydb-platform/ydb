@@ -32,6 +32,9 @@ namespace NKikimr::NSecret {
         const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
         TDescribeSecretSettings settings)
     {
+        if (!settings.RetryPolicy) {
+            settings.RetryPolicy = MakeShortRetryPolicy();
+        }
         auto promise = NThreading::NewPromise<NKqp::TEvDescribeSecretsResponse::TDescription>();
         const auto evResolveSecret = new TDescribeSchemaSecretsService::TEvResolveSecret(
             userToken, "/Root", secretNames, promise, std::move(settings));

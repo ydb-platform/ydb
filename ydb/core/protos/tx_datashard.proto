@@ -509,6 +509,14 @@ message TSnapshotTransaction {
     optional TDropVolatileSnapshot DropVolatileSnapshot = 2;
 }
 
+message TMvccRemovedRowVersions {
+    message TRange {
+        optional NKikimrProto.TRowVersion Lower = 1;
+        optional NKikimrProto.TRowVersion Upper = 2;
+    }
+    repeated TRange Ranges = 1;
+}
+
 message TSnapshotTransferReadSet {
     optional bytes BorrowedSnapshot = 1;
     optional uint64 MinWriteVersionStep = 2;
@@ -522,6 +530,7 @@ message TSnapshotTransferReadSet {
     optional uint64 MvccImmediateWriteEdgeStep = 10;
     optional uint64 MvccImmediateWriteEdgeTxId = 11;
     optional bool WithOpenTxs = 12;
+    optional TMvccRemovedRowVersions RemovedRowVersions = 13;
 }
 
 message TSnapshotTransferInfo {
@@ -928,6 +937,8 @@ message TEvSplitAck {
 message TTableSnapshot {
     optional uint64 TableId = 1; // tableid in term of localDB
     optional bytes SnapshotData = 2;
+    // Presence distinguishes an empty set from snapshots sent by older shards.
+    optional TMvccRemovedRowVersions RemovedRowVersions = 3;
 }
 
 message TPersistentSnapshot {

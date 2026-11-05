@@ -62,6 +62,7 @@ class TDataShard::TTxDatabaseFreeze : public NTabletFlatExecutor::TTransactionBa
     THolder<TEvDataShard::TEvDatabaseFreezeResult> Response;
     TVector<IDataShardChangeCollector::TChange> Heartbeats;
     bool Unfreezing = false;
+    ui64 PersistedDeliveryLostEpoch = 0;
 
 public:
     TTxDatabaseFreeze(TDataShard* self, TEvDataShard::TEvDatabaseFreeze::TPtr ev)
@@ -87,7 +88,17 @@ public:
             return true;
         };
 
-        if (!Self->SubDomainPathId || !Self->CurrentSchemeShardId) {
+        const bool schemeShardUnknown = !Self->CurrentSchemeShardId || Self->CurrentSchemeShardId == INVALID_TABLET_ID;
+        if (!Self->SubDomainPathId || schemeShardUnknown) {
+            TStringBuilder issue;
+            issue << "Database freeze is waiting for shard owner metadata:";
+            if (!Self->SubDomainPathId) {
+                issue << " SubDomainPathId is unknown;";
+            }
+            if (schemeShardUnknown) {
+                issue << " CurrentSchemeShardId is unknown;";
+            }
+            result.SetIssue(issue);
             result.SetReady(false);
             return true;
         }
@@ -126,12 +137,26 @@ public:
         if (!newEpoch && stage > Self->DatabaseFreeze.GetStage() + 1) {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Database freeze stages cannot be skipped");
         }
+        const bool hasIndexRecords = stage >= TFreezeState::DRAIN_INDEXES && Self->HasDatabaseFreezeIndexRecords();
+        if (hasIndexRecords) {
+            for (const auto& [order, record] : Self->ChangesQueue) {
+                if (!Self->TableInfos.contains(record.TableId.LocalPathId)) {
+                    // Keep the conservative drain fence, but make an unknown
+                    // table distinguishable from records awaiting delivery.
+                    result.SetIssue(TStringBuilder()
+                        << "Database freeze drain is waiting for a change record for an unknown table"
+                        << ": order# " << order << " tableId# " << record.TableId
+                        << " pathId# " << record.PathId);
+                    break;
+                }
+            }
+        }
         if (stage > TFreezeState::FENCE_WRITES && Self->HasDatabaseFreezeWrites()) {
             result.SetReady(false);
             return true;
         }
         if (stage == TFreezeState::DRAIN_CDC
-            && (Self->HasDatabaseFreezeIndexRecords() || Self->HasDatabaseFreezeCdcScans()))
+            && (hasIndexRecords || Self->HasDatabaseFreezeCdcScans()))
         {
             result.SetReady(false);
             return true;
@@ -164,7 +189,7 @@ public:
 
             bool ready = !Self->HasDatabaseFreezeWrites();
             if (stage >= TFreezeState::DRAIN_INDEXES) {
-                ready = ready && !Self->HasDatabaseFreezeIndexRecords()
+                ready = ready && !hasIndexRecords
                     && !Self->HasDatabaseFreezeCdcScans();
             }
             if (stage == TFreezeState::DRAIN_CDC && ready) {
@@ -208,11 +233,18 @@ public:
 
         if (changed) {
             Self->PersistSys(db, Schema::Sys_DatabaseFreeze, Self->DatabaseFreeze.SerializeAsString());
+            if (Self->DatabaseFreeze.GetDeliveryLost()) {
+                PersistedDeliveryLostEpoch = Self->DatabaseFreeze.GetEpoch();
+            }
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
+        // A completion from an earlier epoch must not mark the current one.
+        if (PersistedDeliveryLostEpoch && Self->DatabaseFreeze.GetEpoch() == PersistedDeliveryLostEpoch) {
+            Self->DatabaseFreezeDeliveryLostPersistedEpoch = PersistedDeliveryLostEpoch;
+        }
         if (Heartbeats) {
             Self->EnqueueChangeRecords(std::move(Heartbeats));
         }

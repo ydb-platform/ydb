@@ -2973,6 +2973,8 @@ private:
 
     TUserTable::TTableInfos TableInfos;  // tableId -> local table info
     NKikimrTxDataShard::TDatabaseFreezeState DatabaseFreeze;
+    // Epoch whose DeliveryLost flag is known to be committed to Sys.
+    ui64 DatabaseFreezeDeliveryLostPersistedEpoch = 0;
     THashSet<ui64> DatabaseFreezeAcceptedTxIds;
     ui64 DatabaseFreezeLocalWrites = 0;
     TTransQueue TransQueue;

@@ -102,7 +102,6 @@ END()
 
 RECURSE(
     ini_config
-    yql_parser
 )
 
 RECURSE_FOR_TESTS(

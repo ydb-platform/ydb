@@ -66,8 +66,8 @@ PEERDIR(
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
     ydb/public/lib/ydb_cli/commands/ydb_discovery
+    ydb/public/lib/ydb_cli/commands/yql_parser
     ydb/public/lib/ydb_cli/common
-    ydb/public/lib/ydb_cli/common/yql_parser
     ydb/public/lib/ydb_cli/dump
     ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/import
@@ -113,6 +113,7 @@ RECURSE(
     topic_workload
     transfer_workload
     ydb_discovery
+    yql_parser
 )
 
 IF (NOT OS_WINDOWS)

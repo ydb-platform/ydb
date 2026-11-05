@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/public/lib/ydb_cli/common/yql_parser)
+UNITTEST_FOR(ydb/public/lib/ydb_cli/commands/yql_parser)
 
 SRCS(
     yql_parser_ut.cpp

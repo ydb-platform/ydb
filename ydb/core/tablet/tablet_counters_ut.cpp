@@ -12,6 +12,7 @@
 #include <ydb/core/protos/counters_statistics_aggregator.pb.h>
 #include <ydb/core/protos/counters_tx_proxy.pb.h>
 #include <ydb/core/protos/sys_view.pb.h>
+#include <ydb/core/tablet_flat/flat_executor_counters.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -211,6 +212,31 @@ Y_UNIT_TEST_SUITE(TTabletCountersParsedOpts) {
         processor.Initialize(&counters);
         processor.FromProto(sum, max);
         UNIT_ASSERT_VALUES_EQUAL(processorGroup->GetCounter("DataShard/TxProgressStart/RwCompleted", true)->Val(), 7);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TTabletCountersPublish) {
+    Y_UNIT_TEST(UnwrittenCountersAreNotPublished) {
+        auto executorGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        NTabletFlatExecutor::TExecutorCounters executorCounters;
+        NPrivate::TAggregatedTabletCounters executor(executorGroup);
+        executor.Initialize(&executorCounters);
+        UNIT_ASSERT(!executorGroup->FindCounter("SUM(CacheFreshSize)"));
+        UNIT_ASSERT(executorGroup->FindCounter("SUM(CacheTotalSharedBody)"));
+        UNIT_ASSERT(!executorGroup->FindCounter("TxWastedBytes"));
+        UNIT_ASSERT(executorGroup->FindCounter("TxCachedBytes"));
+
+        auto appGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TProtobufTabletCounters<NDataShard::ESimpleCounters_descriptor, NDataShard::ECumulativeCounters_descriptor,
+            NDataShard::EPercentileCounters_descriptor, NDataShard::ETxTypes_descriptor> appCounters;
+        NPrivate::TAggregatedTabletCounters app(appGroup);
+        app.Initialize(&appCounters);
+        UNIT_ASSERT(!appGroup->FindCounter("DataShard/TxInit/WrittenBytes"));
+        UNIT_ASSERT(appGroup->FindCounter("DataShard/TxInit/RedoWrittenBytes"));
+        UNIT_ASSERT(!appGroup->FindCounter("DataShard/ReadColumnsRows"));
+        UNIT_ASSERT(appGroup->FindCounter("DataShard/ScannedRows"));
+        UNIT_ASSERT(!appGroup->FindHistogram("DataShard/TxProgressExecLatency"));
+        UNIT_ASSERT(appGroup->FindHistogram("DataShard/ProposeQueueLatency"));
     }
 }
 

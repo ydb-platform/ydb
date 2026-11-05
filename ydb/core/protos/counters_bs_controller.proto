@@ -12,7 +12,7 @@ enum ESimpleCounters {
     COUNTER_SLOTS_ON_FAULTY_DISKS = 2 [(CounterOpts) = {Name: "SlotsOnFaultyDisks"}];
     COUNTER_BYTES_ON_FAULTY_DISKS = 3 [(CounterOpts) = {Name: "BytesOnFaultyDisks"}];
     COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT = 4 [(CounterOpts) = {Name: "PDisksWithoutExpectedSlotCount"}];
-    COUNTER_TO_BE_REMOVED_DISKS = 5 [(CounterOpts) = {Name: "ToBeRemovedDisks"}];
+    COUNTER_TO_BE_REMOVED_DISKS_DEPRECATED = 5 [deprecated = true];
     COUNTER_GROUPS_WITH_SLOTS_ON_TO_BE_REMOVED_DISKS = 6 [(CounterOpts) = {Name: "GroupsWithSlotsOnToBeRemovedDisks"}];
     COUNTER_SLOTS_ON_TO_BE_REMOVED_DISKS = 7 [(CounterOpts) = {Name: "SlotsOnToBeRemovedDisks"}];
     COUNTER_BYTES_ON_TO_BE_REMOVED_DISKS = 8 [(CounterOpts) = {Name: "BytesOnToBeRemovedDisks"}];

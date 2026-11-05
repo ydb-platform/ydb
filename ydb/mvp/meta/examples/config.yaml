@@ -4,9 +4,29 @@ generic:
     token_file: ydb/mvp/core/examples/token_file.pb.txt
 
 meta:
+  # Stable HTTP(S) regional URL, identical for all replicas; required when healthcheck.enabled.
+  # Must exactly match MasterClusterExt.db.meta_endpoint for locally collected clusters.
+  # The separate, automatically derived per-pod LocalEndpoint must resolve and be
+  # reachable from peer pods; do not replace it with this shared regional URL.
+  service_endpoint: https://meta.eu-north1.example.net
   # YDB endpoint of Meta DB cluster used by meta handlers.
   meta_api_endpoint: grpc://meta.ydb.example.net:2135
   # Meta database path.
   meta_database: /Root/meta
   # Token must be defined in generic.auth.tokens.oauth2_exchange (see core/examples/federated_config.yaml).
   meta_database_token_name: "federated-token"
+  # Example deployment configuration, not a statement of production settings.
+  # Before enabling, apply schema/database_health.sql and schema/cluster_meta_endpoint.sql,
+  # assign clusters to service_endpoint, and grant the collector the required DB access.
+  # Upgrading the status-only prototype: run only the ClusterHealth.db CREATE portion
+  # of database_health.sql; preserve the existing DatabaseHealth.db table (no drop/recreate).
+  healthcheck:
+    enabled: false
+    # All regional replicas may collect; ClusterHealth.db leases select one owner per cluster.
+    collect: true
+    # Start-to-start target; only one active check/write per cluster, no global cap.
+    check_period_seconds: 15
+    discovery_period_seconds: 60
+    status_ttl_seconds: 120
+    # HC operation timeout; outer HTTP timeout adds 20% + 1s (37s with this default).
+    request_timeout_seconds: 30

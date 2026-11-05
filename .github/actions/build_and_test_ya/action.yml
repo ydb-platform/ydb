@@ -64,6 +64,10 @@ inputs:
     type: boolean
     default: true
     description: "Read/write YDB QA analytics DB; false (or host nebius/ydb) sets CI_DISABLE_YDB_QA"
+  analytics_job_name:
+    type: string
+    required: false
+    description: "Override analytics job_name (remote executor / workflow_dispatch); empty = resolve from github.workflow"
 defaults:
   run:
     shell: bash
@@ -165,12 +169,17 @@ runs:
         WORKFLOW_NAME: ${{ github.workflow }}
         BUILD_PRESET: ${{ inputs.build_preset }}
         EVENT_NAME: ${{ github.event_name }}
+        ANALYTICS_JOB_NAME_OVERRIDE: ${{ inputs.analytics_job_name }}
         GITHUB_NUMERIC_JOB_ID: ${{ job.check_run_id }}
         GITHUB_TOKEN: ${{ github.token }}
         # Env values are not shell-parsed — safe for untrusted PR titles.
         PR_TITLE: ${{ github.event.pull_request.title || '' }}
       run: |
-        ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
+        if [ -n "$ANALYTICS_JOB_NAME_OVERRIDE" ]; then
+          ANALYTICS_JOB_NAME="$ANALYTICS_JOB_NAME_OVERRIDE"
+        else
+          ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
+        fi
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
         echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
         # Random delimiter so a hostile title cannot close the GITHUB_ENV block.
@@ -215,6 +224,14 @@ runs:
         export PUBLIC_DIR_URL=$S3_URL_PREFIX
         echo "PUBLIC_DIR_URL=$PUBLIC_DIR_URL" >> $GITHUB_ENV
         mkdir -p $PUBLIC_DIR
+
+        # Durable job markdown for remote waiters. GITHUB_STEP_SUMMARY is per-step;
+        # each step that writes a summary flushes it into this file (all retries kept).
+        # Final s3 step also publishes it at the S3 run root as job_summary.md
+        # (e.g. s3://…/nebius/ydb/<workflow>/<run_id>/job_summary.md).
+        export JOB_SUMMARY_MD=$PUBLIC_DIR/job_summary.md
+        : > "$JOB_SUMMARY_MD"
+        echo "JOB_SUMMARY_MD=$JOB_SUMMARY_MD" >> $GITHUB_ENV
 
         echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
@@ -853,6 +870,9 @@ runs:
           echo "Build successful." |  GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color green
         fi
 
+        # Flush this step's summary (all generate-summary retries) into the durable file.
+        cat "$GITHUB_STEP_SUMMARY" >> "$JOB_SUMMARY_MD"
+
     - name: resolve-status-sha
       shell: bash
       run: |
@@ -918,8 +938,13 @@ runs:
         echo "::group::s3-sync"
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
         echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
+        cat "$GITHUB_STEP_SUMMARY" >> "$JOB_SUMMARY_MD"
+        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+        # Stable run-root URL for remote waiters (leaf is ya-*/ under the run).
+        # Example: …/nebius/ydb/CI%20remote%20executor/<run_id>/job_summary.md
+        s3cmd put --acl-public --no-progress --no-mime-magic --guess-mime-type \
+          "$JOB_SUMMARY_MD" "${S3_BUCKET_PATH%/*}/job_summary.md"
         echo "::endgroup::"
 
     - name: Flush analytics JSONL

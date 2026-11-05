@@ -4,7 +4,6 @@ import datetime
 import logging
 import subprocess
 import argparse
-from functools import cached_property
 from typing import Optional
 from github import Github
 from github.PullRequest import PullRequest
@@ -34,6 +33,7 @@ class PrSyncCreator:
         self.base_branch = base_branch
         self.head_branch = head_branch
         self.head_tag = head_tag
+        self.head_tag_sha = None
         self.ours_on_conflict = ours_on_conflict
         self.theirs_on_conflict = theirs_on_conflict
         self.force_overwrite = force_overwrite
@@ -54,15 +54,7 @@ class PrSyncCreator:
                 f"{os.environ['GITHUB_SERVER_URL']}/{self.repo_name}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
             )
 
-    @cached_property
-    def head_tag_sha(self):
-        tag_ref = f"refs/tags/{self.head_tag}"
-        tag_sha = self.git_run("show-ref", "--verify", "--hash", tag_ref).stdout.decode().strip()
-        return self.git_run("rev-parse", "--verify", f"{tag_sha}^{{commit}}").stdout.decode().strip()
-
     def rightlib_latest_repo_sha(self):
-        if self.head_tag:
-            return self.head_tag_sha
         return self.repo.get_branch(self.head_branch).commit.sha
 
     def is_commit_present_on_branch(self, sha, branch):
@@ -239,7 +231,9 @@ class PrSyncCreator:
         pr = self.get_latest_open_pr()
 
         if not pr:
-            cur_sha = self.rightlib_latest_repo_sha()
+            if self.head_tag:
+                self.head_tag_sha = self.repo.get_commit(f"refs/tags/{self.head_tag}").sha
+            cur_sha = self.head_tag_sha or self.rightlib_latest_repo_sha()
             self.logger.info("cur_sha=%s", cur_sha)
 
             if self.is_commit_present_on_branch(cur_sha, self.base_branch) is False:

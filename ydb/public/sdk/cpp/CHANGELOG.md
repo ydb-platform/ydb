@@ -1,3 +1,5 @@
+* PersQueue Auto cluster discovery now recognizes subdomains of `lbk.logbroker.yandex.net`. Topic Producer rejects these federation endpoints, consistently with the main and prestable endpoints.
+
 * Added `TUpdateClusterStateSettings::ExpectedGeneration()` to apply a bridge cluster state update only if the cluster state still has the given generation.
 
 * Added draft `TBridgeClient::SetDatabaseBridgeMode()` to atomically change a database's bridge mode. `TSetDatabaseBridgeModeSettings::RetainPileName()` selects the pile to retain when disabling bridge mode.

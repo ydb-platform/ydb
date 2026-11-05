@@ -4,6 +4,7 @@ SRCS(
     kqp_cbo_ut.cpp
     kqp_opt_hypergraph_ut.cpp
     kqp_opt_interesting_orderings_ut.cpp
+    kqp_opt_predicate_selectivity_ut.cpp
 )
 
 PEERDIR(

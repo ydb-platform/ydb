@@ -8,9 +8,24 @@ CREATE BACKUP COLLECTION collection_name (
 ) WITH (option = value [, ...]);
 ```
 
+{% note warning %}
+
+In YDB 26.2, backup collections are gated by the
+`enable_backup_service` feature flag and are disabled by default. If the flag
+is disabled, `CREATE BACKUP COLLECTION` fails with `Backup collections are
+disabled`. The flag must be enabled in the cluster configuration before using
+backup collections.
+
+{% endnote %}
+
 ## Parameters
 
-* `collection_name` — name of the backup collection to create.
+* `collection_name` — name of the backup collection to create. Use a single
+  name, such as `daily_backups`, rather than an arbitrary schema path. YDB
+  stores the collection under
+  `<database>/.backups/collections/<collection_name>` automatically. Refer to
+  the collection by the same name in `BACKUP`, `RESTORE`, and
+  `DROP BACKUP COLLECTION` statements.
 * `table_name` — full path to a table to include in the collection. Multiple tables can be specified.
 * Options:
 

@@ -27,24 +27,25 @@ TContinuationToken WaitForWriteToken(IWriteSession& session) {
 
 Y_UNIT_TEST_SUITE(WriteSessionFlush) {
     Y_UNIT_TEST(PreparedWritesUseCompressionExecutor) {
+        TTopicSdkTestSetup setup(TEST_CASE_NAME);
+        auto client = setup.MakeClient();
         for (const bool preEncoded : {false, true}) {
-            TTopicSdkTestSetup setup(TEST_CASE_NAME);
-            auto client = setup.MakeClient();
             auto executor = CreateThreadPoolManagedExecutor(1);
             auto session = client.CreateWriteSession(
                 TWriteSessionSettings()
                     .Path(setup.GetTopicPath())
-                    .MessageGroupId(TEST_MESSAGE_GROUP_ID)
+                    .MessageGroupId(preEncoded ? "encoded-producer" : TEST_MESSAGE_GROUP_ID)
                     .Codec(preEncoded ? ECodec::GZIP : ECodec::RAW)
                     .CompressionExecutor(executor)
                     .BatchFlushInterval(TDuration::Zero()));
 
-            for (const std::string_view data : {"first", "second"}) {
+            const std::string_view data = "message";
+            for (const uint64_t seqNo : {1, 1, 2}) {
                 auto token = WaitForWriteToken(*session);
                 if (preEncoded) {
-                    session->WriteEncoded(std::move(token), data, ECodec::RAW, static_cast<uint32_t>(data.size()));
+                    session->WriteEncoded(std::move(token), data, ECodec::RAW, static_cast<uint32_t>(data.size()), seqNo);
                 } else {
-                    session->Write(std::move(token), data);
+                    session->Write(std::move(token), data, seqNo);
                 }
             }
             UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);

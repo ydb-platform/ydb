@@ -1326,14 +1326,18 @@ void TWriteSessionImpl::ScheduleSendImpl() {
         return;
     }
 
-    SendImplScheduled = true;
-    CompressionExecutor->Post([cbContext = SelfContext] {
-        if (auto self = cbContext->LockShared()) {
-            std::lock_guard guard(self->Lock);
-            self->SendImplScheduled = false;
-            self->SendImpl();
-        }
-    });
+    try {
+        CompressionExecutor->Post([cbContext = SelfContext] {
+            if (auto self = cbContext->LockShared()) {
+                std::lock_guard guard(self->Lock);
+                self->SendImplScheduled = false;
+                self->SendImpl();
+            }
+        });
+        SendImplScheduled = true;
+    } catch (...) {
+        SendImpl();
+    }
 }
 
 void TWriteSessionImpl::SendImpl() {
@@ -1350,6 +1354,11 @@ void TWriteSessionImpl::SendImpl() {
         while (IsReadyToSendNextImpl()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
+
+            if (writeRequest->sequence_numbers_size() > 0
+                && static_cast<i64>(GetSeqNoImpl(block.Offset)) <= writeRequest->sequence_numbers(writeRequest->sequence_numbers_size() - 1)) {
+                break;
+            }
 
             const size_t blockSize = EstimateWriteRequestBlockSize(block);
             if (!sizeLimiter.CanAdd(blockSize)) {

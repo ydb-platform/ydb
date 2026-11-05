@@ -25,36 +25,39 @@ TContinuationToken WaitForWriteToken(IWriteSession& session) {
 
 Y_UNIT_TEST_SUITE(CompressExecutor) {
     Y_UNIT_TEST(PreparedWritesUseCompressionExecutor) {
+        TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
         for (const bool preEncoded : {false, true}) {
-            TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
             auto executor = NTopic::NTests::CreateThreadPoolManagedExecutor(1);
             auto settings = setup.GetWriteSessionSettings();
             settings.Codec(preEncoded ? ECodec::GZIP : ECodec::RAW)
+                .MessageGroupId(preEncoded ? "encoded-producer" : "raw-producer")
                 .BatchFlushInterval(TDuration::Zero())
                 .CompressionExecutor(executor);
             auto writer = setup.GetPersQueueClient().CreateWriteSession(settings);
 
-            ui64 seqNo = 1;
-            for (const std::string_view data : {"first", "second"}) {
+            const std::string_view data = "message";
+            for (const ui64 seqNo : {1, 1, 2}) {
                 auto token = WaitForWriteToken(*writer);
                 if (preEncoded) {
                     writer->WriteEncoded(std::move(token), data, ECodec::RAW, static_cast<ui32>(data.size()), seqNo);
                 } else {
                     writer->Write(std::move(token), data, seqNo);
                 }
-                ++seqNo;
             }
             UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);
 
             executor->RunAllTasks();
-            ui64 nextSeqNo = 1;
-            while (nextSeqNo <= 2) {
+            size_t ackCount = 0;
+            while (ackCount < 3) {
                 UNIT_ASSERT_C(writer->WaitEvent().Wait(TDuration::Seconds(30)), "timeout waiting for write acknowledgements");
                 for (auto& event : writer->GetEvents()) {
                     if (auto* acks = std::get_if<TWriteSessionEvent::TAcksEvent>(&event)) {
                         for (const auto& ack : acks->Acks) {
-                            UNIT_ASSERT_VALUES_EQUAL(ack.SeqNo, nextSeqNo++);
-                            UNIT_ASSERT_VALUES_EQUAL(ack.State, TWriteSessionEvent::TWriteAck::EES_WRITTEN);
+                            UNIT_ASSERT_VALUES_EQUAL(ack.SeqNo, ackCount < 2 ? 1 : 2);
+                            UNIT_ASSERT_VALUES_EQUAL(ack.State, ackCount == 1
+                                ? TWriteSessionEvent::TWriteAck::EES_ALREADY_WRITTEN
+                                : TWriteSessionEvent::TWriteAck::EES_WRITTEN);
+                            ++ackCount;
                         }
                     } else if (auto* closed = std::get_if<TSessionClosedEvent>(&event)) {
                         UNIT_FAIL("write session closed unexpectedly: " << closed->GetIssues().ToString());
@@ -63,6 +66,45 @@ Y_UNIT_TEST_SUITE(CompressExecutor) {
             }
             UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
         }
+    }
+
+    Y_UNIT_TEST(RejectedPostFallsBackToInlineSend) {
+        class TRejectFirstPostExecutor final : public NTopic::NTests::TManagedExecutor {
+        public:
+            using TManagedExecutor::TManagedExecutor;
+
+            void Post(TFunction&& task) override {
+                if (RejectNext) {
+                    RejectNext = false;
+                    ythrow yexception() << "reject first post";
+                }
+                TManagedExecutor::Post(std::move(task));
+            }
+
+            bool RejectNext = true;
+        };
+
+        TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+        auto executor = std::make_shared<TRejectFirstPostExecutor>(NYdb::CreateThreadPoolExecutor(1));
+        auto acked = NThreading::NewPromise<bool>();
+        auto settings = setup.GetWriteSessionSettings();
+        settings.Codec(ECodec::RAW)
+            .BatchFlushInterval(TDuration::Zero())
+            .CompressionExecutor(executor);
+        settings.EventHandlers_.AcksHandler([acked](TWriteSessionEvent::TAcksEvent& event) mutable {
+            acked.TrySetValue(event.Acks.size() == 1
+                && event.Acks.front().State == TWriteSessionEvent::TWriteAck::EES_WRITTEN);
+        });
+        auto writer = setup.GetPersQueueClient().CreateWriteSession(settings);
+        writer->Write(WaitForWriteToken(*writer), "first");
+        UNIT_ASSERT_C(acked.GetFuture().Wait(TDuration::Seconds(30)), "inline send was not acknowledged");
+        UNIT_ASSERT(acked.GetFuture().GetValue());
+        UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 0);
+
+        writer->Write(WaitForWriteToken(*writer), "second");
+        UNIT_ASSERT_VALUES_EQUAL(executor->GetPlannedCount(), 1);
+        executor->RunAllTasks();
+        UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
     }
 
     Y_UNIT_TEST(CloseWithQueuedRawSend) {

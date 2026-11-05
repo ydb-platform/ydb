@@ -2044,17 +2044,22 @@ void TWriteSessionImpl::ScheduleSendImpl() {
         SendImpl();
         return;
     }
-    if (!IsReadyToSendNextImpl() || SendImplScheduled.exchange(true)) {
+    if (SendImplScheduled || !IsReadyToSendNextImpl()) {
         return;
     }
 
-    CompressionExecutor->Post([cbContext = SelfContext] {
-        if (auto self = cbContext->LockShared()) {
-            std::lock_guard guard(self->Lock);
-            self->SendImplScheduled.store(false);
-            self->SendImpl();
-        }
-    });
+    try {
+        CompressionExecutor->Post([cbContext = SelfContext] {
+            if (auto self = cbContext->LockShared()) {
+                std::lock_guard guard(self->Lock);
+                self->SendImplScheduled = false;
+                self->SendImpl();
+            }
+        });
+        SendImplScheduled = true;
+    } catch (...) {
+        SendImpl();
+    }
 }
 
 void TWriteSessionImpl::SendImpl() {
@@ -2073,7 +2078,9 @@ void TWriteSessionImpl::SendImpl() {
         while (IsReadyToSendNextImpl()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
-            if (writeRequest->messages_size() > 0 && prevCodec != block.CodecID) {
+            if (writeRequest->messages_size() > 0
+                && (prevCodec != block.CodecID
+                    || static_cast<i64>(GetSeqNoImpl(block.Offset)) <= writeRequest->messages(writeRequest->messages_size() - 1).seq_no())) {
                 break;
             }
             if (TxIsChanged(writeRequest)) {

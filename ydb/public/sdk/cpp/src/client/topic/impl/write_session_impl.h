@@ -538,7 +538,7 @@ private:
     const size_t MaxBlockMessageCount;
     bool Connected = false;
     bool Started = false;
-    std::atomic<bool> SendImplScheduled = false;
+    bool SendImplScheduled = false;
     std::atomic<int> Aborting = 0;
     bool SessionEstablished = false;
     bool BatchingSupported = false;

@@ -407,6 +407,52 @@ private:
     TVector<TAutoPtr<IEventHandle>> Pending;
 };
 
+class TDropDstResultGate: public TDecorator {
+public:
+    static constexpr ui64 Blocked = 35;
+    static constexpr ui64 Release = 36;
+    static constexpr ui64 Released = 37;
+
+    TDropDstResultGate(THolder<IActor> actor, ui64 targetId, TActorId notify)
+        : TDecorator(std::move(actor))
+        , TargetId(targetId)
+        , Notify(notify)
+    {}
+
+    bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) override {
+        if (Blocking && ev->GetTypeRewrite() == TEvPrivate::TEvDropDstResult::EventType
+            && ev->Get<TEvPrivate::TEvDropDstResult>()->TargetId == TargetId)
+        {
+            Pending.push_back(std::move(ev));
+            ctx.Send(Notify, new TEvents::TEvWakeup(Blocked), 0, TargetId);
+            return false;
+        }
+        if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+            switch (ev->Get<TEvents::TEvWakeup>()->Tag) {
+            case Release:
+                UNIT_ASSERT(!Pending.empty());
+                Blocking = false;
+                for (auto& pending : Pending) {
+                    ctx.Send(pending.Release());
+                }
+                Pending.clear();
+                ctx.Send(ctx.SelfID, new TEvents::TEvWakeup(Released));
+                return false;
+            case Released:
+                ctx.Send(Notify, new TEvents::TEvWakeup(Released));
+                return false;
+            }
+        }
+        return true;
+    }
+
+private:
+    const ui64 TargetId;
+    const TActorId Notify;
+    bool Blocking = true;
+    TVector<TAutoPtr<IEventHandle>> Pending;
+};
+
 class TDstAlterResultGate: public TDecorator {
 public:
     static constexpr ui64 Blocked = 24;
@@ -4222,6 +4268,136 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         }
 
         UNIT_FAIL("Timed out waiting for replicated DROP INDEX");
+    }
+
+    void CheckRecreatedSyncIndexWithDelayedDropDstResult(bool restart) {
+        TEnv env(MakeIndexReplicationFlags());
+        auto& runtime = env.GetRuntime();
+        const auto workerStarts = std::make_shared<std::atomic<ui32>>(0);
+        const auto info = StartReplication(env, 1, "root@builtin", true, true,
+            NKikimrSchemeOp::EIndexTypeGlobal, false, Nothing(), workerStarts);
+        auto client = CreateTableClient(env);
+        auto session = CreateTableSession(env, client);
+        const auto execute = [&](const TString& query) {
+            return session.ExecuteDataQuery(query,
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        };
+        const auto write = [&](const TString& query) {
+            UNIT_ASSERT_C(WaitFor([&] {
+                return execute(query).IsSuccess();
+            }, 600), "Source write failed: " << query);
+        };
+        const auto waitForRow = [&](ui32 key) {
+            UNIT_ASSERT_C(WaitFor([&] {
+                const auto state = DescribeReplication(env, info);
+                UNIT_ASSERT_C(!state->Get()->Record.GetState().HasError(), state->Get()->Record.DebugString());
+                const auto rows = execute(Sprintf("SELECT key FROM `/Root/replica1` WHERE key=%u;", key));
+                return rows.IsSuccess() && rows.GetResultSet(0).RowsCount() == 1;
+            }, 600), "Base table did not receive row " << key);
+        };
+
+        write("UPSERT INTO `/Root/table1` (key,value) VALUES (1,'before');");
+        waitForRow(1);
+        const auto addColumn = session.ExecuteSchemeQuery(
+            "ALTER TABLE `/Root/table1` ADD COLUMN other Utf8;").GetValueSync();
+        UNIT_ASSERT_C(addColumn.IsSuccess(), addColumn.GetIssues().ToString());
+        UNIT_ASSERT_C(WaitFor([&] {
+            return env.GetDescription("/Root/replica1").GetPathDescription().GetTable().ColumnsSize() == 3;
+        }, 600), "Setup ADD COLUMN did not reach the replica");
+        write("UPSERT INTO `/Root/table1` (key,value,other) VALUES (2,'before','old');");
+        waitForRow(2);
+
+        const auto initial = DescribeReplication(env, info);
+        ui64 oldIndexId = 0;
+        for (const auto& target : initial->Get()->Record.GetTargets()) {
+            if (target.GetDstPath() == "/Root/replica1/by_value/indexImplTable") {
+                oldIndexId = target.GetId();
+            }
+        }
+        UNIT_ASSERT_C(oldIndexId, initial->Get()->Record.DebugString());
+        const auto controller = InstallControllerGate(env, info.ControllerId,
+            [oldIndexId](THolder<IActor> actor, TActorId notify) {
+                return new TDropDstResultGate(std::move(actor), oldIndexId, notify);
+            });
+        const auto dropped = session.ExecuteSchemeQuery(
+            "ALTER TABLE `/Root/table1` DROP INDEX by_value;").GetValueSync();
+        UNIT_ASSERT_C(dropped.IsSuccess(), dropped.GetIssues().ToString());
+        const auto blocked = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(blocked->Get()->Tag, TDropDstResultGate::Blocked);
+        UNIT_ASSERT_VALUES_EQUAL(blocked->Cookie, oldIndexId);
+        UNIT_ASSERT_C(WaitFor([&] {
+            return env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize() == 0;
+        }, 600), "Destination index was not dropped");
+
+        const auto recreated = session.ExecuteSchemeQuery(
+            "ALTER TABLE `/Root/table1` ADD INDEX by_value GLOBAL SYNC ON (other);").GetValueSync();
+        UNIT_ASSERT_C(recreated.IsSuccess(), recreated.GetIssues().ToString());
+        UNIT_ASSERT_C(WaitFor([&] {
+            const auto state = DescribeReplication(env, info);
+            UNIT_ASSERT_C(!state->Get()->Record.GetState().HasError(), state->Get()->Record.DebugString());
+            return env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize() == 1;
+        }, 600), "Destination index was not recreated while old DropDstResult was held");
+
+        // Replication of this row proves that the new schema was processed
+        // while the obsolete target still existed in the controller.
+        write("UPSERT INTO `/Root/table1` (key,value,other) VALUES (3,'held','while-held');");
+        waitForRow(3);
+        Cerr << "Recreated index while old DropDstResult is held: "
+            << DescribeReplication(env, info)->Get()->Record.DebugString() << Endl;
+
+        if (restart) {
+            // Recovery must load both generations and finish removing only
+            // the old target, whose original completion is still held.
+            UNIT_ASSERT_GT(RestartController(env, info.ControllerId), info.Generation);
+            InvalidateTabletResolverCache(runtime, info.ControllerId);
+        } else {
+            env.SendAsync(controller, new TEvents::TEvWakeup(TDropDstResultGate::Release));
+            const auto released = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+            UNIT_ASSERT_VALUES_EQUAL(released->Get()->Tag, TDropDstResultGate::Released);
+        }
+        UNIT_ASSERT_C(WaitFor([&] {
+            const auto state = DescribeReplication(env, info);
+            for (const auto& target : state->Get()->Record.GetTargets()) {
+                if (target.GetId() == oldIndexId) {
+                    return false;
+                }
+            }
+            return true;
+        }, 100), "Old index target was not removed");
+
+        write("UPSERT INTO `/Root/table1` (key,value,other) VALUES (4,'after','witness');");
+        waitForRow(4);
+        const auto state = DescribeReplication(env, info);
+        Cerr << "Recreated index after old target removal, base row 4 is visible: "
+            << state->Get()->Record.DebugString()
+            << " destination=" << env.GetDescription("/Root/replica1").GetPathDescription().GetTable().DebugString()
+            << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(state->Get()->Record.TargetsSize(), 2,
+            "Recreated sync index has no replication target after old target removal: "
+                << state->Get()->Record.DebugString());
+        ui64 newIndexId = 0;
+        for (const auto& target : state->Get()->Record.GetTargets()) {
+            if (target.GetDstPath() == "/Root/replica1/by_value/indexImplTable") {
+                newIndexId = target.GetId();
+            }
+        }
+        UNIT_ASSERT(newIndexId && newIndexId != oldIndexId);
+        UNIT_ASSERT_C(WaitFor([&] {
+            const auto rows = execute(
+                "SELECT key FROM `/Root/replica1` VIEW by_value WHERE other='witness';");
+            return rows.IsSuccess() && rows.GetResultSet(0).RowsCount() == 1;
+        }, 600), "Recreated index missed a row already visible in the replicated base table");
+        UNIT_ASSERT_VALUES_EQUAL(
+            env.GetDescription("/Root/replica1").GetPathDescription().GetTable().GetTableIndexes(0).GetState(),
+            NKikimrSchemeOp::EIndexStateReady);
+    }
+
+    Y_UNIT_TEST(RecreatedSyncIndexSurvivesDelayedOldDropDstResult) {
+        CheckRecreatedSyncIndexWithDelayedDropDstResult(false);
+    }
+
+    Y_UNIT_TEST(RecreatedSyncIndexSurvivesDelayedOldDropDstResultAfterRestart) {
+        CheckRecreatedSyncIndexWithDelayedDropDstResult(true);
     }
 
     Y_UNIT_TEST(SourceDropSyncIndexWithGlobalConsistency) {

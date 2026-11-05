@@ -227,6 +227,30 @@ THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> TSchemeShard::IgniteOp
             "Client schema modifications are disabled for non-administrators");
     }
 
+    if (record.TransactionSize() > 1) {
+        for (const auto& transaction : record.GetTransaction()) {
+            const auto type = transaction.GetOperationType();
+            const auto& drop = transaction.GetDrop();
+            if ((type != NKikimrSchemeOp::ESchemeOpDropReplication
+                    && type != NKikimrSchemeOp::ESchemeOpDropReplicationCascade)
+                || drop.GetReplicationSourceCleanup() != NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON)
+            {
+                continue;
+            }
+
+            const auto path = drop.HasId()
+                ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
+                : TPath::Resolve(transaction.GetWorkingDir(), context.SS).Dive(drop.GetName());
+            if (path.IsResolved() && path.IsReplication() && path->PlannedToDrop()) {
+                // A single response cannot subscribe the caller to multiple drop transactions.
+                // Reject before any other part can make changes that cannot be rolled back.
+                return MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(
+                    NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId),
+                    "Escalating a pending replication drop requires a single-operation request");
+            }
+        }
+    }
+
     TOperation::TPtr operation = new TOperation(txId);
 
     for (const auto& transaction : record.GetTransaction()) {

@@ -18,6 +18,8 @@
 #include <ydb/core/backup/common/fields_wrappers.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/map.h>
 #include <util/generic/ptr.h>
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>

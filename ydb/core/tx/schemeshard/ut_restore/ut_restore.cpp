@@ -11538,9 +11538,12 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
         for (auto& item : legacyMapping.Items) {
             item.IndexIVs.clear();
         }
+        const TString plainMapping = legacyMapping.Serialize();
         const auto ciphertext = NBackup::TEncryptedFileSerializer::EncryptFullFile(
-            algorithm, NBackup::TEncryptionKey(key), iv, legacyMapping.Serialize());
+            algorithm, NBackup::TEncryptionKey(key), iv, plainMapping);
         writeFile(mappingPath, TString(ciphertext.Data(), ciphertext.Size()));
+        // The checksum is computed for the plain content
+        writeFile(NBackup::ChecksumKey(mappingPath), NBackup::ComputeChecksum(plainMapping));
     }
 
     const bool swapFiles = scenario == EIndexBackupScenario::SwapScheme || scenario == EIndexBackupScenario::SwapData;

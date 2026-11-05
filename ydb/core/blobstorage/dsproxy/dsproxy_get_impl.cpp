@@ -67,7 +67,8 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
             outResponse.Id = query.Id;
             outResponse.PartMap = blobState.PartMap;
             outResponse.LooksLikePhantom = PhantomCheck
-                ? std::make_optional(blobState.WholeSituation == TBlobState::ESituation::Absent)
+                ? std::make_optional(blobState.LooksLikePhantom.value_or(
+                    blobState.WholeSituation == TBlobState::ESituation::Absent))
                 : std::nullopt;
 
             // fill in keep/doNotKeep flags

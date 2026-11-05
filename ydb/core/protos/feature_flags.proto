@@ -448,5 +448,24 @@ message TFeatureFlags {
     optional bool EnableKeyValueRequestInFlightLimit = 363 [default = false];
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
+<<<<<<< HEAD
     optional bool EnableComputeSchedulerMemory = 370 [default = false, (RequireRestart) = true];
+=======
+    optional bool EnableCompileCacheV2 = 369 [default = false];
+    optional bool EnableComputeSchedulerMemory = 370 [default = true, (RequireRestart) = true];
+    optional bool EnableAddColumnGeneratedVirtual = 371 [default = false];
+    optional bool EnableAddColumnGeneratedStored = 372 [default = false];
+    optional bool EnableUnsafeTruncateTable = 373 [default = false];
+    optional bool EnableCsPatternIndexHints = 374 [default = false];
+    // Allows persisting Waiting for column-table imports with unresolved dependencies.
+    // Enable only after the rollback version supports resuming these imports.
+    optional bool EnableColumnTableImportDependencyRetry = 375 [default = false];
+    optional bool EnableSourceTopicMutateRestricted = 376 [default = false];
+    optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
+    optional bool EnableMLPConsumerInFlightMutateDisabled = 378 [default = false];
+    optional bool EnableCoroutineCompactionSelector = 379 [default = false];
+    // Show REPLICATING VDisks with only phantom-like blobs remaining as READY ones in node whiteboard and system views
+    // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
+    optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
+>>>>>>> e1993d22917 (Treat phantoms-only replicating VDisks as working ones per user request (#55651))
 }

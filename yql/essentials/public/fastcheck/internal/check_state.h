@@ -1,6 +1,6 @@
 #pragma once
 
-#include "linter.h"
+#include <yql/essentials/public/fastcheck/linter.h>
 #include "settings.h"
 
 #include <yql/essentials/ast/yql_ast.h>

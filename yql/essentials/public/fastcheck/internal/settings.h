@@ -1,6 +1,6 @@
 #pragma once
 
-#include "linter.h"
+#include <yql/essentials/public/fastcheck/linter.h>
 
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/ast/yql_errors.h>
@@ -43,6 +43,6 @@ bool BuildLexerSettings(
     TIssues& issues,
     TMaybe<TParsedSettingsCache>& cache);
 
-const IUdfMeta* GetDefaultUdfMeta();
+const TUdfMeta* GetDefaultUdfMeta();
 
 } // namespace NYql::NFastCheck

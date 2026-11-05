@@ -5,6 +5,7 @@
 #include <yql/essentials/public/udf_meta/udf_meta.h>
 
 #include <library/cpp/resource/resource.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NYql::NFastCheck {
 
@@ -16,7 +17,7 @@ NJson::TJsonValue LoadJsonResource(TStringBuf filename) {
     return NJson::ReadJsonFastTree(text);
 }
 
-std::unique_ptr<IUdfMeta> LoadDefaultUdfMeta() {
+std::unique_ptr<TUdfMeta> LoadDefaultUdfMeta() {
     auto json = LoadJsonResource("udfs_basic.json");
     return ParseUdfMeta(json);
 }
@@ -27,7 +28,7 @@ struct TDefaultUdfMetaLoader {
     {
     }
 
-    std::unique_ptr<IUdfMeta> Data;
+    std::unique_ptr<TUdfMeta> Data;
 };
 
 } // namespace
@@ -189,7 +190,7 @@ bool BuildLexerSettings(
     return result.Settings.ApplyTo(settings, issues);
 }
 
-const IUdfMeta* GetDefaultUdfMeta() {
+const TUdfMeta* GetDefaultUdfMeta() {
     return Singleton<TDefaultUdfMetaLoader>()->Data.get();
 }
 

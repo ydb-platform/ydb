@@ -78,7 +78,7 @@ private:
     }
 
     bool DoTypeCheck(const TChecksRequest& request, TAstNode* astRoot, TIssues& issues) {
-        const IUdfMeta* udfMeta = request.UdfMeta;
+        const TUdfMeta* udfMeta = request.UdfMeta;
         if (!udfMeta) {
             udfMeta = GetDefaultUdfMeta();
         }

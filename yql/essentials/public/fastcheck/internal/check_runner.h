@@ -1,5 +1,5 @@
 #pragma once
-#include "linter.h"
+#include <yql/essentials/public/fastcheck/linter.h>
 
 namespace NYql::NFastCheck {
 

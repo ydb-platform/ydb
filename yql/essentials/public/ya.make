@@ -1,6 +1,8 @@
 RECURSE(
     decimal
     fastcheck
+    fastcheck/abi/impl
+    fastcheck/impl
     issue
     langver
     purecalc
@@ -15,6 +17,7 @@ RECURSE(
 
 IF (OS_LINUX AND ARCH_X86_64 AND SANITIZER_TYPE != "undefined")
     RECURSE(
+        fastcheck/abi/fat
         sql_format/abi/fat
     )
 ENDIF()

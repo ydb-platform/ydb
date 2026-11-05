@@ -1,4 +1,4 @@
-#include "linter.h"
+#include <yql/essentials/public/fastcheck/linter.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NYql::NFastCheck {

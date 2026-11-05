@@ -5,10 +5,6 @@
 
 namespace NYql::NFastCheck {
 
-std::unique_ptr<IUdfMeta> LoadUdfMeta(TStringBuf json) {
-    return ParseUdfMeta(NJson::ReadJsonFastTree(json));
-}
-
 void FillClusters(const TChecksRequest& request, NSQLTranslation::TTranslationSettings& settings) {
     if (!request.ClusterSystem.empty()) {
         Y_ENSURE(FindPtr(Providers, request.ClusterSystem), "Invalid ClusterSystem value: " + request.ClusterSystem);

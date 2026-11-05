@@ -1,4 +1,4 @@
-#include "fastcheck.h"
+#include <yql/essentials/public/fastcheck/fastcheck.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NYql;

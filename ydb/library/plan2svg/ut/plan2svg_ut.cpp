@@ -1044,7 +1044,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
 
     Y_UNIT_TEST(StorageV3IsAdditiveAcrossReadsAndDeduplicatesDecorations) {
         TPlanVisualizer viz;
-        viz.LoadPlans(R"json({"Plan":{"Plans":[{"Node Type":"ResultSet","Plans":[
+        viz.LoadPlans(TString(R"json({"Plan":{"Plans":[{"Node Type":"ResultSet","Plans":[
           {"Node Type":"Stage","Stats":{"PhysicalStageId":1,"ColumnShardScans":[
             {"ExpectedContextOnly":true,"StatsGroupId":"ga","ParticipatingShards":1,"ParticipatingTablets":["1"]},
             {"StatsScanId":"a","StatsGroupId":"ga","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,
@@ -1066,7 +1066,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
               {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":1024,"ReadCount":1,"DataKind":"data"},
               {"SourceKind":"BlobCache","SourceName":"blob","ReadBytes":128,"ReadCount":1}]}
           ]}}]}
-        ]}]}})json");
+        ]}]}})json"));
         const TString svg = viz.PrintSvg();
         AssertWellFormed(svg, "Storage v3");
         UNIT_ASSERT_C(StorageRow(svg, "grand-total").Contains("data-cs-storage-bytes='1920'"), svg);
@@ -1181,7 +1181,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
 
     Y_UNIT_TEST(ColumnShardPlanIdentityDisambiguatesRepeatedPhysicalStageIds) {
         TPlanVisualizer viz;
-        viz.LoadPlans(R"json({"Plan":{"Plans":[
+        viz.LoadPlans(TString(R"json({"Plan":{"Plans":[
           {"Node Type":"ResultSet","Plans":[{"Node Type":"Stage","Stats":{"PhysicalStageId":0,"ColumnShardScans":[
             {"StatsScanId":"first","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,
              "Steps":[{"StepId":1,"StepKind":"ReaderInit","MetaStep":"Preparation","OwnedExecutionDuration":1}]}
@@ -1190,7 +1190,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
             {"StatsScanId":"second","TabletId":"2","ReaderKind":"TRIVIAL","Finished":true,
              "Steps":[{"StepId":1,"StepKind":"ReaderInit","MetaStep":"Preparation","OwnedExecutionDuration":5}]}
           ]}}]}
-        ]}})json");
+        ]}})json"));
         const TString svg = viz.PrintSvg();
         AssertWellFormed(svg, "Repeated physical stage IDs");
         const auto panels = CsOpeningRows(svg, "data-cs-panel='0'");

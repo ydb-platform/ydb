@@ -1136,16 +1136,18 @@ void TestMirroredOffsetSurvivesRestart(bool kafkaBatch) {
             CmdWrite(0, "sourceid_before_gap", {{1, "before-gap"}}, tc);
             expected.push_back({.SeqNo = 1, .Offset = 0, .Data = "before-gap"});
         }
-        const ui64 oldEndOffset = prefill ? 1 : 0;
         constexpr ui64 mirroredOffset = 1000;
+        // Only an empty partition advances its boundaries to the replicated position.
+        const ui64 expectedStartOffset = prefill ? 0 : mirroredOffset;
+        const ui64 expectedEndOffset = prefill ? 1 : mirroredOffset;
         auto replicationData = MakeHolder<TEvPQ::TEvReplicationData>();
         replicationData->MirroredOffset = mirroredOffset;
         tc.Runtime->Send(new IEventHandle(partitionActor, tc.Edge, replicationData.Release(), 0, 17));
         tc.Runtime->SimulateSleep(TDuration::Seconds(1));
-        PQGetPartInfo(0, oldEndOffset, tc);
+        PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
 
         PQTabletRestart(tc);
-        PQGetPartInfo(0, oldEndOffset, tc);
+        PQGetPartInfo(expectedStartOffset, expectedEndOffset, tc);
 
         const TVector<TString> values = {"after-gap", TString(1_MB, 'x')};
         if (kafkaBatch) {

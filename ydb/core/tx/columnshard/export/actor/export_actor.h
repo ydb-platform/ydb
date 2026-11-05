@@ -18,7 +18,7 @@
 namespace NKikimr::NOlap::NExport {
 
 class TActor: public NBackground::TSessionActor {
-private:
+public:
     enum class EStage {
         Initialization,
         WaitData,
@@ -31,6 +31,7 @@ private:
         Finished
     };
 
+private:
     using TBase = NBackground::TSessionActor;
     std::optional<TActorId> ScanActorId;
     bool AllowScanPings = false;
@@ -64,8 +65,6 @@ private:
 
     void ScheduleTimeoutCheck();
     void HandleWakeup();
-
-    static TString StageToString(EStage stage);
 
     void PassAway() override;
 

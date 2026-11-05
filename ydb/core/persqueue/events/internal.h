@@ -252,6 +252,7 @@ struct TEvPQ {
         EvResetOffsetResponse,
         EvReplicationData,
         EvReplicationDataAck,
+        EvPersistDone,
         EvEnd,
     };
 
@@ -349,6 +350,7 @@ struct TEvPQ {
         bool IsDirectWrite;
         std::optional<ui64> InitialSeqNo;
         EWriteExternalDeduplicationStatus ExternalDeduplicationStatus;
+        bool FromMirrorer = false;
     };
 
     struct TEvReadTimeout : public TEventLocal<TEvReadTimeout, EvReadTimeout> {
@@ -1379,6 +1381,14 @@ struct TEvPQ {
     struct TEvReplicationData : public TEventLocal<TEvReplicationData, EvReplicationData> {
         THashMap<TString, ui64> OffsetsByConsumers;
         TMaybe<ui64> MirroredOffset;
+    };
+
+    struct TEvPersistDone : public TEventLocal<TEvPersistDone, EvPersistDone> {
+        explicit TEvPersistDone(ui64 endOffset)
+            : EndOffset(endOffset)
+        {}
+
+        ui64 EndOffset;
     };
 
     struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {

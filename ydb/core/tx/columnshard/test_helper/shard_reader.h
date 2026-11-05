@@ -149,7 +149,7 @@ public:
 
     bool InitializeScanner() {
         StartScanner();
-        AFL_VERIFY(WaitScannerAnswer());
+        YDB_LOG_VERIFY(WaitScannerAnswer());
         return !!ScanActorId;
     }
 

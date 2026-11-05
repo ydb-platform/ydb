@@ -38,35 +38,11 @@ bool TActor::IsFinishing() const {
 void TActor::SaveCursor(EStage stage) {
     Stage = stage;
     YDB_LOG_VERIFY(IsSavingCursor(),
-        {"stage", StageToString(Stage)});
+        {"stage", ::ToString(Stage)});
     StageStartTime = TInstant::Now();
     Counters.OnSaveCursorStarted();
     SaveCursorStartTime = TInstant::Now();
     SaveSessionProgress();
-}
-
-TString TActor::StageToString(EStage stage) {
-    switch (stage) {
-        case EStage::Initialization:
-            return "Initialization";
-        case EStage::WaitData:
-            return "WaitData";
-        case EStage::WaitWriting:
-            return "WaitWriting";
-        case EStage::WaitSaveCursor:
-            return "WaitSaveCursor";
-        case EStage::WaitSaveCursorBeforeReset:
-            return "WaitSaveCursorBeforeReset";
-        case EStage::WaitSaveResetCursor:
-            return "WaitSaveResetCursor";
-        case EStage::WaitSaveCursorBeforeFinish:
-            return "WaitSaveCursorBeforeFinish";
-        case EStage::WaitSaveFinalCursor:
-            return "WaitSaveFinalCursor";
-        case EStage::Finished:
-            return "Finished";
-    }
-    return "Unknown";
 }
 
 void TActor::ScheduleTimeoutCheck() {
@@ -89,11 +65,11 @@ void TActor::HandleWakeup() {
     if (elapsed > operationTimeout) {
         const TString errorMessage = TStringBuilder()
                                      << "Export operation timed out after " << elapsed.Seconds() << "s"
-                                     << " in stage " << StageToString(Stage) << ", tablet " << TabletId << ", scanActorId "
+                                     << " in stage " << ::ToString(Stage) << ", tablet " << TabletId << ", scanActorId "
                                      << (ScanActorId ? ScanActorId->ToString() : "none") << ", exporter " << Exporter.ToString();
         YDB_LOG_ERROR("",
             {"event", "export_timeout"},
-            {"stage", StageToString(Stage)},
+            {"stage", ::ToString(Stage)},
             {"elapsedSec", elapsed.Seconds()},
             {"tabletId", TabletId},
             {"scanActorId", ScanActorId ? ScanActorId->ToString() : "none"},
@@ -105,7 +81,7 @@ void TActor::HandleWakeup() {
     if (elapsed > WarningInterval) {
         YDB_LOG_WARN("",
             {"event", "export_slow_operation"},
-            {"stage", StageToString(Stage)},
+            {"stage", ::ToString(Stage)},
             {"elapsedSec", elapsed.Seconds()},
             {"tabletId", TabletId},
             {"scanActorId", ScanActorId ? ScanActorId->ToString() : "none"},
@@ -162,7 +138,7 @@ void TActor::PassAway() {
         {"event", "export_actor_pass_away"},
         {"selfId", SelfId()},
         {"tabletId", TabletId},
-        {"stage", StageToString(Stage)});
+        {"stage", ::ToString(Stage)});
     KillExporter();
     AbortScanIfKnown("export actor destroyed");
     TBase::PassAway();
@@ -215,7 +191,7 @@ void TActor::OnTxCompleted(const ui64 /*txId*/) {
 
 void TActor::OnSessionProgressSaved() {
     YDB_LOG_VERIFY(IsSavingCursor(),
-        {"stage", StageToString(Stage)});
+        {"stage", ::ToString(Stage)});
     Counters.OnSaveCursorFinished(TInstant::Now() - SaveCursorStartTime);
     if (ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished()) {
         Stage = EStage::Finished;
@@ -254,7 +230,7 @@ void TActor::OnSessionProgressSaved() {
             return;
         default:
             YDB_LOG_VERIFY(false,
-                {"stage", StageToString(Stage)});
+                {"stage", ::ToString(Stage)});
     }
 }
 
@@ -280,7 +256,7 @@ void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchR
         return;
     }
     YDB_LOG_VERIFY(Stage == EStage::WaitWriting,
-        {"stage", StageToString(Stage)});
+        {"stage", ::ToString(Stage)});
     Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
     YDB_LOG_VERIFY(ExportSession->GetCursor().HasLastKey());
     SaveCursor(EStage::WaitSaveCursor);

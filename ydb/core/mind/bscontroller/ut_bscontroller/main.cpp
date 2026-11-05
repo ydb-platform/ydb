@@ -3590,6 +3590,92 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(pdisk.GetOwnerWeight(2), 2);
     }
 
+    void CheckGroupResourcesOnOverflow(TErasureType::EErasureSpecies erasure, ui32 numVDisks, ui64 slotSize, ui64 allocatedSize,
+            ui64 expectedSpace, ui64 expectedAvailableSize, ui64 expectedAllocatedSize) {
+        UNIT_ASSERT(allocatedSize <= slotSize);
+        using TPDiskInfo = TBlobStorageController::TPDiskInfo;
+        TPDiskInfo pdisk(
+            TBlobStorageController::THostId(TString("host"), 1),
+            TString("/dev/disk"), 0, 1, {}, {}, std::nullopt, 1, TString(), 0, 16,
+            NKikimrBlobStorage::EDriveStatus::ACTIVE, TInstant::Zero(),
+            NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE, TPDiskMood::Normal,
+            TString(), TString(), TString(), 0, true, NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST);
+        pdisk.Metrics.SetEnforcedDynamicSlotSize(slotSize);
+
+        const ui32 numFailRealms = erasure == TBlobStorageGroupType::ErasureMirror3dc ? 3 : 1;
+        const ui32 numFailDomains = numVDisks / numFailRealms;
+        TBlobStorageController::TGroupInfo group(TGroupId::FromValue(0x8200000f), 1, 0,
+            erasure, 0, NKikimrBlobStorage::TVDiskKind::Default,
+            0, 0, TString(), TString(), 0, 0, false, true, 1, TBridgePileId(), TBoxStoragePoolId(1, 1),
+            numFailRealms, numFailDomains, 1, false);
+        UNIT_ASSERT_VALUES_EQUAL(group.VDisksInGroup.size(), numVDisks);
+        TBlobStorageController::TVSlotReadyTimestampQ readyTimestampQ;
+        TVector<THolder<TBlobStorageController::TVSlotInfo>> slots;
+        std::vector<TGroupDiskInfo> disks;
+        for (ui32 i = 0; i < group.VDisksInGroup.size(); ++i) {
+            slots.push_back(MakeHolder<TBlobStorageController::TVSlotInfo>(TVSlotId(1, 1, i), &pdisk,
+                group.ID, 0, 1, NKikimrBlobStorage::TVDiskKind::Default,
+                i / numFailDomains, i % numFailDomains, 0, TMood::Normal,
+                &group, &readyTimestampQ, TInstant::Zero(), TDuration::Zero(), 0, 0));
+            slots.back()->Metrics.SetAvailableSize(slotSize - allocatedSize);
+            slots.back()->Metrics.SetAllocatedSize(allocatedSize);
+            disks.push_back({&pdisk.Metrics, &slots.back()->Metrics, 1, 0});
+        }
+
+        NKikimrBlobStorage::TGroupMetrics::TGroupParameters params;
+        // Only resource values matter here; PDisk metrics are intentionally partial.
+        group.FillInOwnGroupParameters(&params);
+        UNIT_ASSERT_VALUES_EQUAL(params.GetAssuredResources().GetSpace(), expectedSpace);
+        UNIT_ASSERT_VALUES_EQUAL(params.GetCurrentResources().GetSpace(), expectedSpace);
+        UNIT_ASSERT_VALUES_EQUAL(params.GetAvailableSize(), expectedAvailableSize);
+        UNIT_ASSERT_VALUES_EQUAL(params.GetAllocatedSize(), expectedAllocatedSize);
+
+        NKikimrSysView::TGroupInfo info;
+        CalculateGroupUsageStats(&info, disks, TBlobStorageGroupType(erasure), 1);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetAllocatedSize(), expectedAllocatedSize);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), expectedAvailableSize);
+    }
+
+    Y_UNIT_TEST(GroupResourcesSaturateOnOverflow) {
+        auto check_mirror_3_dc = [](ui32 numVDisks, ui64 slotSize, ui64 allocatedSize, ui64 expectedSpace, ui64 expectedAvailableSize, ui64 expectedAllocatedSize) {
+            CheckGroupResourcesOnOverflow(TBlobStorageGroupType::ErasureMirror3dc, numVDisks, slotSize, allocatedSize, expectedSpace, expectedAvailableSize, expectedAllocatedSize);
+        };
+        check_mirror_3_dc(12, ui64{1} << 62, ui64{1} << 62, Max<ui64>(), 0, Max<ui64>());
+        check_mirror_3_dc(9, ui64{1} << 62, ui64{1} << 61, ui64{3} << 62, ui64{3} << 61, ui64{3} << 61);
+        check_mirror_3_dc(9, ui64{1} << 63, ui64{1} << 63, Max<ui64>(), 0, Max<ui64>());
+        // Total capacity overflows while allocated capacity still fits.
+        check_mirror_3_dc(9, ui64{1} << 63, ui64{1} << 62, Max<ui64>(), ui64{3} << 62, ui64{3} << 62);
+        // Both capacities overflow, but their difference still fits.
+        check_mirror_3_dc(9, ui64{1} << 63, ui64{3} << 61, Max<ui64>(), ui64{3} << 61, Max<ui64>());
+        // Available capacity itself also overflows.
+        check_mirror_3_dc(12, ui64{1} << 63, ui64{1} << 62, Max<ui64>(), Max<ui64>(), Max<ui64>());
+
+        auto check_block_4_2 = [](ui32 numVDisks, ui64 slotSize, ui64 allocatedSize, ui64 expectedSpace, ui64 expectedAvailableSize, ui64 expectedAllocatedSize) {
+            CheckGroupResourcesOnOverflow(TBlobStorageGroupType::Erasure4Plus2Block, numVDisks, slotSize, allocatedSize, expectedSpace, expectedAvailableSize, expectedAllocatedSize);
+        };
+        check_block_4_2(10, ui64{1} << 62, 0, Max<ui64>(), Max<ui64>(), 0);
+        check_block_4_2(8, ui64{1} << 61, ui64{1} << 60, 2 * (Max<ui64>() / 3), Max<ui64>() / 3, Max<ui64>() / 3);
+        check_block_4_2(8, ui64{3} << 60, 0, Max<ui64>(), Max<ui64>(), 0);
+    }
+
+    Y_UNIT_TEST(GroupUsageRoundsBeforeSubtracting) {
+        NKikimrBlobStorage::TPDiskMetrics pdiskMetrics;
+        pdiskMetrics.SetEnforcedDynamicSlotSize(3);
+        NKikimrBlobStorage::TVDiskMetrics vdiskMetrics;
+        const std::vector<TGroupDiskInfo> disks(8, {&pdiskMetrics, &vdiskMetrics, 1, 0});
+
+        auto check = [&](ui64 allocatedSize, ui64 expectedAllocatedSize, ui64 expectedAvailableSize) {
+            vdiskMetrics.SetAllocatedSize(allocatedSize);
+            NKikimrSysView::TGroupInfo info;
+            CalculateGroupUsageStats(&info, disks, TBlobStorageGroupType(TBlobStorageGroupType::Erasure4Plus2Block), 1);
+            UNIT_ASSERT_VALUES_EQUAL(info.GetAllocatedSize(), expectedAllocatedSize);
+            UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), expectedAvailableSize);
+        };
+        check(1, 5, 11); // floor(3 * 16/3) - floor(1 * 16/3), not floor(2 * 16/3).
+        check(3, 16, 0);
+        check(4, 21, 0);
+    }
+
     Y_UNIT_TEST(GroupUsagePrefersRoundedDynamicSlotSize) {
         NKikimrBlobStorage::TPDiskMetrics pdiskMetrics;
         pdiskMetrics.SetEnforcedDynamicSlotSize(96);

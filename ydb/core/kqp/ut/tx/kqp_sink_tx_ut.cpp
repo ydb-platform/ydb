@@ -1,6 +1,8 @@
 #include "kqp_sink_common.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -3533,6 +3535,77 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();
+    }
+
+    static void UpdateIndexStreamWriteConfig(TKikimrRunner& kikimr, bool enable) {
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        NKikimrConfig::TAppConfig config = *kikimr.GetTestServer().GetSettings().AppConfig;
+        config.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enable);
+
+        for (const auto& service : {
+                MakeKqpProxyID(runtime.GetNodeId()),
+                MakeKqpCompileServiceID(runtime.GetNodeId())}) {
+            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            *request->Record.MutableConfig() = config;
+            runtime.Send(service, edgeActor, request.Release());
+            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
+                edgeActor, TDuration::Seconds(10));
+            UNIT_ASSERT_C(response, "KQP service must acknowledge the EnableIndexStreamWrite update");
+        }
+    }
+
+    Y_UNIT_TEST(IndexStreamWriteToggleInsideTransaction) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+
+        TKikimrRunner kikimr(settings);
+
+        auto client = kikimr.GetQueryClient();
+        auto create = client.ExecuteQuery(Q_(R"(
+            CREATE TABLE `/Root/test` (
+                Key Uint32 NOT NULL,
+                Value1 String,
+                Value2 String,
+                PRIMARY KEY (Key),
+                INDEX idx1 GLOBAL SYNC ON (Value1),
+                INDEX idx2 GLOBAL SYNC ON (Value2)
+            );
+        )"), TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+        auto session = client.GetSession().GetValueSync().GetSession();
+        auto txResult = session.BeginTransaction(TTxSettings::SerializableRW()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(txResult.GetStatus(), EStatus::SUCCESS, txResult.GetIssues().ToString());
+        auto tx = txResult.GetTransaction();
+
+        auto result = session.ExecuteQuery(Q_(R"(
+            PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+            UPSERT INTO `/Root/test` (Key, Value1, Value2) VALUES (1u, "a1", "b1");
+        )"), TTxControl::Tx(tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        UpdateIndexStreamWriteConfig(kikimr, false);
+
+        result = session.ExecuteQuery(Q_(R"(
+            PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+            UPSERT INTO `/Root/test` (Key, Value1, Value2) VALUES (2u, "a2", "b2");
+        )"), TTxControl::Tx(tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        // The abort must come from the index maintenance mode conflict, not from anything else.
+        UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+            [](const NYdb::NIssue::TIssue& issue) {
+                return issue.GetMessage().find(
+                    "both through the index stream write and through direct writes") != std::string::npos;
+            }), result.GetIssues().ToString());
+
+        result = session.ExecuteQuery(Q_(R"(
+            PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+            SELECT * FROM `/Root/test` ORDER BY Key;
+        )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 

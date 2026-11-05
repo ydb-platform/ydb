@@ -943,34 +943,55 @@ const TIntrusivePtr<IOperator>& TOpCBOTree::GetChild(size_t index) const {
     return std::as_const(*parent).GetChild(slot);
 }
 
+TOpSequencer::TOpSequencer(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
+    TOrderedIUs<TString> inputColumns, TOrderedIUs<TString> generatedColumns)
+    : IUnaryOperator(EOperator::Sequencer, pos, std::move(input))
+    , Table(std::move(table))
+    , InputColumns_(std::move(inputColumns))
+    , GeneratedColumns_(std::move(generatedColumns))
+{
+    Y_ENSURE(!InputColumns_.Unordered().HasAny(GeneratedColumns_.Unordered()), "Sequence columns must have fresh IUs");
+}
+
+void TOpSequencer::ComputeOutputIUs() {
+    auto columns = InputColumns_.Unordered();
+    columns.UnionWith(GeneratedColumns_.Unordered());
+    Props.OutputIUs = std::move(columns);
+}
+
+TUnorderedIUs TOpSequencer::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    return InputColumns_.Unordered();
+}
+
 /**
 * Table Effect operator methods: these are inserts/updates/deletes
 */
 TOpTableEffect::TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table,
-    EEffectType type, TEffectOptions options, TOrderedIUs<TString> columns, TOrderedIUs<TString> returning)
+    EEffectType type, TEffectOptions options)
     : IUnaryOperator(EOperator::TableEffect, pos, input)
     , Table(std::move(table))
     , EffectType(type)
     , Options(std::move(options))
-    , Columns_(std::move(columns))
-    , ReturningColumns_(std::move(returning))
-{}
+{
+    Y_ENSURE(Options.DefaultColumns.IsSubsetOf(Options.Columns.Unordered()));
+}
 
 TUnorderedIUs TOpTableEffect::GetUsedIUs(TPlanProps& props) {
     Y_UNUSED(props);
-    return Columns_.Unordered();
+    auto used = Options.Columns.Unordered();
+    used.UnionWith(Options.DefaultColumns);
+    return used;
 }
 
-TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
-    if (Options.ReturningColumns.has_value() && Options.ReturningColumns->size()) {
-        Y_ENSURE(false, "Returning columns not supported in new optimizer");
-    }
-
+TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx, ui64 priority) {
     TString mode;
     
     switch(EffectType) {
         case EEffectType::InsertRows:
         case EEffectType::InsertRowsIndex:
+            Y_ENSURE(!Options.OnConflict || *Options.OnConflict == "abort",
+                "INSERT conflict handling must be expanded before building sink settings");
             mode = "insert";
             break;
         case EEffectType::UpdateRows:
@@ -989,15 +1010,28 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
             Y_ENSURE(false, "Unsupported DML in new optimizer");
     }
 
+    // KqlUpsertRows also represents REPLACE and predicate UPDATE. The
+    // frontend's mode determines both main-table and index maintenance.
+    if (Options.Settings) {
+        for (const auto& setting : *Options.Settings) {
+            if (setting->Head().IsAtom("Mode")) {
+                Y_ENSURE(setting->ChildrenSize() == 2 && setting->Child(1)->IsAtom());
+                mode = setting->Child(1)->Content();
+            }
+        }
+    }
+
     TString isBatch = "false";
     if (Options.IsBatch.has_value() && Options.IsBatch.value()){
         isBatch = "true";
     }
 
     TVector<TExprNode::TPtr> defaultColumns;
-    if (Options.DefaultColumns.has_value()) {
-        for (auto c : Options.DefaultColumns.value()) {
-            defaultColumns.push_back(ctx.NewAtom(Pos, c));
+    // Only the storage boundary needs names; the default-column subset follows
+    // input IUs through rewrites, while these destination labels stay fixed.
+    for (const auto& [id, name] : Options.Columns.Items()) {
+        if (Options.DefaultColumns.Contains(id)) {
+            defaultColumns.push_back(ctx.NewAtom(Pos, name));
         }
     }
 
@@ -1006,18 +1040,27 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
         settings = Options.Settings.value();
     }
 
+    TVector<TExprNode::TPtr> returningColumns;
+    for (const auto& [id, name] : Options.ReturningColumns.Items()) {
+        returningColumns.push_back(ctx.NewAtom(Pos, name));
+    }
+    // The runtime's row layout follows the struct type's canonical name order;
+    // the SQL projection order is restored by the root's result column hints.
+    std::sort(returningColumns.begin(), returningColumns.end(),
+        [](const auto& lhs, const auto& rhs) { return lhs->Content() < rhs->Content(); });
+
     return Build<TKqpTableSinkSettings>(ctx, Pos)
             .Table(Table)
             .InconsistentWrite().Build("false")
             .Mode().Build(mode)
-            .Priority().Build("0")
+            .Priority().Build(::ToString(priority))
             .StreamWrite().Build("false")
             .IsBatch().Build(isBatch)
             .IsIndexImplTable().Build("false")
             .DefaultColumns()
                 .Add(defaultColumns)
             .Build()
-            .ReturningColumns().Build()
+            .ReturningColumns().Add(returningColumns).Build()
             .Settings()
                 .Add(settings)
             .Build()

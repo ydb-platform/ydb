@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/library/actors/core/allocation_cache_families.h>
 #include "mailbox.h"
 
 #include <atomic>
@@ -17,7 +18,6 @@ namespace NActors {
     struct TExecutionStats;
 
     class IExecutorPool;
-    class TAsyncFrameCache;
 
     template <typename T>
     struct TWaitingStats;
@@ -84,9 +84,8 @@ namespace NActors {
         TExecutionContext ExecutionContext;
         TMailboxContext MailboxContext;
         TExecutionStats *ExecutionStats = nullptr;
-        // Cache owned by the executor thread. Null when this context is not a worker.
-        TAsyncFrameCache* AsyncFrameCache = nullptr;
-
+        // Borrowed family caches, populated by the allocation-cache subsystem.
+        TAllocationCachePointers AllocationCachePointers;
 
         bool IsEnoughCpu = true;
         TWaitingStats<ui64> *WaitingStats = nullptr;
@@ -149,6 +148,11 @@ namespace NActors {
         void ResetMailboxContext();
     };
 
-    extern Y_POD_THREAD(TThreadContext*) TlsThreadContext; // in actor.cpp
+    // Native TLS is constant-initialized; avoid an initialization check on access.
+    extern
+#ifdef Y_HAVE_FAST_POD_TLS
+        constinit
+#endif
+        Y_POD_THREAD(TThreadContext*) TlsThreadContext; // in actor.cpp
 
 }

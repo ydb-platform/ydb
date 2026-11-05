@@ -195,13 +195,13 @@ TConclusionStatus TWithKeysAggregationProcessor::TBuilder::AddGroupBy(
     return TConclusionStatus::Success();
 }
 
-TConclusion<arrow::Datum> TAggregateFunction::Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const {
+TConclusion<TFunctionResult> TAggregateFunction::Call(const TExecFunctionContext& context, const TAccessorsCollection& resources) const {
     if (context.GetColumns().size() == 0 && AggregationType == NAggregation::EAggregate::NumRows) {
         auto rc = resources.GetRecordsCountActualOptional();
         if (!rc) {
             return TConclusionStatus::Fail("resources hasn't info about records count actual");
         } else {
-            return arrow::Datum(std::make_shared<arrow::UInt64Scalar>(*rc));
+            return TFunctionResult(std::make_shared<arrow::UInt64Scalar>(*rc));
         }
     } else {
         return TBase::Call(context, resources);

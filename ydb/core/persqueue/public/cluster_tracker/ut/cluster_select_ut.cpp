@@ -81,19 +81,99 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
             (TVector<TString>{"myt"}));
     }
 
-    Y_UNIT_TEST(MarkFnxFromBalancers) {
+    Y_UNIT_TEST(GetReadClustersUsesAccountTable) {
         TClustersList list;
         list.Clusters.push_back(MakeCluster("sas", false));
-        list.Clusters.push_back(MakeCluster("myt", false));
-        list.Balancers["logbroker-fnx.yandex.net"] = TVector<TString>{"myt", "missing"};
-        list.MarkFnxFromBalancers();
-        UNIT_ASSERT(!list.Clusters[0].IsFnx);
-        UNIT_ASSERT(list.Clusters[1].IsFnx);
+        list.Clusters.push_back(MakeCluster("vla", false));
+        list.Clusters.push_back(MakeCluster("myt", true));
+        list.Clusters.push_back(MakeCluster("klg", true));
+        list.BuildVisibleClusters();
 
-        list.Balancers.clear();
-        list.MarkFnxFromBalancers();
-        UNIT_ASSERT(!list.Clusters[0].IsFnx);
-        UNIT_ASSERT(!list.Clusters[1].IsFnx);
+        auto names = [](const auto& clusters) {
+            TVector<TString> result;
+            for (const auto& cluster : clusters) {
+                result.push_back(cluster.Name);
+            }
+            return result;
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("")), (TVector<TString>{"sas", "vla"}));
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("missing")), (TVector<TString>{"sas", "vla"}));
+
+        auto& prod = list.Accounts["prod"];
+        prod.Write = {"myt", "sas"};
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("PROD")), (TVector<TString>{"sas", "vla", "myt"}));
+
+        prod.Read = {"vla"};
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"vla", "myt"}));
+
+        // Read lists choose among non-FNX clusters only: klg is FNX and missing is unknown.
+        prod.Read = {"klg", "missing"};
+        prod.Write = {"myt"};
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"myt"}));
+
+        prod.Read = {"sas"};
+        prod.Write = {"sas"};
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"sas"}));
+
+        prod.Read.clear();
+        prod.Write.clear();
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"sas", "vla"}));
+    }
+
+    Y_UNIT_TEST(AccountVersionsStayIndependent) {
+        TClustersList::TAccountClusters left;
+        left.Read = {"sas"};
+        left.Version = 2;
+        TClustersList::TAccountClusters right = left;
+        UNIT_ASSERT(left == right);
+        right.Version = 3;
+        UNIT_ASSERT(!(left == right));
+        right.Version = 2;
+        right.Write = {"sas"};
+        UNIT_ASSERT(!(left == right));
+
+        TClustersList list;
+        list.Clusters.push_back(MakeCluster("sas", false));
+        list.Clusters.push_back(MakeCluster("vla", false));
+        list.Clusters.push_back(MakeCluster("myt", true));
+        list.ClusterVersion = 3;
+        list.BalancerVersion = 4;
+        list.Accounts["prod"].Write = {"myt"};
+        list.Accounts["prod"].Version = 2;
+        list.Accounts["dev"].Read = {"sas"};
+        list.Accounts["dev"].Version = 5;
+
+        UNIT_ASSERT_VALUES_EQUAL(list.SumAccountVersions(), 7);
+        list.Version = list.ClusterVersion + list.BalancerVersion + list.SumAccountVersions();
+        UNIT_ASSERT_VALUES_EQUAL(list.Version, 14);
+
+        list.Accounts["prod"].Version = 9;
+        UNIT_ASSERT_VALUES_EQUAL(list.Accounts["dev"].Version, 5);
+        UNIT_ASSERT_VALUES_EQUAL(list.SumAccountVersions(), 14);
+
+        auto names = [](const auto& clusters) {
+            TVector<TString> result;
+            for (const auto& cluster : clusters) {
+                result.push_back(cluster.Name);
+            }
+            return result;
+        };
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"sas", "vla", "myt"}));
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("dev")), (TVector<TString>{"sas"}));
+        list.Accounts["prod"].Version = 0;
+        UNIT_ASSERT_VALUES_EQUAL(names(list.GetReadClusters("prod")), (TVector<TString>{"sas", "vla", "myt"}));
+
+        list.Accounts.clear();
+        UNIT_ASSERT_VALUES_EQUAL(list.SumAccountVersions(), 0);
+    }
+
+    Y_UNIT_TEST(AccountNameFromDatabase) {
+        UNIT_ASSERT_VALUES_EQUAL(AccountNameFromDatabase(""), "");
+        UNIT_ASSERT_VALUES_EQUAL(AccountNameFromDatabase("/Root"), "");
+        UNIT_ASSERT_VALUES_EQUAL(AccountNameFromDatabase("/Root/"), "");
+        UNIT_ASSERT_VALUES_EQUAL(AccountNameFromDatabase("/logbroker-federation/Prod"), "prod");
+        UNIT_ASSERT_VALUES_EQUAL(AccountNameFromDatabase("/Root/logbroker-federation/prod/"), "prod");
     }
 
     Y_UNIT_TEST(ClustersListEqualityAndDebugString) {
@@ -128,14 +208,24 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(fnx.DebugString().Contains("fnx"));
         UNIT_ASSERT(fnx.DebugString().Contains("disabled"));
         UNIT_ASSERT(fnx.DebugString().Contains("remote"));
+        UNIT_ASSERT(fnx.DebugString().Contains("available"));
+        fnx.IsAvailable = false;
+        UNIT_ASSERT(fnx.DebugString().Contains("unavailable"));
+
+        right.Clusters.front().IsAvailable = false;
+        UNIT_ASSERT(!(left == right));
+        right.Clusters.front().IsAvailable = true;
     }
 
-    Y_UNIT_TEST(BalancerTablePathFromClusterTable) {
+    Y_UNIT_TEST(SiblingTablePath) {
         UNIT_ASSERT_VALUES_EQUAL(
-            BalancerTablePathFromClusterTable("/Root/PQ/Config/V2/Cluster"),
+            SiblingTablePath("/Root/PQ/Config/V2/Cluster", "Balancer"),
             "/Root/PQ/Config/V2/Balancer");
         UNIT_ASSERT_VALUES_EQUAL(
-            BalancerTablePathFromClusterTable("/Root/PQ/Config/V2/Other"),
+            SiblingTablePath("/Root/PQ/Config/V2/Cluster", "Account"),
+            "/Root/PQ/Config/V2/Account");
+        UNIT_ASSERT_VALUES_EQUAL(
+            SiblingTablePath("/Root/PQ/Config/V2/Other", "Balancer"),
             "/Root/PQ/Config/V2/OtherBalancer");
     }
 
@@ -145,19 +235,27 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         const TString versions = "/Root/PQ/Config/V2/Versions";
 
         UNIT_ASSERT(MakeListClustersQuery(cluster, versions).Contains(cluster));
+        UNIT_ASSERT(MakeListClustersQuery(cluster, versions).Contains("C.*"));
         UNIT_ASSERT(!MakeListClustersQuery(cluster, versions).Contains("C.fnx"));
         UNIT_ASSERT(MakeListBalancersQuery(balancer, versions).Contains(balancer));
         UNIT_ASSERT(MakeListBalancersQuery(balancer, versions).Contains("B.clusters"));
+        const TString account = SiblingTablePath(cluster, "Account");
+        const TString accountsQuery = MakeListAccountsQuery(account);
+        UNIT_ASSERT(accountsQuery.Contains("A.readClusters"));
+        UNIT_ASSERT(accountsQuery.Contains("A.writeClusters"));
+        UNIT_ASSERT(accountsQuery.Contains("A.version"));
+        UNIT_ASSERT(accountsQuery.Contains("ORDER BY A.name"));
+        UNIT_ASSERT(accountsQuery.Contains("$from"));
+        UNIT_ASSERT(!accountsQuery.Contains("Versions"));
+        UNIT_ASSERT(!accountsQuery.Contains("name == 'Account'"));
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains("CREATE TABLE IF NOT EXISTS"));
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains(cluster));
         UNIT_ASSERT(MakeCreateClusterQuery(cluster).Contains("kikimrHost Utf8"));
         UNIT_ASSERT(!MakeCreateClusterQuery(cluster).Contains("fnx"));
-        UNIT_ASSERT(MakeAlterAddFnxQuery(cluster).Contains("ADD COLUMN fnx"));
         UNIT_ASSERT(MakeCreateBalancerQuery(balancer).Contains("CREATE TABLE IF NOT EXISTS"));
         UNIT_ASSERT(MakeCreateVersionsQuery(versions).Contains("CREATE TABLE IF NOT EXISTS"));
         UNIT_ASSERT(MakeCreateVersionsQuery(versions).Contains(versions));
         UNIT_ASSERT(MakeCreateVersionsQuery(versions).Contains("version Int64"));
-        UNIT_ASSERT(MakeBackfillFnxQuery(cluster).Contains("fnx IS NULL"));
     }
 
     Y_UNIT_TEST(IssuesMatchers) {
@@ -174,7 +272,12 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(IssuesLookLikeMissingTable("path does not exist"));
         UNIT_ASSERT(IssuesLookLikeMissingTable("Unable to find table"));
         UNIT_ASSERT(IssuesLookLikeMissingTable("Table `/x` does not exist"));
+        UNIT_ASSERT(IssuesLookLikeMissingTable("Table '/Root/PQ/Config/V2/Versions' not exists."));
+        UNIT_ASSERT(IssuesLookLikeMissingTable("Table '/Root/PQ/Config/V2/Cluster' not exists."));
+        UNIT_ASSERT(IssuesLookLikeMissingTable("table not exists: 123"));
         UNIT_ASSERT(!IssuesLookLikeMissingTable("column already exists"));
+        UNIT_ASSERT(!IssuesLookLikeMissingTable("session not exists"));
+        UNIT_ASSERT(!IssuesLookLikeMissingTable("IF NOT EXISTS"));
 
         UNIT_ASSERT(IssuesLookLikeMissingColumn("Member not found: fnx"));
         UNIT_ASSERT(IssuesLookLikeMissingColumn("column fnx not found"));
@@ -184,7 +287,9 @@ Y_UNIT_TEST_SUITE(TClusterSelectTest) {
         UNIT_ASSERT(!IssuesLookLikeMissingColumn("fnx is fine"));
 
         UNIT_ASSERT(IssuesLookLikeMissingVersionsTable("Cannot find table `/Root/PQ/Config/V2/Versions`"));
+        UNIT_ASSERT(IssuesLookLikeMissingVersionsTable("Table '/Root/PQ/Config/V2/Versions' not exists."));
         UNIT_ASSERT(!IssuesLookLikeMissingVersionsTable("Cannot find table `/Root/PQ/Config/V2/Cluster`"));
+        UNIT_ASSERT(!IssuesLookLikeMissingVersionsTable("Table '/Root/PQ/Config/V2/Cluster' not exists."));
         UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Cannot find table `/Root/PQ/Config/V2/Versions`"));
         UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Cannot find table `/Root/PQ/Config/V2/Cluster`"));
         UNIT_ASSERT(IssuesLookLikeClusterSchemaGone("Member not found: fnx"));

@@ -2,11 +2,10 @@
 
 #include "yql_pq_provider.h"
 
+#include <util/generic/ptr.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/providers/common/transform/yql_exec.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
-
-#include <util/generic/ptr.h>
 
 namespace NYql {
 
@@ -26,4 +25,4 @@ THolder<IGraphTransformer> CreatePqIODiscoveryTransformer(TPqState::TPtr state);
 
 TString MakeTopicDisplayName(TStringBuf cluster, TStringBuf path);
 
-} // namespace NYql
+}   // namespace NYql

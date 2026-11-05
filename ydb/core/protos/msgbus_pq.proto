@@ -515,6 +515,8 @@ message TPersQueuePartitionResponse {
         // Proxies use it for first-commit distributed commits when the partition has parents (split).
         optional bool ClientHasAnyCommits = 9;
         optional string CommittedMetadata = 10;
+        // Earliest offset retained by the partition.
+        optional uint64 StartOffset = 11;
     }
 
     message TCmdGetOwnershipResult {

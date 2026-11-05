@@ -328,6 +328,7 @@ class TExecutor
             EvLeaseExtend,
             EvActivateLowExecution,
             EvRetryGcRequest,
+            EvVacuumProgress,
 
             EvEnd
         };
@@ -342,6 +343,7 @@ class TExecutor
         struct TEvActivateCompactionChanges : public TEventLocal<TEvActivateCompactionChanges, EvActivateCompactionChanges> {};
         struct TEvBrokenTransaction : public TEventLocal<TEvBrokenTransaction, EvBrokenTransaction> {};
         struct TEvLeaseExtend : public TEventLocal<TEvLeaseExtend, EvLeaseExtend> {};
+        struct TEvVacuumProgress : public TEventLocal<TEvVacuumProgress, EvVacuumProgress> {};
 
         struct TEvRetryGcRequest : public TEventLocal<TEvRetryGcRequest, EvRetryGcRequest> {
             const ui32 Channel;
@@ -489,6 +491,7 @@ class TExecutor
 
     bool LogBatchFlushScheduled = false;
     bool NeedLogSnapshot = false;
+    bool VacuumProgressScheduled = false;
 
     mutable bool HadRejectProbabilityByTxInFly = false;
     mutable bool HadRejectProbabilityByOverload = false;
@@ -532,6 +535,8 @@ class TExecutor
     void CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal = false);
     void SendReassignYellowChannels(const TVector<ui32> &yellowChannels);
     void CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier);
+    void ScheduleVacuumProgress();
+    void DriveVacuumProgress();
     void UtilizeSubset(const NTable::TSubset&, const NTable::NFwd::TSeen&,
         THashSet<TLogoBlobID> reusedBundles, TLogCommit *commit);
     void UtilizeSubset(const NTable::TSubset&, TLogCommit *commit);
@@ -696,6 +701,7 @@ public:
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override;
     ui64 Enqueue(TAutoPtr<ITransaction> transaction) override;
     ui64 EnqueueLowPriority(TAutoPtr<ITransaction> transaction) override;
+    bool TryExecuteReadyTransaction() override;
     bool CancelTransaction(ui64 id) override;
 
     void LeaseConfirmed(ui64 confirmedCookie);
@@ -749,6 +755,7 @@ public:
     void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr &ev) override;
 
     void SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) override;
+    ui32 CreateFollowerSnapshotCheckpoint() override;
 
     THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const override;
     bool HasLoanedParts() const override;

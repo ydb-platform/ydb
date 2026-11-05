@@ -1,3 +1,5 @@
+#include "ut_olap_enums.h"
+
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/olap_helpers.h>
@@ -13,7 +15,10 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/library/testlib/helpers.h>
+#include <yql/essentials/ast/yql_ast_escaping.h>
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -122,6 +127,100 @@ static const TString tableSchemaFormat = R"(
 )";
 
 #define DEBUG_HINT (TStringBuilder() << "at line " << __LINE__)
+
+ui32 MiniKqlRangeSize(const NKikimrMiniKQL::TResult& result) {
+    return result.GetValue().GetStruct(0).GetOptional().GetStruct(0).ListSize();
+}
+
+ui64 MiniKqlSelectUint64(const NKikimrMiniKQL::TResult& result) {
+    const auto& opt = result.GetValue().GetStruct(0).GetOptional();
+    UNIT_ASSERT(opt.HasOptional());
+    return opt.GetOptional().GetStruct(0).GetOptional().GetUint64();
+}
+
+ui32 CountTxInFlightV2(TTestBasicRuntime& runtime) {
+    const auto result = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, R"(
+        (
+            (let range '(
+                '('TxId (Null) (Void))
+                '('TxPartId (Null) (Void))
+            ))
+            (let fields '('TxId 'TxPartId))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'TxInFlightV2 range fields '()))
+            ))
+        )
+    )");
+    return MiniKqlRangeSize(result);
+}
+
+ui32 CountColumnTablesAlters(TTestBasicRuntime& runtime) {
+    const auto result = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, R"(
+        (
+            (let range '('('PathId (Null) (Void))))
+            (let fields '('PathId))
+            (return (AsList
+                (SetResult 'Result (SelectRange 'ColumnTablesAlters range fields '()))
+            ))
+        )
+    )");
+    return MiniKqlRangeSize(result);
+}
+
+ui64 ReadPathLastTxId(TTestBasicRuntime& runtime, ui64 localPathId) {
+    const auto result = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+        (
+            (let key '('('Id (Uint64 '%lu))))
+            (let select '('LastTxId))
+            (return (AsList
+                (SetResult 'Result (SelectRow 'Paths key select))
+            ))
+        )
+    )", localPathId));
+    return MiniKqlSelectUint64(result);
+}
+
+ui64 ReadShardLastTxId(TTestBasicRuntime& runtime, ui64 localShardIdx) {
+    const auto result = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+        (
+            (let key '('('ShardIdx (Uint64 '%lu))))
+            (let select '('LastTxId))
+            (return (AsList
+                (SetResult 'Result (SelectRow 'Shards key select))
+            ))
+        )
+    )", localShardIdx));
+    return MiniKqlSelectUint64(result);
+}
+
+TVector<ui64> ReadColumnShardLastTxIds(TTestBasicRuntime& runtime, const TString& path) {
+    TVector<ui64> lastTxIds;
+    for (const ui64 tabletId : GetColumnShardTabletIds(runtime, path)) {
+        const ui64 shardIdx = ResolveLocalShardIdxByTabletId(runtime, tabletId);
+        UNIT_ASSERT_VALUES_UNEQUAL_C(shardIdx, 0u, path);
+        lastTxIds.push_back(ReadShardLastTxId(runtime, shardIdx));
+    }
+    return lastTxIds;
+}
+
+bool ColumnTableHasColumn(const NKikimrScheme::TEvDescribeSchemeResult& descr, const TString& name) {
+    const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+    for (const auto& col : schema.GetColumns()) {
+        if (col.GetName() == name) {
+            return true;
+        }
+    }
+    return false;
+}
+
+THashSet<TString> ColumnTableIndexNames(const NKikimrScheme::TEvDescribeSchemeResult& descr) {
+    THashSet<TString> names;
+    const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+    for (const auto& idx : schema.GetIndexes()) {
+        names.insert(idx.GetName());
+    }
+    return names;
+}
 
 NLs::TCheckFunc LsCheckDiskQuotaExceeded(
     bool expectExceeded = true,
@@ -507,6 +606,183 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
 }}
 
 Y_UNIT_TEST_SUITE(TOlap) {
+    Y_UNIT_TEST_FLAG(PgTypesRejected, EnableTablePgTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(EnableTablePgTypes));
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        for (const TString type : {"pgint2", "pgint4", "pgint8", "pgfloat4", "pgfloat8", "pgtext", "pgbool"}) {
+            const TString column = TStringBuilder() << "{ Name: \"value\" Type: \"" << type << "\" }";
+            const TString schema = TStringBuilder() << R"(
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                KeyColumnNames: "timestamp"
+                Columns )" << column;
+            const TExpectedResult rejected(NKikimrScheme::StatusSchemeError,
+                TStringBuilder() << "Type '" << type << "' specified for column 'value' is not supported for column tables");
+
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"PgTable\" ColumnShardCount: 1 Schema { " << schema << " }", {rejected});
+            TestCreateOlapStore(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"PgStore\" ColumnShardCount: 1 SchemaPresets { Name: \"default\" Schema { "
+                    << schema << " } }", {rejected});
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore",
+                TStringBuilder() << R"(Name: "PgTable" ColumnShardCount: 1 Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    KeyColumnNames: "timestamp"
+                    Columns { Name: "data" Type: ")" << type << "\" } }",
+                {{NKikimrScheme::StatusSchemeError, TStringBuilder() << "Type '" << type
+                    << "' specified for column 'data' is not supported for column tables"}});
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"ColumnTable\" AlterSchema { AddColumns " << column << " }", {rejected});
+            TestAlterOlapStore(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"OlapStore\" AlterSchemaPresets { Name: \"default\" AlterSchema { AddColumns "
+                    << column << " } }", {rejected});
+        }
+
+        TestLs(runtime, "/MyRoot/PgTable", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/PgStore", false, NLs::PathNotExist);
+
+        // Rejected additions must not prevent subsequent valid schema changes.
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "value" Type: "Int32" } }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema { AddColumns { Name: "value" Type: "Int32" } }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST_FLAG(InFlightPgColumnAlterSurvivesReboot, EnableTablePgTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableTablePgTypes(EnableTablePgTypes));
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+        const ui64 localPathId = DescribePath(runtime, "/MyRoot/ColumnTable").GetPathId();
+
+        TBlockEvents<TEvColumnShard::TEvProposeTransaction> proposals(runtime);
+        const ui64 alterTxId = ++txId;
+        AsyncAlterColumnTable(runtime, alterTxId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "value" Type: "Int32" } }
+        )");
+        runtime.WaitFor("alter proposal blocked", [&]() { return !proposals.empty(); });
+        const ui64 staleGeneration = proposals.front()->Get()->Record.GetSeqNo().GetGeneration();
+
+        const auto selected = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '('('PathId (Uint64 '%lu))))
+                (let select '('AlterBody 'Description))
+                (return (AsList
+                    (SetResult 'Result (SelectRow 'ColumnTablesAlters key select))
+                ))
+            )
+        )", localPathId));
+        const auto& row = selected.GetValue().GetStruct(0).GetOptional();
+        UNIT_ASSERT_C(row.HasOptional(), "the in-flight ALTER must be persisted");
+        UNIT_ASSERT(row.GetOptional().GetStruct(0).HasOptional());
+        UNIT_ASSERT(row.GetOptional().GetStruct(1).HasOptional());
+        NKikimrSchemeOp::TAlterColumnTable alterBody;
+        UNIT_ASSERT(alterBody.ParseFromString(row.GetOptional().GetStruct(0).GetOptional().GetBytes()));
+        NKikimrSchemeOp::TColumnTableDescription description;
+        UNIT_ASSERT(description.ParseFromString(row.GetOptional().GetStruct(1).GetOptional().GetBytes()));
+
+        const auto pgType = NScheme::ProtoColumnTypeFromTypeInfoMod(NScheme::TTypeInfo(NPg::TypeDescFromPgTypeName("pgint4")), "");
+        UNIT_ASSERT_VALUES_EQUAL(alterBody.GetAlterSchema().AddColumnsSize(), 1);
+        auto* added = alterBody.MutableAlterSchema()->MutableAddColumns(0);
+        added->SetType("pgint4");
+        added->ClearTypeId();
+        added->ClearTypeInfo();
+        bool described = false;
+        for (auto& column : *description.MutableSchema()->MutableColumns()) {
+            if (column.GetName() == "value") {
+                column.SetType("pgint4");
+                column.SetTypeId(pgType.TypeId);
+                UNIT_ASSERT(pgType.TypeInfo);
+                *column.MutableTypeInfo() = *pgType.TypeInfo;
+                described = true;
+            }
+        }
+        UNIT_ASSERT(described);
+
+        auto escape = [](const google::protobuf::Message& proto) {
+            TString serialized;
+            UNIT_ASSERT(proto.SerializeToString(&serialized));
+            TStringStream escaped;
+            NYql::EscapeArbitraryAtom(serialized, '"', &escaped);
+            return escaped.Str();
+        };
+        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '('('PathId (Uint64 '%lu))))
+                (let row '('('AlterBody (String '%s)) '('Description (String '%s))))
+                (return (AsList (UpdateRow 'ColumnTablesAlters key row)))
+            )
+        )", localPathId, escape(alterBody).c_str(), escape(description).c_str()));
+
+        auto isRestored = [&](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.GetTxId() == alterTxId && record.GetSeqNo().GetGeneration() > staleGeneration;
+        };
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.WaitFor("proposal after reboot", [&]() { return std::any_of(proposals.begin(), proposals.end(), isRestored); });
+        std::erase_if(proposals, [&](const auto& ev) { return !isRestored(ev); });
+        for (const auto& ev : proposals) {
+            NKikimrTxColumnShard::TSchemaTxBody txBody;
+            UNIT_ASSERT(txBody.ParseFromString(ev->Get()->Record.GetTxBody()));
+            bool proposed = false;
+            for (const auto& column : txBody.GetAlterTable().GetSchema().GetColumns()) {
+                if (column.GetName() == "value") {
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetType(), "pgint4");
+                    proposed = true;
+                }
+            }
+            UNIT_ASSERT(proposed);
+        }
+        proposals.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, alterTxId);
+        const auto checkSchema = [&]() {
+            const auto table = DescribePath(runtime, "/MyRoot/ColumnTable").GetPathDescription().GetColumnTableDescription();
+            UNIT_ASSERT_VALUES_EQUAL(table.GetSchema().ColumnsSize(), 3);
+            bool found = false;
+            for (const auto& column : table.GetSchema().GetColumns()) {
+                if (column.GetName() == "value") {
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetType(), "pgint4");
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetTypeId(), pgType.TypeId);
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetTypeInfo().GetPgTypeId(), pgType.TypeInfo->GetPgTypeId());
+                    found = true;
+                }
+            }
+            UNIT_ASSERT(found);
+        };
+        checkSchema();
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            AlterSchema { AddColumns { Name: "new_value" Type: "pgint4" } }
+        )", {{NKikimrScheme::StatusSchemeError,
+            "Type 'pgint4' specified for column 'new_value' is not supported for column tables"}});
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        checkSchema();
+    }
+
     Y_UNIT_TEST(CreateStore) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -754,6 +1030,119 @@ Y_UNIT_TEST_SUITE(TOlap) {
             << sharding.GetColumnShards(0) << " } }", {NKikimrScheme::StatusSuccess});
         env.TestWaitNotification(runtime, alterTxId);
         publicationAcks.Stop().Unblock();
+    }
+
+    Y_UNIT_TEST_FLAG(InStoreShardAlterSurvivesReboot, Transfer) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        // Sharing still uses SchemeShard path IDs, so run it with legacy IDs.
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetForcedGenerateInternalPathId(!Transfer);
+        runtime.GetAppData().ColumnShardConfig.SetGenerateInternalPathId(!Transfer);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            ColumnShardCount: 2
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 2
+            Sharding {
+                HashSharding { Function: HASH_FUNCTION_MODULO_N Columns: "timestamp" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto table = DescribePath(runtime, "/MyRoot/OlapStore/ColumnTable")
+            .GetPathDescription().GetColumnTableDescription();
+        UNIT_ASSERT_VALUES_EQUAL(table.GetSharding().ColumnShardsSize(), 2);
+        const ui64 shardId = table.GetSharding().GetColumnShards(0);
+        TString alter = TStringBuilder() << R"(
+            Name: "ColumnTable"
+            AlterShards { Modification {
+                OpenWriteIds: )" << shardId << R"(
+                Modulo { PartsCount: 2 Shards { TabletId: )" << shardId << R"( AppropriateMods: 0 } }
+            } }
+        )";
+        if (Transfer) {
+            // Establish the destination's snapshot barrier through a regular ALTER.
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", alter);
+            env.TestWaitNotification(runtime, txId);
+            alter = TStringBuilder() << R"(
+                Name: "ColumnTable"
+                AlterShards { Transfer { Transfers {
+                    SessionId: "reboot-transfer"
+                    DestinationTabletId: )" << shardId << R"(
+                    SourceTabletIds: )" << table.GetSharding().GetColumnShards(1) << R"(
+                } } }
+            )";
+        }
+
+        const ui64 alterTxId = ++txId;
+        TBlockEvents<TEvColumnShard::TEvProposeTransaction> proposals(runtime,
+            [alterTxId](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+                return ev->Get()->Record.GetTxId() == alterTxId;
+            });
+        TestAlterColumnTable(runtime, alterTxId, "/MyRoot/OlapStore", alter);
+        runtime.WaitFor("sharding proposal blocked", [&]() { return !proposals.empty(); });
+        const ui64 staleGeneration = proposals.front()->Get()->Record.GetSeqNo().GetGeneration();
+        const auto originalProposal = proposals.front()->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(originalProposal.GetTxKind(),
+            Transfer ? NKikimrTxColumnShard::TX_KIND_SHARING : NKikimrTxColumnShard::TX_KIND_SCHEMA);
+        auto getBody = [](const auto& proposal) -> TString {
+            if (Transfer) {
+                return proposal.GetTxBody();
+            }
+
+            NKikimrTxColumnShard::TSchemaTxBody body;
+            UNIT_ASSERT(body.ParseFromString(proposal.GetTxBody()));
+            UNIT_ASSERT(body.HasGranuleShardingInfo());
+            body.ClearSeqNo();
+            return body.SerializeAsString();
+        };
+
+        const TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        auto isRestored = [&](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+            return ev->Get()->Record.GetSeqNo().GetGeneration() > staleGeneration;
+        };
+        runtime.WaitFor("sharding proposal after reboot", [&]() {
+            return std::any_of(proposals.begin(), proposals.end(), isRestored);
+        });
+        std::erase_if(proposals, [&](const auto& ev) { return !isRestored(ev); });
+        for (const auto& ev : proposals) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxKind(), originalProposal.GetTxKind());
+            UNIT_ASSERT_VALUES_EQUAL(getBody(ev->Get()->Record), getBody(originalProposal));
+        }
+
+        proposals.Stop().Unblock();
+        env.TestWaitNotification(runtime, alterTxId);
+        const auto altered = DescribePath(runtime, "/MyRoot/OlapStore/ColumnTable")
+            .GetPathDescription().GetColumnTableDescription();
+        UNIT_ASSERT_VALUES_EQUAL(altered.GetSharding().ColumnShardsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(altered.GetSharding().GetColumnShards(0), shardId);
+        UNIT_ASSERT(altered.GetSharding().GetShardsInfo(0).HasOpenForWriteSnapshot());
+        if (!Transfer) {
+            NKikimrTxColumnShard::TSchemaTxBody body;
+            UNIT_ASSERT(body.ParseFromString(originalProposal.GetTxBody()));
+            UNIT_ASSERT_VALUES_EQUAL(altered.GetSharding().GetShardsInfo(0).GetShardingVersion(),
+                body.GetGranuleShardingInfo().GetVersionId());
+        }
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        const auto restored = DescribePath(runtime, "/MyRoot/OlapStore/ColumnTable")
+            .GetPathDescription().GetColumnTableDescription();
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetSharding().SerializeAsString(), altered.GetSharding().SerializeAsString());
     }
 
     Y_UNIT_TEST_TWIN(MultiColumnStatisticsWaitsForPublication, Restart) {
@@ -1268,6 +1657,396 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
         TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
+    }
+
+    Y_UNIT_TEST(ExtendedTtlTypesFeatureFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        for (const TString type : {"DyNumber", "Date32", "Datetime64", "Timestamp64"}) {
+            const TString ttl = TStringBuilder() << "Enabled { ColumnName: \"ts\" ExpireAfterSeconds: 300 ColumnUnit: "
+                << (type == "DyNumber" ? "UNIT_SECONDS" : "UNIT_AUTO") << " }";
+            const TString schema = TStringBuilder() << R"(
+                Name: ")" << type << R"("
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                    Columns { Id: 2 Name: "ts" Type: ")" << type << R"(" }
+                    KeyColumnNames: "id"
+                    Indexes {
+                        Id: 3 Name: "ttl_max" ClassName: "MIN_MAX"
+                        StorageId: "__LOCAL_METADATA" InheritPortionStorage: false
+                        MinMaxIndex { ColumnId: 2 }
+                    }
+                }
+            )";
+            const TString alter = TStringBuilder() << "Name: \"" << type << "\" AlterTtlSettings { " << ttl << " }";
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(false);
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema + " TtlSettings { " + ttl + " }",
+                {NKikimrScheme::StatusSchemeError});
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema);
+            env.TestWaitNotification(runtime, txId);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", alter, {NKikimrScheme::StatusSchemeError});
+
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(true);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", alter);
+            env.TestWaitNotification(runtime, txId);
+            TestLs(runtime, "/MyRoot/" + type, false, NLs::HasColumnTableTtlSettingsEnabled("ts", TDuration::Seconds(300)));
+
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(false);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"" << type << "\" AlterTtlSettings { Disabled {} }");
+            env.TestWaitNotification(runtime, txId);
+            TestLs(runtime, "/MyRoot/" + type, false, NLs::HasColumnTableTtlSettingsDisabled());
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", alter, {NKikimrScheme::StatusSchemeError});
+
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(true);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", alter);
+            env.TestWaitNotification(runtime, txId);
+            TestDropColumnTable(runtime, ++txId, "/MyRoot", type);
+            env.TestWaitNotification(runtime, txId);
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema + " TtlSettings { " + ttl + " }");
+            env.TestWaitNotification(runtime, txId);
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(CompressionAlterSurvivesReboot, DisableOlapCompression) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableOlapCompression(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        const TString alter = R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                AlterColumns {
+                    Name: "data"
+                    Serializer {
+                        ClassName: "ARROW_SERIALIZER"
+                        ArrowCompression { Codec: ColumnCodecZSTD Level: 4 }
+                    }
+                }
+            }
+        )";
+        const ui64 alterTxId = ++txId;
+        TBlockEvents<TEvColumnShard::TEvProposeTransaction> proposals(runtime,
+            [alterTxId](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+                return ev->Get()->Record.GetTxId() == alterTxId;
+            });
+        TestAlterColumnTable(runtime, alterTxId, "/MyRoot", alter);
+        runtime.WaitFor("compression proposal blocked", [&]() { return !proposals.empty(); });
+        const ui64 staleGeneration = proposals.front()->Get()->Record.GetSeqNo().GetGeneration();
+        NKikimrTxColumnShard::TSchemaTxBody originalProposal;
+        UNIT_ASSERT(originalProposal.ParseFromString(proposals.front()->Get()->Record.GetTxBody()));
+        UNIT_ASSERT(originalProposal.GetAlterTable().HasSchema());
+        // PersistColumnTable materializes the standalone engine in the stored copy.
+        originalProposal.MutableAlterTable()->MutableSchema()->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
+
+        runtime.GetAppData().FeatureFlags.SetEnableOlapCompression(!DisableOlapCompression);
+        const TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        auto isRestored = [&](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+            return ev->Get()->Record.GetSeqNo().GetGeneration() > staleGeneration;
+        };
+        runtime.WaitFor("compression proposal after reboot", [&]() {
+            return std::any_of(proposals.begin(), proposals.end(), isRestored);
+        });
+        std::erase_if(proposals, [&](const auto& ev) { return !isRestored(ev); });
+        for (const auto& ev : proposals) {
+            NKikimrTxColumnShard::TSchemaTxBody restoredProposal;
+            UNIT_ASSERT(restoredProposal.ParseFromString(ev->Get()->Record.GetTxBody()));
+            UNIT_ASSERT_VALUES_EQUAL(restoredProposal.GetAlterTable().SerializeAsString(),
+                originalProposal.GetAlterTable().SerializeAsString());
+        }
+
+        proposals.Stop().Unblock();
+        env.TestWaitNotification(runtime, alterTxId);
+
+        const auto checkCompression = [&]() {
+            const auto table = DescribePath(runtime, "/MyRoot/ColumnTable").GetPathDescription().GetColumnTableDescription();
+            bool found = false;
+            for (const auto& column : table.GetSchema().GetColumns()) {
+                if (column.GetName() == "data") {
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetSerializer().GetClassName(), "ARROW_SERIALIZER");
+                    UNIT_ASSERT(column.GetSerializer().GetArrowCompression().GetCodec() == NKikimrSchemeOp::ColumnCodecZSTD);
+                    UNIT_ASSERT_VALUES_EQUAL(column.GetSerializer().GetArrowCompression().GetLevel(), 4);
+                    found = true;
+                }
+            }
+
+            UNIT_ASSERT(found);
+        };
+        checkCompression();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        checkCompression();
+
+        if (DisableOlapCompression) {
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", alter,
+                {{NKikimrScheme::StatusSchemeError, "Compression is disabled for OLAP tables"}});
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(InStoreTtlAlterSurvivesReboot, DisableExtendedTtlTypes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableTableDatetime64(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(true);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp64" NotNull: true }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false,
+            NLs::HasColumnTableSchemaPreset("default"));
+
+        const TString alter = R"(
+            Name: "ColumnTable"
+            AlterTtlSettings {
+                Enabled {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    ExpireAfterSeconds: 300
+                }
+            }
+        )";
+        const ui64 alterTxId = ++txId;
+        TBlockEvents<TEvColumnShard::TEvProposeTransaction> proposals(runtime,
+            [alterTxId](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+                return ev->Get()->Record.GetTxId() == alterTxId;
+            });
+        TestAlterColumnTable(runtime, alterTxId, "/MyRoot/OlapStore", alter);
+        runtime.WaitFor("in-store TTL proposal blocked", [&]() { return !proposals.empty(); });
+        const ui64 staleGeneration = proposals.front()->Get()->Record.GetSeqNo().GetGeneration();
+        NKikimrTxColumnShard::TSchemaTxBody originalProposal;
+        UNIT_ASSERT(originalProposal.ParseFromString(proposals.front()->Get()->Record.GetTxBody()));
+        UNIT_ASSERT(originalProposal.GetAlterTable().HasSchemaPreset());
+        UNIT_ASSERT(originalProposal.GetAlterTable().GetTtlSettings().HasEnabled());
+
+        runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(!DisableExtendedTtlTypes);
+        const TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        auto isRestored = [&](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+            return ev->Get()->Record.GetSeqNo().GetGeneration() > staleGeneration;
+        };
+        runtime.WaitFor("in-store TTL proposal after reboot", [&]() {
+            return std::any_of(proposals.begin(), proposals.end(), isRestored);
+        });
+        std::erase_if(proposals, [&](const auto& ev) { return !isRestored(ev); });
+        for (const auto& ev : proposals) {
+            NKikimrTxColumnShard::TSchemaTxBody restoredProposal;
+            UNIT_ASSERT(restoredProposal.ParseFromString(ev->Get()->Record.GetTxBody()));
+            UNIT_ASSERT_VALUES_EQUAL(restoredProposal.GetAlterTable().SerializeAsString(),
+                originalProposal.GetAlterTable().SerializeAsString());
+        }
+
+        proposals.Stop().Unblock();
+        env.TestWaitNotification(runtime, alterTxId);
+
+        const auto checkTtl = [&]() {
+            TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
+                NLs::HasColumnTableSchemaPreset("default"),
+                NLs::HasColumnTableTtlSettingsVersion(originalProposal.GetAlterTable().GetTtlSettings().GetVersion()),
+                NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+        };
+        checkTtl();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        checkTtl();
+
+        if (DisableExtendedTtlTypes) {
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", alter,
+                {{NKikimrScheme::StatusSchemeError,
+                    "TTL on DyNumber, Date32, Datetime64 and Timestamp64 in column tables is disabled"}});
+        }
+    }
+
+    Y_UNIT_TEST(InStoreTtlAlterDuringStoreAlter, EInStoreSchemaChange, EInStoreAlterReboot) {
+        const auto schemaChange = Arg<0>();
+        const bool reboot = Arg<1>() == EInStoreAlterReboot::WithReboot;
+        const bool acceptTtl = schemaChange == EInStoreSchemaChange::AddTtlColumn;
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalMinMaxIndex(true);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "id" Type: "Uint64" NotNull: true }
+                    Columns { Name: "ts" Type: "Timestamp" }
+                    KeyColumnNames: "id"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema {
+                    UpsertIndexes {
+                        Name: "ttl_max" ClassName: "MIN_MAX"
+                        StorageId: "__LOCAL_METADATA" InheritPortionStorage: false
+                        MinMaxIndex { ColumnName: "ts" }
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const auto initialStore = DescribePath(runtime, "/MyRoot/OlapStore")
+            .GetPathDescription().GetColumnStoreDescription();
+        UNIT_ASSERT_VALUES_EQUAL(initialStore.GetSchemaPresets(0).GetSchema().IndexesSize(), 1);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString schemaAlter;
+        TString ttlError;
+        switch (schemaChange) {
+            case EInStoreSchemaChange::DropTtlColumn:
+                schemaAlter = R"(
+                    DropColumns { Name: "ts" }
+                    DropIndexes: "ttl_max"
+                )";
+                ttlError = "Incorrect ttl column - not found in scheme";
+                break;
+            case EInStoreSchemaChange::DropTtlIndex:
+                schemaAlter = R"(DropIndexes: "ttl_max")";
+                ttlError = "TTL column must either be the first PK column, or have a MIN_MAX index";
+                break;
+            case EInStoreSchemaChange::AddTtlColumn:
+                schemaAlter = R"(
+                    AddColumns { Name: "new_ts" Type: "Timestamp" }
+                    UpsertIndexes {
+                        Name: "new_ttl_max" ClassName: "MIN_MAX"
+                        StorageId: "__LOCAL_METADATA" InheritPortionStorage: false
+                        MinMaxIndex { ColumnName: "new_ts" }
+                    }
+                )";
+                break;
+        }
+
+        const ui64 storeTxId = ++txId;
+        TBlockEvents<TEvColumnShard::TEvProposeTransaction> storeProposals(runtime,
+            [storeTxId](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+                return ev->Get()->Record.GetTxId() == storeTxId;
+            });
+        TestAlterOlapStore(runtime, storeTxId, "/MyRoot", TStringBuilder() << R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema { )" << schemaAlter << R"( }
+            }
+        )");
+        runtime.WaitFor("store ALTER proposal blocked", [&]() { return !storeProposals.empty(); });
+        const ui64 staleGeneration = storeProposals.front()->Get()->Record.GetSeqNo().GetGeneration();
+
+        const ui64 tableTxId = ++txId;
+        TBlockEvents<TEvColumnShard::TEvProposeTransaction> tableProposals(runtime,
+            [tableTxId](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+                return ev->Get()->Record.GetTxId() == tableTxId;
+            });
+        const TString ttlColumn = acceptTtl ? "new_ts" : "ts";
+        const TString ttlAlter = TStringBuilder() << R"(
+            Name: "ColumnTable"
+            AlterTtlSettings {
+                Enabled { ColumnName: ")" << ttlColumn << R"(" ColumnUnit: UNIT_AUTO ExpireAfterSeconds: 300 }
+            }
+        )";
+        const TVector<TExpectedResult> expected = {{
+            acceptTtl ? NKikimrScheme::StatusAccepted : NKikimrScheme::StatusSchemeError, ttlError}};
+        TestAlterColumnTable(runtime, tableTxId, "/MyRoot/OlapStore", ttlAlter, expected);
+        UNIT_ASSERT(tableProposals.empty());
+
+        const TActorId sender = runtime.AllocateEdgeActor();
+        if (reboot) {
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+            const auto isRestored = [&](const TEvColumnShard::TEvProposeTransaction::TPtr& ev) {
+                return ev->Get()->Record.GetSeqNo().GetGeneration() > staleGeneration;
+            };
+
+            runtime.WaitFor("store ALTER proposal after reboot", [&]() {
+                return std::any_of(storeProposals.begin(), storeProposals.end(), isRestored);
+            });
+            std::erase_if(storeProposals, [&](const auto& ev) { return !isRestored(ev); });
+            UNIT_ASSERT(tableProposals.empty());
+        }
+
+        storeProposals.Stop().Unblock();
+        env.TestWaitNotification(runtime, storeTxId);
+        const auto alteredStore = DescribePath(runtime, "/MyRoot/OlapStore")
+            .GetPathDescription().GetColumnStoreDescription();
+        const auto& schema = alteredStore.GetSchemaPresets(0).GetSchema();
+        UNIT_ASSERT_VALUES_EQUAL(schema.ColumnsSize(),
+            schemaChange == EInStoreSchemaChange::DropTtlColumn ? 1 : (acceptTtl ? 3 : 2));
+        UNIT_ASSERT_VALUES_EQUAL(schema.IndexesSize(), acceptTtl ? 2 : 0);
+        if (acceptTtl) {
+            runtime.WaitFor("table TTL proposal after store ALTER", [&]() { return !tableProposals.empty(); });
+        } else {
+            UNIT_ASSERT(tableProposals.empty());
+        }
+
+        for (const auto& ev : tableProposals) {
+            NKikimrTxColumnShard::TSchemaTxBody body;
+            UNIT_ASSERT(body.ParseFromString(ev->Get()->Record.GetTxBody()));
+            const auto& alter = body.GetAlterTable();
+            UNIT_ASSERT(alter.HasSchemaPreset());
+            UNIT_ASSERT_VALUES_EQUAL(alter.GetSchemaPreset().SerializeAsString(),
+                alteredStore.GetSchemaPresets(0).SerializeAsString());
+            UNIT_ASSERT(alter.GetTtlSettings().HasEnabled());
+            UNIT_ASSERT_VALUES_EQUAL(alter.GetTtlSettings().GetEnabled().GetColumnName(), ttlColumn);
+            const auto& columns = alter.GetSchemaPreset().GetSchema().GetColumns();
+            const bool hasTtlColumn = std::any_of(columns.begin(), columns.end(), [&](const auto& column) {
+                return column.GetName() == ttlColumn;
+            });
+
+            UNIT_ASSERT_C(hasTtlColumn,
+                "Restored ALTER enables TTL on a column absent from its schema preset: " << alter.DebugString());
+        }
+
+        tableProposals.Stop().Unblock();
+        if (acceptTtl) {
+            env.TestWaitNotification(runtime, tableTxId);
+        } else {
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", ttlAlter, expected);
+        }
+
+        const auto checkTable = [&]() {
+            const auto describe = DescribePath(runtime, "/MyRoot/OlapStore/ColumnTable");
+            UNIT_ASSERT(describe.GetPathDescription().GetSelf().GetPathState() == NKikimrSchemeOp::EPathStateNoChanges);
+            const auto& ttl = describe.GetPathDescription().GetColumnTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl.HasEnabled(), acceptTtl);
+            if (acceptTtl) {
+                UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetColumnName(), ttlColumn);
+                UNIT_ASSERT_VALUES_EQUAL(ttl.GetEnabled().GetExpireAfterSeconds(), 300);
+            }
+        };
+
+        checkTable();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        checkTable();
     }
 
     Y_UNIT_TEST(CreateTableTtl) {
@@ -2637,6 +3416,24 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         )";
     }
 
+    static TString AlterUpsertMinMaxIndex(const TString& tableName, const TString& indexName,
+            const TString& columnName) {
+        return TStringBuilder() << R"(
+            Name: ")" << tableName << R"("
+            AlterSchema {
+                UpsertIndexes {
+                    Name: ")" << indexName << R"("
+                    StorageId: "__LOCAL_METADATA"
+                    InheritPortionStorage: false
+                    ClassName: "MIN_MAX"
+                    MinMaxIndex {
+                        ColumnName: ")" << columnName << R"("
+                    }
+                }
+            }
+        )";
+    }
+
     Y_UNIT_TEST(CreateColumnTableOk) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -3033,6 +3830,63 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         {
             auto descr = DescribePrivatePath(runtime, "/MyRoot/TestTableLifecycle/bloom_data_v2");
             TestDescribeResult(descr, {NLs::PathNotExist});
+        }
+    }
+
+    Y_UNIT_TEST(AlterColumnTableAddMinMaxIndexRejectedAtPathsLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalMinMaxIndex(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "c_int64" Type: "Int64" }
+                KeyColumnNames: "timestamp"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 pathsBefore = DescribePath(runtime, "/MyRoot")
+            .GetPathDescription().GetDomainDescription().GetPathsInside();
+
+        TSchemeLimits limits;
+        limits.MaxPaths = 1;
+        SetSchemeshardSchemaLimits(runtime, limits);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertMinMaxIndex("Table", "idx_c_int64_minmax", "c_int64"),
+            {{NKikimrScheme::StatusResourceExhausted, "paths count limit exceeded"}});
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription().GetPathsInside(),
+            pathsBefore);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_c_int64_minmax"), {NLs::PathNotExist});
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/Table");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_VALUES_EQUAL(schema.IndexesSize(), 0);
+        }
+
+        limits.MaxPaths = pathsBefore + 100;
+        SetSchemeshardSchemaLimits(runtime, limits);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+            AlterUpsertMinMaxIndex("Table", "idx_c_int64_minmax", "c_int64"));
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx_c_int64_minmax"), {NLs::PathExist});
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/Table");
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            UNIT_ASSERT_VALUES_EQUAL(schema.IndexesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(schema.GetIndexes(0).GetName(), "idx_c_int64_minmax");
         }
     }
 
@@ -3596,6 +4450,271 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         // Move to existing name without overwrite -> error
         TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "bloom_key_renamed", "bloom_data", false,
             {NKikimrScheme::StatusSchemeError});
+    }
+
+    Y_UNIT_TEST(AlterColumnTableLocalIndexProposeAbortRollback) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        options.EnableTieringInColumnShard(true);
+        options.RunFakeConfigDispatcher(true);
+        options.EnableMoveIndex(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        ui64 txId = 100;
+
+        TestCreateExternalDataSource(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tier1"
+            SourceType: "ObjectStorage"
+            Location: "http://fake.fake/fake"
+            Auth: {
+                Aws: {
+                    AwsAccessKeyIdSecretName: "secret"
+                    AwsSecretAccessKeySecretName: "secret"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            ColumnShardCount: 1
+            SchemaPresets {
+                Name: "default"
+                Schema {
+                    Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                    Columns { Name: "data" Type: "Utf8" }
+                    KeyColumnNames: "timestamp"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "StoreTable"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "data" Type: "Utf8" }
+                KeyColumnNames: "timestamp"
+                Indexes {
+                    Id: 4
+                    Name: "bloom_key"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [2]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+                Indexes {
+                    Id: 5
+                    Name: "bloom_data"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnIds: [3]
+                        FalsePositiveProbability: 0.05
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 tablePathId = GetLocalPathId(runtime, "/MyRoot/Table");
+        const ui64 storePathId = GetLocalPathId(runtime, "/MyRoot/OlapStore");
+        const ui64 storeTablePathId = GetLocalPathId(runtime, "/MyRoot/OlapStore/StoreTable");
+
+        struct TSsSnapshot {
+            ui64 TableLastTxId = 0;
+            ui64 StoreLastTxId = 0;
+            ui64 StoreTableLastTxId = 0;
+            TVector<ui64> TableShardLastTxIds;
+            TVector<ui64> StoreShardLastTxIds;
+            ui32 TxInFlight = 0;
+            ui32 ColumnTableAlters = 0;
+        };
+
+        const auto capture = [&]() -> TSsSnapshot {
+            TSsSnapshot snap;
+            snap.TableLastTxId = ReadPathLastTxId(runtime, tablePathId);
+            snap.StoreLastTxId = ReadPathLastTxId(runtime, storePathId);
+            snap.StoreTableLastTxId = ReadPathLastTxId(runtime, storeTablePathId);
+            snap.TableShardLastTxIds = ReadColumnShardLastTxIds(runtime, "/MyRoot/Table");
+            snap.StoreShardLastTxIds = ReadColumnShardLastTxIds(runtime, "/MyRoot/OlapStore/StoreTable");
+            snap.TxInFlight = CountTxInFlightV2(runtime);
+            snap.ColumnTableAlters = CountColumnTablesAlters(runtime);
+            return snap;
+        };
+
+        const TSsSnapshot before = capture();
+        UNIT_ASSERT_VALUES_EQUAL(before.ColumnTableAlters, 0u);
+
+        const auto assertRolledBack = [&](const TString& caseName) {
+            const TSsSnapshot after = capture();
+            UNIT_ASSERT_VALUES_EQUAL_C(after.TableLastTxId, before.TableLastTxId, caseName);
+            UNIT_ASSERT_VALUES_EQUAL_C(after.StoreLastTxId, before.StoreLastTxId, caseName);
+            UNIT_ASSERT_VALUES_EQUAL_C(after.StoreTableLastTxId, before.StoreTableLastTxId, caseName);
+            UNIT_ASSERT_VALUES_EQUAL_C(after.TableShardLastTxIds, before.TableShardLastTxIds, caseName);
+            UNIT_ASSERT_VALUES_EQUAL_C(after.StoreShardLastTxIds, before.StoreShardLastTxIds, caseName);
+            UNIT_ASSERT_VALUES_EQUAL_C(after.TxInFlight, before.TxInFlight, caseName);
+            UNIT_ASSERT_VALUES_EQUAL_C(after.ColumnTableAlters, 0u, caseName);
+
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+                NLs::PathExist,
+                NLs::CheckPathState(),
+                NLs::ChildrenCount(2),
+            });
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/OlapStore"), {
+                NLs::PathExist,
+                NLs::CheckPathState(),
+            });
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/OlapStore/StoreTable"), {
+                NLs::PathExist,
+                NLs::CheckPathState(),
+            });
+
+            {
+                const auto descr = DescribePrivatePath(runtime, "/MyRoot/Table");
+                UNIT_ASSERT_C(!ColumnTableHasColumn(descr, "extra"), caseName);
+                UNIT_ASSERT_VALUES_EQUAL_C(ColumnTableIndexNames(descr),
+                    (THashSet<TString>{"bloom_key", "bloom_data"}), caseName);
+                TestDescribeResult(descr, {NLs::HasColumnTableSchemaVersion(1)});
+            }
+            {
+                const auto descr = DescribePrivatePath(runtime, "/MyRoot/OlapStore/StoreTable");
+                UNIT_ASSERT_C(
+                    !descr.GetPathDescription().GetColumnTableDescription().HasTtlSettings()
+                        || descr.GetPathDescription().GetColumnTableDescription().GetTtlSettings().HasDisabled(),
+                    caseName);
+            }
+
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/idx bad"), {NLs::PathNotExist});
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/no_such_idx"), {NLs::PathNotExist});
+            NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "bloom_key",
+                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"key"});
+            NLocalIndexes::CheckLocalIndexReady(runtime, "/MyRoot/Table", "bloom_data",
+                NKikimrSchemeOp::EIndexTypeLocalBloomFilter, {"data"});
+        };
+
+        const TString inStoreTtlEds = R"(
+            Name: "StoreTable"
+            AlterTtlSettings {
+                Enabled: {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    Tiers: {
+                        ApplyAfterSeconds: 360
+                        EvictToExternalStorage {
+                            Storage: "/MyRoot/Tier1"
+                        }
+                    }
+                }
+            }
+        )";
+
+        const TString standaloneAlterPrefix = R"(
+            Name: "Table"
+            AlterTtlSettings {
+                Enabled: {
+                    ColumnName: "timestamp"
+                    ColumnUnit: UNIT_AUTO
+                    Tiers: {
+                        ApplyAfterSeconds: 360
+                        EvictToExternalStorage {
+                            Storage: "/MyRoot/Tier1"
+                        }
+                    }
+                }
+            }
+            AlterSchema {
+                AddColumns { Name: "extra" Type: "Uint64" }
+        )";
+
+        const auto runAbortingCombine = [&](const TString& standaloneAlter, const TString& reasonFragment) {
+            ++txId;
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, CombineSchemeTransactions({
+                AlterColumnTableRequest(txId, "/MyRoot/OlapStore", inStoreTtlEds),
+                AlterColumnTableRequest(txId, "/MyRoot", standaloneAlter),
+            }));
+            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusSchemeError, reasonFragment}});
+        };
+
+        runAbortingCombine(
+            TStringBuilder() << standaloneAlterPrefix << R"(
+                UpsertIndexes {
+                    Name: "idx bad"
+                    ClassName: "BLOOM_FILTER"
+                    BloomFilter {
+                        ColumnNames: ["extra"]
+                        FalsePositiveProbability: 0.01
+                    }
+                }
+            }
+        )",
+            "is not allowed in the path part");
+        assertRolledBack("create");
+
+        runAbortingCombine(
+            TStringBuilder() << standaloneAlterPrefix << R"(
+                MoveIndex {
+                    SourceName: "bloom_key"
+                    DestinationName: "idx bad"
+                }
+            }
+        )",
+            "is not allowed in the path part");
+        assertRolledBack("move");
+
+        runAbortingCombine(
+            TStringBuilder() << standaloneAlterPrefix << R"(
+                DropIndexes: "no_such_idx"
+            }
+        )",
+            "does not exist");
+        assertRolledBack("drop");
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            AlterSchema {
+                AddColumns { Name: "after_abort" Type: "Uint64" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        {
+            const auto descr = DescribePrivatePath(runtime, "/MyRoot/Table");
+            UNIT_ASSERT(ColumnTableHasColumn(descr, "after_abort"));
+            UNIT_ASSERT(!ColumnTableHasColumn(descr, "extra"));
+        }
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "StoreTable"
+            AlterTtlSettings {
+                Enabled {
+                    ColumnName: "timestamp"
+                    ExpireAfterSeconds: 300
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema {
+                    AddColumns { Name: "comment" Type: "Utf8" }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropExternalDataSource(runtime, ++txId, "/MyRoot", "Tier1");
+        env.TestWaitNotification(runtime, txId);
     }
 
     Y_UNIT_TEST(AlterOwnerAfterReadOnlyCopy) {

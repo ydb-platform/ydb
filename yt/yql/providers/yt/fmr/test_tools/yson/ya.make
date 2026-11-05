@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_yson_helpers.cpp
@@ -7,7 +7,5 @@ SRCS(
 PEERDIR(
     library/cpp/yson
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

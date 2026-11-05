@@ -842,6 +842,7 @@ struct Schema : NIceDb::Schema {
         struct ColumnTableColumnsLimit : Column<32, NScheme::NTypeIds::Uint64> {};
         struct SmallBlobsQuotaExceeded : Column<33, NScheme::NTypeIds::Bool> {};
         struct TablesMetricsLevel : Column<34, NScheme::NTypeIds::Uint32> { using Type = ETablesMetricsLevel; };
+        struct StorageSpaceExhausted : Column<35, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -878,7 +879,8 @@ struct Schema : NIceDb::Schema {
             ServerlessComputeResourcesMode,
             ColumnTableColumnsLimit,
             SmallBlobsQuotaExceeded,
-            TablesMetricsLevel
+            TablesMetricsLevel,
+            StorageSpaceExhausted
         >;
     };
 
@@ -1213,6 +1215,10 @@ struct Schema : NIceDb::Schema {
         struct PlanStep : Column<15, NScheme::NTypeIds::Uint64> { using Type = TStepId; };
         struct NeedUpdateObject : Column<16, NScheme::NTypeIds::Bool> {};
         struct NeedSyncHive : Column<17, NScheme::NTypeIds::Bool> {};
+        // Split/merge ops only: whether this op deepens the by-load split lineage
+        // (propagates LoadSplitLineageDepth at op completion). Absent (pre-upgrade
+        // rows) = false = does not deepen.
+        struct LoadSplitLineage : Column<18, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TxId, TxPartId>;
         using TColumns = TableColumns<
@@ -1232,7 +1238,8 @@ struct Schema : NIceDb::Schema {
             SourceLocalPathId,
             PlanStep,
             NeedUpdateObject,
-            NeedSyncHive
+            NeedSyncHive,
+            LoadSplitLineage
         >;
     };
 

@@ -6,7 +6,8 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
+#include <ydb/core/tx/conveyor_composite/usage/common.h>
 
 namespace NKikimr::NOlap::NReader {
 class TTxScan: public NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard> {
@@ -17,17 +18,14 @@ private:
     void SendError(const TString& problem, const TString& details, const TActorContext& ctx) const;
 
     // Properties of the request. Each reads the request and the tablet, and nothing else.
-    TSnapshot GetSnapshot(const NColumnShard::TSchemeShardLocalPathId& ssPathId) const;
     ERequestSorting GetRequestSorting() const;
     bool GetDeduplicationEnabled(const TSnapshot& snapshot) const;
     TString GetReaderName() const;
     NConveyorComposite::TCPULimitsConfig GetCpuLimits() const;
-    const TVersionedPresetSchemas& GetPresetSchemas() const;
+    std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> GetSchedulerPool() const;
     std::optional<ESourcesSorting> GetCursorSourcesSorting() const;
 
     // Steps building the read description
-    TConclusion<std::shared_ptr<ITableMetadataAccessor>> MakeTableAccessor(
-        const NColumnShard::TSchemeShardLocalPathId& ssPathId, const TSnapshot& snapshot) const;
     TReadDescription MakeReadDescription(const TSnapshot& snapshot, const ERequestSorting requestSorting,
         const std::shared_ptr<NLWTrace::TOrbit>& orbit, const EReaderClass readerClass,
         const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const;
@@ -36,7 +34,6 @@ private:
         const TScannerConstructorContext& context, const TString& readerName) const;
     TConclusionStatus InitScanCursor(TReadDescription& read, const IScannerConstructor& scannerConstructor) const;
     TConclusionStatus InitProgram(TReadDescription& read, const IScannerConstructor& scannerConstructor) const;
-    TConclusionStatus InitPKRangesFilter(TReadDescription& read) const;
 
     // Null when diagnostics are disabled.
     std::unique_ptr<TDiagnosticsEvent> MakeDiagnosticsEvent(const TReadDescription& read) const;
@@ -46,9 +43,10 @@ private:
 public:
     using TReadMetadataPtr = TReadMetadataBase::TConstPtr;
 
-    TTxScan(NColumnShard::TColumnShard* self, TEvDataShard::TEvKqpScan::TPtr& ev)
+    TTxScan(NColumnShard::TColumnShard* self, TEvDataShard::TEvKqpScan::TPtr& ev, TScanTarget&& target)
         : TBase(self)
         , Ev(ev)
+        , Target(std::move(target))
     {
     }
 
@@ -61,6 +59,9 @@ public:
 
 private:
     TEvDataShard::TEvKqpScan::TPtr Ev;
+    const TScanTarget Target;
 };
+
+TConclusion<TScanTarget> BuildScanTarget(NColumnShard::TColumnShard& shard, const NKikimrTxDataShard::TEvKqpScan& request);
 
 }   // namespace NKikimr::NOlap::NReader

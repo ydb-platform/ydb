@@ -183,13 +183,13 @@ public:
 
     // True when this chunk stores `subColumnName` as a dedicated dictionary-encoded key column whose prefix we can
     // restore without the row-aligned index. Chunks that keep the key in "others" or as a plain/sparsed column cannot.
-    bool CanRestoreDictionaryOnly(const TString& subColumnName) const {
+    bool CanRestoreDictionaryOnly(const TString& subColumnName, const NArrow::NAccessor::NSubColumns::TParsedJsonPath& parsedPath) const {
         AFL_VERIFY(PartialArray);
         if (PartialArray->HasSubColumnData(subColumnName)) {
             return false;
         }
-        auto pathResult = NArrow::NAccessor::NSubColumns::ResolveBestPath(PartialArray->GetHeader().GetColumnStats(),
-            PartialArray->GetHeader().GetOtherStats(), NArrow::NAccessor::NSubColumns::ToJsonPath(subColumnName));
+        auto pathResult = NArrow::NAccessor::NSubColumns::ResolveBestPath(
+            PartialArray->GetHeader().GetColumnStats(), PartialArray->GetHeader().GetOtherStats(), parsedPath);
         if (pathResult.IsFail()) {
             return false;
         }
@@ -208,13 +208,15 @@ public:
     // `dictionaryOnly`: read only the dictionary prefix of the single requested key column when this chunk stores it
     // dictionary encoded (DISTINCT needs the distinct values, not the rows). Chunks that store the key differently
     // (plain/sparsed column, or in "others") fall back to the regular row-aligned read.
-    void InitReading(const std::shared_ptr<IBlobsReadingAction>& reading, const std::vector<TString>& subColumns, const bool dictionaryOnly) {
+    void InitReading(const std::shared_ptr<IBlobsReadingAction>& reading, const std::vector<TString>& subColumns,
+        const std::vector<NArrow::NAccessor::NSubColumns::TParsedJsonPath>& parsedPaths, const bool dictionaryOnly) {
         AFL_VERIFY(!HeaderRange);
         if (!!PartialArray) {
             ReadingInitialized = true;
-            for (auto&& subColumnName : subColumns) {
-                auto pathResult = NArrow::NAccessor::NSubColumns::ResolveBestPath(PartialArray->GetHeader().GetColumnStats(),
-                    PartialArray->GetHeader().GetOtherStats(), NArrow::NAccessor::NSubColumns::ToJsonPath(subColumnName));
+            for (size_t i = 0; i < subColumns.size(); ++i) {
+                const auto& subColumnName = subColumns[i];
+                auto pathResult = NArrow::NAccessor::NSubColumns::ResolveBestPath(
+                    PartialArray->GetHeader().GetColumnStats(), PartialArray->GetHeader().GetOtherStats(), parsedPaths[i]);
                 AFL_VERIFY(pathResult.IsSuccess())("subColumnName", subColumnName)("error", pathResult.GetErrorMessage());
                 const auto path = pathResult.DetachResult();
                 if (path && path->IsColumn) {
@@ -311,6 +313,8 @@ private:
     const NArrow::NAccessor::TChunkConstructionData ChunkExternalInfo;
     const NArrow::NAccessor::NSubColumns::TSettings Settings;
     const std::vector<TString> SubColumns;
+    std::vector<TString> JsonPaths;
+    std::vector<NArrow::NAccessor::NSubColumns::TParsedJsonPath> ParsedPaths;
     IDataSource& Source;
     const std::shared_ptr<ISnapshotSchema> SourceSchema;
 
@@ -343,7 +347,7 @@ private:
                 return false;
             }
             anyRealChunk = true;
-            if (!chunk.CanRestoreDictionaryOnly(SubColumns[0])) {
+            if (!chunk.CanRestoreDictionaryOnly(SubColumns[0], ParsedPaths[0])) {
                 return false;
             }
         }
@@ -485,7 +489,7 @@ private:
             }
             for (auto&& i : ColumnChunks) {
                 if (!i.GetReadingInitialized() && i.GetFullChunkRange().GetSize()) {
-                    i.InitReading(reading, SubColumns, useDict);
+                    i.InitReading(reading, SubColumns, ParsedPaths, useDict);
                 }
             }
         }
@@ -532,7 +536,7 @@ private:
                     ColumnChunks.back().InitPartialReader(chunks[resChunkIdx]);
                     ++resChunkIdx;
                 }
-                ColumnChunks.back().InitReading(reading, SubColumns, DictionaryOnly);
+                ColumnChunks.back().InitReading(reading, SubColumns, ParsedPaths, DictionaryOnly);
             } else {
                 ColumnChunks.emplace_back(TColumnChunkRestoreInfo::BuildEmpty(ChunkExternalInfo.GetSubset(meta.GetRecordsCount()), Settings));
             }
@@ -556,6 +560,16 @@ public:
         , SourceSchema(sourceSchema)
         , DictionaryOnly(dictionaryOnly)
     {
+        JsonPaths.reserve(SubColumns.size());
+        ParsedPaths.reserve(SubColumns.size());
+        for (const auto& subColumn : SubColumns) {
+            JsonPaths.emplace_back(NArrow::NAccessor::NSubColumns::ToJsonPath(subColumn));
+        }
+        for (const auto& jsonPath : JsonPaths) {
+            auto parsedPath = NArrow::NAccessor::NSubColumns::ParseJsonPath(jsonPath);
+            AFL_VERIFY(parsedPath.IsSuccess())("path", jsonPath)("error", parsedPath.GetErrorMessage());
+            ParsedPaths.emplace_back(parsedPath.DetachResult());
+        }
         const auto loader = sourceSchema->GetColumnLoaderVerified(GetEntityId());
         AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)(
             "type", loader->GetAccessorConstructor()->GetType());

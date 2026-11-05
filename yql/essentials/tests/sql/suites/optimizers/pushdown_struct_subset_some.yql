@@ -1,5 +1,100 @@
 pragma config.flags("OptimizerFlags", "PushdownStructSubsetFieldsOverAggregate", "PropagateSomeTraitsUnusedColumns");
+pragma warning("disable", "4510");
 
 select a, b from (
 select some(TableRow()) from as_table([<|a:1,b:2,c:3|>])
 ) flatten columns;
+
+$identity = ($value) -> ($value);
+$makeFactory = ($update) -> (($itemType, $extractor) -> (
+    YQL::AggregationTraits(
+        $itemType,
+        $extractor,
+        $update,
+        $identity,
+        $identity,
+        ($left, $_right) -> ($left),
+        $identity,
+        null
+    )
+));
+
+$factory = $makeFactory(($_row, $state) -> (<|kept: $state.pruned, pruned: $state.pruned|>));
+
+-- Multirow cases keep the selected value equal in all reachable states,
+-- since AGGREGATE_BY guarantees neither input order nor merge order.
+select result.kept from (
+    select AGGREGATE_BY(TableRow(), $factory) as result
+    from as_table(ListCreate(Struct<kept: Int32, pruned: Int32>))
+);
+
+select result.kept from (
+    select AGGREGATE_BY(TableRow(), $factory) as result
+    from as_table([<|kept: 1, pruned: 10|>])
+);
+
+select result.kept from (
+    select AGGREGATE_BY(TableRow(), $factory) as result
+    from as_table([
+        <|kept: 10, pruned: 10|>,
+        <|kept: 10, pruned: 10|>
+    ])
+);
+
+$factoryExtra = $makeFactory(($_row, $state) -> (
+    <|kept: $state.pruned, pruned: $state.pruned, unused: 0|>
+));
+
+select result.kept from (
+    select AGGREGATE_BY(TableRow(), $factoryExtra) as result
+    from as_table([
+        <|kept: 10, pruned: 10, unused: 0|>,
+        <|kept: 10, pruned: 10, unused: 1|>
+    ])
+);
+
+$factoryWholeState = $makeFactory(($row, $state) -> (IF($state == $row, $state, $row)));
+
+select result.kept from (
+    select AGGREGATE_BY(TableRow(), $factoryWholeState) as result
+    from as_table([
+        <|kept: 1, pruned: 10|>,
+        <|kept: 1, pruned: 20|>
+    ])
+);
+
+$factoryWithParent = ($itemType, $extractor) -> (
+    YQL::AggregationTraits(
+        $itemType,
+        ($row, $parent) -> (<|
+            kept: $extractor($row).kept + CAST($parent AS Int32),
+            pruned: $extractor($row).pruned,
+            unused: 0
+        |>),
+        ($_row, $state, $parent) -> (<|
+            kept: $state.pruned + CAST($parent AS Int32),
+            pruned: $state.pruned,
+            unused: 0
+        |>),
+        $identity,
+        $identity,
+        ($left, $_right) -> ($left),
+        $identity,
+        null
+    )
+);
+
+select result.kept from (
+    select AGGREGATE_BY(TableRow(), $factoryWithParent) as result
+    from as_table([<|kept: 1, pruned: 10|>])
+);
+
+select result.kept, other.kept from (
+    select
+        AGGREGATE_BY(TableRow(), $factoryWithParent) as result,
+        AGGREGATE_BY(<|kept: kept + 100, pruned: pruned + 100|>, $factoryWithParent) as other
+    from as_table([
+        <|kept: 10, pruned: 10|>,
+        <|kept: 10, pruned: 10|>
+    ])
+);

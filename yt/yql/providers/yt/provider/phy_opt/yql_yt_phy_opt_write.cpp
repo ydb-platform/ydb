@@ -484,16 +484,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
                 useExplicitColumns = useExplicitColumns || AnyOf(inputPaths, [] (const TYtPathInfo::TPtr& path) { return path->Table->RowSpec->HasAuxColumns(); });
             }
             else {
-                if (useNativeDescSort) {
-                    const bool hasOldDescSort = AnyOf(inputPaths, [] (const TYtPathInfo::TPtr& path) {
-                        return path->Table->RowSpec && path->Table->RowSpec->HasNonNativeDescendingSort();
-                    });
-                    const bool hasNativeDescSort = AnyOf(inputPaths, [] (const TYtPathInfo::TPtr& path) {
-                        return path->Table->RowSpec && path->Table->RowSpec->HasNativeDescendingSort();
-                    });
-                    Y_ENSURE(!(hasOldDescSort && hasNativeDescSort), "Unexpected different desc sort types");
-                }
-
                 const bool exactCopySort = inputPaths.size() == 1 && !inputPaths.front()->HasColumns();
                 bool hasAux = inputPaths.front()->Table->RowSpec->HasAuxColumns();
                 bool sortIsChanged = inputPaths.front()->Table->IsUnordered
@@ -510,6 +500,21 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
                         useExplicitColumns = true;
                     }
                 }
+
+                if (useNativeDescSort) {
+                    TYqlRowSpecInfo commonRowSpec = *inputPaths.front()->Table->RowSpec;
+                    for (size_t i = 1; i < inputPaths.size(); ++i) {
+                        commonRowSpec.MakeCommonSortness(ctx, *inputPaths[i]->Table->RowSpec, true);
+                    }
+
+                    TYqlRowSpecInfo commonPrefixRowSpec = *inputPaths.front()->Table->RowSpec;
+                    commonPrefixRowSpec.ClearSortness(ctx, commonRowSpec.SortMembers.size());
+                    for (size_t i = 1; i < inputPaths.size(); ++i) {
+                        YQL_ENSURE(!commonPrefixRowSpec.HasDifferentDescendingSortRepresentation(*inputPaths[i]->Table->RowSpec),
+                            "Unexpected different desc sort types");
+                    }
+                }
+
                 useExplicitColumns = useExplicitColumns || (sortIsChanged && hasAux);
             }
 

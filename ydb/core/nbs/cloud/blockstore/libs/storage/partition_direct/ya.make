@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 GENERATE_ENUM_SERIALIZATION(ddisk_data_copier.h)
 GENERATE_ENUM_SERIALIZATION(dbg_connections.h)

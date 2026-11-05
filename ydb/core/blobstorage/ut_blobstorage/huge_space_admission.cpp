@@ -27,6 +27,7 @@ struct THugeAdmissionEnv {
         .FeatureFlags = Flags(),
         .MinHugeBlobInBytes = 512_KB,
         .PDiskChunkSize = 32_MB,
+        .VDiskHeapAllocatorNumLeadingDisks = Max<ui32>(),
     }};
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     TActorId Queue;

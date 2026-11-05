@@ -9,6 +9,7 @@ TEST_SRCS(
     test_state_storage_workload.py
 )
 
+FORK_TEST_FILES()
 REQUIREMENTS(ram:32 cpu:4)
 
 IF (SANITIZER_TYPE)

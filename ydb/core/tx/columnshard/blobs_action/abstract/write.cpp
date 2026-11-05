@@ -27,6 +27,10 @@ void IBlobsWritingAction::AddDataForWrite(const TUnifiedBlobId& blobId, const TS
     SumSize += data.size();
 }
 
+void IBlobsWritingAction::UpdateChannelApproximateFreeSpace(const TUnifiedBlobId& blobId, float approximateFreeSpaceShare) {
+    DoUpdateChannelApproximateFreeSpace(blobId, approximateFreeSpaceShare);
+}
+
 void IBlobsWritingAction::OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) {
     YDB_LOG_DEBUG("",
         {"event", "WriteBlobResult"},

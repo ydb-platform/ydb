@@ -36,6 +36,7 @@ TConclusionStatus TExecutionVisitor::DoOnComeback(const TCompiledGraph::TNode& n
             }
             if (*conclusion) {
                 SkipActivity.emplace(node.GetIdentifier());
+                break;
             }
         }
     }

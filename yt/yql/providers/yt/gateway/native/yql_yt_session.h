@@ -57,6 +57,7 @@ struct TSession: public TSessionBase {
 
     const TQContext QContext_;
     const IYtFullCapture::TPtr FullCapture_;
+    const TString MrJobLabel_;
 
     TMutex SecureTmpFolderPreparationsMutex_;
     THashMap<TString, NThreading::TFuture<void>> SecureTmpFolderPreparationsByCluster_;

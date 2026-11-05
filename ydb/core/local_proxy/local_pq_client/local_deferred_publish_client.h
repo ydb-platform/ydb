@@ -7,6 +7,7 @@
 namespace NKikimr::NKqp {
 
 // The local client does not automatically wait for write acks before publishing or canceling.
-NYql::IDeferredPublishClient::TPtr CreateLocalDeferredPublishClient(const TLocalTopicClientSettings& localSettings, const NYdb::TCommonClientSettings& clientSettings);
+NYql::IDeferredPublishClient::TPtr CreateLocalDeferredPublishClient(
+    const TLocalTopicClientSettings& localSettings, const NYdb::TCommonClientSettings& clientSettings);
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

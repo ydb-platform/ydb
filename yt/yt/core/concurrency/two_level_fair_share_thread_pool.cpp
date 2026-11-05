@@ -355,9 +355,9 @@ public:
         }
     }
 
-    NThreading::TThreadId GetThreadId() const override
+    TThreadId GetThreadId() const override
     {
-        return NThreading::InvalidThreadId;
+        return InvalidThreadId;
     }
 
     bool CheckAffinity(const IInvokerPtr& invoker) const override
@@ -567,7 +567,7 @@ public:
 private:
     const TDuration PoolRetentionTime_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, MappingLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, MappingLock_);
     THashMap<std::pair<std::string, std::string>, TWeakPtr<TBucket>> BucketMapping_;
     THashMap<std::string, TExecutionPool*> PoolMapping_;
 
@@ -604,7 +604,7 @@ public:
     using TWaitTimeObserver = ITwoLevelFairShareThreadPool::TWaitTimeObserver;
 
     TTwoLevelFairShareQueue(
-        TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+        TIntrusivePtr<TEventCount> callbackEventCount,
         const std::string& threadNamePrefix,
         const TNewTwoLevelFairShareThreadPoolOptions& options)
         : TNotifyManager(std::move(callbackEventCount), GetThreadTags(threadNamePrefix), options.PollingPeriod)
@@ -1274,7 +1274,7 @@ class TFairShareThread
 public:
     TFairShareThread(
         TTwoLevelFairShareQueuePtr queue,
-        TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
+        TIntrusivePtr<TEventCount> callbackEventCount,
         const std::string& threadGroupName,
         const std::string& threadName,
         int index)
@@ -1397,7 +1397,7 @@ public:
     }
 
 private:
-    const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
+    const TIntrusivePtr<TEventCount> CallbackEventCount_ = New<TEventCount>();
     const TTwoLevelFairShareQueuePtr Queue_;
 
     void DoShutdown() override

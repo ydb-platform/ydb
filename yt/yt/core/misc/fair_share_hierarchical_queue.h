@@ -287,7 +287,7 @@ public:
         // To correctly traverse the tree without a global lock, you need per bucket locks.
         // In addition, it is necessary to have a bucket reference counter in order not to
         // delete the bucket at the time of inserting a new log.
-        YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, BucketLock);
+        YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, BucketLock);
         THashMap<TTag, TFairShareHierarchicalSlotQueueBucketNodePtr> Buckets;
         std::atomic<i64> RefCount = 0;
 
@@ -360,10 +360,10 @@ private:
 
     const TFairShareHierarchicalSlotQueueBucketNodePtr RootBucket_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SlotHistoryLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, SlotHistoryLock_);
     std::map<TFairShareLogKey, TFairShareHierarchicalSchedulerLogPtr<TTag>> SlotHistory_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, RequestHistoryLock_);
+    YT_DECLARE_SPIN_LOCK(TReaderWriterSpinLock, RequestHistoryLock_);
     std::map<TFairShareLogKey, TFairShareHierarchicalSchedulerLogPtr<TTag>> RequestHistory_;
 
     std::atomic<i64> BucketCount_ = 0;
@@ -461,7 +461,7 @@ private:
     const TFairShareHierarchicalSchedulerPtr<TTag> HierarchicalScheduler_;
     const NProfiling::TProfiler Profiler_;
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, QueueLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, QueueLock_);
     THashMap<TFairShareLogKey, TFairShareHierarchicalSlotQueueSlotPtr<TTag>> Queue_ = {};
     std::atomic<i64> SlotCount_ = 0;
     std::atomic<i64> SlotSize_ = 0;

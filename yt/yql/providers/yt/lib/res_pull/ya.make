@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     res_or_pull.cpp
@@ -14,7 +14,5 @@ PEERDIR(
     yt/yql/providers/yt/codec
     yt/yql/providers/yt/lib/mkql_helpers
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

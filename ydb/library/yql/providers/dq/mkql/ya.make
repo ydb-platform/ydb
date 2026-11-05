@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     yql/essentials/core
@@ -12,7 +12,5 @@ SRCS(
     dqs_mkql_compiler.cpp
     parser.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -1312,6 +1312,45 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         UNIT_ASSERT_VALUES_EQUAL(consumer.StartTimeSeconds[2], histogramStartTimeSeconds);
     }
 
+    Y_UNIT_TEST(V14DoesNotMergeMetricsAcrossDifferentStartTimes) {
+        TBuffer buffer;
+        {
+            TBufferOutput out(buffer);
+            auto e = EncoderSpackV14(
+                &out,
+                ETimePrecision::SECONDS,
+                ECompression::IDENTITY,
+                EMetricsMergingMode::MERGE_METRICS);
+            e->OnStreamBegin();
+            e->OnCommonStartTimeSeconds(0);
+            for (const auto [startTime, value] : {
+                     std::pair{100u, 1u},
+                     std::pair{100u, 2u},
+                     std::pair{200u, 3u},
+                 }) {
+                e->OnMetricBegin(EMetricType::RATE);
+                e->OnLabelsBegin();
+                e->OnLabel("name", "rate");
+                e->OnLabelsEnd();
+                e->OnStartTimeSeconds(startTime);
+                e->OnUint64(TInstant::Seconds(value), value);
+                e->OnMetricEnd();
+            }
+            e->OnStreamEnd();
+            e->Close();
+        }
+
+        TCollectingConsumer consumer;
+        TBufferInput in(buffer);
+        DecodeSpackV1(&in, &consumer);
+
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics[0].StartTimeSeconds, 100u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics[0].Values->Size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics[1].StartTimeSeconds, 200u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics[1].Values->Size(), 1u);
+    }
+
     Y_UNIT_TEST(V14DecoderForwardsStartTimeFlagForNonRate) {
         constexpr ui32 startTimeSeconds = 1'700'000'100;
         TSpackHeader header;

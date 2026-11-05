@@ -8,9 +8,11 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/opt/physical/predicate_collector.h>
+#include <ydb/core/kqp/ut/olap/combinatory/variator.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/test_helper/test_combinator.h>
 #include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
@@ -1506,6 +1508,198 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                         TStringBuilder() << "Predicate wasn't pushed down. Query: " << query);
     }
 
+    Y_UNIT_TEST(PatternHint_ComplexLike) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/likeHint` (
+                id Int64 NOT NULL,
+                message String,
+                PRIMARY KEY (id)
+            )
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        const auto inserted = querySession.ExecuteQuery(R"(
+            INSERT INTO `/Root/likeHint` (id, message) VALUES
+                (1, "xx aaabbb yy"),
+                (2, "bbb aaa"),
+                (3, "nothing")
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+
+        auto run = [&](const TString& query) {
+            const auto result = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return FormatResultSetYson(result.GetResultSet(0));
+        };
+        CompareYson(run(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%aaa%bbb%' ORDER BY id)"), "[[1]]");
+        CompareYson(run(R"(SELECT id FROM `/Root/likeHint` WHERE message ILIKE '%AAA%bbb%' ORDER BY id)"), "[[1]]");
+        CompareYson(run(R"(SELECT id FROM `/Root/likeHint` WHERE message NOT LIKE '%aaa%bbb%' ORDER BY id)"), "[[2];[3]]");
+
+        auto ssaOf = [&](const TString& query, const TParams* params = nullptr) {
+            TStreamExecScanQuerySettings scanSettings;
+            scanSettings.Explain(true);
+            auto it = params
+                ? tableClient.StreamExecuteScanQuery(query, *params, scanSettings).GetValueSync()
+                : tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto result = CollectStreamResult(it);
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*result.PlanJson, &plan, true));
+            TString ssa;
+            std::function<void(const NJson::TJsonValue&)> walk = [&](const NJson::TJsonValue& node) {
+                if (node.IsMap()) {
+                    for (const auto& [key, value] : node.GetMapSafe()) {
+                        if (key == "SsaProgram") {
+                            ssa += value.GetStringRobust();
+                        }
+                        walk(value);
+                    }
+                } else if (node.IsArray()) {
+                    for (const auto& value : node.GetArraySafe()) {
+                        walk(value);
+                    }
+                }
+            };
+            walk(plan);
+            return ssa;
+        };
+
+        const auto like = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(like.Contains("PatternHint"), like);
+        UNIT_ASSERT_C(like.Contains("\"CaseSensitive\":true") || like.Contains("\"CaseSensitive\": true"), like);
+        const auto ilike = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message ILIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(ilike.Contains("PatternHint"), ilike);
+        UNIT_ASSERT_C(ilike.Contains("\"CaseSensitive\":false") || ilike.Contains("\"CaseSensitive\": false"), ilike);
+        const auto negated = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message NOT LIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(!negated.Contains("PatternHint"), negated);
+        // OR is one KqpOlapApply. A hint on that kernel would be wrong: true does not
+        // imply either pattern. Each branch would need its own apply before it can carry a hint.
+        const auto disjunction = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%aaa%bbb%' OR message LIKE '%ccc%ddd%')");
+        UNIT_ASSERT_C(!disjunction.Contains("PatternHint"), disjunction);
+        const auto escaped = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message LIKE '%x#_%y%' ESCAPE '#')");
+        UNIT_ASSERT_C(escaped.Contains("PatternHint"), escaped);
+        const auto params = tableClient.GetParamsBuilder().AddParam("$p").String("%aaa%bbb%").Build().Build();
+        const auto parameterized = ssaOf(R"(DECLARE $p AS String; SELECT id FROM `/Root/likeHint` WHERE message LIKE $p)", &params);
+        UNIT_ASSERT_C(!parameterized.Contains("PatternHint"), parameterized);
+
+        // Literal=true matches the pattern text, not the LIKE. A hint must not be attached.
+        TStreamExecScanQuerySettings literalSettings;
+        literalSettings.Explain(true);
+        auto literalIt = tableClient.StreamExecuteScanQuery(R"(
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, Re2::Options(true AS CaseSensitive, true AS Literal))(message);
+        )", literalSettings).GetValueSync();
+        UNIT_ASSERT_C(literalIt.IsSuccess(), literalIt.GetIssues().ToString());
+        const auto literal = CollectStreamResult(literalIt);
+        UNIT_ASSERT_C(literal.Ast && literal.Ast->Contains("KqpOlapApply"), literal.Ast.GetOrElse(""));
+        TString literalSsa;
+        if (literal.PlanJson) {
+            NJson::TJsonValue literalPlan;
+            UNIT_ASSERT(NJson::ReadJsonTree(*literal.PlanJson, &literalPlan, true));
+            std::function<void(const NJson::TJsonValue&)> walkLiteral = [&](const NJson::TJsonValue& node) {
+                if (node.IsMap()) {
+                    for (const auto& [key, value] : node.GetMapSafe()) {
+                        if (key == "SsaProgram") {
+                            literalSsa += value.GetStringRobust();
+                        }
+                        walkLiteral(value);
+                    }
+                } else if (node.IsArray()) {
+                    for (const auto& value : node.GetArraySafe()) {
+                        walkLiteral(value);
+                    }
+                }
+            };
+            walkLiteral(literalPlan);
+        }
+        UNIT_ASSERT_C(!literalSsa.Contains("PatternHint"), literalSsa);
+
+        const auto regexp = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE message REGEXP 'aaa.*bbb')");
+        UNIT_ASSERT_C(!regexp.Contains("PatternHint"), regexp);
+        // LIKE is a plain Bool (false for NULL), so YQL folds COALESCE(match, true) to the bare match,
+        // which keeps its hint. If LIKE ever becomes optional, the COALESCE reaches the parser and gets no hint.
+        const auto coalesceTrue = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE COALESCE(message LIKE '%aaa%bbb%', true))");
+        UNIT_ASSERT_C(coalesceTrue.Contains("PatternHint"), coalesceTrue);
+        // The matched argument must be a column. A concatenation or a cast from a non-string type is not.
+        const auto concatenated = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE (message || 'x') LIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(!concatenated.Contains("PatternHint"), concatenated);
+        const auto castFromInt = ssaOf(R"(SELECT id FROM `/Root/likeHint` WHERE CAST(id AS String) LIKE '%aaa%bbb%')");
+        UNIT_ASSERT_C(!castFromInt.Contains("PatternHint"), castFromInt);
+        // Positional Re2::Options with only CaseSensitive (10th argument) set still gets a hint.
+        const auto positionalCase = ssaOf(R"(
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, Re2::Options(
+                CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?),
+                CAST(NULL AS Uint64?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?),
+                CAST(NULL AS Bool?), true
+            ))(message);
+        )");
+        UNIT_ASSERT_C(positionalCase.Contains("PatternHint"), positionalCase);
+        UNIT_ASSERT_C(positionalCase.Contains("\"CaseSensitive\":true") || positionalCase.Contains("\"CaseSensitive\": true"), positionalCase);
+
+        auto explainNoHint = [&](const TString& query, const TParams& params) {
+            TStreamExecScanQuerySettings settings;
+            settings.Explain(true);
+            auto it = tableClient.StreamExecuteScanQuery(query, params, settings).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            const auto collected = CollectStreamResult(it);
+            UNIT_ASSERT_C(collected.Ast && collected.Ast->Contains("KqpOlapApply"), collected.Ast.GetOrElse(""));
+            TString program;
+            if (collected.PlanJson) {
+                NJson::TJsonValue plan;
+                UNIT_ASSERT(NJson::ReadJsonTree(*collected.PlanJson, &plan, true));
+                std::function<void(const NJson::TJsonValue&)> walk = [&](const NJson::TJsonValue& node) {
+                    if (node.IsMap()) {
+                        for (const auto& [key, value] : node.GetMapSafe()) {
+                            if (key == "SsaProgram") {
+                                program += value.GetStringRobust();
+                            }
+                            walk(value);
+                        }
+                    } else if (node.IsArray()) {
+                        for (const auto& value : node.GetArraySafe()) {
+                            walk(value);
+                        }
+                    }
+                };
+                walk(plan);
+            }
+            UNIT_ASSERT_C(!program.Contains("PatternHint"), program);
+        };
+        const auto literalParam = tableClient.GetParamsBuilder().AddParam("$literal").Bool(true).Build().Build();
+        explainNoHint(R"(
+            DECLARE $literal AS Bool;
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, Re2::Options(true AS CaseSensitive, $literal AS Literal))(message);
+        )", literalParam);
+        explainNoHint(R"(
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, Re2::Options(
+                CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?),
+                CAST(NULL AS Uint64?), true, CAST(NULL AS Bool?), CAST(NULL AS Bool?), CAST(NULL AS Bool?), true
+            ))(message);
+        )", tableClient.GetParamsBuilder().Build());
+        explainNoHint(R"(
+            $pattern = Udf(Re2::PatternFromLike)("aaa%bbb");
+            $safe = Re2::Options(true AS CaseSensitive);
+            $unsafe = Re2::Options(true AS CaseSensitive, true AS Literal);
+            SELECT id FROM `/Root/likeHint`
+            WHERE Re2::Match($pattern, IF(false, $safe, $unsafe))(message);
+        )", tableClient.GetParamsBuilder().Build());
+    }
+
     Y_UNIT_TEST(PredicatePushdown_SimpleAsciiILike) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
@@ -1806,32 +2000,34 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         run("", false);
     }
 
-    Y_UNIT_TEST(PredicatePushdown_IgnoreCaseUdfHandleBothStringAndUtf8) {
+    Y_UNIT_TEST_QUATRO(PredicatePushdown_IgnoreCaseUdfDifferentStringTypes, Utf8Column, NotNullColumn) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();
         auto schemeSession = tableClient.CreateSession().GetValueSync().GetSession();
-        UNIT_ASSERT(schemeSession.ExecuteSchemeQuery(R"(
+        UNIT_ASSERT(schemeSession.ExecuteSchemeQuery(Sprintf(R"(
             CREATE TABLE `/Root/foo` (
                 id Int64 NOT NULL,
-                str String,
-                u_str Utf8,
+                field %s%s,
                 PRIMARY KEY(id)
             )
             WITH (STORE = COLUMN);
-        )").GetValueSync().IsSuccess());
+        )", Utf8Column ? "Utf8" : "String", NotNullColumn ? " NOT NULL" : ""))
+                        .GetValueSync()
+                        .IsSuccess());
 
         auto queryClient = kikimr.GetQueryClient();
         auto session = queryClient.GetSession().GetValueSync().GetSession();
-        const auto insertResult = session.ExecuteQuery(R"(
-            INSERT INTO `/Root/foo` (id, str, u_str) VALUES
-                (1, "foobar", "foobar"),
-                (2, "barfoo", "barfoo"),
-                (3, "foo", "foo"),
-                (4, NULL, NULL)
-        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        const auto insertResult = session.ExecuteQuery(Sprintf(R"(
+            INSERT INTO `/Root/foo` (id, field) VALUES
+                (1, "foobar"),
+                (2, "barfoo"),
+                (3, "foo"),
+                (4, %s)
+        )", NotNullColumn ? "\"baz\"" : "NULL"), NYdb::NQuery::TTxControl::NoTx())
+                                      .GetValueSync();
         UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues());
 
         const THashMap<TString, std::pair<TString, TString>> patterns = {
@@ -1842,29 +2038,27 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
         UNIT_ASSERT_VALUES_EQUAL(patterns.size(), NOpt::IgnoreCaseSubstringMatchFunctions.size());
 
-        const std::vector<TString> inputColumns = {"str", "u_str"};
         const TString directUdfNode = "KqpOlapUdf";
 
         auto run = [&](const TString& expectedKernel, const TString& pattern, const TString& expectedResult,
                        const TString& extraPragma) {
-            for (const auto& column : inputColumns) {
-                const auto query = Sprintf(R"(
-                    PRAGMA OptimizeSimpleILike;
-                    PRAGMA AnsiLike;
-                    %s
-                    SELECT id FROM `/Root/foo` WHERE %s ILIKE "%s" ORDER BY id;
-                )", extraPragma.c_str(), column.c_str(), pattern.c_str());
-                const auto res = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
-                    NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full)).ExtractValueSync();
-                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
-                CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResult);
+            const auto query = Sprintf(R"(
+                PRAGMA OptimizeSimpleILike;
+                PRAGMA AnsiLike;
+                %s
+                SELECT id FROM `/Root/foo` WHERE field ILIKE "%s" ORDER BY id;
+            )", extraPragma.c_str(), pattern.c_str());
+            const auto res = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                                  NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full))
+                                 .ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+            CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResult);
 
-                const auto ast = res.GetStats()->GetAst();
-                UNIT_ASSERT_C(ast->find(directUdfNode) != std::string::npos,
-                    TStringBuilder() << "Expected direct UDF node. Query: " << query << " AST: " << *ast);
-                UNIT_ASSERT_C(ast->find(expectedKernel) != std::string::npos,
-                    TStringBuilder() << "Expected UDF kernel. Query: " << query << " AST: " << *ast);
-            }
+            const auto ast = res.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast->find(directUdfNode) != std::string::npos,
+                          TStringBuilder() << "Expected direct UDF node. Query: " << query << " AST: " << *ast);
+            UNIT_ASSERT_C(ast->find(expectedKernel) != std::string::npos,
+                          TStringBuilder() << "Expected UDF kernel. Query: " << query << " AST: " << *ast);
         };
 
         for (const auto& [functionName, kernelName] : NOpt::IgnoreCaseSubstringMatchFunctions) {
@@ -1877,6 +2071,53 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(containsTest);
         run("OlapKernels._yql_AsciiContainsIgnoreCase", containsTest->first, containsTest->second,
             "PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = \"true\";");
+    }
+
+    Y_UNIT_TEST_QUATRO(PredicatePushdown_IgnoreCaseUdfUsesIndex, Utf8Column, NotNullColumn) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        const TString script = Sprintf(R"(
+            STOP_COMPACTION
+            ------
+            SCHEMA:
+            CREATE TABLE `/Root/foo` (
+                id Int64 NOT NULL,
+                field %s%s,
+                PRIMARY KEY(id),
+                INDEX idx_field LOCAL USING bloom_ngram_filter ON (field)
+                    WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = false)
+            )
+            PARTITION BY HASH(id)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/foo` (TYPE TABLE) SET
+                (ACTION=UPSERT_OPTIONS, `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`,
+                    `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`);
+            ------
+            DATA:
+            REPLACE INTO `/Root/foo` (id, field) VALUES
+                (1, "foobar"),
+                (2, "barfoo");
+            ------
+            DATA:
+            REPLACE INTO `/Root/foo` (id, field) VALUES (3, "foo");
+            ------
+            DATA:
+            REPLACE INTO `/Root/foo` (id, field) VALUES (4, %s);
+            ------
+            ONE_COMPACTION
+            ------
+            READ: SELECT COUNT(*) > 0u FROM `/Root/foo/.sys/primary_index_stats` WHERE EntityName = "idx_field";
+            EXPECTED: [[%%true]]
+            ------
+            READ:
+            PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true";
+            SELECT id FROM `/Root/foo` WHERE field ILIKE "%%FOO%%" ORDER BY id;
+            EXPECTED: [[1];[2];[3]]
+            IDX_ND_SKIP_APPROVE: 0, 0, 1
+        )", Utf8Column ? "Utf8" : "String", NotNullColumn ? " NOT NULL" : "", NotNullColumn ? "\"baz\"" : "NULL");
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute(settings);
     }
 
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
@@ -5530,8 +5771,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             )";
 
             auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_C(result.GetIssues().ToString().contains("path is not a table"),
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains("TRUNCATE TABLE is not supported for column tables"),
                 "Unexpected error message: " << result.GetIssues().ToString());
         }
     }

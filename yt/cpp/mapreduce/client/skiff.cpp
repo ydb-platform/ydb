@@ -187,7 +187,7 @@ void Serialize(const NSkiff::TSkiffSchemaPtr& schema, NYson::IYsonConsumer* cons
     }
     consumer->OnKeyedItem("wire_type");
     consumer->OnStringScalar(ToString(schema->GetWireType()));
-    if (schema->GetChildren().size() > 0) {
+    if (NSkiff::GetSchemaKind(schema->GetWireType()) == NSkiff::ESchemaKind::Complex) {
         consumer->OnKeyedItem("children");
         consumer->OnBeginList();
         for (const auto& child : schema->GetChildren()) {

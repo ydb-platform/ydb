@@ -35,6 +35,8 @@ namespace NKikimr {
         // Index capacity already charged to Fresh; transferred back to Skeleton
         // on success or allocation refusal, and held until replay or rejection.
         TFreshAdmission FreshAdmission;
+        // Present for VPut requests; internal replication does not acknowledge a client write.
+        std::optional<ui32> AdmittedGroupGeneration;
         NPDisk::EAllocationPurpose AllocationPurpose = NPDisk::EAllocationPurpose::Recovery;
 
         mutable NLWTrace::TOrbit Orbit;
@@ -105,6 +107,8 @@ namespace NKikimr {
         // FreshRefuseAtColor is unset or the gate is off. Skeleton lands it once the record is in Fresh, or
         // instead of that when HugeKeeper refused the data.
         TFreshAdmission FreshAdmission;
+        // Present for VPut requests; internal replication does not acknowledge a client write.
+        std::optional<ui32> AdmittedGroupGeneration;
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,
@@ -274,9 +278,9 @@ namespace NKikimr {
     struct TEvHugeAllocateSlotsResult : TEventLocal<TEvHugeAllocateSlotsResult, TEvBlobStorage::EvHugeAllocateSlotsResult> {
         NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
         std::vector<TDiskPart> Locations;
-        // Heap ownership at allocation time. Do not re-read the feature flag to classify these:
-        // EnableVDiskHeapAllocator is RequireRestart, but tests (and a missed restart) can still
-        // disagree with the heap that actually produced the location.
+        // Heap ownership at allocation time. Do not re-read the feature flag or the leading-disk
+        // knob to classify these: both are latched on the VDisk at start, and a missed restart can
+        // still disagree with the heap that actually produced the location.
         std::vector<bool> IsStripe;
 
         TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations, std::vector<bool> isStripe)

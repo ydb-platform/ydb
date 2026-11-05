@@ -1,5 +1,4 @@
 #include "filters_set.h"
-
 #include "purecalc_filter.h"
 
 #include <ydb/library/actors/core/log.h>
@@ -10,7 +9,7 @@ namespace NFq::NRowDispatcher {
 
 namespace {
 
-class TTopicFilters : public ITopicFilters {
+class TTopicFilters: public ITopicFilters {
     class TStats {
     public:
         void AddFilterLatency(TDuration filterLatency) {
@@ -30,9 +29,11 @@ public:
         : Owner_(owner)
         , Config_(std::move(config))
         , Counters_(std::move(counters))
-    {}
+    {
+    }
 
-    void ProcessData(const TVector<ui64>& columnIndex, std::span<const ui64> offsets, const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) override {
+    void ProcessData(const TVector<ui64>& columnIndex, std::span<const ui64> offsets,
+        const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) override {
         YDB_LOG_TRACE("ProcessData for clients",
             {"logPrefix", LogPrefix},
             {"runHandlers", RunHandlers_.size()},
@@ -155,7 +156,8 @@ private:
         return TStatus::Success();
     }
 
-    TValueStatus<IProgramCompileHandler::TPtr> AddCompileProgram(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder, ui64 cookie) {
+    TValueStatus<IProgramCompileHandler::TPtr> AddCompileProgram(
+        IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder, ui64 cookie) {
         const auto clientId = consumer->GetClientId();
 
         const auto [inflightIter, inflightInserted] = InFlightCompilations_.emplace(cookie, clientId);
@@ -163,11 +165,13 @@ private:
             return TStatus::Fail(EStatusId::INTERNAL_ERROR, "Got duplicated compilation event id");
         }
 
-        auto compileHandler = CreateProgramCompileHandler(std::move(consumer), std::move(programHolder), cookie, Config_.CompileServiceId, Owner_, Counters_);
+        auto compileHandler =
+            CreateProgramCompileHandler(std::move(consumer), std::move(programHolder), cookie, Config_.CompileServiceId, Owner_, Counters_);
         auto [iter, inserted] = CompileHandlers_.emplace(clientId, std::move(compileHandler));
         if (!inserted) {
             InFlightCompilations_.erase(inflightIter);
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to compile new program, program with client id " << clientId << " already exists");
+            return TStatus::Fail(EStatusId::INTERNAL_ERROR,
+                TStringBuilder() << "Failed to compile new program, program with client id " << clientId << " already exists");
         }
         return iter->second;
     }
@@ -196,7 +200,8 @@ private:
 
         const auto iter = CompileHandlers_.find(clientId);
         if (iter == CompileHandlers_.end()) {
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Compile response ignored for id " << cookie << ", program with client id " << clientId << " not found");
+            return TStatus::Fail(EStatusId::INTERNAL_ERROR,
+                TStringBuilder() << "Compile response ignored for id " << cookie << ", program with client id " << clientId << " not found");
         }
         const auto result = iter->second;
         CompileHandlers_.erase(iter);
@@ -210,7 +215,8 @@ private:
         auto runHandler = CreateProgramRunHandler(std::move(consumer), std::move(programHolder), Counters_);
         const auto [iter, inserted] = RunHandlers_.emplace(clientId, std::move(runHandler));
         if (!inserted) {
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to run new program, program with client id " << clientId << " already exists");
+            return TStatus::Fail(EStatusId::INTERNAL_ERROR,
+                TStringBuilder() << "Failed to run new program, program with client id " << clientId << " already exists");
         }
         return iter->second;
     }
@@ -223,14 +229,16 @@ private:
         RunHandlers_.erase(iter);
     }
 
-    void PushToRunner(IProgramRunHandler::TPtr programRunHandler, std::span<const ui64> /* offsets */, const TVector<ui64>& columnIndex, const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) {
+    void PushToRunner(IProgramRunHandler::TPtr programRunHandler, std::span<const ui64> /* offsets */, const TVector<ui64>& columnIndex,
+        const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) {
         const auto consumer = programRunHandler->GetConsumer();
         const auto& columnIds = consumer->GetColumnIds();
 
         TVector<std::span<NYql::NUdf::TUnboxedValue>> result;
         result.reserve(columnIds.size());
         for (ui64 columnId : columnIds) {
-            Y_ENSURE(columnId < columnIndex.size(), "Unexpected column id " << columnId << ", it is larger than index array size " << columnIndex.size());
+            Y_ENSURE(columnId < columnIndex.size(),
+                "Unexpected column id " << columnId << ", it is larger than index array size " << columnIndex.size());
             const ui64 index = columnIndex[columnId];
 
             Y_ENSURE(index < values.size(), "Unexpected column index " << index << ", it is larger than values array size " << values.size());
@@ -258,7 +266,7 @@ private:
     NActors::TActorId Owner_;
     TTopicFiltersConfig Config_;
 
-    ui64 NextCookie_ = 1;  // 0 <=> compilation is not started
+    ui64 NextCookie_ = 1;   // 0 <=> compilation is not started
     std::unordered_map<ui64, NActors::TActorId> InFlightCompilations_;
     std::unordered_map<NActors::TActorId, IProgramCompileHandler::TPtr> CompileHandlers_;
     std::unordered_map<NActors::TActorId, IProgramRunHandler::TPtr> RunHandlers_;
@@ -268,10 +276,10 @@ private:
     TStats Stats_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 ITopicFilters::TPtr CreateTopicFilters(NActors::TActorId owner, TTopicFiltersConfig config, NMonitoring::TDynamicCounterPtr counters) {
     return MakeIntrusive<TTopicFilters>(owner, std::move(config), std::move(counters));
 }
 
-}  // namespace NFq::NRowDispatcher
+}   // namespace NFq::NRowDispatcher

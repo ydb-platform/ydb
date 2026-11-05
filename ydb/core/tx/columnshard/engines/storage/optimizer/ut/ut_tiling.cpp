@@ -24,6 +24,8 @@ namespace {
 struct TTestPortion {
     using TPtr = std::shared_ptr<TTestPortion>;
     using TConstPtr = std::shared_ptr<const TTestPortion>;
+    using TKey = ui64;
+    using TKeyRef = ui64;
 
     ui64 PortionId;
     ui64 Start;
@@ -55,6 +57,14 @@ struct TTestPortion {
         return Finish;
     }
 
+    ui64 IndexKeyStartRef() const {
+        return Start;
+    }
+
+    ui64 IndexKeyEndRef() const {
+        return Finish;
+    }
+
     ui64 GetPortionId() const {
         return PortionId;
     }
@@ -82,10 +92,10 @@ struct TTestPortion {
     void AddRuntimeFeature(const TPortionInfo::ERuntimeFeature /*feature*/) {};
 };
 
-using TTestAccumulator = Accumulator<ui64, TTestPortion>;
-using TTestLastLevel = LastLevel<ui64, TTestPortion>;
-using TTestMiddleLevel = MiddleLevel<ui64, TTestPortion>;
-using TTestTiling = Tiling<ui64, TTestPortion>;
+using TTestAccumulator = Accumulator<TTestPortion>;
+using TTestLastLevel = LastLevel<TTestPortion>;
+using TTestMiddleLevel = MiddleLevel<TTestPortion>;
+using TTestTiling = Tiling<TTestPortion>;
 
 TTestPortion::TPtr MakePortion(const ui64 id, const ui64 start, const ui64 finish, const ui64 blobBytes) {
     return std::make_shared<TTestPortion>(id, start, finish, blobBytes);
@@ -301,6 +311,33 @@ Y_UNIT_TEST_SUITE(TilingCoreUnits) {
         UNIT_ASSERT_VALUES_EQUAL(ids[0], 1);
         UNIT_ASSERT_VALUES_EQUAL(ids[1], 2);
         UNIT_ASSERT_VALUES_EQUAL(ids[2], 3);
+    }
+
+    Y_UNIT_TEST(LastLevelMeasuresOverlaps) {
+        TCounters counters;
+        TTestLastLevel lastLevel(TLastLevelSettings{}, counters);
+        lastLevel.AddPortion(MakePortion(1, 0, 10, 100));
+        lastLevel.AddPortion(MakePortion(2, 20, 30, 100));
+
+        UNIT_ASSERT_VALUES_EQUAL(lastLevel.Measure(MakePortion(3, 31, 40, 100)), 0);
+        UNIT_ASSERT_VALUES_EQUAL(lastLevel.Measure(MakePortion(4, 30, 40, 100)), 1);
+        UNIT_ASSERT_VALUES_EQUAL(lastLevel.Measure(MakePortion(5, 25, 40, 100)), 1);
+        UNIT_ASSERT_VALUES_EQUAL(lastLevel.Measure(MakePortion(6, 5, 25, 100)), 2);
+    }
+
+    Y_UNIT_TEST(LastLevelSettlesPortionInGap) {
+        TCounters counters;
+        TTestLastLevel lastLevel(TLastLevelSettings{}, counters);
+        lastLevel.AddPortion(MakePortion(1, 0, 10, 100));
+        lastLevel.AddPortion(MakePortion(2, 20, 30, 100));
+        lastLevel.AddPortion(MakePortion(3, 12, 15, 100));
+
+        TVector<ui64> ids;
+        for (const auto& p : lastLevel.Portions) {
+            ids.push_back(p->GetPortionId());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ids, TVector<ui64>({ 1, 3, 2 }));
+        UNIT_ASSERT(lastLevel.Candidates.empty());
     }
 
     Y_UNIT_TEST(TilingReturnsAccumulatorTask) {

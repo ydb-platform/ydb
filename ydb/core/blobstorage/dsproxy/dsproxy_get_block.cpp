@@ -97,7 +97,11 @@ public:
             << " Deadline# " << Deadline
             << " RestartCounter# " << RestartCounter);
         for (const auto& vdisk : Info->GetVDisks()) {
-            SendGetBlockRequest(Info->GetVDiskId(vdisk.OrderNumber));
+            const auto vd = Info->GetVDiskId(vdisk.OrderNumber);
+            if (Info->GetFailRealmState(vd.FailRealm) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F) {
+                continue;
+            }
+            SendGetBlockRequest(vd);
             ++Requests;
         }
 

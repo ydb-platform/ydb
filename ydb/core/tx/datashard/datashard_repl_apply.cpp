@@ -209,15 +209,10 @@ public:
                     "WriteTxId cannot be specified for row consistency");
                 return false;
             }
-        } else {
-            if (writeTxId == 0) {
-                Result = MakeHolder<TEvDataShard::TEvApplyReplicationChangesResult>(
-                    NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_REJECTED,
-                    NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_BAD_REQUEST,
-                    "Non-zero WriteTxId must be specified for global consistency");
-                return false;
-            }
         }
+
+        // Global replicas also accept immediate writes during index initial
+        // scan. The replication protocol chooses when to use WriteTxId.
 
         TSerializedCellVec keyCellVec;
         if (!TSerializedCellVec::TryParse(change.GetKey(), keyCellVec) ||
@@ -230,8 +225,9 @@ public:
             return false;
         }
 
-        TReplicationSourceOffsetsDb rdb(txc);
-        if (!source.AdvanceMaxOffset(rdb, keyCellVec.GetCells(), sourceOffset)) {
+        auto offset = source.Offsets.upper_bound(keyCellVec.GetCells());
+        Y_ENSURE(offset != source.Offsets.begin());
+        if (sourceOffset <= (*std::prev(offset))->MaxOffset) {
             // We have already seen this offset and ignore it
             return true;
         }
@@ -272,6 +268,10 @@ public:
                 return false;
             }
         }
+
+        // Rejected records must not advance the persisted deduplication offset.
+        TReplicationSourceOffsetsDb rdb(txc);
+        source.AdvanceMaxOffset(rdb, keyCellVec.GetCells(), sourceOffset);
 
         if (writeTxId) {
             if (collector) {

@@ -71,8 +71,8 @@ TIntrusivePtr<TConnection> MakePortConnection(const IOperator& port, ui32 output
 }
 
 ui32 OutputIndex(const IOperator& input, TStageGraph& graph) {
-    if (input.Props.StageOutputIndex) {
-        return *input.Props.StageOutputIndex;
+    if (const auto index = GetReplicateOutputIndex(input)) {
+        return *index;
     }
     return graph.GetOutputIndex(*input.Props.StageId);
 }
@@ -105,6 +105,11 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
     } else if (input->Kind == EOperator::Replicate) {
         auto& hub = CastOperator<TOpReplicate>(*input).GetReplicate();
         auto& producer = *hub.GetInput();
+        // Match the compiler's AllowWithSpilling setting for multi-output stages.
+        const auto& kqpCtx = ctx.KqpCtx;
+        Y_ENSURE(kqpCtx.Config->GetEnableQueryServiceSpilling()
+            && (kqpCtx.IsGenericQuery() || kqpCtx.IsScanQuery()) && kqpCtx.Config->SpillingEnabled(),
+            "Cannot execute shared " << producer.GetExplainName() << " with channel spilling disabled");
         input->Props.StageId = producer.Props.StageId;
         // A Replicate over a port needs a row stream, not its producer's variant.
         if (producer.Kind == EOperator::Replicate) {
@@ -113,13 +118,8 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
                 MakePortConnection(producer, OutputIndex(producer, props.StageGraph)));
             input->Props.StageId = stage;
         }
-        auto ports = hub.GetOutputs();
-        std::sort(ports.begin(), ports.end(), [](const auto* lhs, const auto* rhs) {
-            return lhs->GetIndex() < rhs->GetIndex();
-        });
-        for (ui32 index = 0; index < ports.size(); ++index) {
-            ports[index]->Props.StageId = input->Props.StageId;
-            ports[index]->Props.StageOutputIndex = index;
+        for (auto* port : hub.GetOutputs()) {
+            port->Props.StageId = input->Props.StageId;
         }
     } else if (input->Kind == EOperator::Join) {
         const auto join = CastOperator<TOpJoin>(input);
@@ -249,7 +249,8 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         if (CanEliminateAggregateShuffle(*aggregate, ctx)) {
             props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TMapConnection>(outputIndex));
         } else if (!aggregate->GetKeyColumns().Items().empty()) {
-            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TShuffleConnection>(aggregate->GetKeyColumns(), outputIndex));
+            props.StageGraph.Connect(inputStageId, newStageId,
+                                     MakeIntrusive<TShuffleConnection>(GetAggregateInputShuffle(*aggregate), outputIndex));
         } else {
             props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
         }
@@ -294,7 +295,8 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         if (lookup->IsJoin()) {
             settings.Strategy = lookup->JoinKind == "LeftSemi" ? EStreamLookupStrategyType::LookupSemiJoinRows : EStreamLookupStrategyType::LookupJoinRows;
             // For point prefix lookup we allow null keys with it size.
-            settings.AllowNullKeysPrefixSize = lookup->Prefix ? lookup->Prefix->Columns.size() : 0;
+            const size_t prefixSize = lookup->Prefix ? lookup->Prefix->Columns.size() : 0;
+            settings.AllowNullKeysPrefixSize = prefixSize + (lookup->AllowNullKeys ? lookup->LookupKeys.Items().size() : 0);
         } else {
             settings.Strategy = EStreamLookupStrategyType::LookupRows;
 
@@ -320,16 +322,40 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         auto lookup = &lookupJoin->GetTableLookup();
         input->Props.StageId = *lookup->Props.StageId;
         YQL_CLOG(TRACE, CoreDq) << "Assign stages index lookup join";
+    } else if (input->Kind == EOperator::Sequencer) {
+        auto& sequencer = CastOperator<TOpSequencer>(*input);
+        auto& exprCtx = ctx.ExprCtx;
+        const auto pos = sequencer.Pos;
+        const auto inputStageId = *sequencer.GetInput()->Props.StageId;
+        const auto outputIndex = OutputIndex(*sequencer.GetInput(), props.StageGraph);
+        const auto newStageId = props.StageGraph.AddStage();
+        sequencer.Props.StageId = newStageId;
+
+        TVector<TExprNode::TPtr> columns;
+        TVector<TExprNode::TPtr> generatedColumns;
+        TVector<const TItemExprType*> inputItems;
+        for (const auto& [id, name] : sequencer.GetInputColumns().Items()) {
+            columns.push_back(exprCtx.NewAtom(pos, name));
+            inputItems.push_back(exprCtx.MakeType<TItemExprType>(name, sequencer.GetInput()->GetIUType(id, exprCtx)));
+        }
+        for (const auto& [id, name] : sequencer.GetGeneratedColumns().Items()) {
+            columns.push_back(exprCtx.NewAtom(pos, name));
+            generatedColumns.push_back(exprCtx.NewAtom(pos, name));
+        }
+        props.StageGraph.Connect(inputStageId, newStageId,
+            MakeIntrusive<TSequencerConnection>(outputIndex, sequencer.Table,
+                exprCtx.NewList(pos, std::move(columns)), exprCtx.NewList(pos, std::move(generatedColumns)),
+                ExpandType(pos, *exprCtx.MakeType<TListExprType>(exprCtx.MakeType<TStructExprType>(inputItems)), exprCtx)));
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages sequencer";
     } else if (input->Kind == EOperator::TableEffect) {
         auto tableEffect = CastOperator<TOpTableEffect>(input);
-
-        const auto newStageId = props.StageGraph.AddSinkStage(tableEffect->BuildSettings(ctx.ExprCtx));
-        const auto inputStageId = *(tableEffect->GetInput()->Props.StageId);
+        // OLAP sinks use the direct-write actor, which requires priority zero.
+        const auto priority = tableEffect->Props.Metadata->StorageType == EStorageType::ColumnStorage ? 0 : props.EffectPriority;
+        const auto newStageId = props.StageGraph.AddSinkStage(tableEffect->BuildSettings(ctx.ExprCtx, priority));
+        const auto inputStageId = *tableEffect->GetInput()->Props.StageId;
         const auto outputIndex = OutputIndex(*tableEffect->GetInput(), props.StageGraph);
-
         input->Props.StageId = newStageId;
-        props.StageGraph.Connect(inputStageId, newStageId,
-                                 MakeIntrusive<TUnionAllConnection>(outputIndex));
+        props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
         YQL_CLOG(TRACE, CoreDq) << "Assign stages table effects";
     }
     else {

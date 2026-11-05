@@ -422,7 +422,7 @@ bool TContext::IsDynamicCluster(const TDeferredAtom& cluster) const {
 
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     if (arg.Defined()) {
-        if (*arg == YtProviderName || *arg == KikimrProviderName || *arg == RtmrProviderName)
+        if (*arg == YtProviderName || *arg == KikimrProviderName)
         {
             ProviderPathPrefixes_[*arg] = value;
             return true;
@@ -441,6 +441,15 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     }
 
     return true;
+}
+
+void TContext::SetRelativePathPrefix(const TString& value) {
+    PathPrefix_ = BuildTablePath(Settings.PathPrefix, value);
+    for (auto& [cluster, prefix] : ClusterPathPrefixes_) {
+        if (prefix) {
+            prefix = BuildTablePath(prefix, value);
+        }
+    }
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {

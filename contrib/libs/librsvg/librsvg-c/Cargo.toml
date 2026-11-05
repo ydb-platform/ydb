@@ -1,0 +1,42 @@
+[package]
+name = "librsvg-c"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+cairo-rs = { workspace = true, features = ["v1_16", "png", "pdf", "ps", "svg"] }
+cast.workspace = true
+float-cmp.workspace = true
+gdk-pixbuf = { workspace = true, optional = true }
+gio.workspace = true
+glib.workspace = true
+libc.workspace = true
+librsvg = { workspace = true, features = ["capi"] }
+rgb = { workspace = true, features = ["argb"] }
+url.workspace = true
+
+[build-dependencies]
+regex.workspace = true
+
+[features]
+avif = ["librsvg/avif"]
+capi = ["librsvg/capi"]
+pixbuf = ["dep:gdk-pixbuf"]
+
+[lib]
+crate-type = [ "staticlib" ]
+
+[package.metadata.capi]
+min_version = "0.10.10"
+
+[package.metadata.capi.library]
+name = "rsvg_2"
+
+[package.metadata.capi.header]
+enabled = false

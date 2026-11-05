@@ -96,6 +96,76 @@ namespace {
         TVector<std::pair<TString, TString>> Labels;
     };
 
+    struct TEvAllSqsMetricsLabelsResult
+        : public NActors::TEventLocal<TEvAllSqsMetricsLabelsResult, NActors::TEvents::ES_PRIVATE + 7423> {
+        TVector<TVector<std::pair<TString, TString>>> Labels;
+    };
+
+    class TAllSqsMetricsLabelsTestActor : public NActors::TActorBootstrapped<TAllSqsMetricsLabelsTestActor> {
+    public:
+        TAllSqsMetricsLabelsTestActor(NActors::TActorId edge, TString consumer, bool firstClassCitizen)
+            : Edge_(edge)
+            , Consumer_(std::move(consumer))
+            , FirstClassCitizen_(firstClassCitizen)
+        {
+        }
+
+        void Bootstrap(const NActors::TActorContext& ctx) {
+            NKikimr::AppData(ctx)->PQConfig.SetTopicsAreFirstClassCitizen(FirstClassCitizen_);
+
+            const TString database = "/Root/db";
+            const TString topic = "/Root/db/topic";
+            auto* ev = new TEvAllSqsMetricsLabelsResult;
+            ev->Labels = {
+                GetRequestMessageCountMetricsLabels(database, topic, Consumer_, "SendMessage"),
+                GetResponseMessageCountMetricsLabels(database, topic, Consumer_, "ReceiveMessage", "OK"),
+                GetResponseEmptyCountMetricsLabels(database, topic, Consumer_, "ReceiveMessage"),
+                GetRequestSizeMetricsLabels(database, topic, Consumer_, "SendMessage"),
+                GetMetricsLabels(database, topic, Consumer_, "SendMessage", {{"name", "api.sqs.request.count"}}),
+                GetMetricsLabels(
+                    database,
+                    topic,
+                    Consumer_,
+                    "SendMessage",
+                    {{"name", "api.sqs.response.count"}, {"code", "200"}}),
+                GetMetricsLabels(
+                    database,
+                    topic,
+                    Consumer_,
+                    "SendMessage",
+                    {{"name", "api.sqs.response.bytes"}, {"code", "200"}}),
+                GetMetricsLabels(
+                    database,
+                    topic,
+                    Consumer_,
+                    "SendMessage",
+                    {{"name", "api.sqs.response.duration_milliseconds"}}),
+            };
+            ctx.Send(Edge_, ev);
+            Die(ctx);
+        }
+
+    private:
+        NActors::TActorId Edge_;
+        TString Consumer_;
+        bool FirstClassCitizen_;
+    };
+
+    TVector<TVector<std::pair<TString, TString>>> CollectAllSqsMetricsLabels(
+        NKikimr::TTestActorRuntime& runtime,
+        const TString& consumer,
+        bool firstClassCitizen
+    ) {
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Register(
+            new TAllSqsMetricsLabelsTestActor(edge, consumer, firstClassCitizen),
+            0,
+            runtime.GetAppData().SystemPoolId
+        );
+        auto ev = runtime.GrabEdgeEvent<TEvAllSqsMetricsLabelsResult>(edge);
+        return ev->Get()->Labels;
+    }
+
     class TMetricsLabelsTestActor : public NActors::TActorBootstrapped<TMetricsLabelsTestActor> {
     public:
         TMetricsLabelsTestActor(
@@ -290,6 +360,64 @@ Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
         );
 
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "account/dir--topic");
+    }
+
+    Y_UNIT_TEST(DoesNotPrefixSharedForAlreadyConvertedConsumerInFederation) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
+
+        const TString pathForm = "crowdplatform/ycs-tasks/sqs/push2yt/push2yt_consumer";
+        const auto fromPath = CollectRequestMessageCountMetricsLabels(runtime, pathForm, false);
+        const auto fromConfigName = CollectRequestMessageCountMetricsLabels(
+            runtime,
+            "crowdplatform@ycs-tasks@sqs@push2yt@push2yt_consumer",
+            false
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(fromPath, "consumer"), pathForm);
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(fromConfigName, "consumer"), pathForm);
+
+        const auto shared = CollectRequestMessageCountMetricsLabels(
+            runtime,
+            "shared/ydb_sqs_consumer",
+            false
+        );
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(shared, "consumer"), "shared/ydb_sqs_consumer");
+    }
+
+    Y_UNIT_TEST(ConsumerLabelIsSameForAllSqsMetrics) {
+        const TVector<TString> metricNames = {
+            "api.sqs.request.message_count",
+            "api.sqs.response.message_count",
+            "api.sqs.response.empty_count",
+            "api.sqs.request.bytes",
+            "api.sqs.request.count",
+            "api.sqs.response.count",
+            "api.sqs.response.bytes",
+            "api.sqs.response.duration_milliseconds",
+        };
+        const TString pathForm = "crowdplatform/ycs-tasks/sqs/push2yt/push2yt_consumer";
+        const TString configName = "crowdplatform@ycs-tasks@sqs@push2yt@push2yt_consumer";
+
+        auto assertConsumer = [&](bool firstClassCitizen, const TString& consumer, const TString& expectedConsumer) {
+            NKikimr::TTestActorRuntime runtime(1, false);
+            InitRuntime(runtime);
+            const auto labels = CollectAllSqsMetricsLabels(runtime, consumer, firstClassCitizen);
+            UNIT_ASSERT_VALUES_EQUAL(labels.size(), metricNames.size());
+            for (size_t i = 0; i < labels.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels[i], "name"), metricNames[i]);
+                UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels[i], "consumer"), expectedConsumer);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels[1], "status"), "OK");
+            UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels[5], "code"), "200");
+            UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels[6], "code"), "200");
+        };
+
+        assertConsumer(false, pathForm, pathForm);
+        assertConsumer(false, configName, pathForm);
+        assertConsumer(false, "shared/ydb_sqs_consumer", "shared/ydb_sqs_consumer");
+        assertConsumer(true, pathForm, pathForm);
+        assertConsumer(true, configName, configName);
     }
 }
 

@@ -60,7 +60,9 @@ class TestSecondaryIndexBase(TestBase):
         rows = dml.query(f"select count(*) as count from {table_name}")
         count_col = rows[0].count
         for type_name in index.keys():
-            for i in range(1, count_col + 1):
+            # Boolean generators only produce two distinct predicates.
+            values = (1, 4) if type_name in ("Bool", "pgbool") else range(1, count_col + 1)
+            for i in values:
 
                 def process(session):
                     rows = self.query(

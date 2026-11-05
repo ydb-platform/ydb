@@ -27,20 +27,21 @@ TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
     return {};
 }
 
-class TS3DataSinkTypeAnnotationTransformer : public TVisitorTransformerBase {
+class TS3DataSinkTypeAnnotationTransformer: public TVisitorTransformerBase {
 public:
     TS3DataSinkTypeAnnotationTransformer(TS3State::TPtr state)
         : TVisitorTransformerBase(true)
         , State_(state)
     {
         using TSelf = TS3DataSinkTypeAnnotationTransformer;
-        AddHandler({TCoCommit::CallableName()}, Hndl(&TSelf::HandleCommit));
-        AddHandler({TS3WriteObject::CallableName()}, Hndl(&TSelf::HandleWrite));
-        AddHandler({TS3Target::CallableName()}, Hndl(&TSelf::HandleTarget));
-        AddHandler({TS3SinkSettings::CallableName()}, Hndl(&TSelf::HandleSink));
-        AddHandler({TS3SinkOutput::CallableName()}, Hndl(&TSelf::HandleOutput));
-        AddHandler({TS3Insert::CallableName()}, Hndl(&TSelf::HandleInsert));
+        AddHandler({ TCoCommit::CallableName() }, Hndl(&TSelf::HandleCommit));
+        AddHandler({ TS3WriteObject::CallableName() }, Hndl(&TSelf::HandleWrite));
+        AddHandler({ TS3Target::CallableName() }, Hndl(&TSelf::HandleTarget));
+        AddHandler({ TS3SinkSettings::CallableName() }, Hndl(&TSelf::HandleSink));
+        AddHandler({ TS3SinkOutput::CallableName() }, Hndl(&TSelf::HandleOutput));
+        AddHandler({ TS3Insert::CallableName() }, Hndl(&TSelf::HandleInsert));
     }
+
 private:
     TStatus HandleCommit(TExprBase input, TExprContext&) {
         const auto commit = input.Cast<TCoCommit>();
@@ -97,9 +98,7 @@ private:
                 convertedValues.emplace_back(std::move(node));
             }
 
-            const auto list = Build<TCoAsList>(ctx, input->Pos())
-                .Add(std::move(convertedValues))
-                .Done();
+            const auto list = Build<TCoAsList>(ctx, input->Pos()).Add(std::move(convertedValues)).Done();
 
             input->ChildRef(TS3WriteObject::idx_Input) = list.Ptr();
             return TStatus::Repeat;
@@ -119,7 +118,8 @@ private:
         }
 
         if (targetType) {
-            const auto status = TryConvertTo(input->ChildRef(TS3WriteObject::idx_Input), *ctx.MakeType<TListExprType>(targetType), ctx, *State_->Types);
+            const auto status =
+                TryConvertTo(input->ChildRef(TS3WriteObject::idx_Input), *ctx.MakeType<TListExprType>(targetType), ctx, *State_->Types);
             if (status == TStatus::Error) {
                 ctx.AddError(TIssue(ctx.GetPosition(source->Pos()), "Row type mismatch for S3 external table"));
                 return TStatus::Error;
@@ -165,9 +165,8 @@ private:
                 const TTypeAnnotationNode* targetType = userschema->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
                 if (!IsSameAnnotation(*targetType, *sourceType)) {
                     ctx.AddError(TIssue(ctx.GetPosition(source->Pos()),
-                                        TStringBuilder() << "Type mismatch between schema type: " << *targetType
-                                                         << " and actual data type: " << *sourceType << ", diff is: "
-                                                         << GetTypeDiff(*targetType, *sourceType)));
+                        TStringBuilder() << "Type mismatch between schema type: " << *targetType << " and actual data type: " << *sourceType
+                                         << ", diff is: " << GetTypeDiff(*targetType, *sourceType)));
                     return TStatus::Error;
                 }
             }
@@ -192,12 +191,7 @@ private:
             return TStatus::Error;
         }
 
-        auto t = ctx.MakeType<TTupleExprType>(
-                    TTypeAnnotationNode::TListType{
-                        ctx.MakeType<TListExprType>(
-                            baseTargeType
-                        )
-                    });
+        auto t = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{ ctx.MakeType<TListExprType>(baseTargeType) });
 
         input->SetTypeAnn(t);
         return TStatus::Ok;
@@ -214,7 +208,8 @@ private:
 
         const auto& path = input->Child(TS3Target::idx_Path)->Content();
         if (path.empty() || path.back() != '/') {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Path)->Pos()), "Expected non empty path to directory ending with '/'."));
+            ctx.AddError(
+                TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Path)->Pos()), "Expected non empty path to directory ending with '/'."));
             return TStatus::Error;
         }
 
@@ -232,8 +227,9 @@ private:
         }
 
         if (input->ChildrenSize() > TS3Target::idx_Settings) {
-            if (!EnsureTuple(*input->Child(TS3Target::idx_Settings), ctx))
+            if (!EnsureTuple(*input->Child(TS3Target::idx_Settings), ctx)) {
                 return TStatus::Error;
+            }
 
             bool hasDateTimeFormat = false;
             bool hasDateTimeFormatName = false;
@@ -250,9 +246,9 @@ private:
                         return false;
                     }
                     if (value.Content() == "lz4"sv && (format == "raw"sv || format == "json_list"sv)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()),
-                            TStringBuilder() << "Compression '" << value.Content() << "' is not supported for format '" << format
-                                             << "'. Use one of: gzip, zstd, brotli, bzip2, xz"));
+                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), TStringBuilder() << "Compression '" << value.Content()
+                                                                                           << "' is not supported for format '" << format
+                                                                                           << "'. Use one of: gzip, zstd, brotli, bzip2, xz"));
                         return false;
                     }
                     return true;
@@ -354,17 +350,22 @@ private:
                 return true;
             };
 
-            if (!EnsureValidSettings(*input->Child(TS3Target::idx_Settings), {"compression", "partitionedby", "mode", "userschema", "data.datetime.formatname", "data.datetime.format", "data.timestamp.formatname", "data.timestamp.format", "data.date.format", "csvdelimiter", "filepattern"}, validator, ctx)) {
+            if (!EnsureValidSettings(*input->Child(TS3Target::idx_Settings),
+                    { "compression", "partitionedby", "mode", "userschema", "data.datetime.formatname", "data.datetime.format",
+                        "data.timestamp.formatname", "data.timestamp.format", "data.date.format", "csvdelimiter", "filepattern" }, validator,
+                    ctx)) {
                 return TStatus::Error;
             }
 
             if (hasDateTimeFormat && hasDateTimeFormatName) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Settings)->Pos()), "Don't use data.datetime.format_name and data.datetime.format together"));
+                ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Settings)->Pos()),
+                    "Don't use data.datetime.format_name and data.datetime.format together"));
                 return TStatus::Error;
             }
 
             if (hasTimestampFormat && hasTimestampFormatName) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Settings)->Pos()), "Don't use data.timestamp.format_name and data.timestamp.format together"));
+                ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Settings)->Pos()),
+                    "Don't use data.timestamp.format_name and data.timestamp.format together"));
                 return TStatus::Error;
             }
         }
@@ -392,7 +393,8 @@ private:
         }
 
         if (ETypeAnnotationKind::Stream == source->GetTypeAnn()->GetKind()) {
-            output = ctx.ChangeChild(*input, TS3SinkOutput::idx_Input, ctx.NewCallable(source->Pos(), "ToFlow", {input->ChildPtr(TS3SinkOutput::idx_Input)}));
+            output = ctx.ChangeChild(
+                *input, TS3SinkOutput::idx_Input, ctx.NewCallable(source->Pos(), "ToFlow", { input->ChildPtr(TS3SinkOutput::idx_Input) }));
             return TStatus::Repeat;
         }
 
@@ -427,13 +429,15 @@ private:
     }
 
 private:
-    const TTypeAnnotationNode* AnnotateTargetBase(TCoAtom format, const TExprNode::TListType& keys, const TStructExprType* structType, TExprContext& ctx) {
-        const bool isSingleRowPerFileFormat = IsIn({TStringBuf("raw"), TStringBuf("json_list")}, format);
+    const TTypeAnnotationNode* AnnotateTargetBase(
+        TCoAtom format, const TExprNode::TListType& keys, const TStructExprType* structType, TExprContext& ctx) {
+        const bool isSingleRowPerFileFormat = IsIn({ TStringBuf("raw"), TStringBuf("json_list") }, format);
 
         auto keysCount = keys.size();
         if (keysCount) {
             if (isSingleRowPerFileFormat) {
-                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), TStringBuilder() << "Partitioned isn't supported for " << format.Value() << " output format."));
+                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()),
+                    TStringBuilder() << "Partitioned isn't supported for " << format.Value() << " output format."));
                 return nullptr;
             }
 
@@ -441,13 +445,15 @@ private:
             for (auto i = 0U; i < keysCount; ++i) {
                 const auto key = keys[i];
                 TIssueScopeGuard issueScopePartitionKey(ctx.IssueManager, [&]() {
-                    return MakeIntrusive<TIssue>(ctx.GetPosition(key->Pos()), TStringBuilder() << "At partition key: '" << key->Content() << "'");
+                    return MakeIntrusive<TIssue>(
+                        ctx.GetPosition(key->Pos()), TStringBuilder() << "At partition key: '" << key->Content() << "'");
                 });
 
                 if (const auto keyType = structType->FindItemType(key->Content())) {
                     hasErrors = !EnsureDataType(key->Pos(), *keyType, ctx) || hasErrors;
                 } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Missing key column for partitioning. Please ensure the column is included in the schema."));
+                    ctx.AddError(TIssue(ctx.GetPosition(key->Pos()),
+                        "Missing key column for partitioning. Please ensure the column is included in the schema."));
                     hasErrors = true;
                 }
             }
@@ -489,10 +495,10 @@ private:
     const TS3State::TPtr State_;
 };
 
-} // anonymous namespace
+}   // anonymous namespace
 
 THolder<TVisitorTransformerBase> CreateS3DataSinkTypeAnnotationTransformer(TS3State::TPtr state) {
     return MakeHolder<TS3DataSinkTypeAnnotationTransformer>(state);
 }
 
-} // namespace NYql
+}   // namespace NYql

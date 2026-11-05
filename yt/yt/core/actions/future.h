@@ -382,6 +382,8 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<R()> callback) const;
     template <class R>
+    TFuture<R> Apply(TCallback<TErrorOr<R>()> callback) const;
+    template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>()> callback) const;
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>()> callback) const;
@@ -490,6 +492,8 @@ public:
     template <class R>
     TFuture<R> Apply(TCallback<R()> callback) const;
     template <class R>
+    TFuture<R> Apply(TCallback<TErrorOr<R>()> callback) const;
+    template <class R>
     TFuture<R> Apply(TCallback<TFuture<R>()> callback) const;
     template <class R>
     TFuture<R> Apply(TCallback<TUniqueFuture<R>()> callback) const;
@@ -582,6 +586,7 @@ public:
     //! Converts promise into future.
     operator TFuture<T>() const;
     TFuture<T> ToFuture() const;
+    explicit operator TUniqueFuture<T>() const;
 
 protected:
     explicit TPromiseBase(TIntrusivePtr<NYT::NDetail::TPromiseState<T>> impl);

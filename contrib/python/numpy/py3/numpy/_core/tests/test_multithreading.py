@@ -1,13 +1,13 @@
 import concurrent.futures
-import threading
 import string
+import threading
 
-import numpy as np
 import pytest
 
-from numpy.testing import IS_WASM, IS_64BIT
-from numpy.testing._private.utils import run_threaded
+import numpy as np
 from numpy._core import _rational_tests
+from numpy.testing import IS_64BIT, IS_WASM
+from numpy.testing._private.utils import run_threaded
 
 if IS_WASM:
     pytest.skip(allow_module_level=True, reason="no threading support in wasm")
@@ -277,7 +277,7 @@ def test_nonzero(dtype):
     #
     # This test triggers a data race which is suppressed in the TSAN CI. The test is to ensure
     # np.nonzero does not generate a segmentation fault
-    x = np.random.randint(4, size=10_000).astype(dtype)
+    x = np.random.randint(4, size=100).astype(dtype)
 
     def func(index):
         for _ in range(10):
@@ -289,5 +289,4 @@ def test_nonzero(dtype):
                 except RuntimeError as ex:
                     assert 'number of non-zero array elements changed during function execution' in str(ex)
 
-    run_threaded(func, max_workers=10, pass_count=True, outer_iterations=50)
-
+    run_threaded(func, max_workers=10, pass_count=True, outer_iterations=5)

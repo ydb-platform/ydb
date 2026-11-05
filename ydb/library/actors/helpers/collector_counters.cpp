@@ -1,41 +1,14 @@
 #include "collector_counters.h"
 
-#include <ydb/library/actors/core/async_frame_cache.h>
+#include <ydb/library/actors/core/subsystems/allocation_cache.h>
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
+
+#include <ydb/library/actors/core/allocation_cache.h>
 #include <ydb/library/actors/core/mon_stats.h>
 #include <ydb/library/actors/core/harmonizer/harmonizer_stats.h>
 
 
 namespace NActors {
-
-// THistogramCounters
-
-void THistogramCounters::Init(NMonitoring::TDynamicCounters* group, const TString& baseName, const TString& unit, ui64 maxVal) {
-    for (size_t i = 0; (1ull<<i) <= maxVal; ++i) {
-        TString bucketName = ToString(1ull<<i) + " " + unit;
-        Buckets.push_back(group->GetSubgroup("sensor", baseName)->GetNamedCounter("range", bucketName, true));
-    }
-    Buckets.push_back(group->GetSubgroup("sensor", baseName)->GetNamedCounter("range", "INF", true));
-}
-
-void THistogramCounters::Set(const TLogHistogram& data) {
-    ui32 i = 0;
-    for (;i < Y_ARRAY_SIZE(data.Buckets) && i < Buckets.size()-1; ++i)
-        *Buckets[i] = data.Buckets[i];
-    ui64 last = 0;
-    for (;i < Y_ARRAY_SIZE(data.Buckets); ++i)
-        last += data.Buckets[i];
-    *Buckets.back() = last;
-}
-
-void THistogramCounters::Set(const TLogHistogram& data, double factor) {
-    ui32 i = 0;
-    for (;i < Y_ARRAY_SIZE(data.Buckets) && i < Buckets.size()-1; ++i)
-        *Buckets[i] = data.Buckets[i]*factor;
-    ui64 last = 0;
-    for (;i < Y_ARRAY_SIZE(data.Buckets); ++i)
-        last += data.Buckets[i];
-    *Buckets.back() = last*factor;
-}
 
 // TActivityStats
 
@@ -174,16 +147,12 @@ void TExecutorPoolCounters::Init(NMonitoring::TDynamicCounters* group, const TSt
     SpinThresholdUs = PoolGroup->GetCounter("SpinThresholdUs", false);
 
 
-    LegacyActivationTimeHistogram.Init(PoolGroup.Get(), "ActivationTime", "usec", 5*1000*1000);
     ActivationTimeHistogram = PoolGroup->GetHistogram(
         "ActivationTimeUs", NMonitoring::ExponentialHistogram(24, 2, 1));
-    LegacyEventDeliveryTimeHistogram.Init(PoolGroup.Get(), "EventDeliveryTime", "usec", 5*1000*1000);
     EventDeliveryTimeHistogram = PoolGroup->GetHistogram(
         "EventDeliveryTimeUs", NMonitoring::ExponentialHistogram(24, 2, 1));
-    LegacyEventProcessingCountHistogram.Init(PoolGroup.Get(), "EventProcessingCount", "usec", 5*1000*1000);
     EventProcessingCountHistogram = PoolGroup->GetHistogram(
         "EventProcessingCountUs", NMonitoring::ExponentialHistogram(24, 2, 1));
-    LegacyEventProcessingTimeHistogram.Init(PoolGroup.Get(), "EventProcessingTime", "usec", 5*1000*1000);
     EventProcessingTimeHistogram = PoolGroup->GetHistogram(
         "EventProcessingTimeUs", NMonitoring::ExponentialHistogram(24, 2, 1));
 
@@ -239,20 +208,16 @@ void TExecutorPoolCounters::Set(const TExecutorPoolStats& poolStats, const TExec
     *SpinningTimeUs = poolStats.SpinningTimeUs;
     *SpinThresholdUs = poolStats.SpinThresholdUs;
 
-    LegacyActivationTimeHistogram.Set(stats.ActivationTimeHistogram);
     ActivationTimeHistogram->Reset();
     ActivationTimeHistogram->Collect(stats.ActivationTimeHistogram);
 
-    LegacyEventDeliveryTimeHistogram.Set(stats.EventDeliveryTimeHistogram);
     EventDeliveryTimeHistogram->Reset();
     EventDeliveryTimeHistogram->Collect(stats.EventDeliveryTimeHistogram);
 
-    LegacyEventProcessingCountHistogram.Set(stats.EventProcessingCountHistogram);
     EventProcessingCountHistogram->Reset();
     EventProcessingCountHistogram->Collect(stats.EventProcessingCountHistogram);
 
     double toMicrosec = 1000000 / NHPTimer::GetClockRate();
-    LegacyEventProcessingTimeHistogram.Set(stats.EventProcessingTimeHistogram, toMicrosec);
     EventProcessingTimeHistogram->Reset();
     for (ui32 i = 0; i < stats.EventProcessingTimeHistogram.Count(); ++i) {
         EventProcessingTimeHistogram->Collect(
@@ -297,9 +262,7 @@ void TActorSystemCounters::Init(NMonitoring::TDynamicCounters* group) {
     AsyncFrameCacheCachedBytes = frameCacheGroup->GetCounter("CachedBytes", false);
 }
 
-void TActorSystemCounters::Set(const THarmonizerStats& harmonizerStats, const TAsyncFrameCache::TProcessStats& frameCacheStats) {
-    *AsyncFrameCacheCachedFrames = frameCacheStats.CachedFrames;
-    *AsyncFrameCacheCachedBytes = frameCacheStats.CachedBytes;
+void TActorSystemCounters::Set(const THarmonizerStats& harmonizerStats) {
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
     *MaxUsedCpuPercent = harmonizerStats.MaxUsedCpu;
     *MinUsedCpuPercent = harmonizerStats.MinUsedCpu;
@@ -314,3 +277,22 @@ void TActorSystemCounters::Set(const THarmonizerStats& harmonizerStats, const TA
 }
 
 } // NActors 
+
+namespace NActors {
+
+void TActorSystemCounters::SetAllocationCacheStats(const std::vector<TAllocationCacheFamilyStats>& stats) {
+    *AsyncFrameCacheCachedFrames = 0;
+    *AsyncFrameCacheCachedBytes = 0;
+    auto cacheGroup = Group->GetSubgroup("subsystem", "allocation_cache");
+    for (const auto& family : stats) {
+        auto group = cacheGroup->GetSubgroup("family", family.Name);
+        *group->GetCounter("CachedBlocks", false) = family.Stats.CachedFrames;
+        *group->GetCounter("CachedBytes", false) = family.Stats.CachedBytes;
+        if (family.Name == TAsyncFrameCacheTag::Name) {
+            *AsyncFrameCacheCachedFrames = family.Stats.CachedFrames;
+            *AsyncFrameCacheCachedBytes = family.Stats.CachedBytes;
+        }
+    }
+}
+
+} // namespace NActors

@@ -1278,8 +1278,8 @@ message AutoPartitioningSettings {
     // Auto merge would stop working when the partitions count reaches min_active_partitions.
     // Zero value means default - 1.
     int64 min_active_partitions = 2 [(Ydb.value) = ">= 0"];
-    // Auto split would stop working when the partitions count reaches max_active_partitions.
-    // Zero value means default - 1.
+    // Auto split stops when the partition count reaches max_active_partitions.
+    // A zero value means use the effective min_active_partitions value.
     int64 max_active_partitions = 3 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.

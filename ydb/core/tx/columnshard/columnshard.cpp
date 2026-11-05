@@ -16,14 +16,11 @@
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/diagnostics/scan_diagnostics_actor.h>
-#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
-#include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
-#include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
@@ -83,13 +80,17 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
         return;
     }
     ProgressTxController->OnTabletInit();
+    AbortNotProposedTransactions();
     {
-        const TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())(
-            "self_id", SelfId())("process", "SwitchToWork");
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"tabletId", TabletID()},
+            {"selfId", SelfId()},
+            {"process", "SwitchToWork"});
         YDB_LOG_INFO("",
             {"event", "initialize_shard"},
             {"step", "SwitchToWork"});
         Become(&TThis::StateWork);
+        StartFindEmptyHistoryIntervals(ctx);
         SignalTabletActive(ctx);
         YDB_LOG_INFO("",
             {"event", "initialize_shard"},
@@ -98,6 +99,8 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
         EnqueueProgressTx(ctx);
         OnTieringModified();
     }
+    // the request for every portion takes long to build, so it is not part of the start
+    ctx.Send(SelfId(), new TEvPrivate::TEvPrefetchPortionsMetadata());
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     EnqueueBackgroundActivities();
     BackgroundSessionsManager->Start();
@@ -109,20 +112,21 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
     ScheduleBaseStatistics();
 
     NYDBTest::TControllers::GetColumnShardController()->OnSwitchToWork(TabletID());
-    AFL_VERIFY(!!StartInstant);
-    Counters.GetCSCounters().Initialization.OnSwitchToWork(TMonotonic::Now() - *StartInstant, TMonotonic::Now() - CreateInstant);
+    ui64 portionsCount = 0;
+    if (TablesManager.HasPrimaryIndex()) {
+        for (auto&& [_, granule] : TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetTables()) {
+            portionsCount += granule->GetPortions().size();
+        }
+    }
+    StartupTimeline.OnSwitchedToWork(portionsCount);
     NYDBTest::TControllers::GetColumnShardController()->OnTabletInitCompleted(*this);
 }
 
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
-    using namespace NOlap::NReader;
-    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_SCAN));
-    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_DATA_SOURCE));
-    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS));
-    StartInstant = TMonotonic::Now();
-    Counters.GetCSCounters().Initialization.OnActivateExecutor(TMonotonic::Now() - CreateInstant);
-    const TLogContextGuard gLogging =
-        NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletID())("self_id", SelfId());
+    StartupTimeline.OnExecutorActivated();
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"tabletId", TabletID()},
+        {"selfId", SelfId()});
     YDB_LOG_INFO("",
         {"event", "initialize_shard"},
         {"step", "OnActivateExecutor"});
@@ -230,9 +234,13 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TAc
 
     if (clientId == StatsReportPipe) {
         if (ev->Get()->Status == NKikimrProto::OK) {
-            LOG_S_DEBUG("Connected to " << tabletId << " at tablet " << TabletID());
+            YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Connected",
+                {"toTabletId", tabletId},
+                {"fromTabletId", TabletID()});
         } else {
-            LOG_S_INFO("Failed to connect to " << tabletId << " at tablet " << TabletID());
+            YDB_LOG_INFO_COMP(TX_COLUMNSHARD, "Failed to connect",
+                {"toTabletId", tabletId},
+                {"fromTabletId", TabletID()});
             LastStats = {};
             StatsReportPipe = {};
         }
@@ -242,18 +250,24 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TAc
     }
 
     if (PipeClientCache->OnConnect(ev)) {
-        LOG_S_DEBUG("Connected to " << tabletId << " at tablet " << TabletID());
+        YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Connected to tablet",
+            {"toTabletId", tabletId},
+            {"fromTabletId", TabletID()});
         return;
     }
 
-    LOG_S_INFO("Failed to connect to " << tabletId << " at tablet " << TabletID());
+    YDB_LOG_INFO_COMP(TX_COLUMNSHARD, "Failed to connect",
+        {"toTabletId", tabletId},
+        {"fromTabletId", TabletID()});
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&) {
     auto tabletId = ev->Get()->TabletId;
     auto clientId = ev->Get()->ClientId;
 
-    LOG_S_DEBUG("Client pipe reset to " << tabletId << " at tablet " << TabletID());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Client pipe reset",
+        {"toTabletId", tabletId},
+        {"fromTabletId", TabletID()});
 
     if (clientId == StatsReportPipe) {
         StatsReportPipe = {};
@@ -266,7 +280,8 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TAc
 
 void TColumnShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&) {
     PipeServersInterconnectSessions.emplace(ev->Get()->ServerId, ev->Get()->InterconnectSession);
-    LOG_S_DEBUG("Server pipe connected at tablet " << TabletID());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Server pipe connected at tablet",
+        {"tabletId", TabletID()});
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
@@ -275,7 +290,8 @@ void TColumnShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const 
         std::make_unique<NOverload::TEvOverloadPipeServerDisconnected>(
             NOverload::TColumnShardInfo{ .ColumnShardId = SelfId(), .TabletId = TabletID() },
             NOverload::TPipeServerInfo{ .PipeServerId = ev->Get()->ServerId, .InterconnectSessionId = {} }));
-    LOG_S_DEBUG("Server pipe reset at tablet " << TabletID());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Server pipe reset at tablet",
+        {"tabletId", TabletID()});
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContext& ctx) {
@@ -288,7 +304,9 @@ void TColumnShard::Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContex
 void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ctx);
     ui64 readCookie = ev->Get()->RequestCookie;
-    LOG_S_DEBUG("Finished read cookie: " << readCookie << " at tablet " << TabletID());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Finished read at tablet",
+        {"cookie", readCookie},
+        {"tabletId", TabletID()});
     const NOlap::TVersionedIndex* index = nullptr;
     if (HasIndex()) {
         index = &GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex();
@@ -305,6 +323,18 @@ void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorCon
         Counters.GetTabletCounters()->SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
         Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
     }
+}
+
+void TColumnShard::Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& /*ev*/) {
+    if (TablesManager.HasPrimaryIndex()) {
+        TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().PrefetchPortionsMetadata();
+    }
+}
+
+void TColumnShard::Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev) {
+    auto& engine = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    engine.GetGranulePtrVerified(ev->Get()->PathId)->SetLoadedKeyRanges(std::move(ev->Get()->LoadedKeyRanges));
+    ScanGate.ReleaseLoadedPortions(engine);
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const TActorContext& ctx) {
@@ -354,7 +384,8 @@ void TColumnShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev
     Y_ABORT_UNLESS(msg->TabletId == TabletID());
     MediatorTimeCastEntry = msg->Entry;
     Y_ABORT_UNLESS(MediatorTimeCastEntry);
-    LOG_S_DEBUG("Registered with mediator time cast at tablet " << TabletID());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Registered with mediator time cast at tablet",
+        {"tabletId", TabletID()});
 
     RescheduleWaitingReads();
 }
@@ -365,7 +396,9 @@ void TColumnShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, cons
 
     Y_ABORT_UNLESS(MediatorTimeCastEntry);
     ui64 step = MediatorTimeCastEntry->Get(TabletID());
-    LOG_S_DEBUG("Notified by mediator time cast with PlanStep# " << step << " at tablet " << TabletID());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Notified by mediator time cast at tablet",
+        {"planStep", step},
+        {"tabletId", TabletID()});
 
     for (auto it = MediatorTimeCastWaitingSteps.begin(); it != MediatorTimeCastWaitingSteps.end();) {
         if (step < *it) {
@@ -430,15 +463,18 @@ void TColumnShard::UpdateIndexCounters() {
     counters->SetCounter(COUNTER_EVICTED_BYTES, evictedStats.GetBlobBytes());
     counters->SetCounter(COUNTER_EVICTED_RAW_BYTES, evictedStats.GetRawBytes());
 
-    LOG_S_DEBUG("Index: tables " << Counters.GetPortionIndexCounters()->GetTablesCount() << " inserted " << insertedStats.DebugString()
-                                 << " compacted " << compactedStats.DebugString() << " s-compacted " << splitCompactedStats.DebugString()
-                                 << " inactive " << inactiveStats.DebugString() << " evicted " << evictedStats.DebugString() << " at tablet "
-                                 << TabletID());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Index",
+        {"tablesCount", Counters.GetPortionIndexCounters()->GetTablesCount()},
+        {"insertedStats", insertedStats.DebugString()},
+        {"compactedStats", compactedStats.DebugString()},
+        {"splitCompactedStats", splitCompactedStats.DebugString()},
+        {"inactiveStats", inactiveStats.DebugString()},
+        {"evictedStats", evictedStats.DebugString()},
+        {"tabletId", TabletID()});
 }
 
 ui64 TColumnShard::MemoryUsage() const {
-    ui64 memory = ProgressTxController->GetMemoryUsage() + ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) +
-                  (WaitingScans.size()) * (sizeof(NOlap::TSnapshot) + sizeof(void*));
+    ui64 memory = ProgressTxController->GetMemoryUsage() + ScanTxInFlight.size() * (sizeof(ui64) + sizeof(TInstant)) + ScanGate.GetMemoryUsage();
     memory += TablesManager.GetMemoryUsage();
     return memory;
 }
@@ -562,7 +598,9 @@ void TColumnShard::FillColumnTableStats(
             }
 
             tableStatsBuilder.FillTableStats(internalPathId, *(periodicTableStats->MutableTableStats()));
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("Add stats for table, tableLocalID", schemeShardLocalPathId);
+            YDB_LOG_DEBUG("",
+                {"event", "Add stats for table"},
+                {"tableLocalID", schemeShardLocalPathId});
         }
     }
 }

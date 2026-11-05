@@ -1,4 +1,5 @@
 #include "write.h"
+#include "write_internal.h"
 
 #include <contrib/libs/simdjson/include/simdjson.h>
 #include <library/cpp/containers/absl/flat_hash_map.h>
@@ -8,7 +9,6 @@
 #include <util/generic/set.h>
 #include <util/generic/stack.h>
 #include <util/generic/vector.h>
-#include <yql/essentials/minikql/dom/node.h>
 #include <yql/essentials/utils/parse_double.h>
 
 #include <cmath>
@@ -35,7 +35,6 @@ namespace NKikimr::NBinaryJson {
  */
 
 using namespace NJson;
-using namespace NYql::NDom;
 
 namespace {
 
@@ -493,63 +492,6 @@ private:
     bool AllowInf_;
 };
 
-void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& callbacks) {
-    switch (GetNodeType(value)) {
-        case ENodeType::String: {
-            auto cleanValue = ClearUtf8Mark(value);
-            callbacks.OnString(cleanValue.AsStringRef());
-            break;
-        }
-        case ENodeType::Bool:
-            callbacks.OnBoolean(value.Get<bool>());
-            break;
-        case ENodeType::Int64:
-            callbacks.OnInteger(value.Get<i64>());
-            break;
-        case ENodeType::Uint64:
-            callbacks.OnUInteger(value.Get<ui64>());
-            break;
-        case ENodeType::Double:
-            callbacks.OnDouble(value.Get<double>());
-            break;
-        case ENodeType::Entity:
-            callbacks.OnNull();
-            break;
-        case ENodeType::List: {
-            callbacks.OnOpenArray();
-
-            if (value.IsBoxed()) {
-                const auto it = value.GetListIterator();
-                TUnboxedValue current;
-                while (it.Next(current)) {
-                    DomToJsonIndex(current, callbacks);
-                }
-            }
-
-            callbacks.OnCloseArray();
-            break;
-        }
-        case ENodeType::Dict:
-        case ENodeType::Attr: {
-            callbacks.OnOpenMap();
-
-            if (value.IsBoxed()) {
-                const auto it = value.GetDictIterator();
-                TUnboxedValue key;
-                TUnboxedValue value;
-                while (it.NextPair(key, value)) {
-                    auto cleanKey = ClearUtf8Mark(key);
-                    callbacks.OnMapKey(cleanKey.AsStringRef());
-                    DomToJsonIndex(value, callbacks);
-                }
-            }
-
-            callbacks.OnCloseMap();
-            break;
-        }
-    }
-}
-
 template <typename TOnDemandValue>
     requires std::is_same_v<TOnDemandValue, simdjson::ondemand::value> || std::is_same_v<TOnDemandValue, simdjson::ondemand::document>
 [[nodiscard]] simdjson::error_code SimdJsonToJsonIndex(TOnDemandValue& value, TBinaryJsonCallbacks& callbacks) {
@@ -739,9 +681,9 @@ std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json, 
     return SerializeToBinaryJsonImpl(json, allowInf);
 }
 
-TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {
+TBinaryJson SerializeToBinaryJson(const TJsonEmitter& emit) {
     TBinaryJsonCallbacks callbacks(/* throwException */ false, /* allowInf */ false);
-    DomToJsonIndex(value, callbacks);
+    emit(callbacks);
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
     return std::move(serializer).Serialize();
 }

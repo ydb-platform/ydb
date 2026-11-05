@@ -24,7 +24,7 @@ void TAllocationGuard::Update(const ui64 newVolume, const bool notify) {
     }
     if (notify && TlsActivationContext) {
         NActors::TActivationContext::AsActorContext().Send(
-            ActorId, std::make_unique<NEvents::TEvExternal::TEvTaskUpdated>(ProcessId, ScopeId, AllocationId));
+            ActorId, std::make_unique<NEvents::TEvExternal::TEvTaskUpdated>(ProcessId, ScopeId, AllocationId, newVolume));
     }
     Memory = newVolume;
 }

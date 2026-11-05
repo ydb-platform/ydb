@@ -106,14 +106,10 @@ namespace NKikimr {
                     }
                 }
                 // run ExtractConfig as the very last step
-                const ui32 oldSlotSizeInUnits = pdiskInfo->SlotSizeInUnits;
-                const bool oldHasFixedSlotSize = pdiskInfo->GetEffectiveExpectedSlotSize() != 0;
+                const ui32 oldSlotSizeInUnits = pdiskInfo->GetEffectiveSlotSizeInUnits();
                 pdiskInfo->ExtractConfig(defaultMaxSlots);
-                // NumActiveDynamicSlots is a sum of owner weights, so it must be recomputed when the
-                // config change affects the weight inputs: SlotSizeInUnits or the effective
-                // expected slot size being set/unset
-                if (pdiskInfo->SlotSizeInUnits != oldSlotSizeInUnits ||
-                        (pdiskInfo->GetEffectiveExpectedSlotSize() != 0) != oldHasFixedSlotSize) {
+                // Slot weights depend on SlotSizeInUnits, independently of quota calculation.
+                if (pdiskInfo->GetEffectiveSlotSizeInUnits() != oldSlotSizeInUnits) {
                     pdiskInfo->NumActiveDynamicSlots = pdiskInfo->ComputeNumActiveDynamicSlots([&](TGroupId groupId) {
                         return state.Groups.Find(groupId);
                     });

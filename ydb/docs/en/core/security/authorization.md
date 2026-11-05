@@ -7,7 +7,7 @@ Authorization in {{ ydb-short-name }} is based on the following concepts:
 * [Access object](../concepts/glossary.md#access-object)
 * [Access subject](../concepts/glossary.md#access-subject)
 * [Access rights](../concepts/glossary.md#access-right)
-* [Access list](../concepts/glossary.md#access-acl)
+* [Access list](../concepts/glossary.md#access-control-list)
 * [Owner](../concepts/glossary.md#access-owner)
 * [User](../concepts/glossary.md#access-user)
 * [Group](../concepts/glossary.md#access-group)
@@ -48,7 +48,7 @@ For more information about initial deployment:
 
 {{ ydb-short-name }} allows working with [users](../concepts/glossary.md#access-user) from different directories and systems, and they are distinguished by [SID](../concepts/glossary.md#access-sid) using a suffix.
 
-The suffix `@<auth-domain>` identifies the “user source”, within which the uniqueness of all user logins or identifiers is guaranteed. For example, in the case of [LDAP authentication](authentication.md#ldap-auth-provider), user SIDs will be `user1@ldap` and `user2@ldap`.<br/>
+The suffix `@<auth-domain>` identifies the “user source”, within which the uniqueness of all user logins or identifiers is guaranteed. For example, in the case of [LDAP authentication](authentication.md#ldap), user SIDs will be `user1@ldap` and `user2@ldap`.<br/>
 Local users have an empty auth-domain. If a user SID does not contain a suffix, it refers to a local user created and existing directly in the {{ ydb-short-name }} cluster.
 
 ## Group {#group}
@@ -74,7 +74,7 @@ To create, modify, and delete [groups](../concepts/glossary.md#access-group), th
 
 [Access rights](../concepts/glossary.md#access-right) in {{ ydb-short-name }} are tied not to the [subject](../concepts/glossary.md#access-subject), but to the [access object](../concepts/glossary.md#access-object).
 
-Each access object has a list of rights — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — it stores all rights granted to [access subjects](../concepts/glossary.md#subject) (users and groups) on the object.
+Each access object has a list of rights — [ACL](../concepts/glossary.md#access-control-list) (Access Control List) — it stores all rights granted to [access subjects](../concepts/glossary.md#access-subject) (users and groups) on the object.
 
 By default, rights are inherited from parents to descendants along the access object tree.
 
@@ -124,11 +124,11 @@ For operations where both [access control lists](../concepts/glossary.md#access-
 
 ### Access level hierarchy
 
-Access level lists form a hierarchy used in [Embedded UI](../reference/ydb-ui/ydb-monitoring.md), viewer, and many other cluster-wide actions (ordered from least to most privileges):
+Access level lists form a hierarchy used in [{{ ydb-ui-name }}](../reference/ydb-ui/ydb-monitoring.md), viewer, and many other cluster-wide actions (ordered from least to most privileges):
 
 - `database_allowed_sids` (`Database`) - access to operations in the context of a specific database.
 - `viewer_allowed_sids` (`Viewer`) - access to viewing cluster-wide state.
-- `monitoring_allowed_sids` (`Monitoring`) - access to operational actions in Embedded UI.
+- `monitoring_allowed_sids` (`Monitoring`) - access to operational actions in {{ ydb-ui-name }}.
 - `administration_allowed_sids` (`Administration`) - administrative actions on the cluster and databases.
 
 A higher level automatically includes all lower ones, so a subject only needs to be present in one list. For example, being in `administration_allowed_sids` automatically grants privileges `monitoring`, `viewer`, and `database`.
@@ -143,9 +143,9 @@ Additionally, there are two separate access level lists for specific operations:
 
 Access level lists are configured in the [security configuration](../reference/configuration/security_config.md#security-access-levels) and define privileges for:
 
-- **Database** (included in `database_allowed_sids`) — access only in the context of a specific database. You can open Embedded UI and work with the data of this database, but you cannot run cluster-wide queries (for example, view the list of cluster nodes). Queries without specifying a database are prohibited.
-- **Viewer** (included in `viewer_allowed_sids`) — read-only access to the cluster-wide state: you can view [Embedded UI](../reference/ydb-ui/ydb-monitoring.md) pages and diagnostic information, but you cannot run actions that change the system state.
-- **Monitoring** (included in `monitoring_allowed_sids`) — access to operational actions in Embedded UI, including actions that can change the system state. For example, starting a backup, restoring a database, or running YQL queries through Embedded UI.
+- **Database** (included in `database_allowed_sids`) — access only in the context of a specific database. You can open {{ ydb-ui-name }} and work with the data of this database, but you cannot run cluster-wide queries (for example, view the list of cluster nodes). Queries without specifying a database are prohibited.
+- **Viewer** (included in `viewer_allowed_sids`) — read-only access to the cluster-wide state: you can view [{{ ydb-ui-name }}](../reference/ydb-ui/ydb-monitoring.md) pages and diagnostic information, but you cannot run actions that change the system state.
+- **Monitoring** (included in `monitoring_allowed_sids`) — access to operational actions in {{ ydb-ui-name }}, including actions that can change the system state. For example, starting a backup, restoring a database, or running YQL queries through {{ ydb-ui-name }}.
 - **Administration** (included in `administration_allowed_sids`) — grants the right to perform administrative actions on databases or the cluster. Full administrative access to the cluster and its databases. Also used for changing configuration, schema operations that require administrative rights, and other administrative checks.
 - **Register node** (included in `register_dynamic_node_allowed_sids`) — a separate (non-hierarchical) level for registering dynamic nodes in the cluster. It does not automatically grant `database`/`viewer`/`monitoring`/`administration` rights. For technical reasons, if the list is specified (not empty), it must include `root@builtin`.
 - **Bootstrap** (included in `bootstrap_allowed_sids`) — a separate (non-hierarchical) level only for cluster initialization operations. Used in an uninitialized state when the authentication subsystem is not yet functioning. Initialization is allowed if the subject is in `bootstrap_allowed_sids` or `administration_allowed_sids`, while `bootstrap` itself does not grant full administrative privileges.

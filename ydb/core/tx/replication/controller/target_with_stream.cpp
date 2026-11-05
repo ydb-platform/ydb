@@ -217,8 +217,62 @@ bool TTargetWithStreamCounters::UpdateWithSingleStatsItem(ui64, ui64 key, i64 va
     return true;
 }
 
+bool TTargetWithStream::CanDetachWithoutStream() const {
+    if (GetReplication()->GetDesiredState() != TReplication::EState::Done) {
+        return false;
+    }
+
+    if (GetStreamState() == EStreamState::Removing) {
+        return false;
+    }
+
+    switch (GetDstState()) {
+    case EDstState::Attaching:
+    case EDstState::Paused:
+    case EDstState::Alter:
+    case EDstState::Done:
+        return true;
+    default:
+        return false;
+    }
+}
+
 void TTargetWithStream::Progress(const TActorContext& ctx) {
     auto replication = GetReplication();
+
+    if (replication->GetState() == TReplication::EState::Removing
+        && GetStreamState() == EStreamState::Removed)
+    {
+        Reset(StreamCreator);
+        Reset(StreamRemover);
+        if (GetDstState() != EDstState::Removing && GetDstState() != EDstState::Attaching) {
+            if (HasWorkers()) {
+                RemoveWorkers(ctx);
+            } else {
+                ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropStreamResult(
+                    replication->GetId(), GetId(), NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+            }
+            return;
+        }
+    }
+
+    if (CanDetachWithoutStream()) {
+        Reset(StreamCreator);
+        // Keep the stream metadata so a later DROP can clean up a stream whose
+        // creation was already submitted when DONE was requested.
+        TTargetBase::Progress(ctx);
+        return;
+    }
+
+    // Source setup can return before destination progress, including while the
+    // replication is initially PAUSED. Refresh retained source actors first.
+    if (replication->GetYdbProxy()) {
+        for (const auto& actor : {StreamCreator, StreamRemover}) {
+            if (actor) {
+                ctx.Send(actor, new TEvPrivate::TEvUpdateYdbProxy(replication->GetYdbProxy()));
+            }
+        }
+    }
 
     switch (GetStreamState()) {
     case EStreamState::Creating:
@@ -237,6 +291,13 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
         }
         return;
     case EStreamState::Ready:
+        if (GetKind() == TReplication::ETargetKind::Table && !GetStreamSchemaChanges().has_value() && !StreamCreator) {
+            // Streams created before capability persistence need one read-only
+            // description. Index workers wait until its result is durable.
+            StreamCreator = ctx.Register(CreateStreamCreator(replication, GetId(), ctx, true));
+        }
+
+        break;
     case EStreamState::Removed:
     case EStreamState::Error:
         break;
@@ -253,6 +314,10 @@ void TTargetWithStream::Shutdown(const TActorContext& ctx) {
     }
 
     TTargetBase::Shutdown(ctx);
+}
+
+bool TTargetWithStream::IsExpectedStreamCreator(const TActorId& actorId) const {
+    return StreamCreator && StreamCreator == actorId;
 }
 
 void TTargetWithStream::WorkerStatusChanged(ui64, ui64) {

@@ -507,7 +507,7 @@ class Patcher:
         self.operations = None
         self.applied_operations = set()
 
-        # Set temporariliy by patch()
+        # Set temporarily by patch()
         self._has_pythoncapi_compat = None
         self._applied_operations = None
 
@@ -554,13 +554,17 @@ class Patcher:
         return operations
 
     def add_line(self, content, line):
-        line = line + '\n'
+        # Use the first matching newline
+        match = re.search(r'(?:\r\n|\n|\r)', content)
+        newline = match.group(0) if match else '\n'
+
+        line = line + newline
         # FIXME: tolerate trailing spaces
         if line not in content:
             # FIXME: add macro after the first header comment
             # FIXME: add macro after includes
             # FIXME: add macro after: #define PY_SSIZE_T_CLEAN
-            return line + '\n' + content
+            return line + newline + content
         else:
             return content
 
@@ -601,7 +605,7 @@ class Patcher:
         encoding = "utf-8"
         errors = "surrogateescape"
 
-        with open(filename, encoding=encoding, errors=errors) as fp:
+        with open(filename, encoding=encoding, errors=errors, newline="") as fp:
             old_contents = fp.read()
 
         new_contents, operations = self._patch(old_contents)
@@ -620,7 +624,7 @@ class Patcher:
             # If old_filename already exists, replace it
             os.replace(filename, old_filename)
 
-        with open(filename, "w", encoding=encoding, errors=errors) as fp:
+        with open(filename, "w", encoding=encoding, errors=errors, newline="") as fp:
             fp.write(new_contents)
 
         self.applied_operations |= set(operations)

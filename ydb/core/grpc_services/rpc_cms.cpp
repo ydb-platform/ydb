@@ -3,6 +3,7 @@
 
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
@@ -143,6 +144,19 @@ private:
     {
         auto request = MakeHolder<TCmsRequest>();
         request->Record.MutableRequest()->CopyFrom(*this->GetProtoRequest());
+        if (AppData(ctx)->FeatureFlags.GetEnableRelativePaths()) {
+            auto& body = *request->Record.MutableRequest();
+            const auto root = DatabaseFromDomain(AppData(ctx));
+            if constexpr (requires { body.path(); }) {
+                body.set_path(PrependDomainIfNeeded(root, body.path()));
+            }
+            if constexpr (requires { body.serverless_resources(); }) {
+                if (body.has_serverless_resources()) {
+                    auto* resources = body.mutable_serverless_resources();
+                    resources->set_shared_database_path(PrependDomainIfNeeded(root, resources->shared_database_path()));
+                }
+            }
+        }
         request->Record.SetUserToken(this->Request_->GetSerializedToken());
         request->Record.SetPeerName(this->Request_->GetPeerName());
         NTabletPipe::SendData(ctx, CmsPipe, request.Release());

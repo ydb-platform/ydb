@@ -6,6 +6,7 @@
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_pb.h>
 
@@ -18,12 +19,13 @@ namespace {
 
 using NMetadata::NProvider::TEvTrackOperationCompletion;
 
-class TMetadataServiceMock : public TActor<TMetadataServiceMock> {
+class TMetadataServiceMock: public TActor<TMetadataServiceMock> {
 public:
     explicit TMetadataServiceMock(TActorId edge)
         : TActor(&TThis::StateWork)
         , Edge(edge)
-    {}
+    {
+    }
 
 private:
     void Handle(TEvTrackOperationCompletion::TPtr& ev) {
@@ -67,8 +69,9 @@ struct TFixture {
     ui64 TxId = 100;
 
     explicit TFixture(EDatabase database = EDatabase::Root)
-        : Database(database == EDatabase::Serverless ? "/MyRoot/ServerLessDB"
-            : database == EDatabase::Subdomain ? "/MyRoot/Database" : "/MyRoot")
+        : Database(database == EDatabase::Serverless  ? "/MyRoot/ServerLessDB"
+                   : database == EDatabase::Subdomain ? "/MyRoot/Database"
+                                                      : "/MyRoot")
         , WorkingDir(Database + "/DirStreamingQuery")
         , QueryPath(WorkingDir + "/Query")
         , DatabaseId(Database)
@@ -101,17 +104,14 @@ struct TFixture {
         Env->TestWaitNotification(Runtime, TxId, SchemeShardId);
     }
 
-    THolder<TEvTx> MakeRequest(bool alter, TActorId owner = {}, std::optional<ui64> version = std::nullopt,
-        bool replace = false)
+    THolder<TEvTx> MakeRequest(bool alter, TActorId owner = {}, std::optional<ui64> version = std::nullopt, bool replace = false)
     {
         THolder<TEvTx> request(CreateStreamingQueryRequest(SchemeShardId, ++TxId, WorkingDir, R"(
             Name: "Query"
             Properties { Properties { key: "run" value: "true" } }
         )"));
         auto& tx = *request->Record.MutableTransaction(0);
-        tx.SetOperationType(alter && !replace
-            ? NKikimrSchemeOp::ESchemeOpAlterStreamingQuery
-            : NKikimrSchemeOp::ESchemeOpCreateStreamingQuery);
+        tx.SetOperationType(alter && !replace ? NKikimrSchemeOp::ESchemeOpAlterStreamingQuery : NKikimrSchemeOp::ESchemeOpCreateStreamingQuery);
         tx.SetReplaceIfExists(replace);
         if (owner) {
             ActorIdToProto(owner, tx.MutableCreateStreamingQuery()->MutableOperationOwnerActorId());
@@ -129,7 +129,7 @@ struct TFixture {
     void Propose(THolder<TEvTx> request, TExpectedResult expected = NKikimrScheme::StatusAccepted) {
         const auto txId = request->Record.GetTxId();
         AsyncSend(Runtime, SchemeShardId, request.Release());
-        TestModificationResults(Runtime, txId, {expected});
+        TestModificationResults(Runtime, txId, { expected });
         if (expected.Status == NKikimrScheme::StatusAccepted) {
             Env->TestWaitNotification(Runtime, txId, SchemeShardId);
         }
@@ -141,8 +141,8 @@ struct TFixture {
         return ev;
     }
 
-    TPathId CheckTracking(ui64 version, TActorId owner, const std::optional<TString>& token = std::nullopt,
-        const TString& objectId = "DirStreamingQuery/Query")
+    TPathId CheckTracking(
+        ui64 version, TActorId owner, const std::optional<TString>& token = std::nullopt, const TString& objectId = "DirStreamingQuery/Query")
     {
         auto ev = GrabTracking();
         const auto& request = *ev->Get();
@@ -151,7 +151,7 @@ struct TFixture {
         UNIT_ASSERT_VALUES_EQUAL(request.GetTypeId(), "STREAMING_QUERY");
         UNIT_ASSERT_VALUES_EQUAL(request.GetObjectId(), objectId);
         const auto description = DescribePath(Runtime, SchemeShardId, Database + "/" + objectId);
-        TestDescribeResult(description, {NLs::PathExist});
+        TestDescribeResult(description, { NLs::PathExist });
         const auto& path = description.GetPathDescription().GetSelf();
         UNIT_ASSERT_VALUES_EQUAL(request.GetPathId().OwnerId, path.GetSchemeshardId());
         UNIT_ASSERT_VALUES_EQUAL(request.GetPathId().LocalPathId, path.GetPathId());
@@ -177,10 +177,14 @@ struct TFixture {
 
     void CheckQuery(ui64 version, const TString& run = "true") {
         const auto description = DescribePath(Runtime, SchemeShardId, QueryPath);
-        TestDescribeResult(description, {NLs::Finished, NLs::IsStreamingQuery});
+        TestDescribeResult(description, { NLs::Finished, NLs::IsStreamingQuery });
         const auto& path = description.GetPathDescription();
         UNIT_ASSERT_VALUES_EQUAL(path.GetSelf().GetVersion().GetStreamingQueryVersion(), version);
-        const auto& properties = path.GetStreamingQueryDescription().GetProperties().GetProperties();
+        auto properties = path.GetStreamingQueryDescription().GetProperties().GetProperties();
+        // Audit properties are maintained by SchemeShard independently of operation tracking.
+        for (const char* key : { "__created_by", "__modified_by", "__started_by", "__stopped_by", "__created_at", "__modified_at" }) {
+            properties.erase(key);
+        }
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), properties.contains("__operation_owner_user_token") ? 2 : 1);
         UNIT_ASSERT_VALUES_EQUAL(properties.at("run"), run);
     }
@@ -188,14 +192,15 @@ struct TFixture {
     void Reboot() {
         const auto previousGeneration = Generations.at(SchemeShardId);
         RebootTablet(Runtime, SchemeShardId, Runtime.AllocateEdgeActor());
-        TestDescribeResult(DescribePath(Runtime, SchemeShardId, WorkingDir), {NLs::Finished});
+        TestDescribeResult(DescribePath(Runtime, SchemeShardId, WorkingDir), { NLs::Finished });
         UNIT_ASSERT_C(Generations.at(SchemeShardId) > previousGeneration, "SchemeShard did not restart");
     }
 
     void CheckOwner(TActorId owner) {
         const auto description = DescribePath(Runtime, SchemeShardId, QueryPath);
-        TestDescribeResult(description, {NLs::Finished, NLs::IsStreamingQuery});
-        UNIT_ASSERT_VALUES_EQUAL(ActorIdFromProto(description.GetPathDescription().GetStreamingQueryDescription().GetOperationOwnerActorId()), owner);
+        TestDescribeResult(description, { NLs::Finished, NLs::IsStreamingQuery });
+        UNIT_ASSERT_VALUES_EQUAL(
+            ActorIdFromProto(description.GetPathDescription().GetStreamingQueryDescription().GetOperationOwnerActorId()), owner);
     }
 };
 
@@ -208,11 +213,14 @@ std::optional<TString> MakeUserToken(bool enabled) {
 
 void SetUserToken(TEvTx& request, const std::optional<TString>& token) {
     if (token) {
-        (*request.Record.MutableTransaction(0)->MutableCreateStreamingQuery()->MutableProperties()->MutableProperties())["__operation_owner_user_token"] = *token;
+        (*request.Record.MutableTransaction(0)
+                ->MutableCreateStreamingQuery()
+                ->MutableProperties()
+                ->MutableProperties())["__operation_owner_user_token"] = *token;
     }
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TStreamingQueryOperationTrackingTest) {
     Y_UNIT_TEST_FLAGS(PendingOperationResumesAfterReboot, Alter, WithUserToken) {
@@ -234,7 +242,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryOperationTrackingTest) {
     }
 
     Y_UNIT_TEST_FLAG(TrackerUsesQueryDatabase, Alter) {
-        for (const auto database : {TFixture::EDatabase::Subdomain, TFixture::EDatabase::Serverless}) {
+        for (const auto database : { TFixture::EDatabase::Subdomain, TFixture::EDatabase::Serverless }) {
             TFixture f(database);
             if (Alter) {
                 f.Propose(f.MakeRequest(false));
@@ -263,7 +271,9 @@ Y_UNIT_TEST_SUITE(TStreamingQueryOperationTrackingTest) {
         });
         AsyncSend(f.Runtime, f.SchemeShardId, request.Release());
         TestModificationResult(f.Runtime, txId);
-        f.Runtime.WaitFor("streaming query plan blocked", [&] { return !blockedPlan.empty(); });
+        f.Runtime.WaitFor("streaming query plan blocked", [&] {
+            return !blockedPlan.empty();
+        });
         f.CheckRequests(0);
         f.Reboot();
         const auto tracking = f.GrabTracking();
@@ -289,7 +299,9 @@ Y_UNIT_TEST_SUITE(TStreamingQueryOperationTrackingTest) {
         });
         AsyncSend(f.Runtime, f.SchemeShardId, request.Release());
         TestModificationResult(f.Runtime, txId);
-        f.Runtime.WaitFor("publication acknowledgement blocked", [&] { return !acknowledgements.empty(); });
+        f.Runtime.WaitFor("publication acknowledgement blocked", [&] {
+            return !acknowledgements.empty();
+        });
         f.CheckRequests(0);
         f.Reboot();
         const auto tracking = f.GrabTracking();
@@ -304,11 +316,11 @@ Y_UNIT_TEST_SUITE(TStreamingQueryOperationTrackingTest) {
         TFixture f;
         f.Propose(f.MakeRequest(false, f.Owner));
         f.Propose(f.MakeRequest(true, f.Runtime.AllocateEdgeActor(), 1, Replace),
-            {NKikimrScheme::StatusPreconditionFailed, "Streaming query already under operation"});
+            { NKikimrScheme::StatusPreconditionFailed, "Streaming query already under operation" });
         f.Reboot();
         f.CheckTracking(1, f.Owner);
         f.Propose(f.MakeRequest(true, f.Runtime.AllocateEdgeActor(), 1, Replace),
-            {NKikimrScheme::StatusPreconditionFailed, "Streaming query already under operation"});
+            { NKikimrScheme::StatusPreconditionFailed, "Streaming query already under operation" });
         f.CheckRequests(1);
     }
 
@@ -319,7 +331,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryOperationTrackingTest) {
         }
         auto request = f.MakeRequest(Alter, {}, std::nullopt, Replace);
         request->Record.MutableTransaction(0)->MutableCreateStreamingQuery()->MutableOperationOwnerActorId();
-        f.Propose(std::move(request), {NKikimrScheme::StatusInvalidParameter, "Operation owner actor id must not be empty"});
+        f.Propose(std::move(request), { NKikimrScheme::StatusInvalidParameter, "Operation owner actor id must not be empty" });
         f.Reboot();
         f.CheckRequests(0);
     }
@@ -327,7 +339,7 @@ Y_UNIT_TEST_SUITE(TStreamingQueryOperationTrackingTest) {
     Y_UNIT_TEST(CompletingOperationChecksVersionAndClearsPersistedOwner) {
         TFixture f;
         f.Propose(f.MakeRequest(false, f.Owner));
-        f.Propose(f.MakeRequest(true, {}, 0), {NKikimrScheme::StatusPreconditionFailed, "ApplyIf"});
+        f.Propose(f.MakeRequest(true, {}, 0), { NKikimrScheme::StatusPreconditionFailed, "ApplyIf" });
         f.CheckOwner(f.Owner);
         f.Propose(f.MakeRequest(true, {}, 1));
         f.Reboot();

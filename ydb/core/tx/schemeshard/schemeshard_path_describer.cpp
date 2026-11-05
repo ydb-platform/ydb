@@ -1024,8 +1024,13 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
         entry->MutableDatabaseQuotas()->CopyFrom(*databaseQuotas);
     }
 
-    if (subDomainInfo->GetDiskQuotaExceeded()) {
+    // exhausted storage blocks user writes through the same flag as the exceeded disk quota
+    if (subDomainInfo->GetDiskQuotaExceeded() || subDomainInfo->GetStorageSpaceExhausted()) {
         entry->MutableDomainState()->SetDiskQuotaExceeded(true);
+    }
+
+    if (subDomainInfo->GetStorageSpaceExhausted()) {
+        entry->MutableDomainState()->SetStorageSpaceExhausted(true);
     }
 
     if (subDomainInfo->GetSmallBlobsQuotaExceeded()) {

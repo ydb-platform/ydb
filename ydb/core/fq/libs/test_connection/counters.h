@@ -22,4 +22,4 @@ private:
 
 using TTestConnectionRequestCountersPtr = TIntrusivePtr<TTestConnectionRequestCounters>;
 
-} // NFq
+}   // namespace NFq

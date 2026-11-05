@@ -15,7 +15,7 @@ from ydb.tests.olap.lib.remote_execution import (
     deploy_binaries_to_hosts,
     copy_file,
 )
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.olap.lib.workload_result import ErrorArea, ErrorPriority, Iteration, WorkloadRunResult
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param
 
@@ -88,14 +88,14 @@ class WorkloadTestBase(LoadSuiteBase):
             cluster_issue = cls._check_cluster_health()
 
             # Создаем результат
-            result = YdbCliHelper.WorkloadRunResult()
-            result.iterations[0] = YdbCliHelper.Iteration()
+            result = WorkloadRunResult()
+            result.iterations[0] = Iteration()
             result.start_time = verification_start_time
             result.iterations[0].time = time_module.time() - verification_start_time
 
             # Добавляем ошибку если есть проблема с кластером
             if cluster_issue.get("issue_type") is not None:
-                result.add_error(cluster_issue["issue_description"])
+                result.add_error(cluster_issue["issue_description"], area=ErrorArea.YDB_INFRA)
 
             # Устанавливаем start_time для _Verification
             try:
@@ -868,7 +868,7 @@ class WorkloadTestBase(LoadSuiteBase):
         is_timeout: bool = False,
         iteration_number: int = 0,
         actual_execution_time: float = None,
-    ) -> YdbCliHelper.WorkloadRunResult:
+    ) -> WorkloadRunResult:
         """
         Создает и заполняет WorkloadRunResult с общей логикой
 
@@ -885,7 +885,7 @@ class WorkloadTestBase(LoadSuiteBase):
         Returns:
             Заполненный WorkloadRunResult
         """
-        result = YdbCliHelper.WorkloadRunResult()
+        result = WorkloadRunResult()
         result.start_time = self.__class__._setup_start_time
         result.stdout = str(stdout)
         result.stderr = str(stderr)
@@ -916,20 +916,21 @@ class WorkloadTestBase(LoadSuiteBase):
         # Проверяем на timeout сначала (это warning, не error)
         if is_timeout:
             result.add_warning(
-                f"Workload execution timed out. stdout: {stdout}, stderr: {stderr}"
+                f"Workload execution timed out. stdout: {stdout}, stderr: {stderr}",
+                area=ErrorArea.TIMEOUT,
             )
         else:
             # Проверяем явные ошибки (только если не timeout)
             if not success:
                 result.add_error(
-                    f"Workload execution failed. stderr: {stderr}")
+                    f"Workload execution failed. stderr: {stderr}", area=ErrorArea.OTHER)
                 error_found = True
             elif not self._ignore_stderr_content:
                 if "error" in str(stderr).lower():
-                    result.add_error(f"Error detected in stderr: {stderr}")
+                    result.add_error(f"Error detected in stderr: {stderr}", area=ErrorArea.OTHER)
                     error_found = True
                 elif self._has_real_error_in_stdout(str(stdout)):
-                    result.add_warning(f"Error detected in stdout: {stdout}")
+                    result.add_warning(f"Error detected in stdout: {stdout}", area=ErrorArea.OTHER)
                     error_found = True
 
         # Проверяем предупреждения
@@ -937,10 +938,10 @@ class WorkloadTestBase(LoadSuiteBase):
             "warning: permanently added" not in str(stderr).lower()
             and "warning" in str(stderr).lower()
         ):
-            result.add_warning(f"Warning in stderr: {stderr}")
+            result.add_warning(f"Warning in stderr: {stderr}", area=ErrorArea.OTHER)
 
         # Добавляем информацию о выполнении в iterations
-        iteration = YdbCliHelper.Iteration()
+        iteration = Iteration()
         # Используем фактическое время выполнения, если оно указано, иначе
         # плановое время
         execution_time = (
@@ -987,8 +988,11 @@ class WorkloadTestBase(LoadSuiteBase):
             # Для timeout используем более конкретное сообщение
             iteration.error_message = "Workload execution timed out"
         elif error_found:
-            # Устанавливаем ошибку в iteration для consistency
-            iteration.error_message = result.error_message
+            # Устанавливаем ошибку в iteration для consistency.
+            # Только ERROR: warning не должен помечать итерацию как упавшую
+            integrated_error = result.get_integrated_error(ErrorPriority.ERROR)
+            if integrated_error is not None:
+                iteration.error_message = str(integrated_error)
 
         result.iterations[iteration_number] = iteration
 
@@ -1018,7 +1022,7 @@ class WorkloadTestBase(LoadSuiteBase):
         logging.info(
             f"Workload result created - final success: {
                 result.success}, error_message: {
-                result.error_message}"
+                result.get_integrated_error() or ''}"
         )
 
         return result
@@ -1299,7 +1303,7 @@ class WorkloadTestBase(LoadSuiteBase):
             )
 
             # Инициализируем результат
-            overall_result = YdbCliHelper.WorkloadRunResult()
+            overall_result = WorkloadRunResult()
             overall_result.start_time = time_module.time()
 
             logging.info(
@@ -2246,12 +2250,14 @@ class WorkloadTestBase(LoadSuiteBase):
                 threads_info = f" with {thread_count} parallel threads"
 
             overall_result.add_error(
-                f"All {real_iteration_count} iterations{threads_info} failed to execute successfully"
+                f"All {real_iteration_count} iterations{threads_info} failed to execute successfully",
+                area=ErrorArea.REQUEST
             )
         elif failed_iterations > 0:
             # Некоторые итерации завершились с ошибкой
             overall_result.add_warning(
-                f"{failed_iterations} out of {real_iteration_count} iterations failed to execute successfully"
+                f"{failed_iterations} out of {real_iteration_count} iterations failed to execute successfully",
+                area=ErrorArea.REQUEST
             )
 
     def _add_execution_statistics(
@@ -2521,7 +2527,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
     def process_workload_result_with_diagnostics(
         self,
-        result: YdbCliHelper.WorkloadRunResult,
+        result: WorkloadRunResult,
         workload_name: str,
         check_scheme: bool = True,
         use_node_subcols: bool = False,
@@ -2591,7 +2597,7 @@ class WorkloadTestBase(LoadSuiteBase):
             except Exception as e:
                 logging.error(f"Error getting nodes state: {e}")
                 # Добавляем ошибку в результат
-                result.add_warning(f"Error getting nodes state: {e}")
+                result.add_warning(f"Error getting nodes state: {e}", area=ErrorArea.YDB_INFRA)
                 node_errors = []  # Устанавливаем пустой список если диагностика не удалась
 
             # Вычисляем время выполнения
@@ -2647,7 +2653,6 @@ class WorkloadTestBase(LoadSuiteBase):
 
                 # Формируем списки ошибок для выгрузки
                 node_error_messages = []
-                workload_error_messages = []
 
                 # Собираем ошибки нод с подробностями
                 for node_error in node_errors:
@@ -2662,10 +2667,9 @@ class WorkloadTestBase(LoadSuiteBase):
                         node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
 
                 # Собираем workload ошибки (не связанные с нодами)
-                if result.errors:
-                    for err in result.errors:
-                        if "coredump" not in err.lower() and "oom" not in err.lower():
-                            workload_error_messages.append(err)
+                workload_error_messages = [
+                    str(e) for e in result.get_errors(ErrorPriority.ERROR) if e.area != ErrorArea.NODE_FAIL
+                ]
 
                 # Добавляем в статистику
                 result.add_stat(workload_name, "node_error_messages", node_error_messages)
@@ -2676,11 +2680,9 @@ class WorkloadTestBase(LoadSuiteBase):
                 result.add_stat(workload_name, "workload_errors", len(workload_error_messages) > 0)
 
                 # Собираем workload предупреждения (исключая node-специфичные)
-                workload_warning_messages = []
-                if result.warnings:
-                    for warn in result.warnings:
-                        if "coredump" not in warn.lower() and "oom" not in warn.lower():
-                            workload_warning_messages.append(warn)
+                workload_warning_messages = [
+                    str(e) for e in result.get_errors(ErrorPriority.WARNING) if e.area != ErrorArea.NODE_FAIL
+                ]
 
                 result.add_stat(workload_name, "workload_warning_messages", workload_warning_messages)
                 result.add_stat(workload_name, "workload_warnings", len(workload_warning_messages) > 0)
@@ -2727,7 +2729,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 # Логируем ошибку выгрузки, но не прерываем выполнение
                 error_msg = f"Failed to upload results: {e}"
                 logging.error(error_msg)
-                result.add_warning(error_msg)
+                result.add_warning(error_msg, area=ErrorArea.TEST_INFRA)
                 # После добавления warning нужно пересчитать summary флаги
                 # summary флаги (with_errors/with_warnings) автоматически добавляются в ydb_cli.py
 

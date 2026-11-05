@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Split one ya_make_try into ya_build / ya_tests / ya_cache_* from evlog."""
+"""Split one ya_make_try into overlapping ya_build / ya_tests / ya_cache_* from evlog."""
 
 from __future__ import annotations
 
@@ -82,30 +82,6 @@ def _merge(spans: Sequence[Tuple[float, float]], gap: float) -> List[Tuple[float
     return merged
 
 
-def _subtract(
-    spans: Sequence[Tuple[float, float]],
-    cuts: Sequence[Tuple[float, float]],
-) -> List[Tuple[float, float]]:
-    remaining: List[Tuple[float, float]] = []
-    for start, end in spans:
-        pieces = [(start, end)]
-        for cut_start, cut_end in cuts:
-            nxt: List[Tuple[float, float]] = []
-            for piece_start, piece_end in pieces:
-                if cut_end <= piece_start or cut_start >= piece_end:
-                    nxt.append((piece_start, piece_end))
-                    continue
-                if cut_start > piece_start:
-                    nxt.append((piece_start, cut_start))
-                if cut_end < piece_end:
-                    nxt.append((cut_end, piece_end))
-            pieces = nxt
-        for piece_start, piece_end in pieces:
-            if piece_end - piece_start >= MIN_SEC:
-                remaining.append((piece_start, piece_end))
-    return remaining
-
-
 def phases_from_events(events: Iterable[Dict[str, Any]], *, gap: float = GAP_SEC) -> List[Phase]:
     builds: List[Tuple[float, float]] = []
     tests: List[Tuple[float, float]] = []
@@ -130,7 +106,7 @@ def phases_from_events(events: Iterable[Dict[str, Any]], *, gap: float = GAP_SEC
         elif kind == "upload":
             uploads.append(span)
     build_spans = _merge(builds, gap)
-    test_spans = _subtract(_merge(tests, gap), build_spans)
+    test_spans = _merge(tests, gap)
     found: List[Phase] = []
     found.extend(("ya_build", start, end) for start, end in build_spans)
     found.extend(("ya_tests", start, end) for start, end in test_spans)

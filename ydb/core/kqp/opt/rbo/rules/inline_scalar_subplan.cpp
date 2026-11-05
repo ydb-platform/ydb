@@ -7,9 +7,19 @@ namespace NKqp {
 
 namespace {
 
+// Unlike some, min is deterministic, so a shared plan with the subquery can be copied for each consumer.
+TString OnlyValueAggregation(const TTypeAnnotationNode* valueType) {
+    if (!valueType) {
+        return "some";
+    }
+    const auto compare = NYql::CanCompare<false>(valueType, valueType);
+    return compare == NYql::ECompareOptions::Comparable || compare == NYql::ECompareOptions::Optional ? "min" : "some";
+}
+
 // Make sure that scalar subquery produce one row for each binding.
 std::pair<TIntrusivePtr<IOperator>, TInfoUnitId> MakeAtMostOneRowPerGroup(const TIntrusivePtr<IOperator>& input, const TOrderedIUs<>& groupKeys,
-                                                                          TInfoUnitId valueIU, TPositionHandle pos, TRBOContext& ctx, TPlanProps& props) {
+                                                                          TInfoUnitId valueIU, const TTypeAnnotationNode* valueType,
+                                                                          TPositionHandle pos, TRBOContext& ctx, TPlanProps& props) {
     auto rowIU = props.InfoUnitRegistry.AddGenerated("row");
     TMapIUs rowElements;
     rowElements.Add(rowIU, MakeConstant("Uint64", "1", pos, &ctx.ExprCtx));
@@ -20,8 +30,8 @@ std::pair<TIntrusivePtr<IOperator>, TInfoUnitId> MakeAtMostOneRowPerGroup(const 
 
     TAggregationIUs traits;
     traits.Add(countIU, TOpAggregationTraits{rowIU, "count"});
-    // This is need to get the actual value, we emit ensure that we get only one row, so can take any.
-    traits.Add(valueStateIU, TOpAggregationTraits{valueIU, "some"});
+    // This is need to get the actual value, we emit ensure that we get only one row, so its minimum is the value.
+    traits.Add(valueStateIU, TOpAggregationTraits{valueIU, OnlyValueAggregation(valueType)});
     auto aggregate = MakeIntrusive<TOpAggregate>(rowMap, traits, groupKeys, EOpPhase::Undefined, /*distinctAll=*/false, pos);
 
     auto atMostOne =
@@ -53,7 +63,6 @@ bool TInlineScalarSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input,
 
 // Rewrite a single scalar subplan into a cross-join for uncorrelated queries
 // or into a left join for correlated (assuming at most one tuple in the output of each subquery)
-// FIXME: Need to do correct general case decorellation in the future
 
 bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     TVector<TInfoUnitId> scalarIUs;
@@ -73,6 +82,7 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
     auto subplan = CastOperator<IOperator>(subplanEntry.Plan);
     Y_ENSURE(subplanEntry.ResultIU, "Missing scalar result binding");
     auto subplanResIU = *subplanEntry.ResultIU;
+    const auto* subplanResType = subplan->Type ? subplan->GetIUType(subplanResIU, ctx.ExprCtx) : nullptr;
 
     Y_ENSURE(MatchOperator<IUnaryOperator>(input));
     auto unaryOp = CastOperator<IUnaryOperator>(input);
@@ -105,7 +115,14 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
         TJoinIUs joinKeys = domain.Keys;
         auto dependentJoin = std::move(domain).Bind(subplan, subplan->Pos);
 
-        auto [rightInput, rightResIU] = MakeAtMostOneRowPerGroup(dependentJoin, domainColumns, subplanResIU, subplan->Pos, ctx, props);
+        TIntrusivePtr<IOperator> rightInput = dependentJoin;
+        TInfoUnitId rightResIU = subplanResIU;
+
+        if (subplan->Props.Metadata->LogicalCard != ELogicalCardinality::One) {
+            const auto & pair = MakeAtMostOneRowPerGroup(dependentJoin, domainColumns, subplanResIU, subplanResType, subplan->Pos, ctx, props);
+            rightInput = pair.first;
+            rightResIU = pair.second;
+        }
 
         TIntrusivePtr<IOperator> joinLeftInput = child;
         TIntrusivePtr<IOperator> joinRightInput = rightInput;
@@ -117,7 +134,14 @@ bool TInlineScalarSubplanRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TR
     }
     // Otherwise we assume an uncorrelated supbplan
     else {
-        auto [checkedInput, checkedResIU] = MakeAtMostOneRowPerGroup(subplan, {}, subplanResIU, subplan->Pos, ctx, props);
+        TIntrusivePtr<IOperator> checkedInput = subplan;
+        TInfoUnitId checkedResIU = subplanResIU;
+
+        if (subplan->Props.Metadata->LogicalCard != ELogicalCardinality::One) {
+            const auto & pair =  MakeAtMostOneRowPerGroup(subplan, {}, subplanResIU, subplanResType, subplan->Pos, ctx, props);
+            checkedInput = pair.first;
+            checkedResIU = pair.second;
+        }
 
         TMapIUs renameElements;
         renameElements.Add(scalarIU, MakeColumnAccess(checkedResIU, subplan->Pos, &ctx.ExprCtx, &props));

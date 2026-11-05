@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     cell_maker.cpp
@@ -20,7 +20,5 @@ PEERDIR(
     library/cpp/string_utils/base64
     library/cpp/string_utils/quote
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

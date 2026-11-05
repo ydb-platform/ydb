@@ -159,9 +159,14 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
         auto evCopy = ev;
         HandleFilterRequestImpl(evCopy);
     } else {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
-            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvRequestFilter")("type", "queued")(
-            "portion_id", ev->Get()->GetPortionId())("pending_count", PendingFilterRequests.size());
+        YDB_LOG_TRACE("",
+            {"component", "duplicates_manager"},
+            {"self", TActivationContext::AsActorContext().SelfID},
+            {"bordersFlowController", BordersFlowController.DebugString()},
+            {"event", "TEvRequestFilter"},
+            {"type", "queued"},
+            {"portionId", ev->Get()->GetPortionId()},
+            {"pendingCount", PendingFilterRequests.size()});
         PendingFilterRequests.emplace_back(ev);
     }
 }
@@ -175,9 +180,13 @@ void TDuplicateManager::HandleFilterRequestImpl(TEvRequestFilter::TPtr& ev) {
         constructor->AddFilter(std::move(filter));
         AFL_VERIFY(constructor->IsDone());
         Counters->OnRowsMerged(0, 0, mainPortion->GetRecordsCount());
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
-            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvRequestFilter")("type", "exclusive")(
-            "info", constructor->DebugString());
+        YDB_LOG_TRACE("",
+            {"component", "duplicates_manager"},
+            {"self", TActivationContext::AsActorContext().SelfID},
+            {"bordersFlowController", BordersFlowController.DebugString()},
+            {"event", "TEvRequestFilter"},
+            {"type", "exclusive"},
+            {"info", constructor->DebugString()});
         OnFilterRequestCompleted();
         return;
     }
@@ -187,17 +196,25 @@ void TDuplicateManager::HandleFilterRequestImpl(TEvRequestFilter::TPtr& ev) {
     auto& filterGuard = task->GetRequestGuard();
     NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(filterGuard->GetMemoryProcessId(),
         filterGuard->GetMemoryScopeId(), filterGuard->GetMemoryGroupId(), { task }, (ui64)TFilterAccumulator::EFetchingStage::FILTERS);
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
-        "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvRequestFilter")("type", "shared")(
-        "info", constructor->DebugString());
+    YDB_LOG_TRACE("",
+        {"component", "duplicates_manager"},
+        {"self", TActivationContext::AsActorContext().SelfID},
+        {"bordersFlowController", BordersFlowController.DebugString()},
+        {"event", "TEvRequestFilter"},
+        {"type", "shared"},
+        {"info", constructor->DebugString()});
 }
 
 void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr& ev) {
     std::shared_ptr<TFilterAccumulator> constructor = ev->Get()->GetRequest();
     if (FiltersStore.NotifyReadyFilter(constructor)) {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
-            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvFilterRequestResourcesAllocated")("type", "cached")(
-            "info", constructor->DebugString());
+        YDB_LOG_TRACE("",
+            {"component", "duplicates_manager"},
+            {"self", TActivationContext::AsActorContext().SelfID},
+            {"bordersFlowController", BordersFlowController.DebugString()},
+            {"event", "TEvFilterRequestResourcesAllocated"},
+            {"type", "cached"},
+            {"info", constructor->DebugString()});
         OnFilterRequestCompleted();
         return;
     }
@@ -228,43 +245,68 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
             ++InflightExecutors;
             Counters->OnFetchInflight(1);
             OnProgress();
-            AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")(
-                "self", TActivationContext::AsActorContext().SelfID)("borders_flow_controller", BordersFlowController.DebugString())(
-                "event", "TEvFilterRequestResourcesAllocated")("type", "inflight")("info", constructor->DebugString())("was_started", 1);
+            YDB_LOG_TRACE("",
+                {"component", "duplicates_manager"},
+                {"self", TActivationContext::AsActorContext().SelfID},
+                {"bordersFlowController", BordersFlowController.DebugString()},
+                {"event", "TEvFilterRequestResourcesAllocated"},
+                {"type", "inflight"},
+                {"info", constructor->DebugString()},
+                {"wasStarted", 1});
             return;
         }
         // No borders left for this request. Filter must be produced by an already running executor.
         // If nothing is running, the request would hang forever in WaitingPortions.
         if (InflightExecutors == 0 && PendingExecutors.empty()) {
             const ui64 portionId = constructor->GetRequest()->Get()->GetPortionId();
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("event", "empty_borders_without_inflight")(
-                "portion_id", portionId)("borders_flow_controller", BordersFlowController.DebugString());
+            YDB_LOG_WARN("",
+                {"component", "duplicates_manager"},
+                {"event", "empty_borders_without_inflight"},
+                {"portionId", portionId},
+                {"bordersFlowController", BordersFlowController.DebugString()});
             AFL_VERIFY(FiltersStore.AbortWaitingPortion(portionId, "no borders to build duplicate filter"));
             OnFilterRequestCompleted();
             return;
         }
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
-            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvFilterRequestResourcesAllocated")(
-            "type", "waiting_other_inflight")("info", constructor->DebugString());
+        YDB_LOG_TRACE("",
+            {"component", "duplicates_manager"},
+            {"self", TActivationContext::AsActorContext().SelfID},
+            {"bordersFlowController", BordersFlowController.DebugString()},
+            {"event", "TEvFilterRequestResourcesAllocated"},
+            {"type", "waiting_other_inflight"},
+            {"info", constructor->DebugString()});
     } else {
         PendingExecutors.emplace_back(std::move(executor), std::move(columnFetchingRequest));
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
-            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvFilterRequestResourcesAllocated")("type", "queued")(
-            "info", constructor->DebugString())("pending_count", PendingExecutors.size());
+        YDB_LOG_TRACE("",
+            {"component", "duplicates_manager"},
+            {"self", TActivationContext::AsActorContext().SelfID},
+            {"bordersFlowController", BordersFlowController.DebugString()},
+            {"event", "TEvFilterRequestResourcesAllocated"},
+            {"type", "queued"},
+            {"info", constructor->DebugString()},
+            {"pendingCount", PendingExecutors.size()});
     }
 }
 
 void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
     if (ev->Get()->Result.IsFail()) {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
-            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvBordersConstructionResult")(
-            "error", ev->Get()->Result.GetErrorMessage());
+        YDB_LOG_TRACE("",
+            {"component", "duplicates_manager"},
+            {"self", TActivationContext::AsActorContext().SelfID},
+            {"bordersFlowController", BordersFlowController.DebugString()},
+            {"event", "TEvBordersConstructionResult"},
+            {"error", ev->Get()->Result.GetErrorMessage()});
         AbortAndPassAway(ev->Get()->Result.GetErrorMessage());
         return;
     }
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
-        "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvBordersConstructionResult")("type", "finish")(
-        "portions", ev->Get()->Context.GetBatch().GetPortionIds().size())("borders", ev->Get()->Context.GetBatch().GetBorders().size());
+    YDB_LOG_TRACE("",
+        {"component", "duplicates_manager"},
+        {"self", TActivationContext::AsActorContext().SelfID},
+        {"bordersFlowController", BordersFlowController.DebugString()},
+        {"event", "TEvBordersConstructionResult"},
+        {"type", "finish"},
+        {"portions", ev->Get()->Context.GetBatch().GetPortionIds().size()},
+        {"borders", ev->Get()->Context.GetBatch().GetBorders().size()});
 
     OnProgress();
     BordersFlowController.Enqueue(ev);
@@ -273,9 +315,12 @@ void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
 void TDuplicateManager::Handle(const TEvMergeBordersResult::TPtr& ev) {
     auto& event = *ev->Get();
     if (event.Result.IsFail()) {
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
-            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvMergeBordersResult")(
-            "error", event.Result.GetErrorMessage());
+        YDB_LOG_TRACE("",
+            {"component", "duplicates_manager"},
+            {"self", TActivationContext::AsActorContext().SelfID},
+            {"bordersFlowController", BordersFlowController.DebugString()},
+            {"event", "TEvMergeBordersResult"},
+            {"error", event.Result.GetErrorMessage()});
         AbortAndPassAway(event.Result.GetErrorMessage());
         return;
     }

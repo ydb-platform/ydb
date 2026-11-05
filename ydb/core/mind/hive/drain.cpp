@@ -18,6 +18,8 @@ protected:
     ui32 KickInFlight;
     ui32 Movements;
     TDrainTarget Target;
+    const std::unordered_set<TNodeId> Nodes; // nodes of the target at the start of the drain
+    const std::unordered_set<TNodeId> ReservedNodes; // the ones the drain has added to BalancerNodes
     std::unordered_map<TNodeId, bool> DownBefore;
     TActorId DomainHivePipeClient;
     TTabletId DomainHiveId = 0;
@@ -35,11 +37,18 @@ protected:
             NTabletPipe::CloseClient(SelfId(), DomainHivePipeClient);
         }
         Hive->RemoveSubActor(this);
-        for (TGetNodes getNodes{Hive}; auto nodeId : std::visit(getNodes, Target)) {
+        // the nodes are released as they were reserved, as the target pile may have changed or even gone meanwhile
+        for (const TNodeId nodeId : ReservedNodes) {
             Hive->BalancerNodes.erase(nodeId);
-            auto node = Hive->FindNode(nodeId);
-            if (node) {
+        }
+        for (const TNodeId nodeId : Nodes) {
+            if (auto node = Hive->FindNode(nodeId); node && node->DrainActor == this) {
                 node->DrainActor = nullptr;
+            }
+        }
+        if (const auto* pileId = std::get_if<TBridgePileId>(&Target)) {
+            if (auto it = Hive->BridgePiles.find(*pileId); it != Hive->BridgePiles.end() && it->second.DrainActor == this) {
+                it->second.DrainActor = nullptr;
             }
         }
         return IActor::PassAway();
@@ -66,7 +75,7 @@ protected:
             TNodeInfo* nodeInfo = Hive->FindNode(nodeId);
             if (nodeInfo != nullptr) {
                 if (!downBefore) {
-                    nodeInfo->SetDown(false);
+                    nodeInfo->SetDown(false, EHiveEventReason::DrainFinished);
                 }
             }
         }
@@ -83,7 +92,7 @@ protected:
         while (CanKickNextTablet()) {
             TFullTabletId tabletId = *NextKick;
             TTabletInfo* tablet = Hive->FindTablet(tabletId);
-            if (tablet != nullptr && tablet->IsAlive() && std::visit(TGetNodes(Hive), Target).contains(tablet->NodeId)) {
+            if (tablet != nullptr && tablet->IsAlive() && Nodes.contains(tablet->NodeId)) {
                 THive::TBestNodeResult result = Hive->FindBestNode(*tablet);
                 if (std::holds_alternative<TNodeInfo*>(result)) {
                     TNodeInfo* node = std::get<TNodeInfo*>(result);
@@ -97,7 +106,7 @@ protected:
                         {"sourceNodeId", tablet->Node->Id},
                         {"targetNodeId", node->Id});
                     Hive->TabletCounters->Cumulative()[NHive::COUNTER_DRAIN_EXECUTED].Increment(1);
-                    Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, node->Id));
+                    Hive->RecordTabletMove(THive::TTabletMoveInfo(TInstant::Now(), *tablet, tablet->Node->Id, node->Id), EHiveEventReason::Drain);
                     Hive->Execute(Hive->CreateRestartTablet(tabletId, node->Id));
                 } else {
                     if (std::holds_alternative<THive::TNoNodeFound>(result) || std::holds_alternative<THive::TNotEnoughResources>(result)) {
@@ -210,17 +219,20 @@ public:
         return NKikimrServices::TActivity::HIVE_BALANCER_ACTOR;
     }
 
-    THiveDrain(THive* hive, TDrainTarget target, TDrainSettings settings)
+    THiveDrain(THive* hive, TDrainTarget target, TDrainSettings settings, std::unordered_set<TNodeId> nodes,
+            std::unordered_set<TNodeId> reservedNodes)
         : Hive(hive)
         , NextKick(Tablets.end())
         , KickInFlight(0)
         , Movements(0)
         , Target(target)
+        , Nodes(std::move(nodes))
+        , ReservedNodes(std::move(reservedNodes))
         , Settings(std::move(settings))
     {}
 
     void Bootstrap() {
-        for (TGetNodes getNodes{Hive}; auto nodeId : std::visit(getNodes, Target)) {
+        for (const TNodeId nodeId : Nodes) {
             TNodeInfo* nodeInfo = Hive->FindNode(nodeId);
             if (nodeInfo != nullptr) {
                 Tablets.reserve(Tablets.size() + nodeInfo->GetTabletsRunning());
@@ -232,7 +244,7 @@ public:
                     }
                 }
                 DownBefore[nodeId] = nodeInfo->Down;
-                nodeInfo->SetDown(true);
+                nodeInfo->SetDown(true, EHiveEventReason::DrainStarted);
             } else {
                 return ReplyAndDie(NKikimrProto::ERROR);
             }
@@ -287,14 +299,16 @@ public:
 };
 
 THiveDrain* THive::StartHiveDrain(TDrainTarget target, TDrainSettings settings) {
-    bool shouldStart = false;
-    for (TGetNodes getNodes{this}; auto nodeId : std::visit(getNodes, target)) {
+    TGetNodes getNodes{this};
+    std::unordered_set<TNodeId> nodes = std::visit(getNodes, target);
+    std::unordered_set<TNodeId> reservedNodes;
+    for (const TNodeId nodeId : nodes) {
         if (BalancerNodes.emplace(nodeId).second) {
-            shouldStart = true;
+            reservedNodes.insert(nodeId);
         }
     }
-    if (shouldStart) {
-        auto* balancer = new THiveDrain(this, target, std::move(settings));
+    if (!reservedNodes.empty()) {
+        auto* balancer = new THiveDrain(this, target, std::move(settings), std::move(nodes), std::move(reservedNodes));
         SubActors.emplace_back(balancer);
         RegisterWithSameMailbox(balancer);
         return balancer;

@@ -1,14 +1,15 @@
 #pragma once
 
 #include <ydb/core/fq/libs/protos/dq_effects.pb.h>
-#include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
-#include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
-#include <util/generic/size_literals.h>
 
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
+#include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
+
+#include <util/generic/size_literals.h>
 
 namespace NYql {
 
@@ -16,50 +17,37 @@ class TS3GatewayConfig;
 
 namespace NDq {
 
-    struct TS3ReadActorFactoryConfig {
-        ui64 RowsInBatch = 1000;
-        ui64 MaxInflight = 20;
-        ui64 DataInflight = 200_MB;
-        ui64 FileSizeLimit = 100_GB;
-        ui64 BlockFileSizeLimit = 50_GB;
-        std::unordered_map<std::string, ui64> FormatSizeLimits;
-        bool EnableScheduling = false;
-    };
+struct TS3ReadActorFactoryConfig {
+    ui64 RowsInBatch = 1000;
+    ui64 MaxInflight = 20;
+    ui64 DataInflight = 200_MB;
+    ui64 FileSizeLimit = 100_GB;
+    ui64 BlockFileSizeLimit = 50_GB;
+    std::unordered_map<std::string, ui64> FormatSizeLimits;
+    bool EnableScheduling = false;
+    bool BatchedRowGroupDecode = true;
+    ui64 BatchDecodeTargetBytes = 16_MB;
+};
 
-    class IS3ActorsFactory {
-    public:
-        virtual ~IS3ActorsFactory() = default;
-        
-        virtual THolder<NActors::IActor> CreateS3ApplicatorActor(
-            NActors::TActorId parentId,
-            IHTTPGateway::TPtr gateway,
-            const TString& queryId,
-            const TString& jobId,
-            std::optional<ui32> restartNumber,
-            bool commit,
-            const THashMap<TString, TString>& secureParams,
-            IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-            const NYql::NDqProto::TExternalEffect& externalEffect) = 0;
+class IS3ActorsFactory {
+public:
+    virtual ~IS3ActorsFactory() = default;
 
-        virtual void RegisterS3WriteActorFactory(
-            TDqAsyncIoFactory& factory,
-            IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-            IHTTPGateway::TPtr gateway,
-            const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy) = 0;
+    virtual THolder<NActors::IActor> CreateS3ApplicatorActor(NActors::TActorId parentId, IHTTPGateway::TPtr gateway, const TString& queryId,
+        const TString& jobId, std::optional<ui32> restartNumber, bool commit, const THashMap<TString, TString>& secureParams,
+        IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const NYql::NDqProto::TExternalEffect& externalEffect) = 0;
 
-        virtual void RegisterS3ReadActorFactory(
-            TDqAsyncIoFactory& factory,
-            IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-            IHTTPGateway::TPtr gateway,
-            const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy,
-            const TS3ReadActorFactoryConfig& cfg = {},
-            ::NMonitoring::TDynamicCounterPtr counters = nullptr,
-            bool allowLocalFiles = false) = 0;
-    };
+    virtual void RegisterS3WriteActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+        IHTTPGateway::TPtr gateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy) = 0;
 
-    std::shared_ptr<IS3ActorsFactory> CreateDefaultS3ActorsFactory();
+    virtual void RegisterS3ReadActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+        IHTTPGateway::TPtr gateway, const IHTTPGateway::TRetryPolicy::TPtr& retryPolicy, const TS3ReadActorFactoryConfig& cfg = {},
+        ::NMonitoring::TDynamicCounterPtr counters = nullptr, bool allowLocalFiles = false) = 0;
+};
 
-    TS3ReadActorFactoryConfig CreateReadActorFactoryConfig(const ::NYql::TS3GatewayConfig& s3Config);
-} // namespace NDq
+std::shared_ptr<IS3ActorsFactory> CreateDefaultS3ActorsFactory();
 
-} // namespace NYql
+TS3ReadActorFactoryConfig CreateReadActorFactoryConfig(const ::NYql::TS3GatewayConfig& s3Config);
+}   // namespace NDq
+
+}   // namespace NYql

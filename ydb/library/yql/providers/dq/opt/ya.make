@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 PEERDIR(
     ydb/library/yql/providers/dq/expr_nodes
@@ -21,7 +21,5 @@ SRCS(
     logical_optimize.cpp
     physical_optimize.cpp
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

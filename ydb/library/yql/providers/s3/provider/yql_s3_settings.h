@@ -16,7 +16,7 @@ public:
 };
 
 template <typename TType>
-class IS3ConfSettingWithDisable : public IS3ConfSettingWithDisableCheck {
+class IS3ConfSettingWithDisable: public IS3ConfSettingWithDisableCheck {
 public:
     virtual void Disable(TType value, const TString& reason) = 0;
 
@@ -24,7 +24,7 @@ public:
 };
 
 template <typename TType, TType Default>
-class TS3ConfSettingDefault final : NCommon::TConfSetting<TType, NCommon::EConfSettingType::Static>, public IS3ConfSettingWithDisable<TType> {
+class TS3ConfSettingDefault final: NCommon::TConfSetting<TType, NCommon::EConfSettingType::Static>, public IS3ConfSettingWithDisable<TType> {
     using TBase = NCommon::TConfSetting<TType, NCommon::EConfSettingType::Static>;
 
     friend struct TS3Configuration;
@@ -63,33 +63,36 @@ private:
 struct TS3Settings {
 private:
     template <typename TType>
-    using TS3ConfSettingOptional = NCommon::TConfSetting<TType, NCommon::EConfSettingType::Static>; // Default value selected in runtime
+    using TS3ConfSettingOptional = NCommon::TConfSetting<TType, NCommon::EConfSettingType::Static>;   // Default value selected in runtime
 
 public:
     using TConstPtr = std::shared_ptr<const TS3Settings>;
 
     TS3ConfSettingDefault<bool, true> SourceCoroActor;
-    TS3ConfSettingDefault<ui64, 50_MB> MaxOutputObjectSize;           // Maximum size of written to S3 file
+    TS3ConfSettingDefault<ui64, 50_MB> MaxOutputObjectSize;   // Maximum size of written to S3 file
     TS3ConfSettingDefault<ui64, 4096> UniqueKeysCountLimit;
-    TS3ConfSettingDefault<ui64, 1_MB> BlockSizeMemoryLimit;           // Maximum size of single part for S3 writing
-    TS3ConfSettingDefault<ui64, 10_MB> SerializeMemoryLimit;          // Total serialization memory limit for all current blocks for all partition keys. Reachable in case of many but small partitions
-    TS3ConfSettingDefault<ui64, 1_GB> InFlightMemoryLimit;            // Maximum memory used by one sink
-    TS3ConfSettingDefault<ui64, 10'000> JsonListSizeLimit;            // Limit of elements count in json list written to S3 file. Default: 10'000. Max: 100'000
-    TS3ConfSettingDefault<ui64, 0> ArrowParallelRowGroupCount;        // Number of parquet row groups to read in parallel, min == 1
-    TS3ConfSettingDefault<bool, true> ArrowRowGroupReordering;        // Allow to push rows from file in any order, default false, but usually it is OK
-    TS3ConfSettingDefault<ui64, 0> ParallelDownloadCount;             // Number of files to read in parallel, min == 1
-    TS3ConfSettingDefault<bool, true> UseBlocksSource;                // Deprecated and has to be removed after config cleanup
-    TS3ConfSettingOptional<bool> UseBlocksSink;                       // Automatically enabled by default if all types are supported
-    TS3ConfSettingDefault<bool, false> AtomicUploadCommit;            // Commit each file independently, w/o transaction semantic over all files
-    TS3ConfSettingOptional<bool> UseConcurrentDirectoryLister;        // By default TS3GatewayConfig::AllowConcurrentListings
-    TS3ConfSettingOptional<ui64> MaxDiscoveryFilesPerDirectory;       // By default TS3GatewayConfig::MaxListingResultSizePerPartition
-    TS3ConfSettingDefault<bool, false> UseRuntimeListing;             // Enables runtime listing (requires ActorSystem during optimisation)
-    TS3ConfSettingDefault<ui64, 1000'000> FileQueueBatchSizeLimit;    // Limits total size of files in one PathBatch from FileQueue
-    TS3ConfSettingDefault<ui64, 1000> FileQueueBatchObjectCountLimit; // Limits count of files in one PathBatch from FileQueue
+    TS3ConfSettingDefault<ui64, 1_MB> BlockSizeMemoryLimit;   // Maximum size of single part for S3 writing
+    TS3ConfSettingDefault<ui64, 10_MB>
+        SerializeMemoryLimit;   // Total serialization memory limit for all current blocks for all partition keys. Reachable in case of many but small partitions
+    TS3ConfSettingDefault<ui64, 1_GB> InFlightMemoryLimit;   // Maximum memory used by one sink
+    TS3ConfSettingDefault<ui64, 10'000>
+        JsonListSizeLimit;   // Limit of elements count in json list written to S3 file. Default: 10'000. Max: 100'000
+    TS3ConfSettingDefault<ui64, 0> ArrowParallelRowGroupCount;   // Number of parquet row groups to read in parallel, min == 1
+    TS3ConfSettingDefault<bool, true>
+        ArrowRowGroupReordering;   // Allow to push rows from file in any order, default false, but usually it is OK
+    TS3ConfSettingDefault<ui64, 0> ParallelDownloadCount;   // Number of files to read in parallel, min == 1
+    TS3ConfSettingDefault<bool, true> UseBlocksSource;   // Deprecated and has to be removed after config cleanup
+    TS3ConfSettingOptional<bool> UseBlocksSink;   // Automatically enabled by default if all types are supported
+    TS3ConfSettingDefault<bool, false> AtomicUploadCommit;   // Commit each file independently, w/o transaction semantic over all files
+    TS3ConfSettingOptional<bool> UseConcurrentDirectoryLister;   // By default TS3GatewayConfig::AllowConcurrentListings
+    TS3ConfSettingOptional<ui64> MaxDiscoveryFilesPerDirectory;   // By default TS3GatewayConfig::MaxListingResultSizePerPartition
+    TS3ConfSettingDefault<bool, false> UseRuntimeListing;   // Enables runtime listing (requires ActorSystem during optimisation)
+    TS3ConfSettingDefault<ui64, 1000'000> FileQueueBatchSizeLimit;   // Limits total size of files in one PathBatch from FileQueue
+    TS3ConfSettingDefault<ui64, 1000> FileQueueBatchObjectCountLimit;   // Limits count of files in one PathBatch from FileQueue
     TS3ConfSettingOptional<ui64> FileQueuePrefetchSize;
-    TS3ConfSettingDefault<bool, false> AsyncDecoding;                 // Parse and decode input data at separate mailbox/thread of TaskRunner
+    TS3ConfSettingDefault<bool, false> AsyncDecoding;   // Parse and decode input data at separate mailbox/thread of TaskRunner
     TS3ConfSettingDefault<bool, false> UsePredicatePushdown;
-    TS3ConfSettingDefault<bool, false> AsyncDecompressing;            // Decompression and parsing input data in different mailbox/thread
+    TS3ConfSettingDefault<bool, false> AsyncDecompressing;   // Decompression and parsing input data in different mailbox/thread
     TS3ConfSettingOptional<TDuration> OutputKeyFlushTimeout;
 };
 
@@ -97,7 +100,7 @@ struct TS3ClusterSettings {
     TString Url;
 };
 
-struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher {
+struct TS3Configuration: public NCommon::TDispatcherAndSettings<TS3Settings> {
     using TPtr = TIntrusivePtr<TS3Configuration>;
     using TSetupper = std::function<void(TS3Configuration& configuration)>;
 
@@ -148,4 +151,4 @@ private:
     std::vector<IS3ConfSettingWithDisableCheck*> DisabledPragmas;
 };
 
-} // namespace NYql
+}   // namespace NYql

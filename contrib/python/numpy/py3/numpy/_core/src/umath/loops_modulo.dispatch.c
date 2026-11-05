@@ -8,9 +8,6 @@
  */
 
 #line 1
-/*@targets
- ** baseline vsx4
- **/
 #define _UMATHMODULE
 #define _MULTIARRAYMODULE
 #define NPY_NO_DEPRECATED_API NPY_API_VERSION
@@ -68,7 +65,7 @@ vsx4_expand_s32_s16(npyv_s16 data)
     return r;
 }
 
-#line 65
+#line 62
 // Converts 1 8-bit vector into 4 32-bit vectors
 NPY_FINLINE vsx4_u32x4
 vsx4_expand_u32_u8(npyv_u8 data)
@@ -80,7 +77,7 @@ vsx4_expand_u32_u8(npyv_u8 data)
     return r;
 }
 
-#line 79
+#line 76
 /*
  * Computes division/modulo of 2 8-bit signed/unsigned integer vectors
  *
@@ -140,7 +137,7 @@ vsx4_div_scalar_u16(npyv_u16 a, const npyv_u32x2 b_expand)
 #define vsx4_div_scalar_u32 vec_div
 #define vsx4_div_scalar_u64 vec_div
 
-#line 79
+#line 76
 /*
  * Computes division/modulo of 2 8-bit signed/unsigned integer vectors
  *
@@ -201,7 +198,7 @@ vsx4_mod_scalar_u16(npyv_u16 a, const npyv_u32x2 b_expand)
 #define vsx4_mod_scalar_u64 vec_mod
 
 
-#line 65
+#line 62
 // Converts 1 8-bit vector into 4 32-bit vectors
 NPY_FINLINE vsx4_s32x4
 vsx4_expand_s32_s8(npyv_s8 data)
@@ -213,7 +210,7 @@ vsx4_expand_s32_s8(npyv_s8 data)
     return r;
 }
 
-#line 79
+#line 76
 /*
  * Computes division/modulo of 2 8-bit signed/unsigned integer vectors
  *
@@ -273,7 +270,7 @@ vsx4_div_scalar_s16(npyv_s16 a, const npyv_s32x2 b_expand)
 #define vsx4_div_scalar_s32 vec_div
 #define vsx4_div_scalar_s64 vec_div
 
-#line 79
+#line 76
 /*
  * Computes division/modulo of 2 8-bit signed/unsigned integer vectors
  *
@@ -335,7 +332,7 @@ vsx4_mod_scalar_s16(npyv_s16 a, const npyv_s32x2 b_expand)
 
 
 
-#line 146
+#line 143
 // Generates the divisor for the division/modulo operations
 NPY_FINLINE vsx4_u32x4
 vsx4_divisor_u8(const npyv_u8 vscalar)
@@ -343,7 +340,7 @@ vsx4_divisor_u8(const npyv_u8 vscalar)
     return vsx4_expand_u32_u8(vscalar);
 }
 
-#line 146
+#line 143
 // Generates the divisor for the division/modulo operations
 NPY_FINLINE npyv_u32x2
 vsx4_divisor_u16(const npyv_u16 vscalar)
@@ -351,7 +348,7 @@ vsx4_divisor_u16(const npyv_u16 vscalar)
     return npyv_expand_u32_u16(vscalar);
 }
 
-#line 146
+#line 143
 // Generates the divisor for the division/modulo operations
 NPY_FINLINE vsx4_s32x4
 vsx4_divisor_s8(const npyv_s8 vscalar)
@@ -359,7 +356,7 @@ vsx4_divisor_s8(const npyv_s8 vscalar)
     return vsx4_expand_s32_s8(vscalar);
 }
 
-#line 146
+#line 143
 // Generates the divisor for the division/modulo operations
 NPY_FINLINE npyv_s32x2
 vsx4_divisor_s16(const npyv_s16 vscalar)
@@ -368,28 +365,28 @@ vsx4_divisor_s16(const npyv_s16 vscalar)
 }
 
 
-#line 157
+#line 154
 NPY_FINLINE npyv_u32
 vsx4_divisor_u32(const npyv_u32 vscalar)
 {
     return vscalar;
 }
 
-#line 157
+#line 154
 NPY_FINLINE npyv_u64
 vsx4_divisor_u64(const npyv_u64 vscalar)
 {
     return vscalar;
 }
 
-#line 157
+#line 154
 NPY_FINLINE npyv_s32
 vsx4_divisor_s32(const npyv_s32 vscalar)
 {
     return vscalar;
 }
 
-#line 157
+#line 154
 NPY_FINLINE npyv_s64
 vsx4_divisor_s64(const npyv_s64 vscalar)
 {
@@ -397,8 +394,8 @@ vsx4_divisor_s64(const npyv_s64 vscalar)
 }
 
 
-#line 170
-#line 174
+#line 167
+#line 171
 static inline void
 vsx4_simd_fmod_contig_u8(char **args, npy_intp len)
 {
@@ -508,7 +505,7 @@ vsx4_simd_fmod_by_scalar_contig_u8(char **args, npy_intp len)
     npyv_cleanup();
 }
 
-#line 174
+#line 171
 static inline void
 vsx4_simd_remainder_contig_u8(char **args, npy_intp len)
 {
@@ -618,7 +615,7 @@ vsx4_simd_remainder_by_scalar_contig_u8(char **args, npy_intp len)
     npyv_cleanup();
 }
 
-#line 174
+#line 171
 static inline void
 vsx4_simd_divmod_contig_u8(char **args, npy_intp len)
 {
@@ -729,8 +726,8 @@ vsx4_simd_divmod_by_scalar_contig_u8(char **args, npy_intp len)
 }
 
 
-#line 170
-#line 174
+#line 167
+#line 171
 static inline void
 vsx4_simd_fmod_contig_u16(char **args, npy_intp len)
 {
@@ -840,7 +837,7 @@ vsx4_simd_fmod_by_scalar_contig_u16(char **args, npy_intp len)
     npyv_cleanup();
 }
 
-#line 174
+#line 171
 static inline void
 vsx4_simd_remainder_contig_u16(char **args, npy_intp len)
 {
@@ -950,7 +947,7 @@ vsx4_simd_remainder_by_scalar_contig_u16(char **args, npy_intp len)
     npyv_cleanup();
 }
 
-#line 174
+#line 171
 static inline void
 vsx4_simd_divmod_contig_u16(char **args, npy_intp len)
 {
@@ -1061,8 +1058,8 @@ vsx4_simd_divmod_by_scalar_contig_u16(char **args, npy_intp len)
 }
 
 
-#line 170
-#line 174
+#line 167
+#line 171
 static inline void
 vsx4_simd_fmod_contig_u32(char **args, npy_intp len)
 {
@@ -1172,7 +1169,7 @@ vsx4_simd_fmod_by_scalar_contig_u32(char **args, npy_intp len)
     npyv_cleanup();
 }
 
-#line 174
+#line 171
 static inline void
 vsx4_simd_remainder_contig_u32(char **args, npy_intp len)
 {
@@ -1282,7 +1279,7 @@ vsx4_simd_remainder_by_scalar_contig_u32(char **args, npy_intp len)
     npyv_cleanup();
 }
 
-#line 174
+#line 171
 static inline void
 vsx4_simd_divmod_contig_u32(char **args, npy_intp len)
 {
@@ -1393,8 +1390,8 @@ vsx4_simd_divmod_by_scalar_contig_u32(char **args, npy_intp len)
 }
 
 
-#line 170
-#line 174
+#line 167
+#line 171
 static inline void
 vsx4_simd_fmod_contig_u64(char **args, npy_intp len)
 {
@@ -1504,7 +1501,7 @@ vsx4_simd_fmod_by_scalar_contig_u64(char **args, npy_intp len)
     npyv_cleanup();
 }
 
-#line 174
+#line 171
 static inline void
 vsx4_simd_remainder_contig_u64(char **args, npy_intp len)
 {
@@ -1614,7 +1611,7 @@ vsx4_simd_remainder_by_scalar_contig_u64(char **args, npy_intp len)
     npyv_cleanup();
 }
 
-#line 174
+#line 171
 static inline void
 vsx4_simd_divmod_contig_u64(char **args, npy_intp len)
 {
@@ -1726,8 +1723,8 @@ vsx4_simd_divmod_by_scalar_contig_u64(char **args, npy_intp len)
 
 
 
-#line 291
-#line 295
+#line 288
+#line 292
 static inline void
 vsx4_simd_fmod_contig_s8(char **args, npy_intp len)
 {
@@ -1929,18 +1926,22 @@ vsx4_simd_fmod_by_scalar_contig_s8(char **args, npy_intp len)
 #else /* fmod and remainder */
     for (; len > 0; --len, ++src1, ++dst1) {
         const npyv_lanetype_s8 a = *src1;
-        *dst1 = a % scalar;
+        if (NPY_UNLIKELY(a == NPY_MIN_INT8 && scalar == -1)) {
+            *dst1 = 0;
+        } else {
+            *dst1 = a % scalar;
 #if 0 == 1 /* remainder */
-        if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
-            *dst1 += scalar;
-        }
+            if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
+                *dst1 += scalar;
+            }
 #endif
+        }
     }
 #endif
     npyv_cleanup();
 }
 
-#line 295
+#line 292
 static inline void
 vsx4_simd_remainder_contig_s8(char **args, npy_intp len)
 {
@@ -2142,18 +2143,22 @@ vsx4_simd_remainder_by_scalar_contig_s8(char **args, npy_intp len)
 #else /* fmod and remainder */
     for (; len > 0; --len, ++src1, ++dst1) {
         const npyv_lanetype_s8 a = *src1;
-        *dst1 = a % scalar;
+        if (NPY_UNLIKELY(a == NPY_MIN_INT8 && scalar == -1)) {
+            *dst1 = 0;
+        } else {
+            *dst1 = a % scalar;
 #if 1 == 1 /* remainder */
-        if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
-            *dst1 += scalar;
-        }
+            if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
+                *dst1 += scalar;
+            }
 #endif
+        }
     }
 #endif
     npyv_cleanup();
 }
 
-#line 295
+#line 292
 static inline void
 vsx4_simd_divmod_contig_s8(char **args, npy_intp len)
 {
@@ -2355,20 +2360,24 @@ vsx4_simd_divmod_by_scalar_contig_s8(char **args, npy_intp len)
 #else /* fmod and remainder */
     for (; len > 0; --len, ++src1, ++dst1) {
         const npyv_lanetype_s8 a = *src1;
-        *dst1 = a % scalar;
+        if (NPY_UNLIKELY(a == NPY_MIN_INT8 && scalar == -1)) {
+            *dst1 = 0;
+        } else {
+            *dst1 = a % scalar;
 #if 2 == 1 /* remainder */
-        if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
-            *dst1 += scalar;
-        }
+            if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
+                *dst1 += scalar;
+            }
 #endif
+        }
     }
 #endif
     npyv_cleanup();
 }
 
 
-#line 291
-#line 295
+#line 288
+#line 292
 static inline void
 vsx4_simd_fmod_contig_s16(char **args, npy_intp len)
 {
@@ -2570,18 +2579,22 @@ vsx4_simd_fmod_by_scalar_contig_s16(char **args, npy_intp len)
 #else /* fmod and remainder */
     for (; len > 0; --len, ++src1, ++dst1) {
         const npyv_lanetype_s16 a = *src1;
-        *dst1 = a % scalar;
+        if (NPY_UNLIKELY(a == NPY_MIN_INT16 && scalar == -1)) {
+            *dst1 = 0;
+        } else {
+            *dst1 = a % scalar;
 #if 0 == 1 /* remainder */
-        if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
-            *dst1 += scalar;
-        }
+            if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
+                *dst1 += scalar;
+            }
 #endif
+        }
     }
 #endif
     npyv_cleanup();
 }
 
-#line 295
+#line 292
 static inline void
 vsx4_simd_remainder_contig_s16(char **args, npy_intp len)
 {
@@ -2783,18 +2796,22 @@ vsx4_simd_remainder_by_scalar_contig_s16(char **args, npy_intp len)
 #else /* fmod and remainder */
     for (; len > 0; --len, ++src1, ++dst1) {
         const npyv_lanetype_s16 a = *src1;
-        *dst1 = a % scalar;
+        if (NPY_UNLIKELY(a == NPY_MIN_INT16 && scalar == -1)) {
+            *dst1 = 0;
+        } else {
+            *dst1 = a % scalar;
 #if 1 == 1 /* remainder */
-        if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
-            *dst1 += scalar;
-        }
+            if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
+                *dst1 += scalar;
+            }
 #endif
+        }
     }
 #endif
     npyv_cleanup();
 }
 
-#line 295
+#line 292
 static inline void
 vsx4_simd_divmod_contig_s16(char **args, npy_intp len)
 {
@@ -2996,20 +3013,24 @@ vsx4_simd_divmod_by_scalar_contig_s16(char **args, npy_intp len)
 #else /* fmod and remainder */
     for (; len > 0; --len, ++src1, ++dst1) {
         const npyv_lanetype_s16 a = *src1;
-        *dst1 = a % scalar;
+        if (NPY_UNLIKELY(a == NPY_MIN_INT16 && scalar == -1)) {
+            *dst1 = 0;
+        } else {
+            *dst1 = a % scalar;
 #if 2 == 1 /* remainder */
-        if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
-            *dst1 += scalar;
-        }
+            if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
+                *dst1 += scalar;
+            }
 #endif
+        }
     }
 #endif
     npyv_cleanup();
 }
 
 
-#line 291
-#line 295
+#line 288
+#line 292
 static inline void
 vsx4_simd_fmod_contig_s32(char **args, npy_intp len)
 {
@@ -3211,18 +3232,22 @@ vsx4_simd_fmod_by_scalar_contig_s32(char **args, npy_intp len)
 #else /* fmod and remainder */
     for (; len > 0; --len, ++src1, ++dst1) {
         const npyv_lanetype_s32 a = *src1;
-        *dst1 = a % scalar;
+        if (NPY_UNLIKELY(a == NPY_MIN_INT32 && scalar == -1)) {
+            *dst1 = 0;
+        } else {
+            *dst1 = a % scalar;
 #if 0 == 1 /* remainder */
-        if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
-            *dst1 += scalar;
-        }
+            if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
+                *dst1 += scalar;
+            }
 #endif
+        }
     }
 #endif
     npyv_cleanup();
 }
 
-#line 295
+#line 292
 static inline void
 vsx4_simd_remainder_contig_s32(char **args, npy_intp len)
 {
@@ -3424,18 +3449,22 @@ vsx4_simd_remainder_by_scalar_contig_s32(char **args, npy_intp len)
 #else /* fmod and remainder */
     for (; len > 0; --len, ++src1, ++dst1) {
         const npyv_lanetype_s32 a = *src1;
-        *dst1 = a % scalar;
+        if (NPY_UNLIKELY(a == NPY_MIN_INT32 && scalar == -1)) {
+            *dst1 = 0;
+        } else {
+            *dst1 = a % scalar;
 #if 1 == 1 /* remainder */
-        if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
-            *dst1 += scalar;
-        }
+            if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
+                *dst1 += scalar;
+            }
 #endif
+        }
     }
 #endif
     npyv_cleanup();
 }
 
-#line 295
+#line 292
 static inline void
 vsx4_simd_divmod_contig_s32(char **args, npy_intp len)
 {
@@ -3637,20 +3666,24 @@ vsx4_simd_divmod_by_scalar_contig_s32(char **args, npy_intp len)
 #else /* fmod and remainder */
     for (; len > 0; --len, ++src1, ++dst1) {
         const npyv_lanetype_s32 a = *src1;
-        *dst1 = a % scalar;
+        if (NPY_UNLIKELY(a == NPY_MIN_INT32 && scalar == -1)) {
+            *dst1 = 0;
+        } else {
+            *dst1 = a % scalar;
 #if 2 == 1 /* remainder */
-        if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
-            *dst1 += scalar;
-        }
+            if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
+                *dst1 += scalar;
+            }
 #endif
+        }
     }
 #endif
     npyv_cleanup();
 }
 
 
-#line 291
-#line 295
+#line 288
+#line 292
 static inline void
 vsx4_simd_fmod_contig_s64(char **args, npy_intp len)
 {
@@ -3852,18 +3885,22 @@ vsx4_simd_fmod_by_scalar_contig_s64(char **args, npy_intp len)
 #else /* fmod and remainder */
     for (; len > 0; --len, ++src1, ++dst1) {
         const npyv_lanetype_s64 a = *src1;
-        *dst1 = a % scalar;
+        if (NPY_UNLIKELY(a == NPY_MIN_INT64 && scalar == -1)) {
+            *dst1 = 0;
+        } else {
+            *dst1 = a % scalar;
 #if 0 == 1 /* remainder */
-        if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
-            *dst1 += scalar;
-        }
+            if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
+                *dst1 += scalar;
+            }
 #endif
+        }
     }
 #endif
     npyv_cleanup();
 }
 
-#line 295
+#line 292
 static inline void
 vsx4_simd_remainder_contig_s64(char **args, npy_intp len)
 {
@@ -4065,18 +4102,22 @@ vsx4_simd_remainder_by_scalar_contig_s64(char **args, npy_intp len)
 #else /* fmod and remainder */
     for (; len > 0; --len, ++src1, ++dst1) {
         const npyv_lanetype_s64 a = *src1;
-        *dst1 = a % scalar;
+        if (NPY_UNLIKELY(a == NPY_MIN_INT64 && scalar == -1)) {
+            *dst1 = 0;
+        } else {
+            *dst1 = a % scalar;
 #if 1 == 1 /* remainder */
-        if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
-            *dst1 += scalar;
-        }
+            if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
+                *dst1 += scalar;
+            }
 #endif
+        }
     }
 #endif
     npyv_cleanup();
 }
 
-#line 295
+#line 292
 static inline void
 vsx4_simd_divmod_contig_s64(char **args, npy_intp len)
 {
@@ -4278,12 +4319,16 @@ vsx4_simd_divmod_by_scalar_contig_s64(char **args, npy_intp len)
 #else /* fmod and remainder */
     for (; len > 0; --len, ++src1, ++dst1) {
         const npyv_lanetype_s64 a = *src1;
-        *dst1 = a % scalar;
+        if (NPY_UNLIKELY(a == NPY_MIN_INT64 && scalar == -1)) {
+            *dst1 = 0;
+        } else {
+            *dst1 = a % scalar;
 #if 2 == 1 /* remainder */
-        if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
-            *dst1 += scalar;
-        }
+            if (!((a > 0) == (scalar > 0) || *dst1 == 0)) {
+                *dst1 += scalar;
+            }
 #endif
+        }
     }
 #endif
     npyv_cleanup();
@@ -4296,10 +4341,10 @@ vsx4_simd_divmod_by_scalar_contig_s64(char **args, npy_intp len)
  ** Defining ufunc inner functions
  *****************************************************************************/
 
-#line 524
+#line 525
 #undef TO_SIMD_SFX
 #if 0
-#line 529
+#line 530
 #elif NPY_BITSOF_BYTE == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_s8
@@ -4307,7 +4352,7 @@ vsx4_simd_divmod_by_scalar_contig_s64(char **args, npy_intp len)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_BYTE == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_s16
@@ -4315,7 +4360,7 @@ vsx4_simd_divmod_by_scalar_contig_s64(char **args, npy_intp len)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_BYTE == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_s32
@@ -4323,7 +4368,7 @@ vsx4_simd_divmod_by_scalar_contig_s64(char **args, npy_intp len)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_BYTE == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_s64
@@ -4472,10 +4517,10 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_divmod)
 #endif
 }
 
-#line 524
+#line 525
 #undef TO_SIMD_SFX
 #if 0
-#line 529
+#line 530
 #elif NPY_BITSOF_SHORT == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_s8
@@ -4483,7 +4528,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_divmod)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_SHORT == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_s16
@@ -4491,7 +4536,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_divmod)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_SHORT == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_s32
@@ -4499,7 +4544,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_divmod)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_SHORT == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_s64
@@ -4648,10 +4693,10 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_divmod)
 #endif
 }
 
-#line 524
+#line 525
 #undef TO_SIMD_SFX
 #if 0
-#line 529
+#line 530
 #elif NPY_BITSOF_INT == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_s8
@@ -4659,7 +4704,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_divmod)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_INT == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_s16
@@ -4667,7 +4712,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_divmod)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_INT == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_s32
@@ -4675,7 +4720,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_divmod)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_INT == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_s64
@@ -4824,10 +4869,10 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_divmod)
 #endif
 }
 
-#line 524
+#line 525
 #undef TO_SIMD_SFX
 #if 0
-#line 529
+#line 530
 #elif NPY_BITSOF_LONG == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_s8
@@ -4835,7 +4880,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_divmod)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_LONG == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_s16
@@ -4843,7 +4888,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_divmod)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_LONG == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_s32
@@ -4851,7 +4896,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_divmod)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_LONG == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_s64
@@ -5000,10 +5045,10 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_divmod)
 #endif
 }
 
-#line 524
+#line 525
 #undef TO_SIMD_SFX
 #if 0
-#line 529
+#line 530
 #elif NPY_BITSOF_LONGLONG == 8
     #if 0
         #define TO_SIMD_SFX(X) X##_s8
@@ -5011,7 +5056,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_divmod)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_LONGLONG == 16
     #if 0
         #define TO_SIMD_SFX(X) X##_s16
@@ -5019,7 +5064,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_divmod)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_LONGLONG == 32
     #if 0
         #define TO_SIMD_SFX(X) X##_s32
@@ -5027,7 +5072,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_divmod)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_LONGLONG == 64
     #if 0
         #define TO_SIMD_SFX(X) X##_s64
@@ -5176,10 +5221,10 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_divmod)
 #endif
 }
 
-#line 524
+#line 525
 #undef TO_SIMD_SFX
 #if 0
-#line 529
+#line 530
 #elif NPY_BITSOF_BYTE == 8
     #if 1
         #define TO_SIMD_SFX(X) X##_s8
@@ -5187,7 +5232,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_divmod)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_BYTE == 16
     #if 1
         #define TO_SIMD_SFX(X) X##_s16
@@ -5195,7 +5240,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_divmod)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_BYTE == 32
     #if 1
         #define TO_SIMD_SFX(X) X##_s32
@@ -5203,7 +5248,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_divmod)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_BYTE == 64
     #if 1
         #define TO_SIMD_SFX(X) X##_s64
@@ -5352,10 +5397,10 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_divmod)
 #endif
 }
 
-#line 524
+#line 525
 #undef TO_SIMD_SFX
 #if 0
-#line 529
+#line 530
 #elif NPY_BITSOF_SHORT == 8
     #if 1
         #define TO_SIMD_SFX(X) X##_s8
@@ -5363,7 +5408,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_divmod)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_SHORT == 16
     #if 1
         #define TO_SIMD_SFX(X) X##_s16
@@ -5371,7 +5416,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_divmod)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_SHORT == 32
     #if 1
         #define TO_SIMD_SFX(X) X##_s32
@@ -5379,7 +5424,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_divmod)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_SHORT == 64
     #if 1
         #define TO_SIMD_SFX(X) X##_s64
@@ -5528,10 +5573,10 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_divmod)
 #endif
 }
 
-#line 524
+#line 525
 #undef TO_SIMD_SFX
 #if 0
-#line 529
+#line 530
 #elif NPY_BITSOF_INT == 8
     #if 1
         #define TO_SIMD_SFX(X) X##_s8
@@ -5539,7 +5584,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_divmod)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_INT == 16
     #if 1
         #define TO_SIMD_SFX(X) X##_s16
@@ -5547,7 +5592,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_divmod)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_INT == 32
     #if 1
         #define TO_SIMD_SFX(X) X##_s32
@@ -5555,7 +5600,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_divmod)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_INT == 64
     #if 1
         #define TO_SIMD_SFX(X) X##_s64
@@ -5704,10 +5749,10 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_divmod)
 #endif
 }
 
-#line 524
+#line 525
 #undef TO_SIMD_SFX
 #if 0
-#line 529
+#line 530
 #elif NPY_BITSOF_LONG == 8
     #if 1
         #define TO_SIMD_SFX(X) X##_s8
@@ -5715,7 +5760,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_divmod)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_LONG == 16
     #if 1
         #define TO_SIMD_SFX(X) X##_s16
@@ -5723,7 +5768,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_divmod)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_LONG == 32
     #if 1
         #define TO_SIMD_SFX(X) X##_s32
@@ -5731,7 +5776,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_divmod)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_LONG == 64
     #if 1
         #define TO_SIMD_SFX(X) X##_s64
@@ -5880,10 +5925,10 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_divmod)
 #endif
 }
 
-#line 524
+#line 525
 #undef TO_SIMD_SFX
 #if 0
-#line 529
+#line 530
 #elif NPY_BITSOF_LONGLONG == 8
     #if 1
         #define TO_SIMD_SFX(X) X##_s8
@@ -5891,7 +5936,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_divmod)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_LONGLONG == 16
     #if 1
         #define TO_SIMD_SFX(X) X##_s16
@@ -5899,7 +5944,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_divmod)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_LONGLONG == 32
     #if 1
         #define TO_SIMD_SFX(X) X##_s32
@@ -5907,7 +5952,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_divmod)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 529
+#line 530
 #elif NPY_BITSOF_LONGLONG == 64
     #if 1
         #define TO_SIMD_SFX(X) X##_s64

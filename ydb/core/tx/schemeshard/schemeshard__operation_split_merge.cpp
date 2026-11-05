@@ -279,12 +279,19 @@ public:
         ui64 partitionsSkipped = 0;
         ui64 partitionsRewritten = 0;
 
+        // Whether this op deepens the by-load split lineage: set at Propose from the
+        // request and persisted with the tx state (TxInFlightV2), so it survives reboot.
+        // Absent (pre-upgrade or non-by-load ops) means false.
+        const bool loadSplitLineage = txState->LoadSplitLineage;
+        // Tx-level snapshot of the feature flag (AppData() global, as used elsewhere in schemeshard).
+        const bool trackSplitMergeDemand = AppData()->FeatureFlags.GetEnableSplitMergeDemandTracking();
+
         if (tableInfo->PartitionsInShardIdxFormat) {
             // O(k) fast path: touch only src/dst rows in TablePartitionsByShardIdx.
             const auto kAdded = newShardsIdx.size();
 
             context.SS->PersistTablePartitioningByShardIdxDelete(db, tableId, tableInfo, allSrcShardIdxs);
-            context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx);
+            context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx, trackSplitMergeDemand, loadSplitLineage);
             context.SS->PersistTablePartitioningByShardIdxInsert(db, tableId, tableInfo, srcFirstIdx, kAdded);
             context.SS->PersistTablePartitioningVersion(db, tableId, tableInfo);
 
@@ -296,7 +303,7 @@ public:
             ui64 splitStartIdx = AppData()->FeatureFlags.GetEnableSplitMergePartialPersistence() ? srcFirstIdx : 0;
 
             context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo, splitStartIdx);
-            context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx);
+            context.SS->ApplySplitMerge(tableId, tableInfo, std::move(dstPartitions), allSrcShardIdxs, srcFirstIdx, trackSplitMergeDemand, loadSplitLineage);
             context.SS->PersistTablePartitioning(db, tableId, tableInfo, splitStartIdx);
             context.SS->PersistAllTablePartitionStats(db, tableId, tableInfo, splitStartIdx);
 
@@ -674,11 +681,15 @@ public:
         srcRange->SetKeyRangeEnd(tableInfo->GetPartitions()[srcPartitionIdx]->EndOfRange);
 
         // Check that ranges are sorted in ascending order
+        // The parsed cells point directly into the source buffers
+        // (rangeEnds elements and EndOfRange), which are alive and
+        // unmodified for the whole scope of this check.
         TVector<TCell> prevKey;
+        TVector<TCell> key;
         if (srcPartitionIdx != 0) {
             // Take the end of previous shard
-            TSerializedCellVec key(tableInfo->GetPartitions()[srcPartitionIdx-1]->EndOfRange);
-            prevKey.assign(key.GetCells().begin(), key.GetCells().end());
+            Y_ENSURE(TSerializedCellVec::TryParseCells(
+                tableInfo->GetPartitions()[srcPartitionIdx-1]->EndOfRange, prevKey));
         } else {
             // Or start from (NULL, NULL, .., NULL)
             prevKey.resize(keyColTypeIds.size());
@@ -687,12 +698,12 @@ public:
         srcRange->SetKeyRangeBegin(firstRangeBegin);
 
         for (ui32 i = 0; i < rangeEnds.size(); ++i) {
-            TSerializedCellVec key(rangeEnds[i]);
-            if (CompareBorders<true, true>(prevKey, key.GetCells(), true, true, keyColTypeIds) >= 0) {
+            Y_ENSURE(TSerializedCellVec::TryParseCells(rangeEnds[i], key));
+            if (CompareBorders<true, true>(prevKey, key, true, true, keyColTypeIds) >= 0) {
                 errStr = Sprintf("Partition ranges are not sorted at index %u", i);
                 return false;
             }
-            prevKey.assign(key.GetCells().begin(), key.GetCells().end());
+            prevKey.swap(key);
         }
 
         // Allocate new datashard ids
@@ -1068,6 +1079,9 @@ public:
         txState.State = op.State;
         txState.Shards = std::move(op.Shards);
         txState.SplitDescription = std::move(op.SplitDescription);
+        // LoadSplitLineage is internal-only: ignore it in client (non-internal) proposes so
+        // external callers cannot deepen the by-load lineage of their partitions.
+        txState.LoadSplitLineage = Transaction.GetInternal() && info.GetLoadSplitLineage();
         context.OnComplete.ActivateTx(OperationId);
 
         for (const auto& shard : txState.Shards) {

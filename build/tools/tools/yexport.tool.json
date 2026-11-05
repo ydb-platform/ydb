@@ -1,0 +1,10 @@
+{
+    "tool": {
+        "type": "simple",
+        "description": "Run yexport",
+        "availability": "hidden",
+        "definition": {
+            "formula": "build/external_resources/yexport/public.resources.json"
+        }
+    }
+}

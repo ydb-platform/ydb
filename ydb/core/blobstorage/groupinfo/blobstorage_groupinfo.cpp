@@ -4,6 +4,7 @@
 #include "blobstorage_groupinfo_sets.h"
 #include "blobstorage_groupinfo_partlayout.h"
 #include "blobstorage_groupinfo_data_check.h"
+#include <ydb/core/base/bridge.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/protos/blobstorage.pb.h>
@@ -493,6 +494,7 @@ IBlobToDiskMapper *TBlobStorageGroupInfo::TTopology::CreateMapper(TBlobStorageGr
     switch (gtype.GetErasure()) {
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::Erasure4Plus2Block:
+        case TBlobStorageGroupType::Erasure8Plus2Block:
         case TBlobStorageGroupType::Erasure4Plus3Block:
         case TBlobStorageGroupType::Erasure3Plus3Block:
         case TBlobStorageGroupType::ErasureMirror3of4:
@@ -512,6 +514,7 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
     switch (topology->GType.GetErasure()) {
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::Erasure4Plus2Block:
+        case TBlobStorageGroupType::Erasure8Plus2Block:
         case TBlobStorageGroupType::Erasure4Plus3Block:
         case TBlobStorageGroupType::Erasure3Plus3Block:
             return new TQuorumCheckerOrdinary(topology);
@@ -533,13 +536,14 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
 TBlobStorageGroupInfo::IDataIntegrityChecker*
 TBlobStorageGroupInfo::TTopology::CreateDataIntegrityChecker(const TTopology* topology) {
     switch (topology->GType.GetErasure()) {
+        case TBlobStorageGroupType::Erasure4Plus2Block:
+            return new TDataIntegrityCheckerBlock42(topology);
+
+        case TBlobStorageGroupType::Erasure8Plus2Block:
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::Erasure4Plus3Block:
         case TBlobStorageGroupType::Erasure3Plus3Block:
             return new TDataIntegrityCheckerTrivial(topology);
-
-        case TBlobStorageGroupType::Erasure4Plus2Block:
-            return new TDataIntegrityCheckerBlock42(topology);
 
         case TBlobStorageGroupType::ErasureMirror3dc:
             return new TDataIntegrityCheckerMirror3dc(topology);
@@ -620,6 +624,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 n
     Topology = std::make_shared<TTopology>(std::move(topology));
     Topology->FinalizeConstruction();
 
+    Dynamic.FailRealmStates.resize(numFailRealms, NKikimrBlobStorage::TGroupInfo::TFailRealm::N0);
     for (ui32 i = 0, num = Topology->GetTotalVDisksNum(); i < num; ++i) {
         Dynamic.PushBackActorId(vdiskIds ? vdiskIds->at(i) : MakeBlobStorageVDiskID(1, i + 1, 0));
     }
@@ -636,7 +641,12 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology
     , AcceptedScope(acceptedScope)
     , StoragePoolName(std::move(storagePoolName))
     , DeviceType(deviceType)
-{}
+{
+    if (Dynamic.FailRealmStates.empty()) {
+        Dynamic.FailRealmStates.resize(Topology->FailRealms.size(), NKikimrBlobStorage::TGroupInfo::TFailRealm::N0);
+    }
+    Y_ABORT_UNLESS(Dynamic.FailRealmStates.size() == Topology->FailRealms.size());
+}
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TTopology&& topology, TDynamicInfo&& dyn, TString storagePoolName,
         TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType, ui32 groupSizeInUnits)
@@ -663,6 +673,57 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGro
 {
     Dynamic.ServiceIdForOrderNumber.resize(Topology->GetTotalVDisksNum(), TActorId());
     Dynamic.ServiceIdForOrderNumber[GetOrderNumber(vdiskId)] = actorId;
+    Dynamic.FailRealmStates = info->Dynamic.FailRealmStates;
+}
+
+TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TBlobStorageGroupInfo& other, TInlinePileViewTag)
+    : GroupID(other.GroupID)
+    , GroupGeneration(other.GroupGeneration)
+    , Type(other.Type)
+    , GroupSizeInUnits(other.GroupSizeInUnits)
+    , BlobDepotId(other.BlobDepotId)
+    , DecommitStatus(other.DecommitStatus)
+    , Group(other.Group)
+    , Topology(other.Topology)
+    , Dynamic(other.Dynamic)
+    , EncryptionMode(other.EncryptionMode)
+    , LifeCyclePhase(other.LifeCyclePhase)
+    , GroupKeyNonce(other.GroupKeyNonce)
+    , Key(other.Key)
+    , AcceptedScope(other.AcceptedScope)
+    , StoragePoolName(other.StoragePoolName)
+    , DeviceType(other.DeviceType)
+    , BridgeProxyGroupId(other.BridgeProxyGroupId)
+    , BridgePileId(other.BridgePileId)
+{
+    // keep BridgeProxyGroupId, so the DS proxy treats this group as an ordinary pile one accessible only through the
+    // bridge proxy. Keep BridgeGroupState in the protobuf as well: queues retain this protobuf and may send it back
+    // through a VDisk to NodeWarden, which needs it to recognize the inline pile.
+}
+
+TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::MakeInlinePileView() const {
+    Y_ABORT_UNLESS(IsInlinePile());
+    return TIntrusivePtr<TBlobStorageGroupInfo>(new TBlobStorageGroupInfo(*this, TInlinePileViewTag()));
+}
+
+bool TBlobStorageGroupInfo::DecommitBlocksWrites() const {
+    switch (DecommitStatus) {
+        case NKikimrBlobStorage::TGroupDecommitStatus::NONE:
+        case NKikimrBlobStorage::TGroupDecommitStatus::PENDING:
+            return false;
+
+        case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
+        case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
+            return true;
+
+        case NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING:
+            return true; // TODO(alexvru): accept writes only from BlobDepot agent-processed requests
+
+        case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
+            Y_ABORT();
+            return true;
+    }
 }
 
 TBlobStorageGroupInfo::~TBlobStorageGroupInfo()
@@ -678,6 +739,7 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     topology.FailRealms.resize(group.RingsSize());
     for (ui32 ringIdx = 0; ringIdx < group.RingsSize(); ++ringIdx) {
         const auto& realm = group.GetRings(ringIdx);
+        dyn.FailRealmStates.push_back(realm.GetState());
         TBlobStorageGroupInfo::TFailRealm& bsFailRealm = topology.FailRealms[ringIdx];
         bsFailRealm.FailDomains.resize(realm.FailDomainsSize());
         for (ui32 domainIdx = 0; domainIdx < realm.FailDomainsSize(); ++domainIdx) {
@@ -760,9 +822,10 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
 
     // parse bridge mode fields
     if (group.HasBridgeGroupState()) {
-        for (const auto& pile : group.GetBridgeGroupState().GetPile()) {
-           res->BridgeGroupIds.push_back(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
-        }
+        NBridge::ForEachGroupPile(group.GetBridgeGroupState(), [&](TBridgePileId,
+                const NKikimrBridge::TGroupState::TPile& pile) {
+            res->BridgeGroupIds.push_back(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+        });
     }
     if (group.HasBridgeProxyGroupId()) {
         res->BridgeProxyGroupId.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId));
@@ -809,7 +872,7 @@ bool TBlobStorageGroupInfo::DecryptGroupKey(TBlobStorageGroupInfo::EEncryptionMo
 }
 
 const TBlobStorageGroupInfo::IQuorumChecker& TBlobStorageGroupInfo::GetQuorumChecker() const {
-    Y_ABORT_UNLESS(!IsBridged());
+    Y_ABORT_UNLESS(!IsBridged() || IsInlinePile());
     return Topology->GetQuorumChecker();
 }
 

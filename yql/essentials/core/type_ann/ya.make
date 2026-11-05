@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 ENABLE(SKIP_YQL_STYLE_CPP)
 
@@ -40,7 +40,5 @@ PEERDIR(
     yql/essentials/public/udf_meta
     library/cpp/yson/node
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

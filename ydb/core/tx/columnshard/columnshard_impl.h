@@ -1,6 +1,7 @@
 #pragma once
 #include "background_controller.h"
 #include "columnshard.h"
+#include "columnshard_find_empty_history_intervals.h"
 #include "columnshard_private_events.h"
 #include "columnshard_subdomain_path_id.h"
 #include "counters.h"
@@ -13,6 +14,7 @@
 #include "common/path_id.h"
 #include "counters/columnshard.h"
 #include "counters/counters_manager.h"
+#include "counters/startup_timeline.h"
 #include "data_sharing/destination/events/control.h"
 #include "data_sharing/destination/events/transfer.h"
 #include "data_sharing/manager/sessions.h"
@@ -20,6 +22,7 @@
 #include "data_sharing/modification/events/change_owning.h"
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/source/events/transfer.h"
+#include "engines/reader/transaction/scan_gate.h"
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
@@ -214,6 +217,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxReadBlobRanges;
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
+    friend class TTxSaveCutHistoryRequests;
+    friend class TFindEmptyHistoryIntervalsResultProcessor;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitOnProposeTxSubscriberBase;
@@ -295,6 +300,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvUpdateChannelApproximateFreeSpace::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvStartCompaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvMetadataAccessorsInfo::TPtr& ev, const TActorContext& ctx);
 
@@ -307,6 +313,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& ev);
+    void Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev);
 
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
@@ -348,8 +356,9 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
     void SubscribeLockIfNotAlready(const ui64 lockId, const ui32 lockNodeId) const;
-    void ProposeTransaction(std::shared_ptr<TCommitOperation> op, const TActorId source, const ui64 cookie);
+    [[nodiscard]] bool ProposeTransaction(std::shared_ptr<TCommitOperation> op, const TActorId source, const ui64 cookie);
     void TransactionToAbort(const ui64 lockId);
+    void AbortNotProposedTransactions();
     void MaybeAbortTransaction(const ui64 lockId);
     void CancelTransaction(const ui64 txId);
 
@@ -394,6 +403,10 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
 
 public:
     TAtomicCounter InitShardCounter;
+
+    const TTabletCountersHandle& GetTabletCounters() const {
+        return *Counters.GetTabletCounters();
+    }
 
     ui64 BuildEphemeralTxId() {
         static TAtomicCounter Counter = 0;
@@ -447,8 +460,10 @@ protected:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
             default:
-                LOG_S_WARN("TColumnShard.StateBroken at " << TabletID() << " unhandled event type: " << ev->GetTypeName()
-                                                          << " event: " << ev->ToString());
+                YDB_LOG_WARN_COMP(TX_COLUMNSHARD, "TColumnShard.StateBroken at unhandled event",
+                    {"tabletID", TabletID()},
+                    {"type", ev->GetTypeName()},
+                    {"event", ev->ToString()});
                 Send(IEventHandle::ForwardOnNondelivery(std::move(ev), NActors::TEvents::TEvUndelivered::ReasonActorUnknown));
                 break;
         }
@@ -459,6 +474,7 @@ protected:
 private:
     std::unique_ptr<TTabletCountersBase> TabletCountersHolder;
     TCountersManager Counters;
+    TStartupTimeline StartupTimeline;
     std::unique_ptr<TWriteTasksQueue> WriteTasksQueue;
 
     std::unique_ptr<TTxController> ProgressTxController;
@@ -473,8 +489,6 @@ private:
     using TSchemaPreset = TSchemaPreset;
     using TTableInfo = TTableInfo;
 
-    const TMonotonic CreateInstant = TMonotonic::Now();
-    std::optional<TMonotonic> StartInstant;
     bool IsTxInitFinished = false;
 
     ui64 CurrentSchemeShardId = 0;
@@ -521,7 +535,7 @@ private:
     ui64 InProgressTxId = 0;
     bool ProgressTxScheduled = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
-    TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
+    NOlap::NReader::TScanGate ScanGate;
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;
@@ -597,6 +611,15 @@ private:
     void StartOneCompactionTask(const std::shared_ptr<NOlap::NCompaction::TGeneralCompactColumnEngineChanges>& indexChanges,
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
+    std::optional<TEmptyHistoryIntervalsScan> EmptyHistoryIntervalsScan;
+    void InitFindEmptyHistoryIntervals();
+    void StartFindEmptyHistoryIntervals(const TActorContext& ctx);
+    void AbortFindEmptyHistoryIntervals();
+    void FinishFindEmptyHistoryIntervalsBatch(const NOlap::TDataAccessorsResult& result);
+    void TryCutHistory(const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvContinueFindEmptyHistoryIntervals::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady::TPtr& ev, const TActorContext& ctx);
+    void SubmitMetadataRequest(const NOlap::TCSMetadataRequest& request);
     void SetupMetadata();
     bool SetupTtl();
     void SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders);

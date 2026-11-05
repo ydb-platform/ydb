@@ -547,6 +547,7 @@ namespace NKikimr {
                             Config->GarbageThresholdToRunFullCompactionPerMille,
                             logFunc);
             }
+            LocRecCtx->RepairedHuge->StripeAllocatorEnabled = Config->UseHeapAllocator;
             HugeBlobCtx = std::make_shared<THugeBlobCtx>(LocRecCtx->VCtx->VDiskLogPrefix,
                 LocRecCtx->RepairedHuge->Heap->BuildHugeSlotsMap(), Config->BlobHeaderMode,
                 LocRecCtx->PDiskCtx->Dsk->ChunkSize);

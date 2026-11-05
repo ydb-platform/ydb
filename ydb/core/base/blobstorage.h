@@ -579,6 +579,7 @@ struct TEvBlobStorage {
         EvControllerDDiskInfoGetTablet              = 0x10031634,
         EvControllerDDiskInfoGetTabletResult        = 0x10031635,
         EvControllerDDiskInfoTabletRevisionChanged  = 0x10031636,
+        EvControllerSubscribeDatabaseSpace          = 0x10031637,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -588,6 +589,7 @@ struct TEvBlobStorage {
         EvControllerNodeReport                      = 0x1003180d,
         EvControllerScrubStartQuantum               = 0x1003180e,
         EvControllerUpdateSystemViews               = 0x10031815,
+        EvControllerDatabaseSpaceState              = 0x10031816,
 
         // BlobCheckerOrchestrator <-> BSC interface
         EvBlobCheckerUpdateSettings                 = 0x10031820,
@@ -644,6 +646,7 @@ struct TEvBlobStorage {
         EvNodeWardenListLocalDDisksResult,
         EvNodeWardenAcquireBlobDepotS3Router,
         EvNodeWardenReleaseBlobDepotS3Router,
+        EvNodeConfigGetSelfHealState,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -670,6 +673,9 @@ struct TEvBlobStorage {
 
         // Device overestimation sample transport (DDisk/PersistentBuffer -> PDisk)
         EvDeviceOverestimationSamples,
+
+        EvVRestorePart,
+        EvVRestorePartResult,
 
         EvEnd
     };
@@ -1507,6 +1513,7 @@ struct TEvBlobStorage {
         const TWriteSource WriteSource;
         const std::optional<ui32> Version;
         bool IsMonitored = true;
+        bool IsIdempotent = false;
 
         TEvBlock(TCloneEventPolicy, const TEvBlock& origin)
             : TEvRequestCommon(CloneEventPolicy, origin)
@@ -1517,6 +1524,7 @@ struct TEvBlobStorage {
             , WriteSource(origin.WriteSource)
             , Version(origin.Version)
             , IsMonitored(origin.IsMonitored)
+            , IsIdempotent(origin.IsIdempotent)
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline,
@@ -1548,6 +1556,7 @@ struct TEvBlobStorage {
             }
             str << " Deadline# " << Deadline.MilliSeconds()
                 << " IsMonitored# " << IsMonitored
+                << " IsIdempotent# " << IsIdempotent
                 << "}";
             return str.Str();
         }
@@ -2745,6 +2754,8 @@ struct TEvBlobStorage {
     struct TEvControllerDistconfRequest;
     struct TEvControllerDistconfResponse;
     struct TEvControllerUpdateSyncerState;
+    struct TEvControllerSubscribeDatabaseSpace;
+    struct TEvControllerDatabaseSpaceState;
 
     struct TEvControllerAllocateDDiskBlockGroup;
     struct TEvControllerAllocateDDiskBlockGroupResult;

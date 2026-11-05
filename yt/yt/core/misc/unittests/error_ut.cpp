@@ -18,6 +18,8 @@
 #include <util/string/join.h>
 #include <util/string/split.h>
 
+#include <thread>
+
 namespace NYT {
 namespace {
 
@@ -115,7 +117,7 @@ TEST(TErrorTest, ErrorSanitizer)
 
         EXPECT_EQ("<host-override>", GetHost(error));
         EXPECT_EQ(0, error.GetPid());
-        EXPECT_EQ(NThreading::InvalidThreadId, error.GetTid());
+        EXPECT_EQ(InvalidThreadId, error.GetTid());
         EXPECT_EQ(NConcurrency::InvalidFiberId, GetFid(error));
         EXPECT_EQ(NTracing::InvalidTraceId, GetTraceId(error));
         EXPECT_EQ(NTracing::InvalidSpanId, GetSpanId(error));
@@ -138,7 +140,7 @@ TEST(TErrorTest, ErrorSanitizer)
         auto instant1 = TInstant::Days(123);
         TErrorSanitizerGuard guard1(
             instant1,
-            /*localHostNameOverride*/ TSharedRef::FromString(std::string("<host-override>")));
+            /*localHostNameOverride*/ "<host-override>");
 
         auto error2 = TError("error2");
         checkSantizied(error2);
@@ -148,8 +150,7 @@ TEST(TErrorTest, ErrorSanitizer)
             auto instant2 = TInstant::Days(234);
             TErrorSanitizerGuard guard2(
                 instant2,
-                /*localHostNameOverride*/
-                TSharedRef::FromString(std::string("<host-override>")));
+                /*localHostNameOverride*/ "<host-override>");
 
             auto error3 = TError("error3");
             checkSantizied(error3);
@@ -212,6 +213,33 @@ TEST(TErrorTest, NativeHostName)
 
     EXPECT_TRUE(HasHost(error));
     EXPECT_EQ(GetHost(error), TStringBuf(hostName));
+}
+
+TEST(TErrorTest, FormattedCopyEqualsOriginal)
+{
+    auto error = TError("FormattedCopyTest");
+    auto copy = error;
+    Y_UNUSED(ToString(copy));
+    EXPECT_EQ(error, copy);
+}
+
+TEST(TErrorTest, ConcurrentCopyAndFormat)
+{
+    auto error = TError("ConcurrentCopyAndFormatTest");
+
+    std::vector<std::thread> threads;
+    for (int threadIndex = 0; threadIndex < 4; ++threadIndex) {
+        threads.emplace_back([&] {
+            for (int iteration = 0; iteration < 1000; ++iteration) {
+                auto copy = error;
+                Y_UNUSED(ToString(error));
+                EXPECT_EQ(GetHost(copy), GetHost(error));
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
 }
 
 TEST(TErrorTest, NativeFiberId)

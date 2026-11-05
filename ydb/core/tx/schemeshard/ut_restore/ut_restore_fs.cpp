@@ -7,6 +7,8 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
+#include <yql/essentials/public/issue/protos/issue_severity.pb.h>
+
 #include <library/cpp/json/json_writer.h>
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>
@@ -62,6 +64,55 @@ public:
         WriteDataFileWithChecksum(fullPath, csvData, partNum);
     }
 
+    // Backup of a table with a plain secondary index and a vector index. The vector index
+    // dimensionality is decoupled from the data, so tests can request an index that cannot be built.
+    void CreateTableBackupWithIndexes(const TString& tablePath, const TString& tableName,
+                                      const TString& plainIndexName, const TVector<TString>& plainIndexColumns,
+                                      const TString& vectorIndexName, const TVector<TString>& vectorIndexColumns,
+                                      ui32 vectorDimension) {
+        const TString fullPath = TempDir.Name() + "/" + tablePath;
+        MakePathIfNotExist(fullPath.c_str());
+
+        CreateMetadataFile(fullPath);
+
+        TVector<Ydb::Table::TableIndex> indexes;
+        {
+            Ydb::Table::TableIndex index;
+            index.set_name(plainIndexName);
+            for (const auto& col : plainIndexColumns) {
+                index.add_index_columns(col);
+            }
+            index.mutable_global_index();
+            indexes.push_back(std::move(index));
+        }
+        {
+            Ydb::Table::TableIndex index;
+            index.set_name(vectorIndexName);
+            for (const auto& col : vectorIndexColumns) {
+                index.add_index_columns(col);
+            }
+            auto* kmeans = index.mutable_global_vector_kmeans_tree_index();
+            auto* settings = kmeans->mutable_vector_settings()->mutable_settings();
+            settings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8);
+            settings->set_vector_dimension(vectorDimension);
+            kmeans->mutable_vector_settings()->set_clusters(2);
+            kmeans->mutable_vector_settings()->set_levels(2);
+            indexes.push_back(std::move(index));
+        }
+
+        CreateTableSchemeFile(fullPath, tableName,
+            {
+                {"key", Ydb::Type::UINT32},
+                {"embedding", Ydb::Type::STRING},
+                {"value", Ydb::Type::STRING}
+            },
+            {"key"}, {}, indexes);
+
+        CreatePermissionsFile(fullPath);
+        CreateEmptyDataFile(fullPath);
+    }
+
 private:
     static void WriteFileWithChecksum(const TString& dirPath, const TString& fileName, const TString& content) {
         TFileOutput file(dirPath + "/" + fileName);
@@ -101,7 +152,8 @@ private:
     static void CreateTableSchemeFile(const TString& dirPath, const TString& tableName,
                                       const TVector<std::pair<TString, Ydb::Type::PrimitiveTypeId>>& columns,
                                       const TVector<TString>& keyColumns,
-                                      const TVector<TVector<TString>>& splitPoints = {}) {
+                                      const TVector<TVector<TString>>& splitPoints = {},
+                                      const TVector<Ydb::Table::TableIndex>& indexes = {}) {
         Ydb::Table::CreateTableRequest table;
         table.set_path(tableName);
 
@@ -113,6 +165,10 @@ private:
 
         for (const auto& keyCol : keyColumns) {
             table.add_primary_key(keyCol);
+        }
+
+        for (const auto& index : indexes) {
+            table.add_indexes()->CopyFrom(index);
         }
 
         if (!splitPoints.empty()) {
@@ -414,14 +470,80 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
         });
     }
 
+    Y_UNIT_TEST(ShouldSkipFailedIndexBuild) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableVectorIndex(true);
+
+        TTempBackupFiles backup;
+        backup.CreateTableBackupWithIndexes("backup/Table", "Table",
+            /* plainIndexName */ "idx_plain", /* plainIndexColumns */ {"value"},
+            /* vectorIndexName */ "idx_vector", /* vectorIndexColumns */ {"embedding"},
+            /* vectorDimension */ 3);
+
+        // The embeddings are 5 bytes long while the vector index expects 3-dimensional UINT8
+        // vectors (4 bytes including the format byte), so building that index is bound to fail.
+        backup.AddDataFile("backup/Table", R"(1,"hello%02","one"
+2,"world%02","two"
+)");
+
+        TString importSettings = Sprintf(R"(
+            ImportFromFsSettings {
+              base_path: "%s"
+              items {
+                source_path: "backup/Table"
+                destination_path: "/MyRoot/RestoredTable"
+              }
+            }
+        )", backup.GetBasePath().c_str());
+
+        TestImport(runtime, ++txId, "/MyRoot", importSettings);
+        env.TestWaitNotification(runtime, txId);
+
+        // The failed vector index build must not fail the whole import.
+        auto response = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        const auto& entry = response.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+
+        // The skipped index must be reported to the client as a warning even though the import succeeded.
+        bool sawSkippedIndexWarning = false;
+        for (const auto& issue : entry.GetIssues()) {
+            if (issue.message().Contains("Vector dimension mismatch")) {
+                UNIT_ASSERT(issue.severity() == NYql::TSeverityIds::S_WARNING);
+                sawSkippedIndexWarning = true;
+            }
+        }
+        UNIT_ASSERT_C(sawSkippedIndexWarning,
+            "expected a warning about the skipped vector index, got: " << entry.ShortDebugString());
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/RestoredTable"), {
+            NLs::PathExist,
+            NLs::IsTable
+        });
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/RestoredTable"), 2);
+
+        // The good index is built, proving that indexes are built during the import at all.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/RestoredTable/idx_plain"), {
+            NLs::PathExist,
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)
+        });
+
+        // The index that failed to build must be skipped, not left broken on the table.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/RestoredTable/idx_vector"), {
+            NLs::PathNotExist
+        });
+    }
+
     Y_UNIT_TEST(ShouldRestorePartitionedTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
 
         TTempBackupFiles backup;
 
@@ -477,11 +599,11 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
         runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(encrypted);
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FS_WRAPPER, NActors::NLog::PRI_TRACE);
 
         // Step 1: Create table with schema
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(

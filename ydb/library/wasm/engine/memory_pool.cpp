@@ -23,4 +23,4 @@ TWebAssemblyMemoryPool::~TWebAssemblyMemoryPool()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYdb::NWasm
+}   // namespace NYdb::NWasm

@@ -168,6 +168,7 @@ struct TDqChannelLimits {
     // the channels which have something for it, see TDqInputReadySet, and a compute actor checks its output channels
     // for finish only once one of them has, see TDqOutputFinishEpoch; off, the channels are polled as before
     bool EnableChannelNotifications = true;
+    TDuration UnboundWaitPeriod = TDuration::Minutes(10); // an auto-created descriptor nobody binds to is erased after this
 };
 
 NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId,

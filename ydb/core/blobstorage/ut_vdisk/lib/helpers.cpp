@@ -201,7 +201,7 @@ IActor *CreateRangeGet(const TActorId &notifyID, const TAllVDisks::TVDiskInstanc
 class TManyPuts : public TActorBootstrapped<TManyPuts> {
     struct TPut {
         ui64 Step;
-        TString Data;
+        std::shared_ptr<const TString> Data;
     };
 
     TConfiguration *Conf;
@@ -271,12 +271,12 @@ class TManyPuts : public TActorBootstrapped<TManyPuts> {
 
             const TPut &put = Puts[PutIdx];
 
-            TLogoBlobID logoBlobID(TabletId, Gen, put.Step, Channel, put.Data.size(), 0, 1);
+            TLogoBlobID logoBlobID(TabletId, Gen, put.Step, Channel, put.Data->size(), 0, 1);
             TVDiskIdShort mainVDiskId = TIngress::GetMainReplica(&Conf->GroupInfo->GetTopology(), logoBlobID);
             if (mainVDiskId == VDiskInfo.VDiskID) {
                 const bool noTimeout = RequestTimeout == TDuration::Seconds(0);
                 const TInstant deadline = noTimeout ? TInstant::Max() : TInstant::Now() + RequestTimeout;
-                auto s = put.Data;
+                auto s = *put.Data;
                 if (Conf->GroupInfo->Type.GetErasure() == NKikimr::TBlobStorageGroupType::Erasure4Plus2Block) {
                     s.resize(Conf->GroupInfo->Type.PartSize(logoBlobID));
                 }
@@ -327,8 +327,9 @@ class TManyPuts : public TActorBootstrapped<TManyPuts> {
         Puts.reserve(MsgNum);
         ui64 msgIdx = 0;
         for (ui32 packIdx = 0; packIdx < MsgPacks->size(); ++packIdx) {
+            const auto data = std::make_shared<const TString>(MsgPacks->at(packIdx).MsgData);
             for (ui32 i = 0; i < MsgPacks->at(packIdx).Count; ++i) {
-                Puts.push_back({msgIdx, MsgPacks->at(packIdx).MsgData});
+                Puts.push_back({msgIdx, data});
                 msgIdx++;
             }
         }

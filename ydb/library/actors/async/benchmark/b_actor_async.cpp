@@ -90,12 +90,12 @@ public:
         for (size_t i = 0; i < 64; ++i) {
             co_await Step();
         }
-        const auto before = TAsyncFrameCache::GetCurrent()->GetStats().HeapAllocations;
+        const auto before = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats().HeapAllocations;
         for (auto _ : State) {
             co_await Step();
         }
 
-        const auto stats = TAsyncFrameCache::GetCurrent()->GetStats();
+        const auto stats = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats();
         State.counters["heap_allocations_per_op"] = double(stats.HeapAllocations - before) / State.iterations();
         State.counters["retained_bytes"] = stats.CachedBytes;
         PassAway();
@@ -122,7 +122,7 @@ template<class TDriver>
 void BM_PingActor(benchmark::State& state, size_t budget = TAsyncFrameCache::DefaultSizeBytes) {
 
     THolder<TActorSystemSetup> setup(new TActorSystemSetup);
-    setup->AsyncFrameCacheSizeBytes = budget;
+    setup->RegisterSubSystem(std::make_unique<TAsyncFrameCache>(budget));
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[ setup->ExecutorsCount ]);
@@ -233,7 +233,7 @@ template<class TDriver>
 void BM_YieldActor(benchmark::State& state, size_t budget = TAsyncFrameCache::DefaultSizeBytes) {
 
     THolder<TActorSystemSetup> setup(new TActorSystemSetup);
-    setup->AsyncFrameCacheSizeBytes = budget;
+    setup->RegisterSubSystem(std::make_unique<TAsyncFrameCache>(budget));
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[ setup->ExecutorsCount ]);
@@ -281,12 +281,12 @@ public:
         for (size_t i = 0; i < 64; ++i) {
             benchmark::DoNotOptimize(co_await Step());
         }
-        const auto before = TAsyncFrameCache::GetCurrent()->GetStats().HeapAllocations;
+        const auto before = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats().HeapAllocations;
         for (auto _ : State) {
             benchmark::DoNotOptimize(co_await Step());
         }
 
-        const auto stats = TAsyncFrameCache::GetCurrent()->GetStats();
+        const auto stats = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats();
         // Step is inline: allocation elision is allowed in this control.
         State.counters["heap_allocations_per_op"] = double(stats.HeapAllocations - before) / State.iterations();
         State.counters["retained_bytes"] = stats.CachedBytes;
@@ -309,6 +309,7 @@ private:
 
 void BM_CallAsync(benchmark::State& state) {
     THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    setup->RegisterSubSystem(std::make_unique<TAsyncFrameCache>());
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[ setup->ExecutorsCount ]);
@@ -352,11 +353,11 @@ public:
         for (size_t i = 0; i < 64; ++i) {
             Root();
         }
-        const auto before = TAsyncFrameCache::GetCurrent()->GetStats().HeapAllocations;
+        const auto before = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats().HeapAllocations;
         for (auto _ : State) {
             Root();
         }
-        const auto stats = TAsyncFrameCache::GetCurrent()->GetStats();
+        const auto stats = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats();
         State.counters["heap_allocations_per_op"] = double(stats.HeapAllocations - before) / State.iterations();
         State.counters["frame_allocations_per_op"] = 2;
         State.counters["retained_bytes"] = stats.CachedBytes;
@@ -409,12 +410,12 @@ public:
         if (context.WarmupLeft) {
             Root();
             if (!--context.WarmupLeft) {
-                context.HeapBefore = TAsyncFrameCache::GetCurrent()->GetStats().HeapAllocations;
+                context.HeapBefore = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats().HeapAllocations;
             }
         } else if (context.State.KeepRunning()) {
             Root();
         } else {
-            const auto stats = TAsyncFrameCache::GetCurrent()->GetStats();
+            const auto stats = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats();
             context.State.counters["heap_allocations_per_op"] =
                 double(stats.HeapAllocations - context.HeapBefore) / context.State.iterations();
             context.State.counters["frame_allocations_per_op"] = 2;
@@ -491,6 +492,7 @@ private:
 
 void BM_RescheduleRunnableAsync(benchmark::State& state) {
     THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    setup->RegisterSubSystem(std::make_unique<TAsyncFrameCache>());
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[ setup->ExecutorsCount ]);

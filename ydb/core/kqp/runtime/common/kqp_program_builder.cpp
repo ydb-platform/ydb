@@ -1,0 +1,466 @@
+#include "kqp_program_builder.h"
+
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_runtime_version.h>
+
+namespace NKikimr::NMiniKQL {
+
+namespace {
+
+TType* GetRowType(const TProgramBuilder& builder, const TArrayRef<TKqpTableColumn>& columns) {
+    TStructTypeBuilder rowTypeBuilder(builder.GetTypeEnvironment());
+    for (auto& column : columns) {
+        TType* type = nullptr;
+        switch (column.Type) {
+            case NUdf::TDataType<NUdf::TDecimal>::Id: {
+                const NScheme::TDecimalType& decimal = column.TypeInfo.GetDecimalType();
+                type = TDataDecimalType::Create(decimal.GetPrecision(), decimal.GetScale(), builder.GetTypeEnvironment());
+                if (!column.NotNull)
+                    type = TOptionalType::Create(type, builder.GetTypeEnvironment());
+                break;
+            }
+            case NKikimr::NScheme::NTypeIds::Pg: {
+                type = TPgType::Create(NPg::PgTypeIdFromTypeDesc(column.TypeInfo.GetPgTypeDesc()), builder.GetTypeEnvironment());
+                break;
+            }
+            default: {
+                type = TDataType::Create(column.Type, builder.GetTypeEnvironment());
+                if (!column.NotNull)
+                    type = TOptionalType::Create(type, builder.GetTypeEnvironment());
+                break;
+            }
+        }
+
+        rowTypeBuilder.Add(column.Name, type);
+    }
+
+    return rowTypeBuilder.Build();
+}
+
+TRuntimeNode BuildColumnTags(const TProgramBuilder& builder, const TArrayRef<TKqpTableColumn>& columns) {
+    TStructLiteralBuilder tagsBuilder(builder.GetTypeEnvironment());
+    for (auto& column : columns) {
+        tagsBuilder.Add(column.Name, builder.NewDataLiteral<ui32>(column.Id));
+    }
+
+    return TRuntimeNode(tagsBuilder.Build(), true);
+}
+
+TRuntimeNode BuildTableIdLiteral(const TTableId& tableId, TProgramBuilder& builder) {
+    TVector<TRuntimeNode> tupleItems {
+        builder.NewDataLiteral<ui64>(tableId.PathId.OwnerId),
+        builder.NewDataLiteral<ui64>(tableId.PathId.LocalPathId),
+        builder.NewDataLiteral<NUdf::EDataSlot::String>(tableId.SysViewInfo),
+        builder.NewDataLiteral<ui64>(tableId.SchemaVersion),
+    };
+
+    return builder.NewTuple(tupleItems);
+}
+
+TRuntimeNode BuildKeyRangeNode(TProgramBuilder& builder, const TKqpKeyRange& range) {
+    TVector<TRuntimeNode> rangeItems;
+    rangeItems.reserve(4);
+    rangeItems.push_back(builder.NewTuple(range.FromTuple));
+    rangeItems.push_back(builder.NewDataLiteral(range.FromInclusive));
+    rangeItems.push_back(builder.NewTuple(range.ToTuple));
+    rangeItems.push_back(builder.NewDataLiteral(range.ToInclusive));
+
+    return builder.NewTuple(rangeItems);
+}
+
+TRuntimeNode BuildKeyRangesNode(TProgramBuilder& builder, const TKqpKeyRanges& range) {
+    TVector<TRuntimeNode> rangeItems{range.Ranges};
+    return builder.NewTuple(rangeItems);
+}
+
+TRuntimeNode BuildSkipNullKeysNode(TProgramBuilder& builder, const TKqpKeyRange& range) {
+    TListLiteralBuilder skipNullKeysBuilder(
+        builder.GetTypeEnvironment(),
+        builder.NewDataType(NUdf::TDataType<bool>::Id));
+
+    for (bool skipNull : range.SkipNullKeys) {
+        skipNullKeysBuilder.Add(builder.NewDataLiteral(skipNull));
+    }
+    return TRuntimeNode(skipNullKeysBuilder.Build(), true);
+}
+
+TType* MakeWideFlowType(TProgramBuilder& builder, TStructType* rowType) {
+    std::vector<TType*> tupleItems;
+    tupleItems.reserve(rowType->GetMembersCount());
+    for (ui32 i = 0; i < rowType->GetMembersCount(); ++i) {
+        tupleItems.push_back(rowType->GetMemberType(i));
+    }
+
+    return builder.NewFlowType(builder.NewMultiType(tupleItems));
+}
+
+TType* MakeBlockType(TProgramBuilder& builder, TStructType* rowType) {
+    std::vector<TType*> tupleItems;
+    tupleItems.reserve(rowType->GetMembersCount());
+    for (ui32 i = 0; i < rowType->GetMembersCount(); ++i) {
+        tupleItems.push_back(rowType->GetMemberType(i));
+    }
+
+    return builder.NewBlockType(builder.NewTupleType(tupleItems), TBlockType::EShape::Many);
+}
+
+EJoinKind GetIndexLookupJoinKind(const TString& joinKind) {
+    if (joinKind == "Inner") {
+        return EJoinKind::Inner;
+    } else if (joinKind == "Left") {
+        return EJoinKind::Left;
+    } else if (joinKind == "LeftOnly") {
+        return EJoinKind::LeftOnly;
+    } else if (joinKind == "RightSemi") {
+        return EJoinKind::RightSemi;
+    } else if (joinKind == "LeftSemi") {
+        return EJoinKind::LeftSemi;
+    } else {
+        MKQL_ENSURE_S(false, "Unexpected join kind: " << joinKind);
+    }
+}
+
+bool RightJoinSideAllowed(const TString& joinType) {
+    return joinType != "LeftOnly" && joinType != "LeftSemi";
+}
+
+bool RightJoinSideOptional(const TString& joinType) {
+    return joinType == "Left";
+}
+} // anonymous namespace
+
+TKqpProgramBuilder::TKqpProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
+    : TDqProgramBuilder(env, functionRegistry) {}
+
+TRuntimeNode TKqpProgramBuilder::KqpWideReadTable(const TTableId& tableId, const TKqpKeyRange& range,
+    const TArrayRef<TKqpTableColumn>& columns)
+{
+    auto rowType = GetRowType(*this, columns);
+    auto structType = AS_TYPE(TStructType, rowType);
+    auto returnType = MakeWideFlowType(*this, structType);
+
+    MKQL_ENSURE_S(returnType);
+    MKQL_ENSURE_S(returnType->IsFlow());
+    GetWideComponents(AS_TYPE(TFlowType, returnType));
+
+    TCallableBuilder builder(Env, __func__, returnType);
+    builder.Add(BuildTableIdLiteral(tableId, *this));
+    builder.Add(BuildKeyRangeNode(*this, range));
+    builder.Add(BuildColumnTags(*this, columns));
+    builder.Add(BuildSkipNullKeysNode(*this, range));
+    builder.Add(range.ItemsLimit ? range.ItemsLimit : NewNull());
+    builder.Add(NewDataLiteral(range.Reverse));
+
+    return TRuntimeNode(builder.Build(), false);
+}
+
+TRuntimeNode TKqpProgramBuilder::KqpWideReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& ranges,
+    const TArrayRef<TKqpTableColumn>& columns, TType* returnType)
+{
+    if (returnType == nullptr) {
+        auto rowType = GetRowType(*this, columns);
+        auto structType = AS_TYPE(TStructType, rowType);
+        returnType = MakeWideFlowType(*this, structType);
+    } else {
+        MKQL_ENSURE_S(returnType);
+        MKQL_ENSURE_S(returnType->IsFlow());
+        GetWideComponents(AS_TYPE(TFlowType, returnType));
+    }
+
+    TCallableBuilder builder(Env, __func__, returnType);
+    builder.Add(BuildTableIdLiteral(tableId, *this));
+    builder.Add(BuildKeyRangesNode(*this, ranges));
+    builder.Add(BuildColumnTags(*this, columns));
+    builder.Add(ranges.ItemsLimit);
+    builder.Add(NewDataLiteral(ranges.Reverse));
+
+    return TRuntimeNode(builder.Build(), false);
+}
+
+TRuntimeNode TKqpProgramBuilder::KqpBlockReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& ranges,
+    const TArrayRef<TKqpTableColumn>& columns, TType* returnType)
+{
+    if (returnType == nullptr) {
+        auto rowType = GetRowType(*this, columns);
+        auto structType = AS_TYPE(TStructType, rowType);
+        returnType = MakeBlockType(*this, structType);
+    } else {
+        MKQL_ENSURE_S(returnType);
+        MKQL_ENSURE_S(returnType->IsFlow());
+        GetWideComponents(AS_TYPE(TFlowType, returnType));
+    }
+
+    TCallableBuilder builder(Env, __func__, returnType);
+    builder.Add(BuildTableIdLiteral(tableId, *this));
+    builder.Add(BuildKeyRangesNode(*this, ranges));
+    builder.Add(BuildColumnTags(*this, columns));
+    builder.Add(ranges.ItemsLimit);
+    builder.Add(NewDataLiteral(ranges.Reverse));
+
+    return TRuntimeNode(builder.Build(), false);
+}
+
+TRuntimeNode TKqpProgramBuilder::KqpEnsure(TRuntimeNode value, TRuntimeNode predicate, TRuntimeNode issueCode,
+    TRuntimeNode message)
+{
+    bool isOptional;
+    const auto unpackedType = UnpackOptionalData(predicate, isOptional);
+    MKQL_ENSURE(unpackedType->GetSchemeType() == NUdf::TDataType<bool>::Id, "Expected bool.");
+
+    const auto& issueCodeType = issueCode.GetStaticType();
+    MKQL_ENSURE(issueCodeType->IsData(), "Expected data.");
+
+    const auto& issueCodeTypeData = static_cast<const TDataType&>(*issueCodeType);
+    MKQL_ENSURE(issueCodeTypeData.GetSchemeType() == NUdf::TDataType<ui32>::Id, "Expected uint32.");
+
+    const auto& messageType = message.GetStaticType();
+    MKQL_ENSURE(messageType->IsData(), "Expected data.");
+
+    const auto& messageTypeData = static_cast<const TDataType&>(*messageType);
+    MKQL_ENSURE(messageTypeData.GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id, "Expected string or utf8.");
+
+    TCallableBuilder callableBuilder(Env, __func__, value.GetStaticType());
+    callableBuilder.Add(value);
+    callableBuilder.Add(predicate);
+    callableBuilder.Add(issueCode);
+    callableBuilder.Add(message);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType,
+    const TString& leftLabel, const TString& rightLabel, ui32 cookieFormatVersion) {
+
+    auto inputRowItems = AS_TYPE(TTupleType, AS_TYPE(TStreamType, input.GetStaticType())->GetItemType());
+    MKQL_ENSURE(inputRowItems->GetElementsCount() == 3, "Expected 3 elements");
+
+    auto leftRowType = AS_TYPE(TStructType, inputRowItems->GetElementType(0));
+    auto rightRowType = AS_TYPE(TStructType, AS_TYPE(TOptionalType, inputRowItems->GetElementType(1))->GetItemType());
+
+    TStructTypeBuilder rowTypeBuilder(GetTypeEnvironment());
+
+    TVector<TString> leftRowColumns;
+    leftRowColumns.reserve(leftRowType->GetMembersCount());
+    for (ui32 i = 0; i < leftRowType->GetMembersCount(); ++i) {
+        TString newMemberName = leftLabel.empty() ? TString(leftRowType->GetMemberName(i))
+            : TString::Join(leftLabel, ".", leftRowType->GetMemberName(i));
+        rowTypeBuilder.Add(newMemberName, leftRowType->GetMemberType(i));
+        leftRowColumns.push_back(newMemberName);
+    }
+
+    TVector<TString> rightRowColumns;
+    rightRowColumns.reserve(rightRowType->GetMembersCount());
+    if (RightJoinSideAllowed(joinType)) {
+        for (ui32 i = 0; i < rightRowType->GetMembersCount(); ++i) {
+            TString newMemberName = rightLabel.empty() ? TString(rightRowType->GetMemberName(i))
+                : TString::Join(rightLabel, ".", rightRowType->GetMemberName(i));
+
+            const bool makeOptional = RightJoinSideOptional(joinType)
+                && rightRowType->GetMemberType(i)->GetKind() != TType::EKind::Optional
+                && rightRowType->GetMemberType(i)->GetKind() != TType::EKind::Pg;
+
+            TType* memberType = makeOptional
+                ? TOptionalType::Create(rightRowType->GetMemberType(i), GetTypeEnvironment())
+                : rightRowType->GetMemberType(i);
+
+            rowTypeBuilder.Add(newMemberName, memberType);
+            rightRowColumns.push_back(newMemberName);
+        }
+    }
+
+    auto resultRowStruct = rowTypeBuilder.Build();
+
+    TDictLiteralBuilder leftIndicesMap(GetTypeEnvironment(),
+        TDataType::Create(NUdf::TDataType<ui32>::Id, GetTypeEnvironment()),
+        TDataType::Create(NUdf::TDataType<ui32>::Id, GetTypeEnvironment())
+    );
+
+    for (ui32 i = 0; i < leftRowColumns.size(); ++i) {
+        auto resultIndex = resultRowStruct->GetMemberIndex(leftRowColumns[i]);
+        leftIndicesMap.Add(NewDataLiteral<ui32>(i), NewDataLiteral<ui32>(resultIndex));
+    }
+
+    TDictLiteralBuilder rightIndicesMap(GetTypeEnvironment(),
+        TDataType::Create(NUdf::TDataType<ui32>::Id, GetTypeEnvironment()),
+        TDataType::Create(NUdf::TDataType<ui32>::Id, GetTypeEnvironment())
+    );
+
+    for (ui32 i = 0; i < rightRowColumns.size(); ++i) {
+        auto resultIndex = resultRowStruct->GetMemberIndex(rightRowColumns[i]);
+        rightIndicesMap.Add(NewDataLiteral<ui32>(i), NewDataLiteral<ui32>(resultIndex));
+    }
+
+    auto returnType = NewStreamType(resultRowStruct);
+
+    TCallableBuilder callableBuilder(Env, __func__, returnType);
+    callableBuilder.Add(input);
+    callableBuilder.Add(NewDataLiteral<ui32>((ui32)GetIndexLookupJoinKind(joinType)));
+    callableBuilder.Add(TRuntimeNode(leftIndicesMap.Build(), true));
+    callableBuilder.Add(TRuntimeNode(rightIndicesMap.Build(), true));
+    // Legacy (v0) programs stay 4-arg for compatibility with older binaries during
+    // a rolling upgrade; the cookie format version is only appended when non-legacy.
+    if (cookieFormatVersion != 0) {
+        callableBuilder.Add(NewDataLiteral<ui32>(cookieFormatVersion));
+    }
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings, TRuntimeNode mode)
+{
+    // Validate text argument — String, Utf8, Json, JsonDocument (or optional of those)
+    const auto& textType = text.GetStaticType();
+    const TDataType* textDataType = nullptr;
+
+    if (textType->IsOptional()) {
+        auto optionalType = static_cast<const TOptionalType*>(textType);
+        auto itemType = optionalType->GetItemType();
+        MKQL_ENSURE(itemType->IsData(), "Expected data type inside optional for text.");
+        textDataType = static_cast<const TDataType*>(itemType);
+    } else {
+        MKQL_ENSURE(textType->IsData(), "Expected data or optional data type for text.");
+        textDataType = static_cast<const TDataType*>(textType);
+    }
+
+    const auto textSchemeType = textDataType->GetSchemeType();
+    switch (textSchemeType) {
+        case NScheme::NTypeIds::String:
+        case NScheme::NTypeIds::Utf8:
+        case NScheme::NTypeIds::Json:
+        case NScheme::NTypeIds::JsonDocument:
+            break;
+        default:
+            MKQL_ENSURE(false, "Expected String, Utf8, Json, or JsonDocument for text column.");
+    }
+
+    // Return type: List<Struct<__ydb_token:String or Utf8,__ydb_freq:Uint32>>
+    const auto tokenSchemeType = (textSchemeType == NScheme::NTypeIds::Json
+        || textSchemeType == NScheme::NTypeIds::JsonDocument)
+        ? NScheme::NTypeIds::String
+        : textSchemeType;
+    auto stringType = TDataType::Create(tokenSchemeType, Env);
+    auto freqType = TDataType::Create(NUdf::TDataType<ui32>::Id, GetTypeEnvironment());
+    TStructTypeBuilder rowTypeBuilder(GetTypeEnvironment());
+    rowTypeBuilder.Add(NTableIndex::NFulltext::FreqColumn, freqType);
+    rowTypeBuilder.Add(NTableIndex::NFulltext::TokenColumn, stringType);
+    auto rowType = rowTypeBuilder.Build();
+    auto listType = TListType::Create(rowType, Env);
+
+    // Validate settings argument - should be a string (serialized proto)
+    const auto& settingsType = settings.GetStaticType();
+    MKQL_ENSURE(settingsType->IsData(), "Expected data type for settings.");
+    const auto& settingsTypeData = static_cast<const TDataType&>(*settingsType);
+    MKQL_ENSURE(settingsTypeData.GetSchemeType() == NScheme::NTypeIds::String, "Expected string for settings.");
+
+    // Validate mode argument - should be Uint32
+    const auto& modeType = mode.GetStaticType();
+    MKQL_ENSURE(modeType->IsData(), "Expected data type for mode.");
+    const auto& modeTypeData = static_cast<const TDataType&>(*modeType);
+    MKQL_ENSURE(modeTypeData.GetSchemeType() == NUdf::TDataType<ui32>::Id, "Expected Uint32 for mode.");
+
+    TCallableBuilder callableBuilder(Env, __func__, listType);
+    callableBuilder.Add(text);
+    callableBuilder.Add(settings);
+    callableBuilder.Add(mode);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TKqpProgramBuilder::KqpStreamingAggregation(TRuntimeNode flow,
+                                                   const TUnaryLambda& keyExtractor,
+                                                   const TUnaryLambda& init,
+                                                   const TBinaryLambda& update,
+                                                   const TBinaryLambda& finish,
+                                                   TRuntimeNode stateTablePath,
+                                                   const TUnaryLambda& save,
+                                                   const TUnaryLambda& load,
+                                                   const TBinaryLambda& merge)
+{
+    auto flowType = AS_TYPE(TFlowType, flow);
+    auto itemType = flowType->GetItemType();
+
+    TRuntimeNode itemArg = Arg(itemType);
+    auto outKey = keyExtractor(itemArg);
+
+    auto keyType = outKey.GetStaticType();
+    TRuntimeNode keyArg = Arg(keyType);
+
+    auto outInit = init(itemArg);
+    auto stateType = outInit.GetStaticType();
+    TRuntimeNode stateArg = Arg(stateType);
+
+    auto outUpdate = update(stateArg, itemArg);
+    MKQL_ENSURE(outUpdate.GetStaticType()->IsSameType(*stateType),
+                "KqpStreamingAggregation: update lambda must produce the same state type as init");
+
+    auto outSave = save ? save(stateArg) : stateArg;
+    auto savedStateArg = Arg(outSave.GetStaticType());
+    auto outLoad = load ? load(savedStateArg) : savedStateArg;
+    MKQL_ENSURE(outLoad.GetStaticType()->IsSameType(*stateType),
+                "KqpStreamingAggregation: load lambda must produce the same state type as init");
+
+    auto outFinish = finish(keyArg, stateArg);
+    auto resultType = TFlowType::Create(outFinish.GetStaticType(), GetTypeEnvironment());
+
+    TCallableBuilder callableBuilder(GetTypeEnvironment(), __func__, resultType);
+    callableBuilder.Add(flow);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(stateArg);
+    callableBuilder.Add(keyArg);
+    callableBuilder.Add(outKey);
+    callableBuilder.Add(outInit);
+    callableBuilder.Add(outUpdate);
+    callableBuilder.Add(outFinish);
+    callableBuilder.Add(stateTablePath);
+    callableBuilder.Add(savedStateArg);
+    callableBuilder.Add(outSave);
+    callableBuilder.Add(outLoad);
+
+    if (merge) {
+        auto mergeArg = Arg(stateType);
+        auto outMerge = merge(stateArg, mergeArg);
+        MKQL_ENSURE(outMerge.GetStaticType()->IsSameType(*stateType), "KqpStreamingAggregation: merge lambda must produce the same state type as init");
+        callableBuilder.Add(mergeArg);
+        callableBuilder.Add(outMerge);
+    }
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TKqpProgramBuilder::KqpStreamEnumerate(TRuntimeNode input)
+{
+    const auto inputType = input.GetStaticType();
+
+    TType* itemType = nullptr;
+    enum class EKind { List, Flow, Stream } kind;
+    if (inputType->IsList()) {
+        itemType = static_cast<const TListType*>(inputType)->GetItemType();
+        kind = EKind::List;
+    } else if (inputType->IsFlow()) {
+        itemType = static_cast<const TFlowType*>(inputType)->GetItemType();
+        kind = EKind::Flow;
+    } else if (inputType->IsStream()) {
+        itemType = static_cast<const TStreamType*>(inputType)->GetItemType();
+        kind = EKind::Stream;
+    } else {
+        MKQL_ENSURE(false, "KqpStreamEnumerate: expected list, flow or stream input");
+    }
+
+    auto rankType = TDataType::Create(NUdf::TDataType<ui64>::Id, Env);
+    std::array<TType*, 2> pairElems = {{ rankType, itemType }};
+    auto pairType = TTupleType::Create(pairElems.size(), pairElems.data(), Env);
+
+    TType* resultType = nullptr;
+    switch (kind) {
+        case EKind::List:   resultType = TListType::Create(pairType, Env); break;
+        case EKind::Flow:   resultType = TFlowType::Create(pairType, Env); break;
+        case EKind::Stream: resultType = TStreamType::Create(pairType, Env); break;
+    }
+
+    TCallableBuilder callableBuilder(Env, __func__, resultType);
+    callableBuilder.Add(input);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+} // namespace NKikimr::NMiniKQL

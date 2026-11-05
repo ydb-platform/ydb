@@ -9,4 +9,4 @@ class IGraphTransformer;
 
 TAutoPtr<IGraphTransformer> CreatePqDataSourceConstraintTransformer(TIntrusivePtr<TPqState> state);
 
-} // namespace NYql
+}   // namespace NYql

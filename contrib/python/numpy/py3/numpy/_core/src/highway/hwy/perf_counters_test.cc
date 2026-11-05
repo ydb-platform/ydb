@@ -21,14 +21,11 @@
 
 #include <vector>
 
+#include "hwy/contrib/thread_pool/futex.h"  // NanoSleep
 #include "hwy/nanobenchmark.h"  // Unpredictable1
 #include "hwy/tests/hwy_gtest.h"
 #include "hwy/tests/test_util-inl.h"
 #include "hwy/timer.h"
-
-#if !HWY_OS_WIN
-#include <unistd.h>  // usleep
-#endif
 
 namespace hwy {
 namespace {
@@ -86,7 +83,7 @@ TEST(PerfCountersTest, TestMem) {
   HWY_ASSERT(values[PerfCounters::kPageFaults] == 0.0 ||
              values[PerfCounters::kPageFaults] > 1);  // 4..500K
   HWY_ASSERT(values[PerfCounters::kBranches] == 0.0 ||
-             values[PerfCounters::kBranches] > 1E6);
+             values[PerfCounters::kBranches] > 1E5);           // > 900K
   HWY_ASSERT(values[PerfCounters::kBranchMispredicts] < 1E7);  // 273K..1M
 
   HWY_ASSERT(values[PerfCounters::kL3Loads] == 0.0 ||
@@ -99,7 +96,7 @@ TEST(PerfCountersTest, TestMem) {
   HWY_ASSERT(values[PerfCounters::kCacheMisses] == 0.0 ||
              values[PerfCounters::kCacheMisses] > 1.0);  // 10..51M
   HWY_ASSERT(values[PerfCounters::kBusCycles] == 0.0 ||
-             values[PerfCounters::kBusCycles] > 1E7);  // 82M
+             values[PerfCounters::kBusCycles] > 1E6);  // 8M
 }
 
 // Ensures a branch-heavy workload has high branch-related counters and not
@@ -122,10 +119,8 @@ TEST(PerfCountersTest, RunBranches) {
       // Entirely different operation to ensure there is a branch.
       r >>= 1;
     }
-#if !HWY_OS_WIN
     // Ensure test runs long enough for counter multiplexing to happen.
-    usleep(100);  // NOLINT(runtime/sleep)
-#endif
+    NanoSleep(100 * 1000);
   }
 
   double values[64] = {0.0};
@@ -142,12 +137,12 @@ TEST(PerfCountersTest, RunBranches) {
   HWY_ASSERT(values[PerfCounters::kBranchMispredicts] == 0 ||
              values[PerfCounters::kBranchMispredicts] > 10.0);  // 65..5K
 
-  HWY_ASSERT(values[PerfCounters::kL3Loads] < 1E7);       // 174K..1M
-  HWY_ASSERT(values[PerfCounters::kL3Stores] < 1E6);      // 44K..128K
-  HWY_ASSERT(values[PerfCounters::kCacheRefs] < 1E8);     // 5M..27M
+  HWY_ASSERT(values[PerfCounters::kL3Loads] < 1E8);       // 174K..12M
+  HWY_ASSERT(values[PerfCounters::kL3Stores] < 1E7);      // 44K..1.8M
+  HWY_ASSERT(values[PerfCounters::kCacheRefs] < 1E9);     // 5M..104M
   HWY_ASSERT(values[PerfCounters::kCacheMisses] < 1E8);   // 500K..10M
   HWY_ASSERT(values[PerfCounters::kBusCycles] < 1E11);    // 1M..10B
-  HWY_ASSERT(values[PerfCounters::kPageFaults] < 100.0);  // 0..12
+  HWY_ASSERT(values[PerfCounters::kPageFaults] < 1E4);    // 0..1.1K (in SDE)
 }
 
 }  // namespace

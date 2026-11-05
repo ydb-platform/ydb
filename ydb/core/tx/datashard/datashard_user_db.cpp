@@ -347,19 +347,28 @@ void TDataShardUserDb::EraseRow(
 
     if (CollectAffectedRows && rowExists) {
         Counters.NAffectedRows = Counters.NAffectedRows.value_or(0) + 1;
-        // The flag-gated existence check is a real read; account it.
+    }
+    if (rowExists) {
+        // rowExists can only be true when RowExists() was actually executed
+        // (see the CollectAffectedRows / OptimisticSnapshotIsolation gate
+        // above); that existence check is a real read, account it.
         IncreaseSelectCounters(key);
     }
 }
 
 bool TDataShardUserDb::PrechargeRow(
     const TTableId& tableId,
-    const TArrayRef<const TRawTypeValue> key)
+    const TArrayRef<const TRawTypeValue> key,
+    bool needsMvccRead)
 {
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected PrechargeRow for an unknown table");
 
-    return Db.Precharge(localTableId, key, key, {}, 0, Max<ui64>(), Max<ui64>()).Ready;
+    // Finite version enables precharging history pages that we may need for
+    // reading from a snapshot.
+    const auto version = needsMvccRead ? MvccVersion : TRowVersion::Max();
+    return Db.Precharge(localTableId, key, key, {}, 0, Max<ui64>(), Max<ui64>(),
+        NTable::EDirection::Forward, version).Ready;
 }
 
 void TDataShardUserDb::IncreaseUpdateCounters(
@@ -565,10 +574,11 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
     }
 
     if (auto lock = Self.SysLocksTable().GetRawLock(lockId); lock && !VolatileCommitOrdered) {
-        lock->ForAllVolatileDependencies([this](ui64 txId) {
-            auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId);
+        lock->ForAllVolatileDependencies([this](ui64 dependencyTxId) {
+            auto& manager = Self.GetVolatileTxManager();
+            auto* info = manager.FindByTxId(dependencyTxId);
             if (info && info->State != EVolatileTxState::Aborting) {
-                if (VolatileDependencies.insert(txId).second) {
+                if (VolatileDependencies.insert(info->TxId).second) {
                     EnsureVolatileTxId();
                 }
             }

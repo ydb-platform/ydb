@@ -1,14 +1,12 @@
-#include "object.h"
 #include "behaviour.h"
-
-#include <library/cpp/json/json_reader.h>
+#include "object.h"
 
 #include <ydb/services/metadata/abstract/request_features.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <util/generic/serialized_enum.h>
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>
-
 
 namespace NKikimr::NWorkloadManager {
 
@@ -16,23 +14,15 @@ namespace {
 
 using namespace NResourcePool;
 
-void ResetOptionalConfigField(
-    NJson::TJsonValue& configPatch,
-    const TString& key,
-    bool& hasConfigPatch)
+void ResetOptionalConfigField(NJson::TJsonValue& configPatch, const TString& key, bool& hasConfigPatch)
 {
-    configPatch.InsertValue(key, NJson::TJsonValue{NJson::JSON_NULL});
+    configPatch.InsertValue(key, NJson::TJsonValue{ NJson::JSON_NULL });
     hasConfigPatch = true;
 }
 
 template <typename T, typename TSetNonEmpty>
-std::optional<TString> ParseOptionalFeature(
-    NYql::TFeaturesExtractor& featuresExtractor,
-    const TString& key,
-    std::optional<T>& field,
-    NJson::TJsonValue& configPatch,
-    bool& hasConfigPatch,
-    TSetNonEmpty&& setNonEmpty)
+std::optional<TString> ParseOptionalFeature(NYql::TFeaturesExtractor& featuresExtractor, const TString& key, std::optional<T>& field,
+    NJson::TJsonValue& configPatch, bool& hasConfigPatch, TSetNonEmpty&& setNonEmpty)
 {
     if (std::optional<TString> value = featuresExtractor.Extract(key)) {
         if (!value->empty()) {
@@ -55,7 +45,7 @@ std::optional<TString> ParseOptionalFeature(
     return std::nullopt;
 }
 
-class TJsonConfigsMerger : public NMetadata::NModifications::IColumnValuesMerger {
+class TJsonConfigsMerger: public NMetadata::NModifications::IColumnValuesMerger {
 public:
     virtual TConclusionStatus Merge(Ydb::Value& value, const Ydb::Value& patch) const override {
         NJson::TJsonValue selfConfigJson;
@@ -78,8 +68,7 @@ public:
 
         if (selfConfigJson.Has("action")) {
             EClassifierAction action;
-            if (TryFromString(to_lower(selfConfigJson["action"].GetStringRobust()), action)
-                && action == EClassifierAction::Reject)
+            if (TryFromString(to_lower(selfConfigJson["action"].GetStringRobust()), action) && action == EClassifierAction::Reject)
             {
                 selfConfigJson.EraseValue("resource_pool");
             }
@@ -93,8 +82,7 @@ public:
     }
 };
 
-}  // anonymous namespace
-
+}   // anonymous namespace
 
 //// TResourcePoolClassifierConfig::TDecoder
 
@@ -103,7 +91,8 @@ TResourcePoolClassifierConfig::TDecoder::TDecoder(const Ydb::ResultSet& rawData)
     , NameIdx(GetFieldIndex(rawData, Name))
     , RankIdx(GetFieldIndex(rawData, Rank))
     , ConfigJsonIdx(GetFieldIndex(rawData, ConfigJson))
-{}
+{
+}
 
 //// TResourcePoolClassifierConfig
 
@@ -118,8 +107,7 @@ NMetadata::NModifications::IColumnValuesMerger::TPtr TResourcePoolClassifierConf
 
 NJson::TJsonValue TResourcePoolClassifierConfig::SerializeToJson(const NResourcePool::TClassifierSettings& settings) {
     NJson::TJsonValue json = NJson::JSON_MAP;
-    const bool isReject = settings.Action
-        && *settings.Action == NResourcePool::EClassifierAction::Reject;
+    const bool isReject = settings.Action && *settings.Action == NResourcePool::EClassifierAction::Reject;
     if (settings.ResourcePool && !isReject) {
         json.InsertValue(JSON_KEY_RESOURCE_POOL, *settings.ResourcePool);
     }
@@ -214,8 +202,7 @@ NResourcePool::TClassifierSettings TResourcePoolClassifierConfig::DeserializeFro
 //// ParseFromFeaturesExtractor
 
 std::optional<TString> TResourcePoolClassifierConfig::ParseFromFeaturesExtractor(
-    NYql::TFeaturesExtractor& featuresExtractor,
-    TParseResult* result)
+    NYql::TFeaturesExtractor& featuresExtractor, TParseResult* result)
 {
     auto& settings = result->Settings;
     auto& configPatch = result->ConfigPatch;
@@ -225,8 +212,8 @@ std::optional<TString> TResourcePoolClassifierConfig::ParseFromFeaturesExtractor
         try {
             settings.Rank = FromString<i64>(*value);
             if (settings.Rank < -1) {
-                return TStringBuilder() << "Failed to parse property " << JSON_KEY_RANK
-                    << ": Invalid integer value " << settings.Rank << ", it is should be greater or equal -1";
+                return TStringBuilder() << "Failed to parse property " << JSON_KEY_RANK << ": Invalid integer value " << settings.Rank
+                                        << ", it is should be greater or equal -1";
             }
             result->HasRank = true;
         } catch (const yexception& error) {
@@ -239,8 +226,7 @@ std::optional<TString> TResourcePoolClassifierConfig::ParseFromFeaturesExtractor
     // Parse resource_pool
     if (std::optional<TString> value = featuresExtractor.Extract(JSON_KEY_RESOURCE_POOL)) {
         if (value->empty()) {
-            return TStringBuilder() << "Failed to parse property " << JSON_KEY_RESOURCE_POOL
-                << ": resource pool name must not be empty";
+            return TStringBuilder() << "Failed to parse property " << JSON_KEY_RESOURCE_POOL << ": resource pool name must not be empty";
         }
         settings.ResourcePool = *value;
         configPatch.InsertValue(JSON_KEY_RESOURCE_POOL, *value);
@@ -251,30 +237,30 @@ std::optional<TString> TResourcePoolClassifierConfig::ParseFromFeaturesExtractor
     }
 
     // Parse member_name
-    if (auto error = ParseOptionalFeature<TString>(
-            featuresExtractor, JSON_KEY_MEMBER_NAME, settings.MemberName, configPatch, result->HasConfigPatch,
-            [&](const TString& value, std::optional<TString>& field, NJson::TJsonValue& patch) {
-                field = value;
-                patch.InsertValue(JSON_KEY_MEMBER_NAME, value);
-            }))
+    if (auto error =
+            ParseOptionalFeature<TString>(featuresExtractor, JSON_KEY_MEMBER_NAME, settings.MemberName, configPatch, result->HasConfigPatch,
+                [&](const TString& value, std::optional<TString>& field, NJson::TJsonValue& patch) {
+                    field = value;
+                    patch.InsertValue(JSON_KEY_MEMBER_NAME, value);
+                }))
     {
         return error;
     }
 
     // Parse has_app_name
-    if (auto error = ParseOptionalFeature<TString>(
-            featuresExtractor, JSON_KEY_HAS_APP_NAME, settings.HasAppName, configPatch, result->HasConfigPatch,
-            [&](const TString& value, std::optional<TString>& field, NJson::TJsonValue& patch) {
-                field = value;
-                patch.InsertValue(JSON_KEY_HAS_APP_NAME, value);
-            }))
+    if (auto error =
+            ParseOptionalFeature<TString>(featuresExtractor, JSON_KEY_HAS_APP_NAME, settings.HasAppName, configPatch, result->HasConfigPatch,
+                [&](const TString& value, std::optional<TString>& field, NJson::TJsonValue& patch) {
+                    field = value;
+                    patch.InsertValue(JSON_KEY_HAS_APP_NAME, value);
+                }))
     {
         return error;
     }
 
     // Parse has_full_scan
-    if (auto error = ParseOptionalFeature<TRegexPredicate>(
-            featuresExtractor, JSON_KEY_HAS_FULL_SCAN, settings.HasFullScan, configPatch, result->HasConfigPatch,
+    if (auto error = ParseOptionalFeature<TRegexPredicate>(featuresExtractor, JSON_KEY_HAS_FULL_SCAN, settings.HasFullScan, configPatch,
+            result->HasConfigPatch,
             [&](const TString& value, std::optional<TRegexPredicate>& field, NJson::TJsonValue& patch) {
                 field = TRegexPredicate::FromGlob(value);
                 patch.InsertValue(JSON_KEY_HAS_FULL_SCAN, value);
@@ -284,19 +270,18 @@ std::optional<TString> TResourcePoolClassifierConfig::ParseFromFeaturesExtractor
     }
 
     // Parse has_path
-    if (auto error = ParseOptionalFeature<TRegexPredicate>(
-            featuresExtractor, JSON_KEY_HAS_PATH, settings.HasPath, configPatch, result->HasConfigPatch,
-            [&](const TString& value, std::optional<TRegexPredicate>& field, NJson::TJsonValue& patch) {
-                field = TRegexPredicate::FromGlob(value);
-                patch.InsertValue(JSON_KEY_HAS_PATH, value);
-            }))
+    if (auto error =
+            ParseOptionalFeature<TRegexPredicate>(featuresExtractor, JSON_KEY_HAS_PATH, settings.HasPath, configPatch, result->HasConfigPatch,
+                [&](const TString& value, std::optional<TRegexPredicate>& field, NJson::TJsonValue& patch) {
+                    field = TRegexPredicate::FromGlob(value);
+                    patch.InsertValue(JSON_KEY_HAS_PATH, value);
+                }))
     {
         return error;
     }
 
     // Parse has_stream
-    if (auto error = ParseOptionalFeature<bool>(
-            featuresExtractor, JSON_KEY_HAS_STREAM, settings.HasStream, configPatch, result->HasConfigPatch,
+    if (auto error = ParseOptionalFeature<bool>(featuresExtractor, JSON_KEY_HAS_STREAM, settings.HasStream, configPatch, result->HasConfigPatch,
             [&](const TString& value, std::optional<bool>& field, NJson::TJsonValue& patch) {
                 field = FromString<bool>(value);
                 patch.InsertValue(JSON_KEY_HAS_STREAM, *field);
@@ -310,9 +295,8 @@ std::optional<TString> TResourcePoolClassifierConfig::ParseFromFeaturesExtractor
         if (!value->empty()) {
             NResourcePool::EClassifierAction parsed;
             if (!TryFromString(to_lower(*value), parsed)) {
-                return TStringBuilder() << "Failed to parse property " << JSON_KEY_ACTION
-                    << ": Invalid action '" << *value
-                    << "', supported values: " << GetEnumAllNames<NResourcePool::EClassifierAction>();
+                return TStringBuilder() << "Failed to parse property " << JSON_KEY_ACTION << ": Invalid action '" << *value
+                                        << "', supported values: " << GetEnumAllNames<NResourcePool::EClassifierAction>();
             }
             settings.Action = parsed;
             configPatch.InsertValue(JSON_KEY_ACTION, ToString(parsed));
@@ -389,4 +373,4 @@ TString TResourcePoolClassifierConfig::GetTypeId() {
     return "RESOURCE_POOL_CLASSIFIER";
 }
 
-}  // namespace NKikimr::NWorkloadManager
+}   // namespace NKikimr::NWorkloadManager

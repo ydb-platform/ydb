@@ -12,8 +12,10 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
+#include <ydb/library/query_actor/query_actor.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 namespace NKikimr {
@@ -57,6 +59,70 @@ std::unordered_map<std::string, std::unordered_set<std::string>> ParseCompileCac
         UNIT_ASSERT(parser.TryNextRow());
         auto value = parser.ColumnParser("cnt").GetUint64();
         return value;
+    }
+
+    struct TCompileCacheAggregateResult {
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+        TVector<NYdb::TResultSet> ResultSets;
+    };
+
+    class TCompileCacheAggregateProbe : public TQueryBase {
+    public:
+        TCompileCacheAggregateProbe(TString query, NThreading::TPromise<TCompileCacheAggregateResult> promise)
+            : TQueryBase(NKikimrServices::KQP_COMPILE_SERVICE, {}, "/Root", true, true)
+            , Query(std::move(query))
+            , Promise(std::move(promise))
+        {}
+
+    private:
+        void OnRunQuery() override {
+            RunStreamQuery(Query);
+        }
+
+        void OnStreamResult(NYdb::TResultSet&& resultSet) override {
+            ResultSets.push_back(std::move(resultSet));
+        }
+
+        void OnQueryResult() override {
+            Finish();
+        }
+
+        void OnFinish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
+            Promise.SetValue(TCompileCacheAggregateResult{status, std::move(issues), std::move(ResultSets)});
+        }
+
+        TString Query;
+        NThreading::TPromise<TCompileCacheAggregateResult> Promise;
+        TVector<NYdb::TResultSet> ResultSets;
+    };
+
+    TCompileCacheAggregateResult RunCompileCacheWarmupAggregate(TTestActorRuntime& runtime, const TString& predicate) {
+        // Use the same internal ScanQuery entry point and system token as TFetchTruncatedCountActor.
+        const TString query = TStringBuilder()
+            << "SELECT SUM(CASE WHEN IsTruncated = true THEN 1 ELSE 0 END) AS TruncatedCount,"
+            << " SUM(CASE WHEN QueryType IS NULL OR QueryType = '' THEN 1 ELSE 0 END) AS EmptyQueryTypeCount"
+            << " FROM `/Root/.sys/compile_cache_queries` WHERE AccessCount > 0 AND " << predicate;
+        auto promise = NThreading::NewPromise<TCompileCacheAggregateResult>();
+        auto future = promise.GetFuture();
+        runtime.Register(new TCompileCacheAggregateProbe(query, std::move(promise)));
+        return runtime.WaitFuture(future);
+    }
+
+    void AssertCompileCacheAggregate(const TCompileCacheAggregateResult& result,
+        std::optional<i64> expected = std::nullopt)
+    {
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::SUCCESS, result.Issues.ToString());
+        ui64 rows = 0;
+        for (const auto& resultSet : result.ResultSets) {
+            NYdb::TResultSetParser parser(resultSet);
+            while (parser.TryNextRow()) {
+                ++rows;
+                UNIT_ASSERT(parser.ColumnParser("TruncatedCount").GetOptionalInt64() == expected);
+                UNIT_ASSERT(parser.ColumnParser("EmptyQueryTypeCount").GetOptionalInt64() == expected);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rows, 1);
     }
 
 
@@ -1442,6 +1508,87 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         }
     }
 
+    Y_UNIT_TEST(CompileCacheWarmupAggregatePartialPeerFailure) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false).SetUseRealThreads(false));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
+        const ui32 liveNodeId = runtime.GetNodeId(0);
+        const ui32 deadNodeId = liveNodeId + 1;
+        auto client = kikimr.GetTableClient();
+        auto session = kikimr.RunCall([&] {
+            return client.CreateSession().GetValueSync();
+        });
+        UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+        const TString probe = "SELECT 42 AS aggregate_peer_warning_probe";
+        for (ui32 i = 0; i < 2; ++i) {
+            auto populated = kikimr.RunCall([&] {
+                return session.GetSession().ExecuteDataQuery(probe,
+                    TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings().KeepInQueryCache(true)).GetValueSync();
+            });
+            UNIT_ASSERT_C(populated.IsSuccess(), populated.GetIssues().ToString());
+        }
+        ui32 failedRequests = 0;
+        const auto nodesObserver = runtime.AddObserver<TEvKqp::TEvListProxyNodesResponse>(
+            [&](TEvKqp::TEvListProxyNodesResponse::TPtr& ev) {
+                ev->Get()->ProxyNodes = {liveNodeId, deadNodeId};
+            });
+        const auto requestObserver = runtime.AddObserver<IEventHandle>(
+            [&](IEventHandle::TPtr& ev) {
+                if (ev->Type != TEvKqp::TEvListQueryCacheQueriesRequest::EventType || ev->Cookie != deadNodeId) {
+                    return;
+                }
+                ++failedRequests;
+                runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                    new TEvents::TEvUndelivered(TEvKqp::TEvListQueryCacheQueriesRequest::EventType,
+                        TEvents::TEvUndelivered::Disconnected), 0, ev->Cookie));
+                ev.Reset();
+            });
+        ui32 deliveredWarnings = 0;
+        const auto warningObserver = runtime.AddObserver<TEvKqpCompute::TEvScanWarning>(
+            [&](TEvKqpCompute::TEvScanWarning::TPtr& ev) {
+                // Check delivery to the consumer, including forwarding through the ranges reader.
+                if (runtime.FindActorName(ev->GetRecipientRewrite()) != "KQP_COMPUTE_ACTOR") {
+                    return;
+                }
+                const auto& issues = ev->Get()->Issues;
+                UNIT_ASSERT(!issues.Empty());
+                for (const auto& issue : issues) {
+                    UNIT_ASSERT_C(issue.GetSeverity() == NYql::TSeverityIds::S_WARNING, issues.ToString());
+                }
+                UNIT_ASSERT_STRING_CONTAINS(issues.ToString(),
+                    TStringBuilder() << "node_id=" << deadNodeId);
+                ++deliveredWarnings;
+            });
+        const TVector<TString> nodePredicates = {
+            TStringBuilder() << "NodeId IN (" << liveNodeId << ", " << deadNodeId << ")",
+            TStringBuilder() << "(NodeId BETWEEN " << liveNodeId << " AND " << deadNodeId
+                << " OR NodeId = " << deadNodeId + 2 << ")",
+        };
+        for (const auto& nodePredicate : nodePredicates) {
+            for (bool empty : {true, false}) {
+                const auto requestsBefore = failedRequests;
+                const auto warningsBefore = deliveredWarnings;
+                const auto result = RunCompileCacheWarmupAggregate(runtime,
+                    TStringBuilder() << nodePredicate << " AND Query = '"
+                        << (empty ? TString("__missing_compile_cache_aggregate_probe__") : probe) << "'");
+                UNIT_ASSERT_C(failedRequests > requestsBefore, "One of the selected peers must fail after discovery");
+                AssertCompileCacheAggregate(result, empty ? std::nullopt : std::optional<i64>(0));
+                UNIT_ASSERT_C(deliveredWarnings > warningsBefore,
+                    "The compute actor must receive a partial scan warning");
+            }
+        }
+
+        // A real scan failure must still fail the query.
+        const auto requestsBefore = failedRequests;
+        const auto warningsBefore = deliveredWarnings;
+        const auto result = RunCompileCacheWarmupAggregate(runtime,
+            TStringBuilder() << "NodeId IN (" << deadNodeId << ")");
+        UNIT_ASSERT_C(failedRequests > requestsBefore, "The selected peer must fail after discovery");
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status, Ydb::StatusIds::UNAVAILABLE, result.Issues.ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(), "Failed to read compile cache from all nodes");
+        UNIT_ASSERT_VALUES_EQUAL(deliveredWarnings, warningsBefore);
+    }
+
     Y_UNIT_TEST_TWIN(CompileCacheBasic, EnableCompileCacheView) {
         auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
         TKikimrRunner kikimr(serverSettings);
@@ -1830,6 +1977,20 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             return true;
         });
+        // Wait for the scheme cache to observe the new owner and inherited permissions.
+        auto navigate = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        for (const auto& path : {"/Root", "/Root/EightShard"}) {
+            auto& entry = navigate->ResultSet.emplace_back();
+            entry.Path = SplitPath(path);
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+            entry.SyncVersion = true;
+        }
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(MakeSchemeCacheID(), edge,
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.Release())));
+        auto response = runtime.GrabEdgeEvent<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Request->ErrorCount, 0);
+
         auto& appData = runtime.GetAppData();
         appData.AdministrationAllowedSIDs = {"root@builtin"};
         appData.FeatureFlags.SetEnableDatabaseAdmin(true);

@@ -213,6 +213,7 @@ public:
         ui32 SlotCount = 0;
         ui32 SlotSizeInUnits = 0;
         ui64 ExpectedSlotSize = 0;
+        std::optional<ui64> UserChunkPoolSize;
         ui32 NumActiveSlots = 0;
         ui64 Category = 0;
         TString DecommitStatus;
@@ -238,10 +239,10 @@ public:
         }
 
         ui64 GetSlotTotalSize() const {
-            if (ExpectedSlotSize) {
-                return ExpectedSlotSize;
-            } else if (EnforcedDynamicSlotSize) {
+            if (EnforcedDynamicSlotSize) {
                 return EnforcedDynamicSlotSize;
+            } else if (ExpectedSlotSize) {
+                return ExpectedSlotSize;
             } else if (SlotCount) {
                 return TotalSize / SlotCount;
             } else {
@@ -249,8 +250,9 @@ public:
             }
         }
 
-        ui32 GetOwnerWeight(ui32 groupSizeInUnits) const {
-            return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize);
+        ui64 GetOwnerQuota(ui32 groupSizeInUnits) const {
+            return TPDiskConfig::GetOwnerQuota(GetSlotTotalSize(), groupSizeInUnits, SlotSizeInUnits,
+                ExpectedSlotSize, UserChunkPoolSize);
         }
 
         float GetDiskSpaceUsage() const {
@@ -302,6 +304,7 @@ public:
         TString Erasure;
         TErasureType::EErasureSpecies ErasureSpecies = TErasureType::ErasureNone;
         TString State;
+        NKikimrViewer::TStorageGroupStateInfo StateInfo;
         ui32 StateSortKey = 0;
         ui32 EncryptionMode = 0;
         ui32 GroupSizeInUnits = 0;
@@ -391,6 +394,7 @@ public:
         // mirror-3-dc: ok, degraded:1(1), degraded:1(2), degraded:1(3), degraded:2(3,1), dead:3(3,1,1)
 
         void CalcState() {
+            StateInfo.Clear();
             MissingDisks = 0;
             ui32 startingDisks = 0;
             ui32 replicatingDisks = 0;
@@ -420,6 +424,7 @@ public:
             if (MissingDisks == 0) {
                 Overall = NKikimrViewer::EFlag::Green;
                 State = "ok";
+                StateInfo.SetStatus("ok");
                 StateSortKey = 0;
             } else {
                 if (ErasureSpecies == TErasureType::ErasureNone) {
@@ -433,6 +438,8 @@ public:
                         StateSortKey = 100;
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
+                    StateInfo.SetStatus(state);
+                    StateInfo.MutableCount()->MutableDisks()->SetValue(static_cast<ui32>(MissingDisks));
                 } else if (ErasureSpecies == TErasureType::Erasure4Plus2Block) {
                     TString state;
                     if (MissingDisks > 2) {
@@ -460,6 +467,8 @@ public:
                         }
                     }
                     State = TStringBuilder() << state << ':' << MissingDisks;
+                    StateInfo.SetStatus(state);
+                    StateInfo.MutableCount()->MutableDisks()->SetValue(static_cast<ui32>(MissingDisks));
                 } else if (ErasureSpecies == TErasureType::ErasureMirror3dc) {
                     std::sort(failedDomainsPerRealm.begin(), failedDomainsPerRealm.end(), std::greater<ui8>());
                     while (!failedDomainsPerRealm.empty() && failedDomainsPerRealm.back() == 0) {
@@ -491,6 +500,13 @@ public:
                         }
                     }
                     State = TStringBuilder() << state << ':' << PrintDomains(failedDomainsPerRealm);
+                    if (!state.empty()) {
+                        StateInfo.SetStatus(state);
+                        StateInfo.MutableCount()->MutableFailRealms()->SetValue(static_cast<ui32>(failedDomainsPerRealm.size()));
+                        for (ui8 failedDomains : failedDomainsPerRealm) {
+                            StateInfo.AddFailedDomainsPerRealm(failedDomains);
+                        }
+                    }
                 }
             }
         }
@@ -508,16 +524,18 @@ public:
                     DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
                     DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
                     MaxPDiskUsage = std::max(MaxPDiskUsage, itPDisk->second.PDiskUsage);
-                    ui64 slotSize = itPDisk->second.GetSlotTotalSize() * itPDisk->second.GetOwnerWeight(GroupSizeInUnits);
-                    // when a vdisk overgrows its nominal slot, keep its real AvailableSize
-                    if (slotSize > vdisk.AllocatedSize) {
-                        ui64 slotAvailable = slotSize - vdisk.AllocatedSize;
+                    const ui64 slotSize = itPDisk->second.GetOwnerQuota(GroupSizeInUnits);
+                    // Nominal slot-weight-based quotas may be exceeded; fixed quotas remain hard limits.
+                    if (itPDisk->second.ExpectedSlotSize || slotSize > vdisk.AllocatedSize) {
+                        ui64 slotAvailable = slotSize > vdisk.AllocatedSize ? slotSize - vdisk.AllocatedSize : 0;
                         if (slotAvailable < vdisk.AvailableSize || vdisk.AvailableSize == 0) {
                             vdisk.AvailableSize = slotAvailable;
                         }
                     }
-                    limit += slotSize ? slotSize : vdisk.AllocatedSize + vdisk.AvailableSize;
-                    available += vdisk.AvailableSize;
+                    const ui64 vdiskLimit = slotSize || (itPDisk->second.ExpectedSlotSize && itPDisk->second.UserChunkPoolSize)
+                        ? slotSize : vdisk.AllocatedSize + vdisk.AvailableSize;
+                    limit += Min(vdiskLimit, Max<ui64>() - limit);
+                    available += Min(vdisk.AvailableSize, Max<ui64>() - available);
                 }
                 allocated += vdisk.AllocatedSize;
             }
@@ -794,7 +812,7 @@ public:
             result = EGroupFields::Erasure;
         } else if (field == "Degraded" || field == "MissingDisks") {
             result = EGroupFields::MissingDisks;
-        } else if (field == "State") {
+        } else if (field == "State" || field == "StateInfo") {
             result = EGroupFields::State;
         } else if (field == "Usage") {
             result = EGroupFields::Usage;
@@ -1130,6 +1148,9 @@ public:
         }
         // group id pre-filter, affects TotalGroups count
         if (!FilterGroupIds.ToApply.empty()) {
+            if (!FieldsAvailable.test(+EGroupFields::GroupId)) {
+                return;
+            }
             TGroupView groupView;
             for (TGroup* group : GroupView) {
                 if (FilterGroupIds.ToApply.count(group->GroupId)) {
@@ -1744,6 +1765,9 @@ public:
                     pDisk.SlotCount = info.GetExpectedSlotCount();
                     pDisk.SlotSizeInUnits = info.GetSlotSizeInUnits();
                     pDisk.ExpectedSlotSize = info.GetExpectedSlotSize();
+                    if (info.HasUserChunkPoolSize()) {
+                        pDisk.UserChunkPoolSize = info.GetUserChunkPoolSize();
+                    }
                     pDisk.NumActiveSlots = info.GetNumActiveSlots();
                     pDisk.Category = info.GetCategory();
                     pDisk.DecommitStatus = info.GetDecommitStatus();
@@ -2129,6 +2153,9 @@ public:
                     if (info.GetExpectedSlotSize()) {
                         pDisk.ExpectedSlotSize = info.GetExpectedSlotSize();
                     }
+                    if (info.HasUserChunkPoolSize()) {
+                        pDisk.UserChunkPoolSize = info.GetUserChunkPoolSize();
+                    }
                     if (pDisk.NumActiveSlots < info.GetNumActiveSlots()) {
                         pDisk.NumActiveSlots = info.GetNumActiveSlots();
                     }
@@ -2221,6 +2248,7 @@ public:
             pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kPDiskUsageFieldNumber);
             pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kSlotSizeInUnitsFieldNumber);
             pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kPDiskCapacityAlertFieldNumber);
+            pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kUserChunkPoolSizeFieldNumber);
             PDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, pdiskRequest));
             ++PDiskStateRequestsInFlight;
         }
@@ -2505,6 +2533,9 @@ public:
                 }
                 if (FieldsAvailable.test(+EGroupFields::State) && FieldsRequested.test(+EGroupFields::State)) {
                     jsonGroup.SetState(group->State);
+                    if (!group->StateInfo.GetStatus().empty()) {
+                        jsonGroup.MutableStateInfo()->CopyFrom(group->StateInfo);
+                    }
                     if (group->GroupGeneration) {
                         jsonGroup.SetGroupGeneration(group->GroupGeneration);
                     }
@@ -2654,6 +2685,7 @@ public:
                           * `Erasure`
                           * `MissingDisks`
                           * `State`
+                          * `StateInfo` (alias for `State`)
                           * `Usage`
                           * `GroupId`
                           * `Used`
@@ -2688,6 +2720,7 @@ public:
                           * `MediaType`
                           * `MissingDisks`
                           * `State`
+                          * `StateInfo` (alias for `State`)
                           * `Latency`
                           * `CapacityAlert`
                     required: false
@@ -2707,6 +2740,7 @@ public:
                           * `MediaType`
                           * `MissingDisks`
                           * `State`
+                          * `StateInfo` (alias for `State`)
                           * `Latency`
                           * `CapacityAlert`
                     required: false
@@ -2726,7 +2760,8 @@ public:
                           * `MediaType`
                           * `Erasure`
                           * `MissingDisks`
-                          * `State`
+                          * `State` (also returns structured `StateInfo`)
+                          * `StateInfo` (alias for `State`)
                           * `Usage`
                           * `Used`
                           * `Limit`
@@ -2790,13 +2825,39 @@ public:
         properties["NeedLimit"]["description"] = "true if limit couldn't be applied";
         properties["Problems"]["description"] = "list of problems collecting the data";
         YAML::Node storageGroupProperties(properties["StorageGroups"]["items"]["properties"]);
+        YAML::Node stateInfo(storageGroupProperties["StateInfo"]);
+        stateInfo["description"] =
+            "Structured group state. Can be omitted even when State is present if CalcState cannot determine a known status.";
+        stateInfo["properties"]["Status"]["description"] = "one of: ok, starting, replicating, degraded, dead";
+        YAML::Node count(stateInfo["properties"]["Count"]);
+        count["description"] =
+            "Number after the colon in State, with explicit units: Disks.Value for none/block-4-2, "
+            "FailRealms.Value for mirror-3-dc. Exactly one count kind is present. Omitted for ok.";
+        count["properties"].remove("Kind"); // protobuf oneof name is not a JSON property
+        for (const char* kind : {"Disks", "FailRealms"}) {
+            YAML::Node alternative;
+            alternative["required"].push_back(kind);
+            count["oneOf"].push_back(alternative);
+        }
+        count["properties"]["Disks"]["properties"]["Value"]["description"] =
+            "Number of missing or not-ready disks for none/block-4-2.";
+        count["properties"]["FailRealms"]["properties"]["Value"]["description"] =
+            "Number of affected fail realms for mirror-3-dc. "
+            "Only disks with a known non-READY status contribute; disks without status data are excluded.";
+        stateInfo["properties"]["FailedDomainsPerRealm"]["description"] =
+            "For mirror-3-dc, non-zero failed-domain counts per affected fail realm, sorted in descending order. "
+            "Only disks with a known non-READY status contribute; disks without status data are excluded, "
+            "so the sum can differ from MissingDisks. "
+            "Matches the values in parentheses in State. Omitted for other erasure schemes and ok.";
         storageGroupProperties["State"]["description"] =
             "could be one of: \n"
             " * `ok` - group is okay\n"
             " * `starting:n` - group is okay, but n disks are starting\n"
             " * `replicating:n` - group is okay, all disks are available, but n disks are replicating\n"
             " * `degraded:n(m, m...)` - group is okay, but n data centers / racks are not available (with m devices)\n"
-            " * `dead:n` - group is not okay, n data centers / racks are not available\n";
+            " * `dead:n` - group is not okay, n data centers / racks are not available\n"
+            "When a known state cannot be determined, the legacy value can be `:0()` "
+            "(mirror-3-dc with missing disk status data), or State can be omitted.";
         storageGroupProperties["Kind"]["description"] = "kind of the disks in this group (specified by the user)";
         storageGroupProperties["MediaType"]["description"] = "actual physical media type of the disks in this group";
         storageGroupProperties["MissingDisks"]["description"] = "number of disks missing";

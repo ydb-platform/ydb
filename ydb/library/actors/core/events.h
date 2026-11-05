@@ -69,6 +69,11 @@ namespace NActors {
             {
             }
 
+            TEvBlob(TString&& blob) noexcept
+                : Blob(std::move(blob))
+            {
+            }
+
             TString ToStringHeader() const noexcept override {
                 return "THelloWorld::Blob";
             }

@@ -379,6 +379,9 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
 
     Execute(CreateTxInitPopulator(std::move(opts.DelayPublications)), ctx);
 
+    DatabaseSpaceSubscriptionsActive = true;
+    UpdateDatabaseSpaceSubscriptions();
+
     if (opts.TablesToClean) {
         Execute(CreateTxCleanTables(std::move(opts.TablesToClean)), ctx);
     }
@@ -2786,7 +2789,8 @@ void TSchemeShard::PersistSubDomainState(NIceDb::TNiceDb& db, const TPathId& pat
     db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::SubDomains::StateVersion>(subDomain.GetDomainStateVersion()),
             NIceDb::TUpdate<Schema::SubDomains::DiskQuotaExceeded>(subDomain.GetDiskQuotaExceeded()),
-            NIceDb::TUpdate<Schema::SubDomains::SmallBlobsQuotaExceeded>(subDomain.GetSmallBlobsQuotaExceeded()));
+            NIceDb::TUpdate<Schema::SubDomains::SmallBlobsQuotaExceeded>(subDomain.GetSmallBlobsQuotaExceeded()),
+            NIceDb::TUpdate<Schema::SubDomains::StorageSpaceExhausted>(subDomain.GetStorageSpaceExhausted()));
 }
 
 void TSchemeShard::PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
@@ -2843,8 +2847,11 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
             db.Table<Schema::WaitingShredTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
         }
 
+        subDomain->ApplyStorageSpaceExhausted(false, this); // keep the counter right, as nothing will clear it now
+
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();
         SubDomains.erase(pathId);
+        UpdateDatabaseSpaceSubscriptions();
     }
 }
 
@@ -2985,7 +2992,13 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
     Y_ABORT_UNLESS(txState.TxType != TTxState::TxInvalid);
     Y_ABORT_UNLESS(txState.State != TTxState::Invalid);
     TString extraData;
-    if (txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition) {
+    if (txState.TxType == TTxState::TxDropReplication || txState.TxType == TTxState::TxDropReplicationCascade) {
+        if (txState.ReplicationSourceCleanup != NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP) {
+            NKikimrSchemeOp::TDrop drop;
+            drop.SetReplicationSourceCleanup(txState.ReplicationSourceCleanup);
+            Y_ABORT_UNLESS(drop.SerializeToString(&extraData));
+        }
+    } else if (txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition) {
         Y_ABORT_UNLESS(txState.SplitDescription, "Split Tx must have non-empty split description");
         bool serializeRes = txState.SplitDescription->SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
@@ -3047,7 +3060,8 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
                 NIceDb::TUpdate<Schema::TxInFlightV2::SourceLocalPathId>(txState.SourcePathId.LocalPathId),
                 NIceDb::TUpdate<Schema::TxInFlightV2::SourceOwnerId>(txState.SourcePathId.OwnerId),
                 NIceDb::TUpdate<Schema::TxInFlightV2::NeedUpdateObject>(txState.NeedUpdateObject),
-                NIceDb::TUpdate<Schema::TxInFlightV2::NeedSyncHive>(txState.NeedSyncHive)
+                NIceDb::TUpdate<Schema::TxInFlightV2::NeedSyncHive>(txState.NeedSyncHive),
+                NIceDb::TUpdate<Schema::TxInFlightV2::LoadSplitLineage>(txState.LoadSplitLineage)
                 );
 
     for (const auto& shardOp : txState.Shards) {
@@ -3892,29 +3906,37 @@ void TSchemeShard::PersistRemoveExternalDataSource(NIceDb::TNiceDb& db, TPathId 
     db.Table<Schema::ExternalDataSource>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
-void TSchemeShard::PersistExternalDataSourceReference(NIceDb::TNiceDb& db, TPathId pathId, const TPath& referrer) {
+void TSchemeShard::AddExternalDataSourceReference(TPathId pathId, const TPath& referrer) {
     auto findSource = ExternalDataSources.FindPtr(pathId);
     Y_ABORT_UNLESS(findSource);
     auto* ref = (*findSource)->ExternalTableReferences.AddReferences();
     ref->SetPath(referrer.PathString());
     referrer->PathId.ToProto(ref->MutablePathId());
-    db.Table<Schema::ExternalDataSource>()
-        .Key(pathId.OwnerId, pathId.LocalPathId)
-        .Update(
-            NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{ (*findSource)->ExternalTableReferences.SerializeAsString() });
 }
 
-void TSchemeShard::PersistRemoveExternalDataSourceReference(NIceDb::TNiceDb& db, TPathId pathId, TPathId referrer) {
+void TSchemeShard::RemoveExternalDataSourceReference(TPathId pathId, TPathId referrer) {
     auto findSource = ExternalDataSources.FindPtr(pathId);
     Y_ABORT_UNLESS(findSource);
     EraseIf(*(*findSource)->ExternalTableReferences.MutableReferences(),
         [referrer](const NKikimrSchemeOp::TExternalTableReferences::TReference& reference) {
             return TPathId::FromProto(reference.GetPathId()) == referrer;
         });
+}
+
+void TSchemeShard::PersistExternalDataSourceReference(NIceDb::TNiceDb& db, TPathId pathId, const TPath& referrer) {
+    AddExternalDataSourceReference(pathId, referrer);
     db.Table<Schema::ExternalDataSource>()
         .Key(pathId.OwnerId, pathId.LocalPathId)
         .Update(
-            NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{ (*findSource)->ExternalTableReferences.SerializeAsString() });
+            NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{ ExternalDataSources.at(pathId)->ExternalTableReferences.SerializeAsString() });
+}
+
+void TSchemeShard::PersistRemoveExternalDataSourceReference(NIceDb::TNiceDb& db, TPathId pathId, TPathId referrer) {
+    RemoveExternalDataSourceReference(pathId, referrer);
+    db.Table<Schema::ExternalDataSource>()
+        .Key(pathId.OwnerId, pathId.LocalPathId)
+        .Update(
+            NIceDb::TUpdate<Schema::ExternalDataSource::ExternalTableReferences>{ ExternalDataSources.at(pathId)->ExternalTableReferences.SerializeAsString() });
 }
 
 void TSchemeShard::PersistView(NIceDb::TNiceDb &db, TPathId pathId) {
@@ -5836,6 +5858,8 @@ void TSchemeShard::Die(const TActorContext &ctx) {
         NTabletPipe::CloseClient(SelfId(), SAPipeClientId);
     }
 
+    UnsubscribeFromDatabaseSpace();
+
     PipeClientCache->Detach(ctx);
 
     if (BackgroundCompactionQueue)
@@ -6150,6 +6174,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NBackground::TEvListRequest, Handle);
         HFuncTraced(TEvPrivate::TEvExportSchemeUploadResult, Handle);
         HFuncTraced(TEvPrivate::TEvExportUploadMetadataResult, Handle);
+        HFuncTraced(TEvPrivate::TEvExportCompletionUploadResult, Handle);
 
         // namespace NImport {
         HFuncTraced(TEvImport::TEvCreateImportRequest, Handle);
@@ -6262,6 +6287,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         HFuncTraced(TEvPrivate::TEvPersistTableStats, Handle);
         HFuncTraced(TEvPrivate::TEvPeriodicTableStatsParsed, Handle);
+        HFuncTraced(TEvPrivate::TEvRevisitSplitMerge, Handle);
         HFuncTraced(TEvPrivate::TEvPersistTopicStats, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
@@ -6287,6 +6313,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvShredManualStartupRequest, Handle);
         HFuncTraced(TEvBlobStorage::TEvControllerShredResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunShredBSC, Handle);
+
+        // storage space state
+        HFuncTraced(TEvBlobStorage::TEvControllerDatabaseSpaceState, Handle);
 
         HFuncTraced(NKikimr::NTestShard::TEvControlResponse, Handle);
 
@@ -6325,6 +6354,9 @@ void TSchemeShard::DeleteSplitOp(TOperationId operationId, TTxState& txState) {
     TTableInfo::TPtr tableInfo = *Tables.FindPtr(txState.TargetPathId);
     Y_ABORT_UNLESS(tableInfo);
     tableInfo->FinishSplitMergeOp(operationId);
+
+    // A split/merge slot just freed -- let the fair scheduler hand it to a waiting table (edge-triggered).
+    ScheduleSplitMergeRevisit(TActivationContext::AsActorContext());
 }
 
 bool TSchemeShard::ShardIsUnderSplitMergeOp(const TShardIdx& idx) const {
@@ -7919,13 +7951,8 @@ void TSchemeShard::Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvCancelTx::TPtr& ev, const TActorContext& ctx) {
-    if (IsReadOnlyMode) {
-        YDB_LOG_ERROR_CTX(ctx, "Ignoring message TEvSchemeShard::TEvCancelTx: schemeshard in readonly",
-            {"schemeshard", TabletID()},
-        );
-        return;
-    }
-
+    // Read-only mode rejects new schema operations, but existing backups and
+    // restores must still be cancellable so exports and imports can finish.
     Execute(CreateTxOperationPropose(ev), ctx);
 }
 
@@ -8771,7 +8798,9 @@ void TSchemeShard::ApplySplitMerge(
     TTableInfo::TPtr tableInfo,
     TVector<TTableShardInfo>&& dstPartitions,
     const TVector<TShardIdx>& removedShards,
-    ui64 splitStartIdx
+    ui64 splitStartIdx,
+    bool trackSplitMergeDemand,
+    bool loadSplitLineage
 ) {
     const TInstant now = AppData()->TimeProvider->Now();
     if (!tableInfo->IsBackup) {
@@ -8789,7 +8818,8 @@ void TSchemeShard::ApplySplitMerge(
         }
     }
 
-    tableInfo->ApplySplitMerge(std::move(dstPartitions), removedShards, splitStartIdx, now);
+    tableInfo->ApplySplitMerge(std::move(dstPartitions), removedShards, splitStartIdx, now,
+        trackSplitMergeDemand, loadSplitLineage);
 
     // report TTableInfo::VerifyConsistency() time
     TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS].Increment(tableInfo->LastVerifyConsistencyTime);
@@ -9245,6 +9275,18 @@ void TSchemeShard::ConfigureExternalSources(
     const TActorContext& ctx) {
     const auto& hostnamePatterns = config.GetHostnamePatterns();
     const auto& availableExternalDataSources = config.GetAvailableExternalDataSources();
+    std::set<NYql::EDatabaseType> availableTypes;
+    for (const auto& type : availableExternalDataSources) {
+        // YdbTopics is a legacy configuration alias, not a valid EDS type.
+        if (type == "YdbTopics") {
+            availableTypes.insert(NYql::EDatabaseType::Ydb);
+        } else if (const auto databaseType = NYql::DatabaseTypeFromString(type)) {
+            availableTypes.insert(*databaseType);
+        } else {
+            YDB_LOG_WARN_CTX(ctx, "Unknown external data source type, ignoring it",
+                {"sourceType", type});
+        }
+    }
     ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
         std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
         nullptr,
@@ -9253,7 +9295,7 @@ void TSchemeShard::ConfigureExternalSources(
         EnableExternalSourceSchemaInference,
         config.GetS3().GetAllowLocalFiles(),
         config.GetAllExternalDataSourcesAreAvailable(),
-        std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend())
+        availableTypes
     );
 
     YDB_LOG_NOTICE_CTX(ctx, "ExternalSources configured",

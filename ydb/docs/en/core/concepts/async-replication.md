@@ -8,21 +8,28 @@ Asynchronous replication is based on [Change Data Capture](cdc.md) and operates 
 
 ```mermaid
 sequenceDiagram
-  participant dst as Source
-  participant src as Target
+  participant dst as Target
+  participant src as Source
+  participant s3 as S3-compatible storage
 
-  dst-->src: Initialization
+  Note over dst,src: Initialization
   dst->>dst: Creating an asynchronous replication instance
   dst->>src: Creating changefeeds
-  dst->>dst: Creating replica objects
 
-  dst-->src: Initial table scan
-  loop
-    dst->>src: Request to get data
-    src->>dst: Data
+  Note over dst,src: Initial synchronization
+  alt Initial scan
+    dst->>dst: Creating replica objects
+    loop Reading initial data
+      dst->>src: Request to get data
+      src->>dst: Data from changefeeds
+    end
+  else Backup and restore
+    src->>s3: Creating a backup
+    s3->>dst: Restoring tables and data
+    dst->>dst: Attaching restored tables to replication
   end
 
-  dst-->src: Change data replication
+  Note over dst,src: Change data replication
   loop
     dst->>src: Request to get data
     src->>dst: Data
@@ -37,7 +44,7 @@ As shown in the diagram above, asynchronous replication involves two databases:
 Asynchronous replication consists of the following stages:
 
 * [Initialization](#init)
-* [Initial table scan](#initial-scan)
+* [Initial synchronization](#initial-sync)
 * [Change data replication](#replication-of-changes)
 
 ### Initialization {#init}
@@ -56,25 +63,53 @@ The user account that is used to connect to the source database must have the fo
 
 {% endnote %}
 
-* The following objects are created for replicated objects on the source:
-  * [changefeeds](glossary.md#changefeed) on the source
-  * [replica objects](glossary.md#replica-object) on the target
+* [Changefeeds](glossary.md#changefeed) are created automatically on the source for the specified set of source objects.
+* If the initial scan is enabled, [replica objects](glossary.md#replica-object) are created automatically on the target. With synchronization using backup and restore, the target tables are restored from a backup first and then attached to replication.
 
 {% note info %}
 
-Replicas are created under the user account that was used to create the asynchronous replication instance.
+Replica objects are created or attached using the account that created the asynchronous replication instance.
 
 {% endnote %}
 
-### Initial Table Scan {#initial-scan}
+### Initial Synchronization {#initial-sync}
+
+Initial synchronization transfers the existing source data to the target before proceeding to change data replication. The synchronization method is selected with the [INITIAL_SCAN](../yql/reference/syntax/create-async-replication.md#params) parameter when creating the replication instance.
+
+#### Initial Scan {#initial-scan}
+
+With `INITIAL_SCAN = TRUE`, replication automatically creates the target tables and transfers the source data through changefeeds. This is the standard synchronization method. If the parameter is omitted, the server setting is used; the initial scan is enabled by default.
 
 During the [initial table scan](cdc.md#initial-scan) the source data is exported to changefeeds. The target runs [consumers](datamodel/topic.md#consumer) that read the source data from the changefeeds and write it to replicas.
 
 You can get the progress of the initial table scan from the [description](../reference/ydb-cli/commands/scheme-describe.md) of the asynchronous replication instance.
 
+#### Synchronization Using Backup and Restore {#export-import-sync}
+
+With `INITIAL_SCAN = FALSE`, the initial data is transferred using server-side [backup to S3](../reference/ydb-cli/export-import/export-s3.md) and [restore from S3](../reference/ydb-cli/export-import/import-s3.md) operations. This method uses the backup mechanism to transfer large datasets.
+
+Replication is created in the `PAUSED` state and prepares changefeeds without an initial scan. After all changefeeds are ready, the user creates a backup of the source tables and restores them on the target. Changes on the source accumulate in the changefeeds during the transfer. The target tables are not attached to replication at this stage.
+
+After the restore is complete, the user switches replication to `STANDBY` using [ALTER ASYNC REPLICATION](../yql/reference/syntax/alter-async-replication.md). The target checks the restored table schemas, attaches the tables as replica objects, and starts applying accumulated changes. Attached tables become read-only.
+
+To ensure data completeness, changefeeds must be ready before the backup is created, and accumulated records must remain available until their processing is acknowledged. The availability period is set with the [AVAILABILITY_PERIOD](#availability-period) parameter. For the procedure and checks, see the [guide to initial synchronization using backup and restore](../devops/async-replication-initial-sync.md).
+
+#### Choosing an Initial Synchronization Method {#initial-sync-comparison}
+
+Both methods require reading the source data and writing it to the target. Their additional costs differ:
+
+| Cost | [Initial scan](#initial-scan) | [Backup and restore](#export-import-sync) |
+| --- | --- | --- |
+| Data processing | Each source row is serialized into a CDC message, written to a changefeed, read, and applied on the target | Data is exported and imported by server-side operations; only changes pass through CDC |
+| Temporary storage | Initial data and changes are stored in changefeeds according to the [availability period](#availability-period) | A consistent copy of the tables in the source and a backup in S3 are required; changefeeds store changes according to the availability period |
+| Network transfer | Initial data is transferred from the source changefeeds to the target | Data is transferred from the source to S3 and then from S3 to the target; export compression can reduce the transfer volume |
+| Setup and operation | Synchronization starts automatically when replication is created | Requires S3 storage, separate backup and restore operations, checking their completion, and starting replication |
+
+An initial scan is simpler to set up and suits small datasets. For large datasets, backup and restore can reduce the cost of processing the initial data through CDC, but require additional storage and S3 operations. Actual costs and duration depend on data volume, the rate of changes, cluster resources, compression, and the terms of S3 usage.
+
 ### Change Data Replication {#replication-of-changes}
 
-After the initial table scan is completed, the consumers read the change data and write it to replicas.
+After initial synchronization, consumers continue reading changes from the source and writing them to replica objects.
 
 Each change data block has its *creation time* ($created\_at$). Consumers track the *reception time* of the change data ($received\_at$). Thus, you can use the following formula to calculate the *replication lag*:
 
@@ -82,14 +117,33 @@ $$
 replication\_lag = received\_at - created\_at
 $$
 
-You can also get the replication lag from the [description](../reference/ydb-cli/commands/scheme-describe.md) of the asynchronous replication instance.
+You can also get the replication lag from the [description](../reference/ydb-cli/commands/scheme-describe.md) of the asynchronous replication instance with the `--stats` option. If a consumer stops, loses its session, or does not report fresh statistics for 60 seconds, the lag value becomes unavailable. A missing value means that the lag is unknown, not zero.
+
+## Storing Changes in the Source {#availability-period}
+
+The [AVAILABILITY_PERIOD](../yql/reference/syntax/create-async-replication.md#params) parameter determines how long changefeeds retain messages whose processing has not yet been acknowledged by replication. It is set when replication is created and cannot be changed using `ALTER ASYNC REPLICATION`.
+
+The default value is `'UNLIMITED'`: unacknowledged messages are retained until their processing is acknowledged. To limit the availability period, specify a positive interval, for example, `Interval('PT48H')`.
+
+Regardless of the selected availability period, messages in the topic are deleted almost immediately after the consumer acknowledges their processing, freeing up space in the source and reducing the cost of storing changes that have already been processed. The `AVAILABILITY_PERIOD` parameter protects only unacknowledged messages from deletion.
+
+| Condition | Unlimited: `'UNLIMITED'` | Finite period: for example, `Interval('PT48H')` |
+| --- | --- | --- |
+| Extended downtime or lag | Unacknowledged messages are retained regardless of their age | Unacknowledged messages may be deleted after the specified period expires |
+| Storage usage in the source | Accumulated messages can keep growing in volume as long as replication does not acknowledge processing | The age of messages retained for replication is limited by the specified period |
+| Initial transfer using a backup | No age limit for accumulated changes; enough storage space must be provided | Export, import, and processing of accumulated changes must fit within the selected period |
+| What to monitor | Free space in the source and replication lag | Replication lag and the time remaining before the availability period expires |
+
+The availability period applies to the age of messages, not the duration of the current downtime. The `PAUSED` state does not suspend this period. If required messages have already been deleted, initial synchronization must be repeated to restore data completeness.
+
+With `'UNLIMITED'`, replication uses an [important consumer](datamodel/topic.md#important-consumer). With a finite period, it uses a consumer with a specified [message availability period](datamodel/topic.md#availability-period-consumer). This allows unacknowledged messages to be retained longer than the [topic message retention period](datamodel/topic.md#retention-time).
 
 ## Restrictions {#restrictions}
 
 * The set of replicated objects is immutable and is generated when {{ ydb-short-name }} creates an asynchronous replication instance.
 * {{ ydb-short-name }} supports the following types of replicated objects:
 
-  * [row-based tables](datamodel/table.md#row-oriented-tables)
+  * [row-based tables](datamodel/table.md#row-oriented-tables), including those with synchronous secondary indexes (unique indexes are supported; vector indexes are excluded)
   * [directories](datamodel/dir.md)
 
     {{ ydb-short-name }} will replicate all row-based tables that are located in the given directories and subdirectories at the time the asynchronous replication instance is created.
@@ -139,6 +193,8 @@ The change commit interval directly affects the barrier emission interval in the
 ## Asynchronous Replication Completion {#done}
 
 Completion of asynchronous replication might be an end goal of data migration from one database to another. In this case the client stops writing data to the source, waits for the zero replication lag, and completes replication. After the replication process is completed, replicas become available both for reading and writing. Then you can switch the load from the source database to the target database and complete data migration.
+
+Before completing replication, get an up-to-date lag value using `scheme describe --stats`. If the value is unavailable, wait for reporting to resume: a missing value or a previously displayed zero does not confirm that all changes have been transferred.
 
 {% note info %}
 

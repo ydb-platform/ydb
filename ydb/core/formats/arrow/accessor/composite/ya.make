@@ -1,4 +1,4 @@
-LIBRARY(library-formats-arrow-accessor-composite)
+YQL_LIBRARY(library-formats-arrow-accessor-composite)
 
 PEERDIR(
     contrib/libs/apache/arrow

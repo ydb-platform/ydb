@@ -383,6 +383,67 @@ Y_UNIT_TEST_SUITE(TCircularOperationQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.GetRunning()[0].Item, 2);
     }
 
+    Y_UNIT_TEST(CheckRemoveNoStartRunning) {
+        TQueue::TConfig config;
+        config.IsCircular = true;
+        config.InflightLimit = 1;
+        config.Timeout = Timeout;
+        TOperationStarter starter;
+
+        TQueue queue(config, starter, starter);
+        queue.Start();
+
+        queue.Enqueue(1);
+        queue.Enqueue(2);
+        queue.Enqueue(3);
+        queue.Enqueue(4);
+
+        size_t startsBefore = starter.StartHistory.size();
+
+        // RemoveNoStart must remove the running item without
+        // starting a replacement operation
+        UNIT_ASSERT(queue.RemoveNoStart(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(starter.StartHistory.size(), startsBefore);
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 0UL);
+        // circular queue re-enqueues started items, so item 1 was both
+        // running and queued; both copies are gone now
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 3UL);
+        UNIT_ASSERT_VALUES_EQUAL(
+            queue.GetQueue(),
+            TVector<int>({2, 3, 4}));
+
+        // a subsequent Enqueue performs the consolidated refill
+        queue.Enqueue(5);
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.GetRunning()[0].Item, 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            queue.GetQueue(),
+            TVector<int>({3, 4, 5}));
+    }
+
+    Y_UNIT_TEST(CheckRemoveNoStartNotExisting) {
+        TQueue::TConfig config;
+        config.IsCircular = true;
+        config.InflightLimit = 1;
+        config.Timeout = Timeout;
+        TOperationStarter starter;
+
+        TQueue queue(config, starter, starter);
+        queue.Start();
+
+        queue.Enqueue(1);
+        queue.Enqueue(2);
+
+        size_t startsBefore = starter.StartHistory.size();
+
+        UNIT_ASSERT(!queue.RemoveNoStart(42));
+
+        UNIT_ASSERT_VALUES_EQUAL(starter.StartHistory.size(), startsBefore);
+        UNIT_ASSERT_VALUES_EQUAL(queue.RunningSize(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 1UL);
+    }
+
     Y_UNIT_TEST(CheckRemoveWaiting) {
         TQueue::TConfig config;
         config.IsCircular = true;

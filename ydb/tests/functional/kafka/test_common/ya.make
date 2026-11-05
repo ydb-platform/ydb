@@ -4,6 +4,7 @@ PEERDIR(
     contrib/libs/librdkafka/src-cpp
     library/cpp/testing/unittest
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/topic
 )
 

@@ -120,7 +120,7 @@ class DiskShellTest(unittest.IsolatedAsyncioTestCase):
 
         with mock.patch.object(self.service, "parted_info", parted_info), \
                 mock.patch.object(disks.term, "run", run):
-            response = await self.service.obliterate(DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="label1")]))
+            response = await self.service.obliterate(DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="label1_0")]))
 
         self.assertTrue(response.success)
         self.assertEqual(calls, [[
@@ -145,7 +145,7 @@ class DiskShellTest(unittest.IsolatedAsyncioTestCase):
 
         with mock.patch.object(self.service, "parted_info", parted_info), \
                 mock.patch.object(disks.term, "run", run):
-            response = await self.service.obliterate(DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="label1")]))
+            response = await self.service.obliterate(DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="label1_0")]))
 
         self.assertFalse(response.success)
         self.assertIn("obliterate failed", response.operations[0].message)
@@ -629,7 +629,7 @@ class DiskObliterateTest(unittest.IsolatedAsyncioTestCase):
         with mock.patch.object(self.service, "parted_info", parted_info), \
                 mock.patch.object(disks.term, "run", run):
             response = await self.service.obliterate(
-                DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="label1")])
+                DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="label1", device="/dev/sdb")])
             )
 
         self.assertTrue(response.success)
@@ -653,7 +653,7 @@ class DiskObliterateTest(unittest.IsolatedAsyncioTestCase):
         with mock.patch.object(self.service, "parted_info", parted_info), \
                 mock.patch.object(disks.term, "run", run):
             response = await self.service.obliterate(
-                DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="label1")])
+                DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="label1", device="/dev/sdb")])
             )
 
         self.assertFalse(response.success)
@@ -680,7 +680,7 @@ class DiskObliterateTest(unittest.IsolatedAsyncioTestCase):
         with mock.patch.object(self.service, "parted_info", parted_info), \
                 mock.patch.object(disks.term, "run", run):
             response = await self.service.obliterate(
-                DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="label1")])
+                DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="label1", device="/dev/sdb")])
             )
 
         self.assertFalse(response.success)
@@ -705,3 +705,83 @@ class DiskObliterateTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(response.success)
         self.assertEqual(response.operations[0].message, "parted busted")
+
+
+class DiskPartitionSelectionTest(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.old_mnc_home = config.mnc_home
+        self.old_partlabels = config.managed_partlabels
+        self.old_regexps = config.managed_partlabel_regexps
+        config.mnc_home = "/mnc"
+        config.managed_partlabels = set()
+        config.managed_partlabel_regexps = [re.compile(r"kikimr_nvme_\d{2}(_\d+)?")]
+        self.service = disks.DiskService()
+
+    def tearDown(self):
+        config.mnc_home = self.old_mnc_home
+        config.managed_partlabels = self.old_partlabels
+        config.managed_partlabel_regexps = self.old_regexps
+
+    def _info_for_device(self, device):
+        disk = int(device.partlabel.split("_")[2])
+        parts = [device_lib.DevicePartInfo("1", None, None, None, "primary")] + [
+            device_lib.DevicePartInfo(str(part + 2), None, None, common.Memory(640000000000), f"kikimr_nvme_{disk:02}_{part}")
+            for part in range(5)
+        ]
+        return device_lib.DeviceInfo(f"/dev/nvme{disk}n1", common.Memory(3200631791616), parts)
+
+    async def test_obliterate_ready_partitions_leaves_reserved_partitions_untouched(self):
+        labels = [f"kikimr_nvme_{disk:02}_{part}" for part in range(4) for disk in range(4)]
+        request = DiskOperationRequest(devices=[DiskDeviceSchema(partlabel=label) for label in labels])
+        with mock.patch.object(self.service, "parted_info", new_callable=mock.AsyncMock, side_effect=self._info_for_device), \
+                mock.patch.object(self.service, "_run", new_callable=mock.AsyncMock, return_value=term.Result(0, "", "")) as run:
+            response = await self.service.obliterate(request)
+
+        self.assertTrue(response.success)
+        self.assertEqual(len(response.operations), 16)
+        self.assertEqual(run.await_args_list, [mock.call([
+            "sudo", "/mnc/ydb/bin/ydb", "admin", "blobstorage", "disk", "obliterate", f"/dev/disk/by-partlabel/{label}",
+        ]) for label in labels])
+
+    async def test_obliterate_whole_disk_keeps_all_data_partitions(self):
+        request = DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="kikimr_nvme_00", device="/dev/nvme0n1")])
+        with mock.patch.object(self.service, "parted_info", new_callable=mock.AsyncMock, side_effect=self._info_for_device), \
+                mock.patch.object(self.service, "_run", new_callable=mock.AsyncMock, return_value=term.Result(0, "", "")) as run:
+            response = await self.service.obliterate(request)
+
+        self.assertTrue(response.success)
+        self.assertEqual([call.args[0][-1] for call in run.await_args_list], [
+            f"/dev/disk/by-partlabel/kikimr_nvme_00_{part}" for part in range(5)
+        ])
+
+    async def test_missing_partition_does_not_format_other_partitions(self):
+        request = DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="kikimr_nvme_00_9")])
+        with mock.patch.object(self.service, "parted_info", new_callable=mock.AsyncMock, side_effect=self._info_for_device), \
+                mock.patch.object(self.service, "_run", new_callable=mock.AsyncMock) as run:
+            response = await self.service.obliterate(request)
+
+        self.assertFalse(response.success)
+        self.assertIn("Partition kikimr_nvme_00_9 not found", response.operations[0].message)
+        run.assert_not_awaited()
+
+    async def test_unselected_unmanaged_partitions_are_not_formatted(self):
+        config.managed_partlabel_regexps = []
+        config.managed_partlabels = {"kikimr_nvme_00_0"}
+        request = DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="kikimr_nvme_00_0")])
+        with mock.patch.object(self.service, "parted_info", new_callable=mock.AsyncMock, side_effect=self._info_for_device), \
+                mock.patch.object(self.service, "_run", new_callable=mock.AsyncMock, return_value=term.Result(0, "", "")) as run:
+            response = await self.service.obliterate(request)
+
+        self.assertTrue(response.success)
+        self.assertEqual(run.await_count, 1)
+        self.assertEqual(run.await_args.args[0][-1], "/dev/disk/by-partlabel/kikimr_nvme_00_0")
+
+    async def test_missing_disk_info_does_not_format_any_partition(self):
+        request = DiskOperationRequest(devices=[DiskDeviceSchema(partlabel="kikimr_nvme_00_0")])
+        with mock.patch.object(self.service, "parted_info", new_callable=mock.AsyncMock, return_value=None), \
+                mock.patch.object(self.service, "_run", new_callable=mock.AsyncMock) as run:
+            response = await self.service.obliterate(request)
+
+        self.assertFalse(response.success)
+        self.assertIn("Failed to receive partition information", response.operations[0].message)
+        run.assert_not_awaited()

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_join.cpp
@@ -11,9 +11,5 @@ PEERDIR(
     yql/essentials/core
     yql/essentials/ast
 )
-
-
-   YQL_LAST_ABI_VERSION()
-
 
 END()

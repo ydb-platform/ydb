@@ -12,7 +12,8 @@ namespace NFq {
 struct TCoordinatorId {
     TCoordinatorId(TString graphId, ui64 generation)
         : GraphId(std::move(graphId))
-        , Generation(generation) {
+        , Generation(generation)
+    {
     }
 
     TString GraphId;
@@ -36,20 +37,19 @@ struct TCheckpointId {
     {
     }
 
-    bool operator ==(const TCheckpointId& rhs) const {
+    bool operator==(const TCheckpointId& rhs) const {
         return CoordinatorGeneration == rhs.CoordinatorGeneration && SeqNo == rhs.SeqNo;
     }
 
-    bool operator <(const TCheckpointId& rhs) const {
-        return CoordinatorGeneration < rhs.CoordinatorGeneration ||
-            (CoordinatorGeneration == rhs.CoordinatorGeneration && SeqNo < rhs.SeqNo);
+    bool operator<(const TCheckpointId& rhs) const {
+        return CoordinatorGeneration < rhs.CoordinatorGeneration || (CoordinatorGeneration == rhs.CoordinatorGeneration && SeqNo < rhs.SeqNo);
     }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TCheckpointIdHash {
-    size_t operator ()(const TCheckpointId& checkpointId);
+    size_t operator()(const TCheckpointId& checkpointId);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -66,11 +66,7 @@ enum class ECheckpointStatus {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TCheckpointMetadata {
-    TCheckpointMetadata(TString graphId,
-                        const TCheckpointId& checkpointId,
-                        ECheckpointStatus status,
-                        TInstant created,
-                        TInstant modified)
+    TCheckpointMetadata(TString graphId, const TCheckpointId& checkpointId, ECheckpointStatus status, TInstant created, TInstant modified)
         : GraphId(std::move(graphId))
         , CheckpointId(checkpointId)
         , Status(status)
@@ -90,4 +86,4 @@ struct TCheckpointMetadata {
 
 using TCheckpoints = TVector<TCheckpointMetadata>;
 
-} // namespace NFq
+}   // namespace NFq

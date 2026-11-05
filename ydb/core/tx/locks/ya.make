@@ -15,6 +15,4 @@ PEERDIR(
     ydb/library/range_treap
 )
 
-YQL_LAST_ABI_VERSION()
-
 END()

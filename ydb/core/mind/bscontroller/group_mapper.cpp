@@ -49,7 +49,7 @@ namespace NKikimr::NBsController {
             }
 
             ui32 GetOwnerWeight(ui32 groupSizeInUnits) const {
-                return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, SlotSizeInBytes);
+                return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits);
             }
 
             // the less the better
@@ -109,7 +109,7 @@ namespace NKikimr::NBsController {
             const i64 RequiredSpace;
             const bool RequireOperational;
             TForbiddenPDisks ForbiddenDisks;
-            const TBridgePileId BridgePileId;
+            const TPileScope PileScope;
             THashMap<ui32, unsigned> LocalityFactor;
             TGroupLayout GroupLayout;
             const ui32 GroupSizeInUnits;
@@ -120,13 +120,13 @@ namespace NKikimr::NBsController {
 
             TPlacementSearch(const TImpl& self, const TGroupGeometryInfo& geom, i64 requiredSpace, bool requireOperational,
                     TForbiddenPDisks forbiddenDisks, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, ui32 groupSizeInUnits,
-                    TBridgePileId bridgePileId)
+                    TPileScope pileScope)
                 : Self(self)
                 , Topology(geom.GetType(), geom.GetNumFailRealms(), geom.GetNumFailDomainsPerFailRealm(), geom.GetNumVDisksPerFailDomain(), true)
                 , RequiredSpace(requiredSpace)
                 , RequireOperational(requireOperational)
                 , ForbiddenDisks(std::move(forbiddenDisks))
-                , BridgePileId(bridgePileId)
+                , PileScope(pileScope)
                 , GroupLayout(Topology)
                 , GroupSizeInUnits(groupSizeInUnits)
                 , Group(Topology.GetTotalVDisksNum())
@@ -187,19 +187,40 @@ namespace NKikimr::NBsController {
                 return pdisk.GetOwnerWeight(GroupSizeInUnits);
             }
 
+            // Apply the existing space policy to the quota of the requested VDisk.
+            i64 GetVDiskSpaceLimit(const TPDiskInfo& pdisk) const {
+                if (!Self.IgnoreVSlotQuotaCheck && pdisk.EnforcedDynamicSlotSize
+                        && Self.SpaceColorBorder >= NKikimrBlobStorage::TPDiskSpaceColor::YELLOW) {
+                    const ui64 quota = GetFixedVDiskQuota(pdisk, *pdisk.EnforcedDynamicSlotSize);
+                    const ui32 factor = 1000 - Self.SpaceMarginPromille;
+                    const ui64 quotaWithMargin = quota / 1000 * factor + quota % 1000 * factor / 1000;
+                    return Min<ui64>(quotaWithMargin, Max<i64>());
+                }
+                return pdisk.SpaceAvailable;
+            }
+
+            ui64 GetFixedVDiskQuota(const TPDiskInfo& pdisk, ui64 baseSize) const {
+                if (!pdisk.HasFixedSlotSize()) {
+                    return baseSize;
+                }
+                const ui32 units = Max(1u, GroupSizeInUnits);
+                return baseSize > Max<ui64>() / units ? Max<ui64>() : baseSize * units;
+            }
+
+            bool HasEnoughCapacityUnits(const TPDiskInfo& pdisk) const {
+                return !pdisk.CapacityUnits || (pdisk.NumActiveUnits <= *pdisk.CapacityUnits
+                    && Max(1u, GroupSizeInUnits) <= *pdisk.CapacityUnits - pdisk.NumActiveUnits);
+            }
+
             bool HasEnoughSpace(const TPDiskInfo& pdisk) const {
                 if (Self.IgnoreVSlotQuotaCheck) {
                     return true;
                 }
-                if (pdisk.SpaceAvailable < RequiredSpace) {
+                if (GetVDiskSpaceLimit(pdisk) < RequiredSpace) {
                     return false;
                 }
                 if (pdisk.SlotSizeInBytes && RequiredSpace > 0) {
-                    const ui64 slotsNeeded = GetSlotsNeeded(pdisk);
-                    if (slotsNeeded > Max<ui64>() / pdisk.SlotSizeInBytes) {
-                        return false;
-                    }
-                    if (pdisk.SlotSizeInBytes * slotsNeeded < static_cast<ui64>(RequiredSpace)) {
+                    if (GetFixedVDiskQuota(pdisk, pdisk.SlotSizeInBytes) < static_cast<ui64>(RequiredSpace)) {
                         return false;
                     }
                 }
@@ -219,10 +240,13 @@ namespace NKikimr::NBsController {
                 if (!HasEnoughSpace(pdisk)) {
                     return false;
                 }
-                if (pdisk.BridgePileId != BridgePileId) {
+                if (!PileScope.Allows(pdisk.BridgePileId)) {
                     return false;
                 }
                 if (pdisk.FreeSlots() < i32(GetSlotsNeeded(pdisk))) {
+                    return false;
+                }
+                if (!HasEnoughCapacityUnits(pdisk)) {
                     return false;
                 }
                 return true;
@@ -377,7 +401,7 @@ namespace NKikimr::NBsController {
             }
 
             bool BetterQuotaMatch(const TPDiskInfo& pretender, const TPDiskInfo& king) const {
-                return pretender.SpaceAvailable < king.SpaceAvailable;
+                return GetVDiskSpaceLimit(pretender) < GetVDiskSpaceLimit(king);
             }
 
             void AddUsedDisk(const TPDiskInfo& pdisk) {
@@ -914,6 +938,8 @@ namespace NKikimr::NBsController {
         bool PreferLessOccupiedRack;
         bool WithAttentionToReplication;
         bool IgnoreVSlotQuotaCheck;
+        const NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColorBorder;
+        const ui32 SpaceMarginPromille;
         std::optional<TPDiskSlotTracker> PDiskSlotTracker;
 
     public:
@@ -923,6 +949,8 @@ namespace NKikimr::NBsController {
             , PreferLessOccupiedRack(options.PreferLessOccupiedRack)
             , WithAttentionToReplication(options.WithAttentionToReplication)
             , IgnoreVSlotQuotaCheck(options.IgnoreVSlotQuotaCheck)
+            , SpaceColorBorder(options.SpaceColorBorder)
+            , SpaceMarginPromille(options.SpaceMarginPromille)
         {
             static bool controlsRegistered = false;
             if (controlsRegistered) {
@@ -1127,12 +1155,19 @@ namespace NKikimr::NBsController {
                         diskIsOk = false;
                         s << std::exchange(minus, "") << pdisk->WhyUnusable;
                     }
-                    if (pdisk->NumActiveSlots >= pdisk->ExpectedSlotCount) {
+                    const bool noFreeSlots = pdisk->NumActiveSlots >= pdisk->ExpectedSlotCount;
+                    const bool notEnoughCapacityUnits = !diskManager.HasEnoughCapacityUnits(*pdisk);
+                    if (noFreeSlots || notEnoughCapacityUnits) {
                         totalStats.AllSlotsAreOccupied++;
                         domainStats.AllSlotsAreOccupied++;
                         diskIsOk = false;
 
-                        s << std::exchange(minus, "") << "s[" << pdisk->NumActiveSlots << "/" << pdisk->ExpectedSlotCount << "]";
+                        if (noFreeSlots) {
+                            s << std::exchange(minus, "") << "s[" << pdisk->NumActiveSlots << "/" << pdisk->ExpectedSlotCount << "]";
+                        }
+                        if (notEnoughCapacityUnits) {
+                            s << std::exchange(minus, "") << "u[" << pdisk->NumActiveUnits << "/" << *pdisk->CapacityUnits << "]";
+                        }
                     }
                     if (!diskManager.HasEnoughSpace(*pdisk)) {
                         totalStats.NotEnoughSpace++;
@@ -1144,7 +1179,7 @@ namespace NKikimr::NBsController {
                         diskIsOk = false;
                         s << std::exchange(minus, "") << "o";
                     }
-                    if (pdisk->BridgePileId != diskManager.BridgePileId) {
+                    if (!diskManager.PileScope.Allows(pdisk->BridgePileId)) {
                         s << std::exchange(minus, "") << "p";
                     }
                     if (diskManager.DiskIsUsable(*pdisk)) {
@@ -1196,11 +1231,13 @@ namespace NKikimr::NBsController {
             if (previous != TPDiskId()) {
                 auto& pdisk = PDisks.at(previous);
                 pdisk.NumActiveSlots -= pdisk.GetOwnerWeight(groupSizeInUnits);
+                pdisk.NumActiveUnits -= Max(1u, groupSizeInUnits);
                 pdisk.EraseGroup(groupId);
             }
             if (next != TPDiskId()) {
                 auto& pdisk = PDisks.at(next);
                 pdisk.NumActiveSlots += pdisk.GetOwnerWeight(groupSizeInUnits);
+                pdisk.NumActiveUnits += Max(1u, groupSizeInUnits);
                 pdisk.InsertGroup(groupId);
             }
         }
@@ -1208,7 +1245,7 @@ namespace NKikimr::NBsController {
         bool AllocateGroup(ui32 groupId, TGroupDefinition& groupDefinition, TGroupMapper::TGroupConstraintsDefinition& constraints,
                 const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid,
                 ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational,
-                TBridgePileId bridgePileId, TGroupMapperError& error, bool ignoreGroupLayoutChecks = false) {
+                TPileScope pileScope, TGroupMapperError& error, bool ignoreGroupLayoutChecks = false) {
             if (Dirty) {
                 std::sort(PDiskByPosition.begin(), PDiskByPosition.end());
                 Dirty = false;
@@ -1222,7 +1259,7 @@ namespace NKikimr::NBsController {
 
             // fill in the allocation context
             TAllocator allocator(*this, Geom, requiredSpace, requireOperational, std::move(forbid), replacedDisks, groupSizeInUnits,
-                bridgePileId);
+                pileScope);
             if (!allocator.InitializeGroup(groupDefinition, error.ErrorMessage)) {
                 return false;
             }
@@ -1353,7 +1390,7 @@ namespace NKikimr::NBsController {
                         }
                         if (AllocateGroup(request.GroupId, allocation.Group, *constraints, allocation.ReplacedDisks,
                                           request.ForbiddenPDisks, request.GroupSizeInUnits, requiredSpace, requireOperational,
-                                          request.BridgePileId, error, ignoreLayout)) {
+                                          request.PileScope, error, ignoreLayout)) {
                             return true;
                         }
                     }
@@ -1415,7 +1452,7 @@ namespace NKikimr::NBsController {
         }
 
         std::optional<TPDiskId> TargetMisplacedVDisk(ui32 groupId, TGroupDefinition& groupDefinition, TVDiskIdShort vdisk,
-                TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, TBridgePileId bridgePileId,
+                TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, TPileScope pileScope,
                 TString& error) {
             if (Dirty) {
                 std::sort(PDiskByPosition.begin(), PDiskByPosition.end());
@@ -1428,7 +1465,7 @@ namespace NKikimr::NBsController {
                 return std::nullopt;
             }
 
-            TSanitizer sanitizer(*this, Geom, requiredSpace, requireOperational, std::move(forbid), {}, groupSizeInUnits, bridgePileId);
+            TSanitizer sanitizer(*this, Geom, requiredSpace, requireOperational, std::move(forbid), {}, groupSizeInUnits, pileScope);
             if (!sanitizer.InitializeGroup(groupDefinition, error)) {
                 error = "Empty group";
                 return std::nullopt;
@@ -1479,7 +1516,7 @@ namespace NKikimr::NBsController {
         };
 
         TGroupMapper& Mapper;
-        THashMap<TGroupKey, ui32> GroupSizes;
+        THashMap<ui32, ui32> GroupSizes;
         THashMap<TGroupKey, i64> MaxGroupSlotSize;
         THashMap<TPDiskId, size_t> PDiskIndices;
         TVector<TAccumulatedPDisk> PDisks;
@@ -1499,7 +1536,7 @@ namespace NKikimr::NBsController {
 
     void TGroupMapper::TPlacementBuilder::AddGroup(const TGroupState& group) {
         const auto groupKey = std::make_pair(group.GroupId, group.GroupGeneration);
-        State->GroupSizes[groupKey] = group.GroupSizeInUnits;
+        State->GroupSizes[group.GroupId] = group.GroupSizeInUnits;
         if (group.MaxVDiskAllocatedSize) {
             State->MaxGroupSlotSize[groupKey] = *group.MaxVDiskAllocatedSize;
         }
@@ -1538,11 +1575,11 @@ namespace NKikimr::NBsController {
 
         auto& pdisk = State->PDisks[it->second];
         if (vslot.CountedInNumActiveSlots) {
-            const auto groupKey = std::make_pair(vslot.GroupId.value_or(0), vslot.GroupGeneration);
-            const auto groupIt = State->GroupSizes.find(groupKey);
+            // Donors retain an older generation, but the group size is shared.
+            const auto groupIt = State->GroupSizes.find(vslot.GroupId.value_or(0));
             const ui32 groupSizeInUnits = groupIt != State->GroupSizes.end() ? groupIt->second : 1;
-            pdisk.State.NumActiveSlots += TPDiskConfig::GetOwnerWeight(groupSizeInUnits, pdisk.State.SlotSizeInUnits,
-                                                                 pdisk.State.SlotSizeInBytes);
+            pdisk.State.NumActiveSlots += TPDiskConfig::GetOwnerWeight(groupSizeInUnits, pdisk.State.SlotSizeInUnits);
+            pdisk.State.NumActiveUnits += Max(1u, groupSizeInUnits);
         }
         if (vslot.OccupiedByGroup && vslot.GroupId) {
             pdisk.Groups.push_back(*vslot.GroupId);
@@ -1580,8 +1617,7 @@ namespace NKikimr::NBsController {
             i64 availableSpace = Max<i64>();
             if (disk.Usable && !State->Mapper.Options.IgnoreVSlotQuotaCheck) {
                 availableSpace = disk.Space
-                                 ? CalculateSpaceAvailable(*disk.Space, State->Mapper.Options.SpaceColorBorder,
-                                                           State->Mapper.Options.SpaceMarginPromille)
+                                 ? CalculateSpaceAvailable(*disk.Space, State->Mapper.Options.SpaceMarginPromille)
                                  : 0;
                 if (!disk.Space || !SlotSpaceEnforced(*disk.Space, State->Mapper.Options.SpaceColorBorder)) {
                     availableSpace += pdisk.ReplicationSpaceAdjustment;
@@ -1593,6 +1629,7 @@ namespace NKikimr::NBsController {
                 .Location = disk.Location,
                 .Usable = disk.Usable,
                 .NumActiveSlots = disk.NumActiveSlots,
+                .NumActiveUnits = disk.NumActiveUnits,
                 .ExpectedSlotCount = disk.ExpectedSlotCount,
                 .SlotSizeInUnits = disk.SlotSizeInUnits,
                 .SlotSizeInBytes = disk.SlotSizeInBytes,
@@ -1604,6 +1641,10 @@ namespace NKikimr::NBsController {
                 .WhyUnusable = std::move(disk.WhyUnusable),
                 .BridgePileId = disk.BridgePileId,
                 .DiskScope = std::move(disk.DiskScope),
+                .CapacityUnits = disk.SlotSizeInBytes && disk.Space
+                    ? CalculateCapacityUnits(disk.Space->UserChunkPoolSize, disk.Space->EnforcedDynamicSlotSize)
+                    : std::nullopt,
+                .EnforcedDynamicSlotSize = disk.Space ? disk.Space->EnforcedDynamicSlotSize : std::nullopt,
             });
             Y_ABORT_UNLESS(registered);
             if (populateSlotTracker && disk.Usable) {
@@ -1622,6 +1663,9 @@ namespace NKikimr::NBsController {
         if (metrics.HasEnforcedDynamicSlotSize()) {
             state.EnforcedDynamicSlotSize = metrics.GetEnforcedDynamicSlotSize();
         }
+        if (metrics.HasUserChunkPoolSize()) {
+            state.UserChunkPoolSize = metrics.GetUserChunkPoolSize();
+        }
         return state;
     }
 
@@ -1631,11 +1675,7 @@ namespace NKikimr::NBsController {
                && colorBorder >= NKikimrBlobStorage::TPDiskSpaceColor::YELLOW;
     }
 
-    i64 TGroupMapper::CalculateSpaceAvailable(const TPDiskSpaceState& space,
-                                              NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder, ui32 marginPromille) {
-        if (SlotSpaceEnforced(space, colorBorder)) {
-            return *space.EnforcedDynamicSlotSize * (1000 - marginPromille) / 1000;
-        }
+    i64 TGroupMapper::CalculateSpaceAvailable(const TPDiskSpaceState& space, ui32 marginPromille) {
         return space.AvailableSize - space.TotalSize * marginPromille / 1000;
     }
 
@@ -1715,19 +1755,19 @@ namespace NKikimr::NBsController {
     bool TGroupMapper::AllocateGroup(ui32 groupId, TGroupDefinition& group, TGroupMapper::TGroupConstraintsDefinition& constraints,
             const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid,
             ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational,
-            TBridgePileId bridgePileId, TGroupMapperError& error) {
+            TPileScope pileScope, TGroupMapperError& error) {
         return Impl->AllocateGroup(groupId, group, constraints, replacedDisks, std::move(forbid),
             groupSizeInUnits, requiredSpace,
-            requireOperational, bridgePileId, error);
+            requireOperational, pileScope, error);
     }
 
     bool TGroupMapper::AllocateGroup(ui32 groupId, TGroupDefinition& group, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks,
-            TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, TBridgePileId bridgePileId,
+            TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational, TPileScope pileScope,
             TGroupMapperError& error) {
         TGroupMapper::TGroupConstraintsDefinition emptyConstraints;
         return AllocateGroup(groupId, group, emptyConstraints, replacedDisks, std::move(forbid),
             groupSizeInUnits, requiredSpace,
-            requireOperational, bridgePileId, error);
+            requireOperational, pileScope, error);
     }
 
     TGroupMapper::TMisplacedVDisks TGroupMapper::FindMisplacedVDisks(const TGroupDefinition& group, ui32 groupSizeInUnits) {
@@ -1736,8 +1776,8 @@ namespace NKikimr::NBsController {
 
     std::optional<TPDiskId> TGroupMapper::TargetMisplacedVDisk(TGroupId groupId, TGroupMapper::TGroupDefinition& group,
             TVDiskIdShort vdisk, TForbiddenPDisks forbid, ui32 groupSizeInUnits, i64 requiredSpace, bool requireOperational,
-            TBridgePileId bridgePileId, TString& error) {
+            TPileScope pileScope, TString& error) {
         return Impl->TargetMisplacedVDisk(groupId.GetRawId(), group, vdisk, std::move(forbid), groupSizeInUnits, requiredSpace,
-            requireOperational, bridgePileId, error);
+            requireOperational, pileScope, error);
     }
 } // NKikimr::NBsController

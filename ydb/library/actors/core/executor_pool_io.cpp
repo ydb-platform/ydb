@@ -114,6 +114,7 @@ namespace NActors {
 
         for (i16 i = 0; i != PoolThreads; ++i) {
             Threads[i].Thread.reset(new TExecutorThread(i, actorSystem, this, PoolName));
+            Threads[i].Thread->Prepare();
         }
 
         *scheduleReaders = &ScheduleQueue->Reader;
@@ -152,14 +153,6 @@ namespace NActors {
         // Per-thread stats
         for (i16 i = 0; i < PoolThreads; ++i) {
             Threads[i].Thread->GetCurrentStats(statsCopy[i + 1]);
-        }
-    }
-
-    void TIOExecutorPool::CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const {
-        for (i16 i = 0; i < PoolThreads; ++i) {
-            if (Threads[i].Thread) {
-                Threads[i].Thread->CollectAsyncFrameCacheStats(stats);
-            }
         }
     }
 

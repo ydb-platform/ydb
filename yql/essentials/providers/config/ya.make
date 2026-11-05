@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_config_provider.cpp
@@ -12,14 +12,11 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/utils/log
     yql/essentials/core
-    yql/essentials/core/expr_nodes
     yql/essentials/providers/common/proto
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/activation
     yql/essentials/minikql/runtime_settings
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

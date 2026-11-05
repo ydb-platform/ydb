@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_table_data_service_client_impl.cpp
@@ -17,7 +17,5 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/utils/log
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

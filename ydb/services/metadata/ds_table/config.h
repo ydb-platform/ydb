@@ -1,7 +1,9 @@
 #pragma once
+#include <ydb/core/protos/config.pb.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/services/metadata/request/config.h>
-#include <ydb/core/protos/config.pb.h>
+
 #include <util/datetime/base.h>
 
 namespace NKikimr::NMetadata::NProvider {
@@ -12,9 +14,10 @@ private:
     YDB_READONLY(TDuration, RefreshPeriod, TDuration::Seconds(10));
     YDB_READONLY_FLAG(Enabled, true);
     YDB_READONLY(TString, Path, ".metadata");
+
 public:
     TConfig() = default;
 
     bool DeserializeFromProto(const NKikimrConfig::TMetadataProviderConfig& config);
 };
-}
+}   // namespace NKikimr::NMetadata::NProvider

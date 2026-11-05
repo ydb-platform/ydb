@@ -150,8 +150,13 @@ void TOpIndexLookupJoin::RenameUsedIUs(const TSubstitutions& substitutions) {
 }
 
 // Substitution changes bindings, never the external field names.
+void TOpSequencer::RenameUsedIUs(const TSubstitutions& substitutions) {
+    Substitute(InputColumns_, substitutions);
+}
+
 void TOpTableEffect::RenameUsedIUs(const TSubstitutions& substitutions) {
-    Substitute(Columns_, substitutions);
+    Substitute(Options.Columns, substitutions);
+    Substitute(Options.DefaultColumns, substitutions);
 }
 
 void TOpRoot::RenameUsedIUs(const TSubstitutions& substitutions) {

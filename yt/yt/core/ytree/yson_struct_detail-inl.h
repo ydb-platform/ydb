@@ -577,7 +577,7 @@ inline void PostprocessRecursive(
         PostprocessRecursive(
             value,
             [&pathGetter, &key = key] {
-                return pathGetter() + "/" + NYPath::ToYPathLiteral(TAssociativeContainerKeyHelper<std::decay_t<decltype(key)>>::Serialize(key));
+                return pathGetter() + "/" + NYPath::ToYPathLiteral(TAssociativeContainerKeyHelper<typename TMap::key_type>::Serialize(key));
             });
     }
 }

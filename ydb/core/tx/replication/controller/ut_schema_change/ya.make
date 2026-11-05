@@ -12,6 +12,7 @@ PEERDIR(
 )
 
 SRCS(
+    dst_delivery_retry_ut.cpp
     schema_change_ut.cpp
 )
 

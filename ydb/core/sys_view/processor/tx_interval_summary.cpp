@@ -41,7 +41,7 @@ struct TSysViewProcessor::TTxIntervalSummary : public TTxBase {
                 NIceDb::TUpdate<Schema::IntervalSummaries::NodeId>(nodeId));
 
         } else {
-            if (Self->ByCpu.size() == DistinctQueriesLimit) {
+            if (Self->ByCpu.size() == NQueryMetricsLimits::ProcessorCandidateCount) {
                 auto it = Self->ByCpu.begin();
                 if (it->first >= cpu) {
                     return;
@@ -161,6 +161,15 @@ struct TSysViewProcessor::TTxIntervalSummary : public TTxBase {
             return true;
         }
         Self->SummaryNodes.insert(nodeId);
+
+        if (Record.HasQueryMetricsTotalCpuTimeUs()
+            && Record.HasQueryMetricsRetainedCpuTimeUs())
+        {
+            ++Self->QueryMetricsCoverage.Nodes;
+            Self->QueryMetricsCoverage.TotalCpuTimeUs += Record.GetQueryMetricsTotalCpuTimeUs();
+            Self->QueryMetricsCoverage.NodeRetainedCpuTimeUs +=
+                Record.GetQueryMetricsRetainedCpuTimeUs();
+        }
 
         const auto& metrics = Record.GetMetrics();
         auto count = metrics.HashesSize();

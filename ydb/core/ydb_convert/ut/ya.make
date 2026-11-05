@@ -14,6 +14,7 @@ SRCS(
     dictionary_feature_flag_ut.cpp
     table_description_ut.cpp
     table_settings_ut.cpp
+    replication_description_ut.cpp
     topic_description_ut.cpp
     ydb_convert_ut.cpp
 )
@@ -25,3 +26,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    permissions
+)

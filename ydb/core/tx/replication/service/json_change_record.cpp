@@ -6,7 +6,10 @@
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/replication/common/family_settings.h>
 
+#include <contrib/libs/rapidjson/include/rapidjson/reader.h>
+
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/rapidjson_helpers.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/hash_set.h>
@@ -16,30 +19,106 @@ namespace NKikimr::NReplication::NService {
 
 namespace {
 
-class TFamilyKeyParser: public NJson::TParserCallbacks {
+// NJson::ReadJson does not expose kParseFullPrecisionFlag, and its RapidJSON
+// callback adapter is private to the JSON library. This local bridge lets
+// replication parse CDC doubles exactly while retaining the existing schema
+// validation callbacks.
+class TRapidJsonCallbacks {
 public:
-    explicit TFamilyKeyParser(NJson::TJsonValue& value)
+    explicit TRapidJsonCallbacks(NJson::TJsonCallbacks& callbacks)
+        : Callbacks(callbacks)
+    {
+    }
+
+    bool Null() {
+        return Callbacks.OnNull();
+    }
+
+    bool Bool(bool value) {
+        return Callbacks.OnBoolean(value);
+    }
+
+    bool Int(int value) {
+        return Callbacks.OnInteger(value);
+    }
+
+    bool Uint(unsigned value) {
+        return Uint64(value);
+    }
+
+    bool Int64(i64 value) {
+        return Callbacks.OnInteger(value);
+    }
+
+    bool Uint64(ui64 value) {
+        if (value <= ui64(Max<i64>())) {
+            return Callbacks.OnInteger(i64(value));
+        }
+        return Callbacks.OnUInteger(value);
+    }
+
+    bool Double(double value) {
+        return Callbacks.OnDouble(value);
+    }
+
+    bool RawNumber(const char*, rapidjson::SizeType, bool) {
+        return false;
+    }
+
+    bool String(const char* value, rapidjson::SizeType length, bool) {
+        return Callbacks.OnString(TStringBuf(value, length));
+    }
+
+    bool StartObject() {
+        return Callbacks.OnOpenMap();
+    }
+
+    bool Key(const char* value, rapidjson::SizeType length, bool) {
+        return Callbacks.OnMapKey(TStringBuf(value, length));
+    }
+
+    bool EndObject(rapidjson::SizeType) {
+        return Callbacks.OnCloseMap();
+    }
+
+    bool StartArray() {
+        return Callbacks.OnOpenArray();
+    }
+
+    bool EndArray(rapidjson::SizeType) {
+        return Callbacks.OnCloseArray();
+    }
+
+private:
+    NJson::TJsonCallbacks& Callbacks;
+};
+
+class TSchemaKeyParser: public NJson::TParserCallbacks {
+public:
+    explicit TSchemaKeyParser(NJson::TJsonValue& value)
         : TParserCallbacks(value)
     {
     }
 
     bool OnOpenMap() override {
-        const bool isFamilyMap = CurrentState == AFTER_MAP_KEY && Key == "columnFamilies";
+        const bool isSchemaMap = CurrentState == AFTER_MAP_KEY && (Key == "columnFamilies" || Key == "indexes");
+        const TString mapKind = isSchemaMap ? Key : TString();
         if (!TParserCallbacks::OnOpenMap()) {
             return false;
         }
 
-        if (isFamilyMap) {
-            FamilyMaps.push_back(ValuesStack.back());
+        if (isSchemaMap) {
+            SchemaMaps.push_back(ValuesStack.back());
+            MapKind = mapKind;
         }
 
         return true;
     }
 
     bool OnMapKey(const TStringBuf& key) override {
-        if (!FamilyMaps.empty() && ValuesStack.back()->Has(key)) {
-            if (FamilyMaps.back() == ValuesStack.back()) {
-                DuplicateFamily = key;
+        if (!SchemaMaps.empty() && ValuesStack.back()->Has(key)) {
+            if (SchemaMaps.back() == ValuesStack.back()) {
+                DuplicateName = key;
             } else {
                 DuplicateSetting = key;
             }
@@ -50,33 +129,40 @@ public:
     }
 
     bool OnCloseMap() override {
-        if (!FamilyMaps.empty() && FamilyMaps.back() == ValuesStack.back()) {
-            FamilyMaps.pop_back();
+        if (!SchemaMaps.empty() && SchemaMaps.back() == ValuesStack.back()) {
+            SchemaMaps.pop_back();
         }
 
         return TParserCallbacks::OnCloseMap();
     }
 
-    TString DuplicateFamily;
+    TString DuplicateName;
     TString DuplicateSetting;
+    TString MapKind;
 
 private:
-    TVector<const NJson::TJsonValue*> FamilyMaps;
+    TVector<const NJson::TJsonValue*> SchemaMaps;
 };
 
 } // namespace
 
 bool TChangeRecordBuilder::ParseJsonBody(TStringBuf body, NJson::TJsonValue& json, TString& error) {
-    TMemoryInput input(body.data(), body.size());
-    TFamilyKeyParser parser(json);
-    if (NJson::ReadJson(&input, &parser)) {
+    NJson::TStringBufStreamWrapper input(body);
+    TSchemaKeyParser parser(json);
+    TRapidJsonCallbacks callbacks(parser);
+    rapidjson::Reader reader;
+    // CDC emits enough digits to recover the original double exactly.
+    constexpr auto flags = rapidjson::kParseValidateEncodingFlag | rapidjson::kParseFullPrecisionFlag;
+    if (reader.Parse<flags>(input, callbacks) && parser.OnEnd()) {
         return true;
     }
 
-    if (parser.DuplicateFamily) {
-        error = TStringBuilder() << "duplicate column family: " << parser.DuplicateFamily;
+    if (parser.DuplicateName) {
+        error = TStringBuilder() << (parser.MapKind == "indexes" ? "duplicate index: " : "duplicate column family: ")
+            << parser.DuplicateName;
     } else if (parser.DuplicateSetting) {
-        error = TStringBuilder() << "duplicate column family setting: " << parser.DuplicateSetting;
+        error = TStringBuilder() << (parser.MapKind == "indexes" ? "duplicate index setting: " : "duplicate column family setting: ")
+            << parser.DuplicateSetting;
     } else {
         error = "cannot parse JSON";
     }
@@ -429,6 +515,53 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
     if (schema.PrimaryKeyColumnNamesSize() == 0) {
         error = "schema record has no primary key";
         return false;
+    }
+
+    if (table.Has("indexes")) {
+        if (!table["indexes"].IsMap()) {
+            error = "schema record has invalid indexes";
+            return false;
+        }
+
+        auto* indexes = schema.MutableIndexes();
+        TVector<TString> names;
+        for (const auto& [name, definition] : table["indexes"].GetMap()) {
+            if (name.empty() || !definition.IsMap() || !definition["type"].IsString()
+                || definition["type"].GetString().empty()
+                || !definition["indexColumns"].IsArray() || definition["indexColumns"].GetArray().empty()
+                || !definition["dataColumns"].IsArray())
+            {
+                error = TStringBuilder() << "schema record has invalid index: " << name;
+                return false;
+            }
+
+            THashSet<TString> indexColumns;
+            for (const auto field : {"indexColumns", "dataColumns"}) {
+                for (const auto& column : definition[field].GetArray()) {
+                    if (!column.IsString() || !columns.contains(column.GetString())
+                        || !indexColumns.insert(column.GetString()).second)
+                    {
+                        error = TStringBuilder() << "schema record index '" << name << "' has invalid columns";
+                        return false;
+                    }
+                }
+            }
+            names.push_back(name);
+        }
+
+        Sort(names);
+        for (const auto& name : names) {
+            const auto& definition = table["indexes"][name];
+            auto* index = indexes->AddItems();
+            index->SetName(name);
+            index->SetType(definition["type"].GetString());
+            for (const auto& column : definition["indexColumns"].GetArray()) {
+                index->AddIndexColumns(column.GetString());
+            }
+            for (const auto& column : definition["dataColumns"].GetArray()) {
+                index->AddDataColumns(column.GetString());
+            }
+        }
     }
 
     return true;

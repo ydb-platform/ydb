@@ -1171,21 +1171,16 @@ private:
             cfg->Record = config.GetTabletConfig();
             cfg->Record.SetNumDirectBlockGroupsToUse(effectiveDbgCount);
             cfg->Record.SetIoSizeBytes(ioSizeBytes);
-            if (Cmd.GetRequireReady()) {
-                cfg->Record.SetConfigurationId(Tag);
-            }
+            cfg->Record.SetConfigurationId(Max<ui64>(1, Tag));
             NTabletPipe::SendData(SelfId(), ProxyPipeClient, cfg.release());
         }
 
         PendingResolved = {effectiveDbgCount, vChunkSizeBytes, targetNumVChunks, ioSizeBytes};
         PendingNumWorkers = numWorkers;
-        if (!Cmd.GetRequireReady()) {
-            SpawnWorkers();
-        }
     }
 
     void HandleConfigured(TEvLoad::TEvConfigureTabletResult::TPtr& ev) {
-        if (ev->Get()->Record.GetConfigurationId() != Tag) {
+        if (!ConfigurationSent || ev->Get()->Record.GetConfigurationId() != Max<ui64>(1, Tag)) {
             return;
         }
         ConfigurationSent = false;

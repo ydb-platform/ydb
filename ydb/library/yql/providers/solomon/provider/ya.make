@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_solomon_config.cpp
@@ -46,7 +46,5 @@ PEERDIR(
     yt/yql/providers/ytflow/integration/proto
     yt/yql/providers/ytflow/expr_nodes
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

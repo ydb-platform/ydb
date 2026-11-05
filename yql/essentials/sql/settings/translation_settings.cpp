@@ -182,6 +182,22 @@ void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettin
 
     static const THashMap<TString, TFlagValueParser> Parsers = {
         {
+            "GroupByLimit",
+            [](const TVector<TString>& args, TTranslationSettings& settings) {
+                if (args.empty() || !TryFromString(args[0], settings.GroupByLimit)) {
+                    ThrowBad("GroupByLimit", args);
+                }
+            },
+        },
+        {
+            "GroupByCubeLimit",
+            [](const TVector<TString>& args, TTranslationSettings& settings) {
+                if (args.empty() || !TryFromString(args[0], settings.GroupByCubeLimit)) {
+                    ThrowBad("GroupByCubeLimit", args);
+                }
+            },
+        },
+        {
             "YqlSelect",
             [](const TVector<TString>& args, TTranslationSettings& s) {
                 if (!args.empty() && args[0] == "disable") {

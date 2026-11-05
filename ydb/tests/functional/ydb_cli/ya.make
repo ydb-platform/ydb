@@ -8,6 +8,7 @@ TEST_SRCS(
     test_ydb_flame_graph.py
     test_ydb_impex.py
     test_ydb_interactive_ai.py
+    test_ydb_interactive_helpers.py
     test_ydb_interactive_sql.py
     test_ydb_profile.py
     test_ydb_recursive_remove.py
@@ -34,6 +35,7 @@ ELSE()
 ENDIF()
 
 DEPENDS(
+    contrib/tools/python3/bin
     ydb/apps/ydb
     ydb/apps/ydb/experimental/ydb
     ydb/tests/functional/ydb_cli/ai_interactive

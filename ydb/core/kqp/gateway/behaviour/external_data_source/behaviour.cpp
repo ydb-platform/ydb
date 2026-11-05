@@ -3,7 +3,8 @@
 
 namespace NKikimr::NKqp {
 
-TExternalDataSourceBehaviour::TFactory::TRegistrator<TExternalDataSourceBehaviour> TExternalDataSourceBehaviour::Registrator(TExternalDataSourceConfig::GetTypeId());
+TExternalDataSourceBehaviour::TFactory::TRegistrator<TExternalDataSourceBehaviour> TExternalDataSourceBehaviour::Registrator(
+    TExternalDataSourceConfig::GetTypeId());
 
 NMetadata::NModifications::IOperationsManager::TPtr TExternalDataSourceBehaviour::ConstructOperationsManager() const {
     return std::make_shared<TExternalDataSourceManager>();
@@ -17,9 +18,8 @@ TString TExternalDataSourceBehaviour::GetInternalStorageTablePath() const {
     return TExternalDataSourceConfig::GetTypeId();
 }
 
-
 TString TExternalDataSourceBehaviour::GetTypeId() const {
     return TExternalDataSourceConfig::GetTypeId();
 }
 
-}
+}   // namespace NKikimr::NKqp

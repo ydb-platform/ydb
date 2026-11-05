@@ -202,7 +202,7 @@ protected:
     }
 
 private:
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, Lock_);
     THashSet<int> Keys_;
     int TotalAdded_ = 0;
     int TotalRemoved_ = 0;
@@ -1762,7 +1762,7 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
     std::uniform_int_distribution<int> capacityDistribution(static_cast<int>(cacheSize * 0.5), static_cast<int>(cacheSize * 1.5));
     std::uniform_real_distribution<double> youngerSizeFractionDistribution(0.0, 1.0);
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, lock);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, lock);
 
     std::vector<TCountingSlruCache::TInsertCookie> activeInsertCookies;
 

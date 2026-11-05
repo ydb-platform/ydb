@@ -103,7 +103,6 @@ bool HasNulls(const std::shared_ptr<arrow::Array>& column);
 std::vector<std::shared_ptr<arrow::RecordBatch>> SliceToRecordBatches(const std::shared_ptr<arrow::Table>& t);
 
 bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs);
-std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec);
 
 NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 head, const ui32 tail);
 NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> batch, const ui32 head, const ui32 tail);

@@ -580,6 +580,17 @@ struct TFileReaderOptions
     FLUENT_FIELD_OPTION(i64, Length);
 };
 
+/// Options for @ref NYT::IClient::CreateFilePartitionReader
+struct TFilePartitionReaderOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TFilePartitionReaderOptions;
+    /// @endcond
+
+    /// @brief Advanced options for reader, see @ref NYT::TIOOptions::Config
+    FLUENT_FIELD_OPTION(TNode, Config);
+};
+
 /// @brief Options that control how server side of YT stores data.
 struct TWriterOptions
 {
@@ -1656,6 +1667,23 @@ struct TGetTablePartitionsOptions
     ///
     /// Increases cookie size but likely reduces read latency in @ref NYT::IClientBase::CreateTablePartitionReader method.
     FLUENT_FIELD_DEFAULT(bool, FetchCookieNodeDescriptors, false);
+};
+
+///
+/// @brief Options for @ref NYT::IClient::GetFilePartitions
+///
+struct TGetFilePartitionsOptions
+    : public TSuppressableAccessTrackingOptions<TGetFilePartitionsOptions>
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TGetFilePartitionsOptions;
+    /// @endcond
+
+    ///
+    /// @brief Enable partition node descriptors serialization in cookie.
+    ///
+    /// Increases cookie size but likely reduces read latency in @ref NYT::IClientBase::CreateFilePartitionReader method.
+    FLUENT_FIELD_DEFAULT(bool, FetchCookieNodeDescriptors, true);
 };
 
 ///

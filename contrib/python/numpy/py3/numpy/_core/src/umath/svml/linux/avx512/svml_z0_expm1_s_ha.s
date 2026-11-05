@@ -27,6 +27,7 @@
  */
 
 
+	.file   "svml_z0_expm1_s_ha.s"
 	.text
 .L_2__routine_start___svml_expm1f16_ha_z0_0:
 

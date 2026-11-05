@@ -143,7 +143,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18 [default = true];
-    optional bool UseUnitedPool = 22;
+    optional bool UseUnitedPool = 22 [default = true];
     optional bool UseRingQueue = 19 [default = true];
     optional bool UseWaker = 25 [default = false]; // Experimental, enables wakers for auto-configured BASIC executors.
 
@@ -385,6 +385,13 @@ message TBlobStorageConfig {
 
     optional uint64 BridgeSyncRateBytesPerSecond = 13 [default = 500000000]; // default 500 MB/s per node
     optional NKikimrBlobStorage.TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 14;
+
+    // How many leading VDisks (order number 0 .. N-1) may use the stripe heap. Unset means 0. A storage-pool value
+    // (TStoragePoolSettings) overrides this. Applied when a VDisk starts; running VDisks are not restarted.
+    optional uint32 VDiskHeapAllocatorNumLeadingDisks = 15;
+
+    // Persistent per-pile allocation rules. At most one rule may match a (pile, pool kind) or static group.
+    repeated NKikimrBlobStorage.TStoragePoolPileOverride StoragePoolPileOverrides = 16;
 }
 
 message TSelfManagementConfig {
@@ -560,6 +567,14 @@ message TInterconnectConfig {
     optional uint32 MaxRdmaRetryBackoffLevel = 61 [default = 8]; // 5s * 2^8 = 1280s, about 21 minutes by default
     reserved 62, 63; // were UseUring / EnableUringSQPOLL of the reverted io_uring v1 transport
     optional bool EnableRdmaSendReceive = 69 [default = false];
+    optional string RdmaQpCachePoolName = 71; // Specify name of pool for qp creation/destruction
+    optional uint32 RdmaQpPoolSize = 72 [default = 1024];
+    // Prefer the RDMA context whose GID corresponds to this local IP address.
+    // Falls back to the local TCP interconnect address when no matching context is found.
+    optional string RdmaAddress = 73;
+    // Prefer the first address of this network interface that has a matching RDMA context.
+    // RdmaAddress has priority. Falls back to the local TCP interconnect address when no match is found.
+    optional string RdmaInterface = 74;
 
     message TV2Config {
         // Enables negotiation of the v2 session during the handshake. This is the ONLY field of TV2Config
@@ -828,12 +843,19 @@ message TCompositeConveyorConfig {
     }
 
     message TWorkersPool {
+        enum ESchedulingMode {
+            NonSchedulable = 0;
+            Schedulable = 1;
+            All = 2;
+        }
+
         optional double WorkersCount = 1;
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
         optional string Name = 4;
         optional uint64 MaxBatchSize = 5;
         repeated THeavyLimit HeavyLimits = 6;
+        optional ESchedulingMode SchedulingMode = 7 [default = NonSchedulable];
     }
 
     optional bool Enabled = 1 [default = true];
@@ -857,6 +879,8 @@ message TGroupedMemoryLimiterConfig {
     optional uint64 MemoryLimit = 2;
     optional uint64 HardMemoryLimit = 3;
     optional uint64 CountBuckets = 4;
+    optional double UnrestrictedSoftLimitCoefficient = 5;
+    optional uint32 MaxUnrestrictedGroupsPerScope = 6 [default = 1];
 }
 
 message TExternalIndexConfig {
@@ -1724,6 +1748,16 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0 }];
+        optional uint64 EnableSplitMergeFairScheduling = 20 [(ControlOptions) = {
+            Description: "Enables cross-table fair (round-robin) scheduling of deferred split/merge operations on slot-free. Requires the EnableSplitMergeDemandTracking feature flag. Off falls back to stats-arrival order.",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+        optional uint64 MergeBySizeEnabled = 21 [(ControlOptions) = {
+            Description: "Enables merge by size",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 1 }];
     }
 
     message TTCMallocControls {
@@ -2297,6 +2331,11 @@ message TImmediateControlsConfig {
                          "Successful DDisk/PersistentBuffer direct I/O also resets the idle interval. 0 disables probes",
             MinValue: 0,
             MaxValue: 86400,
+            DefaultValue: 0 }];
+        optional uint64 UseFixedVDiskSlotSize = 14 [(ControlOptions) = {
+            Description: "Use infer_pdisk_slot_count_settings.unit_size as PDiskConfig.ExpectedSlotSize setting",
+            MinValue: 0,
+            MaxValue: 1,
             DefaultValue: 0 }];
     }
 
@@ -2888,6 +2927,8 @@ message THiveConfig {
     repeated THiveTabletAllowedMetrics DefaultTabletAllowedMetrics = 92;
     optional double TabletImpactToPin = 93 [default = 0.3, (ParamDescription) = "Usage impact at which a tablet is treated as high-impact and is potentially isolated on a node"];
     optional double TabletImpactShareToPin = 94 [default = 0.5, (ParamDescription) = "Same as above, but relative to node's total usage"];
+    optional uint64 TabletEventHistorySize = 95 [default = 20, (ParamDescription) = "Number of recent events kept in memory per tablet for debugging, shown on the tablet page in Hive UI. 0 disables per-tablet history, values above 5000 are capped."];
+    optional uint64 NodeEventHistorySize = 96 [default = 50, (ParamDescription) = "Number of recent events kept in memory per node for debugging, shown on the node page in Hive UI. 0 disables per-node history, values above 5000 are capped."];
 }
 
 message THealthCheckConfig {
@@ -3060,6 +3101,23 @@ message TColumnShardConfig {
     optional string ScanDefaultPool = 75;
     // Actor-system pool for compaction conveyor tasks: "User" or "Batch". Unset is User.
     optional string CompactionDefaultPool = 76;
+    optional bool EnableWeightedDataChannelSelection = 77 [default = false];
+
+    message TCutHistoryConfig {
+        optional uint32 ScanBatchSize = 2 [default = 32];
+        optional uint64 ScanMemoryLimitBytes = 3 [default = 8388608];
+        optional uint32 ContinuationDelayMs = 4 [default = 1];
+        optional uint32 ContinuationJitterMs = 5 [default = 1];
+    }
+
+    optional TCutHistoryConfig CutHistory = 78;
+
+    message TBackupSettings {
+        optional uint32 ExportOperationTimeoutSeconds = 1 [default = 172800]; // 2 days
+        optional uint32 ImportOperationTimeoutSeconds = 2 [default = 172800]; // 2 days
+    }
+
+    optional TBackupSettings BackupSettings = 79;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from
@@ -3459,7 +3517,11 @@ message TBridgeConfig {
     message TPile {
         optional string Name = 1; // name (to be matched with node's BridgePileName)
     }
-    repeated TPile Piles = 1; // order of realms must not change during config updates
+    // Preserve the legacy order until the cluster has a persisted pile registry. Once the registry is present,
+    // pile identities are resolved by name and this local list may be reordered.
+    repeated TPile Piles = 1;
+    // Opt in to ordinary mirror-3-dc pools alongside bridged pools. Activation is irreversible.
+    optional bool EnableNonUniformStorage = 2 [default = false];
 }
 
 message TLabel {
@@ -3540,6 +3602,7 @@ message TSystemTabletBackupConfig {
     optional uint32 RetryBackupTimeoutSeconds = 7 [default = 60];
     optional uint32 RetryBackupMaxTimeoutSeconds = 8 [default = 900];
     optional uint32 SnapshotWorkBudgetPercent = 9 [default = 25];
+    optional uint64 MaxGlobalBackupsLimit = 10 [default = 50];
 }
 
 message TClusterDiagnosticsConfig {

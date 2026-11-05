@@ -8,9 +8,10 @@ SS_COUNTER_PREFIX = 'COUNTER_IN_FLIGHT_OPS_Tx'
 
 
 class SchemeShardHasNoInFlightTransactions(LivenessWarden):
-    def __init__(self, cluster):
+    def __init__(self, cluster, counters=None):
         super(SchemeShardHasNoInFlightTransactions, self).__init__()
         self._cluster = cluster
+        self._counters = counters
 
     @property
     def list_of_liveness_violations(self):
@@ -27,7 +28,10 @@ class SchemeShardHasNoInFlightTransactions(LivenessWarden):
             sensor_name = "SUM(SchemeShard/InFlightOps/%s)" % transaction_type_name
             in_fly_stats[sensor_name] = []
 
-        monitors = [node.monitor.fetch() for node in self._cluster.nodes.values()]
+        if self._counters is None:
+            monitors = [node.monitor.fetch() for node in self._cluster.nodes.values()]
+        else:
+            monitors = [self._counters.monitor(node) for node in self._cluster.nodes.values()]
         for monitor in monitors:
             for sensor_name in sorted(in_fly_stats.keys()):
                 sensor_value = monitor.sensor(

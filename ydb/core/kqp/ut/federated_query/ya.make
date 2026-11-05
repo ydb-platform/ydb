@@ -5,4 +5,6 @@ RECURSE_FOR_TESTS(
     generic_ut
     large_results
     s3
+    scheme
+    ydb_external
 )

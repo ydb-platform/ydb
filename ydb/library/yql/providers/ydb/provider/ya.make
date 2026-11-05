@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_ydb_datasink.cpp
@@ -29,6 +29,7 @@ PEERDIR(
     ydb/library/yql/providers/common/token_accessor/client
     yql/essentials/core
     yql/essentials/core/type_ann
+    ydb/library/pretty_types_print/protobuf
     ydb/library/yql/dq/expr_nodes
     yql/essentials/core/dq_integration
     yql/essentials/providers/common/config
@@ -49,7 +50,5 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/table
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

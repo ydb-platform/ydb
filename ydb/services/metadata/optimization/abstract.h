@@ -18,4 +18,4 @@ public:
     virtual NYql::IGraphTransformer::TStatus ValidateObjectNodeAnnotation(NYql::TExprNode::TPtr node, NYql::TExprContext& ctx) const = 0;
 };
 
-}  // namespace NKikimr::NMetadata::NModifications
+}   // namespace NKikimr::NMetadata::NModifications

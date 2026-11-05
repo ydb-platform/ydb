@@ -4,92 +4,95 @@
 
 namespace NKikimr::NPublicHttp {
 
-    TGrpcRequestContextWrapper::TGrpcRequestContextWrapper(const THttpRequestContext& requestContext, std::unique_ptr<NProtoBuf::Message> request, TReplySender replySender)
-      : RequestContext(requestContext)
-      , LongProject("yandexcloud://" + requestContext.GetProject())  // todo: remove prefix
-      , Request(std::move(request))
-      , ReplySender(std::move(replySender))
-      , AuthState(true)
-      , DeadlineAt(TInstant::Max())
-    {
-        JsonSettings.EnumAsNumbers = false;
-        JsonSettings.UI64AsString = false;
-        JsonSettings.EmptyRepeated = true;
+TGrpcRequestContextWrapper::TGrpcRequestContextWrapper(
+    const THttpRequestContext& requestContext, std::unique_ptr<NProtoBuf::Message> request, TReplySender replySender)
+    : RequestContext(requestContext)
+    , LongProject("yandexcloud://" + requestContext.GetProject())   // todo: remove prefix
+    , Request(std::move(request))
+    , ReplySender(std::move(replySender))
+    , AuthState(true)
+    , DeadlineAt(TInstant::Max())
+{
+    JsonSettings.EnumAsNumbers = false;
+    JsonSettings.UI64AsString = false;
+    JsonSettings.EmptyRepeated = true;
+}
+
+const NProtoBuf::Message* TGrpcRequestContextWrapper::GetRequest() const {
+    return Request.get();
+}
+
+NYdbGrpc::TAuthState& TGrpcRequestContextWrapper::GetAuthState() {
+    return AuthState;
+}
+
+void TGrpcRequestContextWrapper::Reply(NProtoBuf::Message* resp, ui32 status) {
+    Y_UNUSED(resp);
+    Y_UNUSED(status);
+    Y_ABORT_UNLESS(resp);
+    ReplySender(RequestContext, JsonSettings, resp, status);
+}
+
+void TGrpcRequestContextWrapper::Reply(grpc::ByteBuffer* resp, ui32 status, EStreamCtrl ctrl) {
+    Y_UNUSED(resp);
+    Y_UNUSED(status);
+    Y_UNUSED(ctrl);
+    Y_ABORT_UNLESS(false, "TGrpcRequestContextWrapper::Reply");
+}
+
+void TGrpcRequestContextWrapper::ReplyUnauthenticated(const TString& in) {
+    RequestContext.ResponseUnauthenticated(in);
+}
+
+void TGrpcRequestContextWrapper::ReplyError(grpc::StatusCode code, const TString& msg, const TString& details) {
+    auto errorMsg = TStringBuilder() << "Unexpected error. code: " << (int)code << ", msg: " << msg << ", details: " << details;
+    RequestContext.ResponseBadRequest(Ydb::StatusIds::BAD_REQUEST, errorMsg);
+}
+
+TInstant TGrpcRequestContextWrapper::Deadline() const {
+    return DeadlineAt;
+}
+
+TSet<TStringBuf> TGrpcRequestContextWrapper::GetPeerMetaKeys() const {
+    return {};
+}
+
+TVector<TStringBuf> TGrpcRequestContextWrapper::GetPeerMetaValues(TStringBuf key) const {
+    if (key == "x-ydb-database"sv) {
+        MetaValueCache = RequestContext.GetDb();
+        return { TStringBuf(MetaValueCache) };
     }
 
-    const NProtoBuf::Message* TGrpcRequestContextWrapper::GetRequest() const {
-        return Request.get();
+    if (key == "x-ydb-fq-project"sv) {
+        return { TStringBuf(LongProject) };
     }
 
-    NYdbGrpc::TAuthState& TGrpcRequestContextWrapper::GetAuthState() {
-        return AuthState;
+    if (key == "x-ydb-auth-ticket"sv) {
+        MetaValueCache = RequestContext.GetToken();
+        return { TStringBuf(MetaValueCache) };
     }
 
-    void TGrpcRequestContextWrapper::Reply(NProtoBuf::Message* resp, ui32 status) {
-        Y_UNUSED(resp);
-        Y_UNUSED(status);
-        Y_ABORT_UNLESS(resp);
-        ReplySender(RequestContext, JsonSettings, resp, status);
+    return {};
+}
+
+google::protobuf::Arena* TGrpcRequestContextWrapper::GetArena() {
+    return &Arena;
+}
+
+TString TGrpcRequestContextWrapper::GetPeer() const {
+    return RequestContext.GetPeer();
+}
+
+TString TGrpcRequestContextWrapper::GetEndpointId() const {
+    return {};
+}
+
+TString TGrpcRequestContextWrapper::GetRpcMethodName() const {
+    // We have no grpc method, but the closest analog is protobuf name
+    if (Request) {
+        return Request->GetDescriptor()->name();
     }
+    return {};
+}
 
-    void TGrpcRequestContextWrapper::Reply(grpc::ByteBuffer* resp, ui32 status, EStreamCtrl ctrl) {
-        Y_UNUSED(resp);
-        Y_UNUSED(status);
-        Y_UNUSED(ctrl);
-        Y_ABORT_UNLESS(false, "TGrpcRequestContextWrapper::Reply");
-    }
-
-    void TGrpcRequestContextWrapper::ReplyUnauthenticated(const TString& in) {
-        RequestContext.ResponseUnauthenticated(in);
-    }
-
-    void TGrpcRequestContextWrapper::ReplyError(grpc::StatusCode code, const TString& msg, const TString& details) {
-        auto errorMsg = TStringBuilder() << "Unexpected error. code: " << (int)code << ", msg: " << msg << ", details: " << details;
-        RequestContext.ResponseBadRequest(Ydb::StatusIds::BAD_REQUEST, errorMsg);
-    }
-
-    TInstant TGrpcRequestContextWrapper::Deadline() const {
-        return DeadlineAt;
-    }
-
-    TSet<TStringBuf> TGrpcRequestContextWrapper::GetPeerMetaKeys() const {
-        return {};
-    }
-
-    TVector<TStringBuf> TGrpcRequestContextWrapper::GetPeerMetaValues(TStringBuf key) const {
-        if (key == "x-ydb-database"sv) {
-            MetaValueCache = RequestContext.GetDb();
-            return { TStringBuf(MetaValueCache) };
-        }
-
-        if (key == "x-ydb-fq-project"sv) {
-            return { TStringBuf(LongProject) };
-        }
-
-        if (key == "x-ydb-auth-ticket"sv) {
-            MetaValueCache = RequestContext.GetToken();
-            return { TStringBuf(MetaValueCache) };
-        }
-
-        return { };
-    }
-
-    google::protobuf::Arena* TGrpcRequestContextWrapper::GetArena() {
-        return &Arena;
-    }
-
-    TString TGrpcRequestContextWrapper::GetPeer() const {
-       return RequestContext.GetPeer();
-    }
-
-    TString TGrpcRequestContextWrapper::GetEndpointId() const { return {}; }
-
-    TString TGrpcRequestContextWrapper::GetRpcMethodName() const {
-        // We have no grpc method, but the closest analog is protobuf name
-        if (Request) {
-            return Request->GetDescriptor()->name();
-        }
-        return {};
-    }
-
-} // namespace NKikimr::NPublicHttp
+}   // namespace NKikimr::NPublicHttp

@@ -2433,10 +2433,11 @@ private:
 
     bool AutoSelectVectorSettings(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         TString embeddingCopy;
+        TVector<TCell> cells;
         for (const auto& [_, row] : buildInfo.Sample.Rows) {
-            TSerializedCellVec cellVec;
-            if (TSerializedCellVec::TryParse(TString(row), cellVec)) {
-                auto cells = cellVec.GetCells();
+            // The parsed cells point into `row`, which is alive here;
+            // the embedding is copied out below.
+            if (TSerializedCellVec::TryParseCells(row, cells)) {
                 if (!cells.empty() && !cells[0].IsNull() && cells[0].Size() > 0) {
                     embeddingCopy = TString(cells[0].AsBuf());
                     break;
@@ -2766,10 +2767,11 @@ private:
             if (!buildInfo.Clusters) {
                 TStringBuf embedding;
                 TString embeddingCopy;
+                TVector<TCell> cells;
                 for (const auto& [_, row] : buildInfo.Sample.Rows) {
-                    TSerializedCellVec cellVec;
-                    if (TSerializedCellVec::TryParse(TString(row), cellVec)) {
-                        auto cells = cellVec.GetCells();
+                    // The parsed cells point into `row`, which is alive here;
+                    // the embedding is copied out below.
+                    if (TSerializedCellVec::TryParseCells(row, cells)) {
                         if (!cells.empty() && !cells[0].IsNull() && cells[0].Size() > 0) {
                             embeddingCopy = TString(cells[0].AsBuf());
                             break;

@@ -1,0 +1,8 @@
+Failed to execute query, reason:
+Request finished with status: GENERIC_ERROR
+Issues:
+<main>: Error: Post type annotation, code: 1090
+    <main>:1:1: Error: At function: RemovePrefixMembers, At function: SqlProject
+        <main>:4:5: Error: At function: PqReadTopic!
+            <main>:7:9: Error: Event time expression must be materialized into a Timestamp column before assigning a watermark
+

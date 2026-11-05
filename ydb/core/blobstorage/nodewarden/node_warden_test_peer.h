@@ -17,6 +17,9 @@ public:
     static const auto& GetPDisk(TNodeWarden& warden, ui32 pdiskId) {
         return warden.LocalPDisks.at(TPDiskKey(1, pdiskId)).Record;
     }
+    static ui32 GetPDiskRefCount(const TNodeWarden& warden, ui32 pdiskId) {
+        return warden.LocalPDisks.at(TPDiskKey(1, pdiskId)).RefCount;
+    }
 };
 }
 

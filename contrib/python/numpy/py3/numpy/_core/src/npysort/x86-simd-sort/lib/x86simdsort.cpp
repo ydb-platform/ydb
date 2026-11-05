@@ -11,7 +11,7 @@ static int check_cpu_feature_support(std::string_view cpufeature)
 
     if ((cpufeature == "avx512_spr") && (!disable_avx512))
 #if defined(__FLT16_MAX__) && !defined(__INTEL_LLVM_COMPILER) \
-        && __clang_major__ >= 18
+        && (!defined(__clang_major__) || __clang_major__ >= 18)
         return __builtin_cpu_supports("avx512f")
                 && __builtin_cpu_supports("avx512fp16")
                 && __builtin_cpu_supports("avx512vbmi2");
@@ -108,6 +108,17 @@ namespace x86simdsort {
         return (*internal_argselect##TYPE)(arr, k, arrsize, hasnan); \
     }
 
+/* simple constexpr function as a way around having #ifdef __FLT16_MAX__ block
+ * within the DISPATCH macro */
+template <typename T>
+constexpr bool IS_TYPE_FLOAT16()
+{
+#ifdef __FLT16_MAX__
+    if constexpr (std::is_same_v<T, _Float16>) { return true; }
+#endif
+    return false;
+}
+
 /* runtime dispatch mechanism */
 #define DISPATCH(func, TYPE, ISA) \
     DECLARE_INTERNAL_##func(TYPE) static __attribute__((constructor)) void \
@@ -118,7 +129,24 @@ namespace x86simdsort {
         std::string_view preferred_cpu = find_preferred_cpu(ISA); \
         if constexpr (dispatch_requested("avx512", ISA)) { \
             if (preferred_cpu.find("avx512") != std::string_view::npos) { \
-                CAT(CAT(internal_, func), TYPE) = &xss::avx512::func<TYPE>; \
+                if constexpr (IS_TYPE_FLOAT16<TYPE>()) { \
+                    if (preferred_cpu.find("avx512_spr") \
+                        != std::string_view::npos) { \
+                        CAT(CAT(internal_, func), TYPE) \
+                                = &xss::fp16_spr::func<TYPE>; \
+                        return; \
+                    } \
+                    if (preferred_cpu.find("avx512_icl") \
+                        != std::string_view::npos) { \
+                        CAT(CAT(internal_, func), TYPE) \
+                                = &xss::fp16_icl::func<TYPE>; \
+                        return; \
+                    } \
+                } \
+                else { \
+                    CAT(CAT(internal_, func), TYPE) \
+                            = &xss::avx512::func<TYPE>; \
+                } \
                 return; \
             } \
         } \
@@ -137,9 +165,9 @@ namespace x86simdsort {
     }
 
 #ifdef __FLT16_MAX__
-DISPATCH(qsort, _Float16, ISA_LIST("avx512_spr"))
-DISPATCH(qselect, _Float16, ISA_LIST("avx512_spr"))
-DISPATCH(partial_qsort, _Float16, ISA_LIST("avx512_spr"))
+DISPATCH(qsort, _Float16, ISA_LIST("avx512_spr", "avx512_icl"))
+DISPATCH(qselect, _Float16, ISA_LIST("avx512_spr", "avx512_icl"))
+DISPATCH(partial_qsort, _Float16, ISA_LIST("avx512_spr", "avx512_icl"))
 DISPATCH(argsort, _Float16, ISA_LIST("none"))
 DISPATCH(argselect, _Float16, ISA_LIST("none"))
 #endif
@@ -265,3 +293,47 @@ DISPATCH_KEYVALUE_SORT_FORTYPE(int32_t)
 DISPATCH_KEYVALUE_SORT_FORTYPE(float)
 
 } // namespace x86simdsort
+//
+
+extern "C" {
+XSS_EXPORT_SYMBOL
+void keyvalue_qsort_float_uint32(float *key, uint32_t *val, size_t size)
+{
+    x86simdsort::keyvalue_qsort(key, val, size, true);
+}
+XSS_EXPORT_SYMBOL
+void keyvalue_qsort_float_uint64(float *key, uint64_t *val, size_t size)
+{
+    x86simdsort::keyvalue_qsort(key, val, size, true);
+}
+XSS_EXPORT_SYMBOL
+void keyvalue_qsort_uint64_uint32(uint64_t *key, uint32_t *val, size_t size)
+{
+    x86simdsort::keyvalue_qsort(key, val, size, true);
+}
+XSS_EXPORT_SYMBOL
+void keyvalue_qsort_uint64_uint64(uint64_t *key, uint64_t *val, size_t size)
+{
+    x86simdsort::keyvalue_qsort(key, val, size, true);
+}
+XSS_EXPORT_SYMBOL
+void keyvalue_qsort_int32_uint32(int32_t *key, uint32_t *val, size_t size)
+{
+    x86simdsort::keyvalue_qsort(key, val, size, true);
+}
+XSS_EXPORT_SYMBOL
+void keyvalue_qsort_int32_uint64(int32_t *key, uint64_t *val, size_t size)
+{
+    x86simdsort::keyvalue_qsort(key, val, size, true);
+}
+XSS_EXPORT_SYMBOL
+void keyvalue_qsort_uint32_uint32(uint32_t *key, uint32_t *val, size_t size)
+{
+    x86simdsort::keyvalue_qsort(key, val, size, true);
+}
+XSS_EXPORT_SYMBOL
+void keyvalue_qsort_uint32_uint64(uint32_t *key, uint64_t *val, size_t size)
+{
+    x86simdsort::keyvalue_qsort(key, val, size, true);
+}
+}

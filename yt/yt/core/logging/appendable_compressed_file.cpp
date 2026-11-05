@@ -64,7 +64,7 @@ private:
     i64 WrittenBuffersCount_ = 0;
 
     // These fields are read and updated under FlushSpinLock_.
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, FlushSpinLock_);
+    YT_DECLARE_SPIN_LOCK(TSpinLock, FlushSpinLock_);
     i64 BuffersToFlushCount_ = 0;
     i64 CompressedBuffersCount_ = 0;
     TPromise<void> ReadyToFlushEvent_;

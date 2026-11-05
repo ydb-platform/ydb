@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/core/blobstorage/vdisk/common)
 FORK_SUBTESTS()
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:4)
+REQUIREMENTS(cpu:1)
 
 PEERDIR(
     library/cpp/getopt
@@ -23,6 +23,7 @@ SRCS(
     vdisk_events_ut.cpp
     vdisk_histogram_latency_ut.cpp
     vdisk_lsnmngr_ut.cpp
+    vdisk_mongroups_ut.cpp
     vdisk_outofspace_ut.cpp
     vdisk_pdisk_error_ut.cpp
     vdisk_syncneighbors_ut.cpp

@@ -14,7 +14,7 @@ import logging
 import random
 import time
 import urllib.parse
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING, TypeVar, cast
 from . import ydb_version
 
 import typing
@@ -31,6 +31,8 @@ except ImportError:
 
 _grpcs_protocol = "grpcs://"
 _grpc_protocol = "grpc://"
+
+CallableT = TypeVar("CallableT", bound=Callable[..., Any])
 
 
 def wrap_result_in_future(result):
@@ -82,7 +84,7 @@ def parse_connection_string(connection_string):
 
 
 # Decorator that ensures no exceptions are leaked from decorated async call
-def wrap_async_call_exceptions(f):
+def wrap_async_call_exceptions(f: CallableT) -> CallableT:
     @functools.wraps(f)
     def decorator(*args, **kwargs):
         try:
@@ -90,7 +92,7 @@ def wrap_async_call_exceptions(f):
         except Exception as e:
             return wrap_exception_in_future(e)
 
-    return decorator
+    return cast(CallableT, decorator)
 
 
 def check_module_exists(path: str) -> bool:
@@ -207,7 +209,11 @@ def get_first_message_with_timeout(status_stream: SyncResponseIterator, timeout:
     waiter = future()
 
     def get_first_response(waiter):
-        first_response = next(status_stream)
+        try:
+            first_response = next(status_stream)
+        except BaseException as e:
+            waiter.set_exception(e)
+            return
         waiter.set_result(first_response)
 
     thread = threading.Thread(

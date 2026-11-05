@@ -726,8 +726,9 @@ namespace NKikimr::NStorage {
         if (!vdisk.RuntimeData) {
             return;
         }
-        if (newInfo->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
-            return; // group is decomitted, VDisks will be deleted soon
+        if (newInfo->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE || !newInfo->GetTotalVDisksNum()) {
+            // group has no VDisks anymore (it is decommitted, or it has lost its inline pile), they will be deleted soon
+            return;
         }
 
         TIntrusivePtr<TBlobStorageGroupInfo>& currentInfo = vdisk.RuntimeData->GroupInfo;
@@ -738,6 +739,18 @@ namespace NKikimr::NStorage {
 
         if (newInfo->GetActorId(orderNumber) != vdiskServiceId) {
             // this disk is in donor mode, we don't care about generation change; donor modes are operated by BSC solely
+            return;
+        }
+
+        const ui32 failRealm = vdisk.GetVDiskId().FailRealm;
+        const auto failed = NKikimrBlobStorage::TGroupInfo::TFailRealm::F;
+        const bool wasFailed = currentInfo->GetFailRealmState(failRealm) == failed;
+        const bool isFailed = newInfo->GetFailRealmState(failRealm) == failed;
+        if (wasFailed != isFailed) {
+            PoisonLocalVDisk(vdisk);
+            // Keep receiving group updates while the previous incarnation is shutting down.
+            Groups.at(vdisk.GetGroupId()).VDisksOfGroup.PushBack(&vdisk);
+            StartLocalVDiskActor(vdisk);
             return;
         }
 

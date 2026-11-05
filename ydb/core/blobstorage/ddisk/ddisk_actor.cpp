@@ -180,7 +180,6 @@ namespace {
         , MinChunksReserved(isPersistentBufferActor
             ? MinChunksReservedPersistentBuffer
             : MinChunksReservedDDisk)
-        , SegmentManager(DDiskInstanceGuid)
         , PersistentBufferFormat(std::move(pbFormat))
     {
         if (IsPersistentBufferActor) {
@@ -292,8 +291,9 @@ namespace {
             .Checksums = {
                 COUNTER(Checksums, WritesWithoutChecksums, true)
                 COUNTER(Checksums, ChecksumMismatch, true)
-                COUNTER(Checksums, IntegrityPairReads, true)
-                COUNTER(Checksums, IntegrityPairWrites, true)
+                // Preserve published names for existing monitoring consumers.
+                .MetadataReads = COUNTER_VALUE(Checksums, IntegrityPairReads, true),
+                .ChecksumWrites = COUNTER_VALUE(Checksums, IntegrityPairWrites, true),
                 COUNTER(Checksums, IntegrityCorruption, true)
                 COUNTER(Checksums, IntegrityLostWriteDetected, true)
             },
@@ -313,8 +313,7 @@ namespace {
 
         DdiskIoOpPool.Resize(IoOpPoolCapacity);
         PersistentBufferPartIoOpPool.Resize(IoOpPoolCapacity);
-        InternalSyncWriteOpPool.Resize(IoOpPoolCapacity);
-        IntegrityIoOpPool.Resize(IoOpPoolCapacity);
+        BatchedIOAwaiterPool.reserve(IoOpPoolCapacity);
     }
 
     TDDiskActor::~TDDiskActor() {
@@ -342,8 +341,9 @@ namespace {
         IoStalledCounter = CountersBase->GetCounter("io_stalled", false);
         FillPool(DdiskIoOpPool);
         FillPool(PersistentBufferPartIoOpPool);
-        FillPool(InternalSyncWriteOpPool);
-        FillPool(IntegrityIoOpPool);
+        for (ui32 i = 0; i < IoOpPoolCapacity; ++i) {
+            BatchedIOAwaiterPool.push_back(std::make_shared<TBatchedIOAwaiter>(*this));
+        }
 
         YDB_LOG_DEBUG("TDDiskActor::Bootstrap",
             {"marker", "BSDD09"},
@@ -377,21 +377,8 @@ namespace {
         return BrokenReason ? BrokenReason : TString("DDisk is broken");
     }
 
-    void TDDiskActor::FailPendingDDiskQuery(std::unique_ptr<IEventHandle> ev) {
-        RejectQuery(*ev, NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, GetBrokenReason());
-    }
-
     void TDDiskActor::FailDirectIoOp(std::unique_ptr<TDirectIoOpBase> op, TString reason) {
-        switch (op->GetOperationType()) {
-            case NPDisk::TUringOperationBase::EREAD:
-                Counters.DirectIO.Read.Done(op->GetTotalSize());
-                break;
-            case NPDisk::TUringOperationBase::EWRITE:
-                Counters.DirectIO.Write.Done(op->GetTotalSize());
-                break;
-            default:
-                Y_ABORT("Unknown OperationType");
-        }
+        op->GetCounters().Done(op->GetTotalSize());
         if (!reason) {
             reason = GetBrokenReason();
         }
@@ -441,60 +428,16 @@ namespace {
 
         RejectPendingDDiskQueries(NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, GetBrokenReason());
 
-        // Fail every sync exactly once, remove any segment-manager state, and leave late source
-        // reads/internal writes harmless (their handlers already tolerate an absent sync).
-        std::vector<TSegmentManager::TSegment> removedSegments;
-        while (!SyncsInFlight.empty()) {
-            auto it = SyncsInFlight.begin();
-            auto& sync = it->second;
-            if (sync.FirstRequestId != Max<ui64>()) {
-                for (ui64 i = 0; i < sync.Requests.size(); ++i) {
-                    const ui64 requestId = sync.FirstRequestId + i;
-                    SegmentManager.PopRequest(requestId, &removedSegments);
-                    SyncReadCookiesInFlight.erase(requestId);
-                    auto& request = sync.Requests[i];
-                    if (request.Status == NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
-                        request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-                        request.ErrorReason << GetBrokenReason();
-                    }
-                }
-            }
-            sync.ErrorReason << GetBrokenReason();
-            ReplySync(it);
-        }
-        SyncReadCookiesInFlight.clear();
-
-        for (auto& [key, allocation] : DataChunkAllocationsInFlight) {
-            Y_UNUSED(key);
-            if (!allocation.LogIssued) {
+        CancelPendingSyncSources();
+        for (auto& [_, allocation] : DataChunkAllocationsInFlight) {
+            if (allocation.ChunkIdx && !allocation.LogIssued) {
                 PendingChunkRelease.insert(allocation.ChunkIdx);
             }
-            for (auto& parked : allocation.ParkedWriteResults) {
-                parked.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-                parked.ErrorMessage = GetBrokenReason();
-            }
-            FlushParkedAllocationReplies(allocation);
         }
-
-        DataChunkAllocationsInFlight.clear();
-        ChunkMapIncrementsInFlight.clear();
-
-        std::vector<ui64> pendingWriteIds;
-        pendingWriteIds.reserve(PendingClientWrites.size());
-        for (auto& [operationId, pending] : PendingClientWrites) {
-            pending.IntegrityCompleted = true;
-            pending.IntegrityError = GetBrokenReason();
-            pendingWriteIds.push_back(operationId);
-        }
-        for (const ui64 operationId : pendingWriteIds) {
-            MaybeFinishClientWrite(operationId);
-        }
-
-        PendingSyncSegments.clear();
-
+        FailLogWaiters(true);
         if (IntegrityManager) {
-            Y_UNUSED(IntegrityManager->TakeActions());
-            Y_UNUSED(IntegrityManager->TakeCompletedOperations());
+            IntegrityManager->Stop();
+            IntegrityManager->NotifyCompleted();
         }
 
         // DDisk and PersistentBuffer are separate actor instances sharing
@@ -503,16 +446,7 @@ namespace {
         // and keep serving those PB allocations if DDisk is the one that
         // broke. The PersistentBuffer instance never uses this queue.
         if (!IsPersistentBufferActor) {
-            decltype(ChunkAllocateQueue) persistentBufferAllocations;
-            while (!ChunkAllocateQueue.empty()) {
-                auto allocation = std::move(ChunkAllocateQueue.front());
-                ChunkAllocateQueue.pop();
-                if (std::holds_alternative<TChunkForPersistentBuffer>(
-                        allocation)) {
-                    persistentBufferAllocations.push(std::move(allocation));
-                }
-            }
-            ChunkAllocateQueue.swap(persistentBufferAllocations);
+            ChunkManager.RetainPersistentBufferAllocations();
             HandleChunkReserved();
         }
     }
@@ -525,53 +459,26 @@ namespace {
             TryCompleteStop();
             return;
         }
-        if (sourceType == NPDisk::TEvChunkReserve::EventType && ReserveInFlight) {
-            ReserveInFlight = false;
+        if (sourceType == NPDisk::TEvLog::EventType) {
+            for (const auto& [lsn, waiter] : LogWaiters) {
+                Y_UNUSED(lsn);
+                if (waiter.DeliveryCookie == ev->Cookie) {
+                    BeginStopping("PDisk log request was not delivered");
+                    return;
+                }
+            }
+            return;
+        }
+        if (sourceType == NPDisk::TEvChunkReserve::EventType
+                && ReservationCookie && *ReservationCookie == ev->Cookie) {
+            ReservationCookie.reset();
+            ChunkManager.FinishReservation();
             BeginStopping("PDisk reserve request was not delivered");
             TryCompleteStop();
             return;
         }
-        if (sourceType == NPDisk::TEvChunkForget::EventType && ev->Cookie == StartupForgetCookie) {
-            BeginStopping("PDisk startup forget request was not delivered");
-            return;
-        }
         if (sourceType == TEv::EvRead || sourceType == TEv::EvReadPersistentBuffer) {
-            SyncReadCookiesInFlight.erase(ev->Cookie);
-            std::vector<TSegmentManager::TSegment> segments;
-            ui64 syncId = SegmentManager.GetSync(ev->Cookie);
-            SegmentManager.PopRequest(ev->Cookie, &segments);
-
-            auto it = SyncsInFlight.find(syncId);
-            if (it == SyncsInFlight.end()) {
-                return;
-            }
-            auto& sync = it->second;
-
-            if (ev->Cookie < sync.FirstRequestId || ev->Cookie >= sync.FirstRequestId + sync.Requests.size()) {
-                YDB_LOG_ERROR("TDDiskActor::Handle(TEvUndelivered) request cookie out of range",
-                    {"marker", "BSDD23"},
-                    {"DDiskId", DDiskId},
-                    {"cookie", ev->Cookie},
-                    {"syncId", syncId},
-                    {"firstRequestId", sync.FirstRequestId},
-                    {"requestsCount", sync.Requests.size()},
-                    {"sourceType", sourceType});
-                return;
-            }
-            auto& request = sync.Requests[ev->Cookie - sync.FirstRequestId];
-
-            if (request.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
-                return;
-            }
-
-            request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
-            request.ErrorReason << "[" << request.Selector.OffsetInBytes << ';'
-                << request.Selector.OffsetInBytes + request.Selector.Size
-                << "] failed to read; reason: read event undelivered";
-            sync.ErrorReason << "[request_idx=" << ev->Cookie - sync.FirstRequestId << "] failed to read; ";
-            if (--sync.RequestsInFlight == 0) {
-                MaybeReplySync(it);
-            }
+            HandleSyncSourceUndelivered(ev->Cookie, sourceType == TEv::EvReadPersistentBuffer);
             return;
         }
     }
@@ -597,19 +504,13 @@ namespace {
             hFunc(TEvents::TEvGone, HandleGone)
 
             hFunc(TEvReadResult, Handle)
-            hFunc(TEvPrivate::TEvInternalSyncWriteResult, Handle)
 
             hFunc(NPDisk::TEvYardInitResult, Handle)
             hFunc(NPDisk::TEvReadLogResult, Handle)
-            hFunc(NPDisk::TEvChunkForgetResult, Handle)
-            cFunc(TEvPrivate::EvHandleSingleQuery, HandleSingleQuery)
+            IgnoreFunc(NPDisk::TEvChunkForgetResult)
             hFunc(NPDisk::TEvChunkReserveResult, Handle)
+            cFunc(TEvPrivate::EvHandleSingleQuery, HandleSingleQuery)
             hFunc(NPDisk::TEvLogResult, Handle)
-            hFunc(TEvPrivate::TEvHandleEventForChunk, Handle)
-            hFunc(TEvPrivate::TEvHandleSerializedWriteForChunk, Handle)
-            hFunc(TEvPrivate::TEvDDiskIoResult, Handle)
-            hFunc(TEvPrivate::TEvIntegrityIoResult, Handle)
-            hFunc(TEvPrivate::TEvChunkFormatIoResult, Handle)
             hFunc(NPDisk::TEvCutLog, Handle)
             hFunc(TEvReadPersistentBufferResult, Handle)
             hFunc(NPDisk::TEvChunkWriteRawResult, Handle)
@@ -781,27 +682,13 @@ namespace {
             Y_UNUSED(tabletId);
             for (auto& [vChunkIndex, chunk] : chunks) {
                 Y_UNUSED(vChunkIndex);
-                auto drain = [&](auto& queue) {
-                    while (!queue.empty()) {
-                        auto ev = queue.front().Release();
-                        queue.pop();
-                        RejectQuery(*ev, status, reason);
-                    }
-                };
-                drain(chunk.PendingEventsForChunk);
-                drain(chunk.PendingSerializedWrites);
-                chunk.SerializedWriteResumeScheduled = false;
+                // Wake allocation and commit awaiters before
+                // the stopping mailbox barrier and Gone notification.
+                chunk.AllocationPending = false;
+                chunk.AllocationReady.NotifyAll();
+                chunk.CommitReady.NotifyAll();
             }
         }
-
-        for (auto& [operationId, read] : PendingChecksumReads) {
-            Y_UNUSED(operationId);
-            const auto size = read.Event->Get<TEvRead>()->Record.GetSelector().GetSize();
-            Counters.Interface.Read.Reply(false, size);
-            SendReply(*read.Event, std::make_unique<TEvReadResult>(
-                status, reason));
-        }
-        PendingChecksumReads.clear();
 
         for (const auto& [tabletId, pending] : TabletChunkDeletionReplies) {
             Y_UNUSED(tabletId);
@@ -829,25 +716,11 @@ namespace {
         *Counters.PersistentBuffer.PendingEventsQueueSize -= PendingPersistentBufferEvents.size();
         drain(PendingPersistentBufferEvents);
 
-        for (auto& [syncId, sync] : SyncsInFlight) {
-            Y_UNUSED(syncId);
-            auto result = std::make_unique<TEvSyncResult>(TStatus::SESSION_MISMATCH, TString(StoppingReason));
-            for (const auto& request : sync.Requests) {
-                Y_UNUSED(request);
-                result->AddSegmentResult(TStatus::SESSION_MISMATCH, TString(StoppingReason));
-            }
-            auto reply = std::make_unique<IEventHandle>(sync.Sender, SelfId(), result.release(), 0, sync.Cookie);
-            if (sync.InterconnectionSessionId) {
-                reply->Rewrite(TEvInterconnect::EvForward, sync.InterconnectionSessionId);
-            }
-            Counters.Interface.Sync.Reply(false);
-            *Counters.Interface.Sync.BytesInFlight -= sync.RequestedBytes;
-            sync.Span.End();
-            TActivationContext::Send(reply.release());
+        CancelPendingSyncSources();
+        if (IntegrityManager) {
+            IntegrityManager->Stop();
+            IntegrityManager->NotifyCompleted();
         }
-        SyncsInFlight.clear();
-        SyncReadCookiesInFlight.clear();
-        PendingSyncSegments.clear();
 
         // The open PB batch has not submitted any I/O. Use the normal write
         // finalizer to reply to its records and duplicate waiters.
@@ -882,8 +755,9 @@ namespace {
             hFunc(TEvReadThenWritePersistentBuffers, reject)
             hFunc(TEvPrivate::TEvRetryListPersistentBuffer, rejectListRetry)
 
-            hFunc(TEvPrivate::TEvDDiskIoResult, Handle)
-            hFunc(TEvPrivate::TEvIntegrityIoResult, Handle)
+            hFunc(NPDisk::TEvChunkReserveResult, Handle)
+            hFunc(TEvReadResult, Handle)
+            hFunc(TEvReadPersistentBufferResult, Handle)
             hFunc(TEvPrivate::TEvReadPersistentBufferPart, Handle)
             hFunc(TEvPrivate::TEvWritePersistentBufferPart, Handle)
 #if defined(__linux__)
@@ -896,7 +770,6 @@ namespace {
             cFunc(TEvPrivate::EvFinishStopping, FinishStopping)
             cFunc(TEvPrivate::EvCompleteStop, CompleteStop)
             cFunc(TEvPrivate::EvStopIoTimeout, HandleStopIoTimeout)
-            hFunc(NPDisk::TEvChunkReserveResult, HandleStopping)
             hFunc(TEvCollectTabletStats, Handle)
             hFunc(TEvGetTabletStats, Handle)
             hFunc(NMon::TEvHttpInfo, Handle)
@@ -936,6 +809,7 @@ namespace {
             Send(PersistentBufferActorId, new TEvents::TEvPoison(),
                 IEventHandle::FlagTrackDelivery, PBShutdownCookie);
         }
+        FailLogWaiters(false);
         RejectQueuedQueries();
         CancelRetries();
         for (auto* callbacks : {&ReadCallbacks, &WriteCallbacks}) {
@@ -948,11 +822,11 @@ namespace {
             }
         }
         const ui64 previous = DirectIoState.fetch_or(DirectIoStopping, std::memory_order_acq_rel);
-        if (!previous) {
+        if (!(previous & ~DirectIoFlags)) {
             // Includes fallback: cancellation results must precede destruction.
             Send(SelfId(), new TEvPrivate::TEvFinishStopping);
         }
-        if (previous || !PersistentBufferGone || ReserveInFlight) {
+        if ((previous & ~DirectIoFlags) || !PersistentBufferGone || ChunkManager.IsReservationInFlight()) {
             Schedule(StopIoTimeout, new TEvPrivate::TEvStopIoTimeout);
         }
     }
@@ -965,7 +839,9 @@ namespace {
     }
 
     void TDDiskActor::TryCompleteStop() {
-        if (!PoisonReceived || !OwnDrainComplete || !PersistentBufferGone || ReserveInFlight) {
+        if (!PoisonReceived || !OwnDrainComplete || DataRequestsInFlight || !SyncsInFlight.empty()
+                || !SyncSourceCookies.empty()
+                || !PersistentBufferGone || ChunkManager.IsReservationInFlight()) {
             return;
         }
 #if defined(__linux__)
@@ -995,8 +871,8 @@ namespace {
             // This is the last actor access: shutdown may destroy it as soon as
             // the count reaches zero. All callback cleanup must precede retirement.
             const ui64 previous = DirectIoState.fetch_sub(1, std::memory_order_acq_rel);
-            Y_ABORT_UNLESS(previous & ~DirectIoStopping);
-            if (previous == (DirectIoStopping | 1)) {
+            Y_ABORT_UNLESS(previous & ~DirectIoFlags);
+            if ((previous & DirectIoStopping) && (previous & ~DirectIoFlags) == 1) {
                 // Result events were published before retirement. The final mailbox
                 // turn must process them before destroying the actor's request state.
                 actorSystem->Send(actorId, new TEvPrivate::TEvFinishStopping);
@@ -1014,7 +890,7 @@ namespace {
             YDB_LOG_ERROR("TDDiskActor I/O stalled during shutdown",
                 {"DDiskId", DDiskId}, {"persistentBuffer", IsPersistentBufferActor});
         }
-        if (ReserveInFlight) {
+        if (ChunkManager.IsReservationInFlight()) {
             YDB_LOG_ERROR("DDisk waiting for outstanding reservation", {"DDiskId", DDiskId});
         }
         if (!PersistentBufferGone) {
@@ -1031,28 +907,18 @@ namespace {
 
     void TDDiskActor::FinishStopping() {
         Y_ABORT_UNLESS(Stopping && !GetDirectIoInflight());
-        if (std::exchange(OwnDrainFinishing, true)) {
+        // RejectQueuedQueries wakes logical requests before the fallback cancellation loop
+        // publishes all accepted I/O results. BeginStopping sets this bit only after that loop;
+        // its final TEvFinishStopping (or the last router callback) retries
+        // this barrier once every cancellation result has been queued.
+        if (!(DirectIoState.load(std::memory_order_acquire) & DirectIoStopping)) {
             return;
         }
-        using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
-        // Results whose integrity work or allocation log could not finish are
-        // already represented here; no separate registry of client replies is needed.
-        for (auto& [operationId, pending] : PendingClientWrites) {
-            Y_UNUSED(operationId);
-            if (pending.DataResult) {
-                pending.DataResult->Status = TStatus::SESSION_MISMATCH;
-                pending.DataResult->ErrorMessage = TString(StoppingReason);
-                FinishClientWrite(std::move(*pending.DataResult));
-            }
+        if (DataRequestsInFlight || !SyncsInFlight.empty() || !SyncSourceCookies.empty()) {
+            return;
         }
-        PendingClientWrites.clear();
-        for (auto& [key, allocation] : DataChunkAllocationsInFlight) {
-            Y_UNUSED(key);
-            for (auto& reply : allocation.ParkedWriteResults) {
-                reply.Status = TStatus::SESSION_MISMATCH;
-                reply.ErrorMessage = TString(StoppingReason);
-            }
-            FlushParkedAllocationReplies(allocation);
+        if (std::exchange(OwnDrainFinishing, true)) {
+            return;
         }
         ClearIoStalled();
         ReleaseUncommittedChunks();

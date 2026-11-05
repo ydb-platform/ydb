@@ -105,7 +105,7 @@ class CherryPickCreator:
         return output
 
     def create_pr_for_branch(self, target_branch):
-        dev_branch_name = f"cherry-pick-{target_branch}-{self.dtm}"
+        dev_branch_name = f"robots/backport/cherry-pick-{target_branch}-{self.dtm}"
         self.git_run("reset", "--hard")
         self.git_run("checkout", target_branch)
         self.git_run("checkout", "-b", dev_branch_name)

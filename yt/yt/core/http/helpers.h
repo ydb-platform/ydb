@@ -30,6 +30,7 @@ inline const std::string AccessControlMaxAgeHeaderName("Access-Control-Max-Age")
 inline const std::string AuthorizationHeaderName("Authorization");
 inline const std::string CacheControlHeaderName("Cache-Control");
 inline const std::string ContentEncodingHeaderName("Content-Encoding");
+inline const std::string ContentLengthHeaderName("Content-Length");
 inline const std::string ContentRangeHeaderName("Content-Range");
 inline const std::string ContentTypeHeaderName("Content-Type");
 inline const std::string CookieHeaderName("Cookie");

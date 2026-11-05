@@ -1,8 +1,9 @@
 #pragma once
 
+#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.gen.h>
+
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.gen.h>
 
 namespace NYql {
 namespace NNodes {
@@ -34,13 +35,17 @@ public:
     }
 };
 
-class TPqDataSink : public NGenerated::TPqDataSinkStub<TExprBase, TCallable, TCoAtom> {
+class TPqDataSink: public NGenerated::TPqDataSinkStub<TExprBase, TCallable, TCoAtom> {
 public:
     explicit TPqDataSink(const TExprNode* node)
-        : TPqDataSinkStub(node) {}
+        : TPqDataSinkStub(node)
+    {
+    }
 
     explicit TPqDataSink(const TExprNode::TPtr& node)
-        : TPqDataSinkStub(node) {}
+        : TPqDataSinkStub(node)
+    {
+    }
 
     static bool Match(const TExprNode* node) {
         if (!TPqDataSinkStub::Match(node)) {
@@ -57,5 +62,5 @@ public:
 
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.defs.inl.h>
 
-} // namespace NNodes
-} // namespace NYql
+}   // namespace NNodes
+}   // namespace NYql

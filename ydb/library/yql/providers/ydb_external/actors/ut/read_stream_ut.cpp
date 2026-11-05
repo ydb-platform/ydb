@@ -1,12 +1,13 @@
 #include <ydb/library/yql/providers/ydb_external/actors/read_stream.h>
+
+#include <arrow/api.h>
+#include <arrow/ipc/metadata_internal.h>
+#include <arrow/ipc/writer.h>
+#include <arrow/util/compression.h>
+#include <arrow/util/key_value_metadata.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/cast.h>
 #include <yql/essentials/public/udf/arrow/util.h>
-#include <arrow/api.h>
-#include <arrow/ipc/writer.h>
-#include <arrow/ipc/metadata_internal.h>
-#include <arrow/util/key_value_metadata.h>
-#include <arrow/util/compression.h>
 
 namespace NYql::NYdbExternal {
 namespace {
@@ -28,9 +29,9 @@ TSource Source(Ydb::Type::PrimitiveTypeId type = Ydb::Type::UINT64, bool optiona
 }
 
 NYdb::TResultSet Result(std::shared_ptr<arrow::Array> values, const std::string& name = "value",
-                       arrow::ipc::IpcWriteOptions options = arrow::ipc::IpcWriteOptions::Defaults()) {
-    auto schema = arrow::schema({arrow::field(name, values->type())});
-    auto batch = arrow::RecordBatch::Make(schema, values->length(), {values});
+    arrow::ipc::IpcWriteOptions options = arrow::ipc::IpcWriteOptions::Defaults()) {
+    auto schema = arrow::schema({ arrow::field(name, values->type()) });
+    auto batch = arrow::RecordBatch::Make(schema, values->length(), { values });
     auto schemaBytes = arrow::ipc::SerializeSchema(*schema).ValueOrDie();
     auto bytes = arrow::ipc::SerializeRecordBatch(*batch, options).ValueOrDie();
     Ydb::ResultSet proto;
@@ -52,8 +53,8 @@ std::string Framed(const arrow::Buffer& metadata, const std::string& body = {}) 
     return result;
 }
 
-NYdb::TResultSet RawResult(const std::shared_ptr<arrow::Schema>& schema,
-                          const std::shared_ptr<arrow::Buffer>& metadata, const std::string& body) {
+NYdb::TResultSet RawResult(
+    const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<arrow::Buffer>& metadata, const std::string& body) {
     Ydb::ResultSet proto;
     proto.set_format(Ydb::ResultSet::FORMAT_ARROW);
     proto.mutable_arrow_format_meta()->set_schema(arrow::ipc::SerializeSchema(*schema).ValueOrDie()->ToString());
@@ -63,11 +64,11 @@ NYdb::TResultSet RawResult(const std::shared_ptr<arrow::Schema>& schema,
 
 std::shared_ptr<arrow::Array> Integers() {
     arrow::UInt64Builder builder;
-    UNIT_ASSERT(builder.AppendValues({1, 2, 3}).ok());
+    UNIT_ASSERT(builder.AppendValues({ 1, 2, 3 }).ok());
     return builder.Finish().ValueOrDie();
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(YdbExternalReadStream) {
     Y_UNIT_TEST(EscapesIdentifiersAndRejectsControls) {
@@ -100,9 +101,10 @@ Y_UNIT_TEST_SUITE(YdbExternalReadStream) {
 
     Y_UNIT_TEST(DeliveredBuffersDoNotRetainIpcPadding) {
         std::shared_ptr<arrow::Buffer> metadata;
-        UNIT_ASSERT(arrow::ipc::internal::WriteRecordBatchMessage(1, 4096, nullptr,
-            {{1, 0, 0}}, {{0, 0}, {0, 8}}, arrow::ipc::IpcWriteOptions::Defaults(), &metadata).ok());
-        auto result = RawResult(arrow::schema({arrow::field("value", arrow::uint64())}), metadata, std::string(4096, '\0'));
+        UNIT_ASSERT(arrow::ipc::internal::WriteRecordBatchMessage(
+            1, 4096, nullptr, { { 1, 0, 0 } }, { { 0, 0 }, { 0, 8 } }, arrow::ipc::IpcWriteOptions::Defaults(), &metadata)
+                        .ok());
+        auto result = RawResult(arrow::schema({ arrow::field("value", arrow::uint64()) }), metadata, std::string(4096, '\0'));
         auto decoded = DecodeArrowResult(result, Source(), 8192);
         auto output = TakeOutputBatch(*decoded, 0, 1024, MaxOutputRowBytes);
         decoded.reset();
@@ -126,11 +128,10 @@ Y_UNIT_TEST_SUITE(YdbExternalReadStream) {
                 UNIT_ASSERT(flags.Append(row % 2).ok());
             }
         }
-        auto batch = arrow::RecordBatch::Make(arrow::schema({
-            arrow::field("value", arrow::utf8()), arrow::field("key", arrow::uint64()),
-            arrow::field("flag", arrow::uint8())}), 97,
-            {strings.Finish().ValueOrDie(), integers.Finish().ValueOrDie(), flags.Finish().ValueOrDie()});
-        batch = batch->Slice(3, 90); // Exercise input offsets and non-byte-aligned bitmaps.
+        auto batch = arrow::RecordBatch::Make(
+            arrow::schema({ arrow::field("value", arrow::utf8()), arrow::field("key", arrow::uint64()), arrow::field("flag", arrow::uint8()) }),
+            97, { strings.Finish().ValueOrDie(), integers.Finish().ValueOrDie(), flags.Finish().ValueOrDie() });
+        batch = batch->Slice(3, 90);   // Exercise input offsets and non-byte-aligned bitmaps.
         ui64 blocks = 0;
         int64_t offset = 0;
         while (offset < batch->num_rows()) {
@@ -205,11 +206,11 @@ Y_UNIT_TEST_SUITE(YdbExternalReadStream) {
         *second = source.GetColumns(0);
         second->SetName("other");
         std::shared_ptr<arrow::Buffer> metadata;
-        UNIT_ASSERT(arrow::ipc::internal::WriteRecordBatchMessage(512, 4096, nullptr,
-            {{512, 0, 0}, {512, 0, 0}}, {{0, 0}, {0, 4096}, {0, 0}, {0, 4096}},
-            arrow::ipc::IpcWriteOptions::Defaults(), &metadata).ok());
-        auto result = RawResult(arrow::schema({arrow::field("value", arrow::uint64()),
-            arrow::field("other", arrow::uint64())}), metadata, std::string(4096, '\0'));
+        UNIT_ASSERT(arrow::ipc::internal::WriteRecordBatchMessage(512, 4096, nullptr, { { 512, 0, 0 }, { 512, 0, 0 } },
+            { { 0, 0 }, { 0, 4096 }, { 0, 0 }, { 0, 4096 } }, arrow::ipc::IpcWriteOptions::Defaults(), &metadata)
+                        .ok());
+        auto result = RawResult(arrow::schema({ arrow::field("value", arrow::uint64()), arrow::field("other", arrow::uint64()) }), metadata,
+            std::string(4096, '\0'));
         UNIT_ASSERT_EXCEPTION_CONTAINS(DecodeArrowResult(result, source, 5000), yexception, "decoded buffers");
     }
 
@@ -234,8 +235,8 @@ Y_UNIT_TEST_SUITE(YdbExternalReadStream) {
         UNIT_ASSERT(values.IsNull(1));
         UNIT_ASSERT_VALUES_EQUAL(values.Value(2), 0);
         UNIT_ASSERT(builder.Append(2).ok());
-        UNIT_ASSERT_EXCEPTION_CONTAINS(DecodeArrowResult(Result(builder.Finish().ValueOrDie()), source,
-            source.GetMaxBatchBytes()), yexception, "invalid Bool value");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeArrowResult(Result(builder.Finish().ValueOrDie()), source, source.GetMaxBatchBytes()), yexception, "invalid Bool value");
     }
 
     Y_UNIT_TEST(BoolUsesMiniKqlLayoutAndPreservesNulls) {
@@ -255,9 +256,9 @@ Y_UNIT_TEST_SUITE(YdbExternalReadStream) {
     }
 
     Y_UNIT_TEST(RejectsLegacyAndUnalignedIpcFraming) {
-        auto schema = arrow::schema({arrow::field("value", arrow::uint64())});
+        auto schema = arrow::schema({ arrow::field("value", arrow::uint64()) });
         auto schemaBytes = arrow::ipc::SerializeSchema(*schema).ValueOrDie()->ToString();
-        auto batch = arrow::RecordBatch::Make(schema, 3, {Integers()});
+        auto batch = arrow::RecordBatch::Make(schema, 3, { Integers() });
         auto batchBytes = arrow::ipc::SerializeRecordBatch(*batch, arrow::ipc::IpcWriteOptions::Defaults()).ValueOrDie()->ToString();
         Ydb::ResultSet proto;
         proto.set_format(Ydb::ResultSet::FORMAT_ARROW);
@@ -282,13 +283,14 @@ Y_UNIT_TEST_SUITE(YdbExternalReadStream) {
             column->SetName("c" + ToString(i));
             column->MutableType()->set_type_id(Ydb::Type::BOOL);
             fields.push_back(arrow::field(std::string(column->GetName()), arrow::boolean()));
-            nodes.push_back({rows, 0, 0});
-            buffers.push_back({0, 0});
-            buffers.push_back({0, rows / 8}); // Every column aliases the same tiny bitmap.
+            nodes.push_back({ rows, 0, 0 });
+            buffers.push_back({ 0, 0 });
+            buffers.push_back({ 0, rows / 8 });   // Every column aliases the same tiny bitmap.
         }
         std::shared_ptr<arrow::Buffer> metadata;
-        UNIT_ASSERT(arrow::ipc::internal::WriteRecordBatchMessage(rows, rows / 8, nullptr,
-            nodes, buffers, arrow::ipc::IpcWriteOptions::Defaults(), &metadata).ok());
+        UNIT_ASSERT(arrow::ipc::internal::WriteRecordBatchMessage(
+            rows, rows / 8, nullptr, nodes, buffers, arrow::ipc::IpcWriteOptions::Defaults(), &metadata)
+                        .ok());
         auto result = RawResult(arrow::schema(fields), metadata, std::string(rows / 8, '\xff'));
         UNIT_ASSERT_EXCEPTION_CONTAINS(DecodeArrowResult(result, source, 4096), yexception, "Bool expansion");
     }
@@ -296,11 +298,11 @@ Y_UNIT_TEST_SUITE(YdbExternalReadStream) {
     Y_UNIT_TEST(RejectsExperimentalCompressionAndMetadataBeforeArrowOpen) {
         auto options = arrow::ipc::IpcWriteOptions::Defaults();
         options.metadata_version = arrow::ipc::MetadataVersion::V4;
-        auto custom = arrow::key_value_metadata({"ARROW:experimental_compression"}, {"ZSTD"});
+        auto custom = arrow::key_value_metadata({ "ARROW:experimental_compression" }, { "ZSTD" });
         std::shared_ptr<arrow::Buffer> metadata;
-        UNIT_ASSERT(arrow::ipc::internal::WriteRecordBatchMessage(3, 24, custom,
-            {{3, 0, 0}}, {{0, 0}, {0, 24}}, options, &metadata).ok());
-        auto result = RawResult(arrow::schema({arrow::field("value", arrow::uint64())}), metadata, std::string(24, '\0'));
+        UNIT_ASSERT(
+            arrow::ipc::internal::WriteRecordBatchMessage(3, 24, custom, { { 3, 0, 0 } }, { { 0, 0 }, { 0, 24 } }, options, &metadata).ok());
+        auto result = RawResult(arrow::schema({ arrow::field("value", arrow::uint64()) }), metadata, std::string(24, '\0'));
         UNIT_ASSERT_EXCEPTION_CONTAINS(DecodeArrowResult(result, Source(), 4096), yexception, "custom metadata");
     }
 
@@ -311,25 +313,25 @@ Y_UNIT_TEST_SUITE(YdbExternalReadStream) {
         auto entry = arrow::flatbuf::CreateKeyValue(builder, key, value);
         std::vector<flatbuffers::Offset<arrow::flatbuf::KeyValue>> entries(256, entry);
         auto metadataEntries = builder.CreateVector(entries);
-        auto message = arrow::flatbuf::CreateMessage(builder, arrow::flatbuf::MetadataVersion::V5,
-            arrow::flatbuf::MessageHeader::RecordBatch, flatbuffers::Offset<void>(), 0, metadataEntries);
+        auto message = arrow::flatbuf::CreateMessage(builder, arrow::flatbuf::MetadataVersion::V5, arrow::flatbuf::MessageHeader::RecordBatch,
+            flatbuffers::Offset<void>(), 0, metadataEntries);
         builder.Finish(message);
         auto metadata = std::make_shared<arrow::Buffer>(builder.GetBufferPointer(), builder.GetSize());
-        auto result = RawResult(arrow::schema({arrow::field("value", arrow::uint64())}), metadata, {});
+        auto result = RawResult(arrow::schema({ arrow::field("value", arrow::uint64()) }), metadata, {});
         UNIT_ASSERT_EXCEPTION_CONTAINS(DecodeArrowResult(result, Source(), 4096), yexception, "custom metadata");
     }
 
     Y_UNIT_TEST(RejectsSchemaMetadataAndMissingHeaders) {
-        auto schema = arrow::schema({arrow::field("value", arrow::uint64())}, arrow::key_value_metadata({"key"}, {"value"}));
-        auto batch = arrow::RecordBatch::Make(schema, 3, {Integers()});
+        auto schema = arrow::schema({ arrow::field("value", arrow::uint64()) }, arrow::key_value_metadata({ "key" }, { "value" }));
+        auto batch = arrow::RecordBatch::Make(schema, 3, { Integers() });
         Ydb::ResultSet proto;
         proto.set_format(Ydb::ResultSet::FORMAT_ARROW);
         proto.mutable_arrow_format_meta()->set_schema(arrow::ipc::SerializeSchema(*schema).ValueOrDie()->ToString());
         proto.set_data(arrow::ipc::SerializeRecordBatch(*batch, arrow::ipc::IpcWriteOptions::Defaults()).ValueOrDie()->ToString());
         UNIT_ASSERT_EXCEPTION_CONTAINS(DecodeArrowResult(NYdb::TResultSet(proto), Source(), 4096), yexception, "schema custom metadata");
         flatbuffers::FlatBufferBuilder builder;
-        auto missingHeader = arrow::flatbuf::CreateMessage(builder, arrow::flatbuf::MetadataVersion::V5,
-            arrow::flatbuf::MessageHeader::Schema, flatbuffers::Offset<void>(), 0);
+        auto missingHeader = arrow::flatbuf::CreateMessage(
+            builder, arrow::flatbuf::MetadataVersion::V5, arrow::flatbuf::MessageHeader::Schema, flatbuffers::Offset<void>(), 0);
         builder.Finish(missingHeader);
         arrow::Buffer metadata(builder.GetBufferPointer(), builder.GetSize());
         proto.mutable_arrow_format_meta()->set_schema(Framed(metadata));
@@ -344,4 +346,4 @@ Y_UNIT_TEST_SUITE(YdbExternalReadStream) {
     }
 }
 
-} // namespace NYql::NYdbExternal
+}   // namespace NYql::NYdbExternal

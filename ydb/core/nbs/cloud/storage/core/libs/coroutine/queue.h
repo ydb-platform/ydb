@@ -127,6 +127,12 @@ public:
         Event.Signal();
     }
 
+    // takes an item without waiting; for draining once nobody dequeues anymore
+    bool TryDequeue(T* item)
+    {
+        return Queue.Dequeue(item);
+    }
+
     bool Dequeue(T* item)
     {
         do {

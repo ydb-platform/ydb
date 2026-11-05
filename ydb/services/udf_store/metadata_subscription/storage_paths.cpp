@@ -1,6 +1,7 @@
 #include "storage_paths.h"
 
 #include <ydb/core/base/appdata.h>
+
 #include <ydb/services/metadata/service.h>
 
 #include <util/string/builder.h>
@@ -34,10 +35,7 @@ TString NormalizeCpuSpec(TStringBuf triple, TStringBuf cpu) {
         TString result;
         result.reserve(value.size());
         for (char ch : value) {
-            if ((ch >= 'a' && ch <= 'z')
-                || (ch >= 'A' && ch <= 'Z')
-                || (ch >= '0' && ch <= '9')
-                || ch == '-' || ch == '_')
+            if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-' || ch == '_')
             {
                 result.push_back(ch);
             } else {
@@ -46,10 +44,7 @@ TString NormalizeCpuSpec(TStringBuf triple, TStringBuf cpu) {
         }
         return result.empty() ? TString("unknown") : result;
     };
-    return TStringBuilder()
-        << sanitize(triple)
-        << "__"
-        << sanitize(cpu.empty() ? "generic" : cpu);
+    return TStringBuilder() << sanitize(triple) << "__" << sanitize(cpu.empty() ? "generic" : cpu);
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

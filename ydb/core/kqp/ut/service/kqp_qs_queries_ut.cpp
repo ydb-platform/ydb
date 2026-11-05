@@ -2505,6 +2505,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     Y_UNIT_TEST(DdlSecret) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
+        serverSettings.FeatureFlags.SetDisableOldSecretCreation(false);
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();

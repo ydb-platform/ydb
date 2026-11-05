@@ -1,7 +1,7 @@
 $start_timestamp = (CurrentUtcDate() - 30 * Interval("P1D"));
 
 $all_suites = (
-    SELECT 
+    SELECT
         Suite, Test, Db
     FROM (
         SELECT
@@ -11,12 +11,12 @@ $all_suites = (
         FROM `perfomance/olap/tests_results`
         WHERE Timestamp >= $start_timestamp
         GROUP BY Suite, Db
-    ) 
+    )
     FLATTEN LIST BY Tests AS Test
 );
 
 $launch_times = (
-    SELECT 
+    SELECT
         launch_times_raw.*,
         all_suites.Suite as Suite,
         all_suites.Test as Test,
@@ -24,7 +24,7 @@ $launch_times = (
         COALESCE(SubString(CAST(launch_times_raw.CiVersion AS String), 0U, RFIND(CAST(launch_times_raw.CiVersion AS String), '.')), 'unknown') As CiBranch,
         COALESCE(SubString(CAST(launch_times_raw.TestToolsVersion AS String), 0U, RFIND(CAST(launch_times_raw.TestToolsVersion AS String), '.')), 'unknown') As TestToolsBranch,
     FROM
-    $all_suites AS all_suites 
+    $all_suites AS all_suites
     LEFT JOIN (
         SELECT
             Db,
@@ -44,7 +44,7 @@ $launch_times = (
 );
 
 $all_tests_raw =
-    SELECT 
+    SELECT
         tests_results.*,
         JSON_VALUE(Info, "$.report_url") AS Report,
         JSON_VALUE(tests_results.Info, "$.cluster.version") AS Version_n,
@@ -59,22 +59,42 @@ $all_tests_raw =
         IF(Success > 0, MaxDuration / 1000) AS YdbSumMax,
         IF(Success > 0, MinDuration / 1000) AS YdbSumMin,
         CAST(RunId / 1000UL AS Timestamp) AS RunTs,
-        IF (JSON_VALUE(Stats, "$.errors.other") = "true",
-            "red",
-            IF (JSON_VALUE(Stats, "$.errors.timeout") = "true",
-            "blue",
-                IF (JSON_VALUE(Stats, "$.errors.warning") = "true",
-                    "yellow",
-                    "green"
-                )
-            )
-        ) AS Color
+        -- Color by error type: new format (ydb/tests/olap/lib/workload_result.py get_error_stats)
+        -- writes $.errors.{other,ydb_infra,test_infra,request,timeout,diff,node_fail,performance,warning}.true
+        -- Old format wrote only $.errors.{other,timeout,diff,warning}.true — same keys, so old rows
+        -- keep their old colors: other=red beats timeout=blue beats warning=yellow.
+        -- Priority: node_fail > request > performance > ydb_infra > other > diff > timeout > test_infra > warning.
+        CASE
+            WHEN JSON_VALUE(Stats, "$.errors.node_fail") = "true" THEN "magenta"
+            WHEN JSON_VALUE(Stats, "$.errors.request") = "true" THEN "crimson"
+            WHEN JSON_VALUE(Stats, "$.errors.performance") = "true" THEN "brown"
+            WHEN JSON_VALUE(Stats, "$.errors.ydb_infra") = "true" THEN "orange"
+            WHEN JSON_VALUE(Stats, "$.errors.other") = "true" THEN "red"
+            WHEN JSON_VALUE(Stats, "$.errors.diff") = "true" THEN "cyan"
+            WHEN JSON_VALUE(Stats, "$.errors.timeout") = "true" THEN "blue"
+            WHEN JSON_VALUE(Stats, "$.errors.test_infra") = "true" THEN "purple"
+            WHEN JSON_VALUE(Stats, "$.errors.warning") = "true" THEN "yellow"
+            ELSE "green"
+        END AS Color,
+        -- Machine-readable main error area for the dashboard (coloring rules / filters / tooltips).
+        CASE
+            WHEN JSON_VALUE(Stats, "$.errors.node_fail") = "true" THEN "node_fail"
+            WHEN JSON_VALUE(Stats, "$.errors.request") = "true" THEN "request"
+            WHEN JSON_VALUE(Stats, "$.errors.performance") = "true" THEN "performance"
+            WHEN JSON_VALUE(Stats, "$.errors.ydb_infra") = "true" THEN "ydb_infra"
+            WHEN JSON_VALUE(Stats, "$.errors.other") = "true" THEN "other"
+            WHEN JSON_VALUE(Stats, "$.errors.diff") = "true" THEN "diff"
+            WHEN JSON_VALUE(Stats, "$.errors.timeout") = "true" THEN "timeout"
+            WHEN JSON_VALUE(Stats, "$.errors.test_infra") = "true" THEN "test_infra"
+            WHEN JSON_VALUE(Stats, "$.errors.warning") = "true" THEN "warning"
+            ELSE "ok"
+        END AS ErrorArea
     FROM `perfomance/olap/tests_results` AS tests_results
     WHERE Timestamp >= $start_timestamp;
 
-SELECT 
+SELECT
     Db,
-    Suite, 
+    Suite,
     Test,
     Run_start_timestamp,
     Run_number_in_version,
@@ -104,6 +124,7 @@ SELECT
     YdbSumMeans IS NULL AS errors,
     max(Report) OVER (PARTITION  by Db, Run_start_timestamp, Suite) IS NULL AS Suite_not_runned,
     Color,
+    ErrorArea,
     CASE
         WHEN Db LIKE '%sas%' THEN 'sas'
         WHEN Db LIKE '%vla%' THEN 'vla'
@@ -179,8 +200,9 @@ FROM (
         COALESCE(real_data.YdbSumMin, null_template.YdbSumMin) AS YdbSumMin,
         COALESCE(real_data.diff_response, null_template.diff_response) AS diff_response,
         COALESCE(real_data.Color, null_template.Color) AS Color,
+        COALESCE(real_data.ErrorArea, null_template.ErrorArea) AS ErrorArea,
     FROM (
-        SELECT 
+        SELECT
             all_tests.*,
             launch_times.*
         FROM $launch_times AS launch_times
@@ -227,8 +249,9 @@ FROM (
             real_data.YdbSumMin AS YdbSumMin,
             real_data.diff_response AS diff_response,
             real_data.Color AS Color,
+            real_data.ErrorArea AS ErrorArea,
         FROM (
-            SELECT 
+            SELECT
                 all_tests.*,
                 launch_times.*,
             FROM $launch_times AS launch_times
@@ -239,7 +262,7 @@ FROM (
             AND all_tests.Version_n = launch_times.Version
             WHERE (
                 all_tests.LunchId_n == launch_times.LunchId
-                OR all_tests.RunId IS NULL 
+                OR all_tests.RunId IS NULL
             )
         ) AS real_data
     ) AS real_data

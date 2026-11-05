@@ -2,10 +2,10 @@
 
 #include "settings.h"
 
-#include <library/cpp/logger/backend.h>
-
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/testlib/test_client.h>
+
+#include <library/cpp/logger/backend.h>
 
 namespace NKikimrRun {
 
@@ -21,7 +21,8 @@ public:
 
     NYdbGrpc::TServerOptions GetGrpcSettings(ui32 grpcPort, ui32 nodeIdx, TDuration shutdownDeadline = TDuration::Seconds(30)) const;
 
-    static std::optional<NKikimrWhiteboard::TSystemStateInfo> GetSystemStateInfo(TIntrusivePtr<NKikimr::NMemory::IProcessMemoryInfoProvider> memoryInfoProvider);
+    static std::optional<NKikimrWhiteboard::TSystemStateInfo> GetSystemStateInfo(
+        TIntrusivePtr<NKikimr::NMemory::IProcessMemoryInfoProvider> memoryInfoProvider);
 
     static TString FormatMonitoringLink(ui16 port, const TString& uri);
 
@@ -38,4 +39,4 @@ protected:
     TPortManager PortManager;
 };
 
-}  // namespace NKikimrRun
+}   // namespace NKikimrRun

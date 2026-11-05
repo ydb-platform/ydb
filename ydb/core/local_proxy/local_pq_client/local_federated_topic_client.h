@@ -6,6 +6,7 @@
 
 namespace NKikimr::NKqp {
 
-NYql::IFederatedTopicClient::TPtr CreateLocalFederatedTopicClient(const TLocalTopicClientSettings& localSettings, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& clientSettings);
+NYql::IFederatedTopicClient::TPtr CreateLocalFederatedTopicClient(
+    const TLocalTopicClientSettings& localSettings, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& clientSettings);
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

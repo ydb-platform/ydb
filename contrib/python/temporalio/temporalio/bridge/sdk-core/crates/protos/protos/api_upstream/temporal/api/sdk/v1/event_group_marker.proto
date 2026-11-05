@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package temporal.api.sdk.v1;
+
+option go_package = "go.temporal.io/api/sdk/v1;sdk";
+option java_package = "io.temporal.api.sdk.v1";
+option java_multiple_files = true;
+option java_outer_classname = "EventGroupMarkerProto";
+option ruby_package = "Temporalio::Api::Sdk::V1";
+option csharp_namespace = "Temporalio.Api.Sdk.V1";
+
+
+import "temporal/api/common/v1/message.proto";
+
+message EventGroupMarker {
+  // What this Marker represents. The variant determines whether the Marker was
+  // created explicitly by user code (label) or implicitly by the SDK on inbound
+  // signals/events (inbound_event) or update handlers (inbound_update).
+  oneof variant {
+    Label label = 1;
+    InboundEvent inbound_event = 2;
+    InboundUpdate inbound_update = 3;
+  }
+
+  // A user-defined short-form string value to be used as the group's label.
+  message Label {
+    // Opaque identifier assigned by the SDK.
+    string id = 1;
+
+    // This payload should be a "json/plain"-encoded payload that is a single
+    // JSON string for use in user interfaces. User interface formatting may not
+    // apply to this text when used in "label" situations. The payload data
+    // section is limited to 400 bytes by default.
+    //
+    // Payload only needs to be set on the first use of a given Marker ID;
+    // further references to an existing Marker ID reuse existing attributes of
+    // the referenced Marker -- i.e. further label payloads are ignored.
+    //
+    // Note that it is valid to have distinct Markers (i.e. distinct Marker IDs)
+    // in a given workflow execution that carry the same label, provided that
+    // they have the distinct ID.
+    temporal.api.common.v1.Payload label = 2;
+  }
+
+  // The event ID of an event in the present workflow that triggered implicit
+  // creation of this group Marker.
+  //
+  // The target event's type must be one of the following:
+  //  - `WORKFLOW_EXECUTION_STARTED`
+  //  - `WORKFLOW_EXECUTION_SIGNALED`
+  message InboundEvent {
+    int64 inbound_event_id = 1;
+  }
+
+  // The identifier of an inbound Update (request.meta.update_id)
+  // whose handler triggered implicit creation of this group Marker.
+  //
+  // Used in place of `inbound_event_id` for Updates because the event ID of the
+  // UpdateAccepted history event is not known until the Workflow Task is
+  // completed and recorded by the server, which may be too late.
+  message InboundUpdate {
+    string inbound_update_id = 1;
+  }
+}

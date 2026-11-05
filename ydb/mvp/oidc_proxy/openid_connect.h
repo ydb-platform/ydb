@@ -94,6 +94,7 @@ const TString& GetAuthCallbackUrl();
 TString CreateSecureCookie(const TString& name, const TString& value, const ui32 expiredSeconds);
 TString ClearSecureCookie(const TString& name);
 void SetCORS(const NHttp::THttpIncomingRequestPtr& request, NHttp::THeadersBuilder* const headers);
+NHttp::THttpOutgoingResponsePtr CreateOptionsResponse(const NHttp::THttpIncomingRequestPtr& request);
 TString EncodeState(const TState& payload, TStringBuf signingKey);
 TDecodeStateResult DecodeState(TStringBuf encodedState);
 TCheckStateResult CheckState(const TString& state, const TString& key);

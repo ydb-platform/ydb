@@ -733,6 +733,7 @@ namespace NSchemeShardUT_Private {
 
             TVector<NScheme::TTypeInfo> KeyColumnTypes;
             TVector<TBorder> Partitioning;
+            ui64 Version = 0;
 
             std::shared_ptr<const TPartitioning> ResolveKey(const TTableRange& range) const;
         };

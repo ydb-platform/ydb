@@ -14,4 +14,4 @@ inline constexpr ui64 MaxOutputRowBytes = 32 * 1024 * 1024;
 // baseline SDK parses/decompresses before validation, and an input part, its
 // compact output block and the DQ allocator copy can coexist.
 
-} // namespace NYql::NYdbExternal
+}   // namespace NYql::NYdbExternal

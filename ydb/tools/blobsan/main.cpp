@@ -4,6 +4,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/vdisk/query/query_stream.h>
 #include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/streams/bzip2/bzip2.h>
 #include <util/generic/buffer.h>
 #include <util/generic/hash.h>
@@ -29,6 +30,7 @@ ui32 TotalPartCount = 0;
 ui32 BlobSubgroupSize = 0;
 
 bool OutputCout = true;
+bool Write2x2Candidates = false;
 
 struct TRecordHeader {
     ui32 GroupId;
@@ -261,7 +263,7 @@ void ParseBlock(TBuffer& buffer, TVDiskState& vs, const TBlobStorageGroupInfo& i
             }
 
             auto ingress = TBarrierIngress::CreateFromRaw(r.Ingress);
-            if (ingress.IsQuorum(ingressCache.Get())) {
+            if (Write2x2Candidates || ingress.IsQuorum(ingressCache.Get())) {
                 auto& key = r.Hard ? barrier.HardKey : barrier.SoftKey;
                 auto& value = r.Hard ? barrier.Hard : barrier.Soft;
                 if (!value || key < it->first) { // newer barrier with quorum wins
@@ -369,10 +371,48 @@ TString FormatLayout(const TSubgroupPartLayout& layout, TBlobStorageGroupType ty
 }
 
 int main(int argc, char **argv) {
-    if (argc != 2) {
-        Cerr << "usage: " << argv[0] << " <erasure>" << Endl;
-        return 1;
-    }
+    NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
+    opts.SetTitle("Analyze BlobStorage VDisk index snapshots for incomplete blob layouts.");
+    opts.SetFreeArgsNum(1);
+    opts.SetFreeArgTitle(0, "erasure", "Erasure species of all input groups, e.g. mirror-3-dc or block-4-2");
+    opts.AddLongOption("write2x2-candidates", "Find mirror-3-dc write2x2 recovery candidates using local parts from the snapshot")
+        .StoreTrue(&Write2x2Candidates);
+    opts.AddSection("Input",
+        "Read a binary snapshot from stdin, as produced by `ydb-dstool group take-snapshot`."
+        " It contains group/VDisk headers and bzip2-compressed LogoBlobs, Blocks and"
+        " Barriers index records. Blob payloads are not included. All input groups"
+        " must use the specified erasure species.");
+    opts.AddSection("Analysis",
+        "By default, check Keep blobs below quorum-confirmed GC barriers for"
+        " incomplete local data or ingress layouts. Parts on missing VDisks may"
+        " be inferred from ingress metadata."
+        " --write2x2-candidates requires mirror-3-dc. Judge"
+        " completeness using only local parts from captured VDisks, include blobs"
+        " above barriers and accept barriers without quorum. Skip hard-collected"
+        " and DoNotKeep blobs; blobs below soft barriers still require Keep."
+        " Both modes filter out blobs with missing records on captured VDisks,"
+        " too few restorable parts or insufficient subgroup coverage.");
+    opts.AddSection("Output",
+        "stdout: text dump of the input index records. Redirect to /dev/null"
+        " to skip generating the dump.\n"
+        "stderr: GroupId#/BlobId# reports with part layouts, Keep flags, VDisk"
+        " coverage masks and GC barriers. An optional TrashSize# line"
+        " estimates the size of misplaced and phantom-like parts."
+        " In write2x2 mode this estimate may include blobs still being written"
+        " above GC barriers; it does not establish that these parts can be deleted."
+        " FULL marks a write2x2 candidate whose merged ingress layout is full"
+        " while its local-part layout from captured VDisks is incomplete."
+        " Write2x2 mode also emits RestorePartInv1#/RestorePartInv2# <GroupId> <OrderNum> <BlobId>"
+        " to reach two copies per failrealm on captured VDisks, counting existing local copies.");
+    opts.AddSection("Exit status",
+        "0: analysis completed, including when findings are reported."
+        " Nonzero: argument or input error.");
+    opts.AddSection("Examples",
+        "ydb-dstool -e HOST:2135 group take-snapshot --group-ids 42 --output snapshot.bin"
+        " blobsan mirror-3-dc < snapshot.bin > dump.txt 2> report.txt"
+        " blobsan --write2x2-candidates mirror-3-dc < snapshot.bin > /dev/null 2> candidates.txt");
+    NLastGetopt::TOptsParseResult args(&opts, argc, argv);
+    const TString erasure = args.GetFreeArgs().front();
 
     char link[256];
     ssize_t rv = readlink("/proc/self/fd/1", link, sizeof(link));
@@ -381,8 +421,12 @@ int main(int argc, char **argv) {
     }
 
     TBlobStorageGroupType::EErasureSpecies species;
-    if (!TBlobStorageGroupType::ParseErasureName(species, argv[1])) {
-        Cerr << "invalid erasure species name: " << argv[1] << Endl;
+    if (!TBlobStorageGroupType::ParseErasureName(species, erasure)) {
+        Cerr << "invalid erasure species name: " << erasure << Endl;
+        return 1;
+    }
+    if (Write2x2Candidates && species != TBlobStorageGroupType::ErasureMirror3dc) {
+        Cerr << "--write2x2-candidates requires mirror-3-dc" << Endl;
         return 1;
     }
     TBlobStorageGroupType type(species);
@@ -542,7 +586,17 @@ int main(int argc, char **argv) {
                 }
             }
 
-            if (!blob.UnderBarrierMask || blob.Hard || blob.Info.KeepMode != KEEP ||
+            if (blob.Hard || blob.Info.KeepMode == DO_NOT_KEEP) {
+                continue;
+            }
+            if (blob.UnderBarrierMask && blob.Info.KeepMode != KEEP) {
+                continue;
+            }
+            if (!Write2x2Candidates && (!blob.UnderBarrierMask || blob.Info.KeepMode != KEEP)) {
+                continue;
+            }
+
+            if (Write2x2Candidates ? isFull(originalLocalLayout) :
                     (isFull(blob.Info.Layout) && isFull(blob.Info.ReflectionLayout) && isFull(blob.Info.LocalLayout))) {
                 // looks like correct blob -- either it is not under barrier (and may be being written right now), or
                 // it is with keep flags and fully written with correct ingress bits on every disk
@@ -577,7 +631,7 @@ int main(int argc, char **argv) {
                 case DO_NOT_KEEP: keepMode = "doNotKeep"; break;
             }
 
-            err << "GroupId# " << groupId << " BlobId# " << blobId
+            err << "GroupId# " << groupId << " BlobId# " << blobId << (Write2x2Candidates && isFull(blob.Info.Layout) ? " FULL" : "")
                 << "\n\tOrderNums#          " << FormatList(nums)
                 << "\n\tKeepMode#           " << keepMode
                 << "\n\tLayout#             " << FormatLayout(blob.Info.Layout, type)
@@ -598,12 +652,28 @@ int main(int argc, char **argv) {
                 << "\n\tDoNotKeepMask#      " << FormatBitMask(blob.DoNotKeepMask, BlobSubgroupSize)
                 << "\n\tMisplaced#          " << (misplacedParts ? "true" : "false");
 
+            if (Write2x2Candidates) {
+                for (ui32 partIdx = 0; partIdx < TotalPartCount; ++partIdx) {
+                    const ui32 localDisks = originalLocalLayout.GetDisksWithPart(partIdx);
+                    ui32 copies = std::popcount(localDisks & (0b001001001 << partIdx));
+                    for (ui32 i = partIdx; i < BlobSubgroupSize && copies < 2; i += TotalPartCount) {
+                        const bool captured = seenDisks & (1u << i);
+                        const bool hasPart = localDisks & (1u << i);
+                        if (captured && !hasPart) {
+                            err << "\n\tRestorePartInv" << ++copies << "#    "
+                                << groupId << " " << nums[i] << " " << TLogoBlobID(blobId, partIdx + 1);
+                        }
+                    }
+                }
+            }
+
             for (const ui32 index : indexes) {
                 const auto& vdisk = group.States.at(index);
                 const auto& k = std::make_tuple(blobId.TabletID(), blobId.Channel());
                 if (const auto it = vdisk.Barriers.find(k); it != vdisk.Barriers.end()) {
-                    const bool keep = blob.KeepMask >> index & 1;
-                    err << "\n\tBarrier[" << index << "]#         " << it->second.ToString(blobId.Generation(), blobId.Channel(), keep);
+                    const auto nodeId = std::find(nums.begin(), nums.end(), index) - nums.begin();
+                    const bool keep = blob.KeepMask >> nodeId & 1;
+                    err << "\n\tBarrier[" << index << "]#         " << it->second.ToString(blobId.Generation(), blobId.Step(), keep);
                 }
             }
 

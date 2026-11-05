@@ -7,6 +7,7 @@
 #include <util/folder/tempdir.h>
 #include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
+#include <util/random/fast.h>
 #include <util/stream/buffer.h>
 #include <util/stream/str.h>
 
@@ -384,6 +385,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
 
             ValidateS3FileList({
                 "/test_bucket/EncryptedExport/001/data_00.csv.enc",
+                "/test_bucket/EncryptedExport/001/data_complete.json",
                 "/test_bucket/EncryptedExport/001/data_00.csv.sha256",
                 "/test_bucket/EncryptedExport/001/metadata.json.enc",
                 "/test_bucket/EncryptedExport/001/metadata.json.sha256",
@@ -395,6 +397,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/EncryptedExport/SchemaMapping/mapping.json.sha256",
                 "/test_bucket/EncryptedExport/SchemaMapping/metadata.json.enc",
                 "/test_bucket/EncryptedExport/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/EncryptedExport/export_complete.json",
                 "/test_bucket/EncryptedExport/metadata.json",
                 "/test_bucket/EncryptedExport/metadata.json.sha256",
             });
@@ -412,6 +415,217 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         }
     }
 
+    Y_UNIT_TEST(EncryptedExportAndImportWithLargeScheme) {
+        auto& runtime = *Server().GetRuntime();
+        // Descriptions contain large binary partition boundaries; keep them out of trace logs.
+        for (const auto service : {NKikimrServices::TX_PROXY, NKikimrServices::EXPORT,
+                                  NKikimrServices::IMPORT, NKikimrServices::FLAT_TX_SCHEMESHARD}) {
+            runtime.SetLogPriority(service, NLog::EPriority::PRI_WARN);
+        }
+
+        constexpr ui32 boundaryCount = 13;
+        const auto makeBoundary = [](ui32 index) {
+            // Protobuf text escapes each '\1' as four characters, making scheme.pb exceed 50 MiB.
+            std::string boundary(1_MB, '\1');
+            boundary.front() = 'A' + index;
+            return boundary;
+        };
+        NYdb::NTable::TExplicitPartitions partitions;
+        for (ui32 i = 0; i < boundaryCount; ++i) {
+            partitions.AppendSplitPoints(TValueBuilder()
+                .BeginTuple().AddElement().OptionalString(makeBoundary(i)).EndTuple().Build());
+        }
+
+        auto mkdir = YdbSchemeClient().MakeDirectory("/Root/LargeSchemeSource").GetValueSync();
+        UNIT_ASSERT_C(mkdir.IsSuccess(), mkdir.GetIssues().ToString());
+        auto sessionResult = YdbTableClient().CreateSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        auto create = session.CreateTable("/Root/LargeSchemeSource/Table", NYdb::NTable::TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::String)
+            .AddNullableColumn("Value", EPrimitiveType::Uint32)
+            .SetPrimaryKeyColumn("Key")
+            .SetPartitionAtKeys(partitions)
+            .SetPartitioningSettings(NYdb::NTable::TPartitioningSettingsBuilder()
+                .SetPartitioningBySize(false)
+                .SetPartitioningByLoad(false)
+                .SetMinPartitionsCount(boundaryCount + 1)
+                .SetMaxPartitionsCount(boundaryCount + 1)
+                .Build())
+            .Build()).GetValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+
+        auto insert = YdbQueryClient().ExecuteQuery(R"sql(
+            INSERT INTO `/Root/LargeSchemeSource/Table` (Key, Value)
+            VALUES ("A", 1u), ("G", 2u), ("Z", 3u);
+        )sql", NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(insert.IsSuccess(), insert.GetIssues().ToString());
+
+        const TString encryptionKey = "Cool random key!";
+        auto exportSettings = MakeExportSettings("/Root/LargeSchemeSource", "LargeSchemeExport");
+        exportSettings.SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, encryptionKey);
+        WaitOpSuccess(YdbExportClient().ExportToS3(exportSettings).GetValueSync());
+
+        {
+            const auto& files = S3Mock().GetData();
+            const auto it = files.find("/test_bucket/LargeSchemeExport/001/scheme.pb.enc");
+            UNIT_ASSERT_C(it != files.end(), "Encrypted table scheme was not exported");
+            auto [scheme, iv] = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                NBackup::TEncryptionKey(encryptionKey), TBuffer(it->second.data(), it->second.size()));
+            UNIT_ASSERT_GT(scheme.Size(), NBackup::MAX_BLOCK_SIZE);
+        }
+
+        auto importSettings = MakeImportSettings("LargeSchemeExport", "/Root/LargeSchemeRestored");
+        importSettings.SymmetricKey(encryptionKey);
+        WaitOpSuccess(YdbImportClient().ImportFromS3(importSettings).GetValueSync());
+
+        auto describe = session.DescribeTable("/Root/LargeSchemeRestored/Table",
+            NYdb::NTable::TDescribeTableSettings().WithKeyShardBoundary(true)).GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        const auto& table = describe.GetTableDescription();
+        UNIT_ASSERT_VALUES_EQUAL(table.GetTableColumns().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(table.GetPrimaryKeyColumns(), std::vector<std::string>{"Key"});
+        const auto& ranges = table.GetKeyRanges();
+        UNIT_ASSERT_VALUES_EQUAL(ranges.size(), boundaryCount + 1);
+        UNIT_ASSERT(!ranges.front().From());
+        UNIT_ASSERT(!ranges.back().To());
+        const auto checkBoundary = [&](const NYdb::NTable::TKeyBound& bound, ui32 index, bool inclusive) {
+            UNIT_ASSERT_VALUES_EQUAL(bound.IsInclusive(), inclusive);
+            TValueParser parser(bound.GetValue());
+            parser.OpenTuple();
+            UNIT_ASSERT(parser.TryNextElement());
+            const auto value = parser.GetOptionalString();
+            UNIT_ASSERT(value);
+            UNIT_ASSERT_C(*value == makeBoundary(index), "Partition boundary " << index << " changed");
+            UNIT_ASSERT(!parser.TryNextElement());
+            parser.CloseTuple();
+        };
+        for (ui32 i = 0; i < boundaryCount; ++i) {
+            UNIT_ASSERT(ranges[i].To());
+            checkBoundary(*ranges[i].To(), i, false);
+            UNIT_ASSERT(ranges[i + 1].From());
+            checkBoundary(*ranges[i + 1].From(), i, true);
+        }
+
+        auto select = YdbQueryClient().ExecuteQuery(R"sql(
+            SELECT Key, Value FROM `/Root/LargeSchemeRestored/Table` ORDER BY Key;
+        )sql", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(select.IsSuccess(), select.GetIssues().ToString());
+        auto rows = select.GetResultSetParser(0);
+        UNIT_ASSERT_VALUES_EQUAL(rows.RowsCount(), 3);
+        ui32 expectedValue = 1;
+        for (const auto* expectedKey : {"A", "G", "Z"}) {
+            UNIT_ASSERT(rows.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Key").GetOptionalString(), expectedKey);
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Value").GetOptionalUint32(), expectedValue++);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(EncryptedExportAndImportWithLargeDataBatch, WithCompression, DirectPartImport) {
+        auto& runtime = *Server().GetRuntime();
+        for (const auto service : {NKikimrServices::TX_PROXY, NKikimrServices::EXPORT,
+                                  NKikimrServices::IMPORT, NKikimrServices::FLAT_TX_SCHEMESHARD}) {
+            runtime.SetLogPriority(service, NLog::EPriority::PRI_WARN);
+        }
+        runtime.GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(DirectPartImport);
+        // Without compression, the last row expands a 31 MiB batch past 50 MiB.
+        // With zstd, use enough incompressible data to split the compressed frame itself.
+        runtime.GetAppData().DataShardConfig.SetBackupBytesBatchSize(WithCompression ? 80_MB : 32_MB);
+        const ui32 rowCount = WithCompression ? 80 : 32;
+        const auto makeValue = [&](ui32 row) {
+            if (!WithCompression) {
+                return std::string(row == 31 ? 7_MB : 1_MB, row == 31 ? '\1' : 'a');
+            }
+            constexpr TStringBuf alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            TFastRng64 rng(row + 1);
+            std::string value(1_MB, '\0');
+            for (char& ch : value) {
+                ch = alphabet[rng.GenRand() % alphabet.size()];
+            }
+            return value;
+        };
+
+        auto mkdir = YdbSchemeClient().MakeDirectory("/Root/LargeBatchSource").GetValueSync();
+        UNIT_ASSERT_C(mkdir.IsSuccess(), mkdir.GetIssues().ToString());
+        auto sessionResult = YdbTableClient().CreateSession().GetValueSync();
+        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto session = sessionResult.GetSession();
+        auto create = session.CreateTable("/Root/LargeBatchSource/Table", NYdb::NTable::TTableBuilder()
+            .AddNonNullableColumn("Key", EPrimitiveType::Uint32)
+            .AddNullableColumn("Value", EPrimitiveType::String)
+            .SetPrimaryKeyColumn("Key")
+            .SetPartitioningSettings(NYdb::NTable::TPartitioningSettingsBuilder()
+                .SetPartitioningBySize(false)
+                .SetPartitioningByLoad(false)
+                .SetMinPartitionsCount(1)
+                .SetMaxPartitionsCount(1)
+                .Build())
+            .Build()).GetValueSync();
+        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
+        for (ui32 row = 0; row < rowCount; ++row) {
+            auto values = TValueBuilder().BeginList().AddListItem().BeginStruct()
+                .AddMember("Key").Uint32(row)
+                .AddMember("Value").String(makeValue(row))
+                .EndStruct().EndList().Build();
+            auto upsert = YdbTableClient().BulkUpsert("/Root/LargeBatchSource/Table", std::move(values)).GetValueSync();
+            UNIT_ASSERT_C(upsert.IsSuccess(), upsert.GetIssues().ToString());
+        }
+
+        const TString key = "Cool random key!";
+        auto exportSettings = MakeExportSettings("/Root/LargeBatchSource", "LargeBatchExport");
+        exportSettings.SymmetricEncryption(NExport::TEncryptionAlgorithm::AES_128_GCM, key);
+        if (WithCompression) {
+            exportSettings.Compression("zstd");
+        }
+        WaitOpSuccess(YdbExportClient().ExportToS3(exportSettings).GetValueSync());
+
+        {
+            const TString dataKey = TStringBuilder() << "/test_bucket/LargeBatchExport/001/data_00.csv"
+                << (WithCompression ? ".zst" : "") << ".enc";
+            const auto file = S3Mock().GetData().find(dataKey);
+            UNIT_ASSERT_C(file != S3Mock().GetData().end(), "Encrypted data file is missing");
+            const auto& encrypted = file->second;
+            UNIT_ASSERT_GT(encrypted.size(), NBackup::MAX_BLOCK_SIZE + 1_MB);
+            NBackup::TEncryptedFileDeserializer deserializer{NBackup::TEncryptionKey(key)};
+            TMaybe<TBuffer> firstBlock;
+            for (size_t offset = 0; offset < encrypted.size() && !firstBlock;) {
+                const size_t size = Min<size_t>(1_MB, encrypted.size() - offset);
+                deserializer.AddData(TBuffer(encrypted.data() + offset, size), offset + size == encrypted.size());
+                firstBlock = deserializer.GetNextBlock();
+                offset += size;
+            }
+            UNIT_ASSERT(firstBlock);
+            // Prove that export exercised AddData's split, rather than several small batches.
+            UNIT_ASSERT_VALUES_EQUAL(firstBlock->Size(), NBackup::MAX_BLOCK_SIZE);
+        }
+
+        auto importSettings = MakeImportSettings("LargeBatchExport", "/Root/LargeBatchRestored");
+        importSettings.SymmetricKey(key);
+        WaitOpSuccess(YdbImportClient().ImportFromS3(importSettings).GetValueSync());
+
+        auto reader = session.ReadTable("/Root/LargeBatchRestored/Table",
+            NYdb::NTable::TReadTableSettings().Ordered(true).ReturnNotNullAsOptional(false)).GetValueSync();
+        UNIT_ASSERT_C(reader.IsSuccess(), reader.GetIssues().ToString());
+        ui32 row = 0;
+        for (;;) {
+            auto part = reader.ReadNext().GetValueSync();
+            if (part.EOS()) {
+                break;
+            }
+            UNIT_ASSERT_C(part.IsSuccess(), part.GetIssues().ToString());
+            TResultSetParser parser(part.GetPart());
+            while (parser.TryNextRow()) {
+                UNIT_ASSERT_LT(row, rowCount);
+                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetUint32(), row);
+                const auto value = parser.ColumnParser("Value").GetOptionalString();
+                UNIT_ASSERT_C(value && *value == makeValue(row), "Restored value differs at row " << row);
+                ++row;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(row, rowCount);
+    }
+
     Y_UNIT_TEST_TWIN(EncryptionAndCompression, IsOlap) {
         {
             NExport::TExportToS3Settings settings = MakeExportSettings("/Root/EncryptedExportAndImport/dir1/dir2", "Prefix");
@@ -423,6 +637,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             WaitOpSuccess(res);
 
             ValidateS3FileList({
+                "/test_bucket/Prefix/export_complete.json",
                 "/test_bucket/Prefix/metadata.json",
                 "/test_bucket/Prefix/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
@@ -436,6 +651,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/permissions.pb.enc",
                 "/test_bucket/Prefix/001/permissions.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.zst.enc",
+                "/test_bucket/Prefix/001/data_complete.json",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
             });
         }
@@ -464,6 +680,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             WaitOpSuccess(res);
 
             ValidateS3FileList({
+                "/test_bucket/Prefix/export_complete.json",
                 "/test_bucket/Prefix/metadata.json",
                 "/test_bucket/Prefix/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
@@ -475,6 +692,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/scheme.pb.enc",
                 "/test_bucket/Prefix/001/scheme.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.enc",
+                "/test_bucket/Prefix/001/data_complete.json",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
                 "/test_bucket/Prefix/001/permissions.pb.enc",
                 "/test_bucket/Prefix/001/permissions.pb.sha256",
@@ -515,6 +733,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             WaitOpSuccess(res);
 
             ValidateS3FileList({
+                "/test_bucket/Prefix/export_complete.json",
                 "/test_bucket/Prefix/metadata.json",
                 "/test_bucket/Prefix/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
@@ -526,6 +745,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/scheme.pb.enc",
                 "/test_bucket/Prefix/001/scheme.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.zst.enc",
+                "/test_bucket/Prefix/001/data_complete.json",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
                 "/test_bucket/Prefix/001/permissions.pb.enc",
                 "/test_bucket/Prefix/001/permissions.pb.sha256",
@@ -580,6 +800,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             WaitOpSuccess(res);
 
             ValidateS3FileList({
+                "/test_bucket/Prefix/export_complete.json",
                 "/test_bucket/Prefix/metadata.json",
                 "/test_bucket/Prefix/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
@@ -593,6 +814,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
                 "/test_bucket/Prefix/001/permissions.pb.enc",
                 "/test_bucket/Prefix/001/permissions.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.enc",
+                "/test_bucket/Prefix/001/data_complete.json",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
                 "/test_bucket/Prefix/001/001/changefeed_description.pb.enc",
                 "/test_bucket/Prefix/001/001/changefeed_description.pb.sha256",
@@ -629,6 +851,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         )sql";
 
         TSet<TString> s3FileList = {
+            "/test_bucket/Prefix/export_complete.json",
             "/test_bucket/Prefix/metadata.json",
             "/test_bucket/Prefix/metadata.json.sha256",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
@@ -655,6 +878,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         )sql";
 
         TSet<TString> s3FileList = {
+            "/test_bucket/Prefix/export_complete.json",
             "/test_bucket/Prefix/metadata.json",
             "/test_bucket/Prefix/metadata.json.sha256",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
@@ -692,6 +916,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/export_complete.json",
             "/test_bucket/Prefix/metadata.json",
             "/test_bucket/Prefix/metadata.json.sha256"
         };
@@ -737,6 +962,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/export_complete.json",
             "/test_bucket/Prefix/metadata.json",
             "/test_bucket/Prefix/metadata.json.sha256"
         };
@@ -764,6 +990,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/export_complete.json",
             "/test_bucket/Prefix/metadata.json",
             "/test_bucket/Prefix/metadata.json.sha256"
         };
@@ -807,6 +1034,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
             "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+            "/test_bucket/Prefix/export_complete.json",
             "/test_bucket/Prefix/metadata.json",
             "/test_bucket/Prefix/metadata.json.sha256"
         };
@@ -820,6 +1048,7 @@ class TBackupEncryptionCommonRequirementsTestFixture : public TS3BackupTestFixtu
         EnableAllExportAndImportInFeatureFlags();
 
         AppConfig().MutableFeatureFlags()->SetEnableExternalDataSources(true);
+        AppConfig().MutableFeatureFlags()->SetDisableOldSecretCreation(false);
     }
 
     void TearDown(NUnitTest::TTestContext& /* context */) override {
@@ -845,7 +1074,8 @@ class TBackupEncryptionCommonRequirementsTestFixture : public TS3BackupTestFixtu
 
 protected:
     bool NotEncryptedFileName(const TString& key, const TString& metadataPrefix) {
-        return key.EndsWith(".sha256") || key == metadataPrefix + "metadata.json";
+        const bool completionMarker = key.EndsWith("/data_complete.json") || key.EndsWith("/export_complete.json");
+        return completionMarker || key.EndsWith(".sha256") || key == metadataPrefix + "metadata.json";
     }
 
     TString ReencryptWithDifferentIV(const TString& source, NBackup::TEncryptionKey& encryptionKey, const std::string& algorithm) {

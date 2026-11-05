@@ -8,7 +8,7 @@ namespace NYql {
 using namespace NCommon;
 
 TYdbConfiguration::TYdbConfiguration(bool strictConfigValidation)
-    : NCommon::TSettingDispatcher(YdbProviderName, TQContext(), strictConfigValidation)
+    : NCommon::TDispatcherAndSettings<TYdbSettings>(YdbProviderName, TQContext(), strictConfigValidation)
 {
 }
 

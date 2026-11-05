@@ -14,6 +14,32 @@
 TSpinLock TKeepAliveHttpClient::ConnectionQuarantineMutex;
 TQueue<THolder<NPrivate::THttpConnection>> TKeepAliveHttpClient::ConnectionQuarantine;
 
+namespace {
+    TKeepAliveHttpClient::THeaders GetRedirectHeaders(const TKeepAliveHttpClient::THeaders& headers) {
+        TKeepAliveHttpClient::THeaders redirectHeaders;
+        for (const auto& header : headers) {
+            if (AsciiEqualsIgnoreCase(header.first, "User-Agent") || AsciiEqualsIgnoreCase(header.first, "X-Request-ID")) {
+                redirectHeaders.emplace(header.first, header.second);
+            }
+        }
+        return redirectHeaders;
+    }
+
+    TString GetResponseRequestIds(const THttpInput& input) {
+        TString requestIds;
+        // S3 uses X-Amz-Request-Id instead of X-Request-ID in responses.
+        for (TStringBuf name : {TStringBuf("X-Request-ID"), TStringBuf("X-Amz-Request-Id")}) {
+            if (const auto* header = input.Headers().FindHeader(name)) {
+                requestIds += "\n";
+                requestIds += name;
+                requestIds += ": ";
+                requestIds += header->Value();
+            }
+        }
+        return requestIds;
+    }
+} // namespace
+
 TKeepAliveHttpClient::TKeepAliveHttpClient(const TString& host,
                                            ui32 port,
                                            TDuration socketTimeout,
@@ -243,7 +269,7 @@ void TSimpleHttpClient::DoGet(const TStringBuf relativeUrl, IOutputStream* outpu
     TKeepAliveHttpClient::THttpCode code = cl.DoGet(relativeUrl, output, headers, outHeaders, std::move(cancellation));
 
     Y_ENSURE(cl.GetHttpInput());
-    ProcessResponse(relativeUrl, *cl.GetHttpInput(), output, code);
+    ProcessResponseWithHeaders(relativeUrl, *cl.GetHttpInput(), output, code, headers);
 }
 
 void TSimpleHttpClient::DoPost(const TStringBuf relativeUrl, TStringBuf body, IOutputStream* output, const THashMap<TString, TString>& headers, THttpHeaders* outHeaders, NThreading::TCancellationToken cancellation) const {
@@ -252,7 +278,7 @@ void TSimpleHttpClient::DoPost(const TStringBuf relativeUrl, TStringBuf body, IO
     TKeepAliveHttpClient::THttpCode code = cl.DoPost(relativeUrl, body, output, headers, outHeaders, std::move(cancellation));
 
     Y_ENSURE(cl.GetHttpInput());
-    ProcessResponse(relativeUrl, *cl.GetHttpInput(), output, code);
+    ProcessResponseWithHeaders(relativeUrl, *cl.GetHttpInput(), output, code, headers);
 }
 
 void TSimpleHttpClient::DoPostRaw(const TStringBuf relativeUrl, const TStringBuf rawRequest, IOutputStream* output, THttpHeaders* outHeaders, NThreading::TCancellationToken cancellation) const {
@@ -261,7 +287,7 @@ void TSimpleHttpClient::DoPostRaw(const TStringBuf relativeUrl, const TStringBuf
     TKeepAliveHttpClient::THttpCode code = cl.DoRequestRaw(rawRequest, output, outHeaders, std::move(cancellation));
 
     Y_ENSURE(cl.GetHttpInput());
-    ProcessResponse(relativeUrl, *cl.GetHttpInput(), output, code);
+    ProcessResponseWithHeaders(relativeUrl, *cl.GetHttpInput(), output, code, {});
 }
 
 namespace NPrivate {
@@ -326,12 +352,26 @@ namespace NPrivate {
     }
 }
 
-void TSimpleHttpClient::ProcessResponse(const TStringBuf relativeUrl, THttpInput& input, IOutputStream*, const unsigned statusCode) const {
+void TSimpleHttpClient::ProcessResponse(
+    const TStringBuf relativeUrl,
+    THttpInput& input,
+    IOutputStream*,
+    const unsigned statusCode) const {
     if (!(statusCode >= 200 && statusCode < 300)) {
+        TString responseRequestIds = GetResponseRequestIds(input);
         TString rest = ReadDiagnosticBody(input, statusCode);
         ythrow THttpRequestException(statusCode) << "Got " << statusCode << " at " << Host << relativeUrl << "\nFull http response:\n"
-                                                 << rest;
+                                                 << rest << responseRequestIds;
     }
+}
+
+void TSimpleHttpClient::ProcessResponseWithHeaders(
+    const TStringBuf relativeUrl,
+    THttpInput& input,
+    IOutputStream* output,
+    const unsigned statusCode,
+    const THeaders&) const {
+    ProcessResponse(relativeUrl, input, output, statusCode);
 }
 
 TSimpleHttpClient::~TSimpleHttpClient() {
@@ -376,7 +416,12 @@ void TRedirectableHttpClient::PrepareClient(TKeepAliveHttpClient& cl) const {
     };
 }
 
-void TRedirectableHttpClient::ProcessResponse(const TStringBuf relativeUrl, THttpInput& input, IOutputStream* output, const unsigned statusCode) const {
+void TRedirectableHttpClient::ProcessResponseWithHeaders(
+    const TStringBuf relativeUrl,
+    THttpInput& input,
+    IOutputStream* output,
+    const unsigned statusCode,
+    const THeaders& headers) const {
     for (auto i = input.Headers().Begin(), e = input.Headers().End(); i != e; ++i) {
         if (0 == TString::compare(i->Name(), TStringBuf("Location"))) {
             if (Opts.MaxRedirectCount() == 0) {
@@ -408,14 +453,15 @@ void TRedirectableHttpClient::ProcessResponse(const TStringBuf relativeUrl, THtt
             if (HttpsVerification) {
                 cl.EnableVerificationForHttps();
             }
-            cl.DoGet(body, output);
+            cl.DoGet(body, output, GetRedirectHeaders(headers));
             return;
         }
     }
     if (!(statusCode >= 200 && statusCode < 300)) {
+        TString responseRequestIds = GetResponseRequestIds(input);
         TString rest = ReadDiagnosticBody(input, statusCode);
         ythrow THttpRequestException(statusCode) << "Got " << statusCode << " at " << Host << relativeUrl << "\nFull http response:\n"
-                                                 << rest;
+                                                 << rest << responseRequestIds;
     }
     TransferData(&input, output);
 }

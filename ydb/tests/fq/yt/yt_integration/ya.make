@@ -3,6 +3,8 @@
 
 PY3TEST()
 
+STYLE_PYTHON()
+
 SET(DOCKER_COMPOSE_FILE ydb/tests/fq/yt/yt_integration/yt_in_docker/docker-compose.yml)
 
 ENV(COMPOSE_HTTP_TIMEOUT=600)

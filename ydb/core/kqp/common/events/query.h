@@ -20,7 +20,6 @@
 
 namespace NKikimr::NWorkloadManager {
 class ISessionUpdater;
-class IQueryClassifier;
 }
 
 namespace NKikimr::NKqp::NPrivateEvents {
@@ -380,14 +379,6 @@ public:
         return WmSessionUpdater;
     }
 
-    void SetWmQueryClassifier(std::shared_ptr<NWorkloadManager::IQueryClassifier> classifier) {
-        WmQueryClassifier = std::move(classifier);
-    }
-
-    std::shared_ptr<NWorkloadManager::IQueryClassifier> GetWmQueryClassifier() const {
-        return WmQueryClassifier;
-    }
-
     void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
         ProgressStatsPeriod = progressStatsPeriod;
     }
@@ -517,7 +508,6 @@ private:
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
     bool DisableDefaultTimeout = false;
     std::shared_ptr<NWorkloadManager::ISessionUpdater> WmSessionUpdater;
-    std::shared_ptr<NWorkloadManager::IQueryClassifier> WmQueryClassifier;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

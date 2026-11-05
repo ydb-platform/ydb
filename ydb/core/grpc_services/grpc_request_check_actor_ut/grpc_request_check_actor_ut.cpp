@@ -22,7 +22,7 @@ struct TTestSetup {
     TPortManager PortManager;
     const ui16 KikimrPort;
     const TString AccessServiceEndpoint;
-    TTicketParserAccessServiceMockV2 AccessServiceMock;
+    TTicketParserAccessServiceMock AccessServiceMock;
     std::unique_ptr<grpc::Server> AccessServiceServer;
     std::unique_ptr<TServer> Server;
     // Keep request-check counters independent of resets by TLabelsMaintainer

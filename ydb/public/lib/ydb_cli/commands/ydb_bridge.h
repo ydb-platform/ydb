@@ -6,6 +6,8 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <util/generic/string.h>
+
+#include <optional>
 #include <vector>
 
 namespace NYdb::NConsoleClient {
@@ -13,6 +15,19 @@ namespace NYdb::NConsoleClient {
 class TCommandBridge : public TClientCommandTree {
 public:
     TCommandBridge(bool allowEmptyDatabase);
+};
+
+class TCommandBridgeSetDatabaseMode : public TYdbCommand {
+public:
+    TCommandBridgeSetDatabaseMode();
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    TString TargetDatabase;
+    bool Bridged = false;
+    TString RetainPile;
 };
 
 class TCommandBridgeUpdate : public TYdbCommand {
@@ -27,9 +42,9 @@ private:
 
     TVector<TString> PileStateUpdates;
     TString FilePath;
+    std::optional<ui64> ExpectedGeneration;
 
     std::vector<NYdb::NBridge::TPileStateUpdate> Updates;
-    std::vector<TString> QuorumPiles;
 };
 
 class TCommandBridgeList : public TYdbReadOnlyCommand, public TCommandWithOutput {
@@ -65,7 +80,7 @@ public:
 
 private:
     bool AllowEmptyDatabase = false;
-    TString DownPile;
+    TVector<TString> DownPiles;
     TString NewPrimaryPile;
 };
 
@@ -83,11 +98,48 @@ private:
     TString NewPrimaryPile;
 };
 
-class TCommandBridgeRejoin : public TYdbCommand {
+class TCommandBridgeJoinPile : public TYdbCommand {
 public:
-    TCommandBridgeRejoin(bool allowEmptyDatabase);
+    TCommandBridgeJoinPile(bool allowEmptyDatabase);
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase = false;
+    TString Pile;
+};
+
+class TCommandBridgeConvert : public TYdbCommand {
+public:
+    TCommandBridgeConvert(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase = false;
+    bool SkipStoragePoolConversion = false;
+};
+
+class TCommandBridgeProvisionPile : public TYdbCommand {
+public:
+    TCommandBridgeProvisionPile(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    int Run(TConfig& config) override;
+
+private:
+    bool AllowEmptyDatabase = false;
+    TString Pile;
+};
+
+class TCommandBridgeDestroyPile : public TYdbCommand {
+public:
+    TCommandBridgeDestroyPile(bool allowEmptyDatabase);
+    void Config(TConfig& config) override;
+    void Parse(TConfig& config) override;
+    bool Prompt(TConfig& config) override;
     int Run(TConfig& config) override;
 
 private:

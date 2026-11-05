@@ -44,6 +44,13 @@ struct TEvPrivate {
         EvAllowDropStream,
         EvPrepareAttachDst,
         EvPrepareAttachDstResult,
+        EvRestoreSession,
+        EvBootPersistedWorkers,
+        EvCompleteDstAttachment,
+        EvUpdateYdbProxy,
+        EvCancelCreateStream,
+        EvCancelDropStream,
+        EvExpireWorkerLag,
 
         EvEnd,
     };
@@ -175,6 +182,16 @@ struct TEvPrivate {
         TString ToString() const override;
     };
 
+    struct TEvCompleteDstAttachment: public TEventLocal<TEvCompleteDstAttachment, EvCompleteDstAttachment> {};
+
+    struct TEvUpdateYdbProxy: public TEventLocal<TEvUpdateYdbProxy, EvUpdateYdbProxy> {
+        const TActorId YdbProxy;
+
+        explicit TEvUpdateYdbProxy(const TActorId& ydbProxy)
+            : YdbProxy(ydbProxy)
+        {}
+    };
+
     struct TEvDropDstResult: public TGenericSchemeResult<TEvDropDstResult, EvDropDstResult> {
         explicit TEvDropDstResult(ui64 rid, ui64 tid,
             NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
@@ -206,6 +223,8 @@ struct TEvPrivate {
         explicit TEvUpdateTenantNodes(const TString& tenant);
         TString ToString() const override;
     };
+
+    struct TEvExpireWorkerLag: public TEventLocal<TEvExpireWorkerLag, EvExpireWorkerLag> {};
 
     struct TEvProcessQueues: public TEventLocal<TEvProcessQueues, EvProcessQueues> {
     };
@@ -319,6 +338,24 @@ struct TEvPrivate {
     };
 
     struct TEvAllowDropStream: public TEventLocal<TEvAllowDropStream, EvAllowDropStream> {
+    };
+
+    struct TEvCancelCreateStream: public TEventLocal<TEvCancelCreateStream, EvCancelCreateStream> {
+    };
+
+    struct TEvCancelDropStream: public TEventLocal<TEvCancelDropStream, EvCancelDropStream> {
+    };
+
+    struct TEvBootPersistedWorkers: public TEventLocal<TEvBootPersistedWorkers, EvBootPersistedWorkers> {
+    };
+
+    struct TEvRestoreSession: public TEventLocal<TEvRestoreSession, EvRestoreSession> {
+        const ui32 NodeId;
+
+        explicit TEvRestoreSession(ui32 nodeId)
+            : NodeId(nodeId)
+        {
+        }
     };
 
 }; // TEvPrivate

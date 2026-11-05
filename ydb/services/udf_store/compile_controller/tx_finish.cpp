@@ -4,12 +4,13 @@ namespace NKikimr::NUdfStore {
 
 //! Applies one batch of assignment and attempt changes: an assignment that
 //! ended, an attempt counter that moved, or both.
-class TWasmCompileController::TTxFinish : public TTxBase {
+class TWasmCompileController::TTxFinish: public TTxBase {
 public:
     TTxFinish(TWasmCompileController* self, TStateUpdate&& update)
         : TTxBase("TxFinish", self)
         , Update(std::move(update))
-    {}
+    {
+    }
 
     TTxType GetTxType() const override {
         return TXTYPE_FINISH;
@@ -27,8 +28,7 @@ public:
         for (const auto& [key, attempt] : Update.UpdatedAttempts) {
             db.Table<Schema::Attempts>()
                 .Key(key.Name, key.Kind, key.Uid, key.CpuSpec)
-                .Update(
-                    NIceDb::TUpdate<Schema::Attempts::FailCount>(attempt.FailCount),
+                .Update(NIceDb::TUpdate<Schema::Attempts::FailCount>(attempt.FailCount),
                     NIceDb::TUpdate<Schema::Attempts::LastError>(attempt.LastError),
                     NIceDb::TUpdate<Schema::Attempts::Poisoned>(attempt.Poisoned));
         }
@@ -53,4 +53,4 @@ void TWasmCompileController::RunTxFinish(TStateUpdate&& update) {
     Execute(new TTxFinish(this, std::move(update)), TActivationContext::AsActorContext());
 }
 
-} // namespace NKikimr::NUdfStore
+}   // namespace NKikimr::NUdfStore

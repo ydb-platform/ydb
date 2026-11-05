@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>:1:17: Error: Unicode::FromCodePointList: invalid Unicode scalar value 1114112
+	SELECT Unicode::FromCodePointList(YQL::LazyList([0x110000u]));
+	                ^

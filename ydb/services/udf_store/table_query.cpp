@@ -1,12 +1,11 @@
+#include "blob_chunks.h"
 #include "table_query.h"
 
-#include "blob_chunks.h"
 #include "metadata_subscription/udf_module.h"
 
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 #include <google/protobuf/any.pb.h>
-
 #include <util/string/builder.h>
 #include <util/string/subst.h>
 
@@ -112,8 +111,7 @@ bool AppendChunksResultSet(const Ydb::ResultSet& resultSet, TVector<TString>& ch
         }
         const auto& idxItem = row.items(chunkIdxCol);
         const auto& dataItem = row.items(dataCol);
-        if (!idxItem.has_uint64_value() || !dataItem.has_bytes_value()
-            || idxItem.uint64_value() != expectedIdx++)
+        if (!idxItem.has_uint64_value() || !dataItem.has_bytes_value() || idxItem.uint64_value() != expectedIdx++)
         {
             return false;
         }
@@ -124,11 +122,9 @@ bool AppendChunksResultSet(const Ydb::ResultSet& resultSet, TVector<TString>& ch
     return true;
 }
 
-} // namespace
+}   // namespace
 
-bool ExtractQueryResult(
-    const Ydb::Table::ExecuteDataQueryResponse& response,
-    Ydb::Table::ExecuteQueryResult& result)
+bool ExtractQueryResult(const Ydb::Table::ExecuteDataQueryResponse& response, Ydb::Table::ExecuteQueryResult& result)
 {
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
         return false;
@@ -141,18 +137,13 @@ bool ExtractQueryResult(
 }
 
 TString BuildSelectModuleByNameQuery(const TString& tablePath) {
-    return TStringBuilder()
-        << "DECLARE $name AS Utf8; "
-        << "DECLARE $type AS Utf8; "
-        << "SELECT uid, md5, name, type, version, size, chunk_count, manifest FROM `"
-        << EscapeTablePath(tablePath)
-        << "` WHERE name = $name AND type = $type;";
+    return TStringBuilder() << "DECLARE $name AS Utf8; "
+                            << "DECLARE $type AS Utf8; "
+                            << "SELECT uid, md5, name, type, version, size, chunk_count, manifest FROM `" << EscapeTablePath(tablePath)
+                            << "` WHERE name = $name AND type = $type;";
 }
 
-void SetSelectModuleByNameParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& name,
-    const TString& type)
+void SetSelectModuleByNameParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& name, const TString& type)
 {
     (*request.mutable_parameters())["$name"] = MakeUtf8Param(name);
     (*request.mutable_parameters())["$type"] = MakeUtf8Param(type);
@@ -181,13 +172,11 @@ bool ParseModuleSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& respo
 }
 
 TString BuildSelectSourceChunksQuery(const TString& tablePath) {
-    return TStringBuilder()
-        << "DECLARE $owner_key AS Utf8; "
-        << "DECLARE $first_chunk AS Uint64; "
-        << "SELECT chunk_idx, data FROM `"
-        << EscapeTablePath(tablePath)
-        << "` WHERE owner_key = $owner_key AND chunk_idx >= $first_chunk "
-        << "ORDER BY chunk_idx LIMIT " << ChunksPerRead << ";";
+    return TStringBuilder() << "DECLARE $owner_key AS Utf8; "
+                            << "DECLARE $first_chunk AS Uint64; "
+                            << "SELECT chunk_idx, data FROM `" << EscapeTablePath(tablePath)
+                            << "` WHERE owner_key = $owner_key AND chunk_idx >= $first_chunk "
+                            << "ORDER BY chunk_idx LIMIT " << ChunksPerRead << ";";
 }
 
 void SetSelectSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey, ui64 firstChunk) {
@@ -204,65 +193,57 @@ bool AppendSourceChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& resp
 }
 
 TString BuildSelectArtifactQuery(const TString& tablePath) {
-    return TStringBuilder()
-        << "DECLARE $id AS Utf8; "
-        << "DECLARE $kind AS Utf8; "
-        << "DECLARE $uid AS Utf8; "
-        << "SELECT id, kind, uid, version, format, "
-        << "wasm_data_size, wasm_data_chunk_count, object_code_size, object_code_chunk_count FROM `"
-        << EscapeTablePath(tablePath)
-        << "` WHERE id = $id AND kind = $kind AND uid = $uid;";
+    return TStringBuilder() << "DECLARE $id AS Utf8; "
+                            << "DECLARE $kind AS Utf8; "
+                            << "DECLARE $uid AS Utf8; "
+                            << "SELECT id, kind, uid, version, format, "
+                            << "wasm_data_size, wasm_data_chunk_count, object_code_size, object_code_chunk_count FROM `"
+                            << EscapeTablePath(tablePath) << "` WHERE id = $id AND kind = $kind AND uid = $uid;";
 }
 
 TString BuildEnsurePendingArtifactQuery(const TString& tablePath) {
     const auto path = EscapeTablePath(tablePath);
-    return TStringBuilder()
-        << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
-        << "$existing = SELECT id FROM `" << path
-        << "` WHERE id = $id AND kind = $kind AND uid = $uid; "
-        << "$pending = SELECT $id AS id, $kind AS kind, $uid AS uid, CAST('pending' AS Utf8) AS compile_status, "
-        << "CAST('' AS Utf8) AS compile_error; "
-        << "INSERT INTO `" << path << "` (id, kind, uid, compile_status, compile_error) "
-        << "SELECT id, kind, uid, compile_status, compile_error FROM $pending "
-        << "WHERE NOT EXISTS (SELECT id FROM $existing);";
+    return TStringBuilder() << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
+                            << "$existing = SELECT id FROM `" << path << "` WHERE id = $id AND kind = $kind AND uid = $uid; "
+                            << "$pending = SELECT $id AS id, $kind AS kind, $uid AS uid, CAST('pending' AS Utf8) AS compile_status, "
+                            << "CAST('' AS Utf8) AS compile_error; "
+                            << "INSERT INTO `" << path << "` (id, kind, uid, compile_status, compile_error) "
+                            << "SELECT id, kind, uid, compile_status, compile_error FROM $pending "
+                            << "WHERE NOT EXISTS (SELECT id FROM $existing);";
 }
 
 TString BuildMarkArtifactCompilingQuery(const TString& tablePath) {
-    return TStringBuilder()
-        << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
-        << "UPDATE `" << EscapeTablePath(tablePath)
-        << "` SET compile_status = CAST('compiling' AS Utf8), compile_error = CAST('' AS Utf8), "
-        << "compile_started_at = CurrentUtcTimestamp(), compile_finished_at = NULL "
-        << "WHERE id = $id AND kind = $kind AND uid = $uid "
-        << "AND compile_status IN ('pending', 'failed');";
+    return TStringBuilder() << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
+                            << "UPDATE `" << EscapeTablePath(tablePath)
+                            << "` SET compile_status = CAST('compiling' AS Utf8), compile_error = CAST('' AS Utf8), "
+                            << "compile_started_at = CurrentUtcTimestamp(), compile_finished_at = NULL "
+                            << "WHERE id = $id AND kind = $kind AND uid = $uid "
+                            << "AND compile_status IN ('pending', 'failed');";
 }
 
 TString BuildMarkArtifactFailedQuery(const TString& tablePath) {
-    return TStringBuilder()
-        << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
-        << "DECLARE $error AS Utf8; "
-        << "UPDATE `" << EscapeTablePath(tablePath)
-        << "` SET compile_status = CAST('failed' AS Utf8), compile_error = $error, "
-        << "compile_finished_at = CurrentUtcTimestamp() "
-        << "WHERE id = $id AND kind = $kind AND uid = $uid AND compile_status = 'compiling';";
+    return TStringBuilder() << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
+                            << "DECLARE $error AS Utf8; "
+                            << "UPDATE `" << EscapeTablePath(tablePath)
+                            << "` SET compile_status = CAST('failed' AS Utf8), compile_error = $error, "
+                            << "compile_finished_at = CurrentUtcTimestamp() "
+                            << "WHERE id = $id AND kind = $kind AND uid = $uid AND compile_status = 'compiling';";
 }
 
-void SetMarkArtifactFailedParams(Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id, const TString& kind, const TString& uid, const TString& error)
+void SetMarkArtifactFailedParams(
+    Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid, const TString& error)
 {
     SetSelectArtifactParams(request, id, kind, uid);
     (*request.mutable_parameters())["$error"] = MakeUtf8Param(error);
 }
 
 TString BuildSelectArtifactCompileStateQuery(const TString& tablePath) {
-    return TStringBuilder()
-        << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
-        << "SELECT compile_status, compile_error, compile_started_at, compile_finished_at FROM `"
-        << EscapeTablePath(tablePath) << "` WHERE id = $id AND kind = $kind AND uid = $uid;";
+    return TStringBuilder() << "DECLARE $id AS Utf8; DECLARE $kind AS Utf8; DECLARE $uid AS Utf8; "
+                            << "SELECT compile_status, compile_error, compile_started_at, compile_finished_at FROM `"
+                            << EscapeTablePath(tablePath) << "` WHERE id = $id AND kind = $kind AND uid = $uid;";
 }
 
-bool ParseArtifactCompileStateResponse(const Ydb::Table::ExecuteDataQueryResponse& response,
-    TMaybe<TArtifactCompileState>& state)
+bool ParseArtifactCompileStateResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TMaybe<TArtifactCompileState>& state)
 {
     Ydb::Table::ExecuteQueryResult result;
     if (!ExtractQueryResult(response, result)) {
@@ -278,9 +259,8 @@ bool ParseArtifactCompileStateResponse(const Ydb::Table::ExecuteDataQueryRespons
     }
     TArtifactCompileState parsed;
     TString status;
-    if (!ReadUtf8Column(rows, "compile_status", status)
-        || !TUdfModule::CompileStatusFromString(status, parsed.Status)
-        || !ReadUtf8Column(rows, "compile_error", parsed.Error))
+    if (!ReadUtf8Column(rows, "compile_status", status) || !TUdfModule::CompileStatusFromString(status, parsed.Status) ||
+        !ReadUtf8Column(rows, "compile_error", parsed.Error))
     {
         return false;
     }
@@ -299,8 +279,7 @@ bool ParseArtifactCompileStateResponse(const Ydb::Table::ExecuteDataQueryRespons
         value = TInstant::MicroSeconds(item.uint64_value());
         return true;
     };
-    if (!readTimestamp("compile_started_at", parsed.StartedAt)
-        || !readTimestamp("compile_finished_at", parsed.FinishedAt))
+    if (!readTimestamp("compile_started_at", parsed.StartedAt) || !readTimestamp("compile_finished_at", parsed.FinishedAt))
     {
         return false;
     }
@@ -308,11 +287,7 @@ bool ParseArtifactCompileStateResponse(const Ydb::Table::ExecuteDataQueryRespons
     return true;
 }
 
-void SetSelectArtifactParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind,
-    const TString& uid)
+void SetSelectArtifactParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid)
 {
     (*request.mutable_parameters())["$id"] = MakeUtf8Param(id);
     (*request.mutable_parameters())["$kind"] = MakeUtf8Param(kind);
@@ -343,15 +318,10 @@ bool ParseArtifactResponse(const Ydb::Table::ExecuteDataQueryResponse& response,
 }
 
 TString BuildSelectArtifactKeysQuery(const TString& tablePath) {
-    return TStringBuilder()
-        << "SELECT id, kind, uid FROM `"
-        << EscapeTablePath(tablePath)
-        << "` WHERE object_code_chunk_count > 0;";
+    return TStringBuilder() << "SELECT id, kind, uid FROM `" << EscapeTablePath(tablePath) << "` WHERE object_code_chunk_count > 0;";
 }
 
-bool ParseArtifactKeysResponse(
-    const Ydb::Table::ExecuteDataQueryResponse& response,
-    TVector<TArtifactKeyRow>& rows)
+bool ParseArtifactKeysResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TVector<TArtifactKeyRow>& rows)
 {
     Ydb::Table::ExecuteQueryResult result;
     if (!ExtractQueryResult(response, result)) {
@@ -387,25 +357,18 @@ bool ParseArtifactKeysResponse(
 }
 
 TString BuildSelectArtifactChunksQuery(const TString& tablePath) {
-    return TStringBuilder()
-        << "DECLARE $id AS Utf8; "
-        << "DECLARE $kind AS Utf8; "
-        << "DECLARE $uid AS Utf8; "
-        << "DECLARE $blob_kind AS Utf8; "
-        << "DECLARE $first_chunk AS Uint64; "
-        << "SELECT chunk_idx, data FROM `"
-        << EscapeTablePath(tablePath)
-        << "` WHERE id = $id AND kind = $kind AND uid = $uid AND blob_kind = $blob_kind "
-        << "AND chunk_idx >= $first_chunk ORDER BY chunk_idx LIMIT " << ChunksPerRead << ";";
+    return TStringBuilder() << "DECLARE $id AS Utf8; "
+                            << "DECLARE $kind AS Utf8; "
+                            << "DECLARE $uid AS Utf8; "
+                            << "DECLARE $blob_kind AS Utf8; "
+                            << "DECLARE $first_chunk AS Uint64; "
+                            << "SELECT chunk_idx, data FROM `" << EscapeTablePath(tablePath)
+                            << "` WHERE id = $id AND kind = $kind AND uid = $uid AND blob_kind = $blob_kind "
+                            << "AND chunk_idx >= $first_chunk ORDER BY chunk_idx LIMIT " << ChunksPerRead << ";";
 }
 
-void SetSelectArtifactChunksParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind,
-    const TString& uid,
-    const TString& blobKind,
-    ui64 firstChunk)
+void SetSelectArtifactChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid,
+    const TString& blobKind, ui64 firstChunk)
 {
     (*request.mutable_parameters())["$id"] = MakeUtf8Param(id);
     (*request.mutable_parameters())["$kind"] = MakeUtf8Param(kind);
@@ -423,29 +386,24 @@ bool AppendArtifactChunksResponse(const Ydb::Table::ExecuteDataQueryResponse& re
 }
 
 TString BuildUpsertArtifactQuery(const TString& tablePath) {
-    return TStringBuilder()
-        << "DECLARE $id AS Utf8; "
-        << "DECLARE $kind AS Utf8; "
-        << "DECLARE $uid AS Utf8; "
-        << "DECLARE $version AS Uint64; "
-        << "DECLARE $format AS Utf8; "
-        << "DECLARE $wasm_data_size AS Uint64; "
-        << "DECLARE $wasm_data_chunk_count AS Uint64; "
-        << "DECLARE $object_code_size AS Uint64; "
-        << "DECLARE $object_code_chunk_count AS Uint64; "
-        << "UPSERT INTO `"
-        << EscapeTablePath(tablePath)
-        << "` (id, kind, uid, version, format, "
-        << "wasm_data_size, wasm_data_chunk_count, object_code_size, object_code_chunk_count, compiled_at, "
-        << "compile_status, compile_error, compile_finished_at) "
-        << "VALUES ($id, $kind, $uid, $version, $format, "
-        << "$wasm_data_size, $wasm_data_chunk_count, $object_code_size, $object_code_chunk_count, "
-        << "CurrentUtcTimestamp(), CAST('ready' AS Utf8), CAST('' AS Utf8), CurrentUtcTimestamp());";
+    return TStringBuilder() << "DECLARE $id AS Utf8; "
+                            << "DECLARE $kind AS Utf8; "
+                            << "DECLARE $uid AS Utf8; "
+                            << "DECLARE $version AS Uint64; "
+                            << "DECLARE $format AS Utf8; "
+                            << "DECLARE $wasm_data_size AS Uint64; "
+                            << "DECLARE $wasm_data_chunk_count AS Uint64; "
+                            << "DECLARE $object_code_size AS Uint64; "
+                            << "DECLARE $object_code_chunk_count AS Uint64; "
+                            << "UPSERT INTO `" << EscapeTablePath(tablePath) << "` (id, kind, uid, version, format, "
+                            << "wasm_data_size, wasm_data_chunk_count, object_code_size, object_code_chunk_count, compiled_at, "
+                            << "compile_status, compile_error, compile_finished_at) "
+                            << "VALUES ($id, $kind, $uid, $version, $format, "
+                            << "$wasm_data_size, $wasm_data_chunk_count, $object_code_size, $object_code_chunk_count, "
+                            << "CurrentUtcTimestamp(), CAST('ready' AS Utf8), CAST('' AS Utf8), CurrentUtcTimestamp());";
 }
 
-void SetUpsertArtifactParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TWasmArtifactRow& row)
+void SetUpsertArtifactParams(Ydb::Table::ExecuteDataQueryRequest& request, const TWasmArtifactRow& row)
 {
     (*request.mutable_parameters())["$id"] = MakeUtf8Param(row.Id);
     (*request.mutable_parameters())["$kind"] = MakeUtf8Param(row.Kind);
@@ -459,69 +417,47 @@ void SetUpsertArtifactParams(
 }
 
 TString BuildDeleteArtifactChunksQuery(const TString& tablePath) {
-    return TStringBuilder()
-        << "DECLARE $id AS Utf8; "
-        << "DECLARE $kind AS Utf8; "
-        << "DECLARE $uid AS Utf8; "
-        << "DELETE FROM `"
-        << EscapeTablePath(tablePath)
-        << "` WHERE id = $id AND kind = $kind AND uid = $uid;";
+    return TStringBuilder() << "DECLARE $id AS Utf8; "
+                            << "DECLARE $kind AS Utf8; "
+                            << "DECLARE $uid AS Utf8; "
+                            << "DELETE FROM `" << EscapeTablePath(tablePath) << "` WHERE id = $id AND kind = $kind AND uid = $uid;";
 }
 
-void SetDeleteArtifactChunksParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind,
-    const TString& uid)
+void SetDeleteArtifactChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid)
 {
     (*request.mutable_parameters())["$id"] = MakeUtf8Param(id);
     (*request.mutable_parameters())["$kind"] = MakeUtf8Param(kind);
     (*request.mutable_parameters())["$uid"] = MakeUtf8Param(uid);
 }
 
-TString BuildDeleteStaleArtifactChunksQuery(
-    const TString& artifactChunksTablePath,
-    const TString& modulesTablePath)
+TString BuildDeleteStaleArtifactChunksQuery(const TString& artifactChunksTablePath, const TString& modulesTablePath)
 {
     // EXISTS keeps the delete inside one statement with the modules row it
     // depends on: verify-then-delete across separate requests would let a
     // re-upload land in between and have its artifacts wiped by the loser.
-    return TStringBuilder()
-        << "DECLARE $id AS Utf8; "
-        << "DECLARE $kind AS Utf8; "
-        << "DECLARE $uid AS Utf8; "
-        << "DECLARE $type AS Utf8; "
-        << "DELETE FROM `"
-        << EscapeTablePath(artifactChunksTablePath)
-        << "` WHERE id = $id AND kind = $kind AND uid != $uid "
-        << "AND EXISTS (SELECT 1 FROM `"
-        << EscapeTablePath(modulesTablePath)
-        << "` AS m WHERE m.name = $id AND m.type = $type AND m.uid = $uid);";
+    return TStringBuilder() << "DECLARE $id AS Utf8; "
+                            << "DECLARE $kind AS Utf8; "
+                            << "DECLARE $uid AS Utf8; "
+                            << "DECLARE $type AS Utf8; "
+                            << "DELETE FROM `" << EscapeTablePath(artifactChunksTablePath)
+                            << "` WHERE id = $id AND kind = $kind AND uid != $uid "
+                            << "AND EXISTS (SELECT 1 FROM `" << EscapeTablePath(modulesTablePath)
+                            << "` AS m WHERE m.name = $id AND m.type = $type AND m.uid = $uid);";
 }
 
-TString BuildDeleteStaleArtifactsQuery(
-    const TString& artifactTablePath,
-    const TString& modulesTablePath)
+TString BuildDeleteStaleArtifactsQuery(const TString& artifactTablePath, const TString& modulesTablePath)
 {
-    return TStringBuilder()
-        << "DECLARE $id AS Utf8; "
-        << "DECLARE $kind AS Utf8; "
-        << "DECLARE $uid AS Utf8; "
-        << "DECLARE $type AS Utf8; "
-        << "DELETE FROM `"
-        << EscapeTablePath(artifactTablePath)
-        << "` WHERE id = $id AND kind = $kind AND uid != $uid "
-        << "AND EXISTS (SELECT 1 FROM `"
-        << EscapeTablePath(modulesTablePath)
-        << "` AS m WHERE m.name = $id AND m.type = $type AND m.uid = $uid);";
+    return TStringBuilder() << "DECLARE $id AS Utf8; "
+                            << "DECLARE $kind AS Utf8; "
+                            << "DECLARE $uid AS Utf8; "
+                            << "DECLARE $type AS Utf8; "
+                            << "DELETE FROM `" << EscapeTablePath(artifactTablePath) << "` WHERE id = $id AND kind = $kind AND uid != $uid "
+                            << "AND EXISTS (SELECT 1 FROM `" << EscapeTablePath(modulesTablePath)
+                            << "` AS m WHERE m.name = $id AND m.type = $type AND m.uid = $uid);";
 }
 
 void SetDeleteStaleArtifactsParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind,
-    const TString& uid,
-    const TString& type)
+    Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid, const TString& type)
 {
     (*request.mutable_parameters())["$id"] = MakeUtf8Param(id);
     (*request.mutable_parameters())["$kind"] = MakeUtf8Param(kind);
@@ -530,27 +466,18 @@ void SetDeleteStaleArtifactsParams(
 }
 
 TString BuildUpsertArtifactChunkQuery(const TString& tablePath) {
-    return TStringBuilder()
-        << "DECLARE $id AS Utf8; "
-        << "DECLARE $kind AS Utf8; "
-        << "DECLARE $uid AS Utf8; "
-        << "DECLARE $blob_kind AS Utf8; "
-        << "DECLARE $chunk_idx AS Uint64; "
-        << "DECLARE $data AS String; "
-        << "UPSERT INTO `"
-        << EscapeTablePath(tablePath)
-        << "` (id, kind, uid, blob_kind, chunk_idx, data) "
-        << "VALUES ($id, $kind, $uid, $blob_kind, $chunk_idx, $data);";
+    return TStringBuilder() << "DECLARE $id AS Utf8; "
+                            << "DECLARE $kind AS Utf8; "
+                            << "DECLARE $uid AS Utf8; "
+                            << "DECLARE $blob_kind AS Utf8; "
+                            << "DECLARE $chunk_idx AS Uint64; "
+                            << "DECLARE $data AS String; "
+                            << "UPSERT INTO `" << EscapeTablePath(tablePath) << "` (id, kind, uid, blob_kind, chunk_idx, data) "
+                            << "VALUES ($id, $kind, $uid, $blob_kind, $chunk_idx, $data);";
 }
 
-void SetUpsertArtifactChunkParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind,
-    const TString& uid,
-    const TString& blobKind,
-    ui64 chunkIdx,
-    const TString& data)
+void SetUpsertArtifactChunkParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid,
+    const TString& blobKind, ui64 chunkIdx, const TString& data)
 {
     (*request.mutable_parameters())["$id"] = MakeUtf8Param(id);
     (*request.mutable_parameters())["$kind"] = MakeUtf8Param(kind);
@@ -560,4 +487,4 @@ void SetUpsertArtifactChunkParams(
     (*request.mutable_parameters())["$data"] = MakeStringParam(data);
 }
 
-} // namespace NKikimr::NUdfStore::NTableQuery
+}   // namespace NKikimr::NUdfStore::NTableQuery

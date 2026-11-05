@@ -3,16 +3,17 @@
 #include <ydb/core/kqp/host/kqp_host.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
-#include <ydb/core/testlib/actor_helpers.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
-#include <yql/essentials/core/services/mounts/yql_mounts.h>
-#include <library/cpp/testing/common/network.h>
+#include <ydb/core/testlib/actor_helpers.h>
+
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+
 #include <grpc/grpc_security.h>
 #include <grpc/support/string_util.h>
-
-#include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/testing/common/network.h>
+#include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/core/services/mounts/yql_mounts.h>
 
 namespace NKikimr::NKqp {
 namespace {
@@ -47,14 +48,13 @@ struct TYdbExternalFixture {
     // Initialize before constructing any drivers, even for plaintext fixtures
     // that later try TLS against a warmed endpoint.
     const NCertTestUtils::TCertAndKey& TrustedCa = TTestTlsRoots::GetCa();
-    TKikimrRunner Remote{TKikimrSettings().SetDomainRoot("Remote").SetWithSampleTables(false).SetAuthToken("root@builtin")};
+    TKikimrRunner Remote{ TKikimrSettings().SetDomainRoot("Remote").SetWithSampleTables(false).SetAuthToken("root@builtin") };
     const TString SourceType;
     std::shared_ptr<TKikimrRunner> Consumer;
 
     explicit TYdbExternalFixture(const TString& sourceType = "YdbExternal", const TString& token = "root@builtin",
-                               const TString& hostnamePattern = {}, bool createSource = true,
-                               bool enableLookup = false,
-                               const std::set<TString>& available = {"Ydb", "YdbExternal"})
+        const TString& hostnamePattern = {}, bool createSource = true, bool enableLookup = false,
+        const std::set<TString>& available = { "Ydb", "YdbExternal" })
         : SourceType(sourceType)
     {
         NKikimrConfig::TAppConfig config;
@@ -67,20 +67,20 @@ struct TYdbExternalFixture {
             config.MutableQueryServiceConfig()->AddHostnamePatterns(hostnamePattern);
         }
         // No ConnectorClient is provided, including when checking legacy routing.
-        Consumer = MakeKikimrRunner(false, nullptr, nullptr, config,
-            NYql::NDq::CreateS3ActorsFactory(),
-            {.DomainRoot = "Consumer", .CredentialsFactory = CreateCredentialsFactory("root@builtin"), .AuthToken = "root@builtin"});
+        Consumer = MakeKikimrRunner(false, nullptr, nullptr, config, NYql::NDq::CreateS3ActorsFactory(),
+            { .DomainRoot = "Consumer", .CredentialsFactory = CreateCredentialsFactory("root@builtin"), .AuthToken = "root@builtin" });
 
         auto remote = Remote.GetQueryClient();
-        const auto create = remote.ExecuteQuery(
-            "CREATE TABLE `/Remote/items` (Key Uint64 NOT NULL, Value Utf8, Flag Bool, PRIMARY KEY (Key));",
-            TTxControl::NoTx()).ExtractValueSync();
+        const auto create = remote
+                                .ExecuteQuery("CREATE TABLE `/Remote/items` (Key Uint64 NOT NULL, Value Utf8, Flag Bool, PRIMARY KEY (Key));",
+                                    TTxControl::NoTx())
+                                .ExtractValueSync();
         UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
 
         auto consumer = Consumer->GetQueryClient();
-        const auto secret = consumer.ExecuteQuery(
-            TStringBuilder() << "CREATE SECRET remote_token WITH (value = '" << token << "');",
-            TTxControl::NoTx()).ExtractValueSync();
+        const auto secret =
+            consumer.ExecuteQuery(TStringBuilder() << "CREATE SECRET remote_token WITH (value = '" << token << "');", TTxControl::NoTx())
+                .ExtractValueSync();
         UNIT_ASSERT_C(secret.IsSuccess(), secret.GetIssues().ToString());
 
         if (createSource) {
@@ -90,11 +90,11 @@ struct TYdbExternalFixture {
     }
 
     TExecuteQueryResult CreateSource(const TString& endpoint, bool tls, const TString& name = "remote_db") {
-        const TString source = TStringBuilder()
-            << "CREATE EXTERNAL DATA SOURCE " << name << " WITH (SOURCE_TYPE='" << SourceType << "', LOCATION='"
-            << endpoint << "', DATABASE_NAME='/Remote', USE_TLS='" << (tls ? "true" : "false") << "', "
-            << "AUTH_METHOD='TOKEN', TOKEN_SECRET_PATH='remote_token'"
-            << ");";
+        const TString source = TStringBuilder() << "CREATE EXTERNAL DATA SOURCE " << name << " WITH (SOURCE_TYPE='" << SourceType
+                                                << "', LOCATION='" << endpoint << "', DATABASE_NAME='/Remote', USE_TLS='"
+                                                << (tls ? "true" : "false") << "', "
+                                                << "AUTH_METHOD='TOKEN', TOKEN_SECRET_PATH='remote_token'"
+                                                << ");";
         return Consumer->GetQueryClient().ExecuteQuery(source, TTxControl::NoTx()).ExtractValueSync();
     }
 
@@ -106,20 +106,25 @@ struct TYdbExternalFixture {
 
     void Populate() {
         auto remote = Remote.GetQueryClient();
-        const auto result = remote.ExecuteQuery(
-            "UPSERT INTO `/Remote/items` (Key, Value, Flag) VALUES (1u, 'one', true), (2u, 'two', false), (3u, NULL, NULL);",
-            TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        const auto result =
+            remote
+                .ExecuteQuery("UPSERT INTO `/Remote/items` (Key, Value, Flag) VALUES (1u, 'one', true), (2u, 'two', false), (3u, NULL, NULL);",
+                    TTxControl::BeginTx().CommitTx())
+                .ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
     TExecuteQueryResult Read(const TString& sql) {
-        return Consumer->GetQueryClient().ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(30))).ExtractValueSync();
+        return Consumer->GetQueryClient()
+            .ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(30)))
+            .ExtractValueSync();
     }
 
     NJson::TJsonValue ExplainSource(const TString& sql) {
-        const auto result = Consumer->GetQueryClient().ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ExecMode(EExecMode::Explain).ClientTimeout(TDuration::Seconds(30))).ExtractValueSync();
+        const auto result = Consumer->GetQueryClient()
+                                .ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(),
+                                    TExecuteQuerySettings().ExecMode(EExecMode::Explain).ClientTimeout(TDuration::Seconds(30)))
+                                .ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT(result.GetStats());
         UNIT_ASSERT(result.GetStats()->GetPlan());
@@ -142,33 +147,34 @@ void CheckTlsCertificateRejected(bool wrongHostname) {
     TYdbExternalFixture fixture("YdbExternal", "root@builtin", {}, false);
     // A hostname mismatch must use the trusted issuer so it cannot accidentally
     // pass by rejecting an unrelated issuer left in gRPC's process-wide cache.
-    const auto ca = wrongHostname ? fixture.TrustedCa
-        : NCertTestUtils::GenerateCA(NCertTestUtils::TProps::AsCA().WithValid(TDuration::Days(1)));
+    const auto ca = wrongHostname ? fixture.TrustedCa : NCertTestUtils::GenerateCA(NCertTestUtils::TProps::AsCA().WithValid(TDuration::Days(1)));
     auto properties = NCertTestUtils::TProps::AsServer().WithValid(TDuration::Days(1));
     if (wrongHostname) {
         properties.CommonName = "wrong-host.invalid";
-        properties.AltNames = {"DNS:wrong-host.invalid"};
+        properties.AltNames = { "DNS:wrong-host.invalid" };
     }
     const auto certificate = NCertTestUtils::GenerateSignedCert(ca, properties);
     fixture.Populate();
     const auto port = NTesting::GetFreePort();
     fixture.Remote.GetTestServer().EnableGRpc(NYdbGrpc::TServerOptions()
-        .SetHost("localhost").SetPort(port)
-        .SetSslData(NYdbGrpc::TSslData{
-            .Cert = TString(certificate.Certificate),
-            .Key = TString(certificate.PrivateKey),
-            .Root = TString(ca.Certificate),
-        }));
+                                                  .SetHost("localhost")
+                                                  .SetPort(port)
+                                                  .SetSslData(NYdbGrpc::TSslData{
+                                                      .Cert = TString(certificate.Certificate),
+                                                      .Key = TString(certificate.PrivateKey),
+                                                      .Root = TString(ca.Certificate),
+                                                  }));
     const auto created = fixture.CreateSource(TStringBuilder() << "localhost:" << port, true);
     UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
-    const auto result = fixture.Consumer->GetQueryClient().ExecuteQuery(
-        "SELECT COUNT(*) AS Total FROM remote_db.`items`;", TTxControl::BeginTx().CommitTx(),
-        // Allow the provider's 60 s metadata budget to finish before the client.
-        TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(75))).ExtractValueSync();
+    const auto result = fixture.Consumer->GetQueryClient()
+                            .ExecuteQuery("SELECT COUNT(*) AS Total FROM remote_db.`items`;", TTxControl::BeginTx().CommitTx(),
+                                // Allow the provider's 60 s metadata budget to finish before the client.
+                                TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(75)))
+                            .ExtractValueSync();
     AssertMetadataConnectionFailure(result);
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     Y_UNIT_TEST_TWIN(PrepareWithMinimalFederatedSetup, Script) {
@@ -191,20 +197,17 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
         auto counters = MakeIntrusive<TKqpRequestCounters>();
         counters->Counters = new TKqpCounters(countersRoot);
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(countersRoot);
-        auto gateway = CreateKikimrIcGateway(cluster,
-            Script ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY,
-            database, database, std::make_shared<TKqpTableMetadataLoader>(cluster, actorSystem.System.Get(), config),
-            actorSystem.System.Get(), 0, counters, queryServiceConfig);
+        auto gateway =
+            CreateKikimrIcGateway(cluster, Script ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY,
+                database, database, std::make_shared<TKqpTableMetadataLoader>(cluster, actorSystem.System.Get(), config),
+                actorSystem.System.Get(), 0, counters, queryServiceConfig);
 
         // Query replay supplies only an HTTP gateway and uses the default query service config.
         // Even queries without external sources initialize all enabled providers.
         auto host = CreateKqpHost(gateway, cluster, database, config, moduleResolver,
-            TKqpFederatedQuerySetup{.HttpGateway = NYql::IHTTPGateway::Make()},
-            nullptr, std::make_shared<TGUCSettings>(), queryServiceConfig);
+            TKqpFederatedQuerySetup{ .HttpGateway = NYql::IHTTPGateway::Make() }, nullptr, std::make_shared<TGUCSettings>(), queryServiceConfig);
         const TString query = "SELECT 1;";
-        auto preparing = Script
-            ? host->PrepareGenericScript(query, {})
-            : host->PrepareGenericQuery(query, {});
+        auto preparing = Script ? host->PrepareGenericScript(query, {}) : host->PrepareGenericQuery(query, {});
         while (!preparing->HasResult()) {
             preparing->Continue().GetValueSync();
         }
@@ -238,11 +241,13 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     Y_UNIT_TEST(MultipleArrowPartsPreserveAggregateRowsAndBytes) {
         TYdbExternalFixture fixture;
         fixture.Scheme("CREATE TABLE `/Remote/many_rows` (Key Uint64 NOT NULL, Value String, PRIMARY KEY(Key));", true);
-        const auto populated = fixture.Remote.GetQueryClient().ExecuteQuery(R"(
+        const auto populated = fixture.Remote.GetQueryClient()
+                                   .ExecuteQuery(R"(
             $rows = ListMap(ListFromRange(0ul, 20000ul), ($key) -> (
                 AsStruct($key AS Key, ListConcat(ListReplicate("abcdefgh", 25)) AS Value)));
             UPSERT INTO `/Remote/many_rows` SELECT * FROM AS_TABLE($rows);
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        )", TTxControl::BeginTx().CommitTx())
+                                   .ExtractValueSync();
         UNIT_ASSERT_C(populated.IsSuccess(), populated.GetIssues().ToString());
         // Several server chunks cross the soft 1 MiB threshold. All rows and
         // bytes must survive local splitting before this consumer-side aggregate.
@@ -262,14 +267,16 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     Y_UNIT_TEST(SingleValuesOfTwoAndSixteenMiBAreReadable) {
         TYdbExternalFixture fixture;
         fixture.Scheme("CREATE TABLE `/Remote/large_rows` (Key Uint64 NOT NULL, Value String, PRIMARY KEY(Key));", true);
-        for (ui64 size : {2 * 1024 * 1024, 16 * 1024 * 1024}) {
-            auto params = TParamsBuilder().AddParam("$key").Uint64(size).Build()
-                .AddParam("$value").String(std::string(size, 'x')).Build().Build();
-            const auto populated = fixture.Remote.GetQueryClient().ExecuteQuery(R"(
+        for (ui64 size : { 2 * 1024 * 1024, 16 * 1024 * 1024 }) {
+            auto params =
+                TParamsBuilder().AddParam("$key").Uint64(size).Build() .AddParam("$value").String(std::string(size, 'x')).Build().Build();
+            const auto populated = fixture.Remote.GetQueryClient()
+                                       .ExecuteQuery(R"(
                 DECLARE $key AS Uint64;
                 DECLARE $value AS String;
                 UPSERT INTO `/Remote/large_rows` (Key, Value) VALUES ($key, $value);
-            )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            )", TTxControl::BeginTx().CommitTx(), params)
+                                       .ExtractValueSync();
             UNIT_ASSERT_C(populated.IsSuccess(), populated.GetIssues().ToString());
         }
         const auto result = fixture.Read(R"(
@@ -278,7 +285,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         auto rows = result.GetResultSetParser(0);
         UNIT_ASSERT_VALUES_EQUAL(rows.RowsCount(), 2);
-        for (ui64 size : {2 * 1024 * 1024, 16 * 1024 * 1024}) {
+        for (ui64 size : { 2 * 1024 * 1024, 16 * 1024 * 1024 }) {
             UNIT_ASSERT(rows.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Key").GetUint64(), size);
             UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Bytes").GetOptionalUint64().value(), size);
@@ -289,8 +296,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     Y_UNIT_TEST(FilterAndProjectionStayCorrectLocally) {
         TYdbExternalFixture fixture;
         fixture.Populate();
-        const auto result = fixture.Read(
-            "SELECT Value FROM remote_db.`items` WHERE Key = 2u;");
+        const auto result = fixture.Read("SELECT Value FROM remote_db.`items` WHERE Key = 2u;");
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         auto rows = result.GetResultSetParser(0);
         UNIT_ASSERT_VALUES_EQUAL(rows.ColumnsCount(), 1);
@@ -326,14 +332,14 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     }
 
     Y_UNIT_TEST(ExternalSourceReadTimeoutIsRejectedForBothTypes) {
-        for (const auto* type : {"Ydb", "YdbExternal"}) {
+        for (const auto* type : { "Ydb", "YdbExternal" }) {
             // The fixture first creates a source without a timeout option.
             TYdbExternalFixture fixture(type);
-            for (const auto* value : {"60000", "120000", "0", "60s"}) {
+            for (const auto* value : { "60000", "120000", "0", "60s" }) {
                 const TString sql = TStringBuilder()
-                    << "CREATE EXTERNAL DATA SOURCE remote_timeout WITH (SOURCE_TYPE='" << type << "', LOCATION='"
-                    << fixture.Remote.GetEndpoint() << "', DATABASE_NAME='/Remote', "
-                    << "AUTH_METHOD='TOKEN', TOKEN_SECRET_PATH='remote_token', READ_TIMEOUT_MS='" << value << "');";
+                                    << "CREATE EXTERNAL DATA SOURCE remote_timeout WITH (SOURCE_TYPE='" << type << "', LOCATION='"
+                                    << fixture.Remote.GetEndpoint() << "', DATABASE_NAME='/Remote', "
+                                    << "AUTH_METHOD='TOKEN', TOKEN_SECRET_PATH='remote_token', READ_TIMEOUT_MS='" << value << "');";
                 const auto rejected = fixture.Consumer->GetQueryClient().ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
                 UNIT_ASSERT(!rejected.IsSuccess());
                 UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(), "Unknown property: read_timeout_ms");
@@ -412,7 +418,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     }
 
     Y_UNIT_TEST(ExternalAvailabilityDoesNotFollowLegacyYdb) {
-        TYdbExternalFixture fixture("YdbExternal", "root@builtin", {}, false, false, {"Ydb"});
+        TYdbExternalFixture fixture("YdbExternal", "root@builtin", {}, false, false, { "Ydb" });
         const auto rejected = fixture.CreateSource(fixture.Remote.GetEndpoint(), false);
         UNIT_ASSERT(!rejected.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(), "YdbExternal is disabled");
@@ -421,15 +427,16 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     }
 
     Y_UNIT_TEST(ExternalReadsWithOnlyItsOwnAvailability) {
-        TYdbExternalFixture fixture("YdbExternal", "root@builtin", {}, true, false, {"YdbExternal"});
+        TYdbExternalFixture fixture("YdbExternal", "root@builtin", {}, true, false, { "YdbExternal" });
         fixture.Populate();
         const auto result = fixture.Read("SELECT Key FROM remote_db.`items`;");
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
-        const auto legacy = fixture.Consumer->GetQueryClient().ExecuteQuery(
-            TStringBuilder() << "CREATE EXTERNAL DATA SOURCE legacy_db WITH (SOURCE_TYPE='Ydb', LOCATION='"
-                << fixture.Remote.GetEndpoint() << "', DATABASE_NAME='/Remote', AUTH_METHOD='NONE');",
-            TTxControl::NoTx()).ExtractValueSync();
+        const auto legacy = fixture.Consumer->GetQueryClient()
+                                .ExecuteQuery(TStringBuilder() << "CREATE EXTERNAL DATA SOURCE legacy_db WITH (SOURCE_TYPE='Ydb', LOCATION='"
+                                                               << fixture.Remote.GetEndpoint()
+                                                               << "', DATABASE_NAME='/Remote', AUTH_METHOD='NONE');", TTxControl::NoTx())
+                                .ExtractValueSync();
         UNIT_ASSERT(!legacy.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(legacy.GetIssues().ToString(), "Ydb is disabled");
     }
@@ -437,10 +444,11 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
     Y_UNIT_TEST(ExternalDdlRejectsUnsupportedPropertiesAndAuthentication) {
         TYdbExternalFixture fixture;
         const auto reject = [&](const TString& settings, const TString& expected) {
-            const auto result = fixture.Consumer->GetQueryClient().ExecuteQuery(
-                TStringBuilder() << "CREATE EXTERNAL DATA SOURCE invalid_db WITH (SOURCE_TYPE='YdbExternal', LOCATION='"
-                    << fixture.Remote.GetEndpoint() << "', " << settings << ");",
-                TTxControl::NoTx()).ExtractValueSync();
+            const auto result =
+                fixture.Consumer->GetQueryClient()
+                    .ExecuteQuery(TStringBuilder() << "CREATE EXTERNAL DATA SOURCE invalid_db WITH (SOURCE_TYPE='YdbExternal', LOCATION='"
+                                                   << fixture.Remote.GetEndpoint() << "', " << settings << ");", TTxControl::NoTx())
+                    .ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
             TString issues(result.GetIssues().ToString());
             issues.to_lower();
@@ -448,9 +456,8 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
             expectedLower.to_lower();
             UNIT_ASSERT_STRING_CONTAINS(issues, expectedLower);
         };
-        for (const auto* property : {"DATABASE_ID", "MDB_CLUSTER_ID", "SHARED_READING_GROUP"}) {
-            reject(TStringBuilder() << "DATABASE_NAME='/Remote', AUTH_METHOD='NONE', " << property << "='unsupported'",
-                "Unsupported property");
+        for (const auto* property : { "DATABASE_ID", "MDB_CLUSTER_ID", "SHARED_READING_GROUP" }) {
+            reject(TStringBuilder() << "DATABASE_NAME='/Remote', AUTH_METHOD='NONE', " << property << "='unsupported'", "Unsupported property");
         }
         // SHARED_READING may be rejected by the generic DDL gate before source validation.
         reject("DATABASE_NAME='/Remote', AUTH_METHOD='NONE', SHARED_READING='true'", "SHARED_READING");
@@ -463,23 +470,23 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
             "SERVICE_ACCOUNT isn't supported for this source type");
         // NONE is a valid definition even when the remote server requires a token for reads.
         fixture.Scheme(TStringBuilder() << "CREATE EXTERNAL DATA SOURCE no_auth WITH (SOURCE_TYPE='YdbExternal', LOCATION='"
-            << fixture.Remote.GetEndpoint() << "', DATABASE_NAME='/Remote', AUTH_METHOD='NONE');");
+                                        << fixture.Remote.GetEndpoint() << "', DATABASE_NAME='/Remote', AUTH_METHOD='NONE');");
     }
 
     Y_UNIT_TEST(TokenAndTlsReadWithoutConnector) {
         TYdbExternalFixture fixture("YdbExternal", "root@builtin", {}, false);
         const auto& ca = fixture.TrustedCa;
-        const auto certificate = NCertTestUtils::GenerateSignedCert(ca,
-            NCertTestUtils::TProps::AsServer().WithValid(TDuration::Days(1)));
+        const auto certificate = NCertTestUtils::GenerateSignedCert(ca, NCertTestUtils::TProps::AsServer().WithValid(TDuration::Days(1)));
         fixture.Populate();
         const auto port = NTesting::GetFreePort();
         fixture.Remote.GetTestServer().EnableGRpc(NYdbGrpc::TServerOptions()
-            .SetHost("localhost").SetPort(port)
-            .SetSslData(NYdbGrpc::TSslData{
-                .Cert = TString(certificate.Certificate),
-                .Key = TString(certificate.PrivateKey),
-                .Root = TString(ca.Certificate),
-            }));
+                                                      .SetHost("localhost")
+                                                      .SetPort(port)
+                                                      .SetSslData(NYdbGrpc::TSslData{
+                                                          .Cert = TString(certificate.Certificate),
+                                                          .Key = TString(certificate.PrivateKey),
+                                                          .Root = TString(ca.Certificate),
+                                                      }));
         const auto created = fixture.CreateSource(TStringBuilder() << "localhost:" << port, true);
         UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
         const auto result = fixture.Read("SELECT COUNT(*) AS Total FROM remote_db.`items`;");
@@ -506,9 +513,10 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
         UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
         // Both EDS entries use one federated setup and the same endpoint. The
         // metadata driver must keep TLS separate from the warmed plaintext cache.
-        const auto tls = fixture.Consumer->GetQueryClient().ExecuteQuery(
-            "SELECT COUNT(*) AS Total FROM remote_tls.`items`;", TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(75))).ExtractValueSync();
+        const auto tls = fixture.Consumer->GetQueryClient()
+                             .ExecuteQuery("SELECT COUNT(*) AS Total FROM remote_tls.`items`;", TTxControl::BeginTx().CommitTx(),
+                                 TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(75)))
+                             .ExtractValueSync();
         AssertMetadataConnectionFailure(tls);
         const auto again = fixture.Read("SELECT COUNT(*) AS Total FROM remote_db.`items`;");
         UNIT_ASSERT_C(again.IsSuccess(), again.GetIssues().ToString());
@@ -521,8 +529,10 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
         TYdbExternalFixture fixture;
         fixture.Scheme("GRANT 'ydb.database.connect' ON `/Consumer` TO `reader@builtin`;");
         auto client = fixture.Consumer->GetQueryClient(TClientSettings().AuthToken("reader@builtin"));
-        const auto result = client.ExecuteQuery("SELECT * FROM remote_db.`items`;",
-            TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(30))).ExtractValueSync();
+        const auto result = client
+                                .ExecuteQuery("SELECT * FROM remote_db.`items`;", TTxControl::BeginTx().CommitTx(),
+                                    TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(30)))
+                                .ExtractValueSync();
         // Schema lookup deliberately hides whether an inaccessible EDS exists.
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "access permissions");
@@ -532,8 +542,10 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
         TYdbExternalFixture fixture;
         fixture.Scheme("GRANT ALL ON `/Consumer` TO `reader@builtin`;");
         auto client = fixture.Consumer->GetQueryClient(TClientSettings().AuthToken("reader@builtin"));
-        const auto result = client.ExecuteQuery("SELECT * FROM remote_db.`items`;",
-            TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(30))).ExtractValueSync();
+        const auto result = client
+                                .ExecuteQuery("SELECT * FROM remote_db.`items`;", TTxControl::BeginTx().CommitTx(),
+                                    TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(30)))
+                                .ExtractValueSync();
         UNIT_ASSERT(!result.IsSuccess());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "secret");
         UNIT_ASSERT(result.GetIssues().ToString().find("root@builtin") == std::string::npos);
@@ -547,8 +559,7 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
         UNIT_ASSERT(!result.IsSuccess());
         // Remote KQP wraps the resolver's AccessDenied in ABORTED. The source
         // preserves the status while withholding remote issues and credentials.
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-            "YdbExternal query failed with status ABORTED");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "YdbExternal query failed with status ABORTED");
         UNIT_ASSERT(result.GetIssues().ToString().find("restricted@builtin") == std::string::npos);
 
         fixture.Scheme("GRANT 'ydb.granular.select_row' ON `/Remote/items` TO `restricted@builtin`;", true);
@@ -568,13 +579,12 @@ Y_UNIT_TEST_SUITE(KqpYdbExternal) {
 
     Y_UNIT_TEST(WritesAreRejected) {
         TYdbExternalFixture fixture;
-        for (const TString mode : {"INSERT", "UPSERT"}) {
-            const auto result = fixture.Read(
-                mode + " INTO remote_db.`items` (Key, Value) VALUES (1u, 'one');");
+        for (const TString mode : { "INSERT", "UPSERT" }) {
+            const auto result = fixture.Read(mode + " INTO remote_db.`items` (Key, Value) VALUES (1u, 'one');");
             UNIT_ASSERT(!result.IsSuccess());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "not supported");
         }
     }
 }
 
-} // namespace NKikimr::NKqp
+}   // namespace NKikimr::NKqp

@@ -50,8 +50,6 @@ common:
 # DevOps-related redirects
   - from: /getting_started/kubernetes.md
     to: /devops/kubernetes/initial-deployment.md
-  - from: /getting_started/ansible.md
-    to: /devops/ansible/initial-deployment.md
   - from: /troubleshooting/system_views_cluster.md
     to: /devops/manual/system-views.md
   - from: /ops/devslice-user-guide-k8s-baremetal-host.md
@@ -546,6 +544,12 @@ common:
     to: /concepts/query_execution/federated_query/$1
 
 ru:
+  - from: /getting_started/ansible(?:[.]html|[.]md)?/?$
+    to: /devops/deployment-options/ansible/initial-deployment/index
+  - from: /devops/ansible/initial-deployment(?:[.]html|[.]md)?/?$
+    to: /devops/deployment-options/ansible/initial-deployment/index
+  - from: /devops/deployment-options/ansible/initial-deployment(?:[.]html|[.]md)?/?$
+    to: /devops/deployment-options/ansible/initial-deployment/index
   - from: /db/terraform.md
     to: /dev/terraform.md
   - from: /maintenance/manual/replacing_nodes.md
@@ -586,6 +590,12 @@ ru:
     to: /devops/concepts/node-authorization.md
 
 en:
+  - from: /getting_started/ansible(?:[.]html|[.]md)?/?$
+    to: /devops/deployment-options/ansible/initial-deployment/index
+  - from: /devops/ansible/initial-deployment(?:[.]html|[.]md)?/?$
+    to: /devops/deployment-options/ansible/initial-deployment/index
+  - from: /devops/deployment-options/ansible/initial-deployment(?:[.]html|[.]md)?/?$
+    to: /devops/deployment-options/ansible/initial-deployment/index
   - from: /reference/ydb-sdk/recipes/debug.md
     to: /reference/ydb-sdk/observability/index.md
   - from: /reference/ydb-sdk/recipes/debug-logs.md

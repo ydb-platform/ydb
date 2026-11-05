@@ -1,5 +1,9 @@
 PY3TEST()
 
+STYLE_PYTHON()
+
+PY_EXTRA_LINT_FILES(__init__.py)
+
 TEST_SRCS(
     test_resource_pool.py
 )
@@ -8,7 +12,7 @@ FORK_TESTS()
 FORK_TEST_FILES()
 FORK_SUBTESTS()
 
-REQUIREMENTS(ram:16 cpu:4)
+REQUIREMENTS(ram:16 cpu:1)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)

@@ -1,29 +1,28 @@
 #include "nodes_manager.h"
 #include "nodes_manager_events.h"
 
+#include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/config/protos/fq_config.pb.h>
+#include <ydb/core/fq/libs/private_client/internal_service.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/process_stats.h>
 #include <ydb/library/actors/interconnect/events_local.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
-#include <ydb/core/fq/libs/common/entity_id.h>
-#include <ydb/core/fq/libs/private_client/internal_service.h>
-#include <ydb/library/actors/core/log.h>
-#include <util/system/hostname.h>
-#include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/scheme/scheme.h>
+#include <util/system/hostname.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <random>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YQL_NODES_MANAGER
-
 
 namespace NFq {
 
@@ -31,24 +30,16 @@ using namespace NActors;
 using namespace NYql;
 using namespace NDqs;
 
-class TNodesManagerActor : public NActors::TActorBootstrapped<TNodesManagerActor> {
+class TNodesManagerActor: public NActors::TActorBootstrapped<TNodesManagerActor> {
 public:
     enum EWakeUp {
         WU_NodesHealthCheck
     };
 
-    TNodesManagerActor(
-        const NFq::TYqSharedResources::TPtr& yqSharedResources,
-        const NDqs::TWorkerManagerCounters& workerManagerCounters,
-        TIntrusivePtr<ITimeProvider> timeProvider,
-        TIntrusivePtr<IRandomProvider> randomProvider,
-        const ::NYql::NCommon::TServiceCounters& serviceCounters,
-        const NConfig::TPrivateApiConfig& privateApiConfig,
-        const ui32& icPort,
-        bool useDataCenter,
-        const TString& dataCenter,
-        const TString& tenant,
-        ui64 mkqlInitialMemoryLimit)
+    TNodesManagerActor(const NFq::TYqSharedResources::TPtr& yqSharedResources, const NDqs::TWorkerManagerCounters& workerManagerCounters,
+        TIntrusivePtr<ITimeProvider> timeProvider, TIntrusivePtr<IRandomProvider> randomProvider,
+        const ::NYql::NCommon::TServiceCounters& serviceCounters, const NConfig::TPrivateApiConfig& privateApiConfig, const ui32& icPort,
+        bool useDataCenter, const TString& dataCenter, const TString& tenant, ui64 mkqlInitialMemoryLimit)
         : WorkerManagerCounters(workerManagerCounters)
         , TimeProvider(timeProvider)
         , RandomProvider(randomProvider)
@@ -87,7 +78,7 @@ public:
 private:
     void Handle(NDqs::TEvAllocateWorkersRequest::TPtr& ev) {
         ServiceCounters.Counters->GetCounter("EvAllocateWorkersRequest", true)->Inc();
-        const auto &request = ev->Get()->Record;
+        const auto& request = ev->Get()->Record;
         const auto count = request.GetCount();
         auto scheduler = request.GetScheduler();
         const auto& filters = request.GetWorkerFilterPerTask();
@@ -114,7 +105,8 @@ private:
             } catch (...) {
                 auto& error = *response->Record.MutableError();
                 error.SetStatusCode(NYql::NDqProto::StatusIds::BAD_REQUEST);
-                error.SetMessage(TStringBuilder{} << "Error choosing scheduler. Invalid settings: " << scheduler << ", error: " << CurrentExceptionMessage());
+                error.SetMessage(
+                    TStringBuilder{} << "Error choosing scheduler. Invalid settings: " << scheduler << ", error: " << CurrentExceptionMessage());
             }
         }
         YDB_LOG_DEBUG("TEvAllocateWorkersResponse",
@@ -143,9 +135,9 @@ private:
             if (totalMemoryLimit == 0) {
                 totalMemoryLimit = MkqlInitialMemoryLimit;
             }
-            const auto& nodeIdProto =  filtersPerTask.Get(i).GetNodeId();
-            TSet<ui64> nodeFilter{nodeIdProto.begin(), nodeIdProto.end()};
-            TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
+            const auto& nodeIdProto = filtersPerTask.Get(i).GetNodeId();
+            TSet<ui64> nodeFilter{ nodeIdProto.begin(), nodeIdProto.end() };
+            TPeer node = { SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter };
             bool selfPlacement = true;
             if (!Peers.empty()) {
                 auto firstPeer = NextPeer;
@@ -157,11 +149,11 @@ private:
                         NextPeer = 0;
                     }
 
-                    if ((!UseDataCenter || DataCenter.empty() || nextNode.DataCenter.empty() || DataCenter == nextNode.DataCenter) // non empty DC must match
-                        && (nextNode.MemoryLimit == 0 // memory is NOT limited
-                             || nextNode.MemoryLimit >= nextNode.MemoryAllocated + totalMemoryLimit) // or enough
-                        && (nodeFilter.empty() || nodeFilter.contains(nextNode.NodeId))
-                    ) {
+                    if ((!UseDataCenter || DataCenter.empty() || nextNode.DataCenter.empty() ||
+                            DataCenter == nextNode.DataCenter)   // non empty DC must match
+                        && (nextNode.MemoryLimit == 0   // memory is NOT limited
+                               || nextNode.MemoryLimit >= nextNode.MemoryAllocated + totalMemoryLimit)   // or enough
+                        && (nodeFilter.empty() || nodeFilter.contains(nextNode.NodeId))) {
                         // adjust allocated size to place next tasks correctly, will be reset after next health check
                         nextNode.MemoryAllocated += totalMemoryLimit;
                         if (nextNode.NodeId == SelfId().NodeId()) {
@@ -173,7 +165,7 @@ private:
                         break;
                     }
 
-                    if (NextPeer == firstPeer) {  // we closed loop w/o success, fallback to self placement then
+                    if (NextPeer == firstPeer) {   // we closed loop w/o success, fallback to self placement then
                         break;
                     }
                 }
@@ -217,14 +209,15 @@ private:
             for (ui32 i = 0; i < Peers.size(); i++) {
                 SingleNodeScheduler.NodeOrder.push_back(i);
             }
-            std::shuffle(SingleNodeScheduler.NodeOrder.begin(), SingleNodeScheduler.NodeOrder.end(), std::default_random_engine(TInstant::Now().MicroSeconds()));
+            std::shuffle(SingleNodeScheduler.NodeOrder.begin(), SingleNodeScheduler.NodeOrder.end(),
+                std::default_random_engine(TInstant::Now().MicroSeconds()));
         }
         TSet<ui64> nodeFilter;
         if (!filtersPerTask.empty()) {
-            const auto& nodeIdProto =  filtersPerTask.Get(0).GetNodeId();
+            const auto& nodeIdProto = filtersPerTask.Get(0).GetNodeId();
             nodeFilter.insert(nodeIdProto.begin(), nodeIdProto.end());
         }
-        TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
+        TPeer node = { SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter };
 
         if (!Peers.empty()) {
             for (ui32 i = 0; i < Peers.size(); ++i) {
@@ -275,9 +268,9 @@ private:
         ServiceCounters.Counters->GetCounter("EvWakeup", true)->Inc();
         auto tag = ev->Get()->Tag;
         switch (tag) {
-        case WU_NodesHealthCheck:
-            NodesHealthCheck();
-            break;
+            case WU_NodesHealthCheck:
+                NodesHealthCheck();
+                break;
         }
     }
 
@@ -352,7 +345,7 @@ private:
         try {
             const auto& status = ev->Get()->Status.GetStatus();
             if (!ev->Get()->Status.IsSuccess()) {
-                ythrow yexception() <<  status << '\n' << ev->Get()->Status.GetIssues().ToString();
+                ythrow yexception() << status << '\n' << ev -> Get()->Status.GetIssues().ToString();
             }
             const auto& res = ev->Get()->Result;
 
@@ -360,25 +353,20 @@ private:
             nodesInfo->reserve(res.nodes().size());
 
             Peers.clear();
-            std::set<ui32> nodeIds; // may be not unique
+            std::set<ui32> nodeIds;   // may be not unique
             for (const auto& node : res.nodes()) {
-
                 if (nodeIds.contains(node.node_id())) {
                     continue;
                 }
                 nodeIds.insert(node.node_id());
 
-                Peers.push_back({node.node_id(), node.instance_id() + "," + node.hostname(),
-                  node.active_workers(), node.memory_limit(), node.memory_allocated(), node.data_center()});
+                Peers.push_back({ node.node_id(), node.instance_id() + "," + node.hostname(), node.active_workers(), node.memory_limit(),
+                    node.memory_allocated(), node.data_center() });
 
                 if (node.interconnect_port()) {
-                    nodesInfo->emplace_back(TEvInterconnect::TNodeInfo{
-                        node.node_id(),
-                        node.node_address(),
-                        node.hostname(), // host
-                        node.hostname(), // resolveHost
-                        static_cast<ui16>(node.interconnect_port()),
-                        TNodeLocation(node.data_center())});
+                    nodesInfo->emplace_back(TEvInterconnect::TNodeInfo{ node.node_id(), node.node_address(), node.hostname(),   // host
+                        node.hostname(),   // resolveHost
+                        static_cast<ui16>(node.interconnect_port()), TNodeLocation(node.data_center()) });
                 }
             }
             if (NextPeer >= Peers.size()) {
@@ -394,7 +382,7 @@ private:
                 THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo(nodesInfo));
                 Send(GetNameserviceActorId(), nameServiceUpdateReq.Release());
             }
-        } catch (yexception &e) {
+        } catch (yexception& e) {
             YDB_LOG_ERROR("Exception",
                 {"exception", e.what()});
             ServiceCounters.Counters->GetCounter("NodesHealthCheckFail", true)->Inc();
@@ -412,7 +400,7 @@ private:
 
     NFq::TYqSharedResources::TPtr YqSharedResources;
 
-    const ui32 IcPort; // Interconnect Port
+    const ui32 IcPort;   // Interconnect Port
     bool UseDataCenter;
     TString DataCenter;
 
@@ -424,6 +412,7 @@ private:
         ui64 MemoryAllocated;
         TString DataCenter;
     };
+
     TVector<TPeer> Peers;
     ui32 ResourceIdPart = 0;
     ui32 NextPeer = 0;
@@ -436,6 +425,7 @@ private:
     struct TSingleNodeScheduler {
         TVector<int> NodeOrder;
     };
+
     TSingleNodeScheduler SingleNodeScheduler;
 };
 
@@ -444,21 +434,12 @@ TActorId MakeNodesManagerId() {
     return NActors::TActorId(0, name);
 }
 
-IActor* CreateNodesManager(
-    const NDqs::TWorkerManagerCounters& workerManagerCounters,
-    TIntrusivePtr<ITimeProvider> timeProvider,
-    TIntrusivePtr<IRandomProvider> randomProvider,
-    const ::NYql::NCommon::TServiceCounters& serviceCounters,
-    const NConfig::TPrivateApiConfig& privateApiConfig,
-    const NFq::TYqSharedResources::TPtr& yqSharedResources,
-    const ui32& icPort,
-    const TString& dataCenter,
-    bool useDataCenter,
-    const TString& tenant,
-    ui64 mkqlInitialMemoryLimit) {
-    return new TNodesManagerActor(yqSharedResources, workerManagerCounters,
-        timeProvider, randomProvider,
-        serviceCounters, privateApiConfig, icPort, useDataCenter, dataCenter, tenant, mkqlInitialMemoryLimit);
+IActor* CreateNodesManager(const NDqs::TWorkerManagerCounters& workerManagerCounters, TIntrusivePtr<ITimeProvider> timeProvider,
+    TIntrusivePtr<IRandomProvider> randomProvider, const ::NYql::NCommon::TServiceCounters& serviceCounters,
+    const NConfig::TPrivateApiConfig& privateApiConfig, const NFq::TYqSharedResources::TPtr& yqSharedResources, const ui32& icPort,
+    const TString& dataCenter, bool useDataCenter, const TString& tenant, ui64 mkqlInitialMemoryLimit) {
+    return new TNodesManagerActor(yqSharedResources, workerManagerCounters, timeProvider, randomProvider, serviceCounters, privateApiConfig,
+        icPort, useDataCenter, dataCenter, tenant, mkqlInitialMemoryLimit);
 }
 
-} // namespace NFq
+}   // namespace NFq

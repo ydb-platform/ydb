@@ -1,20 +1,17 @@
 #include "ydb_grpc_helpers.h"
 
-#include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
-#include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
-
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/library/ycloud/api/events.h>
-#include <ydb/library/grpc/actor_client/grpc_service_client.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-
+#include <ydb/library/grpc/actor_client/grpc_service_client.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/ycloud/api/events.h>
+#include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_scheme_v1.grpc.pb.h>
 #include <ydb/public/lib/fq/scope.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -41,39 +38,47 @@ struct TEvPrivate {
 
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
-    struct TEvCreateDatabaseRequest : NCloud::TEvGrpcProtoRequest<TEvCreateDatabaseRequest, EvCreateDatabaseRequest, Ydb::Cms::CreateDatabaseRequest> {};
-    struct TEvCreateDatabaseResponse : NCloud::TEvGrpcProtoResponse<TEvCreateDatabaseResponse, EvCreateDatabaseResponse, Ydb::Cms::CreateDatabaseResponse> {};
-    struct TEvModifyPermissionsRequest : NCloud::TEvGrpcProtoRequest<TEvModifyPermissionsRequest, EvModifyPermissionsRequest, Ydb::Scheme::ModifyPermissionsRequest> {};
-    struct TEvModifyPermissionsResponse : NCloud::TEvGrpcProtoResponse<TEvModifyPermissionsResponse, EvModifyPermissionsResponse, Ydb::Scheme::ModifyPermissionsResponse> {};
-    struct TEvListDatabasesRequest : NCloud::TEvGrpcProtoRequest<TEvListDatabasesRequest, EvListDatabasesRequest, Ydb::Cms::ListDatabasesRequest> {};
-    struct TEvListDatabasesResponse : NCloud::TEvGrpcProtoResponse<TEvListDatabasesResponse, EvListDatabasesResponse, Ydb::Cms::ListDatabasesResponse> {};
+    struct TEvCreateDatabaseRequest
+        : NCloud::TEvGrpcProtoRequest<TEvCreateDatabaseRequest, EvCreateDatabaseRequest, Ydb::Cms::CreateDatabaseRequest> {};
+
+    struct TEvCreateDatabaseResponse
+        : NCloud::TEvGrpcProtoResponse<TEvCreateDatabaseResponse, EvCreateDatabaseResponse, Ydb::Cms::CreateDatabaseResponse> {};
+
+    struct TEvModifyPermissionsRequest
+        : NCloud::TEvGrpcProtoRequest<TEvModifyPermissionsRequest, EvModifyPermissionsRequest, Ydb::Scheme::ModifyPermissionsRequest> {};
+
+    struct TEvModifyPermissionsResponse
+        : NCloud::TEvGrpcProtoResponse<TEvModifyPermissionsResponse, EvModifyPermissionsResponse, Ydb::Scheme::ModifyPermissionsResponse> {};
+
+    struct TEvListDatabasesRequest
+        : NCloud::TEvGrpcProtoRequest<TEvListDatabasesRequest, EvListDatabasesRequest, Ydb::Cms::ListDatabasesRequest> {};
+
+    struct TEvListDatabasesResponse
+        : NCloud::TEvGrpcProtoResponse<TEvListDatabasesResponse, EvListDatabasesResponse, Ydb::Cms::ListDatabasesResponse> {};
 };
 
-}
+}   // namespace
 
-class TCmsGrpcServiceActor
-    : public NActors::TActor<TCmsGrpcServiceActor>
-    , NGrpcActorClient::TGrpcServiceClient<Ydb::Cms::V1::CmsService>
-    , NGrpcActorClient::TGrpcServiceClient<Ydb::Scheme::V1::SchemeService>
-{
+class TCmsGrpcServiceActor: public NActors::TActor<TCmsGrpcServiceActor>, NGrpcActorClient::TGrpcServiceClient<Ydb::Cms::V1::CmsService>,
+                            NGrpcActorClient::TGrpcServiceClient<Ydb::Scheme::V1::SchemeService> {
 public:
     using TBase = NActors::TActor<TCmsGrpcServiceActor>;
     using TCmsGrpcClient = NGrpcActorClient::TGrpcServiceClient<Ydb::Cms::V1::CmsService>;
     using TSchemeGrpcClient = NGrpcActorClient::TGrpcServiceClient<Ydb::Scheme::V1::SchemeService>;
 
-    struct TCreateDatabaseGrpcRequest : TCmsGrpcClient::TGrpcRequest {
+    struct TCreateDatabaseGrpcRequest: TCmsGrpcClient::TGrpcRequest {
         static constexpr auto Request = &Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase;
         using TRequestEventType = TEvPrivate::TEvCreateDatabaseRequest;
         using TResponseEventType = TEvPrivate::TEvCreateDatabaseResponse;
     };
 
-    struct TModifyPermissionsGrpcRequest : TSchemeGrpcClient::TGrpcRequest {
+    struct TModifyPermissionsGrpcRequest: TSchemeGrpcClient::TGrpcRequest {
         static constexpr auto Request = &Ydb::Scheme::V1::SchemeService::Stub::AsyncModifyPermissions;
         using TRequestEventType = TEvPrivate::TEvModifyPermissionsRequest;
         using TResponseEventType = TEvPrivate::TEvModifyPermissionsResponse;
     };
 
-    struct TListDatabasesGrpcRequest : TCmsGrpcClient::TGrpcRequest {
+    struct TListDatabasesGrpcRequest: TCmsGrpcClient::TGrpcRequest {
         static constexpr auto Request = &Ydb::Cms::V1::CmsService::Stub::AsyncListDatabases;
         using TRequestEventType = TEvPrivate::TEvListDatabasesRequest;
         using TResponseEventType = TEvPrivate::TEvListDatabasesResponse;
@@ -85,7 +90,8 @@ public:
         , TSchemeGrpcClient(settings)
         , Settings(settings)
         , CredentialsProvider(credentialsProvider)
-    {}
+    {
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvYdbCompute::TEvCreateDatabaseRequest, Handle);
@@ -117,7 +123,8 @@ public:
         forwardRequest->Request.set_path(request.Path);
         SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
         forwardRequest->Headers.emplace(NYdb::YDB_DATABASE_HEADER, request.BasePath);
-        TEvPrivate::TEvCreateDatabaseRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvCreateDatabaseRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
+        TEvPrivate::TEvCreateDatabaseRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvCreateDatabaseRequest>*)new IEventHandle(
+            SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         TCmsGrpcClient::MakeCall<TCreateDatabaseGrpcRequest>(std::move(forwardEvent));
         Requests[Cookie++] = ev;
     }
@@ -202,7 +209,8 @@ public:
         SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
         forwardRequest->Headers.emplace(NYdb::YDB_DATABASE_HEADER, ev->Get()->Database);
 
-        TEvPrivate::TEvListDatabasesRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvListDatabasesRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
+        TEvPrivate::TEvListDatabasesRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvListDatabasesRequest>*)new IEventHandle(
+            SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         TCmsGrpcClient::MakeCall<TListDatabasesGrpcRequest>(std::move(forwardEvent));
         Requests[Cookie++] = ev;
     }
@@ -272,12 +280,15 @@ private:
         grant->add_permission_names("ydb.generic.use");
 
         SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
-        TEvPrivate::TEvModifyPermissionsRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvModifyPermissionsRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
+        TEvPrivate::TEvModifyPermissionsRequest::TPtr forwardEvent =
+            (NActors::TEventHandle<TEvPrivate::TEvModifyPermissionsRequest>*)new IEventHandle(
+                SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         TSchemeGrpcClient::MakeCall<TModifyPermissionsGrpcRequest>(std::move(forwardEvent));
         ModifyPermissionsRequests[Cookie++] = request;
     }
 
-    void FillCreateDatabaseResponse(TEvYdbCompute::TEvCreateDatabaseResponse& response, const TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& request) const {
+    void FillCreateDatabaseResponse(
+        TEvYdbCompute::TEvCreateDatabaseResponse& response, const TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& request) const {
         response.Result.set_id(request.Get()->Get()->Path);
         response.Result.mutable_connection()->set_endpoint(request->Get()->ExecutionConnection.GetEndpoint());
         response.Result.mutable_connection()->set_database(request.Get()->Get()->Path);
@@ -291,8 +302,9 @@ private:
     int64_t Cookie = 0;
 };
 
-std::unique_ptr<NActors::IActor> CreateCmsGrpcClientActor(const NGrpcActorClient::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
+std::unique_ptr<NActors::IActor> CreateCmsGrpcClientActor(
+    const NGrpcActorClient::TGrpcClientSettings& settings, const NYdb::TCredentialsProviderPtr& credentialsProvider) {
     return std::make_unique<TCmsGrpcServiceActor>(settings, credentialsProvider);
 }
 
-}
+}   // namespace NFq

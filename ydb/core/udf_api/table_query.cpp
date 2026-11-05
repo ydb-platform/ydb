@@ -101,8 +101,7 @@ void ReadInstant(const Ydb::ResultSet& resultSet, const Ydb::Value& row, TString
 }
 
 const TString& ModuleColumnList() {
-    static const TString value =
-        "name, uid, md5, size, type, version, chunk_count, manifest, created_at";
+    static const TString value = "name, uid, md5, size, type, version, chunk_count, manifest, created_at";
     return value;
 }
 
@@ -136,14 +135,11 @@ void ReadModuleRow(const Ydb::ResultSet& resultSet, const Ydb::Value& rawRow, TM
     ReadInstant(resultSet, rawRow, TUdfModule::CreatedAtColName, row.CreatedAt);
 }
 
-} // namespace
+}   // namespace
 
 TString BuildSelectModuleByNameQuery(const TString& modulesTablePath) {
-    return TStringBuilder()
-        << "DECLARE $name AS Utf8; "
-        << "SELECT " << ModuleColumnList() << " FROM `"
-        << EscapeTablePath(modulesTablePath)
-        << "` WHERE name = $name;";
+    return TStringBuilder() << "DECLARE $name AS Utf8; "
+                            << "SELECT " << ModuleColumnList() << " FROM `" << EscapeTablePath(modulesTablePath) << "` WHERE name = $name;";
 }
 
 void SetSelectModuleByNameParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& name) {
@@ -166,7 +162,7 @@ TString BuildListModulesQuery(const TString& modulesTablePath, const TListFilter
         query << "DECLARE $type AS Utf8; ";
     }
     query << "SELECT " << ModuleColumnList() << " FROM `" << EscapeTablePath(modulesTablePath) << "`";
-    TVector<TString> predicates = {"type IN (\"WASM\", \"LIBRARY\")"};
+    TVector<TString> predicates = { "type IN (\"WASM\", \"LIBRARY\")" };
     if (filter.Type) {
         predicates.push_back("type = $type");
     }
@@ -179,11 +175,7 @@ TString BuildListModulesQuery(const TString& modulesTablePath, const TListFilter
     return query;
 }
 
-void SetListModulesParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TListFilter& filter,
-    ui64 offset,
-    ui64 limit)
+void SetListModulesParams(Ydb::Table::ExecuteDataQueryRequest& request, const TListFilter& filter, ui64 offset, ui64 limit)
 {
     (*request.mutable_parameters())["$offset"] = MakeUint64Param(offset);
     (*request.mutable_parameters())["$limit"] = MakeUint64Param(limit);
@@ -255,12 +247,8 @@ TString BuildFlipModuleQuery(const TString& modulesTablePath, bool withManifest)
     return query;
 }
 
-void SetFlipModuleParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TModuleRow& row,
-    const TWriteConditions& conditions,
-    bool versionGiven,
-    bool withManifest)
+void SetFlipModuleParams(Ydb::Table::ExecuteDataQueryRequest& request, const TModuleRow& row, const TWriteConditions& conditions,
+    bool versionGiven, bool withManifest)
 {
     auto& params = *request.mutable_parameters();
     params["$name"] = MakeUtf8Param(row.Name);
@@ -281,41 +269,35 @@ void SetFlipModuleParams(
 }
 
 TString BuildDeleteModuleQuery(const TString& modulesTablePath, const TString& moduleChunksTablePath) {
-    return TStringBuilder()
-        << "DECLARE $name AS Utf8; "
-        << "DECLARE $expected_uid AS Utf8; "
-        << "DECLARE $require_uid AS Bool; "
-        << "DECLARE $type AS Utf8; "
-        << "DECLARE $require_type AS Bool; "
-        << "DECLARE $type_wasm AS Utf8; "
-        << "DECLARE $type_library AS Utf8; "
-        << "$cur = SELECT uid AS uid, type AS type FROM `" << EscapeTablePath(modulesTablePath)
-        << "` WHERE name = $name; "
-        << "$cur_uid = SELECT uid FROM $cur; "
-        << "$cur_type = SELECT type FROM $cur; "
-        << "$existed = $cur_uid IS NOT NULL; "
-        << "$applied = COALESCE($existed"
-        << " AND (NOT $require_uid OR $cur_uid == $expected_uid)"
-        << " AND (NOT $require_type OR $cur_type == $type)"
-        // Legacy native modules predate this API and nothing else here writes a
-        // type, so a row of any other type is not ours to remove either,
-        // whatever kind the caller says they are deleting.
-        << " AND ($cur_type == $type_wasm OR $cur_type == $type_library), false); "
-        << "SELECT $existed AS existed, $applied AS applied,"
-        << " $cur_uid AS cur_uid, $cur_type AS cur_type; "
-        // The uid the condition matched is part of the delete, so a re-upload
-        // that lands first keeps its row: this transaction then finds the uid
-        // changed and aborts instead of dropping content it never saw.
-        << "DELETE FROM `" << EscapeTablePath(modulesTablePath) << "` WHERE name = $name AND $applied; "
-        << "DELETE FROM `" << EscapeTablePath(moduleChunksTablePath)
-        << "` WHERE owner_key = $cur_uid AND $applied;";
+    return TStringBuilder() << "DECLARE $name AS Utf8; "
+                            << "DECLARE $expected_uid AS Utf8; "
+                            << "DECLARE $require_uid AS Bool; "
+                            << "DECLARE $type AS Utf8; "
+                            << "DECLARE $require_type AS Bool; "
+                            << "DECLARE $type_wasm AS Utf8; "
+                            << "DECLARE $type_library AS Utf8; "
+                            << "$cur = SELECT uid AS uid, type AS type FROM `" << EscapeTablePath(modulesTablePath) << "` WHERE name = $name; "
+                            << "$cur_uid = SELECT uid FROM $cur; "
+                            << "$cur_type = SELECT type FROM $cur; "
+                            << "$existed = $cur_uid IS NOT NULL; "
+                            << "$applied = COALESCE($existed"
+                            << " AND (NOT $require_uid OR $cur_uid == $expected_uid)"
+                            << " AND (NOT $require_type OR $cur_type == $type)"
+                            // Legacy native modules predate this API and nothing else here writes a
+                            // type, so a row of any other type is not ours to remove either,
+                            // whatever kind the caller says they are deleting.
+                            << " AND ($cur_type == $type_wasm OR $cur_type == $type_library), false); "
+                            << "SELECT $existed AS existed, $applied AS applied,"
+                            << " $cur_uid AS cur_uid, $cur_type AS cur_type; "
+                            // The uid the condition matched is part of the delete, so a re-upload
+                            // that lands first keeps its row: this transaction then finds the uid
+                            // changed and aborts instead of dropping content it never saw.
+                            << "DELETE FROM `" << EscapeTablePath(modulesTablePath) << "` WHERE name = $name AND $applied; "
+                            << "DELETE FROM `" << EscapeTablePath(moduleChunksTablePath) << "` WHERE owner_key = $cur_uid AND $applied;";
 }
 
 void SetDeleteModuleParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& name,
-    const TString& expectedUid,
-    TMaybe<EUdfType> requiredType)
+    Ydb::Table::ExecuteDataQueryRequest& request, const TString& name, const TString& expectedUid, TMaybe<EUdfType> requiredType)
 {
     auto& params = *request.mutable_parameters();
     params["$name"] = MakeUtf8Param(name);
@@ -327,9 +309,7 @@ void SetDeleteModuleParams(
     params["$type_library"] = MakeUtf8Param(TUdfModule::TypeToString(EUdfType::LIBRARY));
 }
 
-bool ParseModulePreStateResponse(
-    const Ydb::Table::ExecuteDataQueryResponse& response,
-    TModulePreState& preState)
+bool ParseModulePreStateResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TModulePreState& preState)
 {
     Ydb::ResultSet resultSet;
     if (!ExtractResultSet(response, resultSet) || resultSet.rows().empty()) {
@@ -345,9 +325,8 @@ bool ParseModulePreStateResponse(
 }
 
 TString BuildDeleteSourceChunksQuery(const TString& moduleChunksTablePath) {
-    return TStringBuilder()
-        << "DECLARE $owner_key AS Utf8; "
-        << "DELETE FROM `" << EscapeTablePath(moduleChunksTablePath) << "` WHERE owner_key = $owner_key;";
+    return TStringBuilder() << "DECLARE $owner_key AS Utf8; "
+                            << "DELETE FROM `" << EscapeTablePath(moduleChunksTablePath) << "` WHERE owner_key = $owner_key;";
 }
 
 void SetDeleteSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey) {
@@ -355,19 +334,14 @@ void SetDeleteSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, c
 }
 
 TString BuildUpsertSourceChunkQuery(const TString& moduleChunksTablePath) {
-    return TStringBuilder()
-        << "DECLARE $owner_key AS Utf8; "
-        << "DECLARE $chunk_idx AS Uint64; "
-        << "DECLARE $data AS String; "
-        << "UPSERT INTO `" << EscapeTablePath(moduleChunksTablePath)
-        << "` (owner_key, chunk_idx, data) VALUES ($owner_key, $chunk_idx, $data);";
+    return TStringBuilder() << "DECLARE $owner_key AS Utf8; "
+                            << "DECLARE $chunk_idx AS Uint64; "
+                            << "DECLARE $data AS String; "
+                            << "UPSERT INTO `" << EscapeTablePath(moduleChunksTablePath)
+                            << "` (owner_key, chunk_idx, data) VALUES ($owner_key, $chunk_idx, $data);";
 }
 
-void SetUpsertSourceChunkParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& ownerKey,
-    ui64 chunkIdx,
-    const TString& data)
+void SetUpsertSourceChunkParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey, ui64 chunkIdx, const TString& data)
 {
     auto& params = *request.mutable_parameters();
     params["$owner_key"] = MakeUtf8Param(ownerKey);
@@ -376,20 +350,14 @@ void SetUpsertSourceChunkParams(
 }
 
 TString BuildSelectArtifactStateQuery(const TString& artifactTablePath) {
-    return TStringBuilder()
-        << "DECLARE $id AS Utf8; "
-        << "DECLARE $kind AS Utf8; "
-        << "DECLARE $uid AS Utf8; "
-        << "SELECT compile_status, compile_error, compile_started_at, compile_finished_at FROM `"
-        << EscapeTablePath(artifactTablePath)
-        << "` WHERE id = $id AND kind = $kind AND uid = $uid;";
+    return TStringBuilder() << "DECLARE $id AS Utf8; "
+                            << "DECLARE $kind AS Utf8; "
+                            << "DECLARE $uid AS Utf8; "
+                            << "SELECT compile_status, compile_error, compile_started_at, compile_finished_at FROM `"
+                            << EscapeTablePath(artifactTablePath) << "` WHERE id = $id AND kind = $kind AND uid = $uid;";
 }
 
-void SetSelectArtifactStateParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind,
-    const TString& uid)
+void SetSelectArtifactStateParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind, const TString& uid)
 {
     auto& params = *request.mutable_parameters();
     params["$id"] = MakeUtf8Param(id);
@@ -397,9 +365,7 @@ void SetSelectArtifactStateParams(
     params["$uid"] = MakeUtf8Param(uid);
 }
 
-bool ParseArtifactStateResponse(
-    const Ydb::Table::ExecuteDataQueryResponse& response,
-    TMaybe<TArtifactCompileState>& state)
+bool ParseArtifactStateResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TMaybe<TArtifactCompileState>& state)
 {
     Ydb::ResultSet resultSet;
     if (!ExtractResultSet(response, resultSet)) {
@@ -431,16 +397,12 @@ bool ParseArtifactStateResponse(
 }
 
 TString BuildDeleteArtifactsByIdQuery(const TString& tablePath) {
-    return TStringBuilder()
-        << "DECLARE $id AS Utf8; "
-        << "DECLARE $kind AS Utf8; "
-        << "DELETE FROM `" << EscapeTablePath(tablePath) << "` WHERE id = $id AND kind = $kind;";
+    return TStringBuilder() << "DECLARE $id AS Utf8; "
+                            << "DECLARE $kind AS Utf8; "
+                            << "DELETE FROM `" << EscapeTablePath(tablePath) << "` WHERE id = $id AND kind = $kind;";
 }
 
-void SetDeleteArtifactsByIdParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& id,
-    const TString& kind)
+void SetDeleteArtifactsByIdParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& id, const TString& kind)
 {
     auto& params = *request.mutable_parameters();
     params["$id"] = MakeUtf8Param(id);
@@ -452,4 +414,4 @@ TString ArtifactKindFor(EUdfType type) {
         type == EUdfType::LIBRARY ? NUdfStore::EWasmArtifactKind::Library : NUdfStore::EWasmArtifactKind::Module);
 }
 
-} // namespace NKikimr::NUdfApi::NQuery
+}   // namespace NKikimr::NUdfApi::NQuery

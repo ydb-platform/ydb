@@ -8,115 +8,104 @@
 
 namespace NYql {
 
-    const TString TGenericSettings::TDefault::DateTimeFormat = "string";
+const TString TGenericSettings::TDefault::DateTimeFormat = "string";
 
-    TGenericConfiguration::TGenericConfiguration(bool strictConfigValidation)
-        : NCommon::TSettingDispatcher(GenericProviderName, TQContext(), strictConfigValidation)
-    {
-        REGISTER_SETTING(*this, UsePredicatePushdown);
-        REGISTER_SETTING(*this, DateTimeFormat);
-    }
+TGenericConfiguration::TGenericConfiguration(bool strictConfigValidation)
+    : NCommon::TDispatcherAndSettings<TGenericSettings>(GenericProviderName, TQContext(), strictConfigValidation)
+{
+    REGISTER_SETTING(*this, UsePredicatePushdown);
+    REGISTER_SETTING(*this, DateTimeFormat);
+}
 
-    void TGenericConfiguration::Init(const NYql::TGenericGatewayConfig& gatewayConfig,
-                                     const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
-                                     NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
-                                     const TCredentials::TPtr& credentials)
-    {
-        Dispatch(gatewayConfig.GetDefaultSettings());
+void TGenericConfiguration::Init(const NYql::TGenericGatewayConfig& gatewayConfig,
+    const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver, NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
+    const TCredentials::TPtr& credentials)
+{
+    Dispatch(gatewayConfig.GetDefaultSettings());
 
-        DescribeTableTimeout = gatewayConfig.HasDescribeTableTimeoutSeconds() ? 
-                               TDuration::Seconds(gatewayConfig.GetDescribeTableTimeoutSeconds()) :
-                               TDuration::Seconds(60);
+    DescribeTableTimeout = gatewayConfig.HasDescribeTableTimeoutSeconds() ? TDuration::Seconds(gatewayConfig.GetDescribeTableTimeoutSeconds())
+                                                                          : TDuration::Seconds(60);
 
-        for (const auto& cluster : gatewayConfig.GetClusterMapping()) {
-            // This token handling is used for backward compatibility with YQv1. 
-            // You can safely delete this code as soon as YQv1 is no longer supported.
-            TString structuredToken;
+    for (const auto& cluster : gatewayConfig.GetClusterMapping()) {
+        // This token handling is used for backward compatibility with YQv1.
+        // You can safely delete this code as soon as YQv1 is no longer supported.
+        TString structuredToken;
 
-            if (cluster.credentials().has_basic()) {
-                const auto& basic = cluster.credentials().basic();
-                structuredToken = ComposeStructuredTokenJsonForBasicAuth(basic.username(), basic.password());
-            } else if (cluster.has_serviceaccountid() && cluster.has_serviceaccountid()) {
-                structuredToken = ComposeStructuredTokenJsonForServiceAccount(
-                    cluster.GetServiceAccountId(), 
-                    cluster.GetServiceAccountIdSignature(), 
-                    cluster.GetToken());
-            } else {
-                ythrow yexception() << "Unsupported credentials type";
-            }
-
-            Tokens[cluster.name()] = structuredToken;
-    
-            // Register cluster
-            AddCluster(cluster, databaseResolver, databaseAuth, credentials);
+        if (cluster.credentials().has_basic()) {
+            const auto& basic = cluster.credentials().basic();
+            structuredToken = ComposeStructuredTokenJsonForBasicAuth(basic.username(), basic.password());
+        } else if (cluster.has_serviceaccountid() && cluster.has_serviceaccountid()) {
+            structuredToken = ComposeStructuredTokenJsonForServiceAccount(
+                cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), cluster.GetToken());
+        } else {
+            ythrow yexception() << "Unsupported credentials type";
         }
 
-        // TODO: check if it's necessary
-        FreezeDefaults();
+        Tokens[cluster.name()] = structuredToken;
+
+        // Register cluster
+        AddCluster(cluster, databaseResolver, databaseAuth, credentials);
     }
 
-    void TGenericConfiguration::AddCluster(const TGenericClusterConfig& clusterConfig,
-                                           const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver,
-                                           NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
-                                           const TCredentials::TPtr& credentials) {
-        ValidateGenericClusterConfig(clusterConfig, "TGenericConfiguration::AddCluster");
+    // TODO: check if it's necessary
+    FreezeDefaults();
+}
 
-        YQL_CLOG(INFO, ProviderGeneric) << "GenericConfiguration::AddCluster: " << DumpGenericClusterConfig(clusterConfig);
+void TGenericConfiguration::AddCluster(const TGenericClusterConfig& clusterConfig,
+    const std::shared_ptr<NYql::IDatabaseAsyncResolver> databaseResolver, NYql::IDatabaseAsyncResolver::TDatabaseAuthMap& databaseAuth,
+    const TCredentials::TPtr& credentials) {
+    ValidateGenericClusterConfig(clusterConfig, "TGenericConfiguration::AddCluster");
 
-        const auto& clusterName = clusterConfig.GetName();
-        const auto& databaseId = clusterConfig.GetDatabaseId();
+    YQL_CLOG(INFO, ProviderGeneric) << "GenericConfiguration::AddCluster: " << DumpGenericClusterConfig(clusterConfig);
 
-        if (databaseId) {
-            if (!databaseResolver) {
-                ythrow yexception() << "You're trying to access managed database, but database resolver is not configured.";
-            }
+    const auto& clusterName = clusterConfig.GetName();
+    const auto& databaseId = clusterConfig.GetDatabaseId();
 
-            const auto token = MakeStructuredToken(clusterConfig, credentials);
-
-            databaseAuth[std::make_pair(databaseId, DatabaseTypeFromDataSourceKind(clusterConfig.GetKind()))] =
-                NYql::TDatabaseAuth{
-                    .StructuredToken = token,
-                    .AddBearerToToken = true,
-                    .UseTls = clusterConfig.GetUseSsl(),
-                    .Protocol = clusterConfig.GetProtocol()};
-
-            DatabaseIdsToClusterNames[databaseId].emplace_back(clusterName);
-            YQL_CLOG(DEBUG, ProviderGeneric) << "database id '" << databaseId << "' added to mapping";
+    if (databaseId) {
+        if (!databaseResolver) {
+            ythrow yexception() << "You're trying to access managed database, but database resolver is not configured.";
         }
 
-        // preserve cluster config entirely for the further use
-        ClusterNamesToClusterConfigs[clusterName] = clusterConfig;
+        const auto token = MakeStructuredToken(clusterConfig, credentials);
 
-        // Add cluster to the list of valid clusters
-        this->AddValidCluster(clusterConfig.GetName());
+        databaseAuth[std::make_pair(databaseId, DatabaseTypeFromDataSourceKind(clusterConfig.GetKind()))] =
+            NYql::TDatabaseAuth{ .StructuredToken = token, .AddBearerToToken = true, .UseTls = clusterConfig.GetUseSsl(),
+                .Protocol = clusterConfig.GetProtocol() };
+
+        DatabaseIdsToClusterNames[databaseId].emplace_back(clusterName);
+        YQL_CLOG(DEBUG, ProviderGeneric) << "database id '" << databaseId << "' added to mapping";
     }
 
-    // Structured tokens are used to access MDB API. They can be constructed either from IAM tokens, or from SA credentials.
-    TString TGenericConfiguration::MakeStructuredToken(const TGenericClusterConfig& cluster, const TCredentials::TPtr& credentials) const {
-        TStructuredTokenBuilder b;
+    // preserve cluster config entirely for the further use
+    ClusterNamesToClusterConfigs[clusterName] = clusterConfig;
 
-        const auto iamToken = credentials->FindCredentialContent(
-            "default_" + cluster.name(),
-            "default_generic",
-            cluster.GetToken());
-        if (iamToken) {
-            return b.SetIAMToken(iamToken).ToJson();
-        }
+    // Add cluster to the list of valid clusters
+    this->AddValidCluster(clusterConfig.GetName());
+}
 
-        if (cluster.HasServiceAccountId() && cluster.HasServiceAccountIdSignature()) {
-            return b.SetServiceAccountIdAuth(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature()).ToJson();
-        }
+// Structured tokens are used to access MDB API. They can be constructed either from IAM tokens, or from SA credentials.
+TString TGenericConfiguration::MakeStructuredToken(const TGenericClusterConfig& cluster, const TCredentials::TPtr& credentials) const {
+    TStructuredTokenBuilder b;
 
-        ythrow yexception() << "you should either provide IAM Token via credential system or cluster config, "
-                               "or set (ServiceAccountId && ServiceAccountIdSignature) in cluster config";
+    const auto iamToken = credentials->FindCredentialContent("default_" + cluster.name(), "default_generic", cluster.GetToken());
+    if (iamToken) {
+        return b.SetIAMToken(iamToken).ToJson();
     }
 
-    TGenericSettings::TConstPtr TGenericConfiguration::Snapshot() const {
-        return std::make_shared<const TGenericSettings>(*this);
+    if (cluster.HasServiceAccountId() && cluster.HasServiceAccountIdSignature()) {
+        return b.SetServiceAccountIdAuth(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature()).ToJson();
     }
 
-    bool TGenericConfiguration::HasCluster(TStringBuf cluster) const {
-        return GetValidClusters().contains(cluster);
-    }
+    ythrow yexception() << "you should either provide IAM Token via credential system or cluster config, "
+                           "or set (ServiceAccountId && ServiceAccountIdSignature) in cluster config";
+}
 
-} // namespace NYql
+TGenericSettings::TConstPtr TGenericConfiguration::Snapshot() const {
+    return std::make_shared<const TGenericSettings>(*this);
+}
+
+bool TGenericConfiguration::HasCluster(TStringBuf cluster) const {
+    return GetValidClusters().contains(cluster);
+}
+
+}   // namespace NYql

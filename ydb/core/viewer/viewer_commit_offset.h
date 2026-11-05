@@ -21,14 +21,6 @@ public:
         AllowedMethods = {HTTP_METHOD_POST};
     }
 
-    void Bootstrap() override {
-        const auto& params(Event->Get()->Request.GetParams());
-        if (params.Has("database")) {
-            Database = params.Get("database");
-        }
-        TBase::Bootstrap();
-    }
-
     static YAML::Node GetSwagger() {
         TSimpleYamlBuilder yaml({
             .Method = "post",

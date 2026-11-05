@@ -9,7 +9,7 @@ Read the [library source and contract guide](../../../README.md), then select th
 
 ## Trace Ownership Across Threads
 
-For a router change, follow setup before Start, admission, queueing, device submission, completion, and Stop. Identify who owns every operation, buffer, file handle, registered resource, and completion object until it is safe to release. Verify the exactly-once completion contract only for accepted work, and inspect the rejection path separately.
+For a router change, follow setup before Start, admission, queueing, device submission, completion, and Stop. For every operation, buffer, file handle, registered resource, and completion object, identify its owner at each step, where ownership passes to another thread or component, and the point after which no thread uses it. Verify the exactly-once completion contract only for accepted work, and inspect the rejection path separately.
 
 Read the actual caller when changing a boundary. DDisk and its PB child have separate actor lifetimes and can own separate routers over duplicated handles. Completion on an I/O thread must use the caller's supported handoff to actor execution; it must not manipulate actor-local continuations or TLS-bound APIs directly.
 

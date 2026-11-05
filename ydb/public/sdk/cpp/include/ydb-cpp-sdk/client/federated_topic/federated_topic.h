@@ -407,6 +407,11 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
 
     //! Databases to read from.
     //! Default (empty) value means reading from all available databases.
+    //! The session tracks federation membership for its whole lifetime: a database that
+    //! appears and is readable is subscribed, a database that disappears from the federation
+    //! is unsubscribed and its partition sessions are closed with the ConnectionLost reason.
+    //! A listed database that becomes unavailable stays subscribed.
+    //! Refresh period is TFederatedTopicClientSettings::FederationDiscoveryInterval.
     //! Adding duplicates or unavailable databases is okay, they will be ignored.
     struct TReadOriginalSettings {
         //! Add reading from specified database if it's available.
@@ -499,6 +504,12 @@ struct TFederatedTopicClientSettings : public TCommonClientSettingsBase<TFederat
 
     //! Connection timeoout for federation discovery.
     FLUENT_SETTING_DEFAULT(TDuration, ConnectionTimeout, TDuration::Seconds(30));
+
+    //! How often federation membership is rediscovered.
+    //! Read sessions open subsessions for databases that joined the federation
+    //! and close subsessions for databases that left it on this cadence.
+    //! Zero keeps the default of 30 seconds.
+    FLUENT_SETTING_DEFAULT(TDuration, FederationDiscoveryInterval, TDuration::Seconds(30));
 
     //! Retry policy enables automatic retries for non-fatal errors.
     FLUENT_SETTING_DEFAULT(NTopic::IRetryPolicy::TPtr, RetryPolicy, NTopic::IRetryPolicy::GetDefaultPolicy());

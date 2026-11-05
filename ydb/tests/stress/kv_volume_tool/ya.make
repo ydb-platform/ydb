@@ -1,6 +1,7 @@
 PROGRAM(kv_volume_tool)
 
 SRCS(
+    endpoint_select.cpp
     main.cpp
 )
 
@@ -16,4 +17,5 @@ END()
 
 RECURSE_FOR_TESTS(
     tests
+    ut
 )

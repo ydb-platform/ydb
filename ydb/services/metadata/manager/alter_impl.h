@@ -1,55 +1,59 @@
 #pragma once
 #include "abstract.h"
 #include "fetch_database.h"
+#include "modification.h"
 #include "modification_controller.h"
 #include "preparation_controller.h"
 #include "restore.h"
-#include "modification.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NMetadata::NModifications {
 
 template <class TObject>
-class TProcessingController:
-    public IRestoreObjectsController<TObject>,
-    public IModificationObjectsController,
-    public IAlterPreparationController<TObject> {
+class TProcessingController: public IRestoreObjectsController<TObject>, public IModificationObjectsController,
+                             public IAlterPreparationController<TObject> {
 private:
     const TActorIdentity ActorId;
+
 public:
     using TPtr = std::shared_ptr<TProcessingController>;
+
     TProcessingController(const TActorIdentity actorId)
         : ActorId(actorId)
     {
-
     }
 
     virtual void OnRestoringFinished(std::vector<TObject>&& objects, const TString& transactionId) override {
         ActorId.Send(ActorId, new TEvRestoreFinished<TObject>(std::move(objects), transactionId));
     }
+
     virtual void OnRestoringProblem(const TString& errorMessage) override {
         ActorId.Send(ActorId, new TEvRestoreProblem(errorMessage));
     }
+
     virtual void OnModificationFinished() override {
         ActorId.Send(ActorId, new TEvModificationFinished());
     }
+
     virtual void OnModificationProblem(const TString& errorMessage) override {
         ActorId.Send(ActorId, new TEvModificationProblem(errorMessage));
     }
+
     virtual void OnPreparationProblem(const TString& errorMessage) override {
         ActorId.Send(ActorId, new TEvAlterPreparationProblem(errorMessage));
     }
-    virtual void OnPreparationFinished(std::vector<TObject>&& objects)  override {
+
+    virtual void OnPreparationFinished(std::vector<TObject>&& objects) override {
         ActorId.Send(ActorId, new TEvAlterPreparationFinished<TObject>(std::move(objects)));
     }
-
 };
 
 template <class TObject>
 class TModificationActorImpl: public NActors::TActorBootstrapped<TModificationActorImpl<TObject>> {
 private:
     using TBase = NActors::TActorBootstrapped<TModificationActorImpl<TObject>>;
+
 protected:
     TString SessionId;
     TString TransactionId;
@@ -65,44 +69,42 @@ protected:
     virtual bool ProcessPreparedObjects(NInternal::TTableRecords&& records) const = 0;
     virtual void InitState() = 0;
     virtual bool BuildRestoreObjectIds() = 0;
+
 public:
-    TModificationActorImpl(NInternal::TTableRecord&& patch,
-        IAlterController::TPtr controller,
-        const typename IObjectOperationsManager<TObject>::TPtr& manager,
-        const IOperationsManager::TInternalModificationContext& context)
+    TModificationActorImpl(NInternal::TTableRecord&& patch, IAlterController::TPtr controller,
+        const typename IObjectOperationsManager<TObject>::TPtr& manager, const IOperationsManager::TInternalModificationContext& context)
         : ExternalController(controller)
         , Manager(manager)
-        , Context(context) {
+        , Context(context)
+    {
         Patches.emplace_back(std::move(patch));
     }
 
     TModificationActorImpl(const NInternal::TTableRecord& patch, IAlterController::TPtr controller,
-        const typename IObjectOperationsManager<TObject>::TPtr& manager,
-        const IOperationsManager::TInternalModificationContext& context)
+        const typename IObjectOperationsManager<TObject>::TPtr& manager, const IOperationsManager::TInternalModificationContext& context)
         : ExternalController(controller)
         , Manager(manager)
-        , Context(context) {
+        , Context(context)
+    {
         Patches.emplace_back(patch);
     }
 
     TModificationActorImpl(std::vector<NInternal::TTableRecord>&& patches, IAlterController::TPtr controller,
-        const typename IObjectOperationsManager<TObject>::TPtr& manager,
-        const IOperationsManager::TInternalModificationContext& context)
+        const typename IObjectOperationsManager<TObject>::TPtr& manager, const IOperationsManager::TInternalModificationContext& context)
         : ExternalController(controller)
         , Manager(manager)
         , Context(context)
-        , Patches(std::move(patches)) {
-
+        , Patches(std::move(patches))
+    {
     }
 
     TModificationActorImpl(const std::vector<NInternal::TTableRecord>& patches, IAlterController::TPtr controller,
-        const typename IObjectOperationsManager<TObject>::TPtr& manager,
-        const IOperationsManager::TInternalModificationContext& context)
+        const typename IObjectOperationsManager<TObject>::TPtr& manager, const IOperationsManager::TInternalModificationContext& context)
         : ExternalController(controller)
         , Manager(manager)
         , Context(context)
-        , Patches(patches) {
-
+        , Patches(patches)
+    {
     }
 
     STATEFN(StateMain) {
@@ -129,7 +131,8 @@ public:
             return this->PassAway();
         }
 
-        if (!AppData()->FeatureFlags.GetEnableMetadataObjectsOnServerless() && Context.GetActivityType() != IOperationsManager::EActivityType::Drop) {
+        if (!AppData()->FeatureFlags.GetEnableMetadataObjectsOnServerless() &&
+            Context.GetActivityType() != IOperationsManager::EActivityType::Drop) {
             TBase::Register(CreateDatabaseFetcherActor(Context.GetExternalData().GetDatabase()));
         } else {
             CreateSession();
@@ -141,7 +144,8 @@ public:
         if (const auto& errorString = ev->Get()->GetErrorString()) {
             errorMessage = TStringBuilder() << "Cannot fetch database '" << Context.GetExternalData().GetDatabase() << "': " << *errorString;
         } else if (ev->Get()->GetServerless()) {
-            errorMessage = TStringBuilder() << "Objects " << TObject::GetTypeId() << " are disabled for serverless domains. Please contact your system administrator to enable it";
+            errorMessage = TStringBuilder() << "Objects " << TObject::GetTypeId()
+                                            << " are disabled for serverless domains. Please contact your system administrator to enable it";
         }
 
         if (errorMessage) {
@@ -175,7 +179,8 @@ public:
         if (!PrepareRestoredObjects(objects)) {
             this->PassAway();
         } else {
-            Manager->PrepareObjectsBeforeModification(std::move(objects), InternalController, Context, TAlterOperationContext(SessionId, TransactionId, RestoreObjectIds));
+            Manager->PrepareObjectsBeforeModification(
+                std::move(objects), InternalController, Context, TAlterOperationContext(SessionId, TransactionId, RestoreObjectIds));
         }
     }
 
@@ -226,8 +231,10 @@ template <class TObject>
 class TModificationActor: public TModificationActorImpl<TObject> {
 private:
     using TBase = TModificationActorImpl<TObject>;
+
 protected:
     using TBase::Manager;
+
     virtual void InitState() override {
         TBase::UnsafeBecome(&TModificationActor<TObject>::StateMain);
     }
@@ -247,6 +254,7 @@ protected:
 
 public:
     using TBase::TBase;
+
     STFUNC(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvModificationFinished, Handle);
@@ -311,7 +319,6 @@ public:
         auto g = TBase::PassAwayGuard();
         TBase::ExternalController->OnAlteringProblem("cannot " + GetModificationType() + " objects: " + ev->Get()->GetErrorMessage());
     }
-
 };
 
-}
+}   // namespace NKikimr::NMetadata::NModifications

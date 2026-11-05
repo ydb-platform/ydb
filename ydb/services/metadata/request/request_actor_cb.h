@@ -2,15 +2,17 @@
 #include "common.h"
 #include "config.h"
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/aclib/aclib.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
-#include <yql/essentials/public/issue/yql_issue.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/conclusion/result.h>
+
+#include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 namespace NKikimr::NMetadata::NRequest {
 
@@ -41,22 +43,26 @@ private:
         }
         externalController->OnRequestResult(std::move(response));
     }
+
 public:
     void Start() const {
         auto request = ProtoRequest;
         using TRpcRequest = NGRpcService::TGrpcRequestOperationCall<TRequest, TResponse>;
-        auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), AppData()->TenantName, UserToken.SerializeAsString(), TActivationContext::ActorSystem(), /*internalCall*/ true);
+        auto result = NRpcService::DoLocalRpc<TRpcRequest>(
+            std::move(request), AppData()->TenantName, UserToken.SerializeAsString(), TActivationContext::ActorSystem(), /*internalCall*/ true);
         auto extController = ExternalController;
         const auto replyCallback = [extController](const NThreading::TFuture<TResponse>& f) {
             TYDBOneRequestSender<TDialogPolicy>::OnInternalResult(f, extController);
         };
         result.Subscribe(replyCallback);
     }
-    TYDBOneRequestSender(const TRequest& request, const NACLib::TUserToken& uToken, typename IExternalController<TDialogPolicy>::TPtr externalController)
+
+    TYDBOneRequestSender(
+        const TRequest& request, const NACLib::TUserToken& uToken, typename IExternalController<TDialogPolicy>::TPtr externalController)
         : ProtoRequest(request)
         , UserToken(uToken)
-        , ExternalController(externalController) {
-
+        , ExternalController(externalController)
+    {
     }
 };
 
@@ -65,6 +71,7 @@ class IChainController: public IExternalController<TCurrentDialogPolicy> {
 private:
     std::shared_ptr<TNextController> NextController;
     const NACLib::TUserToken UserToken;
+
 protected:
     using TYdbConclusionStatus = TConclusionSpecialStatus<Ydb::StatusIds::StatusCode, Ydb::StatusIds::SUCCESS, Ydb::StatusIds::INTERNAL_ERROR>;
     using TRequestConclusion = TConclusionImpl<TYdbConclusionStatus, typename TNextController::TDialogPolicy::TRequest>;
@@ -74,8 +81,10 @@ protected:
     }
 
     virtual TRequestConclusion DoBuildNextRequest(typename TCurrentDialogPolicy::TResponse&& result) const = 0;
+
 public:
     using TDialogPolicy = TCurrentDialogPolicy;
+
     virtual void OnRequestResult(typename TCurrentDialogPolicy::TResponse&& result) override {
         TRequestConclusion nextRequest = BuildNextRequest(std::move(result));
         if (!nextRequest) {
@@ -85,19 +94,21 @@ public:
             req.Start();
         }
     }
+
     virtual void OnRequestFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage) override final {
         NextController->OnRequestFailed(status, errorMessage);
     }
+
     IChainController(const NACLib::TUserToken& userToken, std::shared_ptr<TNextController> nextController)
         : NextController(nextController)
         , UserToken(userToken)
     {
-
     }
 };
 
 class TSessionContext {
     TString SessionId;
+
 public:
     using TPtr = std::shared_ptr<TSessionContext>;
 
@@ -117,6 +128,7 @@ private:
     using TBase = IChainController<TDialogCreateSession, IExternalController<TDialogPolicy>>;
     TRequest ProtoRequest;
     TSessionContext::TPtr SessionContext;
+
 protected:
     virtual TBase::TRequestConclusion DoBuildNextRequest(TDialogCreateSession::TResponse&& response) const override {
         auto result = ProtoRequest;
@@ -131,11 +143,14 @@ protected:
         SessionContext->SetSessionId(sessionId);
         return result;
     }
+
 public:
-    TSessionedChainController(const TRequest& request, const NACLib::TUserToken& uToken, typename IExternalController<TDialogPolicy>::TPtr externalController, TSessionContext::TPtr sessionContext)
+    TSessionedChainController(const TRequest& request, const NACLib::TUserToken& uToken,
+        typename IExternalController<TDialogPolicy>::TPtr externalController, TSessionContext::TPtr sessionContext)
         : TBase(uToken, externalController)
         , ProtoRequest(request)
-        , SessionContext(sessionContext) {
+        , SessionContext(sessionContext)
+    {
         Y_ABORT_UNLESS(SessionContext);
     }
 };
@@ -144,16 +159,18 @@ template <class TDialogPolicy>
 class TNaiveExternalController: public IExternalController<TDialogPolicy> {
 private:
     const NActors::TActorIdentity ActorId;
+
 public:
     TNaiveExternalController(const NActors::TActorIdentity& actorId)
-        : ActorId(actorId) {
-
+        : ActorId(actorId)
+    {
     }
 
     virtual void OnRequestResult(typename TDialogPolicy::TResponse&& result) override {
         ActorId.Send(ActorId, new TEvRequestResult<TDialogPolicy>(std::move(result)));
         ActorId.Send(ActorId, new TEvRequestFinished);
     }
+
     virtual void OnRequestFailed(Ydb::StatusIds::StatusCode status, const TString& errorMessage) override {
         ActorId.Send(ActorId, new TEvRequestFailed(status, errorMessage));
     }
@@ -162,9 +179,11 @@ public:
 class TSessionDeleteResponseController: public IExternalController<NMetadata::NRequest::TDialogDeleteSession> {
 private:
     TSessionContext::TPtr SessionContext;
+
 public:
     TSessionDeleteResponseController(TSessionContext::TPtr sessionContext)
-        : SessionContext(sessionContext) {
+        : SessionContext(sessionContext)
+    {
     }
 
     virtual void OnRequestResult(typename TDialogPolicy::TResponse&&) override {
@@ -197,10 +216,12 @@ private:
     }
 
 public:
-    TSessionDeleteController(TSessionContext::TPtr sessionContext, const NACLib::TUserToken& userToken, typename IExternalController<TDialogPolicy>::TPtr externalController)
+    TSessionDeleteController(TSessionContext::TPtr sessionContext, const NACLib::TUserToken& userToken,
+        typename IExternalController<TDialogPolicy>::TPtr externalController)
         : SessionContext(sessionContext)
         , ExternalController(externalController)
-        , UserToken(userToken) {
+        , UserToken(userToken)
+    {
     }
 
     virtual void OnRequestResult(typename TDialogPolicy::TResponse&& result) override {
@@ -228,19 +249,24 @@ private:
         }
         return pRequest;
     }
+
 public:
-    static void Execute(TDialogYQLRequest::TRequest&& request, const NACLib::TUserToken& uToken, IExternalController<TDialogYQLRequest>::TPtr controller) {
+    static void Execute(
+        TDialogYQLRequest::TRequest&& request, const NACLib::TUserToken& uToken, IExternalController<TDialogYQLRequest>::TPtr controller) {
         auto sessionContext = std::make_shared<TSessionContext>();
-        auto sessionDeleteController = std::make_shared<NMetadata::NRequest::TSessionDeleteController<NMetadata::NRequest::TDialogYQLRequest>>(sessionContext, uToken, controller);
-        auto sessionController = std::make_shared<NMetadata::NRequest::TSessionedChainController<NMetadata::NRequest::TDialogYQLRequest>>
-            (std::move(request), uToken, sessionDeleteController, sessionContext);
-        NMetadata::NRequest::TYDBOneRequestSender<NMetadata::NRequest::TDialogCreateSession> ydbReq(NMetadata::NRequest::TDialogCreateSession::TRequest(),
-            uToken, sessionController);
+        auto sessionDeleteController = std::make_shared<NMetadata::NRequest::TSessionDeleteController<NMetadata::NRequest::TDialogYQLRequest>>(
+            sessionContext, uToken, controller);
+        auto sessionController = std::make_shared<NMetadata::NRequest::TSessionedChainController<NMetadata::NRequest::TDialogYQLRequest>>(
+            std::move(request), uToken, sessionDeleteController, sessionContext);
+        NMetadata::NRequest::TYDBOneRequestSender<NMetadata::NRequest::TDialogCreateSession> ydbReq(
+            NMetadata::NRequest::TDialogCreateSession::TRequest(), uToken, sessionController);
         ydbReq.Start();
     }
-    static void Execute(const TString& request, const NACLib::TUserToken& uToken, IExternalController<TDialogYQLRequest>::TPtr controller, const bool readOnly) {
+
+    static void Execute(
+        const TString& request, const NACLib::TUserToken& uToken, IExternalController<TDialogYQLRequest>::TPtr controller, const bool readOnly) {
         Execute(BuildRequest(request, readOnly), uToken, controller);
     }
 };
 
-}
+}   // namespace NKikimr::NMetadata::NRequest

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/formats/arrow/rows/view.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -514,6 +515,9 @@ ui64 CountLocalDbTableRows(
 void EraseLocalDbTableRow(TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec);
 void UpdateLocalDbTableRow(
     TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec, const TString& valuesSpec);
+std::vector<NKikimrTxColumnShard::TSchemaPresetVersionInfo> ReadSchemaPresetVersions(TTestBasicRuntime& runtime, ui64 tabletId);
+
+ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId = TTestTxConfig::TxTablet0);
 
 void VerifyNoBackupOrRestoreArtifacts(
     TTestBasicRuntime& runtime, const NYDBTest::NColumnShard::TController* csController, ui64 tabletId = TTestTxConfig::TxTablet0);
@@ -531,6 +535,8 @@ TString MakeTestBlobValues(const std::vector<ui64>& values, const std::vector<NA
     const TTestBlobOptions& options = {}, const std::set<std::string>& notNullColumns = {});
 TSerializedTableRange MakeTestRange(
     std::pair<ui64, ui64> range, bool inclusiveFrom, bool inclusiveTo, const std::vector<NArrow::NTest::TTestColumn>& columns);
+// The key MakeTestBlob gives to the row of this value.
+NArrow::TSimpleRow MakeTestKey(const ui64 value, const std::vector<NArrow::NTest::TTestColumn>& pk);
 
 }   // namespace NKikimr::NTxUT
 

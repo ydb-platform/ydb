@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 
 from .utils import build_pj_path
 
@@ -40,10 +41,14 @@ class PackageJson(object):
 
         self.path = path
         self.data = None
+        self.indent = "  "
 
     def read(self):
         with open(self.path, 'rb') as f:
-            self.data = json.load(f)
+            content = f.read()
+            self.data = json.loads(content)
+            indent = re.search(rb'^[ \t]+(?=")', content, re.MULTILINE)
+            self.indent = indent.group().decode('ascii') if indent else "  "
 
     def write(self, path=None):
         """
@@ -58,7 +63,7 @@ class PackageJson(object):
             os.mkdir(directory)
 
         with open(path, "w") as f:
-            json.dump(self.data, f, indent=2, ensure_ascii=False)
+            json.dump(self.data, f, indent=self.indent, ensure_ascii=False)
             f.write('\n')  # it's better for diff algorithm in arc
             logger.debug("Written {}".format(path))
 
@@ -141,11 +146,24 @@ class PackageJson(object):
         Returns names and paths from specifiers of the defined workspace dependencies.
         :rtype: list[tuple[str, str]]
         """
-        spec_paths = []
+        return [(name, relative) for name, relative, _ in self._workspace_dep_spec_paths_iter()]
+
+    def _workspace_dep_spec_paths_iter(self):
+        # Keep the protocol for consumers that validate workspace package names.
+        # file: can use an alias or an override selector unrelated to the manifest name.
         schema = self.WORKSPACE_SCHEMA
         schema_len = len(schema)
 
         for name, spec in self.dependencies_iter():
+            if spec.startswith("file:"):
+                relative = spec[len("file:") :]
+                directory = os.path.normpath(os.path.join(os.path.dirname(self.path), relative))
+                if not os.path.isabs(relative) and (
+                    os.path.isfile(os.path.join(directory, "ya.make"))
+                    or os.path.isfile(os.path.join(directory, "output.tar.uuid"))
+                ):
+                    yield name, relative, False
+                continue
             if not spec.startswith(schema):
                 continue
 
@@ -157,9 +175,7 @@ class PackageJson(object):
                     )
                 )
 
-            spec_paths.append((name, spec_path))
-
-        return spec_paths
+            yield name, spec_path, True
 
     def get_workspace_dep_paths(self, base_path=None):
         """
@@ -180,7 +196,7 @@ class PackageJson(object):
         ws_deps = []
         pj_dir = os.path.dirname(self.path)
 
-        for name, rel_path in self.get_workspace_dep_spec_paths():
+        for name, rel_path, is_workspace in self._workspace_dep_spec_paths_iter():
             dep_path = os.path.normpath(os.path.join(pj_dir, rel_path))
             dep_pj_path = build_pj_path(dep_path)
             try:
@@ -188,9 +204,9 @@ class PackageJson(object):
             except IOError as e:
                 logger.debug(f"{self.path}: cannot load {name}: {e}. Process dependency as empty package.")
                 dep_pj = PackageJson(dep_pj_path)
-                dep_pj.data = {"name": name}
+                dep_pj.data = {"name": name if is_workspace else os.path.basename(dep_path)}
 
-            if name != dep_pj.get_name():
+            if is_workspace and name != dep_pj.get_name():
                 raise PackageJsonWorkspaceError(
                     "Workspace dependency name mismatch, found '{}' instead of '{}' in {}".format(
                         name, dep_pj.get_name(), self.path
@@ -233,8 +249,9 @@ class PackageJson(object):
         ws_map = self.get_workspace_map()
         return {pj.get_name(): path for path, (pj, _) in ws_map.items()}
 
-    def validate_prebuilds(self, requires_build_packages: list[str]):
-        pnpm_overrides: dict[str, str] = self.data.get("pnpm", {}).get("overrides", {})
+    def validate_prebuilds(self, requires_build_packages: list[str], common_overrides=None):
+        pnpm_overrides = dict(common_overrides or {})
+        pnpm_overrides.update(self.data.get("pnpm", {}).get("overrides", {}))
         use_prebuild_flags: dict[str, bool] = self.data.get("@yatool/prebuilder", {}).get("usePrebuild", {})
 
         def covered(k: str) -> bool:

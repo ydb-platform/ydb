@@ -44,6 +44,7 @@ public:
 
     virtual void OnRestart() = 0;
     virtual bool NeedToReadKeys() const = 0;
+    virtual bool NeedHistoricalPrecharge(const TTableId& tableId, TArrayRef<const TRawTypeValue> key) const = 0;
 
     virtual bool Collect(const TTableId& tableId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates, TIntrusivePtr<NACLib::TUserContext> userCtx) = 0;
@@ -60,6 +61,7 @@ public:
 
     void OnRestart() override;
     bool NeedToReadKeys() const override;
+    bool NeedHistoricalPrecharge(const TTableId& tableId, TArrayRef<const TRawTypeValue> key) const override;
 
     // abstract class, subclasses need to implement Collect
 

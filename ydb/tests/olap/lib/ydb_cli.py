@@ -315,11 +315,16 @@ class YdbCliHelper:
 
     @classmethod
     @allure.step
-    def deploy_remote_cli(cls, host: str = '') -> str:
+    def deploy_remote_cli(cls, host: str = '', target_dir: str = '') -> str:
         if not host:
             host = YdbCluster.get_client_host()
-        remote_path = remote_execution.get_remote_tmp_path(host, 'ydb_cli', str(time()) , os.path.basename(cls.get_cli_path()))
-        result = remote_execution.deploy_binary(cls.get_cli_path(), host, os.path.dirname(remote_path))
+        if remote_execution.is_localhost(host):
+            # Functional tests can execute the built CLI without copying it for every chunk.
+            return os.path.abspath(cls.get_cli_path())
+        if not target_dir:
+            target_dir = remote_execution.get_remote_tmp_path(host, 'ydb_cli', str(time()))
+        remote_path = os.path.join(target_dir, os.path.basename(cls.get_cli_path()))
+        result = remote_execution.deploy_binary(cls.get_cli_path(), host, target_dir)
         assert result.get('success', False), f"host: {host}, bin: {cls.get_cli_path()}, path: {result.get('path')}, error: {result.get('error')}"
         return remote_path
 

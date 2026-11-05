@@ -1,19 +1,20 @@
 #include "external_data_source.h"
 
-#include <library/cpp/testing/unittest/registar.h>
-#include <util/random/random.h>
 #include <ydb/core/protos/external_sources.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+#include <util/random/random.h>
 
 namespace NKikimr {
 
 namespace {
 
 NExternalSource::IExternalSource::TPtr CreateTestSource(std::vector<TRegExMatch> hostnamePatterns = {}) {
-    return NExternalSource::CreateExternalDataSource("Test", {"auth1", "auth2"}, {"property"}, std::move(hostnamePatterns));
+    return NExternalSource::CreateExternalDataSource("Test", { "auth1", "auth2" }, { "property" }, std::move(hostnamePatterns));
 }
 
-}
+}   // namespace
 
 Y_UNIT_TEST_SUITE(ExternalDataSourceTest) {
     Y_UNIT_TEST(ValidateName) {
@@ -25,7 +26,8 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceTest) {
         auto source = CreateTestSource();
         NKikimrExternalSources::TSchema schema;
         NKikimrExternalSources::TGeneral general;
-        UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Only external table supports pack operation");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            source->Pack(schema, general), NExternalSource::TExternalSourceException, "Only external table supports pack operation");
     }
 
     Y_UNIT_TEST(ValidateAuth) {
@@ -38,7 +40,8 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceTest) {
 
     Y_UNIT_TEST(ValidateParameters) {
         auto source = CreateTestSource();
-        UNIT_ASSERT_EXCEPTION_CONTAINS(source->GetParameters({}), NExternalSource::TExternalSourceException, "Only external table supports parameters");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            source->GetParameters({}), NExternalSource::TExternalSourceException, "Only external table supports parameters");
     }
 
     Y_UNIT_TEST(ValidateHasExternalTable) {
@@ -50,11 +53,12 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceTest) {
         NKikimrSchemeOp::TExternalDataSourceDescription proto;
         auto source = CreateTestSource();
 
-        proto.MutableProperties()->MutableProperties()->insert({"property", "value"});
+        proto.MutableProperties()->MutableProperties()->insert({ "property", "value" });
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(proto.SerializeAsString()));
 
-        proto.MutableProperties()->MutableProperties()->insert({"another_property", "value"});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(source->ValidateExternalDataSource(proto.SerializeAsString()), NExternalSource::TExternalSourceException, "Unsupported property: another_property");
+        proto.MutableProperties()->MutableProperties()->insert({ "another_property", "value" });
+        UNIT_ASSERT_EXCEPTION_CONTAINS(source->ValidateExternalDataSource(proto.SerializeAsString()), NExternalSource::TExternalSourceException,
+            "Unsupported property: another_property");
     }
 
     Y_UNIT_TEST(ValidateYdbSourceRequiresDatabase) {
@@ -62,38 +66,29 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceTest) {
         proto.SetSourceType("Ydb");
 
         auto source = NExternalSource::CreateExternalDataSource(
-            "Ydb",
-            {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"},
-            {"database_name", "use_tls", "database_id", "shared_reading"},
-            {});
+            "Ydb", { "NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM" }, { "database_name", "use_tls", "database_id", "shared_reading" }, {});
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            source->ValidateExternalDataSource(proto.SerializeAsString()),
-            NExternalSource::TExternalSourceException,
+        UNIT_ASSERT_EXCEPTION_CONTAINS(source->ValidateExternalDataSource(proto.SerializeAsString()), NExternalSource::TExternalSourceException,
             "Ydb source must provide a non-empty database_name or database_id");
 
-        proto.MutableProperties()->MutableProperties()->insert({"database_name", ""});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            source->ValidateExternalDataSource(proto.SerializeAsString()),
-            NExternalSource::TExternalSourceException,
+        proto.MutableProperties()->MutableProperties()->insert({ "database_name", "" });
+        UNIT_ASSERT_EXCEPTION_CONTAINS(source->ValidateExternalDataSource(proto.SerializeAsString()), NExternalSource::TExternalSourceException,
             "Ydb source must provide a non-empty database_name or database_id");
 
         proto.MutableProperties()->MutableProperties()->clear();
-        proto.MutableProperties()->MutableProperties()->insert({"database_id", ""});
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            source->ValidateExternalDataSource(proto.SerializeAsString()),
-            NExternalSource::TExternalSourceException,
+        proto.MutableProperties()->MutableProperties()->insert({ "database_id", "" });
+        UNIT_ASSERT_EXCEPTION_CONTAINS(source->ValidateExternalDataSource(proto.SerializeAsString()), NExternalSource::TExternalSourceException,
             "Ydb source must provide a non-empty database_name or database_id");
 
         proto.MutableProperties()->MutableProperties()->clear();
-        proto.MutableProperties()->MutableProperties()->insert({"database_name", "/local"});
+        proto.MutableProperties()->MutableProperties()->insert({ "database_name", "/local" });
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(proto.SerializeAsString()));
 
         proto.MutableProperties()->MutableProperties()->clear();
-        proto.MutableProperties()->MutableProperties()->insert({"database_id", "etn0123456789"});
+        proto.MutableProperties()->MutableProperties()->insert({ "database_id", "etn0123456789" });
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(proto.SerializeAsString()));
 
-        proto.MutableProperties()->MutableProperties()->insert({"database_name", "/local"});
+        proto.MutableProperties()->MutableProperties()->insert({ "database_name", "/local" });
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(proto.SerializeAsString()));
     }
 
@@ -119,11 +114,13 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceTest) {
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(proto.SerializeAsString()));
 
         proto.SetLocation("scheme://anotherhost:1234/uri");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(source->ValidateExternalDataSource(proto.SerializeAsString()), NExternalSource::TExternalSourceException, "It is not allowed to access hostname 'anotherhost'");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(source->ValidateExternalDataSource(proto.SerializeAsString()), NExternalSource::TExternalSourceException,
+            "It is not allowed to access hostname 'anotherhost'");
 
         proto.SetLocation("anotherhost:1234/uri");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(source->ValidateExternalDataSource(proto.SerializeAsString()), NExternalSource::TExternalSourceException, "It is not allowed to access hostname 'anotherhost'");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(source->ValidateExternalDataSource(proto.SerializeAsString()), NExternalSource::TExternalSourceException,
+            "It is not allowed to access hostname 'anotherhost'");
     }
 }
 
-} // NKikimr
+}   // namespace NKikimr

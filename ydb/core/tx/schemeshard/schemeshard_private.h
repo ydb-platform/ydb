@@ -59,6 +59,7 @@ namespace TEvPrivate {
         EvMoveShardToStoragePool,
         EvPeriodicTableStatsParsed,
         EvRevisitSplitMerge,
+        EvExportCompletionUploadResult,
         EvEnd
     };
 
@@ -187,6 +188,20 @@ namespace TEvPrivate {
 
         TEvExportUploadMetadataResult(ui64 id, bool success, const TString& error)
             : ExportId(id)
+            , Success(success)
+            , Error(error)
+        {}
+    };
+
+    struct TEvExportCompletionUploadResult: public TEventLocal<TEvExportCompletionUploadResult, EvExportCompletionUploadResult> {
+        const ui64 ExportId;
+        const ui32 ItemIdx; // Max<ui32>() denotes the operation marker.
+        const bool Success;
+        const TString Error;
+
+        TEvExportCompletionUploadResult(ui64 exportId, ui32 itemIdx, bool success, const TString& error)
+            : ExportId(exportId)
+            , ItemIdx(itemIdx)
             , Success(success)
             , Error(error)
         {}

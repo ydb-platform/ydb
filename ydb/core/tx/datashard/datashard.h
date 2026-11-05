@@ -1556,11 +1556,13 @@ namespace TEvDataShard {
         bool Success;
         TString Error;
         ui32 Step; // reserved step of the write (for TEvS3DirectWriteAbort)
+        TRowVersion RowVersion = TRowVersion::Min(); // version of the planned restore transaction
         THolder<NTabletFlatExecutor::TDirectPartWriter> Writer;
 
         // Defined out-of-line (datashard_direct_import.cpp) because TDirectPartWriter
         // is only forward-declared here.
-        TEvS3DirectWriteBeginResult(ui64 txId, THolder<NTabletFlatExecutor::TDirectPartWriter> writer, ui32 step);
+        TEvS3DirectWriteBeginResult(ui64 txId, THolder<NTabletFlatExecutor::TDirectPartWriter> writer,
+            ui32 step, TRowVersion rowVersion);
         TEvS3DirectWriteBeginResult(ui64 txId, TString error);
         ~TEvS3DirectWriteBeginResult();
 
@@ -1570,6 +1572,7 @@ namespace TEvDataShard {
                 << " Success: " << Success
                 << " Error: " << Error
                 << " Step: " << Step
+                << " RowVersion: " << RowVersion
             << " }";
         }
     };
@@ -1598,7 +1601,8 @@ namespace TEvDataShard {
         }
     };
 
-    // DataShard -> downloader: the attach transaction has committed (or failed).
+    // DataShard -> downloader: attachment result, or failure of an active write
+    // before attachment (e.g. the database ran out of space).
     struct TEvS3DirectWriteFinishResult : public TEventLocal<TEvS3DirectWriteFinishResult, TEvDataShard::EvS3DirectWriteFinishResult> {
         ui64 TxId;
         bool Success;
@@ -1624,6 +1628,9 @@ namespace TEvDataShard {
     struct TEvS3DirectWriteAbort : public TEventLocal<TEvS3DirectWriteAbort, TEvDataShard::EvS3DirectWriteAbort> {
         ui64 TxId;
         ui32 Step;
+        // Preserve space signals when aborting instead of attaching the part.
+        TVector<ui32> YellowMoveChannels;
+        TVector<ui32> YellowStopChannels;
 
         TEvS3DirectWriteAbort(ui64 txId, ui32 step)
             : TxId(txId)

@@ -3,20 +3,17 @@
 #include "host_intrinsic.h"
 #include "invocation_context.h"
 
-#include <ydb/services/udf_store/wasm/abi/udf_cpp_abi.h>
-
 #include <ydb/library/wasm/api/compartment.h>
 #include <ydb/library/wasm/api/pointer.h>
-
-#include <util/generic/yexception.h>
-#include <util/generic/utility.h>
+#include <ydb/services/udf_store/wasm/abi/udf_cpp_abi.h>
 
 #include <util/generic/scope.h>
+#include <util/generic/utility.h>
+#include <util/generic/yexception.h>
 #include <util/string/builder.h>
 #include <util/system/types.h>
 
 #include <bit>
-
 
 extern "C" char* AllocateBytes(TExpressionContext* /*context*/, size_t byteCount) {
     // Never trust the guest-provided context pointer. Host sets the current
@@ -62,11 +59,7 @@ extern "C" void ThrowException(const char* error) {
 
     // Plain throw: do not prefix with host.cpp:line (ythrow) — that is internal
     // and must not appear in the query failure reason shown to users.
-    throw yexception()
-        << "Error while executing UDF: "
-        << message
-        << "\n\n"
-        << stack;
+    throw yexception() << "Error while executing UDF: " << message << "\n\n" << stack;
 }
 
 namespace NKikimr::NUdfStore::NWasm {
@@ -76,9 +69,7 @@ using namespace NYdb::NWasm;
 
 char* AllocateBytesHost(void* context, ui64 byteCount)
 {
-    return ::AllocateBytes(
-        reinterpret_cast<TExpressionContext*>(context),
-        static_cast<size_t>(byteCount));
+    return ::AllocateBytes(reinterpret_cast<TExpressionContext*>(context), static_cast<size_t>(byteCount));
 }
 
 void ThrowExceptionHost(const char* error)
@@ -94,7 +85,7 @@ WAVM::Intrinsics::Function* const HostIntrinsicAnchors[] = {
     &IntrinsicFunctionThrowException,
 };
 
-} // namespace
+}   // namespace
 
 void EnsureUdfHostIntrinsicsRegistered()
 {
@@ -106,4 +97,4 @@ void EnsureUdfHostIntrinsicsRegistered()
     KeepBridgeHostIntrinsicsLinked();
 }
 
-} // namespace NKikimr::NUdfStore::NWasm
+}   // namespace NKikimr::NUdfStore::NWasm

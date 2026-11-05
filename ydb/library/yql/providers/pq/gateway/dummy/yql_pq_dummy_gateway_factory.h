@@ -6,4 +6,4 @@ namespace NYql {
 
 IPqGatewayFactory::TPtr CreatePqFileGatewayFactory(IPqGateway::TPtr pqGateway);
 
-} // namespace NYql
+}   // namespace NYql

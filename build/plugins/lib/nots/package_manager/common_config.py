@@ -1,151 +1,141 @@
 """Explicit, source-relative NOTS settings shared by injected modules."""
 
-import logging
+import copy
 import os
 import re
+from functools import lru_cache
 
 try:
     import ymakeyaml as yaml
 except ImportError:
     import yaml
 
-logger = logging.getLogger(__name__)
-
-# npm range syntax: partial versions, comparators, unions and hyphen ranges.
-_NUM = r"(?:0|[1-9][0-9]*)"
-_PART = r"(?:" + _NUM + r"|[xX*])"
-_IDENT = r"(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
-_BUILD = r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
-_VERSION = (
-    r"v?(?:"
-    + _NUM
-    + r"\."
-    + _NUM
-    + r"\."
-    + _NUM
-    + r"(?:-"
-    + _IDENT
-    + r"(?:\."
-    + _IDENT
-    + r")*)?|"
-    + _PART
-    + r"(?:\."
-    + _PART
-    + r"){0,2})"
-    + _BUILD
-)
-_COMPARATOR = r"(?:[<>]=?|=|~>?|\^)?\s*" + _VERSION
-_RANGE = re.compile(r"(?:" + _VERSION + r"\s+-\s+" + _VERSION + r"|" + _COMPARATOR + r"(?:\s+" + _COMPARATOR + r")*)")
+T0_SETTINGS_PATH = "devtools/frontend_build_platform/nots/constants/src/tier0-settings.yaml"
 
 
-def is_version_range(value):
-    return (
-        isinstance(value, str)
-        and bool(value.strip())
-        and all(_RANGE.fullmatch(part.strip()) for part in value.split("||"))
-    )
-
-
-# ymake exposes a fixed native loader; builder uses PyYAML and checks duplicate keys.
-_ConfigLoader = yaml.CSafeLoader
-if yaml.__name__ != "ymakeyaml":
-
-    class _UniqueKeyLoader(yaml.CSafeLoader):
-        def construct_mapping(self, node, deep=False):
-            seen = set()
-            for key, _ in node.value:
-                if key.id == "scalar" and key.tag != "tag:yaml.org,2002:merge":
-                    value = self.construct_object(key, deep=deep)
-                    if value in seen:
-                        raise ValueError("Duplicate YAML key {!r} at line {}".format(value, key.start_mark.line + 1))
-                    seen.add(value)
-            return super().construct_mapping(node, deep=deep)
-
-    _ConfigLoader = _UniqueKeyLoader
-
-
-def load_common_config(pj, sources_root, inject_peers):
-    """Return (Arcadia-relative config path, catalogs); never rewrite the manifest."""
-    settings = pj.data.get("nots", {})
-    if not isinstance(settings, dict):
-        raise ValueError("{}: nots must be a mapping".format(pj.path))
-    has_config = "commonConfigPath" in settings
-    config_path = settings.get("commonConfigPath")
-    if not inject_peers:
-        if has_config:
-            logger.warning("%s: commonConfigPath requires injected peers; ignoring config", pj.path)
-        return None, {}
-
+def load_common_config(pj, sources_root, include_settings=False):
+    """Read graph inputs; semantic validation is performed by CLI prepare."""
+    config_path = pj.data.get("nots", {}).get("commonConfigPath")
     catalogs = {}
+    settings = {}
     relative_path = None
-    if has_config:
-        if not isinstance(config_path, str) or not config_path or os.path.isabs(config_path):
-            raise ValueError("{}: commonConfigPath must be a nonempty relative path".format(pj.path))
+    if config_path is not None:
         absolute_path = os.path.normpath(os.path.join(os.path.dirname(pj.path), config_path))
-        source_root = os.path.abspath(sources_root)
-        if os.path.commonpath([source_root, absolute_path]) != source_root or os.path.commonpath(
-            [os.path.realpath(source_root), os.path.realpath(absolute_path)]
-        ) != os.path.realpath(source_root):
-            raise ValueError("{}: commonConfigPath escapes Arcadia: {}".format(pj.path, config_path))
-        relative_path = os.path.relpath(absolute_path, source_root)
-        try:
-            with open(absolute_path) as stream:
-                data = yaml.load(stream, Loader=_ConfigLoader)
-        except Exception as error:
-            raise ValueError("{}: cannot read common config {}: {}".format(pj.path, absolute_path, error)) from error
-        if not isinstance(data, dict):
-            raise ValueError("{}: {} must contain a mapping".format(pj.path, absolute_path))
-        for key in data:
-            if key != "catalogs":
-                logger.warning("%s: ignoring unknown common config key %s in %s", pj.path, key, absolute_path)
+        relative_path = os.path.relpath(absolute_path, sources_root)
+        with open(absolute_path) as stream:
+            data = yaml.load(stream, Loader=yaml.CSafeLoader)
+        settings = select_pnpm_settings(data)
         catalogs = data.get("catalogs", {})
-        if not isinstance(catalogs, dict):
-            raise ValueError("{}: catalogs must be a mapping in {}".format(pj.path, absolute_path))
-        directory = os.path.dirname(relative_path).replace(os.sep, "/")
-        prefix = directory + "/" if directory else ""
-        for group, entries in catalogs.items():
-            if (
-                not isinstance(group, str)
-                or not group.startswith(prefix)
-                or not group[len(prefix) :]
-                or group == "default"
-            ):
-                raise ValueError(
-                    "{}: invalid catalog group {!r} in {}; expected prefix {!r}".format(
-                        pj.path, group, absolute_path, prefix
-                    )
-                )
-            if not isinstance(entries, dict):
-                raise ValueError("{}: catalog {} must be a mapping in {}".format(pj.path, group, absolute_path))
-            for name, value in entries.items():
-                if not isinstance(name, str) or not name or not is_version_range(value):
-                    raise ValueError(
-                        "{}: invalid catalog entry {} / {!r}: {!r} in {}".format(
-                            pj.path, group, name, value, absolute_path
-                        )
-                    )
-
-    for name, spec in pj.dependencies_iter():
-        if isinstance(spec, str) and spec.startswith("catalog:"):
-            group = spec[len("catalog:") :]
-            if not group or group == "default" or name not in catalogs.get(group, {}):
-                raise ValueError(
-                    "{}: unresolved {} for {} in common config {}".format(pj.path, spec, name, relative_path)
-                )
-    return relative_path, catalogs
+    return (relative_path, catalogs, settings) if include_settings else (relative_path, catalogs)
 
 
-def merge_config_sources(target, incoming):
-    """Map source file paths to group names; preserve ownership across peer workspaces."""
-    for filename, groups in incoming.items():
-        for previous, previous_groups in target.items():
-            if previous == filename:
-                continue
-            if os.path.dirname(previous) == os.path.dirname(filename):
-                raise ValueError("Conflicting common configs: {} and {}".format(previous, filename))
-            overlap = set(groups).intersection(previous_groups)
-            if overlap:
-                raise ValueError(
-                    "Conflicting catalog groups {} in {} and {}".format(sorted(overlap), previous, filename)
-                )
-        target[filename] = sorted(set(target.get(filename, [])).union(groups))
+_tier0_sources_root = None
+
+
+def set_tier0_sources_root(sources_root):
+    global _tier0_sources_root
+    _tier0_sources_root = sources_root
+
+
+def load_tier0_settings():
+    sources_root = _tier0_sources_root
+    if sources_root is None:
+        # Plugins run from sources; Python tests supply the source root via yatest.
+        sources_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../"))
+        if not os.path.isfile(os.path.join(sources_root, T0_SETTINGS_PATH)):
+            import yatest.common
+
+            sources_root = yatest.common.source_path()
+    return _read_tier0_settings(os.path.join(sources_root, T0_SETTINGS_PATH))
+
+
+@lru_cache(maxsize=None)
+def _read_tier0_settings(policy_path):
+    with open(policy_path) as policy_file:
+        return yaml.load(policy_file, Loader=yaml.CSafeLoader)
+
+
+def pnpm_setting_types():
+    return load_tier0_settings()["pnpm"]["supportedCustomSettings"]
+
+
+def pnpm_settings():
+    return tuple(key for key in pnpm_setting_types() if key != "catalogs")
+
+
+def select_pnpm_settings(source):
+    """Copy only supported settings; unknown pnpm options have no effect in NOTS."""
+    if not isinstance(source, dict):
+        return {}
+    return {key: copy.deepcopy(source[key]) for key in pnpm_settings() if key in source}
+
+
+def rebase_pnpm_settings(settings, source_dir, target_dir):
+    result = copy.deepcopy(settings)
+    if os.path.abspath(source_dir) == os.path.abspath(target_dir):
+        return result
+
+    def rebase(value, patch=False):
+        match = re.match(r"^(workspace:|file:|link:)(.*)$", value)
+        if not patch and (
+            not match or os.path.isabs(match[2]) or (match[1] == "workspace:" and not re.match(r"^\.\.?/", match[2]))
+        ):
+            return value
+        relative = os.path.relpath(
+            os.path.normpath(os.path.join(source_dir, value if patch else match[2])), target_dir
+        ).replace(os.sep, "/")
+        return relative if patch else match[1] + (relative if relative.startswith(".") else "./" + relative)
+
+    for key in pnpm_settings():
+        if pnpm_setting_types()[key] not in ("dependency-map", "patch-map", "package-extensions"):
+            continue
+        for name, value in result.get(key, {}).items():
+            if pnpm_setting_types()[key] == "package-extensions":
+                for section, dependencies in value.items():
+                    if section != "peerDependenciesMeta":
+                        value[section] = {dep: rebase(spec) for dep, spec in dependencies.items()}
+            else:
+                result[key][name] = rebase(value, pnpm_setting_types()[key] == "patch-map")
+    return result
+
+
+def workspace_settings_paths(settings):
+    overrides = list(settings.get("overrides", {}).values())
+    specs = list(overrides)
+    for extension in settings.get("packageExtensions", {}).values():
+        for section in ("dependencies", "optionalDependencies", "peerDependencies"):
+            specs.extend(extension.get(section, {}).values())
+    paths = [spec[len("workspace:") :] for spec in specs if re.match(r"^workspace:\.\.?/", spec)]
+    for spec in overrides:
+        if not spec.startswith("file:"):
+            continue
+        paths.append(spec[len("file:") :])
+    return paths
+
+
+def common_config_inputs(pj, sources_root):
+    """Only the target's explicit config and effective patches are build inputs."""
+    inputs = set()
+    filename, _, settings = load_common_config(pj, sources_root, include_settings=True)
+    directory = os.path.dirname(pj.path)
+    if filename:
+        inputs.add(filename)
+        settings = rebase_pnpm_settings(settings, os.path.join(sources_root, os.path.dirname(filename)), directory)
+    settings = join_pnpm_settings(settings, select_pnpm_settings(pj.data.get("pnpm")))
+    inputs.update(
+        os.path.relpath(os.path.normpath(os.path.join(directory, p)), sources_root)
+        for p in settings.get("patchedDependencies", {}).values()
+    )
+    return sorted(inputs)
+
+
+def join_pnpm_settings(common, target):
+    """Join dependency maps recursively; target leaves win and rule lists combine."""
+    if isinstance(common, dict) and isinstance(target, dict):
+        result = copy.deepcopy(common)
+        for key, value in target.items():
+            result[key] = join_pnpm_settings(result.get(key), value)
+        return result
+    if isinstance(common, list) and isinstance(target, list):
+        return list(dict.fromkeys(common + target))
+    return copy.deepcopy(target)

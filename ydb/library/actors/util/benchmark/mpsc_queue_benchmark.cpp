@@ -1,5 +1,6 @@
 #include <library/cpp/testing/gbenchmark/benchmark.h>
 
+#include <library/cpp/threading/bounded_queue/bounded_queue.h>
 #include <library/cpp/threading/queue/mpsc_intrusive_unordered.h>
 #include <ydb/library/actors/util/funnel_queue.h>
 #include <ydb/library/actors/util/intrusive_funnel_queue.h>
@@ -125,6 +126,11 @@ private:
 class TLockFreeQueueAdapter
 {
 public:
+    TLockFreeQueueAdapter() = default;
+
+    explicit TLockFreeQueueAdapter(size_t)
+    { }
+
     void Push(TNode* node)
     {
         Queue_.Enqueue(node);
@@ -139,6 +145,30 @@ public:
 
 private:
     TLockFreeQueue<TNode*> Queue_;
+};
+
+class TBoundedQueueAdapter
+{
+public:
+    explicit TBoundedQueueAdapter(size_t size)
+        : Queue_(size)
+    { }
+
+    void Push(TNode* node) noexcept
+    {
+        while (!Queue_.Enqueue(node)) {
+            std::this_thread::yield();
+        }
+    }
+
+    TNode* Pop() noexcept
+    {
+        TNode* node = nullptr;
+        return Queue_.Dequeue(node) ? node : nullptr;
+    }
+
+private:
+    NThreading::TBoundedQueue<TNode*> Queue_;
 };
 
 // Runs one consumer concurrently with N producers. Every producer owns a fixed
@@ -245,6 +275,88 @@ void BM_TLockFreeQueue(benchmark::State& state)
     RunMpsc<TLockFreeQueueAdapter>(state);
 }
 
+// Runs one producer concurrently with N consumers. A shared counter lets each
+// consumer leave the round once all nodes have been removed from the queue.
+template <class TQueue>
+void RunSpmc(benchmark::State& state)
+{
+    const auto consumerCount = static_cast<size_t>(state.range(0));
+    const auto itemCount = static_cast<size_t>(state.range(1));
+
+    TQueue queue(itemCount);
+    TVector<TNode> nodes(itemCount);
+    for (size_t index = 0; index < nodes.size(); ++index) {
+        nodes[index].Value = index;
+    }
+
+    std::atomic<bool> stopping = false;
+    std::atomic<size_t> consumed = 0;
+    std::barrier roundStart(static_cast<std::ptrdiff_t>(consumerCount + 2));
+    std::barrier roundEnd(static_cast<std::ptrdiff_t>(consumerCount + 2));
+
+    TVector<std::thread> threads;
+    threads.reserve(consumerCount + 1);
+
+    threads.emplace_back([&] {
+        for (;;) {
+            roundStart.arrive_and_wait();
+            if (stopping.load(std::memory_order_relaxed)) {
+                return;
+            }
+
+            for (auto& node : nodes) {
+                queue.Push(&node);
+            }
+            roundEnd.arrive_and_wait();
+        }
+    });
+
+    for (size_t consumer = 0; consumer < consumerCount; ++consumer) {
+        threads.emplace_back([&] {
+            for (;;) {
+                roundStart.arrive_and_wait();
+                if (stopping.load(std::memory_order_relaxed)) {
+                    return;
+                }
+
+                while (consumed.load(std::memory_order_relaxed) < itemCount) {
+                    if (auto* node = queue.Pop()) {
+                        benchmark::DoNotOptimize(node->Value);
+                        consumed.fetch_add(1, std::memory_order_relaxed);
+                    } else {
+                        std::this_thread::yield();
+                    }
+                }
+                roundEnd.arrive_and_wait();
+            }
+        });
+    }
+
+    for (auto _ : state) {
+        consumed.store(0, std::memory_order_relaxed);
+        roundStart.arrive_and_wait();
+        roundEnd.arrive_and_wait();
+    }
+
+    stopping.store(true, std::memory_order_relaxed);
+    roundStart.arrive_and_wait();
+    for (auto& thread : threads) {
+        thread.join();
+    }
+
+    state.SetItemsProcessed(state.iterations() * itemCount);
+}
+
+void BM_TLockFreeQueueSpmc(benchmark::State& state)
+{
+    RunSpmc<TLockFreeQueueAdapter>(state);
+}
+
+void BM_TBoundedQueueSpmc(benchmark::State& state)
+{
+    RunSpmc<TBoundedQueueAdapter>(state);
+}
+
 void MpscArguments(benchmark::Benchmark* benchmark)
 {
     for (int producers : {1, 4, 16}) {
@@ -258,6 +370,13 @@ void PooledFunnelQueueArguments(benchmark::Benchmark* benchmark)
     // producers take entries while the consumer returns entries to the pool.
     // Keep this benchmark single-producer until the freelist is fixed.
     benchmark->Args({1, ItemsPerProducer});
+}
+
+void SpmcArguments(benchmark::Benchmark* benchmark)
+{
+    for (int consumers : {1, 4, 16}) {
+        benchmark->Args({consumers, ItemsPerProducer});
+    }
 }
 
 BENCHMARK(BM_FunnelQueue)
@@ -293,6 +412,18 @@ BENCHMARK(BM_TIntrusiveFunnelQueueTryPop)
 BENCHMARK(BM_TLockFreeQueue)
     ->Apply(MpscArguments)
     ->ArgNames({"producers", "items_per_producer"})
+    ->UseRealTime()
+    ->Unit(benchmark::kNanosecond);
+
+BENCHMARK(BM_TLockFreeQueueSpmc)
+    ->Apply(SpmcArguments)
+    ->ArgNames({"consumers", "items_per_producer"})
+    ->UseRealTime()
+    ->Unit(benchmark::kNanosecond);
+
+BENCHMARK(BM_TBoundedQueueSpmc)
+    ->Apply(SpmcArguments)
+    ->ArgNames({"consumers", "items_per_producer"})
     ->UseRealTime()
     ->Unit(benchmark::kNanosecond);
 

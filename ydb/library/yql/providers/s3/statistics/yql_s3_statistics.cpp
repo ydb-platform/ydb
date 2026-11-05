@@ -1,7 +1,6 @@
-#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
-
 #include "yql_s3_statistics.h"
 
+#include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
 namespace NYql {
 
@@ -21,4 +20,4 @@ double GetDqSourceWrapBaseCost(const NNodes::TDqSourceWrapBase& wrapBase, TTypeA
     return 0.0;
 }
 
-} // namespace NYql
+}   // namespace NYql

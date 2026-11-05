@@ -2,7 +2,6 @@
 
 #include <library/cpp/http/simple/http_client.h>
 #include <library/cpp/retry/retry.h>
-
 #include <util/string/builder.h>
 
 namespace NTestUtils {
@@ -25,7 +24,7 @@ TString BuildLocationUrl(const TSolomonLocation& location, const TString& url) {
     return builder;
 }
 
-} // anonymous namespace
+}   // anonymous namespace
 
 void CleanupSolomon(const TSolomonLocation& location) {
     DoWithRetry([url = BuildLocationUrl(location, "/cleanup"), client = CreateHttpClient()]() {
@@ -40,4 +39,4 @@ TString GetSolomonMetrics(const TSolomonLocation& location) {
     return str.Str();
 }
 
-}  // namespace NTestUtils
+}   // namespace NTestUtils

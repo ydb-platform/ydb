@@ -1,7 +1,8 @@
-#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include "yql_ydb_external_provider_impl.h"
 
+#include <ydb/library/yql/providers/ydb_external/common/provider_names.h>
 #include <ydb/library/yql/providers/ydb_external/expr_nodes/yql_ydb_external_expr_nodes.h>
+
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
@@ -15,8 +16,8 @@ using namespace NNodes;
 using NYdbExternal::TState;
 
 bool ValidateCluster(const TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster, const TState& state, bool sink) {
-    if (!node.IsCallable(sink ? "DataSink" : "DataSource") || node.ChildrenSize() < 2 ||
-        !node.Child(0)->IsAtom(YdbExternalProviderName) || !EnsureAtom(*node.Child(1), ctx)) {
+    if (!node.IsCallable(sink ? "DataSink" : "DataSource") || node.ChildrenSize() < 2 || !node.Child(0)->IsAtom(YdbExternalProviderName) ||
+        !EnsureAtom(*node.Child(1), ctx)) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid YdbExternal provider parameters"));
         return false;
     }
@@ -28,7 +29,7 @@ bool ValidateCluster(const TExprNode& node, TExprContext& ctx, TMaybe<TString>& 
     return true;
 }
 
-class TDataSource final : public TDataProviderBase {
+class TDataSource final: public TDataProviderBase {
 public:
     explicit TDataSource(TState::TPtr state)
         : State_(std::move(state))
@@ -123,13 +124,13 @@ private:
     const THolder<IDqIntegration> DqIntegration_;
 };
 
-class TSinkTypeAnnotation final : public TVisitorTransformerBase {
+class TSinkTypeAnnotation final: public TVisitorTransformerBase {
 public:
     TSinkTypeAnnotation()
         : TVisitorTransformerBase(true)
     {
-        AddHandler({TCoCommit::CallableName()}, Hndl(&TSinkTypeAnnotation::Commit));
-        AddHandler({TCoWrite::CallableName()}, Hndl(&TSinkTypeAnnotation::Write));
+        AddHandler({ TCoCommit::CallableName() }, Hndl(&TSinkTypeAnnotation::Commit));
+        AddHandler({ TCoWrite::CallableName() }, Hndl(&TSinkTypeAnnotation::Write));
     }
 
     TStatus Commit(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -146,14 +147,14 @@ public:
     }
 };
 
-class TSinkExecution final : public TExecTransformerBase {
+class TSinkExecution final: public TExecTransformerBase {
 public:
     TSinkExecution() {
-        AddHandler({TCoCommit::CallableName()}, RequireFirst(), Pass());
+        AddHandler({ TCoCommit::CallableName() }, RequireFirst(), Pass());
     }
 };
 
-class TDataSink final : public TDataProviderBase {
+class TDataSink final: public TDataProviderBase {
 public:
     explicit TDataSink(TState::TPtr state)
         : State_(std::move(state))
@@ -196,8 +197,8 @@ public:
 
 private:
     static bool IsNativeSinkOperation(const TExprNode& node) {
-        return node.ChildrenSize() > 1 && node.Child(1)->IsCallable("DataSink") &&
-            node.Child(1)->ChildrenSize() > 0 && node.Child(1)->Child(0)->IsAtom(YdbExternalProviderName);
+        return node.ChildrenSize() > 1 && node.Child(1)->IsCallable("DataSink") && node.Child(1)->ChildrenSize() > 0 &&
+               node.Child(1)->Child(0)->IsAtom(YdbExternalProviderName);
     }
 
     const TState::TPtr State_;
@@ -207,7 +208,7 @@ private:
     const THolder<IGraphTransformer> LogicalOptimizer_;
 };
 
-} // namespace
+}   // namespace
 
 namespace NYdbExternal {
 
@@ -222,14 +223,12 @@ THolder<IGraphTransformer> CreatePhysicalOptimizer() {
     });
 }
 
-} // namespace NYdbExternal
+}   // namespace NYdbExternal
 
 TDataProviderInfo CreateYdbExternalDataProviders(TTypeAnnotationContext* types,
-                                              TYdbExternalMetadataClientCacheFactory metadataClientCacheFactory,
-                                              IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-                                              TInstant metadataDeadline) {
-    auto state = MakeIntrusive<TState>(types, std::move(metadataClientCacheFactory),
-        std::move(credentialsFactory), metadataDeadline);
+    TYdbExternalMetadataClientCacheFactory metadataClientCacheFactory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    TInstant metadataDeadline) {
+    auto state = MakeIntrusive<TState>(types, std::move(metadataClientCacheFactory), std::move(credentialsFactory), metadataDeadline);
     TDataProviderInfo info;
     info.Names.insert(TString(YdbExternalProviderName));
     info.Source = new TDataSource(state);
@@ -237,4 +236,4 @@ TDataProviderInfo CreateYdbExternalDataProviders(TTypeAnnotationContext* types,
     return info;
 }
 
-} // namespace NYql
+}   // namespace NYql

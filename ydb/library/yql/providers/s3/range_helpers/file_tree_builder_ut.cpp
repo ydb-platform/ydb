@@ -1,9 +1,8 @@
 #include "file_tree_builder.h"
 #include "path_list_reader.h"
 
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-
 #include <library/cpp/testing/unittest/registar.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql::NS3Details {
 
@@ -211,4 +210,4 @@ Y_UNIT_TEST_SUITE(S3FileTreeBuilderTest) {
     }
 }
 
-} // namespace NYql::NS3Details
+}   // namespace NYql::NS3Details

@@ -5,19 +5,17 @@
 #include <ydb/core/fq/libs/compute/common/run_actor_params.h>
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-#include <ydb/library/services/services.pb.h>
-
-#include <yql/essentials/providers/common/metrics/service_counters.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <google/protobuf/util/time_util.h>
+#include <yql/essentials/providers/common/metrics/service_counters.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_RUN_ACTOR
 
@@ -26,7 +24,7 @@ namespace NFq {
 using namespace NActors;
 using namespace NFq;
 
-class TFinalizerActor : public TBaseComputeActor<TFinalizerActor> {
+class TFinalizerActor: public TBaseComputeActor<TFinalizerActor> {
 public:
     enum ERequestType {
         RT_PING,
@@ -34,9 +32,8 @@ public:
     };
 
     class TCounters: public virtual TThrRefBase {
-        std::array<TComputeRequestCountersPtr, RT_MAX> Requests = CreateArray<RT_MAX, TComputeRequestCountersPtr>({
-            { MakeIntrusive<TComputeRequestCounters>("Ping") }
-        });
+        std::array<TComputeRequestCountersPtr, RT_MAX> Requests =
+            CreateArray<RT_MAX, TComputeRequestCountersPtr>({ { MakeIntrusive<TComputeRequestCounters>("Ping") } });
 
         ::NMonitoring::TDynamicCounterPtr Counters;
 
@@ -44,7 +41,7 @@ public:
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {
-            for (auto& request: Requests) {
+            for (auto& request : Requests) {
                 request->Register(Counters);
             }
         }
@@ -54,7 +51,8 @@ public:
         }
     };
 
-    TFinalizerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& pinger, NYdb::NQuery::EExecStatus execStatus, FederatedQuery::QueryMeta::ComputeStatus status, const ::NYql::NCommon::TServiceCounters& queryCounters)
+    TFinalizerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& pinger, NYdb::NQuery::EExecStatus execStatus,
+        FederatedQuery::QueryMeta::ComputeStatus status, const ::NYql::NCommon::TServiceCounters& queryCounters)
         : TBaseComputeActor(queryCounters, "Finalizer")
         , Params(params)
         , Parent(parent)
@@ -63,7 +61,8 @@ public:
         , Status(status)
         , Counters(GetStepCountersSubgroup())
         , StartTime(TInstant::Now())
-    {}
+    {
+    }
 
     static constexpr char ActorName[] = "FQ_FINALIZER_ACTOR";
 
@@ -82,7 +81,6 @@ public:
         } else {
             SendFinalPing();
         }
-
     }
 
     FederatedQuery::QueryMeta::ComputeStatus GetFinalStatus() const {
@@ -95,7 +93,7 @@ public:
             case NYdb::NQuery::EExecStatus::Aborted:
             case NYdb::NQuery::EExecStatus::Canceled:
             case NYdb::NQuery::EExecStatus::Failed:
-            break;
+                break;
         }
 
         switch (Status) {
@@ -133,7 +131,7 @@ public:
             case NYdb::NQuery::EExecStatus::Aborted:
             case NYdb::NQuery::EExecStatus::Canceled:
             case NYdb::NQuery::EExecStatus::Failed:
-            break;
+                break;
         }
 
         switch (Status) {
@@ -182,7 +180,9 @@ public:
                 {"scope", Params.Scope},
                 {"queryId", Params.QueryId},
                 {"jobId", Params.JobId});
-            Send(Parent, new TEvYdbCompute::TEvFinalizerResponse(NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Error moving the query to the terminal state"}}, NYdb::EStatus::INTERNAL_ERROR));
+            Send(Parent, new TEvYdbCompute::TEvFinalizerResponse(
+                             NYql::TIssues{ NYql::TIssue{ TStringBuilder{} << "Error moving the query to the terminal state" } },
+                             NYdb::EStatus::INTERNAL_ERROR));
             FailedAndPassAway();
         }
     }
@@ -209,18 +209,15 @@ private:
     TActorId Pinger;
     NYdb::NQuery::EExecStatus ExecStatus;
     FederatedQuery::QueryMeta::ComputeStatus Status;
-    
+
     TCounters Counters;
     TInstant StartTime;
 };
 
-std::unique_ptr<NActors::IActor> CreateFinalizerActor(const TRunActorParams& params,
-                                                      const TActorId& parent,
-                                                      const TActorId& pinger,
-                                                      NYdb::NQuery::EExecStatus execStatus,
-                                                      FederatedQuery::QueryMeta::ComputeStatus status,
-                                                      const ::NYql::NCommon::TServiceCounters& queryCounters) {
+std::unique_ptr<NActors::IActor> CreateFinalizerActor(const TRunActorParams& params, const TActorId& parent, const TActorId& pinger,
+    NYdb::NQuery::EExecStatus execStatus, FederatedQuery::QueryMeta::ComputeStatus status,
+    const ::NYql::NCommon::TServiceCounters& queryCounters) {
     return std::make_unique<TFinalizerActor>(params, parent, pinger, execStatus, status, queryCounters);
 }
 
-}
+}   // namespace NFq

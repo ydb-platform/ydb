@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/metadata.h>
+
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/services/metadata/abstract/common.h>
 
@@ -11,19 +12,22 @@ namespace NKikimr::NMetadata::NProvider {
 class TEvObjectsOperation: public NActors::TEventLocal<TEvObjectsOperation, EEvents::EvAlterObjects> {
 private:
     YDB_READONLY_DEF(NModifications::IObjectModificationCommand::TPtr, Command);
+
 public:
     TEvObjectsOperation(NModifications::IObjectModificationCommand::TPtr command)
-        : Command(command) {
-
+        : Command(command)
+    {
     }
 };
 
 class TEvPrepareManager: public NActors::TEventLocal<TEvPrepareManager, EEvents::EvPrepareManager> {
 private:
     YDB_READONLY_DEF(IClassBehaviour::TPtr, Manager);
+
 public:
     TEvPrepareManager(IClassBehaviour::TPtr manager)
-        : Manager(manager) {
+        : Manager(manager)
+    {
         Y_ABORT_UNLESS(!!Manager);
     }
 };
@@ -31,9 +35,11 @@ public:
 class TEvManagerPrepared: public NActors::TEventLocal<TEvManagerPrepared, EEvents::EvManagerPrepared> {
 private:
     YDB_READONLY_DEF(IClassBehaviour::TPtr, Manager);
+
 public:
     TEvManagerPrepared(IClassBehaviour::TPtr manager)
-        : Manager(manager) {
+        : Manager(manager)
+    {
         Y_ABORT_UNLESS(!!Manager);
     }
 };
@@ -41,9 +47,11 @@ public:
 class TEvAskSnapshot: public NActors::TEventLocal<TEvAskSnapshot, EEvents::EvAskExternal> {
 private:
     YDB_READONLY_DEF(NFetcher::ISnapshotsFetcher::TPtr, Fetcher);
+
 public:
     TEvAskSnapshot(NFetcher::ISnapshotsFetcher::TPtr fetcher)
-        : Fetcher(fetcher) {
+        : Fetcher(fetcher)
+    {
         Y_ABORT_UNLESS(!!Fetcher);
     }
 };
@@ -51,6 +59,7 @@ public:
 class TEvSubscribeExternal: public NActors::TEventLocal<TEvSubscribeExternal, EEvents::EvSubscribeExternal> {
 private:
     YDB_READONLY_DEF(NFetcher::ISnapshotsFetcher::TPtr, Fetcher);
+
 public:
     TEvSubscribeExternal(NFetcher::ISnapshotsFetcher::TPtr fetcher)
         : Fetcher(fetcher)
@@ -62,14 +71,16 @@ public:
 class TEvUnsubscribeExternal: public NActors::TEventLocal<TEvUnsubscribeExternal, EEvents::EvUnsubscribeExternal> {
 private:
     YDB_READONLY_DEF(NFetcher::ISnapshotsFetcher::TPtr, Fetcher);
+
 public:
     TEvUnsubscribeExternal(NFetcher::ISnapshotsFetcher::TPtr fetcher)
-        : Fetcher(fetcher) {
+        : Fetcher(fetcher)
+    {
         Y_ABORT_UNLESS(!!Fetcher);
     }
 };
 
-class TEvResetManagerRegistration : public TEventLocal<TEvResetManagerRegistration, EEvents::EvResetManagerRegistration> {
+class TEvResetManagerRegistration: public TEventLocal<TEvResetManagerRegistration, EEvents::EvResetManagerRegistration> {
 private:
     YDB_READONLY_DEF(IClassBehaviour::TPtr, Manager);
 
@@ -90,9 +101,10 @@ private:
     bool EnabledFlag = false;
     TString Path = ".metadata";
     static void Register(const TConfig& config);
+
 public:
     static bool IsEnabled();
     static TString GetPath();
 };
 
-} // namespace NKikimr::NMetadata::NProvider
+}   // namespace NKikimr::NMetadata::NProvider

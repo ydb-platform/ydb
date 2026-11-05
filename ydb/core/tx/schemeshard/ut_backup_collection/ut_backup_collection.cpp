@@ -1152,6 +1152,44 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     }
 
+    Y_UNIT_TEST(DropCollectionDuringUnrelatedCopyTable) {
+        // A copy outside the collection must not hang drop: the ancestor walk used to loop on the root.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        PrepareDirs(runtime, env, txId);
+
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", DefaultCollectionSettings());
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Unrelated"
+            Columns { Name: "key"   Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Keep the copy in flight
+        TBlockEvents<TEvDataShard::TEvProposeTransactionResult> block(runtime);
+        AsyncCopyTable(runtime, ++txId, "/MyRoot", "UnrelatedCopy", "/MyRoot/Unrelated");
+        const ui64 copyTxId = txId;
+        TestModificationResult(runtime, copyTxId);
+        runtime.WaitFor("copy table propose", [&]{ return !block.empty(); });
+
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+            "Name: \"" DEFAULT_NAME_1 "\"");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
+            {NLs::PathNotExist});
+
+        block.Stop().Unblock();
+        env.TestWaitNotification(runtime, copyTxId);
+    }
+
     Y_UNIT_TEST(VerifyCdcStreamCleanupInIncrementalBackup) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));

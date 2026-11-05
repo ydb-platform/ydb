@@ -2992,7 +2992,13 @@ void TSchemeShard::PersistTxState(NIceDb::TNiceDb& db, const TOperationId opId) 
     Y_ABORT_UNLESS(txState.TxType != TTxState::TxInvalid);
     Y_ABORT_UNLESS(txState.State != TTxState::Invalid);
     TString extraData;
-    if (txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition) {
+    if (txState.TxType == TTxState::TxDropReplication || txState.TxType == TTxState::TxDropReplicationCascade) {
+        if (txState.ReplicationSourceCleanup != NKikimrReplication::SOURCE_CLEANUP_POLICY_DROP) {
+            NKikimrSchemeOp::TDrop drop;
+            drop.SetReplicationSourceCleanup(txState.ReplicationSourceCleanup);
+            Y_ABORT_UNLESS(drop.SerializeToString(&extraData));
+        }
+    } else if (txState.TxType == TTxState::TxSplitTablePartition || txState.TxType == TTxState::TxMergeTablePartition) {
         Y_ABORT_UNLESS(txState.SplitDescription, "Split Tx must have non-empty split description");
         bool serializeRes = txState.SplitDescription->SerializeToString(&extraData);
         Y_ABORT_UNLESS(serializeRes);
@@ -6168,6 +6174,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NBackground::TEvListRequest, Handle);
         HFuncTraced(TEvPrivate::TEvExportSchemeUploadResult, Handle);
         HFuncTraced(TEvPrivate::TEvExportUploadMetadataResult, Handle);
+        HFuncTraced(TEvPrivate::TEvExportCompletionUploadResult, Handle);
 
         // namespace NImport {
         HFuncTraced(TEvImport::TEvCreateImportRequest, Handle);
@@ -7944,13 +7951,8 @@ void TSchemeShard::Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvCancelTx::TPtr& ev, const TActorContext& ctx) {
-    if (IsReadOnlyMode) {
-        YDB_LOG_ERROR_CTX(ctx, "Ignoring message TEvSchemeShard::TEvCancelTx: schemeshard in readonly",
-            {"schemeshard", TabletID()},
-        );
-        return;
-    }
-
+    // Read-only mode rejects new schema operations, but existing backups and
+    // restores must still be cancellable so exports and imports can finish.
     Execute(CreateTxOperationPropose(ev), ctx);
 }
 

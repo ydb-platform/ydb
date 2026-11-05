@@ -319,7 +319,6 @@ class TDropBackupCollection : public TSubOperation {
 
                 // Check if target is a child of this backup collection
                 if (context.SS->PathsById.contains(targetPathId)) {
-                    auto targetPath = context.SS->PathsById.at(targetPathId);
                     TPathId currentId = targetPathId;
 
                     // Walk up the path hierarchy to check if bcPathId is an ancestor
@@ -328,6 +327,9 @@ class TDropBackupCollection : public TSubOperation {
                             return true;
                         }
                         auto currentPath = context.SS->PathsById.at(currentId);
+                        if (currentPath->ParentPathId == currentId) {
+                            break; // root is its own parent
+                        }
                         currentId = currentPath->ParentPathId;
                     }
                 }

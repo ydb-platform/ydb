@@ -430,6 +430,10 @@ public:
     using TRpcRequestActor<TImportDataRPC, TEvImportDataRequest, true>::TRpcRequestActor;
 
     void Bootstrap() {
+        if (!AppData()->FeatureFlags.GetEnableClientModifications()) {
+            return Reply(StatusIds::PRECONDITION_FAILED, TIssuesIds::DEFAULT_ERROR,
+                "Client data writes are disabled");
+        }
         switch (GetProtoRequest()->format_case()) {
         case Import::ImportDataRequest::kYdbDump:
             break;

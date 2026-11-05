@@ -1125,7 +1125,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
                         auto status = CopyTableAsyncStart(driver, dbIt.GetFullPath(), tmpTablePath);
                         copiedTablesStatuses.emplace(dbIt.GetFullPath(), std::move(status));
                     }
-                } else if (dbIt.IsDir() && !dbIt.IsSystemDir()) {
+                } else if (dbIt.IsDir() && !dbIt.IsInternalDir()) {
                     CreateClusterDirectory(driver, JoinDatabasePath(backupPrefix, dbIt.GetRelPath()));
                 }
             }
@@ -1247,7 +1247,7 @@ void BackupFolderImpl(TDriver driver, const TString& database, const TString& db
             } else if (dbIt.IsDir()) {
                 MaybeCreateEmptyFile(childFolderPath);
                 BackupPermissions(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath);
-                if (!avoidCopy && !dbIt.IsSystemDir()) {
+                if (!avoidCopy && !dbIt.IsInternalDir()) {
                     RemoveClusterDirectory(driver, tmpTablePath);
                 }
             }
@@ -1459,11 +1459,12 @@ void BackupGroupMembers(TDriver driver, const TString& dbPath, const TFsPath& fo
     WriteCreationQueryToFile(alterGroupQuery.Str(), folderPath, NDump::NFiles::AlterGroup());
 }
 
-void BackupDatabaseImpl(TDriver driver, const TString& dbPath, const TFsPath& folderPath, TBackupDatabaseSettings settings) {
+void BackupDatabaseImpl(TDriver driver, TString dbPath, const TFsPath& folderPath, TBackupDatabaseSettings settings) {
     LOG_I("Backup database " << dbPath.Quote() << " to " << folderPath.GetPath().Quote());
     folderPath.MkDirs();
 
     auto status = GetDatabaseStatus(driver, dbPath);
+    dbPath = TString(status.GetPath());
     Ydb::Cms::CreateDatabaseRequest proto;
     status.SerializeTo(proto);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::Database());

@@ -1,10 +1,11 @@
-#include <ydb/library/yql/providers/native/read_stream.h>
-#include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
+#include <ydb/library/yql/providers/native/read_stream.h>
+
 #include <arrow/api.h>
-#include <yql/essentials/public/udf/arrow/util.h>
+#include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/scope.h>
+#include <yql/essentials/public/udf/arrow/util.h>
 
 #include <atomic>
 #include <mutex>
@@ -17,7 +18,7 @@ namespace {
 using namespace NDq;
 const auto WaitTimeout = TDuration::Seconds(10);
 
-class TStream final : public IReadStream {
+class TStream final: public IReadStream {
 public:
     NThreading::TFuture<TReadResult> Next() override {
         auto promise = NThreading::NewPromise<TReadResult>();
@@ -27,7 +28,9 @@ public:
             Pending = promise;
         }
         if (BeforeNotification) {
-            promise.GetFuture().Subscribe([before = BeforeNotification](const auto&) { before(); });
+            promise.GetFuture().Subscribe([before = BeforeNotification](const auto&) {
+                before();
+            });
         }
         if (++Calls == 1) {
             Started.SetValue();
@@ -56,7 +59,7 @@ public:
             promise.swap(Pending);
         }
         if (promise) {
-            promise->SetValue({.Error = "cancelled"});
+            promise->SetValue({ .Error = "cancelled" });
         }
     }
 
@@ -64,18 +67,19 @@ public:
     std::atomic<ui32> Calls = 0;
     std::atomic<bool> Cancelled = false;
     NThreading::TPromise<void> Started = NThreading::NewPromise();
+
 private:
     std::mutex Mutex;
     std::optional<NThreading::TPromise<TReadResult>> Pending;
 };
 
-void Init(TFakeActor& actor, TReadStreamFactory factory,
-          TDuration timeout = TDuration::Seconds(30), bool pollBeforeBootstrap = false, ui64 maxRowBytes = 0) {
+void Init(TFakeActor& actor, TReadStreamFactory factory, TDuration timeout = TDuration::Seconds(30), bool pollBeforeBootstrap = false,
+    ui64 maxRowBytes = 0) {
     NDqProto::TTaskInput input;
     THashMap<TString, TString> params;
     TVector<TString> ranges;
     auto [asyncInput, readActor] = CreateNativeReadActor(std::move(factory),
-        {.Timeout = timeout, .MaxBatchBytes = 1024, .MaxRowBytes = maxRowBytes, .MaxRetries = 2, .Columns = {"value"}},
+        { .Timeout = timeout, .MaxBatchBytes = 1024, .MaxRowBytes = maxRowBytes, .MaxRetries = 2, .Columns = { "value" } },
         IDqAsyncIoFactory::TSourceArguments{
             .InputDesc = input,
             .InputIndex = 0,
@@ -103,12 +107,13 @@ void Init(TFakeActor& actor, TReadStreamFactory factory,
     }
 }
 
-void Init(TFakeCASetup& setup, TReadStreamFactory factory,
-          TDuration timeout = TDuration::Seconds(30), bool pollBeforeBootstrap = false, ui64 maxRowBytes = 0) {
+void Init(TFakeCASetup& setup, TReadStreamFactory factory, TDuration timeout = TDuration::Seconds(30), bool pollBeforeBootstrap = false,
+    ui64 maxRowBytes = 0) {
     setup.Execute([&](TFakeActor& actor) {
         Init(actor, std::move(factory), timeout, pollBeforeBootstrap, maxRowBytes);
     });
-    setup.Execute([](TFakeActor&) {}); // Drain bootstrap before capturing notification promises.
+    setup.Execute([](TFakeActor&) {
+    });   // Drain bootstrap before capturing notification promises.
 }
 
 struct TPull {
@@ -134,26 +139,27 @@ TReadResult Batch(ui64 value) {
     arrow::UInt64Builder builder;
     UNIT_ASSERT(builder.Append(value).ok());
     auto array = builder.Finish().ValueOrDie();
-    return {.Batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("value", arrow::uint64())}), 1, {array}), .Bytes = 8};
+    return { .Batch = arrow::RecordBatch::Make(arrow::schema({ arrow::field("value", arrow::uint64()) }), 1, { array }), .Bytes = 8 };
 }
 
-} // namespace
+}   // namespace
 
 Y_UNIT_TEST_SUITE(NativeReadActor) {
     Y_UNIT_TEST(DiscardedReadMayReleasePayloadReentrantly) {
         NActors::TTestActorRuntimeBase runtime;
         const NActors::TActorId fakeActorId(0, "FakeActor");
-        runtime.AddLocalService(fakeActorId, NActors::TActorSetupCmd(
-            new TFakeActor(std::make_shared<TAsyncInputPromises>(), std::make_shared<TAsyncOutputPromises>()),
-            NActors::TMailboxType::Simple, 0));
+        runtime.AddLocalService(fakeActorId,
+            NActors::TActorSetupCmd(new TFakeActor(std::make_shared<TAsyncInputPromises>(), std::make_shared<TAsyncOutputPromises>()),
+                NActors::TMailboxType::Simple, 0));
         runtime.Initialize();
         auto execute = [&](TCallback callback) {
             auto promise = NThreading::NewPromise();
             std::exception_ptr error;
-            runtime.Send(new NActors::IEventHandle(fakeActorId, {},
-                new NDq::TEvPrivate::TEvExecute(promise, std::move(callback), error)));
+            runtime.Send(new NActors::IEventHandle(fakeActorId, {}, new NDq::TEvPrivate::TEvExecute(promise, std::move(callback), error)));
             NActors::TDispatchOptions options;
-            options.CustomFinalCondition = [&] { return promise.GetFuture().HasValue(); };
+            options.CustomFinalCondition = [&] {
+                return promise.GetFuture().HasValue();
+            };
             runtime.DispatchEvents(options, WaitTimeout);
             UNIT_ASSERT(promise.GetFuture().HasValue());
             if (error) {
@@ -163,7 +169,9 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
         auto stream = std::make_shared<TStream>();
         NActors::TActorId readActorId;
         execute([&](TFakeActor& actor) {
-            Init(actor, [stream](const auto&) { return stream; });
+            Init(actor, [stream](const auto&) {
+                return stream;
+            });
             readActorId = *actor.DqAsyncInputActorId;
         });
         execute([&](TFakeActor& actor) {
@@ -176,11 +184,10 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
         bool released = false;
         bool releasedWhileSending = false;
         auto previousFilter = runtime.SetEventFilter([&](auto&, TAutoPtr<NActors::IEventHandle>& event) {
-            if (event->GetRecipientRewrite() != readActorId ||
-                event->GetTypeRewrite() != EventSpaceBegin(NActors::TEvents::ES_PRIVATE)) {
+            if (event->GetRecipientRewrite() != readActorId || event->GetTypeRewrite() != EventSpaceBegin(NActors::TEvents::ES_PRIVATE)) {
                 return false;
             }
-            event.Destroy(); // Discard synchronously inside TActorSystem::Send.
+            event.Destroy();   // Discard synchronously inside TActorSystem::Send.
             discarded = true;
             releasedWhileSending = released;
             return true;
@@ -195,7 +202,9 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
             Y_UNUSED(owner);
             // Native actor destruction calls Detach on the same callback state.
             // Releasing the final batch under its mutex would deadlock here.
-            execute([](TFakeActor& actor) { actor.Terminate(); });
+            execute([](TFakeActor& actor) {
+                actor.Terminate();
+            });
             released = true;
         });
         stream->Resolve(std::move(result));
@@ -209,12 +218,14 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
         TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
         auto error = setup.AsyncInputPromises->FatalError.GetFuture();
-        Init(setup, [stream](const auto&) { return stream; }, TDuration::Seconds(30), true);
+        Init(setup, [stream](const auto&) {
+            return stream;
+        }, TDuration::Seconds(30), true);
         UNIT_ASSERT(!error.HasValue());
         UNIT_ASSERT_VALUES_EQUAL(stream->Calls.load(), 0);
         auto first = Pull(setup, 1);
         UNIT_ASSERT(stream->Started.GetFuture().Wait(WaitTimeout));
-        stream->Resolve({.Finished = true});
+        stream->Resolve({ .Finished = true });
         UNIT_ASSERT(first.Notification.Wait(WaitTimeout));
         UNIT_ASSERT(Pull(setup, 0).Finished);
         UNIT_ASSERT(!error.HasValue());
@@ -223,38 +234,42 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     Y_UNIT_TEST(SingleOversizedRowUsesExplicitRowAllowance) {
         TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
-        Init(setup, [stream](const auto&) { return stream; }, TDuration::Seconds(30), false, 8192);
+        Init(setup, [stream](const auto&) {
+            return stream;
+        }, TDuration::Seconds(30), false, 8192);
         auto ready = Pull(setup, 1);
         UNIT_ASSERT(stream->Started.GetFuture().Wait(WaitTimeout));
         arrow::BinaryBuilder builder;
         UNIT_ASSERT(builder.Append(std::string(4096, 'x')).ok());
         auto array = builder.Finish().ValueOrDie();
-        auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("value", arrow::binary())}), 1, {array});
+        auto batch = arrow::RecordBatch::Make(arrow::schema({ arrow::field("value", arrow::binary()) }), 1, { array });
         const auto bytes = NUdf::GetSizeOfArrowBatchInBytes(*batch);
         UNIT_ASSERT(bytes > 1024 && bytes <= 8192);
-        stream->Resolve({.Batch = std::move(batch), .Bytes = bytes});
+        stream->Resolve({ .Batch = std::move(batch), .Bytes = bytes });
         UNIT_ASSERT(ready.Notification.Wait(WaitTimeout));
         const auto delivered = Pull(setup, 1);
         UNIT_ASSERT_VALUES_EQUAL(delivered.Rows, 1);
         UNIT_ASSERT_VALUES_EQUAL(delivered.Bytes, bytes);
-        UNIT_ASSERT_VALUES_EQUAL(stream->Calls.load(), 1); // Backpressure still applies.
+        UNIT_ASSERT_VALUES_EQUAL(stream->Calls.load(), 1);   // Backpressure still applies.
     }
 
     Y_UNIT_TEST(RowAllowanceCannotAdmitOversizedMultiRowBatch) {
         TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
         auto error = setup.AsyncInputPromises->FatalError.GetFuture();
-        Init(setup, [stream](const auto&) { return stream; }, TDuration::Seconds(30), false, 8192);
+        Init(setup, [stream](const auto&) {
+            return stream;
+        }, TDuration::Seconds(30), false, 8192);
         Pull(setup, 1);
         UNIT_ASSERT(stream->Started.GetFuture().Wait(WaitTimeout));
         arrow::BinaryBuilder builder;
         UNIT_ASSERT(builder.Append(std::string(2000, 'x')).ok());
         UNIT_ASSERT(builder.Append(std::string(2000, 'y')).ok());
         auto array = builder.Finish().ValueOrDie();
-        auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("value", arrow::binary())}), 2, {array});
+        auto batch = arrow::RecordBatch::Make(arrow::schema({ arrow::field("value", arrow::binary()) }), 2, { array });
         const auto bytes = NUdf::GetSizeOfArrowBatchInBytes(*batch);
         UNIT_ASSERT(bytes > 1024 && bytes <= 8192);
-        stream->Resolve({.Batch = std::move(batch), .Bytes = bytes});
+        stream->Resolve({ .Batch = std::move(batch), .Bytes = bytes });
         UNIT_ASSERT(error.Wait(WaitTimeout));
         UNIT_ASSERT_STRING_CONTAINS(error.GetValue().ToString(), "exceeding its contract");
         UNIT_ASSERT(stream->Cancelled.load());
@@ -263,7 +278,10 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     Y_UNIT_TEST(CancellationBeforeDemandDoesNotStartRemoteOperation) {
         TFakeCASetup setup;
         std::atomic<ui32> attempts = 0;
-        Init(setup, [&](const auto&) { ++attempts; return std::make_shared<TStream>(); });
+        Init(setup, [&](const auto&) {
+            ++attempts;
+            return std::make_shared<TStream>();
+        });
         setup.Terminate();
         UNIT_ASSERT_VALUES_EQUAL(attempts.load(), 0);
     }
@@ -271,7 +289,9 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     Y_UNIT_TEST(PositiveDemandBoundsOneReadAndOneBatch) {
         TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
-        Init(setup, [stream](const auto&) { return stream; });
+        Init(setup, [stream](const auto&) {
+            return stream;
+        });
         UNIT_ASSERT_VALUES_EQUAL(Pull(setup, 0).Rows, 0);
         UNIT_ASSERT_VALUES_EQUAL(Pull(setup, -1).Rows, 0);
         UNIT_ASSERT_VALUES_EQUAL(stream->Calls.load(), 0);
@@ -311,7 +331,7 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
         }, TDuration::Seconds(5));
         Pull(setup, 1);
         UNIT_ASSERT(first->Started.GetFuture().Wait(WaitTimeout));
-        first->Resolve({.Error = "temporary", .Retryable = true});
+        first->Resolve({ .Error = "temporary", .Retryable = true });
         UNIT_ASSERT(second->Started.GetFuture().Wait(WaitTimeout));
         UNIT_ASSERT(first->Cancelled);
         UNIT_ASSERT_VALUES_EQUAL(attempts.load(), 2);
@@ -322,7 +342,10 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
         TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
         std::atomic<ui32> attempts = 0;
-        Init(setup, [&](const auto&) { ++attempts; return stream; });
+        Init(setup, [&](const auto&) {
+            ++attempts;
+            return stream;
+        });
         auto first = Pull(setup, 1);
         UNIT_ASSERT(stream->Started.GetFuture().Wait(WaitTimeout));
         stream->Resolve(Batch(42));
@@ -330,7 +353,7 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
         UNIT_ASSERT_VALUES_EQUAL(Pull(setup, 1).Rows, 1);
         Pull(setup, 1);
         auto error = setup.AsyncInputPromises->FatalError.GetFuture();
-        stream->Resolve({.Error = "temporary", .Retryable = true});
+        stream->Resolve({ .Error = "temporary", .Retryable = true });
         UNIT_ASSERT(error.Wait(WaitTimeout));
         UNIT_ASSERT_VALUES_EQUAL(attempts.load(), 1);
         UNIT_ASSERT(stream->Cancelled);
@@ -339,7 +362,9 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     Y_UNIT_TEST(DeadlineCancelsPendingRead) {
         TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
-        Init(setup, [stream](const auto&) { return stream; }, TDuration::MilliSeconds(200));
+        Init(setup, [stream](const auto&) {
+            return stream;
+        }, TDuration::MilliSeconds(200));
         auto error = setup.AsyncInputPromises->FatalError.GetFuture();
         Pull(setup, 1);
         UNIT_ASSERT(stream->Started.GetFuture().Wait(WaitTimeout));
@@ -358,15 +383,19 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
             callbackStarted.TrySetValue();
             resume.Wait();
         };
-        Init(*setup, [stream](const auto&) { return stream; });
+        Init(*setup, [stream](const auto&) {
+            return stream;
+        });
         Pull(*setup, 1);
         UNIT_ASSERT(stream->Started.GetFuture().Wait(WaitTimeout));
         // SetValue has completed the future, but the provider subscriber is
         // deliberately delayed behind another subscriber until after shutdown.
-        std::thread callback([stream] { stream->Resolve(Batch(42)); });
+        std::thread callback([stream] {
+            stream->Resolve(Batch(42));
+        });
         const bool started = callbackStarted.GetFuture().Wait(WaitTimeout);
         if (!started) {
-            continueCallback.TrySetValue(); // Allow failure cleanup to finish too.
+            continueCallback.TrySetValue();   // Allow failure cleanup to finish too.
         }
         setup.reset();
         continueCallback.TrySetValue();
@@ -378,14 +407,16 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
     Y_UNIT_TEST(OnlyEofCompletesTheInput) {
         TFakeCASetup setup;
         auto stream = std::make_shared<TStream>();
-        Init(setup, [stream](const auto&) { return stream; });
+        Init(setup, [stream](const auto&) {
+            return stream;
+        });
         auto first = Pull(setup, 1);
         UNIT_ASSERT(!first.Finished);
         UNIT_ASSERT(stream->Started.GetFuture().Wait(WaitTimeout));
-        stream->Resolve({.Finished = true});
+        stream->Resolve({ .Finished = true });
         UNIT_ASSERT(first.Notification.Wait(WaitTimeout));
         UNIT_ASSERT(Pull(setup, 0).Finished);
     }
 }
 
-} // namespace NYql::NNative
+}   // namespace NYql::NNative

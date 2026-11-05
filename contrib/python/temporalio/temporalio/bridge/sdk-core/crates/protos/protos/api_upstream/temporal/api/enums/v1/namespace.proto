@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package temporal.api.enums.v1;
+
+option go_package = "go.temporal.io/api/enums/v1;enums";
+option java_package = "io.temporal.api.enums.v1";
+option java_multiple_files = true;
+option java_outer_classname = "NamespaceProto";
+option ruby_package = "Temporalio::Api::Enums::V1";
+option csharp_namespace = "Temporalio.Api.Enums.V1";
+
+enum NamespaceState {
+    NAMESPACE_STATE_UNSPECIFIED = 0;
+    NAMESPACE_STATE_REGISTERED = 1;
+    NAMESPACE_STATE_DEPRECATED = 2;
+    NAMESPACE_STATE_DELETED = 3;
+}
+
+enum ArchivalState {
+    ARCHIVAL_STATE_UNSPECIFIED = 0;
+    ARCHIVAL_STATE_DISABLED = 1;
+    ARCHIVAL_STATE_ENABLED = 2;
+}
+
+enum ReplicationState {
+    REPLICATION_STATE_UNSPECIFIED = 0;
+    REPLICATION_STATE_NORMAL = 1;
+    REPLICATION_STATE_HANDOVER = 2;
+}

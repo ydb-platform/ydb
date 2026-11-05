@@ -8,13 +8,13 @@ void TFileTreeBuilder::AddPath(const TString& path, ui64 fileSize, bool isDirect
     for (size_t i = 0, size = parts.size(); i < size; ++i) {
         bool isSubDirectory = i != size - 1;
         if (!isSubDirectory) {
-            TPath& p = (*currentChildren)[TTreeKey{path == "" ? "/" : parts[i], isDirectory}];
+            TPath& p = (*currentChildren)[TTreeKey{ path == "" ? "/" : parts[i], isDirectory }];
             Y_ABORT_UNLESS(p.FileSize == 0);
             Y_ABORT_UNLESS(!p.Read);
             p.FileSize = fileSize;
             p.Read = true;
         } else {
-            TPath& p = (*currentChildren)[TTreeKey{parts[i], isSubDirectory}];
+            TPath& p = (*currentChildren)[TTreeKey{ parts[i], isSubDirectory }];
             currentChildren = &p.Children;
         }
     }
@@ -44,4 +44,4 @@ std::vector<TString> TFileTreeBuilder::SplitPath(const TString& path) {
     return parts;
 }
 
-} // namespace NYql::NS3Details
+}   // namespace NYql::NS3Details

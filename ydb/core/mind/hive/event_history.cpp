@@ -31,6 +31,51 @@ TStringBuf EHiveEventReasonName(EHiveEventReason value) {
     case EHiveEventReason::SetDownRequest: return "TEvSetDown";
     case EHiveEventReason::MonitoringRequest: return "monitoring request";
     case EHiveEventReason::LoadedFromDatabase: return "loaded from database";
+    case EHiveEventReason::InitialState: return "initial state";
+    case EHiveEventReason::OwnerRequest: return "owner request";
+    case EHiveEventReason::BootQueue: return "boot queue";
+    case EHiveEventReason::SyncTablets: return "node reported tablet on sync";
+    case EHiveEventReason::TabletDead: return "tablet reported dead";
+    case EHiveEventReason::StartFailed: return "start on node failed";
+    case EHiveEventReason::RestartPenalty: return "too many restarts";
+    case EHiveEventReason::NodeDisconnected: return "node disconnected";
+    case EHiveEventReason::Move: return "move to another node";
+    case EHiveEventReason::RestartRequest: return "restart requested";
+    case EHiveEventReason::StopRequest: return "stop requested";
+    case EHiveEventReason::LockRequest: return "lock requested";
+    case EHiveEventReason::UnlockRequest: return "unlock requested";
+    case EHiveEventReason::TabletLocked: return "tablet is locked to external owner";
+    case EHiveEventReason::Deleting: return "tablet is being deleted";
+    case EHiveEventReason::BootingSuppressed: return "booting suppressed";
+    case EHiveEventReason::GroupsChanged: return "storage groups changed";
+    case EHiveEventReason::FollowerRemoved: return "follower removed";
+    case EHiveEventReason::PileUpdate: return "bridge pile update";
+    case EHiveEventReason::TenantStopped: return "tenant stopped";
+    case EHiveEventReason::ConfigChanged: return "config changed";
+    case EHiveEventReason::Seized: return "tablet seized from another hive";
+    case EHiveEventReason::Drain: return "drain";
+    case EHiveEventReason::Fill: return "fill";
+    case EHiveEventReason::ManualMove: return "manual move";
+    case EHiveEventReason::StorageReassign: return "storage reassign";
+    case EHiveEventReason::TabletNotAlive: return "tablet is not alive";
+    case EHiveEventReason::SourceNodeDown: return "source node is down";
+    case EHiveEventReason::SourceNodeCannotRunTablet: return "source node cannot run tablet";
+    case EHiveEventReason::SourceNodeOverloaded: return "source node is overloaded";
+    case EHiveEventReason::SpreadNeighbours: return "spread neighbours";
+    case EHiveEventReason::ExpediencyCheckDisabled: return "move expediency check disabled";
+    case EHiveEventReason::ResourceStDevImproved: return "resource stdev improves";
+    case EHiveEventReason::LeaderNotRunning: return "leader not running";
+    case EHiveEventReason::AllNodesDead: return "all nodes are dead";
+    case EHiveEventReason::AllNodesDeadOrDown: return "all nodes are dead or down";
+    case EHiveEventReason::NoNodesAllowedToRun: return "no nodes allowed to run";
+    case EHiveEventReason::FamilyFilledAllNodes: return "all available nodes are already filled with someone from our family";
+    case EHiveEventReason::DomainNotFound: return "can't find domain";
+    case EHiveEventReason::NotEnoughDatacenters: return "not enough datacenters";
+    case EHiveEventReason::NotEnoughResources: return "not enough resources";
+    case EHiveEventReason::NodesLocationUnknown: return "nodes location unknown";
+    case EHiveEventReason::TooManyStarting: return "too many tablets starting";
+    case EHiveEventReason::PreferredNodeUnavailable: return "preferred node unavailable";
+    case EHiveEventReason::MAX: break;
     }
     return "Unknown";
 }
@@ -51,6 +96,21 @@ TStringBuf EHiveEventTypeName(EHiveEventType value) {
     case EHiveEventType::DrainFinished: return "DrainFinished";
     case EHiveEventType::LocationChanged: return "LocationChanged";
     case EHiveEventType::AvailabilityChanged: return "AvailabilityChanged";
+    case EHiveEventType::Created: return "Created";
+    case EHiveEventType::Deleting: return "Deleting";
+    case EHiveEventType::Starting: return "Starting";
+    case EHiveEventType::Running: return "Running";
+    case EHiveEventType::Stopped: return "Stopped";
+    case EHiveEventType::BootFailed: return "BootFailed";
+    case EHiveEventType::StartPostponed: return "StartPostponed";
+    case EHiveEventType::NoNodeToBoot: return "NoNodeToBoot";
+    case EHiveEventType::Moved: return "Moved";
+    case EHiveEventType::GroupsReassigned: return "GroupsReassigned";
+    case EHiveEventType::Locked: return "Locked";
+    case EHiveEventType::Unlocked: return "Unlocked";
+    case EHiveEventType::StopRequested: return "StopRequested";
+    case EHiveEventType::Resumed: return "Resumed";
+    case EHiveEventType::MAX: break;
     }
     return "Unknown";
 }
@@ -82,7 +142,87 @@ void THive::RecordNodeEvent(TNodeInfo& node, EHiveEventType type, EHiveEventReas
         {"reason", EHiveEventReasonName(reason)},
         {"details", event.Details});
     RecentNodeEvents.PushBack(TRecentNodeEvent{.NodeId = node.Id, .Event = event});
-    node.EventHistory.PushBack(event);
+    node.EventHistory.Push(GetNodeEventHistorySize(), event);
+}
+
+void THive::RecordTabletEvent(const TTabletInfo& tablet, EHiveEventType type, EHiveEventReason reason, TString details, bool skipIfRepeated) {
+    if (reason == EHiveEventReason::LoadedFromDatabase || reason == EHiveEventReason::InitialState) {
+        // Not transitions: state restored on Hive start or a freshly created tablet entering its first state.
+        // Recording them would also allocate a history for every tablet at once.
+        return;
+    }
+    if (skipIfRepeated) {
+        if (const THiveEvent* last = tablet.EventHistory.GetNewest();
+                last && last->Type == type && last->Reason == reason && last->Details == details) {
+            return;
+        }
+    }
+    const TInstant now = TActivationContext::Now();
+    THiveEvent event(now, type, reason, std::move(details));
+    const TLeaderTabletInfo& leader = tablet.GetLeader();
+    YDB_LOG_INFO("Tablet event",
+        {"logPrefix", GetLogPrefix()},
+        {"event", EHiveEventTypeName(type)},
+        {"tabletId", tablet.GetFullTabletId()},
+        {"tabletType", TTabletTypes::TypeToStr(tablet.GetTabletType())},
+        {"volatileState", TTabletInfo::EVolatileStateName(tablet.GetVolatileState())},
+        {"state", ETabletStateName(leader.State)},
+        {"nodeId", tablet.NodeId},
+        {"lastNodeId", tablet.LastNodeId},
+        {"objectId", tablet.GetObjectId()},
+        {"generation", leader.KnownGeneration},
+        {"bootState", tablet.BootState},
+        {"restarts", tablet.GetRestartsPerPeriod(now - GetTabletRestartsPeriodForPenalties())},
+        {"reason", EHiveEventReasonName(reason)},
+        {"details", event.Details});
+    RecentTabletEvents.PushBack(TRecentTabletEvent{.TabletId = tablet.GetFullTabletId(), .Event = event});
+    tablet.EventHistory.Push(GetTabletEventHistorySize(), event);
+}
+
+void TEventHistory::Resize(ui64 newSize) {
+    if (!Buffer) {
+        return;
+    }
+    if (newSize == 0) {
+        Buffer.Clear();
+        Capacity = 0;
+        return;
+    }
+    const TSimpleRingBuffer<THiveEvent>& old = *Buffer;
+    TSimpleRingBuffer<THiveEvent> resized(newSize);
+    size_t first = old.FirstIndex();
+    if (old.TotalSize() - first > newSize) {
+        first = old.TotalSize() - newSize;
+    }
+    for (size_t i = first; i < old.TotalSize(); ++i) {
+        resized.PushBack(old[i]);
+    }
+    Buffer = std::move(resized);
+    Capacity = newSize;
+}
+
+void TEventHistory::Push(ui64 configuredSize, const THiveEvent& event) {
+    if (!Buffer) {
+        if (configuredSize == 0) {
+            return;
+        }
+        Buffer.ConstructInPlace(configuredSize);
+        Capacity = configuredSize;
+    } else if (Capacity != configuredSize) {
+        Resize(configuredSize);
+        if (!Buffer) {
+            return;
+        }
+    }
+    Buffer->PushBack(event);
+}
+
+void THive::RecordTabletBootFailure(const TTabletInfo& tablet, EHiveEventReason reason, TString details) {
+    // FindBestNode is also called by the balancer and drain for running tablets, only a tablet waiting
+    // in the boot queue is actually failing to boot; the boot queue retries, so repeats are collapsed
+    if (tablet.IsBooting()) {
+        RecordTabletEvent(tablet, EHiveEventType::NoNodeToBoot, reason, std::move(details), /* skipIfRepeated */ true);
+    }
 }
 
 } // NHive

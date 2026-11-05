@@ -17,13 +17,17 @@ namespace NKikimr::NBridge {
         const TGroupId SourceGroupId;
         const TGroupId TargetGroupId;
         std::shared_ptr<TSyncerDataStats> SyncerDataStats;
-        ui32 SourceGroupGeneration;
-        ui32 TargetGroupGeneration;
         TString LogId;
         NKikimrBridge::TGroupState::EStage Stage;
         bool Finished = false;
         ui32 Step = 0;
         std::deque<TLogoBlobID> RestoreQueue;
+        struct TSourceBlobFlags {
+            bool Keep = false;
+            bool DoNotKeep = false;
+        };
+        // Preserve both flags observed by assimilation: the later data read may use VDisks that do not know them yet.
+        THashMap<TLogoBlobID, TSourceBlobFlags> SourceBlobFlags;
         TReplQuoter::TPtr SyncRateQuoter;
         const TBlobStorageGroupType SourceGroupType;
 
@@ -46,13 +50,22 @@ namespace NKikimr::NBridge {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Main sync logic
 
+        struct TAbsenceCheck {
+            std::vector<TLogoBlobID> Ids;
+            std::vector<ui8> Observations; // bit 0: absent/DoNotKeep; bit 1: live
+            ui32 ResponsesPending = 0;
+            bool Failed = false;
+        };
+
         struct TQueryPayload {
             bool ToTargetGroup;
+            std::shared_ptr<TAbsenceCheck> AbsenceCheck;
         };
 
         const ui32 MaxQueriesInFlight = 16;
         ui32 QueriesInFlight = 0;
         THashMap<ui64, TQueryPayload> Payloads;
+        THashMap<ui64, std::unique_ptr<IEventHandle>> DelayedQueries;
         std::deque<std::tuple<std::unique_ptr<IEventHandle>, TMonotonic>> PendingQueries;
         ui64 NextCookie = 1;
 
@@ -68,10 +81,15 @@ namespace NKikimr::NBridge {
 
         void IssueQuery(bool toTargetGroup, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {},
             ui64 quoterBytes = 0);
+        void IssueQuery(TGroupId groupId, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {},
+            ui64 quoterBytes = 0);
+        void SendQuery(std::unique_ptr<IEventHandle> handle, TMonotonic notBefore);
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
+        void Handle(TEvents::TEvUndelivered::TPtr ev);
+        void Handle(TEvents::TEvWakeup::TPtr ev);
         TQueryPayload OnQueryFinished(ui64 cookie, bool success);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -80,6 +98,7 @@ namespace NKikimr::NBridge {
         static constexpr ui32 MaxDataPerIndexQuery = 10_MB;
 
         void ProcessRestoreQueue();
+        TSourceBlobFlags TakeSourceBlobFlags(const TLogoBlobID& id);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Per-group assimilation status

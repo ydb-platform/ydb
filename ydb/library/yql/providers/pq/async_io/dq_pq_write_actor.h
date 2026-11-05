@@ -29,6 +29,8 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(NP
 void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const IPqStaticGateway::TPtr& pqGateway,
     const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>(),
-    bool enableStreamingQueriesCounters = true, std::function<bool()> getEnableDeduplicationFeatureFlag = [] { return true; });
+    bool enableStreamingQueriesCounters = true, std::function<bool()> getEnableDeduplicationFeatureFlag = [] {
+        return true;
+    });
 
 }   // namespace NYql::NDq

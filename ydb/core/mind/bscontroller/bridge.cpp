@@ -1520,6 +1520,7 @@ void TBlobStorageController::UpdateBridgeSyncNodeRates(const THashSet<TNodeId>& 
 
 void TBlobStorageController::FillBridgeSyncNodeRate(TNodeId nodeId,
         NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update) {
+    update->SetControllerGeneration(Executor()->Generation());
     if (!BridgeSyncNodeRate) {
         update->SetKeepBridgeSyncNodeRate(true);
         return;

@@ -986,6 +986,51 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
         UNIT_ASSERT_VALUES_EQUAL(test.Rates.at(registering), newShare);
     }
 
+    // A share of the previous BSC instance comes in the middle of a sync. The current instance has no reason to send the
+    // share again, so the node would stay on the wrong one.
+    Y_UNIT_TEST(LateShareFromPreviousController) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const TActorId sourceProxy = MakeBlobStorageProxyID(GetGroupInfo(env, groupId).GetBridgeGroupState().GetPile(0).GetGroupId());
+        const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        constexpr ui64 share = 100'000;
+        ui32 generation = 0;
+        bool sent = false;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerNodeServiceSetUpdate::EventType) {
+                generation = Max(generation, ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record.GetControllerGeneration());
+            } else if (!sent && ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->Recipient == sourceProxy &&
+                    !ev->Get<TEvBlobStorage::TEvGet>()->IsIndexOnly) {
+                sent = true;
+                UNIT_ASSERT(generation);
+                for (ui32 nodeId : env.Runtime->GetNodes()) {
+                    auto update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+                    update->Record.SetControllerGeneration(generation - 1);
+                    update->Record.SetBridgeSyncNodeRateBytesPerSecond(share);
+                    env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), sender, update.release()), nodeId);
+                }
+            }
+            return true;
+        };
+
+        constexpr ui32 numBlobs = 40;
+        constexpr ui32 blobSize = 64_KB;
+        const auto reads = SyncBlobs(env, groupId, {1}, numBlobs, blobSize);
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT(sent);
+        UNIT_ASSERT_GE(reads.size(), numBlobs);
+        const double rate = GetReadRate(reads, blobSize);
+        UNIT_ASSERT_C(rate >= 10'000'000, "rate# " << rate << " numReads# " << reads.size()); // the default limit is 500 MB/s
+    }
+
     // BSC restarts having persisted a new limit, but not having sent it to the nodes.
     Y_UNIT_TEST(ZeroTotalRateReachesNodesAfterControllerRestart) {
         THeldSyncersEnv test;
@@ -1071,6 +1116,45 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
 
     Y_UNIT_TEST(RegistrationPreservesCompletedGeneration) {
         TestLateSyncerCompletion(ECompletionRace::ReregisterAfterCompletion);
+    }
+
+    // A list of syncers of the previous BSC instance comes when the node runs the syncers assigned by the current one.
+    // The node would stop them and ignore their completions, while BSC would wait for those completions.
+    Y_UNIT_TEST(LateSyncersFromPreviousController) {
+        using namespace NBridgeTest;
+        THeldSyncersEnv test;
+        auto& env = test.Env;
+        std::set<ui32> hostingNodes;
+        for (const auto& [nodeId, hosting] : test.Hosting) {
+            if (hosting) {
+                hostingNodes.insert(nodeId);
+            }
+        }
+        std::set<ui32> registeredNodes;
+        ui32 generation = 0;
+        test.OnUpdate = [&](ui32 nodeId, const auto& record) {
+            if (record.GetComprehensive()) { // only the new instance sends these from now on
+                registeredNodes.insert(nodeId);
+                generation = record.GetControllerGeneration();
+            }
+        };
+        env.RebootTablet(env.TabletId);
+        WaitUntil(env, [&] { return std::ranges::includes(registeredNodes, hostingNodes); }, "registration at the new instance",
+            TDuration::Seconds(1));
+        test.OnUpdate = {};
+        UNIT_ASSERT(generation);
+
+        const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        for (ui32 nodeId : hostingNodes) {
+            auto update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+            update->Record.SetControllerGeneration(generation - 1);
+            update->Record.SetUpdateSyncers(true);
+            env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), sender, update.release()), nodeId);
+        }
+        env.Sim(TDuration::Seconds(1));
+
+        test.ReleaseHeldSyncers();
+        WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
     }
 
     // the reply to the commit of the static part as SYNCED comes by another path than configs do, so the config with the

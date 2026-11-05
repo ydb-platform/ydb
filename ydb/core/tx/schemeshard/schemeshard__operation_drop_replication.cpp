@@ -306,9 +306,9 @@ public:
                 const auto it = context.SS->Operations.find(path->DropTxId);
                 if (it != context.SS->Operations.end()) {
                     for (const auto& part : it->second->Parts) {
-                        auto* txState = context.SS->FindTx(part->GetId());
+                        auto* txState = context.SS->FindTx(part->GetOperationId());
                         if (txState && IsDropReplication(txState->TxType) && txState->TargetPathId == path->PathId) {
-                            pendingOperationId = part->GetId();
+                            pendingOperationId = part->GetOperationId();
                             pendingDrop = txState;
                             break;
                         }

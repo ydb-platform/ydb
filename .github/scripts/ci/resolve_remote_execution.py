@@ -24,15 +24,24 @@ DEFAULT_REMOTE: dict[str, Any] = {
     "workflow_file": "ci_remote_executor.yml",
     "workflow_name": "CI remote executor",
     "executor_ref": "nebius-ci",
+    # pull = public ticket + remote poller/claim (no launch PAT). push = workflow_dispatch + PAT.
+    "handoff": "pull",
     "wait": True,
     "fail_on_remote_failure": True,
+    # Ticket on platform public S3 (empty → vars.AWS_* at enqueue).
+    "ticket_s3_endpoint": "",
+    "ticket_s3_bucket": "",
+    # Artifacts + claims on remote host public S3.
     "summary_s3_endpoint": "https://s3.us-east-1.amazonaws.com",
     "summary_s3_bucket": "ydb-nebius-ci-public-609722444123-us-east-1",
+    "claim_s3_endpoint": "",
+    "claim_s3_bucket": "",
     "analytics_job_name": "Run and debug tests",
     "caller_workflow": "",
     "runs_on": ["self-hosted", "linux", "amd64-large"],
     "code_ref": "",
     "analytics_branch": "",
+    "platform_repository": "",
     "job": {
         "build_target": "ydb/tests/olap/",
         "build_preset": "relwithdebinfo",
@@ -182,8 +191,20 @@ def build_config() -> dict[str, Any]:
 
     cfg["wait"] = _truthy(cfg.get("wait"), True)
     cfg["fail_on_remote_failure"] = _truthy(cfg.get("fail_on_remote_failure"), True)
+    handoff = _as_str(cfg.get("handoff"), "pull").strip().lower() or "pull"
+    if handoff not in ("pull", "push"):
+        die(f"handoff must be pull|push, got {handoff!r}")
+    cfg["handoff"] = handoff
+    cfg["platform_repository"] = (
+        _as_str(cfg.get("platform_repository")).strip()
+        or (os.environ.get("GITHUB_REPOSITORY") or "").strip()
+    )
+    if not _as_str(cfg.get("claim_s3_endpoint")).strip():
+        cfg["claim_s3_endpoint"] = cfg.get("summary_s3_endpoint") or ""
+    if not _as_str(cfg.get("claim_s3_bucket")).strip():
+        cfg["claim_s3_bucket"] = cfg.get("summary_s3_bucket") or ""
 
-    # Executor workflow_dispatch payload (strings coerced later by dispatch start).
+    # Executor workflow_dispatch payload (poller / push start).
     cfg["inputs"] = {
         "code_ref": code_ref,
         "job_inputs": job_inputs,

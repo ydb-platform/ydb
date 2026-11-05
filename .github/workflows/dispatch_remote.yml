@@ -1,107 +1,136 @@
 name: Dispatch remote executor
 
-# Reusable remote path: start → optional wait+mirror / cancel-on-caller-cancel.
-# Call sites pass one opaque `config` JSON (see resolve_remote_execution.py).
+# pull (default): publish ticket → wait claim → ingest. No remote-repo launch PAT.
+# push: workflow_dispatch via GH_PERSONAL_ACCESS_TOKEN (legacy).
+# Config: resolve_remote_execution.py / REMOTE_PULL.md.
 on:
   workflow_call:
     inputs:
       config:
-        description: >
-          JSON object: repository, workflow_file, workflow_name, executor_ref,
-          wait, fail_on_remote_failure, summary_s3_endpoint, summary_s3_bucket,
-          analytics_job_name, caller_workflow, inputs (executor workflow_dispatch payload).
+        description: JSON from resolve_remote_execution (handoff, repos, S3, inputs, …)
         required: true
         type: string
     outputs:
       executor_run_id:
-        description: Dispatched executor run id
-        value: ${{ jobs.dispatch.outputs.executor_run_id }}
+        value: ${{ jobs.wait.outputs.executor_run_id }}
       executor_run_url:
-        description: Dispatched executor run URL
-        value: ${{ jobs.dispatch.outputs.executor_run_url }}
+        value: ${{ jobs.wait.outputs.executor_run_url }}
       executor_conclusion:
-        description: Executor run conclusion after wait (empty if fire-and-forget)
         value: ${{ jobs.wait.outputs.executor_conclusion }}
 
 jobs:
-  dispatch:
-    # When waiting, stay on runner-waiter (same pool as wait job). Fire-and-forget uses ubuntu-latest.
+  enqueue:
     runs-on: ${{ fromJSON(inputs.config).wait && fromJSON('["self-hosted", "runner-waiter"]') || fromJSON('["ubuntu-latest"]') }}
     timeout-minutes: 15
     outputs:
-      executor_run_id: ${{ steps.dispatch.outputs.executor_run_id }}
-      executor_run_url: ${{ steps.dispatch.outputs.executor_run_url }}
+      platform_run_id: ${{ steps.handoff.outputs.platform_run_id }}
+      ticket_url: ${{ steps.handoff.outputs.ticket_url }}
+      executor_run_id: ${{ steps.handoff.outputs.executor_run_id }}
+      executor_run_url: ${{ steps.handoff.outputs.executor_run_url }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
         with:
           sparse-checkout: |
-            .github/scripts/ci/dispatch_remote_executor.py
-            .github/scripts/ci/remote_dispatch_config.py
+            .github/scripts/ci
+            .github/actions/s3cmd
           sparse-checkout-cone-mode: false
 
-      - name: Dispatch remote executor
-        id: dispatch
+      - name: Configure ticket s3cmd
+        if: (fromJSON(inputs.config).handoff || 'pull') != 'push'
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          s3_bucket: ${{ fromJSON(inputs.config).ticket_s3_bucket || vars.AWS_BUCKET }}
+          s3_endpoint: ${{ fromJSON(inputs.config).ticket_s3_endpoint || vars.AWS_ENDPOINT }}
+          build_preset: relwithdebinfo
+
+      - name: Enqueue or push-dispatch
+        id: handoff
         env:
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           CONFIG_JSON: ${{ inputs.config }}
-          # Fallback when config.repository is empty.
           GITHUB_REPOSITORY: ${{ github.repository }}
+          PLATFORM_RUN_ID: ${{ github.run_id }}
+          PLATFORM_REPOSITORY: ${{ github.repository }}
+          PLATFORM_WORKFLOW: ${{ github.workflow }}
+          PLATFORM_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CALLER_AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
+          CALLER_AWS_BUCKET: ${{ vars.AWS_BUCKET }}
+          TICKET_AWS_ENDPOINT: ${{ fromJSON(inputs.config).ticket_s3_endpoint || vars.AWS_ENDPOINT }}
+          TICKET_AWS_BUCKET: ${{ fromJSON(inputs.config).ticket_s3_bucket || vars.AWS_BUCKET }}
+          REPO: ${{ fromJSON(inputs.config).repository || github.repository }}
+          WORKFLOW_FILE: ${{ fromJSON(inputs.config).workflow_file }}
+          WORKFLOW_NAME: ${{ fromJSON(inputs.config).workflow_name }}
+          EXECUTOR_REF: ${{ fromJSON(inputs.config).executor_ref }}
+          INPUTS_JSON: ${{ toJSON(fromJSON(inputs.config).inputs) }}
+          WAIT_MODE: ${{ fromJSON(inputs.config).wait && 'wait+mirror' || 'fire-and-forget' }}
         run: python3 .github/scripts/ci/dispatch_remote_executor.py start
 
   wait:
     if: fromJSON(inputs.config).wait
-    needs: dispatch
+    needs: enqueue
     runs-on: [self-hosted, runner-waiter]
-    # Match run_tests.yml / long regression; must cover executor job wall time.
     timeout-minutes: 1200
     outputs:
+      executor_run_id: ${{ steps.wait.outputs.executor_run_id }}
+      executor_run_url: ${{ steps.wait.outputs.executor_run_url }}
       executor_conclusion: ${{ steps.wait.outputs.executor_conclusion }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
         with:
           sparse-checkout: |
-            .github/scripts/ci/dispatch_remote_executor.py
-            .github/scripts/ci/remote_dispatch_config.py
+            .github/scripts/ci
           sparse-checkout-cone-mode: false
 
-      - name: Wait and mirror executor summary
+      - name: Wait for claim + executor
         id: wait
         env:
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           CONFIG_JSON: ${{ inputs.config }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          EXECUTOR_RUN_ID: ${{ needs.dispatch.outputs.executor_run_id }}
-          EXECUTOR_RUN_URL: ${{ needs.dispatch.outputs.executor_run_url }}
-          # Fallback when config omits summary_s3_*.
-          AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
-          AWS_BUCKET: ${{ vars.AWS_BUCKET }}
+          PLATFORM_RUN_ID: ${{ github.run_id }}
+          EXECUTOR_RUN_ID: ${{ needs.enqueue.outputs.executor_run_id }}
+          EXECUTOR_RUN_URL: ${{ needs.enqueue.outputs.executor_run_url }}
+          REPO: ${{ fromJSON(inputs.config).repository }}
+          WORKFLOW_NAME: ${{ fromJSON(inputs.config).workflow_name }}
+          AWS_ENDPOINT: ${{ fromJSON(inputs.config).summary_s3_endpoint || fromJSON(inputs.config).claim_s3_endpoint }}
+          AWS_BUCKET: ${{ fromJSON(inputs.config).summary_s3_bucket || fromJSON(inputs.config).claim_s3_bucket }}
+          FAIL_ON_REMOTE_FAILURE: ${{ fromJSON(inputs.config).fail_on_remote_failure }}
+          CALLER_AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
+          CALLER_AWS_BUCKET: ${{ vars.AWS_BUCKET }}
         run: python3 .github/scripts/ci/dispatch_remote_executor.py wait
 
-      - name: Cancel executor on caller cancel
-        if: cancelled() && needs.dispatch.outputs.executor_run_id != ''
+      - name: Cancel on caller cancel
+        if: cancelled()
         env:
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           CONFIG_JSON: ${{ inputs.config }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          EXECUTOR_RUN_ID: ${{ needs.dispatch.outputs.executor_run_id }}
-          EXECUTOR_RUN_URL: ${{ needs.dispatch.outputs.executor_run_url }}
-        run: python3 .github/scripts/ci/dispatch_remote_executor.py cancel
+          PLATFORM_RUN_ID: ${{ github.run_id }}
+          EXECUTOR_RUN_ID: ${{ steps.wait.outputs.executor_run_id || needs.enqueue.outputs.executor_run_id }}
+          EXECUTOR_RUN_URL: ${{ steps.wait.outputs.executor_run_url || needs.enqueue.outputs.executor_run_url }}
+          REPO: ${{ fromJSON(inputs.config).repository }}
+          CALLER_AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
+          CALLER_AWS_BUCKET: ${{ vars.AWS_BUCKET }}
+          TICKET_AWS_ENDPOINT: ${{ fromJSON(inputs.config).ticket_s3_endpoint || vars.AWS_ENDPOINT }}
+          TICKET_AWS_BUCKET: ${{ fromJSON(inputs.config).ticket_s3_bucket || vars.AWS_BUCKET }}
+        run: |
+          if command -v s3cmd >/dev/null 2>&1; then
+            python3 .github/scripts/ci/dispatch_remote_executor.py cancel
+          else
+            echo "::warning::s3cmd missing; skip cancel marker"
+          fi
 
-  # After wait: reupload remote artifacts to caller S3, regenerate summary, upload YDB QA.
   ingest:
     if: >-
       fromJSON(inputs.config).wait && always() && !cancelled() &&
-      needs.dispatch.result == 'success' &&
-      needs.dispatch.outputs.executor_run_id != '' &&
-      needs.wait.result != 'cancelled'
-    needs: [dispatch, wait]
+      needs.enqueue.result == 'success' &&
+      needs.wait.result != 'cancelled' &&
+      needs.wait.outputs.executor_run_id != ''
+    needs: [enqueue, wait]
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
         with:
           sparse-checkout: |
             .github/actions
@@ -109,22 +138,19 @@ jobs:
             .github/config
           sparse-checkout-cone-mode: false
 
-      - name: Setup ydb access
-        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      - uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
           ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
       - name: Install tools
-        shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq s3cmd awscli
           python3 -m pip install --user ydb 'ydb[yc]' codeowners jinja2 pyyaml
 
-      - name: Configure caller s3cmd
-        uses: ./.github/actions/s3cmd
+      - uses: ./.github/actions/s3cmd
         with:
           s3_key_id: ${{ secrets.AWS_KEY_ID }}
           s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
@@ -138,12 +164,10 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           CALLER_AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
           CALLER_AWS_BUCKET: ${{ vars.AWS_BUCKET }}
-          # Fallback when config omits summary_s3_*.
-          REMOTE_AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
-          REMOTE_AWS_BUCKET: ${{ vars.AWS_BUCKET }}
-          EXECUTOR_RUN_ID: ${{ needs.dispatch.outputs.executor_run_id }}
-          EXECUTOR_RUN_URL: ${{ needs.dispatch.outputs.executor_run_url }}
-          # Fallback only — ingest prefers remote_artifacts.json (job_inputs).
+          REMOTE_AWS_ENDPOINT: ${{ fromJSON(inputs.config).summary_s3_endpoint }}
+          REMOTE_AWS_BUCKET: ${{ fromJSON(inputs.config).summary_s3_bucket }}
+          EXECUTOR_RUN_ID: ${{ needs.wait.outputs.executor_run_id }}
+          EXECUTOR_RUN_URL: ${{ needs.wait.outputs.executor_run_url }}
           SOURCE_EVENT_NAME: ${{ github.event_name }}
           SOURCE_RUN_ID: ${{ github.run_id }}
           PULL_NUMBER: ${{ github.event.pull_request.number || github.event.number || '' }}

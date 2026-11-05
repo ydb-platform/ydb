@@ -167,9 +167,9 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 4), 0);
     }
     Y_UNIT_TEST(OneCopyDurabilityStillReplicatesRecoveringRealm) {
-        for (const auto state : {EMirror3dcGroupState::DC_SOLO_RECOVERY,
-                EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING}) {
-            const auto normal = state == EMirror3dcGroupState::DC_SOLO_RECOVERY ? R::N0 : R::N1;
+        for (const auto state : {TMirror3dcGroupState::DC_SOLO_RECOVERY,
+                TMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING}) {
+            const auto normal = state == TMirror3dcGroupState::DC_SOLO_RECOVERY ? R::N0 : R::N1;
             const auto info = MakeInfo({normal, R::R, R::F}, state);
             const auto checker = TMirror3dcWriteQuorumChecker::TryCreate(info, 0);
             UNIT_ASSERT(checker);
@@ -192,20 +192,20 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     }
 
     Y_UNIT_TEST(PrimaryStateSelectsPolicyForIdenticalRealmTuple) {
-        using S = EMirror3dcGroupState;
+        using TGroupState = TMirror3dcGroupState;
         const TStates realms{R::N2, R::R, R::F};
-        const auto pending = MakeInfo(realms, S::DC_SOLO_RECOVERY_INV2_PENDING);
-        const auto ready = MakeInfo(realms, S::DC_SOLO_RECOVERY_INV2);
+        const auto pending = MakeInfo(realms, TGroupState::DC_SOLO_RECOVERY_INV2_PENDING);
+        const auto ready = MakeInfo(realms, TGroupState::DC_SOLO_RECOVERY_INV2);
         const auto pendingChecker = TMirror3dcWriteQuorumChecker::TryCreate(pending, 0);
         const auto readyChecker = TMirror3dcWriteQuorumChecker::TryCreate(ready, 0);
         UNIT_ASSERT(pendingChecker && readyChecker);
         UNIT_ASSERT(pendingChecker->GetWriteLayout() == L::LAYOUT_2);
         UNIT_ASSERT(readyChecker->GetWriteLayout() == L::LAYOUT_22);
-        const auto soloPending = MakeInfo({R::N1, R::F, R::F}, S::DC_SOLO_INV2_PENDING);
+        const auto soloPending = MakeInfo({R::N1, R::F, R::F}, TGroupState::DC_SOLO_INV2_PENDING);
         const auto soloChecker = TMirror3dcWriteQuorumChecker::TryCreate(soloPending, 0);
         UNIT_ASSERT(soloChecker);
         UNIT_ASSERT(soloChecker->GetEnsuredLayout() == L::LAYOUT_1);
-        UNIT_ASSERT(GetMirror3dcGroupLayouts(S::DC_SOLO_INV2_PENDING)->Ensured == L::LAYOUT_1);
+        UNIT_ASSERT(GetMirror3dcGroupLayouts(TGroupState::DC_SOLO_INV2_PENDING)->Ensured == L::LAYOUT_1);
         TBlobStorageGroupInfo::TVDiskIds subgroup;
         soloPending.PickSubgroup(0, &subgroup, nullptr);
         G::TSubgroupVDisks uncertain(&soloPending.GetTopology());
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
     Y_UNIT_TEST(NormalPartLayoutsMatchLegacyQuorum) {
         // NORMAL is N0/N0/N0: W = 1+1+1 OR 2+2, as in ordinary mirror-3-dc.
         const TStates states = {R::N0, R::N0, R::N0};
-        UNIT_ASSERT(GetMirror3dcGroupState(states[0], states[1], states[2]) == EMirror3dcGroupState::NORMAL);
+        UNIT_ASSERT(GetMirror3dcGroupState(states[0], states[1], states[2]) == TMirror3dcGroupState::NORMAL);
         const auto info = MakeInfo(states);
         // Compare with the ordinary ErasureMirror3dc topology checker, not GroupInfo's default.
         const TBlobStorageGroupInfo::IQuorumChecker& legacyMirror3dc = info.GetTopology().GetQuorumChecker();

@@ -773,7 +773,7 @@ Y_UNIT_TEST_SUITE(TVPatchMirror3dcActorTest) {
             for (const auto second : {R::N0, R::N1, R::N2, R::R, R::F}) {
                 for (const auto third : {R::N0, R::N1, R::N2, R::R, R::F}) {
                     const auto state = GetMirror3dcGroupState(first, second, third);
-                    if (!state || *state == EMirror3dcGroupState::NORMAL) {
+                    if (!state || *state == TMirror3dcGroupState::NORMAL) {
                         continue;
                     }
                     // Exercise both VPatch and VMovedPatch entry paths.

@@ -7,112 +7,9 @@
 
 namespace NKikimr {
 
-// Mirror-3-dc group state diagram. The group state is authoritative.
-// Realm roles: I = Included, X = Excluded, R = Recovering.
-// Copy guarantees and pending progress are represented by the group state and D/W/E.
-// E = Layout Ensurance: guaranteed layouts for confirmed blobs.
-// D = Layout Durability: background replication target.
-// W = Write Layout: layouts sufficient to acknowledge a new write.
-// OR separates alternative layouts; + combines copy counts in distinct failrealms.
-// Each box contains realm roles and D, W and E.
-// Columns describe logical roles; transitions retain physical failrealm identities.
-//
-//     +---------------------------------+
-// +-->|              NORMAL             |
-// |   | I/I/I                           |------------------------------+
-// |   | D: 1+1+1                        |                              |
-// |   | W: 1+1+1 OR 2+2                 |                              |
-// |   | E: 1+1+1 OR 2+2                 |                              |
-// |   +---------------------------------+                              |
-// |                                                                    |
-// |                                                                    |
-// |                                                                    |
-// |                                                                    |
-// |                                                                    |
-// |                                                                    |
-// |                                                                    |
-// |                                                                    |
-// |                                                                    |
-// |                                                                    |
-// |                                                                    v
-// |   +---------------------------------+             +----------------+----------------+                     +---------------------------------+             +---------------------------------+
-// +<--|           DC_RECOVERY           |<----------->|            DC_FAILURE           |-------------------->|         DC_SOLO_DISASTER        |<----------->|         DC_SOLO_RECOVERY        |
-// |   | I/I/R                           |             | I/I/X                           |                     | I/X/X                           |             | I/R/X                           |
-// |   | D: 1+1+1                        |             | D: 0                            |                     | D: 0                            |             | D: 1+1                          |
-// |   | W: 1+1+1 OR 2+2                 |             | W: 2+2                          |                     | W: 2                            |             | W: 2+2                          |
-// |   | E: 1+1 OR 2                     |<---+        | E: 1+1 OR 2                     |    +--------------->| E: 0                            |             | E: 0                            |
-// |   +---------------------------------+    |        +----------------+----------------+    |                +---------------------------------+             +----------------+----------------+
-// |                                          |                         |                     |                                                                                 |
-// |                                          |                         |                     |                                                                                 |
-// |                                          |                         v                     |                                                                                 v
-// |                                          |        +----------------+----------------+    |                                                                +----------------+----------------+
-// |                                          |        |     DC_FAILURE_INV1_PENDING     |    |                                                                |  DC_SOLO_RECOVERY_INV1_PENDING  |
-// |                                          |        | I/I/X                           |    |                                                                | I/R/X                           |
-// |                                          +--------| D: 1+1                          |----+                                                         +----->| D: 1+1                          |
-// |                                                   | W: 2+2                          |                                                              |      | W: 2                            |
-// |                                                   | E: 1+1 OR 2                     |                                                              |      | E: 1                            |
-// |                                                   +----------------+----------------+                                                              |      +----------------+----------------+
-// |                                                                    |                                                                               |                       |
-// |                                                                    |                                                                               |                       |
-// |                                                                    |                                                                               |                       |
-// |                                                                    v                                                                               |                       v
-// |   +---------------------------------+             +----------------+----------------+                     +---------------------------------+      |      +----------------+----------------+
-// +<--|         DC_RECOVERY_INV1        |<----------->|         DC_FAILURE_INV1         |-------------------->|           DC_SOLO_INV1          |      |      |      DC_SOLO_RECOVERY_INV1      |
-//     | I/I/R                           |             | I/I/X                           |                     | I/X/X                           |<-----+      | I/R/X                           |
-//     | D: 1+1+1                        |<-----+      | D: 1+1                          |                     | D: 1                            |<-----=------| D: 1+1                          |
-//     | W: 1+1+1 OR 2+2                 |      |      | W: 2+2                          |                +--->| W: 2                            |      ^      | W: 2+2                          |
-//     | E: 1+1                          |      |      | E: 1+1                          |<------+        |    | E: 1                            |      |      | E: 1                            |---------+
-//     +---------------------------------+      |      +----------------+-------+--------+       |        |    +----------------+----------------+      |      +---------------------------------+         |
-//                                              |                       |                        |        |                     |                       |                                                  |
-//                                              |                       |                        +--------=---------------------=-----------------------=--------------------------------------------------+
-//                                              |                       v                                 |                     v                       |                                                  |
-//                                              |      +----------------+----------------+                |    +----------------+----------------+      |      +---------------------------------+         |
-//                                              |      |     DC_FAILURE_INV2_PENDING     |                |    |       DC_SOLO_INV2_PENDING      |      |      |  DC_SOLO_RECOVERY_INV2_PENDING  |         |
-//                                              |      | I/I/X                           |                |    | I/X/X                           |      |      | I/R/X                           |         |
-//                                              +------| D: 2+2                          |----------------+    | D: 2                            |------+  +-->| D: 1+1                          |         |
-//                                              |      | W: 2+2                          |                     | W: 2                            |         |   | W: 2                            |         |
-//                                              |      | E: 1+1                          |                     | E: 1                            |         |   | E: 2                            |         |
-//                                              |      +----------------+----------------+                     +----------------+----------------+         |   +----------------+----------------+         |
-//                                              |                       |                                                       |                          |                    |                          |
-//                                              |                       |                                                       |                          |                    |                          |
-//                                              |                       |                                                       |                          |                    |                          |
-//                                              |                       v                                                       v                          |                    v                          |
-//                                              |      +----------------+----------------+                     +----------------+----------------+         |   +----------------+----------------+         |
-//                                              +------|         DC_FAILURE_INV2         |-------------------->|           DC_SOLO_INV2          |         |   |      DC_SOLO_RECOVERY_INV2      |         |
-//                                                     | I/I/X                           |                     | I/X/X                           |<--------+   | I/R/X                           |         |
-//                                                     | D: 2+2                          |                     | D: 2                            |<------------| D: 1+1                          |         |
-//                                                     | W: 2+2                          |                     | W: 2                            |             | W: 2+2                          |         |
-//                                                     | E: 2+2                          |                     | E: 2                            |             | E: 2                            |---------+
-//                                                     +---------------------------------+                     +---------------------------------+             +---------------------------------+
-//
-//
-// + marks turns/junctions; = is a crossing WITHOUT a connection.
-// Internal progress may change I/X/R, D and E without an administrator action.
-// A transition arrow does not itself replicate data; target guarantees must be established.
-//
-enum class EMirror3dcGroupState {
-    NORMAL = 0,                             // I/I/I.
-
-    DC_FAILURE = 1,                         // I/I/X.
-    DC_FAILURE_INV1_PENDING = 12,           // I/I/X.
-    DC_FAILURE_INV1 = 2,                    // I/I/X.
-    DC_FAILURE_INV2_PENDING = 13,           // I/I/X.
-    DC_FAILURE_INV2 = 3,                    // I/I/X.
-
-    DC_RECOVERY = 4,                        // I/I/R.
-    DC_RECOVERY_INV1 = 5,                   // I/I/R.
-
-    DC_SOLO_DISASTER = 6,                   // I/X/X.
-    DC_SOLO_INV1 = 7,                       // I/X/X.
-    DC_SOLO_INV2_PENDING = 14,              // I/X/X.
-    DC_SOLO_INV2 = 8,                       // I/X/X.
-
-    DC_SOLO_RECOVERY = 9,                   // I/R/X.
-    DC_SOLO_RECOVERY_INV1_PENDING = 15,     // I/R/X.
-    DC_SOLO_RECOVERY_INV1 = 10,             // I/R/X.
-    DC_SOLO_RECOVERY_INV2_PENDING = 16,     // I/R/X.
-    DC_SOLO_RECOVERY_INV2 = 11,             // I/R/X.
-};
+// State definitions and the complete state diagram live in blobstorage_base.proto.
+using TMirror3dcGroupState = NKikimrBlobStorage::TMirror3dcGroupState;
+using EMirror3dcGroupState = TMirror3dcGroupState::EState;
 
 using EMirror3dcFailRealmState = NKikimrBlobStorage::TGroupInfo::TFailRealm::EState;
 using TMirror3dcFailRealmStates = std::array<EMirror3dcFailRealmState, 3>;
@@ -136,45 +33,46 @@ struct TMirror3dcGroupLayouts {
 };
 
 constexpr std::optional<TMirror3dcGroupLayouts> GetMirror3dcGroupLayouts(EMirror3dcGroupState state) {
-    using EGroupState = EMirror3dcGroupState;
+    using TGroupState = TMirror3dcGroupState;
     using ELayout = EMirror3dcLayout;
     switch (state) {
-        case EGroupState::NORMAL:
+        case TGroupState::NORMAL:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_111_22};
-        case EGroupState::DC_FAILURE:
+        case TGroupState::DC_FAILURE:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_0, ELayout::LAYOUT_11_2};
-        case EGroupState::DC_FAILURE_INV1:
+        case TGroupState::DC_FAILURE_INV1:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_11};
-        case EGroupState::DC_FAILURE_INV2:
+        case TGroupState::DC_FAILURE_INV2:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_22, ELayout::LAYOUT_22};
-        case EGroupState::DC_RECOVERY:
+        case TGroupState::DC_RECOVERY:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_11_2};
-        case EGroupState::DC_RECOVERY_INV1:
+        case TGroupState::DC_RECOVERY_INV1:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_11};
-        case EGroupState::DC_SOLO_DISASTER:
+        case TGroupState::DC_SOLO_DISASTER:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_0, ELayout::LAYOUT_0};
-        case EGroupState::DC_SOLO_INV1:
+        case TGroupState::DC_SOLO_INV1:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_1, ELayout::LAYOUT_1};
-        case EGroupState::DC_SOLO_INV2:
+        case TGroupState::DC_SOLO_INV2:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_2, ELayout::LAYOUT_2};
-        case EGroupState::DC_SOLO_RECOVERY:
+        case TGroupState::DC_SOLO_RECOVERY:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_1, ELayout::LAYOUT_0};
-        case EGroupState::DC_SOLO_RECOVERY_INV1:
+        case TGroupState::DC_SOLO_RECOVERY_INV1:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_1};
-        case EGroupState::DC_SOLO_RECOVERY_INV2:
+        case TGroupState::DC_SOLO_RECOVERY_INV2:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_2};
-        case EGroupState::DC_FAILURE_INV1_PENDING:
+        case TGroupState::DC_FAILURE_INV1_PENDING:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_11_2};
-        case EGroupState::DC_FAILURE_INV2_PENDING:
+        case TGroupState::DC_FAILURE_INV2_PENDING:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_22, ELayout::LAYOUT_11};
-        case EGroupState::DC_SOLO_INV2_PENDING:
+        case TGroupState::DC_SOLO_INV2_PENDING:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_2, ELayout::LAYOUT_1};
-        case EGroupState::DC_SOLO_RECOVERY_INV1_PENDING:
+        case TGroupState::DC_SOLO_RECOVERY_INV1_PENDING:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_1, ELayout::LAYOUT_1};
-        case EGroupState::DC_SOLO_RECOVERY_INV2_PENDING:
+        case TGroupState::DC_SOLO_RECOVERY_INV2_PENDING:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_11, ELayout::LAYOUT_2};
+        default:
+            return std::nullopt;
     }
-    return std::nullopt;
 }
 
 // Reads use the confirmed guarantee E, including while replication is pending.
@@ -183,45 +81,46 @@ constexpr EMirror3dcLayout GetMirror3dcReadLayout(EMirror3dcGroupState state) {
 }
 
 constexpr std::optional<TMirror3dcFailRealmStates> GetMirror3dcRealmStates(EMirror3dcGroupState state) {
-    using EGroupState = EMirror3dcGroupState;
+    using TGroupState = TMirror3dcGroupState;
     using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
     switch (state) {
-        case EGroupState::NORMAL:
+        case TGroupState::NORMAL:
             return TMirror3dcFailRealmStates{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
-        case EGroupState::DC_FAILURE:
+        case TGroupState::DC_FAILURE:
             return TMirror3dcFailRealmStates{TFailRealm::N0, TFailRealm::N0, TFailRealm::F};
-        case EGroupState::DC_FAILURE_INV1:
+        case TGroupState::DC_FAILURE_INV1:
             return TMirror3dcFailRealmStates{TFailRealm::N1, TFailRealm::N1, TFailRealm::F};
-        case EGroupState::DC_FAILURE_INV2:
+        case TGroupState::DC_FAILURE_INV2:
             return TMirror3dcFailRealmStates{TFailRealm::N2, TFailRealm::N2, TFailRealm::F};
-        case EGroupState::DC_RECOVERY:
+        case TGroupState::DC_RECOVERY:
             return TMirror3dcFailRealmStates{TFailRealm::N0, TFailRealm::N0, TFailRealm::R};
-        case EGroupState::DC_RECOVERY_INV1:
+        case TGroupState::DC_RECOVERY_INV1:
             return TMirror3dcFailRealmStates{TFailRealm::N1, TFailRealm::N1, TFailRealm::R};
-        case EGroupState::DC_SOLO_DISASTER:
+        case TGroupState::DC_SOLO_DISASTER:
             return TMirror3dcFailRealmStates{TFailRealm::N0, TFailRealm::F, TFailRealm::F};
-        case EGroupState::DC_SOLO_INV1:
+        case TGroupState::DC_SOLO_INV1:
             return TMirror3dcFailRealmStates{TFailRealm::N1, TFailRealm::F, TFailRealm::F};
-        case EGroupState::DC_SOLO_INV2:
+        case TGroupState::DC_SOLO_INV2:
             return TMirror3dcFailRealmStates{TFailRealm::N2, TFailRealm::F, TFailRealm::F};
-        case EGroupState::DC_SOLO_RECOVERY:
+        case TGroupState::DC_SOLO_RECOVERY:
             return TMirror3dcFailRealmStates{TFailRealm::N0, TFailRealm::R, TFailRealm::F};
-        case EGroupState::DC_SOLO_RECOVERY_INV1:
+        case TGroupState::DC_SOLO_RECOVERY_INV1:
             return TMirror3dcFailRealmStates{TFailRealm::N1, TFailRealm::R, TFailRealm::F};
-        case EGroupState::DC_SOLO_RECOVERY_INV2:
+        case TGroupState::DC_SOLO_RECOVERY_INV2:
             return TMirror3dcFailRealmStates{TFailRealm::N2, TFailRealm::R, TFailRealm::F};
-        case EGroupState::DC_FAILURE_INV1_PENDING:
+        case TGroupState::DC_FAILURE_INV1_PENDING:
             return TMirror3dcFailRealmStates{TFailRealm::N0, TFailRealm::N0, TFailRealm::F};
-        case EGroupState::DC_FAILURE_INV2_PENDING:
+        case TGroupState::DC_FAILURE_INV2_PENDING:
             return TMirror3dcFailRealmStates{TFailRealm::N1, TFailRealm::N1, TFailRealm::F};
-        case EGroupState::DC_SOLO_INV2_PENDING:
+        case TGroupState::DC_SOLO_INV2_PENDING:
             return TMirror3dcFailRealmStates{TFailRealm::N1, TFailRealm::F, TFailRealm::F};
-        case EGroupState::DC_SOLO_RECOVERY_INV1_PENDING:
+        case TGroupState::DC_SOLO_RECOVERY_INV1_PENDING:
             return TMirror3dcFailRealmStates{TFailRealm::N1, TFailRealm::R, TFailRealm::F};
-        case EGroupState::DC_SOLO_RECOVERY_INV2_PENDING:
+        case TGroupState::DC_SOLO_RECOVERY_INV2_PENDING:
             return TMirror3dcFailRealmStates{TFailRealm::N2, TFailRealm::R, TFailRealm::F};
+        default:
+            return std::nullopt;
     }
-    return std::nullopt;
 }
 
 // Legacy migration only: realm states cannot distinguish PENDING states.
@@ -259,31 +158,31 @@ constexpr std::optional<EMirror3dcGroupState> GetMirror3dcGroupState(
                 return std::nullopt;
         }
     }
-    using EGroupState = EMirror3dcGroupState;
+    using TGroupState = TMirror3dcGroupState;
     if (recovering > 1 || failures + recovering == 3) {
         return std::nullopt;
     }
     if (recovering == 1) {
         if (failures == 1) {
-            return minCopies == 0 ? EGroupState::DC_SOLO_RECOVERY
-                : minCopies == 1 ? EGroupState::DC_SOLO_RECOVERY_INV1 : EGroupState::DC_SOLO_RECOVERY_INV2;
+            return minCopies == 0 ? TGroupState::DC_SOLO_RECOVERY
+                : minCopies == 1 ? TGroupState::DC_SOLO_RECOVERY_INV1 : TGroupState::DC_SOLO_RECOVERY_INV2;
         }
         // W accepts 1+1+1, so neither normal realm can retain an N2 guarantee.
         if (hasTwoCopyGuarantee) {
             return std::nullopt;
         }
-        return minCopies == 0 ? EGroupState::DC_RECOVERY : EGroupState::DC_RECOVERY_INV1;
+        return minCopies == 0 ? TGroupState::DC_RECOVERY : TGroupState::DC_RECOVERY_INV1;
     }
     if (failures == 2) {
-        return minCopies == 0 ? EGroupState::DC_SOLO_DISASTER
-            : minCopies == 1 ? EGroupState::DC_SOLO_INV1 : EGroupState::DC_SOLO_INV2;
+        return minCopies == 0 ? TGroupState::DC_SOLO_DISASTER
+            : minCopies == 1 ? TGroupState::DC_SOLO_INV1 : TGroupState::DC_SOLO_INV2;
     }
     if (failures == 1) {
-        return minCopies == 0 ? EGroupState::DC_FAILURE
-            : minCopies == 1 ? EGroupState::DC_FAILURE_INV1 : EGroupState::DC_FAILURE_INV2;
+        return minCopies == 0 ? TGroupState::DC_FAILURE
+            : minCopies == 1 ? TGroupState::DC_FAILURE_INV1 : TGroupState::DC_FAILURE_INV2;
     }
     // Stronger per-realm guarantees do not require another NORMAL group state.
-    return EGroupState::NORMAL;
+    return TGroupState::NORMAL;
 }
 
 // A role change crosses an F/R boundary; changing only an N copy guarantee keeps the role.
@@ -297,7 +196,7 @@ constexpr bool IsMirror3dcFailRealmRoleChange(EMirror3dcFailRealmState before, E
 // Logical roles are mapped to physical realms by the supplied tuple. All changes
 // retain realm identities, including when N2 is downgraded on return to three DCs.
 struct TMirror3dcGroupConfiguration {
-    EMirror3dcGroupState State = EMirror3dcGroupState::NORMAL;
+    EMirror3dcGroupState State = TMirror3dcGroupState::NORMAL;
     TMirror3dcFailRealmStates Realms{};
     bool operator==(const TMirror3dcGroupConfiguration&) const = default;
 };
@@ -310,40 +209,40 @@ struct TMirror3dcTransition {
 };
 
 inline constexpr TMirror3dcTransition Mirror3dcAllowedGroupTransitions[] = {
-    {EMirror3dcGroupState::NORMAL, EMirror3dcGroupState::DC_FAILURE, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_FAILURE_INV1_PENDING, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_FAILURE_INV2_PENDING, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_FAILURE_INV2, EMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_RECOVERY, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_RECOVERY, EMirror3dcGroupState::DC_FAILURE, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_FAILURE_INV2, EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_FAILURE, EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_FAILURE_INV1_PENDING, EMirror3dcGroupState::DC_RECOVERY, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_FAILURE_INV2_PENDING, EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcGroupState::DC_SOLO_RECOVERY, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY, EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1, EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_FAILURE_INV1_PENDING, EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcTransitionKind::System},
-    {EMirror3dcGroupState::DC_FAILURE_INV2_PENDING, EMirror3dcGroupState::DC_FAILURE_INV2, EMirror3dcTransitionKind::System},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2_PENDING, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2, EMirror3dcTransitionKind::System},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2, EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcTransitionKind::System},
-    {EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcGroupState::DC_SOLO_INV2_PENDING, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING, EMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2_PENDING, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2_PENDING, EMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV2, EMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1, EMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcTransitionKind::System},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1, EMirror3dcTransitionKind::System},
-    {EMirror3dcGroupState::DC_FAILURE_INV2_PENDING, EMirror3dcGroupState::DC_SOLO_INV2_PENDING, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_FAILURE_INV1_PENDING, EMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcTransitionKind::Admin},
-    {EMirror3dcGroupState::DC_SOLO_INV2_PENDING, EMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcTransitionKind::System},
-    {EMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcGroupState::NORMAL, EMirror3dcTransitionKind::System},
-    {EMirror3dcGroupState::DC_RECOVERY, EMirror3dcGroupState::NORMAL, EMirror3dcTransitionKind::System},
-    {EMirror3dcGroupState::DC_SOLO_RECOVERY, EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING, EMirror3dcTransitionKind::System},
+    {TMirror3dcGroupState::NORMAL, TMirror3dcGroupState::DC_FAILURE, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_FAILURE, TMirror3dcGroupState::DC_FAILURE_INV1_PENDING, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_FAILURE_INV1, TMirror3dcGroupState::DC_FAILURE_INV2_PENDING, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_FAILURE_INV1, TMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_FAILURE_INV2, TMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_FAILURE, TMirror3dcGroupState::DC_RECOVERY, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_RECOVERY, TMirror3dcGroupState::DC_FAILURE, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_FAILURE_INV1, TMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_RECOVERY_INV1, TMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_FAILURE_INV2, TMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_FAILURE, TMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_FAILURE_INV1_PENDING, TMirror3dcGroupState::DC_RECOVERY, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_FAILURE_INV2_PENDING, TMirror3dcGroupState::DC_RECOVERY_INV1, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_SOLO_DISASTER, TMirror3dcGroupState::DC_SOLO_RECOVERY, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_SOLO_RECOVERY, TMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_SOLO_RECOVERY_INV1, TMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_FAILURE_INV1_PENDING, TMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcTransitionKind::System},
+    {TMirror3dcGroupState::DC_FAILURE_INV2_PENDING, TMirror3dcGroupState::DC_FAILURE_INV2, EMirror3dcTransitionKind::System},
+    {TMirror3dcGroupState::DC_SOLO_RECOVERY_INV2_PENDING, TMirror3dcGroupState::DC_SOLO_RECOVERY_INV2, EMirror3dcTransitionKind::System},
+    {TMirror3dcGroupState::DC_SOLO_RECOVERY_INV2, TMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcTransitionKind::System},
+    {TMirror3dcGroupState::DC_SOLO_INV1, TMirror3dcGroupState::DC_SOLO_INV2_PENDING, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_SOLO_INV1, TMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING, TMirror3dcGroupState::DC_SOLO_INV1, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_SOLO_INV2, TMirror3dcGroupState::DC_SOLO_RECOVERY_INV2_PENDING, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_SOLO_RECOVERY_INV2_PENDING, TMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_SOLO_RECOVERY_INV2, TMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_SOLO_RECOVERY_INV1, TMirror3dcGroupState::DC_FAILURE_INV1, EMirror3dcTransitionKind::System},
+    {TMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING, TMirror3dcGroupState::DC_SOLO_RECOVERY_INV1, EMirror3dcTransitionKind::System},
+    {TMirror3dcGroupState::DC_FAILURE_INV2_PENDING, TMirror3dcGroupState::DC_SOLO_INV2_PENDING, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_FAILURE_INV1_PENDING, TMirror3dcGroupState::DC_SOLO_DISASTER, EMirror3dcTransitionKind::Admin},
+    {TMirror3dcGroupState::DC_SOLO_INV2_PENDING, TMirror3dcGroupState::DC_SOLO_INV2, EMirror3dcTransitionKind::System},
+    {TMirror3dcGroupState::DC_RECOVERY_INV1, TMirror3dcGroupState::NORMAL, EMirror3dcTransitionKind::System},
+    {TMirror3dcGroupState::DC_RECOVERY, TMirror3dcGroupState::NORMAL, EMirror3dcTransitionKind::System},
+    {TMirror3dcGroupState::DC_SOLO_RECOVERY, TMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING, EMirror3dcTransitionKind::System},
 };
 
 constexpr bool IsAllowedMirror3dcGroupTransition(EMirror3dcGroupState from, EMirror3dcGroupState to,
@@ -424,21 +323,21 @@ constexpr std::optional<TMirror3dcGroupConfiguration> MigrateMirror3dcGroupConfi
 }
 
 constexpr bool IsMirror3dcReplicationTarget(EMirror3dcGroupState state, EMirror3dcFailRealmState realm) {
-    using EGroupState = EMirror3dcGroupState;
+    using TGroupState = TMirror3dcGroupState;
     using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
     switch (state) {
-        case EGroupState::NORMAL:
-        case EGroupState::DC_RECOVERY:
-        case EGroupState::DC_FAILURE_INV1_PENDING:
-        case EGroupState::DC_FAILURE_INV2_PENDING:
-        case EGroupState::DC_SOLO_INV2_PENDING:
-        case EGroupState::DC_SOLO_RECOVERY:
+        case TGroupState::NORMAL:
+        case TGroupState::DC_RECOVERY:
+        case TGroupState::DC_FAILURE_INV1_PENDING:
+        case TGroupState::DC_FAILURE_INV2_PENDING:
+        case TGroupState::DC_SOLO_INV2_PENDING:
+        case TGroupState::DC_SOLO_RECOVERY:
             return realm != TFailRealm::F;
-        case EGroupState::DC_RECOVERY_INV1:
-        case EGroupState::DC_SOLO_RECOVERY_INV1_PENDING:
-        case EGroupState::DC_SOLO_RECOVERY_INV2_PENDING:
-        case EGroupState::DC_SOLO_RECOVERY_INV1:
-        case EGroupState::DC_SOLO_RECOVERY_INV2:
+        case TGroupState::DC_RECOVERY_INV1:
+        case TGroupState::DC_SOLO_RECOVERY_INV1_PENDING:
+        case TGroupState::DC_SOLO_RECOVERY_INV2_PENDING:
+        case TGroupState::DC_SOLO_RECOVERY_INV1:
+        case TGroupState::DC_SOLO_RECOVERY_INV2:
             return realm == TFailRealm::R;
         default:
             return false;
@@ -447,27 +346,27 @@ constexpr bool IsMirror3dcReplicationTarget(EMirror3dcGroupState state, EMirror3
 
 constexpr std::optional<TMirror3dcGroupConfiguration> CompleteMirror3dcReplication(
         const TMirror3dcGroupConfiguration& before) {
-    using EGroupState = EMirror3dcGroupState;
+    using TGroupState = TMirror3dcGroupState;
     using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
     if (!IsValidMirror3dcGroupConfiguration(before)) {
         return std::nullopt;
     }
-    EGroupState next;
+    EMirror3dcGroupState next;
     switch (before.State) {
-        case EGroupState::DC_FAILURE_INV1_PENDING: next = EGroupState::DC_FAILURE_INV1; break;
-        case EGroupState::DC_FAILURE_INV2_PENDING: next = EGroupState::DC_FAILURE_INV2; break;
-        case EGroupState::DC_SOLO_INV2_PENDING: next = EGroupState::DC_SOLO_INV2; break;
-        case EGroupState::DC_SOLO_RECOVERY: next = EGroupState::DC_SOLO_RECOVERY_INV1_PENDING; break;
-        case EGroupState::DC_SOLO_RECOVERY_INV1_PENDING: next = EGroupState::DC_SOLO_RECOVERY_INV1; break;
-        case EGroupState::DC_SOLO_RECOVERY_INV2_PENDING: next = EGroupState::DC_SOLO_RECOVERY_INV2; break;
-        case EGroupState::DC_SOLO_RECOVERY_INV1:
-        case EGroupState::DC_SOLO_RECOVERY_INV2: next = EGroupState::DC_FAILURE_INV1; break;
-        case EGroupState::DC_RECOVERY:
-        case EGroupState::DC_RECOVERY_INV1: next = EGroupState::NORMAL; break;
+        case TGroupState::DC_FAILURE_INV1_PENDING: next = TGroupState::DC_FAILURE_INV1; break;
+        case TGroupState::DC_FAILURE_INV2_PENDING: next = TGroupState::DC_FAILURE_INV2; break;
+        case TGroupState::DC_SOLO_INV2_PENDING: next = TGroupState::DC_SOLO_INV2; break;
+        case TGroupState::DC_SOLO_RECOVERY: next = TGroupState::DC_SOLO_RECOVERY_INV1_PENDING; break;
+        case TGroupState::DC_SOLO_RECOVERY_INV1_PENDING: next = TGroupState::DC_SOLO_RECOVERY_INV1; break;
+        case TGroupState::DC_SOLO_RECOVERY_INV2_PENDING: next = TGroupState::DC_SOLO_RECOVERY_INV2; break;
+        case TGroupState::DC_SOLO_RECOVERY_INV1:
+        case TGroupState::DC_SOLO_RECOVERY_INV2: next = TGroupState::DC_FAILURE_INV1; break;
+        case TGroupState::DC_RECOVERY:
+        case TGroupState::DC_RECOVERY_INV1: next = TGroupState::NORMAL; break;
         default: return std::nullopt;
     }
     auto roles = before.Realms;
-    if (next == EGroupState::NORMAL || next == EGroupState::DC_FAILURE_INV1) {
+    if (next == TGroupState::NORMAL || next == TGroupState::DC_FAILURE_INV1) {
         for (auto& realm : roles) {
             if (realm == TFailRealm::R) {
                 realm = TFailRealm::N1;

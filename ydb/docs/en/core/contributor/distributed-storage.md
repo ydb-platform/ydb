@@ -88,7 +88,7 @@ As a rule, groups of two adjacent generations differ by no more than one slot.
 
 #### Mirror-3-dc group state
 
-For an ordinary three-realm `mirror-3-dc` group, the group state is authoritative. The model has 17 states, including explicit `PENDING` states. BSC persists this state with the group configuration and publishes it in `TGroupInfo` with the group generation. DS proxy and VDisk use that state to select their policies. Configurations without an explicit group state use the legacy realm-state classifier for migration.
+For an ordinary three-realm `mirror-3-dc` group, the group state is authoritative. The state diagram and enum are defined in `TMirror3dcGroupState::EState` in [`blobstorage_base.proto`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/blobstorage_base.proto). The model has 17 states, including explicit `PENDING` states. BSC persists this state with the group configuration and publishes it in `TGroupInfo` with the group generation. DS proxy and VDisk use that state to select their policies. Configurations without an explicit group state use the legacy realm-state classifier for migration.
 
 The group state determines the logical realm roles and minimum copy guarantees; their mapping retains physical failrealm identities. `N0`, `N1`, and `N2` describe normal realms with minimum per-realm copy counts, `F` is an excluded realm, and `R` is a recovering realm. `N0` does not imply an empty realm. Realm tuples alone do not identify the group state: for example, `DC_FAILURE` and `DC_FAILURE_INV1_PENDING` both use `N0/N0/F`, but only the latter starts background replication.
 

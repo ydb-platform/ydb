@@ -113,7 +113,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             TDefinition* definition = requestConfig->AddCommand()->MutableDefineFailRealmStates()->AddGroups();
             definition->SetGroupId(groupId);
             definition->SetExpectedGroupGeneration(group->Info.Generation);
-            definition->SetGroupState(static_cast<NKikimrBlobStorage::TMirror3dcGroupState::EState>(next->State));
+            definition->SetGroupState(next->State);
             for (EMirror3dcFailRealmState state : next->Realms) {
                 definition->AddFailRealmStates(static_cast<TDefinition::EFailRealmState>(state));
             }

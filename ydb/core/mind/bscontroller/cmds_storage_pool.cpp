@@ -1216,7 +1216,7 @@ namespace NKikimr::NBsController {
             std::array<TFailRealm::EState, 3> states;
             if (!definition.FailRealmStatesSize() && definition.HasGroupState()) {
                 const auto next = MakeMirror3dcGroupConfiguration(
-                    static_cast<EMirror3dcGroupState>(definition.GetGroupState()),
+                    definition.GetGroupState(),
                     group->FailRealmStates.value_or(TFailRealmStates{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}));
                 if (!next) {
                     throw TExError() << "group state requires different physical realm roles for GroupId# " << groupId;
@@ -1238,7 +1238,7 @@ namespace NKikimr::NBsController {
             TGroupInfo* updated = Groups.FindForUpdate(groupId);
             updated->FailRealmStates = states;
             if (definition.HasGroupState()) {
-                updated->Mirror3dcState = static_cast<EMirror3dcGroupState>(definition.GetGroupState());
+                updated->Mirror3dcState = definition.GetGroupState();
                 if (!IsValidMirror3dcGroupConfiguration({*updated->Mirror3dcState, states})) {
                     throw TExError() << "invalid mirror-3-dc group state or realm roles for GroupId# " << groupId;
                 }
@@ -1294,11 +1294,11 @@ namespace NKikimr::NBsController {
             const TFailRealmStates previous = isNew ? normal : existing->second->FailRealmStates.value_or(normal);
             TFailRealmStates states = ResetDataCenterStates ? normal : group->FailRealmStates.value_or(normal);
             const auto legacyPrevious = MigrateMirror3dcGroupConfiguration(previous);
-            const std::optional<EMirror3dcGroupState> previousState = isNew ? std::optional(EMirror3dcGroupState::NORMAL)
+            const std::optional<EMirror3dcGroupState> previousState = isNew ? std::optional(TMirror3dcGroupState::NORMAL)
                 : existing->second->Mirror3dcState ? existing->second->Mirror3dcState
                 : legacyPrevious ? std::optional(legacyPrevious->State) : std::nullopt;
             const auto migrated = MigrateMirror3dcGroupConfiguration(states);
-            std::optional<EMirror3dcGroupState> groupState = ResetDataCenterStates ? std::optional(EMirror3dcGroupState::NORMAL)
+            std::optional<EMirror3dcGroupState> groupState = ResetDataCenterStates ? std::optional(TMirror3dcGroupState::NORMAL)
                 : group->Mirror3dcState ? group->Mirror3dcState
                 : migrated ? std::optional(migrated->State) : std::nullopt;
             if (!ResetDataCenterStates && (DataCenterStates.Changed() || isNew)) {

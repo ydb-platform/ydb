@@ -5,8 +5,8 @@ import grpc
 import pytest
 
 from ydb.tests.library.replication_credentials import (
-    DATABASE, P1, USER, SecretKind, cleanup_objects, create_replication, database,
-    recover, rejecting_source_endpoint, rotate_to_error, secret_name, secret_option, ydb, ydb_auth_pb2, ydb_auth_v1_pb2_grpc,
+    DATABASE, P1, P2, USER, SecretKind, cleanup_objects, create_replication, database,
+    recover, rejecting_source_endpoint, rotate_to_error, secret_name, secret_option, write_secret, ydb, ydb_auth_pb2, ydb_auth_v1_pb2_grpc, ydb_status_codes_pb2,
 )
 
 
@@ -29,9 +29,63 @@ class TestCredentialsRotation:
             rotate_to_error(source, destination, identities)
             recover(source, destination, kind, identities)
 
-    def test_temporary_source_outage_recovers(self):
+    def test_invalid_credentials_after_pause_are_error(self):
         with ExitStack() as cleanup:
             source = cleanup.enter_context(database("source"))
+            destination = cleanup.enter_context(database("destination", replication_log_level=8))
+            cleanup.callback(cleanup_objects, source, destination, SecretKind.LEGACY)
+            identities = create_replication(source, destination, SecretKind.LEGACY)
+            destination.query('ALTER ASYNC REPLICATION r SET (STATE="PAUSED");')
+            destination.wait_state("paused")
+            offsets = destination.log_offsets()
+            source.query(f"ALTER USER {USER} PASSWORD '{P2}';")
+            source.login(P2, ydb_status_codes_pb2.StatusIds.SUCCESS)
+
+            def source_unlocked(phase):
+                rows = source.query(f"SELECT IsLockedOut, FailedAttemptCount FROM `/Root/.sys/auth_users` WHERE Sid = '{USER}';")[0].rows
+                assert len(rows) == 1
+                state = {name: rows[0][name] for name in ("IsLockedOut", "FailedAttemptCount")}
+                source.record(phase, auth_state=state)
+                assert not state["IsLockedOut"], "Source account lockout invalidates the wrong-secret prerequisite"
+            source_unlocked("registrar-source-before-resume")
+            destination.query('ALTER ASYNC REPLICATION r SET (STATE="STANDBY");')
+
+            def registrar_rejected(timeout):
+                lines = list(destination.log_lines_after(offsets))
+                assert not any("Run worker" in line and "actorClassName=TReplicationService" in line
+                               for _, line in lines), "Worker started before the registrar authentication failure"
+                for path, line in lines:
+                    if "TableWorkerRegistar" in line and "CLIENT_UNAUTHENTICATED" in line:
+                        destination.record("registrar-authentication-rejected", log=path, event=destination.redact(line.strip()))
+                        return True
+                return False
+            destination.poll("actual registrar authentication rejection", registrar_rejected)
+            source_unlocked("registrar-source-after-rejection")
+            result = destination.wait_state("error")
+            issue = str(result.error.issues)
+            assert "auth" in issue.lower() and "registration" in issue.lower()
+            assert destination.identities() == identities
+            destination.assert_no_secrets(issue, source.tokens)
+            destination.record("registrar-public-error", identities=identities, issue=issue)
+            destination.restart()
+            result = destination.wait_state("error")
+            assert result.error.issues and destination.identities() == identities
+            destination.record("registrar-persisted-error", identities=identities)
+            write_secret(destination, SecretKind.LEGACY, P2)
+            destination.query('ALTER ASYNC REPLICATION r SET (STATE="PAUSED");')
+            destination.wait_state("paused")
+            source.query('UPSERT INTO t (id, value) VALUES (6001u, "after-registrar-error");')
+            destination.query('ALTER ASYNC REPLICATION r SET (STATE="STANDBY");')
+            destination.wait_state("running")
+            destination.wait_rows([(1, "initial"), (2, "remove-me"), (6001, "after-registrar-error")])
+            assert destination.identities() == identities
+            destination.assert_no_secrets(extra_tokens=source.tokens)
+            source.assert_no_secrets()
+            destination.record("registrar-recovered", identities=identities, rows=destination.last_rows)
+
+    def test_temporary_source_outage_recovers(self):
+        with ExitStack() as cleanup:
+            source = cleanup.enter_context(database("source", enable_audit_log=True))
             destination = cleanup.enter_context(database("destination"))
             cleanup.callback(cleanup_objects, source, destination, SecretKind.LEGACY)
             identities = create_replication(source, destination, SecretKind.LEGACY)

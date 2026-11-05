@@ -131,6 +131,7 @@ def pause_across_controller_upgrade(destination, tablet, controller, survivor):
         future = executor.submit(lambda: list(session.execute(
             'ALTER ASYNC REPLICATION r SET (STATE="PAUSED");',
             settings=ydb.BaseRequestSettings().with_timeout(PHASE_TIMEOUT))))
+
         def accepted(timeout):
             if future.done():
                 future.result()  # Preserve an immediate SQL error instead of hiding it behind a poll.
@@ -276,4 +277,3 @@ class TestCredentialRolesCompatibility:
             destination.assert_no_secrets(extra_tokens=source.tokens)
             source.assert_no_secrets()
             destination.record("all-old-valid-rollback", rows=expected, identities=identities)
-

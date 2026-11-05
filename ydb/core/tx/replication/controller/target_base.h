@@ -63,6 +63,7 @@ public:
 
     bool IsExpectedDstCreator(const TActorId& actorId) const override;
     bool IsExpectedDstAlterer(const TActorId& actorId) const override;
+    bool IsExpectedWorkerRegistar(const TActorId& actorId) const override;
 
     const TPathId& GetDstPathId() const override;
     void SetDstPathId(const TPathId& value) override;

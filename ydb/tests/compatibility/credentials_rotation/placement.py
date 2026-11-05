@@ -34,6 +34,7 @@ def actual_node_id(destination, process):
         data = monitor(root, viewer_path(root, "sysinfo"),
                        {"database": destination.database_path, "direct": 1, "alive": 1,
                         "static": 0, "enums": "true"}, timeout=timeout)
+
         def endpoint_matches(entry, name, port):
             return any(endpoint.get("Name") == name
                        and endpoint.get("Address", "").rsplit(":", 1)[-1] == str(port)
@@ -87,6 +88,7 @@ def move_controller(destination, tablet, process):
                      {"TabletID": hive, "page": "MoveTablet", "tablet": tablet, "node": node_id},
                      method="post", timeout=RPC_TIMEOUT)
     assert result.get("status"), result
+
     def placed(timeout):
         location = controller_location(destination, tablet, timeout)
         return location if location and location["node"] == node_id else None
@@ -108,6 +110,7 @@ def field(line, key):
 
 def wait_worker(destination, process, offsets, expected=None):
     node_id = actual_node_id(destination, process)
+
     def ready(timeout):
         assert destination.replication(timeout).WhichOneof("state") != "error"
         lines = process_lines(destination, process, offsets)

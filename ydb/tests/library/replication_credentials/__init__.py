@@ -131,7 +131,7 @@ def rejecting_source_endpoint(source):
 
 
 class Database:
-    def __init__(self, name, *, binary_paths=None, nodes=1, extra_flags=(), disabled_flags=(), tenant_slots=0, replication_log_level=7, account_lockout_attempt_threshold=None):
+    def __init__(self, name, *, binary_paths=None, nodes=1, extra_flags=(), disabled_flags=(), tenant_slots=0, replication_log_level=7, account_lockout_attempt_threshold=None, enable_audit_log=False):
         self.name = name
         self.database_path = f"{DATABASE}/tenant" if tenant_slots else DATABASE
         self.tenant_slots = tenant_slots
@@ -144,7 +144,7 @@ class Database:
             extra_grpc_services=["replication"], default_clusteradmin=ADMIN,
             additional_log_configs={"REPLICATION_SERVICE": replication_log_level,
                                     "REPLICATION_CONTROLLER": replication_log_level},
-            enforce_user_token_requirement=True,
+            enforce_user_token_requirement=True, enable_audit_log=enable_audit_log,
             extra_feature_flags=["enable_schema_secrets", *extra_flags],
             disabled_feature_flags=["disable_old_secret_creation", "disable_old_secrets", *disabled_flags],
         )
@@ -267,7 +267,7 @@ class Database:
                     raise AssertionError(self.redact(error)) from None
                 last_error = self.redact(error)
             time.sleep(min(0.25, max(0, deadline - time.monotonic())))
-        raise AssertionError(f"{self.name}: {phase} timed out; state={self.last_state}; "
+        raise AssertionError(f"{self.name}: {phase} timed out; last_observed_state={self.last_state}; "
                              f"issue={self.last_issue}; rows={self.last_rows}; error={last_error}; "
                              f"nodes/logs={self.node_manifest()}")
 
@@ -305,6 +305,7 @@ class Database:
     def identities(self):
         replication = self.describe(f"{self.database_path}/r")
         destination = self.describe(f"{self.database_path}/t")
+
         def identity(description):
             return (int(description["Self"]["SchemeshardId"]), int(description["Self"]["PathId"]))
         return {"replication": identity(replication), "destination": identity(destination),
@@ -409,6 +410,7 @@ def write_secret(destination, kind, password, *, create=False, name="pw"):
         before = None if create else destination.describe(path)
         statement = "CREATE" if create else "ALTER"
         destination.query(f"{statement} SECRET `{path}` WITH (value='{password}');")
+
         def changed(timeout):
             after = destination.describe(path, timeout)
             version = int(after["SecretDescription"]["Version"])
@@ -508,4 +510,3 @@ def recover(source, destination, kind, identities, extra_rows=()):
     destination.assert_no_secrets(extra_tokens=source.tokens)
     source.assert_no_secrets()
     destination.record("recovered-after-restart", identities=identities, rows=destination.last_rows)
-

@@ -51,11 +51,33 @@ struct TEvPrivate {
         EvCancelCreateStream,
         EvCancelDropStream,
         EvExpireWorkerLag,
+        EvWorkerRegistrationError,
 
         EvEnd,
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+
+    struct TEvWorkerRegistrationError: public TEventLocal<TEvWorkerRegistrationError, EvWorkerRegistrationError> {
+        const ui64 ReplicationId;
+        const ui64 TargetId;
+        const NYdb::EStatus Status;
+
+        TEvWorkerRegistrationError(ui64 rid, ui64 tid, NYdb::EStatus status)
+            : ReplicationId(rid)
+            , TargetId(tid)
+            , Status(status)
+        {}
+
+        TString GetIssue() const {
+            return TStringBuilder() << "Source authentication failed during worker registration (" << Status << ")";
+        }
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " { ReplicationId: " << ReplicationId
+                << " TargetId: " << TargetId << " Status: " << Status << " }";
+        }
+    };
 
     struct TEvDiscoveryTargetsResult: public TEventLocal<TEvDiscoveryTargetsResult, EvDiscoveryTargetsResult> {
         struct TAddEntry {

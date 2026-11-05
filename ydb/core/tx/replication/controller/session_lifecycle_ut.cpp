@@ -1,8 +1,14 @@
 #include "controller_impl.h"
+#include "target_table.h"
 
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/replication/service/service.h>
+#include <ydb/core/tx/replication/service/worker.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <util/generic/scope.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/replication/ut_helpers/mock_service.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
@@ -293,6 +299,388 @@ Y_UNIT_TEST_SUITE(SessionLifecycle) {
                 new NMon::TEvRemoteHttpInfo(std::move(request)))->Get()->Html;
         }
     };
+
+    class TRegistrarPolicyTarget: public TTargetTable {
+    public:
+        using TTargetTable::TTargetTable;
+        using TTargetTable::CreateWorkerRegistar;
+    };
+
+    class TRegistrarPolicyOwner: public TActorBootstrapped<TRegistrarPolicyOwner> {
+        const TActorId Edge;
+        TReplication::TPtr Replication;
+        TRegistrarPolicyTarget Target;
+        const NKikimrReplication::TConnectionParams Params;
+        TActorId Registrar;
+
+        template <typename TEventPtr>
+        void Forward(TEventPtr& ev) {
+            Send(ev->Forward(Edge));
+        }
+
+        void PassAway() override {
+            Send(Registrar, new TEvents::TEvPoison());
+            Replication->Shutdown(TActivationContext::AsActorContext());
+            TActorBootstrapped<TRegistrarPolicyOwner>::PassAway();
+        }
+
+    public:
+        TRegistrarPolicyOwner(TActorId edge, const NKikimrReplication::TConnectionParams& params)
+            : Edge(edge)
+            , Replication(MakeIntrusive<TReplication>(ui64(1), TPathId(1, 2), NKikimrReplication::TReplicationConfig(), TString("/Root")))
+            , Target(Replication.Get(), 1, std::make_shared<TTargetTable::TTableConfig>("/Root/source", "/Root/destination"))
+            , Params(params)
+        {}
+
+        void Bootstrap(const TActorContext& ctx) {
+            // Create a benign local proxy without starting target discovery.
+            // The registrar captures the tested connection policy separately;
+            // its requests are intercepted before this proxy receives them.
+            Replication->SetState(TReplication::EState::Error);
+            Replication->Progress(ctx);
+            UNIT_ASSERT(Replication->GetYdbProxy());
+            NKikimrReplication::TReplicationConfig config;
+            config.MutableSrcConnectionParams()->CopyFrom(Params);
+            config.MutableConsistencySettings()->MutableRow();
+            Replication->SetConfig(std::move(config));
+            Target.SetStreamName("stream");
+            Target.SetStreamConsumerName("consumer");
+            Target.SetDstPathId(TPathId(1, 3));
+            Registrar = Register(Target.CreateWorkerRegistar(ctx));
+            Become(&TThis::StateWork);
+        }
+
+        STATEFN(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvPrivate::TEvWorkerRegistrationError, Forward);
+                hFunc(TEvPrivate::TEvCompleteWorkerSet, Forward);
+                sFunc(TEvents::TEvPoison, PassAway);
+            }
+        }
+    };
+
+    Y_UNIT_TEST(WorkerRegistrarStaticAndIamAuthenticationPolicy) {
+        enum class EExpectedResult { Error, RetryThenSuccess };
+        struct TCase {
+            NKikimrReplication::TConnectionParams::CredentialsCase Credentials;
+            NYdb::EStatus Status;
+            EExpectedResult Expected;
+        };
+        const TCase cases[] = {
+            {NKikimrReplication::TConnectionParams::kStaticCredentials, NYdb::EStatus::CLIENT_UNAUTHENTICATED, EExpectedResult::Error},
+            {NKikimrReplication::TConnectionParams::kStaticCredentials, NYdb::EStatus::UNAUTHORIZED, EExpectedResult::Error},
+            {NKikimrReplication::TConnectionParams::kIamCredentials, NYdb::EStatus::CLIENT_UNAUTHENTICATED, EExpectedResult::RetryThenSuccess},
+            {NKikimrReplication::TConnectionParams::kIamCredentials, NYdb::EStatus::UNAUTHORIZED, EExpectedResult::Error},
+        };
+        for (const auto& test : cases) {
+            TTestActorRuntime runtime;
+            runtime.Initialize(TAppPrepare().Unwrap());
+            const auto edge = runtime.AllocateEdgeActor();
+            NKikimrReplication::TConnectionParams params;
+            params.SetEndpoint("not-contacted:1");
+            params.SetDatabase("/Root");
+            if (test.Credentials == NKikimrReplication::TConnectionParams::kStaticCredentials) {
+                params.MutableStaticCredentials()->SetUser("policy-user");
+                params.MutableStaticCredentials()->SetPassword("policy-password");
+            } else {
+                params.MutableIamCredentials()->SetServiceAccountId("policy-service-account");
+                params.MutableIamCredentials()->SetResourceId("policy-resource");
+            }
+            ui32 requests = 0;
+            auto intercept = runtime.AddObserver<TEvYdbProxy::TEvDescribeTopicRequest>(
+                [&](TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
+                    runtime.EnableScheduleForActor(ev->Sender);
+                    const auto status = ++requests == 1 ? test.Status : NYdb::EStatus::SUCCESS;
+                    runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                        new TEvYdbProxy::TEvDescribeTopicResponse(NYdb::TStatus(status, {}), Ydb::Topic::DescribeTopicResult()),
+                        0, ev->Cookie));
+                    ev.Reset();
+                });
+            const auto owner = runtime.Register(new TRegistrarPolicyOwner(edge, params));
+            Y_DEFER {
+                runtime.Send(new IEventHandle(owner, edge, new TEvents::TEvPoison()), 0, true);
+                runtime.WaitFor("policy owner stopped", [&] { return !runtime.FindActor(owner); }, TDuration::Seconds(5));
+            };
+            if (test.Expected == EExpectedResult::Error) {
+                const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvWorkerRegistrationError>(edge, TDuration::Seconds(5));
+                UNIT_ASSERT(result);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, test.Status);
+                UNIT_ASSERT_VALUES_EQUAL(requests, 1);
+            } else {
+                runtime.WaitFor("first IAM registrar attempt", [&] { return requests == 1; }, TDuration::Seconds(5));
+                runtime.SimulateSleep(TDuration::Seconds(10));
+                UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvCompleteWorkerSet>(edge, TDuration::Seconds(5)));
+                UNIT_ASSERT_VALUES_EQUAL(requests, 2);
+            }
+        }
+    }
+
+    void CompleteRegistrarPause(TSetup& s) {
+        const bool hadWorker = s.HasWorkerRow();
+        s.AlterState("Paused");
+        s.ProcessQueues();
+        if (hadWorker) {
+            s.ExpectStop(0);
+            s.Env.GetRuntime().Send(new IEventHandle(s.Controller, s.Edges[0],
+                new TEvService::TEvWorkerStatus(s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+            s.Sync();
+        }
+        s.Env.GetRuntime().WaitFor("completed pause without worker rows", [&] {
+            return s.Describe().GetState().HasPaused() && !s.HasWorkerRow();
+        }, TDuration::Seconds(30));
+    }
+
+    class TRegistrarFault {
+        TTestActorRuntime& Runtime;
+        TTestActorRuntime::TEventObserverHolder Observer;
+    public:
+        ui32 Requests = 0;
+        TActorId Registrar;
+
+        TRegistrarFault(TTestActorRuntime& runtime, NYdb::EStatus status)
+            : Runtime(runtime)
+            , Observer(runtime.AddObserver<TEvYdbProxy::TEvDescribeTopicRequest>(
+                [this, status](TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
+                    const auto* sender = Runtime.FindActor(ev->Sender);
+                    if (!sender || sender->GetActivityType()
+                        != NKikimrServices::TActivity::REPLICATION_CONTROLLER_TABLE_WORKER_REGISTAR)
+                    {
+                        return;
+                    }
+                    ++Requests;
+                    if (Requests != 1) {
+                        return;
+                    }
+                    Registrar = ev->Sender;
+                    NYdb::NIssue::TIssues issues;
+                    if (status == NYdb::EStatus::UNAUTHORIZED || status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
+                        NYdb::NIssue::TIssue issue("RegistrarPasswordMarker27516");
+                        issue.AddSubIssue(MakeIntrusive<NYdb::NIssue::TIssue>("RegistrarTokenMarker27516"));
+                        issues.AddIssue(issue);
+                    }
+                    Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                        new TEvYdbProxy::TEvDescribeTopicResponse(NYdb::TStatus(status, std::move(issues)),
+                            Ydb::Topic::DescribeTopicResult()), 0, ev->Cookie));
+                    ev.Reset();
+                }))
+        {}
+    };
+
+    auto WaitRegistrarWorker(TSetup& s) {
+        for (ui32 i = 0; i < 50; ++i) {
+            s.ProcessQueues();
+            s.Env.GetRuntime().SimulateSleep(TDuration::MilliSeconds(200));
+        }
+        auto run = s.Env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(s.Edges[0], TDuration::Seconds(10));
+        UNIT_ASSERT_C(run, "registration did not produce a worker");
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(run->Get()->Record.GetWorker()), s.Worker);
+        UNIT_ASSERT(s.HasWorkerRow());
+        return run;
+    }
+
+    template <typename TBetweenMarkers>
+    void CheckRegistrarWorkerDelivery(TSetup& s, TEvService::TEvRunWorker::TPtr& run, TBetweenMarkers betweenMarkers) {
+        auto& runtime = s.Env.GetRuntime();
+        ui32 startedReads = 0;
+        ui32 finishedReads = 0;
+        THashSet<const void*> activeReads;
+        auto readObserver = runtime.AddObserver<NGRpcService::TEvStreamTopicReadRequest>(
+            [&](NGRpcService::TEvStreamTopicReadRequest::TPtr& ev) {
+                // The proxy forwards this same request object to the PQ service.
+                // Count streams once; replacing its hook would lose the first count.
+                const auto* request = ev->Get();
+                if (!activeReads.insert(request).second) {
+                    return;
+                }
+                ev->Get()->SetAuditLogHook([&, request](auto, const auto&) {
+                    UNIT_ASSERT_VALUES_EQUAL(activeReads.erase(request), 1);
+                    ++finishedReads;
+                });
+                ++startedReads;
+            });
+        TActorId readerWorker;
+        auto dataObserver = runtime.AddObserver<NService::TEvWorker::TEvData>(
+            [&](NService::TEvWorker::TEvData::TPtr& ev) {
+                const auto* recipient = runtime.FindActor(ev->GetRecipientRewrite());
+                if (recipient && recipient->GetActivityType() == NKikimrServices::TActivity::REPLICATION_WORKER) {
+                    if (readerWorker) {
+                        UNIT_ASSERT_VALUES_EQUAL(readerWorker, ev->GetRecipientRewrite());
+                    }
+                    readerWorker = ev->GetRecipientRewrite();
+                }
+            });
+        const auto controller = run->Get()->Record.GetController();
+        const auto service = runtime.Register(CreateReplicationService());
+        bool closed = false;
+        auto close = [&] {
+            auto stop = MakeHolder<TEvService::TEvStopWorker>();
+            stop->Record.MutableController()->CopyFrom(controller);
+            s.Worker.Serialize(*stop->Record.MutableWorker());
+            runtime.Send(new IEventHandle(service, s.Controller, stop.Release()), 0, true);
+            runtime.WaitFor("registrar source streams closed", [&] {
+                return finishedReads == startedReads;
+            }, TDuration::Seconds(30));
+            runtime.Send(new IEventHandle(service, s.Controller, new TEvents::TEvPoison()), 0, true);
+            runtime.WaitFor("registrar real service stopped", [&] { return !runtime.FindActor(service); }, TDuration::Seconds(30));
+            closed = true;
+        };
+        Y_DEFER {
+            if (!closed) {
+                try { close(); } catch (...) { Cerr << "Registrar reader cleanup: " << CurrentExceptionMessage() << Endl; }
+            }
+        };
+        runtime.Send(new IEventHandle(service, s.Controller,
+            new TEvService::TEvHandshake(s.ControllerId, controller.GetGeneration())), 0, true);
+        runtime.Send(run->Forward(service), 0, true);
+        auto marker = [&](ui32 key) {
+            s.Env.RunCall([&] {
+                NYdb::NTable::TTableClient client(s.Env.GetDriver());
+                auto session = client.CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteDataQuery(Sprintf("UPSERT INTO `/Root/table` (key) VALUES (%uu)", key),
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                for (const auto deadline = TInstant::Now() + TDuration::Seconds(30); TInstant::Now() < deadline;) {
+                    result = session.ExecuteDataQuery(Sprintf("SELECT key FROM `/Root/replica` WHERE key = %uu", key),
+                        NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                    auto parser = result.GetResultSetParser(0);
+                    if (parser.TryNextRow()) {
+                        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetOptionalUint32().value_or(0), key);
+                        UNIT_ASSERT(!parser.TryNextRow());
+                        return;
+                    }
+                    Sleep(TDuration::MilliSeconds(50));
+                }
+                UNIT_FAIL("registrar replacement worker did not deliver the exact source marker");
+            });
+        };
+        marker(42);
+        UNIT_ASSERT(readerWorker);
+        betweenMarkers();
+        marker(43);
+        UNIT_ASSERT_GT(startedReads, 0);
+        UNIT_ASSERT(s.Describe().GetState().HasStandBy());
+        close();
+    }
+
+    Y_UNIT_TEST(WorkerRegistrarRetriesUnavailableAndNonStaticInitialization) {
+        for (const auto status : {NYdb::EStatus::UNAVAILABLE, NYdb::EStatus::TRANSPORT_UNAVAILABLE,
+                NYdb::EStatus::CLIENT_UNAUTHENTICATED}) {
+            TSetup s(1);
+            auto& runtime = s.Env.GetRuntime();
+            CompleteRegistrarPause(s);
+            TRegistrarFault fault(runtime, status);
+            ui32 retries = 0;
+            auto wakeups = runtime.AddObserver<TEvents::TEvWakeup>([&](TEvents::TEvWakeup::TPtr& ev) {
+                if (ev->GetRecipientRewrite() == fault.Registrar) {
+                    ++retries;
+                }
+            });
+            s.AlterState("StandBy");
+            runtime.WaitFor("first registrar request rejected", [&] { return fault.Requests >= 1; }, TDuration::Seconds(30));
+            UNIT_ASSERT(s.Describe().GetState().HasStandBy());
+            runtime.SimulateSleep(TDuration::Seconds(10));
+            runtime.WaitFor("registrar scheduled retry request", [&] { return fault.Requests >= 2; }, TDuration::Seconds(30));
+            UNIT_ASSERT_GT(retries, 0);
+            auto run = WaitRegistrarWorker(s);
+            CheckRegistrarWorkerDelivery(s, run, [&] { UNIT_ASSERT(s.Describe().GetState().HasStandBy()); });
+        }
+    }
+
+    Y_UNIT_TEST(ObsoleteRegistrarAuthenticationErrorKeepsReplacement) {
+        TSetup s(1);
+        auto& runtime = s.Env.GetRuntime();
+        CompleteRegistrarPause(s);
+        TString logs;
+        TTestActorRuntimeBase::TEventFilter previousFilter;
+        previousFilter = runtime.SetEventFilter([&](TTestActorRuntimeBase& actorRuntime, TAutoPtr<IEventHandle>& ev) {
+            // The simulated executor delivers logs directly, before observers.
+            // This filter sees the event sent to the real logger fast path.
+            if (ev->HasEvent() && ev->GetTypeRewrite() == NLog::TEvLog::EventType) {
+                const auto* log = ev->Get<NLog::TEvLog>();
+                if (log->Component == NKikimrServices::REPLICATION_CONTROLLER) {
+                    logs += log->Line;
+                    if (log->StructuredMessage) {
+                        TStringBuilder fields;
+                        NActors::NStructuredLog::TTextWriter writer;
+                        writer.Write(fields, log->StructuredMessage.GetRef());
+                        logs += fields;
+                    }
+                    logs += '\n';
+                }
+            }
+            return previousFilter(actorRuntime, ev);
+        });
+        Y_DEFER { runtime.SetEventFilter(std::move(previousFilter)); };
+        NActors::NStructuredLog::TStructuredMessage probe;
+        probe.AppendFixedValue({"probe"}, "RegistrarCaptureMarker27516");
+        runtime.Send(new IEventHandle(runtime.GetActorSystem(0)->LoggerSettings()->LoggerActorId, s.Env.GetSender(),
+            new NLog::TEvLog(NLog::PRI_TRACE, NKikimrServices::REPLICATION_CONTROLLER,
+                __FILE__, __LINE__, "Registrar log capture calibration", std::move(probe))), 0, true);
+        TAutoPtr<IEventHandle> delayed;
+        auto hold = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->HasEvent() && dynamic_cast<TEvPrivate::TEvWorkerRegistrationError*>(ev->GetBase())) {
+                UNIT_ASSERT(!delayed);
+                delayed = std::move(ev);
+            }
+        });
+        TRegistrarFault fault(runtime, NYdb::EStatus::UNAUTHORIZED);
+        s.AlterState("StandBy");
+        runtime.WaitFor("actual registrar authentication result", [&] { return bool(delayed); }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(delayed->Sender, fault.Registrar);
+        UNIT_ASSERT_STRING_CONTAINS(delayed->Get<TEvPrivate::TEvWorkerRegistrationError>()->GetIssue(), "UNAUTHORIZED");
+        hold.Remove();
+        CompleteRegistrarPause(s);
+        s.AlterState("StandBy");
+        auto run = WaitRegistrarWorker(s);
+        UNIT_ASSERT_GT(fault.Requests, 1);
+        CheckRegistrarWorkerDelivery(s, run, [&] {
+            runtime.Send(delayed.Release());
+            s.Sync();
+            UNIT_ASSERT(s.Describe().GetState().HasStandBy());
+        });
+        runtime.Send(runtime.GetActorSystem(0)->LoggerSettings()->LoggerActorId, s.Env.GetSender(),
+            new TLogComponentLevelRequest(NLog::PRI_TRACE, NKikimrServices::REPLICATION_CONTROLLER));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TLogComponentLevelResponse>(s.Env.GetSender(), TDuration::Seconds(5)));
+        UNIT_ASSERT_STRING_CONTAINS(logs, "RegistrarCaptureMarker27516");
+        UNIT_ASSERT_STRING_CONTAINS(logs, "Source authentication failed during worker registration");
+        UNIT_ASSERT(!logs.Contains("RegistrarPasswordMarker27516"));
+        UNIT_ASSERT(!logs.Contains("RegistrarTokenMarker27516"));
+    }
+
+    Y_UNIT_TEST(WorkerRegistrarStopsAdoptedTransferAfterAuthenticationError) {
+        TSetup s(1, true);
+        auto& runtime = s.Env.GetRuntime();
+        TRegistrarFault fault(runtime, NYdb::EStatus::UNAUTHORIZED);
+        TAutoPtr<IEventHandle> delayed;
+        auto hold = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->HasEvent() && dynamic_cast<TEvPrivate::TEvWorkerRegistrationError*>(ev->GetBase())) {
+                UNIT_ASSERT(!delayed);
+                delayed = std::move(ev);
+            }
+        });
+        s.Reboot();
+        runtime.WaitFor("restarted transfer registrar rejected", [&] { return bool(delayed); }, TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(delayed->Sender, fault.Registrar);
+        s.Status(0, true);
+        UNIT_ASSERT(s.HasWorkerRow());
+        hold.Remove();
+        runtime.Send(delayed.Release());
+        s.Sync();
+        UNIT_ASSERT(s.Describe().GetState().HasError());
+        s.ProcessQueues();
+        // Consume the exact stop event. Edge observers may revisit a retained
+        // event while another mailbox fence is awaited, so do not count visits.
+        s.ExpectStop(0);
+        ui32 starts = 0;
+        auto noRestart = runtime.AddObserver<TEvService::TEvRunWorker>([&](TEvService::TEvRunWorker::TPtr&) { ++starts; });
+        runtime.Send(new IEventHandle(s.Controller, s.Edges[0],
+            new TEvService::TEvWorkerStatus(s.Worker, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED)));
+        s.Sync();
+        s.ProcessQueues(true);
+        UNIT_ASSERT_VALUES_EQUAL(starts, 0);
+        UNIT_ASSERT(s.Describe().GetState().HasError());
+    }
 
     Y_UNIT_TEST(LagUnavailableAfterStopWhileWaitingInBootQueue) {
         TSetup s(1);

@@ -101,6 +101,7 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvBootPersistedWorkers, Handle);
         HFunc(TEvPrivate::TEvRemoveWorker, Handle);
         HFunc(TEvPrivate::TEvCompleteWorkerSet, Handle);
+        HFunc(TEvPrivate::TEvWorkerRegistrationError, Handle);
         HFunc(TEvPrivate::TEvResumeDeferredAlter, Handle);
         HFunc(TEvPrivate::TEvDescribeTargetsResult, Handle);
         HFunc(TEvPrivate::TEvRequestCreateStream, Handle);
@@ -398,6 +399,10 @@ void TController::Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorCo
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
     RunTxAlterDstResult(ev, ctx);
+}
+
+void TController::Handle(TEvPrivate::TEvWorkerRegistrationError::TPtr& ev, const TActorContext& ctx) {
+    RunTxWorkerRegistrationError(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx) {

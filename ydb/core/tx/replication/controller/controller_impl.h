@@ -156,6 +156,7 @@ private:
     void Handle(TEvPrivate::TEvBootPersistedWorkers::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvWorkerRegistrationError::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvResumeDeferredAlter::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvSchemaChangeDstAlterTxId::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvSchemaChangeDstAlterResult::TPtr& ev, const TActorContext& ctx);
@@ -230,6 +231,7 @@ private:
     class TTxCreateDstResult;
     class TTxPrepareAttachDst;
     class TTxAlterDstResult;
+    class TTxWorkerRegistrationError;
     class TTxDropDstResult;
     class TTxResolveDatabaseResult;
     class TTxResolveSecretResult;
@@ -265,6 +267,7 @@ private:
     void RunTxCreateDstResult(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxPrepareAttachDst(TEvPrivate::TEvPrepareAttachDst::TPtr& ev, const TActorContext& ctx);
     void RunTxAlterDstResult(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxWorkerRegistrationError(TEvPrivate::TEvWorkerRegistrationError::TPtr& ev, const TActorContext& ctx);
     void RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveDatabaseResult(TEvPrivate::TEvResolveTenantResult::TPtr& ev, const TActorContext& ctx);
     void RunTxResolveSecretResult(TEvPrivate::TEvResolveSecretResult::TPtr& ev, const TActorContext& ctx);

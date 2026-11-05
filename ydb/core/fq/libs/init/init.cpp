@@ -21,7 +21,6 @@
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/test_connection/test_connection.h>
-#include <ydb/library/yql/providers/pq/gateway/native/topic_client_settings.h>
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/library/actors/http/http_proxy.h>
@@ -37,6 +36,7 @@
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
+#include <ydb/library/yql/providers/pq/gateway/native/topic_client_settings.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>

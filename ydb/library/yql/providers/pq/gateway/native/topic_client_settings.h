@@ -4,7 +4,6 @@
 
 namespace NYql {
 
-    NYdb::NTopic::TTopicClientSettings MakeCommonTopicClientSettings(
-        ui64 handlersExecutorThreadsNum, ui64 compressionExecutorThreadsNum);
+NYdb::NTopic::TTopicClientSettings MakeCommonTopicClientSettings(ui64 handlersExecutorThreadsNum, ui64 compressionExecutorThreadsNum);
 
-} // namespace NYql
+}   // namespace NYql

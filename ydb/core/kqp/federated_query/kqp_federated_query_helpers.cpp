@@ -18,8 +18,8 @@
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
 #include <ydb/library/yql/providers/pq/comp_nodes/yql_pq_factory.h>
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/pq/gateway/native/topic_client_settings.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/library/yql/providers/ydb_external/common/read_limits.h>

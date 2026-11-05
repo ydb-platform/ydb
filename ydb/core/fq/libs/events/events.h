@@ -13,7 +13,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <library/cpp/threading/future/future.h>
-
 #include <util/digest/multi.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/public/issue/yql_issue.h>

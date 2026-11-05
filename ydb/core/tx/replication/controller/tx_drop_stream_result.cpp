@@ -64,16 +64,8 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-<<<<<<< HEAD
-        Self->DeleteProcessedSourceOffsets(rid, tid, db);
-        const auto dstState = target->GetDstState();
-        const bool isRemoving = dstState == TReplication::EDstState::Removing;
-        const bool isAttaching = dstState == TReplication::EDstState::Attaching;
-        if (isRemoving || isAttaching) {
-=======
         if (target->GetDstState() == TReplication::EDstState::Removing) {
             Self->DeleteProcessedSourceOffsets(rid, tid, db);
->>>>>>> 60f721ec0a0 (KIKIMR-27460: Track replication bootstrap import state (#57704))
             target->SetStreamState(TReplication::EStreamState::Removed);
             db.Table<Schema::SrcStreams>().Key(rid, tid).Update<Schema::SrcStreams::State>(target->GetStreamState());
         } else {

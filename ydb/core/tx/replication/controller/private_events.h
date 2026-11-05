@@ -39,13 +39,6 @@ struct TEvPrivate {
         EvRequestDropStream,
         EvAllowDropStream,
         EvRestoreSession,
-<<<<<<< HEAD
-        EvPrepareAttachDst,
-        EvPrepareAttachDstResult,
-        EvCompleteDstAttachment,
-=======
-        EvBootPersistedWorkers,
->>>>>>> 60f721ec0a0 (KIKIMR-27460: Track replication bootstrap import state (#57704))
         EvUpdateYdbProxy,
         EvCancelCreateStream,
         EvCancelDropStream,

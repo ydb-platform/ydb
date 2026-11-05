@@ -28,70 +28,8 @@ using namespace NSchemeShard;
 
 namespace {
 
-<<<<<<< HEAD
-bool CheckReplicationMode(
-        const NKikimrSchemeOp::TTableDescription& table,
-        NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode)
-{
-    return table.GetReplicationConfig().GetMode() == mode;
-}
-
-bool IsReplica(const NKikimrSchemeOp::TTableDescription& table) {
-    return CheckReplicationMode(table, NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-}
-
-bool NotReplica(const NKikimrSchemeOp::TTableDescription& table) {
-    return CheckReplicationMode(table, NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
-=======
-bool CheckColumnFamilySettings(
-        const NKikimrSchemeOp::TFamilyDescription& expected,
-        const NKikimrSchemeOp::TFamilyDescription& actual,
-        TString& error)
-{
-    const auto name = GetFamilyName(expected);
-
-    const auto expectedCodec = GetColumnCodec(expected);
-    const auto actualCodec = GetColumnCodec(actual);
-    if (expectedCodec != actualCodec) {
-        error = TStringBuilder() << "Column family codec mismatch"
-            << ": name: " << name
-            << ", expected: " << static_cast<ui32>(expectedCodec)
-            << ", got: " << static_cast<ui32>(actualCodec);
-        return false;
-    }
-
-    const auto expectedCacheMode = expected.GetColumnCacheMode();
-    const auto actualCacheMode = actual.GetColumnCacheMode();
-    if (expectedCacheMode != actualCacheMode) {
-        error = TStringBuilder() << "Column family cache mode mismatch"
-            << ": name: " << name
-            << ", expected: " << static_cast<ui32>(expectedCacheMode)
-            << ", got: " << static_cast<ui32>(actualCacheMode);
-        return false;
-    }
-
-    const auto& expectedData = expected.GetStorageConfig().GetData();
-    const auto& expectedMedia = expectedData.GetPreferredPoolKind();
-    if (!expectedMedia || expectedData.GetAllowOtherKinds()) {
-        return true;
-    }
-
-    const auto& actualData = actual.GetStorageConfig().GetData();
-    const auto& actualMedia = actualData.GetPreferredPoolKind();
-    if (expectedMedia == actualMedia && !actualData.GetAllowOtherKinds()) {
-        return true;
-    }
-
-    error = TStringBuilder() << "Column family media mismatch"
-        << ": name: " << name
-        << ", expected: " << expectedMedia
-        << ", got: " << actualMedia;
-    return false;
-}
-
 bool IsImported(const NKikimrSchemeOp::TTableDescription& table) {
     return table.GetReplicationConfig().GetImportState() == NKikimrSchemeOp::TTableReplicationConfig::IMPORTED;
->>>>>>> 60f721ec0a0 (KIKIMR-27460: Track replication bootstrap import state (#57704))
 }
 
 } // anonymous namespace

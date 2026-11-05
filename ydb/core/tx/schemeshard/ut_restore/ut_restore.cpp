@@ -3744,8 +3744,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         }
     }
 
-<<<<<<< HEAD
-=======
     TString ImportTableRequest() {
         return R"(
             ImportFromS3Settings {
@@ -4015,277 +4013,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             TTableReplicationConfig::IMPORTING);
     }
 
-    Y_UNIT_TEST_FLAG(ShouldSucceedOnParquetTable, EnableDataShardDirectPartImport) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
-        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
-        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
-
-        const auto data = GenerateParquetTestData({{"a1", "value1"}, {"a2", "value2"}});
-        Run(runtime, env, ConvertTestData(TTestDataWithScheme(Utf8KeyValueScheme(), {data})), ImportTableRequest());
-
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
-        NKqp::CompareYson(data.YsonStr, content);
-    }
-
-    // A Parquet checksum is checked after the rows are written: the import fails, the
-    // rows stay.
-    Y_UNIT_TEST(ShouldFailOnParquetChecksumAfterWritingRows) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
-        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
-
-        const TVector<std::pair<TString, TMaybe<TString>>> rows = {
-            {"a1", TString(24_KB, 'a')},
-            {"a2", TString(24_KB, 'b')},
-            {"a3", TString(24_KB, 'c')},
-            {"a4", TString(24_KB, 'd')},
-        };
-        const auto data = GenerateParquetTestData(rows, /*rowGroupSize=*/1);
-        UNIT_ASSERT_GT(data.Data.size(), 64_KB);
-
-        TTestDataWithScheme backup(Utf8KeyValueScheme(), {data});
-        backup.Metadata = R"({"version": 1})";
-        auto s3Data = ConvertTestData(backup);
-        s3Data[NBackup::ChecksumKey("/data_00.parquet")] = TString(64, '0');
-
-        const ui64 id = Run(runtime, env, std::move(s3Data), ImportTableRequest(), Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED), "checksum mismatch");
-
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
-        NKqp::CompareYson(data.YsonStr, content);
-    }
-
-    // A row group above the read buffer is rejected by the footer; the limit is a
-    // DataShard setting.
-    Y_UNIT_TEST(ShouldFailOnParquetRowGroupAboveTheLimit) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
-        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
-        // above the 64 KB of the file the footer is looked for in
-        runtime.GetAppData().DataShardConfig.SetRestoreReadBufferSizeLimit(80_KB);
-
-        // one row group of 96 KB
-        const auto data = GenerateParquetTestData({
-            {"a1", TString(24_KB, 'a')},
-            {"a2", TString(24_KB, 'b')},
-            {"a3", TString(24_KB, 'c')},
-            {"a4", TString(24_KB, 'd')},
-        });
-
-        const ui64 id = Run(runtime, env,
-            ConvertTestData(TTestDataWithScheme(Utf8KeyValueScheme(), {data})), ImportTableRequest(),
-            Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED),
-            "bytes (RestoreReadBufferSizeLimit less what the footer takes)");
-    }
-
-    // A backup has no NULL in a NOT NULL column, so such a file is rejected, for any
-    // format, with the row's place.
-    Y_UNIT_TEST(ShouldFailOnNullInNotNullColumn, EBackupTestDataFormat) {
-        const auto format = ToDataFormat(Arg<0>());
-        const TString scheme = R"(
-            columns {
-              name: "key"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            columns {
-              name: "value"
-              type { type_id: UTF8 }
-              not_null: true
-            }
-            primary_key: "key"
-        )";
-
-        // k1 has NULL, k2 has a value
-        const TTestData data = format == EDataFormat::Parquet
-            ? GenerateParquetTestData({{"k1", Nothing()}, {"k2", "v2"}})
-            : TTestData("\"k1\",null\n\"k2\",\"v2\"\n", "");
-        const TString place = format == EDataFormat::Parquet
-            ? " in row 0 of row group 0"
-            : " on line: \"k1\",null";
-
-        for (const bool directPartImport : {false, true}) {
-            TTestBasicRuntime runtime;
-            TTestEnv env(runtime, TTestEnvOptions());
-            runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
-            runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directPartImport);
-
-            const ui64 id = Run(runtime, env,
-                ConvertTestData(TTestDataWithScheme(TString(scheme), {data})), ImportTableRequest(),
-                Ydb::StatusIds::CANCELLED);
-            UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED),
-                "column 'value' has a NULL value but is NOT NULL" + place);
-        }
-    }
-
-    // Cells are checked by their place: keys in key order, values in scheme order;
-    // here the column order is neither.
-    Y_UNIT_TEST(ShouldFailOnNullInNotNullKey, EBackupTestDataFormat) {
-        const auto format = ToDataFormat(Arg<0>());
-        const TString scheme = R"(
-            columns {
-              name: "value"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            columns {
-              name: "k2"
-              type { type_id: UTF8 }
-              not_null: true
-            }
-            columns {
-              name: "k1"
-              type { optional_type { item { type_id: UTF8 } } }
-            }
-            primary_key: "k1"
-            primary_key: "k2"
-        )";
-
-        TTestData data("", "");
-        TString place;
-        if (format == EDataFormat::Parquet) {
-            data = TTestData(NTestUtils::BuildUtf8ColumnsParquet({
-                {"value", {"v1", "v2"}},
-                {"k2", {"x", Nothing()}},
-                {"k1", {"a", "b"}},
-            }), "");
-            data.DataFormat = EDataFormat::Parquet;
-            place = " in row 1 of row group 0";
-        } else {
-            data = TTestData("\"v1\",\"x\",\"a\"\n\"v2\",null,\"b\"\n", "");
-            place = " on line: \"v2\",null,\"b\"";
-        }
-
-        for (const bool directPartImport : {false, true}) {
-            TTestBasicRuntime runtime;
-            TTestEnv env(runtime, TTestEnvOptions());
-            runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
-            runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directPartImport);
-
-            const ui64 id = Run(runtime, env,
-                ConvertTestData(TTestDataWithScheme(TString(scheme), {data})), ImportTableRequest(),
-                Ydb::StatusIds::CANCELLED);
-            UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED),
-                "column 'k2' has a NULL value but is NOT NULL" + place);
-        }
-    }
-
-    Y_UNIT_TEST(ShouldFailWhenParquetImportIsDisabled) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
-
-        const auto data = GenerateParquetTestData({{"k", "v"}});
-        const ui64 id = Run(runtime, env,
-            ConvertTestData(TTestDataWithScheme(Utf8KeyValueScheme(), {data})), ImportTableRequest(),
-            Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED),
-            "Parquet import is disabled by feature flag EnableImportInParquet");
-    }
-
-    TString ImportTableRequestWithRetries() {
-        return R"(
-            ImportFromS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              number_of_retries: 3
-              items {
-                source_prefix: ""
-                destination_path: "/MyRoot/Table"
-              }
-            }
-        )";
-    }
-
-    // Three row groups, each a GetObject of its own: the file is bigger than the footer tail.
-    TTestData MultiRowGroupParquetTestData() {
-        TVector<std::pair<TString, TMaybe<TString>>> rows;
-        for (ui32 i = 0; i < 6; ++i) {
-            rows.emplace_back(TStringBuilder() << "k" << i, TString(24_KB, static_cast<char>('a' + i)));
-        }
-        return GenerateParquetTestData(rows, /*rowGroupSize=*/2);
-    }
-
-    // A row group's GetObject fails once after earlier ones were written: the downloader
-    // restarts with its engine, which keeps its place, and the import completes.
-    Y_UNIT_TEST_FLAG(ShouldRetryParquetReadWithLiveEngine, EnableDataShardDirectPartImport) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
-        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
-        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
-
-        const auto data = MultiRowGroupParquetTestData();
-        const ui64 contentLength = data.Data.size();
-        UNIT_ASSERT_GT(contentLength, 64_KB);
-
-        ui32 rowGroupReads = 0;
-        bool failed = false;
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != NWrappers::NExternalStorage::EvGetObjectResponse) {
-                return TTestActorRuntime::EEventAction::PROCESS;
-            }
-            const auto* response = ev->Get<NWrappers::NExternalStorage::TEvGetObjectResponse>();
-            if (!response->Key || !response->Key->EndsWith(".parquet") || !response->Result.IsSuccess()) {
-                return TTestActorRuntime::EEventAction::PROCESS;
-            }
-            const auto interval = response->GetReadInterval();
-            if (interval.second + 1 == contentLength) {
-                return TTestActorRuntime::EEventAction::PROCESS; // the tail of the file, with the footer
-            }
-            if (++rowGroupReads != 2 || failed) {
-                return TTestActorRuntime::EEventAction::PROCESS;
-            }
-
-            // the second row group fails once; the retry is a wakeup the
-            // downloader schedules for itself
-            failed = true;
-            runtime.EnableScheduleForActor(ev->Recipient);
-            Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(
-                Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
-                    Aws::S3::S3Errors::INTERNAL_FAILURE, "InternalError", "injected failure", /*isRetryable=*/true)));
-            ev.Reset(new IEventHandle(ev->Recipient, ev->Sender,
-                new NWrappers::NExternalStorage::TEvGetObjectResponse(response->Key, interval, outcome),
-                ev->Flags, ev->Cookie));
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-
-        Run(runtime, env, ConvertTestData(TTestDataWithScheme(Utf8KeyValueScheme(), {data})), ImportTableRequestWithRetries());
-        UNIT_ASSERT_C(failed, "no row group was read on its own");
-
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
-        NKqp::CompareYson(data.YsonStr, content);
-    }
-
-    // The first upload fails with a retriable error: the downloader drops its engine,
-    // restarts from the checkpoint and uploads again; every row once.
-    Y_UNIT_TEST(ShouldRetryParquetUploadAfterRetriableError) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
-        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
-
-        const auto data = MultiRowGroupParquetTestData();
-
-        bool failed = false;
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvDataShard::EvS3UploadRowsResponse || failed) {
-                return TTestActorRuntime::EEventAction::PROCESS;
-            }
-            failed = true;
-            runtime.EnableScheduleForActor(ev->Recipient);
-            const ui64 tabletId = ev->Get<TEvDataShard::TEvS3UploadRowsResponse>()->Record.GetTabletID();
-            ev.Reset(new IEventHandle(ev->Recipient, ev->Sender,
-                new TEvDataShard::TEvS3UploadRowsResponse(tabletId, NKikimrTxDataShard::TError::WRONG_SHARD_STATE),
-                ev->Flags, ev->Cookie));
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-
-        Run(runtime, env, ConvertTestData(TTestDataWithScheme(Utf8KeyValueScheme(), {data})), ImportTableRequestWithRetries());
-        UNIT_ASSERT_C(failed, "no rows were uploaded");
-
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
-        NKqp::CompareYson(data.YsonStr, content);
-    }
-
->>>>>>> 60f721ec0a0 (KIKIMR-27460: Track replication bootstrap import state (#57704))
     Y_UNIT_TEST_FLAG(ShouldSucceedOnSingleShardTable, EnableDataShardDirectPartImport) {
         TestImportTable(EnableDataShardDirectPartImport);
     }
@@ -7229,14 +6956,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         return AddedSchemeCommon(bucketContent, permissions, pkType, tableName);
     }
 
-<<<<<<< HEAD
     void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables, bool enableDataShardDirectPartImport = false,
-            const TString& extraTopicFields = "", Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
-=======
-    void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables, bool enableDataShardDirectPartImport,
             const TString& extraTopicFields = "", Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             bool replica = false) {
->>>>>>> 60f721ec0a0 (KIKIMR-27460: Track replication bootstrap import state (#57704))
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
@@ -7295,18 +7017,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImportChangefeeds({{"Table", pkType, countChangefeed, addedScheme, maxPartitions}});
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST(Changefeed) {
-        TestImportChangefeeds(1, AddedScheme);
-=======
     Y_UNIT_TEST_FLAG(ReplicaImportChangefeeds, EnableDataShardDirectPartImport) {
         TestImportChangefeeds({{"Table", "UTF8", 1, AddedScheme, 3}},
             EnableDataShardDirectPartImport, "", Ydb::StatusIds::SUCCESS, true);
     }
 
-    Y_UNIT_TEST_FLAG(Changefeed, EnableDataShardDirectPartImport) {
-        TestImportChangefeeds(EnableDataShardDirectPartImport, 1, AddedScheme);
->>>>>>> 60f721ec0a0 (KIKIMR-27460: Track replication bootstrap import state (#57704))
+    Y_UNIT_TEST(Changefeed) {
+        TestImportChangefeeds(1, AddedScheme);
     }
 
     // Explicit specification of the number of partitions when creating CDC
@@ -8081,15 +7798,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_EQUAL(issues.begin()->message(), "Unsupported scheme object type");
     }
 
-<<<<<<< HEAD
-    void MaterializedIndex(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, const TString& metadata = R"({"version": 1})") {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
-=======
     void MaterializedIndex(
             Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode,
-            bool enableDataShardDirectPartImport,
-            const TString& metadata = R"({"version": 1})", bool replica = false)
+            const TString& metadata = R"({"version": 1})", bool replica = false,
+            bool enableDataShardDirectPartImport = false)
     {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
@@ -8097,7 +7809,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             CreateReplicaPlaceholder(runtime, env, 10, "Table", true);
         }
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
->>>>>>> 60f721ec0a0 (KIKIMR-27460: Track replication bootstrap import state (#57704))
 
         const auto a = GenerateTestData(R"(
             columns {
@@ -8180,7 +7891,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     Y_UNIT_TEST_QUAD(ReplicaImportIndexes, Materialized, EnableDataShardDirectPartImport) {
         MaterializedIndex(Materialized ? Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT
                                       : Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD,
-            EnableDataShardDirectPartImport, R"({"version": 1})", true);
+            R"({"version": 1})", true, EnableDataShardDirectPartImport);
     }
 
     Y_UNIT_TEST(MaterializedIndexBuild) {

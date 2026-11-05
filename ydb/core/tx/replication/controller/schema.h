@@ -70,23 +70,7 @@ struct TControllerSchema: NIceDb::Schema {
         struct WorkerSetComplete: Column<13, NScheme::NTypeIds::Bool> {
             static constexpr bool Default = false;
         };
-<<<<<<< HEAD
-        struct PendingDstPathOwnerId: Column<18, NScheme::NTypeIds::Uint64> {
-=======
-        struct SchemaBarrierPhase: Column<14, NScheme::NTypeIds::Uint8> {
-            static constexpr ui8 Default = 0; // No schema barrier.
-        };
-        struct SchemaBarrierChange: Column<15, NScheme::NTypeIds::String> {};
-        // Only the DDL transaction for the active schema barrier is tracked
-        // here; ordinary destination alters do not use this column.
-        struct DstAlterTxId: Column<16, NScheme::NTypeIds::Uint64> {
-            static constexpr ui64 Default = 0;
-        };
-        // Ordered target-only flush snapshot; retain it until ordinary global
-        // commits retire the captured write transaction IDs.
-        struct SchemaBarrierFlushTxIds: Column<17, NScheme::NTypeIds::String> {};
         struct PendingDstPathOwnerId: Column<18, NScheme::NTypeIds::Uint64> { // Deprecated.
->>>>>>> 60f721ec0a0 (KIKIMR-27460: Track replication bootstrap import state (#57704))
             using Type = TOwnerId;
             static constexpr Type Default = InvalidOwnerId;
         };
@@ -94,10 +78,6 @@ struct TControllerSchema: NIceDb::Schema {
             using Type = TLocalPathId;
             static constexpr Type Default = InvalidLocalPathId;
         };
-<<<<<<< HEAD
-=======
-        struct IndexBuild: Column<20, NScheme::NTypeIds::String> {};
->>>>>>> 60f721ec0a0 (KIKIMR-27460: Track replication bootstrap import state (#57704))
 
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<

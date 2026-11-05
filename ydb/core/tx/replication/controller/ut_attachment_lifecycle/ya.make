@@ -19,11 +19,8 @@ PEERDIR(
 )
 
 SRCS(
-<<<<<<< HEAD:ydb/core/tx/replication/controller/ut_attachment_lifecycle/ya.make
     attachment_lifecycle_ut.cpp
-=======
     bootstrap_ut.cpp
->>>>>>> 60f721ec0a0 (KIKIMR-27460: Track replication bootstrap import state (#57704)):ydb/core/tx/replication/controller/ut_schema_change/ya.make
     dst_delivery_retry_ut.cpp
 )
 

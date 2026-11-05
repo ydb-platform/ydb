@@ -131,9 +131,11 @@ public:
     template <typename... Args>
     ui64 AddTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) {
         TargetTablePaths.clear();
+        const auto previousLag = GetLag();
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
         TLagProvider::AddPendingLag(id);
+        NotifyLagChanged(previousLag);
         return id;
     }
 
@@ -150,6 +152,7 @@ public:
     }
 
     void RemoveTarget(ui64 id) {
+        const auto previousLag = GetLag();
         const auto it = Targets.find(id);
         if (it == Targets.end()) {
             return;
@@ -157,6 +160,7 @@ public:
         TLagProvider::RemoveLag(it->second, id);
         Targets.erase(it);
         TargetTablePaths.clear();
+        NotifyLagChanged(previousLag);
     }
 
     TVector<ITarget*> GetTargets() const {
@@ -356,14 +360,24 @@ public:
             return;
         }
 
+        const auto previousLag = GetLag();
         if (lag) {
             TLagProvider::UpdateLag(it->second, targetId, *lag);
         } else {
             TLagProvider::InvalidateLag(it->second, targetId);
         }
+
+        NotifyLagChanged(previousLag);
+    }
+
+    void NotifyLagChanged(std::optional<TDuration> previousLag) {
+        if (LagChangedCallback && previousLag != GetLag()) {
+            LagChangedCallback();
+        }
     }
 
 private:
+    std::function<void()> LagChangedCallback;
     const ui64 ReplicationId;
     const TPathId PathId;
 
@@ -669,6 +683,10 @@ void TReplication::UpdateLag(ui64 targetId, std::optional<TDuration> lag) {
 
 const std::optional<TDuration> TReplication::GetLag() const {
     return Impl->GetLag();
+}
+
+void TReplication::SetLagChangedCallback(std::function<void()> callback) {
+    Impl->LagChangedCallback = std::move(callback);
 }
 
 void TReplication::SetLocation(const NKikimrReplication::TReplicationLocationConfig& location) {

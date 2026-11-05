@@ -1720,15 +1720,13 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
 
     Y_UNIT_TEST(EnablingCoroSelector) {
         for (bool useCoro : {false, true}) {
-            TFeatureFlags ff;
-            ff.SetEnableCoroutineCompactionSelector(useCoro);
             TEnvironmentSetup env({
                 .NodeCount = 1,
                 .Erasure = TBlobStorageGroupType::ErasureNone,
-                .FeatureFlags = ff,
             });
 
             auto& runtime = env.Runtime;
+            runtime->GetNode(1)->AppData->FeatureFlags.SetEnableCoroutineCompactionSelector(useCoro);
             ui32 selectorsSeen = 0;
 
             runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {

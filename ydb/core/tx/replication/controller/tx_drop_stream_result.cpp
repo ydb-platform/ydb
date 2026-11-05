@@ -64,8 +64,8 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+        Self->DeleteProcessedSourceOffsets(rid, tid, db);
         if (target->GetDstState() == TReplication::EDstState::Removing) {
-            Self->DeleteProcessedSourceOffsets(rid, tid, db);
             target->SetStreamState(TReplication::EStreamState::Removed);
             db.Table<Schema::SrcStreams>().Key(rid, tid).Update<Schema::SrcStreams::State>(target->GetStreamState());
         } else {

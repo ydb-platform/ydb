@@ -10,6 +10,7 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery13
 ydb/core/kqp/executer_actor/ut unittest.[*/*] chunk
 ydb/core/kqp/federated_query/actors/pq_checkpoint_provider_integration/ut unittest.sole chunk
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_BulkUpsert_Column+UseStreamIndex-UseChannelsV2
 ydb/core/kqp/ut/arrow unittest.[*/*] chunk
 ydb/core/kqp/ut/indexes/prefixed_vector KqpPrefixedVectorIndexes.PrefixedVectorIndexInsertNewPrefix-Nullable+Covered
 ydb/core/kqp/ut/indexes/prefixed_vector KqpPrefixedVectorIndexes.PrefixedVectorIndexInsertNewPrefixWithOverlap-Covered
@@ -39,6 +40,9 @@ ydb/core/kqp/ut/rbo KqpRboYql.WindowAggregates-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.WindowFunctions-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.WindowSortWithoutBlocksUnderWindowFunctionsV2-WindowFunctionsV2
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
+ydb/core/kqp/ut/runtime KqpScanSpilling.HandleErrorsCorrectly+EnableComputeSchedulerMemory
+ydb/core/kqp/ut/runtime KqpScanSpilling.SpillingInRuntimeNodes+EnabledSpilling+EnableComputeSchedulerMemory
+ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme GeneratedStored.CompileTimeDefaultsAlterDependencySetAndDrop
 ydb/core/kqp/ut/scheme GeneratedStored.CompileTimeDefaultsNonKeySerialDependency
 ydb/core/kqp/ut/scheme GeneratedStored.CompositeGeneratedIndexWithCompositePrimaryKey
@@ -92,9 +96,12 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnWithDefaultRejection
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultUndeterministicExpression
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefault-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnColumnTable
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK-EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnColumnTable
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultUnsupportedValue
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_AllTypes
@@ -154,6 +161,7 @@ ydb/core/persqueue/public/schema/ut SchemaOps.ConsumerReadQuotaAndAvailabilityPe
 ydb/core/statistics/aggregator/ut AnalyzeSampling.CollectAndPersistStatistics+ColumnShard+SmallHistogramBudget
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
+ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranuleStrKey_PKUtf8
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKDatetime
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKInt64

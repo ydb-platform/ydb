@@ -23,6 +23,7 @@ def kikimr(request):
     param = getattr(request, "param", {})
     set_test_env(request)
     config = get_ydb_config(request)
+    # Exercise aggregation by default while preserving explicit flag overrides.
     config.yaml_config["feature_flags"]["enable_streaming_aggregation"] = param.get("enable_streaming_aggregation", True)
     cluster = Kikimr(config, tenant_database="/Root/my_tenant")
     yield cluster

@@ -1225,6 +1225,21 @@
                 "ColumnId": 14,
                 "ColumnName": "FSSettings",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "EncryptionSettings",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "Compression",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "IndexExportPrefixes",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -1244,7 +1259,10 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15,
+                    16,
+                    17
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4827,6 +4845,21 @@
                 "ColumnId": 15,
                 "ColumnName": "FSSettings",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "EncryptionSettings",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "Compression",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "IndexExportPrefixes",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -4847,7 +4880,10 @@
                     12,
                     13,
                     14,
-                    15
+                    15,
+                    16,
+                    17,
+                    18
                 ],
                 "RoomID": 0,
                 "Codec": 0,

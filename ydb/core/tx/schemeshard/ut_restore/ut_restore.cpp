@@ -11285,6 +11285,7 @@ enum class EIndexBackupScenario {
     RebootBeforeScheme,
     NoIndexIVsInMapping,
     ChangefeedDuringExport,
+    RebootBeforeBackupPropose,
 };
 
 void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
@@ -11405,8 +11406,26 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
         return tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup
             && tx.GetBackup().GetTableName().StartsWith("indexImpl");
     });
+    // Lose the backup proposals of the tables and restart SchemeShard: it must send
+    // the same tasks again, with the encryption settings and the fixed index prefixes
+    const bool rebootBeforeBackupPropose = scenario == EIndexBackupScenario::RebootBeforeBackupPropose;
+    TBlockEvents<TEvDataShard::TEvProposeTransaction> tableBackups(runtime, [&](const auto& ev) {
+        const auto& record = ev->Get()->Record;
+        if (!rebootBeforeBackupPropose || record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
+            return false;
+        }
+        NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+        return schemeTx.ParseFromString(record.GetTxBody())
+            && schemeTx.HasBackup()
+            && !schemeTx.GetBackup().GetTableName().StartsWith("indexImpl");
+    });
     const ui64 exportTxId = ++txId;
     TestExport(runtime, exportTxId, "/MyRoot", exportRequest);
+    if (rebootBeforeBackupPropose) {
+        runtime.WaitFor("table backup proposal", [&] { return !tableBackups.empty(); });
+        tableBackups.Stop().clear();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+    }
     if (changefeedDuringExport) {
         runtime.WaitFor("index impl table backup", [&] { return !indexBackups.empty(); });
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
@@ -11766,6 +11785,11 @@ Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
     Y_UNIT_TEST_QUAD(ImportWithChangefeed, IsFs, ChangefeedsExport) {
         ExportImportMaterializedIndexes(IsFs, true, Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
             "ChaCha20-Poly1305", EIndexBackupScenario::RoundTrip, ChangefeedsExport);
+    }
+
+    Y_UNIT_TEST_FLAG(ExportWithRebootBeforeBackupPropose, IsFs) {
+        ExportImportMaterializedIndexes(IsFs, true, Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
+            "ChaCha20-Poly1305", EIndexBackupScenario::RebootBeforeBackupPropose);
     }
 
     Y_UNIT_TEST_FLAG(ChangefeedDuringExport, IsFs) {

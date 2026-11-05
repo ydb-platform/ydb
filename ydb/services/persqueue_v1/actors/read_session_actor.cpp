@@ -1488,7 +1488,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& e
     }
 
     LOG_D("Sending to client partition status");
-    SendControlMessage(it->second.Partition, std::move(result), ctx, false);
+    SendControlMessage(it->second.Partition, std::move(result), ctx);
 }
 
 template <EProtocol Protocol>

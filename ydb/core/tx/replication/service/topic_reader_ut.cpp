@@ -419,6 +419,38 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             return reader;
         }
 
+        void WaitForFirstMessageReadStatus() {
+            auto& runtime = Env.GetRuntime();
+            ui64 statusReadOffset = 0;
+            auto statusObserver = runtime.AddObserver<NGRpcProxy::V1::TEvPQProxy::TEvPartitionStatus>(
+                [&](NGRpcProxy::V1::TEvPQProxy::TEvPartitionStatus::TPtr& ev) {
+                    if (!ev->Get()->Init) {
+                        statusReadOffset = ev->Get()->ReadOffset;
+                    }
+                });
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(11));
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&] { return statusReadOffset != 0; };
+            runtime.DispatchEvents(options, TDuration::Seconds(30));
+            UNIT_ASSERT_VALUES_EQUAL(statusReadOffset, 1);
+            statusObserver.Remove();
+            runtime.DispatchEvents(TDispatchOptions{}, TDuration::Seconds(1));
+        }
+
+        void AssertFirstMessageDelivered(const TActorId& reader) {
+            auto& runtime = Env.GetRuntime();
+            Env.SendAsync(reader, new TEvWorker::TEvPoll());
+            TAutoPtr<IEventHandle> result;
+            runtime.GrabEdgeEvents<TEvWorker::TEvData, TEvWorker::TEvGone>(result, TDuration::Seconds(30));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->GetTypeRewrite(), TEvWorker::EvData);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvWorker::TEvData>()->Records.front().GetOffset(), 0);
+
+            Env.SendAsync(reader, new TEvents::TEvPoison());
+            runtime.DispatchEvents(TDispatchOptions{}, TDuration::Seconds(1));
+        }
+
         void ExpireFirstMessage() {
             auto& runtime = Env.GetRuntime();
             NYdb::NTopic::TTopicClient topicClient(Env.GetDriver(), NYdb::NTopic::TTopicClientSettings()
@@ -579,6 +611,48 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         UNIT_ASSERT_VALUES_EQUAL(result->Sender, reader);
         UNIT_ASSERT_VALUES_EQUAL(result->GetTypeRewrite(), TEvWorker::EvGone);
         UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::DATA_LOSS);
+    }
+
+    Y_UNIT_TEST(StatusReadOffsetAheadOfNextExpectedReportsDataLoss) {
+        TMockReader s(true);
+        s.Start("read-session", 0);
+        s.Runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(s.Worker);
+        s.Runtime.Send(s.Reader, s.Session, new TEvYdbProxy::TEvTopicReaderStatus(
+            TEvYdbProxy::TTopicReaderStatusResult{"read-session", 1}));
+
+        const auto gone = s.Runtime.GrabEdgeEvent<TEvWorker::TEvGone>(s.Worker);
+        UNIT_ASSERT_VALUES_EQUAL(gone->Get()->Status, TEvWorker::TEvGone::DATA_LOSS);
+    }
+
+    Y_UNIT_TEST(BufferedDataBeforeStatusDoesNotReportDataLoss) {
+        TRetentionGapTest s;
+        const auto reader = s.StartReader();
+        s.WaitForFirstMessageReadStatus();
+        s.AssertFirstMessageDelivered(reader);
+    }
+
+    Y_UNIT_TEST(InFlightReadBeforeStatusDoesNotReportDataLoss) {
+        TRetentionGapTest s;
+        auto& runtime = s.Env.GetRuntime();
+        TVector<TAutoPtr<IEventHandle>> heldResponses;
+        auto readObserver = runtime.AddObserver<NGRpcProxy::V1::TEvPQProxy::TEvReadResponse>(
+            [&](NGRpcProxy::V1::TEvPQProxy::TEvReadResponse::TPtr& ev) {
+                heldResponses.emplace_back(ev.Release());
+            });
+        const auto reader = s.StartReader();
+
+        TDispatchOptions readOptions;
+        readOptions.CustomFinalCondition = [&] { return !heldResponses.empty(); };
+        runtime.DispatchEvents(readOptions, TDuration::Seconds(30));
+        UNIT_ASSERT(!heldResponses.empty());
+
+        s.WaitForFirstMessageReadStatus();
+
+        readObserver.Remove();
+        for (auto& response : heldResponses) {
+            runtime.Send(response.Release());
+        }
+        s.AssertFirstMessageDelivered(reader);
     }
 }
 

@@ -1,4 +1,5 @@
 #include "target_table.h"
+#include "index_replication.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -30,7 +31,7 @@ TTargetIndexTable::TTargetIndexTable(TReplication* replication, ui64 id, const I
 }
 
 TString TTargetIndexTable::BuildStreamPath() const {
-    return CanonizePath(ChildPath(SplitPath(GetSrcPath()), {"indexImplTable", GetStreamName()}));
+    return CanonizePath(ChildPath(SplitPath(GetSourceIndexTablePath(GetSrcPath(), Config->IsSrcIndexTable())), GetStreamName()));
 }
 
 }

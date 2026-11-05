@@ -474,4 +474,6 @@ message TFeatureFlags {
     optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
     optional bool EnableCsPortionsCacheAcrossRestarts = 381 [default = false];
     optional bool EnableCsGeneralCacheConsumerWeights = 382 [default = false];
+    // Enables backing-table replication for fulltext and JSON indexes.
+    optional bool EnableFulltextIndexReplication = 383 [default = false];
 }

@@ -3,6 +3,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -38,15 +39,14 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxFinalizeBuildIndex);
-        Y_ABORT_UNLESS(txState->BuildIndexId);
 
         TPathId pathId = txState->TargetPathId;
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
 
         txState->ClearShardsInProgress();
 
-        const TTxId snapshotTxId = context.SS->GetSingleTableSnapshot(pathId);
-        const TStepId snapshotStepId = context.SS->SnapshotsStepIds.at(snapshotTxId);
+        const TTxId snapshotTxId = txState->BuildIndexId ? context.SS->GetSingleTableSnapshot(pathId) : TTxId(0);
+        const TStepId snapshotStepId = txState->BuildIndexId ? context.SS->SnapshotsStepIds.at(snapshotTxId) : TStepId(0);
 
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             TShardIdx shardIdx = txState->Shards[i].Idx;
@@ -117,10 +117,13 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
         TPathId tableId = txState->TargetPathId;
-        const TTxId snapshotTxId = context.SS->GetSingleTableSnapshot(tableId);
-        context.SS->RemoveTableSnapshot(tableId, snapshotTxId);
+        if (txState->BuildIndexId) {
+            const TTxId snapshotTxId = context.SS->GetSingleTableSnapshot(tableId);
+            context.SS->RemoveTableSnapshot(tableId, snapshotTxId);
 
-        context.SS->PersistDropSnapshot(db, snapshotTxId, tableId);
+            context.SS->PersistDropSnapshot(db, snapshotTxId, tableId);
+            context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
+        }
 
         const TTableInfo::TPtr tableInfo = context.SS->Tables.at(txState->TargetPathId);
         tableInfo->AlterVersion += 1;
@@ -142,7 +145,6 @@ public:
 
         context.SS->PersistTableAlterVersion(db, txState->TargetPathId, tableInfo);
 
-        context.SS->TabletCounters->Simple()[COUNTER_SNAPSHOTS_COUNT].Sub(1);
 
         auto tablePath = context.SS->PathsById.at(tableId);
         context.SS->ClearDescribePathCaches(tablePath);
@@ -310,8 +312,23 @@ public:
             return result;
         }
 
+        bool sourceSnapshot = false;
+        if (Transaction.GetInternal() && path.IsAsyncReplicaTable()
+            && !finalizeMainTable.GetSnapshotTxId() && !finalizeMainTable.GetBuildIndexId()
+            && finalizeMainTable.HasOutcome())
+        {
+            const auto& outcome = finalizeMainTable.GetOutcome();
+            const auto indexId = TPathId::FromProto(outcome.HasApply()
+                ? outcome.GetApply().GetIndexPathId() : outcome.GetCancel().GetIndexPathId());
+            if (const auto index = context.SS->Indexes.find(indexId); index != context.SS->Indexes.end()) {
+                sourceSnapshot = NTableIndex::IsFulltextOrJsonIndex(index->second->Type)
+                    || (index->second->Type == NKikimrSchemeOp::EIndexTypeGlobalUnique
+                        && index->second->IndexKeys.size() == 1
+                        && index->second->IndexKeys.front() == NTableIndex::NFulltext::RowIdColumn);
+            }
+        }
         const TTxId snapshotTxId = TTxId(finalizeMainTable.GetSnapshotTxId());
-        if (!context.SS->HasTableSnapshot(tablePathId, snapshotTxId)) {
+        if (!sourceSnapshot && !context.SS->HasTableSnapshot(tablePathId, snapshotTxId)) {
             errStr = TStringBuilder()
                 << "No snapshot with requested txId presents for table"
                 << ", tableId:" << tablePathId

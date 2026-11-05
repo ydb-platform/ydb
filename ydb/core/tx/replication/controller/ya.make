@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/library/naming_conventions
     ydb/public/api/protos
+    ydb/public/sdk/cpp/src/client/proto
     ydb/services/metadata
     yql/essentials/public/issue
     library/cpp/json
@@ -84,6 +85,7 @@ END()
 RECURSE_FOR_TESTS(
     ut_assign_tx_id
     ut_dst_creator
+    ut_fulltext_replication
     ut_replication
     ut_schema_change
     ut_stream_creator

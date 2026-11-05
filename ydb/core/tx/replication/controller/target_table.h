@@ -37,9 +37,18 @@ public:
     struct TIndexTableConfig: public TConfigBase {
         using TPtr = std::shared_ptr<TIndexTableConfig>;
 
-        TIndexTableConfig(const TString& srcPath, const TString& dstPath)
+        TIndexTableConfig(const TString& srcPath, const TString& dstPath, bool srcIndexTable = false, bool rowIdIndex = false)
             : TConfigBase(ETargetKind::IndexTable, srcPath, dstPath)
+            , SrcIndexTable(srcIndexTable)
+            , RowIdIndex(rowIdIndex)
         {}
+
+        bool IsSrcIndexTable() const override { return SrcIndexTable; }
+        bool IsRowIdIndex() const override { return RowIdIndex; }
+
+    private:
+        const bool SrcIndexTable;
+        const bool RowIdIndex;
     };
 
     explicit TTargetIndexTable(TReplication* replication,

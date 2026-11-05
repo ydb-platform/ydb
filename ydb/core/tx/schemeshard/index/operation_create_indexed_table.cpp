@@ -421,6 +421,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
         }
 
         auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {
+            if (NTableIndex::IsFulltextOrJsonIndex(indexDescription.GetType())
+                && baseTableDescription.HasReplicationConfig())
+            {
+                *implTableDesc.MutableReplicationConfig() = baseTableDescription.GetReplicationConfig();
+            }
             // Index impl tables inherit their base table's detailed metrics level.
             if (AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics() && baseTableDescription.HasDetailedMetricsSettings()) {
                 *implTableDesc.MutableDetailedMetricsSettings() = baseTableDescription.GetDetailedMetricsSettings();

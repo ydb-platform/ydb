@@ -601,7 +601,6 @@ public:
             }
         }
 
-        auto domainPathId = parentPath.GetPathIdForDomain();
         auto domainInfo = parentPath.DomainInfo();
 
         Y_ABORT_UNLESS(context.SS->Sequences.contains(srcPath.Base()->PathId));
@@ -664,7 +663,23 @@ public:
             return result;
         }
 
-        dstPath.MaterializeLeaf(owner);
+        auto guard = context.DbGuard();
+        TPathId allocatedPathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabNewSequence(context.SS, allocatedPathId);
+        context.MemChanges.GrabDomain(context.SS, parentPath.GetPathIdForDomain());
+
+        context.DbChanges.PersistPath(allocatedPathId);
+        context.DbChanges.PersistPath(parentPath.Base()->PathId);
+        context.DbChanges.PersistPath(srcPath.Base()->PathId);
+        context.DbChanges.PersistSequence(allocatedPathId);
+        context.DbChanges.PersistAlterSequence(allocatedPathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        dstPath.MaterializeLeaf(owner, allocatedPathId);
         result->SetPathId(dstPath->PathId.LocalPathId);
         context.SS->TabletCounters->Simple()[COUNTER_SEQUENCE_COUNT].Add(1);
 
@@ -702,52 +717,39 @@ public:
             p->SetLocalId(ui64(sequenceShard.GetLocalId()));
         }
 
-        NIceDb::TNiceDb db(context.GetDB());
-
-        context.SS->ChangeTxState(db, OperationId, txState.State);
         context.OnComplete.ActivateTx(OperationId);
 
         if (!acl.empty()) {
             dstPath->ApplyACL(acl);
         }
-        context.SS->PersistPath(db, dstPath->PathId);
 
         context.SS->Sequences[pathId] = sequenceInfo;
-        context.SS->PersistSequence(db, pathId, *sequenceInfo);
-        context.SS->PersistSequenceAlter(db, pathId, *alterData);
         context.SS->IncrementPathDbRefCount(pathId);
 
-        context.SS->PersistTxState(db, OperationId);
-        context.SS->PersistUpdateNextPathId(db);
-
-        for (auto shard : txState.Shards) {
-            if (shard.Operation == TTxState::CreateParts) {
-                context.SS->PersistChannelsBinding(db, shard.Idx, context.SS->ShardInfos.at(shard.Idx).BindedChannels);
-                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, domainPathId, OperationId.GetTxId(), shard.TabletType);
-            }
-        }
-
-        ++parentPath->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parentPath.Base());
-        context.SS->ClearDescribePathCaches(parentPath.Base());
-        context.OnComplete.PublishToSchemeBoard(OperationId, parentPath->PathId);
-
-        context.SS->ClearDescribePathCaches(dstPath.Base());
-        context.OnComplete.PublishToSchemeBoard(OperationId, dstPath->PathId);
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
         domainInfo->IncPathsInside(context.SS);
-        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TCopySequence");
+    void AbortPropose(TOperationContext& context) override {
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TCopySequence AbortPropose"
+            << ", opId: " << OperationId
+            << ", schemeshard: " << context.SS->TabletID()
+        );
     }
 
-    void AbortUnsafe(TTxId, TOperationContext&) override {
-        Y_ABORT("no AbortUnsafe for TCopySequence");
+    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TCopySequence AbortUnsafe"
+            << ", opId: " << OperationId
+            << ", forceDropId: " << forceDropTxId
+            << ", schemeshard: " << context.SS->TabletID()
+        );
+
+        context.OnComplete.DoneOperation(OperationId);
     }
 };
 

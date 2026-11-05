@@ -507,6 +507,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     CurrentPersistRequestSpan = NWilson::TSpan();
     OnProcessTxsAndUserActsWriteComplete(ctx);
     HandleWriteResponse(ctx);
+    NotifyMirrorerPersistDone();
     ProcessTxsAndUserActs(ctx);
     TryRunCompaction();
 

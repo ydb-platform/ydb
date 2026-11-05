@@ -246,6 +246,14 @@ struct TEvPQ {
         EvTopicSqsActionMetrics,
         EvProcessBatchKeys,
         EvProcessBatchKeysResult,
+<<<<<<< HEAD
+=======
+        EvResetOffsetRequest,
+        EvResetOffsetResponse,
+        EvReplicationData,
+        EvReplicationDataAck,
+        EvPersistDone,
+>>>>>>> 3ef01186b99 (Move end offset & start offset to mirrored offset (#58014))
         EvEnd,
     };
 
@@ -1348,6 +1356,22 @@ struct TEvPQ {
         ui64 Cookie;
     };
 
+<<<<<<< HEAD
+=======
+    struct TEvReplicationData : public TEventLocal<TEvReplicationData, EvReplicationData> {
+        THashMap<TString, ui64> OffsetsByConsumers;
+        TMaybe<ui64> MirroredOffset;
+    };
+
+    struct TEvPersistDone : public TEventLocal<TEvPersistDone, EvPersistDone> {
+        explicit TEvPersistDone(ui64 endOffset)
+            : EndOffset(endOffset)
+        {}
+
+        ui64 EndOffset;
+    };
+
+>>>>>>> 3ef01186b99 (Move end offset & start offset to mirrored offset (#58014))
     struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {
         TEvPartitionScaleStatusChanged() = default;
 

@@ -11,6 +11,7 @@
 #include <grpcpp/security/credentials.h>
 #include <grpcpp/create_channel.h>
 
+#include <chrono>
 #include <random>
 #include <thread>
 
@@ -51,6 +52,15 @@ void WarmPoolCreateSession(NYdb::NQuery::TQueryClient& client, std::string& sess
     TResultSetParser resultSet(res.GetResultSetParser(0));
     ASSERT_EQ(resultSet.ColumnsCount(), 2u);
 }
+
+    void WaitForNoActiveSessions(const NYdb::NTable::TTableClient& client) {
+        // A ready query future does not imply that its callback has released
+        // the session it captured.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (client.GetActiveSessionCount() != 0 && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::yield();
+        }
+    }
 
 void WaitForSessionsInPool(NYdb::NQuery::TQueryClient& client, std::int64_t expected) {
     int attempt = 10;
@@ -145,6 +155,7 @@ TEST(YdbSdkSessions, TestMultipleSessions) {
     sids.clear();
     results.clear();
 
+    WaitForNoActiveSessions(client);
     ASSERT_EQ(client.GetActiveSessionCount(), 0);
 
     driver.Stop(true);
@@ -191,6 +202,7 @@ TEST(YdbSdkSessions, TestActiveSessionCountAfterBadSession) {
     sids.clear();
     results.clear();
 
+    WaitForNoActiveSessions(client);
     ASSERT_EQ(client.GetActiveSessionCount(), 0);
 
     driver.Stop(true);

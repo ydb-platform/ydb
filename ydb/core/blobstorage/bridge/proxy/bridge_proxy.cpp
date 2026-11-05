@@ -1,11 +1,11 @@
 #include "bridge_proxy.h"
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
-#include <ydb/core/util/stlog.h>
 
 #include <ydb/library/actors/async/wait_for_event.h>
-
 #include <map>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PROXY_BRIDGE
 
 namespace NKikimr {
 
@@ -490,8 +490,11 @@ namespace NKikimr {
                         if (existing.Status == current.Status) {
                             // status did not change, so there is nothing to do, unless the piles have different data
                             if (!(existing.Buffer == current.Buffer)) {
-                                STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB08, "piles have different data of the blob",
-                                    (GroupId, self.GroupId), (BlobId, existing.Id), (BridgePileId, pile.BridgePileId));
+                                YDB_LOG_CRIT("Piles have different data of the blob",
+                                    {"marker", "BPB08"},
+                                    {"groupId", self.GroupId},
+                                    {"blobId", existing.Id},
+                                    {"bridgePileId", pile.BridgePileId});
                                 existing = {};
                                 existing.Id = current.Id;
                                 existing.Status = NKikimrProto::ERROR;
@@ -669,8 +672,11 @@ namespace NKikimr {
                 } else if (ev->Status == NKikimrProto::NODATA || ev->Id < state.Id) { // this pile has older version than already discovered
                     item.WriteTo.Set(pile.BridgePileId.GetPileIndex());
                 } else if (state.Buffer != ev->Buffer) { // same blob with different data
-                    STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB09, "piles have different data of the blob",
-                        (GroupId, self.GroupId), (BlobId, state.Id), (BridgePileId, pile.BridgePileId));
+                    YDB_LOG_CRIT("Piles have different data of the blob",
+                        {"marker", "BPB09"},
+                        {"groupId", self.GroupId},
+                        {"blobId", state.Id},
+                        {"bridgePileId", pile.BridgePileId});
                     auto res = std::make_unique<TEvBlobStorage::TEvDiscoverResult>(NKikimrProto::ERROR,
                         state.MinGeneration, state.BlockedGeneration);
                     res->ErrorReason = TStringBuilder() << "piles have different data of the blob " << state.Id;
@@ -779,8 +785,11 @@ namespace NKikimr {
                     merge(std::greater<TLogoBlobID>());
                 }
                 if (divergedId) {
-                    STLOG(PRI_CRIT, BS_PROXY_BRIDGE, BPB10, "piles have different data of the blob",
-                        (GroupId, self.GroupId), (BlobId, *divergedId), (BridgePileId, pile.BridgePileId));
+                    YDB_LOG_CRIT("Piles have different data of the blob",
+                        {"marker", "BPB10"},
+                        {"groupId", self.GroupId},
+                        {"blobId", *divergedId},
+                        {"bridgePileId", pile.BridgePileId});
                     return static_cast<TEvBlobStorage::TEvRange&>(*OriginalRequest).MakeErrorResponse(NKikimrProto::ERROR,
                         TStringBuilder() << "piles have different data of the blob " << *divergedId, self.GroupId);
                 }
@@ -1103,8 +1112,9 @@ namespace NKikimr {
                 // this process runs without BridgeConfig, but the group is bridged one; this happens when the node was
                 // not prepared before the cluster got converted to bridged one, and it can't serve bridged groups until
                 // restarted with BridgeConfig
-                STLOG(NotCapableReported ? PRI_DEBUG : PRI_CRIT, BS_PROXY_BRIDGE, BPB04,
-                    "bridged group request on node running without BridgeConfig", (GroupId, GroupId));
+                YDB_LOG(NotCapableReported ? PRI_DEBUG : PRI_CRIT, "Bridged group request on node running without BridgeConfig",
+                    {"marker", "BPB04"},
+                    {"groupId", GroupId});
                 NotCapableReported = true;
                 ReplyWithError(*ev->Get(), ev->Sender, ev->Cookie,
                     "node runs without BridgeConfig and can't serve bridged group");
@@ -1125,9 +1135,12 @@ namespace NKikimr {
             const auto& state = Info->Group->GetBridgeGroupState();
             if (const ui64 generation = StorageConfig->GetClusterState().GetGeneration();
                     generation < state.GetClusterStateGeneration()) {
-                STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB05, "request waits for newer cluster state", (GroupId, GroupId),
-                    (GroupGeneration, Info->GroupGeneration), (ClusterStateGeneration, generation),
-                    (BridgeGroupState, state));
+                YDB_LOG_DEBUG("Request waits for newer cluster state",
+                    {"marker", "BPB05"},
+                    {"groupId", GroupId},
+                    {"groupGeneration", Info->GroupGeneration},
+                    {"clusterStateGeneration", generation},
+                    {"bridgeGroupState", state});
                 QueuePending(PendingForClusterState, MakePendingHandle(*ev), routingBudget);
                 return;
             }
@@ -1166,8 +1179,11 @@ namespace NKikimr {
             if (subrequests.empty() || (std::is_same_v<TEvent, TEvBlobStorage::TEvAssimilate> && !hasTrustedPile)) {
                 // no pile is able to take this request with the group state we have; it is older than the cluster state
                 // (e.g. the node has just got back and the pile which is synced now is not synced in its group state)
-                STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB06, "request waits for newer group state", (GroupId, GroupId),
-                    (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
+                YDB_LOG_DEBUG("Request waits for newer group state",
+                    {"marker", "BPB06"},
+                    {"groupId", GroupId},
+                    {"groupGeneration", Info->GroupGeneration},
+                    {"bridgeGroupState", state});
                 QueuePending(PendingForNextGeneration, MakePendingHandle(*ev), routingBudget);
                 return;
             }
@@ -1175,8 +1191,11 @@ namespace NKikimr {
                     return std::get<0>(item) == authorityPileId;
                 })) {
                 // the group relies on its part in the single pile, and writes reaching other parts only would be lost
-                STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB07, "request waits for the pile of the authority part",
-                    (GroupId, GroupId), (GroupGeneration, Info->GroupGeneration), (BridgeGroupState, state));
+                YDB_LOG_DEBUG("Request waits for the pile of the authority part",
+                    {"marker", "BPB07"},
+                    {"groupId", GroupId},
+                    {"groupGeneration", Info->GroupGeneration},
+                    {"bridgeGroupState", state});
                 QueuePending(PendingForNextGeneration, MakePendingHandle(*ev), routingBudget);
                 return;
             }
@@ -1188,10 +1207,13 @@ namespace NKikimr {
             request->BridgeInfo = BridgeInfo;
             request->RoutingBudget = routingBudget;
 
-            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB00, "new request", (RequestId, request->RequestId),
-                (GroupId, GroupId), (GroupGeneration, request->Info->GroupGeneration),
-                (BridgeGroupState, request->Info->Group->GetBridgeGroupState()),
-                (Request, originalRequest.ToString()));
+            YDB_LOG_DEBUG("New request",
+                {"marker", "BPB00"},
+                {"requestId", request->RequestId},
+                {"groupId", GroupId},
+                {"groupGeneration", request->Info->GroupGeneration},
+                {"bridgeGroupState", request->Info->Group->GetBridgeGroupState()},
+                {"request", originalRequest});
 
             for (auto& [bridgePileId, eventToSend] : subrequests) {
                 SendQuery(request, bridgePileId, std::move(eventToSend));
@@ -1209,9 +1231,13 @@ namespace NKikimr {
             Y_ABORT_UNLESS(common);
             common->ForceGroupGeneration = groupPileInfo->GetGroupGeneration();
 
-            STLOG(PRI_DEBUG, BS_PROXY_BRIDGE, BPB03, "new subrequest", (RequestId, request->RequestId),
-                (BridgePileId, bridgePileId), (Request, ev->ToString()), (Cookie, LastRequestCookie + 1),
-                (GroupPileInfo, *groupPileInfo));
+            YDB_LOG_DEBUG("New subrequest",
+                {"marker", "BPB03"},
+                {"requestId", request->RequestId},
+                {"bridgePileId", bridgePileId},
+                {"request", ev->ToString()},
+                {"cookie", LastRequestCookie + 1},
+                {"groupPileInfo", groupPileInfo});
 
             // allocate cookie for this specific request and bind it to the common one
             const ui64 cookie = ++LastRequestCookie;
@@ -1311,12 +1337,13 @@ namespace NKikimr {
 
             const bool isError = ev->Get()->Status != NKikimrProto::OK && ev->Get()->Status != NKikimrProto::NODATA;
 
-            STLOG(isError ? PRI_NOTICE : PRI_DEBUG, BS_PROXY_BRIDGE, BPB02, "intermediate response",
-                (RequestId, request->RequestId),
-                (GroupId, item.GroupId),
-                (Status, ev->Get()->Status),
-                (PileState, pile.State),
-                (Response, ev->Get()->ToString()));
+            YDB_LOG(isError ? PRI_NOTICE : PRI_DEBUG, "Intermediate response",
+                {"marker", "BPB02"},
+                {"requestId", request->RequestId},
+                {"groupId", item.GroupId},
+                {"status", ev->Get()->Status},
+                {"pileState", pile.State},
+                {"response", ev->Get()->ToString()});
 
             Y_ABORT_UNLESS(request->ResponsesPending);
             --request->ResponsesPending;
@@ -1399,12 +1426,13 @@ namespace NKikimr {
                             }));
                         };
 
-                        STLOG(success ? PRI_INFO : PRI_NOTICE, BS_PROXY_BRIDGE, BPB01, "request finished",
-                            (RequestId, request->RequestId),
-                            (Status, common->Status),
-                            (Response, response->ToString()),
-                            (Passed, TDuration::Seconds(request->Timer.Passed())),
-                            (SubrequestTimings, makeSubrequestTimings()));
+                        YDB_LOG(success ? PRI_INFO : PRI_NOTICE, "Request finished",
+                            {"marker", "BPB01"},
+                            {"requestId", request->RequestId},
+                            {"status", common->Status},
+                            {"response", response->ToString()},
+                            {"passed", TDuration::Seconds(request->Timer.Passed())},
+                            {"subrequestTimings", makeSubrequestTimings()});
 
                         if (success) {
                             request->Span.EndOk();

@@ -93,7 +93,8 @@ Hibernate - это фреймворк объектно-реляционного 
 | `bool`, `Boolean`                                                           | `Bool`                      |
 | `String`, enum с аннотацией `@Enumerated(EnumType.STRING)`                  | `Text` (синоним `Utf8`)     |
 | `java.time.LocalDate`                                                       | `Date`                      |
-| `java.math.BigDecimal`, `java.math.BigInteger`                              | `Decimal(22,9)`             |
+| `java.math.BigDecimal`                                                       | `Decimal(22,9)`             |
+| `java.math.BigInteger`                                                       | `Decimal(22,0)` (Hibernate 6 и 7), `Decimal(22,9)` (Hibernate 5) |
 | `double`, `Double`                                                          | `Double`                    |
 | `float`, `Float`                                                            | `Float`                     |
 | `int`, `java.lang.Integer`                                                  | `Int32`                     |
@@ -251,7 +252,87 @@ Hibernate не предназначен для управления схемам
 
 {% endlist %}
 
-### Пример с Spring Data JPA {#integration-with-spring-data-jpa-example}
+## Нативные типы {{ ydb-short-name }} {#native-types}
+
+Таблица выше описывает сопоставления по умолчанию. Для явного выбора нативных типов дат и интервалов используйте аннотацию `@JdbcTypeCode` из `org.hibernate.annotations` и константы `YdbJdbcCode` из `tech.ydb.hibernate.dialect.code`. Точность и масштаб Decimal задаются отдельно с помощью `@Column`.
+
+Следующие примеры предназначены для Hibernate 6 и 7. Расширенные даты и интервалы поддерживаются в `hibernate-ydb-dialect` начиная с версии 1.5.1 для Hibernate 6 и 1.7.0 для Hibernate 7; необходим [JDBC-драйвер](../../reference/languages-and-apis/jdbc-driver/maven.md) версии 2.3.11 или новее. Для произвольного Decimal дополнительно требуется поддержка, описанная [ниже](#decimal). В отдельном диалекте для Hibernate 5 эти коды не зарегистрированы, а аннотация `@JdbcTypeCode` отсутствует в API Hibernate 5.
+
+### Расширенные типы дат и интервалов {#extended-datetime}
+
+Чтобы хранить даты вне диапазона обычных `Date`, `Datetime` и `Timestamp` или расширенные интервалы, выберите соответствующий JDBC-код:
+
+| Java-тип | Аннотация | Тип {{ ydb-short-name }} |
+|---|---|---|
+| `java.time.LocalDate` | `@JdbcTypeCode(YdbJdbcCode.DATE_32)` | `Date32` |
+| `java.time.LocalDateTime` | `@JdbcTypeCode(YdbJdbcCode.DATETIME_64)` | `Datetime64` |
+| `java.time.Instant` | `@JdbcTypeCode(YdbJdbcCode.TIMESTAMP_64)` | `Timestamp64` |
+| `java.time.Duration` | `@JdbcTypeCode(YdbJdbcCode.INTERVAL_64)` | `Interval64` |
+
+Например, добавьте следующие поля в класс сущности:
+
+```java
+@JdbcTypeCode(YdbJdbcCode.DATE_32)
+private LocalDate eventDate;
+
+@JdbcTypeCode(YdbJdbcCode.DATETIME_64)
+private LocalDateTime eventDatetime;
+
+@JdbcTypeCode(YdbJdbcCode.TIMESTAMP_64)
+private Instant eventTimestamp;
+
+@JdbcTypeCode(YdbJdbcCode.INTERVAL_64)
+private Duration eventInterval;
+```
+
+Аннотация задаёт тип как при генерации схемы, так и при передаче значений через JDBC. Например, поле `eventDate` сможет хранить `LocalDate.of(1960, 1, 1)`, которое не входит в диапазон `Date`.
+
+Одна аннотация `@Column(columnDefinition = "Date32")` меняет определение столбца при генерации схемы, но не выбирает нужный способ передачи значений. Используйте `@JdbcTypeCode` и для существующих таблиц, созданных с помощью Liquibase или Flyway; при этом тип поля должен совпадать с типом столбца.
+
+Расширенный диапазон не увеличивает точность: `Datetime64` хранит секунды, а `Timestamp64` и `Interval64` — микросекунды. Значения `LocalDateTime` интерпретируются в UTC. Диапазоны значений описаны в разделе [Дата и время](../../yql/reference/types/primitive.md#datetime).
+
+### Decimal с заданной точностью и масштабом {#decimal}
+
+Для `java.math.BigDecimal` по умолчанию используется `Decimal(22,9)`, а для `java.math.BigInteger` — `Decimal(22,0)`. Чтобы задать другие параметры, используйте аннотацию `@Column` из `jakarta.persistence`:
+
+```java
+@Column(precision = 35, scale = 10)
+private BigDecimal amount;
+```
+
+Здесь `BigDecimal` — класс `java.math.BigDecimal`. Аннотация задаёт `Decimal(35,10)` как для генерации схемы, так и для передачи параметров через JDBC. Допустимы значения `1 ≤ precision ≤ 35` и `0 ≤ scale ≤ precision`; подробнее см. [Примитивные типы данных](../../yql/reference/types/primitive.md#numeric).
+
+Для автоматического выбора типа по `precision` и `scale` используйте `@Column` без `@JdbcTypeCode` на том же поле. Явный JDBC-код, в том числе `SqlTypes.DECIMAL` или `SqlTypes.NUMERIC`, обходит этот механизм. Готовые коды `YdbJdbcCode` из таблицы ниже служат отдельным способом выбора фиксированных параметров.
+
+{% note info %}
+
+Настройка JDBC-привязки через `@Column(precision = ..., scale = ...)` требует сборки диалекта Hibernate с [поддержкой параметризованного Decimal](https://github.com/ydb-platform/ydb-java-dialects/pull/274). В более ранних выпусках эта аннотация меняет только генерируемое определение столбца, а стандартная передача `BigDecimal` через JDBC остаётся привязанной к `Decimal(22,9)`.
+
+{% endnote %}
+
+Одна аннотация `@Column(columnDefinition = "Decimal(35,10)")` не задаёт точность и масштаб JDBC-параметров. Если определение столбца указано явно, добавьте к той же аннотации `precision = 35` и `scale = 10`.
+
+Для существующей таблицы, созданной с помощью [Liquibase](../migration/liquibase.md#decimal) или Flyway, укажите в `@Column` точность и масштаб физического столбца, даже если Hibernate не управляет схемой. Например, столбцу `type="Decimal(35,10)"` в Liquibase соответствует поле `amount` из примера выше.
+
+Готовые JDBC-коды диалекта также остаются доступны:
+
+| JDBC-код | Тип {{ ydb-short-name }} |
+|---|---|
+| `YdbJdbcCode.DECIMAL_22_9` | `Decimal(22,9)` |
+| `YdbJdbcCode.DECIMAL_31_9` | `Decimal(31,9)` |
+| `YdbJdbcCode.DECIMAL_35_0` | `Decimal(35,0)` |
+| `YdbJdbcCode.DECIMAL_35_9` | `Decimal(35,9)` |
+
+Например, вместо `@Column(precision = 31, scale = 9)` можно выбрать готовый тип:
+
+```java
+@JdbcTypeCode(YdbJdbcCode.DECIMAL_31_9)
+private BigDecimal amount;
+```
+
+Выбранный JDBC-код определяет точность и масштаб при генерации схемы и передаче значений. Дополнительно указывать `precision`, `scale` или `columnDefinition` не требуется.
+
+## Пример с Spring Data JPA {#integration-with-spring-data-jpa-example}
 
 Настройте Spring Data JPA для использования диалекта {{ ydb-short-name }}, обновив свой `application.properties`:
 

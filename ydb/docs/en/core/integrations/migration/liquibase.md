@@ -50,6 +50,59 @@ The type names are case insensitive.
 
 The `dropTable` changeset - delete a table. For example: `<dropTable tableName="episodes"/>`
 
+### Extended date and interval types {#extended-datetime}
+
+To create columns with an extended date or interval range, set the `type` attribute to the native type name: `Date32`, `Datetime64`, `Timestamp64`, or `Interval64`. The standard names `date`, `datetime`, and `timestamp` still create `Date`, `Datetime`, and `Timestamp`; they do not select the extended types automatically.
+
+For example, add this changeset to your changelog:
+
+```xml
+<changeSet id="extended-datetime" author="example">
+    <createTable tableName="events">
+        <column name="id" type="Int64">
+            <constraints primaryKey="true" nullable="false"/>
+        </column>
+        <column name="event_date" type="Date32"/>
+        <column name="event_datetime" type="Datetime64"/>
+        <column name="event_timestamp" type="Timestamp64"/>
+        <column name="event_interval" type="Interval64"/>
+    </createTable>
+</changeSet>
+```
+
+The same type names work with `addColumn` and with YAML and JSON changelogs. For value ranges and precision, see [Date and time](../../yql/reference/types/primitive.md#datetime).
+
+Use [JDBC driver](../../reference/languages-and-apis/jdbc-driver/maven.md) version 2.3.11 or later, which adds support for the extended types. Declaring a column type does not add automatic conversion of string values for `insert`, `loadData`, or `loadUpdateData`. To load extended dates and intervals, use SQL migrations with explicitly typed values.
+
+### Decimal precision and scale {#decimal}
+
+The {{ ydb-short-name }} type `Decimal(precision, scale)` specifies the total number of decimal digits and the number of digits after the decimal point. Valid parameters are `1 ≤ precision ≤ 35` and `0 ≤ scale ≤ precision`; see [Primitive data types](../../yql/reference/types/primitive.md#numeric).
+
+{% note info %}
+
+The following examples require a Liquibase dialect build that includes [parameterized Decimal support](https://github.com/ydb-platform/ydb-java-dialects/pull/274). In earlier releases, the `decimal` handler uses the fixed type `Decimal(22,9)`, even when different parameters are specified explicitly.
+
+{% endnote %}
+
+To create a column with the required precision and scale, specify both parameters in the `type` attribute:
+
+```xml
+<changeSet id="parameterized-decimal" author="example">
+    <createTable tableName="decimal_values">
+        <column name="id" type="Int64">
+            <constraints primaryKey="true" nullable="false"/>
+        </column>
+        <column name="amount" type="Decimal(35,10)"/>
+    </createTable>
+</changeSet>
+```
+
+The dialect preserves precision and scale in `createTable`, `addColumn`, writes through `insert`, `loadData`, and `loadUpdateData`, and changelogs generated from an existing schema. An SQL changeset is not required for an arbitrary `Decimal(precision, scale)`. The same parameters are supported in YAML and JSON changelogs and with the names `java.sql.Types.DECIMAL` and `java.math.BigDecimal`.
+
+Omitting parameters, for example with `type="decimal"`, selects `Decimal(22,9)`. For a different type, specify exactly two integer parameters. A single parameter, extra parameters, or values outside the supported range cause a type validation error.
+
+When using Hibernate with Liquibase, specify the same precision and scale [in the entity class](../orm/hibernate.md#decimal).
+
 ### Changing the table structure
 
 `addColumn` - add a column to a table. For example:
@@ -277,7 +330,7 @@ Asynchronous indexes should be created using [native SQL migrations](https://doc
 
 {% endlist %}
 
-You can also specify any value in the `value` field. Data from the `value` field in `insert` changeset or `CSV` files will be automatically converted to the required types, taking into account strict typing in {{ydb-short-name }}.
+For the types listed below, values in an `insert` changeset's `value` field or in CSV files are automatically converted to the corresponding {{ ydb-short-name }} types. For [extended dates and intervals](#extended-datetime), use SQL migrations. Values of [parameterized Decimal](#decimal) preserve the column's precision and scale.
 
 The type formatting table to load into the table:
 
@@ -295,7 +348,7 @@ An unsigned integer
 || `Text`, `Bytes`, `Json`, `JsonDocument` |
 Represent as text
     ||
-|| `Float`, `Double`, `Decimal(22, 9)` |
+|| `Float`, `Double`, `Decimal(precision, scale)` |
 A real number
     ||
 || `Interval` |
@@ -343,7 +396,7 @@ There are two ways:
 
 - Liquibase CLI
 
-  First, you need to install Liquibase itself using [one of the recommended methods](https://docs.liquibase.com/start/install/home.html). Then you need to place the `.jar` archives of [{{ ydb-short-name }} JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases) and Liquibase [{{ ydb-short-name }} dialect](https://mvnrepository.com/artifact/tech.ydb.dialects/liquibase-ydb-dialect/1.0.0) into the `internal/lib` folder.
+  First, you need to install Liquibase itself using [one of the recommended methods](https://docs.liquibase.com/start/install/home.html). Then you need to place the `.jar` archives of [{{ ydb-short-name }} JDBC driver](https://github.com/ydb-platform/ydb-jdbc-driver/releases) and Liquibase [{{ ydb-short-name }} dialect](https://mvnrepository.com/artifact/tech.ydb.dialects/liquibase-ydb-dialect/1.1.1) into the `internal/lib` folder.
 
   ```bash
   # $(which liquibase)
@@ -351,8 +404,8 @@ There are two ways:
 
   # you may need to sudo
   # set actual versions of .jar files
-  curl -L -o ydb-jdbc-driver.jar https://repo.maven.apache.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.0.7/ydb-jdbc-driver-shaded-2.0.7.jar
-  curl -L -o liquibase-ydb-dialect.jar https://repo.maven.apache.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.0.0/liquibase-ydb-dialect-1.0.0.jar
+  curl -L -o ydb-jdbc-driver.jar https://repo.maven.apache.org/maven2/tech/ydb/jdbc/ydb-jdbc-driver-shaded/2.3.18/ydb-jdbc-driver-shaded-2.3.18.jar
+  curl -L -o liquibase-ydb-dialect.jar https://repo.maven.apache.org/maven2/tech/ydb/dialects/liquibase-ydb-dialect/1.1.1/liquibase-ydb-dialect-1.1.1.jar
   ```
 
   For a more detailed description, see the [Manual library management](https://docs.liquibase.com/start/install/home.html) in Liquibase documentation.

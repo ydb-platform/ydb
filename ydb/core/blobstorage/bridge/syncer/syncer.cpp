@@ -428,8 +428,9 @@ namespace NKikimr::NBridge {
     }
 
     void TSyncerActor::SendQuery(std::unique_ptr<IEventHandle> handle, ui64 quoterBytes) {
-        // The quota is taken here and not when the query is issued, so a query waiting for its turn holds no quota and
-        // the current rate applies to it. A delayed query keeps its in-flight slot, which bounds the backlog in the quoter.
+        // The quota is taken here and not when the query is issued, so a query waiting for its turn holds no quota and is
+        // charged at the current rate, though behind the backlog taken at the old one. A delayed query keeps its in-flight
+        // slot, which bounds this backlog.
         const TDuration timeout = SyncRateQuoter && quoterBytes
             ? SyncRateQuoter->Take(TActivationContext::Monotonic(), quoterBytes)
             : TDuration::Zero();

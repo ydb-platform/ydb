@@ -1156,6 +1156,10 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
     if (record.HasBridgeSyncNodeRateBytesPerSecond()) {
         SyncRateControllerLimit = record.GetBridgeSyncNodeRateBytesPerSecond();
         UpdateSyncRateQuoter();
+    } else if (record.GetComprehensive() && !record.GetKeepBridgeSyncNodeRate() && SyncRateControllerLimit) {
+        // this BSC doesn't support shares and won't ever update the one got from a newer instance
+        SyncRateControllerLimit = 0;
+        UpdateSyncRateQuoter();
     }
 
     if (record.GetUpdateSyncers()) {

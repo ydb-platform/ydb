@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <map>
+#include <set>
 
 using NBridgeTest::GetBridgedLocation;
 
@@ -295,7 +296,8 @@ struct TSyncerRead {
 };
 
 // Disconnect the target piles, write blobs through the bridge proxy, bring the piles back and wait for them to get
-// synchronized. Returns the reads of data from the source group of the first pile, ordered by time.
+// synchronized. Returns the reads of data from the source group of the first pile, ordered by time. The filter function
+// set by the caller stays in effect.
 std::vector<TSyncerRead> SyncBlobs(TEnvironmentSetup& env, ui32 groupId, const std::vector<ui32>& targetPiles,
         ui32 numBlobs, ui32 blobSize) {
     using namespace NBridgeTest;
@@ -319,12 +321,13 @@ std::vector<TSyncerRead> SyncBlobs(TEnvironmentSetup& env, ui32 groupId, const s
 
     std::vector<TSyncerRead> reads;
     const TActorId sourceProxyId = MakeBlobStorageProxyID(sourceGroupId);
+    auto callerFilter = std::move(env.Runtime->FilterFunction);
     env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
         if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->Recipient == sourceProxyId &&
                 !ev->Get<TEvBlobStorage::TEvGet>()->IsIndexOnly) {
             reads.push_back({env.Runtime->GetClock(), nodeId});
         }
-        return true;
+        return !callerFilter || callerFilter(nodeId, ev);
     };
     for (ui32 pile : targetPiles) {
         SwitchBridgePileState(env, pile, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
@@ -332,8 +335,14 @@ std::vector<TSyncerRead> SyncBlobs(TEnvironmentSetup& env, ui32 groupId, const s
     for (ui32 pile : targetPiles) {
         WaitForPileState(env, pile, NKikimrBridge::TClusterState::SYNCHRONIZED);
     }
-    env.Runtime->FilterFunction = {};
+    env.Runtime->FilterFunction = std::move(callerFilter);
     return reads;
+}
+
+// In bytes per second; with no limit all the reads may go at the same moment.
+double GetReadRate(const std::vector<TSyncerRead>& reads, ui32 blobSize) {
+    const TDuration span = reads.back().Time - reads.front().Time;
+    return span ? (reads.size() - 1) * blobSize / span.SecondsFloat() : Max<double>();
 }
 
 // Checks that the node reads at the rate between the bounds, in bytes per second; both limits are applied before the sync.
@@ -358,11 +367,62 @@ void TestSyncRate(ui64 nodeLimit, ui64 totalRate, double minRate, double maxRate
     constexpr ui32 blobSize = 64_KB;
     const auto reads = SyncBlobs(env, groupId, {1}, numBlobs, blobSize);
     UNIT_ASSERT_GE(reads.size(), numBlobs);
-    const TDuration span = reads.back().Time - reads.front().Time;
-    // with no limit all the reads may go at the same moment
-    const double rate = span ? (reads.size() - 1) * blobSize / span.SecondsFloat() : Max<double>();
+    const double rate = GetReadRate(reads, blobSize);
     UNIT_ASSERT_C(minRate <= rate && rate <= maxRate, "rate# " << rate << " minRate# " << minRate << " maxRate# " << maxRate
-        << " span# " << span);
+        << " numReads# " << reads.size());
+}
+
+// Every node has a share got from a BSC that is gone, and registers at a BSC telling nothing about it. A BSC that keeps
+// the share of the node doesn't know it yet, while any other one doesn't support shares at all.
+void TestShareAfterRegistration(bool keepShare) {
+    using namespace NBridgeTest;
+    TEnvironmentSetup env{{
+        .NodeCount = 16,
+        .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        .LocationGenerator = GetBridgedLocation,
+        .SelfManagementConfig = true,
+        .NumPiles = 2,
+        .AutomaticBootstrap = true,
+    }};
+    const ui32 groupId = CreatePoolAndGetGroup(env);
+
+    const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+    std::set<ui32> registeredNodes;
+    env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerNodeServiceSetUpdate::EventType && ev->Sender != sender) {
+            auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+            record.ClearBridgeSyncNodeRateBytesPerSecond();
+            record.ClearKeepBridgeSyncNodeRate();
+            if (record.GetComprehensive()) {
+                registeredNodes.insert(nodeId);
+                if (keepShare) {
+                    record.SetKeepBridgeSyncNodeRate(true);
+                }
+            }
+        }
+        return true;
+    };
+
+    constexpr ui64 share = 100'000;
+    const auto nodes = env.Runtime->GetNodes();
+    for (ui32 nodeId : nodes) {
+        auto update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+        update->Record.SetBridgeSyncNodeRateBytesPerSecond(share);
+        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), sender, update.release()), nodeId);
+        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), sender,
+            new TEvTabletPipe::TEvClientDestroyed(env.TabletId, {}, {})), nodeId);
+    }
+    WaitUntil(env, [&] { return registeredNodes.size() == nodes.size(); }, "registration of the nodes", TDuration::Seconds(1));
+
+    constexpr ui32 numBlobs = 20;
+    constexpr ui32 blobSize = 64_KB;
+    const auto reads = SyncBlobs(env, groupId, {1}, numBlobs, blobSize);
+    env.Runtime->FilterFunction = {};
+    UNIT_ASSERT_GE(reads.size(), numBlobs);
+    const double rate = GetReadRate(reads, blobSize);
+    const double minRate = keepShare ? 0 : 10'000'000; // the default limit per node is 500 MB/s
+    const double maxRate = keepShare ? share * 1.2 : Max<double>();
+    UNIT_ASSERT_C(minRate <= rate && rate <= maxRate, "rate# " << rate << " numReads# " << reads.size());
 }
 
 void RebootBSController(TEnvironmentSetup& env) {
@@ -436,6 +496,15 @@ struct THeldSyncersEnv {
 
     ~THeldSyncersEnv() {
         Env.Runtime->FilterFunction = {};
+    }
+
+    // Lets the held completions go; the filter applies to them again, so it stops holding them first.
+    void ReleaseHeldSyncers() {
+        HoldSyncers = false;
+        for (auto& [nodeId, ev] : HeldSyncers) {
+            Env.Runtime->Send(ev.release(), nodeId);
+        }
+        HeldSyncers.clear();
     }
 
     ui64 GetNumHostingNodes() const {
@@ -557,11 +626,7 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
         // the nodes that have stopped hosting syncers have no share left
         setTotalRate(total);
         test.CheckRates(total);
-        test.HoldSyncers = false;
-        for (auto& [nodeId, ev] : test.HeldSyncers) {
-            env.Runtime->Send(ev.release(), nodeId);
-        }
-        test.HeldSyncers.clear();
+        test.ReleaseHeldSyncers();
         WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
         env.Sim(TDuration::Seconds(5));
         for (const auto& [nodeId, rate] : test.Rates) {
@@ -704,25 +769,107 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
         auto& env = test.Env;
         std::optional<TInstant> startedAt; // when the first node has heard from the new instance
         bool rateSent = false;
+        ui32 numRegistrations = 0;
+        ui32 numRegistrationsKeepingShare = 0;
         test.OnUpdate = [&](ui32, const auto& record) {
             if (!startedAt) {
                 startedAt = env.Runtime->GetClock();
             }
             rateSent |= record.HasBridgeSyncNodeRateBytesPerSecond();
+            if (record.GetComprehensive()) {
+                ++numRegistrations;
+                numRegistrationsKeepingShare += record.GetKeepBridgeSyncNodeRate();
+            }
         };
         RebootBSController(env);
         NBridgeTest::WaitUntil(env, [&] { return startedAt.has_value(); }, "start of the new instance", TDuration::Seconds(1), 60);
 
-        test.HoldSyncers = false;
-        for (auto& [nodeId, ev] : test.HeldSyncers) {
-            env.Runtime->Send(ev.release(), nodeId);
-        }
-        test.HeldSyncers.clear();
+        test.ReleaseHeldSyncers();
         env.Sim(TDuration::Seconds(2));
         UNIT_ASSERT_C(env.Runtime->GetClock() < *startedAt + reportingTime - TDuration::Seconds(1),
             "the test has to finish its check while BSC is waiting for the reports");
         UNIT_ASSERT(!rateSent);
+        UNIT_ASSERT_GT(numRegistrations, 0);
+        UNIT_ASSERT_VALUES_EQUAL(numRegistrationsKeepingShare, numRegistrations);
         NBridgeTest::WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
+    }
+
+    Y_UNIT_TEST(RegistrationDropsShareWithOldController) {
+        TestShareAfterRegistration(false);
+    }
+
+    Y_UNIT_TEST(RegistrationKeepsShareWhileControllerIsStarting) {
+        TestShareAfterRegistration(true);
+    }
+
+    // The share changes while the registration of a node is being committed. The reply must not bring the old one back, as
+    // BSC wouldn't send the new one again.
+    Y_UNIT_TEST(RegistrationReplyHasCurrentShare) {
+        THeldSyncersEnv test;
+        auto& env = test.Env;
+        ui32 registering = 0;
+        for (const auto& [nodeId, hosting] : test.Hosting) {
+            if (hosting) {
+                registering = nodeId;
+                break;
+            }
+        }
+        UNIT_ASSERT(registering);
+        const ui64 oldShare = test.Rates.at(registering);
+
+        bool replied = false;
+        test.OnUpdate = [&](ui32 nodeId, const auto& record) {
+            replied |= nodeId == registering && record.GetComprehensive();
+        };
+        const TActorId sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
+        std::optional<NKikimrBlobStorage::TConfigResponse> configResponse;
+        bool holdCommits = false;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> heldCommits;
+        auto fixtureFilter = env.Runtime->FilterFunction;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == sender) { // this edge actor can't wait for anything during the commit
+                if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigResponse::EventType) {
+                    configResponse = ev->Get<TEvBlobStorage::TEvControllerConfigResponse>()->Record.GetResponse();
+                }
+                return false;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerRegisterNode::EventType &&
+                    ev->Get<TEvBlobStorage::TEvControllerRegisterNode>()->Record.GetNodeID() == registering) {
+                holdCommits = true;
+            }
+            if (holdCommits && ev->GetTypeRewrite() == TEvBlobStorage::EvPut &&
+                    ev->Get<TEvBlobStorage::TEvPut>()->Id.TabletID() == env.TabletId) {
+                heldCommits.emplace_back(nodeId, std::move(ev));
+                return false;
+            }
+            return fixtureFilter(nodeId, ev);
+        };
+
+        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(registering), sender,
+            new TEvTabletPipe::TEvClientDestroyed(env.TabletId, {}, {})), registering);
+        NBridgeTest::WaitUntil(env, [&] { return !heldCommits.empty(); }, "commit of the registration", TDuration::MilliSeconds(100));
+        env.Sim(TDuration::Seconds(1));
+        UNIT_ASSERT(!replied);
+
+        // the limit gets applied before its commit
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        request->Record.MutableRequest()->AddCommand()->MutableUpdateSettings()->AddBridgeSyncTotalRateBytesPerSecond(
+            THeldSyncersEnv::TotalRate * 2);
+        env.Runtime->SendToPipe(env.TabletId, sender, request.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
+        NBridgeTest::WaitUntil(env, [&] { return test.Rates.at(registering) != oldShare; }, "update of the share", TDuration::Seconds(1));
+        const ui64 newShare = test.Rates.at(registering);
+        UNIT_ASSERT_GT(newShare, oldShare);
+        UNIT_ASSERT(!replied);
+
+        holdCommits = false;
+        for (auto& [nodeId, ev] : heldCommits) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        NBridgeTest::WaitUntil(env, [&] { return replied && configResponse; }, "replies to the registration and the command",
+            TDuration::Seconds(1));
+        UNIT_ASSERT_C(configResponse->GetSuccess(), configResponse->GetErrorDescription());
+        env.Sim(TDuration::Seconds(30));
+        UNIT_ASSERT_VALUES_EQUAL(test.Rates.at(registering), newShare);
     }
 
     // BSC restarts having persisted a new limit, but not having sent it to the nodes.

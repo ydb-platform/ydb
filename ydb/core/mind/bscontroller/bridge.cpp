@@ -1059,8 +1059,9 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
         unlistedSyncerState.erase(&syncerState);
         auto& perNodeInfo = syncerState.NodeIds[nodeId];
         perNodeInfo.SourceGroupId = sourceGroupId;
-        NodeToSyncerState.emplace(nodeId, &syncerState);
-        BridgeSyncNodeRatesDirty = true;
+        if (NodeToSyncerState.emplace(nodeId, &syncerState).second) { // usually it's a report of a known syncer
+            BridgeSyncNodeRatesDirty = true;
+        }
         syncerState.Unlink();
 
         // update any progress
@@ -1459,6 +1460,7 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
         TSet<TGroupId> groupIdsToRead;
         SerializeSyncers(nodeId, &ev->Record, groupIdsToRead);
+        FillBridgeSyncNodeRate(nodeId, &ev->Record);
         ReadGroups(groupIdsToRead, false, ev.get(), nodeId);
         YDB_LOG_DEBUG("ProcessSyncers: sending an update",
             {"marker", "BSCBR09"},
@@ -1519,6 +1521,7 @@ void TBlobStorageController::UpdateBridgeSyncNodeRates(const THashSet<TNodeId>& 
 void TBlobStorageController::FillBridgeSyncNodeRate(TNodeId nodeId,
         NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update) {
     if (!BridgeSyncNodeRate) {
+        update->SetKeepBridgeSyncNodeRate(true);
         return;
     }
     const ui64 rate = IsNodeHostingSyncers(nodeId) ? *BridgeSyncNodeRate : 0;
@@ -1557,7 +1560,6 @@ void TBlobStorageController::SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage
         }
     }
     update->SetUpdateSyncers(true);
-    FillBridgeSyncNodeRate(nodeId, update);
 }
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateSyncerState::TPtr ev) {
@@ -1756,6 +1758,7 @@ void TBlobStorageController::ApplyStaticGroupUpdateForSyncers(std::map<TGroupId,
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
         TSet<TGroupId> groupIdsToRead;
         SerializeSyncers(nodeId, &ev->Record, groupIdsToRead);
+        FillBridgeSyncNodeRate(nodeId, &ev->Record);
         ReadGroups(groupIdsToRead, false, ev.get(), nodeId);
         SendToWarden(nodeId, std::move(ev), 0);
     }

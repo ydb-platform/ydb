@@ -1,0 +1,5 @@
+platform: standard-v4a
+cores: 8
+memory_gb: 64
+disk_gb: 186
+preset: analytic-node

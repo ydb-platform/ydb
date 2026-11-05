@@ -8,7 +8,7 @@ from decimal import Decimal
 import pytest
 import ydb
 
-from ydb.tests.fq.streaming_common.common import StreamingTestBase
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, get_ydb_config, set_test_env
 from ydb.tests.library.common.wait_for import wait_for
 
 IN_MEMORY = "PRAGMA ydb.UseInMemoryStreamingAggregation = 'true';"
@@ -16,6 +16,18 @@ NO_VALIDATION = "PRAGMA ydb.OptValidateStreamingConstraints = 'false';"
 MULTIPLE_AGGREGATES = "SELECT key, subkey, SUM(value) AS value, MIN(value) AS other FROM $input GROUP BY key, subkey"
 STATE_ERROR = "requires an output state table"
 FINALIZER_ERROR = "require an identity finalizer or a finalizer equal to serialization"
+
+
+@pytest.fixture(scope="module")
+def kikimr(request):
+    param = getattr(request, "param", {})
+    set_test_env(request)
+    config = get_ydb_config(request)
+    # Exercise aggregation by default while preserving explicit flag overrides.
+    config.yaml_config["feature_flags"]["enable_streaming_aggregation"] = param.get("enable_streaming_aggregation", True)
+    cluster = Kikimr(config, tenant_database="/Root/my_tenant")
+    yield cluster
+    cluster.stop()
 
 
 @dataclass(frozen=True)

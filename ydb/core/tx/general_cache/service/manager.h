@@ -14,6 +14,16 @@
 
 namespace NKikimr::NGeneralCache::NPrivate {
 
+    struct TEmptyPolicyStatsCapture {};
+    template <class TPolicy>
+    auto CapturePolicyStatsRequest() {
+        if constexpr (requires { TPolicy::CaptureStatsRequest(); }) {
+            return TPolicy::CaptureStatsRequest();
+        } else {
+            return TEmptyPolicyStatsCapture{};
+        }
+    }
+
 template <class TPolicy>
 class TRequest: public NColumnShard::TMonitoringObjectsCounter<TRequest<TPolicy>>, public TNonCopyable {
 private:
@@ -35,6 +45,8 @@ private:
     TPositiveControlInteger WaitObjectsCount;
 
     std::shared_ptr<ICallback> Callback;
+
+        [[no_unique_address]] const decltype(CapturePolicyStatsRequest<TPolicy>()) RequestStatsCapture = CapturePolicyStatsRequest<TPolicy>();
     const EConsumer Consumer;
 
     bool RemoveAddrOnFinished(const TAddress addr) {
@@ -63,6 +75,9 @@ public:
                     counters.ObjectCacheMiss->Inc();
                 } else {
                     counters.ObjectCacheHit->Inc();
+                if constexpr (requires { TPolicy::OnStatsCacheHit(it.Value()); }) {
+                    TPolicy::OnStatsCacheHit(it.Value());
+                }
                     AFL_VERIFY(Result.emplace(addr, it.Value()).second);
                     WaitObjectsCount.Dec();
                     toRemove.emplace_back(addr);
@@ -98,6 +113,9 @@ public:
     }
 
     [[nodiscard]] bool AddResult(const TAddress& addr, const TObject& obj) {
+            if constexpr (requires { TPolicy::OnStatsSharedRead(obj, RequestStatsCapture); }) {
+                TPolicy::OnStatsSharedRead(obj, RequestStatsCapture);
+            }
         AFL_VERIFY(Result.emplace(addr, obj).second);
         WaitObjectsCount.Dec();
         return RemoveAddrOnFinished(addr);
@@ -164,6 +182,12 @@ public:
     }
 
     void AddObjects(THashMap<TAddress, TObject>&& add, const bool isAdditional, const TMonotonic now) {
+            if constexpr (requires(const TObject& object) { TPolicy::OnStatsSourceRead(object); }) {
+                for (const auto& [address, object] : add) {
+                    Y_UNUSED(address);
+                    TPolicy::OnStatsSourceRead(object);
+                }
+            }
         for (auto&& i : add) {
             auto it = RequestedObjects.find(i.first);
             if (it == RequestedObjects.end()) {

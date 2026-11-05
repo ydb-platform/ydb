@@ -29,6 +29,7 @@ namespace NKikimr::NScanStats {
         ui32 OwnedPauseDepth = 0;
         std::optional<TMonotonic> WaitingSince;
         bool Finalized = false;
+    bool ReadBytesOverflow = false;
         THashSet<TString> RequestedRanges;
 
         TOperation(std::shared_ptr<TCollector> collector, TStep&& record);
@@ -63,9 +64,13 @@ namespace NKikimr::NScanStats {
         void InheritContext(TStep& child);
         void Finish(TStep::EOutcome outcome = TStep::completed);
         void AddRequestedRange(TString rangeIdentity, ui64 bytes);
-        void AddReadBytes(ui64 bytes) {
-            Update([&](TStep& record) { record.SetReadBytes(record.GetReadBytes() + bytes); });
-        }
+    void AddDataSourceRead(TStringBuf kind, TStringBuf name, std::optional<ui64> bytes,
+        NKqpProto::TColumnShardStepDetails::TStorageRead::EDataKind dataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::unknown,
+        bool shared = false, bool includeInStorage = true);
+
+    std::optional<ui64> GetParentStepId();
+
+    void AddReadBytes(ui64 bytes);
     };
 
     class TCollector: public std::enable_shared_from_this<TCollector> {
@@ -82,6 +87,8 @@ namespace NKikimr::NScanStats {
         ui64 PublishedBytes = 0;
         std::atomic<ui64> ActiveOperations = 0;
         std::optional<NKqpProto::TColumnShardCacheStats> CacheStats;
+    google::protobuf::RepeatedPtrField<NKqpProto::TColumnShardDataSourceRead> StorageReads;
+    TString TablePath;
         bool Truncated = false;
 
         void Publish(TStep&& record);
@@ -93,6 +100,11 @@ namespace NKikimr::NScanStats {
         }
         void BindScanId(TString id);
         void AddCacheRead(ui64 bytes, bool cached);
+    void AddStorageRead(TStringBuf kind, TStringBuf name, std::optional<ui64> bytes,
+        NKqpProto::TColumnShardStepDetails::TStorageRead::EDataKind dataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::unknown,
+        bool shared = false);
+    void SetTablePath(TString path);
+    TString GetTablePath();
         std::shared_ptr<TOperation> Start(TStep::EStepKind kind, TString name, TString operation,
                                           const std::shared_ptr<TOperation>& parent = {}, std::optional<ui64> sourceId = {});
         std::unique_ptr<NKqpProto::TColumnShardScanStats> Drain(bool finished);
@@ -110,6 +122,14 @@ namespace NKikimr::NScanStats {
         TCapture();
         TCapture(std::shared_ptr<TOperation> operation, std::shared_ptr<TCollector> collector);
     };
+
+    void RecordDataSourceRead(TStringBuf kind, TStringBuf name, std::optional<ui64> bytes,
+        NKqpProto::TColumnShardStepDetails::TStorageRead::EDataKind dataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::unknown,
+        const TCapture& capture = TCapture(), bool shared = false, bool includeInStorage = true);
+
+    void RecordNonOwnerDataSourceRead(TStringBuf kind, TStringBuf name,
+        NKqpProto::TColumnShardStepDetails::TStorageRead::EDataKind dataKind,
+        const TCapture& request, const std::shared_ptr<TOperation>& owner);
 
     class TScope {
         const std::shared_ptr<TOperation> Operation;

@@ -292,7 +292,8 @@ TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(IDataSource& source
         const TString categoryName = iterator->GetCurrentNode().GetSignalCategoryName();
         const auto processor = iterator->GetProcessorVerified();
         const auto& signals = GetSignals(nodeId);
-        executionContext.OnStartProgramStepExecution(nodeId, signals, source, processor, Program->GetStatsMetaStep(nodeId));
+        executionContext.OnStartProgramStepExecution(nodeId, signals, source, processor, Program->GetStatsMetaStep(nodeId),
+            Program->GetStatsIndexProcessors(nodeId));
 
         const TMonotonic start = TMonotonic::Now();
         auto conclusion = [&] {

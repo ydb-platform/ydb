@@ -1,4 +1,6 @@
 #pragma once
+
+#include <set>
 #include "abstract.h"
 #include "checker.h"
 #include "collection.h"
@@ -78,6 +80,11 @@ public:
 
     virtual bool IsSkipIndex() const {
         return false;
+    }
+
+    virtual const std::set<ui32>& GetColumnIdsForStats() const {
+        static const std::set<ui32> empty;
+        return empty;
     }
 
     virtual std::optional<ui32> GetSingleColumnId() const {

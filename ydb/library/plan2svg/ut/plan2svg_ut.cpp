@@ -1018,6 +1018,193 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         }
     }
 
+    std::vector<TString> CsOpeningRows(TStringBuf svg, TStringBuf marker) {
+        std::vector<TString> result;
+        size_t position = 0;
+        while ((position = svg.find(marker, position)) != TStringBuf::npos) {
+            const auto begin = svg.rfind("<svg", position), end = svg.find('>', position);
+            UNIT_ASSERT(begin != TStringBuf::npos && end != TStringBuf::npos);
+            result.emplace_back(svg.substr(begin, end - begin + 1));
+            position = end + 1;
+        }
+        return result;
+    }
+
+    TString StorageRow(TStringBuf svg, TStringBuf row, TStringBuf kind = {}, TStringBuf name = {}, TStringBuf read = {}) {
+        const TString marker = "data-cs-storage-row='" + TString(row) + '\'';
+        for (const auto& opening : CsOpeningRows(svg, marker)) {
+            if ((!kind || opening.Contains("data-cs-source-kind='" + TString(kind) + '\'')) &&
+                (!name || opening.Contains("data-cs-source-name='" + TString(name) + '\'')) && (!read || opening.Contains(read))) {
+                return opening;
+            }
+        }
+        UNIT_ASSERT_C(false, "Missing Storage row " << row << '/' << kind << '/' << name << '/' << read);
+        return {};
+    }
+
+    Y_UNIT_TEST(StorageV3IsAdditiveAcrossReadsAndDeduplicatesDecorations) {
+        TPlanVisualizer viz;
+        viz.LoadPlans(R"json({"Plan":{"Plans":[{"Node Type":"ResultSet","Plans":[
+          {"Node Type":"Stage","Stats":{"PhysicalStageId":1,"ColumnShardScans":[
+            {"ExpectedContextOnly":true,"StatsGroupId":"ga","ParticipatingShards":1,"ParticipatingTablets":["1"]},
+            {"StatsScanId":"a","StatsGroupId":"ga","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,
+             "StorageStatsVersion":1,"TablePath":"/A","StorageReads":[
+              {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":1024,"ReadCount":1,"DataKind":"unknown"},
+              {"SourceKind":"BlobCache","SourceName":"blob","ReadBytes":128,"ReadCount":1},
+              {"SourceKind":"Memory","ReadBytes":0,"ReadCount":0}],
+             "CacheStats":{"ReturnedBytes":99999,"CacheServedBytes":99999},
+             "Steps":[{"StepId":1,"StepKind":"StorageRead","MetaStep":"Filter","ReadBytes":99999,"OwnedExecutionDuration":1}]}
+          ]},"Plans":[{"Node Type":"Stage","Stats":{"PhysicalStageId":2,"ColumnShardScans":[
+            {"ExpectedContextOnly":true,"StatsGroupId":"gb","ParticipatingShards":1,"ParticipatingTablets":["2"]},
+            {"StatsScanId":"b","StatsGroupId":"gb","TabletId":"2","ReaderKind":"PLAIN","Finished":true,
+             "StorageStatsVersion":1,"TablePath":"/B","StorageReads":[
+              {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":512,"ReadCount":1},
+              {"SourceKind":"ExternalStorage","SourceName":"tier<&'\"Ж","ReadBytes":256,"ReadCount":1}],
+             "Steps":[{"StepId":1,"StepKind":"ReaderInit","MetaStep":"Preparation","OwnedExecutionDuration":1}]},
+            {"StatsScanId":"a","StatsGroupId":"ga","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,
+             "StorageStatsVersion":1,"TablePath":"/A","StorageReads":[
+              {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":1024,"ReadCount":1,"DataKind":"data"},
+              {"SourceKind":"BlobCache","SourceName":"blob","ReadBytes":128,"ReadCount":1}]}
+          ]}}]}
+        ]}]}})json");
+        const TString svg = viz.PrintSvg();
+        AssertWellFormed(svg, "Storage v3");
+        UNIT_ASSERT_C(StorageRow(svg, "grand-total").Contains("data-cs-storage-bytes='1920'"), svg);
+        UNIT_ASSERT_C(StorageRow(svg, "source-total", "BlobStorage", "default").Contains("data-cs-storage-bytes='1536'"), svg);
+        UNIT_ASSERT_C(StorageRow(svg, "read", "BlobStorage", "default", "/A").Contains("data-cs-storage-bytes='1024'"), svg);
+        UNIT_ASSERT_C(StorageRow(svg, "read", "BlobStorage", "default", "/B").Contains("data-cs-storage-bytes='512'"), svg);
+        UNIT_ASSERT_C(CsOccurrences(svg, "data-cs-storage-row='grand-total'") == 1, svg);
+        UNIT_ASSERT_C(!svg.Contains("data-cs-row='cache'") && !svg.Contains("data-cs-source-kind='Memory'"), svg);
+        UNIT_ASSERT_C(svg.Contains("data-cs-plan-area='true'") && svg.Contains("Read · table / stage"), svg);
+        UNIT_ASSERT_C(svg.Contains("tier&lt;&amp;&apos;&quot;Ж"), svg);
+    }
+
+    Y_UNIT_TEST(StorageV3UnknownSharedBytesAreNotZeroOrAnExtraOwnedCharge) {
+        const TString svg = RenderScans(R"json([
+          {"ExpectedContextOnly":true,"StatsGroupId":"g","ParticipatingShards":1,"ParticipatingTablets":["1"]},
+          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","ReaderKind":"TRIVIAL","Finished":false,
+           "PendingOperations":1,"StorageStatsVersion":1,"StorageReads":[
+            {"SourceKind":"BlobStorage","ReadBytes":100,"ReadCount":1},
+            {"SourceKind":"ColumnCache","ReadBytes":5,"ReadCount":2,"UnknownByteReads":1,"Shared":true}],
+           "Steps":[{"StepId":1,"StepKind":"FetchColumns","MetaStep":"Filter","OwnedExecutionDuration":1,
+             "DataSourceReads":[{"SourceKind":"ColumnCache","ReadBytes":5,"ReadCount":2,"UnknownByteReads":1,"Shared":true}]}]}
+        ])json");
+        const TString total = StorageRow(svg, "grand-total");
+        UNIT_ASSERT_C(total.Contains("data-cs-storage-bytes='105'") && total.Contains("data-cs-storage-partial='true'"), svg);
+        UNIT_ASSERT_C(total.Contains("data-cs-storage-unknown='1'"), svg);
+        UNIT_ASSERT_C(CsRow(svg, "Filter", "", "").Contains("&quot;ReadBytes&quot;:5"), svg);
+        UNIT_ASSERT_C(svg.Contains("shared provenance") && svg.Contains("Storage · observed sources (PARTIAL)"), svg);
+    }
+
+    Y_UNIT_TEST(StorageV3SourceDetailsRespectSemanticOwnersAndNormalizeReservePaths) {
+        const TString svg = RenderScans(R"json([
+          {"ExpectedContextOnly":true,"StatsGroupId":"g","ParticipatingShards":1,"ParticipatingTablets":["1"]},
+          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,
+           "StorageStatsVersion":1,"StorageReads":[{"SourceKind":"BlobStorage","ReadBytes":100,"ReadCount":1}],
+           "Steps":[
+            {"StepId":1,"StepKind":"MemoryReserve","MetaStep":"Filter","OwnedExecutionDuration":1,"Details":{"ReservationBytes":128}},
+            {"StepId":2,"ParentStepId":10,"StepKind":"FetchColumns","MetaStep":"Filter","CanonicalPath":"Reserve","OwnedExecutionDuration":2},
+            {"StepId":3,"ParentStepId":2,"StepKind":"StorageRead","MetaStep":"Filter","CanonicalPath":"ReserveMemory/Fetching","OwnedExecutionDuration":3,
+             "DataSourceReads":[{"SourceKind":"BlobStorage","ReadBytes":100,"ReadCount":1}]},
+            {"StepId":10,"StepKind":"Reader","MetaStep":"PKFilter","OwnedExecutionDuration":1}
+           ]}
+        ])json");
+        UNIT_ASSERT_C(CsRow(svg, "Filter", "", "ReserveMemory").Contains("data-cs-calls='1'"), svg);
+        UNIT_ASSERT_C(CsOccurrences(svg, "data-cs-meta='Filter' data-cs-path='ReserveMemory' data-cs-kind='Fetching'") == 1, svg);
+        UNIT_ASSERT_C(CsRow(svg, "Filter", "", "").Contains("&quot;ReadBytes&quot;:100"), svg);
+        UNIT_ASSERT_C(CsRow(svg, "PKFilter", "", "Reader").Contains("&quot;ReadBytes&quot;:100"), svg);
+        UNIT_ASSERT_C(CsRow(svg, "PKFilter", "", "").Contains("data-cs-source-reads='[]'"), svg);
+        UNIT_ASSERT_C(StorageRow(svg, "grand-total").Contains("data-cs-storage-bytes='100'"), svg);
+        UNIT_ASSERT_C(!svg.Contains("data-cs-kind='Reserve'") && !svg.Contains("data-cs-path='Reserve/"), svg);
+    }
+
+    Y_UNIT_TEST(IndexV3KeepsIdentityCheckOrderAndOneSharedReserveOwner) {
+        const TString svg = RenderScans(R"json([
+          {"StatsScanId":"a","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,"TablePath":"/A","Steps":[
+            {"StepId":1,"StepKind":"MemoryReserve","MetaStep":"IndexFilter","OwnedExecutionDuration":5,
+             "SharedIndexInputs":true,"IndexDescriptors":[
+              {"IndexId":11,"Name":"bloom_a","Type":"BLOOM_FILTER","Columns":["a"]},
+              {"IndexId":12,"Name":"bloom_b","Type":"BLOOM_FILTER","Columns":["b"]}],"Details":{"ReservationBytes":12345}},
+            {"StepId":2,"StepKind":"IndexCheck","MetaStep":"IndexFilter","OwnedExecutionDuration":3,"ApplicationOrder":2,
+             "IndexDescriptors":[{"IndexId":11,"Name":"bloom_a","Type":"BLOOM_FILTER","Columns":["a"]}],
+             "Details":{"CandidateInputRows":100,"CandidateOutputRows":20,"InputRows":100,"OutputRows":100,
+              "IndexAvailable":true,"IndexDataAvailable":true,"AppliedToResourceFilter":false}},
+            {"StepId":3,"StepKind":"IndexCheck","MetaStep":"IndexFilter","OwnedExecutionDuration":4,"ApplicationOrder":3,
+             "IndexDescriptors":[{"IndexId":12,"Name":"bloom_b","Type":"BLOOM_FILTER","Columns":["b"]}],
+             "Details":{"CandidateInputRows":100,"CandidateOutputRows":10,"InputRows":100,"OutputRows":10,"AppliedToResourceFilter":true}},
+            {"StepId":4,"StepKind":"IndexCheck","MetaStep":"IndexFilter","OwnedExecutionDuration":2,"ApplicationOrder":1,
+             "IndexDescriptors":[{"IndexId":13,"Name":"min<&'\"Ж","Type":"MIN_MAX","Columns":["level"]}],
+             "Details":{"InputRows":100,"OutputRows":100,"IndexAvailable":true,"IndexDataAvailable":false}}
+          ]}
+        ])json");
+        const auto indexes = CsOpeningRows(svg, "data-cs-row='meta' data-cs-family='SIMPLE/TRIVIAL' data-cs-meta='IndexFilter'");
+        UNIT_ASSERT_VALUES_EQUAL_C(indexes.size(), 4, svg);
+        UNIT_ASSERT_C(indexes[0].Contains("id:13") && indexes[0].Contains("data-cs-index-positions='[1]'"), svg);
+        UNIT_ASSERT_C(indexes[1].Contains("data-cs-index-shared='true'"), svg);
+        UNIT_ASSERT_C(indexes[2].Contains("id:11") && indexes[3].Contains("id:12"), svg);
+        UNIT_ASSERT_C(indexes[2].Contains("data-cs-index-candidate-input-rows='100'") &&
+            indexes[2].Contains("data-cs-index-candidate-output-rows='20'"), svg);
+        UNIT_ASSERT_C(CsOccurrences(svg, "data-cs-kind='ReserveMemory'") == 1, svg);
+        UNIT_ASSERT_C(CsRow(svg, "", "", "").Contains("data-cs-active-sum='14'"), svg);
+        UNIT_ASSERT_C(svg.Contains("shared inputs") && svg.Contains("Actual input owners"), svg);
+        UNIT_ASSERT_C(svg.Contains("min&lt;&amp;"), svg);
+    }
+
+    Y_UNIT_TEST(IndexV3HeaderInputsKeepTheirFilterOwnerWithoutDuplicatingQuota) {
+        const TString svg = RenderScans(R"json([
+          {"StatsScanId":"a","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,"Steps":[
+            {"StepId":1,"StepKind":"MemoryReserve","MetaStep":"Filter","OwnedExecutionDuration":5,"SharedIndexInputs":true,
+             "IndexDescriptors":[{"IndexId":11,"Name":"bloom","Type":"BLOOM_FILTER","Columns":["a"]}],
+             "Details":{"ReservationBytes":4096}},
+            {"StepId":2,"StepKind":"IndexCheck","MetaStep":"IndexFilter","OwnedExecutionDuration":3,"ApplicationOrder":1,
+             "IndexDescriptors":[{"IndexId":11,"Name":"bloom","Type":"BLOOM_FILTER","Columns":["a"]}],"Details":{"InputRows":10,"OutputRows":10}}
+          ]}
+        ])json");
+        UNIT_ASSERT_C(CsRow(svg, "Filter", "", "").Contains("data-cs-active-sum='5'"), svg);
+        UNIT_ASSERT_C(CsOccurrences(svg, "data-cs-kind='ReserveMemory'") == 1, svg);
+        UNIT_ASSERT_C(svg.Contains("Filter/ReserveMemory") && svg.Contains("references, not additional quota/time"), svg);
+        const auto indexes = CsOpeningRows(svg, "data-cs-row='meta' data-cs-family='SIMPLE/TRIVIAL' data-cs-meta='IndexFilter'");
+        UNIT_ASSERT_VALUES_EQUAL_C(indexes.size(), 1, svg);
+        UNIT_ASSERT_C(indexes[0].Contains("data-cs-active-sum='3'"), svg);
+    }
+
+    Y_UNIT_TEST(StorageV3KnownZeroDoesNotInventReadSources) {
+        const TString svg = RenderScans(R"json([
+          {"ExpectedContextOnly":true,"StatsGroupId":"g","ParticipatingShards":1,"ParticipatingTablets":["1"]},
+          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,
+           "StorageStatsVersion":1,"Steps":[{"StepId":1,"StepKind":"ReaderInit","MetaStep":"Preparation","OwnedExecutionDuration":1}]}
+        ])json");
+        UNIT_ASSERT_C(StorageRow(svg, "grand-total").Contains("data-cs-storage-bytes='0'"), svg);
+        UNIT_ASSERT_C(StorageRow(svg, "grand-total").Contains("data-cs-storage-partial='false'"), svg);
+        UNIT_ASSERT_C(CsOccurrences(svg, "data-cs-storage-row='read'") == 0 && !svg.Contains("data-cs-row='cache'"), svg);
+    }
+
+    Y_UNIT_TEST(ColumnShardPlanIdentityDisambiguatesRepeatedPhysicalStageIds) {
+        TPlanVisualizer viz;
+        viz.LoadPlans(R"json({"Plan":{"Plans":[
+          {"Node Type":"ResultSet","Plans":[{"Node Type":"Stage","Stats":{"PhysicalStageId":0,"ColumnShardScans":[
+            {"StatsScanId":"first","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,
+             "Steps":[{"StepId":1,"StepKind":"ReaderInit","MetaStep":"Preparation","OwnedExecutionDuration":1}]}
+          ]}}]},
+          {"Node Type":"ResultSet","Plans":[{"Node Type":"Stage","Stats":{"PhysicalStageId":0,"ColumnShardScans":[
+            {"StatsScanId":"second","TabletId":"2","ReaderKind":"TRIVIAL","Finished":true,
+             "Steps":[{"StepId":1,"StepKind":"ReaderInit","MetaStep":"Preparation","OwnedExecutionDuration":5}]}
+          ]}}]}
+        ]}})json");
+        const TString svg = viz.PrintSvg();
+        AssertWellFormed(svg, "Repeated physical stage IDs");
+        const auto panels = CsOpeningRows(svg, "data-cs-panel='0'");
+        UNIT_ASSERT_VALUES_EQUAL_C(panels.size(), 2, svg);
+        UNIT_ASSERT_C(panels[0].Contains("data-cs-plan-index='0'") && panels[1].Contains("data-cs-plan-index='1'"), svg);
+        const auto first = svg.find("data-columnshard='read' data-cs-plan-index='0'");
+        const auto second = svg.find("data-columnshard='read' data-cs-plan-index='1'");
+        UNIT_ASSERT_C(first != TString::npos && second != TString::npos && first < second, svg);
+        const TStringBuf firstCard = TStringBuf(svg).substr(first, second - first);
+        const TStringBuf secondCard = TStringBuf(svg).substr(second);
+        UNIT_ASSERT_C(firstCard.Contains("data-cs-owned-sum='1'") && !firstCard.Contains("data-cs-owned-sum='5'"), svg);
+        UNIT_ASSERT_C(secondCard.Contains("data-cs-owned-sum='5'") && !secondCard.Contains("data-cs-owned-sum='1'"), svg);
+    }
+
     Y_UNIT_TEST(MetaStatsChildOrderDiffersFromMetastepOrder) {
         auto svg = RenderScans(R"([
             {"StatsScanId":"a","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,"Truncated":false,"Steps":[
@@ -1039,8 +1226,8 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
                 {"StepId":16,"StepKind":"BuildResult","MetaStep":"BuildResult","OwnedExecutionDuration":1},
                 {"StepId":17,"StepKind":"PrepareResult","MetaStep":"BuildResult","OwnedExecutionDuration":1}]}
         ])");
-        CsAssertOrder(svg, "Filter", {"Reserve", "Fetching", "Assemble", "Decode", "Calculation", "Filter"});
-        CsAssertOrder(svg, "Aggregation", {"Reserve", "Fetching", "Assemble", "Decode", "Calculation", "Aggregation"});
+        CsAssertOrder(svg, "Filter", {"ReserveMemory", "Fetching", "Assemble", "Decode", "Calculation", "Filter"});
+        CsAssertOrder(svg, "Aggregation", {"ReserveMemory", "Fetching", "Assemble", "Decode", "Calculation", "Aggregation"});
         CsAssertOrder(svg, "Preparation", {"ParseProgram", "SelectPortions", "ReaderInit"});
         CsAssertOrder(svg, "BuildResult", {"PrepareResult", "BuildResult"});
     }
@@ -1155,14 +1342,14 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
                 {"StepId":9,"StepKind":"Limit","MetaStep":"Output","Operation":"first","OwnedExecutionDuration":1},
                 {"StepId":10,"StepKind":"Limit","MetaStep":"Output","Operation":"second","OwnedExecutionDuration":1}]}
         ])");
-        UNIT_ASSERT_C(CsRow(svg, "Filter", "", "Reserve").Contains("data-cs-calls='2'"), svg);
+        UNIT_ASSERT_C(CsRow(svg, "Filter", "", "ReserveMemory").Contains("data-cs-calls='2'"), svg);
         UNIT_ASSERT_C(CsRow(svg, "PKFilter", "", "Filter").Contains("data-cs-calls='2'"), svg);
         UNIT_ASSERT_C(CsRow(svg, "Output", "", "Limit").Contains("data-cs-calls='2'"), svg);
         CsRow(svg, "Filter", "", "Fetching");
         CsRow(svg, "PKFilter", "", "Fetching");
         CsRow(svg, "Filter", "Assemble", "Decode");
         CsRow(svg, "Filter", "Calculation", "Decode");
-        UNIT_ASSERT_C(CsOccurrences(svg, "data-cs-meta='Filter' data-cs-path='' data-cs-kind='Reserve'") == 1, svg);
+        UNIT_ASSERT_C(CsOccurrences(svg, "data-cs-meta='Filter' data-cs-path='' data-cs-kind='ReserveMemory'") == 1, svg);
         const auto index = svg.find("data-cs-meta='IndexFilter' data-cs-path='' data-cs-kind=''");
         const auto filter = svg.find("data-cs-meta='Filter' data-cs-path='' data-cs-kind=''");
         const auto aggregation = svg.find("data-cs-meta='Aggregation' data-cs-path='' data-cs-kind=''");

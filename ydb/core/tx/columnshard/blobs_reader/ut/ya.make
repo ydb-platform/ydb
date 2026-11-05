@@ -23,4 +23,6 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+SRCS(v3_storage_context_ut.cpp)
+
 END()

@@ -1,6 +1,63 @@
 #include "stats.h"
 
+#include <limits>
+
 namespace NKikimr::NScanStats {
+    namespace {
+        TStringBuf StorageDataKindName(NKqpProto::TColumnShardStepDetails::TStorageRead::EDataKind kind) {
+            using TStorageRead = NKqpProto::TColumnShardStepDetails::TStorageRead;
+            switch (kind) {
+                case TStorageRead::data: return "data";
+                case TStorageRead::index: return "index";
+                case TStorageRead::metadata: return "metadata";
+                case TStorageRead::mixed: return "mixed";
+                default: return "unknown";
+            }
+        }
+
+        bool AddSourceRead(google::protobuf::RepeatedPtrField<NKqpProto::TColumnShardDataSourceRead>& reads,
+            TStringBuf kind, TStringBuf name, std::optional<ui64> bytes,
+            NKqpProto::TColumnShardStepDetails::TStorageRead::EDataKind dataKind, bool shared = false) {
+            const TStringBuf dataKindName = StorageDataKindName(dataKind);
+            if (shared) {
+                bytes.reset();
+            }
+            NKqpProto::TColumnShardDataSourceRead* target = nullptr;
+            for (auto& read : reads) {
+                if (read.GetSourceKind() == kind && read.GetSourceName() == name) {
+                    target = &read;
+                    break;
+                }
+            }
+            if (!target) {
+                target = reads.Add();
+                target->SetSourceKind(kind.data(), kind.size());
+                target->SetSourceName(name.data(), name.size());
+                target->SetDataKind(dataKindName.data(), dataKindName.size());
+            } else if (target->GetDataKind() != dataKindName) {
+                target->SetDataKind(target->GetDataKind() == "unknown" || dataKindName == "unknown" ? "unknown" : "mixed");
+            }
+            if (shared) {
+                target->SetShared(true);
+            }
+            bool overflow = false;
+            const auto add = [&](ui64 value, ui64 delta) {
+                if (delta > std::numeric_limits<ui64>::max() - value) {
+                    overflow = true;
+                    return std::numeric_limits<ui64>::max();
+                }
+                return value + delta;
+            };
+            target->SetReadCount(add(target->GetReadCount(), 1));
+            if (bytes) {
+                target->SetReadBytes(add(target->GetReadBytes(), *bytes));
+            }
+            if (!bytes || overflow) {
+                target->SetUnknownByteReads(add(target->GetUnknownByteReads(), 1));
+            }
+            return !overflow;
+        }
+    }
 
     static TString CanonicalStepKind(TStep::EStepKind kind) {
         switch (kind) {
@@ -140,6 +197,12 @@ namespace NKikimr::NScanStats {
 
     void TOperation::InheritContext(TStep& child) {
         std::lock_guard guard(Mutex);
+        if (child.IndexDescriptorsSize() == 0) {
+            child.MutableIndexDescriptors()->CopyFrom(Record.GetIndexDescriptors());
+        }
+        if (!child.HasApplicationOrder() && Record.HasApplicationOrder()) {
+            child.SetApplicationOrder(Record.GetApplicationOrder());
+        }
         if (!Record.HasMetaStep()) {
             return;
         }
@@ -176,19 +239,89 @@ namespace NKikimr::NScanStats {
             const auto now = TMonotonic::Now();
             EndActive(now);
             EndWait(now);
+            if (Record.GetStepKind() == TStep::StorageRead) {
+                const auto& details = Record.GetDetails().GetStorageRead();
+                using TStorageRead = NKqpProto::TColumnShardStepDetails::TStorageRead;
+                TStringBuf kind = "Unknown";
+                switch (details.GetBackendKind()) {
+                    case TStorageRead::BlobStorage: kind = "BlobStorage"; break;
+                    case TStorageRead::ExternalStorage: kind = "ExternalStorage"; break;
+                    case TStorageRead::MemoryOrFake: kind = "FakeExternal"; break;
+                    default: break;
+                }
+                const auto bytes = Record.HasReadBytes() && !ReadBytesOverflow
+                    ? std::optional<ui64>(Record.GetReadBytes()) : std::nullopt;
+                AddSourceRead(*Record.MutableDataSourceReads(), kind, details.GetStorageTier(), bytes, details.GetDataKind());
+                Collector->AddStorageRead(kind, details.GetStorageTier(), bytes, details.GetDataKind());
+            }
             Record.SetOutcome(outcome);
             finalized.Swap(&Record);
             // Captured callbacks can create children after this operation has finished.
             Record.SetStepKind(finalized.GetStepKind());
+            if (finalized.HasParentStepId()) {
+                Record.SetParentStepId(finalized.GetParentStepId());
+            }
             if (finalized.HasMetaStep()) {
                 Record.SetMetaStep(finalized.GetMetaStep());
             }
             if (finalized.HasCanonicalPath()) {
                 Record.SetCanonicalPath(finalized.GetCanonicalPath());
             }
+            Record.MutableIndexDescriptors()->CopyFrom(finalized.GetIndexDescriptors());
+            if (finalized.HasApplicationOrder()) {
+                Record.SetApplicationOrder(finalized.GetApplicationOrder());
+            }
             Finalized = true;
         }
         Collector->Publish(std::move(finalized));
+    }
+
+    void TOperation::AddReadBytes(ui64 bytes) {
+        std::lock_guard guard(Mutex);
+        if (Finalized) {
+            return;
+        }
+        if (bytes > std::numeric_limits<ui64>::max() - Record.GetReadBytes()) {
+            ReadBytesOverflow = true;
+            Record.SetReadBytes(std::numeric_limits<ui64>::max());
+        } else {
+            Record.SetReadBytes(Record.GetReadBytes() + bytes);
+        }
+    }
+
+    std::optional<ui64> TOperation::GetParentStepId() {
+        std::lock_guard guard(Mutex);
+        return Record.HasParentStepId() ? std::optional<ui64>(Record.GetParentStepId()) : std::nullopt;
+    }
+
+    void TOperation::AddDataSourceRead(TStringBuf kind, TStringBuf name, std::optional<ui64> bytes,
+        NKqpProto::TColumnShardStepDetails::TStorageRead::EDataKind dataKind, bool shared, bool includeInStorage) {
+        std::lock_guard guard(Mutex);
+        if (Finalized) {
+            return;
+        }
+        AddSourceRead(*Record.MutableDataSourceReads(), kind, name, bytes, dataKind, shared);
+        if (includeInStorage) {
+            Collector->AddStorageRead(kind, name, bytes, dataKind, shared);
+        }
+    }
+
+    void TCollector::AddStorageRead(TStringBuf kind, TStringBuf name, std::optional<ui64> bytes,
+        NKqpProto::TColumnShardStepDetails::TStorageRead::EDataKind dataKind, bool shared) {
+        std::lock_guard guard(Mutex);
+        if (!AddSourceRead(StorageReads, kind, name, bytes, dataKind, shared)) {
+            Truncated = true;
+        }
+    }
+
+    void TCollector::SetTablePath(TString path) {
+        std::lock_guard guard(Mutex);
+        TablePath = std::move(path);
+    }
+
+    TString TCollector::GetTablePath() {
+        std::lock_guard guard(Mutex);
+        return TablePath;
     }
 
     void TCollector::AddCacheRead(ui64 bytes, bool cached) {
@@ -200,6 +333,35 @@ namespace NKikimr::NScanStats {
         CacheStats->SetReturnedBytes(CacheStats->GetReturnedBytes() + bytes);
         CacheStats->SetCacheServedReadRanges(CacheStats->GetCacheServedReadRanges() + (cached ? 1 : 0));
         CacheStats->SetCacheServedBytes(CacheStats->GetCacheServedBytes() + (cached ? bytes : 0));
+    }
+
+    void RecordDataSourceRead(TStringBuf kind, TStringBuf name, std::optional<ui64> bytes,
+        NKqpProto::TColumnShardStepDetails::TStorageRead::EDataKind dataKind, const TCapture& capture, bool shared, bool includeInStorage) {
+        if (!capture.Collector) {
+            return;
+        }
+        auto operation = capture.Collector->Start(TStep::Reader, shared ? "SHARED_READ" : "READ_SOURCE", TString(kind), capture.Operation);
+        if (operation) {
+            operation->AddDataSourceRead(kind, name, bytes, dataKind, shared, includeInStorage);
+            operation->Finish();
+        } else if (includeInStorage) {
+            capture.Collector->AddStorageRead(kind, name, bytes, dataKind, shared);
+        }
+    }
+
+    void RecordNonOwnerDataSourceRead(TStringBuf kind, TStringBuf name,
+        NKqpProto::TColumnShardStepDetails::TStorageRead::EDataKind dataKind,
+        const TCapture& request, const std::shared_ptr<TOperation>& owner) {
+        if (!request.Collector) {
+            return;
+        }
+        const bool sameCollector = owner && owner->GetCollector() == request.Collector;
+        const auto requestedParent = request.Operation ? std::optional<ui64>(request.Operation->GetStepId()) : std::nullopt;
+        if (sameCollector && owner->GetParentStepId() == requestedParent) {
+            return;
+        }
+        // shortcut: payload shared by collectors needs an unknown allocation until the backend reports per-read ownership.
+        RecordDataSourceRead(kind, name, std::nullopt, dataKind, request, true, !sameCollector);
     }
 
     void TCollector::BindScanId(TString id) {
@@ -271,6 +433,11 @@ namespace NKikimr::NScanStats {
         std::lock_guard guard(Mutex);
         report->SetStatsScanId(StatsScanId);
         report->SetTabletId(TabletId);
+        report->SetStorageStatsVersion(1);
+        report->MutableStorageReads()->CopyFrom(StorageReads);
+        if (TablePath) {
+            report->SetTablePath(TablePath);
+        }
         if (ReaderKind) {
             report->SetReaderKind(ReaderKind);
         }

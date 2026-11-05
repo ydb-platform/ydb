@@ -29,6 +29,10 @@ void TReadingAction::DoRetryRead(const TBlobRange& range) {
         if (attempt) {
             attempt->Update([&](auto& record) {
                 auto* details = record.MutableDetails()->MutableStorageRead();
+                context.AppendIndexDescriptorsTo(*record.MutableIndexDescriptors());
+                if (context.SharedIndexInputs) {
+                    record.SetSharedIndexInputs(true);
+                }
                 details->SetStorageTier(GetStorageId());
                 details->SetBackendKind(dynamic_cast<const NWrappers::NExternalStorage::TFakeExternalStorageOperator*>(storageOperator.get())
                     ? NKqpProto::TColumnShardStepDetails::TStorageRead::MemoryOrFake

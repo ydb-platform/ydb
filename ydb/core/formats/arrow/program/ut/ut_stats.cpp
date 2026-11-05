@@ -1,6 +1,7 @@
 #include <ydb/core/formats/arrow/program/execution.h>
 #include <ydb/core/formats/arrow/program/assign_internal.h>
 #include <ydb/core/formats/arrow/program/filter.h>
+#include <ydb/core/formats/arrow/program/index.h>
 #include <ydb/core/formats/arrow/program/functions.h>
 #include <ydb/core/formats/arrow/program/stats.h>
 #include <ydb/library/formats/arrow/helpers/array.h>
@@ -129,6 +130,58 @@ namespace NKikimr::NArrow::NSSA {
             operation->Finish();
             auto report = collector->Drain(true);
             UNIT_ASSERT_VALUES_EQUAL(report->GetSteps(0).GetDetails().GetCalculation().GetRowsCount(), 3);
+        }
+
+        Y_UNIT_TEST(IndexDecisionAndResourceApplicationRemainDistinct) {
+            class TIndexSource: public TFakeDataSource {
+                NArrow::TColumnFilter Decision;
+
+                TConclusion<NArrow::TColumnFilter> DoCheckIndex(const TProcessorContext&, const TCheckIndexContext&,
+                    const std::shared_ptr<arrow::Scalar>&) override {
+                    return Decision;
+                }
+
+            public:
+                explicit TIndexSource(NArrow::TColumnFilter decision)
+                    : Decision(std::move(decision)) {
+                }
+            };
+            for (const bool deny : {false, true}) {
+                for (const bool apply : {false, true}) {
+                    auto decision = NArrow::TColumnFilter::BuildDenyFilter();
+                    if (!deny) {
+                        decision = NArrow::TColumnFilter::BuildAllowFilter();
+                        decision.Add(true, 2);
+                        decision.Add(false, 2);
+                    }
+                    TIndexSource source(std::move(decision));
+                    auto resources = std::make_unique<TAccessorsCollection>(4);
+                    resources->AddInput(1, arrow::Datum(NKernels::NumVecToArray(arrow::int64(), {1, 2, 3, 4})), false);
+                    resources->AddConstantVerified(2, std::make_shared<arrow::Int64Scalar>(3));
+                    TProcessorContext context(source, std::move(resources), std::nullopt, false);
+                    const IDataSource::TCheckIndexContext check(1, {}, TIndexCheckOperation(TIndexCheckOperation::EOperation::Equals, true), "value");
+                    TIndexCheckerProcessor processor(1, 2, check, 3);
+                    if (apply) {
+                        processor.SetApplyToFilter();
+                    }
+                    auto collector = std::make_shared<NScanStats::TCollector>(1);
+                    auto operation = collector->Start(NScanStats::TStep::IndexCheck, "index", "index");
+                    {
+                        NScanStats::TScope scope(operation);
+                        const auto result = processor.Execute(context, TExecutionNodeContext());
+                        UNIT_ASSERT_C(!result.IsFail(), result.GetErrorMessage());
+                    }
+                    operation->Finish();
+                    const auto report = collector->Drain(true);
+                    UNIT_ASSERT_VALUES_EQUAL(report->StepsSize(), 1);
+                    const auto& details = report->GetSteps(0).GetDetails().GetIndexCheck();
+                    UNIT_ASSERT(details.HasAppliedToResourceFilter());
+                    UNIT_ASSERT_VALUES_EQUAL(details.GetAppliedToResourceFilter(), !deny && apply);
+                    UNIT_ASSERT_VALUES_EQUAL(details.GetInputRows(), 4);
+                    UNIT_ASSERT_VALUES_EQUAL(details.GetOutputRows(), deny ? 0 : (apply ? 2 : 4));
+                    UNIT_ASSERT_VALUES_EQUAL(context.GetResources().GetFilter().GetFilteredCount().value_or(4), !deny && apply ? 2 : 4);
+                }
+            }
         }
 
         Y_UNIT_TEST(SequentialFilterUsesRetainedCandidates) {

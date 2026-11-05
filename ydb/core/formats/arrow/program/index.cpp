@@ -16,6 +16,7 @@ TConclusion<TExecutionResult> TIndexCheckerProcessor::DoExecute(
     }
     auto inputRows = context.GetResources().GetFilter().GetFilteredCount();
     std::optional<ui64> outputRows;
+    bool appliedToResourceFilter = false;
     if (conclusion->IsTotalDenyFilter()) {
         const ui64 records = context.GetResources().GetRecordsCountRobustVerified();
         if (!inputRows) {
@@ -37,12 +38,14 @@ TConclusion<TExecutionResult> TIndexCheckerProcessor::DoExecute(
             inputRows = conclusion->GetRecordsCountVerified();
         }
         context.MutableResources().AddFilter(*conclusion);
+        appliedToResourceFilter = true;
         outputRows = context.GetResources().GetFilter().GetFilteredCount();
     }
     if (const auto& operation = NScanStats::Current()) {
         operation->Update([&](NScanStats::TStep& record) {
             if (record.GetStepKind() == NScanStats::TStep::IndexCheck) {
                 auto* details = record.MutableDetails()->MutableIndexCheck();
+                details->SetAppliedToResourceFilter(appliedToResourceFilter);
                 if (inputRows) {
                     details->SetInputRows(*inputRows);
                 }

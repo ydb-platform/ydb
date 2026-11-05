@@ -1,11 +1,28 @@
 #include "policy.h"
 
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
+
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/collector.h>
 #include <ydb/core/tx/general_cache/source/events.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 
 namespace NKikimr::NOlap::NGeneralCache {
+
+void TPortionsMetadataCachePolicy::OnStatsCacheHit(const TObject&) {
+    NScanStats::RecordDataSourceRead("PortionMetadataCache", GetCacheName(), std::nullopt,
+        NKqpProto::TColumnShardStepDetails::TStorageRead::metadata);
+}
+
+void TPortionsMetadataCachePolicy::OnStatsSourceRead(const TObject&) {
+    NScanStats::RecordDataSourceRead("TabletMetadata", GetCacheName(), std::nullopt,
+        NKqpProto::TColumnShardStepDetails::TStorageRead::metadata);
+}
+
+void TPortionsMetadataCachePolicy::OnStatsSharedRead(const TObject&, const NScanStats::TCapture& capture) {
+    NScanStats::RecordNonOwnerDataSourceRead("TabletMetadata", GetCacheName(),
+        NKqpProto::TColumnShardStepDetails::TStorageRead::metadata, capture, NScanStats::Current());
+}
 
 std::shared_ptr<NKikimr::NGeneralCache::NSource::IObjectsProcessor<TPortionsMetadataCachePolicy>>
 TPortionsMetadataCachePolicy::BuildObjectsProcessor(const NActors::TActorId& serviceActorId) {

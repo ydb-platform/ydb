@@ -115,7 +115,12 @@ Y_UNIT_TEST_SUITE(TBlobCache) {
         parent->Finish();
         const auto report = collector->Drain(true);
         UNIT_ASSERT(report->GetFinished());
-        UNIT_ASSERT_VALUES_EQUAL(report->StepsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(report->StepsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(report->StorageReadsSize(), 1);
+        UNIT_ASSERT_STRINGS_EQUAL(report->GetStorageReads(0).GetSourceKind(), "BlobCache");
+        UNIT_ASSERT_VALUES_EQUAL(report->GetStorageReads(0).GetReadBytes(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(report->GetStorageReads(0).GetReadCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(report->GetStorageReads(0).GetUnknownByteReads(), 0);
         const auto& cache = report->GetCacheStats();
         UNIT_ASSERT_VALUES_EQUAL(cache.GetCompletedReadRanges(), 1);
         UNIT_ASSERT_VALUES_EQUAL(cache.GetCacheServedReadRanges(), 1);
@@ -147,6 +152,8 @@ Y_UNIT_TEST_SUITE(TBlobCache) {
         }
         ui64 physicalBytes = 0;
         ui32 physicalReads = 0;
+        ui64 globalKnownBytes = 0;
+        ui64 globalUnknownReads = 0;
         for (ui32 i = 0; i < 2; ++i) {
             parents[i]->Finish();
             auto report = collectors[i]->Drain(true);
@@ -156,6 +163,11 @@ Y_UNIT_TEST_SUITE(TBlobCache) {
             UNIT_ASSERT_VALUES_EQUAL(cache.GetCacheServedReadRanges(), 0);
             UNIT_ASSERT_VALUES_EQUAL(cache.GetReturnedBytes(), 40);
             UNIT_ASSERT_VALUES_EQUAL(cache.GetCacheServedBytes(), 0);
+            for (const auto& source : report->GetStorageReads()) {
+                UNIT_ASSERT_STRINGS_EQUAL(source.GetSourceKind(), "BlobStorage");
+                globalKnownBytes += source.GetReadBytes();
+                globalUnknownReads += source.GetUnknownByteReads();
+            }
             for (const auto& step : report->GetSteps()) {
                 if (step.GetStepKind() == NScanStats::TStep::StorageRead) {
                     ++physicalReads;
@@ -167,6 +179,41 @@ Y_UNIT_TEST_SUITE(TBlobCache) {
         }
         UNIT_ASSERT_VALUES_EQUAL(physicalReads, 1);
         UNIT_ASSERT_VALUES_EQUAL(physicalBytes, 40);
+        UNIT_ASSERT_VALUES_EQUAL(globalKnownBytes, 40);
+        UNIT_ASSERT_VALUES_EQUAL(globalUnknownReads, 1);
+    }
+
+    Y_UNIT_TEST(ScanSameQueryCoalescedMissHasOneStorageOrigin) {
+        TBlobCacheFixture fixture(1024);
+        const auto range = MakeRange(1, 40);
+        auto collector = std::make_shared<NScanStats::TCollector>(1);
+        std::shared_ptr<NScanStats::TOperation> parents[2];
+        for (ui32 i = 0; i < 2; ++i) {
+            parents[i] = collector->Start(NScanStats::TStep::FetchColumns, "FETCH", "price");
+            auto event = new TEvBlobCache::TEvReadBlobRange(range, TReadBlobRangeOptions{ .CacheAfterRead = true, .IsBackgroud = false },
+                { parents[i], NKqpProto::TColumnShardStepDetails::TStorageRead::data, collector });
+            fixture.Runtime.Send(new IEventHandle(fixture.ActorId, fixture.Sender, event), 0, true);
+            fixture.Runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        }
+        auto* reply = new TEvBlobStorage::TEvGetResult(NKikimrProto::OK, 1, 0u);
+        reply->Responses[0].Status = NKikimrProto::OK;
+        reply->Responses[0].Buffer = TRope(MakeData(40, 'x'));
+        fixture.Runtime.Send(new IEventHandle(fixture.ActorId, fixture.Sender, reply, 0, 2), 0, true);
+        for (ui32 i = 0; i < 2; ++i) {
+            auto result = fixture.Runtime.GrabEdgeEvent<TEvBlobCache::TEvReadBlobRangeResult>(fixture.Sender, TDuration::Seconds(5));
+            UNIT_ASSERT(!result->Get()->FromCache);
+            parents[i]->Finish();
+        }
+        const auto report = collector->Drain(true);
+        UNIT_ASSERT(report->GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(report->StorageReadsSize(), 1);
+        const auto& source = report->GetStorageReads(0);
+        UNIT_ASSERT_STRINGS_EQUAL(source.GetSourceKind(), "BlobStorage");
+        UNIT_ASSERT_VALUES_EQUAL(source.GetReadBytes(), 40);
+        UNIT_ASSERT_VALUES_EQUAL(source.GetReadCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(source.GetUnknownByteReads(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(report->GetCacheStats().GetCompletedReadRanges(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(report->GetCacheStats().GetCacheServedReadRanges(), 0);
     }
 
     Y_UNIT_TEST(ScanReadFailureIsOutsideCachePopulation) {

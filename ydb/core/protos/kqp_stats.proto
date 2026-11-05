@@ -65,6 +65,11 @@ message TColumnShardStepDetails {
         optional string Predicate = 2;
         optional uint64 InputRows = 3;
         optional uint64 OutputRows = 4;
+    optional bool IndexAvailable = 5;
+    optional bool IndexDataAvailable = 6;
+    optional uint64 CandidateInputRows = 7;
+    optional uint64 CandidateOutputRows = 8;
+    optional bool AppliedToResourceFilter = 9;
     }
     message TAssemble { TColumns Columns = 1; }
     message TDecode {
@@ -123,11 +128,32 @@ message TColumnShardStepDetails {
 }
 
 // One finalized runtime operation; parent timers are inclusive, all durations are microseconds.
+message TColumnShardDataSourceRead {
+  string SourceKind = 1;
+  string SourceName = 2;
+  uint64 ReadBytes = 3;
+  uint64 ReadCount = 4;
+  uint64 UnknownByteReads = 5;
+  optional string DataKind = 6;
+  optional bool Shared = 7;
+}
+
+message TColumnShardIndexDescriptor {
+  optional uint32 IndexId = 1;
+  optional string Name = 2;
+  optional string Type = 3;
+  repeated string Columns = 4;
+}
+
 message TColumnShardStepStats {
     // V2 semantic grouping; the path contains ancestor kinds inside MetaStep.
     optional string MetaStep = 20;
     optional string CanonicalPath = 21;
     optional uint64 OwnedExecutionDuration = 22;
+  repeated TColumnShardDataSourceRead DataSourceReads = 23;
+  repeated TColumnShardIndexDescriptor IndexDescriptors = 24;
+  optional uint64 ApplicationOrder = 25;
+  optional bool SharedIndexInputs = 26;
     enum EStepKind {
         Unknown = 0;
         Reader = 1;
@@ -183,6 +209,9 @@ message TColumnShardScanStats {
     repeated uint64 ParticipatingTablets = 23 [packed = true];
     optional bool ExpectedContextOnly = 24;
     optional uint64 PendingOperations = 25;
+  repeated TColumnShardDataSourceRead StorageReads = 26;
+  optional uint32 StorageStatsVersion = 27;
+  optional string TablePath = 28;
     string StatsScanId = 1;
     uint64 TabletId = 2;
     bool Finished = 3;

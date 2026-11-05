@@ -116,6 +116,96 @@ Y_UNIT_TEST_SUITE(TColumnShardV2Transport) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TColumnShardV3Transport) {
+    Y_UNIT_TEST(StorageSnapshotsAreCumulativeAndKeepReadIdentity) {
+        NKqpProto::TColumnShardScanStats first;
+        first.SetStatsScanId("v3-read-a");
+        first.SetTabletId(42);
+        first.SetTablePath("/Root/A");
+        first.SetStorageStatsVersion(1);
+        auto* initial = first.AddStorageReads();
+        initial->SetSourceKind("BlobStorage");
+        initial->SetSourceName("__DEFAULT");
+        initial->SetDataKind("data");
+        initial->SetReadBytes(32);
+        initial->SetReadCount(1);
+        auto* step = first.AddSteps();
+        step->SetStepId(1);
+        step->SetStepKind(NKqpProto::TColumnShardStepStats::StorageRead);
+        step->AddDataSourceReads()->CopyFrom(*initial);
+        auto* index = step->AddIndexDescriptors();
+        index->SetIndexId(9);
+        index->SetName("marker_bloom");
+        index->SetType("BLOOM_FILTER");
+        index->AddColumns("marker");
+        step->SetApplicationOrder(2);
+        step->SetSharedIndexInputs(true);
+
+        NKqpProto::TColumnShardScanStats wire;
+        UNIT_ASSERT(wire.ParseFromString(first.SerializeAsString()));
+        TColumnShardScanStatsCollection collection;
+        collection.Merge(wire);
+        collection.Merge(wire);
+
+        auto update = wire;
+        update.ClearSteps();
+        update.ClearTablePath();
+        auto* total = update.MutableStorageReads(0);
+        total->SetReadBytes(96);
+        total->SetReadCount(3);
+        total->SetUnknownByteReads(1);
+        total->SetDataKind("mixed");
+        total->SetShared(true);
+        auto* cache = update.AddStorageReads();
+        cache->SetSourceKind("BlobCache");
+        cache->SetSourceName("blob-cache");
+        cache->SetReadBytes(64);
+        cache->SetReadCount(1);
+        cache->SetDataKind("data");
+        collection.Merge(update);
+        collection.Merge(update);
+        collection.Merge(wire);
+
+        NKqpProto::TColumnShardScanStats finished;
+        finished.SetStatsScanId(first.GetStatsScanId());
+        finished.SetFinished(true);
+        collection.Merge(finished);
+        NKqpProto::TColumnShardScanStats other;
+        other.SetStatsScanId("v3-read-b");
+        other.SetTabletId(42);
+        other.SetTablePath("/Root/B");
+        other.SetStorageStatsVersion(1);
+        auto* otherRead = other.AddStorageReads();
+        otherRead->CopyFrom(*initial);
+        otherRead->SetReadBytes(7);
+        collection.Merge(other);
+
+        google::protobuf::RepeatedPtrField<NKqpProto::TColumnShardScanStats> reports;
+        collection.Export(&reports);
+        UNIT_ASSERT_VALUES_EQUAL(reports.size(), 2);
+        const auto& restored = reports.Get(0);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetStatsScanId(), "v3-read-a");
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetTablePath(), "/Root/A");
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetStorageStatsVersion(), 1);
+        UNIT_ASSERT(restored.GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(restored.StorageReadsSize(), 2);
+        const auto& storage = restored.GetStorageReads(0);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetReadBytes(), 96);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetReadCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetUnknownByteReads(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetDataKind(), "mixed");
+        UNIT_ASSERT(storage.GetShared());
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetStorageReads(1).GetReadBytes(), 64);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetSteps(0).GetDataSourceReads(0).GetReadBytes(), 32);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetSteps(0).GetIndexDescriptors(0).GetName(), "marker_bloom");
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetSteps(0).GetIndexDescriptors(0).GetColumns(0), "marker");
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetSteps(0).GetApplicationOrder(), 2);
+        UNIT_ASSERT(restored.GetSteps(0).GetSharedIndexInputs());
+        UNIT_ASSERT_VALUES_EQUAL(reports.Get(1).GetTablePath(), "/Root/B");
+        UNIT_ASSERT_VALUES_EQUAL(reports.Get(1).GetStorageReads(0).GetReadBytes(), 7);
+    }
+}
+
 TStageExecutionStats PreparedStage(ui32 taskCount) {
     TStageExecutionStats stage;
     for (ui64 taskId = 1; taskId <= taskCount; ++taskId) {

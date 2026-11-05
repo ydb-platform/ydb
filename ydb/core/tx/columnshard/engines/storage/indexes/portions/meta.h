@@ -52,6 +52,10 @@ public:
         return std::nullopt;
     }
 
+    const std::set<ui32>& GetColumnIdsForStats() const override {
+        return ColumnIds;
+    }
+
     const std::set<ui32>& GetColumnIds() const {
         return ColumnIds;
     }

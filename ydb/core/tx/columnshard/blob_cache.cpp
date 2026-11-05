@@ -515,6 +515,10 @@ private:
             if (attempt) {
                 attempt->Update([&](auto& record) {
                     auto* details = record.MutableDetails()->MutableStorageRead();
+                    context->AppendIndexDescriptorsTo(*record.MutableIndexDescriptors());
+                    if (context->SharedIndexInputs) {
+                        record.SetSharedIndexInputs(true);
+                    }
                     details->SetStorageTier("default");
                     details->SetBackendKind(NKqpProto::TColumnShardStepDetails::TStorageRead::BlobStorage);
                     details->SetDataKind(context->DataKind);
@@ -612,6 +616,10 @@ private:
 
         if (status == NKikimrProto::OK && to.Stats.Collector) {
             to.Stats.Collector->AddCacheRead(data.size(), fromCache);
+            if (fromCache) {
+                NScanStats::RecordDataSourceRead("BlobCache", "default", data.size(), to.Stats.DataKind,
+                    NScanStats::TCapture(to.Stats.Parent, to.Stats.Collector));
+            }
         }
         ctx.Send(to.ActorId, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data, detailedError, fromCache));
     }
@@ -648,8 +656,10 @@ private:
 
         Y_ABORT_UNLESS(blobRanges.size() == ev->Get()->ResponseSz, "Mismatched number of results for read request!");
 
+        std::shared_ptr<NScanStats::TOperation> readOwner;
         if (auto it = ReadAttempts.find(readCookie); it != ReadAttempts.end()) {
             auto& attempt = it->second;
+            readOwner = attempt;
             attempt->Resume();
             ui64 payloadBytes = 0;
             bool success = ev->Get()->Status == NKikimrProto::OK;
@@ -663,14 +673,14 @@ private:
         }
         for (size_t i = 0; i < ev->Get()->ResponseSz; ++i) {
             const auto& res = ev->Get()->Responses[i];
-            ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), detailedError, ctx);
+            ProcessSingleRangeResult(blobRanges[i], readCookie, res.Status, res.Buffer.ConvertToString(), detailedError, ctx, readOwner);
         }
 
         MakeReadRequests(ctx);
     }
 
     void ProcessSingleRangeResult(const TBlobRange& blobRange, const ui64 readCookie, ui32 status, const TString& data,
-        const TString& detailedError, const TActorContext& ctx) noexcept {
+        const TString& detailedError, const TActorContext& ctx, const std::shared_ptr<NScanStats::TOperation>& readOwner = {}) noexcept {
         YDB_LOG_DEBUG("",
             {"processSingleRangeResult", blobRange});
         auto readIt = OutstandingReads.find(blobRange);
@@ -718,6 +728,10 @@ private:
             {"sendReplies", readIt->second.Waiting.size()});
         // Send results to all waiters
         for (const auto& to : readIt->second.Waiting) {
+            if (status == NKikimrProto::OK) {
+                NScanStats::RecordNonOwnerDataSourceRead("BlobStorage", "default", to.Stats.DataKind,
+                    NScanStats::TCapture(to.Stats.Parent, to.Stats.Collector), readOwner);
+            }
             SendResult(to, blobRange, (NKikimrProto::EReplyStatus)status, data, detailedError, ctx);
         }
 

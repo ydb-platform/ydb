@@ -42,6 +42,7 @@ private:
     std::shared_ptr<NScanStats::TOperation> RuntimeStats;
     THashMap<ui32, TString> StatsExpressions;
     std::optional<ui32> CurrentProgramNodeId;
+    ui64 IndexCheckStatsOrder = 0;
     std::shared_ptr<TFetchingStepSignals> CurrentStepSignals;
     std::optional<TMonotonic> CurrentNodeStart;
 
@@ -74,7 +75,12 @@ public:
     TString BuildStatsDescription(IDataSource& source, ui32 nodeId,
         const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, std::vector<TString> columns);
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals,
-        IDataSource& source, const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, const TString& metaStep);
+        IDataSource& source, const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, const TString& metaStep,
+        const std::vector<std::shared_ptr<NArrow::NSSA::IResourceProcessor>>& indexProcessors);
+
+    ui64 AllocateIndexCheckStatsOrder() {
+        return ++IndexCheckStatsOrder;
+    }
 
     void OnFinishProgramStepExecution(NScanStats::TStep::EOutcome outcome = NScanStats::TStep::completed);
 
@@ -334,6 +340,11 @@ public:
     }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const;
+
+    virtual void FillIndexStatsContext(
+        const std::vector<std::shared_ptr<NArrow::NSSA::IResourceProcessor>>& /*indexProcessors*/,
+        NScanStats::TStep& /*record*/) const {
+    }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const {
         static std::shared_ptr<ISnapshotSchema> defaultValue;

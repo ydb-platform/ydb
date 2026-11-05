@@ -11,6 +11,7 @@
 #include <ydb/core/formats/arrow/program/functions.h>
 #include <ydb/core/formats/arrow/program/graph_execute.h>
 #include <ydb/core/formats/arrow/program/graph_optimization.h>
+#include <ydb/core/formats/arrow/program/index.h>
 #include <ydb/core/formats/arrow/program/projection.h>
 #include <ydb/core/formats/arrow/program/stream_logic.h>
 
@@ -753,6 +754,89 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         auto chain = BuildMergeFilterSimpleGraph(true);
         AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:2;];SUB:[AssembleOriginalData:1;];")("debug", chain->DebugStats());
         UNIT_ASSERT_VALUES_EQUAL(CountIndexReservesWiredToIndexFetch(chain), 1);
+    }
+
+    Y_UNIT_TEST(IndexReserveStatsRetainEverySharedChecker) {
+        auto chain = BuildMergeFilterSimpleGraph(true);
+        std::set<const IResourceProcessor*> checkers;
+        for (const auto& [id, node] : chain->GetNodes()) {
+            if (node->GetProcessor()->GetProcessorType() == EProcessorType::CheckIndexData) {
+                checkers.emplace(node->GetProcessor().get());
+                const auto owners = chain->GetStatsIndexProcessors(id);
+                UNIT_ASSERT_VALUES_EQUAL(owners.size(), 1);
+                UNIT_ASSERT(owners.front() == node->GetProcessor());
+            }
+        }
+        UNIT_ASSERT(checkers.size() > 1);
+        ui32 reserves = 0;
+        for (const auto& [id, node] : chain->GetNodes()) {
+            if (node->GetProcessor()->GetProcessorType() != EProcessorType::ReserveMemory ||
+                !node->GetProcessor()->DebugJson()["extra_data"].Has("indexes")) {
+                continue;
+            }
+            UNIT_ASSERT_STRINGS_EQUAL(chain->GetStatsMetaStep(id), chain->GetStatsMetaStep(node->GetOutputEdges().front()->GetIdentifier()));
+            std::set<const IResourceProcessor*> owners;
+            std::set<ui32> columns;
+            for (const auto& owner : chain->GetStatsIndexProcessors(id)) {
+                owners.emplace(owner.get());
+                const auto* checker = dynamic_cast<const TIndexCheckerProcessor*>(owner.get());
+                UNIT_ASSERT(checker);
+                columns.emplace(checker->GetIndexContext().GetColumnId());
+            }
+            UNIT_ASSERT(owners == checkers);
+            UNIT_ASSERT(columns == std::set<ui32>({1, 2}));
+            ++reserves;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(reserves, 1);
+    }
+
+    Y_UNIT_TEST(IndexStatsOwnersPreserveBothBooleanBranches) {
+        for (const auto operation : {NKernels::EOperation::And, NKernels::EOperation::Or}) {
+            auto schema = std::make_shared<arrow::Schema>(std::vector{
+                std::make_shared<arrow::Field>("left", arrow::int64()),
+                std::make_shared<arrow::Field>("right", arrow::int64())});
+            TSchemaColumnResolver resolver(schema);
+            NOptimization::TGraph::TBuilder builder(resolver);
+            builder.EnableIndexMemoryReserve();
+            builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(56), 3));
+            builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(0), 4));
+            for (ui32 column : {1u, 2u}) {
+                builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({column, 3}), TColumnChainInfo(1000 + column),
+                    std::make_shared<TSimpleFunction>(EOperation::Equal),
+                    std::make_shared<TCompareKernel>(false, TIndexCheckOperation::EOperation::Equals)).DetachResult());
+                builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1000 + column, 4}), TColumnChainInfo(1100 + column),
+                    std::make_shared<TSimpleFunction>(EOperation::Add),
+                    std::make_shared<TSimpleKernelLogic>((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce)).DetachResult());
+            }
+            builder.Add(std::make_shared<TStreamLogicProcessor>(TColumnChainInfo::BuildVector({1101, 1102}), TColumnChainInfo(1200), operation));
+            builder.Add(std::make_shared<TFilterProcessor>(1200));
+            builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({1, 2})));
+            const auto chain = builder.Finish().DetachResult();
+            std::set<ui32> checkColumns;
+            std::set<ui32> fetchColumns;
+            bool sawBooleanOperation = false;
+            for (const auto& [id, node] : chain->GetNodes()) {
+                if (const auto* stream = dynamic_cast<const TStreamLogicProcessor*>(node->GetProcessor().get())) {
+                    sawBooleanOperation |= stream->GetOperation() == operation;
+                }
+                if (const auto* checker = dynamic_cast<const TIndexCheckerProcessor*>(node->GetProcessor().get())) {
+                    checkColumns.emplace(checker->GetIndexContext().GetColumnId());
+                    const auto owners = chain->GetStatsIndexProcessors(id);
+                    UNIT_ASSERT_VALUES_EQUAL(owners.size(), 1);
+                    UNIT_ASSERT(owners.front() == node->GetProcessor());
+                }
+                if (node->GetProcessor()->GetProcessorType() == EProcessorType::FetchOriginalData) {
+                    for (const auto& owner : chain->GetStatsIndexProcessors(id)) {
+                        const auto* checker = dynamic_cast<const TIndexCheckerProcessor*>(owner.get());
+                        UNIT_ASSERT(checker);
+                        fetchColumns.emplace(checker->GetIndexContext().GetColumnId());
+                    }
+                }
+            }
+            UNIT_ASSERT(sawBooleanOperation);
+            UNIT_ASSERT(checkColumns == std::set<ui32>({1, 2}));
+            UNIT_ASSERT(fetchColumns == checkColumns);
+        }
     }
 
     Y_UNIT_TEST(SingleIndexFetchMemory) {

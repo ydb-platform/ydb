@@ -27,6 +27,12 @@ void TColumnShardScanStatsCollection::Merge(const NKqpProto::TColumnShardScanSta
     if (report.HasReaderKind()) {
         scan.Context.SetReaderKind(report.GetReaderKind());
     }
+    if (report.HasTablePath()) {
+        scan.Context.SetTablePath(report.GetTablePath());
+    }
+    if (report.HasStorageStatsVersion()) {
+        scan.Context.SetStorageStatsVersion(Max(scan.Context.GetStorageStatsVersion(), report.GetStorageStatsVersion()));
+    }
     if (report.HasStatsGroupId()) {
         scan.Context.SetStatsGroupId(report.GetStatsGroupId());
     }
@@ -63,6 +69,29 @@ void TColumnShardScanStatsCollection::Merge(const NKqpProto::TColumnShardScanSta
         }
         if (update.HasCacheServedBytes()) {
             cache->SetCacheServedBytes(Max(cache->GetCacheServedBytes(), update.GetCacheServedBytes()));
+        }
+    }
+    for (const auto& update : report.GetStorageReads()) {
+        NKqpProto::TColumnShardDataSourceRead* target = nullptr;
+        for (auto& source : *scan.Context.MutableStorageReads()) {
+            if (source.GetSourceKind() == update.GetSourceKind() && source.GetSourceName() == update.GetSourceName()) {
+                target = &source;
+                break;
+            }
+        }
+        if (!target) {
+            scan.Context.AddStorageReads()->CopyFrom(update);
+            continue;
+        }
+        // Snapshots are cumulative; replay or sparse delivery must not charge the same read again.
+        target->SetReadBytes(Max(target->GetReadBytes(), update.GetReadBytes()));
+        target->SetReadCount(Max(target->GetReadCount(), update.GetReadCount()));
+        target->SetUnknownByteReads(Max(target->GetUnknownByteReads(), update.GetUnknownByteReads()));
+        target->SetShared(target->GetShared() || update.GetShared());
+        if (target->GetDataKind() != update.GetDataKind()) {
+            const bool unknown = target->GetDataKind().empty() || target->GetDataKind() == "unknown" ||
+                update.GetDataKind().empty() || update.GetDataKind() == "unknown";
+            target->SetDataKind(unknown ? "unknown" : "mixed");
         }
     }
     for (const auto& step : report.GetSteps()) {

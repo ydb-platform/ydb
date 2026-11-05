@@ -205,6 +205,7 @@ void TCompiledGraph::BuildStatsMetaSteps() {
     };
     THashMap<ui32, ui32> remaining;
     THashMap<ui32, ui8> consumers;
+    THashMap<ui32, std::set<ui32>> indexConsumers;
     std::vector<TNode*> ready;
     for (const auto& [id, node] : Nodes) {
         ui32 outputs = 0;
@@ -213,6 +214,10 @@ void TCompiledGraph::BuildStatsMetaSteps() {
         }
         remaining.emplace(id, outputs);
         consumers.emplace(id, boundary(*node));
+        auto& indexNodes = indexConsumers[id];
+        if (node->GetProcessor()->GetProcessorType() == EProcessorType::CheckIndexData) {
+            indexNodes.emplace(id);
+        }
         if (outputs == 0) {
             ready.push_back(node.get());
         }
@@ -234,6 +239,10 @@ void TCompiledGraph::BuildStatsMetaSteps() {
         } else {
             meta = "FetchOtherColumns";
         }
+        const auto& indexNodes = indexConsumers.at(id);
+        if (!indexNodes.empty()) {
+            StatsIndexNodes.emplace(id, std::vector<ui32>(indexNodes.begin(), indexNodes.end()));
+        }
         StatsMetaSteps.emplace(id, std::move(meta));
         for (auto* input : node->GetInputEdges()) {
             const ui32 inputId = input->GetIdentifier();
@@ -242,6 +251,8 @@ void TCompiledGraph::BuildStatsMetaSteps() {
             }
             if (!boundary(*input)) {
                 consumers.at(inputId) |= mask;
+                const auto& indexNodes = indexConsumers.at(id);
+                indexConsumers.at(inputId).insert(indexNodes.begin(), indexNodes.end());
             }
             if (--remaining.at(inputId) == 0) {
                 ready.push_back(input);
@@ -255,6 +266,16 @@ const TString& TCompiledGraph::GetStatsMetaStep(ui32 identifier) const {
     const auto it = StatsMetaSteps.find(identifier);
     AFL_VERIFY(it != StatsMetaSteps.end())("node_id", identifier);
     return it->second;
+}
+
+std::vector<std::shared_ptr<IResourceProcessor>> TCompiledGraph::GetStatsIndexProcessors(ui32 identifier) const {
+    std::vector<std::shared_ptr<IResourceProcessor>> result;
+    if (const auto it = StatsIndexNodes.find(identifier); it != StatsIndexNodes.end()) {
+        for (ui32 nodeId : it->second) {
+            result.emplace_back(Nodes.at(nodeId)->GetProcessor());
+        }
+    }
+    return result;
 }
 
 TConclusion<std::unique_ptr<TAccessorsCollection>> TCompiledGraph::Apply(

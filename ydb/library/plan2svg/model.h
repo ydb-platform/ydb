@@ -143,6 +143,7 @@ public:
     const NJson::TJsonValue* StatsNode = nullptr;
     NJson::TJsonValue ColumnShardScans; // owned: the input JSON can expire before rendering
     TStringBuilder ColumnShardSvg;
+    std::optional<ui32> ColumnShardPlanIndex;
     ui32 ColumnShardHeight = 0;
     ui64 MinTime = 0;
     ui64 MaxTime = 0;

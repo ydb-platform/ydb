@@ -17,8 +17,64 @@ struct TReadStatsContext {
     std::shared_ptr<NScanStats::TOperation> Parent;
     EDataKind DataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::unknown;
     std::shared_ptr<NScanStats::TCollector> Collector;
+        google::protobuf::RepeatedPtrField<NKqpProto::TColumnShardIndexDescriptor> IndexDescriptors;
+        bool SharedIndexInputs = false;
+
+        void AppendIndexDescriptorsTo(google::protobuf::RepeatedPtrField<NKqpProto::TColumnShardIndexDescriptor>& target) const {
+            const auto append = [&](const auto& descriptors) {
+                for (const auto& descriptor : descriptors) {
+                    bool found = false;
+                    for (const auto& existing : target) {
+                        if (existing.SerializeAsString() == descriptor.SerializeAsString()) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        target.Add()->CopyFrom(descriptor);
+                    }
+                }
+            };
+            append(IndexDescriptors);
+            if (Parent) {
+                NScanStats::TStep context;
+                Parent->InheritContext(context);
+                append(context.GetIndexDescriptors());
+            }
+        }
 
     void Merge(const TReadStatsContext& other) {
+            if (Collector && Collector == other.Collector) {
+                NScanStats::TStep ownContext;
+                NScanStats::TStep otherContext;
+                AppendIndexDescriptorsTo(*ownContext.MutableIndexDescriptors());
+                other.AppendIndexDescriptorsTo(*otherContext.MutableIndexDescriptors());
+                if (Parent) {
+                    Parent->InheritContext(ownContext);
+                }
+                if (other.Parent) {
+                    other.Parent->InheritContext(otherContext);
+                }
+                if (ownContext.IndexDescriptorsSize() || otherContext.IndexDescriptorsSize()) {
+                    bool sameDescriptors = ownContext.IndexDescriptorsSize() == otherContext.IndexDescriptorsSize();
+                    for (const auto& descriptor : ownContext.GetIndexDescriptors()) {
+                        bool found = false;
+                        for (const auto& candidate : otherContext.GetIndexDescriptors()) {
+                            found |= descriptor.SerializeAsString() == candidate.SerializeAsString();
+                        }
+                        sameDescriptors &= found;
+                    }
+                    SharedIndexInputs |= other.SharedIndexInputs || !sameDescriptors ||
+                        ownContext.GetMetaStep() != otherContext.GetMetaStep();
+                }
+            }
+            google::protobuf::RepeatedPtrField<NKqpProto::TColumnShardIndexDescriptor> descriptors;
+            AppendIndexDescriptorsTo(descriptors);
+            if (!Collector || !other.Collector || Collector == other.Collector) {
+                SharedIndexInputs |= other.SharedIndexInputs;
+                other.AppendIndexDescriptorsTo(descriptors);
+            }
+            IndexDescriptors.Swap(&descriptors);
         if (!Parent) {
             Parent = other.Parent;
         }

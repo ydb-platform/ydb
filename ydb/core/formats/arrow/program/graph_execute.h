@@ -137,6 +137,7 @@ private:
     THashMap<ui64, std::shared_ptr<TNode>> Nodes;
     THashMap<ui32, TString> StatsColumnNames;
     THashMap<ui32, TString> StatsMetaSteps;
+    THashMap<ui32, std::vector<ui32>> StatsIndexNodes;
     void BuildStatsMetaSteps();
     THashSet<ui32> SourceColumns;
     THashSet<ui32> FilterColumns;
@@ -145,6 +146,7 @@ private:
     bool IsFilterRoot(const ui32 identifier) const;
     public:
         const TString& GetStatsMetaStep(ui32 identifier) const;
+    std::vector<std::shared_ptr<IResourceProcessor>> GetStatsIndexProcessors(ui32 identifier) const;
     std::shared_ptr<IResourcesAggregator> GetResultsAggregationProcessor() const {
         if (ResultRoot->GetProcessor()->GetProcessorType() != EProcessorType::Projection) {
             return nullptr;

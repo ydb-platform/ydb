@@ -61,7 +61,8 @@ TString TExecutionContext::BuildStatsDescription(IDataSource& source, ui32 nodeI
 }
 
 void TExecutionContext::OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals,
-    IDataSource& source, const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, const TString& metaStep) {
+    IDataSource& source, const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, const TString& metaStep,
+    const std::vector<std::shared_ptr<NArrow::NSSA::IResourceProcessor>>& indexProcessors) {
     if (!CurrentProgramNodeId) {
         const auto& collector = source.GetContext()->GetCommonContext()->GetRuntimeStats();
         if (collector) {
@@ -89,6 +90,10 @@ void TExecutionContext::OnStartProgramStepExecution(const ui32 nodeId, const std
                 RuntimeStats->Update([&](NScanStats::TStep& record) {
                     record.SetMetaStep(metaStep);
                     record.SetCanonicalPath("");
+                    if (!indexProcessors.empty()) {
+                        record.ClearIndexDescriptors();
+                        source.FillIndexStatsContext(indexProcessors, record);
+                    }
                     if (kind == NScanStats::TStep::FetchColumns || kind == NScanStats::TStep::Assemble) {
                         auto* names = kind == NScanStats::TStep::FetchColumns
                             ? record.MutableDetails()->MutableFetchColumns()->MutableColumns()

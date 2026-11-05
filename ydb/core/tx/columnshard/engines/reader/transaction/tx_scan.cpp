@@ -266,6 +266,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (request.GetStatsMode() == NYql::NDqProto::DQ_STATS_MODE_FULL ||
         request.GetStatsMode() == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
         RuntimeStats = std::make_shared<NScanStats::TCollector>(Self->TabletID());
+        RuntimeStats->SetTablePath(request.GetTablePath());
     }
     auto preparationStats = RuntimeStats ? RuntimeStats->Start(NScanStats::TStep::Reader,
         "PREPARE_READ", "Prepare ColumnShard read") : nullptr;
@@ -305,6 +306,17 @@ void TTxScan::Complete(const TActorContext& ctx) {
         {"tabletId", Self->TabletID()});
 
     const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor = Target.TableMetadataAccessor;
+    if (RuntimeStats) {
+        const auto ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
+        TString tablePath = tableMetadataAccessor->GetTablePath();
+        if (!tablePath) {
+            tablePath = request.GetTablePath();
+        }
+        if (!tablePath && Self->CurrentSchemeShardId && ssPathId.GetRawValue()) {
+            tablePath = TStringBuilder() << "table-id:" << Self->CurrentSchemeShardId << "/" << ssPathId.GetRawValue();
+        }
+        RuntimeStats->SetTablePath(std::move(tablePath));
+    }
     // A table may insist on a reader of its own, so the scanner comes first: its class shapes the read.
     const auto readerName = tableMetadataAccessor->GetOverridenScanType(GetReaderName());
     if (RuntimeStats) {

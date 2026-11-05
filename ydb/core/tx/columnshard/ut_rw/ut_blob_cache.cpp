@@ -131,6 +131,67 @@ Y_UNIT_TEST_SUITE(TBlobCache) {
         UNIT_ASSERT_VALUES_EQUAL(cache.GetCacheServedBytes(), 20);
     }
 
+    Y_UNIT_TEST(ScanCacheHitKeepsMergedIndexOriginWithoutChangingParent) {
+        TBlobCacheFixture fixture(1024);
+        fixture.CacheRange(MakeRange(1, 100), MakeData(100, 'x'));
+        auto collector = std::make_shared<NScanStats::TCollector>(1);
+        std::shared_ptr<NScanStats::TOperation> parents[2];
+        NOlap::TReadStatsContext contexts[2];
+        for (ui32 i = 0; i < 2; ++i) {
+            parents[i] = collector->Start(NScanStats::TStep::FetchColumns, "FETCH_INDEX", "index");
+            parents[i]->Update([i](auto& record) {
+                record.SetMetaStep("IndexFilter");
+                record.SetCanonicalPath("");
+                auto* descriptor = record.AddIndexDescriptors();
+                descriptor->SetIndexId(11 + i);
+                descriptor->SetName(i == 0 ? "resource_bloom" : "tenant_bloom");
+                descriptor->SetType("BLOOM_FILTER");
+                descriptor->AddColumns(i == 0 ? "resource_id" : "tenant");
+            });
+            contexts[i].Parent = parents[i];
+            contexts[i].Collector = collector;
+            contexts[i].DataKind = NKqpProto::TColumnShardStepDetails::TStorageRead::index;
+        }
+        contexts[0].Merge(contexts[1]);
+        UNIT_ASSERT(contexts[0].SharedIndexInputs);
+        auto result = fixture.ReadRange(MakeRange(1, 100, 10, 20), true, std::move(contexts[0]));
+        UNIT_ASSERT(result->Get()->FromCache);
+        for (auto& parent : parents) {
+            parent->Finish();
+        }
+        const auto report = collector->Drain(true);
+        UNIT_ASSERT(report->GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(report->StorageReadsSize(), 1);
+        const auto& source = report->GetStorageReads(0);
+        UNIT_ASSERT_STRINGS_EQUAL(source.GetSourceKind(), "BlobCache");
+        UNIT_ASSERT_VALUES_EQUAL(source.GetReadBytes(), 20);
+        UNIT_ASSERT_VALUES_EQUAL(source.GetReadCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(source.GetUnknownByteReads(), 0);
+        UNIT_ASSERT(!source.GetShared());
+        ui32 origins = 0;
+        for (const auto& step : report->GetSteps()) {
+            UNIT_ASSERT(step.GetStepKind() != NScanStats::TStep::StorageRead);
+            if (step.GetStepName() == "READ_SOURCE") {
+                ++origins;
+                UNIT_ASSERT_VALUES_EQUAL(step.GetParentStepId(), parents[0]->GetStepId());
+                UNIT_ASSERT(step.HasOwnedExecutionDuration());
+                UNIT_ASSERT(step.GetSharedIndexInputs());
+                UNIT_ASSERT_VALUES_EQUAL(step.IndexDescriptorsSize(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(step.GetIndexDescriptors(0).GetIndexId(), 11);
+                UNIT_ASSERT_VALUES_EQUAL(step.GetIndexDescriptors(1).GetIndexId(), 12);
+                UNIT_ASSERT_VALUES_EQUAL(step.DataSourceReadsSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(step.GetDataSourceReads(0).GetReadBytes(), 20);
+                UNIT_ASSERT(!step.GetDataSourceReads(0).GetShared());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(step.IndexDescriptorsSize(), 1);
+                const ui32 expectedIndex = step.GetStepId() == parents[0]->GetStepId() ? 11 : 12;
+                UNIT_ASSERT_VALUES_EQUAL(step.GetIndexDescriptors(0).GetIndexId(), expectedIndex);
+                UNIT_ASSERT(!step.GetSharedIndexInputs());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(origins, 1);
+    }
+
     Y_UNIT_TEST(ScanSharedReadHasOnePhysicalOwner) {
         TBlobCacheFixture fixture(1024);
         const auto range = MakeRange(1, 40);

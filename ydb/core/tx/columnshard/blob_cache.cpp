@@ -617,8 +617,20 @@ private:
         if (status == NKikimrProto::OK && to.Stats.Collector) {
             to.Stats.Collector->AddCacheRead(data.size(), fromCache);
             if (fromCache) {
-                NScanStats::RecordDataSourceRead("BlobCache", "default", data.size(), to.Stats.DataKind,
-                    NScanStats::TCapture(to.Stats.Parent, to.Stats.Collector));
+                auto origin = to.Stats.Collector->Start(NScanStats::TStep::Reader, "READ_SOURCE", "BlobCache", to.Stats.Parent);
+                if (origin) {
+                    NScanStats::TScope sourceScope(origin, to.Stats.Collector);
+                    origin->Update([&](auto& record) {
+                        to.Stats.AppendIndexDescriptorsTo(*record.MutableIndexDescriptors());
+                        if (to.Stats.SharedIndexInputs) {
+                            record.SetSharedIndexInputs(true);
+                        }
+                    });
+                    origin->AddDataSourceRead("BlobCache", "default", data.size(), to.Stats.DataKind);
+                    origin->Finish();
+                } else {
+                    to.Stats.Collector->AddStorageRead("BlobCache", "default", data.size(), to.Stats.DataKind);
+                }
             }
         }
         ctx.Send(to.ActorId, new TEvBlobCache::TEvReadBlobRangeResult(blobRange, status, data, detailedError, fromCache));
@@ -729,8 +741,8 @@ private:
         // Send results to all waiters
         for (const auto& to : readIt->second.Waiting) {
             if (status == NKikimrProto::OK) {
-                NScanStats::RecordNonOwnerDataSourceRead("BlobStorage", "default", to.Stats.DataKind,
-                    NScanStats::TCapture(to.Stats.Parent, to.Stats.Collector), readOwner);
+                NScanStats::RecordNonOwnerDataSourceRead(
+                    "BlobStorage", "default", to.Stats.DataKind, NScanStats::TCapture(to.Stats.Parent, to.Stats.Collector), readOwner);
             }
             SendResult(to, blobRange, (NKikimrProto::EReplyStatus)status, data, detailedError, ctx);
         }

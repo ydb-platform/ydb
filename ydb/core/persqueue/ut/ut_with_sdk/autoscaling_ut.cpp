@@ -1943,6 +1943,80 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
         ReadFromTimestamp(SdkVersion::PQv1, false);
     }
 
+    void ReadFromTimestampAfterInactivePartitionEnd(bool autoscaleAwareSDK) {
+        using TReadSessionEvent = NYdb::NTopic::TReadSessionEvent;
+
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopicWithAutoscale();
+
+        TTopicClient client = setup.MakeClient();
+
+        auto writeSession = CreateWriteSession(client, "producer-1");
+        UNIT_ASSERT(writeSession->Write(Msg("message_1.1", 1)));
+        UNIT_ASSERT(writeSession->Write(Msg("message_1.2", 2)));
+        writeSession->Close(TDuration::Seconds(1));
+
+        ui64 txId = 1023;
+        SplitPartition(setup, ++txId, 0, "a");
+
+        Sleep(TDuration::Seconds(2));
+        const TInstant readFrom = TInstant::Now();
+
+        auto readSettings = TReadSessionSettings()
+            .ConsumerName(TEST_CONSUMER)
+            .AutoPartitioningSupport(autoscaleAwareSDK)
+            .AppendTopics(TTopicReadSettings(TEST_TOPIC))
+            .ReadFromTimestamp(readFrom);
+        auto readSession = client.CreateReadSession(readSettings);
+
+        TPartitionSession::TPtr parentSession;
+        std::optional<ui64> readOffset;
+        std::optional<ui64> endOffset;
+        TInstant nextStatusRequest;
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (TInstant::Now() < deadline && !(endOffset && readOffset == endOffset)) {
+            if (parentSession && TInstant::Now() >= nextStatusRequest) {
+                parentSession->RequestStatus();
+                nextStatusRequest = TInstant::Now() + TDuration::MilliSeconds(500);
+            }
+            readSession->WaitEvent().Wait(TDuration::MilliSeconds(500));
+            auto event = readSession->GetEvent(false);
+            if (!event) {
+                continue;
+            }
+            if (auto* start = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                if (start->GetPartitionSession()->GetPartitionId() == 0) {
+                    parentSession = start->GetPartitionSession();
+                }
+                start->Confirm();
+            } else if (auto* stop = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                stop->Confirm();
+            } else if (auto* end = std::get_if<TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
+                end->Confirm();
+            } else if (auto* status = std::get_if<TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
+                if (status->GetPartitionSession()->GetPartitionId() == 0) {
+                    readOffset = status->GetReadOffset();
+                    endOffset = status->GetEndOffset();
+                }
+            }
+        }
+
+        UNIT_ASSERT_C(parentSession, "partition 0 was not assigned");
+        UNIT_ASSERT_C(endOffset, "no status for partition 0");
+        UNIT_ASSERT_VALUES_EQUAL(*endOffset, 2);
+        UNIT_ASSERT_VALUES_EQUAL(*readOffset, *endOffset);
+
+        readSession->Close(TDuration::Seconds(1));
+    }
+
+    Y_UNIT_TEST(ReadFromTimestampAfterInactivePartitionEnd_BeforeAutoscaleAwareSDK) {
+        ReadFromTimestampAfterInactivePartitionEnd(false);
+    }
+
+    Y_UNIT_TEST(ReadFromTimestampAfterInactivePartitionEnd_AutoscaleAwareSDK) {
+        ReadFromTimestampAfterInactivePartitionEnd(true);
+    }
+
     void OrderOfChildrenPartitions(SdkVersion sdk) {
         const size_t partitionsCount = 32;
         TTopicSdkTestSetup setup = CreateSetup();

@@ -1938,11 +1938,18 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
         bsTo->ClearDefineBox();
     }
     bsTo->MutableDefineHostConfig()->CopyFrom(bsFrom.GetDefineHostConfig());
+    bsTo->MutableStoragePoolPileOverrides()->CopyFrom(bsFrom.GetStoragePoolPileOverrides());
 
     if (bsFrom.HasBscSettings()) {
         bsTo->MutableBscSettings()->CopyFrom(bsFrom.GetBscSettings());
     } else {
         bsTo->ClearBscSettings();
+    }
+
+    if (bsFrom.HasBridgeSyncRateBytesPerSecond()) {
+        bsTo->SetBridgeSyncRateBytesPerSecond(bsFrom.GetBridgeSyncRateBytesPerSecond());
+    } else {
+        bsTo->ClearBridgeSyncRateBytesPerSecond();
     }
 
     // copy PDiskConfig from DefineHostConfig/DefineBox if this section is managed automatically

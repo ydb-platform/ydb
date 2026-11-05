@@ -11,7 +11,7 @@
 | `ydb.database.drop` | `DROP` | Право удалять базы данных в кластере |
 | **Элементарные права на объекты базы данных** | | |
 | `ydb.granular.select_row` | `SELECT ROW` | Право читать строки из таблицы (select), читать сообщения из топиков, использовать значения секретов |
-| `ydb.granular.update_row` | `UPDATE ROW` | Право обновлять строки в таблице (insert, update, upsert, replace), писать сообщения в топики |
+| `ydb.granular.update_row` | `UPDATE ROW` | Право обновлять строки в таблице (insert, update, upsert, replace), писать сообщения в топики{% if backend_name == "YDB" %}. На корне базы также разрешает завершать чужие сессии через [KILL SESSION](../syntax/kill-session.md#permissions) при наличии `CONNECT`{% endif %} |
 | `ydb.granular.erase_row` | `ERASE ROW` | Право удалять строки из таблицы (delete) |
 | `ydb.granular.create_directory` | `CREATE DIRECTORY` | Право создавать и удалять директории, в том числе существующие и вложенные |
 | `ydb.granular.create_table` | `CREATE TABLE` | Право создавать таблицы (в том числе индексные, внешние, колоночные), представления, последовательности |

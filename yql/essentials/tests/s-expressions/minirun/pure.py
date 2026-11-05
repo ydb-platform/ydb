@@ -7,7 +7,7 @@ import yql_utils
 import yatest.common
 from yql_utils import execute, get_tables, get_files, get_http_files, \
     KSV_ATTR, yql_binary_path, is_xfail, is_canonize_peephole, is_peephole_use_blocks, is_canonize_lineage, \
-    is_skip_forceblocks, get_param, normalize_source_code_path, replace_vals, get_gateway_cfg_suffix, \
+    is_skip_forceblocks, get_param, normalize_source_code_path, replace_vals, \
     do_custom_query_check, stable_result_file, stable_table_file, is_with_final_result_issues, \
     normalize_result, get_langver
 from yqlrun import YQLRun
@@ -22,9 +22,6 @@ DATA_PATH = yatest.common.source_path('yql/essentials/tests/s-expressions/suites
 
 
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
-    if get_gateway_cfg_suffix() != '' and what not in ('Results','LLVM'):
-        pytest.skip('non-trivial gateways.conf')
-
     config = get_config(suite, case, cfg, data_path=DATA_PATH)
     langver = get_langver(config)
     if langver is None:

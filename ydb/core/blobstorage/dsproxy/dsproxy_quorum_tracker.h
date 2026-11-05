@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 
 namespace NKikimr {
 
@@ -68,6 +69,12 @@ namespace NKikimr {
         }
 
         NKikimrProto::EReplyStatus CalculateStatus() {
+            if (Info->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
+                using Q = TMirror3dcWriteQuorumChecker;
+                return !Q::CheckFailModelForGroup(*Info, ErroneousDisks) ? NKikimrProto::ERROR :
+                       Q::CheckFailModelForGroup(*Info, ~SuccessfulDisks) ? NKikimrProto::OK :
+                                                                          NKikimrProto::UNKNOWN;
+            }
             const auto& checker = Info->GetQuorumChecker();
             return !checker.CheckFailModelForGroup(ErroneousDisks) ? NKikimrProto::ERROR  :
                    checker.CheckQuorumForGroup(SuccessfulDisks)    ? NKikimrProto::OK     :

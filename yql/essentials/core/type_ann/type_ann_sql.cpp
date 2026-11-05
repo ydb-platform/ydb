@@ -5807,7 +5807,7 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
     IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Error;
     bool areColumnsOrdered = true;
     bool isUniversal = false;
-    if (isYql && (1 != setItems->ChildrenSize())) {
+    if (isYql && !ctx.Types.PositionalUnionAll && (1 != setItems->ChildrenSize())) {
         status = InferYqlInferUnionType(
             input->Pos(), setItems->ChildrenList(),
             resultColumnOrder, resultStructType,
@@ -5832,7 +5832,9 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
         YQL_ENSURE(option);
         const auto& data = option->Tail();
         TInputs projectionInputs;
-        projectionInputs.push_back(TInput{ .Alias=TString(), .Type=resultStructType, .Order=resultColumnOrder, .Priority=TInput::Projection, .UsedExternalColumns={}, .CaseSensitive=caseSensitive });
+        projectionInputs.push_back(TInput{ .Alias=TString(), .Type=resultStructType,
+            .Order=areColumnsOrdered ? TMaybe<TColumnOrder>(resultColumnOrder) : Nothing(),
+            .Priority=TInput::Projection, .UsedExternalColumns={}, .CaseSensitive=caseSensitive });
         TExprNode::TListType newSortTupleItems;
 
         // no effective types yet, scan lambda bodies

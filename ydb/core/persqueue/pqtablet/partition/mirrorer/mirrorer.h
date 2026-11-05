@@ -104,6 +104,7 @@ private:
 
     TString GetCurrentState() const;
 
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType();
     TMirrorer(
@@ -125,6 +126,7 @@ public:
     void TryToRead(const TActorContext& ctx);
     void TryToWrite(const TActorContext& ctx);
     void TryToSplitMerge(const TActorContext& ctx);
+    void TryToSendReplicationData(const TActorContext& ctx);
     void HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& ev, const TActorContext& ctx);
     void HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx);
     void HandleRetryWrite(TEvPQ::TEvRetryWrite::TPtr& ev, const TActorContext& ctx);
@@ -183,6 +185,11 @@ private:
     ui64 ReadFeatureId = 0;
     ui64 ReadFuturesInFlight = 0;
     TInstant LastReadEventTime;
+
+    y_absl::flat_hash_map<TString, ui64> OffsetsByConsumers;
+    y_absl::flat_hash_map<TString, ui64> ReplicatedOffsetsByConsumers;
+    TInstant LastReplicationDataTimestamp;
+    TMaybe<ui64> MirroredOffsetToSend;
 };
 
 bool AppendToWriteRequest(

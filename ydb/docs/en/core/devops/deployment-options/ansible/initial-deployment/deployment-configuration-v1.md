@@ -263,6 +263,8 @@ Encrypt this file with the command `ansible-vault encrypt inventory/99-inventory
 
 ## Prepare the {{ ydb-short-name }} configuration file {#ydb-config-prepare}
 
+The examples below contain a `feature_flags` section. Before changing its values, read about [feature flags and guidelines for changing them](../../../../reference/configuration/feature_flags.md).
+
 Create the file `files/config.yaml` and fill it according to the chosen topology (see [topology selection](./deployment-preparation.md#topology-select)). Examples for each supported topology are in the tabs below — choose the one that fits.
 
 {% list tabs %}
@@ -889,7 +891,7 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 
 {% endcut %}
 
-Running the `ydb_platform.ydb.initial_setup` playbook creates a {{ ydb-short-name }} cluster. It will contain a [domain](../../../../concepts/glossary.md#domain) named from the `ydb_domain` setting (default `Root`), a [database](../../../../concepts/glossary.md#database) named from the `ydb_dbname` setting (default `database`), and an initial [user](../../../../concepts/glossary.md#access-user) named from the `ydb_user` setting (default `root`).
+Running the `ydb_platform.ydb.initial_setup` playbook creates a {{ ydb-short-name }} cluster. It will contain a [domain](../../../../concepts/glossary.md#scheme-root) named from the `ydb_domain` setting (default `Root`), a [database](../../../../concepts/glossary.md#database) named from the `ydb_dbname` setting (default `database`), and an initial [user](../../../../concepts/glossary.md#access-user) named from the `ydb_user` setting (default `root`).
 
 ## Additional steps {#additional-steps}
 

@@ -56,6 +56,10 @@ namespace NKikimr::NStorage {
             TExRace() { Status = TResult::RACE; }
         };
 
+        struct TExGenerationMismatch : TExError {
+            TExGenerationMismatch() { Status = TResult::GENERATION_MISMATCH; }
+        };
+
         struct TExNoQuorum : TExError {
             TExNoQuorum() { Status = TResult::NO_QUORUM; }
         };
@@ -114,6 +118,8 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenBaseConfig::TPtr ev);
         void CheckReassignGroupDisk();
         void ReassignGroupDiskExecute();
+        void CheckBridgedPartDataRestorable(const NKikimrBlobStorage::TStorageConfig& config,
+            const NKikimrBlobStorage::TGroupInfo& group, TVDiskID vdiskId);
         void UpdateBridgeGroupInfo(const TQuery::TUpdateBridgeGroupInfo& cmd);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

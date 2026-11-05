@@ -560,7 +560,8 @@ namespace NKikimr::NTable::NPage {
     public:
         /// Returns the child at pos as a version-agnostic TPageRef.
         /// V2 children carry byte-offset TPageLocation inline.
-        /// V1 children carry TPageId (resolve via ResolvePageLocation/Part->GetPageLocation).
+        /// V1 children carry TPageId (resolve via ResolvePageLocation for data pages
+        /// and ResolveIndexPageLocation for index pages).
         TPageRef GetChild(TRecIdx pos, bool isLeafLevel) const noexcept {
             if (IsV2Format) {
                 auto type = isLeafLevel ? EPage::DataPage : EPage::BTreeIndexV2;
@@ -585,7 +586,9 @@ namespace NKikimr::NTable::NPage {
             if (auto* loc = std::get_if<TPageLocation>(&ref)) {
                 return *loc;
             }
-            return part->GetPageLocation(std::get<TPageId>(ref), isLeafLevel ? groupId : TGroupId{});
+            return isLeafLevel
+                ? part->GetPageLocation(std::get<TPageId>(ref), groupId)
+                : part->GetIndexPageLocation(std::get<TPageId>(ref), groupId);
         }
 
         TString ChildToString(TRecIdx pos) const {

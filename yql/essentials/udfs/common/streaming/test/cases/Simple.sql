@@ -1,4 +1,3 @@
-/* syntax version 1 */
 SELECT YQL::@@(block '(
 	(let inputRows (AsList
 		(AsStruct '('Data (String '"Input line #13")))

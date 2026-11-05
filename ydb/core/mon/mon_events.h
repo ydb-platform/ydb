@@ -11,6 +11,7 @@ struct TEvMon {
         EvRegisterHandler,
         EvMonitoringCancelRequest,
         EvCleanupProxy,
+        EvUpdatePathNormalizer,
         End
     };
 
@@ -42,6 +43,14 @@ struct TEvMon {
 
         TEvCleanupProxy(const TString& address)
             : Address(address)
+        {}
+    };
+
+    struct TEvUpdatePathNormalizer : NActors::TEventLocal<TEvUpdatePathNormalizer, EvUpdatePathNormalizer> {
+        std::shared_ptr<const std::function<TString(TStringBuf)>> PathNormalizer;
+
+        explicit TEvUpdatePathNormalizer(std::shared_ptr<const std::function<TString(TStringBuf)>> normalizer)
+            : PathNormalizer(std::move(normalizer))
         {}
     };
 };

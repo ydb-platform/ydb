@@ -146,6 +146,8 @@ namespace NKikimr::NUtil {
             auto& state = RollbackState_.emplace();
             state.Chunk = Current;
             state.Ptr = Current->Ptr;
+            state.Spare = Spare;
+            state.SparePtr = Spare ? Spare->Ptr : nullptr;
         }
 
         void CommitTransaction() {
@@ -156,7 +158,16 @@ namespace NKikimr::NUtil {
         void RollbackTransaction() {
             Y_ENSURE(RollbackState_);
             auto& state = *RollbackState_;
+            // The cached tail can precede the transaction's starting chunk
+            if (state.Spare) {
+                Y_DEBUG_ABORT_UNLESS(state.Spare->Ptr >= state.SparePtr);
+                const size_t used = state.Spare->Ptr - state.SparePtr;
+                state.Spare->Rollback(state.SparePtr);
+                Used_ -= used;
+                Wasted_ += used;
+            }
             DoRollback(state.Chunk, state.Ptr);
+            Spare = state.Spare;
             RollbackState_.reset();
         }
 
@@ -173,7 +184,7 @@ namespace NKikimr::NUtil {
         }
 
         size_t Available() const noexcept {
-            return Available_ + Current->Left;
+            return Available_ + Current->Left + (Spare ? Spare->Left : 0);
         }
 
     private:
@@ -200,6 +211,7 @@ namespace NKikimr::NUtil {
             Total_ += next->ChunkSize();
             Used_ += Current->Used();
             Wasted_ += Current->Wasted();
+            RememberTail(Current);
             Current->Next = next;
             Current = next;
             return next;
@@ -209,6 +221,7 @@ namespace NKikimr::NUtil {
             if (Current->Next) {
                 Used_ += Current->Used();
                 Wasted_ += Current->Wasted();
+                RememberTail(Current);
                 Current = Current->Next;
                 Y_DEBUG_ABORT_UNLESS(Current->Ptr == Current->DataStart());
                 Wasted_ -= Current->ChunkSize();
@@ -217,6 +230,26 @@ namespace NKikimr::NUtil {
             }
 
             return false;
+        }
+
+        void RememberTail(TChunk* chunk) noexcept {
+            if (chunk->Left && (!Spare || chunk->Left > Spare->Left)) {
+                Spare = chunk;
+            }
+        }
+
+        template <class... TArgs>
+        void* AllocateSpare(size_t size, TArgs... args) noexcept {
+            if (Spare) {
+                const size_t left = Spare->Left;
+                if (auto* ptr = Spare->Allocate(size, args...)) {
+                    const size_t used = left - Spare->Left;
+                    Used_ += used;
+                    Wasted_ -= used;
+                    return ptr;
+                }
+            }
+            return nullptr;
         }
 
         void DoRollback(TChunk* target, char* ptr) {
@@ -244,6 +277,9 @@ namespace NKikimr::NUtil {
         }
 
         void* DoAllocate(size_t size) {
+            if (auto* ptr = AllocateSpare(size)) {
+                return ptr;
+            }
             do {
                 if (auto* ptr = Current->Allocate(size)) {
                     return ptr;
@@ -254,6 +290,9 @@ namespace NKikimr::NUtil {
         }
 
         void* DoAllocate(size_t size, size_t align) {
+            if (auto* ptr = AllocateSpare(size, align)) {
+                return ptr;
+            }
             do {
                 if (auto* ptr = Current->Allocate(size, align)) {
                     return ptr;
@@ -267,11 +306,14 @@ namespace NKikimr::NUtil {
         struct TRollbackState {
             TChunk* Chunk;
             char* Ptr;
+            TChunk* Spare;
+            char* SparePtr;
         };
 
     private:
         TChunk* First;
         TChunk* Current;
+        TChunk* Spare = nullptr;
         size_t Total_ = 0;
         size_t Used_ = 0;
         size_t Wasted_ = 0;

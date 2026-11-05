@@ -100,6 +100,7 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         "consistency_level",
         "commit_interval",
         "initial_scan",
+        "availability_period",
     };
 
     static const TSet<TString> StateSettings = {
@@ -123,7 +124,18 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
         return false;
     }
 
-    if (keyName == "commit_interval") {
+    if (keyName == "availability_period") {
+        if (value->GetOpName() != "Interval") {
+            if (!value->IsLiteral() || value->GetLiteralType() != "String") {
+                ctx.Context().Error() << "UNLIMITED or a literal of Interval type is expected for " << key.Name;
+                return false;
+            }
+            if (to_lower(value->GetLiteralValue()) != "unlimited") {
+                ctx.Context().Error() << "Unknown availability period: " << value->GetLiteralValue();
+                return false;
+            }
+        }
+    } else if (keyName == "commit_interval") {
         if (value->GetOpName() != "Interval") {
             ctx.Context().Error() << "Literal of Interval type is expected for " << key.Name;
             return false;
@@ -966,9 +978,16 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
+            TString mode = "drop";
+            if (node.HasBlock5()) {
+                mode += "Cascade";
+            }
+            if (node.HasBlock6()) {
+                mode += "Force";
+            }
             AddStatementToBlocks(blocks, BuildDropAsyncReplication(Ctx_.Pos(),
                                                                    BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id),
-                                                                   node.HasBlock5(), context));
+                                                                   mode, context));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore35: {
@@ -3313,16 +3332,13 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
                 return {};
             }
 
-            // special guard to raise error on situation:
-            // use cluster1;
-            // pragma PqReadPqBy="cluster2";
-            const TString* currentClusterLiteral = ctx.Scoped->CurrCluster.GetLiteral();
-            if (currentClusterLiteral && *values[0].GetLiteral() != "dq" && *currentClusterLiteral != *values[0].GetLiteral()) {
-                query.Error() << "Cluster in PqReadPqBy pragma differs from cluster specified in USE statement: " << *values[0].GetLiteral() << " != " << *currentClusterLiteral;
+            const auto& reader = *values[0].GetLiteral();
+            if (reader && reader != "dq") {
+                query.Error() << "Expected 'dq' or an empty string for: " << pragma;
                 return {};
             }
 
-            ctx.PqReadByRtmrCluster = *values[0].GetLiteral();
+            ctx.PqReadByDq = reader == "dq";
             return TNodePtr{};
         },
     }),

@@ -1,0 +1,46 @@
+[package]
+name = "temporalio-workflow"
+version = "0.6.0"
+edition = "2024"
+authors = ["Temporal Technologies Inc. <sdk@temporal.io>"]
+license-file = { workspace = true }
+description = "Temporal Rust workflow authoring surface"
+homepage = "https://temporal.io/"
+repository = "https://github.com/temporalio/sdk-core"
+keywords = ["temporal", "workflow"]
+categories = ["development-tools"]
+
+[dependencies]
+anyhow = "1.0"
+bon = { workspace = true }
+derive_more = { workspace = true }
+futures-util = { version = "0.3", default-features = false, features = [
+  "async-await-macro",
+  "alloc",
+  "std",
+] }
+futures-channel = { version = "0.3", default-features = false, features = [
+  "alloc",
+] }
+prost = { workspace = true }
+prost-types = { workspace = true }
+rand = { version = "0.10", default-features = false }
+rand_pcg = "0.10"
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "2"
+uuid = { version = "1.18", default-features = false }
+wit-bindgen = { version = "0.57.1", default-features = false, features = ["macros", "std", "realloc", "bitflags"] }
+
+[dependencies.temporalio-common-wasm]
+path = "../common-wasm"
+version = "0.6"
+
+[dependencies.temporalio-macros]
+path = "../macros"
+version = "0.6"
+
+[dev-dependencies]
+rstest = "0.26"
+
+[lints]
+workspace = true

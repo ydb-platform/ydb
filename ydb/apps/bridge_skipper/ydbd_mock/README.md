@@ -152,11 +152,11 @@ All three policies below default to `true`. Configure them under `policies` in t
 
 | Policy | Default behavior | Effect of `false` |
 | --- | --- | --- |
-| `auto_blame_dead_piles` | Emit RED BRIDGE_GROUP issues for unreachable peer piles whose local stored state is SYNCHRONIZED | Only explicit storage/connectivity fault injections produce pile issues |
+| `auto_blame_dead_piles` | Emit RED BRIDGE_GROUP issues for unreachable peer piles whose local stored state requires data quorum (SYNCHRONIZED or NOT_SYNCHRONIZED_2) | Only explicit storage/connectivity fault injections produce pile issues |
 | `enforce_config_quorum` | Require every pile with the config-quorum trait in the proposed state to prepare | Bypass that simulated commit requirement; for deliberately unrealistic lab scenarios |
 | `anti_entropy` | Periodically pull newer snapshots from peers, subject to state/configuration rules above | Disable periodic pulling; proposal replication still occurs |
 
-SelfCheck evaluates only SYNCHRONIZED pile copies, including PRIMARY/PROMOTED. A failed NOT_SYNCHRONIZED_2 pile produces no BRIDGE_GROUP issue even though it still blocks the data quorum. Manual storage/connectivity blame follows the same state filter. A representative group is ORANGE (`MAINTENANCE_REQUIRED`) when some synchronized copies fail, RED (`EMERGENCY`) only when all fail, and GREEN (`GOOD`) otherwise. `issue_style: realistic` adds the parent STORAGE_GROUP issue; the default `minimal` style keeps the child issues and the same aggregate statuses.
+SelfCheck evaluates pile copies that require data quorum: SYNCHRONIZED (including PRIMARY/PROMOTED) and NOT_SYNCHRONIZED_2. Failed stage-2 parts emit RED BRIDGE_GROUP issues; stage 1, SUSPENDED, DISCONNECTED and INACTIVE are excluded. Manual storage/connectivity blame follows the same state filter. Only SYNCHRONIZED copies determine availability: the representative group is RED (`EMERGENCY`) when all synchronized copies fail, ORANGE (`MAINTENANCE_REQUIRED`) for other blamed evaluated copies, and GREEN (`GOOD`) otherwise. A healthy stage-2 copy cannot save a failed synchronized copy. `issue_style: realistic` adds the parent STORAGE_GROUP issue; the default `minimal` style keeps the child issues and the same aggregate statuses.
 
 SelfCheck always returns synthetic verbose coverage. It ignores diagnostic request settings for minimum status, maximum level, verbose output, merging, and caching. It does not collect tablets/whiteboards or generate BSC-unavailable, missing-data, or HEALTHCHECK_STATUS truncation messages itself. Use response overrides for captured real-YDB fixtures; mock health alone cannot certify production failover.
 

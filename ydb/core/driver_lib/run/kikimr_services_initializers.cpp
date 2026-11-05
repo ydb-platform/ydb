@@ -221,9 +221,6 @@
 #include <ydb/services/metadata/ds_table/service.h>
 #include <ydb/services/metadata/service.h>
 
-#include <ydb/core/tx/conveyor/service/service.h>
-#include <ydb/core/tx/conveyor/usage/config.h>
-#include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
 #include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
@@ -291,8 +288,6 @@
 #include <library/cpp/containers/absl/btree_set.h>
 #include <library/cpp/logger/global/global.h>
 #include <library/cpp/logger/log.h>
-
-#include <library/cpp/monlib/messagebus/mon_messagebus.h>
 
 #include <library/cpp/svnversion/svnversion.h>
 
@@ -369,6 +364,21 @@ static ui32 GetInterconnectThreadPoolId(const NKikimr::TAppData* appData) {
         return item->second;
     else
         return appData->SystemPoolId;
+}
+
+static ui32 GetPoolIdForQpCache(const NActors::TActorSystemSetup* setup,
+        const NKikimr::TAppData* appData, const TString& poolName) {
+    Y_DEBUG_ABORT_UNLESS(setup != nullptr);
+    Y_DEBUG_ABORT_UNLESS(appData != nullptr);
+    if (!poolName) {
+        return appData->BatchPoolId;
+    }
+    for (ui32 poolId = 0; poolId < setup->GetExecutorsCount(); ++poolId) {
+        if (setup->GetPoolName(poolId) == poolName) {
+            return poolId;
+        }
+    }
+    return appData->BatchPoolId;
 }
 
 static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInterconnectConfig& config, ui32 numNodes, ui32 numDataCenters) {
@@ -589,6 +599,8 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     if (config.HasMaxRdmaRetryBackoffLevel()) {
         result.MaxRdmaRetryBackoffLevel = config.GetMaxRdmaRetryBackoffLevel();
     }
+    result.RdmaAddress = config.GetRdmaAddress();
+    result.RdmaInterface = config.GetRdmaInterface();
 
     if (config.HasCollectSubscriptionStackTrace()) {
         result.CollectSubscriptionStackTrace = config.GetCollectSubscriptionStackTrace();
@@ -786,9 +798,16 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                             break;
                     }
                 }
+                const ui32 qpCachePoolId = GetPoolIdForQpCache(setup, appData, icConfig.GetRdmaQpCachePoolName());
+                if (icConfig.GetRdmaQpPoolSize() > RdmaRuntimeMaxQpPoolSize) {
+                    Cerr << "Warning: RDMA QP pool size " << icConfig.GetRdmaQpPoolSize()
+                        << " exceeds the supported limit " << RdmaRuntimeMaxQpPoolSize
+                        << " and will be clamped" << Endl;
+                }
                 setup->LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
                     TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
-                        CreateRdmaRuntimeParams(static_cast<int>(icConfig.GetRdmaMaxWr()), icConfig.GetEnableRdmaSendReceive()),
+                        CreateRdmaRuntimeParams(static_cast<int>(icConfig.GetRdmaMaxWr()),
+                            icConfig.GetEnableRdmaSendReceive(), icConfig.GetRdmaQpPoolSize(), qpCachePoolId),
                         rdmaCqMode,
                         interconectCounters.Get()),
                         TMailboxType::ReadAsFilled, interconnectPoolId));

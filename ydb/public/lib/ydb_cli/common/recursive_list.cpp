@@ -29,7 +29,9 @@ namespace {
         }
 
         for (const auto& child : list.GetChildren()) {
-            if (settings.SkipSys_ && IsSystemObject(child)) {
+            if ((settings.SkipMode_ == ERecursiveListSkipMode::Internal && IsInternalObject(child))
+                || (settings.SkipMode_ == ERecursiveListSkipMode::System && IsSystemObject(child)))
+            {
                 continue;
             }
 

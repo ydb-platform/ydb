@@ -113,6 +113,7 @@ PEERDIR(
     library/cpp/lwtrace/mon
     library/cpp/random_provider
     library/cpp/svnversion
+    library/cpp/threading/atomic_shared_ptr
     library/cpp/threading/light_rw_lock
     library/cpp/time_provider
     ydb/core/audit/audit_config
@@ -164,7 +165,6 @@ RECURSE(
     generated
 )
 
-IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
 RECURSE_FOR_TESTS(
     ut
     ut_auth
@@ -173,4 +173,3 @@ RECURSE_FOR_TESTS(
     ut_http_database_param
     ut_statestorage_proxy
 )
-ENDIF()

@@ -154,6 +154,20 @@ TRuntimeNode::TList TDqProgramBuilder::MakeRowArgs(TRuntimeNode input, bool forc
     return args;
 }
 
+TRuntimeNode TDqProgramBuilder::MakeHashJoinSettings(const TBlockHashJoinSettings& settings) {
+    TRuntimeNode::TList settingsNodes = {NewDataLiteral(static_cast<ui32>(settings.BuildSide))};
+    if (!settings.EqualNullsKeys.empty() || settings.Mark) {
+        settingsNodes.push_back(AsTuple(settings.EqualNullsKeys));
+    }
+    if (settings.Mark) {
+        settingsNodes.push_back(NewDataLiteral<bool>(true));
+        if (settings.MarkKey) {
+            settingsNodes.push_back(NewDataLiteral(*settings.MarkKey));
+        }
+    }
+    return NewTuple(settingsNodes);
+}
+
 void TDqProgramBuilder::AddJoinFilters(TCallableBuilder& callableBuilder, TRuntimeNode leftInput,
                                        TRuntimeNode rightInput, EJoinKind joinKind,
                                        const TJoinFilterLambda& leftFilter, const TJoinFilterLambda& rightFilter,
@@ -206,11 +220,7 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
     callableBuilder.Add(AsTuple(rightKeyColumns));
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
-    TRuntimeNode::TList settingsNodes = {NewDataLiteral(static_cast<ui32>(settings.BuildSide))};
-    if (!settings.EqualNullsKeys.empty()) {
-        settingsNodes.push_back(AsTuple(settings.EqualNullsKeys));
-    }
-    callableBuilder.Add(NewTuple(settingsNodes));
+    callableBuilder.Add(MakeHashJoinSettings(settings));
     AddJoinFilters(callableBuilder, leftStream, rightStream, joinKind, leftFilter, rightFilter, commonFilter);
 
     return TRuntimeNode(callableBuilder.Build(), false);
@@ -236,11 +246,7 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
     callableBuilder.Add(AsTuple(rightKeyColumns));
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
-    TRuntimeNode::TList settingsNodes = {NewDataLiteral(static_cast<ui32>(settings.BuildSide))};
-    if (!settings.EqualNullsKeys.empty()) {
-        settingsNodes.push_back(AsTuple(settings.EqualNullsKeys));
-    }
-    callableBuilder.Add(NewTuple(settingsNodes));
+    callableBuilder.Add(MakeHashJoinSettings(settings));
     AddJoinFilters(callableBuilder, leftFlow, rightFlow, joinKind, leftFilter, rightFilter, commonFilter);
 
     return TRuntimeNode(callableBuilder.Build(), false);

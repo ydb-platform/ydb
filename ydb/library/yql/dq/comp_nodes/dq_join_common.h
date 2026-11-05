@@ -15,6 +15,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+#include <util/generic/hash.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -25,11 +26,24 @@ struct TPhysicalJoin {
     ESide Preserved = ESide::Probe;
     // empty equality keys turn the hash lookup into a cartesian scan
     bool IsGrid = Kind == EJoinKind::Cross;
+    bool Mark = false;
 
     constexpr ESide NullSupplying() const {
         return OtherSide(Preserved);
     }
+
+    constexpr bool OutputsPreservedSideOnly() const {
+        return LeftSemiOrOnly(Kind) && !Mark;
+    }
 };
+
+enum class EMarkValue : ui8 {
+    True = 0,
+    False = 1,
+    Null = 2,
+};
+
+inline constexpr int MarkValuesCount = 3;
 
 struct TColumnsMetadata {
     TMKQLVector<ui32> KeyColumns;
@@ -283,6 +297,91 @@ struct TTableAndSomeData {
     ui32 ProbeResumeIndex = 0;
     size_t BuildCursor = 0;
     size_t PreservedResumeIndex = 0;
+};
+
+struct TMarkJoinKey {
+    ui32 PackedKeyColumn;
+    bool ProbeNullable;
+};
+
+class TMarkGroups {
+  public:
+    TMarkGroups(const NPackedTuple::TTupleLayout* layout, TMarkJoinKey key)
+        : Layout_(layout)
+        , Key_(key)
+    {
+        MKQL_ENSURE(Key_.PackedKeyColumn < Layout_->KeyColumnsNum, "mark key column is out of range");
+    }
+
+    void Add(TSingleTuple row) {
+        const bool markIsNull = IsNull(row, Key_.PackedKeyColumn);
+        if (!Key_.ProbeNullable && !markIsNull) {
+            return;
+        }
+        if (!MakeGroup(row)) {
+            return;
+        }
+        auto [it, inserted] = Groups_.emplace(Group_, markIsNull);
+        if (!inserted) {
+            it->second = it->second || markIsNull;
+        }
+    }
+
+    EMarkValue Unmatched(TSingleTuple row) {
+        if (!MakeGroup(row)) {
+            return EMarkValue::False;
+        }
+        const auto it = Groups_.find(Group_);
+        if (it == Groups_.end()) {
+            return EMarkValue::False;
+        }
+        return it->second || IsNull(row, Key_.PackedKeyColumn) ? EMarkValue::Null : EMarkValue::False;
+    }
+
+  private:
+    bool IsNull(TSingleTuple row, ui32 column) const {
+        return !((row.PackedData[Layout_->BitmaskOffset + column / 8] >> (column % 8)) & 1u);
+    }
+
+    bool MakeGroup(TSingleTuple row) {
+        Group_.clear();
+        for (ui32 column = 0; column < Layout_->KeyColumnsNum; ++column) {
+            if (column == Key_.PackedKeyColumn) {
+                continue;
+            }
+            if (IsNull(row, column)) {
+                if (!Layout_->EqualNullsKeyMask.Get(column)) {
+                    return false;
+                }
+                Group_.push_back('\0');
+                continue;
+            }
+            Group_.push_back('\1');
+            const auto& desc = Layout_->KeyColumns[column];
+            const char* data = reinterpret_cast<const char*>(row.PackedData + desc.Offset);
+            if (desc.SizeType == NPackedTuple::EColumnSizeType::Fixed) {
+                Group_.append(data, desc.DataSize);
+                continue;
+            }
+            const ui8 prefixSize = static_cast<ui8>(data[0]);
+            if (prefixSize < 255) {
+                Group_.append(data, prefixSize + 1);
+                continue;
+            }
+            const ui32 overflowOffset = ReadUnaligned<ui32>(data + 1);
+            const ui32 overflowSize = ReadUnaligned<ui32>(data + 1 + sizeof(ui32));
+            Group_.append(data, 1);
+            Group_.append(data + 1 + sizeof(ui32), sizeof(ui32));
+            Group_.append(data + 1 + 2 * sizeof(ui32), desc.DataSize - 1 - 2 * sizeof(ui32));
+            Group_.append(reinterpret_cast<const char*>(row.OverflowBegin) + overflowOffset, overflowSize);
+        }
+        return true;
+    }
+
+    const NPackedTuple::TTupleLayout* Layout_;
+    const TMarkJoinKey Key_;
+    THashMap<TString, bool> Groups_;
+    TString Group_;
 };
 
 namespace NJoinPackedTuples {
@@ -616,12 +715,17 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     };
 
     THybridHashJoin(TSides<Source> sources, TComputationContext& ctx, TString componentName,
-                    TSides<const NPackedTuple::TTupleLayout*> layouts)
+                    TSides<const NPackedTuple::TTupleLayout*> layouts,
+                    std::optional<TMarkJoinKey> markKey = std::nullopt)
         : Logger_(ctx, componentName)
         , Layouts_(layouts)
         , Spiller_(ctx.SpillerFactory ? ctx.SpillerFactory->CreateSpiller() : nullptr)
         , Sources_(std::move(sources))
     {
+        MKQL_ENSURE(!markKey || Join.Mark, "mark key is set for a join without a mark");
+        if (markKey) {
+            MarkGroups_.emplace(Layouts_.Build, *markKey);
+        }
     }
 
     struct Finish {};
@@ -686,7 +790,13 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
         };
         auto finishProbeRow = [&](TSingleTuple probeRow, bool found) {
-            if constexpr (PreservedRowsInProbeStream()) {
+            if constexpr (Join.Mark) {
+                if (found) {
+                    consume(probeRow, EMarkValue::True);
+                } else {
+                    consume(probeRow, MarkGroups_ ? MarkGroups_->Unmatched(probeRow) : EMarkValue::False);
+                }
+            } else if constexpr (PreservedRowsInProbeStream()) {
                 if constexpr (Join.Kind == EJoinKind::Left || Join.Kind == EJoinKind::LeftOnly) {
                     if (!found) {
                         consume(probeRow);
@@ -762,6 +872,9 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 }
                 }
                 for (TSingleTuple tuple: *state.Pack) { 
+                    if (MarkGroups_) {
+                        MarkGroups_->Add(tuple);
+                    }
                     state.Spiller.AddRow(tuple); 
                 }
                 state.Pack = std::nullopt;
@@ -1192,6 +1305,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     TSides<const NPackedTuple::TTupleLayout*> Layouts_;
     ISpiller::TPtr Spiller_;
     Sources Sources_;
+    std::optional<TMarkGroups> MarkGroups_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
 };
@@ -1216,6 +1330,12 @@ inline TBlockHashJoinSettings ParseHashJoinSettingsTuple(TRuntimeNode node) {
         for (ui32 i = 0; i < keys->GetValuesCount(); ++i) {
             settings.EqualNullsKeys.push_back(AS_VALUE(TDataLiteral, keys->GetValue(i))->AsValue().Get<ui32>());
         }
+    }
+    if (settingsTuple->GetValuesCount() >= 3) {
+        settings.Mark = AS_VALUE(TDataLiteral, settingsTuple->GetValue(2))->AsValue().Get<bool>();
+    }
+    if (settingsTuple->GetValuesCount() >= 4) {
+        settings.MarkKey = AS_VALUE(TDataLiteral, settingsTuple->GetValue(3))->AsValue().Get<ui32>();
     }
     return settings;
 }
@@ -1302,6 +1422,56 @@ TResult* DispatchHashJoinByKind(EJoinKind kind, ESide preservedSide, bool isGrid
     }
     MKQL_ENSURE(false, unsupportedMessage);
     Y_UNREACHABLE();
+}
+
+inline void ResetMarkRenames(TDqRenames<ESide>& renames) {
+    for (auto& rename : renames) {
+        if (rename.Side == ESide::Build) {
+            rename.Index = 0;
+        }
+    }
+}
+
+template <template <TPhysicalJoin> class Wrapper, typename TResult, typename... Args>
+TResult* DispatchMarkHashJoin(Args&&... args) {
+    return new Wrapper<TPhysicalJoin{EJoinKind::LeftSemi, ESide::Probe, false, true}>(std::forward<Args>(args)...);
+}
+
+inline void ValidateMarkJoin(const TBlockHashJoinSettings& settings, EJoinKind kind, size_t keyCount,
+                             const TJoinFilters& filters) {
+    MKQL_ENSURE(kind == EJoinKind::LeftSemi, "mark join must be encoded as LeftSemi");
+    MKQL_ENSURE(!settings.LeftIsBuild(), "mark join requires the right side to be the build side");
+    MKQL_ENSURE(keyCount > 0, "mark join requires join keys");
+    MKQL_ENSURE(!filters, "mark join does not support join filters");
+    if (settings.MarkKey) {
+        MKQL_ENSURE(*settings.MarkKey < keyCount, "mark key index is out of range");
+        MKQL_ENSURE(std::find(settings.EqualNullsKeys.begin(), settings.EqualNullsKeys.end(), *settings.MarkKey) ==
+                        settings.EqualNullsKeys.end(),
+                    "mark key must not use EqualNulls");
+    }
+}
+
+template <typename TConverter>
+std::optional<TMarkJoinKey> MakeMarkJoinKey(const TBlockHashJoinSettings& settings,
+                                            TSides<TConverter*> converters, const TSides<TVector<TType*>>& userTypes) {
+    if (!settings.MarkKey) {
+        return std::nullopt;
+    }
+    const ui32 inputColumn = *settings.MarkKey;
+    TSides<ui32> packedColumns;
+    for (ESide side : EachSide) {
+        const auto& innerColumns = converters.SelectSide(side)->GetInnerColumns(inputColumn);
+        MKQL_ENSURE(innerColumns.size() == 1, "mark key must be a single packed column");
+        const auto* layout = converters.SelectSide(side)->GetTupleLayout();
+        const auto it = std::find_if(layout->KeyColumns.begin(), layout->KeyColumns.end(), [&](const auto& column) {
+            return column.OriginalColumnIndex == innerColumns.front();
+        });
+        MKQL_ENSURE(it != layout->KeyColumns.end(), "mark key is not a packed key column");
+        packedColumns.SelectSide(side) = std::distance(layout->KeyColumns.begin(), it);
+    }
+    MKQL_ENSURE(packedColumns.Build == packedColumns.Probe, "mark key is packed differently on build and probe sides");
+    return TMarkJoinKey{.PackedKeyColumn = packedColumns.Build,
+                        .ProbeNullable = userTypes.Probe[inputColumn]->IsOptional()};
 }
 
 template <typename TInputTypes, typename TKeyCols>
@@ -1425,6 +1595,7 @@ template <TPhysicalJoin Join, typename Converter>
 struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
     struct Empty {};
     using BuildNullIfNeeded = std::conditional_t<Join.Kind == EJoinKind::Left, TPackResult, Empty>;
+    using MarksIfNeeded = std::conditional_t<Join.Mark, TPackResult, Empty>;
 
     TPackedTupleOutputBase(const TDqRenames<ESide>* renames, TSides<Converter*> converters)
         : Renames_(renames)
@@ -1468,19 +1639,32 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
                         .AppendTuple(tuple, Self.Converters_.SelectSide(Join.Preserved)->GetTupleLayout());
                 }
             }
+
+            void operator()(TSingleTuple tuple, EMarkValue mark) {
+                if constexpr (Join.Mark) {
+                    const auto* layout = Self.Converters_.Build->GetTupleLayout();
+                    const TSingleTuple value{
+                        .PackedData = Self.Marks_.PackedTuples.data() + layout->TotalRowSize * static_cast<ui32>(mark),
+                        .OverflowBegin = Self.Marks_.Overflow.data()};
+                    (*this)(TSides<TSingleTuple>{.Build = value, .Probe = tuple});
+                } else {
+                    Y_UNUSED(tuple, mark);
+                    MKQL_ENSURE(false, "mark value in a join without a mark");
+                }
+            }
         };
         return ConsumeFn{*this};
     }
 
 protected:
     void AssertSizeIsSane() const {
-        if constexpr (LeftSemiOrOnly(Join.Kind)) {
+        if constexpr (Join.OutputsPreservedSideOnly()) {
             MKQL_ENSURE(Output_.SelectSide(Join.NullSupplying()).NTuples == 0,
                         "Left Only and Left Semi join types shouldn't collect any tuples on the non-output side");
         } else if constexpr (Join.Kind == EJoinKind::Left || Join.Kind == EJoinKind::Inner ||
-                             Join.Kind == EJoinKind::Cross) {
+                             Join.Kind == EJoinKind::Cross || Join.Mark) {
             MKQL_ENSURE(Output_.Build.NTuples == Output_.Probe.NTuples,
-                        "Inner, Left and Cross join types must collect same amount of tuples from build and probe");
+                        "Inner, Left, Cross and Mark join types must collect same amount of tuples from build and probe");
         }
     }
 
@@ -1488,6 +1672,7 @@ protected:
     TSides<Converter*> Converters_;
     TSides<TPackResult> Output_;
     BuildNullIfNeeded Nulls_;
+    MarksIfNeeded Marks_;
 };
 
 template <typename JoinType, typename OutputType, typename FlushSink>

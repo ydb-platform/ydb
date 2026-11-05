@@ -6,6 +6,7 @@
 #include <ydb/apps/bridge_skipper/domain/health.h>
 #include <ydb/apps/bridge_skipper/domain/policy.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/protos/services_common.pb.h>
 
 #include <library/cpp/json/json_value.h>
 
@@ -13,7 +14,7 @@
 
 namespace NBridgeSkipper {
 
-constexpr int SkipperLogComponent = 1;
+constexpr int SkipperLogComponent = NActorsServices::EServiceCommon_MAX + 1;
 
 struct TEndpointSnapshot {
     TString Uri;

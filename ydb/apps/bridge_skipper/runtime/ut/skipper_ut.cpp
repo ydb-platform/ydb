@@ -168,6 +168,10 @@ struct THarness {
         Runtime.Initialize();
         Runtime.UpdateCurrentTime(TInstant::Seconds(100), true);
         auto settings = Runtime.GetLogSettings(0);
+        settings->Append(SkipperLogComponent, SkipperLogComponent + 1, [](NActors::NLog::EComponent) -> const TString& {
+            static const TString name = "BRIDGE_SKIPPER";
+            return name;
+        });
         settings->Format = NActors::NLog::TSettings::JSON_FORMAT;
         settings->SetEnableStructuredLogInJson(true);
         Runtime.SetLogPriority(SkipperLogComponent, NActors::NLog::PRI_DEBUG);

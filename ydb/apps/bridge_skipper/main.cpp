@@ -87,7 +87,9 @@ int Run(
     snapshots->Publish(std::move(seed));
 
     const TActorId loggerId(1, "skipper-log");
-    auto logging = MakeIntrusive<NLog::TSettings>(loggerId, SkipperLogComponent, LogPriority(config.Logging.Level));
+    auto logging = MakeIntrusive<NLog::TSettings>(loggerId, NActorsServices::LOGGER, LogPriority(config.Logging.Level));
+    logging->Append(NActorsServices::EServiceCommon_MIN, NActorsServices::EServiceCommon_MAX,
+        NActorsServices::EServiceCommon_Name);
     logging->Append(SkipperLogComponent, SkipperLogComponent + 1, [](NLog::EComponent) -> const TString& {
         static const TString name = "BRIDGE_SKIPPER";
         return name;

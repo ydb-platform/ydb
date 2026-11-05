@@ -9,18 +9,19 @@ import unittest
 
 import yatest.common
 
-from ydb.apps.bridge_skipper.acceptance.lib.harness import free_port, http_request
+from library.python.port_manager import PortManager
+from ydb.apps.bridge_skipper.acceptance.lib.harness import http_request
 from ydb.apps.bridge_skipper.ydbd_mock.lib.topology import Topology
 
 
 class StandaloneTest(unittest.TestCase):
     def test_mock_cluster_and_cpp_skipper_launch(self):
-        with tempfile.TemporaryDirectory() as run:
-            self._launch(run)
+        with tempfile.TemporaryDirectory() as run, PortManager() as ports:
+            self._launch(run, ports)
 
-    def _launch(self, run):
-        topology = Topology(["a", "b"], 2, control_ports=[free_port(), free_port()],
-                            grpc_ports=[[free_port(), free_port()], [free_port(), free_port()]])
+    def _launch(self, run, ports):
+        topology = Topology(["a", "b"], 2, control_ports=[ports.get_port(), ports.get_port()],
+                            grpc_ports=[[ports.get_port(), ports.get_port()], [ports.get_port(), ports.get_port()]])
         topology_path = str(Path(run) / "input.yaml")
         topology.save(topology_path)
         mock_binary = yatest.common.binary_path("ydb/apps/bridge_skipper/ydbd_mock/ydbd_mock")
@@ -32,7 +33,7 @@ class StandaloneTest(unittest.TestCase):
         try:
             subprocess.run(command + ["up", "--topology", topology_path, "--fresh"],
                            env=env, check=True, capture_output=True, timeout=30)
-            port = free_port()
+            port = ports.get_port()
             with open(Path(run) / "controller.log", "w+") as log:
                 controller = subprocess.Popen(command + ["skipper", "--binary", skipper_binary,
                                               "--listen", "127.0.0.1:%d" % port],

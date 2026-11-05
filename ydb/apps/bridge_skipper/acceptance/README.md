@@ -9,6 +9,8 @@ real C++ SDK. No external virtualenv or YDB CLI is required.
 chunks; a chunk can contain multiple scenarios. Configuration uses
 positive whole seconds and preserves the production validator's warmup minimum
 and timing inequalities.
+All mock and controller listeners use `PortManager` reservations held until
+cleanup, avoiding ephemeral ports and collisions with parallel test workers.
 
 `test_e2e.py` keeps only the cases that need the real binary, SDK and wire:
 
@@ -22,7 +24,8 @@ and timing inequalities.
 - slow observations: delayed SelfCheck while connectivity reports remain
   binding (e17);
 - shutdown: SIGTERM during a hung SelfCheck within the default stop bound;
-- startup: a locked state directory reports `startup_failed` and exits.
+- startup: a locked state directory reports `startup_failed` and exits;
+  HTTP and Skipper logs retain their distinct component names at debug level.
 
 Every skipper mutation assertion parses the mock request log and requires the
 exact overlay, empty `quorum_piles`, and `expected_generation` equal to G captured

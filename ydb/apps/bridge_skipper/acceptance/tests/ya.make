@@ -9,6 +9,7 @@ SPLIT_FACTOR(10)
 
 TEST_SRCS(
     test_e2e.py
+    test_ports.py
     test_standalone.py
 )
 
@@ -18,6 +19,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    library/python/port_manager
     library/python/testing/yatest_common
     ydb/apps/bridge_skipper/acceptance/lib
 )

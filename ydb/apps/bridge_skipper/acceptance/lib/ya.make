@@ -5,6 +5,9 @@ PY_SRCS(
     harness.py
 )
 
-PEERDIR(ydb/apps/bridge_skipper/ydbd_mock/lib)
+PEERDIR(
+    library/python/port_manager
+    ydb/apps/bridge_skipper/ydbd_mock/lib
+)
 
 END()

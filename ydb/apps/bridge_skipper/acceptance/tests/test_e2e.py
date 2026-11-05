@@ -1,6 +1,7 @@
 """Executable failover scenarios against the real C++ binary and SDK."""
 import asyncio
 import fcntl
+import json
 from pathlib import Path
 import re
 import shlex
@@ -52,6 +53,19 @@ class ExecutableCase(unittest.IsolatedAsyncioTestCase):
 
 
 class ExecutableTest(ExecutableCase):
+    async def test_http_startup_keeps_common_and_skipper_log_components(self):
+        e = await self.make(start=False)
+        e.controller.config["logging"] = {"level": "debug"}
+        e.controller.config_path.write_text(json.dumps(e.controller.config))
+        await e.controller.start()
+        await self.scrape(e)
+        await e.controller.stop()
+        self.assertEqual(e.controller.process.returncode, 0, e.controller.log_path.read_text())
+        records = [json.loads(line) for line in e.controller.log_path.read_text().splitlines()]
+        self.assertTrue(any(record.get("component") == "HTTP" for record in records), records)
+        self.assertTrue(any(record.get("component") == "BRIDGE_SKIPPER"
+                            and record.get("event") == "startup" for record in records), records)
+
     async def test_e1_dead_synchronized_confirmed_once(self):
         e = await self.make()
         await e.healthy()

@@ -3,14 +3,15 @@ import asyncio
 import json
 from pathlib import Path
 import re
-import socket
 import subprocess
 import time
 import urllib.error
 import urllib.request
 
+from library.python.port_manager import PortManager
 from ydb.apps.bridge_skipper.ydbd_mock.lib import model, operations
 from ydb.apps.bridge_skipper.ydbd_mock.lib.testkit import LiveCluster, tiny_timings
+from ydb.apps.bridge_skipper.ydbd_mock.lib.topology import Topology
 from ydb.public.api.protos.draft import ydb_bridge_pb2 as B
 
 
@@ -30,12 +31,6 @@ async def wait(predicate, message, timeout=40):
             return last
         await asyncio.sleep(0.05)
     raise AssertionError("timed out waiting for %s; last=%r" % (message, last))
-
-
-def free_port():
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
 
 
 def http_request(url, method="GET"):
@@ -123,7 +118,12 @@ class Controller:
 class Environment:
     def __init__(self, binary, root, names=("a", "b"), mode="auto", initial=None, timing=None):
         self.root = Path(root)
-        self.cluster = LiveCluster(pile_names=names, initial=initial, timings=tiny_timings(lifecycle_delay=0.05))
+        self.ports = PortManager()
+        topology = Topology(
+            names, 3, initial=initial, timings=tiny_timings(lifecycle_delay=0.05),
+            control_ports=[self.ports.get_port() for _ in names],
+            grpc_ports=[[self.ports.get_port() for _ in range(3)] for _ in names])
+        self.cluster = LiveCluster(topology=topology)
         # SelfCheck and Update client deadlines are their operation timeouts + 2 s
         # (GetClusterState uses read_timeout); the validator requires
         # selfcheck operation + 2 + round interval < evidence TTL.
@@ -136,7 +136,7 @@ class Environment:
                      for pile in self.cluster.topo.piles}
         self.controller = Controller(binary, root, {
             "cluster_id": "acceptance", "mode": mode,
-            "endpoints": endpoints, "http": {"listen": "127.0.0.1:%d" % free_port()},
+            "endpoints": endpoints, "http": {"listen": "127.0.0.1:%d" % self.ports.get_port()},
             "timing": values, "health_endpoints_per_pile": 3})
 
     async def start(self, skipper=True):
@@ -147,10 +147,13 @@ class Environment:
 
     async def close(self):
         try:
-            await self.controller.stop()
+            try:
+                await self.controller.stop()
+            finally:
+                (self.root / "requestlog.json").write_text(json.dumps(self.events(), indent=2))
+                await self.cluster.stop()
         finally:
-            (self.root / "requestlog.json").write_text(json.dumps(self.events(), indent=2))
-            await self.cluster.stop()
+            self.ports.release()
 
     def events(self):
         return sorted([event for proc in self.cluster.procs.values()

@@ -7,4 +7,5 @@ SRCS(
     vhost_test.cpp
 )
 
+REQUIREMENTS(cpu:1)
 END()

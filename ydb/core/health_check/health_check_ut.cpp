@@ -10,6 +10,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/util/proto_duration.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include "health_check.h"
@@ -650,7 +651,8 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     Ydb::Monitoring::SelfCheckResult RequestHcWithBridgeVdisks(const TVector<TVDisks>& groupVdisks,
             size_t bridgeGroupCount = 1, bool ordinary = false,
             std::array<NKikimrBridge::TClusterState::EPileState, 2> pileStates = {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::SYNCHRONIZED},
-            bool inlinePile = false) {
+            bool inlinePile = false, bool bridgeModeEnabled = false)
+    {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -662,7 +664,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         server.EnableGRpc(grpcPort);
         TClient client(settings);
         TTestActorRuntime& runtime = *server.GetRuntime();
-        if (ordinary) {
+        if (ordinary || bridgeModeEnabled) {
             runtime.GetAppData().BridgeModeEnabled = true;
         }
 
@@ -679,6 +681,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto* nodeWardenStorageConfig = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, nullptr);
         nodeWardenStorageConfig->BridgeInfo = bridgeInfo;
         runtime.Send(new IEventHandle(GetNameserviceActorId(), runtime.AllocateEdgeActor(), nodeWardenStorageConfig));
+
+        if (bridgeModeEnabled) {
+            // NodeWarden defers bridge-mode queries until it has bridge information.
+            runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(runtime.GetNodeId(0)), sender,
+                new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, bridgeInfo)));
+        }
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -734,6 +742,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         return runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
     }
 
+    Ydb::Monitoring::SelfCheckResult RequestHcInBridgeMode(const TVector<TVDisks>& groupVdisks,
+            std::array<NKikimrBridge::TClusterState::EPileState, 2> pileStates, bool inlinePile = false)
+    {
+        return RequestHcWithBridgeVdisks(groupVdisks, 1, false, pileStates, inlinePile, true);
+    }
+
     struct TLocationFilter {
         std::vector<std::function<bool(const Ydb::Monitoring::Location&)>> Filters;
 
@@ -768,6 +782,15 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             }
         }
         UNIT_ASSERT_VALUES_EQUAL_C(issuesCount, total, "Wrong issues count for " << type << " with expecting status " << expectingStatus);
+    }
+
+    void CheckHcResultHasIssueWithMessage(const Ydb::Monitoring::SelfCheckResult& result, const TString& type,
+            Ydb::Monitoring::StatusFlag::Status status, const TString& message)
+    {
+        const bool found = std::ranges::any_of(result.issue_log(), [&](const auto& issue) {
+            return issue.type() == type && issue.status() == status && issue.message() == message;
+        });
+        UNIT_ASSERT_C(found, "No " << type << " issue with status " << status << " and message '" << message << "'");
     }
 
     // checks that issues of the given types are linked to each other by reason, from the first type down to the last one
@@ -1330,6 +1353,104 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             {NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1, NKikimrBridge::TClusterState::DISCONNECTED});
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test"));
+    }
+
+    const auto checkDeadStage2Pile = [](bool inlinePile) {
+        const auto result = RequestHcInBridgeMode({TVDisks{8, NKikimrBlobStorage::READY}, TVDisks{3, NKikimrBlobStorage::ERROR}},
+            {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2}, inlinePile);
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("pile1"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, TLocationFilter().Pool("/Root:test").Pile("pile1"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssueWithMessage(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, "Group failed in pile pile1");
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "BRIDGE_GROUP", "VDISK"});
+    };
+
+    Y_UNIT_TEST(BridgeGroupDeadInStage2Pile) {
+        checkDeadStage2Pile(false);
+    }
+
+    Y_UNIT_TEST(BridgeConvertedGroupDeadInStage2Pile) {
+        checkDeadStage2Pile(true);
+    }
+
+    Y_UNIT_TEST(BridgeGroupDeadInSynchronizedAndStage2Piles) {
+        const auto result = RequestHcInBridgeMode({TVDisks{3, NKikimrBlobStorage::ERROR}, TVDisks{3, NKikimrBlobStorage::ERROR}},
+            {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2});
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("pile1"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("pile1"));
+        CheckHcResultHasIssueWithMessage(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, "Group dead in all piles");
+    }
+
+    const auto checkDeadSynchronizedPile = [](NKikimrBridge::TClusterState::EPileState otherState, bool inlinePile) {
+        const auto result = RequestHcInBridgeMode({TVDisks{3, NKikimrBlobStorage::ERROR}, TVDisks{8, NKikimrBlobStorage::READY}},
+            {NKikimrBridge::TClusterState::SYNCHRONIZED, otherState}, inlinePile);
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test").Pile("pile0"));
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("pile1"));
+        CheckHcResultHasIssueWithMessage(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, "Group failed in pile pile0");
+        CheckHcResultHasReasonChain(result, {"STORAGE_POOL", "STORAGE_GROUP", "BRIDGE_GROUP", "VDISK"});
+    };
+
+    Y_UNIT_TEST(BridgeGroupDeadInSynchronizedPileWithHealthyStage2Pile) {
+        checkDeadSynchronizedPile(NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2, false);
+    }
+
+    Y_UNIT_TEST(BridgeConvertedGroupDeadInSynchronizedPileWithHealthyStage2Pile) {
+        checkDeadSynchronizedPile(NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2, true);
+    }
+
+    Y_UNIT_TEST(BridgeGroupDeadInSynchronizedPileWithHealthySuspendedPile) {
+        checkDeadSynchronizedPile(NKikimrBridge::TClusterState::SUSPENDED, false);
+    }
+
+    Y_UNIT_TEST(BridgeGroupHealthyStage2PileHasNoIssues) {
+        const auto result = RequestHcInBridgeMode({2, TVDisks{8, NKikimrBlobStorage::READY}},
+            {NKikimrBridge::TClusterState::SYNCHRONIZED, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2});
+        Cerr << result.ShortDebugString() << Endl;
+        for (auto status : {Ydb::Monitoring::StatusFlag::YELLOW, Ydb::Monitoring::StatusFlag::ORANGE, Ydb::Monitoring::StatusFlag::RED}) {
+            CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", status, 0, TLocationFilter().Pool("/Root:test"));
+            CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", status, 0, TLocationFilter().Pool("/Root:test"));
+        }
+    }
+
+    const auto checkIgnoredDeadPile = [](NKikimrBridge::TClusterState::EPileState otherState) {
+        const auto result = RequestHcInBridgeMode({TVDisks{8, NKikimrBlobStorage::READY}, TVDisks{3, NKikimrBlobStorage::ERROR}},
+            {NKikimrBridge::TClusterState::SYNCHRONIZED, otherState});
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "BRIDGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test").Pile("pile1"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, TLocationFilter().Pool("/Root:test"));
+    };
+
+    Y_UNIT_TEST(BridgeGroupDeadInStage1PileIsIgnored) {
+        checkIgnoredDeadPile(NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+    }
+
+    Y_UNIT_TEST(BridgeGroupDeadInSuspendedPileIsIgnored) {
+        checkIgnoredDeadPile(NKikimrBridge::TClusterState::SUSPENDED);
+    }
+
+    Y_UNIT_TEST(BridgeGroupDeadInDisconnectedPileIsIgnored) {
+        checkIgnoredDeadPile(NKikimrBridge::TClusterState::DISCONNECTED);
+    }
+
+    Y_UNIT_TEST(BridgeGroupStage2PartWithoutSynchronizedParts) {
+        const auto result = RequestHcInBridgeMode({2, TVDisks{8, NKikimrBlobStorage::READY}},
+            {NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_2, NKikimrBridge::TClusterState::DISCONNECTED});
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("/Root:test"));
+        CheckHcResultHasIssueWithMessage(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, "Group has no parts in synchronized piles");
+        for (const auto& issue : result.issue_log()) {
+            UNIT_ASSERT_UNEQUAL(issue.type(), "BRIDGE_GROUP");
+        }
     }
 
     /* HC currently infers group status on its own, so it's never unknown
@@ -2580,6 +2701,80 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].id(), "static");
     }
 
+    Y_UNIT_TEST(NoBscResponseThenPipeFailure) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        const ui64 bscId = MakeBSControllerID();
+        std::unordered_set<TActorId> bscClients; // We can't exactly pinpoint HC actor, so we'll settle for this
+        bool bscTimeoutFired = false;
+        bool wasResult = false;
+
+        // BSC never answers
+        auto sysViewObserver = runtime.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            auto type = ev->GetTypeRewrite();
+            if (EventSpaceBegin(TKikimrEvents::ES_SYSTEM_VIEW) <= type && type <= EventSpaceEnd(TKikimrEvents::ES_SYSTEM_VIEW)) {
+                ev.Reset();
+            }
+        });
+        // hold the pipe connection result to inject failure after bsc timeout
+        auto pipeObserver = runtime.AddObserver<TEvTabletPipe::TEvClientConnected>([&](auto&& ev) {
+            if (ev->Get()->TabletId == bscId) {
+                bscClients.insert(ev->Recipient);
+                ev.Reset();
+            }
+        });
+        // first wakeup of the request actor is the bsc timeout (50% of the timeout)
+        auto wakeupObserver = runtime.AddObserver<TEvents::TEvWakeup>([&](auto&& ev) {
+            if (bscClients.contains(ev->Recipient)) {
+                bscTimeoutFired = true;
+            }
+        });
+        auto resultObserver = runtime.AddObserver<NHealthCheck::TEvSelfCheckResult>([&](auto&&) {
+            wasResult = true;
+        });
+        // keep at least one request in flight
+        TBlockEvents<TEvHive::TEvResponseHiveInfo> blockHiveInfo(runtime);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.mutable_operation_params()->mutable_operation_timeout()->set_seconds(20);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        const TInstant start = runtime.GetCurrentTime();
+
+        TDispatchOptions opts;
+        opts.CustomFinalCondition = [&]() { return bscTimeoutFired && !blockHiveInfo.empty(); };
+        runtime.DispatchEvents(opts);
+        UNIT_ASSERT(!wasResult);
+
+        // pipe to bsc fails after bsc requests were already timed out
+        for (const auto& actor : bscClients) {
+            runtime.Send(new IEventHandle(actor, actor,
+                new TEvTabletPipe::TEvClientConnected(bscId, NKikimrProto::ERROR, TActorId(), TActorId(), false, false, 0)));
+        }
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        // bsc requests must not be accounted twice, so we still wait for hive
+        UNIT_ASSERT(!wasResult);
+
+        blockHiveInfo.Stop().Unblock();
+        const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Ctest << result.ShortDebugString() << Endl;
+        UNIT_ASSERT(wasResult);
+        // reply comes after hive response, not by the final timeout
+        UNIT_ASSERT_LT(runtime.GetCurrentTime() - start, TDuration::Seconds(20));
+    }
+
     Y_UNIT_TEST(BridgeNoBscResponse) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -2657,6 +2852,744 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT(bscTabletIssueFoundInResult);
 
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, TLocationFilter().Pool("static").Pile("pile0"));
+    }
+
+    // How a static node answers the whiteboard requests of one kind.
+    enum class EWhiteboardReply {
+        Received, // the reply arrives
+        Missing, // the reply never arrives before the final timeout
+        Unreachable, // every request is undelivered, so the node is reported unavailable
+        UndeliveredOnce, // the first request is undelivered, its retry gets the reply
+    };
+
+    struct TStaticWhiteboardDisk {
+        ui32 Node = 0; // index of the static node
+        ui32 Realm = 0;
+        ui32 Domain = 0;
+        // state in a received VDisk reply; nullopt means the disk is absent from the reply
+        std::optional<NKikimrWhiteboard::EVDiskState> VDiskState = NKikimrWhiteboard::EVDiskState::OK;
+        // state in a received PDisk reply
+        NKikimrBlobStorage::TPDiskState::E PDiskState = NKikimrBlobStorage::TPDiskState::Normal;
+    };
+
+    struct TStaticWhiteboardScenario {
+        TString Erasure = NHealthCheck::BLOCK_4_2;
+        ui32 StaticNodes = 1;
+        std::vector<TStaticWhiteboardDisk> Disks;
+        std::vector<EWhiteboardReply> VDiskReplies; // per static node
+        std::vector<EWhiteboardReply> PDiskReplies; // per static node
+        bool Bridge = false;
+        bool MergeRecords = false;
+        TDuration OperationTimeout; // zero means the server default, 20 s
+    };
+
+    std::vector<TStaticWhiteboardDisk> Block42Disks(ui32 node = 0) {
+        std::vector<TStaticWhiteboardDisk> disks;
+        for (ui32 domain = 0; domain < 8; ++domain) {
+            disks.push_back({.Node = node, .Realm = 0, .Domain = domain});
+        }
+        return disks;
+    }
+
+    std::vector<TStaticWhiteboardDisk> Mirror3DcDisks(ui32 node = 0) {
+        std::vector<TStaticWhiteboardDisk> disks;
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            for (ui32 domain = 0; domain < 3; ++domain) {
+                disks.push_back({.Node = node, .Realm = realm, .Domain = domain});
+            }
+        }
+        return disks;
+    }
+
+    // a disk the node reports with a failed VDisk state
+    void MakeFailed(TStaticWhiteboardDisk& disk) {
+        disk.VDiskState = NKikimrWhiteboard::EVDiskState::LocalRecoveryError;
+    }
+
+    // a disk that lives on node 1, whose replies are missing
+    void MakeUnknown(TStaticWhiteboardDisk& disk) {
+        disk.Node = 1;
+    }
+
+    Ydb::Monitoring::SelfCheckResult RequestHcWithStaticWhiteboard(const TStaticWhiteboardScenario& scenario) {
+        UNIT_ASSERT_VALUES_EQUAL(scenario.VDiskReplies.size(), scenario.StaticNodes);
+        UNIT_ASSERT_VALUES_EQUAL(scenario.PDiskReplies.size(), scenario.StaticNodes);
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(scenario.StaticNodes)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        auto& dynamicNameserviceConfig = runtime.GetAppData().DynamicNameserviceConfig;
+        dynamicNameserviceConfig->MaxStaticNodeId = runtime.GetNodeId(server.StaticNodes() - 1);
+        dynamicNameserviceConfig->MinDynamicNodeId = runtime.GetNodeId(server.StaticNodes());
+        dynamicNameserviceConfig->MaxDynamicNodeId = runtime.GetNodeId(server.StaticNodes() + server.DynamicNodes() - 1);
+
+        auto bridgeInfo = std::make_shared<TBridgeInfo>();
+        if (scenario.Bridge) {
+            bridgeInfo->Piles.push_back(TBridgeInfo::TPile{.BridgePileId = TBridgePileId::FromPileIndex(0), .Name = "pile0", .State = NKikimrBridge::TClusterState::SYNCHRONIZED});
+            bridgeInfo->SelfNodePile = bridgeInfo->Piles.data();
+            for (ui32 node = 0; node < scenario.StaticNodes; ++node) {
+                bridgeInfo->StaticNodeIdToPile[runtime.GetNodeId(node)] = &bridgeInfo->Piles[0];
+            }
+            auto* config = new TEvNodeWardenStorageConfig(std::make_shared<NKikimrBlobStorage::TStorageConfig>(), false, nullptr);
+            config->BridgeInfo = bridgeInfo;
+            runtime.Send(new IEventHandle(GetNameserviceActorId(), runtime.AllocateEdgeActor(), config));
+        }
+
+        ui32 groupId = 0;
+        ui32 generation = 0;
+        auto indexForNode = [&](TNodeId nodeId) -> std::optional<ui32> {
+            for (ui32 index = 0; index < scenario.StaticNodes; ++index) {
+                if (runtime.GetNodeId(index) == nodeId) {
+                    return index;
+                }
+            }
+            return std::nullopt;
+        };
+        // whiteboard requests seen so far, by static node index and request type
+        std::map<std::pair<ui32, ui32>, ui32> requestCounts;
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            const auto type = ev->GetTypeRewrite();
+            // force the whiteboard fallback
+            if (EventSpaceBegin(TKikimrEvents::ES_SYSTEM_VIEW) <= type && type <= EventSpaceEnd(TKikimrEvents::ES_SYSTEM_VIEW)) {
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (type == TEvBlobStorage::EvNodeWardenStorageConfig) {
+                auto* x = reinterpret_cast<TEvNodeWardenStorageConfig::TPtr*>(&ev);
+                auto config = *(*x)->Get()->Config;
+                auto* serviceSet = config.MutableBlobStorageConfig()->MutableServiceSet();
+                if (scenario.Bridge && (serviceSet->vdisks_size() == 0 || serviceSet->pdisks_size() == 0)) {
+                    // the initial empty config sent to the nameservice
+                    (*x)->Get()->BridgeInfo = bridgeInfo;
+                    return TTestActorRuntime::EEventAction::PROCESS;
+                }
+                UNIT_ASSERT(serviceSet->vdisks_size() > 0);
+                UNIT_ASSERT(serviceSet->pdisks_size() > 0);
+                const auto sampleVDisk = serviceSet->vdisks(0);
+                const auto samplePDisk = serviceSet->pdisks(0);
+                groupId = sampleVDisk.GetVDiskID().GetGroupID();
+                generation = sampleVDisk.GetVDiskID().GetGroupGeneration();
+                serviceSet->clear_vdisks();
+                serviceSet->clear_pdisks();
+                for (ui32 i = 0; i < scenario.Disks.size(); ++i) {
+                    const auto& disk = scenario.Disks[i];
+                    const auto nodeId = runtime.GetNodeId(disk.Node);
+                    auto* pDisk = serviceSet->add_pdisks();
+                    pDisk->CopyFrom(samplePDisk);
+                    pDisk->SetNodeID(nodeId);
+                    pDisk->SetPDiskID(PDISK_START_ID + i);
+                    auto* vDisk = serviceSet->add_vdisks();
+                    vDisk->CopyFrom(sampleVDisk);
+                    auto* id = vDisk->MutableVDiskID();
+                    id->SetRing(disk.Realm);
+                    id->SetDomain(disk.Domain);
+                    id->SetVDisk(0);
+                    vDisk->MutableVDiskLocation()->SetNodeID(nodeId);
+                    vDisk->MutableVDiskLocation()->SetPDiskID(PDISK_START_ID + i);
+                }
+                (*x)->Get()->Config = std::make_shared<NKikimrBlobStorage::TStorageConfig>(std::move(config));
+                if (scenario.Bridge) {
+                    (*x)->Get()->BridgeInfo = bridgeInfo;
+                }
+            }
+            if (type == TEvWhiteboard::EvBSGroupStateResponse) {
+                // the group must always be known, otherwise it is not evaluated
+                auto* x = reinterpret_cast<TEvWhiteboard::TEvBSGroupStateResponse::TPtr*>(&ev);
+                for (auto& group : *(*x)->Get()->Record.mutable_bsgroupstateinfo()) {
+                    if (group.groupid() != groupId) {
+                        continue;
+                    }
+                    group.set_erasurespecies(scenario.Erasure);
+                    group.clear_vdiskids();
+                    for (const auto& disk : scenario.Disks) {
+                        auto* id = group.add_vdiskids();
+                        id->set_groupid(groupId);
+                        id->set_groupgeneration(generation);
+                        id->set_ring(disk.Realm);
+                        id->set_domain(disk.Domain);
+                        id->set_vdisk(0);
+                    }
+                    if (scenario.Bridge) {
+                        group.set_bridgepileid(1);
+                    }
+                }
+            }
+            if (type == TEvWhiteboard::EvVDiskStateRequest || type == TEvWhiteboard::EvPDiskStateRequest) {
+                const auto node = indexForNode(ev->GetRecipientRewrite().NodeId());
+                if (node) {
+                    const auto reply = type == TEvWhiteboard::EvVDiskStateRequest ? scenario.VDiskReplies[*node] : scenario.PDiskReplies[*node];
+                    const bool first = requestCounts[{*node, type}]++ == 0;
+                    if (reply == EWhiteboardReply::Unreachable || (reply == EWhiteboardReply::UndeliveredOnce && first)) {
+                        runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
+                            new TEvents::TEvUndelivered(type, TEvents::TEvUndelivered::ReasonActorUnknown), 0, ev->Cookie));
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+            }
+            if (type == TEvWhiteboard::EvVDiskStateResponse) {
+                const auto node = indexForNode(ev->Sender.NodeId());
+                if (node) {
+                    if (scenario.VDiskReplies[*node] == EWhiteboardReply::Missing) {
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    auto* x = reinterpret_cast<TEvWhiteboard::TEvVDiskStateResponse::TPtr*>(&ev);
+                    auto& record = (*x)->Get()->Record;
+                    NKikimrWhiteboard::TVDiskStateInfo sample;
+                    if (record.vdiskstateinfo_size()) {
+                        sample = record.vdiskstateinfo(0);
+                    }
+                    record.clear_vdiskstateinfo();
+                    for (ui32 i = 0; i < scenario.Disks.size(); ++i) {
+                        const auto& disk = scenario.Disks[i];
+                        if (disk.Node != *node || !disk.VDiskState) {
+                            continue;
+                        }
+                        auto* state = record.add_vdiskstateinfo();
+                        state->CopyFrom(sample);
+                        auto* id = state->mutable_vdiskid();
+                        id->set_groupid(groupId);
+                        id->set_groupgeneration(generation);
+                        id->set_ring(disk.Realm);
+                        id->set_domain(disk.Domain);
+                        id->set_vdisk(0);
+                        state->set_vdiskstate(*disk.VDiskState);
+                        state->set_replicated(true);
+                        // real replies carry the disk space flag
+                        state->set_diskspace(NKikimrWhiteboard::EFlag::Green);
+                        state->set_pdiskid(PDISK_START_ID + i);
+                    }
+                }
+            }
+            if (type == TEvWhiteboard::EvPDiskStateResponse) {
+                const auto node = indexForNode(ev->Sender.NodeId());
+                if (node) {
+                    if (scenario.PDiskReplies[*node] == EWhiteboardReply::Missing) {
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    auto* x = reinterpret_cast<TEvWhiteboard::TEvPDiskStateResponse::TPtr*>(&ev);
+                    auto& record = (*x)->Get()->Record;
+                    record.clear_pdiskstateinfo();
+                    for (ui32 i = 0; i < scenario.Disks.size(); ++i) {
+                        const auto& disk = scenario.Disks[i];
+                        if (disk.Node == *node) {
+                            auto* state = record.add_pdiskstateinfo();
+                            state->set_pdiskid(PDISK_START_ID + i);
+                            state->set_state(disk.PDiskState);
+                        }
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+        auto* request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_return_verbose_status(true);
+        request->Request.set_merge_records(scenario.MergeRecords);
+        if (scenario.OperationTimeout) {
+            SetDuration(scenario.OperationTimeout, *request->Request.mutable_operation_params()->mutable_operation_timeout());
+        }
+        request->Database = "/Root";
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Ctest << result.ShortDebugString() << Endl;
+        return result;
+    }
+
+    const Ydb::Monitoring::StoragePoolStatus& GetStaticPool(const Ydb::Monitoring::SelfCheckResult& result) {
+        for (const auto& db : result.database_status()) {
+            for (const auto& pool : db.storage().pools()) {
+                if (pool.id() == "static") {
+                    return pool;
+                }
+            }
+        }
+        UNIT_FAIL("Static pool is missing");
+        return result.database_status(0).storage().pools(0);
+    }
+
+    const Ydb::Monitoring::StorageGroupStatus& GetStaticWhiteboardGroup(const Ydb::Monitoring::SelfCheckResult& result) {
+        const auto& pool = GetStaticPool(result);
+        UNIT_ASSERT_VALUES_EQUAL(pool.groups_size(), 1);
+        return pool.groups(0);
+    }
+
+    // verbose overall of the static group, of all of its VDisks and of all of their PDisks
+    void CheckStaticWhiteboardOverall(const Ydb::Monitoring::SelfCheckResult& result,
+            Ydb::Monitoring::StatusFlag::Status group, Ydb::Monitoring::StatusFlag::Status vdisks,
+            Ydb::Monitoring::StatusFlag::Status pdisks)
+    {
+        const auto& status = GetStaticWhiteboardGroup(result);
+        UNIT_ASSERT_VALUES_EQUAL(status.overall(), group);
+        for (const auto& vdisk : status.vdisks()) {
+            UNIT_ASSERT_VALUES_EQUAL_C(vdisk.overall(), vdisks, vdisk.id());
+            UNIT_ASSERT_VALUES_EQUAL_C(vdisk.pdisk().overall(), pdisks, vdisk.id());
+        }
+    }
+
+    std::vector<const Ydb::Monitoring::IssueLog*> FindIssues(const Ydb::Monitoring::SelfCheckResult& result,
+            const TString& type, Ydb::Monitoring::StatusFlag::Status status, TLocationFilter filter = {})
+    {
+        std::vector<const Ydb::Monitoring::IssueLog*> issues;
+        for (const auto& issue : result.issue_log()) {
+            if (issue.type() == type && issue.status() == status && filter(issue.location())) {
+                issues.push_back(&issue);
+            }
+        }
+        return issues;
+    }
+
+    const Ydb::Monitoring::IssueLog& GetSingleIssue(const Ydb::Monitoring::SelfCheckResult& result,
+            const TString& type, Ydb::Monitoring::StatusFlag::Status status, TLocationFilter filter = {})
+    {
+        const auto issues = FindIssues(result, type, status, filter);
+        UNIT_ASSERT_VALUES_EQUAL_C(issues.size(), 1, "Wrong issues count for " << type << " with status " << status);
+        return *issues.front();
+    }
+
+    // issues of the given type and status that the issue names as its reasons
+    std::vector<const Ydb::Monitoring::IssueLog*> GetReasonIssues(const Ydb::Monitoring::SelfCheckResult& result,
+            const Ydb::Monitoring::IssueLog& issue, const TString& type, Ydb::Monitoring::StatusFlag::Status status)
+    {
+        std::vector<const Ydb::Monitoring::IssueLog*> reasons;
+        for (const auto& reasonId : issue.reason()) {
+            for (const auto& candidate : result.issue_log()) {
+                if (candidate.id() == reasonId && candidate.type() == type && candidate.status() == status) {
+                    reasons.push_back(&candidate);
+                }
+            }
+        }
+        return reasons;
+    }
+
+    void CheckAllReasonsResolve(const Ydb::Monitoring::SelfCheckResult& result) {
+        THashSet<TString> ids;
+        for (const auto& issue : result.issue_log()) {
+            ids.insert(issue.id());
+        }
+        for (const auto& issue : result.issue_log()) {
+            for (const auto& reasonId : issue.reason()) {
+                UNIT_ASSERT_C(ids.contains(reasonId), "Reason " << reasonId << " of " << issue.id() << " is not in the issue log");
+            }
+        }
+    }
+
+    // there is no issue of the type at all, whatever its status is
+    void CheckNoIssues(const Ydb::Monitoring::SelfCheckResult& result, const TString& type, TLocationFilter filter = {}) {
+        for (auto status : {Ydb::Monitoring::StatusFlag::GREY, Ydb::Monitoring::StatusFlag::BLUE, Ydb::Monitoring::StatusFlag::YELLOW,
+                Ydb::Monitoring::StatusFlag::ORANGE, Ydb::Monitoring::StatusFlag::RED})
+        {
+            CheckHcResultHasIssuesWithStatus(result, type, status, 0, filter);
+        }
+    }
+
+    // verbose overall of the static pool and its only issue, which must be caused by the issues of its groups
+    void CheckStaticPool(const Ydb::Monitoring::SelfCheckResult& result, Ydb::Monitoring::StatusFlag::Status status,
+            const TString& message = {})
+    {
+        UNIT_ASSERT_VALUES_EQUAL(GetStaticPool(result).overall(), status);
+        if (status == Ydb::Monitoring::StatusFlag::GREEN) {
+            CheckNoIssues(result, "STORAGE_POOL", TLocationFilter().Pool("static"));
+            return;
+        }
+        auto isStaticPool = [](const Ydb::Monitoring::IssueLog& issue) {
+            return issue.location().storage().pool().name() == "static";
+        };
+        std::vector<const Ydb::Monitoring::IssueLog*> poolIssues;
+        for (const auto& issue : result.issue_log()) {
+            if (issue.type() == "STORAGE_POOL" && isStaticPool(issue)) {
+                poolIssues.push_back(&issue);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(poolIssues.size(), 1);
+        const auto& poolIssue = *poolIssues.front();
+        UNIT_ASSERT_VALUES_EQUAL(poolIssue.status(), status);
+        UNIT_ASSERT_VALUES_EQUAL(poolIssue.message(), message);
+        UNIT_ASSERT(poolIssue.reason_size() > 0);
+        for (const auto& reasonId : poolIssue.reason()) {
+            const auto reason = std::ranges::find_if(result.issue_log(), [&](const auto& issue) {
+                return issue.id() == reasonId;
+            });
+            UNIT_ASSERT_C(reason != result.issue_log().end(), "Reason " << reasonId << " of the pool issue is not in the issue log");
+            UNIT_ASSERT_VALUES_EQUAL_C(reason->type(), "STORAGE_GROUP", reason->ShortDebugString());
+            UNIT_ASSERT_C(isStaticPool(*reason), reason->ShortDebugString());
+        }
+    }
+
+    TStaticWhiteboardScenario TwoNodeScenario(const TString& erasure, std::vector<TStaticWhiteboardDisk> disks) {
+        TStaticWhiteboardScenario scenario;
+        scenario.Erasure = erasure;
+        scenario.StaticNodes = 2;
+        scenario.Disks = std::move(disks);
+        scenario.VDiskReplies = {EWhiteboardReply::Received, EWhiteboardReply::Missing};
+        scenario.PDiskReplies = {EWhiteboardReply::Received, EWhiteboardReply::Missing};
+        return scenario;
+    }
+
+    // the single static node never answers
+    TStaticWhiteboardScenario AllMissingScenario() {
+        TStaticWhiteboardScenario scenario;
+        scenario.Disks = Block42Disks();
+        scenario.VDiskReplies = {EWhiteboardReply::Missing};
+        scenario.PDiskReplies = {EWhiteboardReply::Missing};
+        return scenario;
+    }
+
+    Y_UNIT_TEST(WhiteboardMissingRepliesAreNotGroupFailure) {
+        const auto result = RequestHcWithStaticWhiteboard(AllMissingScenario());
+        const auto pool = TLocationFilter().Pool("static");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, pool);
+        const auto& groupIssue = GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, pool);
+        UNIT_ASSERT_VALUES_EQUAL(groupIssue.message(), "Group has disks with no data");
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 0, pool);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, 8, pool);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::RED, 0);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::GREY, 8);
+        CheckStaticWhiteboardOverall(result, Ydb::Monitoring::StatusFlag::GREY, Ydb::Monitoring::StatusFlag::GREY, Ydb::Monitoring::StatusFlag::GREY);
+
+        UNIT_ASSERT_VALUES_EQUAL(groupIssue.reason_size(), 8);
+        const auto vdiskReasons = GetReasonIssues(result, groupIssue, "VDISK", Ydb::Monitoring::StatusFlag::GREY);
+        UNIT_ASSERT_VALUES_EQUAL(vdiskReasons.size(), 8);
+        for (const auto* vdisk : vdiskReasons) {
+            UNIT_ASSERT_VALUES_EQUAL(vdisk->message(), "VDisk has no data");
+            UNIT_ASSERT_VALUES_EQUAL(GetReasonIssues(result, *vdisk, "PDISK", Ydb::Monitoring::StatusFlag::GREY).size(), 1);
+        }
+        CheckAllReasonsResolve(result);
+
+        // the pool counts disks with no data as failed, while the group stays unknown
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::RED, "Pool failed");
+        const auto& poolIssue = GetSingleIssue(result, "STORAGE_POOL", Ydb::Monitoring::StatusFlag::RED, pool);
+        const auto poolReasons = GetReasonIssues(result, poolIssue, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY);
+        UNIT_ASSERT_VALUES_EQUAL(poolReasons.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(poolReasons.front()->id(), groupIssue.id());
+        UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.database_status(0).storage().overall(), Ydb::Monitoring::StatusFlag::RED);
+
+        // the legacy fallback signal stays
+        CheckHcResultHasIssueWithMessage(result, "STORAGE", Ydb::Monitoring::StatusFlag::RED, "System tablet BSC didn't provide information");
+        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::EMERGENCY);
+    }
+
+    Y_UNIT_TEST(WhiteboardMissingVDiskReplyWithHealthyPDisk) {
+        auto scenario = AllMissingScenario();
+        scenario.PDiskReplies = {EWhiteboardReply::Received};
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, pool);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, 1, pool);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 0, pool);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, 8, pool);
+        CheckNoIssues(result, "PDISK");
+        // a healthy PDisk says nothing about the VDisk, so it must not be GREEN
+        CheckStaticWhiteboardOverall(result, Ydb::Monitoring::StatusFlag::GREY, Ydb::Monitoring::StatusFlag::GREY, Ydb::Monitoring::StatusFlag::GREEN);
+        for (const auto* vdisk : FindIssues(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, pool)) {
+            UNIT_ASSERT_VALUES_EQUAL(vdisk->reason_size(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(WhiteboardMissingPDiskReplyWithReceivedVDisk) {
+        auto scenario = AllMissingScenario();
+        scenario.VDiskReplies = {EWhiteboardReply::Received};
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckNoIssues(result, "STORAGE_GROUP", pool);
+        // received VDisks have the disk space flag, but must not become "degraded" because of an unknown PDisk
+        CheckNoIssues(result, "VDISK", pool);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::GREY, 8);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::RED, 0);
+        CheckNoIssues(result, "STORAGE_NODE");
+        CheckStaticWhiteboardOverall(result, Ydb::Monitoring::StatusFlag::GREEN, Ydb::Monitoring::StatusFlag::GREEN, Ydb::Monitoring::StatusFlag::GREY);
+        // the received VDisks are healthy, so nothing is counted as failed
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::GREEN);
+    }
+
+    Y_UNIT_TEST(WhiteboardTwoFailedAndOneUnknownDisk) {
+        auto scenario = TwoNodeScenario(NHealthCheck::BLOCK_4_2, Block42Disks());
+        MakeFailed(scenario.Disks[0]);
+        MakeFailed(scenario.Disks[1]);
+        MakeUnknown(scenario.Disks[7]);
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, pool);
+        const auto& orange = GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, pool);
+        UNIT_ASSERT_VALUES_EQUAL(orange.message(), "Group has no redundancy");
+        const auto& grey = GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, pool);
+        UNIT_ASSERT_VALUES_EQUAL(grey.message(), "Group has disks with no data");
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 2, pool);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, 1, pool);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::GREY, 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetStaticWhiteboardGroup(result).overall(), Ydb::Monitoring::StatusFlag::ORANGE);
+        // the known verdict cites only the failed disks, the unknown one cites only the disk with no data
+        UNIT_ASSERT_VALUES_EQUAL(orange.reason_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetReasonIssues(result, orange, "VDISK", Ydb::Monitoring::StatusFlag::RED).size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(grey.reason_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetReasonIssues(result, grey, "VDISK", Ydb::Monitoring::StatusFlag::GREY).size(), 1);
+        CheckAllReasonsResolve(result);
+        // the pool counts the disk with no data as failed
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::RED, "Pool failed");
+    }
+
+    Y_UNIT_TEST(WhiteboardThreeFailedAndOneUnknownDiskStaysRed) {
+        auto scenario = TwoNodeScenario(NHealthCheck::BLOCK_4_2, Block42Disks());
+        MakeFailed(scenario.Disks[0]);
+        MakeFailed(scenario.Disks[1]);
+        MakeFailed(scenario.Disks[2]);
+        MakeUnknown(scenario.Disks[7]);
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, 1, pool);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 3, pool);
+        const auto& red = GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, pool);
+        UNIT_ASSERT_VALUES_EQUAL(red.message(), "Group failed");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, 0, pool);
+    }
+
+    Y_UNIT_TEST(WhiteboardMissingVDiskReplyWithFailedPDisk) {
+        auto scenario = TwoNodeScenario(NHealthCheck::BLOCK_4_2, Block42Disks());
+        scenario.PDiskReplies = {EWhiteboardReply::Received, EWhiteboardReply::Received};
+        for (ui32 i = 5; i < 8; ++i) {
+            MakeUnknown(scenario.Disks[i]);
+        }
+        scenario.Disks[5].PDiskState = NKikimrBlobStorage::TPDiskState::DeviceIoError;
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, pool);
+        // the known PDisk failure is evidence, the other two disks are unknown
+        const auto& red = GetSingleIssue(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, pool);
+        UNIT_ASSERT_VALUES_EQUAL(red.message(), "VDisk is not available");
+        const auto pdiskReasons = GetReasonIssues(result, red, "PDISK", Ydb::Monitoring::StatusFlag::RED);
+        UNIT_ASSERT_VALUES_EQUAL(pdiskReasons.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pdiskReasons[0]->message(), "PDisk state is DeviceIoError");
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, 2, pool);
+        const auto& status = GetStaticWhiteboardGroup(result);
+        for (int i = 0; i < status.vdisks_size(); ++i) {
+            const auto expected = i == 5 ? Ydb::Monitoring::StatusFlag::RED : i > 5 ? Ydb::Monitoring::StatusFlag::GREY : Ydb::Monitoring::StatusFlag::GREEN;
+            UNIT_ASSERT_VALUES_EQUAL_C(status.vdisks(i).overall(), expected, "VDisk " << i);
+        }
+        const auto& yellow = GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, pool);
+        UNIT_ASSERT_VALUES_EQUAL(yellow.reason_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetReasonIssues(result, yellow, "VDISK", Ydb::Monitoring::StatusFlag::RED).size(), 1);
+        const auto& grey = GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, pool);
+        UNIT_ASSERT_VALUES_EQUAL(grey.message(), "Group has disks with no data");
+        UNIT_ASSERT_VALUES_EQUAL(grey.reason_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetReasonIssues(result, grey, "VDISK", Ydb::Monitoring::StatusFlag::GREY).size(), 2);
+    }
+
+    Y_UNIT_TEST(WhiteboardMixedRepliesMergedRecords) {
+        auto scenario = TwoNodeScenario(NHealthCheck::BLOCK_4_2, Block42Disks());
+        scenario.MergeRecords = true;
+        MakeFailed(scenario.Disks[0]);
+        MakeFailed(scenario.Disks[1]);
+        MakeUnknown(scenario.Disks[6]);
+        MakeUnknown(scenario.Disks[7]);
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, pool);
+        // a single group is not merged, so the messages stay singular
+        const auto& orange = GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, pool);
+        const auto& grey = GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, pool);
+        UNIT_ASSERT_VALUES_EQUAL(grey.message(), "Group has disks with no data");
+        const auto& greyVDisks = GetSingleIssue(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, pool);
+        UNIT_ASSERT_VALUES_EQUAL(greyVDisks.message(), "VDisks have no data");
+        UNIT_ASSERT_VALUES_EQUAL(greyVDisks.count(), 2);
+        const auto& redVDisks = GetSingleIssue(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, pool);
+        UNIT_ASSERT_VALUES_EQUAL(redVDisks.count(), 2);
+        const auto& greyPDisks = GetSingleIssue(result, "PDISK", Ydb::Monitoring::StatusFlag::GREY);
+        UNIT_ASSERT_VALUES_EQUAL(greyPDisks.message(), "PDisks have no data");
+        UNIT_ASSERT_VALUES_EQUAL(greyPDisks.count(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(grey.reason_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetReasonIssues(result, grey, "VDISK", Ydb::Monitoring::StatusFlag::GREY).size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetReasonIssues(result, greyVDisks, "PDISK", Ydb::Monitoring::StatusFlag::GREY).size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(orange.reason_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetReasonIssues(result, orange, "VDISK", Ydb::Monitoring::StatusFlag::RED).size(), 1);
+        CheckAllReasonsResolve(result);
+    }
+
+    Y_UNIT_TEST(WhiteboardMirror3DcFailedAndUnknownDisksInOneRealm) {
+        auto scenario = TwoNodeScenario(NHealthCheck::MIRROR_3_DC, Mirror3DcDisks());
+        MakeFailed(scenario.Disks[0]); // 0.0
+        MakeUnknown(scenario.Disks[1]); // 0.1
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, 1, pool);
+        // the unknown disk shares the failed realm, so the pessimistic verdict is not worse
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, pool);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, 0, pool);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, pool);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, pool);
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::YELLOW, "Pool degraded");
+    }
+
+    Y_UNIT_TEST(WhiteboardMirror3DcFailedAndUnknownDisksAcrossRealms) {
+        auto scenario = TwoNodeScenario(NHealthCheck::MIRROR_3_DC, Mirror3DcDisks());
+        MakeFailed(scenario.Disks[0]); // 0.0
+        MakeUnknown(scenario.Disks[3]); // 1.0
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0, pool);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, pool);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, 1, pool);
+        // the pool counts the disk with no data as failed, which leaves two failed realms
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::ORANGE, "Pool has no redundancy");
+    }
+
+    Y_UNIT_TEST(WhiteboardMirror3DcUnknownRealmDegradesPool) {
+        auto scenario = TwoNodeScenario(NHealthCheck::MIRROR_3_DC, Mirror3DcDisks());
+        for (ui32 i = 6; i < 9; ++i) {
+            MakeUnknown(scenario.Disks[i]); // 2.x
+        }
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 0, pool);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, 3, pool);
+        for (auto status : {Ydb::Monitoring::StatusFlag::BLUE, Ydb::Monitoring::StatusFlag::YELLOW,
+                Ydb::Monitoring::StatusFlag::ORANGE, Ydb::Monitoring::StatusFlag::RED})
+        {
+            CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", status, 0, pool);
+        }
+        const auto& grey = GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, pool);
+        UNIT_ASSERT_VALUES_EQUAL(grey.message(), "Group has disks with no data");
+        UNIT_ASSERT_VALUES_EQUAL(grey.reason_size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(GetStaticWhiteboardGroup(result).overall(), Ydb::Monitoring::StatusFlag::GREY);
+        // nothing is known to be failed, but the pool counts the realm with no data as failed
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::YELLOW, "Pool degraded");
+    }
+
+    Y_UNIT_TEST(WhiteboardMirror3DcTwoFailedAndTwoUnknownInAnotherRealm) {
+        auto scenario = TwoNodeScenario(NHealthCheck::MIRROR_3_DC, Mirror3DcDisks());
+        MakeFailed(scenario.Disks[0]); // 0.0
+        MakeFailed(scenario.Disks[1]); // 0.1
+        MakeUnknown(scenario.Disks[3]); // 1.0
+        MakeUnknown(scenario.Disks[4]); // 1.1
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, pool);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1, pool);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, 1, pool);
+    }
+
+    Y_UNIT_TEST(WhiteboardMirror3DcTwoFailedRealmsAndUnknownThird) {
+        auto scenario = TwoNodeScenario(NHealthCheck::MIRROR_3_DC, Mirror3DcDisks());
+        MakeFailed(scenario.Disks[0]); // 0.0
+        MakeFailed(scenario.Disks[3]); // 1.0
+        MakeUnknown(scenario.Disks[6]); // 2.0
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0, pool);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 1, pool);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, 1, pool);
+    }
+
+    Y_UNIT_TEST(WhiteboardMirror3DcKnownFailureStaysRed) {
+        auto scenario = TwoNodeScenario(NHealthCheck::MIRROR_3_DC, Mirror3DcDisks());
+        MakeFailed(scenario.Disks[0]); // 0.0
+        MakeFailed(scenario.Disks[3]); // 1.0
+        MakeFailed(scenario.Disks[6]); // 2.0
+        MakeUnknown(scenario.Disks[1]); // 0.1
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, 1, pool);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, pool);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, 0, pool);
+    }
+
+    Y_UNIT_TEST(BridgeWhiteboardMissingRepliesDoNotBlamePile) {
+        auto scenario = AllMissingScenario();
+        scenario.Bridge = true;
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        // this is what the skipper reads: a RED group issue that carries the pile name
+        for (const auto& issue : result.issue_log()) {
+            const bool blamesPile = issue.type().Contains("GROUP") && issue.status() == Ydb::Monitoring::StatusFlag::RED
+                && issue.location().storage().pool().group().pile().name() == "pile0";
+            UNIT_ASSERT_C(!blamesPile, "Pile is blamed by " << issue.ShortDebugString());
+        }
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, 1, TLocationFilter().Pool("static").Pile("pile0"));
+    }
+
+    // guard: a node that answered and does not report the disk is evidence of failure
+    Y_UNIT_TEST(WhiteboardDiskAbsentFromReplyIsGroupFailure) {
+        TStaticWhiteboardScenario scenario;
+        scenario.Disks = Block42Disks();
+        scenario.VDiskReplies = {EWhiteboardReply::Received};
+        scenario.PDiskReplies = {EWhiteboardReply::Received};
+        for (ui32 i = 5; i < 8; ++i) {
+            scenario.Disks[i].VDiskState = std::nullopt;
+        }
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        UNIT_ASSERT_VALUES_EQUAL(GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, pool).message(), "Group failed");
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 3, pool);
+        CheckHcResultHasIssueWithMessage(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, "VDisk is not available");
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, 0, pool);
+        CheckNoIssues(result, "PDISK");
+    }
+
+    // guard: an unreachable node is a dead-node signal and stays RED
+    Y_UNIT_TEST(WhiteboardUnreachableNodeIsGroupFailure) {
+        TStaticWhiteboardScenario scenario;
+        scenario.Disks = Block42Disks();
+        scenario.VDiskReplies = {EWhiteboardReply::Unreachable};
+        scenario.PDiskReplies = {EWhiteboardReply::Unreachable};
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1, pool);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 8, pool);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, 0, pool);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::RED, 8);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::GREY, 0);
+        // identical node issues share an id, so do not count them
+        CheckHcResultHasIssueWithMessage(result, "STORAGE_NODE", Ydb::Monitoring::StatusFlag::RED, "Storage node is not available");
+    }
+
+    // an undelivered request is a dead-node signal at once, even when its retries are not over at the deadline
+    Y_UNIT_TEST(WhiteboardUndeliveredNodeIsGroupFailureBeforeRetriesEnd) {
+        TStaticWhiteboardScenario scenario;
+        scenario.Disks = Block42Disks();
+        scenario.VDiskReplies = {EWhiteboardReply::Unreachable};
+        scenario.PDiskReplies = {EWhiteboardReply::Unreachable};
+        // The request covers the whole domain, so the static config is requested at start and the whiteboard
+        // requests are sent at once, at about 0 ms. They are undelivered immediately and retried at 500 ms,
+        // undelivered again. The next retry, whose failure would give the node up, is due at 1000 ms, but the
+        // final timeout fires at 750 ms. Any timeout below 1 s leaves that retry pending; from 1 s on the node is
+        // given up before the deadline, as in WhiteboardUnreachableNodeIsGroupFailure.
+        scenario.OperationTimeout = TDuration::MilliSeconds(750);
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        UNIT_ASSERT_VALUES_EQUAL(GetSingleIssue(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, pool).message(), "Group failed");
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::GREY, 0, pool);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::RED, 8, pool);
+        CheckHcResultHasIssuesWithStatus(result, "VDISK", Ydb::Monitoring::StatusFlag::GREY, 0, pool);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::RED, 8);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::GREY, 0);
+        // identical node issues share an id, so do not count them
+        CheckHcResultHasIssueWithMessage(result, "STORAGE_NODE", Ydb::Monitoring::StatusFlag::RED, "Storage node is not available");
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::RED, "Pool failed");
+    }
+
+    // guard: a retry that gets the reply wins over the undelivered request before it
+    Y_UNIT_TEST(WhiteboardRetryAfterUndeliveredIsReceived) {
+        TStaticWhiteboardScenario scenario;
+        scenario.Disks = Block42Disks();
+        scenario.VDiskReplies = {EWhiteboardReply::UndeliveredOnce};
+        scenario.PDiskReplies = {EWhiteboardReply::UndeliveredOnce};
+        const auto result = RequestHcWithStaticWhiteboard(scenario);
+        const auto pool = TLocationFilter().Pool("static");
+        CheckNoIssues(result, "STORAGE_GROUP", pool);
+        CheckNoIssues(result, "VDISK", pool);
+        CheckNoIssues(result, "PDISK");
+        CheckNoIssues(result, "STORAGE_NODE");
+        CheckStaticWhiteboardOverall(result, Ydb::Monitoring::StatusFlag::GREEN, Ydb::Monitoring::StatusFlag::GREEN, Ydb::Monitoring::StatusFlag::GREEN);
+        CheckStaticPool(result, Ydb::Monitoring::StatusFlag::GREEN);
     }
 
     Y_UNIT_TEST(TestNoSchemeShardResponse) {

@@ -174,9 +174,17 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         YDB_LOG_DEBUG("Handle",
             {"ev", ev->Get()->ToString()});
 
-        ReadSessionId = ev->Get()->Result.ReadSessionId;
-        NextReadOffset = ev->Get()->Result.CommittedOffset;
-        Send(Worker, new TEvWorker::TEvReaderStarted(NextReadOffset));
+        const auto& result = ev->Get()->Result;
+        ReadSessionId = result.ReadSessionId;
+        NextReadOffset = result.ReadOffset;
+        if (Settings.FailOnDataLoss_ && result.RetainedStartOffset && *result.RetainedStartOffset > NextReadOffset) {
+            return Leave(TEvWorker::TEvGone::DATA_LOSS, TStringBuilder()
+                << "Topic " << Settings.GetBase().Topics_.at(0).Path_
+                << ", consumer " << Settings.GetBase().ConsumerName_
+                << ": read offset " << NextReadOffset
+                << " is before retained start offset " << *result.RetainedStartOffset);
+        }
+        Send(Worker, new TEvWorker::TEvReaderStarted(result.CommittedOffset));
     }
 
     void Handle(TEvWorker::TEvCommit::TPtr& ev) {

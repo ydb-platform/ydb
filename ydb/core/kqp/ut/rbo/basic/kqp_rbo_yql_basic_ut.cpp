@@ -136,6 +136,10 @@ void TestFilter(bool columnTables) {
             PRAGMA YqlSelect = 'force';
             SELECT * FROM `/Root/foo` WHERE name = '3_name' order by id;
         )",
+        R"(
+            PRAGMA OrderedColumns;
+            SELECT * FROM `/Root/foo` WHERE name = '3_name' order by id;
+        )",
     };
 
     std::vector<std::string> results = {
@@ -144,6 +148,8 @@ void TestFilter(bool columnTables) {
         R"([[3;["3_name"]]])",
         R"([[0;[0]];[3;[3]];[4;[4]];[5;[5]];[6;[6]];[7;[7]];[8;[8]];[9;[9]]])",
         R"([[1;[1]];[2;[2]]])",
+        // Plain star uses canonical field order; OrderedColumns uses schema order.
+        R"([[[3];3;["3_name"]]])",
         R"([[3;["3_name"];[3]]])",
     };
 
@@ -531,10 +537,16 @@ void TestQueryClient(bool columnTables) {
         R"(
             SELECT * FROM `/Root/foo` WHERE name = '3_name' order by id;
         )",
+        R"(
+            PRAGMA OrderedColumns;
+            SELECT * FROM `/Root/foo` WHERE name = '3_name' order by id;
+        )",
     };
 
     std::vector<std::string> results = {
         R"([[0;[0]];[3;[3]];[4;[4]];[5;[5]];[6;[6]];[7;[7]];[8;[8]];[9;[9]]])",
+        // Plain star uses canonical field order; OrderedColumns uses schema order.
+        R"([[[3];3;["3_name"]]])",
         R"([[3;["3_name"];[3]]])",
     };
 

@@ -295,7 +295,10 @@ void TestMixedDistinctAggregationBeforeHashShuffle(bool columnTables) {
             // leave the shared scan stage through the hash shuffle.
             const auto* partial = FindOperatorByStringField(*shuffle, "Phase", "Intermediate");
             UNIT_ASSERT_C(partial, "Partial DISTINCT must precede HashShuffle:\n" << plan);
-            UNIT_ASSERT_C(GetStringField(*partial, "GroupBy").Contains("ps_suppkey"), plan);
+            const auto& groupBy = (*partial)["GroupBy"].GetArraySafe();
+            UNIT_ASSERT_C(std::any_of(groupBy.begin(), groupBy.end(), [](const auto& column) {
+                return column.GetStringSafe().Contains("ps_suppkey");
+            }), plan);
             UNIT_ASSERT_C(FindOperatorByStringField(*shuffle, "Name", "TableFullScan"), plan);
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -900,19 +903,20 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TAssignStagesStage().RunStage(*root, f.RboCtx);
         const auto sourceStage = *op->GetInput()->Props.StageId;
         const auto aggregateStage = *op->Props.StageId;
-        const auto& connections = root->PlanProps.StageGraph.GetConnections(sourceStage, aggregateStage);
+        const auto& connections = root->PlanProps.StageGraph.EdgesBetween(root->PlanProps.StageGraph.GetStage(sourceStage), root->PlanProps.StageGraph.GetStage(aggregateStage));
         UNIT_ASSERT_VALUES_EQUAL(connections.size(), 1);
-        UNIT_ASSERT(IsConnection<TShuffleConnection>(connections.front()));
-        UNIT_ASSERT(static_cast<const TShuffleConnection&>(*connections.front()).Keys == (TOrderedIUs<>{k, id}));
+        UNIT_ASSERT(IsConnection<TShuffleConnection>(connections.front()->Connection()));
+        UNIT_ASSERT(static_cast<const TShuffleConnection&>(connections.front()->Connection()).Keys == (TOrderedIUs<>{k, id}));
 
         TPropagateAggregateThroughStageRule rule;
         UNIT_ASSERT(rule.MatchAndApply(root->MutableChild(0), f.RboCtx, root->PlanProps));
         auto& final = CastOperator<TOpAggregate>(*root->GetInput());
+        root->ComputeParents();
         UNIT_ASSERT(rule.MatchAndApply(final.MutableChild(0), f.RboCtx, root->PlanProps));
         const auto& partial = CastOperator<TOpAggregate>(*final.GetInput());
-        const auto& shuffled = root->PlanProps.StageGraph.GetConnections(sourceStage, aggregateStage).front();
-        UNIT_ASSERT(IsConnection<TShuffleConnection>(shuffled));
-        UNIT_ASSERT(static_cast<const TShuffleConnection&>(*shuffled).Keys == final.GetKeyColumns());
+        const auto* shuffled = root->PlanProps.StageGraph.EdgesBetween(root->PlanProps.StageGraph.GetStage(sourceStage), root->PlanProps.StageGraph.GetStage(aggregateStage)).front();
+        UNIT_ASSERT(IsConnection<TShuffleConnection>(shuffled->Connection()));
+        UNIT_ASSERT(static_cast<const TShuffleConnection&>(shuffled->Connection()).Keys == final.GetKeyColumns());
         UNIT_ASSERT(partial.GetAggregationTraits().At(final.GetKeyColumns().Items()[0]).Input == k);
         UNIT_ASSERT(partial.GetAggregationTraits().At(final.GetKeyColumns().Items()[1]).Input == id);
     }
@@ -931,12 +935,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto* mergePtr = merge.get();
         auto root = f.Root(std::move(merge), {{output, "a"}});
         auto& graph = root->PlanProps.StageGraph;
-        const auto producerStage = graph.AddStage(), unionStage = graph.AddStage();
-        hub->GetInput()->Props.StageId = producerStage;
-        leftPtr->Props.StageId = rightPtr->Props.StageId = producerStage;
-        mergePtr->Props.StageId = unionStage;
-        graph.Connect(producerStage, unionStage, MakeIntrusive<TMergeConnection>(TSortIUs{{b, {true, true}}}, 0));
-        graph.Connect(producerStage, unionStage, MakeIntrusive<TShuffleConnection>(TOrderedIUs<>{rightC}, 1));
+        const auto& producerStage = graph.AddStage();
+        const auto& unionStage = graph.AddStage();
+        hub->GetInput()->Props.StageId = producerStage.Id();
+        leftPtr->Props.StageId = rightPtr->Props.StageId = producerStage.Id();
+        mergePtr->Props.StageId = unionStage.Id();
+        root->PlanProps.BindStageInput(*mergePtr, 0, graph.Connect(producerStage, unionStage, MakeIntrusive<TMergeConnection>(TSortIUs{{b, {true, true}}}, 0)));
+        root->PlanProps.BindStageInput(*mergePtr, 1, graph.Connect(producerStage, unionStage, MakeIntrusive<TShuffleConnection>(TOrderedIUs<>{rightC}, 1)));
         ComputePlanLiveness(*root);
         UNIT_ASSERT(GetLiveOut(leftPtr) == (TUnorderedIUs{a, b}));
         UNIT_ASSERT(GetLiveOut(rightPtr) == (TUnorderedIUs{rightA, rightC}));
@@ -957,7 +962,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             f.Config->OptShuffleEliminationForAggregation = testCase.AggregateShuffleEliminationEnabled;
             const auto id = f.Id(), k = f.Id(), payload = f.Id(), result = f.Id();
             auto read = f.Read({id, k, payload});
-            const auto inputStage = f.Props.StageGraph.AddSourceStage(NYql::EStorageType::ColumnStorage);
+            const auto inputStage = f.Props.StageGraph.AddSourceStage(NYql::EStorageType::ColumnStorage).Id();
             read->Props.StageId = inputStage;
             read->StorageType = NYql::EStorageType::ColumnStorage;
             read->Props.Metadata.emplace();
@@ -971,19 +976,19 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             auto root = f.Root(std::move(aggregate), {{result, "sum"}});
             TAssignStagesStage().RunStage(*root, f.RboCtx);
             const auto aggregateStage = *agg->Props.StageId;
-            const auto& connections = root->PlanProps.StageGraph.GetConnections(inputStage, aggregateStage);
+            const auto& connections = root->PlanProps.StageGraph.EdgesBetween(root->PlanProps.StageGraph.GetStage(inputStage), root->PlanProps.StageGraph.GetStage(aggregateStage));
             UNIT_ASSERT_VALUES_EQUAL(connections.size(), 1);
             if (testCase.EliminateShuffle) {
                 UNIT_ASSERT(agg->Props.Metadata->ShuffledByColumns == TOrderedIUs<>{id});
-                UNIT_ASSERT(IsConnection<TMapConnection>(connections.front()));
+                UNIT_ASSERT(IsConnection<TMapConnection>(connections.front()->Connection()));
                 UNIT_ASSERT(TPropagateAggregateThroughStageRule().MatchAndApply(root->MutableChild(0), f.RboCtx, root->PlanProps));
                 UNIT_ASSERT_VALUES_EQUAL(*root->GetInput()->Props.StageId, inputStage);
-                const auto& after = root->PlanProps.StageGraph.GetConnections(inputStage, aggregateStage);
+                const auto& after = root->PlanProps.StageGraph.EdgesBetween(root->PlanProps.StageGraph.GetStage(inputStage), root->PlanProps.StageGraph.GetStage(aggregateStage));
                 UNIT_ASSERT_VALUES_EQUAL(after.size(), 1);
-                UNIT_ASSERT(IsConnection<TMapConnection>(after.front()));
+                UNIT_ASSERT(IsConnection<TMapConnection>(after.front()->Connection()));
             } else {
                 UNIT_ASSERT(agg->Props.Metadata->ShuffledByColumns.Items().empty());
-                UNIT_ASSERT(IsConnection<TShuffleConnection>(connections.front()));
+                UNIT_ASSERT(IsConnection<TShuffleConnection>(connections.front()->Connection()));
             }
         }
     }
@@ -1964,8 +1969,8 @@ PRAGMA ydb.OptimizerHints = '
         const auto simplifiedPlan = GetSimplifiedPlan(plan);
         const auto distinctShuffles = std::count_if(shuffles.begin(), shuffles.end(), [&](const TString& shuffle) {
             const TString key{TStringBuf(shuffle).After('(').RBefore(')')};
-            return FindOperatorByStringField(simplifiedPlan, "Aggregation",
-                "{" + key + ": distinct(/Root/lineitem.l_orderkey)}") != nullptr;
+            const auto* aggregation = FindAggregation(simplifiedPlan, "distinct", key);
+            return aggregation && StringArrayFieldContains(*aggregation, "Arguments", "/Root/lineitem.l_orderkey");
         });
         UNIT_ASSERT_VALUES_EQUAL_C(distinctShuffles, CompositePartitionKey ? 1 : 0, plan);
 

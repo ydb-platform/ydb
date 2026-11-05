@@ -49,9 +49,9 @@ void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
 void ProcessSource(IOperator* op, TOpRead* read, TPlanProps& props) {
     const auto readStageId = *read->Props.StageId;
     if (read->GetTableStorageType() == NYql::EStorageType::RowStorage) {
-        const auto newStageId = props.StageGraph.AddStage();
-        op->Props.StageId = newStageId;
-        props.StageGraph.Connect(readStageId, newStageId, MakeIntrusive<TUnionAllConnection>(props.StageGraph.GetOutputIndex(readStageId)));
+        const auto& newStage = props.StageGraph.AddStage();
+        op->Props.StageId = newStage.Id();
+        props.BindStageInput(*op, 0, props.StageGraph.Connect(props.GetStage(*read), newStage, MakeIntrusive<TUnionAllConnection>(props.StageGraph.AllocateOutput(props.GetStage(*read)))));
     } else {
         op->Props.StageId = readStageId;
     }
@@ -72,9 +72,9 @@ TIntrusivePtr<TConnection> MakePortConnection(const IOperator& port, ui32 output
 
 ui32 OutputIndex(const IOperator& input, TStageGraph& graph) {
     if (const auto index = GetReplicateOutputIndex(input)) {
-        return *index;
+        return graph.RegisterOutput(graph.GetStage(*input.Props.StageId), *index);
     }
-    return graph.GetOutputIndex(*input.Props.StageId);
+    return graph.AllocateOutput(graph.GetStage(*input.Props.StageId));
 }
 
 void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
@@ -94,12 +94,12 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         TString readName;
         if (input->Kind == EOperator::Source) {
             const auto opRead = CastOperator<TOpRead>(input);
-            const auto newStageId = props.StageGraph.AddSourceStage(opRead->StorageType);
-            input->Props.StageId = newStageId;
+            const auto& newStage = props.StageGraph.AddSourceStage(opRead->StorageType);
+            input->Props.StageId = newStage.Id();
             readName = opRead->Alias;
         } else {
-            const auto newStageId = props.StageGraph.AddStage();
-            input->Props.StageId = newStageId;
+            const auto& newStage = props.StageGraph.AddStage();
+            input->Props.StageId = newStage.Id();
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages source: " << readName;
     } else if (input->Kind == EOperator::Replicate) {
@@ -113,31 +113,29 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         input->Props.StageId = producer.Props.StageId;
         // A Replicate over a port needs a row stream, not its producer's variant.
         if (producer.Kind == EOperator::Replicate) {
-            const auto stage = props.StageGraph.AddStage();
-            props.StageGraph.Connect(*producer.Props.StageId, stage,
-                MakePortConnection(producer, OutputIndex(producer, props.StageGraph)));
-            input->Props.StageId = stage;
+            const auto& stage = props.StageGraph.AddStage();
+            props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(producer), stage, MakePortConnection(producer, OutputIndex(producer, props.StageGraph))));
+            input->Props.StageId = stage.Id();
         }
         for (auto* port : hub.GetOutputs()) {
             port->Props.StageId = input->Props.StageId;
+            port->Props.StageInputEdges = input->Props.StageInputEdges;
         }
     } else if (input->Kind == EOperator::Join) {
         const auto join = CastOperator<TOpJoin>(input);
-        const auto leftStage = *join->GetLeftInput()->Props.StageId;
-        const auto rightStage = *join->GetRightInput()->Props.StageId;
-        const auto leftOutputIndex = OutputIndex(*join->GetLeftInput(), props.StageGraph);
-        const auto rightOutputIndex = OutputIndex(*join->GetRightInput(), props.StageGraph);
+        const auto leftOutput = OutputIndex(*join->GetLeftInput(), props.StageGraph);
+        const auto rightOutput = OutputIndex(*join->GetRightInput(), props.StageGraph);
 
-        const auto newStageId = props.StageGraph.AddStage();
-        join->Props.StageId = newStageId;
+        const auto& newStage = props.StageGraph.AddStage();
+        join->Props.StageId = newStage.Id();
 
         FinalizeJoinPhysicalProps(*join, ctx);
 
         // For cross-join or map join we build a stage with map and broadcast connections
         // FIXME: We assume that right side is small one, map join also can work with hash shuffle connections.
         if (join->JoinKind == "Cross" || join->Props.JoinAlgo == EJoinAlgoType::MapJoin) {
-            props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TMapConnection>(leftOutputIndex));
-            props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TBroadcastConnection>(rightOutputIndex));
+            props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*join->GetLeftInput()), newStage, MakeIntrusive<TMapConnection>(leftOutput)));
+            props.BindStageInput(*input, 1, props.StageGraph.Connect(props.GetStage(*join->GetRightInput()), newStage, MakeIntrusive<TBroadcastConnection>(rightOutput)));
         }
         else {
             TOrderedIUs<> leftShuffleKeys;
@@ -165,25 +163,23 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
             // All other things set UseSpilling = false instead (the default in TShuffleConnection)
 
             if (leftShuffleEliminated) {
-                props.StageGraph.Connect(leftStage, newStageId, MakeIntrusive<TMapConnection>(leftOutputIndex));
+                props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*join->GetLeftInput()), newStage, MakeIntrusive<TMapConnection>(leftOutput)));
             } else {
                 auto shuffleConnection = MakeIntrusive<TShuffleConnection>(
-                    effectiveLeftShuffleKeys,
-                    leftOutputIndex,
+                    effectiveLeftShuffleKeys, leftOutput,
                     /*useSpilling=*/true
                 );
-                props.StageGraph.Connect(leftStage, newStageId, std::move(shuffleConnection));
+                props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*join->GetLeftInput()), newStage, std::move(shuffleConnection)));
             }
 
             if (rightShuffleEliminated) {
-                props.StageGraph.Connect(rightStage, newStageId, MakeIntrusive<TMapConnection>(rightOutputIndex));
+                props.BindStageInput(*input, 1, props.StageGraph.Connect(props.GetStage(*join->GetRightInput()), newStage, MakeIntrusive<TMapConnection>(rightOutput)));
             } else {
                 auto shuffleConnection = MakeIntrusive<TShuffleConnection>(
-                    effectiveRightShuffleKeys,
-                    rightOutputIndex,
+                    effectiveRightShuffleKeys, rightOutput,
                     /*useSpilling=*/true
                 );
-                props.StageGraph.Connect(rightStage, newStageId, std::move(shuffleConnection));
+                props.BindStageInput(*input, 1, props.StageGraph.Connect(props.GetStage(*join->GetRightInput()), newStage, std::move(shuffleConnection)));
             }
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
@@ -194,20 +190,18 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         if (childOp->GetKind() == EOperator::Source) {
             ProcessSource(input, CastOperator<TOpRead>(childOp), props);
         } else if (childOp->Kind == EOperator::Replicate) {
-            auto newStageId = props.StageGraph.AddStage();
-            input->Props.StageId = newStageId;
-            props.StageGraph.Connect(prevStageId, newStageId,
-                MakePortConnection(*childOp, OutputIndex(*childOp, props.StageGraph)));
+            auto& newStage = props.StageGraph.AddStage();
+            input->Props.StageId = newStage.Id();
+            props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*childOp), newStage, MakePortConnection(*childOp, OutputIndex(*childOp, props.StageGraph))));
         } else {
             input->Props.StageId = prevStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages map/filter";
     } else if (input->Kind == EOperator::Sort) {
         auto sort = CastOperator<TOpSort>(input);
-        const auto newStageId = props.StageGraph.AddStage();
-        input->Props.StageId = newStageId;
-        const auto prevStageId = *(sort->GetInput()->Props.StageId);
-        props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>(OutputIndex(*sort->GetInput(), props.StageGraph)));
+        const auto& newStage = props.StageGraph.AddStage();
+        input->Props.StageId = newStage.Id();
+        props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*sort->GetInput()), newStage, MakeIntrusive<TUnionAllConnection>(OutputIndex(*sort->GetInput(), props.StageGraph))));
         YQL_CLOG(TRACE, CoreDq) << "Assign stages sort";
     } else if (input->Kind == EOperator::Limit) {
         const auto limit = CastOperator<TOpLimit>(input);
@@ -217,57 +211,53 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
             // Put limit to sort stage.
             limit->Props.StageId = prevStageId;
         } else {
-            const auto newStageId = props.StageGraph.AddStage();
-            const auto outputIndex = OutputIndex(*limitInput, props.StageGraph);
-            input->Props.StageId = newStageId;
-            props.StageGraph.Connect(prevStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
+            const auto& newStage = props.StageGraph.AddStage();
+            const auto output = OutputIndex(*limitInput, props.StageGraph);
+            input->Props.StageId = newStage.Id();
+            props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*input->GetChild(0)), newStage, MakeIntrusive<TUnionAllConnection>(output)));
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages limit";
     } else if (input->Kind == EOperator::UnionAll) {
         auto unionAll = CastOperator<TOpUnionAll>(input);
 
-        const auto newStageId = props.StageGraph.AddStage();
-        unionAll->Props.StageId = newStageId;
+        const auto& newStage = props.StageGraph.AddStage();
+        unionAll->Props.StageId = newStage.Id();
         const bool parallelUnionAllConnections = ctx.KqpCtx.Config->GetEnableParallelUnionAllConnectionsForExtend();
 
         // Connect the inputs in child order: the physical conversion pairs stage arguments
         // with the connections of this stage.
+        ui32 childIndex = 0;
         for (const auto& child : unionAll->GetChildren()) {
-            const auto childStageId = *child->Props.StageId;
-            props.StageGraph.Connect(childStageId, newStageId,
-                                     MakeIntrusive<TUnionAllConnection>(OutputIndex(*child, props.StageGraph), parallelUnionAllConnections));
+            props.BindStageInput(*input, childIndex++, props.StageGraph.Connect(props.GetStage(*child), newStage, MakeIntrusive<TUnionAllConnection>(OutputIndex(*child, props.StageGraph), parallelUnionAllConnections)));
         }
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stages union_all";
     } else if (input->Kind == EOperator::Aggregate) {
         auto aggregate = CastOperator<TOpAggregate>(input);
-        const auto inputStageId = *(aggregate->GetInput()->Props.StageId);
-        const auto outputIndex = OutputIndex(*aggregate->GetInput(), props.StageGraph);
+        const auto output = OutputIndex(*aggregate->GetInput(), props.StageGraph);
 
-        const auto newStageId = props.StageGraph.AddStage();
-        aggregate->Props.StageId = newStageId;
+        const auto& newStage = props.StageGraph.AddStage();
+        aggregate->Props.StageId = newStage.Id();
         if (CanEliminateAggregateShuffle(*aggregate, ctx)) {
-            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TMapConnection>(outputIndex));
+            props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*input->GetChild(0)), newStage, MakeIntrusive<TMapConnection>(output)));
         } else if (!aggregate->GetKeyColumns().Items().empty()) {
-            props.StageGraph.Connect(inputStageId, newStageId,
-                                     MakeIntrusive<TShuffleConnection>(GetAggregateInputShuffle(*aggregate), outputIndex));
+            props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*input->GetChild(0)), newStage, MakeIntrusive<TShuffleConnection>(GetAggregateInputShuffle(*aggregate), output)));
         } else {
-            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
+            props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*input->GetChild(0)), newStage, MakeIntrusive<TUnionAllConnection>(output)));
         }
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to aggregation ";
     } else if (input->Kind == EOperator::Window) {
         auto window = CastOperator<TOpWindow>(input);
-        const auto inputStageId = *(window->GetInput()->Props.StageId);
-        const auto outputIndex = OutputIndex(*window->GetInput(), props.StageGraph);
+        const auto output = OutputIndex(*window->GetInput(), props.StageGraph);
 
-        const auto newStageId = props.StageGraph.AddStage();
-        window->Props.StageId = newStageId;
+        const auto& newStage = props.StageGraph.AddStage();
+        window->Props.StageId = newStage.Id();
         if (!window->GetPartitionKeys().Items().empty()) {
-            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TShuffleConnection>(window->GetPartitionKeys(), outputIndex));
+            props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*input->GetChild(0)), newStage, MakeIntrusive<TShuffleConnection>(window->GetPartitionKeys(), output)));
         } else {
             // Without partition by we assume the whole input is one partition, so do it in one task.
-            props.StageGraph.Connect(inputStageId, newStageId, MakeIntrusive<TUnionAllConnection>(outputIndex));
+            props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*input->GetChild(0)), newStage, MakeIntrusive<TUnionAllConnection>(output)));
         }
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to window";
@@ -275,10 +265,9 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         auto lookup = CastOperator<TOpTableLookup>(input);
         auto& exprCtx = ctx.ExprCtx;
 
-        const auto inputStageId = *(lookup->GetInput()->Props.StageId);
-        const auto outputIndex = OutputIndex(*lookup->GetInput(), props.StageGraph);
-        const auto newStageId = props.StageGraph.AddStage();
-        input->Props.StageId = newStageId;
+        const auto output = OutputIndex(*lookup->GetInput(), props.StageGraph);
+        const auto& newStage = props.StageGraph.AddStage();
+        input->Props.StageId = newStage.Id();
 
         TVector<NYql::NNodes::TCoAtom> columnAtoms;
         THashSet<TString> fetchedNames;
@@ -312,8 +301,7 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         }
         auto settingsNode = settings.BuildNode(exprCtx, lookup->Pos).Ptr();
 
-        props.StageGraph.Connect(inputStageId, newStageId,
-                                 MakeIntrusive<TStreamLookupConnection>(outputIndex, lookup->Table, columnsNode, inputTypeNode, settingsNode));
+        props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*input->GetChild(0)), newStage, MakeIntrusive<TStreamLookupConnection>(output, lookup->Table, columnsNode, inputTypeNode, settingsNode)));
         YQL_CLOG(TRACE, CoreDq) << "Assign stages table lookup";
     } else if (input->Kind == EOperator::IndexLookupJoin) {
         // The lookup join shares the stage of its table lookup: the joined pairs only exist inside
@@ -322,16 +310,37 @@ void AssignStage(IOperator* input, TRBOContext& ctx, TPlanProps& props) {
         auto lookup = &lookupJoin->GetTableLookup();
         input->Props.StageId = *lookup->Props.StageId;
         YQL_CLOG(TRACE, CoreDq) << "Assign stages index lookup join";
+    } else if (input->Kind == EOperator::Sequencer) {
+        auto& sequencer = CastOperator<TOpSequencer>(*input);
+        auto& exprCtx = ctx.ExprCtx;
+        const auto pos = sequencer.Pos;
+        const auto output = OutputIndex(*sequencer.GetInput(), props.StageGraph);
+        const auto& newStage = props.StageGraph.AddStage();
+        sequencer.Props.StageId = newStage.Id();
+
+        TVector<TExprNode::TPtr> columns;
+        TVector<TExprNode::TPtr> generatedColumns;
+        TVector<const TItemExprType*> inputItems;
+        for (const auto& [id, name] : sequencer.GetInputColumns().Items()) {
+            columns.push_back(exprCtx.NewAtom(pos, name));
+            inputItems.push_back(exprCtx.MakeType<TItemExprType>(name, sequencer.GetInput()->GetIUType(id, exprCtx)));
+        }
+        for (const auto& [id, name] : sequencer.GetGeneratedColumns().Items()) {
+            columns.push_back(exprCtx.NewAtom(pos, name));
+            generatedColumns.push_back(exprCtx.NewAtom(pos, name));
+        }
+        props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*input->GetChild(0)), newStage, MakeIntrusive<TSequencerConnection>(output, sequencer.Table,
+                exprCtx.NewList(pos, std::move(columns)), exprCtx.NewList(pos, std::move(generatedColumns)),
+                ExpandType(pos, *exprCtx.MakeType<TListExprType>(exprCtx.MakeType<TStructExprType>(inputItems)), exprCtx))));
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages sequencer";
     } else if (input->Kind == EOperator::TableEffect) {
         auto tableEffect = CastOperator<TOpTableEffect>(input);
-
-        const auto newStageId = props.StageGraph.AddSinkStage(tableEffect->BuildSettings(ctx.ExprCtx));
-        const auto inputStageId = *(tableEffect->GetInput()->Props.StageId);
-        const auto outputIndex = OutputIndex(*tableEffect->GetInput(), props.StageGraph);
-
-        input->Props.StageId = newStageId;
-        props.StageGraph.Connect(inputStageId, newStageId,
-                                 MakeIntrusive<TUnionAllConnection>(outputIndex));
+        // OLAP sinks use the direct-write actor, which requires priority zero.
+        const auto priority = tableEffect->Props.Metadata->StorageType == EStorageType::ColumnStorage ? 0 : props.EffectPriority;
+        const auto& newStage = props.StageGraph.AddSinkStage(tableEffect->BuildSettings(ctx.ExprCtx, priority));
+        const auto output = OutputIndex(*tableEffect->GetInput(), props.StageGraph);
+        input->Props.StageId = newStage.Id();
+        props.BindStageInput(*input, 0, props.StageGraph.Connect(props.GetStage(*input->GetChild(0)), newStage, MakeIntrusive<TUnionAllConnection>(output)));
         YQL_CLOG(TRACE, CoreDq) << "Assign stages table effects";
     }
     else {
@@ -346,6 +355,8 @@ void TAssignStagesStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     for (const auto& item : root) {
         AssignStage(item.Current, ctx, root.PlanProps);
     }
+    Y_ENSURE(root.PlanProps.StageGraph.IsConnected(), "Stage graph must be connected");
+    Y_DEBUG_ABORT_UNLESS(!root.PlanProps.StageGraph.ContainsCycles(), "Stage graph must be acyclic");
 }
 
 } // namespace NKikimr::NKqp

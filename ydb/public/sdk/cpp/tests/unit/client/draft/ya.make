@@ -19,6 +19,7 @@ PEERDIR(
 )
 
 SRCS(
+    bridge_connectivity_ut.cpp
     ydb_keyvalue_ut.cpp
     ydb_replication_ut.cpp
     ydb_scripting_response_headers_ut.cpp

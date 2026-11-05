@@ -988,7 +988,10 @@ TInitMessageDeduplicatorStep::TInitMessageDeduplicatorStep(TInitializer* initial
 }
 
 void TInitMessageDeduplicatorStep::Execute(const TActorContext &ctx) {
-    if (MirroringEnabled(Partition()->Config) || Partition()->Partition.IsSupportivePartition()) {
+    // Replicated topics can accept client writes while destination replication is disabled.
+    if ((MirroringEnabled(Partition()->Config) && !ReplicationEnabled(Partition()->Config))
+        || Partition()->Partition.IsSupportivePartition())
+    {
         return Done(ctx);
     }
     auto firstKey = MakeDeduplicatorWALKey(Partition()->Partition.OriginalPartitionId, 0);

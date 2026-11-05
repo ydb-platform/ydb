@@ -58,6 +58,10 @@ public:
         ui32 Small = Max<ui32>();       /* When pack values to outer blobs  */
         ui32 Large = Max<ui32>();       /* When keep values in single blobs */
         ECacheMode CacheMode = ECacheMode::Regular;
+
+        /* Index placement in parts of the family as a tier with a separate descriptor page collection (see TPartLayout) */
+        bool KeyIndexInDescriptor = true;       /* Main group index is in the descriptor page collection */
+        bool GroupIndexesInDescriptor = true;   /* Other groups indexes are in the descriptor page collection */
     };
 
     using TColumn = NTable::TColumn;
@@ -254,6 +258,7 @@ public:
     TAlter& SetFamilyCache(ui32 table, ui32 family, ECache cache);
     TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec); // legacy
     TAlter& SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large);
+    TAlter& SetFamilyIndexPlacement(ui32 table, ui32 family, bool keyIndexInDescriptor, bool groupIndexesInDescriptor);
     TAlter& DropFamily(ui32 table, ui32 family);
     TAlter& SetRoom(ui32 table, ui32 room, ui32 main, const TSet<ui32>& blobs, ui32 outer);
     TAlter& SetRedo(ui32 annex);

@@ -176,6 +176,7 @@ namespace NKikimr {
             ////////////////////////////////////////////////////////////////////////
             void HandleStatusFlags(const NKikimrBlobStorage::TEvVSyncResult &record);
             bool CheckFragmentFormat(const TString &data);
+            bool HasReachedSyncTarget(const TSyncState& syncState) const;
             void PrepareToFullRecovery(const TSyncState &syncState);
             TSjOutcome ContinueInFullRecoveryMode();
             TSjOutcome ReplyAndDie(ESyncStatus status);

@@ -325,8 +325,7 @@ namespace NKikimr {
         bool HasMetadataSyncQuorum(const TBlobStorageGroupInfo& info) const {
             TBlobStorageGroupInfo::TGroupVDisks synced(&info.GetTopology());
             for (ui32 order : MetadataSyncedPeers) {
-                synced |= TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(),
-                    TVDiskIdShort(info.GetVDiskId(order)));
+                synced |= TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), TVDiskIdShort(info.GetVDiskId(order)));
             }
             return TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, synced);
         }
@@ -339,8 +338,9 @@ namespace NKikimr {
             const TBlobStorageGroupInfo::TTopology& topology = MetadataSyncSourceInfo->GetTopology();
             for (ui32 realm = 0; realm < topology.FailRealms.size(); ++realm) {
                 const TFailRealm::EState sourceState = MetadataSyncSourceInfo->GetFailRealmState(realm);
-                if ((sourceState != TFailRealm::N1 && sourceState != TFailRealm::N2)
-                        || GInfo->IsFailedFailRealm(realm) || GInfo->IsRecoveringFailRealm(realm)) {
+                const bool sourceHasCopyGuarantee = sourceState == TFailRealm::N1 || sourceState == TFailRealm::N2;
+                const bool isNormalRealm = !GInfo->IsFailedFailRealm(realm) && !GInfo->IsRecoveringFailRealm(realm);
+                if (!sourceHasCopyGuarantee || !isNormalRealm) {
                     continue;
                 }
                 bool allDisksSynced = true;
@@ -358,15 +358,22 @@ namespace NKikimr {
         }
 
         void CheckMetadataSyncDone(const TActorContext& ctx) {
-            if (MetadataSyncGeneration && MetadataSyncGeneration == GInfo->GroupGeneration
-                    && HasMetadataSyncQuorum(*GInfo) && HasMetadataSyncSourceQuorum()) {
-                ctx.Send(MetadataSyncNotifyId, new TEvSyncerMetadataSyncDone(MetadataSyncGeneration));
-                MetadataSyncGeneration = 0;
-                MetadataSyncSourceInfo.Reset();
-                MetadataSyncJobs.clear();
-                MetadataSyncRequested.clear();
-                MetadataSyncedPeers.clear();
+            const bool currentRound = MetadataSyncGeneration && MetadataSyncGeneration == GInfo->GroupGeneration;
+            if (!currentRound) {
+                return;
             }
+            if (!HasMetadataSyncQuorum(*GInfo)) {
+                return;
+            }
+            if (!HasMetadataSyncSourceQuorum()) {
+                return;
+            }
+            ctx.Send(MetadataSyncNotifyId, new TEvSyncerMetadataSyncDone(MetadataSyncGeneration));
+            MetadataSyncGeneration = 0;
+            MetadataSyncSourceInfo.Reset();
+            MetadataSyncJobs.clear();
+            MetadataSyncRequested.clear();
+            MetadataSyncedPeers.clear();
         }
 
         void RescheduleFullSyncRequests(const TActorContext& ctx) {
@@ -378,8 +385,7 @@ namespace NKikimr {
             const TInstant now = TAppData::TimeProvider->Now();
             for (TVDiskInfoPtr peer : queued) {
                 if (FullSyncRequested.contains(peer->OrderNumber) || MetadataSyncRequested.contains(peer->OrderNumber)) {
-                    NSyncer::TPeerSyncState& peerState =
-                        (*SyncerData->Neighbors)[GInfo->GetVDiskId(peer->OrderNumber)].Get().PeerSyncState;
+                    NSyncer::TPeerSyncState& peerState = (*SyncerData->Neighbors)[GInfo->GetVDiskId(peer->OrderNumber)].Get().PeerSyncState;
                     peerState.SchTime = now;
                 }
                 SchedulerQueue.push(peer);
@@ -416,8 +422,9 @@ namespace NKikimr {
             const ui32 peerOrderNumber = GInfo->GetOrderNumber(TVDiskIdShort(vDiskId));
             bool metadataSyncRetry = false;
             if (MetadataSyncJobs.erase(peerOrderNumber)) {
-                if (NSyncer::TPeerSyncState::Good(peerSyncState.LastSyncStatus)
-                        && vDiskId.GroupGeneration == MetadataSyncGeneration) {
+                const bool syncSucceeded = NSyncer::TPeerSyncState::Good(peerSyncState.LastSyncStatus);
+                const bool matchingGeneration = vDiskId.GroupGeneration == MetadataSyncGeneration;
+                if (syncSucceeded && matchingGeneration) {
                     MetadataSyncedPeers.insert(peerOrderNumber);
                     CheckMetadataSyncDone(ctx);
                 } else if (MetadataSyncGeneration) {

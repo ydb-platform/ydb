@@ -778,9 +778,8 @@ message TEvVSyncResult {
     }
     optional TStat Stat = 7;
     optional uint32 StatusFlags = 8;
-    reserved 9; // Previously used by AppliedConfigGeneration during development.
     // Returned only when RequestTargetLsn is set; bound to NewSyncState.Guid and VDiskID generation.
-    optional uint64 TargetLsn = 10;
+    optional uint64 TargetLsn = 9;
 }
 
 enum ESyncFullStage {

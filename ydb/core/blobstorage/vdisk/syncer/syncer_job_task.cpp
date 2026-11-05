@@ -134,6 +134,15 @@ namespace NKikimr {
             }
         }
 
+        bool TSyncerJobTask::HasReachedSyncTarget(const TSyncState& syncState) const {
+            if (!SyncTarget) {
+                return false;
+            }
+            const bool matchingGuid = syncState.Guid == SyncTarget->Guid;
+            const bool reachedTargetLsn = syncState.SyncedLsn >= SyncTarget->SyncedLsn;
+            return matchingGuid && reachedTargetLsn;
+        }
+
         TSjOutcome TSyncerJobTask::ReplyAndDie(ESyncStatus status) {
             // Phase
             Phase = EFinished;
@@ -142,9 +151,9 @@ namespace NKikimr {
             Y_VERIFY_S(status != TSyncStatusVal::Running,
                 Ctx->SyncerCtx->VCtx->VDiskLogPrefix << Sublog.Get());
             auto now = TAppData::TimeProvider->Now();
-            if (RequireSyncTarget && NSyncer::TPeerSyncState::Good(status)
-                    && (!SyncTarget || Current.SyncState.Guid != SyncTarget->Guid
-                        || Current.SyncState.SyncedLsn < SyncTarget->SyncedLsn)) {
+            const bool successfulSync = NSyncer::TPeerSyncState::Good(status);
+            const bool syncTargetNotReached = RequireSyncTarget && !HasReachedSyncTarget(Current.SyncState);
+            if (successfulSync && syncTargetNotReached) {
                 status = TSyncStatusVal::NotReady;
             }
             Current.LastSyncStatus = status;
@@ -217,8 +226,8 @@ namespace NKikimr {
 
             const TSyncState oldSyncState = GetCurrent().SyncState;
             SetSyncState(newSyncState);
-            EndOfStream = record.GetFinished() || (RequireSyncTarget && SyncTarget
-                && newSyncState.Guid == SyncTarget->Guid && newSyncState.SyncedLsn >= SyncTarget->SyncedLsn);
+            const bool reachedSyncTarget = RequireSyncTarget && HasReachedSyncTarget(newSyncState);
+            EndOfStream = record.GetFinished() || reachedSyncTarget;
 
             if (!data.empty()) {
                 Phase = EWaitLocal;
@@ -299,8 +308,8 @@ namespace NKikimr {
             }
 
             TSyncState newSyncState = SyncStateFromSyncState(record.GetNewSyncState());
-            if (RequireSyncTarget && (record.GetStatus() == NKikimrProto::OK
-                    || record.GetStatus() == NKikimrProto::ALREADY)) {
+            const bool successfulReply = record.GetStatus() == NKikimrProto::OK || record.GetStatus() == NKikimrProto::ALREADY;
+            if (RequireSyncTarget && successfulReply) {
                 if (!SyncTarget) {
                     if (!record.HasTargetLsn()) {
                         return ReplyAndDie(TSyncStatusVal::NotReady);

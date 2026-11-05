@@ -229,7 +229,6 @@ namespace NKikimr {
         THashSet<ui32> StartupDataSyncPeers;
         THashSet<ui32> FullSyncRequested;
         ui32 MetadataSyncGeneration = 0;
-        TActorId MetadataSyncNotifyId;
         TIntrusivePtr<TBlobStorageGroupInfo> MetadataSyncSourceInfo;
         THashSet<ui32> MetadataSyncRequested;
         THashSet<ui32> MetadataSyncJobs;
@@ -368,7 +367,7 @@ namespace NKikimr {
             if (!HasMetadataSyncSourceQuorum()) {
                 return;
             }
-            ctx.Send(MetadataSyncNotifyId, new TEvSyncerMetadataSyncDone(MetadataSyncGeneration));
+            ctx.Send(SyncerContext->SkeletonId, new TEvSyncerMetadataSyncDone(MetadataSyncGeneration));
             MetadataSyncGeneration = 0;
             MetadataSyncSourceInfo.Reset();
             MetadataSyncJobs.clear();
@@ -399,7 +398,6 @@ namespace NKikimr {
                 return;
             }
             MetadataSyncGeneration = ev->Get()->Generation;
-            MetadataSyncNotifyId = ev->Sender;
             MetadataSyncSourceInfo = ev->Get()->SourceInfo;
             MetadataSyncJobs.clear();
             MetadataSyncRequested.clear();

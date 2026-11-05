@@ -1101,11 +1101,13 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
           {"ExpectedContextOnly":true,"StatsGroupId":"ga","ParticipatingShards":1,"ParticipatingTablets":["1"]},
           {"ExpectedContextOnly":true,"StatsGroupId":"gb","ParticipatingShards":1,"ParticipatingTablets":["2"]},
           {"StatsScanId":"a","StatsGroupId":"ga","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,
+           "ParticipatingShards":1,"ParticipatingTablets":["1"],
            "StorageStatsVersion":1,"TablePath":"/A","StorageReads":[
             {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":100,"ReadCount":1},
             {"SourceKind":"BlobCache","SourceName":"blob","ReadBytes":20,"ReadCount":1}],
            "Steps":[{"StepId":1,"StepKind":"ReaderInit","MetaStep":"Preparation","OwnedExecutionDuration":1}]},
           {"StatsScanId":"b","StatsGroupId":"gb","TabletId":"2","ReaderKind":"TRIVIAL","Finished":true,
+           "ParticipatingShards":1,"ParticipatingTablets":["2"],
            "StorageStatsVersion":1,"TablePath":"/B","StorageReads":[
             {"SourceKind":"BlobStorage","SourceName":"default","ReadCount":1,"UnknownByteReads":1},
             {"SourceKind":"PortionMetadataCache","SourceName":"metadata","ReadCount":1,"UnknownByteReads":1}],

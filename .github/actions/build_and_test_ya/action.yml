@@ -63,7 +63,7 @@ inputs:
   enable_ydb_qa:
     type: boolean
     default: true
-    description: "Read/write YDB QA analytics DB; false (or host nebius/ydb) sets CI_DISABLE_YDB_QA"
+    description: "Read/write YDB QA analytics DB; false sets CI_DISABLE_YDB_QA"
   analytics_job_name:
     type: string
     required: false
@@ -86,14 +86,12 @@ runs:
       shell: bash
       env:
         ENABLE_YDB_QA: ${{ inputs.enable_ydb_qa }}
-        HOST_REPOSITORY: ${{ github.repository }}
       run: |
-        # Nebius host must not touch YC YDB QA (read or write), even if secrets appear later.
-        if [ "$ENABLE_YDB_QA" = "false" ] || [ "$HOST_REPOSITORY" = "nebius/ydb" ]; then
+        if [ "$ENABLE_YDB_QA" = "false" ]; then
           echo "CI_DISABLE_YDB_QA=1" >> "$GITHUB_ENV"
-          echo "YDB QA disabled (enable_ydb_qa=$ENABLE_YDB_QA host=$HOST_REPOSITORY)"
+          echo "YDB QA disabled (enable_ydb_qa=false)"
         else
-          echo "YDB QA enabled (enable_ydb_qa=$ENABLE_YDB_QA host=$HOST_REPOSITORY)"
+          echo "YDB QA enabled"
         fi
 
     - name: Configure runner limits
@@ -192,7 +190,6 @@ runs:
         fi
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
         echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
-        # Mirror caller event/run for remote executor (host event is always workflow_dispatch).
         if [ -n "$SOURCE_EVENT_NAME" ]; then
           echo "SOURCE_EVENT_NAME=$SOURCE_EVENT_NAME" >> "$GITHUB_ENV"
         fi
@@ -252,7 +249,12 @@ runs:
         echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
-        ANALYTICS_FILE=$TMP_DIR/analytics.jsonl
+        # With YDB QA off, buffer ci_metrics under PUBLIC_DIR for remote-repo S3 + caller ingest.
+        if [ "${CI_DISABLE_YDB_QA:-}" = "1" ] || [ "${CI_DISABLE_YDB_QA:-}" = "true" ]; then
+          ANALYTICS_FILE=$PUBLIC_DIR/ci_metrics.jsonl
+        else
+          ANALYTICS_FILE=$TMP_DIR/analytics.jsonl
+        fi
         export ANALYTICS_FILE
         echo "ANALYTICS_FILE=$ANALYTICS_FILE" >> $GITHUB_ENV
         mkdir -p "$(dirname "$ANALYTICS_FILE")"
@@ -819,12 +821,9 @@ runs:
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
           fi
 
-          # upload tests results to YDB (skipped on Nebius / enable_ydb_qa=false;
-          # platform dispatcher ingests after wait).
           if [ "${CI_DISABLE_YDB_QA:-}" = "1" ] || [ "${CI_DISABLE_YDB_QA:-}" = "true" ]; then
             echo "Skipping upload_tests_results (CI_DISABLE_YDB_QA=${CI_DISABLE_YDB_QA})"
           else
-            # Prefer caller event/run when this job was dispatched remotely.
             EFFECTIVE_EVENT_NAME="${SOURCE_EVENT_NAME:-$GITHUB_EVENT_NAME}"
             EFFECTIVE_RUN_ID="${SOURCE_RUN_ID:-${{ github.run_id }}}"
             case "$EFFECTIVE_EVENT_NAME" in
@@ -963,8 +962,7 @@ runs:
         echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         cat "$GITHUB_STEP_SUMMARY" >> "$JOB_SUMMARY_MD"
-        # Locator for the platform dispatcher ingest job (download/reupload/YDB happen there,
-        # not on this host). Written next to job_summary.md at the S3 run root.
+        # Locator for caller-side ingest (next to job_summary.md at the S3 run root).
         REMOTE_ARTIFACTS_JSON="$PUBLIC_DIR/remote_artifacts.json"
         REMOTE_ARTIFACTS_JSON="$REMOTE_ARTIFACTS_JSON" python3 - <<'PY'
         import json, os
@@ -998,6 +996,9 @@ runs:
             "pull_number": os.environ.get("PR_NUMBER", ""),
             "executor_run_id": os.environ.get("GITHUB_RUN_ID", ""),
             "executor_workflow": os.environ.get("GITHUB_WORKFLOW", ""),
+            "ci_metrics_relpath": "ci_metrics.jsonl" if (
+                os.environ.get("CI_DISABLE_YDB_QA", "").strip().lower() in ("1", "true", "yes")
+            ) else "",
         }
         path = os.environ["REMOTE_ARTIFACTS_JSON"]
         with open(path, "w", encoding="utf-8") as f:
@@ -1028,6 +1029,16 @@ runs:
           conclusion=failure
         fi
         analytics send --conclusion "$conclusion"
+        # Final send is after the main S3 sync; republish the buffer for caller ingest.
+        if [ "${CI_DISABLE_YDB_QA:-}" = "1" ] || [ "${CI_DISABLE_YDB_QA:-}" = "true" ]; then
+          metrics="${ANALYTICS_FILE:-}"
+          if [ -n "$metrics" ] && [ -f "$metrics" ] && [ -s "$metrics" ]; then
+            s3cmd put --acl-public --no-progress --no-mime-magic --guess-mime-type \
+              "$metrics" "$S3_BUCKET_PATH/ci_metrics.jsonl"
+            s3cmd put --acl-public --no-progress --no-mime-magic --guess-mime-type \
+              "$metrics" "${S3_BUCKET_PATH%/*}/ci_metrics.jsonl"
+          fi
+        fi
 
     - name: show free space
       if: always() && steps.prepare_s3cmd.outcome == 'success'

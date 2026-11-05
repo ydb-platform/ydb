@@ -641,6 +641,9 @@ struct TEvBlobStorage {
         EvIncrHugeReadLogResult,
         EvIncrHugeScanResult,
 
+        EvVRestorePart,
+        EvVRestorePartResult,
+
         EvEnd
     };
 

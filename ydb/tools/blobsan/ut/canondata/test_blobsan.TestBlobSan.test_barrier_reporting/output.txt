@@ -1,0 +1,212 @@
+===== testcase =====
+Keep flags use subgroup positions
+When only VDisks 2 and 8 have Keep,
+then only their soft barrier reports contain (keep), regardless of subgroup order.
+Snapshot: Snapshot(local_realms=(0,), keep=0, barrier='soft', quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7, 8), keep_flags={2: 1, 8: 1})
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=3, subgroup=8, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=4, subgroup=2, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=5, subgroup=5, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 0, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0]
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D1}
+	OrigLocalLayout#    {R0D1}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      1
+	NumReflectionParts# 3
+	NumNodes#           9
+	Nodes#              111111111
+	SeenDisks#          111111111
+	NumUnderBarrier#    9
+	UnderBarrierMask#   111111111
+	NumDiscard#         7
+	DiscardMask#        111001111
+	KeepMask#           000110000
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	Barrier[0]#         soft[2:1=>1:1](collect)
+	Barrier[1]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[3]#         soft[2:1=>1:1](collect)
+	Barrier[4]#         soft[2:1=>1:1](collect)
+	Barrier[5]#         soft[2:1=>1:1](collect)
+	Barrier[6]#         soft[2:1=>1:1](collect)
+	Barrier[7]#         soft[2:1=>1:1](collect)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D1}
+	OrigLocalLayout#    {R0D1}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      1
+	NumReflectionParts# 3
+	NumNodes#           9
+	Nodes#              111111111
+	SeenDisks#          111111111
+	NumUnderBarrier#    9
+	UnderBarrierMask#   111111111
+	NumDiscard#         7
+	DiscardMask#        111001111
+	KeepMask#           000110000
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv2#    1 7 [1:1:1:0:0:100:1]
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	RestorePartInv1#    1 4 [1:1:1:0:0:100:3]
+	RestorePartInv2#    1 5 [1:1:1:0:0:100:3]
+	Barrier[0]#         soft[2:1=>1:1](collect)
+	Barrier[1]#         soft[2:1=>1:1](collect)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[3]#         soft[2:1=>1:1](collect)
+	Barrier[4]#         soft[2:1=>1:1](collect)
+	Barrier[5]#         soft[2:1=>1:1](collect)
+	Barrier[6]#         soft[2:1=>1:1](collect)
+	Barrier[7]#         soft[2:1=>1:1](collect)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+===== testcase =====
+channel greater than collected step
+When a channel-5 blob at step 1 is covered by a barrier collecting through step 1,
+then every barrier report contains (collect)(keep).
+Snapshot: Snapshot(local_realms=(0,), keep=1, barrier='soft', quorum=True, known_full=True, indexes=(0, 1, 2, 3, 4, 5, 6, 7, 8), subgroup_order=(0, 3, 6, 1, 4, 7, 2, 5, 8), blob_channel=5)
+  VDisk(index=0, subgroup=0, blobs=[(key=(0x1, 0x500000001000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 5, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=1, subgroup=3, blobs=[(key=(0x1, 0x500000001000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 5, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=2, subgroup=6, blobs=[(key=(0x1, 0x500000001000000, 0x100000000000640), ingress=0x000010105040407c)], barriers=[(key=(1, 5, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=3, subgroup=1, blobs=[(key=(0x1, 0x500000001000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 5, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=4, subgroup=4, blobs=[(key=(0x1, 0x500000001000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 5, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=5, subgroup=7, blobs=[(key=(0x1, 0x500000001000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 5, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=6, subgroup=2, blobs=[(key=(0x1, 0x500000001000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 5, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=7, subgroup=5, blobs=[(key=(0x1, 0x500000001000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 5, 2, 1), value=(1, 1, 0x1ff))])
+  VDisk(index=8, subgroup=8, blobs=[(key=(0x1, 0x500000001000000, 0x100000000000640), ingress=0x0000101050404078)], barriers=[(key=(1, 5, 2, 1), value=(1, 1, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:5:0:100:0]
+	OrderNums#          [0 3 6 1 4 7 2 5 8]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      1
+	NumReflectionParts# 3
+	NumNodes#           9
+	Nodes#              111111111
+	SeenDisks#          111111111
+	NumUnderBarrier#    9
+	UnderBarrierMask#   111111111
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           111111111
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[3]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[4]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[5]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:5:0:100:0] FULL
+	OrderNums#          [0 3 6 1 4 7 2 5 8]
+	KeepMode#           keep
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      1
+	NumReflectionParts# 3
+	NumNodes#           9
+	Nodes#              111111111
+	SeenDisks#          111111111
+	NumUnderBarrier#    9
+	UnderBarrierMask#   111111111
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           111111111
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 3 [1:1:1:5:0:100:2]
+	RestorePartInv2#    1 4 [1:1:1:5:0:100:2]
+	RestorePartInv1#    1 6 [1:1:1:5:0:100:3]
+	RestorePartInv2#    1 7 [1:1:1:5:0:100:3]
+	Barrier[0]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[1]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[2]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[3]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[4]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[5]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[6]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[7]#         soft[2:1=>1:1](collect)(keep)
+	Barrier[8]#         soft[2:1=>1:1](collect)(keep)
+
+===== testcase =====
+step greater than collected step
+When a channel-0 blob at step 1 is above a barrier collecting through step 0,
+then its barrier reports contain neither (collect) nor (keep).
+Snapshot: Snapshot(local_realms=(0,), keep=0, barrier=None, quorum=True, known_full=True, indexes=(7, 1, 8, 2, 6, 0), barriers=[{'collect': (1, 0)}])
+  VDisk(index=7, subgroup=0, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=1, subgroup=1, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=8, subgroup=3, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=2, subgroup=4, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=6, subgroup=6, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x000010105040403c)], barriers=[(key=(1, 0, 2, 1), value=(1, 0, 0x1ff))])
+  VDisk(index=0, subgroup=7, blobs=[(key=(0x1, 0x1000000, 0x100000000000640), ingress=0x0000101050404038)], barriers=[(key=(1, 0, 2, 1), value=(1, 0, 0x1ff))])
+
+blobsan mirror-3-dc
+Exit Status: 0
+
+blobsan --write2x2-candidates mirror-3-dc
+Exit Status: 0
+Stderr: GroupId# 1 BlobId# [1:1:1:0:0:100:0] FULL
+	OrderNums#          [7 1 4 8 2 5 6 0 3]
+	KeepMode#           default
+	Layout#             {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	LocalLayout#        {R0D0 R0D1 R0D2 R2D0 R2D1 R2D2}
+	OrigLocalLayout#    {R0D0 R0D1 R0D2}
+	ReflectionLayout#   {R0D0 R0D1 R0D2 R1D0 R1D1 R1D2 R2D0 R2D1 R2D2}
+	NumParts#           3
+	NumLocalParts#      2
+	NumReflectionParts# 3
+	NumNodes#           6
+	Nodes#              110110110
+	SeenDisks#          110110110
+	NumUnderBarrier#    0
+	UnderBarrierMask#   000000000
+	NumDiscard#         0
+	DiscardMask#        000000000
+	KeepMask#           000000000
+	DoNotKeepMask#      000000000
+	Misplaced#          false
+	RestorePartInv1#    1 1 [1:1:1:0:0:100:2]
+	RestorePartInv2#    1 2 [1:1:1:0:0:100:2]
+	Barrier[0]#         soft[2:1=>1:0]
+	Barrier[1]#         soft[2:1=>1:0]
+	Barrier[2]#         soft[2:1=>1:0]
+	Barrier[6]#         soft[2:1=>1:0]
+	Barrier[7]#         soft[2:1=>1:0]
+	Barrier[8]#         soft[2:1=>1:0]

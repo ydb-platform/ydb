@@ -2334,8 +2334,6 @@ THolder<TEvPQ::TEvRead> MakeTestRead(
 
 } // namespace
 
-<<<<<<< HEAD
-=======
 Y_UNIT_TEST_F(DisabledReplicationRejectsMirrorerButAllowsClientWrites, TPartitionFixture)
 {
     auto* partition = CreatePartition({.Partition=TPartitionId{0}, .Begin=0, .End=10});
@@ -2554,7 +2552,6 @@ Y_UNIT_TEST_F(ReplicationDataIncludesOffsetClampedForImportantConsumer, TPartiti
     TestReplicateOffsetClampedToStart(true);
 }
 
->>>>>>> b44ed31a137 (fix offsets replication for consumers with availability period)
 void TPartitionFixture::TestRestoreReadSessionActor(bool hasDataRequest)
 {
     const TString session = "replication-session";

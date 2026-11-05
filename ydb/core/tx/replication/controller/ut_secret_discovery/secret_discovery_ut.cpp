@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(SecretDiscovery) {
         UNIT_ASSERT(result->Get()->Created.empty());
     }
 
-    Y_UNIT_TEST(DiscoversSecretAfterMetadataResponse) {
+    Y_UNIT_TEST(DiscoversSecretFromPathDescription) {
         NActors::TTestActorRuntimeBase runtime;
         runtime.Initialize();
         runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
@@ -83,50 +83,24 @@ Y_UNIT_TEST_SUITE(SecretDiscovery) {
         runtime.Send(new IEventHandle(path->Sender, proxy,
             new TEvYdbProxy::TEvDescribePathResponse(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), entry),
             0, path->Cookie));
-        auto describe = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeSecretRequest>(proxy);
-        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(describe->Get()->GetArgs()), "/Root/source");
-        runtime.Send(new IEventHandle(describe->Sender, proxy,
-            new TEvYdbProxy::TEvDescribeSecretResponse(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(entry), 5),
-            0, describe->Cookie));
-        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(parent);
-        UNIT_ASSERT(result->Get()->IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ToAdd.size(), 1);
-        const auto& found = result->Get()->ToAdd.front();
+        TAutoPtr<IEventHandle> response;
+        runtime.WaitForEdgeEvents([&](NActors::TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
+            response = event;
+            return true;
+        }, {parent, proxy}, TDuration::Seconds(5));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->GetTypeRewrite(), TEvPrivate::TEvDiscoveryTargetsResult::EventType,
+            "Discovery must finish after DescribePath without another source request");
+        UNIT_ASSERT_VALUES_EQUAL(response->GetRecipientRewrite(), parent);
+        const auto* result = response->Get<TEvPrivate::TEvDiscoveryTargetsResult>();
+        UNIT_ASSERT(result->IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result->ToAdd.size(), 1);
+        const auto& found = result->ToAdd.front();
         UNIT_ASSERT_VALUES_EQUAL(found.Kind, TReplication::ETargetKind::Secret);
         UNIT_ASSERT_VALUES_EQUAL(found.Config->GetSrcPath(), "/Root/source");
         UNIT_ASSERT_VALUES_EQUAL(found.Config->GetDstPath(), "/Root/copy");
     }
 
-    Y_UNIT_TEST(RequestsSecretMetadata) {
-        NActors::TTestActorRuntimeBase runtime;
-        runtime.Initialize();
-        runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX, NKikimrServices::EServiceKikimr_Name);
-        const auto parent = runtime.AllocateEdgeActor();
-        const auto proxy = runtime.AllocateEdgeActor();
-        NKikimrReplication::TReplicationConfig config;
-        auto& target = *config.MutableSpecific()->AddTargets();
-        target.SetSrcPath("/Root/source");
-        target.SetDstPath("/Root/copy");
-        runtime.Register(CreateTargetDiscoverer(parent, 1, proxy, config));
-
-        auto request = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribePathRequest>(proxy);
-        NYdb::NScheme::TSchemeEntry entry;
-        entry.Name = "source";
-        entry.Type = NYdb::NScheme::ESchemeEntryType::Secret;
-        runtime.Send(new IEventHandle(request->Sender, proxy,
-            new TEvYdbProxy::TEvDescribePathResponse(
-                NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), entry), 0, request->Cookie));
-
-        TAutoPtr<IEventHandle> next;
-        runtime.WaitForEdgeEvents([&](NActors::TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& event) {
-            next = event;
-            return true;
-        }, {parent, proxy}, TDuration::Seconds(5));
-        UNIT_ASSERT(next);
-        UNIT_ASSERT_C(next->GetRecipientRewrite() == proxy,
-            "A secret must be described at the source instead of being rejected as unsupported");
-    }
 }
 
 }

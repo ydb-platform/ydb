@@ -2,8 +2,6 @@
 #include "local_proxy_request.h"
 
 #include <ydb/core/grpc_services/service_scheme.h>
-#include <ydb/core/grpc_services/service_secret.h>
-#include <ydb/public/api/protos/ydb_secret.pb.h>
 #include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -69,35 +67,6 @@ auto CreateCallback(std::shared_ptr<T>&& ctx) {
     return [ctx = std::move(ctx)](Ydb::StatusIds::StatusCode statusCode, const google::protobuf::Message* message) {
         ctx->OnResponse(statusCode, message);
     };
-}
-
-void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeSecretRequest::TPtr& ev) {
-    auto [path, settings] = std::move(ev->Get()->GetArgs());
-    Y_UNUSED(settings);
-    path = MakeLocalPath(path);
-    auto request = std::make_unique<Ydb::Secret::DescribeSecretRequest>();
-    request->set_path(Database + "/" + path);
-    class TContext: public TCaptureContext {
-    public:
-        using TCaptureContext::TCaptureContext;
-        void OnResponse(Ydb::StatusIds::StatusCode code, const google::protobuf::Message* message) override {
-            Ydb::Secret::DescribeSecretResult result;
-            if (code == Ydb::StatusIds::SUCCESS) {
-                const auto* description = dynamic_cast<const Ydb::Secret::DescribeSecretResult*>(message);
-                if (!description) {
-                    code = Ydb::StatusIds::INTERNAL_ERROR;
-                } else {
-                    result = *description;
-                }
-            }
-            Send(new TEvYdbProxy::TEvDescribeSecretResponse(
-                NYdb::TStatus(static_cast<NYdb::EStatus>(code), {}),
-                NYdb::NScheme::TSchemeEntry(result.self()), result.version()));
-        }
-    };
-    auto callback = CreateCallback(std::make_shared<TContext>(ev->Sender, ev->Cookie));
-    NGRpcService::DoDescribeSecretRequest(
-        std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), callback), *this);
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvExportSecretsRequest::TPtr& ev) {
@@ -244,7 +213,6 @@ STATEFN(TLocalProxyActor::StateWork) {
         hFunc(TEvYdbProxy::TEvAlterTopicRequest, Handle);
         hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribeTableRequest, Handle);
-        hFunc(TEvYdbProxy::TEvDescribeSecretRequest, Handle);
         hFunc(TEvYdbProxy::TEvExportSecretsRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribeTopicRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribePathRequest, Handle);

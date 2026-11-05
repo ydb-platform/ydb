@@ -27,7 +27,6 @@ private:
     void Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev);
-    void Handle(TEvYdbProxy::TEvDescribeSecretRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvExportSecretsRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev);
 

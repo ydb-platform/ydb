@@ -64,8 +64,10 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 break;
             case NYdb::NScheme::ESchemeEntryType::Secret:
                 if (IsReplication()) {
-                    Send(YdbProxy, new TEvYdbProxy::TEvDescribeSecretRequest(path.first, {}), 0, ev->Cookie);
-                    return;
+                    ToAdd.emplace_back(TReplication::ETargetKind::Secret,
+                        std::make_shared<TTargetSecret::TSecretConfig>(path.first, path.second));
+                    Pending.erase(it);
+                    return MaybeReply();
                 }
                 break;
             case NYdb::NScheme::ESchemeEntryType::Topic:
@@ -167,25 +169,6 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             }
         }
 
-        Pending.erase(it);
-        MaybeReply();
-    }
-
-    void Handle(TEvYdbProxy::TEvDescribeSecretResponse::TPtr& ev) {
-        auto it = Pending.find(ev->Cookie);
-        if (it == Pending.end()) {
-            return;
-        }
-        const auto& path = Paths.at(*it);
-        const auto& result = ev->Get()->Result;
-        if (result.IsSuccess()) {
-            ToAdd.emplace_back(TReplication::ETargetKind::Secret,
-                std::make_shared<TTargetSecret::TSecretConfig>(path.first, path.second));
-        } else if (IsRetryableError(result, Backoff)) {
-            return RetryDescribe(*it);
-        } else {
-            Failed.emplace_back(path.first, result);
-        }
         Pending.erase(it);
         MaybeReply();
     }
@@ -401,7 +384,6 @@ public:
             hFunc(TEvYdbProxy::TEvListDirectoryResponse, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
-            hFunc(TEvYdbProxy::TEvDescribeSecretResponse, Handle);
             sFunc(TEvents::TEvWakeup, Retry);
             sFunc(TEvents::TEvPoison, PassAway);
         }

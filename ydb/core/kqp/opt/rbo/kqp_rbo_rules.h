@@ -10,6 +10,15 @@
 namespace NKikimr {
 namespace NKqp {
 
+class TExpandInsertRevertRule final: public IRule {
+public:
+    TExpandInsertRevertRule()
+        : IRule("Expand INSERT OR REVERT", ERuleProperties::RequireOutputIUs) {}
+
+    bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
 // A Replicate becomes a stage with several outputs, which needs channel spilling.
 // Give each non-primary port a copy when separate evaluation is safe; the last
 // port reads the producer itself. Enable after logical rewrites and pruning,
@@ -45,6 +54,20 @@ class TInlineScalarSubplanRule : public IRule {
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps& props) const override;
     virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
+ * Rewrites a correlated [NOT] EXISTS or [NOT] IN conjunct into a semi or anti join: the
+ * correlated predicates become join keys and join filters, so no dependent join is needed.
+ * Runs before the other inlining rules, which decorrelate whatever this rule leaves.
+ */
+class TPullUpCorrelatedPredicateRule : public ISimplifiedRule {
+  public:
+    TPullUpCorrelatedPredicateRule() : ISimplifiedRule("Pull up correlated predicate", ERuleProperties::RequireTypes) {}
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input, const TPlanProps& props) const override;
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
 class TInlineSimpleInExistsSubplanRule : public ISimplifiedRule {
@@ -197,10 +220,16 @@ public:
  */
 class TInlineJoinFiltersRule : public ISimplifiedRule {
   public:
-    TInlineJoinFiltersRule() : ISimplifiedRule("Inline join filters", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireMetadata) {}
+    explicit TInlineJoinFiltersRule(bool fullJoinsOnly = false)
+        : ISimplifiedRule("Inline join filters", ERuleProperties::RequireParents | ERuleProperties::RequireTypes | ERuleProperties::RequireMetadata)
+        , FullJoinsOnly(fullJoinsOnly)
+    {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+
+  private:
+    const bool FullJoinsOnly;
 };
 
 /**

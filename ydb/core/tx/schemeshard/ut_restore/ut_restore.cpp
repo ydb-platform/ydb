@@ -4165,6 +4165,243 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )";
     }
 
+    void CreateReplicaPlaceholder(TTestBasicRuntime& runtime, TTestEnv& env, ui64 txId,
+            const TString& name = "Table", bool withIndex = false) {
+        const auto table = Sprintf(R"(
+            Name: "%s"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            ReplicationConfig {
+                Mode: REPLICATION_MODE_READ_ONLY
+                ConsistencyLevel: CONSISTENCY_LEVEL_GLOBAL
+                ImportState: WAITING_IMPORT
+            }
+        )", name.c_str());
+        if (withIndex) {
+            auto* request = InternalTransaction(CreateIndexedTableRequest(txId, "/MyRoot", TStringBuilder()
+                << "TableDescription { " << table << " }" << R"(
+                    IndexDescription {
+                        Name: "by_value"
+                        Type: EIndexTypeGlobal
+                        KeyColumnNames: ["value"]
+                        IndexImplTableDescriptions {
+                            ReplicationConfig {
+                                Mode: REPLICATION_MODE_READ_ONLY
+                                ConsistencyLevel: CONSISTENCY_LEVEL_GLOBAL
+                                ImportState: WAITING_IMPORT
+                            }
+                        }
+                    }
+                )"));
+            AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+            TestModificationResult(runtime, txId);
+        } else {
+            TestCreateTable(runtime, txId, "/MyRoot", table);
+        }
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    void CheckImportedReplica(TTestBasicRuntime& runtime, const TString& path) {
+        const auto desc = DescribePrivatePath(runtime, path, true, true);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
+        const auto& config = desc.GetPathDescription().GetTable().GetReplicationConfig();
+        UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetConsistencyLevel(), TTableReplicationConfig::CONSISTENCY_LEVEL_GLOBAL);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetImportState(), TTableReplicationConfig::IMPORTED);
+    }
+
+    enum class EFinalizeReboot {
+        None,
+        BeforePropose,
+        AfterPropose,
+    };
+
+    void CheckReplicaImportRecovery(bool rebootBeforeCreate, bool enableDataShardDirectPartImport,
+            bool rebootBeforeCompletion = false, EFinalizeReboot finalizeReboot = EFinalizeReboot::None) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
+        CreateReplicaPlaceholder(runtime, env, 10);
+        const auto placeholder = DescribePath(runtime, "/MyRoot/Table").GetPathId();
+        const auto data = GenerateTestData("", 3);
+        const TTestDataWithScheme backup(R"(
+            columns { name: "key" type { optional_type { item { type_id: UINT32 } } } }
+            columns { name: "value" type { optional_type { item { type_id: UTF8 } } } }
+            primary_key: "key"
+            ttl_settings {
+                value_since_unix_epoch { column_name: "key" column_unit: UNIT_SECONDS expire_after_seconds: 1 }
+            }
+        )", {data});
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TS3Mock s3(ConvertTestData(backup), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3.Start());
+
+        bool createBlocked = false;
+        bool completionBlocked = false;
+        ui64 restoreTxId = 0;
+        ui64 finalizeTxId = 0;
+        bool finalizeBlocked = false;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetAlterTable().GetReplicationConfig().GetImportState() == TTableReplicationConfig::IMPORTED) {
+                    finalizeTxId = ev->Get()->Record.GetTxId();
+                    if (finalizeReboot == EFinalizeReboot::BeforePropose && !finalizeBlocked) {
+                        finalizeBlocked = true;
+                        ev.Reset();
+                        return;
+                    }
+                }
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore) {
+                    restoreTxId = ev->Get()->Record.GetTxId();
+                }
+                if (rebootBeforeCreate && !createBlocked && tx.GetCreateIndexedTable().GetTableDescription().GetReplicationConfig().GetImportState()
+                        == TTableReplicationConfig::IMPORTING) {
+                    createBlocked = true;
+                    ev.Reset();
+                    return;
+                }
+            }
+        });
+        auto resultObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>([&](auto& ev) {
+            if (rebootBeforeCompletion && !completionBlocked && restoreTxId
+                    && ev->Get()->Record.GetTxId() == restoreTxId) {
+                completionBlocked = true;
+                ev.Reset();
+            }
+        });
+        auto finalizeObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransactionResult>([&](auto& ev) {
+            if (finalizeReboot == EFinalizeReboot::AfterPropose && !finalizeBlocked && finalizeTxId
+                    && ev->Get()->Record.GetTxId() == finalizeTxId
+                    && ev->Get()->Record.GetStatus() == NKikimrScheme::StatusAccepted) {
+                finalizeBlocked = true;
+                ev.Reset();
+            }
+        });
+        TestImport(runtime, 20, "/MyRoot", Sprintf(ImportTableRequest().c_str(), port));
+        if (finalizeReboot != EFinalizeReboot::None) {
+            runtime.WaitFor("final replica ALTER", [&] { return finalizeBlocked; });
+            UNIT_ASSERT_UNEQUAL(TestGetImport(runtime, 20, "/MyRoot").GetResponse().GetEntry().GetProgress(),
+                Ydb::Import::ImportProgress::PROGRESS_DONE);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        }
+        if (rebootBeforeCreate) {
+            runtime.WaitFor("recreating replica after DROP", [&] { return createBlocked; });
+            UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Table").GetStatus(), NKikimrScheme::StatusPathDoesNotExist);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        }
+        if (rebootBeforeCompletion) {
+            runtime.WaitFor("restore completion before finishing import", [&] { return completionBlocked; });
+            UNIT_ASSERT_VALUES_EQUAL(DescribePath(runtime, "/MyRoot/Table").GetPathDescription()
+                .GetTable().GetReplicationConfig().GetImportState(), TTableReplicationConfig::IMPORTING);
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        }
+        env.TestWaitNotification(runtime, 20);
+        TestGetImport(runtime, 20, "/MyRoot");
+        CheckImportedReplica(runtime, "/MyRoot/Table");
+        const auto desc = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+        UNIT_ASSERT_UNEQUAL(desc.GetPathId(), placeholder);
+        UNIT_ASSERT(desc.GetPathDescription().GetTable().GetTTLSettings().HasEnabled());
+        const auto shardId = desc.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+        NKqp::CompareYson(data.YsonStr, ReadTable(runtime, shardId, "Table", {"key"}, {"key", "value"}));
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        runtime.AdvanceCurrentTime(TDuration::Hours(1));
+        env.SimulateSleep(runtime, TDuration::Seconds(10));
+        CheckImportedReplica(runtime, "/MyRoot/Table");
+        NKqp::CompareYson(data.YsonStr, ReadTable(runtime, shardId, "Table", {"key"}, {"key", "value"}));
+    }
+
+    Y_UNIT_TEST_QUAD(ReplicaImportPreservesTtlRows, RebootBeforeCreate, EnableDataShardDirectPartImport) {
+        CheckReplicaImportRecovery(RebootBeforeCreate, EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(ReplicaImportResumesCompletion, EnableDataShardDirectPartImport) {
+        CheckReplicaImportRecovery(false, EnableDataShardDirectPartImport, true);
+    }
+
+    Y_UNIT_TEST_QUAD(ReplicaImportResumesFinalAlter, AfterPropose, EnableDataShardDirectPartImport) {
+        CheckReplicaImportRecovery(false, EnableDataShardDirectPartImport, false,
+            AfterPropose ? EFinalizeReboot::AfterPropose : EFinalizeReboot::BeforePropose);
+    }
+
+    Y_UNIT_TEST_FLAG(ReplicaImportFinalizesItemsIndependently, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+        CreateReplicaPlaceholder(runtime, env, 10, "First");
+        CreateReplicaPlaceholder(runtime, env, 11, "Second");
+        const auto backup = GenerateTestData(Utf8KeyValueScheme(), {{"a", 1}});
+        TPortManager ports;
+        const auto port = ports.GetPort();
+        TS3Mock s3(ConvertTestData({{"/a", backup}, {"/b", backup}}), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3.Start());
+
+        bool blocked = false;
+        ui64 otherFinalizeTxId = 0;
+        bool otherFinalized = false;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetAlterTable().GetReplicationConfig().GetImportState() != TTableReplicationConfig::IMPORTED) {
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.TransactionSize(), 1);
+                if (!blocked) {
+                    blocked = true;
+                    ev.Reset();
+                    return;
+                }
+                otherFinalizeTxId = ev->Get()->Record.GetTxId();
+            }
+        });
+        auto resultObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>([&](auto& ev) {
+            if (otherFinalizeTxId && ev->Get()->Record.GetTxId() == otherFinalizeTxId) {
+                otherFinalized = true;
+            }
+        });
+        TestImport(runtime, 20, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items { source_prefix: "a" destination_path: "/MyRoot/First" }
+                items { source_prefix: "b" destination_path: "/MyRoot/Second" }
+            }
+        )", port));
+        runtime.WaitFor("one item finalizes while the other waits for ALTER", [&] { return otherFinalized; });
+        UNIT_ASSERT(blocked);
+        const auto firstState = DescribePath(runtime, "/MyRoot/First").GetPathDescription()
+            .GetTable().GetReplicationConfig().GetImportState();
+        const auto secondState = DescribePath(runtime, "/MyRoot/Second").GetPathDescription()
+            .GetTable().GetReplicationConfig().GetImportState();
+        UNIT_ASSERT((firstState == TTableReplicationConfig::IMPORTING && secondState == TTableReplicationConfig::IMPORTED)
+            || (firstState == TTableReplicationConfig::IMPORTED && secondState == TTableReplicationConfig::IMPORTING));
+        UNIT_ASSERT_UNEQUAL(TestGetImport(runtime, 20, "/MyRoot").GetResponse().GetEntry().GetProgress(),
+            Ydb::Import::ImportProgress::PROGRESS_DONE);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        env.TestWaitNotification(runtime, 20);
+        TestGetImport(runtime, 20, "/MyRoot");
+        for (const TString path : {"/MyRoot/First", "/MyRoot/Second"}) {
+            CheckImportedReplica(runtime, path);
+            const auto table = DescribePrivatePath(runtime, path, true, true);
+            NKqp::CompareYson(backup.Data[0].YsonStr, ReadTable(runtime,
+                table.GetPathDescription().GetTablePartitions(0).GetDatashardId(),
+                table.GetPathDescription().GetTable().GetName(), {"key"}, {"key", "value"}));
+        }
+    }
+
+    Y_UNIT_TEST(ReplicaImportFailureDoesNotMarkImported) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        CreateReplicaPlaceholder(runtime, env, 10);
+        const TTestDataWithScheme backup(Utf8KeyValueScheme(), {TTestData("invalid csv\n", "")});
+        Run(runtime, env, ConvertTestData(backup), ImportTableRequest(), Ydb::StatusIds::CANCELLED);
+        const auto desc = DescribePath(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetPathDescription().GetTable().GetReplicationConfig().GetImportState(),
+            TTableReplicationConfig::IMPORTING);
+    }
+
     Y_UNIT_TEST_FLAG(ShouldSucceedOnParquetTable, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -4562,6 +4799,53 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_FLAG(ShouldSucceedOnIndexedTable3, EnableDataShardDirectPartImport) {
         ShouldSucceedOnIndexedTable(1, EnableDataShardDirectPartImport, "");
+    }
+
+    Y_UNIT_TEST_TWIN(ShouldFailOnColumnTableWithMissingTier, EnableDependencyRetry) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        runtime.GetAppData().FeatureFlags.SetEnableTieringInColumnShard(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTableImportDependencyRetry(EnableDependencyRetry);
+
+        const auto data = GenerateTestData(TTypedScheme(EPathTypeColumnTable, R"(
+            columns {
+                name: "ts"
+                type { type_id: TIMESTAMP }
+                not_null: true
+            }
+            primary_key: "ts"
+            store_type: STORE_TYPE_COLUMN
+            ttl_settings {
+                tiered_ttl {
+                    tiers {
+                        date_type_column {
+                            column_name: "ts"
+                            expire_after_seconds: 86400
+                        }
+                        evict_to_external_storage { storage: "/MyRoot/MissingTier" }
+                    }
+                }
+            }
+        )"), {{"", 0}});
+
+        ui32 createAttempts = 0;
+        const ui32 expectedAttempts = EnableDependencyRetry ? 2 : 1;
+        auto observer = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateColumnTable) {
+                    ++createAttempts;
+                    UNIT_ASSERT_C(createAttempts <= expectedAttempts,
+                        "Column table import keeps retrying without progress");
+                }
+            }
+        });
+
+        const ui64 id = Run(runtime, env, ConvertTestData(data), ImportTableRequest(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(createAttempts, expectedAttempts);
+        UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED),
+            "Object not found: /MyRoot/MissingTier");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathNotExist});
     }
 
     Y_UNIT_TEST_QUAD(ImportStandaloneColumnTableWithLocalBloomIndexes, EnableLocalIndexAsSchemeObject, EnableDataShardDirectPartImport) {
@@ -7423,7 +7707,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     }
 
     void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables, bool enableDataShardDirectPartImport,
-            const TString& extraTopicFields = "", Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
+            const TString& extraTopicFields = "", Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
+            bool replica = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
@@ -7451,6 +7736,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3Mock.Start());
 
         for (const auto& table : tables) {
+            if (replica) {
+                CreateReplicaPlaceholder(runtime, env, ++txId, table.TableName);
+            }
             TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
                 ImportFromS3Settings {
                   endpoint: "localhost:%d"
@@ -7463,6 +7751,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             )", port, table.TableName.c_str(), table.TableName.c_str()));
             env.TestWaitNotification(runtime, txId);
             TestGetImport(runtime, txId, "/MyRoot", expectedStatus);
+            if (replica) {
+                CheckImportedReplica(runtime, "/MyRoot/" + table.TableName);
+            }
         }
 
         if (expectedStatus == Ydb::StatusIds::SUCCESS) {
@@ -7474,6 +7765,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     void TestImportChangefeeds(bool enableDataShardDirectPartImport, ui64 countChangefeed = 1, SchemeFunction addedScheme = AddedScheme, const TString& pkType = "UTF8", int maxPartitions = 3) {
         TestImportChangefeeds({{"Table", pkType, countChangefeed, addedScheme, maxPartitions}}, enableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(ReplicaImportChangefeeds, EnableDataShardDirectPartImport) {
+        TestImportChangefeeds({{"Table", "UTF8", 1, AddedScheme, 3}},
+            EnableDataShardDirectPartImport, "", Ydb::StatusIds::SUCCESS, true);
     }
 
     Y_UNIT_TEST_FLAG(Changefeed, EnableDataShardDirectPartImport) {
@@ -8258,10 +8554,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     void MaterializedIndex(
             Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode,
             bool enableDataShardDirectPartImport,
-            const TString& metadata = R"({"version": 1})")
+            const TString& metadata = R"({"version": 1})", bool replica = false)
     {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+        if (replica) {
+            CreateReplicaPlaceholder(runtime, env, 10, "Table", true);
+        }
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
 
         const auto a = GenerateTestData(R"(
@@ -8281,18 +8580,36 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )", {{"a", 1}}, "", metadata);
 
-        const auto b = GenerateTestData(R"(
+        auto b = GenerateTestData(R"(
             columns {
-              name: "key"
+              name: "value"
               type { optional_type { item { type_id: UTF8 } } }
             }
             columns {
-              name: "value"
+              name: "key"
               type { optional_type { item { type_id: UTF8 } } }
             }
             primary_key: "value"
             primary_key: "key"
         )", {{"b", 1}}, "", metadata);
+        b.Data[0] = TTestData("\"value1\",\"b1\"\n", GenerateTestData("b", 1).YsonStr);
+
+        const bool importedIndex = mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT
+            || (mode == Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO && metadata == R"({"version": 1})");
+        ui32 finalAlterRequests = 0;
+        auto finalAlterObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            ui32 tables = 0;
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetAlterTable().GetReplicationConfig().GetImportState() == TTableReplicationConfig::IMPORTED) {
+                    ++tables;
+                }
+            }
+            if (tables) {
+                UNIT_ASSERT(replica);
+                UNIT_ASSERT_VALUES_EQUAL(tables, importedIndex ? 1 : 2);
+                ++finalAlterRequests;
+            }
+        });
 
         Run(runtime, env, ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}), Sprintf(R"(
             ImportFromS3Settings {
@@ -8310,6 +8627,24 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::PathExist,
             NLs::IndexesCount(1),
         });
+        UNIT_ASSERT_VALUES_EQUAL(finalAlterRequests, replica ? (importedIndex ? 2 : 1) : 0);
+        if (replica) {
+            CheckImportedReplica(runtime, "/MyRoot/Table");
+            CheckImportedReplica(runtime, "/MyRoot/Table/by_value/indexImplTable");
+        }
+        const auto table = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+        const auto index = DescribePrivatePath(runtime, "/MyRoot/Table/by_value/indexImplTable", true, true);
+        NKqp::CompareYson(a.Data[0].YsonStr, ReadTable(runtime,
+            table.GetPathDescription().GetTablePartitions(0).GetDatashardId(), "Table", {"key"}, {"key", "value"}));
+        NKqp::CompareYson((importedIndex ? b : a).Data[0].YsonStr, ReadTable(runtime,
+            index.GetPathDescription().GetTablePartitions(0).GetDatashardId(), "indexImplTable",
+            {"value", "key"}, {"key", "value"}));
+    }
+
+    Y_UNIT_TEST_QUAD(ReplicaImportIndexes, Materialized, EnableDataShardDirectPartImport) {
+        MaterializedIndex(Materialized ? Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT
+                                      : Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD,
+            EnableDataShardDirectPartImport, R"({"version": 1})", true);
     }
 
     Y_UNIT_TEST_FLAG(MaterializedIndexBuild, EnableDataShardDirectPartImport) {
@@ -10044,7 +10379,9 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )", EnableDataShardDirectPartImport);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnSingleView, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    // Direct part import only affects row-table data. Schema-only imports keep
+    // both storage backends and all reboot/reset buckets without varying it.
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleView, 2, 1, false, IsFs) {
         ShouldSucceed<IsFs>(t,
             {
                 EPathTypeView,
@@ -10053,7 +10390,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
                 )"
             },
-            EnableDataShardDirectPartImport
+            false
         );
     }
 
@@ -10089,7 +10426,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         ShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {{"view", "/MyRoot/View"}, {"table", "/MyRoot/Table"}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnDependentView, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnDependentView, 2, 1, false, IsFs) {
         const THashMap<TString, TTypedScheme> schemes = {
             {
                 "/DependentView",
@@ -10111,13 +10448,13 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             }
         };
-        ShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {
+        ShouldSucceed<IsFs>(t, schemes, false, {
             {"DependentView", "/MyRoot/DependentView"},
             {"BaseView", "/MyRoot/BaseView"}
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnSystemView, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSystemView, 2, 1, false, IsFs) {
         const THashMap<TString, TTypedScheme> schemes = {
             {
                 "/partition_stats",
@@ -10130,7 +10467,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             }
         };
-        ShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {{"partition_stats", "/MyRoot/.sys/partition_stats"}});
+        ShouldSucceed<IsFs>(t, schemes, false, {{"partition_stats", "/MyRoot/.sys/partition_stats"}});
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSystemViewWithPermissions, 2, 1, false, IsFs) {
@@ -10292,7 +10629,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         )", EnableDataShardDirectPartImport);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(CancelShouldSucceedOnSingleView, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSingleView, 2, 1, false, IsFs) {
         CancelShouldSucceed<IsFs>(t,
             {
                 EPathTypeView,
@@ -10301,7 +10638,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
                 )"
             },
-            EnableDataShardDirectPartImport
+            false
         );
     }
 
@@ -10461,7 +10798,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         CancelShouldSucceed<IsFs>(t, GetSchemeWithUniqueIndex(), EnableDataShardDirectPartImport);
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(CancelShouldSucceedOnDependentView, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnDependentView, 2, 1, false, IsFs) {
         const THashMap<TString, TTypedScheme> schemes = {
             {
                 "/DependentView",
@@ -10483,13 +10820,13 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             }
         };
-        CancelShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {
+        CancelShouldSucceed<IsFs>(t, schemes, false, {
             {"DependentView", "/MyRoot/DependentView"},
             {"BaseView", "/MyRoot/BaseView"}
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(CancelShouldSucceedOnSystemView, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSystemView, 2, 1, false, IsFs) {
         const THashMap<TString, TTypedScheme> schemes = {
             {
                 "/partition_stats",
@@ -10502,7 +10839,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             }
         };
-        CancelShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {{"partition_stats", "/MyRoot/.sys/partition_stats"}});
+        CancelShouldSucceed<IsFs>(t, schemes, false, {{"partition_stats", "/MyRoot/.sys/partition_stats"}});
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(CancelShouldSucceedOnSystemViewWithPermissions, 2, 1, false, IsFs) {
@@ -10579,7 +10916,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnSingleTopic, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleTopic, 2, 1, false, IsFs) {
         auto topic = NDescUT::TSimpleTopic(0, 2);
         ShouldSucceed<IsFs>(t, {
             {
@@ -10590,7 +10927,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             }
         },
-        EnableDataShardDirectPartImport,
+        false,
         {{topic.GetDir(), TStringBuilder() << "/MyRoot/Restored/" << topic.GetDir()}});
     }
 
@@ -10655,7 +10992,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnSingleReplication, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleReplication, 2, 1, false, IsFs) {
         ShouldSucceed<IsFs>(t,
             {
                 EPathTypeReplication,
@@ -10673,7 +11010,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     );
                 )"
             },
-            EnableDataShardDirectPartImport
+            false
         );
     }
 
@@ -10720,7 +11057,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         ShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {{"Table", "/MyRoot/Table"}, {"Transfer", "/MyRoot/Transfer"}});
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnSingleExternalDataSource, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleExternalDataSource, 2, 1, false, IsFs) {
         ShouldSucceed<IsFs>(t,
             {
                 EPathTypeExternalDataSource,
@@ -10739,11 +11076,11 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                     );
                 )"
             },
-            EnableDataShardDirectPartImport
+            false
         );
     }
 
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnSingleExternalTable, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnSingleExternalTable, 2, 1, false, IsFs) {
         const THashMap<TString, TTypedScheme> schemes = {
             {
                 "/ExternalTable",
@@ -10782,7 +11119,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
                 }
             },
         };
-        ShouldSucceed<IsFs>(t, schemes, EnableDataShardDirectPartImport, {
+        ShouldSucceed<IsFs>(t, schemes, false, {
             {"ExternalTable", "/MyRoot/ExternalTable"},
             {"DataSource", "/MyRoot/DataSource"}
         });

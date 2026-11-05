@@ -199,6 +199,28 @@ Y_UNIT_TEST_SUITE(BridgeRemovePile) {
         WaitUntil(env, [&] { return heldResult != nullptr; }, "response of the added pile");
         env.Runtime->FilterFunction = {};
 
+        // Retain an already-resolved physical request, as a phantom check from an old VDisk can be in flight when
+        // its inline pile is removed. Replaying the original envelope must not reinterpret it as a logical read.
+        const auto physicalEdge = env.Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
+        std::unique_ptr<IEventHandle> physicalRequest;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->Sender == physicalEdge && ev->GetTypeRewrite() == TEvBlobStorage::EvGet) {
+                physicalRequest = std::move(ev);
+                return false;
+            }
+            return true;
+        };
+        const ui32 inlineGeneration = GetGroupInfo(env, groupId).GetGroupGeneration();
+        env.Runtime->WrapInActorContext(physicalEdge, [&] {
+            auto request = std::make_unique<TEvBlobStorage::TEvGet>(blobId, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::AsyncRead);
+            request->PhantomCheck = true;
+            request->ForceGroupGeneration = inlineGeneration;
+            SendToBSProxy(physicalEdge, groupId, request.release());
+        });
+        WaitUntil(env, [&] { return bool(physicalRequest); }, "physical request before pile removal");
+        env.Runtime->FilterFunction = {};
+
         auto clusterState = QueryStorageConfig(env).GetClusterState();
         clusterState.SetGeneration(clusterState.GetGeneration() + 1);
         TBridgePileId::FromPileIndex(1).CopyToProto(&clusterState, &NKikimrBridge::TClusterState::SetPrimaryPile);
@@ -221,6 +243,11 @@ Y_UNIT_TEST_SUITE(BridgeRemovePile) {
         // answered and the node keeps running
         env.Runtime->Send(heldResult.release(), nodeId);
         env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
+
+        env.Runtime->Send(physicalRequest.release(), nodeId);
+        const auto physicalResult = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(physicalEdge);
+        UNIT_ASSERT_VALUES_EQUAL(physicalResult->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT_STRING_CONTAINS(physicalResult->Get()->ErrorReason, "physical pile");
 
         // the groups of the converted cluster are pure bridge proxy groups now
         for (const auto& group : config.GetBlobStorageConfig().GetServiceSet().GetGroups()) {

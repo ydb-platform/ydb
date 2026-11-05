@@ -45,7 +45,11 @@ void TEvYdbProxy::TStartTopicReadingSessionResult::Out(IOutputStream& out) const
     out << "{"
         << " ReadSessionId: " << ReadSessionId
         << " CommittedOffset: " << CommittedOffset
-    << " }";
+        << " ReadOffset: " << ReadOffset;
+    if (RetainedStartOffset) {
+        out << " RetainedStartOffset: " << *RetainedStartOffset;
+    }
+    out << " }";
 }
 
 template <typename TDerived>

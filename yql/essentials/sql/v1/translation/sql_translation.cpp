@@ -1292,7 +1292,7 @@ bool TSqlTranslation::ClusterExpr(const TRule_cluster_expr& node, bool allowWild
         allowBinding = false;
         if (service != YtProviderName &&
             service != KikimrProviderName &&
-            service != RtmrProviderName && service != StatProviderName) {
+            service != StatProviderName) {
             Ctx_.Error() << "Unknown service: " << service;
             return false;
         }

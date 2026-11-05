@@ -139,6 +139,26 @@ void IUnaryOperator::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) 
     Props.Cost = GetInput()->Props.Cost;
 }
 
+void TOpTableEffect::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    IUnaryOperator::ComputeMetadata(ctx, planProps);
+    if (!Props.Metadata) {
+        Props.Metadata = TRBOMetadata();
+    }
+
+    const auto& table = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, TKqpTable(Table).Path());
+    switch (table.Metadata->Kind) {
+        case EKikimrTableKind::Datashard:
+            Props.Metadata->StorageType = EStorageType::RowStorage;
+            break;
+        case EKikimrTableKind::Olap:
+            Props.Metadata->StorageType = EStorageType::ColumnStorage;
+            break;
+        default:
+            Props.Metadata->StorageType = EStorageType::NA;
+            break;
+    }
+}
+
 void TOpReplicate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Props.Metadata = GetInput()->Props.Metadata;

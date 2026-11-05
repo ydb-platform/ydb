@@ -729,7 +729,7 @@ public:
     TOperationLogManager LogManager;
     TOperationLogManager ScheduledLogManager;
 
-    void ApplyActionWithoutLog(const NKikimrCms::TAction &action, i32 priority, const TString &requestId);
+    void ApplyActionWithoutLog(const NKikimrCms::TAction &action, const TNodeLockContext &ctx);
     void ApplyNodeLimits(ui32 clusterLimit, ui32 clusterRatioLimit, ui32 tenantLimit, ui32 tenantRatioLimit);
 
     TClusterInfo() = default;

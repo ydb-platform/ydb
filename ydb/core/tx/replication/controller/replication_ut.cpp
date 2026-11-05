@@ -149,6 +149,41 @@ Y_UNIT_TEST_SUITE(Replication) {
         UNIT_ASSERT(s.Replication->GetLag() == TDuration::Seconds(5));
     }
 
+    Y_UNIT_TEST(LagCallbackTracksAggregateChanges) {
+        TLagSetup s;
+        TVector<std::optional<TDuration>> changes;
+        s.Replication->SetLagChangedCallback([&] {
+            changes.push_back(s.Replication->GetLag());
+        });
+
+        s.Target->UpdateLag(1, TDuration::Seconds(1)); // Maximum stays at five.
+        s.Target->AddWorker(3);
+        s.Target->InvalidateLag(3); // Already unavailable.
+        s.Target->RemoveWorker(3);
+        s.Target->RemoveWorker(2); // Maximum drops to the other target's two.
+        s.Other->RemoveWorker(1);
+        s.Replication->RemoveTarget(s.Other->GetId());
+        const auto added = s.Replication->AddTarget(ui64(100), TReplication::ETargetKind::Table,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/new", "/Root/new_replica"));
+        s.Replication->RemoveTarget(added->GetId());
+        const auto next = s.Replication->AddTarget(TReplication::ETargetKind::Table,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/next", "/Root/next_replica"));
+        s.Replication->RemoveTarget(next);
+
+        const TVector<std::optional<TDuration>> expected{
+            std::nullopt, TDuration::Seconds(5), TDuration::Seconds(2),
+            std::nullopt, TDuration::Seconds(1), std::nullopt, TDuration::Seconds(1),
+            std::nullopt, TDuration::Seconds(1)};
+        UNIT_ASSERT_VALUES_EQUAL(changes.size(), expected.size());
+        for (size_t i = 0; i < changes.size(); ++i) {
+            UNIT_ASSERT_C(changes[i] == expected[i], "lag callback " << i);
+        }
+
+        s.Replication->SetLagChangedCallback({});
+        s.Target->InvalidateLag(1);
+        UNIT_ASSERT_VALUES_EQUAL(changes.size(), expected.size());
+    }
+
     Y_UNIT_TEST(InvalidWorkerLagCannotBeMasked) {
         TLagSetup s;
         s.Target->InvalidateLag(1);

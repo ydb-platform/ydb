@@ -759,6 +759,8 @@ message TDefineFailRealmStates {
         optional uint32 GroupId = 1;
         // Exactly three states, indexed by physical fail realm.
         repeated EFailRealmState FailRealmStates = 2;
+        // If set, apply only to this group generation.
+        optional uint32 ExpectedGroupGeneration = 3;
     }
 
     repeated TGroupDefinition Groups = 1;
@@ -857,6 +859,10 @@ message TConfigRequest {
 
     // ignore disintegrated groups checking
     bool IgnoreDisintegratedGroupsChecks = 11;
+
+    // treat all REPLICATING VDisks with only phantom-like blobs remaining as working ones when calculating group
+    // failure model and DEGRADED state; it is up to the caller to ensure that these blobs are really phantoms
+    bool TreatPhantomsOnlyVDisksAsWorking = 16;
 
     // do not settle slots over non-operating PDisks
     bool SettleOnlyOnOperationalDisks = 9;
@@ -958,6 +964,8 @@ message TBaseConfig {
         uint32 GroupSizeInUnits = 11;
         bool IsProxyGroup = 12;
         string StoragePoolName = 13;
+        // Effective mirror-3-dc realms in physical order (0/1/2); empty for other erasure species.
+        repeated TFailRealmInfo FailRealms = 14;
     }
     message TNode {
         uint32 NodeId = 1;

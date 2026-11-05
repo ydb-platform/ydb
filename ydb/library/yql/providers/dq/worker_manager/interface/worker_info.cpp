@@ -8,18 +8,18 @@ namespace NYql::NDqs {
         : InflightLimit(inflightLimit) {
     }
 
-    bool TInflightLimiter::CanDownload(const TString& id) {
+    bool TInflightLimiter::CanDownload(const TDownloadKey& id) {
         return !InflightResources.contains(id) || InflightResources.find(id)->second < InflightLimit;
     }
 
-    void TInflightLimiter::MarkDownloadStarted(const TString& id) {
+    void TInflightLimiter::MarkDownloadStarted(const TDownloadKey& id) {
         if (!InflightResources.contains(id)) {
             InflightResources.emplace(id, 0);
         }
         InflightResources.find(id)->second++;
     }
 
-    void TInflightLimiter::MarkDownloadFinished(const TString& id) {
+    void TInflightLimiter::MarkDownloadFinished(const TDownloadKey& id) {
         auto it = InflightResources.find(id);
         if (it != InflightResources.end() && it->second > 0) {
             it->second--;
@@ -206,8 +206,11 @@ namespace NYql::NDqs {
         *UsedDiskSizeSum += (request.GetUsedDiskSize() - UsedDiskSize);
         UsedDiskSize = request.GetUsedDiskSize();
 
-        for (auto md5: Resources) {
-            RemoveFromDownloadList(md5);
+        for (auto it = DownloadList.begin(); it != DownloadList.end();) {
+            const auto key = (it++)->first;
+            if (Resources.contains(key.ObjectId)) {
+                RemoveFromDownloadList(key);
+            }
         }
 
         if (*FilesCountMax < static_cast<i64>(Resources.size())) {
@@ -223,36 +226,35 @@ namespace NYql::NDqs {
         return needResume;
     }
 
-    void TWorkerInfo::RemoveFromDownloadList(const TString& objectId) {
-        auto delta = DownloadList.erase(objectId);
-        if (delta) {
-            InflightLimiter->MarkDownloadFinished(objectId);
-            *ActiveDownloadsSum -= ActiveDownloads.erase(objectId);
+    void TWorkerInfo::RemoveFromDownloadList(const TDownloadKey& key) {
+        if (ActiveDownloads.erase(key)) {
+            InflightLimiter->MarkDownloadFinished(key);
+            *ActiveDownloadsSum -= 1;
         }
-        *CurrentDownloadsSum -= delta;
+        *CurrentDownloadsSum -= DownloadList.erase(key);
     }
 
-    void TWorkerInfo::AddToDownloadList(const THashMap<TString, TFileResource>& downloadList) {
-        for (const auto& [k, v] : downloadList) {
-            AddToDownloadList(k, v);
+    void TWorkerInfo::AddToDownloadList(const TDownloadList& downloadList) {
+        for (const auto& [_, resource] : downloadList) {
+            AddToDownloadList(resource);
         }
     }
 
-    bool TWorkerInfo::AddToDownloadList(const TString& key, const TFileResource& value) {
-        if (!Resources.contains(key) && DownloadList.insert({key, value}).second) {
+    bool TWorkerInfo::AddToDownloadList(const TDownloadResource& value) {
+        if (!Resources.contains(value.File.GetObjectId()) && DownloadList.emplace(value.GetKey(), value).second) {
             *CurrentDownloadsSum += 1;
             return true;
         }
         return false;
     }
 
-    const THashMap<TString, TWorkerInfo::TFileResource>& TWorkerInfo::GetDownloadList() {
+    const TWorkerInfo::TDownloadList& TWorkerInfo::GetDownloadList() {
         return DownloadList;
     }
 
-    THashMap<TString, TWorkerInfo::TFileResource> TWorkerInfo::GetResourcesForDownloading() {
+    TWorkerInfo::TDownloadList TWorkerInfo::GetResourcesForDownloading() {
         for (const auto& it : DownloadList) {
-            TString id = it.first;
+            const auto& id = it.first;
             if (InflightLimiter->CanDownload(id) && !ActiveDownloads.contains(id)) {
                 ActiveDownloads.emplace(id, it.second);
                 *ActiveDownloadsSum += 1;

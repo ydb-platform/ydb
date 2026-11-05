@@ -72,6 +72,12 @@ void ExtractConstantExprs(const TExprNode::TPtr& input, TVector<std::pair<TExprN
         }
     }
 
+    if (input->IsCallable("SqlIn") && input->Child(0)->IsList()) {
+        for (const auto& item : input->Child(0)->Children()) {
+            ExtractConstantExprs(item, exprs, ctx, foldUdfs);
+        }
+    }
+
     return;
 }
 

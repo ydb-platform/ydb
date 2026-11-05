@@ -961,6 +961,8 @@ TEMPLATE_SCHEMA = {
         },
         "auth": {"type": "object"},
         "log": copy.deepcopy(LOG_SCHEMA),
+        "node_broker_port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "node_broker_use_tls": {"type": "boolean"},
         "grpc": {"type": "object"},
         "kqp": copy.deepcopy(KQP_SCHEMA),
         "ic": {"type": "object"},

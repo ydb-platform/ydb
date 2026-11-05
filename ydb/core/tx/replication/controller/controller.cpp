@@ -86,7 +86,6 @@ STFUNC(TController::StateWork) {
         HFunc(TEvPrivate::TEvCancelCreateStream, Handle);
         HFunc(TEvPrivate::TEvCancelDropStream, Handle);
         HFunc(TEvPrivate::TEvCreateDstResult, Handle);
-        HFunc(TEvPrivate::TEvPrepareAttachDst, Handle);
         HFunc(TEvPrivate::TEvAlterDstResult, Handle);
         HFunc(TEvPrivate::TEvSchemaChangeDstAlterResult, Handle);
         HFunc(TEvPrivate::TEvSchemaChangeDstAlterTxId, Handle);
@@ -126,6 +125,7 @@ STFUNC(TController::StateWork) {
 
 void TController::Cleanup(const TActorContext& ctx) {
     for (auto& [_, replication] : Replications) {
+        replication->SetLagChangedCallback({});
         replication->Shutdown(ctx);
     }
 
@@ -216,8 +216,12 @@ void TController::Reset() {
     SysParams.Reset();
     ProcessedSourceOffsets.clear();
     ReplicationsWithSourceOffsetMismatch.clear();
+    for (auto& [_, replication] : Replications) {
+        replication->SetLagChangedCallback({});
+    }
     Replications.clear();
     ReplicationsByPathId.clear();
+    UpdateLagCounters();
     UnresolvedDatabaseReplications.clear();
     AssignedTxIds.clear();
     CommittedVersions.clear();
@@ -383,10 +387,6 @@ void TController::Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorC
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
     RunTxCreateDstResult(ev, ctx);
-}
-
-void TController::Handle(TEvPrivate::TEvPrepareAttachDst::TPtr& ev, const TActorContext& ctx) {
-    RunTxPrepareAttachDst(ev, ctx);
 }
 
 void TController::Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx) {
@@ -690,11 +690,21 @@ void TController::UpdateLag(const TWorkerId& id, TDuration lag) {
     }
 
     target->UpdateLag(id.WorkerId(), lag);
-    // The numeric counter retains its last valid sample; availability is exposed
-    // by the optional lag fields in describe responses.
-    if (const auto lag = replication->GetLag()) {
-        TabletCounters->Simple()[COUNTER_DATA_LAG] = lag->MilliSeconds();
+}
+
+void TController::UpdateLagCounters() {
+    TDuration maxLag;
+    ui64 unavailable = 0;
+    for (const auto& [_, replication] : Replications) {
+        if (const auto lag = replication->GetLag()) {
+            maxLag = std::max(maxLag, *lag);
+        } else {
+            ++unavailable;
+        }
     }
+
+    TabletCounters->Simple()[COUNTER_DATA_LAG] = maxLag.MilliSeconds();
+    TabletCounters->Simple()[COUNTER_DATA_LAG_UNAVAILABLE_REPLICATIONS] = unavailable;
 }
 
 void TController::InvalidateLag(const TWorkerId& id) {
@@ -1283,8 +1293,10 @@ void TController::Remove(ui64 id) {
     }
 
     ReplicationsWithSourceOffsetMismatch.erase(id);
+    it->second->SetLagChangedCallback({});
     ReplicationsByPathId.erase(it->second->GetPathId());
     Replications.erase(it);
+    UpdateLagCounters();
 }
 
 } // NController

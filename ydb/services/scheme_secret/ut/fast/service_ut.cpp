@@ -13,6 +13,22 @@ using NKqp::TKikimrSettings;
 using TDescriptionPromise = NThreading::TPromise<NKqp::TEvDescribeSecretsResponse::TDescription>;
 
 Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
+    Y_UNIT_TEST(RejectsNonSecretPaths) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto created = session.ExecuteSchemeQuery(
+            "CREATE TABLE not_a_secret (id Uint64, PRIMARY KEY (id));").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        for (const auto* path : {"/Root", "/Root/not_a_secret"}) {
+            auto future = ResolveSecret(path, kikimr).GetFuture();
+            const auto& result = future.GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT(result.SecretValues.empty());
+        }
+    }
+
     Y_UNIT_TEST(GetNewValue) {
         TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);

@@ -73,6 +73,8 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
             dstPathId.ToProto(writerSettings.MutablePathId());
             break;
         }
+        case TReplication::ETargetKind::Secret:
+            Y_ABORT("Secret targets use initial copying");
         case TReplication::ETargetKind::Transfer: {
             auto p = std::dynamic_pointer_cast<const TTargetTransfer::TTransferConfig>(config);
             auto& writerSettings = *command.MutableTransferWriter();

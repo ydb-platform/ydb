@@ -37,6 +37,9 @@ SRCS(
     resource_id_resolver.cpp
     dst_schema_changer.cpp
     secret_resolver.cpp
+    secret_copier.cpp
+    target_secret.cpp
+    tx_secrets_copied.cpp
     session_info.cpp
     stream_consumer_remover.cpp
     stream_creator.cpp
@@ -81,6 +84,7 @@ RECURSE_FOR_TESTS(
     ut_dst_creator
     ut_replication
     ut_schema_change
+    ut_secret_discovery
     ut_stream_creator
     ut_target_discoverer
     ut_worker_lifecycle

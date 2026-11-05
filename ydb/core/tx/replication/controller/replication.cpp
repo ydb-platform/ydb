@@ -3,6 +3,8 @@
 #include "replication.h"
 #include "resource_id_resolver.h"
 #include "secret_resolver.h"
+#include "secret_copier.h"
+#include "target_secret.h"
 #include "target_discoverer.h"
 #include "target_table.h"
 #include "target_transfer.h"
@@ -84,6 +86,8 @@ class TReplication::TImpl: public TLagProvider {
             return new TTargetTable(self, id, std::forward<Args>(args)...);
         case ETargetKind::IndexTable:
             return new TTargetIndexTable(self, id, std::forward<Args>(args)...);
+        case ETargetKind::Secret:
+            return new TTargetSecret(self, id, std::forward<Args>(args)...);
         case ETargetKind::Transfer:
             return new TTargetTransfer(self, id, std::forward<Args>(args)...);
         }
@@ -109,7 +113,23 @@ class TReplication::TImpl: public TLagProvider {
         }
     }
 
-    void ProgressTargets(const TActorContext& ctx) {
+    void ProgressTargets(TReplication* self, const TActorContext& ctx) {
+        if (State == EState::Removing && SecretCopier) {
+            ctx.Send(SecretCopier, new TEvPrivate::TEvCancelSecretCopy());
+            return;
+        }
+        bool pendingSecrets = false;
+        for (const auto& [_, target] : Targets) {
+            pendingSecrets |= target->GetKind() == ETargetKind::Secret
+                && target->GetStreamState() != EStreamState::Removed
+                && target->GetDstState() != EDstState::Error;
+        }
+        if (pendingSecrets && !SecretCopier && YdbProxy && Database
+            && State == EState::Ready && DesiredState == EState::Ready)
+        {
+            SecretCopier = ctx.Register(CreateSecretCopier(ctx.SelfID, TReplication::TPtr(self)));
+        }
+
         for (auto& [_, target] : Targets) {
             target->Progress(ctx);
         }
@@ -133,7 +153,9 @@ public:
     ui64 AddTarget(TReplication* self, ui64 id, ETargetKind kind, Args&&... args) {
         const auto res = Targets.emplace(id, CreateTarget(self, id, kind, std::forward<Args>(args)...));
         Y_VERIFY_S(res.second, "Duplicate target: " << id);
-        TLagProvider::AddPendingLag(id);
+        if (kind != ETargetKind::Secret) {
+            TLagProvider::AddPendingLag(id);
+        }
         return id;
     }
 
@@ -171,14 +193,14 @@ public:
         paths.reserve(Targets.size());
         for (const auto& [_, target] : Targets) {
             // State changes must take effect in retries of an in-flight commit.
-            if (target->GetDstState() != EDstState::Removing) {
+            if (target->GetKind() != ETargetKind::Secret && target->GetDstState() != EDstState::Removing) {
                 paths.push_back(target->GetDstPath());
             }
         }
         return paths;
     }
 
-    void Progress(const TActorContext& ctx) {
+    void Progress(TReplication* self, const TActorContext& ctx) {
         if (State == EState::Done) {
             return;
         }
@@ -189,7 +211,7 @@ public:
             if (!Database) {
                 ResolveDatabase(ctx);
             }
-            return ProgressTargets(ctx);
+            return ProgressTargets(self, ctx);
         }
 
         if (!YdbProxy && !(State == EState::Removing && !Targets)) {
@@ -249,13 +271,13 @@ public:
             if (!Targets) {
                 return DiscoverTargets(ctx);
             } else {
-                return ProgressTargets(ctx);
+                return ProgressTargets(self, ctx);
             }
         case EState::Removing:
             if (!Targets) {
                 return (void)ctx.Send(ctx.SelfID, new TEvPrivate::TEvDropReplication(ReplicationId));
             } else {
-                return ProgressTargets(ctx);
+                return ProgressTargets(self, ctx);
             }
         case EState::Done:
         case EState::Error:
@@ -269,7 +291,7 @@ public:
             target->Shutdown(ctx);
         }
 
-        for (auto* x : TVector<TActorId*>{&SecretResolver, &ResourceIdResolver, &TargetDiscoverer, &TenantResolver, &YdbProxy}) {
+        for (auto* x : TVector<TActorId*>{&SecretResolver, &ResourceIdResolver, &TargetDiscoverer, &SecretCopier, &TenantResolver, &YdbProxy}) {
             if (auto actorId = std::exchange(*x, {})) {
                 ctx.Send(actorId, new TEvents::TEvPoison());
             }
@@ -332,7 +354,7 @@ public:
         ++CredentialsRevision;
         TargetDiscoveryComplete = false;
         StopTargetDescribers(ctx);
-        for (auto* x : TVector<TActorId*>{&SecretResolver, &ResourceIdResolver, &TargetDiscoverer, &YdbProxy}) {
+        for (auto* x : TVector<TActorId*>{&SecretResolver, &ResourceIdResolver, &TargetDiscoverer, &SecretCopier, &YdbProxy}) {
             if (auto actorId = std::exchange(*x, {})) {
                 ctx.Send(actorId, new TEvents::TEvPoison());
             }
@@ -374,6 +396,7 @@ private:
     THashSet<TActorId> TargetDescribers;
     TActorId TenantResolver; // TODO: Remove in next major release
     TActorId TargetDiscoverer;
+    TActorId SecretCopier;
     ui64 TargetDiscovererRevision = 0;
     bool TargetDiscoveryComplete = false;
 
@@ -417,6 +440,14 @@ TReplication::ITarget* TReplication::FindTarget(ui64 id) {
     return Impl->FindTarget(id);
 }
 
+bool TReplication::IsExpectedSecretCopier(const TActorId& actorId) const {
+    return actorId && actorId == Impl->SecretCopier;
+}
+
+void TReplication::FinishSecretCopy() {
+    Impl->SecretCopier = {};
+}
+
 void TReplication::RemoveTarget(ui64 id) {
     return Impl->RemoveTarget(id);
 }
@@ -445,7 +476,7 @@ TVector<TString> TReplication::GetTargetTablePaths() const {
 }
 
 void TReplication::Progress(const TActorContext& ctx) {
-    Impl->Progress(ctx);
+    Impl->Progress(this, ctx);
 }
 
 bool TReplication::IsExpectedTargetDiscoverer(const TActorId& actorId) const {

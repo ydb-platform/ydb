@@ -66,6 +66,9 @@ class TDstRemover: public TActorBootstrapped<TDstRemover> {
         case TReplication::ETargetKind::Table:
             tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
             break;
+        case TReplication::ETargetKind::Secret:
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropSecret);
+            break;
         case TReplication::ETargetKind::IndexTable:
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
@@ -237,6 +240,7 @@ public:
             Success();
         } else {
             switch (Kind) {
+            case TReplication::ETargetKind::Secret:
             case TReplication::ETargetKind::Table:
                 return AllocateTxId();
             case TReplication::ETargetKind::IndexTable:

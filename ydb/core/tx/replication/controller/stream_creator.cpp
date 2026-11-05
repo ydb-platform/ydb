@@ -83,6 +83,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
                 0,
                 ++RequestCookie);
             break;
+        case TReplication::ETargetKind::Secret:
+            Y_ABORT("Secret targets use initial copying");
         case TReplication::ETargetKind::Transfer:
             return CreateConsumer();
         }
@@ -132,6 +134,8 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             return CanonizePath(ChildPath(SplitPath(SrcPath), TString{Changefeed.GetName()}));
         case TReplication::ETargetKind::IndexTable:
             return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", TString{Changefeed.GetName()}}));
+        case TReplication::ETargetKind::Secret:
+            Y_ABORT("Secret targets use initial copying");
         case TReplication::ETargetKind::Transfer:
             return CanonizePath(SplitPath(SrcPath));
         }

@@ -354,7 +354,7 @@ public:
         Replication->ResetCredentials(ctx);
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
-            if (!target) {
+            if (!target || target->GetKind() == TReplication::ETargetKind::Secret) {
                 continue;
             }
 
@@ -468,7 +468,7 @@ public:
 
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
-            if (!target) {
+            if (!target || target->GetKind() == TReplication::ETargetKind::Secret) {
                 continue;
             }
             target->Shutdown(ctx);

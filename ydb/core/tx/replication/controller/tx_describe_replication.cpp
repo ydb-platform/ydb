@@ -188,7 +188,9 @@ public:
                     continue;
                 }
 
-                TargetsToDescribe.emplace(tid, target->GetSrcPath());
+                if (target->GetKind() != TReplication::ETargetKind::Secret) {
+                    TargetsToDescribe.emplace(tid, target->GetSrcPath());
+                }
             }
 
             if (TargetsToDescribe) {
@@ -272,7 +274,7 @@ public:
                 item.SetLagMilliSeconds(lag->MilliSeconds());
             }
 
-            if (PrivEv) {
+            if (PrivEv && target->GetKind() != TReplication::ETargetKind::Secret) {
                 const auto& result = PrivEv->Get()->Result;
 
                 auto it = result.find(tid);

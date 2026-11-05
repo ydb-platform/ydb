@@ -2,6 +2,7 @@ YQL_LIBRARY()
 
 PEERDIR(
     ydb/core/base
+    ydb/public/sdk/cpp/src/client/secret
     ydb/core/grpc_services/base
     ydb/core/persqueue/events
     ydb/core/persqueue/writer

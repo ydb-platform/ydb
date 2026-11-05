@@ -43,6 +43,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
                 0,
                 ProxyGeneration);
             break;
+        case TReplication::ETargetKind::Secret:
+            Y_ABORT("Secret targets use initial copying");
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("Unreachable");
         }
@@ -138,6 +140,8 @@ public:
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
             return RequestPermission();
+        case TReplication::ETargetKind::Secret:
+            Y_ABORT("Secret targets use initial copying");
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("Unreachable");
         }

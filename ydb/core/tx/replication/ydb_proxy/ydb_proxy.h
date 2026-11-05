@@ -2,6 +2,8 @@
 
 #include "topic_message.h"
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/secret/secret.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -56,6 +58,10 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(CommitOffset),
         EvEndTopicPartition,
         EvStartTopicReadingSession,
+
+        EvSecret = EvBegin + 3 * 100,
+        EV_REQUEST_RESPONSE(DescribeSecret),
+        EV_REQUEST_RESPONSE(ExportSecrets),
 
         EvEnd,
     };
@@ -277,6 +283,9 @@ struct TEvYdbProxy {
     DEFINE_GENERIC_REQUEST_RESPONSE(CopyTables, NYdb::TStatus, TVector<NYdb::NTable::TCopyItem>, NYdb::NTable::TCopyTablesSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(RenameTables, NYdb::TStatus, TVector<NYdb::NTable::TRenameItem>, NYdb::NTable::TRenameTablesSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(DescribeTable, NYdb::NTable::TDescribeTableResult, TString, NYdb::NTable::TDescribeTableSettings);
+    // Secrets
+    DEFINE_GENERIC_REQUEST_RESPONSE(DescribeSecret, NYdb::NSecret::TDescribeSecretResult, TString, NYdb::NScheme::TDescribePathSettings);
+    DEFINE_GENERIC_REQUEST_RESPONSE(ExportSecrets, NYdb::TStatus, TString, std::vector<std::string>, NYdb::NScheme::TDescribePathSettings);
     // Topic
     DEFINE_GENERIC_REQUEST_RESPONSE(CreateTopic, NYdb::TStatus, TString, NYdb::NTopic::TCreateTopicSettings);
     DEFINE_GENERIC_REQUEST_RESPONSE(AlterTopic, NYdb::TStatus, TString, NYdb::NTopic::TAlterTopicSettings);

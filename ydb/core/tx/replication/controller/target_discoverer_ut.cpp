@@ -2,18 +2,22 @@
 #include "target_discoverer.h"
 #include "target_table.h"
 #include "target_transfer.h"
+#include "public_events.h"
 
 #include <ydb/core/protos/metrics_config.pb.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ut_helpers/test_topic.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/services/scheme_secret/resolver.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 #include <util/string/printf.h>
+#include <util/system/datetime.h>
+
 
 namespace NKikimr::NReplication::NController {
 
@@ -84,6 +88,107 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Config->GetSrcPath(), "/Root/Table");
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Config->GetDstPath(), "/Root/Replicated/Table");
         UNIT_ASSERT_VALUES_EQUAL(toAdd.at(0).Kind, TReplication::ETargetKind::Table);
+    }
+
+    Y_UNIT_TEST(DiscoversSecretsInDirectory) {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableSchemaSecrets(true);
+        TEnv env(flags);
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        for (const auto& query : {"CREATE SECRET first WITH (value = 'one');",
+                "CREATE SECRET `nested/second` WITH (value = '');"})
+        {
+            const auto status = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
+            CreateConfig({{"/Root", "/Root/Replicated"}})));
+        auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvDiscoveryTargetsResult>(env.GetSender());
+        UNIT_ASSERT(ev->Get()->IsSuccess());
+        THashMap<TString, TString> paths;
+        for (const auto& target : ev->Get()->ToAdd) {
+            paths.emplace(target.Config->GetSrcPath(), target.Config->GetDstPath());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(paths.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(paths.at("/Root/first"), "/Root/Replicated/first");
+        UNIT_ASSERT_VALUES_EQUAL(paths.at("/Root/nested/second"), "/Root/Replicated/nested/second");
+    }
+
+    Y_UNIT_TEST(CopiesSecretsOnceThroughOneTopic) {
+        TFeatureFlags flags;
+        flags.FeatureFlags.SetEnableSchemaSecrets(true);
+        TEnv env(flags);
+        env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_INFO);
+        NYdb::NTable::TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        auto execute = [&](const TString& query) {
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        execute("CREATE SECRET `source/first` WITH (value = 'one');");
+        execute("CREATE SECRET `source/nested/second` WITH (value = '');");
+
+        execute(TStringBuilder() << "CREATE ASYNC REPLICATION secret_replication "
+            << "FOR source AS copy WITH ("
+            << "CONNECTION_STRING = 'grpc://" << env.GetEndpoint() << "/?database=/Root', "
+            << "TOKEN = 'root@builtin');");
+
+        const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+        bool copied = false;
+        while (TInstant::Now() < deadline) {
+            const auto first = env.GetDescription("/Root/copy/first");
+            const auto second = env.GetDescription("/Root/copy/nested/second");
+            copied = first.GetSchemeStatus() == NKikimrScheme::StatusSuccess
+                && second.GetSchemeStatus() == NKikimrScheme::StatusSuccess
+                && first.GetPathDescription().GetSelf().GetCreateFinished()
+                && second.GetPathDescription().GetSelf().GetCreateFinished();
+            if (copied) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(copied, env.GetDescription("/Root/secret_replication").ShortDebugString());
+        const auto values = NSecret::DescribeSecret({"/Root/copy/first", "/Root/copy/nested/second"},
+            MakeIntrusiveConst<NACLib::TUserToken>("root@builtin", TVector<NACLib::TSID>()),
+            "/Root", env.GetRuntime().GetActorSystem(0)).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(values.Status, Ydb::StatusIds::SUCCESS, values.Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(values.SecretValues.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(values.SecretValues[0], "one");
+        UNIT_ASSERT_VALUES_EQUAL(values.SecretValues[1], "");
+
+        const auto description = env.GetDescription("/Root/secret_replication");
+        auto request = MakeHolder<TEvController::TEvDescribeReplication>();
+        env.GetPathId("/Root/secret_replication").ToProto(request->Record.MutablePathId());
+        const auto state = env.Send<TEvController::TEvDescribeReplicationResult>(
+            description.GetPathDescription().GetReplicationDescription().GetControllerId(), std::move(request));
+        UNIT_ASSERT(state->Get()->Record.GetStatus() == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(state->Get()->Record.TargetsSize(), 2);
+        THashSet<TString> topics;
+        for (const auto& target : state->Get()->Record.GetTargets()) {
+            UNIT_ASSERT(!target.GetSrcStreamName().empty());
+            topics.insert(target.GetSrcStreamName());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(topics.size(), 1);
+        const auto& topic = *topics.begin();
+        NYdb::NTopic::TTopicClient topicClient(env.GetDriver());
+        bool removed = false;
+        while (TInstant::Now() < deadline) {
+            const auto result = topicClient.DescribeTopic(topic).GetValueSync();
+            if (result.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
+                removed = true;
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(removed, "Initial-copy topic was not removed");
+        execute("ALTER SECRET `source/first` WITH (value = 'changed');");
+        const auto unchanged = NSecret::DescribeSecret({"/Root/copy/first"},
+            MakeIntrusiveConst<NACLib::TUserToken>("root@builtin", TVector<NACLib::TSID>()),
+            "/Root", env.GetRuntime().GetActorSystem(0)).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(unchanged.Status, Ydb::StatusIds::SUCCESS, unchanged.Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(unchanged.SecretValues.at(0), "one");
     }
 
     Y_UNIT_TEST(IndexedTable) {

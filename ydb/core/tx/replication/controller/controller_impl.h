@@ -138,6 +138,7 @@ private:
     void Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvSecretsCopied::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPrepareAttachDst::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx);
@@ -213,6 +214,7 @@ private:
     class TTxCreateStreamResult;
     class TTxDropStreamResult;
     class TTxCreateDstResult;
+    class TTxSecretsCopied;
     class TTxPrepareAttachDst;
     class TTxAlterDstResult;
     class TTxDropDstResult;
@@ -246,6 +248,7 @@ private:
     void RunTxAssignStreamName(TEvPrivate::TEvAssignStreamName::TPtr& ev, const TActorContext& ctx);
     void RunTxCreateStreamResult(TEvPrivate::TEvCreateStreamResult::TPtr& ev, const TActorContext& ctx);
     void RunTxDropStreamResult(TEvPrivate::TEvDropStreamResult::TPtr& ev, const TActorContext& ctx);
+    void RunTxSecretsCopied(TEvPrivate::TEvSecretsCopied::TPtr& ev, const TActorContext& ctx);
     void RunTxCreateDstResult(TEvPrivate::TEvCreateDstResult::TPtr& ev, const TActorContext& ctx);
     void RunTxPrepareAttachDst(TEvPrivate::TEvPrepareAttachDst::TPtr& ev, const TActorContext& ctx);
     void RunTxAlterDstResult(TEvPrivate::TEvAlterDstResult::TPtr& ev, const TActorContext& ctx);

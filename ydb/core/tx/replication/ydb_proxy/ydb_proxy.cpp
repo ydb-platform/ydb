@@ -353,6 +353,8 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
             return EnsureClient<TClient, TCommonClientSettings>(SchemeClient);
         } else if constexpr (std::is_same_v<TClient, TTableClient>) {
             return EnsureClient<TClient, TClientSettings>(TableClient);
+        } else if constexpr (std::is_same_v<TClient, NYdb::NSecret::TSecretClient>) {
+            return EnsureClient<TClient, TCommonClientSettings>(SecretClient);
         } else if constexpr (std::is_same_v<TClient, TTopicClient>) {
             return EnsureClient<TClient, TTopicClientSettings>(TopicClient);
         } else {
@@ -442,6 +444,14 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
 
     void Handle(TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev) {
         CallSession<TEvYdbProxy::TEvDescribeTableResponse>(ev, &TSession::DescribeTable);
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeSecretRequest::TPtr& ev) {
+        Call<TEvYdbProxy::TEvDescribeSecretResponse>(ev, &NYdb::NSecret::TSecretClient::DescribeSecret);
+    }
+
+    void Handle(TEvYdbProxy::TEvExportSecretsRequest::TPtr& ev) {
+        Call<TEvYdbProxy::TEvExportSecretsResponse>(ev, &NYdb::NSecret::TSecretClient::ExportSecrets);
     }
 
     void Handle(TEvYdbProxy::TEvCreateTopicRequest::TPtr& ev) {
@@ -541,6 +551,8 @@ public:
             hFunc(TEvYdbProxy::TEvRenameTablesRequest, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTableRequest, Handle);
             // Topic
+            hFunc(TEvYdbProxy::TEvDescribeSecretRequest, Handle);
+            hFunc(TEvYdbProxy::TEvExportSecretsRequest, Handle);
             hFunc(TEvYdbProxy::TEvCreateTopicRequest, Handle);
             hFunc(TEvYdbProxy::TEvAlterTopicRequest, Handle);
             hFunc(TEvYdbProxy::TEvDropTopicRequest, Handle);
@@ -559,6 +571,7 @@ private:
     THolder<TSchemeClient> SchemeClient;
     THolder<TTableClient> TableClient;
     THolder<TTopicClient> TopicClient;
+    THolder<NYdb::NSecret::TSecretClient> SecretClient;
 
 }; // TYdbProxy
 

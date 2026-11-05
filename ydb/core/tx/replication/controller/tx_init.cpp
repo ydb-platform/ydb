@@ -1,5 +1,6 @@
 #include "controller_impl.h"
 #include "target_table.h"
+#include "target_secret.h"
 #include "target_transfer.h"
 
 #include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
@@ -119,6 +120,9 @@ class TController::TTxInit: public TTxBase {
                 break;
             case TReplication::ETargetKind::IndexTable:
                 config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath);
+                break;
+            case TReplication::ETargetKind::Secret:
+                config = std::make_shared<TTargetSecret::TSecretConfig>(srcPath, dstPath);
                 break;
             case TReplication::ETargetKind::Transfer:
                 config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, replication->GetConfig());

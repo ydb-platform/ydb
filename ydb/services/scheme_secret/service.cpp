@@ -281,6 +281,11 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(
     }
 
     for (const auto& entry: request->ResultSet) {
+        if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindSecret || !entry.SecretInfo) {
+            FillResponse(requestId, NKqp::TEvDescribeSecretsResponse::TDescription(
+                Ydb::StatusIds::BAD_REQUEST, {NYql::TIssue("Path is not a secret")}));
+            return;
+        }
         const auto& secretDescription = entry.SecretInfo->Description;
         Y_ENSURE(!secretDescription.HasValue(), "SchemeCache must never contain secret values");
 

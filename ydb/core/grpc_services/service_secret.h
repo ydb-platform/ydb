@@ -8,6 +8,8 @@ namespace NGRpcService {
 class IRequestOpCtx;
 class IFacilityProvider;
 
+void DoExportSecretsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+
 void DoDescribeSecretRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 
 }

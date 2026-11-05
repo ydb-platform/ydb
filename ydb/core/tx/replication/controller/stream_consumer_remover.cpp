@@ -108,6 +108,8 @@ public:
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
             Y_ABORT("Unreachable");
+        case TReplication::ETargetKind::Secret:
+            Y_ABORT("Secret targets use initial copying");
         case TReplication::ETargetKind::Transfer:
             if (NeedDrop) {
                 return RequestPermission();

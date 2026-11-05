@@ -37,6 +37,7 @@ public:
         Table,
         IndexTable,
         Transfer,
+        Secret,
     };
 
     enum class EDstState: ui8 {
@@ -157,6 +158,9 @@ public:
     void RemoveTarget(ui64 id);
     TVector<ITarget*> GetTargets() const;
     TVector<TString> GetTargetTablePaths() const;
+
+    bool IsExpectedSecretCopier(const TActorId& actorId) const;
+    void FinishSecretCopy();
 
     bool IsExpectedTargetDiscoverer(const TActorId& actorId) const;
     void FinishTargetDiscovery();

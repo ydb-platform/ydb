@@ -2,6 +2,7 @@
 #include "private_events.h"
 #include "target_discoverer.h"
 #include "target_table.h"
+#include "target_secret.h"
 #include "target_transfer.h"
 #include "util.h"
 
@@ -59,6 +60,12 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             case NYdb::NScheme::ESchemeEntryType::Table:
                 if (IsReplication()) {
                     return DescribeTable(ev->Cookie);
+                }
+                break;
+            case NYdb::NScheme::ESchemeEntryType::Secret:
+                if (IsReplication()) {
+                    Send(YdbProxy, new TEvYdbProxy::TEvDescribeSecretRequest(path.first, {}), 0, ev->Cookie);
+                    return;
                 }
                 break;
             case NYdb::NScheme::ESchemeEntryType::Topic:
@@ -160,6 +167,25 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             }
         }
 
+        Pending.erase(it);
+        MaybeReply();
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeSecretResponse::TPtr& ev) {
+        auto it = Pending.find(ev->Cookie);
+        if (it == Pending.end()) {
+            return;
+        }
+        const auto& path = Paths.at(*it);
+        const auto& result = ev->Get()->Result;
+        if (result.IsSuccess()) {
+            ToAdd.emplace_back(TReplication::ETargetKind::Secret,
+                std::make_shared<TTargetSecret::TSecretConfig>(path.first, path.second));
+        } else if (IsRetryableError(result, Backoff)) {
+            return RetryDescribe(*it);
+        } else {
+            Failed.emplace_back(path.first, result);
+        }
         Pending.erase(it);
         MaybeReply();
     }
@@ -267,11 +293,12 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                             path.second + '/' + child.Name));
                     }
                     break;
+                case NYdb::NScheme::ESchemeEntryType::Secret:
                 case NYdb::NScheme::ESchemeEntryType::Table:
                     Paths.emplace_back(
                         path.first  + '/' + child.Name,
                         path.second + '/' + child.Name);
-                    DescribeTable(Paths.size() - 1);
+                    DescribePath(Paths.size() - 1);
                     break;
                 default:
                     break;
@@ -374,6 +401,7 @@ public:
             hFunc(TEvYdbProxy::TEvListDirectoryResponse, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
+            hFunc(TEvYdbProxy::TEvDescribeSecretResponse, Handle);
             sFunc(TEvents::TEvWakeup, Retry);
             sFunc(TEvents::TEvPoison, PassAway);
         }

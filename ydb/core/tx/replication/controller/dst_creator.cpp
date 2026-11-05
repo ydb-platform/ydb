@@ -202,6 +202,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                     RetryGeneration);
             }
             break;
+        case TReplication::ETargetKind::Secret:
+            Y_ABORT("Secret targets use initial copying");
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
@@ -602,6 +604,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
             return CheckTableScheme(desc.GetTable(), error);
+        case TReplication::ETargetKind::Secret:
+            Y_ABORT("Secret targets use initial copying");
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("unreachable");
         }
@@ -837,6 +841,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
             return;
+        case TReplication::ETargetKind::Secret:
+            Y_ABORT("Secret targets use initial copying");
         case TReplication::ETargetKind::Transfer:
             return Error(NKikimrScheme::EStatus::StatusPathDoesNotExist,
                 TStringBuilder() << "The target table `" << DstPath << "` does not exist");
@@ -1012,6 +1018,8 @@ public:
                 return Resolve(PathId);
             }
             [[fallthrough]];
+        case TReplication::ETargetKind::Secret:
+            Y_ABORT("Secret targets use initial copying");
         case TReplication::ETargetKind::Transfer:
             // indexed table will be created along with its indexes
             // transfer works with an existing table

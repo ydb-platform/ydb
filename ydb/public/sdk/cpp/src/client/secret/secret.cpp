@@ -17,6 +17,26 @@ public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings) {}
 
+    TAsyncStatus ExportSecrets(const std::string& topicPath, const std::vector<std::string>& secretPaths,
+        const NScheme::TDescribePathSettings& settings)
+    {
+        auto request = MakeOperationRequest<::Ydb::Secret::ExportSecretsRequest>(settings);
+        request.set_topic_path(topicPath);
+        for (const auto& path : secretPaths) {
+            request.add_secret_paths(path);
+        }
+        auto promise = NThreading::NewPromise<TStatus>();
+        Connections_->RunDeferred<::Ydb::Secret::V1::SecretService,
+            ::Ydb::Secret::ExportSecretsRequest, ::Ydb::Secret::ExportSecretsResponse>(
+            std::move(request),
+            [promise](google::protobuf::Any*, TPlainStatus status) mutable {
+                promise.SetValue(TStatus(std::move(status)));
+            },
+            &::Ydb::Secret::V1::SecretService::Stub::AsyncExportSecrets,
+            DbDriverState_, INITIAL_DEFERRED_CALL_DELAY, TRpcRequestSettings::Make(settings));
+        return promise.GetFuture();
+    }
+
     TAsyncDescribeSecretResult DescribeSecret(const std::string& path, const NScheme::TDescribePathSettings& settings) {
         auto request = MakeOperationRequest<::Ydb::Secret::DescribeSecretRequest>(settings);
         request.set_path(TStringType{path});
@@ -83,6 +103,12 @@ void TDescribeSecretResult::SerializeTo(::Ydb::Scheme::Entry* proto) const {
 TSecretClient::TSecretClient(const TDriver& driver, const TCommonClientSettings& settings)
     : Impl_(new TImpl(CreateInternalInterface(driver), settings))
 {}
+
+TAsyncStatus TSecretClient::ExportSecrets(const std::string& topicPath, const std::vector<std::string>& secretPaths,
+    const NScheme::TDescribePathSettings& settings)
+{
+    return Impl_->ExportSecrets(topicPath, secretPaths, settings);
+}
 
 TAsyncDescribeSecretResult TSecretClient::DescribeSecret(const std::string& path, const NScheme::TDescribePathSettings& settings) {
     return Impl_->DescribeSecret(path, settings);

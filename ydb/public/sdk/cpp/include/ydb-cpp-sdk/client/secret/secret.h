@@ -15,6 +15,9 @@ class TSecretClient {
 public:
     TSecretClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
+    TAsyncStatus ExportSecrets(const std::string& topicPath, const std::vector<std::string>& secretPaths,
+        const NScheme::TDescribePathSettings& settings = NScheme::TDescribePathSettings());
+
     TAsyncDescribeSecretResult DescribeSecret(const std::string& path,
         const NScheme::TDescribePathSettings& settings = NScheme::TDescribePathSettings());
 

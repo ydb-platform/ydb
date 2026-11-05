@@ -51,6 +51,9 @@ struct TEvPrivate {
         EvCancelCreateStream,
         EvCancelDropStream,
 
+        EvSecretsCopied,
+        EvCancelSecretCopy,
+
         EvEnd,
     };
 
@@ -81,6 +84,20 @@ struct TEvPrivate {
         TString ToString() const override;
 
         bool IsSuccess() const;
+    };
+
+    struct TEvCancelSecretCopy: public TEventLocal<TEvCancelSecretCopy, EvCancelSecretCopy> {};
+
+    struct TEvSecretsCopied: public TEventLocal<TEvSecretsCopied, EvSecretsCopied> {
+        ui64 ReplicationId;
+        NYdb::TStatus Status;
+        THashMap<ui64, TPathId> Created;
+
+        TEvSecretsCopied(ui64 rid, NYdb::TStatus status, THashMap<ui64, TPathId> created)
+            : ReplicationId(rid)
+            , Status(std::move(status))
+            , Created(std::move(created))
+        {}
     };
 
     struct TEvAssignStreamName: public TEventLocal<TEvAssignStreamName, EvAssignStreamName> {

@@ -7,6 +7,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/iam
     ydb/public/sdk/cpp/src/client/iam_private
     ydb/public/sdk/cpp/src/client/scheme
+    ydb/public/sdk/cpp/src/client/secret
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types/credentials

@@ -21,6 +21,7 @@ PEERDIR(
     library/cpp/monlib/encode
     library/cpp/uri
     ydb/core/base
+    ydb/services/scheme_secret/export
     ydb/core/client
     ydb/core/formats
     ydb/core/grpc_services

@@ -182,7 +182,6 @@ private:
 
 private:
     void CreatePartitionChooser(const TActorContext& ctx);
-    void ReleaseWriteSessionQuota(const TActorContext& ctx);
     bool CreatePartitionWriterCache(const TActorContext& ctx);
     void DestroyPartitionWriterCache(const TActorContext& ctx);
     NWilson::TSpan GenerateSpan(NJaegerTracing::ERequestType subrequestType, const TStringBuf name) const;
@@ -224,7 +223,6 @@ private:
     ui64 PartitionTabletId;
     ui32 PreferedPartition;
     std::optional<ui32> ExpectedGeneration;
-    bool WriteSessionQuotaRequested = false;
     std::optional<ui64> InitialSeqNo;
 
     // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1

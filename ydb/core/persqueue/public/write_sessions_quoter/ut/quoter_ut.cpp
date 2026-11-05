@@ -29,7 +29,7 @@ protected:
     void AcquireFrom(const TActorId& actor, const TBucketKey& key = {});
     void ExpectReplies(const TActorId& actor, size_t count, ui32 eventType = TEvQuoter::TEvQuotaAcquired::EventType);
     void ExpectDeclined(const TActorId& actor);
-    void Release(const TActorId& actor, const TBucketKey& key = {});
+    void AdvanceTime(TDuration duration = TDuration::Seconds(1));
     void CheckIndependentBucket(const TBucketKey& other);
 
     TTestActorRuntime Runtime;
@@ -39,9 +39,10 @@ protected:
 void TWriteSessionsQuoterTest::SetUp(NUnitTest::TTestContext&) {
     TTestActorRuntime::TEgg egg;
     egg.App0 = new TAppData(0, 0, 0, 0, {}, nullptr, nullptr, nullptr, nullptr);
-    egg.App0->PQConfig.SetMaxConcurrentWriteSessionInitializations(1);
+    egg.App0->PQConfig.SetWriteSessionsInitRps(1);
     Runtime.Initialize(std::move(egg));
     Quoter = Runtime.Register(CreateWriteSessionsQuoter());
+    Runtime.EnableScheduleForActor(Quoter);
     Runtime.RegisterService(MakeWriteSessionsQuoterId(), Quoter);
     TDispatchOptions options;
     options.FinalEvents.emplace_back([this](IEventHandle& event) {
@@ -93,9 +94,8 @@ void TWriteSessionsQuoterTest::ExpectDeclined(const TActorId& actor) {
     ExpectReplies(actor, 1, TEvQuoter::TEvQuotaDeclined::EventType);
 }
 
-void TWriteSessionsQuoterTest::Release(const TActorId& actor, const TBucketKey& key) {
-    Runtime.Send(new IEventHandle(Quoter, actor,
-        new TEvQuoter::TEvReleaseQuota(key.Topic, key.Partition, key.Generation)));
+void TWriteSessionsQuoterTest::AdvanceTime(TDuration duration) {
+    Runtime.SimulateSleep(duration);
 }
 
 void TWriteSessionsQuoterTest::CheckIndependentBucket(const TBucketKey& other) {
@@ -117,8 +117,8 @@ Y_UNIT_TEST_F(RegistersBucketViaLocalServiceWithoutReply, TWriteSessionsQuoterTe
     ExpectReplies(Acquire(), 1);
 }
 
-Y_UNIT_TEST_F(LimitsConcurrentHolders, TWriteSessionsQuoterTest) {
-    Runtime.GetAppData().PQConfig.SetMaxConcurrentWriteSessionInitializations(2);
+Y_UNIT_TEST_F(LimitsInitialBurst, TWriteSessionsQuoterTest) {
+    Runtime.GetAppData().PQConfig.SetWriteSessionsInitRps(2);
     Notify();
     ExpectReplies(Acquire(), 1);
     ExpectReplies(Acquire(), 1);
@@ -146,70 +146,48 @@ Y_UNIT_TEST_F(RepeatedNotifyDoesNotResetQuota, TWriteSessionsQuoterTest) {
     ExpectReplies(pending, 0);
 }
 
-Y_UNIT_TEST_F(UnknownReleaseDoesNotGrantQuota, TWriteSessionsQuoterTest) {
+Y_UNIT_TEST_F(WakeupsDrainQueueInFifoOrder, TWriteSessionsQuoterTest) {
     Notify();
     ExpectReplies(Acquire(), 1);
-    const auto pending = Acquire();
-    Release(Runtime.AllocateEdgeActor());
-    ExpectReplies(pending, 0);
-}
-
-Y_UNIT_TEST_F(ReleasesDrainQueueInFifoOrder, TWriteSessionsQuoterTest) {
-    Notify();
-    const auto holder = Acquire();
-    ExpectReplies(holder, 1);
     const auto first = Acquire();
     const auto second = Acquire();
     const auto third = Acquire();
-    Release(holder);
+    AdvanceTime();
     ExpectReplies(first, 1);
     ExpectReplies(second, 0);
     ExpectReplies(third, 0);
-    Release(first);
+    AdvanceTime();
     ExpectReplies(second, 1);
     ExpectReplies(third, 0);
-    Release(second);
+    AdvanceTime();
     ExpectReplies(third, 1);
 }
 
-Y_UNIT_TEST_F(ElapsedTimeDoesNotReleaseQuota, TWriteSessionsQuoterTest) {
+Y_UNIT_TEST_F(QuotaIsRefilledOnScheduledWakeup, TWriteSessionsQuoterTest) {
     Notify();
     ExpectReplies(Acquire(), 1);
     const auto pending = Acquire();
-    Runtime.AdvanceCurrentTime(TDuration::Hours(1));
-    ExpectReplies(Acquire(), 0);
+    AdvanceTime(TDuration::MilliSeconds(500));
     ExpectReplies(pending, 0);
+    AdvanceTime(TDuration::MilliSeconds(500));
+    ExpectReplies(pending, 1);
+    ExpectReplies(Acquire(), 0);
 }
 
-Y_UNIT_TEST_F(EachReleaseFreesOneSlot, TWriteSessionsQuoterTest) {
-    Runtime.GetAppData().PQConfig.SetMaxConcurrentWriteSessionInitializations(2);
+Y_UNIT_TEST_F(WakeupRefillsConfiguredQuota, TWriteSessionsQuoterTest) {
+    Runtime.GetAppData().PQConfig.SetWriteSessionsInitRps(2);
     Notify();
-    const auto firstHolder = Acquire();
-    const auto secondHolder = Acquire();
-    ExpectReplies(firstHolder, 1);
-    ExpectReplies(secondHolder, 1);
+    ExpectReplies(Acquire(), 1);
+    ExpectReplies(Acquire(), 1);
     const auto first = Acquire();
     const auto second = Acquire();
-    Release(secondHolder);
+    const auto third = Acquire();
+    AdvanceTime();
     ExpectReplies(first, 1);
-    ExpectReplies(second, 0);
-    Release(firstHolder);
     ExpectReplies(second, 1);
-}
-
-Y_UNIT_TEST_F(RepeatedReleaseDoesNotIncreaseCapacity, TWriteSessionsQuoterTest) {
-    Notify();
-    const auto holder = Acquire();
-    ExpectReplies(holder, 1);
-    const auto first = Acquire();
-    const auto second = Acquire();
-    Release(holder);
-    ExpectReplies(first, 1);
-    Release(holder);
-    ExpectReplies(first, 0);
-    ExpectReplies(second, 0);
-    Release(first);
-    ExpectReplies(second, 1);
+    ExpectReplies(third, 0);
+    AdvanceTime();
+    ExpectReplies(third, 1);
 }
 
 Y_UNIT_TEST_F(RemoveAllowsFreshRegistration, TWriteSessionsQuoterTest) {
@@ -295,18 +273,15 @@ Y_UNIT_TEST_F(RemovingOldGenerationDoesNotDeclineNewGenerationWaiters, TWriteSes
     const TBucketKey newer{"/Root/topic", 0, 2};
     Notify();
     Notify(newer);
-    const auto oldHolder = Acquire();
-    const auto newHolder = Acquire(newer);
-    ExpectReplies(oldHolder, 1);
-    ExpectReplies(newHolder, 1);
+    ExpectReplies(Acquire(), 1);
+    ExpectReplies(Acquire(newer), 1);
     const auto oldWaiter = Acquire();
     const auto newWaiter = Acquire(newer);
     Remove();
     ExpectDeclined(oldWaiter);
-    Release(oldHolder);
-    Release(newHolder); // Wrong generation must not release the new holder.
     ExpectReplies(newWaiter, 0);
-    Release(newHolder, newer);
+    AdvanceTime();
+    ExpectReplies(oldWaiter, 0);
     ExpectReplies(newWaiter, 1);
 }
 
@@ -328,45 +303,44 @@ Y_UNIT_TEST_F(ShutdownDeclinesAllPendingRequests, TWriteSessionsQuoterTest) {
     ExpectReplies(granted, 0);
 }
 
-Y_UNIT_TEST_F(ExhaustedBucketDoesNotBlockOtherQueues, TWriteSessionsQuoterTest) {
+Y_UNIT_TEST_F(WakeupDrainsIndependentQueues, TWriteSessionsQuoterTest) {
     const TBucketKey other{"/Root/topic", 1, 1};
     Notify();
     Notify(other);
-    const auto holder = Acquire();
-    const auto otherHolder = Acquire(other);
-    ExpectReplies(holder, 1);
-    ExpectReplies(otherHolder, 1);
+    ExpectReplies(Acquire(), 1);
+    ExpectReplies(Acquire(other), 1);
     const auto first = Acquire();
+    const auto second = Acquire();
     const auto otherFirst = Acquire(other);
-    Release(otherHolder, other);
-    ExpectReplies(otherFirst, 1);
-    ExpectReplies(first, 0);
-    Release(holder);
+    AdvanceTime();
     ExpectReplies(first, 1);
+    ExpectReplies(second, 0);
+    ExpectReplies(otherFirst, 1);
 }
 
-Y_UNIT_TEST_F(NewRequestDoesNotOvertakePendingRequestAfterLimitIncrease, TWriteSessionsQuoterTest) {
+Y_UNIT_TEST_F(NewRequestDoesNotOvertakePendingRequest, TWriteSessionsQuoterTest) {
     Notify();
     ExpectReplies(Acquire(), 1);
     const auto first = Acquire();
-    Runtime.GetAppData().PQConfig.SetMaxConcurrentWriteSessionInitializations(2);
     const auto second = Acquire();
+    ExpectReplies(first, 0);
+    ExpectReplies(second, 0);
+    AdvanceTime();
     ExpectReplies(first, 1);
     ExpectReplies(second, 0);
-    Release(first);
+    AdvanceTime();
     ExpectReplies(second, 1);
 }
 
 Y_UNIT_TEST_F(QueueCanBeRecreatedAfterDraining, TWriteSessionsQuoterTest) {
     Notify();
-    const auto holder = Acquire();
-    ExpectReplies(holder, 1);
+    ExpectReplies(Acquire(), 1);
     const auto first = Acquire();
-    Release(holder);
+    AdvanceTime();
     ExpectReplies(first, 1);
     const auto second = Acquire();
     ExpectReplies(second, 0);
-    Release(first);
+    AdvanceTime();
     ExpectReplies(second, 1);
 }
 
@@ -387,117 +361,49 @@ Y_UNIT_TEST_F(QueueLimitRejectsOverflowAndReusesFreedCapacity, TWriteSessionsQuo
     Notify(other);
     ExpectReplies(Acquire(other), 1);
 
-    Release(lastSlot);
+    AdvanceTime();
     const auto replacement = Acquire();
     ExpectReplies(replacement, 0);
     ExpectDeclined(Acquire());
 }
 
-
-Y_UNIT_TEST_F(CancelPendingDoesNotReleaseHolderAndPreservesOrder, TWriteSessionsQuoterTest) {
+Y_UNIT_TEST_F(DuplicateAcquireDoesNotDuplicateWaiter, TWriteSessionsQuoterTest) {
     Notify();
-    const auto holder = Acquire();
-    ExpectReplies(holder, 1);
-    const auto first = Acquire();
-    const auto cancelled = Acquire();
-    const auto last = Acquire();
-    Release(cancelled);
-    Release(cancelled);
-    ExpectReplies(first, 0);
-    ExpectReplies(last, 0);
-    Release(holder);
-    ExpectReplies(first, 1);
-    ExpectReplies(cancelled, 0);
-    ExpectReplies(last, 0);
-    Release(first);
-    ExpectReplies(last, 1);
-}
-
-Y_UNIT_TEST_F(CancelOnlyWaiterAllowsRecreatingQueue, TWriteSessionsQuoterTest) {
-    Notify();
-    const auto holder = Acquire();
-    ExpectReplies(holder, 1);
-    const auto cancelled = Acquire();
-    Release(cancelled);
-    const auto next = Acquire();
-    Release(holder);
-    ExpectReplies(cancelled, 0);
-    ExpectReplies(next, 1);
-}
-
-Y_UNIT_TEST_F(ReleaseBeforeReceivingGrantReturnsSlot, TWriteSessionsQuoterTest) {
-    Notify();
-    const auto holder = Acquire();
-    ExpectReplies(holder, 1);
-    const auto cancelled = Acquire();
-    const auto next = Acquire();
-    Release(holder); // The reply to cancelled is still in its mailbox.
-    Release(cancelled);
-    ExpectReplies(cancelled, 1);
-    ExpectReplies(next, 1);
-    Release(cancelled);
-    ExpectReplies(Acquire(), 0);
-}
-
-Y_UNIT_TEST_F(DuplicateAcquireDoesNotDuplicateHolderOrWaiter, TWriteSessionsQuoterTest) {
-    Notify();
-    const auto holder = Acquire();
-    ExpectReplies(holder, 1);
-    AcquireFrom(holder);
-    ExpectReplies(holder, 0);
+    ExpectReplies(Acquire(), 1);
     const auto waiter = Acquire();
     AcquireFrom(waiter);
     const auto next = Acquire();
-    Release(holder);
+    AdvanceTime();
     ExpectReplies(waiter, 1);
-    Release(waiter);
+    ExpectReplies(next, 0);
+    AdvanceTime();
     ExpectReplies(waiter, 0);
     ExpectReplies(next, 1);
 }
 
-Y_UNIT_TEST_F(WrongKeyDoesNotCancelPendingRequest, TWriteSessionsQuoterTest) {
-    const TBucketKey other{"/Root/other", 0, 1};
+Y_UNIT_TEST_F(RemoveClearsPendingIndex, TWriteSessionsQuoterTest) {
     Notify();
-    Notify(other);
-    const auto holder = Acquire();
-    ExpectReplies(holder, 1);
-    const auto pending = Acquire();
-    Release(pending, other);
-    Release(holder);
-    ExpectReplies(pending, 1);
-}
-
-Y_UNIT_TEST_F(RemoveClearsIndexesAndLateReleaseDoesNotAffectNewHolders, TWriteSessionsQuoterTest) {
-    Notify();
-    const auto holder = Acquire();
-    ExpectReplies(holder, 1);
+    ExpectReplies(Acquire(), 1);
     const auto pending = Acquire();
     Remove();
     ExpectDeclined(pending);
     Notify();
-    const auto newHolder = Acquire();
-    ExpectReplies(newHolder, 1);
-    Release(holder);
-    Release(pending);
-    AcquireFrom(holder);
+    ExpectReplies(Acquire(), 1);
     AcquireFrom(pending);
-    ExpectReplies(holder, 0);
     ExpectReplies(pending, 0);
-    Release(newHolder);
-    ExpectReplies(holder, 1);
-    Release(holder);
+    AdvanceTime();
     ExpectReplies(pending, 1);
 }
 
-Y_UNIT_TEST_F(ZeroLimitDoesNotGrantQuotaOnCancel, TWriteSessionsQuoterTest) {
-    Runtime.GetAppData().PQConfig.SetMaxConcurrentWriteSessionInitializations(0);
+Y_UNIT_TEST_F(ZeroLimitDoesNotGrantQuotaOnWakeup, TWriteSessionsQuoterTest) {
+    Runtime.GetAppData().PQConfig.SetWriteSessionsInitRps(0);
     Notify();
-    const auto cancelled = Acquire();
-    const auto pending = Acquire();
-    Release(cancelled);
-    Release(cancelled);
-    ExpectReplies(cancelled, 0);
-    ExpectReplies(pending, 0);
+    const auto first = Acquire();
+    const auto second = Acquire();
+    AdvanceTime();
+    AdvanceTime();
+    ExpectReplies(first, 0);
+    ExpectReplies(second, 0);
 }
 
 } // Y_UNIT_TEST_SUITE

@@ -478,6 +478,29 @@ std::shared_ptr<NExecution::TCompiledGraph> BuildSingleIndexFilterGraph(const bo
     return builder.Finish().DetachResult();
 }
 
+std::shared_ptr<NExecution::TCompiledGraph> BuildBooleanIndexStatsGraph(NKikimr::NKernels::EOperation operation) {
+    auto schema = std::make_shared<arrow::Schema>(std::vector{
+        std::make_shared<arrow::Field>("left", arrow::int64()),
+        std::make_shared<arrow::Field>("right", arrow::int64())});
+    TSchemaColumnResolver resolver(schema);
+    NOptimization::TGraph::TBuilder builder(resolver);
+    builder.EnableIndexMemoryReserve();
+    builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(56), 3));
+    builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(0), 4));
+    for (ui32 column : {1u, 2u}) {
+        builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({column, 3}), TColumnChainInfo(1000 + column),
+            std::make_shared<TSimpleFunction>(EOperation::Equal),
+            std::make_shared<TCompareKernel>(false, TIndexCheckOperation::EOperation::Equals)).DetachResult());
+        builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1000 + column, 4}), TColumnChainInfo(1100 + column),
+            std::make_shared<TSimpleFunction>(EOperation::Add),
+            std::make_shared<TSimpleKernelLogic>((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce)).DetachResult());
+    }
+    builder.Add(std::make_shared<TStreamLogicProcessor>(TColumnChainInfo::BuildVector({1101, 1102}), TColumnChainInfo(1200), operation));
+    builder.Add(std::make_shared<TFilterProcessor>(1200));
+    builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({1, 2})));
+    return builder.Finish().DetachResult();
+}
+
 ui32 CountIndexReservesWiredToIndexFetch(const std::shared_ptr<NExecution::TCompiledGraph>& chain) {
     ui32 indexReserves = 0;
     for (const auto& [_, node] : chain->GetNodes()) {
@@ -757,61 +780,55 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
     }
 
     Y_UNIT_TEST(IndexReserveStatsRetainEverySharedChecker) {
-        auto chain = BuildMergeFilterSimpleGraph(true);
+        const auto chain = BuildBooleanIndexStatsGraph(NKikimr::NKernels::EOperation::And);
+        const TString graphDebug = TStringBuilder() << chain->DebugStats() << "; graph=" << chain->DebugJson().GetStringRobust();
         std::set<const IResourceProcessor*> checkers;
         for (const auto& [id, node] : chain->GetNodes()) {
             if (node->GetProcessor()->GetProcessorType() == EProcessorType::CheckIndexData) {
                 checkers.emplace(node->GetProcessor().get());
                 const auto owners = chain->GetStatsIndexProcessors(id);
-                UNIT_ASSERT_VALUES_EQUAL(owners.size(), 1);
-                UNIT_ASSERT(owners.front() == node->GetProcessor());
+                UNIT_ASSERT_VALUES_EQUAL_C(owners.size(), 1, graphDebug);
+                UNIT_ASSERT_C(owners.front() == node->GetProcessor(), graphDebug);
             }
         }
-        UNIT_ASSERT(checkers.size() > 1);
-        ui32 reserves = 0;
+        UNIT_ASSERT_C(checkers.size() > 1, graphDebug);
+        ui32 sharedReserves = 0;
+        TStringBuilder reserveTrace;
         for (const auto& [id, node] : chain->GetNodes()) {
             if (node->GetProcessor()->GetProcessorType() != EProcessorType::ReserveMemory ||
                 !node->GetProcessor()->DebugJson()["extra_data"].Has("indexes")) {
                 continue;
             }
-            UNIT_ASSERT_STRINGS_EQUAL(chain->GetStatsMetaStep(id), chain->GetStatsMetaStep(node->GetOutputEdges().front()->GetIdentifier()));
+            UNIT_ASSERT_VALUES_EQUAL_C(node->GetOutputEdges().size(), 1, graphDebug);
+            UNIT_ASSERT_C(chain->GetStatsMetaStep(id) == chain->GetStatsMetaStep(node->GetOutputEdges().front()->GetIdentifier()), graphDebug);
             std::set<const IResourceProcessor*> owners;
             std::set<ui32> columns;
+            reserveTrace << "{node=" << id << "; meta=" << chain->GetStatsMetaStep(id) << "; owners=[";
             for (const auto& owner : chain->GetStatsIndexProcessors(id)) {
                 owners.emplace(owner.get());
                 const auto* checker = dynamic_cast<const TIndexCheckerProcessor*>(owner.get());
-                UNIT_ASSERT(checker);
+                UNIT_ASSERT_C(checker, graphDebug);
                 columns.emplace(checker->GetIndexContext().GetColumnId());
+                reserveTrace << owner->DebugJson().GetStringRobust() << ";";
             }
-            UNIT_ASSERT(owners == checkers);
-            UNIT_ASSERT(columns == std::set<ui32>({1, 2}));
-            ++reserves;
+            reserveTrace << "]}";
+            const TString ownersDebug = reserveTrace;
+            const TString diagnostic = graphDebug + "; reserves=" + ownersDebug;
+            UNIT_ASSERT_C(!owners.empty(), diagnostic);
+            if (owners.size() == 1) {
+                continue;
+            }
+            UNIT_ASSERT_C(owners == checkers, diagnostic);
+            UNIT_ASSERT_C(columns == std::set<ui32>({1, 2}), diagnostic);
+            ++sharedReserves;
         }
-        UNIT_ASSERT_VALUES_EQUAL(reserves, 1);
+        const TString ownersDebug = reserveTrace;
+        UNIT_ASSERT_VALUES_EQUAL_C(sharedReserves, 1, graphDebug + "; reserves=" + ownersDebug);
     }
 
     Y_UNIT_TEST(IndexStatsOwnersPreserveBothBooleanBranches) {
         for (const auto operation : {NKikimr::NKernels::EOperation::And, NKikimr::NKernels::EOperation::Or}) {
-            auto schema = std::make_shared<arrow::Schema>(std::vector{
-                std::make_shared<arrow::Field>("left", arrow::int64()),
-                std::make_shared<arrow::Field>("right", arrow::int64())});
-            TSchemaColumnResolver resolver(schema);
-            NOptimization::TGraph::TBuilder builder(resolver);
-            builder.EnableIndexMemoryReserve();
-            builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(56), 3));
-            builder.Add(std::make_shared<TConstProcessor>(std::make_shared<arrow::Int64Scalar>(0), 4));
-            for (ui32 column : {1u, 2u}) {
-                builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({column, 3}), TColumnChainInfo(1000 + column),
-                    std::make_shared<TSimpleFunction>(EOperation::Equal),
-                    std::make_shared<TCompareKernel>(false, TIndexCheckOperation::EOperation::Equals)).DetachResult());
-                builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1000 + column, 4}), TColumnChainInfo(1100 + column),
-                    std::make_shared<TSimpleFunction>(EOperation::Add),
-                    std::make_shared<TSimpleKernelLogic>((ui32)NYql::TKernelRequestBuilder::EBinaryOp::Coalesce)).DetachResult());
-            }
-            builder.Add(std::make_shared<TStreamLogicProcessor>(TColumnChainInfo::BuildVector({1101, 1102}), TColumnChainInfo(1200), operation));
-            builder.Add(std::make_shared<TFilterProcessor>(1200));
-            builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({1, 2})));
-            const auto chain = builder.Finish().DetachResult();
+            const auto chain = BuildBooleanIndexStatsGraph(operation);
             std::set<ui32> checkColumns;
             std::set<ui32> fetchColumns;
             bool sawBooleanOperation = false;

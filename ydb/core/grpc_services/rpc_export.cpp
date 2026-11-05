@@ -254,7 +254,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         }
         for (const auto& item : TTraits::GetItems(settings)) {
             TString fullPath = CanonizePath(this->Request->NormalizePath(item.source_path(), sourceBase));
-            if ((fullPath.empty() || !AppData()->FeatureFlags.GetEnableRelativePaths())
+            if (!AppData()->FeatureFlags.GetEnableRelativePaths()
                 && !HasCommonSourcePathPrefix(fullPath) && fullPath != CommonSourcePath) {
                 fullPath = CommonSourcePath + fullPath;
             }

@@ -63,6 +63,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         PROPERTY("Total message count", (GetEndOffset() - GetStartOffset()));
                         PROPERTY("StartOffset", GetStartOffset());
                         PROPERTY("EndOffset", GetEndOffset());
+                        PROPERTY("MirroredOffset", BlobEncoder.MirroredOffset);
                         PROPERTY("Last message WriteTimestamp", EndWriteTimestamp.ToRfc822String());
                         PROPERTY("HeadOffset", TStringBuilder() << BlobEncoder.Head.Offset << ", count: " << BlobEncoder.Head.GetCount());
                     }

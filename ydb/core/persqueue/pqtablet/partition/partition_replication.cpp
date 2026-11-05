@@ -4,10 +4,24 @@ namespace NKikimr::NPQ {
 
 void TPartition::Handle(TEvPQ::TEvReplicationData::TPtr& ev, const TActorContext& ctx) {
     if (PendingReplicationData) {
-        return;
+        auto& pending = *(*PendingReplicationData)->Get();
+        for (const auto& [consumer, offset] : ev->Get()->OffsetsByConsumers) {
+            if (offset > static_cast<ui64>(Max<i64>())) {
+                continue;
+            }
+            auto& pendingOffset = pending.OffsetsByConsumers[consumer];
+            // An invalid offset in the earlier payload must not hide a valid update.
+            pendingOffset = pendingOffset > static_cast<ui64>(Max<i64>()) ? offset : Max(pendingOffset, offset);
+        }
+        if (const auto& mirroredOffset = ev->Get()->MirroredOffset; mirroredOffset.Defined()) {
+            pending.MirroredOffset = pending.MirroredOffset.Defined()
+                ? Max(*pending.MirroredOffset, *mirroredOffset) : *mirroredOffset;
+        }
+    } else {
+        PendingReplicationData.emplace(std::move(ev));
     }
 
-    PendingReplicationData.emplace(std::move(ev));
+    ReplicationDataNeedsApply = true;
     UpdatePendingUsersFromReplicationData();
     if (InitDone) {
         ProcessTxsAndUserActs(ctx);
@@ -19,6 +33,7 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
         return;
     }
 
+    ReplicationDataNeedsApply = false;
     const auto& config = ChangeConfig ? ChangeConfig->Config : Config;
     const auto mirroredOffset = (*PendingReplicationData)->Get()->MirroredOffset;
     if (mirroredOffset.Defined()) {
@@ -26,9 +41,23 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
     }
 
     for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
-        if (!GetConsumer(config, consumer) || offset > static_cast<ui64>(Max<i64>())) {
+        auto* consumerConfig = GetConsumer(config, consumer);
+        if (!consumerConfig || offset > static_cast<ui64>(Max<i64>())) {
             continue;
         }
+
+        if (consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION) {
+            continue;
+        } else if (consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+            if (auto it = MLPConsumers.find(consumer); it != MLPConsumers.end()) {
+                auto request = MakeHolder<TEvPQ::TEvMLPPurgeRequest>(
+                    TopicName(), consumer, Partition.OriginalPartitionId);
+                request->Record.SetToOffset(offset);
+                Send(it->second.ActorId, request.Release());
+            }
+            continue;
+        }
+
         auto& userInfo = GetOrCreatePendingUser(consumer);
         if (const auto* committed = UsersInfoStorage->GetIfExists(consumer)) {
             userInfo.Offset = Max(userInfo.Offset, committed->Offset);
@@ -37,9 +66,16 @@ void TPartition::UpdatePendingUsersFromReplicationData() {
     }
 }
 
-void TPartition::CompleteReplicationDataWrite(const TActorContext& ctx) {
+void TPartition::CompleteReplicationDataWrite(const TActorContext&) {
     if (!PendingReplicationData) {
         return;
+    }
+
+    // Updates merged during the KV write have not been applied yet. In
+    // particular, MLP offsets are not checked by expectedOffsets below.
+    if (ReplicationDataNeedsApply) {
+        UpdatePendingUsersFromReplicationData();
+        return; // OnHandleWriteResponse starts the next persist cycle.
     }
 
     const auto mirroredOffset = (*PendingReplicationData)->Get()->MirroredOffset;
@@ -55,7 +91,13 @@ void TPartition::CompleteReplicationDataWrite(const TActorContext& ctx) {
     // Replication may replay older snapshots; acknowledge the greatest valid offset.
     y_absl::flat_hash_map<TString, ui64> expectedOffsets;
     for (const auto& [consumer, offset] : (*PendingReplicationData)->Get()->OffsetsByConsumers) {
-        if (!GetConsumer(config, consumer) || offset > static_cast<ui64>(Max<i64>())) {
+        const auto* consumerConfig = GetConsumer(config, consumer);
+        // Replication consumers are excluded from applying incoming offsets above.
+        // MLP progress is applied by TEvMLPPurgeRequest, not by the streaming commit offset.
+        if (!consumerConfig
+            || consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
+            || consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP
+            || offset > static_cast<ui64>(Max<i64>())) {
             continue;
         }
         auto& expected = expectedOffsets[consumer];
@@ -69,8 +111,6 @@ void TPartition::CompleteReplicationDataWrite(const TActorContext& ctx) {
         }
     }
 
-    const auto& event = *PendingReplicationData;
-    ctx.Send(event->Sender, new TEvPQ::TEvReplicationDataAck(), 0, event->Cookie);
     PendingReplicationData.reset();
 }
 

@@ -250,6 +250,7 @@ struct TEvPQ {
         EvProcessBatchKeysResult,
         EvReplicationData,
         EvReplicationDataAck,
+        EvPersistDone,
         EvEnd,
     };
 
@@ -1359,7 +1360,12 @@ struct TEvPQ {
         TMaybe<ui64> MirroredOffset;
     };
 
-    struct TEvReplicationDataAck : public TEventLocal<TEvReplicationDataAck, EvReplicationDataAck> {
+    struct TEvPersistDone : public TEventLocal<TEvPersistDone, EvPersistDone> {
+        explicit TEvPersistDone(ui64 endOffset)
+            : EndOffset(endOffset)
+        {}
+
+        ui64 EndOffset;
     };
 
     struct TEvPartitionScaleStatusChanged : public TEventPB<TEvPartitionScaleStatusChanged, NKikimrPQ::TEvPartitionScaleStatusChanged, EvPartitionScaleStatusChanged> {
@@ -1827,6 +1833,10 @@ struct TEvPQ {
 
         ui32 GetPartitionId() const {
             return Record.GetPartitionId();
+        }
+
+        std::optional<ui64> GetToOffset() const {
+            return Record.HasToOffset() ? std::make_optional(Record.GetToOffset()) : std::nullopt;
         }
     };
 

@@ -152,10 +152,7 @@ public:
         file->SetObjectId("missing");
         NDqProto::TDqTask task;
         task.MutableMeta()->PackFrom(meta);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(
-            Factory->GetOld(nullptr, NDq::TDqTaskSettings(&task)),
-            std::runtime_error,
-            "Cannot find object `missing` in cache");
+        Factory->GetOld(nullptr, NDq::TDqTaskSettings(&task));
     }
 };
 
@@ -186,7 +183,10 @@ Y_UNIT_TEST_SUITE(TPipeFactoryCleanup) {
         UNIT_ASSERT_VALUES_EQUAL(kill(acquiredPid, 0), 0);
         UNIT_ASSERT(!(fixture.Directory.Path() / "destroy-Slot-2").Exists());
         fixture.Cache->Release = true;
-        request.get();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            request.get(),
+            std::runtime_error,
+            "Cannot find object `missing` in cache");
     }
 }
 

@@ -2001,6 +2001,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(StreamingConstraintsValidation, TStreamingTestFixture) {
         auto& appConfig = SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableKqpConstraintsTransformer(true);
+        appConfig.MutableFeatureFlags()->SetEnableStreamingAggregation(true);
         appConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
 
         constexpr char input1[] = "streamingConstraintsValidationFirstInputTopic";

@@ -13,6 +13,7 @@ RECURSE(
     types
     udf
     udf_meta
+    utf8
 )
 
 IF (OS_LINUX AND ARCH_X86_64 AND SANITIZER_TYPE != "undefined")

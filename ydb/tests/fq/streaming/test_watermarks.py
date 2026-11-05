@@ -5,21 +5,16 @@ import pytest
 import time
 from typing import Callable, Self
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, counter_nodes
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient
 from ydb.tests.library.test_meta import link_test_case
 
 logger = logging.getLogger(__name__)
 DEFAULT_INITIAL_TS = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
 
 
+@pytest.mark.usefixtures("wait_initial_resources")
 class TestWatermarksInYdb(StreamingTestBase):
     idle_timeout_seconds = 5
-
-    @pytest.fixture(autouse=True)
-    def _wait_initial_resources(self, kikimr: Kikimr) -> None:
-        # A partial planner snapshot can place all readers on one node, causing
-        # the health check to restart the query during watermark assertions.
-        kikimr.wait_kqp_node_count(expected_count=len(counter_nodes(kikimr.cluster)), timeout_seconds=120)
 
     @staticmethod
     def _event(

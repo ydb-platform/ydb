@@ -7,7 +7,7 @@
 ### Функциональность
 
 * Добавлена поддержка рекурсивного удаления томов Solomon (KeyValue), пулов ресурсов и коллекций резервных копий с помощью [команды](./reference/ydb-cli/commands/dir.md#rmdir) `{{ ydb-cli }} scheme rmdir --recursive`.
-* Добавлена опция `--skip-storage-pool-conversion` в [команду](./reference/ydb-cli/commands/bridge/convert.md) `{{ ydb-cli }} admin cluster bridge convert`, позволяющая преобразовать только статические группы хранения, оставив существующие пулы хранения и их группы в обычном режиме. Эти пулы не реплицируются в добавляемые pile до отдельного преобразования. Для использования опции в `bridge_config` необходимо задать `enable_non_uniform_storage: true`.
+* Добавлена опция `--skip-storage-pool-conversion` в команду `{{ ydb-cli }} admin cluster bridge convert`, позволяющая преобразовать только статические группы хранения, оставив существующие пулы хранения и их группы в обычном режиме. Эти пулы не реплицируются в добавляемые pile до отдельного преобразования. Для использования опции в `bridge_config` необходимо задать `enable_non_uniform_storage: true`.
 * В вывод [команды](./reference/ydb-cli/commands/bridge/list.md) `{{ ydb-cli }} admin cluster bridge list` в форматах `pretty` и `json` добавлены сведения о незавершённых операциях с pile, включая ошибку последней неудачной попытки.
 * В вывод [команды](./reference/ydb-cli/commands/bridge/list.md) `{{ ydb-cli }} admin cluster bridge list` добавлена поддержка состояния pile `INACTIVE`.
 

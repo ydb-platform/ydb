@@ -5146,6 +5146,13 @@ void TPartition::CreateMirrorerActor() {
     );
 }
 
+void TPartition::DestroyMirrorer() {
+    if (Mirrorer) {
+        Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
+        Mirrorer.Reset();
+    }
+}
+
 void TPartition::NotifyMirrorerPersistDone() {
     if (Mirrorer) {
         Send(Mirrorer->Actor, new TEvPQ::TEvPersistDone(GetEndOffset()));

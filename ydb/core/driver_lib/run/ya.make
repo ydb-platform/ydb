@@ -156,6 +156,7 @@ PEERDIR(
     ydb/library/grpc/server/actors
     ydb/library/pdisk_io
     ydb/library/security
+    ydb/library/signals
     ydb/library/slide_limiter/service
     ydb/library/slide_limiter/usage
     ydb/library/yql/providers/pq/cm_client

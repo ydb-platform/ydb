@@ -27,6 +27,7 @@
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/signals/node_counters.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -2273,6 +2274,21 @@ Y_UNIT_TEST_SUITE(TColumnShardInit) {
         const auto beforeReboot = ColumnsByVersion(runtime, csControllerGuard);
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         UNIT_ASSERT(ColumnsByVersion(runtime, csControllerGuard) == beforeReboot);
+    }
+
+    Y_UNIT_TEST(ExportsNodeServiceCounters) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        // testlib does not run the node initializers, so take a group the way they do
+        auto group = GetNodeServiceCounters(runtime.GetDynamicCounters(0), "TX_TEST");
+        auto tablets = GetServiceCounters(runtime.GetDynamicCounters(0), "tablets");
+        UNIT_ASSERT(!tablets->FindSubgroup("type", "TX_TEST"));
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+        runtime.WaitFor(Cerr, "node service counters export", [&]() {
+            return tablets->FindSubgroup("type", "TX_TEST") == group;
+        });
     }
 }
 

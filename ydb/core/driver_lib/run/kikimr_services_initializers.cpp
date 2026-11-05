@@ -200,6 +200,7 @@
 #include <ydb/core/viewer/viewer.h>
 
 #include <ydb/library/aws_init/aws.h>
+#include <ydb/library/signals/node_counters.h>
 
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 
@@ -1531,8 +1532,7 @@ void TBlobCacheInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
 
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> blobCacheGroup = tabletGroup->GetSubgroup("type", "BLOB_CACHE");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> blobCacheGroup = NColumnShard::GetNodeServiceCounters(appData->Counters, "BLOB_CACHE");
 
     const NBlobCache::TBlobCacheSettings settings = NBlobCache::TBlobCacheSettings::FromProto(Config.GetBlobCacheConfig());
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NBlobCache::MakeBlobCacheServiceId(),
@@ -2674,8 +2674,7 @@ void TScanGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSys
         "invalid ScanGroupedMemoryLimiterConfig: %s", Config.GetScanGroupedMemoryLimiterConfig().ShortDebugString().c_str());
 
     if (serviceConfig.IsEnabled()) {
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_SCAN_GROUPED_MEMORY_LIMITER");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = NColumnShard::GetNodeServiceCounters(appData->Counters, "TX_SCAN_GROUPED_MEMORY_LIMITER");
 
         auto service = NOlap::NGroupedMemoryManager::TScanMemoryLimiterOperator::CreateService(serviceConfig, countersGroup);
 
@@ -2698,8 +2697,7 @@ void TCompGroupedMemoryLimiterInitializer::InitializeServices(NActors::TActorSys
         "invalid CompGroupedMemoryLimiterConfig: %s", Config.GetCompGroupedMemoryLimiterConfig().ShortDebugString().c_str());
 
     if (serviceConfig.IsEnabled()) {
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_COMP_GROUPED_MEMORY_LIMITER");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = NColumnShard::GetNodeServiceCounters(appData->Counters, "TX_COMP_GROUPED_MEMORY_LIMITER");
 
         auto service = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::CreateService(serviceConfig, countersGroup);
 
@@ -2722,8 +2720,7 @@ void TDeduplicationGroupedMemoryLimiterInitializer::InitializeServices(NActors::
         "invalid DeduplicationGroupedMemoryLimiterConfig: %s", Config.GetDeduplicationGroupedMemoryLimiterConfig().ShortDebugString().c_str());
 
     if (serviceConfig.IsEnabled()) {
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_DEDU_GROUPED_MEMORY_LIMITER");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = NColumnShard::GetNodeServiceCounters(appData->Counters, "TX_DEDU_GROUPED_MEMORY_LIMITER");
 
         auto service = NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::CreateService(serviceConfig, countersGroup);
 
@@ -2741,8 +2738,7 @@ void TCompDiskLimiterInitializer::InitializeServices(NActors::TActorSystemSetup*
     Y_ABORT_UNLESS(serviceConfig.DeserializeFromProto<NLimiter::TCompDiskLimiterPolicy>(Config.GetCompDiskLimiterConfig()));
 
     if (serviceConfig.IsEnabled()) {
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_COMP_DISK_LIMITER");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = NColumnShard::GetNodeServiceCounters(appData->Counters, "TX_COMP_DISK_LIMITER");
 
         auto service = NLimiter::CreateService<NLimiter::TCompDiskLimiterPolicy>(serviceConfig, countersGroup);
 
@@ -2763,8 +2759,7 @@ void TCompPrioritiesInitializer::InitializeServices(NActors::TActorSystemSetup* 
     }
 
     if (serviceConfig.IsEnabled()) {
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_COMP_PRIORITIES");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = NColumnShard::GetNodeServiceCounters(appData->Counters, "TX_COMP_PRIORITIES");
 
         auto service = NPrioritiesQueue::CreateService<NPrioritiesQueue::TCompConveyorPolicy>(serviceConfig, conveyorGroup);
 
@@ -2790,8 +2785,7 @@ void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActo
     }
     AFL_VERIFY(!serviceConfig.IsFail());
 
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_PORTIONS_METADATA");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = NColumnShard::GetNodeServiceCounters(appData->Counters, "TX_GENERAL_CACHE_PORTIONS_METADATA");
 
     auto service = NGeneralCache::CreateService<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>(*serviceConfig, conveyorGroup);
 
@@ -2817,8 +2811,7 @@ void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSyste
     }
     AFL_VERIFY(!serviceConfig.IsFail());
 
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_COLUMN_DATA");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = NColumnShard::GetNodeServiceCounters(appData->Counters, "TX_GENERAL_CACHE_COLUMN_DATA");
 
     auto service = NGeneralCache::CreateService<NOlap::NGeneralCache::TColumnDataCachePolicy>(*serviceConfig, conveyorGroup);
 
@@ -2967,8 +2960,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
     AFL_VERIFY(!serviceConfig.IsFail());
 
     if (serviceConfig->IsEnabled()) {
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_COMPOSITE_CONVEYOR");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = NColumnShard::GetNodeServiceCounters(appData->Counters, "TX_COMPOSITE_CONVEYOR");
 
         const auto registerService = [&](const ui32 poolId, bool useBatchPool) {
             auto poolConveyorGroup = conveyorGroup->GetSubgroup("actor_system_pool_id", ::ToString(poolId));
@@ -3562,8 +3554,7 @@ TOverloadManagerInitializer::TOverloadManagerInitializer(const TKikimrRunConfig&
 }
 
 void TOverloadManagerInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "CS_OVERLOAD_MANAGER");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = NColumnShard::GetNodeServiceCounters(appData->Counters, "CS_OVERLOAD_MANAGER");
 
     setup->LocalServices.push_back(std::make_pair(NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
         TActorSetupCmd(NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(countersGroup), TMailboxType::HTSwap, appData->UserPoolId)));

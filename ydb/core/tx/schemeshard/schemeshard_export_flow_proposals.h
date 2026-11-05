@@ -49,6 +49,9 @@ THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(
 TString ExportItemPathName(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx);
 TString ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx);
 
+// IV of a separate index impl-table export item
+NBackup::TEncryptionIV MakeExportIndexItemIV(const NBackup::TEncryptionIV& exportIV, ui32 itemIdx);
+
 // Index impl tables that DataShard lists in the table metadata.json on export
 TVector<NBackup::TIndexMetadata> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId, bool encrypted);
 

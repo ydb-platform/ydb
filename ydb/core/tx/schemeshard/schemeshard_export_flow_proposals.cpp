@@ -5,7 +5,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/backup/common/index_metadata.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
@@ -90,10 +90,14 @@ static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const 
 
 static TVector<NBackup::TIndexMetadata> GetTableIndexesExportMetadata(const NKikimrSchemeOp::TTableDescription& table, bool encrypted) {
     // Must match the list that DataShard writes into the table metadata.json
-    // (see TS3Export::CreateUploader): DataShard numbers anonymized index prefixes
-    // after the exported changefeeds and lists only the indexes it can convert.
+    // (see TS3Export::CreateUploader and GenRowTableScheme): DataShard numbers
+    // anonymized index prefixes after the exported changefeeds, lists only the
+    // indexes it can convert and lists nothing if it fails to build the scheme.
     Ydb::Table::CreateTableRequest scheme;
+    NKikimrMiniKQL::TType mkqlKeyType;
     try {
+        FillColumnDescription(scheme, mkqlKeyType, table);
+        FillTableBoundary(scheme, table, mkqlKeyType);
         FillIndexDescription(scheme, table);
     } catch (const yexception&) {
         return {};
@@ -122,8 +126,24 @@ static TString ComputeIndexItemSuffix(
     }
 
     Y_ABORT_UNLESS(item.ParentIdx < exportInfo.Items.size());
-    const auto& parentItem = exportInfo.Items[item.ParentIdx];
+    const TString unlistedPrefix = TStringBuilder() << "unlisted_" << itemIdx;
 
+    if (item.ParentIdx < exportInfo.ExportMetadata.SchemaMappingSize()) {
+        const auto& parentMapping = exportInfo.ExportMetadata.GetSchemaMapping(item.ParentIdx);
+        if (parentMapping.HasIndexExportPrefixes()) {
+            // Fixed by FillExportMetadata, DataShard lists the same prefixes in the table metadata
+            for (const auto& index : parentMapping.GetIndexExportPrefixes().GetIndexes()) {
+                if (index.GetImplTablePrefix() == item.SourcePathName) {
+                    return index.GetExportPrefix();
+                }
+            }
+            // Never referenced by the table metadata
+            return unlistedPrefix;
+        }
+    }
+
+    // Exports created by older versions: compute the prefix from the current scheme
+    const auto& parentItem = exportInfo.Items[item.ParentIdx];
     auto parentPath = TPath::Init(parentItem.SourcePathId, ss);
     if (parentPath.IsResolved()) {
         for (const auto& index : GetTableIndexesExportMetadata(ss, parentPath.Base()->PathId, encrypted)) {
@@ -133,10 +153,8 @@ static TString ComputeIndexItemSuffix(
         }
     }
 
-    // Index items that DataShard does not list are filtered out on export creation,
-    // so we get here only if the parent table scheme was changed concurrently.
-    // Upload to a unique prefix that is never referenced by the table metadata.
-    return TStringBuilder() << "unlisted_" << itemIdx;
+    // Upload to a unique prefix that is never referenced by the table metadata
+    return unlistedPrefix;
 }
 
 template <typename TSettings>
@@ -236,9 +254,22 @@ TString GetExportItemIV(const TExportInfo& exportInfo, ui32 itemIdx) {
     // the uploaded IV so that the data can always be decrypted on import.
     Y_ABORT_UNLESS(item.ParentIdx < exportInfo.ExportMetadata.SchemaMappingSize());
     const auto& indexIVs = exportInfo.ExportMetadata.GetSchemaMapping(item.ParentIdx).GetIndexIVs().GetIVs();
-    const auto it = indexIVs.find(item.SourcePathName);
-    Y_ABORT_UNLESS(it != indexIVs.end(), "No IV for index item %s", item.SourcePathName.c_str());
-    return it->second;
+    if (const auto it = indexIVs.find(item.SourcePathName); it != indexIVs.end()) {
+        return it->second;
+    }
+
+    // Exports created by older versions have no index IVs in the metadata
+    // (such versions crash on encrypted index items). Let them finish after
+    // upgrade instead of crashing again: the IV is still unique, but import
+    // of this index data will be rejected because the schema mapping lacks it.
+    return MakeExportIndexItemIV(
+        NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetIV()), itemIdx).GetBinaryString();
+}
+
+NBackup::TEncryptionIV MakeExportIndexItemIV(const NBackup::TEncryptionIV& exportIV, ui32 itemIdx) {
+    // Index impl-table items are appended after the user items, so their item
+    // numbers continue the numbering of SchemaMapping items
+    return NBackup::TEncryptionIV::Combine(exportIV, NBackup::EBackupFileType::Metadata, itemIdx + 1, 0);
 }
 
 template <typename TSettings>
@@ -253,6 +284,14 @@ void FillEncryptionSettings(
         encryptionSettings.SetEncryptionAlgorithm(exportInfo.ExportMetadata.GetEncryptionAlgorithm());
         encryptionSettings.SetIV(GetExportItemIV(exportInfo, itemIdx));
         *encryptionSettings.MutableSymmetricKey() = exportSettings.encryption_settings().symmetric_key();
+
+        const bool isTableItem = exportInfo.Items.at(itemIdx).ParentIdx == Max<ui32>();
+        if (isTableItem && itemIdx < exportInfo.ExportMetadata.SchemaMappingSize()) {
+            const auto& mapping = exportInfo.ExportMetadata.GetSchemaMapping(itemIdx);
+            if (mapping.HasIndexExportPrefixes()) {
+                *task.MutableIndexExportPrefixes() = mapping.GetIndexExportPrefixes();
+            }
+        }
     }
 }
 

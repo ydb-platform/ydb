@@ -685,12 +685,29 @@ private:
             // SchemeShard writes the authenticated index IVs itself. DataShards
             // only need the existing per-item encryption settings, including
             // when their binaries predate encrypted index materialization.
+            TMap<ui32, THashSet<TString>> indexItemsByParent;
             for (ui32 indexIdx : xrange(exportInfo.Items.size())) {
                 const auto& indexItem = exportInfo.Items[indexIdx];
                 if (indexItem.ParentIdx != Max<ui32>()) {
                     auto& parent = *exportInfo.ExportMetadata.MutableSchemaMapping(indexItem.ParentIdx);
                     (*parent.MutableIndexIVs()->MutableIVs())[indexItem.SourcePathName] =
-                        NBackup::TEncryptionIV::Combine(*iv, NBackup::EBackupFileType::Metadata, indexIdx + 1, 0).GetBinaryString();
+                        MakeExportIndexItemIV(*iv, indexIdx).GetBinaryString();
+                    indexItemsByParent[indexItem.ParentIdx].insert(indexItem.SourcePathName);
+                }
+            }
+
+            // Anonymized index prefixes depend on the position of the index in the table
+            // scheme, which can be changed during the export. Fix them once here and use
+            // the same list for index items and for the table metadata written by DataShard.
+            for (const auto& [parentIdx, implTables] : indexItemsByParent) {
+                auto& prefixes = *exportInfo.ExportMetadata.MutableSchemaMapping(parentIdx)->MutableIndexExportPrefixes();
+                const auto& parentItem = exportInfo.Items.at(parentIdx);
+                for (const auto& index : GetTableIndexesExportMetadata(Self, parentItem.SourcePathId, true)) {
+                    if (implTables.contains(index.ImplTablePrefix)) {
+                        auto& entry = *prefixes.AddIndexes();
+                        entry.SetImplTablePrefix(index.ImplTablePrefix);
+                        entry.SetExportPrefix(index.ExportPrefix);
+                    }
                 }
             }
         }

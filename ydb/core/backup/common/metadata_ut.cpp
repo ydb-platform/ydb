@@ -1,3 +1,4 @@
+#include "index_metadata.h"
 #include "metadata.h"
 
 #include <library/cpp/testing/unittest/registar.h>

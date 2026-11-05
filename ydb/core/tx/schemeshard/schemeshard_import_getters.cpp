@@ -536,17 +536,29 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         );
 
         const bool canSkip = IndexPopulationMode != Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT;
-        if (canSkip && NoObjectFound(result.GetError().GetErrorType())) {
+        auto skipMaterializedIndexes = [&]() {
             Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
             auto& item = ImportInfo->Items.at(ItemIdx);
             item.MaterializedIndexes.clear();
-            return StartDownloadingChangefeeds();
+            StartDownloadingChangefeeds();
+        };
+
+        if (canSkip && NoObjectFound(result.GetError().GetErrorType())) {
+            return skipMaterializedIndexes();
         } else if (!CheckResult(result, "HeadObject")) {
             return;
         }
 
         Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
         if (Key && !IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].IV) {
+            // Index data cannot be decrypted without its IV
+            if (canSkip) {
+                YDB_LOG_NOTICE("No index IV in schema mapping, indexes will be built",
+                    {"self", SelfId()},
+                    {"key", CurrentMaterializedIndexSchemeKey()},
+                );
+                return skipMaterializedIndexes();
+            }
             return Reply(Ydb::StatusIds::BAD_REQUEST,
                 TStringBuilder() << CurrentMaterializedIndexSchemeKey() << ": no index IV in schema mapping");
         }

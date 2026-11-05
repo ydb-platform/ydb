@@ -5,6 +5,7 @@ SRCS(
     encryption.cpp
     feature_flags.cpp
     fields_wrappers.cpp
+    index_metadata.cpp
     metadata.cpp
 )
 

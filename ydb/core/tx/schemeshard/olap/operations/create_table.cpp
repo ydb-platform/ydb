@@ -12,6 +12,7 @@
 #include <ydb/core/tx/sharding/sharding.h>
 #include <ydb/core/mind/hive/hive.h>
 
+#include <util/generic/is_in.h>
 #include <util/random/shuffle.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
@@ -79,6 +80,38 @@ public:
             errors.AddError(statusBuild.GetErrorMessage());
             return nullptr;
         }
+
+        for (const auto& [name, sequence] : description.GetSerialSequences()) {
+            const auto* column = GetSchema().GetColumns().GetByName(name);
+            if (!column || !column->IsNotNull() || !column->IsKeyColumn() ||
+                !IsIn(description.GetSchema().GetKeyColumnNames(), name)) {
+                errors.AddError("Serial column '" + name + "' must be a NOT NULL primary key column");
+                return nullptr;
+            }
+
+            TString error;
+            auto bounds = ValidateSequenceType(sequence.GetName(), sequence.GetDataType(), *AppData()->TypeRegistry, false, error);
+            if (!bounds || sequence.GetDataType() != column->GetTypeName()) {
+                errors.AddError("Serial sequence type must match the integer type of column '" + name + "'");
+                return nullptr;
+            }
+
+            if (sequence.HasSetVal() && (sequence.GetSetVal().GetNextValue() < bounds->first ||
+                sequence.GetSetVal().GetNextValue() > bounds->second)) {
+                errors.AddError("Sequence next value exceeds the range of column '" + name + "'");
+                return nullptr;
+            }
+
+            if ((sequence.HasMinValue() && sequence.GetMinValue() < bounds->first) ||
+                (sequence.HasMaxValue() && sequence.GetMaxValue() > bounds->second) ||
+                (sequence.HasStartValue() && (sequence.GetStartValue() < bounds->first || sequence.GetStartValue() > bounds->second))) {
+                errors.AddError("Sequence values exceed the range of column '" + name + "'");
+                return nullptr;
+            }
+
+            (*tableInfo->Description.MutableSerialSequences())[name].SetName(sequence.GetName());
+        }
+
         tableInfo->Description.SetColumnShardCount(ShardsCount);
         tableInfo->Description.SetName(Name);
         if (TtlSettings) {
@@ -695,6 +728,21 @@ public:
 
         if (!tableInfo) {
             return result;
+        }
+
+        if (!createDescription.GetSerialSequences().empty() && domainInfo->GetSequenceShards().empty()) {
+            auto checks = dstPath.Check();
+            checks.ShardsLimit(1ULL + (storeInfo ? 0 : shardsCount));
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+
+            TChannelsBindings channels;
+            if (!context.SS->ResolveTabletChannels(0, dstPath.GetPathIdForDomain(), channels)) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding for sequence shard");
+                return result;
+            }
         }
 
         dstPath.MaterializeLeaf(owner);

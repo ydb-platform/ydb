@@ -45,6 +45,19 @@ namespace {
         return descr.SplitBoundarySize() + 1;
     }
 
+    TString SerialTypeName(const TString& type) {
+        auto lowerType = to_lower(type);
+        if (lowerType == "int64") {
+            return "Serial8";
+        } else if (lowerType == "int32") {
+            return "Serial4";
+        } else if (lowerType == "int16") {
+            return "Serial2";
+        }
+
+        return type;
+    }
+
     bool IsGlobalIndex(const TableIndex& index) {
         switch (index.type_case()) {
             case TableIndex::kGlobalIndex:
@@ -565,14 +578,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
             break;
         }
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
-            auto lowerType = to_lower(type);
-            if (lowerType == "int64") {
-                type = "Serial8";
-            } else if (lowerType == "int32") {
-                type = "Serial4";
-            } else if (lowerType == "int16") {
-                type = "Serial2";
-            }
+            type = SerialTypeName(type);
             break;
         }
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromExpression: {
@@ -1612,7 +1618,7 @@ void TCreateTableFormatter::FormatIndexImplTable(const TString& tablePath, const
 
 
 TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TString& fullPath, const TColumnTableDescription& tableDesc, bool temporary,
-    bool enableLocalIndexAsSchemeObject) {
+    bool enableLocalIndexAsSchemeObject, const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences) {
     Stream.Clear();
 
     TStringStreamWrapper wrapper(Stream);
@@ -1635,11 +1641,11 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     try {
         auto it = columns.cbegin();
-        Format(*it->second);
+        Format(*it->second, tableDesc.GetSerialSequences().contains(it->second->GetName()));
         std::advance(it, 1);
         for (; it != columns.end(); ++it) {
             Stream << ",\n";
-            Format(*it->second);
+            Format(*it->second, tableDesc.GetSerialSequences().contains(it->second->GetName()));
         }
     } catch (const TFormatFail& ex) {
         return TFormatResult(ex.Status, ex.Error);
@@ -1748,8 +1754,12 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     Stream << "\n);";
 
     try {
-        for (const auto& column: columns) {
-            FormatAlterColumn(fullPath, *column.second);
+        for (const auto& [_, column] : columns) {
+            FormatAlterColumn(fullPath, *column);
+            const auto sequence = tableDesc.GetSerialSequences().find(column->GetName());
+            if (sequence != tableDesc.GetSerialSequences().end()) {
+                Format(fullPath, sequence->second, sequences);
+            }
         }
     } catch (const TFormatFail& ex) {
         return TFormatResult(ex.Status, ex.Error);
@@ -1794,10 +1804,10 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     return result;
 }
 
-void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc) {
+void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc, bool serial) {
     Stream << "\t";
     EscapeName(olapColumnDesc.GetName(), Stream);
-    Stream << " " << olapColumnDesc.GetType();
+    Stream << " " << (serial ? SerialTypeName(olapColumnDesc.GetType()) : olapColumnDesc.GetType());
 
     if (olapColumnDesc.GetNotNull()) {
         Stream << " NOT NULL";

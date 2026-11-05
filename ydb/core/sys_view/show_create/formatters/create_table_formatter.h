@@ -36,7 +36,8 @@ public:
         const THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>>& persQueues,
         const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences);
     TFormatResult Format(const TString& tablePath, const TString& fullPath, const NKikimrSchemeOp::TColumnTableDescription& tableDesc, bool temporary,
-        bool enableLocalIndexAsSchemeObject = false);
+        bool enableLocalIndexAsSchemeObject = false,
+        const THashMap<TPathId, THolder<NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult>>& sequences = {});
 
 private:
     void Format(const NKikimrSchemeOp::TColumnDescription& columnDesc);
@@ -59,7 +60,7 @@ private:
     void Format(ui64 expireAfterSeconds, std::optional<TString> storage = std::nullopt,
         std::optional<TString> objectKeyPrefix = std::nullopt);
 
-    void Format(const NKikimrSchemeOp::TOlapColumnDescription& olapColumnDesc);
+    void Format(const NKikimrSchemeOp::TOlapColumnDescription& olapColumnDesc, bool serial);
     void Format(const NKikimrSchemeOp::TColumnTableSharding& tableSharding);
     void Format(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings);
 

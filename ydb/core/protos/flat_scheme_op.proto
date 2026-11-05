@@ -1073,6 +1073,9 @@ message TColumnTableDescription {
     optional bool IsBackup = 17;
 
     repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 18;
+
+    // Private sequences owned by this table, keyed by primary key column name.
+    map<string, TSequenceDescription> SerialSequences = 19;
 }
 
 message TAlterColumnTable {

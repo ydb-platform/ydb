@@ -321,8 +321,7 @@ void TPathDescriber::DescribeChildren(const TPath& path) {
             if (childEl->Dropped() || childEl->IsMigrated()) {
                 continue;
             }
-            if (pathEl->IsColumnTable() && childEl->IsSystemDirectory()) {
-                // .sys directory is not included in the children listing
+            if (pathEl->IsColumnTable() && (childEl->IsSystemDirectory() || childEl->IsSequence())) {
                 continue;
             }
             // Filter out local index children when EnableLocalIndexAsSchemeObject is disabled
@@ -636,10 +635,8 @@ void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl
     FillAggregatedStats(*Result->Record.MutablePathDescription(), storeInfo->GetStats());
 }
 
-void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr pathEl) {
+void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr /*pathEl*/) {
     const auto tableInfo = Self->ColumnTables.GetVerified(pathId);
-    Y_UNUSED(pathEl);
-
     auto* pathDescription = Result->Record.MutablePathDescription();
     auto description = pathDescription->MutableColumnTableDescription();
     description->CopyFrom(tableInfo->Description);
@@ -666,9 +663,17 @@ void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr path
         }
     }
 
+    const TPath tablePath = TPath::Init(pathId, Self);
+    for (auto& [_, sequence] : *description->MutableSerialSequences()) {
+        const auto path = tablePath.Child(sequence.GetName());
+        if (path.IsResolved() && path.IsSequence() && !path.IsDeleted()) {
+            Self->DescribeSequence(path->PathId, path->Name, sequence, Params.GetOptions().GetReturnSetVal());
+        }
+    }
+
     description->SetIsRestore(tableInfo->IsRestore);
 
-    DescribeChildren(TPath::Init(pathId, Self));
+    DescribeChildren(tablePath);
 }
 
 void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr pathEl) {

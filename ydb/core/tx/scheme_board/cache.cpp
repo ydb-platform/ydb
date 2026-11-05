@@ -900,6 +900,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 column.PType = typeInfoMod.TypeInfo;
                 column.PTypeMod = typeInfoMod.TypeMod;
                 nameToId[column.Name] = column.Id;
+                const auto sequence = desc.GetSerialSequences().find(column.Name);
+                if (sequence != desc.GetSerialSequences().end() && sequence->second.HasPathId()) {
+                    column.SetDefaultFromSequence();
+                    column.DefaultFromSequence = sequence->second.GetName();
+                    Sequences.push_back(sequence->second);
+                }
+
                 if (columnDesc.GetNotNull()) {
                     NotNullColumns.insert(columnDesc.GetName());
                 }

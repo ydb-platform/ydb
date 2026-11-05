@@ -415,8 +415,7 @@ public:
                         result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
                         return result;
                     }
-                } else if (parentPath->IsTable()) {
-                    // allow immediately inside a normal table
+                } else if (parentPath->IsTable() || parentPath->IsColumnTable()) {
                     checks.IsCommonSensePath();
                     if (parentPath.IsUnderOperation()) {
                         checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
@@ -476,6 +475,11 @@ public:
         if (!description) {
             status = NKikimrScheme::StatusInvalidParameter;
             result->SetError(status, errStr);
+            return result;
+        }
+
+        if (parentPath->IsColumnTable() && sequenceInfo->Description.GetDataType() != description->GetDataType()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Cannot change the data type of a Serial column's sequence");
             return result;
         }
 

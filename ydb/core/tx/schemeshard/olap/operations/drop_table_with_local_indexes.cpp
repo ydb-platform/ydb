@@ -12,7 +12,9 @@ TVector<ISubOperation::TPtr> DropColumnTableWithLocalIndexes(TOperationId nextId
     const TString& parentPathStr = tx.GetWorkingDir();
     const TString& tableName = tx.GetDrop().GetName();
 
-    TPath tablePath = TPath::Resolve(parentPathStr, context.SS).Dive(tableName);
+    TPath tablePath = tx.GetDrop().HasId()
+        ? TPath::Init(context.SS->MakeLocalId(tx.GetDrop().GetId()), context.SS)
+        : TPath::Resolve(parentPathStr, context.SS).Dive(tableName);
     if (!tablePath.IsResolved() || tablePath.IsDeleted() || !tablePath->IsColumnTable()) {
         result.push_back(CreateDropColumnTable(NextPartId(nextId, result), tx));
         return result;
@@ -24,7 +26,18 @@ TVector<ISubOperation::TPtr> DropColumnTableWithLocalIndexes(TOperationId nextId
     // Then, drop local index children after the table is marked as under operation
     for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
         TPath childPath = tablePath.Child(childName);
-        if (!childPath.IsResolved() || !childPath.Base()->IsTableIndex() || childPath.Base()->Dropped()) {
+        if (!childPath.IsResolved() || childPath.Base()->Dropped()) {
+            continue;
+        }
+
+        if (childPath.IsSequence()) {
+            auto drop = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::ESchemeOpDropSequence);
+            drop.MutableDrop()->SetName(childName);
+            result.push_back(CreateDropSequence(NextPartId(nextId, result), drop));
+            continue;
+        }
+
+        if (!childPath.Base()->IsTableIndex()) {
             continue;
         }
 
@@ -39,7 +52,7 @@ TVector<ISubOperation::TPtr> DropColumnTableWithLocalIndexes(TOperationId nextId
 
         // Create sub-operation to drop the local index
         auto dropIndexScheme = TransactionTemplate(
-            parentPathStr + "/" + tableName,
+            tablePath.PathString(),
             NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
         dropIndexScheme.SetInternal(true);
         dropIndexScheme.MutableDrop()->SetName(childName);

@@ -376,6 +376,10 @@ public:
                     checks.IsInsideTableIndexPath()
                         .IsUnderCreating()
                         .IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                } else if (parentPath->IsColumnTable()) {
+                    checks.IsCommonSensePath()
+                        .IsUnderCreating()
+                        .IsUnderTheSameOperation(OperationId.GetTxId());
                 } else if (parentPath->IsTable()) {
                     checks
                         .IsCommonSensePath()
@@ -429,7 +433,7 @@ public:
             if (checks) {
                 checks.IsValidLeafName(context.UserToken.Get());
 
-                if (!parentPath->IsTable()) {
+                if (!parentPath->IsTable() && !parentPath->IsColumnTable()) {
                     checks.DepthLimit();
                 }
 

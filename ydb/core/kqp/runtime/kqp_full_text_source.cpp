@@ -2495,7 +2495,6 @@ private:
 
     ui64 ProducedItemsCount = 0;                           // Rows already delivered to compute actor
     std::deque<TDocInfoPtr> ResultQueue;                   // Ready-to-deliver document rows
-    bool IsNgram = false;                                  // True if the index uses n-gram tokenization
 
     TActorId PipeCacheId;  // Per-node pipe cache for datashard communication
 
@@ -2559,41 +2558,50 @@ private:
         const bool isJsonIndex = Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson
             || Settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact;
 
+        YQL_ENSURE(IndexTableReader, "Index table reader is not initialized");
         if (isJsonIndex) {
-            // For JSON index, tokens are pre-compiled at query compile time
-            YQL_ENSURE(IndexTableReader, "Index table reader is not initialized");
-
             size_t wordIndex = 0;
             for (const TString& token : Settings->GetQuerySettings().GetTokens()) {
                 Words.emplace_back(MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader, PrefixCells));
             }
         } else {
-            YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
-            const auto& expr = Settings->GetQuerySettings().GetQuery();
-
             THashMap<TStringBuf, TWordStatePtr> seen;
-            for (const auto& column : Settings->GetQuerySettings().GetColumns()) {
-                for (const auto& analyzer : Settings->GetIndexDescription().GetSettings().columns()) {
-                    if (analyzer.analyzers().use_filter_ngram() || analyzer.analyzers().use_filter_edge_ngram()) {
-                        IsNgram = true;
-                    }
+            size_t wordIndex = 0;
+            auto addWord = [&](const TString& token, bool required) {
+                auto wordIt = seen.find(token);
+                if (wordIt != seen.end()) {
+                    wordIt->second->Required = wordIt->second->Required || required;
+                } else {
+                    auto word = MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader, PrefixCells);
+                    word->Required = required;
+                    seen[word->Word] = word;
+                    Words.emplace_back(std::move(word));
+                }
+            };
 
-                    if (analyzer.column() == column.GetName()) {
-                        size_t wordIndex = 0;
-                        for (const auto& term: NFulltext::BuildSearchTermsStructured(expr, analyzer.analyzers())) {
-                            YQL_ENSURE(IndexTableReader);
-                            auto wordIt = seen.find(term.Token);
-                            if (wordIt != seen.end()) {
-                                // Don't add duplicate words
-                                wordIt->second->Required = wordIt->second->Required || term.Required;
-                            } else {
-                                auto word = MakeIntrusive<TWordState>(wordIndex++, term.Token, IndexTableReader, PrefixCells);
-                                word->Required = term.Required;
-                                seen[word->Word] = word;
-                                Words.emplace_back(std::move(word));
-                            }
-                        }
-                    }
+            const auto& queries = Settings->GetQuerySettings();
+            const auto& expr = queries.GetQuery();
+            YQL_ENSURE(expr.empty() || queries.GetPatternQueries().empty(), "String predicates must remain residual filters beside fulltext queries");
+            const auto& settings = Settings->GetIndexDescription().GetSettings();
+            YQL_ENSURE(settings.columns_size() == 1);
+            const auto& column = settings.columns(0);
+            YQL_ENSURE(column.column() == queries.GetColumns(0).GetName());
+            for (const auto& query : queries.GetPatternQueries()) {
+                YQL_ENSURE(query.GetEscape().size() <= 1, "Expected an optional single-byte LIKE escape");
+                std::optional<char> escape;
+                if (!query.GetEscape().empty()) {
+                    escape = query.GetEscape().front();
+                }
+                using TPatternQuery = NKqpProto::TKqpFullTextSource::TKqpQuerySettings::TPatternQuery;
+                const auto terms = NFulltext::BuildStringMatchTerms(
+                    query.GetPattern(), TPatternQuery::EMatchMode_Name(query.GetMode()), escape, column.analyzers());
+                for (const auto& term : terms) {
+                    addWord(term, true);
+                }
+            }
+            if (!expr.empty()) {
+                for (const auto& term : NFulltext::BuildSearchTermsStructured(expr, column.analyzers())) {
+                    addWord(term.Token, term.Required);
                 }
             }
         }

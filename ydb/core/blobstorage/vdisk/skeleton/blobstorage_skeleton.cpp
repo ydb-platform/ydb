@@ -2035,7 +2035,8 @@ namespace NKikimr {
                 return ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx,
                     TAppData::TimeProvider->Now());
             }
-            if (AppliedConfigLsn > Db->LsnMngr->GetConfirmedLsnForHull()) {
+            if (ev->Get()->Record.GetRequestTargetLsn()
+                    && AppliedConfigLsn > Db->LsnMngr->GetConfirmedLsnForHull()) {
                 // Retried sync jobs replace their previous request while the config prefix is pending.
                 for (auto it = PendingConfigSyncs.begin(); it != PendingConfigSyncs.end(); ++it) {
                     const TVDiskID previousSource =

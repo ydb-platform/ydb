@@ -106,6 +106,7 @@ namespace NKikimr {
             Y_VERIFY_S(Phase == EStart || Phase == EWaitRemote,
                 Ctx->SyncerCtx->VCtx->VDiskLogPrefix << Sublog.Get());
             Phase = EStart;
+            SyncTarget.reset();
             Type = EFullRecover;
             Current.LastSyncStatus = TSyncStatusVal::FullRecover;
             Current.SyncState = syncState;
@@ -141,7 +142,9 @@ namespace NKikimr {
             Y_VERIFY_S(status != TSyncStatusVal::Running,
                 Ctx->SyncerCtx->VCtx->VDiskLogPrefix << Sublog.Get());
             auto now = TAppData::TimeProvider->Now();
-            if (RequireAppliedConfig && NSyncer::TPeerSyncState::Good(status) && !AppliedConfigConfirmed) {
+            if (RequireSyncTarget && NSyncer::TPeerSyncState::Good(status)
+                    && (!SyncTarget || Current.SyncState.Guid != SyncTarget->Guid
+                        || Current.SyncState.SyncedLsn < SyncTarget->SyncedLsn)) {
                 status = TSyncStatusVal::NotReady;
             }
             Current.LastSyncStatus = status;
@@ -192,6 +195,9 @@ namespace NKikimr {
                 return TSjOutcome::Event(ServiceId, std::move(msg), full);
             } else {
                 auto msg = std::make_unique<TEvBlobStorage::TEvVSync>(Current.SyncState, Ctx->SelfVDiskId, VDiskId);
+                if (RequireSyncTarget && !SyncTarget) {
+                    msg->Record.SetRequestTargetLsn(true);
+                }
                 Ctx->SyncerCtx->MonGroup.SyncerVSyncBytesSent() += msg->GetCachedByteSize();
                 ++Ctx->SyncerCtx->MonGroup.SyncerVSyncMessagesSent();
                 return TSjOutcome::Event(ServiceId, std::move(msg));
@@ -211,7 +217,8 @@ namespace NKikimr {
 
             const TSyncState oldSyncState = GetCurrent().SyncState;
             SetSyncState(newSyncState);
-            EndOfStream = record.GetFinished();
+            EndOfStream = record.GetFinished() || (RequireSyncTarget && SyncTarget
+                && newSyncState.Guid == SyncTarget->Guid && newSyncState.SyncedLsn >= SyncTarget->SyncedLsn);
 
             if (!data.empty()) {
                 Phase = EWaitLocal;
@@ -250,6 +257,7 @@ namespace NKikimr {
         }
 
         TSjOutcome TSyncerJobTask::HandleRestart(const TSyncState &newSyncState) {
+            SyncTarget.reset();
             SetSyncState(newSyncState);
             EndOfStream = false;
             Phase = EStart;
@@ -285,14 +293,24 @@ namespace NKikimr {
             BytesReceived += bytesReceived;
 
             const NKikimrBlobStorage::TEvVSyncResult &record = ev->Get()->Record;
-            AppliedConfigConfirmed = record.HasAppliedConfigGeneration()
-                && record.GetAppliedConfigGeneration() == VDiskId.GroupGeneration;
             TVDiskID fromVDisk = VDiskIDFromVDiskID(record.GetVDiskID());
             if (!Ctx->SelfVDiskId.SameGroupAndGeneration(fromVDisk)) {
                 return ReplyAndDie(TSyncStatusVal::Race);
             }
 
             TSyncState newSyncState = SyncStateFromSyncState(record.GetNewSyncState());
+            if (RequireSyncTarget && (record.GetStatus() == NKikimrProto::OK
+                    || record.GetStatus() == NKikimrProto::ALREADY)) {
+                if (!SyncTarget) {
+                    if (!record.HasTargetLsn()) {
+                        return ReplyAndDie(TSyncStatusVal::NotReady);
+                    }
+                    SyncTarget.emplace(newSyncState.Guid, record.GetTargetLsn());
+                } else if (newSyncState.Guid != SyncTarget->Guid) {
+                    return ReplyAndDie(TSyncStatusVal::Race);
+                }
+            }
+
             Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_DEBUG, BS_SYNCER,
                     VDISKP(Ctx->SyncerCtx->VCtx->VDiskLogPrefix,
                         "SYNCER_VSYNCRES: fromVDisk# %s newSyncState# %s",

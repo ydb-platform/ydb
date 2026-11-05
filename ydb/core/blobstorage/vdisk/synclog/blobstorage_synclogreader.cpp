@@ -9,6 +9,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 
+#include <optional>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCLOG
 
 using namespace NKikimrServices;
@@ -144,6 +146,7 @@ namespace NKikimr {
             TSyncLogFilter Filter;
             TDiskRecLogSnapshot::TIndexRecIterator DiskIt;
             ui64 LastLsn;
+            std::optional<ui64> TargetLsn;
             ui32 DiskReads;
             const ui64 DbBirthLsn;
             const TInstant Now;
@@ -164,7 +167,9 @@ namespace NKikimr {
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(status, SelfVDiskId,
                     TSyncState(VDiskIncarnationGuid, lsn), finished, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(),
                     Now, SlCtx->IFaceMonGroup.SyncReadResMsgsPtr(), nullptr, Ev->GetChannel());
-                result->Record.SetAppliedConfigGeneration(SelfVDiskId.GroupGeneration);
+                if (TargetLsn && (status == NKikimrProto::OK || status == NKikimrProto::ALREADY)) {
+                    result->Record.SetTargetLsn(*TargetLsn);
+                }
                 if (DiskReads) {
                     NKikimrBlobStorage::TEvVSyncResult::TStat *stat = nullptr;
                     stat = result->Record.MutableStat();
@@ -253,6 +258,16 @@ namespace NKikimr {
                 SnapPtr->FillInLogEssence(&e);
                 auto ri = std::bind(InternalsToString, Ev->Get(), SnapPtr.Get(), DbBirthLsn);
                 TWhatsNextOutcome wno = WhatsNext(SlCtx->VCtx->VDiskLogPrefix, syncedLsn, DbBirthLsn, &e, ri);
+
+                if (record.GetRequestTargetLsn()) {
+                    if (!e.MemLogEmpty) {
+                        TargetLsn = e.LastMemLsn;
+                    } else if (!e.DiskLogEmpty) {
+                        TargetLsn = e.LastDiskLsn;
+                    } else {
+                        TargetLsn = syncedLsn;
+                    }
+                }
 
                 // process outcome
                 if (wno.WhatsNext == EWnError) {

@@ -761,6 +761,7 @@ message TEvVSync {
     optional NKikimrBlobStorage.TVDiskID SourceVDiskID = 2; // sync this vdisk with ...
     optional NKikimrBlobStorage.TVDiskID TargetVDiskID = 3; // ... this vdisk
     optional bool NotifyIfNotReady = 4;
+    optional bool RequestTargetLsn = 5;
 }
 
 message TEvVSyncResult {
@@ -777,8 +778,9 @@ message TEvVSyncResult {
     }
     optional TStat Stat = 7;
     optional uint32 StatusFlags = 8;
-    // The source has applied the recovery-log prefix preceding this configuration.
-    optional uint32 AppliedConfigGeneration = 9;
+    reserved 9; // Previously used by AppliedConfigGeneration during development.
+    // Returned only when RequestTargetLsn is set; bound to NewSyncState.Guid and VDiskID generation.
+    optional uint64 TargetLsn = 10;
 }
 
 enum ESyncFullStage {

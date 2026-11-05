@@ -535,7 +535,7 @@ namespace NKikimr {
                     TActorId(),
                     info->Get().PeerSyncState,
                     JobCtx);
-            task->RequireAppliedConfig = metadataSync;
+            task->RequireSyncTarget = metadataSync;
             const TActorId aid = ctx.Register(CreateSyncerJob(SyncerContext, std::move(task), ctx.SelfID));
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 

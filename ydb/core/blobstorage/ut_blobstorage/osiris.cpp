@@ -593,7 +593,7 @@ struct TMirror3dcConfigOverride {
         return disk;
     }
 
-    void Apply(TEnvironmentSetup* env, const TStates& states) {
+    void Apply(TEnvironmentSetup* env, const TStates& states, TDuration settleTime = TDuration::Seconds(30)) {
         States = states;
         Revision += 100;
         for (ui32 node = 1; node <= 9; ++node) {
@@ -602,7 +602,7 @@ struct TMirror3dcConfigOverride {
             *update->Record.MutableServiceSet()->AddGroups() = OriginalGroup;
             env->Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(node), {}, update.release()), node);
         }
-        env->Sim(TDuration::Seconds(30));
+        env->Sim(settleTime);
     }
 };
 
@@ -675,9 +675,13 @@ void DoSyncConfigApplicationTest(bool changeGeneration) {
         env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVSyncFullResult>(syncEdge, false);
     UNIT_ASSERT_VALUES_EQUAL(initial->Get()->Record.GetStatus(), NKikimrProto::NODATA);
     const TSyncState syncState = SyncStateFromSyncState(initial->Get()->Record.GetSyncState());
-    const std::function<void(const TSyncState&)> sendSync = [&](const TSyncState& state) {
-        env.Runtime->Send(new IEventHandle(service, syncEdge, new TEvBlobStorage::TEvVSync(
-            state, configuration.Disk(originalPeer), configuration.Disk(originalTarget))), syncEdge.NodeId());
+    const std::function<void(const TSyncState&, bool)> sendSync = [&](const TSyncState& state, bool requestTarget) {
+        std::unique_ptr<TEvBlobStorage::TEvVSync> request = std::make_unique<TEvBlobStorage::TEvVSync>(
+            state, configuration.Disk(originalPeer), configuration.Disk(originalTarget));
+        if (requestTarget) {
+            request->Record.SetRequestTargetLsn(true);
+        }
+        env.Runtime->Send(new IEventHandle(service, syncEdge, request.release()), syncEdge.NodeId());
     };
     const TActorId queue = env.CreateQueueActor(originalTarget, NKikimrBlobStorage::PutTabletLog, 0);
     putEdge = env.Runtime->AllocateEdgeActor(queue.NodeId());
@@ -691,10 +695,10 @@ void DoSyncConfigApplicationTest(bool changeGeneration) {
     UNIT_ASSERT(putAdmitted);
     UNIT_ASSERT(!heldLogResults.empty());
     UNIT_ASSERT_VALUES_EQUAL(putReplies, 0);
-    configuration.Apply(&env, {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0});
+    configuration.Apply(&env, {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}, TDuration::Seconds(1));
     monitorSync = true;
     syncAdmitted = false;
-    sendSync(syncState);
+    sendSync(syncState, true);
     for (ui32 attempt = 0; attempt < 100 && !syncAdmitted; ++attempt) {
         env.Sim(TDuration::MilliSeconds(100));
     }
@@ -702,7 +706,7 @@ void DoSyncConfigApplicationTest(bool changeGeneration) {
     env.Sim(TDuration::Seconds(1));
     UNIT_ASSERT_VALUES_EQUAL_C(syncReplies, 0, "Sync must wait for the source's recovery log");
     if (changeGeneration) {
-        configuration.Apply(&env, {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0});
+        configuration.Apply(&env, {TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}, TDuration::Seconds(1));
     }
     holdLog = false;
     for (std::unique_ptr<IEventHandle>& event : heldLogResults) {
@@ -724,12 +728,13 @@ void DoSyncConfigApplicationTest(bool changeGeneration) {
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::RACE);
         UNIT_ASSERT_VALUES_EQUAL(VDiskIDFromVDiskID(result->Get()->Record.GetVDiskID()),
             configuration.Disk(originalTarget));
-        sendSync(syncState);
+        sendSync(syncState, true);
         result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVSyncResult>(syncEdge, false);
     }
     const NKikimrBlobStorage::TEvVSyncResult& record = result->Get()->Record;
     UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
-    UNIT_ASSERT_VALUES_EQUAL(record.GetAppliedConfigGeneration(), configuration.Generation());
+    UNIT_ASSERT(record.HasTargetLsn());
+    UNIT_ASSERT(record.GetNewSyncState().GetSyncedLsn() >= record.GetTargetLsn());
     NSyncLog::TFragmentReader reader(record.GetData());
     TString error;
     UNIT_ASSERT_C(reader.Check(error), error);
@@ -738,6 +743,12 @@ void DoSyncConfigApplicationTest(bool changeGeneration) {
         [](const NSyncLog::TBlockRec*) {}, [](const NSyncLog::TBarrierRec*) {},
         [](const NSyncLog::TBlockRecV2*) {});
     UNIT_ASSERT_C(found, "The config-confirming sync must contain the write preceding the config");
+    sendSync(SyncStateFromSyncState(record.GetNewSyncState()), false);
+    const TAutoPtr<TEventHandle<TEvBlobStorage::TEvVSyncResult>> continuation =
+        env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVSyncResult>(syncEdge, false);
+    UNIT_ASSERT(!continuation->Get()->Record.HasTargetLsn());
+    UNIT_ASSERT(continuation->Get()->Record.GetStatus() == NKikimrProto::OK
+        || continuation->Get()->Record.GetStatus() == NKikimrProto::ALREADY);
     env.Runtime->FilterFunction = {};
 }
 
@@ -758,6 +769,8 @@ Y_UNIT_TEST_SUITE(Osiris) {
         TMirror3dcConfigOverride configuration;
         std::set<ui32> survivorNodes;
         std::set<std::pair<ui32, ui32>> completedSyncs;
+        std::set<TActorId> reachedTargetJobs;
+        ui32 unexpectedContinuations = 0;
         ui32 blockedTargetNode = 0;
         bool holdSourceReplies = false;
         bool stripSourceMarker = false;
@@ -774,6 +787,10 @@ Y_UNIT_TEST_SUITE(Osiris) {
             if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
                 configuration.Patch(event->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>());
             }
+            if (event->GetTypeRewrite() == TEvBlobStorage::EvVSync && reachedTargetJobs.contains(event->Sender)) {
+                ++unexpectedContinuations;
+                return false;
+            }
             if (survivorNodes.contains(node)) {
                 if (event->GetTypeRewrite() == TEvBlobStorage::EvVSyncResult) {
                     NKikimrBlobStorage::TEvVSyncResult& record =
@@ -786,10 +803,17 @@ Y_UNIT_TEST_SUITE(Osiris) {
                     }
                     if (stripSourceMarker && node == blockedTargetNode && peer.FailRealm == 0
                             && peer.FailDomain == 1) {
-                        record.ClearAppliedConfigGeneration();
+                        record.ClearTargetLsn();
+                    }
+                    if (record.GetStatus() == NKikimrProto::OK && record.HasTargetLsn()
+                            && record.GetNewSyncState().GetSyncedLsn() >= record.GetTargetLsn()) {
+                        // Model a growing source: reaching the fixed boundary must suffice without EOF.
+                        record.SetFinished(false);
+                        reachedTargetJobs.insert(event->GetRecipientRewrite());
                     }
                     if ((record.GetStatus() == NKikimrProto::OK || record.GetStatus() == NKikimrProto::ALREADY)
-                            && record.GetFinished() && record.GetAppliedConfigGeneration() == configuration.Generation()
+                            && record.HasTargetLsn()
+                            && record.GetNewSyncState().GetSyncedLsn() >= record.GetTargetLsn()
                             && peer.FailRealm == 0 && peer.GroupGeneration == configuration.Generation()) {
                         completedSyncs.emplace(node, peer.FailDomain);
                     }
@@ -848,6 +872,8 @@ Y_UNIT_TEST_SUITE(Osiris) {
         UNIT_ASSERT_VALUES_EQUAL(blockedOsirisDone, 0);
         stripSourceMarker = false;
         env.Sim(TDuration::Seconds(120));
+        UNIT_ASSERT(!reachedTargetJobs.empty());
+        UNIT_ASSERT_VALUES_EQUAL(unexpectedContinuations, 0);
         UNIT_ASSERT(blockedMetadataDone);
         UNIT_ASSERT(blockedOsirisDone);
         // Each of the three surviving VDisks has confirmed an incremental sync with its two peers.

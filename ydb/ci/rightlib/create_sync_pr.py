@@ -4,6 +4,7 @@ import datetime
 import logging
 import subprocess
 import argparse
+from functools import cached_property
 from typing import Optional
 from github import Github
 from github.PullRequest import PullRequest
@@ -53,11 +54,15 @@ class PrSyncCreator:
                 f"{os.environ['GITHUB_SERVER_URL']}/{self.repo_name}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
             )
 
+    @cached_property
+    def head_tag_sha(self):
+        tag_ref = f"refs/tags/{self.head_tag}"
+        tag_sha = self.git_run("show-ref", "--verify", "--hash", tag_ref).stdout.decode().strip()
+        return self.git_run("rev-parse", "--verify", f"{tag_sha}^{{commit}}").stdout.decode().strip()
+
     def rightlib_latest_repo_sha(self):
         if self.head_tag:
-            tag_ref = f"refs/tags/{self.head_tag}"
-            tag_sha = self.git_run("show-ref", "--verify", "--hash", tag_ref).stdout.decode().strip()
-            return self.git_run("rev-parse", "--verify", f"{tag_sha}^{{commit}}").stdout.decode().strip()
+            return self.head_tag_sha
         return self.repo.get_branch(self.head_branch).commit.sha
 
     def is_commit_present_on_branch(self, sha, branch):
@@ -140,8 +145,7 @@ class PrSyncCreator:
         return [line for line in output.splitlines() if line]
 
     def overwrite_paths_from_head(self):
-        # Use the source recorded by git merge to match the merge parent.
-        self.overwrite_paths_from_ref("MERGE_HEAD")
+        self.overwrite_paths_from_ref(f"refs/remotes/origin/{self.head_branch}")
 
     def overwrite_paths_from_ref(self, source_ref):
         """Overwrite top-level paths from source_ref, then restore overwrite_exclude from base. Does not commit."""
@@ -156,10 +160,11 @@ class PrSyncCreator:
             self.git_run("checkout", self.base_branch, "--", path)
             self.git_run("add", path)
 
-    def create_new_pr(self, source_sha):
+    def create_new_pr(self):
         dev_branch_name = f"robots/branch-sync/merge-{self.head_branch}-{self.dtm}"
         commit_msg = f"Sync branches {self.dtm}"
         source_name = f"tag {self.head_tag}" if self.head_tag else self.head_branch
+        source_ref = self.head_tag_sha if self.head_tag else f"refs/remotes/origin/{self.head_branch}"
         pr_title = f"Sync branches {self.dtm}: {source_name} to {self.base_branch}"
 
         self.git_run("clone", f"https://{self.token}@github.com/{self.repo_name}.git", "ydb-new-pr")
@@ -169,9 +174,9 @@ class PrSyncCreator:
         self.git_run("checkout", "-b", dev_branch_name)
         # --no-commit so overwrite is folded into the merge commit (keeps head as a parent).
         if self.force_overwrite:
-            merge_result = self.git_run("merge", "--no-commit", "--no-ff", source_sha, fail=False)
+            merge_result = self.git_run("merge", "--no-commit", "--no-ff", source_ref, fail=False)
         else:
-            merge_result = self.git_run("merge", source_sha, "-m", commit_msg, fail=False)
+            merge_result = self.git_run("merge", source_ref, "-m", commit_msg, fail=False)
         merge_output = merge_result.stdout.decode()
         merge_failed = merge_result.returncode != 0
         conflict_files = ''
@@ -201,7 +206,7 @@ class PrSyncCreator:
             raise Exception(f"Unexpected error during merge {merge_output}")
         if self.force_overwrite:
             if self.head_tag:
-                self.overwrite_paths_from_ref(source_sha)
+                self.overwrite_paths_from_ref(self.head_tag_sha)
             else:
                 self.overwrite_paths_from_head()
             self.git_run("commit", "-m", commit_msg)
@@ -234,7 +239,7 @@ class PrSyncCreator:
             self.logger.info("cur_sha=%s", cur_sha)
 
             if self.is_commit_present_on_branch(cur_sha, self.base_branch) is False:
-                self.create_new_pr(cur_sha)
+                self.create_new_pr()
             else:
                 self.logger.info("Skipping create-pr because base branch is up-to-date")
         else:
@@ -269,7 +274,7 @@ def main():
         args.merge_theirs,
         args.force_overwrite,
         args.overwrite_exclude,
-        head_tag=args.head_tag,
+        args.head_tag,
     )
 
     syncer.cmd_create_pr()

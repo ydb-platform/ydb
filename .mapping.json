@@ -1,4 +1,5 @@
 {
+  ".github/config/ydb_build_profiles.yaml":"kikimr/ci/arcadia_ci/configurations/common/acceptance/build_profiles.a.yaml",
   "build/mapping.conf.json":"devtools/ya/opensource/mapping.conf.json",
   "build/scripts":"build/export_generators/hardcoded-cmake/build/scripts",
   "build/tools":"devtools/ya/opensource/tools",

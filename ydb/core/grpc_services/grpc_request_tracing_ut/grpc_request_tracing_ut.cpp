@@ -678,6 +678,45 @@ Y_UNIT_TEST(FinishesGrpcRequestProxySpanForAuthAndCheckErrorReply) {
 
 Y_UNIT_TEST_SUITE(TGrpcRequestBaseTracing) {
 
+Y_UNIT_TEST_TWIN(SchemaPathsRespectFeatureFlag, relativePathsEnabled) {
+    TActorSystemStub actorSystem;
+    InitializeDatabaseAppData(actorSystem.AppData, relativePathsEnabled);
+    auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), TString("/Root/db"));
+    TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+    UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("Root/db/source", {}),
+        relativePathsEnabled ? "/Root/db/Root/db/source" : "Root/db/source");
+    UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/Root/db/destination", {}), "/Root/db/destination");
+
+    NKikimrConfig::TPathRewriteConfig config;
+    auto* rule = config.AddRules();
+    rule->SetSrc("/Root/db/legacy");
+    rule->SetDst("/Alias/db/new");
+    rule = config.AddRules();
+    rule->SetSrc("/Root");
+    rule->SetDst("/Alias");
+    auto* resourceRule = config.AddRules();
+    resourceRule->SetSrc("/Other/db/table");
+    resourceRule->SetDst("/Archive/table");
+    request.InitializePathNormalization(std::make_shared<const NPathAliasing::TPathNormalizer>(config));
+    UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetRef(), "/Alias/db");
+    for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
+        {"", ""}, {"/Root/db/table", "/Alias/db/table"},
+        {"table", relativePathsEnabled ? "/Alias/db/table" : "table"},
+        {"legacy/table", relativePathsEnabled ? "/Alias/db/new/table" : "legacy/table"},
+        {"Root/db/table", relativePathsEnabled ? "/Alias/db/Root/db/table" : "Root/db/table"},
+        {"/Alias/db/table", "/Alias/db/table"},
+    }) {
+        UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath(path, {}), expected);
+    }
+    const TString prefix = "/Root/db/legacy";
+    UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("table", prefix),
+        relativePathsEnabled ? "/Alias/db/new/table" : "table");
+    UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/Root/db/table", prefix), "/Alias/db/table");
+    UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("", prefix), "");
+    UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("table", "/Other/db"),
+        relativePathsEnabled ? "/Archive/table" : "table");
+}
+
 Y_UNIT_TEST_TWIN(RelativeDatabaseIsResolvedBeforeAliasing, relativePathsEnabled) {
     TActorSystemStub actorSystem;
     InitializeDatabaseAppData(actorSystem.AppData, relativePathsEnabled);
@@ -751,12 +790,12 @@ Y_UNIT_TEST_TWIN(UseDatabasePreservesUnaryDatabaseHeaderPresence, relativePathsE
     }
 }
 
-Y_UNIT_TEST(DatabaseResolutionWithoutDomainPreservesRawName) {
+Y_UNIT_TEST_TWIN(DatabaseResolutionWithoutDomainPreservesRawName, noDomainsInfo) {
     TActorSystemStub actorSystem;
     auto& appData = actorSystem.AppData;
     appData.FeatureFlags.SetEnableRelativePaths(true);
-    appData.DomainsInfo = new TDomainsInfo;
-    UNIT_ASSERT(!appData.DomainsInfo->Domain);
+    appData.DomainsInfo = noDomainsInfo ? nullptr : new TDomainsInfo;
+    UNIT_ASSERT(noDomainsInfo || !appData.DomainsInfo->Domain);
     auto unaryCtx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), TString("mydb"));
     TTestGrpcRequest unary(unaryCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
     auto bidiCtx = MakeIntrusive<TTestBiStreamContext>(Nothing(), TString("mydb"));
@@ -769,6 +808,9 @@ Y_UNIT_TEST(DatabaseResolutionWithoutDomainPreservesRawName) {
     UNIT_ASSERT_VALUES_EQUAL(unary.GetDatabaseName().GetRef(), "mydb");
     UNIT_ASSERT_VALUES_EQUAL(bidi.GetDatabaseName().GetRef(), "mydb");
     UNIT_ASSERT_VALUES_EQUAL(internal.GetDatabaseName().GetRef(), "mydb");
+    UNIT_ASSERT_VALUES_EQUAL(unary.NormalizePath("table", {}), "mydb/table");
+    UNIT_ASSERT_VALUES_EQUAL(bidi.NormalizePath("table", {}), "mydb/table");
+    UNIT_ASSERT_VALUES_EQUAL(internal.NormalizePath("table", {}), "mydb/table");
 }
 
 Y_UNIT_TEST(GeneratesTraceIdForEmptyUnaryTraceHeader) {

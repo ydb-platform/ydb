@@ -35,6 +35,8 @@ public:
     void EnablePathNormalization() noexcept;
     void DisablePathNormalization() noexcept;
     TString NormalizePath(TStringBuf path) const;
+    // An operation-specific base is relative to the requested database; empty means the database.
+    TString NormalizePath(TStringBuf path, TStringBuf base) const;
 
     virtual TMaybe<TString> GetTraceId() const = 0;
     virtual NWilson::TTraceId GetWilsonTraceId() const = 0;

@@ -100,6 +100,8 @@ message ExportToS3Settings {
 
     message Item {
         // Database path to a table/directory to be exported
+        // With relative paths enabled, only paths starting with '/' are absolute;
+        // other paths are relative to settings.source_path (the database root if omitted).
         string source_path = 1 [(required) = true];
 
         /* Tables are exported to one or more S3 objects.
@@ -214,6 +216,8 @@ message EncryptionSettings {
 message ExportToFsSettings {
     message Item {
         // Database path to a table/directory to be exported
+        // With relative paths enabled, only paths starting with '/' are absolute;
+        // other paths are relative to settings.source_path (the database root if omitted).
         string source_path = 1 [(required) = true];
 
         /* Tables are exported to one or more files in FS.

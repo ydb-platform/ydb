@@ -274,13 +274,14 @@ struct TBackupTraits<NExport::TExportToFsSettings> {
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
 
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
     {
-        auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing");
+        auto exportSettings = traits.MakeExportSettings(f, "RecursiveFolderProcessing");
         exportSettings
                 .AppendItem(typename TExportSettings::TItem{.Src = "Table0", .Dst = "Table0_Prefix"})
                 .AppendItem(typename TExportSettings::TItem{.Src = "dir1/Table1", .Dst = "Table1_Prefix"})
@@ -329,9 +330,9 @@ void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
     }
 
     {
-        auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix");
+        auto importSettings = traits.MakeImportSettings(f, "RestorePrefix");
         importSettings
-                .AppendItem(traits.MakeImportItem("/Root/RestorePrefix/Table123", "dir1/dir2//Table2"))
+                .AppendItem(traits.MakeImportItem("Table123", "dir1/dir2//Table2"))
                 .AppendItem(traits.MakeImportItem("/Root/RestorePrefix/Table321", "Table0"));
         auto res = traits.Import(f, importSettings);
         f.WaitOpSuccess(res);
@@ -390,6 +391,23 @@ void ExportUnexistingExplicitPathImpl(TBackupTestFixture& f, bool /*isOlap*/) {
         .AppendItem(typename TExportSettings::TItem{.Src = "unexisting"});
     auto res = traits.Export(f, exportSettings);
     f.WaitOpStatus(res, EStatus::SCHEME_ERROR);
+
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
+    for (const auto& paths : TVector<TVector<TString>>{
+        {"Root/RecursiveFolderProcessing/dir1/unexisting"},
+        {"/Root/RecursiveFolderProcessing/dir1/unexisting"},
+        {"unexisting"},
+        {"Root/RecursiveFolderProcessing/dir1/unexisting", "/Root/RecursiveFolderProcessing/dir1/unexisting"},
+        {"Root/RecursiveFolderProcessing/dir1/unexisting", "unexisting"},
+    }) {
+        auto settings = traits.MakeExportSettings(f, "RecursiveFolderProcessing/dir1");
+        for (ui32 i = 0; i < paths.size(); ++i) {
+            settings.AppendItem(typename TExportSettings::TItem{.Src = paths[i], .Dst = ToString(i)});
+        }
+        const auto result = traits.Export(f, settings);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status().GetStatus(), EStatus::SCHEME_ERROR,
+            result.Status().GetIssues().ToString());
+    }
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>

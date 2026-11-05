@@ -12,6 +12,10 @@ PY_SRCS(
     internal/nemesis/local_network.py
     internal/nemesis/monitored_actor.py
     internal/nemesis/cluster_context.py
+    internal/nemesis/local_cluster_view.py
+    internal/nemesis/local_control_proxy.py
+    internal/nemesis/local_sibling.py
+    internal/nemesis/local_harness_controller.py
     internal/nemesis/cluster_entries.py
     internal/nemesis/runners/__init__.py
     internal/nemesis/runners/network.py
@@ -70,6 +74,11 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    local
+    local_multinode
+)
 
 RECURSE_FOR_TESTS(
     ut

@@ -54,6 +54,85 @@ Stop all Nemesis services on the cluster:
 nemesis stop --yaml-config-location /path/to/config.yaml
 ```
 
+### Single-host harness cluster
+
+Build both binaries:
+
+```bash
+./ya make -r ydb/apps/ydbd
+./ya make -r ydb/tests/stability/nemesis
+```
+
+Eight nodes need about 12 GB of RAM. The process that creates the cluster must stay in the foreground: it owns the `ydbd` processes and serves the control socket. `local_ydb deploy` exits after startup, so it does not leave that socket behind. `nemesis install` and `nemesis run` are the systemd deployment and do not attach to this socket.
+
+Run the owner with the ya Python environment that can import `ydb.tests`. Replace the `ydbd` path with the binary built above.
+
+```python
+import json
+from pathlib import Path
+
+from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.stability.nemesis.internal.nemesis.local_cluster_view import LocalClusterView
+from ydb.tests.stability.nemesis.internal.nemesis.local_control_proxy import HarnessControlProxy
+from ydb.tests.stability.nemesis.internal.nemesis.local_harness_controller import HarnessNodeController
+
+work = Path("/tmp/local-nemesis-cluster")
+(work / "pdisks").mkdir(parents=True, exist_ok=True)
+
+cluster = KiKiMR(KikimrConfigGenerator(
+    erasure=Erasure.BLOCK_4_2,
+    nodes=8,
+    binary_paths=["/absolute/path/to/ydbd"],
+    output_path=str(work / "cluster"),
+    pdisk_store_path=str(work / "pdisks"),
+    use_in_memory_pdisks=False,
+    dynamic_pdisks=[{"user_kind": 1}],
+))
+cluster.start()
+
+socket_path = work / "control.sock"
+manifest_path = work / "manifest.json"
+view = LocalClusterView.from_cluster(cluster)
+controller = HarnessNodeController(cluster)
+
+with HarnessControlProxy(socket_path, controller, cluster):
+    manifest_path.write_text(json.dumps(view.control_manifest(
+        control_socket=str(socket_path),
+        pdisks_info=cluster.config.pdisks_info,
+    )))
+    print("endpoint", cluster.nodes[1].endpoint)
+    print("manifest", manifest_path)
+    input("Press Enter to stop the cluster\n")
+
+cluster.stop()
+```
+
+`dynamic_pdisks` gives every node one unoccupied spare. Keep it for `SafelyBreakDiskNemesis`. Process faults do not need it. PDisks are files under `pdisks/`.
+
+From another terminal, while the owner is still waiting:
+
+```bash
+nemesis local-action \
+  --manifest /tmp/local-nemesis-cluster/manifest.json \
+  --local-type KillNodeNemesis \
+  --action inject \
+  --node-id 2
+```
+
+Node ids are `1` through `8`.
+
+| Type | Inject | Extract |
+|---|---|---|
+| `KillNodeNemesis` | kill and restart one node | no effect |
+| `StopStartNodeNemesis` | stop the node and hold its ports | start it again |
+| `SuspendNodeNemesis` | freeze the node | resume it |
+| `SafelyBreakDiskNemesis` | mark the spare drive `BROKEN` | restore it to `ACTIVE` |
+| `KillSlotDaemonNemesis` | restart one slot (`--slot-idx`) | no effect |
+
+`KillSlotDaemonNemesis` also requires a tenant and its slots to exist before the owner writes the manifest. Network, clock, and raw-disk cleanup are rejected.
+
 ## High-Level Architecture
 
 Nemesis consists of two main components:

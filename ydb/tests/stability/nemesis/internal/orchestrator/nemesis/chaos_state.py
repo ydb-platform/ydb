@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import random
 import threading
+from collections.abc import Iterable
 
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     build_all_planners,
@@ -69,9 +70,17 @@ class ChaosOrchestratorStore:
         self,
         failure_guard: FailureModelGuard | None = None,
         inventory: ClusterInventory | None = None,
+        planner_types: Iterable[str] | None = None,
     ) -> None:
         self._lock = threading.Lock()
-        self._planners: dict[str, NemesisPlannerBase] = build_all_planners()
+        self._planners: dict[str, NemesisPlannerBase] = (
+            build_all_planners()
+            if planner_types is None
+            else {
+                nemesis_type: build_planner(nemesis_type)
+                for nemesis_type in planner_types
+            }
+        )
         self._failure_guard = failure_guard
         self._inventory = inventory
 

@@ -100,6 +100,10 @@ public:
         return partition.BlobEncoder;
     }
 
+    static ui64 GetCumulativeCounter(TPartition& partition, ui32 counter) {
+        return partition.TabletCounters.Cumulative()[counter].Get();
+    }
+
     static void SetMirrorConsumerOffsets(TPartition& partition, bool enabled) {
         partition.Config.MutablePartitionConfig()->MutableMirrorFrom()->SetMirrorConsumerOffsets(enabled);
     }
@@ -445,6 +449,11 @@ protected:
 
     std::shared_ptr<TTabletCountersBase> TabletCounters;
 
+    // The partition resets its cumulative counters each time it flushes them to the tablet
+    ui64 GetCumulativeCounter(TPartition& partition, ui32 counter);
+
+    THashMap<ui32, ui64> FlushedCumulativeCounters;
+    TTestActorRuntimeBase::TEventObserverHolder FlushedCountersObserver;
 };
 
 void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
@@ -454,6 +463,18 @@ void TPartitionFixture::SetUp(NUnitTest::TTestContext&)
 
     Ctx->Prepare();
     Ctx->Runtime->SetScheduledLimit(5'000);
+
+    FlushedCountersObserver = Ctx->Runtime->AddObserver<TEvPQ::TEvPartitionCounters>([this](auto& ev) {
+        const auto& counters = ev->Get()->Counters.Cumulative();
+        for (ui32 i = 0; i < counters.Size(); ++i) {
+            FlushedCumulativeCounters[i] += counters[i].Get();
+        }
+    });
+}
+
+ui64 TPartitionFixture::GetCumulativeCounter(TPartition& partition, ui32 counter)
+{
+    return FlushedCumulativeCounters[counter] + TPartitionTestWrapper::GetCumulativeCounter(partition, counter);
 }
 
 TActorId TPartitionFixture::CreateFakePartition() const {
@@ -2278,7 +2299,7 @@ Y_UNIT_TEST_F(UserActCount, TPartitionFixture)
 
 Y_UNIT_TEST_F(Batching, TPartitionFixture)
 {
-    CreatePartition();
+    auto* partition = CreatePartition();
 
     SendCreateSession(4, "client-1", "session-id-1", 2, 3);
 
@@ -2318,6 +2339,24 @@ Y_UNIT_TEST_F(Batching, TPartitionFixture)
     WaitErrorResponse({.Cookie=9, .ErrorCode=NPersQueue::NErrorCode::WRONG_COOKIE});
     WaitProxyResponse({.Cookie=10, .Status=NMsgBusProxy::MSTATUS_OK});
     WaitErrorResponse({.Cookie=11, .ErrorCode=NPersQueue::NErrorCode::WRONG_COOKIE});
+
+    UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(*partition, COUNTER_PQ_CREATE_SESSION_ERROR), 1);
+    UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(*partition, COUNTER_PQ_SET_CLIENT_OFFSET_ERROR), 1);
+}
+
+Y_UNIT_TEST_F(DropSessionErrorCounter, TPartitionFixture)
+{
+    auto* partition = CreatePartition();
+    CreateSession("client-1", "session-id-1");
+
+    SendEvent(new TEvPQ::TEvSetClientInfo(2, "client-1", 0, "session-id-2", 0, 0, 0, TActorId{},
+                                          TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION));
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitErrorResponse({.Cookie=2, .ErrorCode=NPersQueue::NErrorCode::WRONG_COOKIE});
+
+    UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(*partition, COUNTER_PQ_DELETE_SESSION_ERROR), 1);
+    UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(*partition, COUNTER_PQ_SET_CLIENT_OFFSET_ERROR), 0);
 }
 
 Y_UNIT_TEST_F(SetOffset, TPartitionFixture)

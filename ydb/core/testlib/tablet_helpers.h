@@ -28,6 +28,10 @@ namespace NKikimr {
     void InvalidateTabletResolverCache(TTestActorRuntime& runtime, ui64 tabletId, ui32 nodeIndex = 0);
     void RebootTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0, bool sysTablet = false);
     void GracefulRestartTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0);
+    // App cumulative counter by full name, e.g. "Kesus/Requests/QuoterResourceDescribe"
+    ui64 GetTabletCumulativeCounter(TTestActorRuntime& runtime, ui64 tabletId, const TString& name, ui32 nodeIndex = 0);
+    // RoCompleted + RwCompleted of a tx type, e.g. txName = "Hive/TxMonResumeTablet"
+    ui64 GetTabletTxCompleted(TTestActorRuntime& runtime, ui64 tabletId, const TString& txName, ui32 nodeIndex = 0);
     void SetupTabletServices(TTestActorRuntime& runtime, TAppPrepare* app = nullptr, bool mockDisk = false,
                              NFake::TStorage storage = {}, const NSharedCache::TSharedCacheConfig* sharedCacheConfig = nullptr, bool forceFollowers = false,
                              TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies = {});

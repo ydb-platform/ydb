@@ -23,7 +23,7 @@ public:
     }
 
     TTxType GetTxType() const override {
-        return TXTYPE_PROPOSE;
+        return TXTYPE_ABORT_LOCK;
     }
 
 private:

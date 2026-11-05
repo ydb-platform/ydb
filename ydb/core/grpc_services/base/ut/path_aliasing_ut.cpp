@@ -61,6 +61,8 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("Root/db/source", {}),
                 relativePathsEnabled ? "/Root/db/Root/db/source" : "Root/db/source");
             UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/Root/db/destination", {}), "/Root/db/destination");
+            UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("dir//table/", "restore/"),
+                relativePathsEnabled ? "/Root/db/restore/dir/table" : "dir//table/");
 
             NKikimrConfig::TPathRewriteConfig config;
             auto* rule = config.AddRules();
@@ -90,6 +92,12 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("", prefix), "");
             UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("table", "/Other/db"),
                 relativePathsEnabled ? "/Archive/table" : "table");
+
+            TNamedRequest trailingSlashRequest("Ydb.Table.V1.TableService/DescribeTable", "/Root/db/");
+            trailingSlashRequest.EnablePathNormalization();
+            trailingSlashRequest.InitializePathNormalization(std::make_shared<const NPathAliasing::TPathNormalizer>(config));
+            UNIT_ASSERT_VALUES_EQUAL(trailingSlashRequest.NormalizePath("legacy//table/", {}),
+                relativePathsEnabled ? "/Alias/db/new/table" : "legacy//table/");
         }
 
         Y_UNIT_TEST_TWIN(ResourcePathsWithoutDomain, noDomainsInfo) {

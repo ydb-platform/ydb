@@ -40,6 +40,9 @@ namespace NKikimr::NGRpcService {
             }
             resolved = PrependDomainIfNeeded(
                 base.empty() ? database : PrependDomainIfNeeded(database, base), path);
+            if (resolved.StartsWith('/')) {
+                resolved = CanonizePath(resolved);
+            }
         }
         return PathNormalizer_ ? PathNormalizer_->NormalizePath(resolved) : resolved;
     }

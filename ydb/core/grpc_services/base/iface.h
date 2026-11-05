@@ -38,6 +38,7 @@ public:
     // With relative paths enabled, resolve relative paths against base.
     // An empty base means the request's database path. A relative base is resolved
     // against that database; an absolute base is used as-is.
+    // With relative paths disabled, base is ignored and only aliases are applied.
     TString NormalizePath(TStringBuf path, TStringBuf base) const;
 
     virtual TMaybe<TString> GetTraceId() const = 0;

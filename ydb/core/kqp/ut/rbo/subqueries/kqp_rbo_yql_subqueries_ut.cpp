@@ -351,6 +351,137 @@ void TestDecorrelation(bool columnTables, bool equalNullsJoinKeys = false) {
          )",
          R"([[2];[3];[4];[5];[6];[7];[8];[9];[10];[11];[12]])"},
 
+        // TPC-H Q21 shape: an equality and an inequality in EXISTS and NOT EXISTS.
+        {R"(
+            SELECT t1.a FROM `/Root/t1` AS t1
+            WHERE EXISTS (SELECT * FROM `/Root/t2` AS t2
+                          WHERE t2.b == t1.b AND t2.a != t1.a)
+              AND NOT EXISTS (SELECT * FROM `/Root/t3` AS t3
+                              WHERE t3.b == t1.b AND t3.a != t1.a AND t3.c > 4)
+            ORDER BY t1.a;
+         )",
+         R"([[2];[5];[6];[10]])"},
+
+        // A null correlation key matches nothing, so NOT EXISTS keeps its row.
+        {R"(
+            SELECT t1.a FROM `/Root/t1` AS t1
+            WHERE EXISTS (SELECT 1 FROM `/Root/t2` AS t2
+                          WHERE t2.e == t1.e AND t2.a != t1.a AND t2.a <= 5)
+            ORDER BY t1.a;
+         )",
+         R"([[6];[7];[8];[9];[10];[11];[12]])"},
+
+        {R"(
+            SELECT t1.a FROM `/Root/t1` AS t1
+            WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` AS t2
+                              WHERE t2.e == t1.e AND t2.a != t1.a AND t2.a <= 5)
+            ORDER BY t1.a;
+         )",
+         R"([[1];[2];[3];[4];[5]])"},
+
+        // A false or unknown caller-only predicate means no match: NOT EXISTS keeps the row.
+        {R"(
+            SELECT t1.a FROM `/Root/t1` AS t1
+            WHERE NOT EXISTS (SELECT 1 FROM `/Root/t2` AS t2
+                              WHERE t2.b == t1.b AND t1.e > 1)
+            ORDER BY t1.a;
+         )",
+         R"([[1];[3];[4];[5];[7];[8];[9];[11];[12]])"},
+
+        // Duplicate caller rows survive, each with several matches.
+        {R"(
+            $outer = SELECT a, b FROM `/Root/t1` UNION ALL SELECT a, b FROM `/Root/t1`;
+            SELECT t1.a FROM $outer AS t1
+            WHERE EXISTS (SELECT 1 FROM `/Root/t2` AS t2
+                          WHERE t2.b == t1.b AND t2.a != t1.a)
+            ORDER BY t1.a;
+         )",
+         R"([[1];[1];[2];[2];[4];[4];[5];[5];[6];[6];[8];[8];[9];[9];[10];[10];[12];[12]])"},
+
+        // The same query through a dependent join: join filters need the block hash join.
+        {R"(
+            PRAGMA ydb.UseBlockHashJoin = 'false';
+            $outer = SELECT a, b FROM `/Root/t1` UNION ALL SELECT a, b FROM `/Root/t1`;
+            SELECT t1.a FROM $outer AS t1
+            WHERE EXISTS (SELECT 1 FROM `/Root/t2` AS t2
+                          WHERE t2.b == t1.b AND t2.a != t1.a)
+            ORDER BY t1.a;
+         )",
+         R"([[1];[1];[2];[2];[4];[4];[5];[5];[6];[6];[8];[8];[9];[9];[10];[10];[12];[12]])"},
+
+        // IN brings its own equality, so the subquery can correlate on an inequality alone.
+        {R"(
+            SELECT t1.a FROM `/Root/t1` AS t1
+            WHERE t1.a IN (SELECT t2.a FROM `/Root/t2` AS t2 WHERE t2.b > t1.b)
+            ORDER BY t1.a;
+         )",
+         R"([[4];[5];[8]])"},
+
+        // Nullable lookup and result: a null matches nothing, so the row is dropped.
+        {R"(
+            SELECT t1.a FROM `/Root/t1` AS t1
+            WHERE t1.e IN (SELECT t2.e FROM `/Root/t2` AS t2 WHERE t2.b == t1.b AND t2.a != t1.a)
+            ORDER BY t1.a;
+         )",
+         R"([[4];[6];[8];[10]])"},
+
+        // A result that reads the caller directly stays on the dependent join path.
+        {R"(
+            SELECT t1.a FROM `/Root/t1` AS t1
+            WHERE t1.a IN (SELECT t1.b FROM `/Root/t2` AS t2 WHERE t2.b == t1.b)
+            ORDER BY t1.a;
+         )",
+         R"([[1];[2]])"},
+
+        // NOT IN without nulls is an anti join.
+        {R"(
+            SELECT t1.a FROM `/Root/t1` AS t1
+            WHERE t1.a NOT IN (SELECT t2.a FROM `/Root/t2` AS t2 WHERE t2.b == t1.b AND t2.c > 4)
+            ORDER BY t1.a;
+         )",
+         R"([[1];[2];[3];[4];[5];[6];[7];[8];[9];[10];[11]])"},
+
+        // A false or unknown caller-only predicate empties the subquery: NOT IN keeps the row.
+        {R"(
+            SELECT t1.a FROM `/Root/t1` AS t1
+            WHERE t1.a NOT IN (SELECT t2.a FROM `/Root/t2` AS t2 WHERE t2.b == t1.b AND t1.e > 1)
+            ORDER BY t1.a;
+         )",
+         R"([[1];[3];[4];[5];[6];[7];[8];[9];[10];[11];[12]])"},
+
+        // A null lookup against a non-empty subquery is unknown: an anti join would keep a = 1.
+        {R"(
+            SELECT t1.a FROM `/Root/t1` AS t1
+            WHERE t1.e NOT IN (SELECT t2.a FROM `/Root/t2` AS t2 WHERE t2.b == t1.b)
+            ORDER BY t1.a;
+         )",
+         R"([[3];[4];[7];[8];[11];[12]])"},
+
+        // A null lookup against an empty subquery is true.
+        {R"(
+            SELECT t1.a FROM `/Root/t1` AS t1
+            WHERE t1.e NOT IN (SELECT t2.a FROM `/Root/t2` AS t2 WHERE t2.b == t1.b AND t2.a < 0)
+            ORDER BY t1.a;
+         )",
+         R"([[1];[2];[3];[4];[5];[6];[7];[8];[9];[10];[11];[12]])"},
+
+        // A null result makes a non-matching NOT IN unknown: an anti join would keep those rows.
+        {R"(
+            SELECT t1.a FROM `/Root/t1` AS t1
+            WHERE t1.a NOT IN (SELECT t2.e FROM `/Root/t2` AS t2 WHERE t2.b == t1.b)
+            ORDER BY t1.a;
+         )",
+         R"([[3];[4];[6];[7];[8];[10];[11];[12]])"},
+
+        // IN and NOT EXISTS in one filter become two joins.
+        {R"(
+            SELECT t1.a FROM `/Root/t1` AS t1
+            WHERE t1.a IN (SELECT t2.a FROM `/Root/t2` AS t2 WHERE t2.b > t1.b)
+              AND NOT EXISTS (SELECT 1 FROM `/Root/t3` AS t3 WHERE t3.b == t1.b AND t3.c > 5)
+            ORDER BY t1.a;
+         )",
+         R"([[5]])"},
+
         {R"(
             SELECT t1.a FROM `/Root/t1` as t1
             WHERE EXISTS (SELECT 1 FROM `/Root/t2` as t2 WHERE t2.b == COALESCE(t1.e, 0) AND t2.a <= 3)
@@ -723,9 +854,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[1]])");
     }
 
-    Y_UNIT_TEST(PushFilterBeforeInlining) {
+    Y_UNIT_TEST_TWIN(PushFilterBeforeInlining, InlineJoinFilters) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableInlineJoinFiltersAfterCBO(InlineJoinFilters);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -832,7 +964,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                        WHERE t3.a == t2.a AND t3.b != t1.b);
         )", R"([[[1100]]])");
 
-        check("correlated exists and not exists with non-eliminable domains", R"(
+        check("correlated exists with a preserved primary key", R"(
+            SELECT t1.id FROM `/Root/t1` AS t1
+            WHERE EXISTS (SELECT * FROM `/Root/t1` AS t3
+                          WHERE t3.a == t1.a AND t3.b != t1.b AND t3.c > t1.c)
+            ORDER BY t1.id;
+        )", R"([[1];[3]])");
+
+        check("correlated exists and not exists with inequality filters", R"(
             PRAGMA YqlSelect = 'force';
             PRAGMA AnsiImplicitCrossJoin;
 

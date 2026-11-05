@@ -466,6 +466,30 @@ Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {
         UNIT_ASSERT(simplified.Config.Simplified);
     }
 
+    Y_UNIT_TEST(SimplifiedResultSetPreservesTopOperator) {
+        const TString plans = R"({"SimplifiedPlan":{
+            "Node Type":"ResultSet","PlanNodeType":"ResultSet","Plans":[{
+                "Node Type":"Sort","PlanNodeId":1,
+                "Operators":[{"Name":"Sort","SortBy":[{"Column":"a","Ascending":true,"NullsFirst":true}]}],
+                "Plans":[{
+                    "Node Type":"Merge","PlanNodeType":"Connection","PlanNodeId":2,
+                    "SortColumns":[{"Column":"a","Ascending":true,"NullsFirst":true}],
+                    "Plans":[{
+                        "Node Type":"TableFullScan","PlanNodeId":3,
+                        "Operators":[{"Name":"TableFullScan","Table":"t","ReadColumns":["a"]}]
+                    }]
+                }]
+            }]
+        }})";
+
+        TVisualizer viz;
+        viz.LoadPlans(plans, /*simplified=*/true);
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->NodeType, "ResultSet");
+        UNIT_ASSERT_VALUES_EQUAL(viz.Plans[0]->Stages[0]->NodeType, "Sort");
+        AssertWellFormed(viz.PrintSvg(), "simplified result set");
+    }
+
     // A plan node the loader does not understand is rejected rather than drawn wrong.
     static TString UnsupportedPlan() {
         return R"({"Plan":{"Plans":[{"Node Type":"R","Plans":[
@@ -660,6 +684,57 @@ Y_UNIT_TEST_SUITE(TPlan2SvgFormat) {
 }
 
 Y_UNIT_TEST_SUITE(TPlan2SvgParse) {
+
+    Y_UNIT_TEST(StructuredProperties) {
+        const auto sort = Json(R"([{"Column":"t.a","Ascending":false,"NullsFirst":false}])");
+        for (const auto* name : {"SortBy", "TopSortBy", "OrderBy", "SortColumns"}) {
+            UNIT_ASSERT_VALUES_EQUAL(FormatPlanProperty(name, sort), "t.a desc nulls last");
+        }
+        const auto columns = Json(R"(["b","a, c"])");
+        for (const auto* name : {"Columns", "GroupBy", "PartitionBy", "LookupKeyPrefix"}) {
+            UNIT_ASSERT_VALUES_EQUAL(FormatPlanProperty(name, columns), "b, a, c");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(FormatPlanProperty("Aggregation", Json(R"([
+            {"Output":"n","Function":"count","Arguments":["t.a"],"Distinct":true},
+            {"Output":"s","Function":"sum","Arguments":["t.b"],"Distinct":false}
+        ])")), "{n: count(distinct t.a), s: sum(t.b)}");
+        UNIT_ASSERT_VALUES_EQUAL(FormatPlanProperty("Frame", Json(R"({
+            "Type":"Rows","Begin":{"Kind":"Preceding","Value":0},"End":{"Kind":"UnboundedFollowing"}
+        })")), "Rows[Preceding 0, UnboundedFollowing]");
+        UNIT_ASSERT_VALUES_EQUAL(FormatSortColumn(NJson::TJsonValue("a (Desc)")), "a (Desc)");
+    }
+
+    Y_UNIT_TEST(NumericEstimatesAndBooleanFlags) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetEstimation(Json(R"({"E-Cost":123.5,"E-Rows":1000,"E-Size":4096})")),
+            GetEstimation(Json(R"({"E-Cost":"123.5","E-Rows":"1000","E-Size":"4096"})")));
+        for (const auto* flag : {"true", "false", "\"True\"", "\"False\""}) {
+            bool value = true;
+            ReadBoolString(Json(TStringBuilder() << "{\"Parallel\":" << flag << "}"), "Parallel", value);
+            UNIT_ASSERT_VALUES_EQUAL(value, TString(flag) == "true" || TString(flag) == "\"True\"");
+        }
+    }
+
+    Y_UNIT_TEST(StructuredOperatorsRenderLikeLegacy) {
+        auto render = [](TStringBuf operators) {
+            TPlanVisualizer viz;
+            viz.LoadPlans(TStringBuilder() << R"({"Plan":{"Plans":[{"Node Type":"ResultSet","PlanNodeId":2,"Plans":[
+                {"Node Type":"Stage","PlanNodeId":1,"Operators":)" << operators << "}]}]}}");
+            return viz.PrintSvg();
+        };
+        const auto legacy = render(R"([
+            {"Name":"Sort","SortBy":"a desc nulls last","E-Cost":"123","E-Rows":"45","E-Size":"2048"},
+            {"Name":"Aggregate","GroupBy":"b, c","Aggregation":"{n: count(distinct a)}","Pushdown":"True"},
+            {"Name":"TopSort","Limit":"5","TopSortBy":"b asc nulls first"}
+        ])");
+        const auto structured = render(R"([
+            {"Name":"Sort","SortBy":[{"Column":"a","Ascending":false,"NullsFirst":false}],"E-Cost":123,"E-Rows":45,"E-Size":2048},
+            {"Name":"Aggregate","GroupBy":["b","c"],"Aggregation":[{"Output":"n","Function":"count","Arguments":["a"],"Distinct":true}],"Pushdown":true},
+            {"Name":"TopSort","Limit":"5","TopSortBy":[{"Column":"b","Ascending":true,"NullsFirst":true}]}
+        ])");
+        UNIT_ASSERT_C(legacy == structured, Diff(legacy, structured));
+        AssertWellFormed(structured, "structured properties");
+    }
 
     Y_UNIT_TEST(TableOrIndexName) {
         UNIT_ASSERT_VALUES_EQUAL(ParseTableOrIndexName("table"), "table");

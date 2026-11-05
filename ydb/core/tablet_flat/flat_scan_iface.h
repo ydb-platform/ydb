@@ -10,6 +10,7 @@ namespace NKikimr {
 namespace NTable {
     class TRowState;
     class TSpent;
+    struct TSubset;
 
     /*_ IScan, the generic scan interface. Scan life cycle starts with
         invocation of Prepare(..) method after which it has to progress
@@ -120,6 +121,19 @@ namespace NTable {
         };
 
         virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) = 0;
+
+        /**
+         * Called before the first Seek(..) to let the scan decide whether the
+         * subset it is about to scan contains any rows it might be interested
+         * in. Returning true skips the iteration entirely and finishes the
+         * scan with EStatus::Done right away.
+         *
+         * The default is to return false (the subset has to be scanned).
+         */
+        virtual bool ShouldSkipSubset(const TSubset&) const {
+            return false;
+        }
+
         virtual EScan Seek(TLead&, ui64 seq) = 0;
         virtual EScan Feed(TArrayRef<const TCell>, const TRow&) = 0;
         virtual TAutoPtr<IDestructable> Finish(const std::exception&) {

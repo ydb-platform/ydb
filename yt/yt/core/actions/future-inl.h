@@ -39,7 +39,7 @@ class TFiberCanceledException
 } // namespace NConcurrency
 
 // Forward declaration from invoker_util.h.
-IInvokerPtr GetSyncInvoker();
+const IInvokerPtr& GetSyncInvoker();
 
 namespace NDetail {
 

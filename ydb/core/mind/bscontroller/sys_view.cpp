@@ -81,10 +81,11 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
             totalSize = Min(totalSize.value_or(Max<ui64>()), slotSize);
         }
     }
-    const ui64 a = totalSize.value_or(0) * disks.size() * type.DataParts() / type.TotalPartCount();
-    const ui64 b = allocatedSize * disks.size() * type.DataParts() / type.TotalPartCount();
-    info->SetAllocatedSize(b);
-    info->SetAvailableSize(b < a ? a - b : 0);
+    const unsigned __int128 scaledTotalSize = TBlobStorageController::TGroupInfo::ScaleGroupResource(totalSize.value_or(0), disks.size(), type);
+    const unsigned __int128 scaledAllocatedSize = TBlobStorageController::TGroupInfo::ScaleGroupResource(allocatedSize, disks.size(), type);
+    const unsigned __int128 scaledAvailableSize = scaledAllocatedSize < scaledTotalSize ? scaledTotalSize - scaledAllocatedSize : 0;
+    info->SetAllocatedSize(static_cast<ui64>(Min<unsigned __int128>(scaledAllocatedSize, Max<ui64>())));
+    info->SetAvailableSize(static_cast<ui64>(Min<unsigned __int128>(scaledAvailableSize, Max<ui64>())));
 }
 
 class TSystemViewsCollector : public TActorBootstrapped<TSystemViewsCollector> {

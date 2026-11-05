@@ -1692,11 +1692,17 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     NextPartitionStreamId += PartitionStreamIdStep;
     PartitionStreams.insert_or_assign(partitionSessionId, partitionStream);
 
+    std::optional<uint64_t> retainedStartOffset;
+    if (msg.has_retained_start_offset()) {
+        retainedStartOffset = msg.retained_start_offset();
+    }
+
     // Send event to user.
     bool pushRes = EventsQueue->PushEvent(
         partitionStream,
         TReadSessionEvent::TStartPartitionSessionEvent(
-            partitionStream, msg.committed_offset(), msg.partition_offsets().end()),
+            partitionStream, msg.committed_offset(), msg.partition_offsets().start(),
+            msg.partition_offsets().end(), retainedStartOffset),
         deferred);
 
     if (!pushRes) {

@@ -78,10 +78,7 @@ namespace NKikimr::NBsController {
                     it->second = TGroupGeometryInfo(TBlobStorageGroupType(pool.ErasureSpecies), pool.GetGroupGeometry());
                 }
                 const auto& geometry = it->second;
-                if (group->ErasureSpecies != geometry.GetErasure()
-                        || group->Topology->GetNumVDisksPerFailDomain() != geometry.GetNumVDisksPerFailDomain()
-                        || group->Topology->GetTotalFailRealmsNum() != geometry.GetNumFailRealms()
-                        || group->Topology->GetNumFailDomainsPerFailRealm() != geometry.GetNumFailDomainsPerFailRealm()) {
+                if (!geometry.MatchesGroup(*group)) {
                     return TStringBuilder() << "storage pool pile override changes erasure or topology of existing GroupId# "
                         << groupId;
                 }
@@ -418,6 +415,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::MakeStoragePoolGroupsBridged(TBoxStoragePoolId storagePoolId) {
+        std::map<TBridgePileId, TGroupGeometryInfo> geometries;
         // ordinary groups become inline piles in the piles they reside in
         ForEachStoragePoolGroup(storagePoolId, [&](const TGroupInfo& group) {
             if (group.BridgeGroupInfo || group.BridgePileId) {
@@ -439,6 +437,22 @@ namespace NKikimr::NBsController {
                         " bridged";
                 }
                 pileId = pile->BridgePileId;
+            }
+            const auto [it, inserted] = geometries.try_emplace(*pileId);
+            if (inserted) {
+                const auto pool = GetStoragePoolForPile(storagePoolId, *pileId);
+                it->second = TGroupGeometryInfo(TBlobStorageGroupType(pool.ErasureSpecies), pool.GetGroupGeometry());
+            }
+            const auto& geometry = it->second;
+            if (!geometry.MatchesGroup(group)) {
+                throw TExError() << "GroupId# " << group.ID << " has erasure or topology incompatible with pile "
+                    << BridgeInfo->GetPile(*pileId)->Name
+                    << " ActualErasure# " << TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies)
+                    << " ExpectedErasure# " << geometry.GetErasure()
+                    << " ActualTopology# " << group.Topology->GetTotalFailRealmsNum() << 'x'
+                    << group.Topology->GetNumFailDomainsPerFailRealm() << 'x' << group.Topology->GetNumVDisksPerFailDomain()
+                    << " ExpectedTopology# " << geometry.GetNumFailRealms() << 'x'
+                    << geometry.GetNumFailDomainsPerFailRealm() << 'x' << geometry.GetNumVDisksPerFailDomain();
             }
             Groups.FindForUpdate(group.ID)->MakeInlinePile(*pileId);
             GroupContentChanged.insert(group.ID);
@@ -1293,8 +1307,16 @@ namespace NKikimr::NBsController {
                         return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
                             << " is writing to an excluded datacenter; repair its fail realm state first");
                     }
-                    const TFailRealm::EState target = excludedRealms[realm] ? TFailRealm::Excluded : TFailRealm::Recovering;
-                    states[realm] = target;
+                    const std::optional<TMirror3dcFailRealmStates> next = excludedRealms[realm]
+                        ? TakeDownFailRealm(states, realm) : ReturnFailRealm(states, realm);
+                    if (next) {
+                        states = *next;
+                    } else if (suppressFailModelChecking) {
+                        states[realm] = excludedRealms[realm] ? TFailRealm::F : TFailRealm::R;
+                    } else {
+                        return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
+                            << ": invalid mirror-3-dc data center transition");
+                    }
                     GroupContentChanged.insert(groupId);
                 }
             }

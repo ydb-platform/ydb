@@ -569,6 +569,9 @@ TImportedReplicationInfo StartImportedReplication(TTestEnv& env) {
 
 void AssertEventuallyDone(TTestEnv& env, const TReplicationTestInfo& info) {
     UNIT_ASSERT_C(WaitFor([&] {
+        if (!env.GetRuntime().IsRealThreads()) {
+            env.GetRuntime().SimulateSleep(TDuration::MilliSeconds(100));
+        }
         return DescribeReplication(env, info)->Get()->Record.GetState().HasDone();
     }, 150), DescribeReplication(env, info)->Get()->Record.GetState().DebugString());
 }

@@ -124,6 +124,18 @@ class BridgeKiKiMRTest(object):
 
     @staticmethod
     def stop_driver(driver):
+        # Temporary workaround for the SDK lock inversion, until
+        # https://a.yandex-team.ru/review/16529757 is synchronized from Arcadia.
+        # These drivers disable discovery, so only cleanup() is used at shutdown.
+        cache = driver._store
+
+        def cleanup():
+            # values() takes a snapshot under the cache lock and releases it
+            # before close() can wait for a concurrent disconnect callback.
+            for connection in cache.values():
+                connection.close()
+
+        cache.cleanup = cleanup
         driver.stop()
 
     def update_cluster_state(self, client, updates, expected_status=StatusIds.SUCCESS, quorum_piles=None):

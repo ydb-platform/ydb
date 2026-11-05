@@ -58,6 +58,7 @@ public:
     void Serialize(TChangeRecord::TPtr in, NKikimrTxDataShard::TEvApplyReplicationChanges::TChange& out) override {
         TVisitor visitor(MemoryPool, out);
         in->Accept(visitor);
+        MemoryPool.Clear();
     }
 };
 

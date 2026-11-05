@@ -61,10 +61,10 @@ Y_UNIT_TEST_SUITE(TPortionMetadataCacheKey) {
         const TPortionAddress portion(pathId, 9);
         const NActors::TActorId first(1, 1);
         const NActors::TActorId second(2, 2);
-        const NGeneralCache::TGlobalPortionAddress sameTablet(first, 100, portion);
-        const NGeneralCache::TGlobalPortionAddress restarted(second, 100, portion);
-        const NGeneralCache::TGlobalPortionAddress otherTablet(first, 101, portion);
-        const NGeneralCache::TGlobalPortionAddress otherPortion(first, 100, TPortionAddress(pathId, 10));
+        const NGeneralCache::TGlobalPortionAddress sameTablet(first, 100, portion, 0, true);
+        const NGeneralCache::TGlobalPortionAddress restarted(second, 100, portion, 0, true);
+        const NGeneralCache::TGlobalPortionAddress otherTablet(first, 101, portion, 0, true);
+        const NGeneralCache::TGlobalPortionAddress otherPortion(first, 100, TPortionAddress(pathId, 10), 0, true);
 
         UNIT_ASSERT(sameTablet == restarted);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(sameTablet), static_cast<size_t>(restarted));
@@ -75,8 +75,8 @@ Y_UNIT_TEST_SUITE(TPortionMetadataCacheKey) {
     Y_UNIT_TEST(PortionAddressIgnoresContentStamp) {
         const TPortionAddress portion(NKikimr::NColumnShard::TInternalPathId::FromRawValue(7), 9);
         const NActors::TActorId actor(1, 1);
-        const NGeneralCache::TGlobalPortionAddress added(actor, 100, portion, 1);
-        const NGeneralCache::TGlobalPortionAddress removed(actor, 100, portion, 2);
+        const NGeneralCache::TGlobalPortionAddress added(actor, 100, portion, 1, true);
+        const NGeneralCache::TGlobalPortionAddress removed(actor, 100, portion, 2, true);
 
         UNIT_ASSERT(added == removed);
         UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(added), static_cast<size_t>(removed));

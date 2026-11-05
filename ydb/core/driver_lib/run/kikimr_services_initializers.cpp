@@ -2779,6 +2779,9 @@ namespace {
 NKikimrConfig::TGeneralCacheConfig ApplyCacheConsumerWeights(
     NKikimrConfig::TGeneralCacheConfig config, const bool weightsEnabled, const bool scansOverCompactionByDefault) {
     if (!weightsEnabled) {
+        if (config.ConsumersSize()) {
+            Cerr << "Warning: general cache consumers are ignored while EnableCsGeneralCacheConsumerWeights is off" << Endl;
+        }
         config.ClearConsumers();
         return config;
     }

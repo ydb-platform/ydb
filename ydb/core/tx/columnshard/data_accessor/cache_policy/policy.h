@@ -27,8 +27,8 @@ public:
 
     TInternalPathId GetPathId() const;
 
-    TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress,
-        const ui64 contentStamp = 0, const bool keepAcrossRestarts = true);
+    TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionAddress& internalAddress, const ui64 contentStamp,
+        const bool keepAcrossRestarts);
 
     TGlobalPortionAddress(const NActors::TActorId& actorId, const ui64 tabletId, const TPortionInfo& portion, const bool keepAcrossRestarts);
 

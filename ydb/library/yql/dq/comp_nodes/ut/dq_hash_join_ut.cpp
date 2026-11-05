@@ -916,6 +916,21 @@ TJoinTestData MarkJoinThreeValuedTestData(bool rightHasNull) {
     return td;
 }
 
+TJoinTestData MarkJoinTaggedKeyTestData() {
+    auto td = MarkJoinThreeValuedTestData(false);
+    TProgramBuilder& pb = *td.Setup->PgmBuilder;
+    const auto tagColumn = [&](TType* listType, ui32 column) {
+        const auto elements = AS_TYPE(TTupleType, AS_TYPE(TListType, listType)->GetItemType())->GetElements();
+        TVector<TType*> types(elements.begin(), elements.end());
+        types[column] = pb.NewTaggedType(types[column], "key");
+        return pb.NewListType(pb.NewTupleType(types));
+    };
+    td.Left.Type = tagColumn(td.Left.Type, 1);
+    td.Right.Type = tagColumn(td.Right.Type, 0);
+    td.Result.Type = tagColumn(td.Result.Type, 1);
+    return td;
+}
+
 TJoinTestData MarkJoinEmptyRightTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -3196,6 +3211,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestMarkJoinThreeValuedRightHasNull, BlockJoin) {
         Test(MarkJoinThreeValuedTestData(true), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinTaggedKey, BlockJoin) {
+        Test(MarkJoinTaggedKeyTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestMarkJoinEmptyRight, BlockJoin) {

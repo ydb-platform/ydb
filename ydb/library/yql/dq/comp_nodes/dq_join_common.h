@@ -4,6 +4,8 @@
 #include "dq_join_filters.h"
 #include <algorithm>
 #include <numeric>
+#include <string>
+#include <unordered_map>
 #include <vector>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
@@ -15,7 +17,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
-#include <util/generic/hash.h>
+#include <util/str_stl.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -378,10 +380,18 @@ class TMarkGroups {
         return true;
     }
 
+    using TGroup = std::basic_string<char, std::char_traits<char>, TMKQLAllocator<char>>;
+
+    struct TGroupHash {
+        size_t operator()(const TGroup& group) const {
+            return THash<TStringBuf>{}(TStringBuf(group.data(), group.size()));
+        }
+    };
+
     const NPackedTuple::TTupleLayout* Layout_;
     const TMarkJoinKey Key_;
-    THashMap<TString, bool> Groups_;
-    TString Group_;
+    std::unordered_map<TGroup, bool, TGroupHash, std::equal_to<TGroup>, TMKQLAllocator<std::pair<const TGroup, bool>>> Groups_;
+    TGroup Group_;
 };
 
 namespace NJoinPackedTuples {
@@ -1451,6 +1461,13 @@ inline void ValidateMarkJoin(const TBlockHashJoinSettings& settings, EJoinKind k
     }
 }
 
+inline bool IsNullableKeyType(TType* type) {
+    while (type->IsTagged()) {
+        type = AS_TYPE(TTaggedType, type)->GetBaseType();
+    }
+    return type->IsOptional() || type->IsNull();
+}
+
 template <typename TConverter>
 std::optional<TMarkJoinKey> MakeMarkJoinKey(const TBlockHashJoinSettings& settings,
                                             TSides<TConverter*> converters, const TSides<TVector<TType*>>& userTypes) {
@@ -1471,7 +1488,7 @@ std::optional<TMarkJoinKey> MakeMarkJoinKey(const TBlockHashJoinSettings& settin
     }
     MKQL_ENSURE(packedColumns.Build == packedColumns.Probe, "mark key is packed differently on build and probe sides");
     return TMarkJoinKey{.PackedKeyColumn = packedColumns.Build,
-                        .ProbeNullable = userTypes.Probe[inputColumn]->IsOptional()};
+                        .ProbeNullable = IsNullableKeyType(userTypes.Probe[inputColumn])};
 }
 
 template <typename TInputTypes, typename TKeyCols>

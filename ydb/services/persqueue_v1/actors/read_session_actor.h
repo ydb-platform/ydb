@@ -15,6 +15,7 @@
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
+#include <util/generic/array_ref.h>
 #include <util/generic/guid.h>
 #include <util/system/compiler.h>
 
@@ -52,6 +53,7 @@ struct TPartitionActorInfo {
     ui64 Generation;
     ui64 NodeId;
     bool ReadingFinished;
+    bool StartedFromEnd; // The partition finished without delivering any data to this session.
     ui64 EndOffset;
 
 
@@ -87,13 +89,14 @@ struct TPartitionActorInfo {
         , Generation(0)
         , NodeId(0)
         , ReadingFinished(false)
+        , StartedFromEnd(false)
     {
         AFL_ENSURE(partition.DiscoveryConverter != nullptr)
             ("partition", partition.Partition)("assign_id", partition.AssignId);
     }
 
     bool IsLastOffsetCommitted() const {
-        return ReadingFinished && EndOffset == Offset;
+        return ReadingFinished && (EndOffset == Offset || StartedFromEnd);
     }
 };
 
@@ -368,7 +371,15 @@ private:
     static ui32 NormalizeMaxReadMessagesCount(ui32 sourceValue);
     static ui32 NormalizeMaxReadSize(ui32 sourceValue);
 
+    const TPartitionActorInfo* FindPartitionActor(ui64 partitionId, TStringBuf topicName) const;
     void NotifyChildren(const TPartitionActorInfo& partition, const TActorContext& ctx);
+
+    struct TParentCommitSets {
+        absl::flat_hash_set<ui32> SkippedParents;
+        absl::flat_hash_set<ui32> NotCommitedToFinishParents;
+    };
+
+    TParentCommitSets MakeParentCommitSets(const NKikimr::NPQ::TPartitionGraph::Node& partitionNode, TStringBuf topicName, TConstArrayRef<ui32> groups, TConstArrayRef<ui32> skippedFromLock) const;
 
 private:
     std::unique_ptr</* type alias */ TEvStreamReadRequest> Request;

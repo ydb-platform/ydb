@@ -30,12 +30,15 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+ENV(PQ_EXPERIMENTAL_DIRECT_READ="1")
+
 SRCS(
     autoscaling_ut.cpp
     describe_ut.cpp
     commitoffset_ut.cpp
     mirrorer_autoscaling_ut.cpp
     mirrorer_ut.cpp
+    split_read_from_timestamp_ut.cpp
     topic_timestamp_ut.cpp
     topic_replication_ut.cpp
     topic_ut.cpp

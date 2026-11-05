@@ -392,11 +392,14 @@ struct TEvPQProxy {
     };
 
     struct TEvParentCommitedToFinish : public NActors::TEventLocal<TEvParentCommitedToFinish, EvParentCommitedToFinish> {
-        explicit TEvParentCommitedToFinish(ui64 parentPartitionId)
+        TEvParentCommitedToFinish(ui64 parentPartitionId, bool skipped)
             : ParentPartitionId(parentPartitionId)
+            , Skipped(skipped)
         { }
 
         ui64 ParentPartitionId;
+        // The parent finished without delivering data, so the child commit must commit it.
+        bool Skipped;
     };
 
     struct TEvReleasePartition : public NActors::TEventLocal<TEvReleasePartition, EvReleasePartition> {
@@ -633,7 +636,7 @@ struct TEvPQProxy {
 
         TString Topic;
         ui32 PartitionId;
-        bool FirstMessage;
+        bool FirstMessage; // The partition delivered no data to the session.
 
         std::vector<ui32> AdjacentPartitionIds;
         std::vector<ui32> ChildPartitionIds;

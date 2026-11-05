@@ -1394,22 +1394,36 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
     return true;
 }
 
- void TStatisticsAggregator::ReportBaseStatisticsCounters() {
-    ui64 totalRowCount = 0;
-    ui64 totalBytesSize = 0;
-    for (const auto& [_, serializedStats] : BaseStatistics) {
+TStatisticsAggregator::TBaseStatisticsTotals TStatisticsAggregator::CalculateBaseStatisticsTotals(
+    const NKikimrStat::TSchemeShardStats& stats)
+{
+    TBaseStatisticsTotals totals;
+    for (const auto& entry : stats.GetEntries()) {
+        totals.RowCount += entry.GetRowCount();
+        totals.BytesSize += entry.GetBytesSize();
+    }
+    return totals;
+}
+
+void TStatisticsAggregator::RebuildBaseStatisticsCounters() {
+    BaseStatisticsTotals = {};
+    for (auto& [_, serializedStats] : BaseStatistics) {
+        serializedStats.CommittedTotals = {};
         if (!serializedStats.Committed) {
             continue;
         }
         NKikimrStat::TSchemeShardStats stats;
         Y_PROTOBUF_SUPPRESS_NODISCARD stats.ParseFromString(*serializedStats.Committed);
-        for (const auto& entry: stats.GetEntries()) {
-            totalRowCount += entry.GetRowCount();
-            totalBytesSize += entry.GetBytesSize();
-        }
+        serializedStats.CommittedTotals = CalculateBaseStatisticsTotals(stats);
+        BaseStatisticsTotals.RowCount += serializedStats.CommittedTotals.RowCount;
+        BaseStatisticsTotals.BytesSize += serializedStats.CommittedTotals.BytesSize;
     }
-    TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_ROW_COUNT].Set(totalRowCount);
-    TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_BYTES_SIZE].Set(totalBytesSize);
- }
+    ReportBaseStatisticsCounters();
+}
+
+void TStatisticsAggregator::ReportBaseStatisticsCounters() {
+    TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_ROW_COUNT].Set(BaseStatisticsTotals.RowCount);
+    TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_BYTES_SIZE].Set(BaseStatisticsTotals.BytesSize);
+}
 
 } // NKikimr::NStat

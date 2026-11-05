@@ -292,6 +292,7 @@ public:
 
     ui64 Enqueue(TAutoPtr<ITransaction>) override { Y_TABLET_ERROR("Not supported"); }
     ui64 EnqueueLowPriority(TAutoPtr<ITransaction>) override { Y_TABLET_ERROR("Not supported"); }
+    bool TryExecuteReadyTransaction() override { return false; }
     bool CancelTransaction(ui64) override { Y_TABLET_ERROR("Not supported"); }
     void ConfirmReadOnlyLease(TMonotonic) override { Y_TABLET_ERROR("Not supported"); }
     void ConfirmReadOnlyLease(TMonotonic, std::function<void()>) override { Y_TABLET_ERROR("Not supported"); }

@@ -11,6 +11,11 @@ namespace NKikimr {
                 && AppData()->FeatureFlags.GetExtendedVDiskCounters();
         }
 
+        NMonitoring::TCountableBase::EVisibility GetVDiskCounterVisibility() {
+            return IsExtendedVDiskCounters() ? NMonitoring::TCountableBase::EVisibility::Public
+                : NMonitoring::TCountableBase::EVisibility::Private;
+        }
+
     } // NMonGroup
 } // NKikimr
 

@@ -8,11 +8,55 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NKqp::NSchemeHelpers {
 
 using namespace NKikimrSchemeOp;
 using namespace NKikimrExternalSources;
 using namespace NYql;
+
+bool ValidateColumnBuildAlter(const TModifyScheme& modifyScheme,
+    const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings,
+    Ydb::StatusIds::StatusCode& code, TString& error)
+{
+    if (modifyScheme.GetOperationType() != ESchemeOpAlterTable || !modifyScheme.HasAlterTable()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "invalid ALTER TABLE operation for column build";
+        return false;
+    }
+    // The payload must contain only additions represented in the build settings.
+    auto extraAlter = modifyScheme.GetAlterTable();
+    extraAlter.ClearName();
+    extraAlter.ClearColumns();
+    // KQP also supplies an empty PartitionConfig for ADD COLUMN alone.
+    if (extraAlter.GetPartitionConfig().ByteSizeLong() == 0) {
+        extraAlter.ClearPartitionConfig();
+    }
+    bool onlyDefaultColumns = extraAlter.ByteSizeLong() == 0;
+    THashSet<TString> columnsToBuild;
+    for (const auto& column : buildSettings.column()) {
+        columnsToBuild.insert(column.GetColumnName());
+    }
+    for (const auto& column : modifyScheme.GetAlterTable().GetColumns()) {
+        // Also reject repeated descriptors rather than silently ignoring them.
+        if (!columnsToBuild.erase(column.GetName())) {
+            onlyDefaultColumns = false;
+            break;
+        }
+    }
+    if (!onlyDefaultColumns) {
+        code = Ydb::StatusIds::UNSUPPORTED;
+        error = "ADD COLUMN with DEFAULT or generated values cannot be combined with other ALTER TABLE actions";
+        return false;
+    }
+    if (!columnsToBuild.empty()) {
+        code = Ydb::StatusIds::BAD_REQUEST;
+        error = "ALTER TABLE payload is missing columns to build";
+        return false;
+    }
+    return true;
+}
 
 TString CanonizePath(const TString& path) {
     if (path.empty()) {

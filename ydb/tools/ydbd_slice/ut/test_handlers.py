@@ -296,7 +296,8 @@ static_erasure: none
                 (compute, 2, 2, [assignment]),
             ],
         )
-        sleep.assert_called_once_with(5)
+        # Pause between storage/dynamic phases, then between the two dynamic hosts.
+        self.assertEqual(sleep.call_args_list, [mock.call(5), mock.call(5)])
 
     def test_wait_kikimr_back_requires_old_pids_gone(self):
         host = 'host.search.yandex.net'
@@ -321,6 +322,48 @@ static_erasure: none
             ('222', 0, ''),          # new only, poll 1
             ('222', 0, ''),          # poll 2
             ('222', 0, ''),          # poll 3 -> done
+        ]
+
+        def fake_probe(_host, _cmd):
+            return probes.pop(0)
+
+        with mock.patch.object(slice_obj, '_host_probe', side_effect=fake_probe), \
+                mock.patch.object(handlers.time, 'sleep'), \
+                mock.patch.object(handlers, 'ROLLING_RESTART_STABLE_POLLS', 3):
+            slice_obj._wait_kikimr_back(
+                host,
+                'list-cmd',
+                old_pids=['111'],
+                min_count=1,
+                phase='storage',
+                index=1,
+                total=1,
+            )
+
+        self.assertEqual(probes, [])
+
+    def test_wait_kikimr_back_resets_when_pid_set_changes(self):
+        host = 'host.search.yandex.net'
+        cluster_details = SimpleNamespace(
+            hosts=[SimpleNamespace(hostname=host)],
+            grpc_config={'port': 2135},
+            host_dynamic_slot_counts={},
+            host_storage_enabled={},
+            host_storage_profile={},
+            host_dynamic_profiles={},
+        )
+        with mock.patch.object(handlers.config_client, 'ConfigClient'):
+            slice_obj = handlers.Slice(
+                {'kikimr': ['bin']},
+                nodes.Nodes([host]),
+                cluster_details,
+            )
+
+        probes = [
+            ('222', 0, ''),  # replacement #1
+            ('333', 0, ''),  # different set -> reset
+            ('333', 0, ''),
+            ('333', 0, ''),  # stable -> done
         ]
 
         def fake_probe(_host, _cmd):
@@ -370,11 +413,12 @@ static_erasure: none
             waited['old_pids'] = old_pids
 
         with mock.patch.object(slice_obj, '_host_probe', return_value=('11 22 33', 0, '')), \
-                mock.patch.object(slice_obj.nodes, 'execute_async'), \
+                mock.patch.object(slice_obj, '_stop_all_slots') as stop_all, \
                 mock.patch.object(slice_obj, '_start_slot_for_tenant') as start_slot, \
                 mock.patch.object(slice_obj, '_wait_kikimr_back', side_effect=fake_wait):
             slice_obj._rolling_restart_dynamic_host(host, 1, 1, [assignment])
 
+        stop_all.assert_called_once_with(hosts=[host])
         start_slot.assert_called_once_with(slot_new, tenant, host=host, node_bind=None)
         self.assertEqual(waited['min_count'], 1)
         self.assertEqual(waited['old_pids'], ['11', '22', '33'])

@@ -677,6 +677,7 @@ mon={mon}""".format(
         deadline = time.time() + ROLLING_RESTART_TIMEOUT_SEC
         next_report = time.time() + 30
         stable_polls = 0
+        stable_pid_set = None
         last_stdout = ''
         last_retcode = None
         last_stderr = ''
@@ -695,7 +696,13 @@ mon={mon}""".format(
                 and len(pids) > 0
             )
             if restarted:
-                stable_polls += 1
+                if pid_set != stable_pid_set:
+                    # Crash-looping services can show a fresh PID each poll; require
+                    # the same replacement set across consecutive successful polls.
+                    stable_pid_set = pid_set
+                    stable_polls = 1
+                else:
+                    stable_polls += 1
                 if stable_polls >= ROLLING_RESTART_STABLE_POLLS:
                     logger.info(
                         "rolling restart %s %d/%d %s: new pids: %s",
@@ -708,6 +715,7 @@ mon={mon}""".format(
                     return
             else:
                 stable_polls = 0
+                stable_pid_set = None
             now = time.time()
             if now >= next_report:
                 logger.info(
@@ -748,11 +756,12 @@ mon={mon}""".format(
             nodes=[host],
             retry_attempts=0,
         )
+        # Same retries as _start_static: transient SSH/start failures should not
+        # abort the whole rolling update via sys.exit.
         self.nodes.execute_async(
             "sudo service kikimr start",
             check_retcode=True,
             nodes=[host],
-            retry_attempts=0,
         )
         self._wait_kikimr_back(
             host,
@@ -769,7 +778,7 @@ mon={mon}""".format(
         old_stdout, _, _ = self._host_probe(host, list_cmd)
         old_pids = _parse_pids(old_stdout)
         logger.info(
-            "rolling restart dynamic %d/%d %s: stop configured slots, start %d assigned "
+            "rolling restart dynamic %d/%d %s: stop all local slots, start %d assigned "
             "(old pids: %s)",
             index,
             total,
@@ -777,15 +786,9 @@ mon={mon}""".format(
             len(host_assignments),
             old_stdout or "none",
         )
-        # Stop every configured slot port on this host (same set as slice_stop), then
-        # start only the (slot, host) pairs assigned by the current config.
-        for slot in self.cluster_details.dynamic_slots:
-            self.nodes.execute_async(
-                self._stop_slot_command(slot),
-                check_retcode=False,
-                nodes=[host],
-                retry_attempts=0,
-            )
+        # One SSH call stops every kikimr_* dir, including slots removed from the
+        # current config. Then start only the assignments from this update.
+        self._stop_all_slots(hosts=[host])
         for slot, tenant, _, node_bind in host_assignments:
             self._start_slot_for_tenant(slot, tenant, host=host, node_bind=node_bind)
 
@@ -832,6 +835,7 @@ mon={mon}""".format(
     def _rolling_restart(self, interval_sec):
         # Same order as a full update restart: storage first across hosts, then dynamic.
         # Intentional two-phase (not per-host combined): storage should be back before dynnodes.
+        did_storage = False
         if "kikimr" in self.components:
             storage_hosts = self._storage_hosts()
             storage_host_set = set(storage_hosts)
@@ -844,7 +848,14 @@ mon={mon}""".format(
                 interval_sec,
                 phase="storage",
             )
+            did_storage = bool(storage_hosts)
         if "dynamic_slots" in self.components:
+            if did_storage and interval_sec > 0:
+                logger.info(
+                    "waiting %ss between storage and dynamic rolling-restart phases",
+                    interval_sec,
+                )
+                time.sleep(interval_sec)
             assignments_by_host = defaultdict(list)
             for slot, tenant, host, node_bind in self._iter_dynamic_assignments():
                 assignments_by_host[host].append((slot, tenant, host, node_bind))

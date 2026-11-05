@@ -53,13 +53,11 @@ namespace NKikimr {
         TSaviour(const TIntrusivePtr<THullCtx> &hullCtx,
                  TIntrusivePtr<TBlobStorageGroupInfo> groupInfo,
                  TLogoBlobsSnapshot &&snapshot,
-                 const std::shared_ptr<TFilter> &filter,
-                 EOsirisMode mode)
+                 const std::shared_ptr<TFilter> &filter)
             : HullCtx(hullCtx)
             , GroupInfo(std::move(groupInfo))
             , Snapshot(std::move(snapshot))
             , Filter(filter)
-            , Mode(mode)
             , CurIt(HullCtx, &Snapshot)
         {
             CurIt.SeekToFirst();
@@ -94,7 +92,6 @@ namespace NKikimr {
         const TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
         TLogoBlobsSnapshot Snapshot;
         const std::shared_ptr<TFilter> Filter;
-        const EOsirisMode Mode;
 
         // As an iterator we position at some element, below are data extracted from this element
         TIndexForwardIterator CurIt; // current iterator we have
@@ -118,11 +115,7 @@ namespace NKikimr {
             if (GroupInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc) {
                 const std::optional<TMirror3dcWriteQuorumChecker> checker = TMirror3dcWriteQuorumChecker::TryCreate(*GroupInfo, CurKey.Hash());
                 Y_VERIFY_S(checker, HullCtx->VCtx->VDiskLogPrefix << "Unsupported mirror-3-dc realm states");
-                if (Mode == EOsirisMode::Reinforcement) {
-                    partsMask = checker->GetPartsToReinforce(layout, idxInSubgroup);
-                } else {
-                    partsMask = checker->GetPartsToResurrect(layout, idxInSubgroup);
-                }
+                partsMask = checker->GetPartsToResurrect(layout, idxInSubgroup);
             } else {
                 partsMask = topology.GetQuorumChecker().GetPartsToResurrect(layout, idxInSubgroup);
             }
@@ -262,8 +255,7 @@ namespace NKikimr {
                 TIntrusivePtr<TBlobStorageGroupInfo> groupInfo,
                 THullDsSnap &&fullSnap,
                 ui64 confirmedLsn,
-                ui64 anubisOsirisMaxInFly,
-                EOsirisMode mode)
+                ui64 anubisOsirisMaxInFly)
             : TActorBootstrapped<THullOsirisActor>()
             , HullCtx(fullSnap.HullCtx)
             , ConfirmedLsn(confirmedLsn)
@@ -271,7 +263,7 @@ namespace NKikimr {
             , ParentId(parentId)
             , SkeletonId(skeletonId)
             , LogoBlobFilter(std::make_shared<TLogoBlobFilterForOsiris>(HullCtx, std::move(fullSnap.BarriersSnap)))
-            , Saviour(HullCtx, std::move(groupInfo), std::move(fullSnap.LogoBlobsSnap), LogoBlobFilter, mode)
+            , Saviour(HullCtx, std::move(groupInfo), std::move(fullSnap.LogoBlobsSnap), LogoBlobFilter)
             , MaxInFly(anubisOsirisMaxInFly)
         {}
     };
@@ -287,9 +279,8 @@ namespace NKikimr {
             TIntrusivePtr<TBlobStorageGroupInfo> groupInfo,
             THullDsSnap &&fullSnap,
             ui64 confirmedLsn,
-            ui64 maxInFly,
-            EOsirisMode mode) {
-        return new THullOsirisActor(notifyId, parentId, skeletonId, std::move(groupInfo), std::move(fullSnap), confirmedLsn, maxInFly, mode);
+            ui64 maxInFly) {
+        return new THullOsirisActor(notifyId, parentId, skeletonId, std::move(groupInfo), std::move(fullSnap), confirmedLsn, maxInFly);
     }
 
 } // NKikimr

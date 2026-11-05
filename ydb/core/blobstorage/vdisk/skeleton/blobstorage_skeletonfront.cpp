@@ -753,7 +753,6 @@ namespace NKikimr {
         NMonGroup::TCounterGroup CounterGroup;
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         bool HasUnreadableBlobs = false;
-        ui32 ReinforcedGeneration = 0;
         TInstant LastSanitizeTime = TInstant::Zero();
         TInstant LastSanitizeWithErrorTime = TInstant::Zero();
         ui64 NextUniqueMessageId = 1;
@@ -2063,18 +2062,6 @@ namespace NKikimr {
 
         void Handle(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate::TPtr ev, const TActorContext& ctx) {
             auto& record = ev->Get()->Record;
-            if (ev->Sender == SkeletonId) {
-                // The front can advance its configuration before the skeleton does.
-                // Only the skeleton can qualify completion for the new generation.
-                ReinforcedGeneration = record.GetReinforcementGeneration();
-            }
-            const bool reinforced = ReinforcedGeneration
-                && ReinforcedGeneration == SelfVDiskId.GroupGeneration && !HasUnreadableBlobs;
-            record.SetReinforced(reinforced);
-            record.SetReinforcementGeneration(0);
-            if (reinforced) {
-                record.SetReinforcementGeneration(ReinforcedGeneration);
-            }
             VDiskIDFromVDiskID(SelfVDiskId, record.MutableVDiskId());
             record.SetInstanceGuid(Config->BaseInfo.WhiteboardInstanceGuid);
             ctx.Send(ev->Forward(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId())));

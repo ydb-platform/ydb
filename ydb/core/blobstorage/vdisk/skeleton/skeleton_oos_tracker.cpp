@@ -80,7 +80,8 @@ namespace NKikimr {
             CheckState(ctx);
         }
 
-        void Handle(NPDisk::TEvCheckSpaceResult::TPtr &ev, const TActorContext &ctx) {
+        void Handle(NPDisk::TEvCheckSpaceResult::TPtr& ev) {
+            const TActorContext& ctx = TActivationContext::AsActorContext();
             const auto *msg = ev->Get();
             YDB_LOG_DEBUG_CTX(ctx, "TDskSpaceTrackerActor:handle TEvCheckSpaceResult;",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
@@ -101,7 +102,7 @@ namespace NKikimr {
             VCtx->OutOfSpaceState.UpdateLocalUsedChunks(msg->UsedChunks);
             VCtx->OutOfSpaceState.UpdateLocalTotalChunks(msg->TotalChunks);
             VCtx->OutOfSpaceState.UpdateSpaceHeadroom(msg->Headroom, SpaceObservationGeneration);
-            ctx.Send(NotifyId, new TEvDiskSpaceUpdated());
+            Send(NotifyId, new TEvDiskSpaceUpdated());
             MonGroup.DskTotalBytes() = msg->TotalChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskFreeBytes() = msg->FreeChunks * PDiskCtx->Dsk->ChunkSize;
             MonGroup.DskUsedBytes() = msg->UsedChunks * PDiskCtx->Dsk->ChunkSize;
@@ -222,7 +223,7 @@ namespace NKikimr {
         STRICT_STFUNC(AskFunc,
             HFunc(NMon::TEvHttpInfo, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(NPDisk::TEvCheckSpaceResult, Handle)
+            hFunc(NPDisk::TEvCheckSpaceResult, Handle)
         )
 
         PDISK_TERMINATE_STATE_FUNC_DEF;

@@ -182,7 +182,7 @@ namespace NKikimr {
             }
             if (State.GotQuorum(*GInfo)) {
                 StopAllRunningProxy(ctx);
-                CallOsiris(ctx);
+                CallOsiris();
             }
         }
 
@@ -206,17 +206,19 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // CALL OSIRIS
         ////////////////////////////////////////////////////////////////////////
-        void CallOsiris(const TActorContext& ctx, bool waitForSpace = false) {
+        void CallOsiris(bool waitForSpace = false) {
+            const TActorContext& ctx = TActivationContext::AsActorContext();
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: CallOsiris"));
             // We must fix DbBirthLsn here, because at this moment we have written some
             // data into Hull Db, but we don't want this data to sync back to other VDisks.
             // This is done by skeleton, because it have access to all Lsn positions (CurrentLsn,
             // AllocLsnForSyncLogLock, etc). Selected Lsn goes back to us via TEvOsirisDone reply.
-            ctx.Send(SyncerCtx->SkeletonId, new TEvCallOsiris(waitForSpace));
+            Send(SyncerCtx->SkeletonId, new TEvCallOsiris(waitForSpace));
             Become(&TThis::WaitOsirisStateFunc);
         }
 
-        void Handle(TEvOsirisDone::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvOsirisDone::TPtr& ev) {
+            const TActorContext& ctx = TActivationContext::AsActorContext();
             YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: TEvOsirisDone"));
             switch (ev->Get()->Status) {
                 case NKikimrProto::OK:
@@ -225,7 +227,7 @@ namespace NKikimr {
                     return;
                 case NKikimrProto::OUT_OF_SPACE:
                     // The skeleton waits for its space tracker before taking a fresh snapshot.
-                    CallOsiris(ctx, true);
+                    CallOsiris(true);
                     return;
                 default:
                     // Never publish the final recovery GUID or retry a terminal failure.
@@ -235,7 +237,7 @@ namespace NKikimr {
 
         STRICT_STFUNC(WaitOsirisStateFunc,
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
-            HFunc(TEvOsirisDone, Handle)
+            hFunc(TEvOsirisDone, Handle)
             IgnoreFunc(TEvSyncerFullSyncedWithPeer)
             HFunc(TEvVGenerationChange, Handle)
         )

@@ -304,7 +304,6 @@ public:                                                                         
                 COUNTER_INIT(ReplUnreplicatedVDisks, false);
                 COUNTER_INIT(ReplRecoveryDone, false);
                 COUNTER_INIT(ReplReinforcing, false);
-                COUNTER_INIT(ReplReinforced, false);
                 COUNTER_INIT_IF_EXTENDED(ReplVGetBytesReceived, true);
                 COUNTER_INIT(ReplPhantomLikeDiscovered, false);
                 COUNTER_INIT(ReplPhantomLikeRecovered, false);
@@ -337,7 +336,6 @@ public:                                                                         
             COUNTER_DEF(ReplUnreplicatedVDisks);
             COUNTER_DEF(ReplRecoveryDone);
             COUNTER_DEF(ReplReinforcing);
-            COUNTER_DEF(ReplReinforced);
             COUNTER_DEF(ReplVGetBytesReceived);
             COUNTER_DEF(ReplPhantomLikeDiscovered);
             COUNTER_DEF(ReplPhantomLikeRecovered);

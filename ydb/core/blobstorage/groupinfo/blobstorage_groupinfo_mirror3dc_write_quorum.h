@@ -228,12 +228,6 @@ public:
     }
 
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const;
-    ui32 GetPartsToReinforce(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const;
-
-private:
-    ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup, EMirror3dcLayout durability) const;
-
-public:
     // parts contains known copies; failedDisks includes errors and NOT_YET replies.
     // R participates only in layout alternatives that need it; F never contributes.
     // For E > 0, uncertainty that can hide E takes precedence over known copies.

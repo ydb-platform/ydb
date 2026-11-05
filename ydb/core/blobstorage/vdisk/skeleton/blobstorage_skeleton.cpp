@@ -109,12 +109,6 @@ namespace NKikimr {
             const auto outOfSpaceFlags = VCtx->GetOutOfSpaceState().LocalWhiteboardFlag();
             auto ev = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate>(&satisfactionRank);
             ev->Record.SetGroupSizeInUnits(Config->GroupSizeInUnits);
-            const bool reinforced = ReplMonGroup.ReplReinforced() && !HasUnreadableBlobs;
-            ev->Record.SetReinforced(reinforced);
-            ev->Record.SetReinforcementGeneration(0);
-            if (reinforced) {
-                ev->Record.SetReinforcementGeneration(GInfo->GroupGeneration);
-            }
             const TInstant now = ctx.Now();
             const TInstant prev = std::exchange(WhiteboardUpdateTimestamp, now);
             const ui64 bytesRead = QueryCtx ? QueryCtx->PDiskReadBytes.exchange(0) : 0;
@@ -1780,11 +1774,6 @@ namespace NKikimr {
 
         void Handle(TEvLocalStatus::TPtr &ev, const TActorContext &ctx) {
             std::unique_ptr<TEvLocalStatusResult> result(new TEvLocalStatusResult());
-            const bool reinforced = ReplMonGroup.ReplReinforced() && !HasUnreadableBlobs;
-            result->Record.SetReinforced(reinforced);
-            if (reinforced) {
-                result->Record.SetReinforcementGeneration(GInfo->GroupGeneration);
-            }
             // hull status
             Hull->StatusRequest(ctx, result.get());
             // local recovery status
@@ -2231,7 +2220,8 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // ANUBIS/OSIRIS SECTOR
         ////////////////////////////////////////////////////////////////////////
-        TActorId StartOsiris(const TActorId& notifyId, EOsirisMode mode, const TActorContext& ctx) {
+        TActorId StartOsiris(const TActorId& notifyId) {
+            const TActorContext& ctx = TActivationContext::AsActorContext();
             // NOTE:
             // We take ordinary snapshot. Their can be a race, that LocalSyncData
             // may be in-flight at this moment, so we can't take lsn exclusively.
@@ -2239,67 +2229,64 @@ namespace NKikimr {
             // and confirmed.
             const ui64 confirmedLsn = Db->LsnMngr->GetConfirmedLsnForHull();
             THullDsSnap fullSnap = Hull->GetIndexSnapshot();
-            IActor *actor = CreateHullOsiris(notifyId, ctx.SelfID, ctx.SelfID, GInfo, std::move(fullSnap), confirmedLsn,
-                    Config->AnubisOsirisMaxInFly, mode);
-            const TActorId aid = ctx.Register(actor);
+            IActor* const actor = CreateHullOsiris(notifyId, SelfId(), SelfId(), GInfo, std::move(fullSnap), confirmedLsn,
+                    Config->AnubisOsirisMaxInFly);
+            const TActorId aid = Register(actor);
             ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             return aid;
         }
 
-        void Handle(TEvCallOsiris::TPtr& ev, const TActorContext& ctx) {
+        void Handle(TEvCallOsiris::TPtr& ev) {
             if (ev->Get()->WaitForSpace) {
                 OsirisSpaceWaiters.insert(ev->Sender);
             } else {
-                StartOsiris(ev->Sender, EOsirisMode::Recovery, ctx);
+                StartOsiris(ev->Sender);
             }
         }
 
-        void HandleDiskSpaceUpdated(const TActorContext& ctx) {
+        void HandleDiskSpaceUpdated() {
             if (!OutOfSpaceLogic->WouldAllowOsirisPut()) {
                 return;
             }
             // A fresh tracker observation, rather than elapsed time or a group
             // change, releases scans stopped by space pressure.
             RepeatRecoveryWaitingForSpace = false;
-            TryRepeatRecovery(ctx);
+            TryRepeatRecovery();
             for (const TActorId& notifyId : OsirisSpaceWaiters) {
-                StartOsiris(notifyId, EOsirisMode::Recovery, ctx);
+                StartOsiris(notifyId);
             }
             OsirisSpaceWaiters.clear();
         }
 
-        void HandleOsirisError(TEvCallOsiris::TPtr& ev, const TActorContext& ctx) {
-            ctx.Send(ev->Sender, new TEvOsirisDone(0, NKikimrProto::ERROR));
+        void HandleOsirisError(TEvCallOsiris::TPtr& ev) {
+            Send(ev->Sender, new TEvOsirisDone(0, NKikimrProto::ERROR));
         }
 
-        void HandleOsirisError(TEvAnubisOsirisPut::TPtr& ev, const TActorContext& ctx) {
-            ReplyError(NKikimrProto::ERROR, "VDisk is in error state", ev, ctx, TAppData::TimeProvider->Now());
+        void HandleOsirisError(TEvAnubisOsirisPut::TPtr& ev) {
+            ReplyError(NKikimrProto::ERROR, "VDisk is in error state", ev,
+                TActivationContext::AsActorContext(), TAppData::TimeProvider->Now());
         }
 
-        void TryRepeatRecovery(const TActorContext& ctx) {
+        void TryRepeatRecovery() {
             if (CurrentStateFunc() != &TThis::StateNormal
                     || !RepeatRecoveryPending || RepeatOsirisId || !Db->ReplID || !ReplDone
                     || Config->BaseInfo.ReadOnly || GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)
                     || RepeatRecoveryWaitingForSpace) {
                 return;
             }
-            if (ReinforcementRequired() && ReinforcementSyncGeneration < ReinforcementGeneration) {
+            if (ReinforcementRequired() && RecoverySyncGeneration < RecoveryGeneration) {
                 return;
             }
             RepeatRecoveryPending = false;
             ReplDone = false;
             DurabilityReplDone = false;
             ReplOnlyPhantomsRemain = false;
-            ReplReinforcementGeneration = ReinforcementGeneration;
             UpdateReplState();
-            EOsirisMode mode = EOsirisMode::Recovery;
-            if (ReinforcementRequired()) {
-                mode = EOsirisMode::Reinforcement;
-            }
-            RepeatOsirisId = StartOsiris(SelfId(), mode, ctx);
+            RepeatOsirisId = StartOsiris(SelfId());
         }
 
-        void Handle(TEvOsirisDone::TPtr& ev, const TActorContext& ctx) {
+        void Handle(TEvOsirisDone::TPtr& ev) {
+            const TActorContext& ctx = TActivationContext::AsActorContext();
             if (ev->Sender != RepeatOsirisId) {
                 return;
             }
@@ -2309,11 +2296,11 @@ namespace NKikimr {
                     if (RepeatRecoveryPending) {
                         // A newer policy arrived while the previous snapshot was being processed.
                         ReplDone = true;
-                        TryRepeatRecovery(ctx);
+                        TryRepeatRecovery();
                         return;
                     }
                     // The old scheduler has finished; recreate it to scan Hull from the beginning.
-                    ctx.Send(Db->ReplID, new TEvents::TEvPoisonPill);
+                    Send(Db->ReplID, new TEvents::TEvPoisonPill);
                     ActiveActors.Erase(Db->ReplID);
                     StartReplActor(ctx);
                     return;
@@ -2327,7 +2314,6 @@ namespace NKikimr {
                     break;
             }
             ReplDone = true;
-            ReplReinforcementGeneration = 0;
             UpdateReplState();
         }
 
@@ -2344,13 +2330,13 @@ namespace NKikimr {
             return false;
         }
 
-        void Handle(TEvReinforcementSyncDone::TPtr& ev, const TActorContext& ctx) {
+        void Handle(TEvReinforcementSyncDone::TPtr& ev) {
             const ui32 generation = ev->Get()->GroupGeneration;
-            if (generation < ReinforcementGeneration || generation > GInfo->GroupGeneration) {
+            if (!ReinforcementRequired() || generation < RecoveryGeneration || generation > GInfo->GroupGeneration) {
                 return;
             }
-            ReinforcementSyncGeneration = generation;
-            TryRepeatRecovery(ctx);
+            RecoverySyncGeneration = generation;
+            TryRepeatRecovery();
         }
 
         void Handle(TEvAnubisOsirisPut::TPtr &ev, const TActorContext &ctx) {
@@ -2450,7 +2436,7 @@ namespace NKikimr {
             if (VDiskCompactionState && !results.empty()) {
                 VDiskCompactionState->Logged(ctx, results.back().Lsn);
             }
-            PublishSyncGeneration(ctx);
+            PublishSyncGeneration();
             while (!PendingAssimilations.empty() &&
                     PendingAssimilations.front().first <= Db->LsnMngr->GetConfirmedLsnForHull()) {
                 auto request = std::move(PendingAssimilations.front().second);
@@ -3301,22 +3287,23 @@ namespace NKikimr {
             return GetMirror3dcGroupLayouts(*state)->Durability;
         }
 
-        void PublishSyncGeneration(const TActorContext& ctx) {
+        void PublishSyncGeneration() {
             if (!PendingSyncGeneration) {
                 return;
             }
             if (PendingSyncGenerationLsn && PendingSyncGenerationLsn > Db->LsnMngr->GetConfirmedLsnForHull()) {
                 return;
             }
-            ctx.Send(Db->SyncLogID, PendingSyncGeneration->Clone());
+            Send(Db->SyncLogID, PendingSyncGeneration->Clone());
             if (Db->SyncFullHandlerID) {
-                ctx.Send(Db->SyncFullHandlerID, PendingSyncGeneration->Clone());
+                Send(Db->SyncFullHandlerID, PendingSyncGeneration->Clone());
             }
             PendingSyncGeneration.reset();
         }
 
-        void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
-            auto *msg = ev->Get();
+        void Handle(TEvVGenerationChange::TPtr& ev) {
+            const TActorContext& ctx = TActivationContext::AsActorContext();
+            TEvVGenerationChange* const msg = ev->Get();
 
             const bool generationChanged = msg->NewInfo->GroupGeneration > GInfo->GroupGeneration;
             bool reinforcementChanged = false;
@@ -3340,21 +3327,12 @@ namespace NKikimr {
             GInfo = msg->NewInfo;
             SelfVDiskId = msg->NewVDiskId;
             if (ReinforcementRequired()) {
-                if (!ReinforcementGeneration || reinforcementChanged) {
-                    ReinforcementGeneration = GInfo->GroupGeneration;
+                if (!RecoveryGeneration || reinforcementChanged) {
+                    RecoveryGeneration = GInfo->GroupGeneration;
                     RepeatRecoveryPending = true;
-                    ReplMonGroup.ReplReinforced() = 0;
                 }
-                ReplMonGroup.ReplReinforcing() = !ReplMonGroup.ReplReinforced();
             } else {
-                ReinforcementGeneration = 0;
-                ReplMonGroup.ReplReinforcing() = 0;
-                if (GInfo->Type.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc
-                        && GInfo->GetFailRealmState(0) == NKikimrBlobStorage::TGroupInfo::TFailRealm::Invariant0
-                        && GInfo->GetFailRealmState(1) == NKikimrBlobStorage::TGroupInfo::TFailRealm::Invariant0
-                        && GInfo->GetFailRealmState(2) == NKikimrBlobStorage::TGroupInfo::TFailRealm::Invariant0) {
-                    ReplMonGroup.ReplReinforced() = 0;
-                }
+                RecoveryGeneration = 0;
             }
 
             if (PDiskCtx && Config->GroupSizeInUnits != GInfo->GroupSizeInUnits) {
@@ -3380,7 +3358,7 @@ namespace NKikimr {
             if (ReinforcementRequired()) {
                 PendingSyncGenerationLsn = LoggedRecsVault.GetLastLsnInFlight().value_or(0);
             }
-            PublishSyncGeneration(ctx);
+            PublishSyncGeneration();
             // send command to Syncer
             ctx.Send(Db->SyncerID, ev->Get()->Clone());
             // send command to Repl
@@ -3396,7 +3374,9 @@ namespace NKikimr {
             if (BalancingId) {
                 ctx.Send(BalancingId, ev->Get()->Clone());
             }
-            TryRepeatRecovery(ctx);
+            TryRepeatRecovery();
+
+            UpdateReplState();
 
             // FIXME: reconfigure handoff
         }
@@ -3411,13 +3391,8 @@ namespace NKikimr {
                 ReplDone = true;
                 ReplMonGroup.ReplRecoveryDone() = 1;
                 DurabilityReplDone = true;
-                if (!RepeatRecoveryPending && ReplReinforcementGeneration
-                        && ReplReinforcementGeneration == ReinforcementGeneration) {
-                    ReplMonGroup.ReplReinforced() = 1;
-                    ReplMonGroup.ReplReinforcing() = 0;
-                }
             }
-            TryRepeatRecovery(TActivationContext::AsActorContext());
+            TryRepeatRecovery();
             UpdateReplState();
         }
 
@@ -3438,10 +3413,9 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             ctx.Mailbox.EnableStats();
             ReplMonGroup.ReplRecoveryDone() = 0;
-            ReplMonGroup.ReplReinforced() = 0;
             ReplMonGroup.ReplReinforcing() = ReinforcementRequired();
             if (ReinforcementRequired()) {
-                ReinforcementGeneration = GInfo->GroupGeneration;
+                RecoveryGeneration = GInfo->GroupGeneration;
                 RepeatRecoveryPending = true;
             }
 
@@ -3520,6 +3494,8 @@ namespace NKikimr {
         }
 
         void UpdateReplState() {
+            ReplMonGroup.ReplReinforcing() = ReinforcementRequired()
+                && (RepeatRecoveryPending || RepeatOsirisId || !ReplDone);
             const bool replicationComplete = DurabilityReplDone
                 || (ReinforcementRequired() && ReplMonGroup.ReplRecoveryDone());
             const bool ready = replicationComplete && !HasUnreadableBlobs;
@@ -3797,6 +3773,8 @@ namespace NKikimr {
     }
 
         COUNTED_STRICT_STFUNC(StateLocalRecovery,
+            // The tracker may report before local recovery has installed Hull and admission state.
+            IgnoreFunc(TEvDiskSpaceUpdated)
             // We should not get these requests while performing LocalRecovery
             // TEvBlobStorage::TEvVPut
             // TEvDelLogoBlobDataSyncLog
@@ -3825,7 +3803,7 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(NPDisk::TEvCutLog, Handle)
             IgnoreFunc(TEvRecoveryLogCutDone)
-            HFunc(TEvVGenerationChange, Handle)
+            hFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
@@ -3846,8 +3824,8 @@ namespace NKikimr {
         )
 
         COUNTED_STRICT_STFUNC(StateSyncGuidRecovery,
-            CFunc(TEvDiskSpaceUpdated::EventType, HandleDiskSpaceUpdated)
-            HFunc(TEvReinforcementSyncDone, Handle)
+            cFunc(TEvDiskSpaceUpdated::EventType, HandleDiskSpaceUpdated)
+            hFunc(TEvReinforcementSyncDone, Handle)
             HFunc(TEvBlobStorage::TEvVPut, HandlePutSyncGuidRecovery)
             HFunc(TEvHullLogHugeBlob, Handle)
             HFunc(TEvDelLogoBlobDataSyncLog, Handle)
@@ -3860,7 +3838,7 @@ namespace NKikimr {
             // TEvBlobStorage::TEvVGetBarrier
             // TEvBlobStorage::TEvVSync
             // TEvBlobStorage::TEvVSyncFull
-            HFunc(TEvCallOsiris, Handle)
+            hFunc(TEvCallOsiris, Handle)
             HFunc(TEvAnubisOsirisPut, Handle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             HFunc(TEvSyncGuidRecoveryDone, Handle)
@@ -3884,7 +3862,7 @@ namespace NKikimr {
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvRecoveryLogCutDone, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
-            HFunc(TEvVGenerationChange, Handle)
+            hFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
@@ -3911,8 +3889,8 @@ namespace NKikimr {
         )
 
         COUNTED_STRICT_STFUNC(StateNormal,
-            HFunc(TEvReinforcementSyncDone, Handle)
-            CFunc(TEvDiskSpaceUpdated::EventType, HandleDiskSpaceUpdated)
+            hFunc(TEvReinforcementSyncDone, Handle)
+            cFunc(TEvDiskSpaceUpdated::EventType, HandleDiskSpaceUpdated)
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
             HFunc(TEvBlobStorage::TEvVMovedPatch, Handle)
@@ -3932,7 +3910,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVGetBarrier, Handle)
             HFunc(TEvBlobStorage::TEvVSync, Handle)
             HFunc(TEvBlobStorage::TEvVSyncFull, Handle)
-            HFunc(TEvOsirisDone, Handle)
+            hFunc(TEvOsirisDone, Handle)
             // TEvCallOsiris
             HFunc(TEvAnubisOsirisPut, Handle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
@@ -3966,7 +3944,7 @@ namespace NKikimr {
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvRecoveryLogCutDone, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
-            HFunc(TEvVGenerationChange, Handle)
+            hFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
@@ -3997,8 +3975,8 @@ namespace NKikimr {
         COUNTED_STRICT_STFUNC(StateDatabaseError,
             IgnoreFunc(TEvReinforcementSyncDone)
             IgnoreFunc(TEvDiskSpaceUpdated)
-            HFunc(TEvCallOsiris, HandleOsirisError)
-            HFunc(TEvAnubisOsirisPut, HandleOsirisError)
+            hFunc(TEvCallOsiris, HandleOsirisError)
+            hFunc(TEvAnubisOsirisPut, HandleOsirisError)
             HFunc(TEvBlobStorage::TEvVSyncGuid, Handle)
             CFunc(TEvBlobStorage::EvCompactionFinished, LevelIndexCompactionFinished)
             CFunc(TEvBlobStorage::EvWakeupEmergencyPutQueue, WakeupEmergencyPutQueue)
@@ -4007,7 +3985,7 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvTimeToUpdateStats, UpdateWhiteboard)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
-            HFunc(TEvVGenerationChange, Handle)
+            hFunc(TEvVGenerationChange, Handle)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             IgnoreFunc(TEvOsirisDone)
             CFunc(TEvBlobStorage::EvReplDone, Ignore)
@@ -4124,9 +4102,8 @@ namespace NKikimr {
         bool RepeatRecoveryPending = false;
         bool RepeatRecoveryWaitingForSpace = false;
         std::set<TActorId> OsirisSpaceWaiters;
-        ui32 ReinforcementGeneration = 0;
-        ui32 ReinforcementSyncGeneration = 0;
-        ui32 ReplReinforcementGeneration = 0;
+        ui32 RecoveryGeneration = 0;
+        ui32 RecoverySyncGeneration = 0;
         std::unique_ptr<TEvVGenerationChange> PendingSyncGeneration;
         ui64 PendingSyncGenerationLsn = 0;
         TActorId RepeatOsirisId;

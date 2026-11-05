@@ -7,11 +7,6 @@
 
 namespace NKikimr {
 
-    enum class EOsirisMode : ui8 {
-        Recovery = 0,
-        Reinforcement = 1,
-    };
-
     ////////////////////////////////////////////////////////////////////////////
     // TEvCallOsiris
     ////////////////////////////////////////////////////////////////////////////
@@ -49,7 +44,6 @@ namespace NKikimr {
             TIntrusivePtr<TBlobStorageGroupInfo> groupInfo,
             THullDsSnap &&fullSnap,
             ui64 confirmedLsn,
-            ui64 maxInFly,
-            EOsirisMode mode);
+            ui64 maxInFly);
 
 } // NKikimr

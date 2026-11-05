@@ -22,25 +22,7 @@ constexpr ui32 GetReplicaMask(ui32 realm, EReplicaRole role) {
 ui32 TMirror3dcWriteQuorumChecker::GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const {
     const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(Realms[0], Realms[1], Realms[2]);
     Y_ABORT_UNLESS(state);
-    return GetPartsToResurrect(parts, idxInSubgroup, GetMirror3dcGroupLayouts(*state)->Durability);
-}
-
-ui32 TMirror3dcWriteQuorumChecker::GetPartsToReinforce(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const {
-    const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(Realms[0], Realms[1], Realms[2]);
-    Y_ABORT_UNLESS(state);
-    using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-    const bool hasExcludedRealm = Realms[0] == TFailRealm::F || Realms[1] == TFailRealm::F || Realms[2] == TFailRealm::F;
-    Y_DEBUG_ABORT_UNLESS(hasExcludedRealm);
-    if (!hasExcludedRealm) {
-        return 0;
-    }
-    // Reinforcement establishes the stronger write layout without changing
-    // the durability target or the guarantees already published by the group.
-    return GetPartsToResurrect(parts, idxInSubgroup, GetMirror3dcGroupLayouts(*state)->Write);
-}
-
-ui32 TMirror3dcWriteQuorumChecker::GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup,
-        EMirror3dcLayout durability) const {
+    const EMirror3dcLayout durability = GetMirror3dcGroupLayouts(*state)->Durability;
     using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
     Y_ABORT_UNLESS(idxInSubgroup < 9);
     const std::array<ui32, 3> copies = CountParts(parts);
@@ -100,8 +82,9 @@ ui32 TMirror3dcWriteQuorumChecker::GetPartsToResurrect(const TSubgroupPartLayout
     }
     const ui32 localCopies = parts.GetDisksWithPart(localRealm);
     const bool handoff2Present = (localCopies & GetReplicaMask(localRealm, EReplicaRole::Handoff2)) != 0;
-    // Prefer Main as the additional copy when Handoff2 already holds one.
-    if (localRole == EReplicaRole::Handoff1 && handoff2Present) {
+    // One-copy durability uses Main when the realm is empty. A second copy
+    // may use Handoff1 only when Handoff2 does not already hold the part.
+    if (localRole == EReplicaRole::Handoff1 && (requiredCopies == 1 || handoff2Present)) {
         return 0;
     }
     return 1u << localRealm;

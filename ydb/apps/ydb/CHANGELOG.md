@@ -1,3 +1,5 @@
+* Added support for database paths relative to the cluster root in the YDB CLI when the server's `EnableRelativePaths` flag is enabled. Only paths starting with `/` are absolute; slashless paths starting with the cluster name are now relative too.
+* Resource paths in the YDB CLI are relative to the database unless they start with `/`. The CLI expands relative database names against the cluster root before resolving resource paths. Existing CLI handling of `.` and `./path` is preserved. `ydb tools restore` supports relative destinations whose parent directories do not yet exist.
 * Cluster administration commands that allow omitting `--database` now reject tenant paths. Specify a root domain such as `/Root`, or omit the connection database.
 * `ydb scheme rmdir --recursive` now removes objects in parallel. Added `--in-flight` option to set the maximum number of objects removed at the same time (default: 16).
 * Workload imports with `--file-output-path` now skip database post-import actions such as index building and statistics collection.

@@ -6,6 +6,8 @@
 
 * Fixed PersQueue topic settings losing replication-consumer and consumer-offset-mirroring attributes when copied from DescribeTopic into CreateTopic or AlterTopic settings.
 
+* Fixed Topic producer retries touching the producer after it was destroyed. Write sessions keep a snapshot of the retry policy and no longer read producer settings from the gRPC thread.
+
 * Supported Topic read sessions counting replication control messages as data offsets, which could block commits after an offset gap.
 
 ## v3.26.0

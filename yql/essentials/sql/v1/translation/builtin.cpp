@@ -2731,6 +2731,13 @@ private:
 };
 
 TNodePtr BuildCallable(TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args, bool forReduce) {
+    if (module.empty()) {
+        const auto normalized = to_lower(name);
+        if (normalized == "applyremoteembedder" || normalized == "applyremoteembedderstream") {
+            const TString canonicalName = normalized == "applyremoteembedder" ? "ApplyRemoteEmbedder" : "ApplyRemoteEmbedderStream";
+            return new TCallableNode(pos, "RemoteEmbedder", canonicalName, args, forReduce);
+        }
+    }
     return new TCallableNode(pos, module, name, args, forReduce);
 }
 
@@ -3950,6 +3957,10 @@ TNodeResult BuildBuiltinFunc(
             if (coreFunc->second.MinArgs != coreFunc->second.MaxArgs) {
                 name += ToString(args.size());
             }
+        } else if (normalizedName == "applyremoteembedder" || normalizedName == "applyremoteembedderstream") {
+            nameSpace = "RemoteEmbedder";
+            ns = "remoteembedder";
+            name = normalizedName == "applyremoteembedder" ? "ApplyRemoteEmbedder" : "ApplyRemoteEmbedderStream";
         }
     }
 
@@ -4773,6 +4784,9 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, const TFu
             .OptionalArgCount = info.MaxArgs - info.MinArgs,
         };
     }
+
+    map["ApplyRemoteEmbedder"] = {.Kind = "Normal", .ArgCount = 5, .OptionalArgCount = 1};
+    map["ApplyRemoteEmbedderStream"] = {.Kind = "Normal", .ArgCount = 7, .OptionalArgCount = 3};
 
     for (const auto& [key, name] : simplePgFuncs) {
         map[TString("SimplePg::") + key] = {

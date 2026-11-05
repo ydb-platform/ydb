@@ -1125,6 +1125,44 @@ namespace {
             });
         }
 
+        void TestKesusExportIcb(bool isFs) {
+            Env();
+            Runtime().GetAppData().FeatureFlags.SetEnableFsBackups(true);
+            CreateExportKesus();
+
+            TTempDir tempDir;
+            NKikimrExport::TCreateExportRequest request;
+            if (isFs) {
+                auto* settings = request.MutableExportToFsSettings();
+                settings->set_base_path(tempDir.Path());
+                auto* item = settings->add_items();
+                item->set_source_path("/MyRoot/Coordination");
+                item->set_destination_path("coordination");
+            } else {
+                auto* settings = request.MutableExportToS3Settings();
+                settings->set_endpoint(TStringBuilder() << "localhost:" << S3Port());
+                settings->set_scheme(Ydb::Export::ExportToS3Settings::HTTP);
+                auto* item = settings->add_items();
+                item->set_source_path("/MyRoot/Coordination");
+                item->set_destination_prefix("coordination");
+            }
+
+            auto& control = Runtime().GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport;
+            TControlBoard::SetValue(0, control);
+            TestExport(Runtime(), 101, "/MyRoot", request.DebugString(), "", "", Ydb::StatusIds::BAD_REQUEST);
+
+            // The shared control must take effect without rebooting SchemeShard.
+            TControlBoard::SetValue(1, control);
+            TestExport(Runtime(), 102, "/MyRoot", request.DebugString());
+            Env().TestWaitNotification(Runtime(), 102);
+            TestGetExport(Runtime(), 102, "/MyRoot", Ydb::StatusIds::SUCCESS);
+            if (isFs) {
+                UNIT_ASSERT((TFsPath(tempDir.Path()) / "coordination/create_coordination_node.pb").Exists());
+            } else {
+                UNIT_ASSERT(HasS3File("/coordination/create_coordination_node.pb"));
+            }
+        }
+
         void TestKesusRebootChangesResources(bool empty) {
             EnvOptions().EnableChecksumsExport(true);
             Env();
@@ -5206,6 +5244,26 @@ state: STATE_ENABLED
 
     Y_UNIT_TEST(KesusEmptyEncryptedExportToFs) {
         TestKesusExport(true, true, true);
+    }
+
+    Y_UNIT_TEST(KesusExportIcbToS3) {
+        TestKesusExportIcb(false);
+    }
+
+    Y_UNIT_TEST(KesusExportIcbToFs) {
+        TestKesusExportIcb(true);
+    }
+
+    Y_UNIT_TEST(KesusExportToYtIsRejected) {
+        Env();
+        CreateExportKesus();
+        TControlBoard::SetValue(1, Runtime().GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
+        TestExport(Runtime(), 101, "/MyRoot", R"(
+            ExportToYtSettings {
+                host: "localhost"
+                items { source_path: "/MyRoot/Coordination" destination_path: "//coordination" }
+            }
+        )", "", "", Ydb::StatusIds::BAD_REQUEST);
     }
 
     Y_UNIT_TEST(KesusRebootReplacesResourcesWithEmptySet) {

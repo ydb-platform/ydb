@@ -326,6 +326,62 @@ void ExportKesusImpl(TBackupTestFixture& f, bool throughDirectory) {
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
+void ExportKesusIcbImpl(TBackupTestFixture& f, bool throughDirectory) {
+    TBackupTraits<TExportSettings> traits;
+    auto& runtime = *f.Server().GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+
+    auto status = f.YdbSchemeClient().MakeDirectory("/Root/KesusExport").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    NCoordination::TClient coordination(f.YdbDriver());
+    status = coordination.CreateNode("/Root/KesusExport/Coordination").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    if (throughDirectory) {
+        auto session = f.YdbTableClient().CreateSession().GetValueSync();
+        UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+        status = session.GetSession().CreateTable("/Root/KesusExport/Table", NYdb::NTable::TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint64)
+            .SetPrimaryKeyColumn("Key")
+            .Build()).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    }
+
+    auto settings = traits.MakeExportSettingsRaw(f);
+    settings.AppendItem(typename TExportSettings::TItem{
+        .Src = throughDirectory ? "/Root/KesusExport" : "/Root/KesusExport/Coordination",
+        .Dst = "coordination",
+    });
+    auto hasFile = [&](const TString& name) {
+        const TString path = traits.FilePrefixRaw() + "coordination/" + name;
+        if constexpr (std::is_same_v<TExportSettings, NExport::TExportToS3Settings>) {
+            return f.GetS3Data().contains(path);
+        } else {
+            return (TFsPath(f.GetTempDir().Path()) / path).Exists();
+        }
+    };
+    const TString nodeFile = throughDirectory
+        ? "Coordination/create_coordination_node.pb" : "create_coordination_node.pb";
+
+    auto& control = runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport;
+    NKikimr::TControlBoard::SetValue(0, control);
+    const auto disabled = traits.Export(f, settings);
+    if (throughDirectory) {
+        // RPC must exclude Kesus before sending the expanded item list to SchemeShard.
+        f.WaitOpSuccess(disabled);
+        UNIT_ASSERT(hasFile("Table/scheme.pb"));
+    } else {
+        UNIT_ASSERT(disabled.Ready());
+        UNIT_ASSERT_VALUES_EQUAL_C(disabled.Status().GetStatus(), EStatus::UNSUPPORTED,
+            disabled.Status().GetIssues().ToString());
+    }
+    UNIT_ASSERT(!hasFile(nodeFile));
+
+    NKikimr::TControlBoard::SetValue(1, control);
+    f.WaitOpSuccess(traits.Export(f, settings));
+    UNIT_ASSERT(hasFile(nodeFile));
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
 void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
@@ -2217,6 +2273,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
         ExportKesusImpl<NExport::TExportToFsSettings>(*this, ThroughDirectory);
     }
 
+    Y_UNIT_TEST_TWIN(ExportKesusIcb, ThroughDirectory) {
+        ExportKesusIcbImpl<NExport::TExportToFsSettings>(*this, ThroughDirectory);
+    }
+
     Y_UNIT_TEST(ImportFilterByYdbObjectPath) {
         ImportFilterByYdbObjectPathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
@@ -2294,6 +2354,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
 Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
     Y_UNIT_TEST_TWIN(ExportKesus, ThroughDirectory) {
         ExportKesusImpl<NExport::TExportToS3Settings>(*this, ThroughDirectory);
+    }
+
+    Y_UNIT_TEST_TWIN(ExportKesusIcb, ThroughDirectory) {
+        ExportKesusIcbImpl<NExport::TExportToS3Settings>(*this, ThroughDirectory);
     }
 
     Y_UNIT_TEST_TWIN(ExportWholeDatabase, IsOlap) {

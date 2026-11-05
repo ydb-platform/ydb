@@ -180,8 +180,9 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
             }
             case NSchemeCache::TSchemeCacheNavigate::KindTopic:
-            case NSchemeCache::TSchemeCacheNavigate::KindKesus:
                 return true;
+            case NSchemeCache::TSchemeCacheNavigate::KindKesus:
+                return AppData()->Icb->BackupControls.S3Controls.EnableKesusExport.AtomicLoad()->Get();
             case NSchemeCache::TSchemeCacheNavigate::KindReplication:
                 return AppData()->Icb->BackupControls.S3Controls.EnableAsyncReplicationExport.AtomicLoad()->Get();
             case NSchemeCache::TSchemeCacheNavigate::KindTransfer:

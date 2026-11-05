@@ -5,7 +5,6 @@
 #include <ydb/core/blobstorage/bridge/syncer/syncer.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
-#include <ydb/core/base/tablet_resolver.h>
 #include <ydb/library/testlib/helpers.h>
 
 #include <util/system/type_name.h>
@@ -423,19 +422,6 @@ void TestShareAfterRegistration(bool keepShare) {
     const double minRate = keepShare ? 0 : 10'000'000; // the default limit per node is 500 MB/s
     const double maxRate = keepShare ? share * 1.2 : Max<double>();
     UNIT_ASSERT_C(minRate <= rate && rate <= maxRate, "rate# " << rate << " numReads# " << reads.size());
-}
-
-void RebootBSController(TEnvironmentSetup& env) {
-    const TActorId sender = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId, __FILE__, __LINE__);
-    env.Runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvForward(env.TabletId,
-        new IEventHandle(TActorId(), sender, new TEvents::TEvPoison), {}, TEvTabletResolver::TEvForward::EActor::Tablet)),
-        sender.NodeId());
-    const auto res = env.WaitForEdgeActorEvent<TEvTabletResolver::TEvForwardResult>(sender, false);
-    UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
-    env.Sim(TDuration::Seconds(5));
-    env.Runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(env.TabletId,
-        TActorId())), sender.NodeId());
-    env.Runtime->DestroyActor(sender);
 }
 
 // A cluster with syncers kept on their nodes by holding their completions, and with the rates sent by BSC recorded.
@@ -874,7 +860,7 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
             }
         };
 
-        RebootBSController(env);
+        env.RebootTablet(env.TabletId);
 
         NKikimrBlobStorage::TConfigRequest request;
         request.AddCommand()->MutableReadSettings();
@@ -909,7 +895,7 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
                 numRegistrationsKeepingShare += record.GetKeepBridgeSyncNodeRate();
             }
         };
-        RebootBSController(env);
+        env.RebootTablet(env.TabletId);
         NBridgeTest::WaitUntil(env, [&] { return startedAt.has_value(); }, "start of the new instance", TDuration::Seconds(1), 60);
 
         test.ReleaseHeldSyncers();
@@ -1010,7 +996,7 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
         test.CheckRates(THeldSyncersEnv::TotalRate);
 
         test.DropRates = false;
-        RebootBSController(env);
+        env.RebootTablet(env.TabletId);
         env.Sim(TDuration::Seconds(30));
         test.CheckRates(0);
     }

@@ -155,6 +155,11 @@
                 "ColumnId": 32,
                 "ColumnName": "DataCenterStates",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 33,
+                "ColumnName": "BridgeSyncTotalRate",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -190,7 +195,8 @@
                     29,
                     30,
                     31,
-                    32
+                    32,
+                    33
                 ],
                 "RoomID": 0,
                 "Codec": 0,

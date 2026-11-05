@@ -142,7 +142,8 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         if (bsConfig.HasServiceSet()) {
             ApplyStorageConfig(bsConfig.GetServiceSet());
         }
-        SyncRateQuoter->UpdateBytesPerSecond(bsConfig.GetBridgeSyncRateBytesPerSecond());
+        SyncRateConfigLimit = bsConfig.GetBridgeSyncRateBytesPerSecond();
+        UpdateSyncRateQuoter();
     }
 
     if (StorageConfig->HasStateStorageConfig() && StorageConfig->HasStateStorageBoardConfig() && StorageConfig->HasSchemeBoardConfig()) {

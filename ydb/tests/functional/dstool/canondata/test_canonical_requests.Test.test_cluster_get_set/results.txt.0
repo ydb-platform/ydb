@@ -14,7 +14,8 @@ Exit Status: 0
     "EnableGroupLayoutSanitizer": true,
     "PDiskSpaceColorBorder": "GREEN",
     "DatabaseSpaceBlockColor": "YELLOW",
-    "DatabaseSpaceUnblockColor": "LIGHT_YELLOW"
+    "DatabaseSpaceUnblockColor": "LIGHT_YELLOW",
+    "BridgeSyncTotalRateBytesPerSecond": 0
   }
 ]
 ===== grpc_calls =====

@@ -29,12 +29,10 @@ namespace NKikimr::NBridge {
         // Preserve both flags observed by assimilation: the later data read may use VDisks that do not know them yet.
         THashMap<TLogoBlobID, TSourceBlobFlags> SourceBlobFlags;
         TReplQuoter::TPtr SyncRateQuoter;
-        const TBlobStorageGroupType SourceGroupType;
 
     public:
         TSyncerActor(TIntrusivePtr<TBlobStorageGroupInfo> info, TGroupId sourceGroupId, TGroupId targetGroupId,
-            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter,
-            TBlobStorageGroupType sourceGroupType);
+            std::shared_ptr<TSyncerDataStats> syncerDataStats, TReplQuoter::TPtr syncRateQuoter);
 
         void Bootstrap();
         void BeginNextStep();
@@ -66,7 +64,7 @@ namespace NKikimr::NBridge {
         ui32 QueriesInFlight = 0;
         THashMap<ui64, TQueryPayload> Payloads;
         THashMap<ui64, std::unique_ptr<IEventHandle>> DelayedQueries;
-        std::deque<std::tuple<std::unique_ptr<IEventHandle>, TMonotonic>> PendingQueries;
+        std::deque<std::tuple<std::unique_ptr<IEventHandle>, ui64>> PendingQueries; // handle and bytes to charge
         ui64 NextCookie = 1;
 
         bool Errors = false;
@@ -83,7 +81,7 @@ namespace NKikimr::NBridge {
             ui64 quoterBytes = 0);
         void IssueQuery(TGroupId groupId, std::unique_ptr<IEventBase> ev, TQueryPayload queryPayload = {},
             ui64 quoterBytes = 0);
-        void SendQuery(std::unique_ptr<IEventHandle> handle, TMonotonic notBefore);
+        void SendQuery(std::unique_ptr<IEventHandle> handle, ui64 quoterBytes);
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
         void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);

@@ -203,6 +203,8 @@ jobs:
               "source_event_name": (os.environ.get("SOURCE_EVENT_NAME") or "").strip(),
               "source_run_id": (os.environ.get("SOURCE_RUN_ID") or "").strip(),
               "pull_number": (os.environ.get("PULL_NUMBER") or "").strip(),
+              # Force buffer under PUBLIC_DIR for caller ingest (host has no YDB QA).
+              "enable_ydb_qa": "false",
           }
           runs_on = os.environ.get("REMOTE_RUNS_ON") or '["self-hosted","linux","amd64-large"]'
           # Validate JSON array early so dispatch fails here, not on the host.
@@ -235,6 +237,8 @@ jobs:
       fail_on_remote_failure: ${{ inputs.fail_on_remote_failure }}
       summary_s3_endpoint: ${{ inputs.remote_summary_s3_endpoint }}
       summary_s3_bucket: ${{ inputs.remote_summary_s3_bucket }}
+      analytics_job_name: ${{ inputs.analytics_job_name }}
+      caller_workflow: ${{ github.workflow }}
 
   prepare:
     if: inputs.executor == 'ydb_yc'

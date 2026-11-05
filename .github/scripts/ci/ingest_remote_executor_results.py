@@ -175,6 +175,39 @@ def build_run_name(event_name: str, run_id: str, pull_number: str, attempt: int)
     return f"{base}_attempt_{attempt}"
 
 
+def _nonempty(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def resolve_source_attribution(
+    meta: dict[str, Any], caller_run_id: str
+) -> tuple[str, str, str]:
+    """Prefer remote_artifacts.json (filled from job_inputs) over ingest env.
+
+    Reusable workflow_call sets github.event_name=workflow_call and must not
+    override the caller's real event recorded on the executor.
+    """
+    meta_event = _nonempty(meta.get("source_event_name"))
+    env_event = env_opt("SOURCE_EVENT_NAME")
+    if meta_event and meta_event != "workflow_call":
+        event_name = meta_event
+    elif env_event and env_event != "workflow_call":
+        event_name = env_event
+    else:
+        event_name = "workflow_dispatch"
+
+    meta_run = _nonempty(meta.get("source_run_id"))
+    executor_run = _nonempty(meta.get("executor_run_id"))
+    env_run = env_opt("SOURCE_RUN_ID")
+    if meta_run and meta_run != executor_run:
+        source_run_id = meta_run
+    else:
+        source_run_id = env_run or meta_run or caller_run_id
+
+    pull_number = env_opt("PULL_NUMBER") or _nonempty(meta.get("pull_number"))
+    return event_name, source_run_id, pull_number
+
+
 def discover_attempts(public_dir: Path, meta: dict[str, Any]) -> list[dict[str, Any]]:
     attempts = list(meta.get("attempts") or [])
     if attempts:
@@ -185,10 +218,15 @@ def discover_attempts(public_dir: Path, meta: dict[str, Any]) -> list[dict[str, 
         if not m:
             continue
         retry = int(m.group(1))
+        started_file = report.parent / "started_at"
+        if started_file.is_file():
+            started_at = started_file.read_text(encoding="utf-8").strip() or "0"
+        else:
+            started_at = str(int(report.stat().st_mtime))
         found.append(
             {
                 "retry": retry,
-                "started_at": str(int(report.stat().st_mtime)),
+                "started_at": started_at,
                 "report_relpath": str(report.relative_to(public_dir)),
                 "html_relpath": str((report.parent / "ya-test.html").relative_to(public_dir)),
             }
@@ -206,15 +244,22 @@ def regenerate_summary(
     pull_number: str,
     workflow_run_id: str,
 ) -> Path:
-    """Regenerate ya-test.html with YDB history and append markdown to the step summary."""
+    """Regenerate ya-test.html with YDB history; merge enriched markdown into job_summary."""
     summary_links = public_dir / "summary_links.txt"
     if not summary_links.exists():
         summary_links.write_text(f"00 [Artifacts]({public_dir_url}/index.html)\n", encoding="utf-8")
 
+    job_summary = public_dir / "job_summary.md"
+    remote_body = ""
+    if job_summary.is_file():
+        remote_body = job_summary.read_text(encoding="utf-8").rstrip() + "\n\n"
+
     last = attempts[-1] if attempts else None
     if not last:
         append_summary("_No test attempts found to regenerate._\n")
-        return public_dir / "job_summary.md"
+        if remote_body:
+            append_summary(remote_body)
+        return job_summary
 
     html_rel = last.get("html_relpath") or f"try_{last['retry']}/ya-test.html"
     report_rel = last.get("report_relpath") or f"try_{last['retry']}/report.json"
@@ -265,33 +310,122 @@ def regenerate_summary(
     cmd.extend(["Tests", str(html_path), str(report_path)])
     run(cmd, cwd=str(workspace))
 
-    job_summary = public_dir / "job_summary.md"
-    parts: list[str] = [
+    enriched_parts: list[str] = [
         "## Summary (enriched)\n",
         f"_Reuploaded from remote executor; links use `{public_dir_url}`._\n\n",
     ]
     if text_file.is_file():
-        parts.append(text_file.read_text(encoding="utf-8"))
-        if not parts[-1].endswith("\n"):
-            parts.append("\n")
-    job_summary.write_text("".join(parts), encoding="utf-8")
-    append_summary(job_summary.read_text(encoding="utf-8"))
+        enriched_parts.append(text_file.read_text(encoding="utf-8"))
+        if not enriched_parts[-1].endswith("\n"):
+            enriched_parts.append("\n")
+    enriched = "".join(enriched_parts)
+    job_summary.write_text(remote_body + enriched, encoding="utf-8")
+    # Step summary: enriched block only (wait already mirrored raw remote summary).
+    append_summary(enriched)
     return job_summary
 
 
-def flush_ci_metrics(workspace: Path, public_dir: Path, meta: dict[str, Any]) -> None:
+def _as_uint(value: Any) -> int | None:
+    try:
+        if value is None or value == "":
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def rewrite_ci_metrics_attribution(
+    metrics_path: Path,
+    *,
+    run_id: str,
+    event_name: str,
+    workflow: str,
+    job_name: str,
+    pull_number: str,
+    caller_repo: str,
+) -> Path:
+    """Rewrite remote-stamped JSONL rows to caller run attribution before YDB flush."""
+    out = metrics_path.with_name(metrics_path.name + ".caller")
+    run_url = (
+        f"https://github.com/{caller_repo}/actions/runs/{run_id}" if caller_repo and run_id else None
+    )
+    pr_number = _as_uint(pull_number)
+    rewritten = 0
+    with metrics_path.open(encoding="utf-8") as src, out.open("w", encoding="utf-8") as dst:
+        for line in src:
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                row = json.loads(raw)
+            except json.JSONDecodeError:
+                dst.write(line if line.endswith("\n") else line + "\n")
+                continue
+            if not isinstance(row, dict):
+                dst.write(line if line.endswith("\n") else line + "\n")
+                continue
+            labels = row.get("labels") if isinstance(row.get("labels"), dict) else {}
+            if row.get("run_id") is not None:
+                labels.setdefault("remote_executor_run_id", row.get("run_id"))
+            if row.get("github_job_id") is not None:
+                labels.setdefault("remote_github_job_id", row.get("github_job_id"))
+            row["run_id"] = _as_uint(run_id)
+            row["event_name"] = event_name
+            row["workflow"] = workflow or row.get("workflow")
+            if job_name:
+                row["job_name"] = job_name
+            if run_url:
+                row["run_url"] = run_url
+            if pr_number is not None:
+                row["pr_number"] = pr_number
+            # Drop host job id so PK keys under the caller run; keep original in labels.
+            row["github_job_id"] = 0
+            if labels:
+                row["labels"] = labels
+            dst.write(json.dumps(row, ensure_ascii=False) + "\n")
+            rewritten += 1
+    print(f"Rewrote {rewritten} ci_metrics row(s) for caller run_id={run_id}")
+    return out
+
+
+def flush_ci_metrics(
+    workspace: Path,
+    public_dir: Path,
+    meta: dict[str, Any],
+    *,
+    event_name: str,
+    source_run_id: str,
+    pull_number: str,
+    caller_repo: str,
+    caller_workflow: str,
+) -> None:
     """Flush remote-buffered ci_metrics.jsonl into caller analytics/ci_metrics."""
-    rel = (meta.get("ci_metrics_relpath") or "ci_metrics.jsonl").strip() or "ci_metrics.jsonl"
-    candidates = [
-        public_dir / rel,
-        public_dir / "ci_metrics.jsonl",
-        public_dir / "analytics.jsonl",
-    ]
-    metrics_path = next((p for p in candidates if p.is_file() and p.stat().st_size > 0), None)
-    if metrics_path is None:
-        print("No ci_metrics JSONL in remote artifacts; skipping analytics flush")
+    rel = _nonempty(meta.get("ci_metrics_relpath"))
+    if not rel:
+        print("Manifest has no ci_metrics_relpath; skipping analytics flush")
         return
 
+    metrics_path = public_dir / rel
+    if not metrics_path.is_file() or metrics_path.stat().st_size == 0:
+        print(f"No ci_metrics at {metrics_path}; skipping analytics flush")
+        return
+
+    job_name = (
+        env_opt("ANALYTICS_JOB_NAME")
+        or _nonempty(meta.get("analytics_job_name"))
+        or caller_workflow
+    )
+    rewritten = rewrite_ci_metrics_attribution(
+        metrics_path,
+        run_id=source_run_id,
+        event_name=event_name,
+        workflow=caller_workflow,
+        job_name=job_name,
+        pull_number=pull_number,
+        caller_repo=caller_repo,
+    )
+
+    # Caller ingest must write YDB even if a stray CI_DISABLE leaked into the env.
     os.environ.pop("CI_DISABLE_YDB_QA", None)
     analytics_dir = workspace / ".github/scripts/utils/analytics"
     ga_dir = analytics_dir / "github_actions"
@@ -301,10 +435,10 @@ def flush_ci_metrics(workspace: Path, public_dir: Path, meta: dict[str, Any]) ->
 
     from github_actions.ci_metrics import flush_file  # noqa: E402
 
-    print(f"Flushing ci_metrics from {metrics_path}")
-    uploaded = flush_file(str(metrics_path))
+    print(f"Flushing ci_metrics from {rewritten}")
+    uploaded = flush_file(str(rewritten))
     print(f"ci_metrics flush uploaded={uploaded}")
-    append_summary(f"- **ci_metrics:** flushed `{metrics_path.name}` (uploaded={uploaded})\n")
+    append_summary(f"- **ci_metrics:** flushed `{rewritten.name}` (uploaded={uploaded})\n")
 
 
 def upload_attempts(
@@ -315,8 +449,13 @@ def upload_attempts(
     event_name: str,
     run_id: str,
     pull_number: str,
+    caller_workflow: str,
 ) -> None:
-    job_name = env_opt("ANALYTICS_JOB_NAME") or meta.get("analytics_job_name") or env("GITHUB_WORKFLOW")
+    job_name = (
+        env_opt("ANALYTICS_JOB_NAME")
+        or _nonempty(meta.get("analytics_job_name"))
+        or caller_workflow
+    )
     branch = meta.get("branch") or "main"
     commit = meta.get("commit") or ""
     build_preset = meta.get("build_preset") or "relwithdebinfo"
@@ -392,7 +531,8 @@ def main() -> None:
     caller_endpoint = env("CALLER_AWS_ENDPOINT").rstrip("/")
     caller_bucket = env("CALLER_AWS_BUCKET")
     caller_repo = env("GITHUB_REPOSITORY")
-    caller_workflow = env("GITHUB_WORKFLOW")
+    # Prefer explicit caller workflow (reusable WF's github.workflow is "Dispatch remote…").
+    caller_workflow = env_opt("CALLER_WORKFLOW") or env("GITHUB_WORKFLOW")
     caller_run_id = env("GITHUB_RUN_ID")
 
     meta = load_manifest(run_id)
@@ -409,9 +549,7 @@ def main() -> None:
     caller_s3_path = f"s3://{caller_bucket}/{dest_key_prefix}"
     caller_run_root = f"s3://{caller_bucket}/{caller_repo}/{caller_workflow}/{caller_run_id}/remote-{run_id}"
 
-    event_name = env_opt("SOURCE_EVENT_NAME") or meta.get("source_event_name") or "workflow_dispatch"
-    source_run_id = env_opt("SOURCE_RUN_ID") or meta.get("source_run_id") or caller_run_id
-    pull_number = env_opt("PULL_NUMBER") or str(meta.get("pull_number") or "")
+    event_name, source_run_id, pull_number = resolve_source_attribution(meta, caller_run_id)
 
     append_summary(
         "\n".join(
@@ -441,8 +579,6 @@ def main() -> None:
         attempts = discover_attempts(public_dir, meta)
         print(f"attempts={json.dumps(attempts, ensure_ascii=False)}")
 
-        s3cmd_sync_upload(public_dir, caller_s3_path)
-
         job_summary = regenerate_summary(
             workspace=workspace,
             public_dir=public_dir,
@@ -454,13 +590,11 @@ def main() -> None:
             workflow_run_id=source_run_id,
         )
 
-        s3cmd_sync_upload(public_dir, caller_s3_path)
-        s3cmd_put(job_summary, f"{caller_run_root}/job_summary.md")
-
         meta_out = dict(meta)
         meta_out.update(
             {
                 "ingested": True,
+                "attempts": attempts,
                 "caller_public_dir_url": new_public,
                 "caller_artifact_key_prefix": dest_key_prefix,
                 "caller_run_root_url": (
@@ -474,6 +608,10 @@ def main() -> None:
         )
         meta_path = public_dir / "remote_artifacts.json"
         meta_path.write_text(json.dumps(meta_out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+        # One sync after rewrite + regenerate + meta rewrite.
+        s3cmd_sync_upload(public_dir, caller_s3_path)
+        s3cmd_put(job_summary, f"{caller_run_root}/job_summary.md")
         s3cmd_put(meta_path, f"{caller_run_root}/remote_artifacts.json")
 
         upload_attempts(
@@ -484,9 +622,19 @@ def main() -> None:
             event_name=event_name,
             run_id=source_run_id,
             pull_number=pull_number,
+            caller_workflow=caller_workflow,
         )
 
-        flush_ci_metrics(workspace=workspace, public_dir=public_dir, meta=meta)
+        flush_ci_metrics(
+            workspace=workspace,
+            public_dir=public_dir,
+            meta=meta,
+            event_name=event_name,
+            source_run_id=source_run_id,
+            pull_number=pull_number,
+            caller_repo=caller_repo,
+            caller_workflow=caller_workflow,
+        )
 
     print(f"::notice title=Remote ingest complete::{new_public}/index.html")
 

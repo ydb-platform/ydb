@@ -46,6 +46,16 @@ on:
         required: false
         type: string
         default: ''
+      analytics_job_name:
+        description: Job name for YDB QA uploads on ingest (empty = manifest / caller workflow)
+        required: false
+        type: string
+        default: ''
+      caller_workflow:
+        description: Caller workflow name for analytics attribution (empty = this reusable workflow name)
+        required: false
+        type: string
+        default: ''
     outputs:
       executor_run_id:
         description: Dispatched executor run id
@@ -180,9 +190,12 @@ jobs:
           CALLER_AWS_BUCKET: ${{ vars.AWS_BUCKET }}
           EXECUTOR_RUN_ID: ${{ needs.dispatch.outputs.executor_run_id }}
           EXECUTOR_RUN_URL: ${{ needs.dispatch.outputs.executor_run_url }}
-          # Reusable workflow inherits caller event/run_id.
+          # Fallback only — ingest prefers remote_artifacts.json (job_inputs).
+          # workflow_call sets event_name=workflow_call; that must not win over meta.
           SOURCE_EVENT_NAME: ${{ github.event_name }}
           SOURCE_RUN_ID: ${{ github.run_id }}
           PULL_NUMBER: ${{ github.event.pull_request.number || github.event.number || '' }}
+          ANALYTICS_JOB_NAME: ${{ inputs.analytics_job_name }}
+          CALLER_WORKFLOW: ${{ inputs.caller_workflow != '' && inputs.caller_workflow || github.workflow }}
           WORKSPACE: ${{ github.workspace }}
         run: python3 .github/scripts/ci/ingest_remote_executor_results.py

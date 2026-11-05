@@ -83,12 +83,30 @@ def http_get(url):
         return None
 
 
-def job_summary_url(run_id):
+def _run_root_url(run_id, filename):
     base = (
         f"{env('AWS_ENDPOINT')}/{env('AWS_BUCKET')}/{env('REPO')}/"
-        f"{env('WORKFLOW_NAME')}/{run_id}/job_summary.md"
+        f"{env('WORKFLOW_NAME')}/{run_id}/{filename}"
     )
     return urllib.parse.quote(base, safe=":/")
+
+
+def job_summary_url(run_id):
+    return _run_root_url(run_id, "job_summary.md")
+
+
+def remote_artifacts_url(run_id):
+    return _run_root_url(run_id, "remote_artifacts.json")
+
+
+def _fetch_with_retries(url, attempts=20, sleep_s=3):
+    body = None
+    for _ in range(attempts):
+        body = http_get(url)
+        if body:
+            break
+        time.sleep(sleep_s)
+    return body
 
 
 def coerce_dispatch_inputs(raw):
@@ -232,22 +250,45 @@ def cmd_wait():
         f"- **conclusion:** `{conclusion}`\n\n"
         f"_Enriched summary is attached by the ingest job after reupload._\n\n"
     )
-    url = job_summary_url(run_id)
-    body = None
-    for _ in range(20):
-        body = http_get(url)
-        if body:
-            break
-        time.sleep(3)
-    if not body:
-        append_summary(f"_Failed to fetch remote `job_summary.md`._\n\n[Open executor run]({run_url})\n")
-        die(f"missing S3 job_summary.md at {url}")
-    print(f"Fetched remote job_summary.md from {url}")
-    append_summary(
-        "<details><summary>Raw remote job_summary (pre-ingest)</summary>\n\n"
-        + (body if body.endswith("\n") else body + "\n")
-        + "\n</details>\n"
-    )
+
+    # GH conclusion is authoritative. Missing S3 job_summary.md must not fail wait —
+    # early executor failures / prepare_s3cmd skip still leave a usable conclusion, and
+    # ingest locates artifacts via remote_artifacts.json.
+    # Always publish the remote-host summary under a cut (ingest adds the enriched one).
+    summary_url = job_summary_url(run_id)
+    body = _fetch_with_retries(summary_url)
+    if body:
+        print(f"Fetched remote job_summary.md from {summary_url}")
+        append_summary(
+            f"<details><summary>Original remote job summary</summary>\n\n"
+            f"_Source: [{summary_url}]({summary_url})_\n\n"
+            + (body if body.endswith("\n") else body + "\n")
+            + "\n</details>\n"
+        )
+    else:
+        art_url = remote_artifacts_url(run_id)
+        art = _fetch_with_retries(art_url, attempts=5, sleep_s=2)
+        if art:
+            print(
+                f"::warning::missing S3 job_summary.md at {summary_url}; "
+                f"remote_artifacts.json present — continuing for ingest"
+            )
+            append_summary(
+                f"_Remote `job_summary.md` missing "
+                f"([expected]({summary_url})); `remote_artifacts.json` found "
+                f"(ingest will reupload)._\n\n[Open executor run]({run_url})\n"
+            )
+        else:
+            print(
+                f"::warning::missing S3 job_summary.md at {summary_url} "
+                f"and remote_artifacts.json at {art_url}"
+            )
+            append_summary(
+                f"_Failed to fetch remote "
+                f"[`job_summary.md`]({summary_url}) / "
+                f"[`remote_artifacts.json`]({art_url})._\n\n"
+                f"[Open executor run]({run_url})\n"
+            )
 
     if conclusion == "success":
         print("Executor succeeded")

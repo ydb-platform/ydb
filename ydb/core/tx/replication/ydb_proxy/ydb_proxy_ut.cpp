@@ -1,4 +1,5 @@
 #include "ydb_proxy.h"
+#include <ydb/core/security/sasl/base_auth_actors.h>
 #include <ydb/library/testlib/helpers.h>
 
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
@@ -996,5 +997,66 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
     }
 
 } // YdbProxyTests
+
+
+Y_UNIT_TEST_SUITE(LoginNavigation) {
+    constexpr char User[] = "navigationuser";
+    constexpr char Password[] = "navigationpassword";
+
+    Y_UNIT_TEST(TemporaryLookupFailureIsUnavailable) {
+        NTestHelpers::TEnv<> env(User, Password, NTestHelpers::ERuntimeMode::Simulated);
+        auto& runtime = env.GetRuntime();
+        TActorId authActor;
+        bool injected = false;
+        auto requestObserver = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySet>(
+            [&](TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr& ev) {
+                if (!authActor && dynamic_cast<NSasl::TPlainAuthActorBase*>(runtime.FindActor(ev->Sender))) {
+                    authActor = ev->Sender;
+                }
+            });
+        auto resultObserver = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+            [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+                if (!injected && authActor && ev->GetRecipientRewrite() == authActor) {
+                    auto& request = *ev->Get()->Request;
+                    UNIT_ASSERT_VALUES_EQUAL(request.ResultSet.size(), 1);
+                    auto& entry = request.ResultSet.front();
+                    UNIT_ASSERT_VALUES_EQUAL(entry.Status, NSchemeCache::TSchemeCacheNavigate::EStatus::Ok);
+                    UNIT_ASSERT(entry.DomainInfo);
+                    // Observed on a real cold source: the synchronized lookup
+                    // has no domain information yet; the durable path exists.
+                    entry.Status = NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError;
+                    entry.DomainInfo.Drop();
+                    request.ErrorCount = 1;
+                    injected = true;
+                }
+            });
+        const auto status = env.LoginStatus("/Root", User, Password);
+        UNIT_ASSERT(authActor && injected);
+        UNIT_ASSERT_VALUES_EQUAL_C(static_cast<ui32>(status), static_cast<ui32>(Ydb::StatusIds::UNAVAILABLE),
+            "A transient source lookup must not become permanent Login SCHEME_ERROR");
+        // The same unchanged durable source succeeds once navigation recovers.
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(env.LoginStatus("/Root", User, Password)),
+            static_cast<ui32>(Ydb::StatusIds::SUCCESS));
+    }
+
+    Y_UNIT_TEST(MissingDatabaseRemainsSchemeError) {
+        NTestHelpers::TEnv<> env(User, Password, NTestHelpers::ERuntimeMode::Simulated);
+        env.GetRuntime().GetAppData(0).AuthConfig.SetDomainLoginOnly(false);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(env.LoginStatus("/Root", User, Password)),
+            static_cast<ui32>(Ydb::StatusIds::SUCCESS));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(env.LoginStatus("/Root/does-not-exist-kikimr27516", User, Password)),
+            static_cast<ui32>(Ydb::StatusIds::SCHEME_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(env.LoginStatus("/Root", User, Password)),
+            static_cast<ui32>(Ydb::StatusIds::SUCCESS));
+    }
+
+    Y_UNIT_TEST(WrongPasswordRemainsUnauthorized) {
+        NTestHelpers::TEnv<> env(User, Password, NTestHelpers::ERuntimeMode::Simulated);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(env.LoginStatus("/Root", User, "wrongpassword")),
+            static_cast<ui32>(Ydb::StatusIds::UNAUTHORIZED));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(env.LoginStatus("/Root", User, Password)),
+            static_cast<ui32>(Ydb::StatusIds::SUCCESS));
+    }
+}
 
 }

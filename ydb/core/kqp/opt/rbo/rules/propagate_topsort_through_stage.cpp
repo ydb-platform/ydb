@@ -170,7 +170,7 @@ bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusiveP
         }
     }
 
-    return IsValidLimit(*sort->LimitCond);
+    return true;
 }
 
 bool CanPushSortToRowRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, const TInfoUnitRegistry& registry, ui32& sortDirection) {

@@ -1171,13 +1171,13 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
     Y_UNIT_TEST(StorageV3OlderCounterReplayDoesNotMakeTotalsPartial) {
         const TString svg = RenderScans(R"json([
           {"ExpectedContextOnly":true,"StatsGroupId":"g","ParticipatingShards":1,"ParticipatingTablets":["1"]},
-          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","TablePath":"/A","ReaderKind":"TRIVIAL",
+          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","ParticipatingShards":1,"TablePath":"/A","ReaderKind":"TRIVIAL",
            "Finished":true,"PendingOperations":0,"StorageStatsVersion":1,"StorageReads":[
              {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":100,"ReadCount":2,"DataKind":"data"}]},
-          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","TablePath":"/A","ReaderKind":"TRIVIAL",
+          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","ParticipatingShards":1,"TablePath":"/A","ReaderKind":"TRIVIAL",
            "Finished":false,"PendingOperations":2,"StorageStatsVersion":1,"StorageReads":[
              {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":80,"ReadCount":1,"DataKind":"data"}]},
-          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","TablePath":"/A","ReaderKind":"TRIVIAL",
+          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","ParticipatingShards":1,"TablePath":"/A","ReaderKind":"TRIVIAL",
            "Finished":true,"StorageStatsVersion":1,"StorageReads":[
              {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":80,"ReadCount":1,"DataKind":"data"}]}
         ])json");
@@ -1191,7 +1191,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         const TString header = R"json({"ExpectedContextOnly":true,"StatsGroupId":"g","ParticipatingShards":1,"ParticipatingTablets":["1"]})json";
         const TString final = R"json({"StatsScanId":"a","Finished":true,"PendingOperations":0})json";
         auto render = [&](bool finalFirst, bool truncated) {
-            const TString body = TStringBuilder() << R"json({"StatsScanId":"a","StatsGroupId":"g","TabletId":"1",
+            const TString body = TStringBuilder() << R"json({"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","ParticipatingShards":1,
               "TablePath":"/A","ReaderKind":"TRIVIAL","Finished":false,"PendingOperations":2,"Truncated":)json"
                 << (truncated ? "true" : "false") << R"json(,"StorageStatsVersion":1,"StorageReads":[
                 {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":100,"ReadCount":2,"DataKind":"data"}]})json";
@@ -1214,7 +1214,7 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
     Y_UNIT_TEST(StorageV3KnownZeroDoesNotInventReadSources) {
         const TString svg = RenderScans(R"json([
           {"ExpectedContextOnly":true,"StatsGroupId":"g","ParticipatingShards":1,"ParticipatingTablets":["1"]},
-          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","ReaderKind":"TRIVIAL","Finished":true,
+          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","ParticipatingShards":1,"ReaderKind":"TRIVIAL","Finished":true,
            "StorageStatsVersion":1,"Steps":[{"StepId":1,"StepKind":"ReaderInit","MetaStep":"Preparation","OwnedExecutionDuration":1}]}
         ])json");
         UNIT_ASSERT_C(StorageRow(svg, "grand-total").Contains("data-cs-storage-bytes='0'"), svg);

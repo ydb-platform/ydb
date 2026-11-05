@@ -3,6 +3,8 @@
 
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 
+#include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
+
 namespace NKikimr::NArrow::NSSA {
 
 TConclusion<TExecutionResult> TIndexCheckerProcessor::DoExecute(

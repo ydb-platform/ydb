@@ -35,7 +35,7 @@ namespace NKikimr::NGRpcService {
         const auto* appData = HasAppData() ? AppData() : nullptr;
         if (appData && appData->FeatureFlags.GetEnableRelativePaths() && !path.empty() && !path.StartsWith('/')) {
             auto database = GetDatabaseName().GetOrElse(TString());
-            if (const auto header = GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER); header && appData->DomainsInfo && appData->DomainsInfo->Domain) {
+            if (const auto header = GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER); header && !header->empty() && appData->DomainsInfo && appData->DomainsInfo->Domain) {
                 database = PrependDomainIfNeeded("/" + appData->DomainsInfo->Domain->Name, CGIUnescapeRet(*header));
             }
             resolved = PrependDomainIfNeeded(

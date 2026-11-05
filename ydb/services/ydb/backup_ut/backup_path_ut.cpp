@@ -2201,6 +2201,18 @@ Y_UNIT_TEST_SUITE_F(PathAliasingExplicitExport, TPathAliasExplicitExportFixture)
 }
 
 Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
+    Y_UNIT_TEST_TWIN(EmptyItemSourceUsesCommonSourcePath, relativePathsEnabled) {
+        auto& flags = Server().GetRuntime()->GetAppData().FeatureFlags;
+        flags.SetEnableFsBackups(true);
+        flags.SetEnableRelativePaths(relativePathsEnabled);
+        auto settings = MakeExportSettings("/Root/RecursiveFolderProcessing/dir1/dir2");
+        settings.AppendItem(NExport::TExportToFsSettings::TItem{.Src = "", .Dst = "archive"});
+        auto future = YdbExportClient().ExportToFs(settings);
+        UNIT_ASSERT_C(future.Wait(TDuration::Seconds(60)), "Export request did not complete");
+        WaitOpSuccess(future.ExtractValueSync());
+        UNIT_ASSERT((TFsPath(GetTempDir().Path()) / "archive" / "Table2" / "scheme.pb").Exists());
+    }
+
     Y_UNIT_TEST(ImportFilterByYdbObjectPath) {
         ImportFilterByYdbObjectPathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }

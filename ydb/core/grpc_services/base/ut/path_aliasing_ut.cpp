@@ -98,6 +98,10 @@ namespace NKikimr::NGRpcService {
             trailingSlashRequest.InitializePathNormalization(std::make_shared<const NPathAliasing::TPathNormalizer>(config));
             UNIT_ASSERT_VALUES_EQUAL(trailingSlashRequest.NormalizePath("legacy//table/", {}),
                 relativePathsEnabled ? "/Alias/db/new/table" : "legacy//table/");
+
+            request.UseDatabase("");
+            UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("table", "dir"),
+                relativePathsEnabled ? "/Alias/db/dir/table" : "table");
         }
 
         Y_UNIT_TEST_TWIN(ResourcePathsWithoutDomain, noDomainsInfo) {

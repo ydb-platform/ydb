@@ -874,6 +874,12 @@ class YMake(object):
             print(fin.read())
 
     def print_core_conf(self):
+        # python.conf's when ($BUILD_PYTHON3_BIN) is decided while this import is parsed.
+        # -D in the epilogue is too late: commands already point at the resource python.
+        for key in ("BUILD_PYTHON3_BIN", "BUILD_PYTHON_BIN"):
+            value = opts().presets.get(key)
+            if value:
+                emit(key, value)
         print('@import "${CONF_ROOT}/ymake.core.conf"')
 
     def print_settings(self):

@@ -1766,9 +1766,8 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
                 UNIT_ASSERT_C(!mismatch.IsSuccess() && (mismatchIssues.find("path is being deleted right now") != std::string::npos || mismatchIssues.find("CASCADE") != std::string::npos || mismatchIssues.find("cascade") != std::string::npos), mismatchIssues);
                 UNIT_ASSERT(!ordinaryDrop.HasValue());
                 if (replay) {
-                    // A later failed part must undo both accepted escalations.
-                    // Otherwise the real FORCE below sees ABANDON in memory,
-                    // omits persistence, and reboots back to ordinary DROP.
+                    // Reject unsupported batches before changing the pending DROP.
+                    // The real FORCE below must still persist and replay its policy.
                     auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>();
                     request->Record.SetTxId(900001);
                     for (ui32 i = 0; i < 3; ++i) {
@@ -1784,7 +1783,7 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
                     const auto rejected = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
                         info.PathId.OwnerId, request.Release());
                     UNIT_ASSERT_VALUES_EQUAL(rejected->Get()->Record.GetStatus(), NKikimrScheme::StatusPreconditionFailed);
-                    UNIT_ASSERT_C(rejected->Get()->Record.GetReason().Contains("CASCADE"), rejected->Get()->Record.GetReason());
+                    UNIT_ASSERT_C(rejected->Get()->Record.GetReason().Contains("single-operation"), rejected->Get()->Record.GetReason());
                     UNIT_ASSERT(!schemaRequest);
                     UNIT_ASSERT(!ordinaryDrop.HasValue());
                 }

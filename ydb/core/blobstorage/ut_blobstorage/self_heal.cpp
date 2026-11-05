@@ -331,4 +331,49 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
             UNIT_ASSERT_C(diskMoved, "Expected PDisk (9,1000) to be included into group");
         }
     }
+
+    Y_UNIT_TEST(SelfHealParameters) {
+        const TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block;
+        TEnvironmentSetup env({
+            .NodeCount = erasure.BlobSubgroupSize() + 1,
+            .Erasure = erasure,
+            .ConfigPreprocessor = [](ui32, TNodeWardenConfig& conf) {
+                auto* bscSettings = conf.BlobStorageConfig.MutableBscSettings();
+                auto* selfHealSettings = bscSettings->MutableSelfHealSettings();
+
+                selfHealSettings->SetPreferLessOccupiedRack(true);
+                selfHealSettings->SetWithAttentionToReplication(true);
+            },
+        });
+
+        env.CreateBoxAndPool(1, 1);
+
+        env.UpdateSettings(false, true, false); // disable self-heal
+        
+        ChangeDiskStatus(env, { 1, 1000 }, NKikimrBlobStorage::EDriveStatus::ACTIVE, NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED);
+
+        bool seenParameters = false;
+
+        auto catchReassigns = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) { 
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                const auto& request = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
+                for (const auto& command : request.GetCommand()) {
+                    if (command.GetCommandCase() == NKikimrBlobStorage::TConfigRequest::TCommand::kReassignGroupDisk) {
+                        auto& reassignCommand = command.GetReassignGroupDisk();
+                        if (reassignCommand.GetPreferLessOccupiedRack() && reassignCommand.GetWithAttentionToReplication()) {
+                            seenParameters = true;
+                        }
+                    }
+                }
+            }
+            return true;
+        };
+
+        env.Runtime->FilterFunction = catchReassigns;
+
+        env.UpdateSettings(true, true, false); // enable self-heal
+        env.Sim(TDuration::Seconds(30));
+
+        UNIT_ASSERT(seenParameters);
+    }
 }

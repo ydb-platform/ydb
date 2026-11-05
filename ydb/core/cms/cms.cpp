@@ -1561,6 +1561,10 @@ void TCms::ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, con
         perm->SetDeadline(deadline.GetValue());
     }
 
+    copy->Request.ClearActions();
+
+    it->second = *copy;
+
     AcceptPermissions(resp->Record, rec.GetRequestId(), rec.GetUser(), ctx, true);
 
     auto actor = new TRequestApproveActor(requestId, State, ev->Sender);

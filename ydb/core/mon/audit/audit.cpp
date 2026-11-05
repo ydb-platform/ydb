@@ -1,5 +1,5 @@
 #include "audit.h"
-#include "auditable_actions.cpp"
+#include "audit_denylist.cpp"
 
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/audit/audit_config/audit_config.h>
@@ -50,9 +50,9 @@ namespace {
         return reason;
     }
 
-    inline TUrlMatcher CreateAuditableActionsMatcher() {
+    inline TUrlMatcher CreateDenylistMatcher() {
         TUrlMatcher policy;
-        for (const auto& pattern : AUDITABLE_ACTIONS) {
+        for (const auto& pattern : AUDIT_DENYLIST) {
             policy.AddPattern(pattern);
         }
         return policy;
@@ -86,8 +86,8 @@ void TAuditCtx::AddAuditLogPart(TStringBuf name, const TString& value) {
     Parts.emplace_back(name, value);
 }
 
-bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) {
-    // only modifying methods are audited
+bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) const {
+    // modifying methods are always audited
     const TString method(request->Method);
     static const THashSet<TString> MODIFYING_METHODS = {"POST", "PUT", "DELETE"};
     if (MODIFYING_METHODS.contains(method)) {
@@ -99,16 +99,20 @@ bool TAuditCtx::AuditableRequest(const NHttp::THttpIncomingRequestPtr& request) 
         return false;
     }
 
-    // force audit for specific URLs
-    static auto FORCE_AUDIT_MATCHER = CreateAuditableActionsMatcher();
-    if (FORCE_AUDIT_MATCHER.Match(request->URL)) {
-        return true;
+    // skip audit for URLs from denylist
+    static auto DENYLIST_MATCHER = CreateDenylistMatcher();
+    if (DENYLIST_MATCHER.Match(request->URL)) {
+        return false;
     }
 
-    return false;
+    return true;
 }
 
-void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev) {
+void TAuditCtx::InitAudit(const NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev, bool needAudit) {
+    if (!(Auditable = needAudit)) {
+        return;
+    }
+
     const auto& request = ev->Get()->Request;
     const TString method(request->Method);
     const TString url(request->URL.Before('?'));

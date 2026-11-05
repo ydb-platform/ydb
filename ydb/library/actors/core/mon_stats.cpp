@@ -38,7 +38,6 @@ namespace NActors {
         , ActorsAliveByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
         , ScheduledEventsByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
         , StuckActorsByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
-        , UsageByActivity(TLocalProcessKeyStateIndexLimiter::GetMaxKeysCount())
     {}
 
     namespace {
@@ -93,15 +92,6 @@ namespace NActors {
         }
         if (other.AggregatedCurrentActivationTime.size()) {
             AggregatedCurrentActivationTime.insert(AggregatedCurrentActivationTime.end(), other.AggregatedCurrentActivationTime.begin(), other.AggregatedCurrentActivationTime.end());
-        }
-
-        if (UsageByActivity.size() < other.UsageByActivity.size()) {
-            UsageByActivity.resize(other.UsageByActivity.size());
-        }
-        for (size_t i = 0; i < UsageByActivity.size(); ++i) {
-            for (size_t j = 0; j < 10; ++j) {
-                UsageByActivity[i][j] += RelaxedLoad(&other.UsageByActivity[i][j]);
-            }
         }
 
         RelaxedStore(

@@ -17,6 +17,8 @@ struct TTestEnv {
             clusterBalancingSettings->SetMaxReplicatingPDisks(100);
             clusterBalancingSettings->SetMaxReplicatingVDisks(800);
             clusterBalancingSettings->SetIterationIntervalMs(TDuration::Seconds(1).MilliSeconds());
+            clusterBalancingSettings->SetPreferLessOccupiedRack(true);
+            clusterBalancingSettings->SetWithAttentionToReplication(true);
         },
     })
     {
@@ -83,16 +85,36 @@ struct TTestEnv {
 Y_UNIT_TEST_SUITE(ClusterBalancing) {
 
     Y_UNIT_TEST(ClusterBalancingEvenDistribution) {
-        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 1, 2);
+        TTestEnv env(8, TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
 
         UNIT_ASSERT(env.EachPDiskHasNVDisks(2));
 
-        env->AlterBox(1, 2);
+        env->AlterBox(1, 4);
+
+        bool seenParameters = false;
+
+        auto catchReassigns = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) { 
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                const auto& request = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
+                for (const auto& command : request.GetCommand()) {
+                    if (command.GetCommandCase() == NKikimrBlobStorage::TConfigRequest::TCommand::kReassignGroupDisk) {
+                        auto& reassignCommand = command.GetReassignGroupDisk();
+                        if (reassignCommand.GetPreferLessOccupiedRack() && reassignCommand.GetWithAttentionToReplication()) {
+                            seenParameters = true;
+                        }
+                    }
+                }
+            }
+            return true;
+        };
+
+        env->Runtime->FilterFunction = catchReassigns;
 
         bool success = env.WaitFor([&] {
             return env.EachPDiskHasNVDisks(1);
         }, 10);
 
+        UNIT_ASSERT(seenParameters);
         UNIT_ASSERT(success);
     }
 

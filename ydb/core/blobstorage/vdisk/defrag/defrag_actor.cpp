@@ -7,6 +7,8 @@
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/core/invoke.h>
 
@@ -31,6 +33,7 @@ namespace NKikimr {
         , HugeKeeperId(hugeKeeperId)
         , DefragMonGroup(VCtx->VDiskCounters, "subsystem", "defrag")
         , RunDefragBySchedule(runDefrageBySchedule)
+        , Throttler(std::make_shared<TEventsQuoter>())
     {}
 
     TDefragCtx::~TDefragCtx() = default;
@@ -73,6 +76,13 @@ namespace NKikimr {
         return Min(maxChunksToDefrag, hugeCanBeFreedChunks - MIN_CAN_BE_FREED_CHUNKS);
     }
 
+    ui64 GetGarbageThresholdToRunCompaction(const TOutOfSpaceState& oos, double defragThresholdToRunCompaction, double hugeDefragFreeSpaceBorder, ui64 chunkSize) {
+        double multiplier = Min(oos.GetFreeSpaceShare() / hugeDefragFreeSpaceBorder, 1.0);
+        double thresholdRatio = multiplier * defragThresholdToRunCompaction;
+        ui64 vdiskSharedSpaceLimit = static_cast<ui64>(oos.GetLocalTotalChunks()) * chunkSize;
+        return static_cast<ui64>(thresholdRatio * vdiskSharedSpaceLimit);
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // TDefragLocalScheduler
     // We use statistics about free space share and numbe of used/canBeFreed chunks
@@ -113,31 +123,47 @@ namespace NKikimr {
 
             void Handle(TEvTakeHullSnapshotResult::TPtr ev) {
                 TDefragCalcStat calcStat(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx);
-                std::unique_ptr<IEventBase> res;
+                std::unique_ptr<TEvDefragStartQuantum> res;
                 if (calcStat.Scan(NDefrag::MaxSnapshotHoldDuration)) {
                     STLOG(PRI_ERROR, BS_VDISK_DEFRAG, BSVDD05, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan timed out"));
                 } else {
                     const ui32 totalChunks = calcStat.GetTotalChunks();
                     const ui32 usefulChunks = calcStat.GetUsefulChunks();
+                    const ui32 freedChunks = calcStat.GetFreedChunks();
                     const auto& oos = DCtx->VCtx->GetOutOfSpaceState();
                     Y_VERIFY_S(usefulChunks <= totalChunks, DCtx->VCtx->VDiskLogPrefix);
                     const ui32 canBeFreedChunks = totalChunks - usefulChunks;
+                    Y_ABORT_UNLESS(freedChunks <= canBeFreedChunks);
                     double defaultPercent = DCtx->VCfg->DefaultHugeGarbagePerMille / 1000.0;
                     double hugeDefragFreeSpaceBorder = DCtx->VCfg->HugeDefragFreeSpaceBorderPerMille / 1000.0;
+                    const ui64 spaceCouldBeFreedViaCompaction = calcStat.GetTotalSpaceCouldBeFreedViaCompaction();
+                    ui64 garbageThresholdToRunCompaction = GetGarbageThresholdToRunCompaction(
+                        oos, DCtx->VCfg->GarbageThresholdToRunFullCompactionPerMille / 1000.0, hugeDefragFreeSpaceBorder, DCtx->PDiskCtx->Dsk->ChunkSize);
+
+                    DCtx->DefragMonGroup.SpaceInHugeChunksCouldBeFreedViaCompaction() = spaceCouldBeFreedViaCompaction;
                     DCtx->DefragMonGroup.DefragThreshold() = DefragThreshold(oos, defaultPercent, hugeDefragFreeSpaceBorder);
-                    if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks, totalChunks, defaultPercent, hugeDefragFreeSpaceBorder)) {
-                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflightDefragChunks(DCtx->VCfg->MaxChunksToDefragInflight, canBeFreedChunks));
-                        Y_VERIFY_S(chunksToDefrag, DCtx->VCtx->VDiskLogPrefix);
-                        STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
-                            (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),
-                            (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
-                            (ChunksToDefrag, chunksToDefrag));
-                        res = std::make_unique<TEvDefragStartQuantum>(std::move(chunksToDefrag));
-                    } else {
-                        STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD04, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
-                            (TotalChunks, totalChunks), (UsefulChunks, usefulChunks),
-                            (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())));
+
+                    // check if we need to run compaction
+                    if (garbageThresholdToRunCompaction > 0 && spaceCouldBeFreedViaCompaction > garbageThresholdToRunCompaction) {
+                        STLOG(PRI_INFO, BS_HULLCOMP, BSVDD10, VDISKP(DCtx->VCtx->VDiskLogPrefix, "TDefragPlannerActor decided to compact"),
+                            (SpaceCouldBeFreedViaCompaction, spaceCouldBeFreedViaCompaction),
+                            (GarbageThresholdToRunCompaction, garbageThresholdToRunCompaction));
+                        Send(DCtx->SkeletonId, TEvCompactVDisk::Create(EHullDbType::LogoBlobs, TEvCompactVDisk::EMode::FULL, false));
                     }
+
+                    // check if we need to run defragmentation
+                    if (HugeHeapDefragmentationRequired(oos, canBeFreedChunks - freedChunks, totalChunks - freedChunks, defaultPercent, hugeDefragFreeSpaceBorder)) {
+                        TChunksToDefrag chunksToDefrag = calcStat.GetChunksToDefrag(MaxInflightDefragChunks(DCtx->VCfg->MaxChunksToDefragInflight, canBeFreedChunks - freedChunks));
+                        res = std::make_unique<TEvDefragStartQuantum>(std::move(chunksToDefrag));
+                    }
+
+                    STLOG(PRI_INFO, BS_VDISK_DEFRAG, BSVDD03, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan finished"),
+                        (TotalChunks, totalChunks), (UsefulChunks, usefulChunks), (FreedChunks, freedChunks),
+                        (LocalColor, NKikimrBlobStorage::TPDiskSpaceColor_E_Name(oos.GetLocalColor())),
+                        (ChunksToDefrag, res ? res->ChunksToDefrag.ToString() : "nothing"),
+                        (SpaceCouldBeFreedViaCompaction, spaceCouldBeFreedViaCompaction),
+                        (GarbageThresholdToRunCompaction, garbageThresholdToRunCompaction)
+                    );
                 }
                 if (!res) {
                     res = std::make_unique<TEvDefragStartQuantum>(TChunksToDefrag());
@@ -439,6 +465,12 @@ namespace NKikimr {
                                     TABLED() {str << "VDisk Used Chunks";}
                                     TABLED() {
                                         str << DCtx->VCtx->GetOutOfSpaceState().GetLocalUsedChunks();
+                                    }
+                                }
+                                TABLER() {
+                                    TABLED() {str << "DefragThresholdToRunCompaction";}
+                                    TABLED() {
+                                        str << static_cast<ui64>(DCtx->VCfg->GarbageThresholdToRunFullCompactionPerMille) / 1000.0;
                                     }
                                 }
                             }

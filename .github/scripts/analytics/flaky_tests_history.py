@@ -23,11 +23,7 @@ def _dedupe_history_rows(rows):
 BASE_DATE = datetime.date(1970, 1, 1)
 DEFAULT_DAYS_BACK = 30  # cold start when branch has no flaky_tests_window history
 MAX_RESUME_GAP_DAYS = 180  # safety cap on incremental resume if collection was paused a long time
-# Reprocess this many calendar days before max(date_window) on incremental runs.
-# Late Nightly/Large uploads (~23:xx UTC) often land after the day was first written as
-# no_runs; without a lookback those rows stay frozen once max advances to "today".
-# Mirrors tests_monitor.py reprocessing the last recorded day.
-INCREMENTAL_LOOKBACK_DAYS = 1
+INCREMENTAL_LOOKBACK_DAYS = 1  # reprocess N days before max(date_window); catches late Large/Nightly
 
 
 def parse_arguments():
@@ -118,8 +114,7 @@ def determine_start_date(ydb_wrapper, test_runs_table, flaky_tests_table, build_
     max_date_window = get_max_date_from_history(ydb_wrapper, flaky_tests_table, build_type, branch)
     
     if max_date_window is not None:
-        # Incremental resume: reprocess last stored day(s) so late Large/Nightly
-        # uploads are not stuck as no_runs once max advances to today.
+        # Incremental resume from last stored day minus lookback (late uploads).
         start_date = min(max_date_window, end_date) - datetime.timedelta(days=INCREMENTAL_LOOKBACK_DAYS)
         if start_date < max_resume_start_date:
             print(

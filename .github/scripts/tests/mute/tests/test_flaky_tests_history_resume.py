@@ -44,8 +44,7 @@ class DetermineStartDateTest(unittest.TestCase):
         self.assertEqual(end, self.end_date)
 
     def test_recent_history_resumes_with_incremental_lookback(self):
-        # Steady state: last recorded day is yesterday -> resume lookback days earlier
-        # so late Large/Nightly uploads are rewritten instead of freezing as no_runs.
+        # Last recorded day is yesterday -> resume INCREMENTAL_LOOKBACK_DAYS earlier.
         recent = self.end_date - datetime.timedelta(days=1)
         expected = recent - datetime.timedelta(days=fth.INCREMENTAL_LOOKBACK_DAYS)
         with mock.patch.object(fth, 'get_max_date_from_history', return_value=recent):
@@ -54,8 +53,7 @@ class DetermineStartDateTest(unittest.TestCase):
         self.assertEqual(end, self.end_date)
 
     def test_moderately_stale_history_still_resumes_from_last_day_minus_lookback(self):
-        # A gap smaller than MAX_RESUME_GAP_DAYS must not be capped — this is exactly
-        # the "avoid history gaps" behavior the PR intentionally introduced.
+        # Gap smaller than MAX_RESUME_GAP_DAYS must not be capped.
         stale = self.end_date - datetime.timedelta(days=fth.MAX_RESUME_GAP_DAYS - 10)
         expected = stale - datetime.timedelta(days=fth.INCREMENTAL_LOOKBACK_DAYS)
         with mock.patch.object(fth, 'get_max_date_from_history', return_value=stale):

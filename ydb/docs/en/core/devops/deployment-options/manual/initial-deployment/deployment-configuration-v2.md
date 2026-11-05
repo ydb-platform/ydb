@@ -92,13 +92,19 @@ config:
   client_certificate_authorization:
     request_client_certificate: true
     client_certificate_definitions:
-        - member_groups: ["ADMINS"]
+        - member_groups: ["ADMINS", "databaseNodes@cert"]
           subject_terms:
           - short_name: "O"
             values: ["YDB"]
 ```
 
-To speed up and simplify the initial deployment of {{ ydb-short-name }}, the configuration file already contains most of the cluster setup settings. You only need to replace the default host FQDNs in the `hosts` section and disk paths in the `host_configs` section with your actual values.
+{% note info  %}
+
+The configuration shown above is prepared for running {{ ydb-short-name }} on 3 physical or virtual servers using mirror-3-dc [cluster operating mode](../../../../concepts/topology.md#cluster-config).
+
+{% endnote %}
+
+To speed up and simplify the initial deployment of {{ ydb-short-name }}, the provided configuration file example already contains most of the cluster setup settings. You only need to replace the default host FQDNs in the `hosts` section and disk paths in the `host_configs` section with your actual values.
 
 * The `hosts` section:
 
@@ -357,7 +363,7 @@ The example commands above use the following parameters:
   ```
 
   In the example above, `<ydb-static-node1>`, `<ydb-static-node2>`, and `<ydb-static-node3>` are the FQDNs of any three servers running static cluster nodes.
-  
+
   Start the {{ ydb-short-name }} dynamic node for the `/Root/testdb` database:
 
   ```bash

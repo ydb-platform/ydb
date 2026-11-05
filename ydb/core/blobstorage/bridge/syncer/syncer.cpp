@@ -518,7 +518,7 @@ namespace NKikimr::NBridge {
                         .BlobId = r.Id,
                         .Buffer = TRope(TRcBuf(r.Buffer)),
                         .Deadline = TInstant::Max(),
-                        .HandleClass = NKikimrBlobStorage::TabletLog,
+                        .HandleClass = NKikimrBlobStorage::AsyncBlob,
                         .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
                         .WriteSource = TWriteSource::SyncerMergePut,
                         .IssueKeepFlag = (r.Keep || sourceFlags.Keep) && !(r.DoNotKeep || sourceFlags.DoNotKeep),
@@ -557,7 +557,7 @@ namespace NKikimr::NBridge {
                     // we have to query this blob and do full rewrite -- there was no data for it
                     // the rate limits traffic between piles, and the read brings about one copy of the blob data across
                     IssueQuery(false, std::make_unique<TEvBlobStorage::TEvGet>(r.Id, 0, 0, TInstant::Max(),
-                        NKikimrBlobStorage::FastRead), {}, r.Id.BlobSize());
+                        NKikimrBlobStorage::AsyncRead), {}, r.Id.BlobSize());
                 } else if (r.Status == NKikimrProto::ERROR) {
                     SourceBlobFlags.erase(r.Id);
                     SyncerDataStats->BytesError += r.Id.BlobSize();

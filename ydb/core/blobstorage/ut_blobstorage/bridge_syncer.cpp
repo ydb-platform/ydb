@@ -693,6 +693,39 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
             << " charged# " << charged);
     }
 
+    Y_UNIT_TEST(DataUsesBackgroundClasses) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 16,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 2,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const auto state = GetGroupInfo(env, groupId).GetBridgeGroupState();
+        const TActorId sourceProxy = MakeBlobStorageProxyID(state.GetPile(0).GetGroupId());
+        const TActorId targetProxy = MakeBlobStorageProxyID(state.GetPile(1).GetGroupId());
+        constexpr ui32 numBlobs = 5;
+        ui32 numReads = 0;
+        ui32 numPuts = 0;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvGet && ev->Recipient == sourceProxy) {
+                const auto *msg = ev->Get<TEvBlobStorage::TEvGet>();
+                numReads += !msg->IsIndexOnly && msg->GetHandleClass == NKikimrBlobStorage::AsyncRead;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut && ev->Recipient == targetProxy) {
+                numPuts += ev->Get<TEvBlobStorage::TEvPut>()->HandleClass == NKikimrBlobStorage::AsyncBlob;
+            }
+            return true;
+        };
+        const auto reads = SyncBlobs(env, groupId, {1}, numBlobs, 1000);
+        env.Runtime->FilterFunction = {};
+        UNIT_ASSERT_VALUES_EQUAL(reads.size(), numBlobs);
+        UNIT_ASSERT_VALUES_EQUAL(numReads, numBlobs);
+        UNIT_ASSERT_VALUES_EQUAL(numPuts, numBlobs);
+    }
+
     Y_UNIT_TEST(TotalRateSharedBetweenHostingNodes) {
         using namespace NBridgeTest;
         THeldSyncersEnv test;

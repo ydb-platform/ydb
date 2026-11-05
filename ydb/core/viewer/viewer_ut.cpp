@@ -1151,8 +1151,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
     void CheckStorageLimitWithGroupSizeInUnits(bool enforcedSlotSize, bool cluster = false,
             std::optional<ui64> userChunkPoolSize = {}, bool overflowingQuota = false,
             ui64 tablesSize = 0, ui64 topicsSize = 0, std::optional<TString> poolUsageKind = "ssd",
-            std::optional<TString> expectedTablesStorageType = "SSD",
-            bool withoutDomainStoragePools = false)
+            TString expectedTablesStorageType = "SSD")
     {
         TPortManager tp;
         auto settings = TServerSettings(tp.GetPort(2134))
@@ -1186,12 +1185,10 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     auto* response = ev->Get<TEvSchemeShard::TEvDescribeSchemeResult>();
                     auto* domain = response->MutableRecord()->MutablePathDescription()->MutableDomainDescription();
                     domain->ClearStoragePools();
-                    if (!withoutDomainStoragePools) {
-                        for (const auto& kind : poolKinds) {
-                            auto* pool = domain->AddStoragePools();
-                            pool->SetName(kind);
-                            pool->SetKind(kind);
-                        }
+                    for (const auto& kind : poolKinds) {
+                        auto* pool = domain->AddStoragePools();
+                        pool->SetName(kind);
+                        pool->SetKind(kind);
                     }
                     if (tablesSize || topicsSize) {
                         auto* diskSpaceUsage = domain->MutableDiskSpaceUsage();
@@ -1320,33 +1317,23 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(tenants.size(), 1);
         const auto& tenant = tenants[0];
         const auto& storage = tenant["DatabaseStorage"].GetArray();
-        if (!withoutDomainStoragePools) {
-            UNIT_ASSERT_VALUES_EQUAL(tenant["StorageAllocatedLimit"].GetString(),
-                ToString(saturatedQuota ? Max<ui64>() : fixedQuota + (enforcedSlotSize ? 500 : 600)));
-            UNIT_ASSERT_VALUES_EQUAL(tenant["StorageAllocatedSize"].GetString(), "50");
-            UNIT_ASSERT_VALUES_EQUAL(storage.size(), 2);
-            for (const auto& usage : storage) {
-                const auto& type = usage["Type"].GetString();
-                UNIT_ASSERT(type == "SSD" || type == "HDD");
-                const TString expectedLimit = type == "SSD"
-                    ? (enforcedSlotSize ? "240" : "300")
-                    : ToString(saturatedQuota ? Max<ui64>() : fixedQuota + (enforcedSlotSize ? 260 : 300));
-                UNIT_ASSERT_VALUES_EQUAL(usage["Limit"].GetString(), expectedLimit);
-                UNIT_ASSERT_VALUES_EQUAL(usage["Size"].GetString(), type == "SSD" ? "20" : "30");
-            }
-        } else {
-            UNIT_ASSERT(!tenant.Has("StorageAllocatedLimit"));
-            UNIT_ASSERT(!tenant.Has("StorageAllocatedSize"));
-            UNIT_ASSERT_VALUES_EQUAL(storage.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tenant["StorageAllocatedLimit"].GetString(),
+            ToString(saturatedQuota ? Max<ui64>() : fixedQuota + (enforcedSlotSize ? 500 : 600)));
+        UNIT_ASSERT_VALUES_EQUAL(tenant["StorageAllocatedSize"].GetString(), "50");
+        UNIT_ASSERT_VALUES_EQUAL(storage.size(), 2);
+        for (const auto& usage : storage) {
+            const auto& type = usage["Type"].GetString();
+            UNIT_ASSERT(type == "SSD" || type == "HDD");
+            const TString expectedLimit = type == "SSD"
+                ? (enforcedSlotSize ? "240" : "300")
+                : ToString(saturatedQuota ? Max<ui64>() : fixedQuota + (enforcedSlotSize ? 260 : 300));
+            UNIT_ASSERT_VALUES_EQUAL(usage["Limit"].GetString(), expectedLimit);
+            UNIT_ASSERT_VALUES_EQUAL(usage["Size"].GetString(), type == "SSD" ? "20" : "30");
         }
         if (tablesSize || topicsSize) {
             const auto& tablesStorage = tenant["TablesStorage"].GetArray();
             UNIT_ASSERT_VALUES_EQUAL(tablesStorage.size(), 1);
-            if (expectedTablesStorageType) {
-                UNIT_ASSERT_VALUES_EQUAL(tablesStorage[0]["Type"].GetString(), *expectedTablesStorageType);
-            } else {
-                UNIT_ASSERT(!tablesStorage[0].Has("Type"));
-            }
+            UNIT_ASSERT_VALUES_EQUAL(tablesStorage[0]["Type"].GetString(), expectedTablesStorageType);
             UNIT_ASSERT_VALUES_EQUAL(tablesStorage[0]["Size"].GetString(), ToString(tablesSize + topicsSize));
         }
     }
@@ -1370,18 +1357,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
     {
         CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 0, 200,
             std::nullopt);
-    }
-
-    Y_UNIT_TEST(TenantInfoTablesStorageKeepsTopicsWithUnknownPoolUsage)
-    {
-        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 100, 200,
-            "unknown", std::nullopt);
-    }
-
-    Y_UNIT_TEST(TenantInfoTablesStorageKeepsTopicsWithEmptyDomainPools)
-    {
-        CheckStorageLimitWithGroupSizeInUnits(false, false, {}, false, 100, 200,
-            "hdd", "HDD", true);
     }
 
     Y_UNIT_TEST(ClusterStorageLimitWithGroupSizeInUnits)

@@ -992,8 +992,7 @@ public:
                         }
 
                         if (domainDescription.HasDiskSpaceUsage()) {
-                            auto topicsStorageType = tablesStorageByType.size() == 1 ? tablesStorageByType.begin()->first : guessedStorageType;
-                            tablesStorageByType[topicsStorageType] +=
+                            tablesStorageByType[guessedStorageType] +=
                                 domainDescription.GetDiskSpaceUsage().GetTopics().GetDataSize();
                         }
 

@@ -50,31 +50,60 @@ Y_UNIT_TEST_SUITE(IndexMetadataTest) {
         }
     }
 
-    Y_UNIT_TEST(OptionalIV) {
-        const auto metadata = TMetadata::Deserialize(R"({"indexes": [
-            {"export_prefix": "001", "impl_table_prefix": "encrypted/indexImplTable", "iv": "000102030405060708090A0B"},
-            {"export_prefix": "plain/indexImplTable", "impl_table_prefix": "plain/indexImplTable"}
-        ]})");
+    Y_UNIT_TEST(IndexIVIsNotSerialized) {
+        // Authoritative index IVs live in the authenticated schema mapping only
+        TMetadata metadata;
+        metadata.AddIndex({
+            .ExportPrefix = "001",
+            .ImplTablePrefix = "index/indexImplTable",
+            .IV = TEncryptionIV::FromHexString("000102030405060708090A0B"),
+        });
+        const TString serialized = metadata.Serialize();
+        UNIT_ASSERT_C(!serialized.Contains("\"iv\""), serialized);
 
-        for (const auto& value : {metadata, TMetadata::Deserialize(metadata.Serialize())}) {
-            UNIT_ASSERT(value.GetIndexes());
-            const auto& indexes = *value.GetIndexes();
-            UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(indexes[0].ExportPrefix, "001");
-            UNIT_ASSERT_VALUES_EQUAL(indexes[0].ImplTablePrefix, "encrypted/indexImplTable");
-            UNIT_ASSERT(indexes[0].IV);
-            UNIT_ASSERT(*indexes[0].IV == TEncryptionIV::FromHexString("000102030405060708090A0B"));
-            UNIT_ASSERT_VALUES_EQUAL(indexes[1].ExportPrefix, "plain/indexImplTable");
-            UNIT_ASSERT(!indexes[1].IV);
-        }
+        const auto deserialized = TMetadata::Deserialize(serialized);
+        UNIT_ASSERT(deserialized.GetIndexes());
+        UNIT_ASSERT_VALUES_EQUAL(deserialized.GetIndexes()->size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(deserialized.GetIndexes()->front().ExportPrefix, "001");
+        UNIT_ASSERT_VALUES_EQUAL(deserialized.GetIndexes()->front().ImplTablePrefix, "index/indexImplTable");
+        UNIT_ASSERT(!deserialized.GetIndexes()->front().IV);
     }
 
-    Y_UNIT_TEST(InvalidIV) {
-        // Reject malformed IVs before they reach Combine(), which asserts on their size.
-        for (const TString iv : {"null", "123", "\"\"", "\"00\"", "\"000102030405060708090A0B0C\"", "\"GG0102030405060708090A0B\""}) {
-            UNIT_ASSERT_EXCEPTION(TMetadata::Deserialize(
-                TString(R"({"indexes": [{"export_prefix": "001", "impl_table_prefix": "index/indexImplTable", "iv":)")
-                    + iv + "}]}"), yexception);
+    Y_UNIT_TEST(MakeIndexesMetadata) {
+        google::protobuf::RepeatedPtrField<Ydb::Table::TableIndex> indexes;
+        {
+            auto& index = *indexes.Add();
+            index.set_name("global");
+            index.add_index_columns("value");
+            index.mutable_global_index();
+        }
+        {
+            // Local indexes have no impl tables and must not consume a prefix number
+            auto& index = *indexes.Add();
+            index.set_name("bloom");
+            index.add_index_columns("key");
+            index.mutable_local_bloom_filter_index();
+        }
+        {
+            auto& index = *indexes.Add();
+            index.set_name("vector");
+            index.add_index_columns("embedding");
+            index.mutable_global_vector_kmeans_tree_index();
+        }
+
+        const auto encrypted = NBackup::MakeIndexesMetadata(indexes, 3, true, false);
+        UNIT_ASSERT_VALUES_EQUAL(encrypted.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(encrypted[0].ImplTablePrefix, "global/indexImplTable");
+        UNIT_ASSERT_VALUES_EQUAL(encrypted[0].ExportPrefix, "003");
+        UNIT_ASSERT_VALUES_EQUAL(encrypted[1].ImplTablePrefix, "vector/indexImplLevelTable");
+        UNIT_ASSERT_VALUES_EQUAL(encrypted[1].ExportPrefix, "004");
+        UNIT_ASSERT_VALUES_EQUAL(encrypted[2].ImplTablePrefix, "vector/indexImplPostingTable");
+        UNIT_ASSERT_VALUES_EQUAL(encrypted[2].ExportPrefix, "005");
+
+        const auto plain = NBackup::MakeIndexesMetadata(indexes, 3, false, false);
+        UNIT_ASSERT_VALUES_EQUAL(plain.size(), 3);
+        for (const auto& index : plain) {
+            UNIT_ASSERT_VALUES_EQUAL(index.ExportPrefix, index.ImplTablePrefix);
         }
     }
 }

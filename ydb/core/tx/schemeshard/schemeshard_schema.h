@@ -1790,7 +1790,7 @@ struct Schema : NIceDb::Schema {
         struct EncryptionIV : Column<18, NScheme::NTypeIds::String> {};
         struct SrcPath : Column<19, NScheme::NTypeIds::Utf8> {};
         struct ParentIndex : Column<21, NScheme::NTypeIds::Uint32> {};
-        struct IndexEncryption : Column<24, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportIndexEncryption; };
+        struct IndexIVs : Column<24, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportIndexIVs; };
 
         using TKey = TableKey<ImportId, Index>;
         using TColumns = TableColumns<
@@ -1817,7 +1817,7 @@ struct Schema : NIceDb::Schema {
             ParentIndex,
             SysView,
             ReplicationConfig,
-            IndexEncryption
+            IndexIVs
         >;
     };
 

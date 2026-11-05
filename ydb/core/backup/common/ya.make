@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/backup/common/proto
     ydb/core/base
     ydb/core/util
+    ydb/public/api/protos
     ydb/library/yverify_stream
 )
 

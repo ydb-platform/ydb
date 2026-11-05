@@ -1181,31 +1181,12 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     }
 
     if (scheme) {
-        int idx = changefeeds.size() + 1;
-        for (const auto& index : scheme->indexes()) {
-            const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
-            if (!indexType) {
-                continue;
-            }
-
-            const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
-
-            for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
-                const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
-                TString exportPrefix;
-                if (encrypted) {
-                    std::stringstream prefix;
-                    prefix << std::setfill('0') << std::setw(3) << std::right << idx++;
-                    exportPrefix = prefix.str();
-                } else {
-                    exportPrefix = implTablePrefix;
-                }
-
-                metadata.AddIndex(TIndexMetadata{
-                    .ExportPrefix = exportPrefix,
-                    .ImplTablePrefix = implTablePrefix,
-                });
-            }
+        // SchemeShard computes the same list (see ComputeIndexItemSuffix) to choose
+        // the export prefixes of separate index impl-table items
+        const auto indexes = MakeIndexesMetadata(scheme->indexes(), changefeeds.size() + 1, encrypted,
+            AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
+        for (const auto& index : indexes) {
+            metadata.AddIndex(index);
         }
     }
 

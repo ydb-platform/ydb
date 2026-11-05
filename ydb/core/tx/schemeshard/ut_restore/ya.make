@@ -35,7 +35,6 @@ SRCS(
     ut_restore.cpp
     ut_restore_encrypted_indexes.cpp
     ut_restore_fs.cpp
-    ut_restore_materialized_index_validation.cpp
 )
 
 

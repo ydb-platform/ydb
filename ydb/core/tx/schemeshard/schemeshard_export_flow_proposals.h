@@ -2,6 +2,8 @@
 
 #include "schemeshard_impl.h"
 
+#include <ydb/core/backup/common/metadata.h>
+
 #include <util/generic/ptr.h>
 
 namespace NKikimr {
@@ -46,6 +48,9 @@ THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(
 
 TString ExportItemPathName(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx);
 TString ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx);
+
+// Index impl tables that DataShard lists in the table metadata.json on export
+TVector<NBackup::TIndexMetadata> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId, bool encrypted);
 
 void PrepareDropping(TSchemeShard* ss, TExportInfo& exportInfo, NIceDb::TNiceDb& db,
     TExportInfo::EState droppingState, std::function<void(ui64)> func);

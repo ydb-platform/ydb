@@ -5,12 +5,13 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/ydb_convert/compression.h>
+#include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <util/string/builder.h>
@@ -87,58 +88,55 @@ static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const 
     return record.GetPathDescription();
 }
 
+static TVector<NBackup::TIndexMetadata> GetTableIndexesExportMetadata(const NKikimrSchemeOp::TTableDescription& table, bool encrypted) {
+    // Must match the list that DataShard writes into the table metadata.json
+    // (see TS3Export::CreateUploader): DataShard numbers anonymized index prefixes
+    // after the exported changefeeds and lists only the indexes it can convert.
+    Ydb::Table::CreateTableRequest scheme;
+    try {
+        FillIndexDescription(scheme, table);
+    } catch (const yexception&) {
+        return {};
+    }
+
+    const auto& featureFlags = AppData()->FeatureFlags;
+    const ui32 changefeedsCount = featureFlags.GetEnableChangefeedsExport() ? table.CdcStreamsSize() : 0;
+    return NBackup::MakeIndexesMetadata(scheme.indexes(), changefeedsCount + 1, encrypted,
+        featureFlags.GetEnableCompactFulltextIndex());
+}
+
+TVector<NBackup::TIndexMetadata> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId, bool encrypted) {
+    // The same description that FillTableDescription passes to DataShard
+    return GetTableIndexesExportMetadata(GetDescription(ss, tablePathId).GetTable(), encrypted);
+}
+
 static TString ComputeIndexItemSuffix(
     TSchemeShard* ss,
     const TExportInfo& exportInfo,
     const TExportInfo::TItem& item,
+    ui32 itemIdx,
     bool encrypted)
 {
     if (!encrypted) {
         return item.SourcePathName;
     }
 
-    static constexpr int INVALID_IDX = 999;
-    int idx = INVALID_IDX;
-    bool found = false;
-
     Y_ABORT_UNLESS(item.ParentIdx < exportInfo.Items.size());
     const auto& parentItem = exportInfo.Items[item.ParentIdx];
 
     auto parentPath = TPath::Init(parentItem.SourcePathId, ss);
-    TStringBuf indexName;
-    TStringBuf implTableName;
-    if (parentPath.IsResolved() && TStringBuf(item.SourcePathName).TrySplit('/', indexName, implTableName)) {
-        const auto parentDescription = GetDescription(ss, parentPath.Base()->PathId);
-        idx = parentDescription.GetTable().CdcStreamsSize() + 1;
-
-        for (const auto& index : parentDescription.GetTable().GetTableIndexes()) {
-            const TVector<TString> indexColumns(index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end());
-
-            const auto implTables = NTableIndex::GetImplTables(index.GetType(), indexColumns);
-            if (index.GetName() != indexName) {
-                idx += implTables.size();
-                continue;
-            }
-
-            for (const auto& implTable : implTables) {
-                if (implTable != implTableName) {
-                    ++idx;
-                    continue;
-                }
-
-                found = true;
-                break;
-            }
-
-            if (found) {
-                break;
+    if (parentPath.IsResolved()) {
+        for (const auto& index : GetTableIndexesExportMetadata(ss, parentPath.Base()->PathId, encrypted)) {
+            if (index.ImplTablePrefix == item.SourcePathName) {
+                return index.ExportPrefix;
             }
         }
     }
 
-    std::stringstream ss2;
-    ss2 << std::setfill('0') << std::setw(3) << std::right << (found ? idx : INVALID_IDX);
-    return ss2.str();
+    // Index items that DataShard does not list are filtered out on export creation,
+    // so we get here only if the parent table scheme was changed concurrently.
+    // Upload to a unique prefix that is never referenced by the table metadata.
+    return TStringBuilder() << "unlisted_" << itemIdx;
 }
 
 template <typename TSettings>
@@ -158,7 +156,7 @@ TString ComputeIndexItemPath(
         if (!itemPath.empty() && itemPath.back() != '/') {
             itemPath += '/';
         }
-        itemPath += ComputeIndexItemSuffix(ss, exportInfo, item,
+        itemPath += ComputeIndexItemSuffix(ss, exportInfo, item, itemIdx,
             exportSettings.has_encryption_settings());
     }
     return itemPath;
@@ -227,17 +225,20 @@ void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, 
 }
 
 TString GetExportItemIV(const TExportInfo& exportInfo, ui32 itemIdx) {
-    if (exportInfo.Items.at(itemIdx).ParentIdx == Max<ui32>()) {
+    const auto& item = exportInfo.Items.at(itemIdx);
+    if (item.ParentIdx == Max<ui32>()) {
         Y_ABORT_UNLESS(itemIdx < exportInfo.ExportMetadata.SchemaMappingSize());
         return exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV();
     }
 
-    // Index impl tables are appended after the user items and are not
-    // independent objects in SchemaMapping. Their persisted item numbers
-    // extend the same IV namespace used by FillExportMetadata.
-    const auto exportIV = NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetIV());
-    return NBackup::TEncryptionIV::Combine(
-        exportIV, NBackup::EBackupFileType::Metadata, itemIdx + 1, 0).GetBinaryString();
+    // Index impl tables are not independent objects in SchemaMapping: their IVs
+    // are stored in the parent's mapping item by FillExportMetadata. Use exactly
+    // the uploaded IV so that the data can always be decrypted on import.
+    Y_ABORT_UNLESS(item.ParentIdx < exportInfo.ExportMetadata.SchemaMappingSize());
+    const auto& indexIVs = exportInfo.ExportMetadata.GetSchemaMapping(item.ParentIdx).GetIndexIVs().GetIVs();
+    const auto it = indexIVs.find(item.SourcePathName);
+    Y_ABORT_UNLESS(it != indexIVs.end(), "No IV for index item %s", item.SourcePathName.c_str());
+    return it->second;
 }
 
 template <typename TSettings>

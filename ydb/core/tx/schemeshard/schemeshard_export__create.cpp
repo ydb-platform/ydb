@@ -60,6 +60,11 @@ concept HasIncludeIndexData = requires(const T& t) {
     { t.include_index_data() } -> std::same_as<bool>;
 };
 
+template <typename T>
+concept HasEncryptionSettings = requires(const T& t) {
+    { t.has_encryption_settings() } -> std::same_as<bool>;
+};
+
 }
 
 namespace NKikimr {
@@ -358,6 +363,21 @@ private:
             exportInfo.PendingItems.push_back(exportInfo.Items.size() - 1);
 
             if (exportInfo.IncludeIndexData && path.Base()->IsTable()) {
+                bool encrypted = false;
+                if constexpr (HasEncryptionSettings<TSettings>) {
+                    encrypted = settings.has_encryption_settings();
+                }
+
+                // With encryption, index items are uploaded under anonymized prefixes
+                // that DataShard assigns only to the impl tables it lists in the
+                // table metadata. Other impl tables could never be found on import.
+                THashSet<TString> listedImplTables;
+                if (encrypted) {
+                    for (const auto& index : GetTableIndexesExportMetadata(Self, path.Base()->PathId, encrypted)) {
+                        listedImplTables.insert(index.ImplTablePrefix);
+                    }
+                }
+
                 for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
                     TVector<TString> childParts;
                     childParts.push_back(childName);
@@ -372,6 +392,9 @@ private:
                             continue;
                         }
                         const auto implTableRelPath = JoinPath(ChildPath(childParts, implTableName));
+                        if (encrypted && !listedImplTables.contains(implTableRelPath)) {
+                            continue;
+                        }
                         indexItems.emplace_back(implTableRelPath, implTablePathId, childPath->PathType, itemIdx);
                     }
                 }
@@ -666,7 +689,7 @@ private:
                 const auto& indexItem = exportInfo.Items[indexIdx];
                 if (indexItem.ParentIdx != Max<ui32>()) {
                     auto& parent = *exportInfo.ExportMetadata.MutableSchemaMapping(indexItem.ParentIdx);
-                    (*parent.MutableIndexEncryption()->MutableIVs())[indexItem.SourcePathName] =
+                    (*parent.MutableIndexIVs()->MutableIVs())[indexItem.SourcePathName] =
                         NBackup::TEncryptionIV::Combine(*iv, NBackup::EBackupFileType::Metadata, indexIdx + 1, 0).GetBinaryString();
                 }
             }

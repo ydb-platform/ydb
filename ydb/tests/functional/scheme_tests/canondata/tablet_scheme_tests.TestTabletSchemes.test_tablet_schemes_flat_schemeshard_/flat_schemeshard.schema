@@ -6732,6 +6732,11 @@
                 "ColumnId": 23,
                 "ColumnName": "ReplicationConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 24,
+                "ColumnName": "IndexIVs",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6760,7 +6765,8 @@
                     20,
                     21,
                     22,
-                    23
+                    23,
+                    24
                 ],
                 "RoomID": 0,
                 "Codec": 0,

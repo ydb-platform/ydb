@@ -545,6 +545,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
+        Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
+        if (Key && !IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable].IV) {
+            return Reply(Ydb::StatusIds::BAD_REQUEST,
+                TStringBuilder() << CurrentMaterializedIndexSchemeKey() << ": no index IV in schema mapping");
+        }
+
         GetObject(CurrentMaterializedIndexSchemeKey(), result.GetResult().GetContentLength());
     }
 
@@ -756,10 +762,6 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         Y_ABORT_UNLESS(IndexCheckedMaterializedIndexImplTable < IndexImplTablePrefixes.size());
         const auto& indexImplTablePrefix = IndexImplTablePrefixes[IndexCheckedMaterializedIndexImplTable];
-        if (Key && !indexImplTablePrefix.IV) {
-            return Reply(Ydb::StatusIds::BAD_REQUEST,
-                TStringBuilder() << CurrentMaterializedIndexSchemeKey() << ": no index IV in table metadata");
-        }
 
         TString content;
         if (!MaybeDecryptWithIV(msg.Body, content, NBackup::EBackupFileType::TableSchema, indexImplTablePrefix.IV)) {
@@ -975,15 +977,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         if (const auto& indexes = item.Metadata.GetIndexes()) {
             IndexImplTablePrefixes.reserve(indexes->size());
             for (const auto& index : *indexes) {
-                IndexImplTablePrefixes.push_back(index);
-                const auto& indexIVs = item.ExportIndexEncryption.GetIVs();
+                auto& indexMetadata = IndexImplTablePrefixes.emplace_back(index);
+                // The IV of a separate index impl-table item is stored only in the
+                // authenticated schema mapping of its parent table
+                const auto& indexIVs = item.ExportIndexIVs.GetIVs();
                 if (const auto it = indexIVs.find(index.ImplTablePrefix); it != indexIVs.end()) {
-                    auto expectedIV = NBackup::TEncryptionIV::FromBinaryString(it->second);
-                    if (index.IV && *index.IV != expectedIV) {
-                        return Reply(Ydb::StatusIds::BAD_REQUEST,
-                            TStringBuilder() << MetadataKey << ": index IV differs from schema mapping");
-                    }
-                    IndexImplTablePrefixes.back().IV = std::move(expectedIV);
+                    indexMetadata.IV = NBackup::TEncryptionIV::FromBinaryString(it->second);
                 }
             }
 

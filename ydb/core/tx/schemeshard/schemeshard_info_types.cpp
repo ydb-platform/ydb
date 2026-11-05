@@ -3632,9 +3632,9 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         item.SrcPrefix = TStringBuilder() << sourcePrefix << NBackup::NormalizeItemPrefix(schemaMappingItem.ExportPrefix);
         item.SrcPath = schemaMappingItem.ObjectPath;
         item.ExportItemIV = schemaMappingItem.IV;
-        item.ExportIndexEncryption.Clear();
+        item.ExportIndexIVs.Clear();
         for (const auto& [path, indexIV] : schemaMappingItem.IndexIVs) {
-            (*item.ExportIndexEncryption.MutableIVs())[path] = indexIV.GetBinaryString();
+            (*item.ExportIndexIVs.MutableIVs())[path] = indexIV.GetBinaryString();
         }
     };
 

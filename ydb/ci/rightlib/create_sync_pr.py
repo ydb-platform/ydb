@@ -135,16 +135,20 @@ class PrSyncCreator:
     def git_revparse_head(self):
         return self.git_run("rev-parse", "HEAD").stdout.decode().strip()
 
-    def head_top_level_paths(self, source_sha):
-        output = self.git_run("ls-tree", "--name-only", source_sha).stdout.decode()
+    def head_top_level_paths(self, source_ref):
+        output = self.git_run("ls-tree", "--name-only", source_ref).stdout.decode()
         return [line for line in output.splitlines() if line]
 
-    def overwrite_paths_from_head(self, source_sha):
-        """Overwrite all top-level head paths, then restore overwrite_exclude from base. Does not commit."""
-        for path in self.head_top_level_paths(source_sha):
-            self.logger.info(f"Overwriting {path} fully from {source_sha} for 100% match")
+    def overwrite_paths_from_head(self):
+        # Use the source recorded by git merge to match the merge parent.
+        self.overwrite_paths_from_ref("MERGE_HEAD")
+
+    def overwrite_paths_from_ref(self, source_ref):
+        """Overwrite top-level paths from source_ref, then restore overwrite_exclude from base. Does not commit."""
+        for path in self.head_top_level_paths(source_ref):
+            self.logger.info(f"Overwriting {path} fully from {source_ref} for 100% match")
             self.git_run("rm", "-r", "-f", "--ignore-unmatch", path)
-            self.git_run("checkout", source_sha, "--", path)
+            self.git_run("checkout", source_ref, "--", path)
             self.git_run("add", path)
 
         for path in self.overwrite_exclude:
@@ -196,7 +200,10 @@ class PrSyncCreator:
         elif merge_failed:
             raise Exception(f"Unexpected error during merge {merge_output}")
         if self.force_overwrite:
-            self.overwrite_paths_from_head(source_sha)
+            if self.head_tag:
+                self.overwrite_paths_from_ref(source_sha)
+            else:
+                self.overwrite_paths_from_head()
             self.git_run("commit", "-m", commit_msg)
         self.git_run("push", "--set-upstream", "origin", dev_branch_name)
 

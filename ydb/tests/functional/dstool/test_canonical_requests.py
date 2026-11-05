@@ -285,6 +285,8 @@ class Test(TestBase):
             self._trace('cluster', 'set', '--pdisk-space-margin-promille', '1001'),
             self._trace('cluster', 'set', '--pdisk-space-color-border', 'UNKNOWN'),
             self._trace('--dry-run', 'cluster', 'set', '--disable-self-heal'),
+
+            self._trace('cluster', 'set', '--bridge-sync-total-rate', '1000000', with_grpc_calls=True),
         ]
 
     def test_group_take_snapshot(self):

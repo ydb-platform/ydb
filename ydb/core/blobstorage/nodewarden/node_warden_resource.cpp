@@ -279,7 +279,8 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 NTabletPipe::CloseClient(SelfId(), PipeClientId);
             }
         }
-        SyncRateQuoter->UpdateBytesPerSecond(bsConfig.GetBridgeSyncRateBytesPerSecond());
+        SyncRateConfigLimit = bsConfig.GetBridgeSyncRateBytesPerSecond();
+        UpdateSyncRateQuoter();
     }
 
     if (StorageConfig->HasStateStorageConfig() && StorageConfig->HasStateStorageBoardConfig() && StorageConfig->HasSchemeBoardConfig()) {

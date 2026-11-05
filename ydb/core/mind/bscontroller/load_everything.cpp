@@ -99,6 +99,7 @@ public:
                 Self->GroupReservePart = state.GetValue<T::GroupReservePart>();
                 Self->MaxScrubbedDisksAtOnce = state.GetValue<T::MaxScrubbedDisksAtOnce>();
                 Self->PDiskSpaceColorBorder = state.GetValue<T::PDiskSpaceColorBorder>();
+                Self->BridgeSyncTotalRate = state.GetValue<T::BridgeSyncTotalRate>();
                 Self->GroupLayoutSanitizerEnabled = state.GetValue<T::GroupLayoutSanitizer>();
                 Self->AllowMultipleRealmsOccupation = state.GetValueOrDefault<T::AllowMultipleRealmsOccupation>();
                 Self->SysViewChangedSettings = true;

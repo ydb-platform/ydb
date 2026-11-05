@@ -2890,6 +2890,7 @@ struct TColumnShardStorage {
         TColumnShardAttempt Context;
         TString Table;
         bool VersionKnown = false;
+        bool Truncated = false;
         bool Conflict = false;
         std::map<TString, TString> Scopes;
         TColumnShardSources Snapshot;
@@ -2927,12 +2928,11 @@ TColumnShardStorage CollectColumnShardStorage(const TVisualizer& viz) {
                     result.Partial = true;
                 }
                 auto& attempt = attempts[identity];
-                if (attempt.Context.Last && ColumnShardFlag(*attempt.Context.Last, "Finished") &&
-                    !ColumnShardFlag(scan, "Finished")) {
-                    ReadColumnShardCohortHeader(attempt.Context, scan);
-                    continue;
+                if (!attempt.Context.Last || !ColumnShardFlag(*attempt.Context.Last, "Finished") ||
+                    ColumnShardFlag(scan, "Finished")) {
+                    attempt.Context.Last = &scan;
                 }
-                attempt.Context.Last = &scan;
+                attempt.Truncated = attempt.Truncated || ColumnShardFlag(scan, "Truncated");
                 ReadColumnShardCohortHeader(attempt.Context, scan);
                 if (auto tablet = ColumnShardIdentity(scan, "TabletId")) {
                     attempt.Context.Tablet = std::move(tablet);
@@ -2958,9 +2958,6 @@ TColumnShardStorage CollectColumnShardStorage(const TVisualizer& viz) {
                     }
                     auto& previous = attempt.Snapshot[ColumnShardSourceKey(source)];
                     const auto value = ColumnShardSourceTotals(source);
-                    if (value.Bytes < previous.Bytes || value.Reads < previous.Reads || value.Unknown < previous.Unknown) {
-                        attempt.Conflict = true;
-                    }
                     previous.Bytes = std::max(previous.Bytes, value.Bytes);
                     previous.Reads = std::max(previous.Reads, value.Reads);
                     previous.Unknown = std::max(previous.Unknown, value.Unknown);
@@ -2974,6 +2971,7 @@ TColumnShardStorage CollectColumnShardStorage(const TVisualizer& viz) {
     for (const auto& [identity, attempt] : attempts) {
         coverage.Tablets.insert(attempt.Context.Tablet);
         coverage.AddCohort(attempt.Context, attempt.Context.Tablet);
+        result.Partial = result.Partial || attempt.Truncated;
         result.Partial = result.Partial || !attempt.VersionKnown || attempt.Conflict || !attempt.Context.Tablet ||
             !attempt.Context.Last || !ColumnShardFlag(*attempt.Context.Last, "Finished") ||
             ColumnShardFlag(*attempt.Context.Last, "Truncated") || StepValue(*attempt.Context.Last, "PendingOperations").value_or(0);

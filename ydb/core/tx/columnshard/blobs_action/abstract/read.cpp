@@ -99,7 +99,11 @@ void IBlobsReadingAction::AddRange(const TBlobRange& range, const std::optional<
     Y_ABORT_UNLESS(!Started);
     if (auto collector = NScanStats::CurrentCollector()) {
         auto parent = NScanStats::Current();
-        RangeStats.emplace(range, TReadStatsContext{parent, dataKind, std::move(collector)});
+        TReadStatsContext context;
+        context.Parent = parent;
+        context.DataKind = dataKind;
+        context.Collector = std::move(collector);
+        RangeStats.emplace(range, std::move(context));
         if (parent) {
             parent->AddRequestedRange(range.ToString(), range.Size);
         }

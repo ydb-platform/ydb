@@ -1168,6 +1168,49 @@ Y_UNIT_TEST_SUITE(TPlan2SvgColumnShard) {
         UNIT_ASSERT_C(indexes[0].Contains("data-cs-active-sum='3'"), svg);
     }
 
+    Y_UNIT_TEST(StorageV3OlderCounterReplayDoesNotMakeTotalsPartial) {
+        const TString svg = RenderScans(R"json([
+          {"ExpectedContextOnly":true,"StatsGroupId":"g","ParticipatingShards":1,"ParticipatingTablets":["1"]},
+          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","TablePath":"/A","ReaderKind":"TRIVIAL",
+           "Finished":true,"PendingOperations":0,"StorageStatsVersion":1,"StorageReads":[
+             {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":100,"ReadCount":2,"DataKind":"data"}]},
+          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","TablePath":"/A","ReaderKind":"TRIVIAL",
+           "Finished":false,"PendingOperations":2,"StorageStatsVersion":1,"StorageReads":[
+             {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":80,"ReadCount":1,"DataKind":"data"}]},
+          {"StatsScanId":"a","StatsGroupId":"g","TabletId":"1","TablePath":"/A","ReaderKind":"TRIVIAL",
+           "Finished":true,"StorageStatsVersion":1,"StorageReads":[
+             {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":80,"ReadCount":1,"DataKind":"data"}]}
+        ])json");
+        const TString row = StorageRow(svg, "grand-total");
+        UNIT_ASSERT_C(row.Contains("data-cs-storage-bytes='100'"), svg);
+        UNIT_ASSERT_C(row.Contains("data-cs-storage-reads='2'"), svg);
+        UNIT_ASSERT_C(row.Contains("data-cs-storage-partial='false'"), svg);
+    }
+
+    Y_UNIT_TEST(StorageV3SparseFinalDoesNotHideOlderSourceSnapshots) {
+        const TString header = R"json({"ExpectedContextOnly":true,"StatsGroupId":"g","ParticipatingShards":1,"ParticipatingTablets":["1"]})json";
+        const TString final = R"json({"StatsScanId":"a","Finished":true,"PendingOperations":0})json";
+        auto render = [&](bool finalFirst, bool truncated) {
+            const TString body = TStringBuilder() << R"json({"StatsScanId":"a","StatsGroupId":"g","TabletId":"1",
+              "TablePath":"/A","ReaderKind":"TRIVIAL","Finished":false,"PendingOperations":2,"Truncated":)json"
+                << (truncated ? "true" : "false") << R"json(,"StorageStatsVersion":1,"StorageReads":[
+                {"SourceKind":"BlobStorage","SourceName":"default","ReadBytes":100,"ReadCount":2,"DataKind":"data"}]})json";
+            return RenderScans(TStringBuilder() << '[' << header << ',' << (finalFirst ? final : body)
+                << ',' << (finalFirst ? body : final) << ']');
+        };
+        for (const bool finalFirst : {false, true}) {
+            const TString svg = render(finalFirst, false);
+            const TString row = StorageRow(svg, "grand-total");
+            UNIT_ASSERT_C(row.Contains("data-cs-storage-bytes='100'"), svg);
+            UNIT_ASSERT_C(row.Contains("data-cs-storage-reads='2'"), svg);
+            UNIT_ASSERT_C(row.Contains("data-cs-storage-partial='false'"), svg);
+            UNIT_ASSERT_C(StorageRow(svg, "read", "BlobStorage", "default", "/A")
+                .Contains("data-cs-storage-bytes='100'"), svg);
+            const TString truncated = render(finalFirst, true);
+            UNIT_ASSERT_C(StorageRow(truncated, "grand-total").Contains("data-cs-storage-partial='true'"), truncated);
+        }
+    }
+
     Y_UNIT_TEST(StorageV3KnownZeroDoesNotInventReadSources) {
         const TString svg = RenderScans(R"json([
           {"ExpectedContextOnly":true,"StatsGroupId":"g","ParticipatingShards":1,"ParticipatingTablets":["1"]},

@@ -791,7 +791,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
     }
 
     Y_UNIT_TEST(IndexStatsOwnersPreserveBothBooleanBranches) {
-        for (const auto operation : {NKernels::EOperation::And, NKernels::EOperation::Or}) {
+        for (const auto operation : {NKikimr::NKernels::EOperation::And, NKikimr::NKernels::EOperation::Or}) {
             auto schema = std::make_shared<arrow::Schema>(std::vector{
                 std::make_shared<arrow::Field>("left", arrow::int64()),
                 std::make_shared<arrow::Field>("right", arrow::int64())});

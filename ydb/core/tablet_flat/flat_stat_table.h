@@ -223,13 +223,13 @@ private:
 using TBuildStatsYieldHandler = std::function<void()>;
 
 #ifndef NDEBUG
-#define LOG_BUILD_STATS(...) \
+#define LOG_BUILD_STATS(T, ...) \
     do { \
         if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
-            YDB_LOG_TRACE_CTX_COMP(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, "", {"logPrefix", logPrefix}, __VA_ARGS__); \
+            YDB_LOG_TRACE_CTX_COMP(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, T, {"logPrefix", logPrefix}, __VA_ARGS__); \
         } else { \
             TStringBuilder str; \
-            str << logPrefix << " "; \
+            str << logPrefix << " " << T << " "; \
             NActors::NStructuredLog::TTextWriter writer; \
             writer.Write(str, YDB_LOG_CREATE_MESSAGE(__VA_ARGS__)); \
             Cerr << str << Endl; \
@@ -239,7 +239,7 @@ using TBuildStatsYieldHandler = std::function<void()>;
 #define LOG_BUILD_STATS(...) \
     do { \
         if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
-            YDB_LOG_TRACE_CTX_COMP(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, "", {"logPrefix", logPrefix}, __VA_ARGS__); \
+            YDB_LOG_TRACE_CTX_COMP(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, T, {"logPrefix", logPrefix}, __VA_ARGS__); \
         } \
     } while (0)
 #endif

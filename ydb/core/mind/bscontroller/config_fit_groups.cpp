@@ -172,6 +172,11 @@ namespace NKikimr {
                     NKikimrBridge::TGroupState *mainGroupState = mainGroup.MutableBridgeGroupState();
                     const auto& bridgeInfo = State.BridgeInfo;
                     Y_ABORT_UNLESS(bridgeInfo);
+                    if (State.StorageConfig) {
+                        // New groups bypass GroupContentChanged, but their initial SYNCED parts already depend on
+                        // this cluster state: a proxy with an older view must not acknowledge writes skipping a part.
+                        mainGroupState->SetClusterStateGeneration(State.StorageConfig->GetClusterState().GetGeneration());
+                    }
                     bridgeInfo->ForEachPile([&](TBridgePileId bridgePileId) {
                         NKikimrBridge::TGroupState::TPile *pile = mainGroupState->AddPile();
                         if (bridgeInfo->GetPile(bridgePileId)->State == NKikimrBridge::TClusterState::INACTIVE ||
@@ -323,10 +328,7 @@ namespace NKikimr {
                 }
 
                 SelectPile(groupInfo->BridgePileId);
-                if (!groupInfo->VDisksInGroup.empty() && (groupInfo->ErasureSpecies != Geometry.GetErasure()
-                        || groupInfo->Topology->GetTotalFailRealmsNum() != Geometry.GetNumFailRealms()
-                        || groupInfo->Topology->GetNumFailDomainsPerFailRealm() != Geometry.GetNumFailDomainsPerFailRealm()
-                        || groupInfo->Topology->GetNumVDisksPerFailDomain() != Geometry.GetNumVDisksPerFailDomain())) {
+                if (!groupInfo->VDisksInGroup.empty() && !Geometry.MatchesGroup(*groupInfo)) {
                     throw TExFitGroupError() << "can't change erasure or topology of existing GroupId# " << groupId;
                 }
 

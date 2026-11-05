@@ -346,6 +346,7 @@ public:
         ProcessReplyFromQueue(ev->Get());
 
         const auto& record = ev->Get()->Record;
+        Result->ReplyBytes += record.ByteSizeLong();
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
         const ui32 orderNumber = Info->GetTopology().GetOrderNumber(vdiskId);
         Y_ABORT_UNLESS(orderNumber < PerVDiskInfo.size());

@@ -293,6 +293,7 @@ public:
 
     ui64 Enqueue(TAutoPtr<ITransaction>) override { Y_TABLET_ERROR("Not supported"); }
     ui64 EnqueueLowPriority(TAutoPtr<ITransaction>) override { Y_TABLET_ERROR("Not supported"); }
+    bool TryExecuteReadyTransaction() override { return false; }
     bool CancelTransaction(ui64) override { Y_TABLET_ERROR("Not supported"); }
     void ConfirmReadOnlyLease(TMonotonic) override { Y_TABLET_ERROR("Not supported"); }
     void ConfirmReadOnlyLease(TMonotonic, std::function<void()>) override { Y_TABLET_ERROR("Not supported"); }
@@ -313,6 +314,7 @@ public:
     void AllowBorrowedGarbageCompaction(ui32) override { Y_TABLET_ERROR("Not supported"); }
     void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase>) override { Y_TABLET_ERROR("Not supported"); }
     void SendUserAuxUpdateToFollowers(TString, const TActorContext&) override { Y_TABLET_ERROR("Not supported"); }
+    ui32 CreateFollowerSnapshotCheckpoint() override { Y_TABLET_ERROR("Not supported"); }
     THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const override { Y_TABLET_ERROR("Not supported"); }
     bool HasLoanedParts() const override { Y_TABLET_ERROR("Not supported"); }
     bool HasBorrowed(ui32, ui64) const override { Y_TABLET_ERROR("Not supported"); }

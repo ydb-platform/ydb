@@ -1,12 +1,28 @@
 #include "config.h"
 #include "group_geometry_info.h"
+#include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_state.h>
 
 #include <array>
+#include <algorithm>
 
 namespace NKikimr::NBsController {
+
+    static void UpdateFailRealmDataCenter(NKikimrBlobStorage::TFailRealmInfo* realm,
+            ui32 nodeId, const THostRecordMapImpl& hostRecords) {
+        NActorsInterconnect::TNodeLocation location;
+        if (hostRecords.GetHostId(nodeId)) {
+            hostRecords.GetLocation(nodeId).Serialize(&location, false);
+        }
+        if (!realm->HasDataCenter()) {
+            realm->SetDataCenter(location.GetDataCenter());
+        } else if (realm->GetDataCenter() != location.GetDataCenter()) {
+            // Once the realm has an unknown or conflicting location, keep its name empty.
+            realm->SetDataCenter("");
+        }
+    }
 
     TBlobStorageController::TStoragePoolInfo TBlobStorageController::ResolveStoragePoolForPile(
             const TBoxStoragePoolId& id, const TStoragePoolInfo& pool, TBridgePileId pileId,
@@ -62,10 +78,7 @@ namespace NKikimr::NBsController {
                     it->second = TGroupGeometryInfo(TBlobStorageGroupType(pool.ErasureSpecies), pool.GetGroupGeometry());
                 }
                 const auto& geometry = it->second;
-                if (group->ErasureSpecies != geometry.GetErasure()
-                        || group->Topology->GetNumVDisksPerFailDomain() != geometry.GetNumVDisksPerFailDomain()
-                        || group->Topology->GetTotalFailRealmsNum() != geometry.GetNumFailRealms()
-                        || group->Topology->GetNumFailDomainsPerFailRealm() != geometry.GetNumFailDomainsPerFailRealm()) {
+                if (!geometry.MatchesGroup(*group)) {
                     return TStringBuilder() << "storage pool pile override changes erasure or topology of existing GroupId# "
                         << groupId;
                 }
@@ -402,6 +415,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::TConfigState::MakeStoragePoolGroupsBridged(TBoxStoragePoolId storagePoolId) {
+        std::map<TBridgePileId, TGroupGeometryInfo> geometries;
         // ordinary groups become inline piles in the piles they reside in
         ForEachStoragePoolGroup(storagePoolId, [&](const TGroupInfo& group) {
             if (group.BridgeGroupInfo || group.BridgePileId) {
@@ -423,6 +437,22 @@ namespace NKikimr::NBsController {
                         " bridged";
                 }
                 pileId = pile->BridgePileId;
+            }
+            const auto [it, inserted] = geometries.try_emplace(*pileId);
+            if (inserted) {
+                const auto pool = GetStoragePoolForPile(storagePoolId, *pileId);
+                it->second = TGroupGeometryInfo(TBlobStorageGroupType(pool.ErasureSpecies), pool.GetGroupGeometry());
+            }
+            const auto& geometry = it->second;
+            if (!geometry.MatchesGroup(group)) {
+                throw TExError() << "GroupId# " << group.ID << " has erasure or topology incompatible with pile "
+                    << BridgeInfo->GetPile(*pileId)->Name
+                    << " ActualErasure# " << TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies)
+                    << " ExpectedErasure# " << geometry.GetErasure()
+                    << " ActualTopology# " << group.Topology->GetTotalFailRealmsNum() << 'x'
+                    << group.Topology->GetNumFailDomainsPerFailRealm() << 'x' << group.Topology->GetNumVDisksPerFailDomain()
+                    << " ExpectedTopology# " << geometry.GetNumFailRealms() << 'x'
+                    << geometry.GetNumFailDomainsPerFailRealm() << 'x' << geometry.GetNumVDisksPerFailDomain();
             }
             Groups.FindForUpdate(group.ID)->MakeInlinePile(*pileId);
             GroupContentChanged.insert(group.ID);
@@ -907,6 +937,12 @@ namespace NKikimr::NBsController {
                 if (!virtualGroupsOnly || groupFilter.contains(groupId)) {
                     auto* group = pb->AddGroup();
                     Serialize(group, groupInfo, finder, BridgeInfo.get());
+                    if (group->FailRealmsSize()) {
+                        for (const TVSlotInfo* slot : groupInfo.VDisksInGroup) {
+                            UpdateFailRealmDataCenter(group->MutableFailRealms(slot->RingIdx),
+                                slot->VSlotId.NodeId, *HostRecords);
+                        }
+                    }
                     if (const auto pool = pools.find(groupInfo.StoragePoolId); pool != pools.end()) {
                         group->SetStoragePoolName(pool->second.Name);
                     }
@@ -977,10 +1013,21 @@ namespace NKikimr::NBsController {
                     if (const auto& info = group.Info) {
                         x->SetGroupGeneration(info->GroupGeneration);
                         x->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(info->Type.GetErasure()));
+                        if (info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
+                            for (ui32 realm = 0; realm < 3; ++realm) {
+                                x->AddFailRealms()->SetState(info->GetFailRealmState(realm));
+                            }
+                        }
+                        ui32 orderNumber = 0;
                         for (TActorId actorId : info->GetDynamicInfo().ServiceIdForOrderNumber) {
                             const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(actorId);
                             const TVSlotId vslotId(nodeId, pdiskId, vdiskSlotId);
                             vslotId.Serialize(x->AddVSlotId());
+                            if (x->FailRealmsSize()) {
+                                UpdateFailRealmDataCenter(x->MutableFailRealms(info->GetVDiskId(orderNumber).FailRealm),
+                                    nodeId, *HostRecords);
+                            }
+                            ++orderNumber;
                         }
                         const auto& status = group.GetStatus(finder, BridgeInfo.get());
                         x->SetOperatingStatus(status.OperatingStatus);
@@ -1136,30 +1183,11 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineDataCenterStates& cmd,
             TStatus& /*status*/) {
-        using TDataCenter = NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter;
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        TDataCenterStates states;
-        THashSet<TString> names;
-        for (const auto& dc : cmd.GetDataCenter()) {
-            if (dc.GetName().empty() || !names.insert(dc.GetName()).second) {
-                throw TExError() << "empty or duplicate DataCenter# " << dc.GetName();
-            }
-            switch (dc.GetState()) {
-                case TDataCenter::INCLUDED:
-                    break;
-                case TDataCenter::EXCLUDED:
-                    states.emplace(dc.GetName(), TFailRealm::F);
-                    break;
-                case TDataCenter::RECOVERING:
-                    states.emplace(dc.GetName(), TFailRealm::R);
-                    break;
-                default:
-                    throw TExError() << "unknown state for DataCenter# " << dc.GetName();
-            }
+        auto states = ParseDataCenterStates(cmd);
+        if (!states) {
+            throw TExError() << states.error();
         }
-        if (states != DataCenterStates.Get()) {
-            DataCenterStates.Unshare() = std::move(states);
-        }
+        DataCenterStates.Unshare() = std::move(*states);
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineFailRealmStates& cmd,
@@ -1181,6 +1209,10 @@ namespace NKikimr::NBsController {
                     || group->Topology->GetTotalFailRealmsNum() != 3) {
                 throw TExError() << "GroupId# " << groupId << " is not an ordinary mirror-3-dc group";
             }
+            if (definition.HasExpectedGroupGeneration() && definition.GetExpectedGroupGeneration() != group->Generation) {
+                throw TExGroupGenerationMismatch(definition.GetGroupId(),
+                    definition.GetExpectedGroupGeneration(), group->Generation);
+            }
             if (definition.FailRealmStatesSize() != 3) {
                 throw TExError() << "GroupId# " << groupId << " must define exactly three fail realm states";
             }
@@ -1194,7 +1226,6 @@ namespace NKikimr::NBsController {
             }
             TGroupInfo* updated = Groups.FindForUpdate(groupId);
             updated->FailRealmStates = states;
-            updated->HasExplicitFailRealmStates = true;
             // Every requested transition, including an idempotent one, publishes a new generation.
             GroupContentChanged.insert(groupId);
         }
@@ -1203,87 +1234,110 @@ namespace NKikimr::NBsController {
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TTestResetDataCenterStates&,
             TStatus& /*status*/) {
         DataCenterStates.Unshare().clear();
-        TVector<TGroupId> groups;
+        ResetDataCenterStates = true;
         Groups.ForEach([&](TGroupId groupId, const TGroupInfo& group) {
             if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
-                groups.push_back(groupId);
+                GroupContentChanged.insert(groupId);
             }
         });
-        for (TGroupId groupId : groups) {
-            if (Groups.Find(groupId)->HasExplicitFailRealmStates) {
-                Groups.FindForUpdate(groupId)->HasExplicitFailRealmStates = false;
-            }
-            GroupContentChanged.insert(groupId);
-        }
     }
 
-    std::optional<TString> TBlobStorageController::TConfigState::ApplyDataCenterStates() {
-        const auto& dcStates = DataCenterStates.Get();
-        if (dcStates.empty() && !DataCenterStates.Changed()) {
-            return std::nullopt;
-        }
+    std::expected<void, TString> TBlobStorageController::TConfigState::ApplyDataCenterStates(bool suppressFailModelChecking) {
+        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        const TFailRealmStates normal{TFailRealm::Invariant0, TFailRealm::Invariant0, TFailRealm::Invariant0};
         TVector<TGroupId> groups;
         if (DataCenterStates.Changed()) {
             Groups.ForEach([&](TGroupId groupId, const TGroupInfo&) { groups.push_back(groupId); });
         } else {
-            // Apply the current states to newly allocated or relocated groups as well.
             for (const auto& [base, overlay] : Groups.Diff()) {
                 if (overlay->second) {
                     groups.push_back(overlay->first);
                 }
             }
         }
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
         for (const auto groupId : groups) {
             const auto* group = Groups.Find(groupId);
-            if (group->HasExplicitFailRealmStates || group->ErasureSpecies != TErasureType::ErasureMirror3dc
+            if (group->ErasureSpecies != TErasureType::ErasureMirror3dc
                     || StoragePools.Get().at(group->StoragePoolId).BridgeMode || group->VDisksInGroup.empty()) {
                 continue;
             }
             if (group->Topology->GetTotalFailRealmsNum() != 3) {
-                return TStringBuilder() << "group# " << groupId << " must have three fail realms";
+                if (!group->FailRealmStates && DataCenterStates.Get().empty() && Self.DataCenterStates.empty()) {
+                    continue; // Preserve larger geometries when realm-state management is not in use.
+                }
+                return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " must have three fail realms");
             }
-            std::array<TFailRealm::EState, 3> states{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
-            if (!dcStates.empty()) {
-                std::array<TString, 3> dataCenters;
+            const auto existing = Self.GroupMap.find(groupId);
+            const bool isNew = existing == Self.GroupMap.end();
+            const TFailRealmStates previous = isNew ? normal : existing->second->FailRealmStates.value_or(normal);
+            TFailRealmStates states = ResetDataCenterStates ? normal : group->FailRealmStates.value_or(normal);
+            if (!ResetDataCenterStates && (DataCenterStates.Changed() || isNew)) {
+                std::array<bool, 3> changedRealms{};
+                std::array<bool, 3> excludedRealms{};
+                std::array<bool, 3> reincludedRealms{};
                 for (const TVSlotInfo* slot : group->VDisksInGroup) {
+                    if (DataCenterStates.Get().empty() && Self.DataCenterStates.empty()) {
+                        break;
+                    }
                     if (!HostRecords->GetHostId(slot->VSlotId.NodeId)) {
-                        return TStringBuilder() << "node# " << slot->VSlotId.NodeId << " has no known DataCenter";
+                        return std::unexpected<TString>(TStringBuilder() << "node# " << slot->VSlotId.NodeId << " has no known HostRecord");
                     }
                     NActorsInterconnect::TNodeLocation location;
                     HostRecords->GetLocation(slot->VSlotId.NodeId).Serialize(&location, false);
-                    auto& dc = dataCenters.at(slot->RingIdx);
-                    if (!location.HasDataCenter() || location.GetDataCenter().empty()
-                            || (!dc.empty() && dc != location.GetDataCenter())) {
-                        return TStringBuilder() << "group# " << groupId << " realm# " << slot->RingIdx
-                            << " must belong to one physical DataCenter";
-                    }
-                    dc = location.GetDataCenter();
+                    const TString& name = location.GetDataCenter();
+                    const auto isExcluded = [&name](const TDataCenterStates& states) {
+                        // Missing and unlisted datacenters are included.
+                        const auto it = states.find(name);
+                        return it != states.end()
+                            && it->second == NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter::EXCLUDED;
+                    };
+                    const bool wasExcluded = !isNew && isExcluded(Self.DataCenterStates);
+                    const bool excluded = isExcluded(DataCenterStates.Get());
+                    const ui32 realm = slot->RingIdx;
+                    changedRealms[realm] |= wasExcluded != excluded;
+                    excludedRealms[realm] |= excluded;
+                    reincludedRealms[realm] |= wasExcluded && !excluded;
                 }
                 for (ui32 realm = 0; realm < 3; ++realm) {
-                    if (const auto it = dcStates.find(dataCenters[realm]); it != dcStates.end()) {
-                        states[realm] = it->second;
+                    if (!changedRealms[realm]) {
+                        continue;
                     }
-                }
-                if (!GetMirror3dcGroupState(states[0], states[1], states[2])) {
-                    return TStringBuilder() << "unsupported mirror-3-dc state for group# " << groupId;
+                    if (reincludedRealms[realm] && states[realm] != TFailRealm::Excluded) {
+                        // RFC 190 explicitly requires manual repair via DefineFailRealmStates, even with force.
+                        return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
+                            << " is writing to an excluded datacenter; repair its fail realm state first");
+                    }
+                    const std::optional<TMirror3dcFailRealmStates> next = excludedRealms[realm]
+                        ? TakeDownFailRealm(states, realm) : ReturnFailRealm(states, realm);
+                    if (next) {
+                        states = *next;
+                    } else if (suppressFailModelChecking) {
+                        states[realm] = excludedRealms[realm] ? TFailRealm::F : TFailRealm::R;
+                    } else {
+                        return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
+                            << ": invalid mirror-3-dc data center transition");
+                    }
+                    GroupContentChanged.insert(groupId);
                 }
             }
-            const std::array<TFailRealm::EState, 3> normal{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0};
-            const bool changed = group->FailRealmStates.value_or(normal) != states;
-            if (changed || (dcStates.empty() && group->FailRealmStates)) {
-                auto* updated = Groups.FindForUpdate(groupId);
-                if (dcStates.empty()) {
-                    updated->FailRealmStates.reset();
-                } else {
-                    updated->FailRealmStates = states;
+            if (!suppressFailModelChecking) {
+                if (!isNew) {
+                    if (const auto result = ValidateFailRealmStateTransition(previous, states); !result) {
+                        return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << ": " << result.error());
+                    }
+                } else if (!GetMirror3dcGroupState(states[0], states[1], states[2])) {
+                    return std::unexpected<TString>(TStringBuilder() << "unsupported mirror-3-dc state for group# " << groupId);
                 }
-                if (changed) {
+            }
+            if (group->FailRealmStates.value_or(normal) != states || ResetDataCenterStates) {
+                auto* updated = Groups.FindForUpdate(groupId);
+                updated->FailRealmStates = states;
+                if (previous != states) {
                     GroupContentChanged.insert(groupId);
                 }
             }
         }
-        return std::nullopt;
+        return {};
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDeleteSpecificGroups& cmd, TStatus& /*status*/) {

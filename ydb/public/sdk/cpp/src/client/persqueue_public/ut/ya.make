@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/persqueue_public)
 
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -39,5 +39,6 @@ SRCS(
 END()
 
 RECURSE_FOR_TESTS(
+    control_plane
     with_offset_ranges_mode_ut
 )

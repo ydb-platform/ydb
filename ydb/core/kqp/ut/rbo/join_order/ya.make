@@ -2,10 +2,10 @@ UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 SRCS(
-    ../kqp_join_order_ut.cpp
+    kqp_join_order_ut.cpp
 )
 
 PEERDIR(

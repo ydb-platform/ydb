@@ -1,5 +1,6 @@
 #pragma once
 
+#include "loaded_key_ranges.h"
 #include "portion_interval_tree.h"
 #include "portions_index.h"
 
@@ -149,6 +150,7 @@ private:
     mutable TInstant NextActualizations = TInstant::Zero();
 
     NGranule::NPortionsIndex::TPortionsIndex PortionsIndex;
+    TLoadedKeyRanges LoadedKeyRanges = TLoadedKeyRanges::BuildNothing();
 
     void OnBeforeChangePortion(const std::shared_ptr<TPortionInfo> portionBefore);
     void OnAfterChangePortion(const std::shared_ptr<TPortionInfo> portionAfter, const bool onLoad = false);
@@ -327,18 +329,21 @@ public:
         for (auto&& i : Portions) {
             OnAfterChangePortion(i.second, true);
         }
-        if (MetadataMemoryManager->NeedPrefetch() && Portions.size()) {
-            auto request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::FETCH_ON_LOAD);
-            for (auto&& p : Portions) {
-                request->AddPortion(p.second);
-            }
-            request->RegisterSubscriber(std::make_shared<TFakeDataAccessorsSubscriber>());
-
-            DataAccessorsManager->AskData(request);
-        }
         if (ActualizationIndex->IsStarted()) {
             RefreshScheme();
         }
+    }
+
+    void PrefetchPortionsMetadata() {
+        if (!MetadataMemoryManager->NeedPrefetch() || Portions.empty()) {
+            return;
+        }
+        auto request = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::FETCH_ON_LOAD);
+        for (auto&& p : Portions) {
+            request->AddPortion(p.second);
+        }
+        request->RegisterSubscriber(std::make_shared<TFakeDataAccessorsSubscriber>());
+        DataAccessorsManager->AskData(request);
     }
 
     void AddLoadedPortionsToOptimizer() {
@@ -417,6 +422,14 @@ public:
 
     TInternalPathId GetPathId() const {
         return PathId;
+    }
+
+    const TLoadedKeyRanges& GetLoadedKeyRanges() const {
+        return LoadedKeyRanges;
+    }
+
+    void SetLoadedKeyRanges(TLoadedKeyRanges&& loadedKeyRanges) {
+        LoadedKeyRanges = std::move(loadedKeyRanges);
     }
 
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {

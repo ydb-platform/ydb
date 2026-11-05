@@ -77,6 +77,8 @@ class LiveCluster:
                 if isinstance(result, BaseException):
                     raise result
             self._http = aiohttp.ClientSession()
+            # Tests start with node counts observed through the real peer API.
+            await asyncio.gather(*(p.inst.heartbeat_once() for p in self.procs.values()))
         except BaseException:
             await self.stop()
             raise

@@ -134,6 +134,8 @@ namespace NKikimr::NStorage {
         if (nodeId == WaitingReplyFromNode) {
             if (const auto *op = std::get_if<TInvokeExternalOperation>(&Query);
                     op && op->Command.HasSwitchBridgeClusterState() &&
+                    // Matching state cannot prove that this invocation won its compare-and-set.
+                    !op->Command.GetSwitchBridgeClusterState().HasExpectedGeneration() &&
                     Self->StorageConfig && Self->StorageConfig->HasClusterState() &&
                     IsClusterStateReached(Self->StorageConfig->GetClusterState(),
                                           op->Command.GetSwitchBridgeClusterState().GetNewClusterState())) {
@@ -618,7 +620,7 @@ namespace NKikimr::NStorage {
         } else if (auto error = ValidateConfig(*Self->StorageConfig)) {
             throw TExError() << "Current config validation failed: " << *error;
         } else if (requireScepter && !Self->Scepter) {
-            throw TExError() << "No scepter";
+            throw TExRace() << "No scepter";
         }
 
         if (requireScepter) {

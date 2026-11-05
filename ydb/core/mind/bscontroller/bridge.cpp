@@ -179,6 +179,7 @@ public:
                     Self->RecheckUnsyncedBridgePiles = true;
                     for (TNodeId nodeId : syncerState.NodeIds | std::views::keys) {
                         const size_t numErased = Self->NodeToSyncerState.erase({nodeId, &syncerState});
+                        Self->BridgeSyncNodeRatesDirty = true;
                         Y_ABORT_UNLESS(numErased == 1);
                     }
                     Self->TargetGroupToSyncerState.erase(it);
@@ -1046,6 +1047,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
                     // we have to remove existing syncer; don't need to update it, 'cause node is not connected/working
                     syncerState.NodeIds.erase(it++);
                     NodeToSyncerState.erase({existingNodeId, &syncerState});
+                    BridgeSyncNodeRatesDirty = true;
                 }
             }
             if (dropNewSyncer) {
@@ -1057,7 +1059,9 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
         unlistedSyncerState.erase(&syncerState);
         auto& perNodeInfo = syncerState.NodeIds[nodeId];
         perNodeInfo.SourceGroupId = sourceGroupId;
-        NodeToSyncerState.emplace(nodeId, &syncerState);
+        if (NodeToSyncerState.emplace(nodeId, &syncerState).second) { // usually it's a report of a known syncer
+            BridgeSyncNodeRatesDirty = true;
+        }
         syncerState.Unlink();
 
         // update any progress
@@ -1082,6 +1086,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
         if (syncer.GetFinished()) {
             // syncer is finished, so we remove it from working set
             size_t numErased = NodeToSyncerState.erase({nodeId, &syncerState});
+            BridgeSyncNodeRatesDirty = true;
             Y_ABORT_UNLESS(numErased == 1);
             numErased = syncerState.NodeIds.erase(nodeId);
             Y_ABORT_UNLESS(numErased == 1);
@@ -1160,6 +1165,7 @@ void TBlobStorageController::ApplySyncerState(TNodeId nodeId, const NKikimrBlobS
         size_t numErased = syncerState->NodeIds.erase(nodeId);
         Y_ABORT_UNLESS(numErased == 1);
         numErased = NodeToSyncerState.erase({nodeId, syncerState});
+        BridgeSyncNodeRatesDirty = true;
         Y_ABORT_UNLESS(numErased == 1);
         if (!syncerState->NodeIds && !syncerState->InCommit) {
             SyncersRequiringAction.PushBack(syncerState);
@@ -1235,6 +1241,7 @@ void TBlobStorageController::CheckSyncerDisconnectedNodes() {
                 }
             }
             NodeToSyncerState.erase(beginIt, it);
+            BridgeSyncNodeRatesDirty = true;
         }
     }
 
@@ -1433,6 +1440,7 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
 
             syncerState.NodeIds[nodeId].SourceGroupId = *sourceGroupId;
             NodeToSyncerState.emplace(nodeId, &syncerState);
+            BridgeSyncNodeRatesDirty = true;
             nodesToUpdate.insert(nodeId);
             syncerState.Unlink();
             if (upgradeSync) {
@@ -1446,10 +1454,13 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
         TActivationContext::Schedule(retryAt, new IEventHandle(TEvPrivate::EvRetrySyncers, 0, SelfId(), {}, nullptr, 0));
     }
 
+    UpdateBridgeSyncNodeRates(nodesToUpdate);
+
     for (TNodeId nodeId : nodesToUpdate) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
         TSet<TGroupId> groupIdsToRead;
         SerializeSyncers(nodeId, &ev->Record, groupIdsToRead);
+        FillBridgeSyncNodeRate(nodeId, &ev->Record);
         ReadGroups(groupIdsToRead, false, ev.get(), nodeId);
         YDB_LOG_DEBUG("ProcessSyncers: sending an update",
             {"marker", "BSCBR09"},
@@ -1457,6 +1468,65 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
             {"record", ev->Record});
         SendToWarden(nodeId, std::move(ev), 0);
     }
+}
+
+bool TBlobStorageController::IsNodeHostingSyncers(TNodeId nodeId) const {
+    const auto it = NodeToSyncerState.lower_bound({nodeId, nullptr});
+    return it != NodeToSyncerState.end() && std::get<0>(*it) == nodeId;
+}
+
+void TBlobStorageController::UpdateBridgeSyncNodeRates(const THashSet<TNodeId>& nodesToUpdate) {
+    if (!BridgeSyncNodeRatesDirty || TActivationContext::Monotonic() < LoadedAt + TDuration::Seconds(10)) {
+        return; // while nodes are still reporting their syncers, any share would exceed the limit
+    }
+    BridgeSyncNodeRatesDirty = false;
+
+    // syncers of disconnected nodes count until they get dropped, as they may still be running
+    std::vector<TNodeId> hostingNodes;
+    for (auto it = NodeToSyncerState.begin(); it != NodeToSyncerState.end();
+            it = NodeToSyncerState.lower_bound({std::get<0>(*it) + 1, nullptr})) {
+        hostingNodes.push_back(std::get<0>(*it));
+    }
+    const ui64 rate = BridgeSyncTotalRate && !hostingNodes.empty()
+        ? Max<ui64>(BridgeSyncTotalRate / hostingNodes.size(), 1)
+        : 0;
+    BridgeSyncNodeRate = rate;
+
+    // nodes from nodesToUpdate get the rate along with their syncers
+    std::vector<TNodeId> changedNodes;
+    for (TNodeId nodeId : hostingNodes) {
+        // a node not known to have got any rate may still run on the share got from the previous BSC instance
+        if (const auto it = SentBridgeSyncNodeRates.find(nodeId);
+                (it == SentBridgeSyncNodeRates.end() || it->second != rate) && !nodesToUpdate.contains(nodeId)) {
+            changedNodes.push_back(nodeId);
+        }
+    }
+    for (const auto& [nodeId, sentRate] : SentBridgeSyncNodeRates) {
+        if (sentRate && !IsNodeHostingSyncers(nodeId) && !nodesToUpdate.contains(nodeId)) {
+            changedNodes.push_back(nodeId);
+        }
+    }
+
+    for (TNodeId nodeId : changedNodes) {
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+        FillBridgeSyncNodeRate(nodeId, &ev->Record);
+        YDB_LOG_DEBUG("UpdateBridgeSyncNodeRates: sending an update",
+            {"marker", "BSCBR14"},
+            {"nodeId", nodeId},
+            {"record", ev->Record});
+        SendToWarden(nodeId, std::move(ev), 0);
+    }
+}
+
+void TBlobStorageController::FillBridgeSyncNodeRate(TNodeId nodeId,
+        NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update) {
+    if (!BridgeSyncNodeRate) {
+        update->SetKeepBridgeSyncNodeRate(true);
+        return;
+    }
+    const ui64 rate = IsNodeHostingSyncers(nodeId) ? *BridgeSyncNodeRate : 0;
+    update->SetBridgeSyncNodeRateBytesPerSecond(rate);
+    SentBridgeSyncNodeRates[nodeId] = rate;
 }
 
 void TBlobStorageController::SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
@@ -1671,6 +1741,7 @@ void TBlobStorageController::ApplyStaticGroupUpdateForSyncers(std::map<TGroupId,
         TSyncerState& syncerState = it->second;
         for (TNodeId nodeId : syncerState.NodeIds | std::views::keys) {
             const size_t n = NodeToSyncerState.erase({nodeId, &syncerState});
+            BridgeSyncNodeRatesDirty = true;
             Y_ABORT_UNLESS(n == 1);
         }
         TargetGroupToSyncerState.erase(it);
@@ -1687,6 +1758,7 @@ void TBlobStorageController::ApplyStaticGroupUpdateForSyncers(std::map<TGroupId,
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
         TSet<TGroupId> groupIdsToRead;
         SerializeSyncers(nodeId, &ev->Record, groupIdsToRead);
+        FillBridgeSyncNodeRate(nodeId, &ev->Record);
         ReadGroups(groupIdsToRead, false, ev.get(), nodeId);
         SendToWarden(nodeId, std::move(ev), 0);
     }
@@ -1708,6 +1780,7 @@ void TBlobStorageController::CommitSyncerUpdates(TConfigState& state, TTransacti
             TSyncerState& syncerState = it->second;
             for (TNodeId nodeId : syncerState.NodeIds | std::views::keys) {
                 const size_t n = NodeToSyncerState.erase({nodeId, &syncerState});
+                BridgeSyncNodeRatesDirty = true;
                 Y_ABORT_UNLESS(n == 1);
             }
             TargetGroupToSyncerState.erase(it);

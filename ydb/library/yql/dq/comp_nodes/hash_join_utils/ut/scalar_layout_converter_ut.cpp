@@ -13,7 +13,6 @@
 
 #include <util/generic/guid.h>
 #include <util/generic/serialized_enum.h>
-#include <util/system/cpu_id.h>
 #include <util/system/unaligned_mem.h>
 
 #include <array>
@@ -269,9 +268,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestFixedSize) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -303,9 +299,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestMultipleFixedSize) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -345,9 +338,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestString) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -386,9 +376,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestMixedTypes) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -458,9 +445,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestOptional) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         const auto optionalInt64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true);
@@ -504,9 +488,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestOptionalString) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         const auto optionalStringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, true);
@@ -558,9 +539,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestEmptyStrings) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -593,9 +571,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestLargeStrings) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -637,9 +612,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestBatchPackFixedSize) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -671,9 +643,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestBatchPackMultipleColumns) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -715,9 +684,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestBatchPackStrings) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
@@ -758,9 +724,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestBatchPackMixedTypes) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -962,9 +925,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestBucketPack) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
@@ -1025,9 +985,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestFixedSizePackUnpack, EFixedSizeScalarType, EFixedSizePackMode) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         const auto scalarType = Arg<0>();
         const auto packMode = Arg<1>();
 
@@ -1063,9 +1020,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestFixedSizeOptional, EFixedSizeScalarType) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         const auto scalarType = Arg<0>();
 
         TScalarLayoutConverterTestData data;
@@ -1106,9 +1060,6 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
     }
 
     Y_UNIT_TEST(TestSingularNullKeyPackedAsNull) {
-        if (!NX86::HaveAVX2()) {
-            return;
-        }
         TScalarLayoutConverterTestData data;
 
         auto* const nullType = data.Env.GetTypeOfNullLazy();

@@ -622,7 +622,7 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        if (!context.SS->CanCreateSnapshot(tablePath.Base()->PathId, OperationId.GetTxId(), status, errStr)) {
+        if (!context.SS->CanCreateSingleSnapshot(tablePath.Base()->PathId, OperationId.GetTxId(), status, errStr)) {
             result->SetError(status, errStr);
             return result;
         }

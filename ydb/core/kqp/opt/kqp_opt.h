@@ -27,6 +27,7 @@ namespace NKikimr::NKqp {
 
 struct TUserRequestContext;
 struct TOptimizerHints;
+class TCompileTrace;
 
 namespace NOpt {
 
@@ -55,6 +56,9 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics();
 
     NKikimr::NKqp::TOptimizerHints GetOptimizerHints();
+
+    // Trace of the query compilation, if it is traced.
+    NKikimr::NKqp::TCompileTrace* GetCompileTrace() const;
 
     bool IsDataQuery() const;
 

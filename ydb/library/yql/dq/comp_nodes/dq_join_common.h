@@ -42,6 +42,8 @@ struct TJoinMetadata {
     TKeyTypes KeyTypes;
 };
 
+void EnsureNoPgTypes(TType* type);
+
 TKeyTypes KeyTypesFromColumns(const TMKQLVector<TType*>& types, const TMKQLVector<ui32>& keyIndexes);
 
 template <EJoinKind Kind> struct TRenamedOutput {

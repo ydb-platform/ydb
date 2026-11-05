@@ -1,3 +1,7 @@
+$input = [
+    <|TestField: Just(@@{"inner":{"i":{"a":"hello"}},"test":{"inner":{"i":{"a":"bye"}}}}@@)|>,
+];
+
 /*
 syntax='proto3';
 
@@ -35,5 +39,4 @@ $udfPar = Udf(Protobuf::Parse, $config as TypeConfig);
 $udfSer = Udf(Protobuf::Serialize, $config as TypeConfig);
 
 SELECT TestField, $udfPar(TestField), $udfSer($udfPar(TestField)), Ensure("Success", $udfPar(TestField) == $udfPar($udfSer($udfPar(TestField))), "Fail")
-FROM plato.Input;
-
+FROM AS_TABLE($input);

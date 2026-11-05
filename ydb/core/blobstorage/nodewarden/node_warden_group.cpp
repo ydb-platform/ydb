@@ -123,17 +123,6 @@ namespace NKikimr::NStorage {
         const auto [it, _] = Groups.try_emplace(groupId);
         TGroupRecord& group = it->second;
         group.MaxKnownGeneration = Max(group.MaxKnownGeneration, generation);
-        if (newGroup) {
-            if (newGroup->HasErasureSpecies()) {
-                const auto erasure = static_cast<TBlobStorageGroupType::EErasureSpecies>(newGroup->GetErasureSpecies());
-                Y_DEBUG_ABORT_UNLESS(!group.GType || group.GType->GetErasure() == erasure);
-                group.GType.emplace(erasure);
-            } else {
-                Y_ABORT_UNLESS(newGroup->RingsSize() == 0); // ensure no VDisks in group
-                group.GType.emplace(TBlobStorageGroupType::ErasureNone);
-            }
-        }
-
         // forget pending queries
         if (fromController) {
             group.ProposeRequestPending = false;
@@ -435,6 +424,13 @@ namespace NKikimr::NStorage {
         }
     }
 
+    void TNodeWarden::UpdateSyncRateQuoter() {
+        const ui64 rate = !SyncRateConfigLimit ? SyncRateControllerLimit
+            : !SyncRateControllerLimit ? SyncRateConfigLimit
+            : Min(SyncRateConfigLimit, SyncRateControllerLimit);
+        SyncRateQuoter->UpdateBytesPerSecond(rate);
+    }
+
     void TNodeWarden::ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update) {
         std::set<TWorkingSyncer> toStop = WorkingSyncers;
 
@@ -488,16 +484,8 @@ namespace NKikimr::NStorage {
         if (startNew) {
             syncer.BridgeProxyGroupGeneration = syncer.PendingBridgeProxyGroupGeneration;
             syncer.SyncerDataStats = std::make_unique<NBridge::TSyncerDataStats>();
-
-            TBlobStorageGroupType sourceGroupType(TBlobStorageGroupType::ErasureNone);
-            if (const auto it = Groups.find(syncer.SourceGroupId.GetRawId()); it != Groups.end() && it->second.GType) {
-                sourceGroupType = *it->second.GType;
-            } else {
-                Y_DEBUG_ABORT("can't obtain source group type");
-            }
-
             syncer.ActorId = Register(NBridge::CreateSyncerActor(group.Info, syncer.SourceGroupId, syncer.TargetGroupId,
-                syncer.SyncerDataStats, SyncRateQuoter, sourceGroupType));
+                syncer.SyncerDataStats, SyncRateQuoter));
             syncer.Finished = false;
             syncer.ErrorReason.reset();
             ++syncer.NumStart;

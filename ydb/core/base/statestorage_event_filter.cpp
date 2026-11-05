@@ -16,15 +16,18 @@ void RegisterStateStorageEventScopes(const std::shared_ptr<TEventFilter>& filter
         TEvStateStorage::EvReplicaBoardPublish,
         TEvStateStorage::EvReplicaBoardLookup,
         TEvStateStorage::EvReplicaBoardCleanup,
+        TEvStateStorage::EvReplicaBoardUnsubscribe,
     };
 
     static const ui32 eventsFromSystemToPeer[] = {
         TEvStateStorage::EvReplicaLeaderDemoted,
         TEvStateStorage::EvReplicaDump,
         TEvStateStorage::EvReplicaInfo,
+        TEvStateStorage::EvReplicaShutdown,
 
         TEvStateStorage::EvReplicaBoardPublishAck,
         TEvStateStorage::EvReplicaBoardInfo,
+        TEvStateStorage::EvReplicaBoardInfoUpdate,
     };
 
     for (ui32 e : eventsFromPeerToSystem) {

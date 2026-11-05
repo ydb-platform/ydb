@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include "kqp_effects_helpers.h"
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -10,21 +10,6 @@ namespace NKqp {
 
 using namespace NYdb;
 using namespace NYdb::NTable;
-
-namespace {
-
-NKikimrConfig::TAppConfig NewRboAppConfig() {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-    appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
-    return appConfig;
-}
-
-TKikimrRunner NewRboKikimrRunner() {
-    return DefaultKikimrRunner({}, NewRboAppConfig());
-}
-
-} // namespace
 
 Y_UNIT_TEST_SUITE(KqpWriteNewRbo) {
     Y_UNIT_TEST(UpsertNullKey) {
@@ -462,7 +447,7 @@ Y_UNIT_TEST_SUITE(KqpWriteNewRbo) {
             .SetEnableScriptExecutionOperations(true)
             .SetUseRealThreads(false);
 
-        TKikimrRunner kikimr(settings);
+        TEffectsKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
         auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
 

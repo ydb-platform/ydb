@@ -96,9 +96,9 @@ Each state defines three layout policies:
 
 - **D** — the target of background replication.
 - **W** — the layout sufficient to acknowledge an active write.
-- **E** — the expected blob layout.
+- **E** — the guaranteed layout for confirmed blobs.
 
-A layout count refers to copies in one realm; `+` combines distinct realms and `OR` separates alternatives. Read decisions use a confirmed lower bound, which may be weaker than the expected layout during a pending transition. In `DC_SOLO_INV2_PENDING`, E is `2`, but the surviving realm still has the `N1` guarantee: absence checks must use the one-copy bound until replication establishes the second copy.
+A layout count refers to copies in one realm; `+` combines distinct realms and `OR` separates alternatives. Read decisions use E as the confirmed lower bound. In `DC_SOLO_INV2_PENDING`, E is `1`: the surviving realm retains the `N1` guarantee until replication establishes the second copy.
 
 The transition graph distinguishes administrator actions from system transitions. Administrator actions change availability or select a pending target; system transitions advance the state after replication completes in the realms selected by the current state. The replication target set is explicit: for example, `DC_RECOVERY` targets both normal realms and the recovering realm, whereas `DC_RECOVERY_INV1` and the solo recovery `INV1`/`INV2` states, including their pending variants, target only `R`. A nonzero D does not by itself start replication in every normal realm.
 

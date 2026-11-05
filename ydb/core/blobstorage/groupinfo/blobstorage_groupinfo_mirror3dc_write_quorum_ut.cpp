@@ -166,6 +166,31 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         parts.AddItem(1, 1, type);
         UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, 4), 0);
     }
+    Y_UNIT_TEST(OneCopyDurabilityStillReplicatesRecoveringRealm) {
+        for (const auto state : {EMirror3dcGroupState::DC_SOLO_RECOVERY,
+                EMirror3dcGroupState::DC_SOLO_RECOVERY_INV1_PENDING}) {
+            const auto normal = state == EMirror3dcGroupState::DC_SOLO_RECOVERY ? R::N0 : R::N1;
+            const auto info = MakeInfo({normal, R::R, R::F}, state);
+            const auto checker = TMirror3dcWriteQuorumChecker::TryCreate(info, 0);
+            UNIT_ASSERT(checker);
+            G::TVDiskIds subgroup;
+            info.PickSubgroup(0, &subgroup, nullptr);
+            TSubgroupPartLayout parts;
+            ui32 recoveringPart = 3;
+            for (ui32 part = 0; part < 3; ++part) {
+                if (subgroup[part].FailRealm == 0) {
+                    parts.AddItem(part, part, info.Type);
+                } else if (subgroup[part].FailRealm == 1) {
+                    recoveringPart = part;
+                }
+            }
+            UNIT_ASSERT(recoveringPart < 3);
+            UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, recoveringPart), 1u << recoveringPart);
+            parts.AddItem(recoveringPart, recoveringPart, info.Type);
+            UNIT_ASSERT_VALUES_EQUAL(checker->GetPartsToResurrect(parts, recoveringPart + 3), 0);
+        }
+    }
+
     Y_UNIT_TEST(PrimaryStateSelectsPolicyForIdenticalRealmTuple) {
         using S = EMirror3dcGroupState;
         const TStates realms{R::N2, R::R, R::F};
@@ -180,7 +205,7 @@ Y_UNIT_TEST_SUITE(TMirror3dcWriteQuorumTest) {
         const auto soloChecker = TMirror3dcWriteQuorumChecker::TryCreate(soloPending, 0);
         UNIT_ASSERT(soloChecker);
         UNIT_ASSERT(soloChecker->GetEnsuredLayout() == L::LAYOUT_1);
-        UNIT_ASSERT(GetMirror3dcGroupLayouts(S::DC_SOLO_INV2_PENDING)->Ensured == L::LAYOUT_2);
+        UNIT_ASSERT(GetMirror3dcGroupLayouts(S::DC_SOLO_INV2_PENDING)->Ensured == L::LAYOUT_1);
         TBlobStorageGroupInfo::TVDiskIds subgroup;
         soloPending.PickSubgroup(0, &subgroup, nullptr);
         G::TSubgroupVDisks uncertain(&soloPending.GetTopology());

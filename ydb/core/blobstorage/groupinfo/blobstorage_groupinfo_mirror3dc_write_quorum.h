@@ -236,53 +236,43 @@ public:
         const std::array<ui32, 3> copies = CountParts(parts);
         const ui32 localRealm = idxInSubgroup % 3;
         const bool localRealmIsFailed = Realms[localRealm] == TFailRealm::F;
-        const bool durabilitySatisfied = CheckCounts(copies, durability);
+        // R is an explicit replication target even when I alone already satisfies D.
+        const bool durabilitySatisfied = Realms[localRealm] != TFailRealm::R && CheckCounts(copies, durability);
         const bool localPartAlreadyPresent = (parts.GetDisksWithPart(localRealm) & (1u << idxInSubgroup)) != 0;
         if (!IsMirror3dcReplicationTarget(State, Realms[localRealm])
                 || localRealmIsFailed || durabilitySatisfied || localPartAlreadyPresent) {
             return 0;
         }
 
-        ui32 requiredRealms = 0;
         ui32 requiredCopies = 0;
         switch (durability) {
             case EMirror3dcLayout::LAYOUT_111:
-                requiredRealms = 3;
                 requiredCopies = 1;
                 break;
             case EMirror3dcLayout::LAYOUT_11:
-                requiredRealms = 2;
                 requiredCopies = 1;
                 break;
             case EMirror3dcLayout::LAYOUT_22:
-                requiredRealms = 2;
                 requiredCopies = 2;
                 break;
             case EMirror3dcLayout::LAYOUT_1:
-                requiredRealms = 1;
                 requiredCopies = 1;
                 break;
             case EMirror3dcLayout::LAYOUT_2:
-                requiredRealms = 1;
                 requiredCopies = 2;
                 break;
             default:
                 Y_ABORT("Unsupported mirror-3-dc durability layout");
         }
-        ui32 normalRealms = 0;
         ui32 activeDisks = 0;
         for (ui32 realm = 0; realm < 3; ++realm) {
             if (Realms[realm] != TFailRealm::F) {
                 activeDisks |= 0b001001001u << realm;
-                normalRealms += Realms[realm] != TFailRealm::R;
             }
         }
         const ui32 present = parts.GetDisksWithPart(0) | parts.GetDisksWithPart(1) | parts.GetDisksWithPart(2);
         const bool hasActiveSource = (present & activeDisks) != 0;
-        const bool localRealmIsRecovering = Realms[localRealm] == TFailRealm::R;
-        const bool normalRealmsCanSatisfyDurability = normalRealms >= requiredRealms;
-        const bool skipRecoveringRealm = localRealmIsRecovering && normalRealmsCanSatisfyDurability;
-        if (!hasActiveSource || skipRecoveringRealm) {
+        if (!hasActiveSource) {
             return 0;
         }
         return copies[localRealm] < requiredCopies ? 1u << localRealm : 0;

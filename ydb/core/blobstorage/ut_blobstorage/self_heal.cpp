@@ -595,6 +595,27 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
         env.WaitForEdgeActorEvent<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(sender);
     }
 
+    // report given states to BS_CONTROLLER and keep them overridden in further reports from the nodes
+    void OverrideVDiskStates(TEnvironmentSetup& env, const NKikimrBlobStorage::TBaseConfig& base,
+            const TVDiskStates& states) {
+        env.Runtime->FilterFunction = [&states](ui32, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerUpdateDiskStatus::EventType) {
+                auto *statuses = ev->Get<TEvBlobStorage::TEvControllerUpdateDiskStatus>()->Record.MutableVDiskStatus();
+                for (auto& status : *statuses) {
+                    const auto& vdiskId = status.GetVDiskId();
+                    const auto it = states.find(MakeVDiskKey(vdiskId.GetGroupID(), vdiskId.GetRing(),
+                        vdiskId.GetDomain(), vdiskId.GetVDisk()));
+                    if (it != states.end()) {
+                        status.SetStatus(it->second.Status);
+                        status.SetOnlyPhantomsRemain(it->second.OnlyPhantomsRemain);
+                    }
+                }
+            }
+            return true;
+        };
+        ReportVDiskStates(env, base, states);
+    }
+
     enum class EExpectedResult {
         Success,
         Degraded,
@@ -604,7 +625,8 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
     };
 
     EExpectedResult EvaluateReassign(const TBlobStorageGroupInfo::TTopology& topology,
-            const TVector<TVDiskState>& states, ui32 targetOrderNumber, bool selfHeal) {
+            const TVector<TVDiskState>& states, ui32 targetOrderNumber, bool selfHeal,
+            bool treatPhantomsOnlyAsWorking = false) {
         const TBlobStorageGroupInfo::IQuorumChecker& checker = topology.GetQuorumChecker();
         TBlobStorageGroupInfo::TGroupVDisks nonOperational(&topology);
         for (ui32 orderNumber = 0; orderNumber < states.size(); ++orderNumber) {
@@ -620,11 +642,12 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
 
         TBlobStorageGroupInfo::TGroupVDisks failed(&topology);
         for (ui32 orderNumber = 0; orderNumber < states.size(); ++orderNumber) {
-            if (!states[orderNumber].IsReady()) {
+            const TVDiskState& state = states[orderNumber];
+            if (!state.IsReady() && !(treatPhantomsOnlyAsWorking && state.IsReplicatingWithPhantomsOnly())) {
                 failed |= {&topology, topology.GetVDiskId(orderNumber)};
             }
         }
-        failed |= {&topology, topology.GetVDiskId(targetOrderNumber)};
+        failed |= {&topology, topology.GetVDiskId(targetOrderNumber)}; // new VDisk is not ready yet
 
         if (!checker.CheckFailModelForGroup(failed)) {
             return EExpectedResult::Disintegrated;
@@ -642,9 +665,10 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
     }
 
     void AssertReassignResult(const NKikimrBlobStorage::TConfigResponse& response, EExpectedResult expected,
-            ui32 groupId, const TString& context) {
-        UNIT_ASSERT_VALUES_EQUAL_C(response.GetSuccess(), expected == EExpectedResult::Success,
-            context << " Response# " << response.DebugString());
+            ui32 groupId, const TString& context, bool dryRun = false) {
+        // successful dry run is reported as rolled back transaction
+        UNIT_ASSERT_VALUES_EQUAL_C(dryRun ? response.GetRollbackSuccess() : response.GetSuccess(),
+            expected == EExpectedResult::Success, context << " Response# " << response.DebugString());
         UNIT_ASSERT_VALUES_EQUAL_C(response.GroupsGetDegradedSize(), expected == EExpectedResult::Degraded ? 1 : 0,
             context << " Response# " << response.DebugString());
         UNIT_ASSERT_VALUES_EQUAL_C(response.GroupsGetDisintegratedSize(),
@@ -758,25 +782,11 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
             }
         }
 
-        env.Runtime->FilterFunction = [&states](ui32, std::unique_ptr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerUpdateDiskStatus::EventType) {
-                auto *statuses = ev->Get<TEvBlobStorage::TEvControllerUpdateDiskStatus>()->Record.MutableVDiskStatus();
-                for (auto& status : *statuses) {
-                    const auto& vdiskId = status.GetVDiskId();
-                    const auto it = states.find(MakeVDiskKey(vdiskId.GetGroupID(), vdiskId.GetRing(),
-                        vdiskId.GetDomain(), vdiskId.GetVDisk()));
-                    if (it != states.end()) {
-                        status.SetStatus(it->second.Status);
-                        status.SetOnlyPhantomsRemain(it->second.OnlyPhantomsRemain);
-                    }
-                }
-            }
-            return true;
-        };
-        ReportVDiskStates(env, base, states);
+        OverrideVDiskStates(env, base, states);
 
         ui32 selfHealSuccesses = 0;
         ui32 disintegratedRejections = 0;
+        ui32 phantomsOnlyAsWorkingDiffers = 0;
         for (ui32 index = 0; index < testCases.size(); ++index) {
             const TTestCase& testCase = testCases[index];
             const auto *target = testCase.SlotsByOrderNumber[testCase.TargetOrderNumber];
@@ -802,6 +812,18 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
             if (regularExpected != EExpectedResult::Success) {
                 const EExpectedResult selfHealExpected = EvaluateReassign(topology, testCase.States,
                     testCase.TargetOrderNumber, true);
+
+                // check explicit request flag in dry run mode, so the group remains intact for the SelfHeal request
+                const EExpectedResult flagExpected = EvaluateReassign(topology, testCase.States,
+                    testCase.TargetOrderNumber, false, true);
+                NKikimrBlobStorage::TConfigRequest flagRequest(request);
+                flagRequest.SetTreatPhantomsOnlyVDisksAsWorking(true);
+                flagRequest.SetRollback(true);
+                response = InvokeConfigRequest(env, flagRequest, false);
+                AssertReassignResult(response, flagExpected, testCase.Group->GetGroupId(),
+                    context + " TreatPhantomsOnlyVDisksAsWorking# true", true);
+                phantomsOnlyAsWorkingDiffers += flagExpected != selfHealExpected;
+
                 response = InvokeConfigRequest(env, request, true);
                 AssertReassignResult(response, selfHealExpected, testCase.Group->GetGroupId(),
                     context + " SelfHeal# true");
@@ -813,5 +835,74 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
         UNIT_ASSERT_C(selfHealSuccesses, "Randomized test did not cover a SelfHeal-only successful reassign");
         UNIT_ASSERT_C(disintegratedRejections,
             "Randomized test did not cover fail-model rejection with IgnoreDisintegratedGroupsChecks=true");
+        UNIT_ASSERT_C(phantomsOnlyAsWorkingDiffers,
+            "Randomized test did not cover TreatPhantomsOnlyVDisksAsWorking giving result different from SelfHeal");
+    }
+
+    Y_UNIT_TEST(EvictWithPhantomsOnlyVDisksMirror3dc) {
+        // Realm 0 is totally out, VDisks (1, 1, 0) and (2, 1, 0) are REPLICATING with only phantoms remaining and
+        // VDisk (1, 0, 0) is out and has to be evicted.
+        const TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3dc;
+        TEnvironmentSetup env({
+            .NodeCount = 12,
+            .Erasure = erasure,
+            .NumDataCenters = 3,
+        });
+
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Minutes(1));
+        env.UpdateSettings(false, false); // disable self-heal and donor mode, so the moved slot leaves no donor behind
+
+        const NKikimrBlobStorage::TBaseConfig base = env.FetchBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(base.GroupSize(), 1);
+        const auto& group = base.GetGroup(0);
+        const ui32 groupId = group.GetGroupId();
+
+        constexpr ui32 targetRealm = 1;
+        constexpr ui32 targetDomain = 0;
+
+        TVDiskStates states;
+        for (const auto& slot : base.GetVSlot()) {
+            TVDiskState state;
+            if (slot.GetFailRealmIdx() == 0 ||
+                    (slot.GetFailRealmIdx() == targetRealm && slot.GetFailDomainIdx() == targetDomain)) {
+                state.Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
+            } else if (slot.GetFailDomainIdx() == 1) {
+                state = {NKikimrBlobStorage::EVDiskStatus::REPLICATING, true};
+            }
+            states.emplace(MakeVDiskKey(slot), state);
+        }
+        OverrideVDiskStates(env, base, states);
+
+        auto makeRequest = [&](bool ignoreDegradedGroupsChecks, bool treatPhantomsOnlyVDisksAsWorking) {
+            NKikimrBlobStorage::TConfigRequest request;
+            request.SetIgnoreGroupReserve(true);
+            request.SetAllowUnusableDisks(true);
+            request.SetIgnoreDegradedGroupsChecks(ignoreDegradedGroupsChecks);
+            request.SetTreatPhantomsOnlyVDisksAsWorking(treatPhantomsOnlyVDisksAsWorking);
+            auto *reassign = request.AddCommand()->MutableReassignGroupDisk();
+            reassign->SetGroupId(groupId);
+            reassign->SetGroupGeneration(group.GetGroupGeneration());
+            reassign->SetFailRealmIdx(targetRealm);
+            reassign->SetFailDomainIdx(targetDomain);
+            reassign->SetVDiskIdx(0);
+            return request;
+        };
+
+        const TPDiskId originalPDiskId = GetPDiskIdByVDisk(env, groupId, targetRealm, targetDomain, 0);
+
+        // phantoms-only VDisks are counted as failed ones, so the group would lose quorum
+        AssertReassignResult(InvokeConfigRequest(env, makeRequest(true, false), false),
+            EExpectedResult::Disintegrated, groupId, "IgnoreDegraded# true TreatPhantomsOnly# false");
+
+        // the flag doesn't suppress the DEGRADED check by itself
+        AssertReassignResult(InvokeConfigRequest(env, makeRequest(false, true), false),
+            EExpectedResult::FitDegraded, groupId, "IgnoreDegraded# false TreatPhantomsOnly# true");
+
+        AssertReassignResult(InvokeConfigRequest(env, makeRequest(true, true), false),
+            EExpectedResult::Success, groupId, "IgnoreDegraded# true TreatPhantomsOnly# true");
+
+        const TPDiskId newPDiskId = GetPDiskIdByVDisk(env, groupId, targetRealm, targetDomain, 0);
+        UNIT_ASSERT_C(newPDiskId != originalPDiskId, "Expected VDisk (1, 0, 0) to be moved");
     }
 }

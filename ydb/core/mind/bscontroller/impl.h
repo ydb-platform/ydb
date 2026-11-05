@@ -11,6 +11,19 @@
 #include "self_heal.h"
 #include "storage_pool_stat.h"
 
+<<<<<<< HEAD
+=======
+#include <ydb/core/base/bridge.h>
+#include <ydb/core/base/feature_flags_service.h>
+#include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/base/pdisk_filter.h>
+#include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+>>>>>>> e1993d22917 (Treat phantoms-only replicating VDisks as working ones per user request (#55651))
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
 #include <util/generic/hash_multi_map.h>
@@ -1607,6 +1620,10 @@ private:
     std::unordered_set<TGroupId, THash<TGroupId>> SysViewChangedGroups;
     std::unordered_set<TBoxStoragePoolId, THash<TBoxStoragePoolId>> SysViewChangedStoragePools;
     bool SysViewChangedSettings = false;
+    bool ReportPhantomsOnlyVDisksAsReady = false; // last seen feature flag value affecting VSlots in system views
+
+    void SubscribeToFeatureFlags();
+    void Handle(TEvFeatureFlags::TEvChanged::TPtr ev);
 
     IActor* CreateSystemViewsCollector();
     void UpdateSystemViews();
@@ -1616,6 +1633,7 @@ private:
         bool SuppressDegradedGroupsChecking = false;
         bool SuppressDisintegratedGroupsChecking = false;
         bool AllowDegradedWithSinglePhantomsOnly = false;
+        bool TreatPhantomsOnlyVDisksAsWorking = false;
     };
 
     bool ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
@@ -2258,6 +2276,8 @@ public:
         YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "LoadFinished",
             {"marker", "BSC09"});
         Become(&TThis::StateWork);
+
+        SubscribeToFeatureFlags();
 
         ValidateInternalState();
         UpdatePDisksCounters();

@@ -311,7 +311,9 @@ bool CellToValue(NScheme::TTypeInfo type, const TCell& c, NKikimrMiniKQL::TValue
 
     case NScheme::NTypeIds::Date:
         Y_ABORT_UNLESS(c.Size() == sizeof(ui16));
-        val.MutableOptional()->SetUint32(ReadUnaligned<i16>(c.Data()));
+        // Date is an unsigned day count. Reading it as i16 sign-extends
+        // values >= 32768 (dates from 2059-09-19) into a uint32 above MAX_DATE.
+        val.MutableOptional()->SetUint32(ReadUnaligned<ui16>(c.Data()));
         break;
     case NScheme::NTypeIds::Datetime:
         Y_ABORT_UNLESS(c.Size() == sizeof(ui32));

@@ -72,8 +72,6 @@ During the [initial table scan](cdc.md#initial-scan) the source data is exported
 
 You can get the progress of the initial table scan from the [description](../reference/ydb-cli/commands/scheme-describe.md) of the asynchronous replication instance.
 
-<<<<<<< HEAD
-=======
 #### Synchronization Using Backup and Restore {#export-import-sync}
 
 With `INITIAL_SCAN = FALSE`, the initial data is transferred using server-side [backup to S3](../reference/ydb-cli/export-import/export-s3.md) and [restore from S3](../reference/ydb-cli/export-import/import-s3.md) operations. This method uses the backup mechanism to transfer large datasets.
@@ -97,7 +95,6 @@ Both methods require reading the source data and writing it to the target. Their
 
 An initial scan is simpler to set up and suits small datasets. For large datasets, backup and restore can reduce the cost of processing the initial data through CDC, but require additional storage and S3 operations. Actual costs and duration depend on data volume, the rate of changes, cluster resources, compression, and the terms of S3 usage.
 
->>>>>>> 70980e22fad (Docs: async replication availability period and lag reporting (#57711))
 ### Change Data Replication {#replication-of-changes}
 
 After the initial table scan is completed, the consumers read the change data and write it to replicas.

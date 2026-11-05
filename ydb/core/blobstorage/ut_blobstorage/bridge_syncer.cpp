@@ -1175,6 +1175,76 @@ Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {
         TestLateSyncerCompletion(ECompletionRace::ReregisterAfterCompletion);
     }
 
+    // A stage change of one part bumps the generation of the whole group, and a syncer of another part can do nothing with
+    // the old one. BSC has to tell its node without waiting for a report, which the syncer may have nothing to fill with.
+    Y_UNIT_TEST(RunningSyncerLearnsNewGenerationAtOnce) {
+        using namespace NBridgeTest;
+        TEnvironmentSetup env{{
+            .NodeCount = 24,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .LocationGenerator = GetBridgedLocation,
+            .SelfManagementConfig = true,
+            .NumPiles = 3,
+            .AutomaticBootstrap = true,
+        }};
+        const ui32 groupId = CreatePoolAndGetGroup(env);
+        const ui32 heldTarget = GetGroupInfo(env, groupId).GetBridgeGroupState().GetPile(2).GetGroupId();
+        for (ui32 pile : {1, 2}) {
+            SwitchBridgePileState(env, pile, NKikimrBridge::TClusterState::DISCONNECTED);
+            WaitForPileState(env, pile, NKikimrBridge::TClusterState::DISCONNECTED);
+        }
+        env.Sim(TDuration::Seconds(10));
+
+        // Syncers of the part in pile 2 never finish, and nodes of this pile don't report anything to BSC.
+        constexpr ui32 firstNodeOfPile2 = 17;
+        bool holding = true;
+        ui32 firstAssigned = 0;
+        ui32 lastFinished = 0;
+        std::vector<std::pair<ui32, std::unique_ptr<IEventHandle>>> held;
+        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (!holding) {
+                return true;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerNodeServiceSetUpdate::EventType) {
+                for (const auto& syncer : ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record.GetSyncers()) {
+                    if (syncer.GetTargetGroupId() == heldTarget && !firstAssigned) {
+                        firstAssigned = syncer.GetBridgeProxyGroupGeneration();
+                    }
+                }
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerUpdateSyncerState::EventType &&
+                    ev->Sender.NodeId() >= firstNodeOfPile2) {
+                return false;
+            } else if (ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
+                const auto *msg = ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>();
+                if (msg->TargetGroupId.GetRawId() == heldTarget) {
+                    lastFinished = msg->BridgeProxyGroupGeneration;
+                    held.emplace_back(nodeId, std::move(ev));
+                    return false;
+                }
+            }
+            return true;
+        };
+        for (ui32 pile : {1, 2}) {
+            SwitchBridgePileState(env, pile, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        }
+        WaitUntil(env, [&] { return firstAssigned && lastFinished > firstAssigned; }, "syncer running with new generation",
+            TDuration::Seconds(1), 120);
+
+        holding = false;
+        env.Runtime->FilterFunction = {};
+        for (auto& [nodeId, ev] : held) {
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+        const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        for (ui32 nodeId = firstNodeOfPile2; nodeId <= 24; ++nodeId) { // the nodes repeat what they couldn't report
+            env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), sender,
+                new TEvTabletPipe::TEvClientDestroyed(env.TabletId, {}, {})), nodeId);
+        }
+        for (ui32 pile : {1, 2}) {
+            WaitForPileState(env, pile, NKikimrBridge::TClusterState::SYNCHRONIZED);
+        }
+    }
+
     // A list of syncers of the previous BSC instance comes when the node runs the syncers assigned by the current one.
     // The node would stop them and ignore their completions, while BSC would wait for those completions.
     Y_UNIT_TEST(LateSyncersFromPreviousController) {

@@ -872,6 +872,22 @@ public:
         }
 
         if (!context.SS->CheckLocks(path.Base()->PathId, Transaction, errStr)) {
+            // Record why an internal (fair-scheduler-initiated) propose hit a path lock, so the
+            // revisit path stops re-requesting stats for a reason fresh stats cannot resolve (the
+            // shard waits for the drop-lock edge instead). Gated on Internal: user/monitoring
+            // proposes are never Internal and their lock failures must not touch deferred state.
+            // No-op when the shard is not deferred (UpdateDeferredShardReason checks membership).
+            if (Transaction.GetInternal()) {
+                if (auto* tablePtr = context.SS->Tables.FindPtr(path.Base()->PathId)) {
+                    for (const auto tabletId : info.GetSourceTabletId()) {
+                        const auto shardIt = context.SS->TabletIdToShardIdx.find(TTabletId(tabletId));
+                        if (shardIt != context.SS->TabletIdToShardIdx.end()) {
+                            (*tablePtr)->UpdateDeferredShardReason(shardIt->second,
+                                TPartitionSplitMergeState::EDeferralReason::PathLocked);
+                        }
+                    }
+                }
+            }
             setResultError(NKikimrScheme::StatusMultipleModifications, errStr);
             return result;
         }

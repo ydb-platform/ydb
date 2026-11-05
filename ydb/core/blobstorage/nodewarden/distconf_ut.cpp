@@ -5038,6 +5038,12 @@ selector_config: []
             runtime.StartNode(nodeId);
             fixture.Keepers[nodeId - 1] = RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State);
         }
+        auto push = std::make_unique<NStorage::TEvNodeConfigPush>();
+        push->Record.SetInitial(true);
+        auto *bound = push->Record.AddBoundNodes();
+        bound->MutableNodeId()->CopyFrom(expanded.GetAllNodes(3));
+        bound->MutableMeta()->CopyFrom(NStorage::TStorageConfigMeta(expanded));
+        runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), fixture.Keepers[3], push.release()), 4);
         UNIT_ASSERT(SimUntil(runtime, [&] { return rejectedBinding; }));
         for (ui32 nodeId : {1, 2, 3}) {
             UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetGeneration(), 2);

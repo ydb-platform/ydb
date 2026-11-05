@@ -8,6 +8,7 @@
 #include "group_layout_checker.h"
 #include "util.h"
 
+#include <ydb/core/base/feature_flags.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
@@ -173,9 +174,12 @@ bool TBlobStorageController::TGroupInfo::FillInOwnGroupParameters(
 }
 
 ui64 TBlobStorageController::TGroupInfo::ScaleGroupResource(ui64 value) const {
-    const TBlobStorageGroupType type(ErasureSpecies);
-    const auto scaled = static_cast<unsigned __int128>(value) * VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
+    const unsigned __int128 scaled = ScaleGroupResource(value, VDisksInGroup.size(), TBlobStorageGroupType(ErasureSpecies));
     return scaled > Max<ui64>() ? Max<ui64>() : static_cast<ui64>(scaled);
+}
+
+unsigned __int128 TBlobStorageController::TGroupInfo::ScaleGroupResource(ui64 value, size_t numVDisks, TBlobStorageGroupType type) {
+    return static_cast<unsigned __int128>(value) * numVDisks * type.DataParts() / type.TotalPartCount();
 }
 
 bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb,
@@ -1152,6 +1156,7 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
         hFunc(TEvBlobStorage::TEvControllerDDiskInfoListTablets, Handle);
         hFunc(TEvBlobStorage::TEvControllerDDiskInfoGetTablet, Handle);
+        hFunc(TEvFeatureFlags::TEvChanged, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_ERROR("StateWork unexpected event",
@@ -1173,7 +1178,33 @@ STFUNC(TBlobStorageController::StateWork) {
     }
 }
 
+void TBlobStorageController::SubscribeToFeatureFlags() {
+    ReportPhantomsOnlyVDisksAsReady = AppData()->FeatureFlags.GetReportPhantomsOnlyVDisksAsReady();
+    Send(MakeFeatureFlagsServiceID(), new TEvFeatureFlags::TEvSubscribe("BS_CONTROLLER"));
+}
+
+void TBlobStorageController::Handle(TEvFeatureFlags::TEvChanged::TPtr /*ev*/) {
+    const bool value = AppData()->FeatureFlags.GetReportPhantomsOnlyVDisksAsReady();
+    if (std::exchange(ReportPhantomsOnlyVDisksAsReady, value) == value) {
+        return;
+    }
+    // status of these VSlots in system views depends on the flag
+    for (const auto& [vslotId, vslot] : VSlots) {
+        if (vslot->IsReplicatingWithPhantomsOnly()) {
+            SysViewChangedVSlots.insert(vslotId);
+        }
+    }
+    for (const auto& [vslotId, vslot] : StaticVSlots) {
+        if (vslot.IsReplicatingWithPhantomsOnly()) {
+            SysViewChangedVSlots.insert(vslotId);
+        }
+    }
+}
+
 void TBlobStorageController::PassAway() {
+    if (Loaded) {
+        Send(MakeFeatureFlagsServiceID(), new TEvFeatureFlags::TEvUnsubscribe);
+    }
     if (ResponsivenessPinger) {
         ResponsivenessPinger->Detach(TActivationContext::ActorContextFor(ResponsivenessActorID));
         ResponsivenessPinger = nullptr;

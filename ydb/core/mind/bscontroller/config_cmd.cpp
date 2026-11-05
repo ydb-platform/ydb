@@ -325,6 +325,7 @@ namespace NKikimr::NBsController {
                 const bool hasChanges = Success && State->Changed() && !Cmd.GetRollback();
                 const TValidateConfigUpdatesParameters validationParameters{
                     .SuppressFailModelChecking = Cmd.GetIgnoreGroupFailModelChecks(),
+                    .SuppressConfigDeliveryChecking = Cmd.GetIgnoreGroupConfigDeliveryChecks(),
                     .SuppressDegradedGroupsChecking = Cmd.GetIgnoreDegradedGroupsChecks(),
                     .SuppressDisintegratedGroupsChecking = Cmd.GetIgnoreDisintegratedGroupsChecks(),
                     .AllowDegradedWithSinglePhantomsOnly = SelfHeal,

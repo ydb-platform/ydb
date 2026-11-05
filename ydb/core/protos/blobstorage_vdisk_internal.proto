@@ -311,6 +311,8 @@ message THugeKeeperEntryPoint {
 }
 
 message TMetadataEntryPoint {
+    // A VDisk must not start with a configuration below this durable generation.
+    optional uint32 MinGroupGeneration = 5;
     reserved 1;
     optional uint32 HullCompLevel0MaxSstsAtOnce = 2;
     optional uint32 HullCompSortedPartsNum = 3;

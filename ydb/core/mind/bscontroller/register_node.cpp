@@ -419,6 +419,7 @@ public:
                 Y_ABORT_UNLESS(node);
                 Y_ABORT_UNLESS(!node->Registered);
                 node->Registered = true;
+                Self->PersistGroupConfigAcknowledgements(Request->Get()->Record.GetVDiskStatus());
                 Self->SendInReply(*Request, std::move(Response));
                 Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
             }

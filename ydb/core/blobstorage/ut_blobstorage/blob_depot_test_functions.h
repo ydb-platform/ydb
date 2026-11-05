@@ -11,6 +11,8 @@
 
 #include "blob_depot_event_managers.h"
 
+void DecommitGroup(TBlobDepotTestEnvironment& tenv, ui32 groupId);
+
 void TestBasicPutAndGet(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId);
 
 void TestBasicRange(TBlobDepotTestEnvironment& tenv, ui64 tabletId, ui32 groupId);

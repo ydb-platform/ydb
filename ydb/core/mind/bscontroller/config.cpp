@@ -1,3 +1,4 @@
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_mirror3dc_write_quorum.h>
 #include "impl.h"
 #include "config.h"
 #include "diff.h"
@@ -434,6 +435,51 @@ namespace NKikimr::NBsController {
             }
             state.GroupContentChanged.insert(updates.begin(), updates.end());
 
+            // Confirm delivery against both the current and proposed failure models.
+            for (TGroupId groupId : state.GroupContentChanged) {
+                if (parameters.SuppressConfigDeliveryChecking) {
+                    break;
+                }
+                const TGroupInfo* previous = FindGroup(groupId);
+                const TGroupInfo* proposed = state.Groups.Find(groupId);
+                if (!previous || !proposed || previous->ErasureSpecies != TErasureType::ErasureMirror3dc
+                        || previous->Topology->GetTotalFailRealmsNum() != 3
+                        || StoragePools.at(previous->StoragePoolId).BridgeMode) {
+                    continue;
+                }
+                const std::function<bool(const TGroupInfo&)> configDelivered = [&](const TGroupInfo& config) {
+                    if (config.VDisksInGroup.empty() && (config.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE
+                            || config.BridgeGroupInfo)) {
+                        return true; // The new virtual/proxy configuration has no VDisks to acknowledge it.
+                    }
+                    if (config.Topology->GetTotalFailRealmsNum() != 3) {
+                        return false;
+                    }
+                    TBlobStorageGroupInfo::TDynamicInfo dynamic(groupId, previous->Generation);
+                    const TFailRealmStates realms = config.FailRealmStates.value_or(TFailRealmStates{});
+                    dynamic.FailRealmStates.assign(realms.begin(), realms.end());
+                    const TBlobStorageGroupInfo info(config.Topology, std::move(dynamic), "", {}, NPDisk::DEVICE_TYPE_UNKNOWN);
+                    TBlobStorageGroupInfo::TGroupVDisks confirmed(&info.GetTopology());
+                    for (const TIndirectReferable<TVSlotInfo>::TPtr& slot : config.VDisksInGroup) {
+                        const auto it = GroupConfigAcknowledgements.find(slot->VSlotId);
+                        if (it != GroupConfigAcknowledgements.end() && it->second.PDiskGuid == slot->PDisk->Guid
+                                && it->second.VDiskId.SameExceptGeneration(slot->GetVDiskId())
+                                && it->second.Generation >= previous->Generation) {
+                            confirmed |= TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), slot->GetVDiskId());
+                        }
+                    }
+                    const bool supported = GetMirror3dcGroupState(realms[0], realms[1], realms[2]).has_value();
+                    return supported ? TMirror3dcWriteQuorumChecker::CheckQuorumForFullSync(info, confirmed)
+                        : confirmed.GetNumSetItems() == info.GetTopology().GetTotalVDisksNum();
+                };
+                if (!configDelivered(*previous) || !configDelivered(*proposed)) {
+                    *errorDescription = TStringBuilder() << "group# " << groupId
+                        << " must durably acknowledge configuration generation# " << previous->Generation
+                        << " under both current and proposed failure models before advancing generation";
+                    return false;
+                }
+            }
+
             // spin generation for every changed group
             THashSet<TGroupId> bridgeProxyGroupIds;
             for (TGroupId groupId : state.GroupContentChanged) {
@@ -691,6 +737,13 @@ namespace NKikimr::NBsController {
 
             // apply overlay maps to their respective tables
             state.PDisks.ApplyToTable(this, txc);
+            for (const auto& [base, overlay] : state.VSlots.Diff()) {
+                if (base && !overlay->second) {
+                    const TVSlotId slotId = overlay->first;
+                    db.Table<Schema::GroupConfigAcknowledgement>().Key(slotId.GetKey()).Delete();
+                    state.Callbacks.push_back([this, slotId] { GroupConfigAcknowledgements.erase(slotId); });
+                }
+            }
             state.VSlots.ApplyToTable(this, txc);
             state.Groups.ApplyToTable(this, txc);
             state.DrivesSerials.ApplyToTable(this, txc);

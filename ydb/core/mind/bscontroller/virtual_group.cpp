@@ -1104,6 +1104,8 @@ namespace NKikimr::NBsController {
                 State.emplace(*Self, Self->HostRecords, TActivationContext::Now(), TActivationContext::Monotonic());
                 Action(*State);
                 if (auto error = Self->ValidateAndCommitConfigUpdate(State, TConfigTxFlags::SuppressAll(), txc)) {
+                    Status = NKikimrProto::ERROR;
+                    ErrorReason = *error;
                     YDB_LOG_INFO("Failed to commit update",
                         {"marker", "BSCVG09"},
                         {"error", *error});

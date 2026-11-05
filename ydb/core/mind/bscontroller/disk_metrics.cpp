@@ -211,6 +211,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
 
     // process VDisk status
     ProcessVDiskStatus(record.GetVDiskStatus());
+    PersistGroupConfigAcknowledgements(record.GetVDiskStatus());
 
     Execute(new TTxUpdateDiskMetrics(this, std::move(pdiskIds), std::move(vslotIds), std::move(databaseSpaceLatches)));
 }

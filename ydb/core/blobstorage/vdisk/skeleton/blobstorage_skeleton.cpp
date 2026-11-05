@@ -2642,7 +2642,8 @@ namespace NKikimr {
                     {"marker", "BSVS38"});
             }
 
-            bool writeMetadata = (ev->Get()->HasMetadata || AppData(ctx)->FeatureFlags.GetEnableTinyDisks());
+            // Configuration generations are always durable, including on non-tiny disks.
+            const bool writeMetadata = true;
 
             // run logger forwarder
             auto logWriter = CreateRecoveryLogWriter(PDiskCtx->PDiskId, Db->SkeletonID,
@@ -2665,6 +2666,7 @@ namespace NKikimr {
             // run metadata actor
             auto logCtx = MakeIntrusive<TVDiskLogContext>(VCtx, Db->LsnMngr, PDiskCtx,
                     (TActorId)(Db->LoggerID), (TActorId)(Db->LogCutterID), writeMetadata);
+            PersistedGroupGeneration = ev->Get()->MetadataEntryPoint.GetMinGroupGeneration();
             auto metadataActor = CreateMetadataActor(logCtx, std::move(ev->Get()->MetadataEntryPoint));
             MetadataActorId = ctx.Register(metadataActor);
             ActiveActors.Insert(MetadataActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
@@ -2677,11 +2679,52 @@ namespace NKikimr {
 
             LocalRecoveryDoneEvent = std::move(ev);
 
-            ctx.Send(MetadataActorId, new TEvCommitVDiskMetadata);
+            ConfigStartupPending = true;
+            RequestConfigPersistence(ctx);
         }
 
-        void HandleMetadata(TEvCommitVDiskMetadataDone::TPtr& /*ev*/, const TActorContext& ctx) {
-            auto& ev = LocalRecoveryDoneEvent;
+        void RequestConfigPersistence(const TActorContext& ctx) {
+            if (!MetadataActorId || ConfigPersistenceInFlight) {
+                return;
+            }
+            const ui32 generation = PendingGroupConfig ? PendingGroupConfig->NewInfo->GroupGeneration : GInfo->GroupGeneration;
+            if (generation < PersistedGroupGeneration) {
+                ctx.Send(NodeWardenServiceId, new TEvNodeWardenQueryGroupInfo(GInfo->GroupID.GetRawId(), PersistedGroupGeneration));
+                return;
+            }
+            ConfigPersistenceInFlight = true;
+            ctx.Send(MetadataActorId, new TEvCommitVDiskMetadata(generation));
+        }
+
+        void HandleConfigQueryResult(TEvNodeWardenGroupInfo::TPtr&, const TActorContext& ctx) {
+            if (ConfigStartupPending && GInfo->GroupGeneration < PersistedGroupGeneration && !ConfigPersistenceInFlight) {
+                ctx.Schedule(TDuration::Seconds(5), std::make_unique<IEventHandle>(NodeWardenServiceId, SelfId(),
+                    new TEvNodeWardenQueryGroupInfo(GInfo->GroupID.GetRawId(), PersistedGroupGeneration)));
+            }
+        }
+
+        void HandleMetadata(TEvCommitVDiskMetadataDone::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Sender != MetadataActorId || !ConfigPersistenceInFlight) {
+                return;
+            }
+            ConfigPersistenceInFlight = false;
+            PersistedGroupGeneration = Max(PersistedGroupGeneration, ev->Get()->MinGroupGeneration);
+            if (PendingGroupConfig) {
+                if (PendingGroupConfig->NewInfo->GroupGeneration > PersistedGroupGeneration) {
+                    RequestConfigPersistence(ctx);
+                } else {
+                    PendingGroupConfig->ConfigPersisted = true;
+                    ctx.Send(*SkeletonFrontIDPtr, PendingGroupConfig.release());
+                }
+            } else if (ConfigStartupPending && GInfo->GroupGeneration >= PersistedGroupGeneration) {
+                ContinueAfterMetadata(ctx);
+            }
+        }
+
+        void ContinueAfterMetadata(const TActorContext& ctx) {
+            ConfigStartupPending = false;
+            TEvBlobStorage::TEvLocalRecoveryDone::TPtr ev = std::move(LocalRecoveryDoneEvent);
+            UpdateVDiskStatus(LastVDiskStatus);
 
             // notify skeketon front about recovery status
             auto msg = std::make_unique<TEvFrontRecoveryStatus>(TEvFrontRecoveryStatus::LocalRecoveryDone,
@@ -3208,7 +3251,15 @@ namespace NKikimr {
         }
 
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
-            auto *msg = ev->Get();
+            TEvVGenerationChange* msg = ev->Get();
+            if (!msg->ConfigPersisted) {
+                if (msg->NewInfo->GroupGeneration > GInfo->GroupGeneration
+                        && (!PendingGroupConfig || msg->NewInfo->GroupGeneration > PendingGroupConfig->NewInfo->GroupGeneration)) {
+                    PendingGroupConfig.reset(msg->Clone());
+                    RequestConfigPersistence(ctx);
+                }
+                return;
+            }
 
             if (msg->NewInfo->GroupGeneration > GInfo->GroupGeneration) {
                 const std::optional<EMirror3dcLayout> previousDurability = GetDurabilityLayout(*GInfo);
@@ -3259,6 +3310,11 @@ namespace NKikimr {
 
             TryRepeatRecovery(ctx);
 
+            if (ConfigStartupPending && MetadataActorId && GInfo->GroupGeneration >= PersistedGroupGeneration) {
+                ContinueAfterMetadata(ctx);
+            } else {
+                UpdateVDiskStatus(LastVDiskStatus);
+            }
             // FIXME: reconfigure handoff
         }
 
@@ -3280,9 +3336,10 @@ namespace NKikimr {
         {}
 
         void UpdateVDiskStatus(NKikimrBlobStorage::EVDiskStatus status) {
+            LastVDiskStatus = status;
             const auto& base = Db->Config->BaseInfo;
             Send(NodeWardenServiceId, new TEvStatusUpdate(SelfId().NodeId(), base.PDiskId, base.VDiskSlotId, status,
-                ReplOnlyPhantomsRemain));
+                ReplOnlyPhantomsRemain, Min(PersistedGroupGeneration, GInfo->GroupGeneration), SelfVDiskId));
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -3672,6 +3729,8 @@ namespace NKikimr {
             HFunc(NPDisk::TEvCutLog, Handle)
             IgnoreFunc(TEvRecoveryLogCutDone)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(TEvCommitVDiskMetadataDone, HandleMetadata)
+            HFunc(TEvNodeWardenGroupInfo, HandleConfigQueryResult)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
@@ -3687,7 +3746,6 @@ namespace NKikimr {
             hFunc(NPDisk::TEvPreShredCompactVDisk, HandleShredEnqueue)
             hFunc(NPDisk::TEvShredVDisk, HandleShredEnqueue)
             hFunc(TEvNotifyChunksDeleted, Handle)
-            HFunc(TEvCommitVDiskMetadataDone, HandleMetadata)
             hFunc(TEvGetSkeletonState, Handle)
         )
 
@@ -3729,6 +3787,8 @@ namespace NKikimr {
             HFunc(TEvRecoveryLogCutDone, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(TEvCommitVDiskMetadataDone, HandleMetadata)
+            HFunc(TEvNodeWardenGroupInfo, HandleConfigQueryResult)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
@@ -3809,6 +3869,8 @@ namespace NKikimr {
             HFunc(TEvRecoveryLogCutDone, Handle)
             HFunc(NPDisk::TEvConfigureSchedulerResult, Handle)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(TEvCommitVDiskMetadataDone, HandleMetadata)
+            HFunc(TEvNodeWardenGroupInfo, HandleConfigQueryResult)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
@@ -3846,6 +3908,8 @@ namespace NKikimr {
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvVGenerationChange, Handle)
+            HFunc(TEvCommitVDiskMetadataDone, HandleMetadata)
+            HFunc(TEvNodeWardenGroupInfo, HandleConfigQueryResult)
             HFunc(NPDisk::TEvYardResizeResult, Handle)
             IgnoreFunc(TEvOsirisDone)
             CFunc(TEvBlobStorage::EvReplDone, Ignore)
@@ -3973,6 +4037,11 @@ namespace NKikimr {
         TActorId DefragId;
         TActorId BalancingId;
         TActorId MetadataActorId;
+        ui32 PersistedGroupGeneration = 0;
+        bool ConfigPersistenceInFlight = false;
+        bool ConfigStartupPending = false;
+        std::unique_ptr<TEvVGenerationChange> PendingGroupConfig;
+        NKikimrBlobStorage::EVDiskStatus LastVDiskStatus = NKikimrBlobStorage::INIT_PENDING;
         TActorId VDiskSpaceReportManagerId;
         // A LogoBlob index statistics scan may retain a response-sized batch
         // while it waits for an acknowledgement. Keep at most one such scan

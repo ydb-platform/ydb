@@ -1832,6 +1832,7 @@ private:
 
     struct TValidateConfigUpdatesParameters {
         bool SuppressFailModelChecking = false;
+        bool SuppressConfigDeliveryChecking = false;
         bool SuppressDegradedGroupsChecking = false;
         bool SuppressDisintegratedGroupsChecking = false;
         bool AllowDegradedWithSinglePhantomsOnly = false;
@@ -2066,6 +2067,14 @@ public:
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
     TActorId GroupStateActorId;
+    struct TGroupConfigAcknowledgement {
+        TVDiskID VDiskId;
+        ui64 PDiskGuid = 0;
+        ui32 Generation = 0;
+    };
+    TMap<TVSlotId, TGroupConfigAcknowledgement> GroupConfigAcknowledgements;
+    void PersistGroupConfigAcknowledgements(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus>& reports);
+    class TTxPersistGroupConfigAcknowledgements;
     void UpdateGroupStateActor(TGroupId groupId);
 
     TActorId ClusterBalanceActorId;

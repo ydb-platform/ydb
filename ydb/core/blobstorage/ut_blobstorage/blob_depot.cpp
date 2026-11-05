@@ -687,6 +687,74 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         // no blob depot restarts performed
     }
 
+    Y_UNIT_TEST(Mirror3dcDecommitRetriesUntilConfigurationIsDurable) {
+        TBlobDepotTestEnvironment tenv(1, 1, 9, TBlobStorageGroupType::ErasureMirror3dc);
+        TEnvironmentSetup& env = *tenv.Env;
+        const ui32 groupId = tenv.RegularGroups.front();
+        env.Sim(TDuration::Minutes(1));
+        bool holdNotify = true;
+        bool holdReports = false;
+        ui32 rejected = 0;
+        std::unique_ptr<IEventHandle> notify;
+        std::vector<std::unique_ptr<IEventHandle>> reports;
+        env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerGroupDecommittedNotify
+                    && event->Get<TEvBlobStorage::TEvControllerGroupDecommittedNotify>()->Record.GetGroupId() == groupId
+                    && holdNotify) {
+                notify = std::move(event);
+                holdNotify = false;
+                return false;
+            }
+            if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerUpdateDiskStatus && holdReports) {
+                reports.push_back(std::move(event));
+                return false;
+            }
+            if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerGroupDecommittedResponse
+                    && event->Get<TEvBlobStorage::TEvControllerGroupDecommittedResponse>()->Record.GetStatus() == NKikimrProto::ERROR) {
+                ++rejected;
+            }
+            return true;
+        };
+        DecommitGroup(tenv, groupId);
+        for (ui32 attempt = 0; attempt < 1200 && !notify; ++attempt) {
+            env.Sim(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT(notify);
+        holdReports = true;
+        NKikimrBlobStorage::TConfigRequest bump;
+        bump.SetIgnoreGroupFailModelChecks(true);
+        bump.SetIgnoreGroupConfigDeliveryChecks(true);
+        NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition* definition =
+            bump.AddCommand()->MutableDefineFailRealmStates()->AddGroups();
+        definition->SetGroupId(groupId);
+        for (ui32 realm = 0; realm < 3; ++realm) {
+            definition->AddFailRealmStates(NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition::INVARIANT0);
+        }
+        const NKikimrBlobStorage::TConfigResponse response = env.Invoke(bump);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        env.Sim(TDuration::Seconds(2));
+        env.Runtime->Send(notify.release());
+        env.Sim(TDuration::Seconds(6));
+        UNIT_ASSERT(rejected);
+        UNIT_ASSERT(!reports.empty());
+        holdReports = false;
+        for (std::unique_ptr<IEventHandle>& report : reports) {
+            env.Runtime->Send(report.release());
+        }
+        env.Sim(TDuration::Seconds(60));
+        env.Runtime->FilterFunction = {};
+        bool done = false;
+        const NKikimrBlobStorage::TBaseConfig config = env.FetchBaseConfig();
+        for (const NKikimrBlobStorage::TBaseConfig::TGroup& group : config.GetGroup()) {
+            if (group.GetGroupId() == groupId) {
+                done = group.GetVirtualGroupInfo().GetDecommitStatus() == NKikimrBlobStorage::TGroupDecommitStatus::DONE;
+                UNIT_ASSERT_VALUES_EQUAL(group.VSlotIdSize(), 0);
+            }
+        }
+        UNIT_ASSERT(done);
+        TestBasicPutAndGet(tenv, 17, groupId);
+    }
+
     Y_UNIT_TEST(DecommitVerifiedRandom) {
         ui32 seed;
         LoadSeed(seed);

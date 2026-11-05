@@ -1528,11 +1528,22 @@ void TNodeWarden::Handle(TEvStatusUpdate::TPtr ev) {
         {"marker", "NW47"});
     auto *msg = ev->Get();
     const TVSlotId vslotId(msg->NodeId, msg->PDiskId, msg->VSlotId);
+    if (msg->PersistedGroupGeneration) {
+        const auto it = LocalVDisks.find(vslotId);
+        if (it == LocalVDisks.end() || !msg->ConfigVDiskId
+                || !msg->ConfigVDiskId->SameExceptGeneration(it->second.GetVDiskId())) {
+            msg->PersistedGroupGeneration.reset();
+        }
+    }
     if (const auto it = LocalVDisks.find(vslotId); it != LocalVDisks.end() && (it->second.Status != msg->Status ||
-            it->second.OnlyPhantomsRemain != msg->OnlyPhantomsRemain)) {
+            it->second.OnlyPhantomsRemain != msg->OnlyPhantomsRemain || (msg->PersistedGroupGeneration
+                && it->second.PersistedGroupGeneration != *msg->PersistedGroupGeneration))) {
         auto& vdisk = it->second;
         vdisk.Status = msg->Status;
         vdisk.OnlyPhantomsRemain = msg->OnlyPhantomsRemain;
+        if (msg->PersistedGroupGeneration) {
+            vdisk.PersistedGroupGeneration = *msg->PersistedGroupGeneration;
+        }
         VDiskStatusChanged = true;
 
         if (msg->Status == NKikimrBlobStorage::EVDiskStatus::READY && vdisk.WhiteboardVDiskId) {
@@ -1592,7 +1603,8 @@ void TNodeWarden::FillInVDiskStatus(google::protobuf::RepeatedPtrField<NKikimrBl
 
         const bool onlyPhantomsRemain = status == NKikimrBlobStorage::EVDiskStatus::REPLICATING ? vdisk.OnlyPhantomsRemain : false;
 
-        if (initial || status != vdisk.ReportedVDiskStatus || onlyPhantomsRemain != vdisk.ReportedOnlyPhantomsRemain) {
+        if (initial || status != vdisk.ReportedVDiskStatus || onlyPhantomsRemain != vdisk.ReportedOnlyPhantomsRemain
+                || vdisk.PersistedGroupGeneration != vdisk.ReportedPersistedGroupGeneration) {
             auto *item = pb->Add();
             VDiskIDFromVDiskID(vdisk.GetVDiskId(), item->MutableVDiskId());
             item->SetNodeId(vslotId.NodeId);
@@ -1601,6 +1613,8 @@ void TNodeWarden::FillInVDiskStatus(google::protobuf::RepeatedPtrField<NKikimrBl
             item->SetPDiskGuid(vdisk.Config.GetVDiskLocation().GetPDiskGuid());
             item->SetStatus(status);
             item->SetOnlyPhantomsRemain(onlyPhantomsRemain);
+            item->SetPersistedGroupGeneration(vdisk.PersistedGroupGeneration);
+            vdisk.ReportedPersistedGroupGeneration = vdisk.PersistedGroupGeneration;
             vdisk.ReportedVDiskStatus = status;
             vdisk.ReportedOnlyPhantomsRemain = onlyPhantomsRemain;
         }

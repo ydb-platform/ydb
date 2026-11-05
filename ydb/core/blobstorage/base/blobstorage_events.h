@@ -599,8 +599,9 @@ namespace NKikimr {
             TEvBlobStorage::EvNodeWardenQueryGroupInfo> {
         TEvNodeWardenQueryGroupInfo() = default;
 
-        TEvNodeWardenQueryGroupInfo(ui32 groupId) {
+        TEvNodeWardenQueryGroupInfo(ui32 groupId, ui32 minGeneration = 0) {
             Record.SetGroupId(groupId);
+            Record.SetMinGeneration(minGeneration);
         }
     };
 
@@ -619,14 +620,18 @@ namespace NKikimr {
         ui32 VSlotId;
         NKikimrBlobStorage::EVDiskStatus Status;
         bool OnlyPhantomsRemain;
+        std::optional<ui32> PersistedGroupGeneration;
+        std::optional<TVDiskID> ConfigVDiskId;
 
         TEvStatusUpdate(ui32 nodeId, ui32 pdiskId, ui32 vslotId, NKikimrBlobStorage::EVDiskStatus status,
-                bool onlyPhantomsRemain)
+                bool onlyPhantomsRemain, std::optional<ui32> persistedGroupGeneration = {}, std::optional<TVDiskID> configVDiskId = {})
             : NodeId(nodeId)
             , PDiskId(pdiskId)
             , VSlotId(vslotId)
             , Status(status)
             , OnlyPhantomsRemain(onlyPhantomsRemain)
+            , PersistedGroupGeneration(persistedGroupGeneration)
+            , ConfigVDiskId(configVDiskId)
         {}
     };
 

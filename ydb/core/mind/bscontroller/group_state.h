@@ -33,6 +33,7 @@ struct TEvGroupState {
         std::optional<TGroupReplicationInfo> Info;
         explicit TEvUpdate(ui32 groupId) : GroupId(groupId) {}
     };
+
 };
 
 IActor* CreateGroupStateActor(const TActorId& controllerId);

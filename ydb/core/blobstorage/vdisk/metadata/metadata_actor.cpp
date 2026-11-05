@@ -10,7 +10,13 @@ class TMetadataActor : public TActor<TMetadataActor> {
     NKikimrVDiskData::TMetadataEntryPoint MetadataEntryPoint;
 
     ui64 CurEntryPointLsn = 0;
-    TActorId CommitNotifyId;
+    struct TWaiter {
+        TActorId ActorId;
+        ui64 Cookie;
+        ui32 Generation;
+    };
+    TVector<TWaiter> Waiters;
+    ui32 InFlightGeneration = 0;
     bool CommitInFlight = false;
 
     void WriteEntryPoint() {
@@ -35,16 +41,18 @@ class TMetadataActor : public TActor<TMetadataActor> {
 
         Send(LogCtx->LoggerId, msg.release());
 
+        InFlightGeneration = MetadataEntryPoint.GetMinGroupGeneration();
         CommitInFlight = true;
     }
 
     void Handle(TEvCommitVDiskMetadata::TPtr& ev) {
-        if (!LogCtx->WriteMetadata) {
-            Send(ev->Sender, new TEvCommitVDiskMetadataDone);
+        const ui32 generation = ev->Get()->MinGroupGeneration;
+        if (!LogCtx->WriteMetadata && !generation) {
+            Send(ev->Sender, new TEvCommitVDiskMetadataDone, 0, ev->Cookie);
             return;
         }
-
-        CommitNotifyId = ev->Sender;
+        MetadataEntryPoint.SetMinGroupGeneration(Max(MetadataEntryPoint.GetMinGroupGeneration(), generation));
+        Waiters.push_back({ev->Sender, ev->Cookie, generation});
         WriteEntryPoint();
     }
 
@@ -55,11 +63,19 @@ class TMetadataActor : public TActor<TMetadataActor> {
 
         if (ev->Get()->Status == NKikimrProto::OK) {
             CurEntryPointLsn = ev->Get()->Results.back().Lsn;
-            if (CommitNotifyId) {
-                Send(CommitNotifyId, new TEvCommitVDiskMetadataDone);
-                CommitNotifyId = {};
+            TVector<TWaiter> pending;
+            for (const TWaiter& waiter : Waiters) {
+                if (waiter.Generation <= InFlightGeneration) {
+                    Send(waiter.ActorId, new TEvCommitVDiskMetadataDone(InFlightGeneration), 0, waiter.Cookie);
+                } else {
+                    pending.push_back(waiter);
+                }
             }
+            Waiters.swap(pending);
             Send(LogCtx->LogCutterId, new TEvVDiskCutLog(TEvVDiskCutLog::Metadata, CurEntryPointLsn));
+            if (!Waiters.empty()) {
+                WriteEntryPoint();
+            }
         }
     }
 

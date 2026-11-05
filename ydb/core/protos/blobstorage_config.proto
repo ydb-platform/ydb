@@ -877,6 +877,9 @@ message TConfigRequest {
 
     // allow reassignment to leave a group with an incorrect physical layout
     bool IgnoreGroupLayoutChecks = 15;
+
+    // Emergency override: allow publication before the previous configuration is durably acknowledged.
+    bool IgnoreGroupConfigDeliveryChecks = 16;
 }
 
 enum ETriStateBool {

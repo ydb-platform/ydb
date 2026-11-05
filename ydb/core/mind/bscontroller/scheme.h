@@ -528,6 +528,20 @@ struct Schema : NIceDb::Schema {
     };
 
 
+    struct GroupConfigAcknowledgement : Table<137> {
+        using NodeID = VSlot::NodeID;
+        using PDiskID = VSlot::PDiskID;
+        using VSlotID = VSlot::VSlotID;
+        struct GroupId : Column<4, NScheme::NTypeIds::Uint32> {};
+        struct Generation : Column<5, NScheme::NTypeIds::Uint32> {};
+        struct PDiskGuid : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct FailRealm : Column<7, NScheme::NTypeIds::Uint32> {};
+        struct FailDomain : Column<8, NScheme::NTypeIds::Uint32> {};
+        struct VDisk : Column<9, NScheme::NTypeIds::Uint32> {};
+        using TKey = TableKey<NodeID, PDiskID, VSlotID>;
+        using TColumns = TableColumns<NodeID, PDiskID, VSlotID, GroupId, Generation, PDiskGuid, FailRealm, FailDomain, VDisk>;
+    };
+
     using TTables = SchemaTables<
         Node,
         PDisk,
@@ -556,7 +570,8 @@ struct Schema : NIceDb::Schema {
         DirectBlockGroupTabletState,
         DirectBlockGroupClaims,
         DatabaseSpaceExhaustedPool,
-        BoxStoragePoolPDiskFilterV2
+        BoxStoragePoolPDiskFilterV2,
+        GroupConfigAcknowledgement
     >;
 
     using TSettings = SchemaSettings<

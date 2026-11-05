@@ -46,9 +46,6 @@ struct TChangefeedMetadata {
 struct TIndexMetadata {
     TString ExportPrefix;
     TString ImplTablePrefix;
-    // Not serialized into metadata.json: the authoritative IV of an index
-    // impl-table item is stored in the authenticated schema mapping. This field
-    // only carries it in memory during import.
     TMaybe<TEncryptionIV> IV = Nothing();
 };
 

@@ -14,17 +14,26 @@
 
 На уровне [распределённого хранилища](glossary.md#distributed-storage) в режиме bridge реализуется синхронная репликация по схеме Active / Active между pile. На уровне [узлов баз данных](glossary.md#database-node) возможно резервирование по схеме Active / Passive.
 
-Для хранения данных используются пары [групп хранения](glossary.md#storage-group) из разных pile. При этом для хранения данных в каждом из pile могут применяться любые поддерживаемые {{ ydb-short-name }} [режимы работы](topology.md#cluster-config).
+Для баз данных, использующих хранилище в режиме bridge, каждая [группа хранения](glossary.md#storage-group) имеет по одной части в каждом участвующем pile. Внутри каждого pile могут применяться любые поддерживаемые {{ ydb-short-name }} [режимы работы](topology.md#cluster-config).
 
-В режиме bridge может быть достигнут zero-downtime [switchover](https://en.wikipedia.org/wiki/Switchover). При [failover](https://en.wikipedia.org/wiki/Failover) кластер требует явного отключения репликации в отказавший pile для возобновления работы. При отключении любого pile происходит приостановка обслуживания запросов до выполнения команды отключения репликации в этот pile.
+В режиме bridge может быть достигнут zero-downtime [switchover](https://en.wikipedia.org/wiki/Switchover). При [failover](https://en.wikipedia.org/wiki/Failover) кластер требует явного отключения репликации в отказавший pile для возобновления работы. При отключении любого участвующего pile обработка запросов к группам в режиме bridge приостанавливается до выполнения команды отключения репликации в этот pile.
 
 Pile не являются самостоятельными кластерами {{ ydb-short-name }}, а представляют собой части одного кластера со сложной топологией:
 
 - [таблетки](glossary.md#tablet) в режиме bridge запускаются в единственном экземпляре;
-- в каждом pile работает отдельная [статическая группа](glossary.md#static-group) и набор независимых групп хранения с обычными [VDisk](glossary.md#vdisk). Доступ к группам хранения осуществляется через DS-proxy-proxy, который предоставляет таблеткам интерфейс [DS-proxy](glossary.md#ds-proxy) и выполняет операции с использованием двух DS-proxy — по одной для групп в каждом pile;
-- в каждом pile работает свой набор реплик [StateStorage](glossary.md#state-storage), [SchemeBoard](glossary.md#scheme-board) и [Board](glossary.md#board). Доступ к StateStorage, SchemeBoard и Board осуществляется через аналогичные proxy-proxy.
+- в каждом pile работает отдельная [статическая группа](glossary.md#static-group) и части групп хранения с обычными [VDisk](glossary.md#vdisk). Доступ к группам в режиме bridge осуществляется через bridge proxy, который предоставляет таблеткам интерфейс [DS-proxy](glossary.md#ds-proxy) и выполняет операции через DS-proxy участвующих pile;
+- в каждом pile работает свой набор реплик [StateStorage](glossary.md#state-storage), [SchemeBoard](glossary.md#scheme-board) и [Board](glossary.md#board). Доступ к StateStorage, SchemeBoard и Board осуществляется через аналогичные proxy-компоненты.
 
-## Состояния Pile {#pile-states}
+## Режимы хранения баз данных {#storage-pools}
+
+Кластер bridge поддерживает два режима хранения баз данных:
+
+- **Хранилище в режиме bridge** хранит по одной части каждой группы в каждом участвующем pile и синхронно реплицирует записи между ними.
+- **Обычное хранилище** использует обычные группы хранения с настроенной избыточностью без синхронной репликации между pile.
+
+По умолчанию преобразование кластера переводит все существующие пулы баз данных в режим bridge. Чтобы базы данных с обычным хранилищем и хранилищем в режиме bridge могли существовать одновременно, установите `bridge_config.enable_non_uniform_storage: true`. Также можно оставить существующие пулы обычными при преобразовании, а позже переключать каждую базу данных между двумя режимами, как описано в статье [Управление кластером в режиме bridge](../devops/deployment-options/manual/bridge-management.md#database-mode).
+
+## Состояния pile {#pile-states}
 
 Режим работы кластера определяется состояниями всех его pile. Например, для кластера из pile А и pile Б состояния pile указываются как (А, Б), где порядок имеет значение.
 
@@ -34,7 +43,7 @@ Pile не являются самостоятельными кластерами
 
 - `PRIMARY`. Основной pile, в котором работают таблетки. Только один pile может находиться в состоянии `PRIMARY`.
 
-- `SYNCHRONIZED`. Ведомый pile, в котором все группы хранения синхронизированы с `PRIMARY`.
+- `SYNCHRONIZED`. Pile, все группы хранения которого в режиме bridge полностью синхронизированы с `PRIMARY`.
 
 - `DISCONNECTED`. Отключённый от `PRIMARY`, не участвует в выполнении операций.
 
@@ -44,7 +53,9 @@ Pile не являются самостоятельными кластерами
 
 - `SUSPENDED`. Pile, который необходимо плавно переключить в состояние `DISCONNECTED`. По завершении переключения {{ ydb-short-name }} автоматически переводит pile в состояние `DISCONNECTED`.
 
-В норме пара pile работает в режиме `PRIMARY/SYNCHRONIZED` или `SYNCHRONIZED/PRIMARY`. То есть один из pile — `PRIMARY`, в нём работают таблетки, второй pile — `SYNCHRONIZED`, все его группы хранения синхронизированы с `PRIMARY`. Операция записи считается завершённой при таком состоянии pile только после успешного выполнения записи в группы хранения каждого pile с необходимой избыточностью.
+- `INACTIVE`. Pile указан в `bridge_config`, но ресурсы хранения для него не выделены. Его узлы не могут подключаться к кластеру. Команда `provision-pile` подготавливает хранилище такого pile, а `destroy-pile` возвращает отключённый pile в это состояние.
+
+В норме пара pile работает в режиме `PRIMARY/SYNCHRONIZED` или `SYNCHRONIZED/PRIMARY`. То есть один из pile — `PRIMARY`, в нём работают таблетки, второй pile — `SYNCHRONIZED`, все его группы хранения в режиме bridge синхронизированы с `PRIMARY`. Операция записи в группу в режиме bridge считается завершённой при таком состоянии pile только после успешного выполнения записи в группы хранения каждого участвующего pile с необходимой избыточностью.
 
 
 ### Переходы между состояниями {#transitions-between-states}
@@ -58,7 +69,9 @@ Pile не являются самостоятельными кластерами
 | `SYNCHRONIZED` | `DISCONNECTED` | Вручную — [failover](../reference/ydb-cli/commands/bridge/failover.md) | Аварийное отключение недоступного `SYNCHRONIZED`. |
 | `SYNCHRONIZED` | `PROMOTED` | Вручную — [switchover](../reference/ydb-cli/commands/bridge/switchover.md) | Старт плановой смены `PRIMARY`. |
 | `SYNCHRONIZED` | `SUSPENDED` | Вручную — [takedown](../reference/ydb-cli/commands/bridge/takedown.md) | Старт планового отключения `SYNCHRONIZED` pile. |
-| `DISCONNECTED` | `NOT_SYNCHRONIZED` | Вручную — [rejoin](../reference/ydb-cli/commands/bridge/rejoin.md) | Возврат pile в кластер после обслуживания/восстановления. |
+| `DISCONNECTED` | `NOT_SYNCHRONIZED` | Вручную — [join-pile / rejoin](../reference/ydb-cli/commands/bridge/rejoin.md) | Подключение подготовленного pile или возврат после обслуживания/восстановления. |
+| `DISCONNECTED` | `INACTIVE` | Вручную — [destroy-pile](../reference/ydb-cli/commands/bridge/destroy-pile.md) | Безвозвратное удаление частей групп хранения pile и их данных. |
+| `INACTIVE` | `DISCONNECTED` | Вручную — [provision-pile](../reference/ydb-cli/commands/bridge/provision-pile.md) | Выделение частей статических групп и групп в режиме bridge для pile. |
 | `NOT_SYNCHRONIZED` | `SYNCHRONIZED` | Автоматически | Завершение синхронизации данных. |
 | `NOT_SYNCHRONIZED` | `DISCONNECTED` | Вручную — [failover](../reference/ydb-cli/commands/bridge/failover.md) | Аварийное отключение недоступного `NOT_SYNCHRONIZED`. |
 | `PROMOTED` | `PRIMARY` | Автоматически | Завершение планового переключения. |

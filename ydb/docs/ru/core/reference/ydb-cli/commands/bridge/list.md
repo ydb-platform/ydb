@@ -2,7 +2,7 @@
 
 {% include [feature_enterprise.md](../../../../_includes/feature_enterprise.md) %}
 
-С помощью команды `admin cluster bridge list` можно вывести состояние каждого pile в [режиме bridge](../../../../concepts/bridge.md).
+С помощью команды `admin cluster bridge list` можно вывести состояния pile, ход преобразования кластера и выполняющиеся операции с pile в [режиме bridge](../../../../concepts/bridge.md). Эта команда только читает состояние и не запрашивает подтверждение.
 
 Общий вид команды:
 
@@ -10,8 +10,8 @@
 {{ ydb-cli }} [global options...] admin cluster bridge list [options...]
 ```
 
-* `global options` — [глобальные параметры](../global-options.md) CLI.
-* `options` — [параметры подкоманды](#options).
+- `global options` — [глобальные параметры](../global-options.md) CLI;
+- `options` — [параметры подкоманды](#options).
 
 Просмотр справки по команде:
 
@@ -32,29 +32,54 @@
 
 ```bash
 {{ ydb-cli }} admin cluster bridge list
-
-pile-a: PRIMARY
-pile-b: SYNCHRONIZED
 ```
 
+```text
+Pile pile-a: PRIMARY
+Pile pile-b: SYNCHRONIZED
+Generation: 4
+```
+
+Во время преобразования вывод также содержит `Conversion from non-bridged cluster is in progress, piles can't be added yet`. Во время подготовки или удаления pile выводится выполняющаяся операция и, после неудачной попытки, её ошибка:
+
+```text
+Pending operation on pile pile-b: ADD
+Last attempt has failed (being retried): <error>
+```
 
 Вывести состояние в формате JSON:
 
 ```bash
 {{ ydb-cli }} admin cluster bridge list --format json
+```
 
+```json
 {
-  "pile-a": "PRIMARY",
-  "pile-b": "SYNCHRONIZED"
+  "generation": 4,
+  "piles": [
+    {
+      "pile_name": "pile-a",
+      "state": "PRIMARY"
+    },
+    {
+      "pile_name": "pile-b",
+      "state": "SYNCHRONIZED"
+    }
+  ],
+  "conversion_in_progress": false
 }
 ```
+
+Если операция с pile выполняется, вывод JSON дополнительно содержит `pending_pile_operation` с полями `pile_name`, `kind` и `error_reason`.
 
 Вывести состояние в формате CSV:
 
 ```bash
 {{ ydb-cli }} admin cluster bridge list --format csv
+```
 
-pile,state
-pile-a,PRIMARY
-pile-b,SYNCHRONIZED
+```csv
+pile_name,state,generation
+pile-a,PRIMARY,4
+pile-b,SYNCHRONIZED,4
 ```

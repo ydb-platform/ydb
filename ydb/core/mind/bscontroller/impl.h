@@ -9,6 +9,7 @@
 #include "stat_processor.h"
 #include "indir.h"
 #include "self_heal.h"
+#include "group_state.h"
 #include "storage_pool_stat.h"
 
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
@@ -16,6 +17,7 @@
 #include <util/generic/hash_multi_map.h>
 
 #include <array>
+#include <unordered_map>
 
 inline IOutputStream& operator <<(IOutputStream& o, NKikimr::TErasureType::EErasureSpecies p) {
     return o << NKikimr::TErasureType::ErasureSpeciesName(p);
@@ -639,7 +641,7 @@ public:
         TMaybe<Table::BlobDepotId::Type> BlobDepotId;
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
-        // Derived from the volatile DataCenterStates; intentionally omitted from the table adapter.
+        // Persisted with the group generation by CommitConfigUpdates.
         std::optional<std::array<NKikimrBlobStorage::TGroupInfo::TFailRealm::EState, 3>> FailRealmStates;
         std::optional<NKikimrBlobStorage::TGroupMetrics> GroupMetrics;
         std::optional<NKikimrBlobStorage::TGroupInfo> BridgeGroupInfo; // not synced automatically
@@ -1498,8 +1500,9 @@ private:
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     TActorId ResponsivenessActorID;
     TTabletResponsivenessPinger* ResponsivenessPinger;
-    using TDataCenterStates = THashMap<TString, NKikimrBlobStorage::TGroupInfo::TFailRealm::EState>;
-    TDataCenterStates DataCenterStates; // Not persisted.
+    using TDataCenterStates = std::unordered_map<TString,
+        NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter::EDataCenterState>;
+    TDataCenterStates DataCenterStates;
     TMap<THostConfigId, THostConfigInfo> HostConfigs;
     TMap<TBoxId, TBoxInfo> Boxes;
     TMap<TBoxStoragePoolId, TStoragePoolInfo> StoragePools;
@@ -1846,6 +1849,8 @@ public:
     // basis). BS_CONTROLLER reports faulty PDisks and all involved groups in a push notification manner.
     IActor *CreateSelfHealActor();
     TActorId SelfHealId;
+    TActorId GroupStateActorId;
+    void UpdateGroupStateActor(TGroupId groupId);
 
     TActorId ClusterBalanceActorId;
 
@@ -2271,6 +2276,10 @@ public:
         UpdateSystemViews();
         UpdateSelfHealCounters();
         SignalTabletActive(TActivationContext::AsActorContext());
+        GroupStateActorId = Register(CreateGroupStateActor(SelfId()));
+        for (const auto& [groupId, group] : GroupMap) {
+            UpdateGroupStateActor(groupId);
+        }
         Loaded = true;
         LoadedAt = TActivationContext::Monotonic();
         ApplyStorageConfig();

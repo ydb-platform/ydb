@@ -420,6 +420,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(DeleteSpecificGroups)
                     HANDLE_COMMAND(DefineDataCenterStates)
                     HANDLE_COMMAND(TestResetDataCenterStates)
+                    HANDLE_COMMAND(DefineFailRealmStates)
 
                     default: break;
                 }

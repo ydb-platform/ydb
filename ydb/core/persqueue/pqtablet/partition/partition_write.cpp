@@ -924,7 +924,6 @@ void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const T
             // so the dedup state survives the upgrade.
             body.SeqNo = it->second.SeqNo;
         } else {
-
             switch (it->second.State) {
             case TSourceIdInfo::EState::Registered:
                 return ReplyOk(ctx, ev->Get()->Cookie);

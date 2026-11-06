@@ -340,7 +340,7 @@ void ExportKesusImpl(TBackupTestFixture& f, bool throughDirectory) {
     UNIT_ASSERT_VALUES_EQUAL(metadata.GetRateLimiterResources()->size(), 1);
     const auto& entry = metadata.GetRateLimiterResources()->front();
     UNIT_ASSERT_VALUES_EQUAL(entry.ResourcePath, "limit");
-    UNIT_ASSERT_VALUES_EQUAL(entry.ExportPrefix, "limit");
+    UNIT_ASSERT_VALUES_EQUAL(entry.ExportPrefix, "rate_limiter_resources/001");
     Ydb::RateLimiter::CreateResourceRequest resource;
     UNIT_ASSERT(NYdb::NBackup::ParseProto(readFile(entry.ExportPrefix + "/create_rate_limiter.pb"), resource));
     UNIT_ASSERT(resource.coordination_node_path().empty());
@@ -351,6 +351,7 @@ void ExportKesusImpl(TBackupTestFixture& f, bool throughDirectory) {
     UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->size(), 1);
     const auto& semaphoreEntry = metadata.GetSemaphores()->front();
     UNIT_ASSERT_VALUES_EQUAL(semaphoreEntry.Name, "../persistent");
+    UNIT_ASSERT_VALUES_EQUAL(semaphoreEntry.ExportPrefix, "semaphores/001");
     Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
     UNIT_ASSERT(NYdb::NBackup::ParseProto(readFile(semaphoreEntry.ExportPrefix + "/create_semaphore.pb"), semaphore));
     UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), "../persistent");

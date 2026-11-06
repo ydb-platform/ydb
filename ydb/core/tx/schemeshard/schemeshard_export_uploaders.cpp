@@ -594,23 +594,11 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
         }
 
         if (PathType == NKikimrSchemeOp::EPathTypeKesus) {
-            // Resource paths may occupy any top-level directory. Keep semaphore
-            // files in a separate namespace, never using semaphore names as paths.
-            TString semaphoresPrefix = "semaphores";
-            THashSet<TString> resourceDirectories;
-            if (!IV) {
-                for (const auto& resource : KesusResources) {
-                    resourceDirectories.insert(TString(TStringBuf(resource.resource_path()).Before('/')));
-                }
-            }
-            while (resourceDirectories.contains(semaphoresPrefix)) {
-                semaphoresPrefix += "_";
-            }
             std::vector<NBackup::TRateLimiterResourceMetadata> resources;
             resources.reserve(KesusResources.size());
             for (ui32 index = 0; index < KesusResources.size(); ++index) {
                 const TString resourcePath = KesusResources[index].resource_path();
-                const TString exportPrefix = IV ? Sprintf("%03u", index + 1) : resourcePath;
+                const TString exportPrefix = Sprintf("rate_limiter_resources/%03u", index + 1);
                 Ydb::RateLimiter::CreateResourceRequest request;
                 *request.mutable_resource() = std::move(KesusResources[index]);
                 // As in tools dump, paths are supplied by restore, not stored in the request.
@@ -634,7 +622,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
             semaphores.reserve(KesusSemaphores.size());
             for (ui32 index = 0; index < KesusSemaphores.size(); ++index) {
                 const auto& semaphore = KesusSemaphores[index];
-                const TString prefix = semaphoresPrefix + "/" + Sprintf("%03u", index + 1);
+                const TString prefix = Sprintf("semaphores/%03u", index + 1);
                 Ydb::Coordination::SessionRequest::CreateSemaphore request;
                 request.set_name(semaphore.GetName());
                 request.set_limit(semaphore.GetLimit());

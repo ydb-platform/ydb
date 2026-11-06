@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(RateLimiterMetadataTest) {
 
     Y_UNIT_TEST(EmptyListReplacesNonemptyList) {
         TMetadata metadata;
-        metadata.SetRateLimiterResources({{.ExportPrefix = "A", .ResourcePath = "A"}});
+        metadata.SetRateLimiterResources({{.ExportPrefix = "rate_limiter_resources/001", .ResourcePath = "A"}});
         metadata.SetRateLimiterResources({});
         const TString serialized = metadata.Serialize();
         NJson::TJsonValue json;
@@ -63,16 +63,16 @@ Y_UNIT_TEST_SUITE(RateLimiterMetadataTest) {
         metadata.AddChangefeed({.ExportPrefix = "changefeed", .Name = "feed"});
         metadata.AddIndex({.ExportPrefix = "index", .ImplTablePrefix = "indexImplTable"});
         metadata.SetRateLimiterResources({
-            {.ExportPrefix = "001", .ResourcePath = "parent"},
-            {.ExportPrefix = "002", .ResourcePath = "parent/child"},
+            {.ExportPrefix = "rate_limiter_resources/001", .ResourcePath = "parent"},
+            {.ExportPrefix = "rate_limiter_resources/002", .ResourcePath = "parent/child"},
         });
         const auto parsed = TMetadata::Deserialize(metadata.Serialize());
         UNIT_ASSERT(parsed.GetRateLimiterResources());
         const auto& resources = *parsed.GetRateLimiterResources();
         UNIT_ASSERT_VALUES_EQUAL(resources.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(resources[0].ExportPrefix, "001");
+        UNIT_ASSERT_VALUES_EQUAL(resources[0].ExportPrefix, "rate_limiter_resources/001");
         UNIT_ASSERT_VALUES_EQUAL(resources[0].ResourcePath, "parent");
-        UNIT_ASSERT_VALUES_EQUAL(resources[1].ExportPrefix, "002");
+        UNIT_ASSERT_VALUES_EQUAL(resources[1].ExportPrefix, "rate_limiter_resources/002");
         UNIT_ASSERT_VALUES_EQUAL(resources[1].ResourcePath, "parent/child");
         UNIT_ASSERT_VALUES_EQUAL(parsed.GetVersion(), 1);
         UNIT_ASSERT(parsed.GetEnablePermissions());
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(SemaphoreMetadataTest) {
 
     Y_UNIT_TEST(NamesAndPrefixesRoundTrip) {
         TMetadata metadata;
-        metadata.SetRateLimiterResources({{.ExportPrefix = "001", .ResourcePath = "resource"}});
+        metadata.SetRateLimiterResources({{.ExportPrefix = "rate_limiter_resources/001", .ResourcePath = "resource"}});
         metadata.SetSemaphores({
             {.ExportPrefix = "semaphores/001", .Name = "../name"},
             {.ExportPrefix = "semaphores/002", .Name = "name/with/slashes"},

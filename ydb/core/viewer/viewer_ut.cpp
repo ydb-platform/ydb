@@ -1934,21 +1934,27 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_C(location.StartsWith(TStringBuilder() << "/node/" << storageNodeId << "/viewer/json/cluster?"), location);
     }
 
-    Y_UNIT_TEST_TWIN(ClusterBridgeComputeNodeForwardsWithoutConnectedStorageNode, forwarded) {
-        // No established interconnect session does not mean a static node is unreachable.
+    Y_UNIT_TEST_TWIN(ClusterBridgeComputeNodeWithoutConnectedStorageNode, forwarded) {
+        // Preserve the partial cluster response when the known static nodes of this pile are disconnected.
         const auto json = GetClusterBridgeInfo({
             .Https = true,
             .ForwardedFromNode = forwarded,
             .ServingNodeIndex = 1,
             .ServingMonitoringPort = 8766,
-            .ExpectedStatus = "307",
             .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
+            .AliveNodeIndexes = {1, 3, 4},
+            // Node 3 is dynamic and node 4 belongs to another pile.
             .ConnectedNodeIndexes = std::unordered_set<ui32>{3, 4},
         });
-        const TString location = json["Location"].GetStringSafe();
-        const ui32 firstNodeId = json["FirstNodeId"].GetUIntegerSafe();
-        UNIT_ASSERT_C(location.StartsWith(TStringBuilder() << "/node/" << firstNodeId << "/viewer/json/cluster?")
-            || location.StartsWith(TStringBuilder() << "/node/" << firstNodeId + 2 << "/viewer/json/cluster?"), location);
+        const auto& piles = json["BridgeInfo"]["Piles"].GetArraySafe();
+        AssertBridgePileCounts(piles[0], 2, 2);
+        AssertBridgePileAliveCounts(piles[0], 0, 2);
+        AssertBridgePileCounts(piles[1], 1, 1);
+        AssertBridgePileUnknownAliveCounts(piles[1]);
+        const auto& problems = json["Problems"].GetArraySafe();
+        UNIT_ASSERT(std::any_of(problems.begin(), problems.end(), [](const auto& problem) {
+            return problem.GetStringSafe() == "no-pile-node-info";
+        }));
     }
 
     Y_UNIT_TEST_TWIN(ClusterBridgeComputeNodeWithoutAvailableStorageNode, inactive) {

@@ -408,17 +408,10 @@ private:
             return false;
         }
         std::vector<ui32> nodes;
-        std::vector<ui32> connectedNodes;
         for (const auto& node : NodeData) {
-            if (node.Static && node.PileNum == bridgeInfo.SelfNodePile->BridgePileId.GetPileIndex()) {
+            if (node.Static && node.Connected && node.PileNum == bridgeInfo.SelfNodePile->BridgePileId.GetPileIndex()) {
                 nodes.push_back(node.NodeId);
-                if (node.Connected) {
-                    connectedNodes.push_back(node.NodeId);
-                }
             }
-        }
-        if (!connectedNodes.empty()) {
-            nodes = std::move(connectedNodes);
         }
         if (nodes.empty()) {
             return false;

@@ -383,6 +383,8 @@ message TBlobStorageConfig {
 
     optional NKikimrBlobStorage.TBscConfig BscSettings = 12;
 
+    // limit of bridge syncer reads per node, 0 means no limit; TBscConfig.BridgeSyncTotalRateBytesPerSecond limits the
+    // whole cluster, and the lower of the two applies
     optional uint64 BridgeSyncRateBytesPerSecond = 13 [default = 500000000]; // default 500 MB/s per node
     optional NKikimrBlobStorage.TInferPDiskSlotCountSettings InferPDiskSlotCountSettings = 14;
 

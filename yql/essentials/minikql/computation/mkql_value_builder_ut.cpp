@@ -68,6 +68,9 @@ private:
     UNIT_TEST(TestEmbeddedVariant);
     UNIT_TEST(TestBoxedVariant);
     UNIT_TEST(TestSubstring);
+    UNIT_TEST(TestValueStringConversions);
+    UNIT_TEST(TestValueFromStringErrors);
+    UNIT_TEST(TestValueStringViews);
     UNIT_TEST(TestPgValueFromErrors);
     UNIT_TEST(TestPgValueFromText);
     UNIT_TEST(TestPgValueFromBinary);
@@ -76,6 +79,47 @@ private:
     UNIT_TEST(TestPgNewString);
     UNIT_TEST(TestArrowBlock);
     UNIT_TEST_SUITE_END();
+
+    void TestValueStringConversions() {
+        const IValueBuilder& builder = Builder_;
+        for (const i64 number : {Min<i64>(), i64(-1), i64(0), i64(1), Max<i64>()}) {
+            const auto text = builder.ValueToString(EDataSlot::Int64, TUnboxedValuePod(number));
+            UNIT_ASSERT_VALUES_EQUAL(TStringBuf(text.AsStringRef()), ToString(number));
+            const auto parsed = builder.ValueFromString(EDataSlot::Int64, text.AsStringRef());
+            UNIT_ASSERT(parsed);
+            UNIT_ASSERT_VALUES_EQUAL(parsed.Get<i64>(), number);
+        }
+        for (const bool value : {false, true}) {
+            const auto text = builder.ValueToString(EDataSlot::Bool, TUnboxedValuePod(value));
+            UNIT_ASSERT_VALUES_EQUAL(TStringBuf(text.AsStringRef()), value ? "true" : "false");
+            const auto parsed = builder.ValueFromString(EDataSlot::Bool, text.AsStringRef());
+            UNIT_ASSERT(parsed);
+            UNIT_ASSERT_VALUES_EQUAL(parsed.Get<bool>(), value);
+        }
+    }
+
+    void TestValueFromStringErrors() {
+        const IValueBuilder& builder = Builder_;
+        for (const TStringRef text : {TStringRef(""), TStringRef("invalid"), TStringRef("9223372036854775808")}) {
+            UNIT_ASSERT(!builder.ValueFromString(EDataSlot::Int64, text));
+        }
+        UNIT_ASSERT(!builder.ValueFromString(EDataSlot::Bool, "invalid"));
+    }
+
+    void TestValueStringViews() {
+        const IValueBuilder& builder = Builder_;
+        const char digits[] = {'4', '2', 'x'};
+        UNIT_ASSERT_VALUES_EQUAL(builder.ValueFromString(EDataSlot::Int32, TStringRef(digits, 2)).Get<i32>(), 42);
+        const char binary[] = {'a', '\0', 'b'};
+        for (const TStringRef text : {TStringRef(""), TStringRef(binary, sizeof(binary)),
+                                      TStringRef("a string longer than an embedded value")}) {
+            const auto parsed = builder.ValueFromString(EDataSlot::String, text);
+            UNIT_ASSERT(parsed);
+            UNIT_ASSERT_VALUES_EQUAL(TStringBuf(parsed.AsStringRef()), TStringBuf(text));
+            const auto formatted = builder.ValueToString(EDataSlot::String, parsed);
+            UNIT_ASSERT_VALUES_EQUAL(TStringBuf(formatted.AsStringRef()), TStringBuf(text));
+        }
+    }
 
     void TestEmbeddedVariant() {
         const auto v = Builder_.NewVariant(62, TUnboxedValuePod((ui64)42));

@@ -188,6 +188,7 @@ struct TKqpScriptExecutionEvents {
         EvResetScriptExecutionRetriesResponse,
         EvGetScriptExecutionPhysicalGraph,
         EvDescribeResourceIdResponse,
+        EvFetchScriptResultsRequest,
     };
 };
 

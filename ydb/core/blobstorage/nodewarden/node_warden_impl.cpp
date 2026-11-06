@@ -223,6 +223,7 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvPrivate::TEvDereferencePDisk, Handle);
         hFunc(TEvPrivate::TEvCleanupTemporaryPDisk, Handle);
         hFunc(TEvents::TEvPoisonTaken, Handle);
+        hFunc(TEvents::TEvUndelivered, Handle);
 
         hFunc(TEvNodeWardenQueryCacheResult, Handle);
 
@@ -610,7 +611,7 @@ void TNodeWarden::Bootstrap() {
     if (Cfg->BlobStorageConfig.HasServiceSet()) {
         const auto& serviceSet = Cfg->BlobStorageConfig.GetServiceSet();
         if (serviceSet.GroupsSize()) {
-            ApplyServiceSet(Cfg->BlobStorageConfig.GetServiceSet(), true, false, false, "initial");
+            ApplyServiceSet(Cfg->BlobStorageConfig.GetServiceSet(), true, false, "initial");
         } else {
             Groups.try_emplace(0); // group is gonna be configured soon by DistributedConfigKeeper
         }
@@ -673,7 +674,7 @@ void TNodeWarden::HandleReadCache() {
                     InstanceId.emplace(proto.GetInstanceId());
                 }
 
-                ApplyServiceSet(proto.GetServiceSet(), false, false, false, "cache");
+                ApplyCachedServiceSet(proto.GetServiceSet());
             } catch (...) {
                 YDB_LOG_INFO_COMP(BS_NODE, "Bootstrap failed to fetch cache",
                     {"marker", "NW16"},
@@ -991,13 +992,13 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         InstanceId.emplace(record.GetInstanceId());
     }
 
-    if (record.HasServiceSet()) {
+    if (record.HasServiceSet() || record.GetComprehensive()) {
         const bool comprehensive = record.GetComprehensive();
         IgnoreCache |= comprehensive;
         YDB_LOG_DEBUG_COMP(BS_NODE, "Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate)",
             {"marker", "NW17"},
             {"msg", record});
-        ApplyServiceSet(record.GetServiceSet(), false, comprehensive, true, "controller");
+        ApplyControllerServiceSet(record.GetServiceSet(), comprehensive);
     }
 
     for (const auto& item : record.GetGroupMetadata()) {

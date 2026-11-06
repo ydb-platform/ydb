@@ -10,7 +10,7 @@ RUN apt-get update \
 
 COPY ydbd/ /ydbwork/ydbd/
 WORKDIR /ydbwork/ydbd/
-RUN ./ya make -r -T \
+RUN ./ya make -r -T -DFORCE_VCS_INFO_UPDATE \
       -C ydb/apps/ydbd/ydbd \
       -o /ydbwork/out/ \
     && /ydbwork/out/ydb/apps/ydbd/ydbd -V \

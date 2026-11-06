@@ -512,6 +512,10 @@ bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
     }
 }
 
+void TSchemeShard::Handle(NBackup::TEvTableChecksum::TEvResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressImport(ev), ctx);
+}
+
 } // NSchemeShard
 } // NKikimr
 

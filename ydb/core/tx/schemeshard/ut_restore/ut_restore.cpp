@@ -1,9 +1,11 @@
 #include "ut_helpers/ut_backup_restore_common.h"
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/lib/value/value.h>
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/query/table_checksum.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -18,6 +20,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/wrappers/events/get_object.h>
@@ -10162,6 +10165,225 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
         }
     };
+
+    template <bool IsFs>
+    void TableChecksumValidation(bool cancel) {
+        TTestBasicRuntime runtime;
+        TTestEnv testEnv(runtime, TTestEnvOptions());
+        const auto data = GenerateTestData(R"(
+            columns { name: "key" type { optional_type { item { type_id: UTF8 } } } }
+            columns { name: "value" type { optional_type { item { type_id: UTF8 } } } }
+            primary_key: "key"
+        )",
+            { { "a", 1 } });
+        auto files = ConvertTestData(data);
+        files["/metadata.json"] = R"({"version":0,"table_checksum":{"version":1,"count":"1","hash":"17"}})";
+        TImportEnv<IsFs> storage(files, DefaultImportItems());
+        storage.SetupRuntime(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(false);
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(false);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(false);
+        runtime.GetAppData().FeatureFlags.SetEnableBackupTableChecksum(true);
+        using namespace NKikimr::NSchemeShard;
+        TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(runtime);
+        const ui64 id = 100;
+        AsyncImport(runtime, id, "/MyRoot", storage.Request);
+        runtime.WaitFor("post-import checksum validation", [&] {
+            return starts.size() == 1;
+        });
+        const auto firstRecipient = starts[0]->GetRecipientRewrite();
+        const auto firstOwner = starts[0]->Sender;
+        if (cancel) {
+            TestCancelImport(runtime, id + 1, "/MyRoot", id);
+            testEnv.TestWaitNotification(runtime, id);
+            runtime.Send(new IEventHandle(
+                firstOwner, firstRecipient, new NBackup::TEvTableChecksum::TEvResult(id, 0, Ydb::StatusIds::SUCCESS,
+                                                { .Count = 1, .Hash = 17 }, "")));
+            TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        } else {
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            runtime.WaitFor("resumed checksum validation", [&] {
+                return starts.size() == 2;
+            });
+            runtime.Send(new IEventHandle(
+                firstOwner, firstRecipient, new NBackup::TEvTableChecksum::TEvResult(id, 0, Ydb::StatusIds::SUCCESS,
+                                                { .Count = 1, .Hash = 17 }, "")));
+            const auto status = TestGetImport(runtime, id, "/MyRoot");
+            UNIT_ASSERT_VALUES_EQUAL(
+                status.GetResponse().GetEntry().GetProgress(), Ydb::Import::ImportProgress::PROGRESS_TRANSFER_DATA);
+            const auto& resumed = starts[1];
+            runtime.Send(new IEventHandle(resumed->Sender, resumed->GetRecipientRewrite(),
+                new NBackup::TEvTableChecksum::TEvResult(
+                    id, 0, Ydb::StatusIds::SUCCESS, { .Count = 1, .Hash = 17 }, "")));
+            runtime.Send(new IEventHandle(resumed->GetRecipientRewrite(), {}, new TEvents::TEvPoisonPill()));
+            testEnv.TestWaitNotification(runtime, id);
+            TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumValidationRecovery, IsFs) {
+        TableChecksumValidation<IsFs>(false);
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumValidationCancellation, IsFs) {
+        TableChecksumValidation<IsFs>(true);
+    }
+
+    template <bool IsFs>
+    void TableChecksumQueue(bool cancel, bool disableChecksumOnRecovery = false) {
+        TTestBasicRuntime runtime;
+        TTestEnv testEnv(runtime, TTestEnvOptions());
+        const auto data = GenerateTestData(R"(
+            columns { name: "key" type { optional_type { item { type_id: UTF8 } } } }
+            columns { name: "value" type { optional_type { item { type_id: UTF8 } } } }
+            primary_key: "key"
+        )",
+            { { "a", 1 } });
+        const auto tableFiles = ConvertTestData(data);
+        constexpr ui32 tables = 6;
+        THashMap<TString, TString> files;
+        TVector<TImportItem> items;
+        for (ui32 idx = 0; idx < tables; ++idx) {
+            const TString prefix = TStringBuilder() << "table" << idx;
+            for (const auto& [name, content] : tableFiles) {
+                files[TStringBuilder() << "/" << prefix << name] = content;
+            }
+            files[TStringBuilder() << "/" << prefix << "/metadata.json"] =
+                R"({"version":0,"table_checksum":{"version":1,"count":"1","hash":"17"}})";
+            items.push_back({ prefix, TStringBuilder() << "/MyRoot/Table" << idx });
+        }
+        TImportEnv<IsFs> storage(files, items);
+        storage.SetupRuntime(runtime);
+        auto& flags = runtime.GetAppData().FeatureFlags;
+        flags.SetEnableExportFiltering(false);
+        flags.SetEnableEncryptedExport(false);
+        flags.SetEnableDataShardDirectPartImport(false);
+        flags.SetEnableBackupTableChecksum(true);
+        THashSet<ui64> restoreTxIds;
+        auto restores = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+                if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpRestore) {
+                    restoreTxIds.insert(ev->Get()->Record.GetTxId());
+                }
+            }
+        });
+        THashSet<ui64> completedRestores;
+        auto completions = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>([&](auto& ev) {
+            const auto txId = ev->Get()->Record.GetTxId();
+            if (restoreTxIds.contains(txId)) {
+                completedRestores.insert(txId);
+            }
+        });
+        TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(runtime);
+        const ui64 id = 100;
+        AsyncImport(runtime, id, "/MyRoot", storage.Request);
+        runtime.WaitFor("four admitted checksum checks", [&] {
+            return starts.size() == 4;
+        });
+
+        using EState = TImportInfo::EState;
+        const auto readStates = [&](bool checkRestoreIds = true) {
+            const auto stored = ReadSystemTable(
+                runtime, TTestTxConfig::SchemeShard, "ImportItems", { "ImportId", "Index" }, { "State", "WaitTxId" });
+            const auto value = NClient::TValue::Create(stored);
+            const auto rows = value["Result"]["List"];
+            THashMap<EState, ui32> counts;
+            for (size_t idx = 0; idx < rows.Size(); ++idx) {
+                const ui8 state = rows[static_cast<int>(idx)]["State"];
+                const ui64 waitTxId = rows[static_cast<int>(idx)]["WaitTxId"];
+                if (checkRestoreIds && static_cast<EState>(state) == EState::Transferring) {
+                    // An older binary can subscribe to this completed restore and continue normally
+                    UNIT_ASSERT(restoreTxIds.contains(waitTxId));
+                } else if (static_cast<EState>(state) == EState::Done) {
+                    UNIT_ASSERT_VALUES_EQUAL(waitTxId, 0);
+                }
+                ++counts[static_cast<EState>(state)];
+            }
+            return counts;
+        };
+        THashMap<EState, ui32> queuedStates;
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        do {
+            queuedStates = readStates(false);
+            if (queuedStates.Value(EState::Transferring, 0u) == tables && completedRestores.size() == tables) {
+                break;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        } while (TInstant::Now() < deadline);
+        UNIT_ASSERT_VALUES_EQUAL(queuedStates.Value(EState::Transferring, 0u), tables);
+        UNIT_ASSERT_VALUES_EQUAL(completedRestores.size(), tables);
+        UNIT_ASSERT_VALUES_EQUAL(restoreTxIds.size(), tables);
+        readStates();
+        const auto complete = [&](size_t index) {
+            const auto& start = starts[index];
+            // Only the item owning this query actor accepts the synthetic result
+            for (ui32 idx = 0; idx < tables; ++idx) {
+                runtime.Send(new IEventHandle(start->Sender, start->GetRecipientRewrite(),
+                    new NBackup::TEvTableChecksum::TEvResult(
+                        id, idx, Ydb::StatusIds::SUCCESS, { .Count = 1, .Hash = 17 }, "")));
+            }
+            runtime.Send(new IEventHandle(start->GetRecipientRewrite(), {}, new TEvents::TEvPoisonPill()));
+        };
+        if (cancel) {
+            TestCancelImport(runtime, id + 1, "/MyRoot", id);
+            testEnv.TestWaitNotification(runtime, id);
+            for (size_t idx = 0; idx < 4; ++idx) {
+                complete(idx);
+            }
+            TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT_VALUES_EQUAL(starts.size(), 4);
+            return;
+        }
+
+        flags.SetEnableBackupTableChecksum(!disableChecksumOnRecovery);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        if (disableChecksumOnRecovery) {
+            testEnv.TestWaitNotification(runtime, id);
+            TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(starts.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(readStates().Value(EState::Done, 0u), tables);
+            UNIT_ASSERT_VALUES_EQUAL(restoreTxIds.size(), tables);
+            return;
+        }
+        runtime.WaitFor("four resumed checks, queued checks still waiting", [&] {
+            return starts.size() == 8;
+        });
+        const auto recovered = readStates();
+        UNIT_ASSERT_VALUES_EQUAL(recovered.Value(EState::Transferring, 0u), tables);
+        const auto status = TestGetImport(runtime, id, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(
+            status.GetResponse().GetEntry().GetProgress(), Ydb::Import::ImportProgress::PROGRESS_TRANSFER_DATA);
+
+        complete(4);
+        runtime.WaitFor("queued checksum admitted after a slot is freed", [&] {
+            return starts.size() == 9;
+        });
+        const auto admitted = readStates();
+        UNIT_ASSERT_VALUES_EQUAL(admitted.Value(EState::Transferring, 0u), tables - 1);
+        UNIT_ASSERT_VALUES_EQUAL(admitted.Value(EState::Done, 0u), 1);
+        for (size_t idx = 5; idx < 10; ++idx) {
+            runtime.WaitFor("next checksum check", [&] {
+                return starts.size() > idx;
+            });
+            complete(idx);
+        }
+        testEnv.TestWaitNotification(runtime, id);
+        TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(starts.size(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(restoreTxIds.size(), tables);
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumQueueRecovery, IsFs) {
+        TableChecksumQueue<IsFs>(false);
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumQueueCancellation, IsFs) {
+        TableChecksumQueue<IsFs>(true);
+    }
+
+    Y_UNIT_TEST_TWIN(TableChecksumDisabledOnRecovery, IsFs) {
+        TableChecksumQueue<IsFs>(false, true);
+    }
 
     template <bool IsFs>
     void ShouldSucceed(

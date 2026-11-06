@@ -46,6 +46,17 @@ struct TIndexMetadata {
     TString ImplTablePrefix;
 };
 
+struct TTableChecksum {
+    static constexpr ui32 Version = 1;
+
+    ui64 Count = 0;
+    ui64 Hash = 0;
+
+    bool operator==(const TTableChecksum&) const = default;
+
+    TString ToString() const;
+};
+
 class TMetadata {
 public:
     TMetadata() = default;
@@ -68,8 +79,11 @@ public:
     bool HasEnablePermissions() const;
     bool GetEnablePermissions() const;
 
+    const std::optional<TTableChecksum>& GetTableChecksum() const;
+
     TString Serialize() const;
-    static TMetadata Deserialize(const TString& metadata);
+    static TMetadata Deserialize(const TString& metadata, bool readTableChecksum = false);
+    static TString WithTableChecksum(const TString& metadata, const TTableChecksum& checksum);
 
 private:
     TString ConsistencyKey;
@@ -94,6 +108,7 @@ private:
     // 0: The export has no permissions
     // 1: The export must have permissions file
     std::optional<bool> EnablePermissions;
+    std::optional<TTableChecksum> TableChecksum;
 };
 
 TString NormalizeItemPath(const TString& path);

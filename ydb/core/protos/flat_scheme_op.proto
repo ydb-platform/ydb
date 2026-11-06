@@ -1571,6 +1571,14 @@ message TBackupTask {
     }
 
     optional TEncryptionSettings EncryptionSettings = 19;
+    message TTableChecksum {
+        optional string Database = 1;
+        optional string TablePath = 2;
+        optional uint32 Version = 3;
+        optional uint64 Count = 4;
+        optional uint64 Hash = 5;
+    }
+    optional TTableChecksum TableChecksum = 21;
 }
 
 message TRestoreTask {

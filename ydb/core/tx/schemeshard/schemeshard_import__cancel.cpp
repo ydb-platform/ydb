@@ -58,6 +58,10 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
                 Self->RunningImportSchemeGetters.erase(schemaMappingGetter);
             }
             for (auto& item : importInfo->Items) {
+                if (auto actor = std::exchange(item.ChecksumActor, {})) {
+                    Send(actor, new TEvents::TEvPoisonPill());
+                    Self->RunningTableChecksumQueries.erase(actor);
+                }
                 if (auto schemeGetter = std::exchange(item.SchemeGetter, {})) {
                     Send(schemeGetter, new TEvents::TEvPoisonPill());
                     Self->RunningImportSchemeGetters.erase(schemeGetter);

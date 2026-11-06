@@ -102,6 +102,15 @@ $ sha256sum -c scheme.pb.sha256
 scheme.pb: OK
 ```
 
+The logical table checksum extension adds an optional field to each row table's `metadata.json` (`metadata.json.enc` for an encrypted export):
+
+```json
+{"table_checksum":{"version":1,"count":"123","hash":"3866946870620905364"}}
+```
+
+When the `EnableBackupTableChecksum` feature flag (`enable_backup_table_checksum` in YAML) is enabled, server-side S3 and NFS exports calculate this checksum alongside data export. Import calculates it again after loading the table and fails the operation if either the row count or hash differs. With the flag disabled, import ignores the field. Backups without the field remain importable.
+
+
 ## Examples {#example}
 
 ### Cluster {#example-cluster}

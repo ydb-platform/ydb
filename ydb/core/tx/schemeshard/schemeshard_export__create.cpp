@@ -224,6 +224,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 exportInfo->IncludeIndexData = settings.include_index_data();
             }
             if (enableFeatureFlags) {
+                exportInfo->EnableBackupTableChecksum = AppData()->FeatureFlags.GetEnableBackupTableChecksum();
                 exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
                 exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
             }

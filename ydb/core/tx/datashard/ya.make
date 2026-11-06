@@ -459,6 +459,7 @@ PEERDIR(
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/backup/common
+    ydb/core/backup/query
     ydb/core/base
     ydb/library/json_index
     ydb/core/change_exchange

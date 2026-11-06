@@ -17,23 +17,23 @@ NKikimrDataEvents::TEvWriteResult TShardWriter::StartCommitImpl(const ui64 txId)
 
     TAutoPtr<NActors::IEventHandle> handle;
     auto event = Runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
-    AFL_VERIFY(event);
-    AFL_VERIFY(event->Record.GetTxId() == txId);
+    YDB_LOG_VERIFY(event);
+    YDB_LOG_VERIFY(event->Record.GetTxId() == txId);
     return event->Record;
 }
 
 void TShardWriter::StartCommitFail(const ui64 txId) {
     auto event = StartCommitImpl(txId);
-    AFL_VERIFY(event.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+    YDB_LOG_VERIFY(event.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
 }
 
 TPlanStep TShardWriter::StartCommit(const ui64 txId) {
     const auto now = Runtime.GetTimeProvider()->Now();
     auto event = StartCommitImpl(txId);
-    AFL_VERIFY(event.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
-    AFL_VERIFY(now.MilliSeconds() <= event.GetMinStep());
-    AFL_VERIFY(event.GetMinStep() <= event.GetMaxStep());
-    AFL_VERIFY(event.GetMaxStep() < Max<ui64>());
+    YDB_LOG_VERIFY(event.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+    YDB_LOG_VERIFY(now.MilliSeconds() <= event.GetMinStep());
+    YDB_LOG_VERIFY(event.GetMinStep() <= event.GetMaxStep());
+    YDB_LOG_VERIFY(event.GetMaxStep() < Max<ui64>());
     return TPlanStep{ event.GetMinStep() };
 }
 
@@ -49,8 +49,8 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::StartCommitWithLock(con
 
     TAutoPtr<NActors::IEventHandle> handle;
     auto event = Runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
-    AFL_VERIFY(event);
-    AFL_VERIFY(event->Record.GetTxId() == txId);
+    YDB_LOG_VERIFY(event);
+    YDB_LOG_VERIFY(event->Record.GetTxId() == txId);
     return event->Record.GetStatus();
 }
 
@@ -63,14 +63,14 @@ NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort() {
 
     TAutoPtr<NActors::IEventHandle> handle;
     auto event = Runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
-    AFL_VERIFY(event);
+    YDB_LOG_VERIFY(event);
 
     return event->Record.GetStatus();
 }
 
 void TShardWriter::SendWrite(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId) {
     TString blobData = NArrow::SerializeBatchNoCompression(batch);
-    //    AFL_VERIFY(blobData.size() < NColumnShard::TLimits::GetMaxBlobSize());
+    //    YDB_LOG_VERIFY(blobData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 
     auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
     evWrite->SetTxId(txId);
@@ -85,10 +85,10 @@ void TShardWriter::SendWrite(const std::shared_ptr<arrow::RecordBatch>& batch, c
 NKikimrDataEvents::TEvWriteResult TShardWriter::WaitWriteResult() {
     TAutoPtr<NActors::IEventHandle> handle;
     auto event = Runtime.GrabEdgeEvent<NKikimr::NEvents::TDataEvents::TEvWriteResult>(handle);
-    AFL_VERIFY(event);
+    YDB_LOG_VERIFY(event);
 
-    AFL_VERIFY(event->Record.GetOrigin() == TabletId);
-    AFL_VERIFY(event->Record.GetTxId() == LockId);
+    YDB_LOG_VERIFY(event->Record.GetOrigin() == TabletId);
+    YDB_LOG_VERIFY(event->Record.GetTxId() == LockId);
 
     return event->Record;
 }

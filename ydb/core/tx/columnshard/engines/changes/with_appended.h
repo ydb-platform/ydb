@@ -78,7 +78,7 @@ public:
     }
 
     void AddPortionToRemove(const TPortionInfo::TConstPtr& info, const bool addIntoDataAccessRequest = true) {
-        AFL_VERIFY(PortionsToRemove.AddPortion(info));
+        YDB_LOG_VERIFY(PortionsToRemove.AddPortion(info));
         if (addIntoDataAccessRequest) {
             PortionsToAccess.emplace_back(info);
         }

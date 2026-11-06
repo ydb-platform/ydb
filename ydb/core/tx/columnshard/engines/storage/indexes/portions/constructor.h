@@ -35,7 +35,7 @@ protected:
 
 public:
     const TString& GetColumnName() const {
-        AFL_VERIFY(ColumnName);
+        YDB_LOG_VERIFY(ColumnName);
         return ColumnName;
     }
 
@@ -63,7 +63,7 @@ protected:
 
 public:
     const TReadDataExtractorContainer& GetDataExtractor() const {
-        AFL_VERIFY(!!DataExtractor);
+        YDB_LOG_VERIFY(!!DataExtractor);
         return DataExtractor;
     }
 

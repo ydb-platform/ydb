@@ -40,7 +40,7 @@ public:
     }
 
     bool HasSchemaVersion(const ui64 fromVersion, const ui64 version) const {
-        AFL_VERIFY(fromVersion <= version);
+        YDB_LOG_VERIFY(fromVersion <= version);
         auto it = SchemaVersionsControl.lower_bound(fromVersion);
         return (it != SchemaVersionsControl.end() && it->first <= version);
     }
@@ -90,12 +90,12 @@ public:
 
     void OnRemovePortion(const TPortionInfo& portion) {
         auto it = SchemaVersionsControl.find(portion.GetSchemaVersionVerified());
-        AFL_VERIFY(it != SchemaVersionsControl.end());
+        YDB_LOG_VERIFY(it != SchemaVersionsControl.end());
         if (it->second.Dec() == 0) {
             SchemaVersionsControl.erase(it);
         }
         MetadataMemoryPortionsSize -= portion.GetMetadataMemorySize();
-        AFL_VERIFY(MetadataMemoryPortionsSize >= 0);
+        YDB_LOG_VERIFY(MetadataMemoryPortionsSize >= 0);
         const i64 value = SumMetadataMemoryPortionsSize.Sub(portion.GetMetadataMemorySize());
         Counters.OnIndexMetadataUsageBytes(value);
     }
@@ -168,8 +168,8 @@ public:
         , StoragesManager(storagesManager)
         , Stats(std::make_shared<TGranulesStat>(Counters))
     {
-        AFL_VERIFY(DataAccessorsManager);
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(DataAccessorsManager);
+        YDB_LOG_VERIFY(StoragesManager);
     }
 
     void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const {
@@ -183,7 +183,7 @@ public:
     std::shared_ptr<TGranuleMeta> RegisterTable(
         const TInternalPathId pathId, const NColumnShard::TGranuleDataCounters& counters, const TVersionedIndex& versionedIndex) {
         auto infoEmplace = Tables.emplace(pathId, std::make_shared<TGranuleMeta>(pathId, *this, counters, versionedIndex));
-        AFL_VERIFY(infoEmplace.second);
+        YDB_LOG_VERIFY(infoEmplace.second);
         return infoEmplace.first->second;
     }
 
@@ -206,7 +206,7 @@ public:
     void ReturnToIndexes(const THashMap<TInternalPathId, THashSet<ui64>>& portions) const {
         for (auto&& [g, portionIds] : portions) {
             auto it = Tables.find(g);
-            AFL_VERIFY(it != Tables.end());
+            YDB_LOG_VERIFY(it != Tables.end());
             it->second->ReturnToIndexes(portionIds);
         }
     }
@@ -229,7 +229,7 @@ public:
 
     std::shared_ptr<TGranuleMeta> GetGranuleVerified(const TInternalPathId pathId) const {
         auto it = Tables.find(pathId);
-        AFL_VERIFY(it != Tables.end());
+        YDB_LOG_VERIFY(it != Tables.end());
         return it->second;
     }
 

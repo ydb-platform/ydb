@@ -42,7 +42,7 @@ bool CanCutHistoryInterval(const TColumnShard& owner, const THistoryIntervalKey&
     }
     const auto storage =
         std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(owner.GetStoragesManager()->GetDefaultOperator());
-    AFL_VERIFY(storage);
+    YDB_LOG_VERIFY(storage);
     return !storage->GetSharedBlobs()->HasBlobsInRange(key.Channel, key.From, interval.To);
 }
 
@@ -134,7 +134,8 @@ void TColumnShard::InitFindEmptyHistoryIntervals() {
     for (ui32 channel = FirstDataChannel; channel < Info()->Channels.size(); ++channel) {
         const auto& history = Info()->Channels[channel].History;
         for (size_t i = 0; i + 1 < history.size(); ++i) {
-            AFL_VERIFY(history[i].FromGeneration < history[i + 1].FromGeneration)("channel", channel);
+            YDB_LOG_VERIFY(history[i].FromGeneration < history[i + 1].FromGeneration,
+                {"channel", channel});
             if (history[i + 1].FromGeneration >= Generation()) {
                 break;
             }
@@ -158,7 +159,7 @@ void TColumnShard::StartFindEmptyHistoryIntervals(const TActorContext& ctx) {
         return;
     }
     const auto storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(StoragesManager->GetDefaultOperator());
-    AFL_VERIFY(storage);
+    YDB_LOG_VERIFY(storage);
     auto& scan = *EmptyHistoryIntervalsScan;
     std::erase_if(scan.Intervals, [&](const auto& entry) {
         const auto& [key, interval] = entry;

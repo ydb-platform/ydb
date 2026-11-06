@@ -31,18 +31,18 @@ public:
 
     void Initialize(const ui64 generation) {
         Generation = generation;
-        AFL_VERIFY(!Initialized);
+        YDB_LOG_VERIFY(!Initialized);
         Initialized = true;
         DoInitialize();
     }
 
     ui64 GetGeneration() const {
-        AFL_VERIFY(Generation);
+        YDB_LOG_VERIFY(Generation);
         return *Generation;
     }
 
     const std::shared_ptr<NDataSharing::TSharedBlobsManager>& GetSharedBlobsManager() const {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return DoGetSharedBlobsManager();
     }
 
@@ -59,7 +59,7 @@ public:
     }
 
     const THashMap<TString, std::shared_ptr<IBlobsStorageOperator>>& GetStorages() const {
-        AFL_VERIFY(Initialized);
+        YDB_LOG_VERIFY(Initialized);
         return Constructed;
     }
 

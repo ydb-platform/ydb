@@ -152,7 +152,7 @@ public:
         if (ev->IsSuccess()) {
             Backoff->Reset();
         } else if (NWrappers::ShouldBackoff(ev->GetError())) {
-            AFL_VERIFY(Backoff);
+            YDB_LOG_VERIFY(Backoff);
             delay = Backoff->Next();
             doBackoff = delay > TDuration::Zero();
         }

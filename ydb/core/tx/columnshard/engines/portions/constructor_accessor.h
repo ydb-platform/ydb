@@ -51,10 +51,10 @@ private:
         : PortionInfo(accessor.GetPortionInfo().BuildConstructor(withMetadata))
     {
         if (!withMetadata) {
-            AFL_VERIFY(!withMetadataBlobs);
+            YDB_LOG_VERIFY(!withMetadataBlobs);
         }
         if (withBlobs) {
-            AFL_VERIFY(withMetadataBlobs && withMetadata);
+            YDB_LOG_VERIFY(withMetadataBlobs && withMetadata);
             Indexes = accessor.GetIndexesVerified();
             Records = accessor.GetRecordsVerified();
             BlobIds = accessor.GetBlobIds();
@@ -64,7 +64,7 @@ private:
     void ChunksValidation() const;
 
     static void Validate(const TColumnRecord& rec) {
-        AFL_VERIFY(rec.GetColumnId());
+        YDB_LOG_VERIFY(rec.GetColumnId());
     }
 
     static ui32 GetRecordsCount(const TColumnRecord& rec) {
@@ -72,9 +72,9 @@ private:
     }
 
     static void Validate(const TIndexChunk& rec) {
-        AFL_VERIFY(rec.GetIndexId());
+        YDB_LOG_VERIFY(rec.GetIndexId());
         if (const auto* blobData = rec.GetBlobDataOptional()) {
-            AFL_VERIFY(blobData->size());
+            YDB_LOG_VERIFY(blobData->size());
         }
     }
 
@@ -102,26 +102,32 @@ private:
             if (entityId != i.GetEntityId()) {
                 if (entityId) {
                     if (recordsCount) {
-                        AFL_VERIFY(recordsCountCurrent == *recordsCount);
+                        YDB_LOG_VERIFY(recordsCountCurrent == *recordsCount);
                     } else {
                         recordsCount = recordsCountCurrent;
                     }
                 }
-                AFL_VERIFY(entityId < i.GetEntityId())("entity", entityId)("next", i.GetEntityId())("details", debugString());
-                AFL_VERIFY(i.GetChunkIdx() == 0);
+                YDB_LOG_VERIFY(entityId < i.GetEntityId(),
+                    {"entity", entityId},
+                    {"next", i.GetEntityId()},
+                    {"details", debugString()});
+                YDB_LOG_VERIFY(i.GetChunkIdx() == 0);
                 entityId = i.GetEntityId();
                 chunkIdx = 0;
                 recordsCountCurrent = 0;
             } else {
-                AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunkIdx", chunkIdx)("i.GetChunkIdx()", i.GetChunkIdx())("entity", entityId)(
-                                                "details", debugString());
+                YDB_LOG_VERIFY(i.GetChunkIdx() == chunkIdx + 1,
+                    {"chunkIdx", chunkIdx},
+                    {"iChunkIdx", i.GetChunkIdx()},
+                    {"entity", entityId},
+                    {"details", debugString()});
                 chunkIdx = i.GetChunkIdx();
             }
             recordsCountCurrent += GetRecordsCount(i);
-            AFL_VERIFY(i.GetEntityId());
+            YDB_LOG_VERIFY(i.GetEntityId());
         }
         if (recordsCount) {
-            AFL_VERIFY(recordsCountCurrent == *recordsCount);
+            YDB_LOG_VERIFY(recordsCountCurrent == *recordsCount);
         }
     }
 
@@ -150,7 +156,7 @@ private:
 
 public:
     TBlobRangeLink16::TLinkId RegisterBlobId(const TUnifiedBlobId& blobId) {
-        AFL_VERIFY(blobId.IsValid());
+        YDB_LOG_VERIFY(blobId.IsValid());
         TBlobRangeLink16::TLinkId idx = 0;
         for (auto&& i : BlobIds) {
             if (i == blobId) {
@@ -177,7 +183,7 @@ public:
     }
 
     ui64 GetColumnBlobBytes() const {
-        AFL_VERIFY(Records.size());
+        YDB_LOG_VERIFY(Records.size());
         ui64 result = 0;
         for (auto&& r : Records) {
             result += r.GetBlobRange().GetSize();
@@ -186,7 +192,7 @@ public:
     }
 
     ui64 GetColumnRawBytes() const {
-        AFL_VERIFY(Records.size());
+        YDB_LOG_VERIFY(Records.size());
         ui64 result = 0;
         for (auto&& r : Records) {
             result += r.GetMeta().GetRawBytes();
@@ -267,7 +273,7 @@ public:
                 return linkRange.RestoreRange(GetBlobId(i.GetBlobIdx()));
             }
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TBlobRange();
     }
 
@@ -286,7 +292,7 @@ public:
     }
 
     ui32 CalcRecordsCount() const {
-        AFL_VERIFY(Records.size());
+        YDB_LOG_VERIFY(Records.size());
         ui32 result = 0;
         std::optional<ui32> columnIdFirst;
         for (auto&& i : Records) {
@@ -295,7 +301,7 @@ public:
                 columnIdFirst = i.ColumnId;
             }
         }
-        AFL_VERIFY(columnIdFirst);
+        YDB_LOG_VERIFY(columnIdFirst);
         return result;
     }
 

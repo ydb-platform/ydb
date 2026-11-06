@@ -65,7 +65,7 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
     if (shardingConclusion.IsFail()) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, shardingConclusion.GetErrorMessage());
     }
-    AFL_VERIFY(!!shardingConclusion.GetResult());
+    YDB_LOG_VERIFY(!!shardingConclusion.GetResult());
     return SplitImpl(batch, shardingConclusion.DetachResult());
 }
 

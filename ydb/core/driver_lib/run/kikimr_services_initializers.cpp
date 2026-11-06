@@ -2784,11 +2784,11 @@ void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActo
         YDB_LOG_ERROR("",
             {"error", "cannot parse portions metadata cache config"},
             {"action", "default_usage"},
-            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"serviceConfigError", serviceConfig.GetErrorMessage()},
             {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
-    AFL_VERIFY(!serviceConfig.IsFail());
+    YDB_LOG_VERIFY(!serviceConfig.IsFail());
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_PORTIONS_METADATA");
@@ -2811,11 +2811,11 @@ void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSyste
         YDB_LOG_ERROR("",
             {"error", "cannot parse column data cache config"},
             {"action", "default_usage"},
-            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"serviceConfigError", serviceConfig.GetErrorMessage()},
             {"default", NGeneralCache::NPublic::TConfig::BuildDefault().DebugString()});
         serviceConfig = NGeneralCache::NPublic::TConfig::BuildDefault();
     }
-    AFL_VERIFY(!serviceConfig.IsFail());
+    YDB_LOG_VERIFY(!serviceConfig.IsFail());
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_COLUMN_DATA");
@@ -2960,11 +2960,11 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
         YDB_LOG_ERROR("",
             {"error", "cannot parse composite conveyor config"},
             {"action", "default_usage"},
-            {"#_dup_error", serviceConfig.GetErrorMessage()},
+            {"serviceConfigError", serviceConfig.GetErrorMessage()},
             {"default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString()});
         serviceConfig = NConveyorComposite::NConfig::TConfig::BuildDefault();
     }
-    AFL_VERIFY(!serviceConfig.IsFail());
+    YDB_LOG_VERIFY(!serviceConfig.IsFail());
 
     if (serviceConfig->IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");

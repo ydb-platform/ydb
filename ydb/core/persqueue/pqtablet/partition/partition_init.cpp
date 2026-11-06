@@ -48,13 +48,15 @@ TInitializer::TInitializer(TPartition* partition)
 }
 
 void TInitializer::Execute(const TActorContext& ctx) {
-    AFL_ENSURE(!InProgress)("description", "Initialization already in progress");
+    YDB_LOG_ENSURE(!InProgress,
+        {"description", "Initialization already in progress"});
     InProgress = true;
     DoNext(ctx);
 }
 
 bool TInitializer::Handle(STFUNC_SIG) {
-    AFL_ENSURE(InProgress)("description", "Initialization is not started");
+    YDB_LOG_ENSURE(InProgress,
+        {"description", "Initialization is not started"});
     return CurrentStep->Get()->Handle(ev);
 }
 
@@ -214,7 +216,8 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
         break;
 
     default:
-        AFL_ENSURE(false)("status", response.GetStatus());
+        YDB_LOG_ENSURE(false,
+            {"status", response.GetStatus()});
     };
 
     // There should be no consumers in the configuration of the background partition. When creating a partition,
@@ -319,7 +322,8 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
         case NKikimrProto::NODATA:
             break;
         default:
-            AFL_ENSURE(false)("status", response.GetStatus());
+            YDB_LOG_ENSURE(false,
+                {"status", response.GetStatus()});
         };
     };
 
@@ -423,9 +427,9 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
                 const auto& pair = range.GetPair(i);
                 PQ_INIT_ENSURE(pair.HasStatus());
 
-                AFL_ENSURE(pair.GetStatus() == NKikimrProto::OK)
-                    ("status", pair.GetStatus())
-                    ("key", pair.GetKey());
+                YDB_LOG_ENSURE(pair.GetStatus() == NKikimrProto::OK,
+                    {"status", pair.GetStatus()},
+                    {"key", pair.GetKey()});
 
                 PQ_INIT_ENSURE(pair.HasKey());
                 PQ_INIT_ENSURE(pair.HasValue());
@@ -455,7 +459,8 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             PostProcessing(ctx);
             break;
         default:
-            AFL_ENSURE(false)("status", range.GetStatus());
+            YDB_LOG_ENSURE(false,
+                {"status", range.GetStatus()});
     };
 }
 
@@ -511,7 +516,8 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             Done(ctx);
             break;
         default:
-            AFL_ENSURE(false)("status", range.GetStatus());
+            YDB_LOG_ENSURE(false,
+                {"status", range.GetStatus()});
     };
 }
 
@@ -523,9 +529,9 @@ THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResp
     for (const auto& range : ranges) {
         for (ui32 i = 0; i < range.PairSize(); ++i) {
             const auto& pair = range.GetPair(i);
-            AFL_ENSURE(pair.GetStatus() == NKikimrProto::OK) //this is readrange without keys, only OK could be here
-                ("status", pair.GetStatus())
-                ("key", pair.GetKey());
+            YDB_LOG_ENSURE(pair.GetStatus() == NKikimrProto::OK, //this is readrange without keys, only OK could be here
+                {"status", pair.GetStatus()},
+                {"key", pair.GetKey()});
             keys.push_back(pair.GetKey());
         }
     }
@@ -772,7 +778,9 @@ TKeyBoundaries SplitBodyHeadAndFastWrite(const std::deque<TDataKey>& keys)
         }
     }
 
-    AFL_ENSURE(b.Head <= b.FastWrite)("head", b.Head)("fastWrite", b.FastWrite);
+    YDB_LOG_ENSURE(b.Head <= b.FastWrite,
+        {"head", b.Head},
+        {"fastWrite", b.FastWrite});
 
     return b;
 }
@@ -1015,10 +1023,12 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
             for (auto& w : range->GetPair()) {
                 NKikimrPQ::TMessageDeduplicationIdWAL wal;
                 auto r = wal.ParseFromString(w.GetValue());
-                AFL_ENSURE(r)("key", w.key());
+                YDB_LOG_ENSURE(r,
+                    {"key", w.key()});
 
                 auto a = Partition()->MessageIdDeduplicator.ApplyWAL(TString{w.GetKey()}, std::move(wal));
-                AFL_ENSURE(a)("key", w.key());
+                YDB_LOG_ENSURE(a,
+                    {"key", w.key()});
             }
 
             if (range->GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
@@ -1032,7 +1042,8 @@ void TInitMessageDeduplicatorStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, co
             Done(ctx);
             break;
         default:
-            AFL_ENSURE(false && "bad status")("status", range->GetStatus());
+            YDB_LOG_ENSURE(false && "bad status",
+                {"status", range->GetStatus()});
     };
 }
 
@@ -1130,11 +1141,12 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 break;
                 }
             case NKikimrProto::ERROR:
-                AFL_ENSURE(false)
-                    ("m", read.GetMessage())
-                    ("e", response.GetErrorReason());
+                YDB_LOG_ENSURE(false,
+                    {"m", read.GetMessage()},
+                    {"e", response.GetErrorReason()});
             default:
-                AFL_ENSURE(false)("status", read.GetStatus());
+                YDB_LOG_ENSURE(false,
+                    {"status", read.GetStatus()});
         };
     }
 
@@ -1632,7 +1644,7 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TP
     const TKeyPrefix& to = keyPrefixes.second;
 
     if (!key.empty()) {
-        AFL_ENSURE(key.StartsWith(TStringBuf(from.Data(), from.Size())));
+        YDB_LOG_ENSURE(key.StartsWith(TStringBuf(from.Data(), from.Size())));
         from.Clear();
         from.Append(key.data(), key.size());
     }

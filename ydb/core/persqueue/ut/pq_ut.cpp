@@ -537,7 +537,7 @@ void TestCompactionSurvivesFailedBlobRead(ECompactionBlobReadInjection injection
     UNIT_ASSERT(injected);
 
     // After the fix: tablet stays alive and accepts further writes.
-    // Before the fix: AFL_ENSURE(Data != End) aborts while handling the poisoned response.
+    // Before the fix: YDB_LOG_ENSURE(Data != End) aborts while handling the poisoned response.
     payloads.emplace_back(TString(1_KB, 'y'));
     TVector<std::pair<ui64, TString>> more;
     more.emplace_back(totalMessages, payloads.back());

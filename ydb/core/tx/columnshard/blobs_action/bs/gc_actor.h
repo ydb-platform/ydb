@@ -48,7 +48,7 @@ public:
             {"actionId", GCTask->GetActionGuid()});
         for (auto&& i : GCTask->GetListsByGroupId()) {
             auto request = GCTask->BuildRequest(i.first);
-            AFL_VERIFY(request);   // Cannot fail on the first time
+            YDB_LOG_VERIFY(request);   // Cannot fail on the first time
             SendToBSProxy(ctx, i.first.GetGroupId(), request.release(), i.first.GetGroupId());
         }
         TBase::Bootstrap(ctx);

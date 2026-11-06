@@ -79,7 +79,9 @@ public:
 
     template <bool notNull>
     static std::partial_ordering TypedCompare(const arrow::Array& lhs, const int lpos, const arrow::Array& rhs, const int rpos) {
-        AFL_VERIFY(lhs.type_id() == rhs.type_id())("lhs", lhs.type()->ToString())("rhs", rhs.type()->ToString());
+        YDB_LOG_VERIFY(lhs.type_id() == rhs.type_id(),
+            {"lhs", lhs.type()->ToString()},
+            {"rhs", rhs.type()->ToString()});
         return ConcreteTypedCompare<notNull>(lhs.type_id(), lhs, lpos, rhs, rpos);
     }
 
@@ -88,8 +90,8 @@ public:
         auto& left = static_cast<const T&>(lhs);
         auto& right = static_cast<const T&>(rhs);
         if constexpr (notNull) {
-            AFL_VERIFY(!left.IsNull(lpos));
-            AFL_VERIFY(!right.IsNull(rpos));
+            YDB_LOG_VERIFY(!left.IsNull(lpos));
+            YDB_LOG_VERIFY(!right.IsNull(rpos));
             return CompareValueNotNull(left.GetView(lpos), right.GetView(rpos));
         } else {
             return CompareValue(left.GetView(lpos), right.GetView(rpos), left.IsNull(lpos), right.IsNull(rpos));

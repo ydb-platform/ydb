@@ -35,7 +35,7 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
     std::vector<bool> mask(ArrayDictionary->length(), false);
     ui32 markCount = 0;
     const auto positionsNew = ArrayPositions->Slice(offset, count);
-    AFL_VERIFY(SwitchType(positionsNew->type()->id(), [&](const auto& type) {
+    YDB_LOG_VERIFY(SwitchType(positionsNew->type()->id(), [&](const auto& type) {
         using TRecordsWrap = std::decay_t<decltype(type)>;
         using TRecordsArray = typename arrow::TypeTraits<typename TRecordsWrap::T>::ArrayType;
         if constexpr (arrow::has_c_type<typename TRecordsWrap::T>()) {
@@ -78,11 +78,12 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
         dictArray = NArrow::TStatusValidator::GetValid(arrow::Concatenate(parts));
     }
     // Remap positions to indices into the filtered dictionary and choose their width based on new dictionary size.
-    AFL_VERIFY(dictArray->length() <= Max<ui32>())("dictionary_length", dictArray->length());
+    YDB_LOG_VERIFY(dictArray->length() <= Max<ui32>(),
+        {"dictionaryLength", dictArray->length()});
     const ui32 dictionaryLength = dictArray->length();
     const auto positionsTargetType = NDictionary::TConstructor::GetTypeByVariantsCount(dictionaryLength);
     std::unique_ptr<arrow::ArrayBuilder> positionsBuilder = NArrow::MakeBuilder(positionsTargetType);
-    AFL_VERIFY(SwitchType(positionsNew->type()->id(), [&](const auto& type) {
+    YDB_LOG_VERIFY(SwitchType(positionsNew->type()->id(), [&](const auto& type) {
         using TRecordsWrap = std::decay_t<decltype(type)>;
         using TRecordsArray = typename arrow::TypeTraits<typename TRecordsWrap::T>::ArrayType;
         if constexpr (TRecordsWrap::IsIndexType()) {
@@ -130,7 +131,7 @@ NJson::TJsonValue TDictionaryArray::DoDebugJson() const {
 
 ui32 TDictionaryArray::GetIndexImpl(const ui32 index) const {
     std::optional<ui32> result;
-    AFL_VERIFY(SwitchType(ArrayPositions->type()->id(), [&](const auto type) {
+    YDB_LOG_VERIFY(SwitchType(ArrayPositions->type()->id(), [&](const auto type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
         if constexpr (type.IsIndexType()) {
@@ -138,10 +139,10 @@ ui32 TDictionaryArray::GetIndexImpl(const ui32 index) const {
             result = arr->Value(index);
             return true;
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     }));
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     return *result;
 }
 

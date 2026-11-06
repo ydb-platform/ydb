@@ -134,7 +134,7 @@ private:
             arrowType = arrow::int64();
         } else {
             auto result = NArrow::GetArrowType(column.PType);
-            AFL_VERIFY(result.ok());
+            YDB_LOG_VERIFY(result.ok());
             arrowType = result.ValueUnsafe();
         }
         auto f = std::make_shared<arrow::Field>(column.Name, arrowType, !column.NotNull);
@@ -184,7 +184,7 @@ private:
 
     const TString& GetIndexStorageId(const ui32 indexId, const TString& specialTier) const {
         auto it = Indexes.find(indexId);
-        AFL_VERIFY(it != Indexes.end());
+        YDB_LOG_VERIFY(it != Indexes.end());
         if (specialTier && specialTier != IStoragesManager::DefaultStorageId && it->second->GetInheritPortionStorage()) {
             return specialTier;
         }
@@ -202,8 +202,8 @@ private:
     void SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, const THashMap<ui32, NTable::TColumn>& columns);
 
     bool CompareColumnIdxByName(const ui32 lhs, const ui32 rhs) const {
-        AFL_VERIFY(lhs < ColumnFeatures.size());
-        AFL_VERIFY(rhs < ColumnFeatures.size());
+        YDB_LOG_VERIFY(lhs < ColumnFeatures.size());
+        YDB_LOG_VERIFY(rhs < ColumnFeatures.size());
         return ColumnFeatures[lhs]->GetColumnName() < ColumnFeatures[rhs]->GetColumnName();
     }
 
@@ -218,7 +218,7 @@ public:
     NSplitter::TEntityGroups GetEntityGroupsByStorageId(const TString& specialTier, const IStoragesManager& storages) const;
 
     std::optional<ui32> GetPKColumnIndexByIndexVerified(const ui32 columnIndex) const {
-        AFL_VERIFY(columnIndex < ColumnFeatures.size());
+        YDB_LOG_VERIFY(columnIndex < ColumnFeatures.size());
         return ColumnFeatures[columnIndex]->GetPKColumnIndex();
     }
 
@@ -232,19 +232,19 @@ public:
     const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& GetCompactionPlannerConstructor() const;
 
     const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& GetMetadataManagerConstructor() const {
-        AFL_VERIFY(MetadataManagerConstructor);
+        YDB_LOG_VERIFY(MetadataManagerConstructor);
         return MetadataManagerConstructor;
     }
 
     TConclusion<std::shared_ptr<arrow::Array>> BuildDefaultColumn(const ui32 fieldIndex, const ui32 rowsCount, const bool force) const;
 
     bool IsNullableVerifiedByIndex(const ui32 colIndex) const {
-        AFL_VERIFY(colIndex < ColumnFeatures.size());
+        YDB_LOG_VERIFY(colIndex < ColumnFeatures.size());
         return ColumnFeatures[colIndex]->GetIsNullable();
     }
 
     const TColumnFeatures& GetColumnFeaturesVerifiedByIndex(const ui32 colIndex) const {
-        AFL_VERIFY(colIndex < ColumnFeatures.size());
+        YDB_LOG_VERIFY(colIndex < ColumnFeatures.size());
         return *ColumnFeatures[colIndex];
     }
 
@@ -389,7 +389,7 @@ public:
 
     NIndexes::TIndexMetaContainer GetIndexVerified(const ui32 indexId) const {
         auto it = Indexes.find(indexId);
-        AFL_VERIFY(it != Indexes.end());
+        YDB_LOG_VERIFY(it != Indexes.end());
         return it->second;
     }
 
@@ -444,7 +444,7 @@ public:
     std::set<ui32> GetColumnIdsVerified(const std::set<TString>& names) const {
         std::set<ui32> result;
         for (auto&& i : names) {
-            AFL_VERIFY(result.emplace(GetColumnIdVerified(i)).second);
+            YDB_LOG_VERIFY(result.emplace(GetColumnIdVerified(i)).second);
         }
         return result;
     }
@@ -462,12 +462,12 @@ public:
     TColumnIdsView GetColumnIds(const bool withSpecial = true) const;
 
     ui32 GetColumnIdByIndexVerified(const ui32 index) const {
-        AFL_VERIFY(index < SchemaColumnIdsWithSpecials.size());
+        YDB_LOG_VERIFY(index < SchemaColumnIdsWithSpecials.size());
         return SchemaColumnIdsWithSpecials[index];
     }
 
     const std::vector<ui32>& GetPKColumnIds() const {
-        AFL_VERIFY(PKColumnIds.size());
+        YDB_LOG_VERIFY(PKColumnIds.size());
         return PKColumnIds;
     }
 
@@ -489,8 +489,8 @@ public:
     }
 
     std::shared_ptr<arrow::Schema> GetReplaceKeyPrefix(const ui32 size) const {
-        AFL_VERIFY(size);
-        AFL_VERIFY(size <= (ui32)PrimaryKey->num_fields());
+        YDB_LOG_VERIFY(size);
+        YDB_LOG_VERIFY(size <= (ui32)PrimaryKey->num_fields());
         if (size == (ui32)PrimaryKey->num_fields()) {
             return PrimaryKey;
         } else {

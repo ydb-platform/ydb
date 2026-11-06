@@ -39,13 +39,13 @@ private:
 
     bool RemoveAddrOnFinished(const TAddress addr) {
         auto itSource = Wait.find(TPolicy::GetSourceId(addr));
-        AFL_VERIFY(itSource != Wait.end());
-        AFL_VERIFY(itSource->second.erase(addr));
+        YDB_LOG_VERIFY(itSource != Wait.end());
+        YDB_LOG_VERIFY(itSource->second.erase(addr));
         if (itSource->second.empty()) {
             Wait.erase(itSource);
         }
         if (Wait.empty()) {
-            AFL_VERIFY(WaitObjectsCount.Val() == 0);
+            YDB_LOG_VERIFY(WaitObjectsCount.Val() == 0);
             Callback->OnResultReady(std::move(Result), std::move(Removed), std::move(Errors));
             return true;
         } else {
@@ -63,7 +63,7 @@ public:
                     counters.ObjectCacheMiss->Inc();
                 } else {
                     counters.ObjectCacheHit->Inc();
-                    AFL_VERIFY(Result.emplace(addr, it.Value()).second);
+                    YDB_LOG_VERIFY(Result.emplace(addr, it.Value()).second);
                     WaitObjectsCount.Dec();
                     toRemove.emplace_back(addr);
                 }
@@ -85,7 +85,7 @@ public:
 
     const THashSet<TAddress>& GetWaitBySource(const TSourceId sourceId) const {
         auto it = Wait.find(sourceId);
-        AFL_VERIFY(it != Wait.end());
+        YDB_LOG_VERIFY(it != Wait.end());
         return it->second;
     }
 
@@ -98,19 +98,19 @@ public:
     }
 
     [[nodiscard]] bool AddResult(const TAddress& addr, const TObject& obj) {
-        AFL_VERIFY(Result.emplace(addr, obj).second);
+        YDB_LOG_VERIFY(Result.emplace(addr, obj).second);
         WaitObjectsCount.Dec();
         return RemoveAddrOnFinished(addr);
     }
 
     [[nodiscard]] bool AddRemoved(const TAddress& addr) {
-        AFL_VERIFY(Removed.emplace(addr).second);
+        YDB_LOG_VERIFY(Removed.emplace(addr).second);
         WaitObjectsCount.Dec();
         return RemoveAddrOnFinished(addr);
     }
 
     [[nodiscard]] bool AddError(const TAddress& addr, const TString& errorMessage) {
-        AFL_VERIFY(Errors.emplace(addr, errorMessage).second);
+        YDB_LOG_VERIFY(Errors.emplace(addr, errorMessage).second);
         WaitObjectsCount.Dec();
         return RemoveAddrOnFinished(addr);
     }
@@ -246,13 +246,13 @@ public:
                 }
             }
         }
-        AFL_VERIFY(RequestsInProgress.empty());
+        YDB_LOG_VERIFY(RequestsInProgress.empty());
         Counters->GetTotalInFlight()->Sub(RequestedObjects.size());
         RequestedObjects.clear();
     }
 
     ~TSourceInfo() {
-        AFL_VERIFY(RequestedObjects.empty() || NActors::TActorSystem::IsStopped());
+        YDB_LOG_VERIFY(RequestedObjects.empty() || NActors::TActorSystem::IsStopped());
     }
 
     void DrainQueue() {
@@ -269,7 +269,7 @@ public:
                 Counters->AbortedRequests->Inc();
                 continue;
             }
-            AFL_VERIFY(RequestsInProgress.emplace(request->GetRequestId()).second);
+            YDB_LOG_VERIFY(RequestsInProgress.emplace(request->GetRequestId()).second);
             if (!currentConsumer || *currentConsumer != request->GetConsumer()) {
                 consumerAddresses = &requestedAddresses[request->GetConsumer()];
             }
@@ -279,7 +279,7 @@ public:
                 if (it == RequestedObjects.end()) {
                     it = RequestedObjects.emplace(i, std::vector<std::shared_ptr<TRequest>>()).first;
                     Counters->GetTotalInFlight()->Inc();
-                    AFL_VERIFY(consumerAddresses->emplace(i).second);
+                    YDB_LOG_VERIFY(consumerAddresses->emplace(i).second);
                     Counters->DirectObjects->Inc();
                 }
                 it->second.emplace_back(request);
@@ -327,7 +327,7 @@ private:
 
     TSourceInfo& MutableSourceInfo(const TSourceId sourceId) {
         auto it = SourcesInfo.find(sourceId);
-        AFL_VERIFY(it != SourcesInfo.end());
+        YDB_LOG_VERIFY(it != SourcesInfo.end());
         return it->second;
     }
 
@@ -411,7 +411,7 @@ public:
                 return i.first;
             }
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TSourceId();
     }
 
@@ -485,7 +485,7 @@ public:
                 DrainQueue(sourceId);
             }
         } else {
-            AFL_VERIFY(Counters->CheckTotalLimit() == !inFlightLimitBrokenBefore);
+            YDB_LOG_VERIFY(Counters->CheckTotalLimit() == !inFlightLimitBrokenBefore);
         }
     }
 

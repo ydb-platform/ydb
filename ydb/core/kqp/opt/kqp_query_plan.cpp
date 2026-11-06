@@ -1121,7 +1121,7 @@ private:
 
             NKikimrKqp::TKqpTableSinkSettings tableSinkSettings;
             {
-                AFL_ENSURE(stagePlanNode.StageProto);
+                YDB_LOG_ENSURE(stagePlanNode.StageProto);
                 bool found = false;
                 for (const auto& protoSink : stagePlanNode.StageProto->GetSinks()) {
                     if (FromString<ui32>(TStringBuf(sinkLike.Index())) == protoSink.GetOutputIndex()
@@ -1139,7 +1139,7 @@ private:
                                 break;
                     }
                 }
-                AFL_ENSURE(found);
+                YDB_LOG_ENSURE(found);
             }
 
             TString tablePath;
@@ -1176,7 +1176,7 @@ private:
                 op.Properties["Path"] = tablePath;
             } else {
                 const auto originalPathNode = GetSetting(settings.Settings().Ref(), "OriginalPath");
-                AFL_ENSURE(originalPathNode);
+                YDB_LOG_ENSURE(originalPathNode);
                 tablePath = TCoNameValueTuple(originalPathNode).Value().Cast<TCoAtom>().StringValue();
                 op.Properties["Path"] = tablePath;
 
@@ -3657,7 +3657,8 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         auto stageGuid = stageIdToGuid.at(input.first);
                         auto planNodeIdIt = guidToPlaneId.find(stageGuid);
                         if (planNodeIdIt == guidToPlaneId.end()) {
-                            AFL_ENSURE(newRboEnabled)("stage_guid", stageGuid);
+                            YDB_LOG_ENSURE(newRboEnabled,
+                                {"stageGuid", stageGuid});
                             continue;
                         }
                         auto& inputInfo = inputStats.AppendValue(NJson::JSON_MAP);
@@ -3684,7 +3685,8 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                             auto stageGuid = stageIdToGuid.at(output.first);
                             auto planNodeIdIt = guidToPlaneId.find(stageGuid);
                             if (planNodeIdIt == guidToPlaneId.end()) {
-                                AFL_ENSURE(newRboEnabled)("stage_guid", stageGuid);
+                                YDB_LOG_ENSURE(newRboEnabled,
+                                    {"stageGuid", stageGuid});
                                 continue;
                             }
                             auto planNodeId = planNodeIdIt->second;

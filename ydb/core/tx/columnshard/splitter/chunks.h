@@ -89,7 +89,7 @@ public:
         if (!CurrentChunkArray || !CurrentChunkArray->GetAddress().Contains(CurrentRecordIndex)) {
             CurrentChunkArray = CurrentArray->GetArray(CurrentChunkArray, CurrentRecordIndex, CurrentArray);
         }
-        AFL_VERIFY(CurrentChunkArray);
+        YDB_LOG_VERIFY(CurrentChunkArray);
         return CurrentChunkArray->GetArray();
     }
 
@@ -112,7 +112,7 @@ public:
     }
 
     bool ReadNext() {
-        AFL_VERIFY(!!CurrentArray);
+        YDB_LOG_VERIFY(!!CurrentArray);
         if (++CurrentRecordIndex < CurrentArray->GetRecordsCount()) {
             return true;
         }
@@ -129,9 +129,9 @@ public:
     TChunkedBatchReader(const std::vector<TChunkedColumnReader>& columnReaders)
         : Columns(columnReaders)
     {
-        AFL_VERIFY(Columns.size());
+        YDB_LOG_VERIFY(Columns.size());
         for (auto&& i : Columns) {
-            AFL_VERIFY(i.IsCorrect());
+            YDB_LOG_VERIFY(i.IsCorrect());
         }
     }
 
@@ -149,7 +149,7 @@ public:
     bool ReadNext(const ui32 count) {
         for (ui32 i = 0; i < count; ++i) {
             if (!ReadNext()) {
-                AFL_VERIFY(i + 1 == count);
+                YDB_LOG_VERIFY(i + 1 == count);
                 return false;
             }
         }
@@ -162,7 +162,7 @@ public:
             if (!result) {
                 result = i.ReadNext();
             } else {
-                AFL_VERIFY(*result == i.ReadNext());
+                YDB_LOG_VERIFY(*result == i.ReadNext());
             }
         }
         if (!*result) {

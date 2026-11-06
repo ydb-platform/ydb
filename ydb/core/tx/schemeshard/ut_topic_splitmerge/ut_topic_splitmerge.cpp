@@ -200,7 +200,7 @@ void ValidateDescribeUsableByBoundaryChooser(const NKikimrSchemeOp::TPersQueueGr
                   "Describe returned no Active partitions; BoundaryChooser would fail. Partitions="
                       << topic.PartitionsSize() << activeDump);
     UNIT_ASSERT_C(hasOpenEndedActive,
-                  "Describe Active set has no open-ended ToBound; BoundaryChooser AFL_ENSURE. Active="
+                  "Describe Active set has no open-ended ToBound; BoundaryChooser YDB_LOG_ENSURE. Active="
                       << activeCount << activeDump);
 
     NKikimr::NPQ::NPartitionChooser::TBoundaryChooser<NKikimr::NPQ::NPartitionChooser::TAsIsConverter> chooser(topic);
@@ -1785,7 +1785,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
 
     // After Propose/ReassignIds topic AlterVersion is still old, while split parents/children
     // already have the new partition AlterVersion. Filtering only by AlterVersion would hide
-    // the open-ended Active partition; writers then hit TBoundaryChooser AFL_ENSURE.
+    // the open-ended Active partition; writers then hit TBoundaryChooser YDB_LOG_ENSURE.
     Y_UNIT_TEST(DescribeDuringMinPartitionCountAlterKeepsOpenEndedActive) {
         TTestBasicRuntime runtime;
         TTestEnv env = CreateTestEnv(runtime);

@@ -121,7 +121,7 @@ public:
             {"progressTxId", GetTxId()},
             {"lockId", LockId},
             {"broken", IsTxBroken()});
-        AFL_VERIFY(Version);
+        YDB_LOG_VERIFY(Version);
         if (IsTxBroken()) {
             owner.GetOperationsManager().AbortTransactionOnComplete(owner, GetTxId(), GetLockId());
             TrackCommitWriteResult(owner.TabletID(), GetTxId(), TxInfo.Cookie, TxInfo.Source.ToString(), false, "on_complete",

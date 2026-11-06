@@ -44,7 +44,7 @@ NKikimr::TConclusionStatus TLogsSharding::DoDeserializeFromProto(const NKikimrSc
     if (conclusion.IsFail()) {
         return conclusion;
     }
-    AFL_VERIFY(proto.GetHashSharding().GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS);
+    YDB_LOG_VERIFY(proto.GetHashSharding().GetFunction() == NKikimrSchemeOp::TColumnTableSharding::THashSharding::HASH_FUNCTION_CLOUD_LOGS);
     if (proto.GetHashSharding().HasActiveShardsCount()) {
         NumActive = proto.GetHashSharding().GetActiveShardsCount();
     }

@@ -34,7 +34,7 @@ std::vector<std::shared_ptr<TPartialReadResult>> TPartialReadResult::SplitResult
     std::vector<TCurrentBatch> resultBatches;
     TCurrentBatch currentBatch;
     for (auto&& i : resultsExt) {
-        AFL_VERIFY(i->GetRecordsCount());
+        YDB_LOG_VERIFY(i->GetRecordsCount());
         currentBatch.AddChunk(std::move(i));
         if (currentBatch.GetRecordsCount() >= maxRecordsInResult) {
             resultBatches.emplace_back(std::move(currentBatch));

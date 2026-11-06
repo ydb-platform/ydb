@@ -40,14 +40,18 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         };
 
     {
-        AFL_VERIFY(guard.InitSortingPosition(posStart))("start", posStart)("finish", posFinish);
+        YDB_LOG_VERIFY(guard.InitSortingPosition(posStart),
+            {"start", posStart},
+            {"finish", posFinish});
         auto cmp = position.Compare(forFound);
         if (cond(cmp)) {
             return TFoundPosition(posStart, cmp);
         }
     }
     {
-        AFL_VERIFY(guard.InitSortingPosition(posFinish))("start", posStart)("finish", posFinish);
+        YDB_LOG_VERIFY(guard.InitSortingPosition(posFinish),
+            {"start", posStart},
+            {"finish", posFinish});
         auto cmp = position.Compare(forFound);
         if (!cond(cmp)) {
             return std::nullopt;
@@ -59,19 +63,23 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
             if (finish + 1 == start) {
                 return true;
             }
-            AFL_VERIFY(finish + 1 < start)("finish", finish)("start", start);
+            YDB_LOG_VERIFY(finish + 1 < start,
+                {"finish", finish},
+                {"start", start});
             return false;
         } :
         [](const ui64 start, const ui64 finish) -> bool {
             if (start + 1 == finish) {
                 return true;
             }
-            AFL_VERIFY(start + 1 < finish)("start", start)("finish", finish);
+            YDB_LOG_VERIFY(start + 1 < finish,
+                {"start", start},
+                {"finish", finish});
             return false;
         };
 
     while (!checkBoundIsFound(posStart, posFinish)) {
-        AFL_VERIFY(guard.InitSortingPosition(0.5 * (posStart + posFinish)));
+        YDB_LOG_VERIFY(guard.InitSortingPosition(0.5 * (posStart + posFinish)));
         const auto comparision = position.Compare(forFound);
         if (cond(comparision)) {
             posFinish = position.Position;
@@ -79,10 +87,13 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
             posStart = position.Position;
         }
     }
-    AFL_VERIFY(checkBoundIsFound(posStart, posFinish))("finish", posFinish)("start", posStart)("reverse", position.ReverseSort);
-    AFL_VERIFY(guard.InitSortingPosition(posFinish));
+    YDB_LOG_VERIFY(checkBoundIsFound(posStart, posFinish),
+        {"finish", posFinish},
+        {"start", posStart},
+        {"reverse", position.ReverseSort});
+    YDB_LOG_VERIFY(guard.InitSortingPosition(posFinish));
     const auto comparision = position.Compare(forFound);
-    AFL_VERIFY(cond(comparision));
+    YDB_LOG_VERIFY(cond(comparision));
     return TFoundPosition(posFinish, comparision);
 }
 
@@ -119,7 +130,7 @@ NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::Build
 }
 
 TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(const TSortableBatchPosition& forFound) {
-    AFL_VERIFY(RecordsCount);
+    YDB_LOG_VERIFY(RecordsCount);
     const ui32 posStart = Position;
     std::optional<TSortableBatchPosition::TFoundPosition> pos;
     std::optional<ui64> overrideFound;
@@ -140,14 +151,21 @@ TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(con
     }
     if (overrideFound) {
         auto guard = CreateAsymmetricAccessGuard();
-        AFL_VERIFY(guard.InitSortingPosition(*overrideFound));
+        YDB_LOG_VERIFY(guard.InitSortingPosition(*overrideFound));
         pos = TFoundPosition(*overrideFound, Compare(forFound));
     }
-    AFL_VERIFY(pos)("has_override", !!overrideFound);
+    YDB_LOG_VERIFY(pos,
+        {"hasOverride", !!overrideFound});
     if (ReverseSort) {
-        AFL_VERIFY(Position <= posStart)("pos", Position)("pos_skip", pos->GetPosition())("reverse", true);
+        YDB_LOG_VERIFY(Position <= posStart,
+            {"pos", Position},
+            {"posSkip", pos->GetPosition()},
+            {"reverse", true});
     } else {
-        AFL_VERIFY(posStart <= Position)("pos", Position)("pos_skip", pos->GetPosition())("reverse", false);
+        YDB_LOG_VERIFY(posStart <= Position,
+            {"pos", Position},
+            {"posSkip", pos->GetPosition()},
+            {"reverse", false});
     }
     return *pos;
 }
@@ -156,10 +174,13 @@ TSortableScanData::TSortableScanData(
     const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetAccessorByNameOptional(i);
-        AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns))("batch", batch->DebugString());
+        YDB_LOG_VERIFY(c,
+            {"columnName", i},
+            {"columns", JoinSeq(",", columns)},
+            {"batch", batch->DebugString()});
         Columns.emplace_back(c);
         auto f = batch->GetSchema()->GetFieldByName(i);
-        AFL_VERIFY(f);
+        YDB_LOG_VERIFY(f);
         Fields.emplace_back(f);
     }
     BuildPosition(position);
@@ -175,10 +196,12 @@ TSortableScanData::TSortableScanData(
     const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
-        AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns));
+        YDB_LOG_VERIFY(c,
+            {"columnName", i},
+            {"columns", JoinSeq(",", columns)});
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(c));
         auto f = batch->schema()->GetFieldByName(i);
-        AFL_VERIFY(f);
+        YDB_LOG_VERIFY(f);
         Fields.emplace_back(f);
     }
     BuildPosition(position);
@@ -195,10 +218,13 @@ TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<
 TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns) {
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
-        AFL_VERIFY(c)("batch_names", JoinSeq(",", batch->schema()->field_names()))("column_name", i)("columns", JoinSeq(",", columns));
+        YDB_LOG_VERIFY(c,
+            {"batchNames", JoinSeq(",", batch->schema()->field_names())},
+            {"columnName", i},
+            {"columns", JoinSeq(",", columns)});
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialChunkedArray>(c));
         auto f = batch->schema()->GetFieldByName(i);
-        AFL_VERIFY(f);
+        YDB_LOG_VERIFY(f);
         Fields.emplace_back(f);
     }
     BuildPosition(position);
@@ -216,9 +242,9 @@ TSortableScanData::TSortableScanData(const ui64 position, const ui64 recordsCoun
 
 void TSortableScanData::AppendPositionTo(
     const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const ui64 position, ui64* recordSize) const {
-    AFL_VERIFY(builders.size() == PositionAddress.size());
+    YDB_LOG_VERIFY(builders.size() == PositionAddress.size());
     for (ui32 i = 0; i < PositionAddress.size(); ++i) {
-        AFL_VERIFY(NArrow::Append(*builders[i], *PositionAddress[i].GetArray(), PositionAddress[i].GetAddress().GetLocalIndex(position), recordSize));
+        YDB_LOG_VERIFY(NArrow::Append(*builders[i], *PositionAddress[i].GetArray(), PositionAddress[i].GetAddress().GetLocalIndex(position), recordSize));
     }
 }
 
@@ -235,17 +261,17 @@ void TSortableScanData::BuildPosition(const ui64 position) {
         if (!recordsCount) {
             recordsCount = i->GetRecordsCount();
         } else {
-            AFL_VERIFY(*recordsCount == i->GetRecordsCount());
+            YDB_LOG_VERIFY(*recordsCount == i->GetRecordsCount());
         }
     }
-    AFL_VERIFY(StartPosition < FinishPosition);
-    AFL_VERIFY(recordsCount);
+    YDB_LOG_VERIFY(StartPosition < FinishPosition);
+    YDB_LOG_VERIFY(recordsCount);
     RecordsCount = *recordsCount;
-    AFL_VERIFY(position < RecordsCount);
+    YDB_LOG_VERIFY(position < RecordsCount);
 }
 
 bool TSortableScanData::InitPosition(const ui64 position) {
-    AFL_VERIFY(position < RecordsCount);
+    YDB_LOG_VERIFY(position < RecordsCount);
     if (position < FinishPosition && StartPosition <= position) {
         return true;
     }
@@ -259,15 +285,15 @@ bool TSortableScanData::InitPosition(const ui64 position) {
         }
         StartPosition = std::max<ui64>(StartPosition, i.GetAddress().GetGlobalStartPosition());
         FinishPosition = std::min<ui64>(FinishPosition, i.GetAddress().GetGlobalFinishPosition());
-        AFL_VERIFY(i.GetAddress().Contains(position));
+        YDB_LOG_VERIFY(i.GetAddress().Contains(position));
         ++idx;
     }
-    AFL_VERIFY(StartPosition < FinishPosition);
+    YDB_LOG_VERIFY(StartPosition < FinishPosition);
     return true;
 }
 
 std::shared_ptr<arrow::RecordBatch> TSortableScanData::MakeRecordBatch(const i64 position) const {
-    AFL_VERIFY(Fields.size() == Columns.size());
+    YDB_LOG_VERIFY(Fields.size() == Columns.size());
     if (Columns.empty()) {
         return {};
     }
@@ -276,7 +302,7 @@ std::shared_ptr<arrow::RecordBatch> TSortableScanData::MakeRecordBatch(const i64
 
     for (size_t i = 0; i < Columns.size(); ++i) {
         auto scalar = Columns[i]->GetScalar(GetPositionInChunk(i, position));
-        AFL_VERIFY(scalar && Fields[i]->type()->Equals(scalar->type));
+        YDB_LOG_VERIFY(scalar && Fields[i]->type()->Equals(scalar->type));
 
         auto scalarArr = arrow::MakeArrayFromScalar(*scalar, 1);
         if (!scalarArr.ok()) {
@@ -288,13 +314,13 @@ std::shared_ptr<arrow::RecordBatch> TSortableScanData::MakeRecordBatch(const i64
     auto schema = arrow::schema(Fields);
     auto batch = arrow::RecordBatch::Make(schema, 1, arrays);
 
-    AFL_VERIFY_DEBUG(batch && batch->ValidateFull().ok());
+    YDB_LOG_VERIFY_DEBUG(batch && batch->ValidateFull().ok());
 
     return batch;
 }
 
 std::partial_ordering TCursor::Compare(const TSortableScanData& item, const ui64 itemPosition) const {
-    AFL_VERIFY(PositionAddress.size() == item.GetPositionAddress().size());
+    YDB_LOG_VERIFY(PositionAddress.size() == item.GetPositionAddress().size());
     for (ui32 idx = 0; idx < PositionAddress.size(); ++idx) {
         auto cmp = PositionAddress[idx].Compare(Position, item.GetPositionAddress()[idx], itemPosition);
         if (std::is_neq(cmp)) {
@@ -306,7 +332,7 @@ std::partial_ordering TCursor::Compare(const TSortableScanData& item, const ui64
 }
 
 std::partial_ordering TCursor::Compare(const TCursor& item) const {
-    AFL_VERIFY(PositionAddress.size() == item.PositionAddress.size());
+    YDB_LOG_VERIFY(PositionAddress.size() == item.PositionAddress.size());
     for (ui32 idx = 0; idx < PositionAddress.size(); ++idx) {
         auto cmp = PositionAddress[idx].Compare(Position, item.PositionAddress[idx], item.Position);
         if (std::is_neq(cmp)) {
@@ -318,19 +344,21 @@ std::partial_ordering TCursor::Compare(const TCursor& item) const {
 }
 
 void TCursor::ValidateSchema(const TSortableScanData& position) const {
-    AFL_VERIFY(position.GetFields().size() == PositionAddress.size());
+    YDB_LOG_VERIFY(position.GetFields().size() == PositionAddress.size());
     for (ui64 i = 0; i < PositionAddress.size(); ++i) {
         const auto& posType = position.GetFields()[i]->type();
         const auto& cursorType = PositionAddress[i].GetArray()->type();
-        AFL_VERIFY(posType->Equals(cursorType))("pos", posType->ToString())("cursor", cursorType->ToString());
+        YDB_LOG_VERIFY(posType->Equals(cursorType),
+            {"pos", posType->ToString()},
+            {"cursor", cursorType->ToString()});
     }
 }
 
 void TCursor::AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, ui64* recordSize) const {
-    AFL_VERIFY(builders.size() == PositionAddress.size());
+    YDB_LOG_VERIFY(builders.size() == PositionAddress.size());
     for (ui32 i = 0; i < PositionAddress.size(); ++i) {
-        AFL_VERIFY_DEBUG(builders[i]->type()->Equals(PositionAddress[i].GetArray()->type()));
-        AFL_VERIFY(NArrow::Append(*builders[i], *PositionAddress[i].GetArray(), PositionAddress[i].GetAddress().GetLocalIndex(Position), recordSize));
+        YDB_LOG_VERIFY_DEBUG(builders[i]->type()->Equals(PositionAddress[i].GetArray()->type()));
+        YDB_LOG_VERIFY(NArrow::Append(*builders[i], *PositionAddress[i].GetArray(), PositionAddress[i].GetAddress().GetLocalIndex(Position), recordSize));
     }
 }
 

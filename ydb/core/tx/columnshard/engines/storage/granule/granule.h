@@ -202,7 +202,7 @@ public:
     void ModifyPortionOnExecute(
         IDbWrapper& wrapper, const TPortionDataAccessor& portion, const TModifier& modifier, const ui32 firstPKColumnId) const {
         const auto innerPortion = GetInnerPortion(portion.GetPortionInfoPtr()).DetachResult();
-        AFL_VERIFY((ui64)innerPortion.get() == (ui64)&portion.GetPortionInfo());
+        YDB_LOG_VERIFY((ui64)innerPortion.get() == (ui64)&portion.GetPortionInfo());
         auto copy = innerPortion->MakeCopy();
         modifier(*copy);
         if (!HasAppData() || AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
@@ -216,7 +216,7 @@ public:
     template <class TModifier>
     void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
         const auto innerPortion = GetInnerPortion(portion).DetachResult();
-        AFL_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
+        YDB_LOG_VERIFY((ui64)innerPortion.get() == (ui64)portion.get());
         OnBeforeChangePortion(innerPortion);
         modifier(innerPortion);
         OnAfterChangePortion(innerPortion);
@@ -233,8 +233,8 @@ public:
     void AbortPortionOnExecute(
         NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot ssRemove) const {
         auto it = InsertedPortions.find(insertWriteId);
-        AFL_VERIFY(it != InsertedPortions.end());
-        AFL_VERIFY(InsertedPortionsById.contains(it->second->GetPortionId()));
+        YDB_LOG_VERIFY(it != InsertedPortions.end());
+        YDB_LOG_VERIFY(InsertedPortionsById.contains(it->second->GetPortionId()));
         // it is better to set remove snapshot before the commit snapshot
         // because otherwise concurrent readers may see the portion as just committed while
         // the commit snapshot is already set, but the remove snapshot is not set yet.
@@ -274,7 +274,7 @@ public:
         context.SetPortionExclusiveGuarantee(false);
         for (auto&& p : portionIds) {
             auto it = Portions.find(p);
-            AFL_VERIFY(it != Portions.end());
+            YDB_LOG_VERIFY(it != Portions.end());
             ActualizationIndex->AddPortion(it->second, context);
         }
     }
@@ -398,7 +398,7 @@ public:
     }
 
     const PortionIntervalTree::TPortionIntervalTree& GetPortionIntervalTreeVerified() const {
-        AFL_VERIFY(HasPortionIntervalTree());
+        YDB_LOG_VERIFY(HasPortionIntervalTree());
         return *IntervalTree;
     }
 
@@ -408,7 +408,7 @@ public:
 
     const std::shared_ptr<TWrittenPortionInfo>& GetInsertedPortionVerifiedPtr(const TInsertWriteId portionId) const {
         auto it = InsertedPortions.find(portionId);
-        AFL_VERIFY(it != InsertedPortions.end());
+        YDB_LOG_VERIFY(it != InsertedPortions.end());
         return it->second;
     }
 
@@ -434,7 +434,9 @@ public:
 
     const TPortionInfo& GetPortionVerified(const ui64 portion) const {
         auto it = Portions.find(portion);
-        AFL_VERIFY(it != Portions.end())("portion_id", portion)("count", Portions.size());
+        YDB_LOG_VERIFY(it != Portions.end(),
+            {"portionId", portion},
+            {"count", Portions.size()});
         return *it->second;
     }
 
@@ -445,10 +447,10 @@ public:
                 return it->second;
             }
         }
-        AFL_VERIFY(!committedOnly);
+        YDB_LOG_VERIFY(!committedOnly);
         {
             auto it = InsertedPortionsById.find(portion);
-            AFL_VERIFY(it != InsertedPortionsById.end());
+            YDB_LOG_VERIFY(it != InsertedPortionsById.end());
             return it->second;
         }
     }

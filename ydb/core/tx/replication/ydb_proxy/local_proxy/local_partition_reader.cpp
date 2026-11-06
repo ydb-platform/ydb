@@ -397,8 +397,10 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev
     auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);
 
     const auto& topics = settings.GetBase().Topics_;
-    AFL_VERIFY(1 == topics.size())("topic count", topics.size());
-    AFL_VERIFY(1 == topics.at(0).PartitionIds_.size())("partition count", topics.at(0).PartitionIds_.size());
+    YDB_LOG_VERIFY(1 == topics.size(),
+        {"topicCount", topics.size()});
+    YDB_LOG_VERIFY(1 == topics.at(0).PartitionIds_.size(),
+        {"partitionCount", topics.at(0).PartitionIds_.size()});
 
     auto reader = RegisterWithSameMailbox(new TLocalTopicPartitionReaderActor(ev->Sender, Database, std::move(settings)));
     Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader), 0, ev->Cookie);

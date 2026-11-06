@@ -10,13 +10,13 @@ void TDeclareRemovingAction::DoOnCompleteTxAfterRemoving(const bool blobsWroteSu
     if (blobsWroteSuccessfully) {
         for (auto&& i : GetDeclaredBlobs()) {
             if (GCInfo->IsBlobInUsage(i.first)) {
-                AFL_VERIFY(GCInfo->MutableBlobsToDeleteInFuture().Add(i.first, i.second));
+                YDB_LOG_VERIFY(GCInfo->MutableBlobsToDeleteInFuture().Add(i.first, i.second));
             } else {
                 YDB_LOG_DEBUG("",
                     {"event", "blob_to_delete"},
                     {"blobId", i.first},
                     {"tabletIds", JoinSeq(",", i.second)});
-                AFL_VERIFY(GCInfo->MutableBlobsToDelete().Add(i.first, i.second));
+                YDB_LOG_VERIFY(GCInfo->MutableBlobsToDelete().Add(i.first, i.second));
             }
         }
     }

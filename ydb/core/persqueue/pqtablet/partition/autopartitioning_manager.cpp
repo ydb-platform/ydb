@@ -283,7 +283,7 @@ protected:
 
         return result;
     }
-    
+
     std::string GetSplitBoundaryBasedOnSourceIds() {
         std::vector<std::pair<TString, ui64>> sorted;
         sorted.reserve(PerSourceMetrics.size());
@@ -335,7 +335,8 @@ protected:
         auto partition = FindIfPtr(Config.GetPartitions(), [&](const auto& v) {
             return v.GetPartitionId() == PartitionId;
         });
-        AFL_ENSURE(partition)("p", PartitionId);
+        YDB_LOG_ENSURE(partition,
+            {"p", PartitionId});
         return partition;
     }
 

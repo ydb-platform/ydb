@@ -31,7 +31,7 @@ bool TPortionColumnCursor::Fetch(TMergedColumn& column) {
         }
 
         if (currentStart < RecordIndexFinish) {
-            AFL_VERIFY(CurrentChunk);
+            YDB_LOG_VERIFY(CurrentChunk);
             Y_ABORT_UNLESS(RecordIndexFinish < CurrentChunk->GetAddress().GetGlobalFinishPosition());
             column.AppendSlice(
                 CurrentChunk->GetArray(), CurrentChunk->GetAddress().GetLocalIndex(currentStart), RecordIndexFinish - currentStart);

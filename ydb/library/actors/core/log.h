@@ -675,24 +675,49 @@ namespace NActors {
 
         [[noreturn]] ~TEnsureFormattedRecordWriter() noexcept(false);
     };
+
+    void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage);
+
+    void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
+        const NActors::NStructuredLog::TStructuredMessage& addMessage);
 }
+
 
 #define AFL_VERIFY(condition) if (condition) { static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); } else [[unlikely]] NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 #define AFL_ENSURE(condition) if (condition) { static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); } else [[unlikely]] NActors::TEnsureFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 
+#define YDB_LOG_VERIFY(condition, ...)                                                                                          \
+    if (condition) {                                                                                                            \
+        static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
+    } else [[unlikely]] {                                                                                                       \
+        NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+        YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+        NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
+    }
+
+#define YDB_LOG_ENSURE(condition, ...)                                                                                          \
+    if (condition) {                                                                                                            \
+        static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
+    } else [[unlikely]] {                                                                                                       \
+        NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+        YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+        NActors::LogEnsureFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
+    }
+
 #ifndef NDEBUG
 /// Assert that depend on NDEBUG macro and outputs message like printf
-#define AFL_VERIFY_DEBUG AFL_VERIFY
+#define YDB_LOG_VERIFY_DEBUG YDB_LOG_VERIFY
 #else
-#define AFL_VERIFY_DEBUG(condition) if (true); else NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+#define YDB_LOG_VERIFY_DEBUG(condition, ...)                                                                                    \
+    if (true) {                                                                                                                 \
+        static_assert(!std::is_array_v<std::remove_cvref_t<decltype(condition)>>, "The value of an array type is always true"); \
+    } else [[unlikely]] {                                                                                                       \
+        NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage;                                                    \
+        YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__);                                                           \
+        NActors::LogVerifyFailed(#condition, TStringBuf(__FILE__).RAfter(LOCSLASH_C), __LINE__, ydblogStructuredMessage);       \
+    }
 #endif
-
-#define ACTORS_FORMATTED_LOG(mPriority, mComponent) \
-    if (NActors::TlsActivationContext && !IS_LOG_PRIORITY_ENABLED(mPriority, mComponent));\
-        else NActors::TFormattedRecordWriter(\
-            static_cast<::NActors::NLog::EPriority>(mPriority), static_cast<::NActors::NLog::EComponent>(mComponent)\
-            )("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
-
 
 #define YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...) \
     do { \

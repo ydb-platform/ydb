@@ -22,7 +22,9 @@ public:
         , Schemas(std::move(schemas))
     {
         if (Schemas.size() > 1) {
-            AFL_VERIFY(GetStart() < GetFinish())("start", GetStart().DebugString())("finish", GetFinish().DebugString());
+            YDB_LOG_VERIFY(GetStart() < GetFinish(),
+                {"start", GetStart().DebugString()},
+                {"finish", GetFinish().DebugString()});
         }
     }
 
@@ -33,8 +35,8 @@ public:
 
     virtual bool QueryAgnosticLess(const NCommon::TDataSourceConstructor& rhs) const override {
         auto* rhsLocal = VerifyDynamicCast<const TDataSourceConstructor*>(&rhs);
-        AFL_VERIFY(!Schemas.empty());
-        AFL_VERIFY(!rhsLocal->Schemas.empty());
+        YDB_LOG_VERIFY(!Schemas.empty());
+        YDB_LOG_VERIFY(!rhsLocal->Schemas.empty());
         return std::make_tuple(GetTabletId(), Schemas.front()->GetVersion()) <
                std::make_tuple(rhsLocal->GetTabletId(), rhsLocal->Schemas.front()->GetVersion());
     }

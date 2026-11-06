@@ -118,7 +118,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TCleanOrphanedOperationsNormaliz
         }
         while (!rowset.EndOfSet()) {
             NKikimrTxColumnShard::TInternalOperationData metaProto;
-            AFL_VERIFY(metaProto.ParseFromString(rowset.GetValue<Schema::Operations::Metadata>()));
+            YDB_LOG_VERIFY(metaProto.ParseFromString(rowset.GetValue<Schema::Operations::Metadata>()));
             const ui64 pathId = TInternalPathId::FromProto(metaProto).GetRawValue();
             if (!knownPathIds.contains(pathId) || !proposedLockIds.contains(rowset.GetValue<Schema::Operations::LockId>())) {
                 TOrphanedOperation operation{ .WriteId = rowset.GetValue<Schema::Operations::WriteId>(), .PathId = pathId };

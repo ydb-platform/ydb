@@ -45,14 +45,14 @@ public:
         }
 
         TDataAddress SelectSubColumns(const THashSet<NAccessor::NSubColumns::TCanonicalSubColumnName>& selected) const {
-            AFL_VERIFY(selected.size());
+            YDB_LOG_VERIFY(selected.size());
             TDataAddress result(ColumnId, ColumnName, std::nullopt);
             for (auto&& i : selected) {
                 if (!i) {
-                    AFL_VERIFY(selected.size() == 1);
+                    YDB_LOG_VERIFY(selected.size() == 1);
                     continue;
                 }
-                AFL_VERIFY(SubColumnNames.contains(i));
+                YDB_LOG_VERIFY(SubColumnNames.contains(i));
                 result.AddSubColumnName(i);
             }
             if (UseDictionaryOnly) {
@@ -78,20 +78,20 @@ public:
             const ui32 columnId, const TString& columnName, const std::optional<NAccessor::NSubColumns::TCanonicalSubColumnName>& subColumnName)
             : ColumnId(columnId)
             , ColumnName(columnName) {
-            AFL_VERIFY(!!ColumnName);
+            YDB_LOG_VERIFY(!!ColumnName);
             if (subColumnName) {
                 AddSubColumnName(*subColumnName);
             }
         }
 
         void MergeFrom(const TDataAddress& addr) {
-            AFL_VERIFY(ColumnId == addr.ColumnId);
-            AFL_VERIFY(ColumnName == addr.ColumnName);
+            YDB_LOG_VERIFY(ColumnId == addr.ColumnId);
+            YDB_LOG_VERIFY(ColumnName == addr.ColumnName);
             if (addr.UseDictionaryOnly) {
                 UseDictionaryOnly = true;
             }
             if (IsFullColumn) {
-                AFL_VERIFY(!!addr.IsFullColumn);
+                YDB_LOG_VERIFY(!!addr.IsFullColumn);
                 if (IsFullColumn == addr.IsFullColumn && !*IsFullColumn) {
                     SubColumnNames.insert(addr.SubColumnNames.begin(), addr.SubColumnNames.end());
                 } else {
@@ -108,10 +108,10 @@ public:
             if (!IsFullColumn) {
                 IsFullColumn = !scName;
             } else {
-                AFL_VERIFY(*IsFullColumn == !scName);
+                YDB_LOG_VERIFY(*IsFullColumn == !scName);
             }
             if (!!scName) {
-                AFL_VERIFY(SubColumnNames.emplace(scName).second);
+                YDB_LOG_VERIFY(SubColumnNames.emplace(scName).second);
             }
         }
 
@@ -162,11 +162,11 @@ public:
         }
 
         void AddSubColumn(const NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName) {
-            AFL_VERIFY(SubColumnNames.emplace(subColumnName).second);
+            YDB_LOG_VERIFY(SubColumnNames.emplace(subColumnName).second);
         }
 
         void MergeFrom(const TFetchHeaderContext& ctx) {
-            AFL_VERIFY(ColumnId == ctx.GetColumnId());
+            YDB_LOG_VERIFY(ColumnId == ctx.GetColumnId());
             SubColumnNames.insert(ctx.SubColumnNames.begin(), ctx.SubColumnNames.end());
         }
     };
@@ -186,19 +186,19 @@ public:
             }
 
             bool HasSubColumns() const {
-                AFL_VERIFY(FullColumnOperations);
+                YDB_LOG_VERIFY(FullColumnOperations);
                 return !*FullColumnOperations;
             }
 
             TOperationsBySubColumn& Add(
                 const NAccessor::NSubColumns::TCanonicalSubColumnName& subColumn, const TOperation operation, const bool strict = true) {
                 if (FullColumnOperations) {
-                    AFL_VERIFY(*FullColumnOperations == !subColumn);
+                    YDB_LOG_VERIFY(*FullColumnOperations == !subColumn);
                 } else {
                     FullColumnOperations = !subColumn;
                 }
                 if (strict) {
-                    AFL_VERIFY(Data[subColumn].emplace(operation).second);
+                    YDB_LOG_VERIFY(Data[subColumn].emplace(operation).second);
                 } else {
                     Data[subColumn].emplace(operation);
                 }
@@ -232,8 +232,8 @@ public:
         }
 
         void MergeFrom(const TFetchIndexContext& ctx) {
-            AFL_VERIFY(ColumnId == ctx.GetColumnId());
-            AFL_VERIFY(ctx.OperationsBySubColumn.GetData().size());
+            YDB_LOG_VERIFY(ColumnId == ctx.GetColumnId());
+            YDB_LOG_VERIFY(ctx.OperationsBySubColumn.GetData().size());
             for (auto&& [subColumnName, operators] : ctx.OperationsBySubColumn.GetData()) {
                 for (auto&& op : operators) {
                     OperationsBySubColumn.Add(subColumnName, op, false);
@@ -244,7 +244,7 @@ public:
         TFetchIndexContext(const ui32 columnId, const TOperationsBySubColumn& operationsBySubColumn)
             : ColumnId(columnId)
             , OperationsBySubColumn(operationsBySubColumn) {
-            AFL_VERIFY(OperationsBySubColumn.GetData().size());
+            YDB_LOG_VERIFY(OperationsBySubColumn.GetData().size());
         }
     };
 
@@ -329,7 +329,7 @@ public:
     TConclusion<TExecutionResult> StartReserveMemory(const NArrow::NSSA::TProcessorContext& context,
         const THashMap<ui32, IDataSource::TDataAddress>& columns, const THashMap<ui32, IDataSource::TFetchIndexContext>& indexes,
         const THashMap<ui32, IDataSource::TFetchHeaderContext>& headers, const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& policy) {
-        AFL_VERIFY(policy);
+        YDB_LOG_VERIFY(policy);
         return DoStartReserveMemory(context, columns, indexes, headers, policy);
     }
 
@@ -382,17 +382,17 @@ public:
     }
 
     const NAccessor::TAccessorsCollection& GetResources() const {
-        AFL_VERIFY(HasResources());
+        YDB_LOG_VERIFY(HasResources());
         return *Resources;
     }
 
     NAccessor::TAccessorsCollection& MutableResources() const {
-        AFL_VERIFY(HasResources());
+        YDB_LOG_VERIFY(HasResources());
         return *Resources;
     }
 
     std::unique_ptr<NAccessor::TAccessorsCollection> ExtractResources() {
-        AFL_VERIFY(HasResources());
+        YDB_LOG_VERIFY(HasResources());
         Extracted = true;
         return std::move(Resources);
     }
@@ -404,7 +404,7 @@ public:
     template <class T>
     T& GetDataSourceVerifiedAs() const {
         auto* result = dynamic_cast<T*>(&DataSource);
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 
@@ -414,7 +414,7 @@ public:
         , DataSource(dataSource)
         , Limit(limit)
         , Reverse(reverse) {
-        AFL_VERIFY(!!Resources);
+        YDB_LOG_VERIFY(!!Resources);
     }
 };
 
@@ -422,37 +422,37 @@ class TFailDataSource: public IDataSource {
 private:
     virtual TConclusion<TExecutionResult> DoStartFetch(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& /*fetchers*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TExecutionResult::Done();
     }
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
         const TProcessorContext& /*context*/, const TCheckHeaderContext& /*fetchContext*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TColumnFilter::BuildAllowFilter();
     }
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const TProcessorContext& /*context*/, const TDataAddress& /*addr*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
     virtual TConclusionStatus DoAssembleAccessor(
         const TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TConclusionStatus::Fail("unreachable");
     }
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>();
     }
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const TProcessorContext& /*context*/, const TCheckIndexContext& /*fetchContext*/,
         const std::shared_ptr<arrow::Scalar>& /*value*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
 };
@@ -521,7 +521,7 @@ private:
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
         const TProcessorContext& /*context*/, const TDataAddress& addr) override {
         for (auto&& i : addr.GetSubColumnNames(true)) {
-            AFL_VERIFY(Blobs.contains(TBlobAddress(addr.GetColumnId(), i.GetValue())));
+            YDB_LOG_VERIFY(Blobs.contains(TBlobAddress(addr.GetColumnId(), i.GetValue())));
         }
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
@@ -529,22 +529,22 @@ private:
 
     virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
         const TProcessorContext& /*context*/, const TCheckHeaderContext& /*fetchContext*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return TColumnFilter::BuildAllowFilter();
     }
     virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
         const TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>();
     }
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const TProcessorContext& /*context*/, const TCheckIndexContext& /*fetchContext*/,
         const std::shared_ptr<arrow::Scalar>& /*value*/) override {
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
     virtual TConclusion<TExecutionResult> DoStartFetch(const NArrow::NSSA::TProcessorContext& /*context*/,
@@ -554,23 +554,23 @@ private:
 
 public:
     const NAccessor::TAccessorsCollection& GetResources() const {
-        AFL_VERIFY(!!Resources);
+        YDB_LOG_VERIFY(!!Resources);
         return *Resources;
     }
 
     NAccessor::TAccessorsCollection& MutableResources() const {
-        AFL_VERIFY(!!Resources);
+        YDB_LOG_VERIFY(!!Resources);
         return *Resources;
     }
 
     std::unique_ptr<NAccessor::TAccessorsCollection> ExtractResources() {
-        AFL_VERIFY(!!Resources);
+        YDB_LOG_VERIFY(!!Resources);
         return std::move(Resources);
     }
 
     void ReturnResources(std::unique_ptr<NAccessor::TAccessorsCollection>&& res) {
-        AFL_VERIFY(!Resources);
-        AFL_VERIFY(!!res);
+        YDB_LOG_VERIFY(!Resources);
+        YDB_LOG_VERIFY(!!res);
         Resources = std::move(res);
     }
 

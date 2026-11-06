@@ -59,7 +59,7 @@ public:
         , DistributorId(distributorId)
         , WorkerIdx(workerIdx)
         , WorkersPoolId(workersPoolId) {
-        AFL_VERIFY(std::isfinite(CPULimit) && 0 < CPULimit && CPULimit <= 1);
+        YDB_LOG_VERIFY(std::isfinite(CPULimit) && 0 < CPULimit && CPULimit <= 1);
     }
 };
 

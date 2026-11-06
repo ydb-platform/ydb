@@ -100,7 +100,11 @@ struct TMessage {
         case 4:
             return std::get<4>(Body).Cookie;
         default:
-            AFL_ENSURE(false)("reason", "unreachable")("index", Body.index());
+            YDB_LOG_ENSURE(false,
+                {"reason", "unreachable"},
+                {"index", Body.index()});
+            // This case is unrechable, but compiler requires return statement anyway
+            return 0;
         }
     }
 
@@ -109,11 +113,11 @@ struct TMessage {
             return Body.index() == i; \
         } \
         const auto& Get##name() const { \
-            AFL_ENSURE(Is##name()); \
+            YDB_LOG_ENSURE(Is##name()); \
             return std::get<i>(Body); \
         } \
         auto& Get##name() { \
-            AFL_ENSURE(Is##name()); \
+            YDB_LOG_ENSURE(Is##name()); \
             return std::get<i>(Body); \
         }
 

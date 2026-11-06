@@ -154,7 +154,7 @@ public:
                 } else {
                     gContainer = std::make_shared<NArrow::TGeneralContainer>(i->num_rows());
                     auto itBatchIndexes = i.GetColumnIndexes().begin();
-                    AFL_VERIFY(i.GetColumnIndexes().size() < indexes.size());
+                    YDB_LOG_VERIFY(i.GetColumnIndexes().size() < indexes.size());
                     for (auto itAllIndexes = indexes.begin(); itAllIndexes != indexes.end(); ++itAllIndexes) {
                         if (itBatchIndexes == i.GetColumnIndexes().end() || *itAllIndexes < *itBatchIndexes) {
                             auto defaultColumn = indexInfo.BuildDefaultColumn(*itAllIndexes, i->num_rows(), false);
@@ -167,7 +167,7 @@ public:
                             gContainer->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes), defaultColumn.DetachResult())
                                 .Validate();
                         } else {
-                            AFL_VERIFY(*itAllIndexes == *itBatchIndexes);
+                            YDB_LOG_VERIFY(*itAllIndexes == *itBatchIndexes);
                             gContainer
                                 ->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes),
                                     i->column(itBatchIndexes - i.GetColumnIndexes().begin()))

@@ -9,13 +9,13 @@
 namespace NKikimr::NOlap::NImport {
 
 NKikimr::TConclusion<std::unique_ptr<NActors::IActor>> TSession::DoCreateActor(const NBackground::TStartContext &context) const {
-    AFL_VERIFY(IsConfirmed());
+    YDB_LOG_VERIFY(IsConfirmed());
     Status = EStatus::Started;
     return std::make_unique<TImportActor>(context.GetSessionSelfPtr(), context.GetAdapter());
 }
 
 void TSession::Finish() {
-    AFL_VERIFY(Status == EStatus::Started);
+    YDB_LOG_VERIFY(Status == EStatus::Started);
     Status = EStatus::Finished;
 }
 
@@ -44,7 +44,7 @@ void TSession::Abort(const TString &errorMessage) {
 }
 
 void TSession::Confirm() {
-    AFL_VERIFY(IsDraft());
+    YDB_LOG_VERIFY(IsDraft());
     Status = EStatus::Confirmed;
 }
 
@@ -63,7 +63,7 @@ bool TSession::IsConfirmed() const {
 TSession::TSession(const std::shared_ptr<TImportTask> &task)
     : Task(task)
 {
-    AFL_VERIFY(Task);
+    YDB_LOG_VERIFY(Task);
 }
 
 TString TSession::GetClassName() const {

@@ -25,7 +25,7 @@ public:
         , SnapshotVersion(version)
         , PathId(pathId)
     {
-        AFL_VERIFY(!!ShardingInfo);
+        YDB_LOG_VERIFY(!!ShardingInfo);
     }
 };
 
@@ -43,7 +43,7 @@ private:
         }
 
         void AddIgnoreSchemaVersionTo(const ui64 to) {
-            AFL_VERIFY(!IgnoreToVersion);
+            YDB_LOG_VERIFY(!IgnoreToVersion);
             IgnoreToVersion = to;
         }
 
@@ -77,7 +77,7 @@ public:
 
     void AddIgnoreSchemaVersionTo(const ui64 from, const ui64 to) {
         auto it = SnapshotByVersion.find(from);
-        AFL_VERIFY(it != SnapshotByVersion.end());
+        YDB_LOG_VERIFY(it != SnapshotByVersion.end());
         it->second.AddIgnoreSchemaVersionTo(to);
     }
 
@@ -95,9 +95,9 @@ public:
 
     void EraseVersion(const ui64 version) {
         auto it = SnapshotByVersion.find(version);
-        AFL_VERIFY(it != SnapshotByVersion.end());
+        YDB_LOG_VERIFY(it != SnapshotByVersion.end());
         auto itSnapshot = Snapshots.find(it->second->GetSnapshot());
-        AFL_VERIFY(itSnapshot != Snapshots.end());
+        YDB_LOG_VERIFY(itSnapshot != Snapshots.end());
         Snapshots.erase(itSnapshot);
         SnapshotByVersion.erase(it);
     }
@@ -140,7 +140,7 @@ public:
     std::optional<TGranuleShardingInfo> GetShardingInfoActual(const TInternalPathId pathId) const;
 
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {
-        AFL_VERIFY(ShardingInfo[shardingInfo.GetPathId()].emplace(shardingInfo.GetSinceSnapshot(), shardingInfo).second);
+        YDB_LOG_VERIFY(ShardingInfo[shardingInfo.GetPathId()].emplace(shardingInfo.GetSinceSnapshot(), shardingInfo).second);
     }
 
     TString DebugString() const {
@@ -158,7 +158,9 @@ public:
 
     ISnapshotSchema::TPtr GetSchemaVerified(const ui64 version) const {
         auto it = SnapshotByVersion.lower_bound(version);
-        AFL_VERIFY(it != SnapshotByVersion.end())("problem", "no schema for version")("version", version);
+        YDB_LOG_VERIFY(it != SnapshotByVersion.end(),
+            {"problem", "no schema for version"},
+            {"version", version});
         return it->second.GetSchema();
     }
 

@@ -30,9 +30,10 @@ std::unique_ptr<NCommon::TDataSourceLease> TOrderedResultWithLimitCollection::Do
         auto result = std::move(NextSource);
         NextSource = std::move(localNext);
         const ui32 sourceIdx = result->GetSource().GetSourceIdx();
-        AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() <= FetchingInFlightSources.size())("in_flight",
-                                                                    GetSourcesInFlightCount())("fetching", FetchingInFlightSources.size());
-        AFL_VERIFY(FetchingInFlightSources.emplace(sourceIdx).second);
+        YDB_LOG_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() <= FetchingInFlightSources.size(),
+            {"inFlight", GetSourcesInFlightCount()},
+            {"fetching", FetchingInFlightSources.size()});
+        YDB_LOG_VERIFY(FetchingInFlightSources.emplace(sourceIdx).second);
         YDB_LOG_DEBUG("",
             {"event", "DoTryExtractNext"},
             {"sourceIdx", sourceIdx});
@@ -51,9 +52,11 @@ void TOrderedResultWithLimitCollection::DoOnSourceFinished(const NCommon::IDataS
     if (source.GetAs<IDataSource>()->GetResultRecordsCount() < Limit && InFlightLimit < GetMaxInFlight()) {
         InFlightLimit = Min(2 * InFlightLimit, GetMaxInFlight());
     }
-    AFL_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() <= FetchingInFlightSources.size())("in_flight", GetSourcesInFlightCount())("fetching",
-                                                                FetchingInFlightSources.size());
-    AFL_VERIFY(FetchingInFlightSources.erase(source.GetSourceIdx()) || Cleared || Aborted)("source_idx", source.GetSourceIdx());
+    YDB_LOG_VERIFY(Cleared || Aborted || GetSourcesInFlightCount() <= FetchingInFlightSources.size(),
+        {"inFlight", GetSourcesInFlightCount()},
+        {"fetching", FetchingInFlightSources.size()});
+    YDB_LOG_VERIFY(FetchingInFlightSources.erase(source.GetSourceIdx()) || Cleared || Aborted,
+        {"sourceIdx", source.GetSourceIdx()});
 }
 
 TOrderedResultWithLimitCollection::TOrderedResultWithLimitCollection(

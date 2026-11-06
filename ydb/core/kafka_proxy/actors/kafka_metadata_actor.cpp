@@ -112,7 +112,8 @@ private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         DescriberId = {};
         const auto it = ev->Get()->Topics.find(Path);
-        AFL_ENSURE(it != ev->Get()->Topics.end())("path", Path);
+        YDB_LOG_ENSURE(it != ev->Get()->Topics.end(),
+            {"path", Path});
         const auto& topicInfo = it->second;
         if (topicInfo.Status != NDescriber::EStatus::Success) {
             auto status = NDescriber::Convert(topicInfo.Status);
@@ -122,8 +123,8 @@ private:
             }
             return ReplyError(status, NDescriber::Description(Path, topicInfo.Status));
         }
-        AFL_ENSURE(topicInfo.Self && topicInfo.Info);
-        AFL_ENSURE(Response);
+        YDB_LOG_ENSURE(topicInfo.Self && topicInfo.Info);
+        YDB_LOG_ENSURE(Response);
 
         Response->PathId = topicInfo.Self->Info.GetPathId();
         Response->SchemeShardId = topicInfo.Self->Info.GetSchemeshardId();
@@ -159,7 +160,7 @@ private:
         // instead of a partial live PartitionsInfo (e.g. during split).
         // Cookie 0 is reserved: old PQRB replies without echoing the request cookie.
         const ui64 cookie = ++LocationRequestGeneration;
-        AFL_ENSURE(cookie != 0);
+        YDB_LOG_ENSURE(cookie != 0);
         SendToTablet(
             BalancerTabletId,
             new TEvPersQueue::TEvGetPartitionsLocation(SchemePartitionIds, remaining),
@@ -189,7 +190,7 @@ private:
             return ScheduleRetry();
         }
 
-        AFL_ENSURE(Response);
+        YDB_LOG_ENSURE(Response);
         Response->Partitions.reserve(SchemePartitionIds.size());
         absl::flat_hash_set<ui64> scheme(
             SchemePartitionIds.begin(), SchemePartitionIds.end());
@@ -390,7 +391,9 @@ void TKafkaMetadataActor::ProcessTopicsFromRequest() {
 }
 
 void TKafkaMetadataActor::HandleListTopics(NKikimr::TEvPQ::TEvListAllTopicsResponse::TPtr& ev) {
-    AFL_ENSURE(PendingResponses > 0)("pending", PendingResponses)("database", Context->DatabasePath);
+    YDB_LOG_ENSURE(PendingResponses > 0,
+        {"pending", PendingResponses},
+        {"database", Context->DatabasePath});
     PendingResponses--;
     auto topics = std::move(ev->Get()->Topics);
     Response->Topics.resize(topics.size());

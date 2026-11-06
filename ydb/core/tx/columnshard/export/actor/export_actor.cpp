@@ -10,7 +10,10 @@
 namespace NKikimr::NOlap::NExport {
 
 void TActor::SwitchStage(const EStage from, const EStage to) {
-    AFL_VERIFY(Stage == from)("from", from)("real", Stage)("to", to);
+    YDB_LOG_VERIFY(Stage == from,
+        {"from", (ui32)from},
+        {"real", (ui32)Stage},
+        {"to", (ui32)to});
     Stage = to;
     StageStartTime = TInstant::Now();
 }
@@ -34,7 +37,8 @@ bool TActor::IsFinishing() const {
 
 void TActor::SaveCursor(EStage stage) {
     Stage = stage;
-    AFL_VERIFY(IsSavingCursor())("stage", ::ToString(Stage));
+    YDB_LOG_VERIFY(IsSavingCursor(),
+        {"stage", ::ToString(Stage)});
     StageStartTime = TInstant::Now();
     Counters.OnSaveCursorStarted();
     SaveCursorStartTime = TInstant::Now();
@@ -147,7 +151,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
         return;
     }
     SwitchStage(EStage::Initialization, EStage::WaitData);
-    AFL_VERIFY(!ScanActorId);
+    YDB_LOG_VERIFY(!ScanActorId);
     auto& msg = ev->Get()->Record;
     ScanActorId = ActorIdFromProto(msg.GetScanActorId());
     AllowScanPings = msg.GetAllowPings();
@@ -186,7 +190,8 @@ void TActor::OnTxCompleted(const ui64 /*txId*/) {
 }
 
 void TActor::OnSessionProgressSaved() {
-    AFL_VERIFY(IsSavingCursor())("stage", ::ToString(Stage));
+    YDB_LOG_VERIFY(IsSavingCursor(),
+        {"stage", ::ToString(Stage)});
     Counters.OnSaveCursorFinished(TInstant::Now() - SaveCursorStartTime);
     if (ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished()) {
         Stage = EStage::Finished;
@@ -208,7 +213,7 @@ void TActor::OnSessionProgressSaved() {
         case EStage::WaitSaveCursorBeforeFinish:
             return FinishExport();
         case EStage::WaitSaveFinalCursor:
-            AFL_VERIFY(ExportSession->GetCursor().IsFinished());
+            YDB_LOG_VERIFY(ExportSession->GetCursor().IsFinished());
             if (ExportSession->IsStarted()) {
                 ExportSession->Finish();
             }
@@ -217,14 +222,15 @@ void TActor::OnSessionProgressSaved() {
             return;
         case EStage::WaitSaveCursor:
             SwitchStage(EStage::WaitSaveCursor, EStage::WaitData);
-            AFL_VERIFY(ScanActorId);
+            YDB_LOG_VERIFY(ScanActorId);
             Counters.OnReadStarted();
             Counters.OnAckSent();
             ReadStartTime = TInstant::Now();
             TBase::Send(*ScanActorId, new NKqp::TEvKqpCompute::TEvScanDataAck(FreeSpace, ScanGeneration, 1));
             return;
         default:
-            AFL_VERIFY(false)("stage", ::ToString(Stage));
+            YDB_LOG_VERIFY(false,
+                {"stage", ::ToString(Stage)});
     }
 }
 
@@ -249,9 +255,10 @@ void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportRecordBatchR
         FinishExport();
         return;
     }
-    AFL_VERIFY(Stage == EStage::WaitWriting)("stage", ::ToString(Stage));
+    YDB_LOG_VERIFY(Stage == EStage::WaitWriting,
+        {"stage", ::ToString(Stage)});
     Counters.OnWriteFinished(TInstant::Now() - WriteStartTime);
-    AFL_VERIFY(ExportSession->GetCursor().HasLastKey());
+    YDB_LOG_VERIFY(ExportSession->GetCursor().HasLastKey());
     SaveCursor(EStage::WaitSaveCursor);
 }
 
@@ -264,8 +271,8 @@ void TActor::HandleExecute(NColumnShard::TEvPrivate::TEvBackupExportReset::TPtr&
     if (PendingAbortReason || IsFinishing()) {
         return;
     }
-    AFL_VERIFY(ev->Sender == Exporter);
-    AFL_VERIFY(ev->Get()->Generation == ScanGeneration + 1);
+    YDB_LOG_VERIFY(ev->Sender == Exporter);
+    YDB_LOG_VERIFY(ev->Get()->Generation == ScanGeneration + 1);
     ScanGeneration = ev->Get()->Generation;
     AbortScanIfKnown("export scan reset");
     if (IsSavingCursor()) {
@@ -357,7 +364,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     Counters.OnReadFinished(TInstant::Now() - ReadStartTime);
     SwitchStage(EStage::WaitData, EStage::WaitWriting);
     auto data = ev->Get()->ArrowBatch;
-    AFL_VERIFY(!!data || ev->Get()->Finished);
+    YDB_LOG_VERIFY(!!data || ev->Get()->Finished);
     Counters.OnWriteStarted();
     WriteStartTime = TInstant::Now();
     if (data) {
@@ -367,7 +374,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
         Send(new IEventHandle(Exporter, SelfId(), new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(nullptr, true, ScanGeneration)));
     }
     TOwnedCellVec lastKey = ev->Get()->LastKey;
-    AFL_VERIFY(!ExportSession->GetCursor().IsFinished());
+    YDB_LOG_VERIFY(!ExportSession->GetCursor().IsFinished());
     ExportSession->MutableCursor().InitNext(ev->Get()->LastKey, ev->Get()->Finished);
 }
 
@@ -389,7 +396,8 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TActor::BuildRequestInitiator
     // ev->Record.MutableSnapshot()->SetTxId(backupTask.GetSnapshotTxId());
     ev->Record.SetScanId(tablePathId.GetRawValue());
     const auto txId = ExportSession->GetTxId();
-    AFL_VERIFY(txId)("reason", "export_session_has_no_tx_id");
+    YDB_LOG_VERIFY(txId,
+        {"reason", "export_session_has_no_tx_id"});
     ev->Record.SetTxId(*txId);
     ev->Record.SetTablePath(backupTask.GetTableName());
     ev->Record.SetSchemaVersion(0);
@@ -428,7 +436,7 @@ public:
 };
 
 void TActor::OnSessionStateSaved() {
-    AFL_VERIFY(ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished());
+    YDB_LOG_VERIFY(ExportSession->IsFinished() || ExportSession->IsReadyForRemoveOnFinished());
     NYDBTest::TControllers::GetColumnShardController()->OnExportFinished();
     if (ExportSession->GetTxId()) {
         YDB_LOG_INFO("",

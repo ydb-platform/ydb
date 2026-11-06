@@ -114,7 +114,7 @@ public:
         TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
         if (!!TxAddSharding) {
             auto* tx = dynamic_cast<TTxAddShardingInfo*>(TxAddSharding.get());
-            AFL_VERIFY(tx);
+            YDB_LOG_VERIFY(tx);
             tx->SetSnapshotVersion(version);
             TxAddSharding->Execute(txc, NActors::TActivationContext::AsActorContext());
         }

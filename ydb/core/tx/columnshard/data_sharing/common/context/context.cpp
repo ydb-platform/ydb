@@ -30,7 +30,7 @@ NKikimr::TConclusionStatus TTransferContext::DeserializeFromProto(const NKikimrC
         return TConclusionStatus::Fail("incorrect DestinationTabletId in proto");
     }
     for (auto&& i : proto.GetSourceTabletIds()) {
-        AFL_VERIFY(SourceTabletIds.emplace((TTabletId)i).second);
+        YDB_LOG_VERIFY(SourceTabletIds.emplace((TTabletId)i).second);
     }
     Moving = proto.GetMoving();
     {
@@ -67,12 +67,12 @@ TTransferContext::TTransferContext(const TTabletId destination, const THashSet<T
     , SnapshotBarrier(snapshotBarrier)
     , TxId(txId)
 {
-    AFL_VERIFY(!TxId || *TxId);
-    AFL_VERIFY(!sources.contains(destination));
+    YDB_LOG_VERIFY(!TxId || *TxId);
+    YDB_LOG_VERIFY(!sources.contains(destination));
 }
 
 const NKikimr::NOlap::TSnapshot& TTransferContext::GetSnapshotBarrierVerified() const {
-    AFL_VERIFY(SnapshotBarrier.Valid());
+    YDB_LOG_VERIFY(SnapshotBarrier.Valid());
     return SnapshotBarrier;
 }
 

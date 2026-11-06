@@ -48,7 +48,7 @@ public:
     template <class T>
     T& MutableConstructorsAs() {
         auto result = static_cast<T*>(SourcesConstructor.get());
-        AFL_VERIFY(result);
+        YDB_LOG_VERIFY(result);
         return *result;
     }
 

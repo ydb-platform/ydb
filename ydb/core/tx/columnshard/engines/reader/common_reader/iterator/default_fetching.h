@@ -15,7 +15,7 @@ private:
         if (auto loader = source.GetSourceSchema()->GetColumnLoaderOptional(GetEntityId())) {
             return loader;
         }
-        AFL_VERIFY(IsEmptyChunks && *IsEmptyChunks);
+        YDB_LOG_VERIFY(IsEmptyChunks && *IsEmptyChunks);
         return source.GetContext()->GetReadMetadata()->GetResultSchema()->GetColumnLoaderVerified(GetEntityId());
     }
 
@@ -46,13 +46,13 @@ private:
         }
 
         TPortionDataAccessor::TAssembleBlobInfo ExtractDataVerified() {
-            AFL_VERIFY(!!Data);
+            YDB_LOG_VERIFY(!!Data);
             Data->SetExpectedRecordsCount(RecordsCount);
             return std::move(*Data);
         }
 
         void SetBlobData(const TString& data) {
-            AFL_VERIFY(!Data);
+            YDB_LOG_VERIFY(!Data);
             BlobRange.reset();
             Data.emplace(data);
             if (AdditionalAccessorData) {
@@ -65,7 +65,7 @@ private:
     std::optional<TString> StorageId;
 
     virtual TConclusionStatus DoOnDataCollected(TFetchingResultContext& context) override {
-        AFL_VERIFY(!IIndexInfo::IsSpecialColumn(GetEntityId()));
+        YDB_LOG_VERIFY(!IIndexInfo::IsSpecialColumn(GetEntityId()));
         std::vector<TPortionDataAccessor::TAssembleBlobInfo> chunks;
         for (auto&& i : ColumnChunks) {
             chunks.emplace_back(i.ExtractDataVerified());
@@ -88,7 +88,7 @@ private:
             if (!i.GetBlobRangeOptional()) {
                 continue;
             }
-            AFL_VERIFY(!!StorageId);
+            YDB_LOG_VERIFY(!!StorageId);
             i.SetBlobData(blobs.ExtractVerified(*StorageId, *i.GetBlobRangeOptional()));
         }
     }
@@ -110,7 +110,7 @@ private:
         auto itFilter = cFilter.GetBegin(false, source.GetRecordsCount());
         bool itFinished = false;
         for (auto&& c : columnChunks) {
-            AFL_VERIFY(!itFinished);
+            YDB_LOG_VERIFY(!itFinished);
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 reading->SetIsBackgroundProcess(false);
                 reading->AddRange(source.RestoreBlobRange(c->BlobRange));
@@ -123,7 +123,9 @@ private:
             }
             itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
         }
-        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", source.GetRecordsCount());
+        YDB_LOG_VERIFY(itFinished,
+            {"filter", itFilter.DebugString()},
+            {"count", source.GetRecordsCount()});
         for (auto&& i : blobsAction.GetReadingActions()) {
             nextRead.Add(i);
         }

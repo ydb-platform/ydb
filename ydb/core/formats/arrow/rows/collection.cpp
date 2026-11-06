@@ -9,7 +9,7 @@ namespace NKikimr::NArrow {
 
 void TRowsCollection::Initialize(const std::shared_ptr<arrow::RecordBatch>& data) {
     std::vector<TString> rawData;
-    AFL_VERIFY(data->num_rows());
+    YDB_LOG_VERIFY(data->num_rows());
     rawData.resize(data->num_rows());
     for (ui32 i = 0; i < (ui32)data->num_rows(); ++i) {
         rawData[i] = TSimpleRowViewV0::BuildString(data, i);
@@ -39,17 +39,17 @@ TConclusion<TString> TRowsCollection::DebugString(const std::shared_ptr<arrow::S
 }
 
 TSimpleRow TRowsCollection::GetFirst(const std::shared_ptr<arrow::Schema>& schema) const {
-    AFL_VERIFY(RawData.size());
+    YDB_LOG_VERIFY(RawData.size());
     return TSimpleRow(RawData.front(), schema);
 }
 
 TSimpleRow TRowsCollection::GetLast(const std::shared_ptr<arrow::Schema>& schema) const {
-    AFL_VERIFY(RawData.size());
+    YDB_LOG_VERIFY(RawData.size());
     return TSimpleRow(RawData.back(), schema);
 }
 
 TSimpleRow TRowsCollection::GetRecord(const ui32 recordIndex, const std::shared_ptr<arrow::Schema>& schema) const {
-    AFL_VERIFY(recordIndex < RawData.size());
+    YDB_LOG_VERIFY(recordIndex < RawData.size());
     return TSimpleRow(RawData[recordIndex], schema);
 }
 

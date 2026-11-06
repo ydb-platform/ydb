@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(KqpFail) {
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
         auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
-        
+
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         Y_UNUSED(runtime);
 
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(KqpFail) {
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
         auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
-        
+
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         Y_UNUSED(runtime);
 
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(KqpFail) {
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
         auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
-        
+
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         Y_UNUSED(runtime);
 
@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(KqpFail) {
                     ++stage;
                     return TTestActorRuntime::EEventAction::PROCESS;
                 } else if (ev->GetTypeRewrite() == TEvTxProxy::TEvProposeTransaction::EventType) {
-                    AFL_ENSURE(stage == 2);
+                    YDB_LOG_ENSURE(stage == 2);
                     ++stage;
                     requests.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;

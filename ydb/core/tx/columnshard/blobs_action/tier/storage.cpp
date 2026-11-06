@@ -36,7 +36,7 @@ std::shared_ptr<IBlobsReadingAction> TOperator::DoStartReadingAction() {
 
 std::shared_ptr<IBlobsGCAction> TOperator::DoCreateGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const {
     std::deque<TUnifiedBlobId> draftBlobIds;
-    AFL_VERIFY(!!TabletActorId);
+    YDB_LOG_VERIFY(!!TabletActorId);
     TBlobsCategories categories(TTabletId(0));
     {
         TTabletsByBlob deleteBlobIds;
@@ -60,7 +60,7 @@ std::shared_ptr<IBlobsGCAction> TOperator::DoCreateGCAction(const std::shared_pt
 
 void TOperator::DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) const {
     auto gcTask = dynamic_pointer_cast<TGCTask>(action);
-    AFL_VERIFY(!!gcTask);
+    YDB_LOG_VERIFY(!!gcTask);
     TActorContext::AsActorContext().Register(new TGarbageCollectionActor(gcTask, TabletActorId, GetSelfTabletId()));
 }
 
@@ -79,7 +79,7 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
             }
         }
         auto extStorageConfig = NWrappers::NExternalStorage::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings);
-        AFL_VERIFY(extStorageConfig);
+        YDB_LOG_VERIFY(extStorageConfig);
         DoInitNewExternalOperator(extStorageConfig->ConstructStorageOperator(false), settings);
     } else {
         DoInitNewExternalOperator(std::make_shared<NWrappers::NExternalStorage::TUnavailableExternalStorageOperator>(
@@ -89,7 +89,7 @@ void TOperator::InitNewExternalOperator(const NColumnShard::NTiers::TManager* ti
 }
 
 void TOperator::InitNewExternalOperator() {
-    AFL_VERIFY(InitializationConfig);
+    YDB_LOG_VERIFY(InitializationConfig);
     DoInitNewExternalOperator(InitializationConfig->ConstructStorageOperator(false), std::nullopt);
 }
 

@@ -40,7 +40,7 @@ namespace NLongTxService {
             , Params(std::move(params))
             , LogPrefix("LongTxService.Commit ")
         {
-            AFL_VERIFY(false); //TOD delete this class starting with 25.3
+            YDB_LOG_VERIFY(false); //TOD delete this class starting with 25.3
         }
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

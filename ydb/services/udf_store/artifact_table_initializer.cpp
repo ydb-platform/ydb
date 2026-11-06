@@ -16,7 +16,7 @@ TVector<TString> GetPathFromMetadata(const TString& fullPath) {
     while (it != path.end() && *it != NMetadata::NProvider::TServiceOperator::GetPath()) {
         ++it;
     }
-    AFL_VERIFY(it != cend(path));
+    YDB_LOG_VERIFY(it != cend(path));
     return { it, cend(path) };
 }
 

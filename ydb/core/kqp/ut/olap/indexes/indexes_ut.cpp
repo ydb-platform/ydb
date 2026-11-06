@@ -775,7 +775,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         runDMLQuery(R"(
             $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
-            UPSERT INTO `/Root/olap_indexes_applied_test` (`key`, `value`, `value_bloom`) SELECT 
+            UPSERT INTO `/Root/olap_indexes_applied_test` (`key`, `value`, `value_bloom`) SELECT
             CAST(item AS Int32) AS `key`,
             "Value_" || CAST(item AS String) AS `value`,
             "Value_" || CAST(item AS String) AS `value_bloom`,
@@ -868,7 +868,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resDistinctFromNull.CountResult, 1500000, "incorrect result for query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column");
         UNIT_ASSERT_C(!resDistinctFromNull.LocalIndexUsed, "query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
-        
+
         TQueryResult resBloom = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/olap_indexes_applied_test` WHERE `value_bloom` LIKE '%alue?_50000%' ESCAPE '?';
         )");
@@ -2193,9 +2193,10 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             CompareYson(result, R"([[0u;]])");
-            AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val())
-            ("approve", csController->GetIndexesApprovedOnSelect().Val())("skip", csController->GetIndexesSkippingOnSelect().Val());
+            YDB_LOG_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
+            YDB_LOG_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val(),
+                {"approve", csController->GetIndexesApprovedOnSelect().Val()},
+                {"skip", csController->GetIndexesSkippingOnSelect().Val()});
         }
     }
 
@@ -2303,14 +2304,16 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             filler(1100000, 300100000, 10000);
         }
         const ui64 initCount = csController->GetActualizationRefreshSchemeCount().Val();
-        AFL_VERIFY(initCount == 3)("started_value", initCount);
+        YDB_LOG_VERIFY(initCount == 3,
+            {"startedValue", initCount});
 
         for (ui32 i = 0; i < 10; ++i) {
             ExecQuery(kikimr, UseQueryService,
                 TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
         }
         const ui64 updatesCount = csController->GetActualizationRefreshSchemeCount().Val();
-        AFL_VERIFY(updatesCount == 30 + initCount)("after_modification", updatesCount);
+        YDB_LOG_VERIFY(updatesCount == 30 + initCount,
+            {"afterModification", updatesCount});
 
         for (auto&& i : csController->GetShardActualIds()) {
             kikimr.GetTestServer().GetRuntime()->Send(
@@ -2332,9 +2335,10 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             CompareYson(result, R"([[20000u;]])");
         }
 
-        AFL_VERIFY(updatesCount + 6 ==
-            (ui64)csController->GetActualizationRefreshSchemeCount().Val())("updates", updatesCount)(
-                                       "count", csController->GetActualizationRefreshSchemeCount().Val());
+        YDB_LOG_VERIFY(updatesCount + 6 ==
+            (ui64)csController->GetActualizationRefreshSchemeCount().Val(),
+            {"updates", updatesCount},
+            {"count", csController->GetActualizationRefreshSchemeCount().Val()});
     }
 
     class TTestIndexesScenario {
@@ -2460,13 +2464,15 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                 PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
                 SELECT COUNT(*) FROM `/Root/olapStore/olapTable`)", "[[230000u;]]");
 
-            AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
-            AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 0);
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
+            YDB_LOG_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0,
+                {"val", csController->GetIndexesSkippedNoData().Val()});
+            YDB_LOG_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 0);
+            YDB_LOG_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
             csController->WaitCompactions(TDuration::Seconds(5));
             // The dynamic ngram filter sizing may shift one extra control compaction depending on storage layout
-            AFL_VERIFY(3 <= csController->GetCompactionStartedCounter().Val() &&
-                csController->GetCompactionStartedCounter().Val() <= 5)("count", csController->GetCompactionStartedCounter().Val());
+            YDB_LOG_VERIFY(3 <= csController->GetCompactionStartedCounter().Val() &&
+                csController->GetCompactionStartedCounter().Val() <= 5,
+                {"count", csController->GetCompactionStartedCounter().Val()});
 
             {
                 ExecuteSQL(R"(
@@ -2475,9 +2481,10 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     FROM `/Root/olapStore/olapTable`
                     WHERE resource_id LIKE '%110a151' AND resource_id LIKE '110a%' AND resource_id LIKE '%dd%')",
                     "[[0u;]]");
-                AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
-                AFL_VERIFY(!csController->GetIndexesApprovedOnSelect().Val());
-                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val());
+                YDB_LOG_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0,
+                    {"val", csController->GetIndexesSkippedNoData().Val()});
+                YDB_LOG_VERIFY(!csController->GetIndexesApprovedOnSelect().Val());
+                YDB_LOG_VERIFY(csController->GetIndexesSkippingOnSelect().Val());
             }
             {
                 ResetZeroLevel(csController);
@@ -2487,9 +2494,10 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     FROM `/Root/olapStore/olapTable`
                     WHERE resource_id LIKE '%110a151%')",
                     "[[0u;]]");
-                AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
-                AFL_VERIFY(!csController->GetIndexesApprovedOnSelect().Val());
-                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart >= 3);
+                YDB_LOG_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0,
+                    {"val", csController->GetIndexesSkippedNoData().Val()});
+                YDB_LOG_VERIFY(!csController->GetIndexesApprovedOnSelect().Val());
+                YDB_LOG_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart >= 3);
             }
             {
                 ResetZeroLevel(csController);
@@ -2500,8 +2508,9 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     WHERE ((resource_id = '2' AND level = 222222) OR (resource_id = '1' AND level = 111111) OR (resource_id LIKE '%11dd%')) AND uid = '222')",
                     "[[0u;]]");
 
-                AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
-                AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() - ApproveStart < csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
+                YDB_LOG_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0,
+                    {"val", csController->GetIndexesSkippedNoData().Val()});
+                YDB_LOG_VERIFY(csController->GetIndexesApprovedOnSelect().Val() - ApproveStart < csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }
             constexpr std::string_view enablePushdownOlapAggregation = R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)";
             {
@@ -2522,9 +2531,9 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     };
                     ExecuteSQL(query(resourceIds[idx], uids[idx], levels[idx]), "[[1u;]]");
                 }
-                AFL_VERIFY((csController->GetIndexesApprovedOnSelect().Val() - ApproveStart) * 0.3 < csController->GetIndexesSkippingOnSelect().Val() - SkipStart)
-                ("approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
-                    "skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
+                YDB_LOG_VERIFY((csController->GetIndexesApprovedOnSelect().Val() - ApproveStart) * 0.3 < csController->GetIndexesSkippingOnSelect().Val() - SkipStart,
+                    {"approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart},
+                    {"skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart});
             }
             {
                 ResetZeroLevel(csController);
@@ -2541,7 +2550,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     };
                     ExecuteSQL(query(resourceIds[idx]), "[[1u;]]");
                 }
-//                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
+//                YDB_LOG_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
 //                    "approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
 //                    "skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }
@@ -2560,7 +2569,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     };
                     ExecuteSQL(query(resourceIds[idx]), "[[1u;]]");
                 }
-//                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
+//                YDB_LOG_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
 //                    "approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
 //                    "skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }
@@ -2579,7 +2588,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     };
                     ExecuteSQL(query(resourceIds[idx]), "[[1u;]]");
                 }
-//                AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
+//                YDB_LOG_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart)(
 //                    "approved", csController->GetIndexesApprovedOnSelect().Val() - ApproveStart)(
 //                    "skipped", csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }
@@ -2738,7 +2747,8 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                 PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
                 SELECT COUNT(*) FROM `/Root/olapStore/olapTable`)", "[[230000u;]]");
 
-            AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
+            YDB_LOG_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0,
+                {"val", csController->GetIndexesSkippedNoData().Val()});
             csController->SetCompactionControl(NYDBTest::EOptimizerCompactionWeightControl::Force);
             UNIT_ASSERT(csController->WaitCompactions(TDuration::Seconds(30), 3));
 
@@ -2751,7 +2761,8 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     FROM `/Root/olapStore/olapTable`
                     WHERE resource_id )" + like + R"( '%110a151' AND resource_id )" + like + R"( '110a%' AND resource_id )" + like + R"( '%dd%')",
                     "[[0u;]]");
-                AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
+                YDB_LOG_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0,
+                    {"val", csController->GetIndexesSkippedNoData().Val()});
             }
             {
                 ResetZeroLevel(csController);
@@ -2763,7 +2774,8 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     FROM `/Root/olapStore/olapTable`
                     WHERE resource_id )" + like + R"( '%110a151%')",
                     "[[0u;]]");
-                AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
+                YDB_LOG_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0,
+                    {"val", csController->GetIndexesSkippedNoData().Val()});
             }
             {
                 ResetZeroLevel(csController);
@@ -2776,8 +2788,9 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                     WHERE ((resource_id = '2' AND level = 222222) OR (resource_id = '1' AND level = 111111) OR (resource_id )" + like + R"( '%11dd%')) AND uid = '222')",
                     "[[0u;]]");
 
-                AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
-                AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() - ApproveStart < csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
+                YDB_LOG_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0,
+                    {"val", csController->GetIndexesSkippedNoData().Val()});
+                YDB_LOG_VERIFY(csController->GetIndexesApprovedOnSelect().Val() - ApproveStart < csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }
             constexpr std::string_view enablePushdownOlapAggregation = R"(
                 PRAGMA OptimizeSimpleILIKE;

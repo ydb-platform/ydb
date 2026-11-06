@@ -32,7 +32,7 @@ void TIndexedWriteController::DoOnStartSending() {
 }
 
 void TWideSerializedBatch::InitBlobId(const TUnifiedBlobId& id) {
-    AFL_VERIFY(!Range.BlobId.GetTabletId());
+    YDB_LOG_VERIFY(!Range.BlobId.GetTabletId());
     Range.BlobId = id;
 }
 
@@ -63,7 +63,7 @@ std::vector<NKikimr::NOlap::TWritingBlob> TWritingBuffer::GroupIntoBlobs() {
             if (!currentBlob.AddData(bInfo)) {
                 result.emplace_back(std::move(currentBlob));
                 currentBlob = TWritingBlob();
-                AFL_VERIFY(currentBlob.AddData(bInfo));
+                YDB_LOG_VERIFY(currentBlob.AddData(bInfo));
             }
             sumSize += bInfo.GetSplittedBlobs().GetSize();
         }
@@ -83,8 +83,8 @@ std::vector<NKikimr::NOlap::TWritingBlob> TWritingBuffer::GroupIntoBlobs() {
 }
 
 TString TWritingBlob::ExtractBlobData() {
-    AFL_VERIFY(BlobSize);
-    AFL_VERIFY(!Extracted);
+    YDB_LOG_VERIFY(BlobSize);
+    YDB_LOG_VERIFY(!Extracted);
     Extracted = true;
     TString result;
     result.reserve(BlobSize);

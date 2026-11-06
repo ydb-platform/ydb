@@ -124,63 +124,77 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     ui64 bSize = 0;
                     for (auto&& c : b.GetChunks()) {
                         bSize += c->GetData().size();
-                        AFL_VERIFY(c->GetEntityId());
+                        YDB_LOG_VERIFY(c->GetEntityId());
                         //                        auto& v = entityChunks[c->GetEntityId()];
                         //                        if (v.size()) {
-                        //                            AFL_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified())("v", v.back()->GetChunkIdxVerified())(
+                        //                            YDB_LOG_VERIFY(v.back()->GetChunkIdxVerified() + 1 == c->GetChunkIdxVerified())("v", v.back()->GetChunkIdxVerified())(
                         //                                                                              "c", c->GetChunkIdxVerified());
                         //                        }
-                        AFL_VERIFY(entityChunks[c->GetEntityId()].emplace(c->GetChunkIdxVerified(), c).second);
+                        YDB_LOG_VERIFY(entityChunks[c->GetEntityId()].emplace(c->GetChunkIdxVerified(), c).second);
                     }
                     portionSize += bSize;
-                    AFL_VERIFY(bSize < (ui64)settings.GetMaxBlobSize());
-                    AFL_VERIFY(bSize * 1.01 > (ui64)settings.GetMinBlobSize() || (packs.size() == 1 && blobsLocal.size() == 1))("blob_size", bSize)(
-                                                                                                 "min", settings.GetMinBlobSize());
+                    YDB_LOG_VERIFY(bSize < (ui64)settings.GetMaxBlobSize());
+                    YDB_LOG_VERIFY(bSize * 1.01 > (ui64)settings.GetMinBlobSize() || (packs.size() == 1 && blobsLocal.size() == 1),
+                        {"blobSize", bSize},
+                        {"min", settings.GetMinBlobSize()});
                 }
-                AFL_VERIFY(portionSize >= settings.GetExpectedPortionSize() || packs.size() == 1)("size", portionSize)(
-                                                                               "limit", settings.GetMaxPortionSize());
+                YDB_LOG_VERIFY(portionSize >= settings.GetExpectedPortionSize() || packs.size() == 1,
+                    {"size", portionSize},
+                    {"limit", settings.GetMaxPortionSize()});
 
                 THashMap<ui32, std::set<ui32>> entitiesByRecordsCount;
                 ui32 pagesRestore = 0;
                 for (auto&& e : entityChunks) {
                     const std::shared_ptr<arrow::Array> arr = batch->GetColumnByName(Schema->GetColumnName(e.first));
-                    AFL_VERIFY(arr);
+                    YDB_LOG_VERIFY(arr);
                     ui32 count = 0;
                     i32 idx = -1;
                     for (auto&& [idxC, c] : e.second) {
-                        AFL_VERIFY((i32)idxC == idx + 1);
+                        YDB_LOG_VERIFY((i32)idxC == idx + 1);
                         idx = idxC;
                         auto slice = arr->Slice(count + portionShift, c->GetRecordsCountVerified());
                         auto readBatchArray = Schema->GetColumnLoader(e.first).ApplyVerified(c->GetData(), c->GetRecordsCountVerified());
                         std::shared_ptr<arrow::ChunkedArray> chunkedArray = readBatchArray->GetChunkedArray();
-                        AFL_VERIFY(chunkedArray->num_chunks() == 1);
-                        AFL_VERIFY(slice->length() == chunkedArray->length());
+                        YDB_LOG_VERIFY(chunkedArray->num_chunks() == 1);
+                        YDB_LOG_VERIFY(slice->length() == chunkedArray->length());
                         Y_ABORT_UNLESS(
                             chunkedArray->chunk(0)->RangeEquals(*slice, 0, chunkedArray->length(), 0, arrow::EqualOptions::Defaults()));
                         count += c->GetRecordsCountVerified();
-                        AFL_VERIFY(entitiesByRecordsCount[count].emplace(e.first).second);
-                        AFL_VERIFY(entitiesByRecordsCount[count].size() <= (ui32)batch->num_columns());
+                        YDB_LOG_VERIFY(entitiesByRecordsCount[count].emplace(e.first).second);
+                        YDB_LOG_VERIFY(entitiesByRecordsCount[count].size() <= (ui32)batch->num_columns());
                         if (entitiesByRecordsCount[count].size() == (ui32)batch->num_columns()) {
                             ++pagesRestore;
                         }
                     }
-                    AFL_VERIFY(count == portionRecordsCount);
+                    YDB_LOG_VERIFY(count == portionRecordsCount);
                 }
-                AFL_VERIFY(entitiesByRecordsCount.size() >= i.size());
-                AFL_VERIFY(pagesRestore == pagesOriginal || batch->num_columns() == 1)("restore", pagesRestore)("original", pagesOriginal);
+                YDB_LOG_VERIFY(entitiesByRecordsCount.size() >= i.size());
+                YDB_LOG_VERIFY(pagesRestore == pagesOriginal || batch->num_columns() == 1,
+                    {"restore", pagesRestore},
+                    {"original", pagesOriginal});
                 for (auto&& [_, c] : entityChunks.begin()->second) {
                     portionShift += c->GetRecordsCountVerified();
                 }
             }
-            AFL_VERIFY(portionShift = batch->num_rows());
-            AFL_VERIFY(pagesSum == generalSlices.size())("sum", pagesSum)("general_slices", generalSlices.size());
-            AFL_VERIFY(internalSplitsCount == ExpectedInternalSplitsCount.value_or(internalSplitsCount))("expected", *ExpectedInternalSplitsCount)(
-                                                "real", internalSplitsCount);
-            AFL_VERIFY(blobsCount == ExpectBlobsCount.value_or(blobsCount))("blobs_count", blobsCount)("expected", *ExpectBlobsCount);
-            AFL_VERIFY(pagesSum == ExpectSlicesCount.value_or(pagesSum))("sum", pagesSum)("expected", *ExpectSlicesCount);
-            AFL_VERIFY(portionsCount == ExpectPortionsCount.value_or(portionsCount))("portions_count", portionsCount)(
-                                          "expected", *ExpectPortionsCount);
-            AFL_VERIFY(chunksCount == ExpectChunksCount.value_or(chunksCount))("chunks_count", chunksCount)("expected", *ExpectChunksCount);
+            YDB_LOG_VERIFY(portionShift = batch->num_rows());
+            YDB_LOG_VERIFY(pagesSum == generalSlices.size(),
+                {"sum", pagesSum},
+                {"generalSlices", generalSlices.size()});
+            YDB_LOG_VERIFY(internalSplitsCount == ExpectedInternalSplitsCount.value_or(internalSplitsCount),
+                {"expected", *ExpectedInternalSplitsCount},
+                {"real", internalSplitsCount});
+            YDB_LOG_VERIFY(blobsCount == ExpectBlobsCount.value_or(blobsCount),
+                {"blobsCount", blobsCount},
+                {"expected", *ExpectBlobsCount});
+            YDB_LOG_VERIFY(pagesSum == ExpectSlicesCount.value_or(pagesSum),
+                {"sum", pagesSum},
+                {"expected", *ExpectSlicesCount});
+            YDB_LOG_VERIFY(portionsCount == ExpectPortionsCount.value_or(portionsCount),
+                {"portionsCount", portionsCount},
+                {"expected", *ExpectPortionsCount});
+            YDB_LOG_VERIFY(chunksCount == ExpectChunksCount.value_or(chunksCount),
+                {"chunksCount", chunksCount},
+                {"expected", *ExpectChunksCount});
         }
     };
 

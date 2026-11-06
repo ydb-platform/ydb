@@ -129,7 +129,7 @@ TPortionInfo::TConstPtr MakeTestPortion(TInternalPathId pathId, ui64 portionId) 
 Y_UNIT_TEST_SUITE(TActorAccessorsManagerTests) {
     Y_UNIT_TEST(AskDataHandlesNonEmptyRemovedAddresses) {
         // Test that TActorAccessorsManager handles non-empty removedAddresses without crashing
-        // This verifies the fix where AFL_VERIFY(removedAddresses.empty()) was removed
+        // This verifies the fix where YDB_LOG_VERIFY(removedAddresses.empty()) was removed
 
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);

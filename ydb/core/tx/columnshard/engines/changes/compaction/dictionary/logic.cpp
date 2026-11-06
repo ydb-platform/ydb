@@ -57,14 +57,14 @@ void TMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChun
 
     RemapIndexes.resize(input.size());
     NullIndex.reset();
-    AFL_VERIFY(NArrow::SwitchType(Context.GetResultField()->type()->id(), [&](const auto type) {
+    YDB_LOG_VERIFY(NArrow::SwitchType(Context.GetResultField()->type()->id(), [&](const auto type) {
         if constexpr (type.IsAppropriate) {
             using ValueType = std::optional<typename decltype(type)::ValueType>;
             std::map<ValueType, ui32> globalDecoder;
             for (ui32 idx = 0; idx < input.size(); ++idx) {
                 if (Iterators[idx].IsValid()) {
                     while (true) {
-                        AFL_VERIFY(Iterators[idx].GetCurrentDataChunk().GetType() == NArrow::NAccessor::IChunkedArray::EType::Dictionary);
+                        YDB_LOG_VERIFY(Iterators[idx].GetCurrentDataChunk().GetType() == NArrow::NAccessor::IChunkedArray::EType::Dictionary);
                         const auto* dict = static_cast<const NArrow::NAccessor::TDictionaryArray*>(&Iterators[idx].GetCurrentDataChunk());
                         const auto* arrDictionary = type.CastArray(dict->GetDictionary().get());
                         for (ui32 r = 0; r < (ui32)arrDictionary->length(); ++r) {
@@ -95,8 +95,8 @@ void TMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChun
 
             for (auto&& remapInput : RemapIndexes) {
                 for (auto&& v : remapInput) {
-                    AFL_VERIFY(remap[v] >= 0);
-                    AFL_VERIFY((ui32)remap[v] < globalDecoder.size());
+                    YDB_LOG_VERIFY(remap[v] >= 0);
+                    YDB_LOG_VERIFY((ui32)remap[v] < globalDecoder.size());
                     v = remap[v];
                 }
             }
@@ -108,7 +108,7 @@ void TMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChun
                 if (i.first.has_value()) {
                     NArrow::TStatusValidator::Validate(builderImpl->Append(*i.first));
                 } else {
-                    AFL_VERIFY(!NullIndex.has_value());
+                    YDB_LOG_VERIFY(!NullIndex.has_value());
                     NArrow::TStatusValidator::Validate(builderImpl->AppendNull());
                     NullIndex = buildIdx;
                 }
@@ -140,8 +140,8 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
             continue;
         }
 
-        AFL_VERIFY(Iterators[inputIdx].MoveToPosition(inputRecordIdx));
-        AFL_VERIFY(NArrow::SwitchType(Iterators[inputIdx].GetCurrentRecordsType(), [&](const auto type) {
+        YDB_LOG_VERIFY(Iterators[inputIdx].MoveToPosition(inputRecordIdx));
+        auto cond = NArrow::SwitchType(Iterators[inputIdx].GetCurrentRecordsType(), [&](const auto type) {
             const auto* arr = type.CastArray(Iterators[inputIdx].GetCurrentDataChunk().GetPositions().get());
             if constexpr (type.IsIndexType()) {
                 if (arr->IsNull(Iterators[inputIdx].GetLocalPosition())) {
@@ -149,15 +149,17 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
                     records.emplace_back(-1);
                 } else {
                     const ui32 dictIdx = type.GetValue(*arr, Iterators[inputIdx].GetLocalPosition());
-                    AFL_VERIFY(inputIdx < RemapIndexes.size());
-                    AFL_VERIFY(dictIdx < RemapIndexes[inputIdx].size())("size", RemapIndexes[inputIdx].size())("idx", dictIdx);
+                    YDB_LOG_VERIFY(inputIdx < RemapIndexes.size());
+                    YDB_LOG_VERIFY(dictIdx < RemapIndexes[inputIdx].size(),
+                        {"size", RemapIndexes[inputIdx].size()},
+                        {"idx", dictIdx});
                     const ui32 finalValueIndex = RemapIndexes[inputIdx][dictIdx];
                     if (finalValueIndex == NullIndex) {
                         records.emplace_back(-1);
                     } else {
                         records.emplace_back(finalValueIndex);
                     }
-                    AFL_VERIFY(finalValueIndex < mask.size());
+                    YDB_LOG_VERIFY(finalValueIndex < mask.size());
                     if (!mask[finalValueIndex]) {
                         mask[finalValueIndex] = true;
                         ++maskSize;
@@ -166,13 +168,15 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
                 return true;
             }
             return false;
-        }))("type", Iterators[inputIdx].GetCurrentDataChunk().GetDataType()->ToString());
+        });
+        YDB_LOG_VERIFY(cond,
+            {"type", Iterators[inputIdx].GetCurrentDataChunk().GetDataType()->ToString()});
     }
 
     std::shared_ptr<NArrow::NAccessor::TDictionaryArray> dictArr;
     auto rBuilder = NArrow::MakeBuilder(NArrow::NAccessor::NDictionary::TConstructor::GetTypeByVariantsCount(maskSize));
     if (maskSize == ArrayVariantsFull->length()) {
-        AFL_VERIFY(NArrow::SwitchType(rBuilder->type()->id(), [&](const auto type) {
+        YDB_LOG_VERIFY(NArrow::SwitchType(rBuilder->type()->id(), [&](const auto type) {
             if constexpr (type.IsIndexType()) {
                 auto* builderImpl = type.CastBuilder(rBuilder.get());
                 for (auto&& r : records) {
@@ -199,15 +203,15 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
         }
 
         auto rBuilder = NArrow::MakeBuilder(NArrow::NAccessor::NDictionary::TConstructor::GetTypeByVariantsCount(maskSize));
-        AFL_VERIFY(NArrow::SwitchType(rBuilder->type()->id(), [&](const auto type) {
+        YDB_LOG_VERIFY(NArrow::SwitchType(rBuilder->type()->id(), [&](const auto type) {
             if constexpr (type.IsIndexType()) {
                 auto* builderImpl = type.CastBuilder(rBuilder.get());
                 for (auto&& r : records) {
                     if (r < 0) {
                         NArrow::TStatusValidator::Validate(builderImpl->AppendNull());
                     } else {
-                        AFL_VERIFY((ui32)r < remap.size());
-                        AFL_VERIFY(remap[r] >= 0);
+                        YDB_LOG_VERIFY((ui32)r < remap.size());
+                        YDB_LOG_VERIFY(remap[r] >= 0);
                         NArrow::TStatusValidator::Validate(builderImpl->Append(remap[r]));
                     }
                 }

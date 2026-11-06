@@ -57,11 +57,12 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
                 {"event", "TEvWriteIndex"},
                 {"count", change->GetWritePortionsCount()});
-            AFL_VERIFY(change->GetWritePortionsCount());
+            YDB_LOG_VERIFY(change->GetWritePortionsCount());
             const bool needDiskLimiter = change->NeedDiskWriteLimiter();
             auto writeController = std::make_shared<NOlap::TCompactedWriteController>(ctx.SelfID, ev->Release());
             const TConclusion<bool> needDraftTransaction = writeController->GetBlobsAction().NeedDraftWritingTransaction();
-            AFL_VERIFY(needDraftTransaction.IsSuccess())("error", needDraftTransaction.GetErrorMessage());
+            YDB_LOG_VERIFY(needDraftTransaction.IsSuccess(),
+                {"error", needDraftTransaction.GetErrorMessage()});
             if (*needDraftTransaction) {
                 YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
                     {"event", "TTxWriteDraft"});

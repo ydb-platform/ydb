@@ -16,25 +16,27 @@ TShardState::TPtr TInFlightShards::Put(TShardState&& state) {
     MutableStatistics(state.TabletId).MutableStatistics(0).SetStartInstant(Now());
 
     TShardState::TPtr result = std::make_shared<TShardState>(std::move(state));
-    AFL_ENSURE(Shards.emplace(result->TabletId, result).second)("tablet_id", result->TabletId);
+    YDB_LOG_ENSURE(Shards.emplace(result->TabletId, result).second,
+        {"tabletId", result->TabletId});
     return result;
 }
 
 std::vector<std::unique_ptr<TComputeTaskData>> TShardScannerInfo::OnReceiveData(TEvKqpCompute::TEvScanData& data, const std::shared_ptr<TShardScannerInfo>& selfPtr) {
     if (!data.Finished) {
-        AFL_ENSURE(!NeedAck);
+        YDB_LOG_ENSURE(!NeedAck);
         NeedAck = true;
     } else {
         Finished = true;
     }
-    AFL_ENSURE(ActorId);
-    AFL_ENSURE(!DataChunksInFlightCount)("data_chunks_in_flightCount", DataChunksInFlightCount);
+    YDB_LOG_ENSURE(ActorId);
+    YDB_LOG_ENSURE(!DataChunksInFlightCount,
+        {"dataChunksInFlightCount", DataChunksInFlightCount});
     std::vector<std::unique_ptr<TComputeTaskData>> result;
     if (data.IsEmpty()) {
-        AFL_ENSURE(data.Finished);
+        YDB_LOG_ENSURE(data.Finished);
         result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(TabletId, data)));
     } else if (data.SplittedBatches.size() > 1) {
-        AFL_ENSURE(data.ArrowBatch);
+        YDB_LOG_ENSURE(data.ArrowBatch);
         for (auto&& i : data.SplittedBatches) {
             result.emplace_back(std::make_unique<TComputeTaskData>(selfPtr, std::make_unique<TEvScanExchange::TEvSendData>(TabletId, data, data.ArrowBatch, std::move(i))));
         }

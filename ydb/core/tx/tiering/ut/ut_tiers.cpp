@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
 
         const TTiersManager& GetManager() const {
-            AFL_VERIFY(Manager);
+            YDB_LOG_VERIFY(Manager);
             return *Manager;
         }
 
@@ -973,7 +973,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             Cerr << "CLEANED: " << bsCollector.GetChannelSize(2) << "/" << purposeSize << Endl;
 
             // Internal TTL commits one plan step ahead of the current
-            // readable snapshot. 
+            // readable snapshot.
             // So we need to advance time again to let the readable snapshot cross the removal snapshot before reading.
             runtime.AdvanceCurrentTime(TDuration::Minutes(6));
             runtime.SimulateSleep(TDuration::Seconds(1));
@@ -987,7 +987,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 UNIT_ASSERT(GetValueResult(result.front(), "b")->GetProto().uint64_value() == purposeMinTimestamp);
             }
 
-            AFL_VERIFY(bsCollector.GetChannelSize(2) <= purposeSize)("collector", bsCollector.GetChannelSize(2))("purpose", purposeSize);
+            YDB_LOG_VERIFY(bsCollector.GetChannelSize(2) <= purposeSize,
+                {"collector", bsCollector.GetChannelSize(2)},
+                {"purpose", purposeSize});
         }
 
         {

@@ -27,7 +27,7 @@ ERequestSorting TTxInternalScan::GetRequestSorting() const {
 TReadDescription TTxInternalScan::MakeReadDescription(const TSnapshot& snapshot, const ERequestSorting requestSorting,
     const std::shared_ptr<ITableMetadataAccessor>& tableMetadataAccessor) const {
     const auto& request = *InternalScanEvent->Get();
-    AFL_VERIFY(Self->GetIndexOptional());
+    YDB_LOG_VERIFY(Self->GetIndexOptional());
     // An internal scan always deduplicates, always through the trivial reader, and never resumes from
     // a cursor
     TReadDescription read(Self->TabletID(), snapshot, requestSorting, true, EReaderClass::Trivial, tableMetadataAccessor, std::nullopt);

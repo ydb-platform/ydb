@@ -20,7 +20,7 @@
 #include <util/charset/utf8.h>
 
 #define PARTITION_ENSURE(condition) \
-    AFL_ENSURE(condition)("session", Session)("partition", Partition)("tablet_id", TabletID)
+    AFL_ENSURE(condition)("session", Session)("partition", Partition)("tabletId", TabletID)
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -499,24 +499,26 @@ void SetBatchWriteTimestampMS(Topic::StreamReadMessage::ReadResponse::Batch* bat
 }
 
 TString GetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch) {
-    AFL_ENSURE(batch);
+    YDB_LOG_ENSURE(batch);
     return batch->source_id();
 }
 
 TString GetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch) {
-    AFL_ENSURE(batch);
+    YDB_LOG_ENSURE(batch);
     return batch->producer_id();
 }
 
 void SetBatchExtraField(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString key, TString value) {
-    AFL_ENSURE(batch)("key", key);
+    YDB_LOG_ENSURE(batch,
+        {"key", key});
     auto* item = batch->add_extra_fields();
     item->set_key(std::move(key));
     item->set_value(std::move(value));
 }
 
 void SetBatchExtraField(Topic::StreamReadMessage::ReadResponse::Batch* batch, TString key, TString value) {
-    AFL_ENSURE(batch)("key", key);
+    YDB_LOG_ENSURE(batch,
+        {"key", key});
     (*batch->mutable_write_session_meta())[key] = std::move(value);
 }
 
@@ -565,15 +567,15 @@ bool FillBatchedData(
         const ui64 messageCount = BatchedResultMessageCount(r.GetLogicalMessageCount());
         // When reading from the middle of a batch, tablet returns the whole blob
         // with base offset below ReadOffset; SDK skips already-committed records.
-        AFL_ENSURE(BatchedResultCoversReadOffset(r.GetOffset(), r.GetLogicalMessageCount(), ReadOffset))
-            ("partition", Partition)
-            ("topic", topic->GetPrimaryPath())
-            ("offset", r.GetOffset())
-            ("message_count", messageCount)
-            ("logical_message_count", r.GetLogicalMessageCount())
-            ("read_offset", ReadOffset)
-            ("result_index", i)
-            ("end_offset", EndOffset);
+        YDB_LOG_ENSURE(BatchedResultCoversReadOffset(r.GetOffset(), r.GetLogicalMessageCount(), ReadOffset),
+            {"partition", Partition},
+            {"topic", topic->GetPrimaryPath()},
+            {"offset", r.GetOffset()},
+            {"messageCount", messageCount},
+            {"logicalMessageCount", r.GetLogicalMessageCount()},
+            {"readOffset", ReadOffset},
+            {"resultIndex", i},
+            {"endOffset", EndOffset});
         AdvanceReadOffsetFromBatchedResult(r.GetOffset(), r.GetLogicalMessageCount(), ReadOffset);
         hasOffset = true;
 
@@ -606,10 +608,10 @@ bool FillBatchedData(
             // If write time and source id are the same, the rest fields will be the same too.
             currentBatch = partitionData->add_batches();
             i64 write_ts = static_cast<i64>(r.GetWriteTimestampMS());
-            AFL_ENSURE(write_ts >= 0)
-                ("partition", Partition)
-                ("write_ts", write_ts)
-                ("offset", r.GetOffset());
+            YDB_LOG_ENSURE(write_ts >= 0,
+                {"partition", Partition},
+                {"writeTs", write_ts},
+                {"offset", r.GetOffset()});
             SetBatchWriteTimestampMS(currentBatch, write_ts);
             SetBatchSourceId(currentBatch, std::move(sourceId));
             batchCodec = GetDataChunkCodec(proto);

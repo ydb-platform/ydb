@@ -73,7 +73,7 @@ public:
                 return resultConclusion;
             }
             it = ColumnFeatures.emplace(fingerprint, resultConclusion.DetachResult()).first;
-            AFL_VERIFY(it->second);
+            YDB_LOG_VERIFY(it->second);
         } else {
             if (++AcceptionFeaturesCount % 1000 == 0) {
                 YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
@@ -103,7 +103,7 @@ private:
             : Tenant(tenant)
             , Owner(owner)
         {
-            AFL_VERIFY(!!Owner);
+            YDB_LOG_VERIFY(!!Owner);
         }
 
         explicit operator size_t() const {

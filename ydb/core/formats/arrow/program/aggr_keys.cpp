@@ -94,7 +94,7 @@ TConclusion<TExecutionResult> TWithKeysAggregationProcessor::DoExecute(
     std::vector<std::shared_ptr<arrow::Field>> fields;
     std::set<ui32> fieldsUsage;
     for (auto& key : AggregationKeys) {
-        AFL_VERIFY(fieldsUsage.emplace(key.GetColumnId()).second);
+        YDB_LOG_VERIFY(fieldsUsage.emplace(key.GetColumnId()).second);
         batch.emplace_back(context.GetResources().GetArrayVerified(key.GetColumnId()));
         fields.emplace_back(context.GetResources().GetFieldVerified(key.GetColumnId()));
         funcOpts.assigns.emplace_back(CH::GroupByOptions::Assign{ .result_column = ::ToString(key.GetColumnId()) });
@@ -154,7 +154,7 @@ TConclusion<TExecutionResult> TWithKeysAggregationProcessor::DoExecute(
 }
 
 TConclusion<std::shared_ptr<TWithKeysAggregationProcessor>> TWithKeysAggregationProcessor::TBuilder::Finish() {
-    AFL_VERIFY(!Finished);
+    YDB_LOG_VERIFY(!Finished);
     Finished = true;
     if (Keys.empty()) {
         return TConclusionStatus::Fail("no keys for aggregation");
@@ -190,7 +190,7 @@ TConclusionStatus TWithKeysAggregationProcessor::TBuilder::AddGroupBy(
     if (input.size() > 1) {
         return TConclusionStatus::Fail("a lot of columns for aggregation: " + JoinSeq(", ", input));
     }
-    AFL_VERIFY(!Finished);
+    YDB_LOG_VERIFY(!Finished);
     Aggregations.emplace_back(input, output, aggrType);
     return TConclusionStatus::Success();
 }
@@ -218,12 +218,12 @@ private:
         std::vector<const arrow::Scalar*> scalars;
         std::optional<arrow::Type::type> type;
         for (auto&& i : sources) {
-            AFL_VERIFY(i);
+            YDB_LOG_VERIFY(i);
             const auto& scalar = i->GetConstantScalarVerified(ColumnInfo.GetColumnId());
             if (!type) {
                 type = scalar->type->id();
             } else {
-                AFL_VERIFY(*type == scalar->type->id());
+                YDB_LOG_VERIFY(*type == scalar->type->id());
             }
             scalars.emplace_back(scalar.get());
         }
@@ -246,7 +246,7 @@ private:
                             case EAggregate::Unspecified:
                             case EAggregate::Count:
                             case EAggregate::NumRows:
-                                AFL_VERIFY(false);
+                                YDB_LOG_VERIFY(false);
                             case EAggregate::Sum:
                                 if constexpr (TWrap::IsCType) {
                                     *result += value;
@@ -294,7 +294,7 @@ public:
 }   // namespace
 
 std::shared_ptr<IResourcesAggregator> TAggregateFunction::BuildResultsAggregator(const TColumnChainInfo& output) const {
-    AFL_VERIFY(!GetFunctionOptions());
+    YDB_LOG_VERIFY(!GetFunctionOptions());
     return std::make_shared<TResultsAggregator>(output, TAggregationsHelper::GetSecondaryAggregationId(AggregationType));
 }
 
@@ -331,12 +331,13 @@ private:
         for (ui32 sourceIdx = 0; sourceIdx < sources.size(); ++sourceIdx) {
             auto& source = sources[sourceIdx];
             const auto& acc = source->GetAccessorVerified(aggr.GetColumnInfo().GetColumnId());
-            AFL_VERIFY(acc->GetRecordsCount() == decoder[sourceIdx].size())("count", acc->GetRecordsCount());
+            YDB_LOG_VERIFY(acc->GetRecordsCount() == decoder[sourceIdx].size(),
+                {"count", acc->GetRecordsCount()});
             arrays.emplace_back(acc.get());
             if (!type) {
                 type = acc->GetDataType()->id();
             } else {
-                AFL_VERIFY(*type == acc->GetDataType()->id());
+                YDB_LOG_VERIFY(*type == acc->GetDataType()->id());
             }
         }
         std::shared_ptr<arrow::Array> arrResult;
@@ -349,7 +350,7 @@ private:
                 for (ui32 sourceIdx = 0; sourceIdx < arrays.size(); ++sourceIdx) {
                     auto& source = arrays[sourceIdx];
                     auto addr = source->GetChunkSlow(0);
-                    AFL_VERIFY((ui32)addr.GetArray()->length() == decoder[sourceIdx].size());
+                    YDB_LOG_VERIFY((ui32)addr.GetArray()->length() == decoder[sourceIdx].size());
                     const auto& sourceDecoder = decoder[sourceIdx];
                     const auto& arrWithType = *static_cast<const TArrayType*>(addr.GetArray().get());
                     for (ui32 decoderIdx = 0; decoderIdx < sourceDecoder.size(); ++decoderIdx) {
@@ -365,7 +366,7 @@ private:
                                 case EAggregate::Unspecified:
                                 case EAggregate::Count:
                                 case EAggregate::NumRows:
-                                    AFL_VERIFY(false);
+                                    YDB_LOG_VERIFY(false);
                                 case EAggregate::Sum:
                                     if constexpr (TWrap::IsCType) {
                                         *result[sourceDecoder[decoderIdx]] += value;
@@ -414,7 +415,7 @@ private:
         ui64 countCapacity = 4096;
         while (countCapacity < 3 * reserveCount) {
             countCapacity *= 2;
-            AFL_VERIFY(countCapacity < (1llu << 30));
+            YDB_LOG_VERIFY(countCapacity < (1llu << 30));
         }
         std::deque<std::vector<std::shared_ptr<arrow::Array>>> arraysStorage;
         std::vector<std::vector<ui32>> decoder;
@@ -428,7 +429,7 @@ private:
             NMiniKQL::TRobinHoodHashFixedMap<TReplaceKeyHashable, ui32> keyToIndex(countCapacity);
             for (ui32 sourceIdx = 0; sourceIdx < sources.size(); ++sourceIdx) {
                 auto& source = sources[sourceIdx];
-                AFL_VERIFY(source);
+                YDB_LOG_VERIFY(source);
                 arraysStorage.emplace_back(std::vector<std::shared_ptr<arrow::Array>>());
                 auto& keyArrays = arraysStorage.back();
                 ui32 cIdx = 0;
@@ -439,17 +440,17 @@ private:
                         types[cIdx] = arr->type()->id();
                         keyBuilders[cIdx] = NArrow::MakeBuilder(arr->type());
                     } else {
-                        AFL_VERIFY(types[cIdx] == arr->type()->id());
+                        YDB_LOG_VERIFY(types[cIdx] == arr->type()->id());
                     }
                     keyArrays.emplace_back(arr);
                     if (!count) {
                         count = arr->length();
                     } else {
-                        AFL_VERIFY(*count == arr->length());
+                        YDB_LOG_VERIFY(*count == arr->length());
                     }
                     ++cIdx;
                 }
-                AFL_VERIFY(count);
+                YDB_LOG_VERIFY(count);
                 decoder[sourceIdx].resize(*count);
                 TReplaceKeyHashable pos(keyArrays, 0, types);
                 while (!pos.IsFinished()) {
@@ -460,7 +461,7 @@ private:
                         ++keysCount;
                         ui32 idx = 0;
                         for (auto&& k : keyArrays) {
-                            AFL_VERIFY(NArrow::Append(*keyBuilders[idx], types[idx], *k, pos.GetPosition()));
+                            YDB_LOG_VERIFY(NArrow::Append(*keyBuilders[idx], types[idx], *k, pos.GetPosition()));
                             ++idx;
                         }
                     }
@@ -496,7 +497,7 @@ public:
     TResultsAggregatorWithKeys(std::vector<TColumnChainInfo>&& keyColumns, std::vector<TColumnAggregationInfo>&& aggregations)
         : KeyColumns(std::move(keyColumns))
         , Aggregations(std::move(aggregations)) {
-        AFL_VERIFY(KeyColumns.size());
+        YDB_LOG_VERIFY(KeyColumns.size());
     }
 };
 }   // namespace

@@ -6,7 +6,7 @@
 namespace NKikimr::NColumnShard {
 
 void TInsertedPortion::Finalize(TColumnShard* shard, NTabletFlatExecutor::TTransactionContext& txc) {
-    AFL_VERIFY(PortionInfoConstructor);
+    YDB_LOG_VERIFY(PortionInfoConstructor);
     auto* lastPortionId = shard->MutableIndexAs<NOlap::TColumnEngineForLogs>().GetLastPortionPointer();
     PortionInfoConstructor->MutablePortionConstructor().SetPortionId(++*lastPortionId);
     NOlap::TDbWrapper wrapper(txc.DB, nullptr);
@@ -23,7 +23,7 @@ TWriteResult::TWriteResult(const std::shared_ptr<NEvWrite::TWriteMeta>& writeMet
     , PKBatch(pkBatch)
     , RecordsCount(recordsCount)
 {
-    AFL_VERIFY(WriteMeta);
+    YDB_LOG_VERIFY(WriteMeta);
 }
 
 }   // namespace NKikimr::NColumnShard

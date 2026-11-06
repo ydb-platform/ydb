@@ -288,11 +288,11 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, bool stan
     UNIT_ASSERT_GE(getRowCount(), BlobRowCount);
 
     if (!useFirstPkColumnForTtl) {
-        AFL_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
-        AFL_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
+        YDB_LOG_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
+        YDB_LOG_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
     } else {
-        AFL_VERIFY(!csControllerGuard->GetStatisticsUsageCount().Val());
-        AFL_VERIFY(csControllerGuard->GetMaxValueUsageCount().Val());
+        YDB_LOG_VERIFY(!csControllerGuard->GetStatisticsUsageCount().Val());
+        YDB_LOG_VERIFY(csControllerGuard->GetMaxValueUsageCount().Val());
     }
 }
 
@@ -648,11 +648,11 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const bool standalone
     }
 
     //    if (specs[0].TtlColumn != testYdbPk.front().GetName()) {
-    //        AFL_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
-    //        AFL_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
+    //        YDB_LOG_VERIFY(csControllerGuard->GetStatisticsUsageCount().Val());
+    //        YDB_LOG_VERIFY(!csControllerGuard->GetMaxValueUsageCount().Val());
     //    } else {
-    //        AFL_VERIFY(!csControllerGuard->GetStatisticsUsageCount().Val());
-    //        AFL_VERIFY(csControllerGuard->GetMaxValueUsageCount().Val());
+    //        YDB_LOG_VERIFY(!csControllerGuard->GetStatisticsUsageCount().Val());
+    //        YDB_LOG_VERIFY(csControllerGuard->GetMaxValueUsageCount().Val());
     //    }
 
     return specRowsBytes;
@@ -966,7 +966,7 @@ void TestDropWriteRace() {
 
     // Write into InsertTable
     ++txId;
-    AFL_VERIFY(WriteData(runtime, sender, ++writeId, tableId, data, testYdbSchema));
+    YDB_LOG_VERIFY(WriteData(runtime, sender, ++writeId, tableId, data, testYdbSchema));
     planStep = ProposeCommit(runtime, sender, txId, { writeId });
     const auto commitTxId = txId;
 

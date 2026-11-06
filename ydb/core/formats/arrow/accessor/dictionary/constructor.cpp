@@ -55,7 +55,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
             << " original data: " << Base64Encode(TString(blobDictionary.data(), blobDictionary.size())));
     }
     auto rbDictionary = TStatusValidator::GetValid(resultDictionary);
-    AFL_VERIFY(rbDictionary->num_columns() == 1);
+    YDB_LOG_VERIFY(rbDictionary->num_columns() == 1);
 
     const std::shared_ptr<arrow::DataType> type = GetTypeByVariantsCount(rbDictionary->num_rows());
     auto schemaPositions = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", type) }));
@@ -70,7 +70,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
             << " original data: " << Base64Encode(TString(blobPositions.data(), blobPositions.size())));
     }
     auto rbPositions = TStatusValidator::GetValid(resultPositions);
-    AFL_VERIFY(rbPositions->num_columns() == 1);
+    YDB_LOG_VERIFY(rbPositions->num_columns() == 1);
 
     return std::make_shared<NArrow::NAccessor::TDictionaryArray>(rbDictionary->column(0), rbPositions->column(0));
 }
@@ -102,7 +102,8 @@ TBlobWithAdditionalAccessorData TConstructor::DoSerializeToBlobAndMeta(
     const std::shared_ptr<arrow::DataType> requiredPositionsType = GetTypeByVariantsCount(arrDictionary->length());
     if (!arrPositions->type()->Equals(*requiredPositionsType)) {
         auto castResult = arrow::compute::Cast(*arrPositions, requiredPositionsType);
-        AFL_VERIFY(castResult.ok())("error", castResult.status().ToString());
+        YDB_LOG_VERIFY(castResult.ok(),
+            {"error", castResult.status()});
         arrPositions = std::move(*castResult);
     }
     auto schemaDictionary = NArrow::BuildFakeSchema({ arrDictionary });
@@ -128,12 +129,12 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     }
     auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", externalInfo.GetColumnType()) }));
     auto chunked = originalArray->GetChunkedArray();
-    AFL_VERIFY(chunked->type()->id() == originalArray->GetDataType()->id());
+    YDB_LOG_VERIFY(chunked->type()->id() == originalArray->GetDataType()->id());
     std::unique_ptr<arrow::ArrayBuilder> builderRecords;
     std::unique_ptr<arrow::ArrayBuilder> builderVariants = NArrow::MakeBuilder(originalArray->GetDataType());
     std::vector<i32> records;
     std::vector<i32> remap;
-    AFL_VERIFY(SwitchType(chunked->type()->id(), [&](const auto type) {
+    YDB_LOG_VERIFY(SwitchType(chunked->type()->id(), [&](const auto type) {
         if constexpr (type.IsAppropriate) {
             bool hasNulls = false;
             std::map<typename decltype(type)::ValueType, ui32> indexByValue;
@@ -173,11 +174,12 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
             }
             return true;
         }
-        AFL_VERIFY(false)("type", originalArray->GetDataType()->ToString());
+        YDB_LOG_VERIFY(false,
+            {"type", originalArray->GetDataType()->ToString()});
         return false;
     }));
-    AFL_VERIFY(records.size() == originalArray->GetRecordsCount());
-    AFL_VERIFY(SwitchType(builderRecords->type()->id(), [&](const auto type) {
+    YDB_LOG_VERIFY(records.size() == originalArray->GetRecordsCount());
+    YDB_LOG_VERIFY(SwitchType(builderRecords->type()->id(), [&](const auto type) {
         auto* builder = type.CastBuilder(builderRecords.get());
         if constexpr (type.IsIndexType()) {
             using CType = typename decltype(type)::ValueType;
@@ -185,15 +187,16 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
                 if (r < 0) {
                     TStatusValidator::Validate(builder->AppendNull());
                 } else {
-                    AFL_VERIFY((ui32)r < remap.size());
-                    AFL_VERIFY(remap[r] >= 0);
+                    YDB_LOG_VERIFY((ui32)r < remap.size());
+                    YDB_LOG_VERIFY(remap[r] >= 0);
                     TStatusValidator::Validate(builder->Append((CType)remap[r]));
                 }
             }
             return true;
         }
         return false;
-    }))("type", builderRecords->type()->ToString());
+    }),
+        {"type", builderRecords->type()->ToString()});
     auto arrVariants = NArrow::FinishBuilder(std::move(builderVariants));
     auto arrRecords = NArrow::FinishBuilder(std::move(builderRecords));
     return std::make_shared<TDictionaryArray>(arrVariants, arrRecords);
@@ -222,7 +225,7 @@ TConclusion<std::shared_ptr<arrow::Array>> TConstructor::BuildDictionaryOnlyRead
             << "dictionary-only deserialization failed: " << result.status().ToString());
     }
     auto rb = TStatusValidator::GetValid(result);
-    AFL_VERIFY(rb->num_columns() == 1);
+    YDB_LOG_VERIFY(rb->num_columns() == 1);
     return rb->column(0);
 }
 
@@ -236,7 +239,7 @@ std::shared_ptr<arrow::FixedWidthType> TConstructor::GetTypeByVariantsCount(cons
     if (count <= Max<ui32>()) {
         return std::static_pointer_cast<arrow::FixedWidthType>(arrow::uint32());
     }
-    AFL_VERIFY(false);
+    YDB_LOG_VERIFY(false);
     return nullptr;
 }
 

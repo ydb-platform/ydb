@@ -224,7 +224,7 @@ void TTxScan::StartScanActor(const TReadMetadataBase::TConstPtr& readMetadataRan
     Self->Counters.GetTabletCounters()->OnScanStarted(Self->InFlightReadsTracker.GetSelectStatsDelta());
 
     TComputeShardingPolicy shardingPolicy;
-    AFL_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
+    YDB_LOG_VERIFY(shardingPolicy.DeserializeFromProto(request.GetComputeShardingPolicy()));
 
     if (diagnostics) {
         diagnostics->RequestId = requestCookie;

@@ -26,8 +26,8 @@ private:
         : TBase(std::move(input), std::move(output), EProcessorType::Calculation)
         , KernelLogic(kernelLogic)
         , Function(function) {
-        AFL_VERIFY(KernelLogic);
-        AFL_VERIFY(Function);
+        YDB_LOG_VERIFY(KernelLogic);
+        YDB_LOG_VERIFY(Function);
     }
 
     virtual bool IsAggregation() const override {
@@ -43,7 +43,7 @@ private:
 
 
 public:
-    static TConclusion<std::shared_ptr<TCalculationProcessor>> Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, 
+    static TConclusion<std::shared_ptr<TCalculationProcessor>> Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output,
         const std::shared_ptr<IStepFunction>& function, const std::shared_ptr<IKernelLogic>& kernelLogic);
 };
 

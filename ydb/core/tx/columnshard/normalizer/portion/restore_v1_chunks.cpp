@@ -18,7 +18,7 @@ private:
 public:
     const ui32& GetIndexByBlob(const TUnifiedBlobId& blobId) const {
         auto it = IndexByBlob.find(blobId);
-        AFL_VERIFY(it != IndexByBlob.end());
+        YDB_LOG_VERIFY(it != IndexByBlob.end());
         return it->second;
     }
 
@@ -66,14 +66,14 @@ public:
         for (auto&& i : Patches) {
             auto metaProto = i.GetPortionInfo().GetMetaProto();
             metaProto.ClearBlobIds();
-            AFL_VERIFY(!metaProto.GetBlobIds().size());
+            YDB_LOG_VERIFY(!metaProto.GetBlobIds().size());
             for (auto&& b : i.GetBlobIds()) {
                 *metaProto.AddBlobIds() = b.GetLogoBlobId().AsBinaryString();
             }
             ui32 idx = 0;
             for (auto&& b : metaProto.GetBlobIds()) {
                 auto logo = TLogoBlobID::FromBinary(b);
-                AFL_VERIFY(i.GetBlobIds()[idx++].GetLogoBlobId() == logo);
+                YDB_LOG_VERIFY(i.GetBlobIds()[idx++].GetLogoBlobId() == logo);
             }
             db.Table<IndexPortions>()
                 .Key(i.GetPortionInfo().GetPathId().GetRawValue(), i.GetPortionInfo().GetPortionId())
@@ -166,7 +166,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         while (!rowset.EndOfSet()) {
             TPortionLoadContext portion(rowset);
             existPortions0.emplace(portion.GetPortionId());
-            AFL_VERIFY(portions0.emplace(portion.GetPortionId(), portion).second);
+            YDB_LOG_VERIFY(portions0.emplace(portion.GetPortionId(), portion).second);
 
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");
@@ -183,7 +183,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         while (!rowset.EndOfSet()) {
             TColumnChunkLoadContext chunk(rowset, &DsGroupSelector);
             if (portions0.contains(chunk.GetPortionId())) {
-                AFL_VERIFY(columns0[chunk.GetPortionId()].emplace(chunk.GetFullChunkAddress(), chunk).second);
+                YDB_LOG_VERIFY(columns0[chunk.GetPortionId()].emplace(chunk.GetFullChunkAddress(), chunk).second);
             }
 
             if (!rowset.Next()) {
@@ -200,9 +200,9 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
 
         while (!rowset.EndOfSet()) {
             TColumnChunkLoadContextV1 chunk(rowset);
-            //AFL_VERIFY(!portions0.contains(chunk.GetPortionId()));
+            //YDB_LOG_VERIFY(!portions0.contains(chunk.GetPortionId()));
             if (!existPortions0.contains(chunk.GetPortionId())) {
-                AFL_VERIFY(columns1Remove.emplace(chunk.GetFullChunkAddress(), chunk).second);
+                YDB_LOG_VERIFY(columns1Remove.emplace(chunk.GetFullChunkAddress(), chunk).second);
             }
 
             if (!rowset.Next()) {
@@ -219,7 +219,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         return tasks;
     }
 
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
+    YDB_LOG_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     {
         std::vector<TPatchItemRemoveV1> package;
         for (auto&& [portionId, chunkInfo] : columns1Remove) {
@@ -240,7 +240,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         std::vector<TPatchItemAddV1> package;
         for (auto&& [portionId, portionInfo] : portions0) {
             auto it = columns0.find(portionId);
-            AFL_VERIFY(it != columns0.end());
+            YDB_LOG_VERIFY(it != columns0.end());
             package.emplace_back(portionInfo, std::move(it->second));
             columns0.erase(it);
             if (package.size() == 100) {

@@ -152,7 +152,7 @@ private:
                 i->GetSource().MutableAs<IDataSource>()->ClearMemoryGuards();
             }
         }
-        AFL_VERIFY(!Next);
+        YDB_LOG_VERIFY(!Next);
         const auto sourcesSorting = SourcesSortingToProto(Context->GetReadMetadata()->GetSourcesSorting());
         std::shared_ptr<IScanCursor> cursor;
         if (source.GetType() == IDataSource::EType::SimpleAggregation) {
@@ -164,16 +164,16 @@ private:
             cursor = std::make_shared<TSourceIndexScanCursor>(sourcesSorting, nullptr, aggrSource.GetLastSourceIdx(),
                 aggrSource.GetLastSourceRecordsCount(), aggrSource.GetLastPortionIdOptional());
         } else {
-            AFL_VERIFY(source.GetType() == IDataSource::EType::SimplePortion);
+            YDB_LOG_VERIFY(source.GetType() == IDataSource::EType::SimplePortion);
             Collection->OnSourceFinished(source);
             cursor = std::make_shared<TSourceIndexScanCursor>(
                 sourcesSorting, nullptr, source.GetSourceIdx(), source.GetRecordsCount(), source.GetPortionIdOptional());
             --SourcesCount;
         }
-        AFL_VERIFY(!source.GetStageResult().IsEmpty());
+        YDB_LOG_VERIFY(!source.GetStageResult().IsEmpty());
         auto resultChunk = source.MutableStageResult().ExtractResultChunk();
-        AFL_VERIFY(source.GetStageResult().IsFinished());
-        AFL_VERIFY(resultChunk && resultChunk->HasData());
+        YDB_LOG_VERIFY(source.GetStageResult().IsFinished());
+        YDB_LOG_VERIFY(resultChunk && resultChunk->HasData());
         if (AggregationActivity) {
             ++AggregationsCount;
             if (resultChunk->GetTable()->num_rows() > AggregatedResultKeysCountMinimalForControl &&
@@ -214,9 +214,9 @@ public:
         , AggregationScript(aggregationScript)
         , RestoreResultScript(restoreResultScript)
     {
-        AFL_VERIFY(AggregationScript);
-        AFL_VERIFY(RestoreResultScript);
-        AFL_VERIFY(pointIndex);
+        YDB_LOG_VERIFY(AggregationScript);
+        YDB_LOG_VERIFY(RestoreResultScript);
+        YDB_LOG_VERIFY(pointIndex);
     }
 };
 

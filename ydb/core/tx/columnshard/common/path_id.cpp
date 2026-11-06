@@ -260,17 +260,17 @@ TString TSchemeShardLocalPathId::DebugString() const {
 }
 
 TUnifiedPathId TUnifiedPathId::BuildValid(const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId) {
-    AFL_VERIFY(internalPathId && externalPathId);
+    YDB_LOG_VERIFY(internalPathId && externalPathId);
     return TUnifiedPathId(internalPathId, externalPathId);
 }
 
 TInternalPathId TUnifiedOptionalPathId::GetInternalPathIdVerified() const {
-    AFL_VERIFY(!!InternalPathId);
+    YDB_LOG_VERIFY(!!InternalPathId);
     return *InternalPathId;
 }
 
 TSchemeShardLocalPathId TUnifiedOptionalPathId::GetSchemeShardLocalPathIdVerified() const {
-    AFL_VERIFY(!!SchemeShardLocalPathId);
+    YDB_LOG_VERIFY(!!SchemeShardLocalPathId);
     return *SchemeShardLocalPathId;
 }
 
@@ -289,14 +289,15 @@ std::set<NColumnShard::TUnifiedPathId> IPathIdTranslator::GetUnifiedPathIdsByInt
 std::set<NColumnShard::TSchemeShardLocalPathId> IPathIdTranslator::ResolveSchemeShardLocalPathIdsVerified(
     const TInternalPathId internalPathId) const {
     auto result = ResolveSchemeShardLocalPathIds(internalPathId);
-    AFL_VERIFY(result)("path_id", internalPathId.DebugString());
+    YDB_LOG_VERIFY(result,
+        {"pathId", internalPathId.DebugString()});
     return *result;
 }
 
 NOlap::TInternalPathId IPathIdTranslator::ResolveInternalPathIdVerified(
     const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const {
     auto result = ResolveInternalPathIdOptional(schemeShardLocalPathId, withTabletPathId);
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     return *result;
 }
 

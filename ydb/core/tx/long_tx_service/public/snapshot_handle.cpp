@@ -26,7 +26,7 @@ TSnapshotHandle& TSnapshotHandle::operator=(TSnapshotHandle&& other) noexcept {
 }
 
 void TSnapshotHandle::Reset() {
-    AFL_ENSURE(Alive_);
+    YDB_LOG_ENSURE(Alive_);
     Alive_->store(false);
 }
 

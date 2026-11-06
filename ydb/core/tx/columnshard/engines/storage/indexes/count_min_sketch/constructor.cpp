@@ -12,7 +12,7 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor
     std::set<ui32> columnIds;
     if (ColumnNames.empty()) {
         for (const auto& [id, _] : currentSchema.GetColumns().GetColumns()) {
-            AFL_VERIFY(columnIds.emplace(id).second);
+            YDB_LOG_VERIFY(columnIds.emplace(id).second);
         }
     }
     for (auto&& i : ColumnNames) {
@@ -21,9 +21,9 @@ std::shared_ptr<NKikimr::NOlap::NIndexes::IIndexMeta> TCountMinSketchConstructor
             errors.AddError("no column with name " + i);
             return nullptr;
         }
-        AFL_VERIFY(columnIds.emplace(columnInfo->GetId()).second);
+        YDB_LOG_VERIFY(columnIds.emplace(columnInfo->GetId()).second);
     }
-    AFL_VERIFY(columnIds.size() == 1);
+    YDB_LOG_VERIFY(columnIds.size() == 1);
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId),
         GetInheritPortionStorage().value_or(false), *columnIds.begin());
 }

@@ -9,7 +9,7 @@ THashMap<ui64, std::vector<ui32>> TRandomSharding::MakeSharding(const std::share
             activeShardIds.emplace_back(i);
         }
     }
-    AFL_VERIFY(activeShardIds.size());
+    YDB_LOG_VERIFY(activeShardIds.size());
     THashMap<ui64, std::vector<ui32>> resultHash;
     std::vector<ui32>& sVector = resultHash.emplace(activeShardIds[RandomNumber<ui32>(activeShardIds.size())], std::vector<ui32>()).first->second;
     for (ui32 i = 0; i < batch->num_rows(); ++i) {

@@ -36,7 +36,7 @@ public:
     }
 
     const TOlapSchema& GetTableSchemaVerified() const {
-        AFL_VERIFY(!!TableSchema);
+        YDB_LOG_VERIFY(!!TableSchema);
         return *TableSchema;
     }
 

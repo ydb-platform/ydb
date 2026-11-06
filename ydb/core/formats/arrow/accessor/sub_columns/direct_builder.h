@@ -33,7 +33,7 @@ private:
 
 public:
     const std::shared_ptr<IChunkedArray>& GetAccessorVerified() const {
-        AFL_VERIFY(!!Accessor);
+        YDB_LOG_VERIFY(!!Accessor);
         return Accessor;
     }
 
@@ -47,7 +47,7 @@ public:
 
     void AddData(const NBinaryJson::TBinaryJson& sb, const ui32 index) {
         Values.emplace_back(sb);
-        AFL_VERIFY(RecordIndexes.empty() || RecordIndexes.back() < index);
+        YDB_LOG_VERIFY(RecordIndexes.empty() || RecordIndexes.back() < index);
         RecordIndexes.emplace_back(index);
         DataSize += sb.size();
     }
@@ -106,7 +106,7 @@ public:
     static const NBinaryJson::TBinaryJson& GetNullBinaryJson() {
         const static auto res = NBinaryJson::SerializeToBinaryJson("null", false);
         const static auto nullBinaryJson = std::get_if<NBinaryJson::TBinaryJson>(&res);
-        AFL_VERIFY(nullBinaryJson);
+        YDB_LOG_VERIFY(nullBinaryJson);
 
         return *nullBinaryJson;
     }
@@ -138,7 +138,7 @@ public:
         THeapElements(const TColumnElements* elements, const ui32 keyIndex)
             : Elements(elements)
             , KeyIndex(keyIndex) {
-            AFL_VERIFY(Elements);
+            YDB_LOG_VERIFY(Elements);
         }
 
         ui32 GetRecordIndex() const {

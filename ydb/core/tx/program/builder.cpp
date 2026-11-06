@@ -486,7 +486,7 @@ TConclusionStatus TProgramBuilder::ReadDistinct(const NKikimrSSA::TProgram::TDis
 }
 
 TColumnInfo TProgramBuilder::GetColumnInfo(const NKikimrSSA::TProgram::TColumn& column) const {
-    AFL_VERIFY(column.HasId() && column.GetId());
+    YDB_LOG_VERIFY(column.HasId() && column.GetId());
     if (column.HasId() && column.GetId()) {
         const ui32 columnId = column.GetId();
         const TString name = ColumnResolver.GetColumnName(columnId, false);
@@ -502,7 +502,7 @@ TColumnInfo TProgramBuilder::GetColumnInfo(const NKikimrSSA::TProgram::TColumn& 
 }
 
 std::string TProgramBuilder::GenerateName(const NKikimrSSA::TProgram::TColumn& column) const {
-    AFL_VERIFY(column.HasId() && column.GetId());
+    YDB_LOG_VERIFY(column.HasId() && column.GetId());
     const auto name = ToString(column.GetId());
     return std::string(name.data(), name.size());
 }

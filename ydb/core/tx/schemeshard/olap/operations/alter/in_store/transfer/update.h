@@ -15,7 +15,7 @@ private:
     std::set<ui64> ShardIdsUsage;
 
     virtual std::shared_ptr<TColumnTableInfo> GetTargetTableInfo() const override {
-        AFL_VERIFY(TargetInStoreTable);
+        YDB_LOG_VERIFY(TargetInStoreTable);
         return TargetInStoreTable->GetTableInfoPtrVerified();
     }
     virtual std::shared_ptr<ISSEntity> GetTargetSSEntity() const override {
@@ -33,7 +33,7 @@ private:
 
     virtual TString DoGetShardTxBodyString(const ui64 tabletId, const TMessageSeqNo& /*seqNo*/) const override {
         auto it = DestinationSessions.find(tabletId);
-        AFL_VERIFY(it != DestinationSessions.end());
+        YDB_LOG_VERIFY(it != DestinationSessions.end());
         return it->second.SerializeAsString();
     }
 

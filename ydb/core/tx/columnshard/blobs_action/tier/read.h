@@ -27,7 +27,7 @@ public:
         : TBase(storageId)
         , ExternalStorageOperator(storageOperator)
     {
-        AFL_VERIFY(ExternalStorageOperator);
+        YDB_LOG_VERIFY(ExternalStorageOperator);
     }
 };
 

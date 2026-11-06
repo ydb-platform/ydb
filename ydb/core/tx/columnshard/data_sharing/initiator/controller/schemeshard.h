@@ -29,7 +29,7 @@ protected:
     }
 
     virtual void DoSerializeToProto(NKikimrColumnShardDataSharingProto::TInitiator::TController& /*proto*/) const override {
-        //        AFL_VERIFY(TabletId);
+        //        YDB_LOG_VERIFY(TabletId);
         //        proto.MutableSS()->SetTabletId(TabletId);
         //        proto.MutableSS()->SetReplyCookie(ReplyCookie);
     }

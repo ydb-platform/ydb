@@ -7,8 +7,8 @@
 namespace NKikimr::NOlap {
 
 void IBlobsReadingAction::StartReading(std::vector<TBlobRange>&& ranges) {
-    AFL_VERIFY(ranges.size());
-    AFL_VERIFY(Counters);
+    YDB_LOG_VERIFY(ranges.size());
+    YDB_LOG_VERIFY(Counters);
     for (auto&& i : ranges) {
         Counters->OnRequest(i.Size);
     }
@@ -41,23 +41,32 @@ void IBlobsReadingAction::Start(const THashSet<TBlobRange>& rangesInProgress) {
         StartReading(std::move(rangesFiltered));
     }
     for (auto&& i : RangesForResult) {
-        AFL_VERIFY(i.second.size() == i.first.Size);
-        AFL_VERIFY(Replies.emplace(i.first, i.second).second);
+        YDB_LOG_VERIFY(i.second.size() == i.first.Size);
+        YDB_LOG_VERIFY(Replies.emplace(i.first, i.second).second);
     }
 }
 
 void IBlobsReadingAction::OnReadResult(const TBlobRange& range, const TString& data, const bool fromCache) {
     auto it = Groups.find(range);
-    AFL_VERIFY(it != Groups.end())("range", range.ToString())("from_cache", fromCache);
-    AFL_VERIFY(Counters);
+    YDB_LOG_VERIFY(it != Groups.end(),
+        {"range", range},
+        {"fromCache", fromCache});
+    YDB_LOG_VERIFY(Counters);
     WaitingRangesCount -= it->second.size();
-    AFL_VERIFY(WaitingRangesCount >= 0);
+    YDB_LOG_VERIFY(WaitingRangesCount >= 0);
     Counters->OnReply(range.Size, TMonotonic::Now() - StartWaitingRanges);
-    AFL_VERIFY(data.size() == range.Size)("data", data.size())("range", range.ToString())("from_cache", fromCache);
+    YDB_LOG_VERIFY(data.size() == range.Size,
+        {"data", data.size()},
+        {"range", range},
+        {"fromCache", fromCache});
     for (auto&& i : it->second) {
-        AFL_VERIFY(static_cast<ui64>(i.Offset) + i.GetBlobSize() <= static_cast<ui64>(range.Offset) + data.size())
-        ("group", range.ToString())("sub", i.ToString())("data", data.size());
-        AFL_VERIFY(range.Offset <= i.Offset)("group", range.ToString())("sub", i.ToString());
+        YDB_LOG_VERIFY(static_cast<ui64>(i.Offset) + i.GetBlobSize() <= static_cast<ui64>(range.Offset) + data.size(),
+            {"group", range},
+            {"sub", i},
+            {"data", data.size()});
+        YDB_LOG_VERIFY(range.Offset <= i.Offset,
+            {"group", range},
+            {"sub", i});
         Replies.emplace(i, data.substr(i.Offset - range.Offset, i.GetBlobSize()));
     }
     Groups.erase(it);
@@ -65,11 +74,11 @@ void IBlobsReadingAction::OnReadResult(const TBlobRange& range, const TString& d
 
 void IBlobsReadingAction::OnReadError(const TBlobRange& range, const TErrorStatus& replyStatus) {
     auto it = Groups.find(range);
-    AFL_VERIFY(it != Groups.end());
+    YDB_LOG_VERIFY(it != Groups.end());
 
-    AFL_VERIFY(Counters);
+    YDB_LOG_VERIFY(Counters);
     WaitingRangesCount -= it->second.size();
-    AFL_VERIFY(WaitingRangesCount >= 0);
+    YDB_LOG_VERIFY(WaitingRangesCount >= 0);
     Counters->OnFail(range.Size, TMonotonic::Now() - StartWaitingRanges);
     for (auto&& i : it->second) {
         Fails.emplace(i, replyStatus);
@@ -80,11 +89,13 @@ void IBlobsReadingAction::OnReadError(const TBlobRange& range, const TErrorStatu
 void IBlobsReadingAction::AddRange(const TBlobRange& range, const std::optional<TString>& result /*= {}*/) {
     Y_ABORT_UNLESS(!Started);
     if (!result) {
-        AFL_VERIFY(!RangesForResult.contains(range));
-        AFL_VERIFY(RangesForRead.emplace(range).second)("range", range.ToString());
+        YDB_LOG_VERIFY(!RangesForResult.contains(range));
+        YDB_LOG_VERIFY(RangesForRead.emplace(range).second,
+            {"range", range});
     } else {
-        AFL_VERIFY(result->size() == range.Size);
-        AFL_VERIFY(RangesForResult.emplace(range, *result).second)("range", range.ToString());
+        YDB_LOG_VERIFY(result->size() == range.Size);
+        YDB_LOG_VERIFY(RangesForResult.emplace(range, *result).second,
+            {"range", range});
     }
 }
 

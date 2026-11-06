@@ -31,7 +31,7 @@ public:
         : Schema(schema)
         , Stats(stats)
     {
-        AFL_VERIFY(Stats);
+        YDB_LOG_VERIFY(Stats);
     }
 
     virtual std::shared_ptr<arrow::Field> GetField(const ui32 columnId) const override {
@@ -74,7 +74,8 @@ protected:
                 return i;
             }
         }
-        AFL_VERIFY(false)("id", entityId);
+        YDB_LOG_VERIFY(false,
+            {"id", entityId});
         return Data.front();
     }
 
@@ -84,7 +85,7 @@ public:
     THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> GetPortionChunksToHash() const {
         THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> result;
         for (auto&& i : Data) {
-            AFL_VERIFY(result.emplace(i.GetEntityId(), i.GetChunks()).second);
+            YDB_LOG_VERIFY(result.emplace(i.GetEntityId(), i.GetChunks()).second);
         }
         return result;
     }
@@ -92,7 +93,7 @@ public:
     std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> GetPortionChunksToMap() const {
         std::map<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> result;
         for (auto&& i : Data) {
-            AFL_VERIFY(result.emplace(i.GetEntityId(), i.GetChunks()).second);
+            YDB_LOG_VERIFY(result.emplace(i.GetEntityId(), i.GetChunks()).second);
         }
         return result;
     }
@@ -114,7 +115,9 @@ public:
         for (auto&& i : Data) {
             result += i.GetPackedSize();
         }
-        AFL_VERIFY(Size == result)("size", Size)("result", result);
+        YDB_LOG_VERIFY(Size == result,
+            {"size", Size},
+            {"result", result});
         return result;
     }
 
@@ -124,7 +127,7 @@ public:
 
     std::vector<TSplittedBlob> GroupChunksByBlobs(const NSplitter::TEntityGroups& groups) {
         std::vector<TSplittedBlob> blobs;
-        AFL_VERIFY(GroupBlobs(blobs, groups));
+        YDB_LOG_VERIFY(GroupBlobs(blobs, groups));
         return blobs;
     }
 

@@ -14,10 +14,10 @@ TRWAddress::TRWAddress(std::set<TString>&& readStorages, std::set<TString>&& wri
     : ReadStorages(std::move(readStorages))
     , WriteStorages(std::move(writeStorages))
 {
-    AFL_VERIFY(!ReadStorages.contains(""));
-    AFL_VERIFY(!WriteStorages.contains(""));
+    YDB_LOG_VERIFY(!ReadStorages.contains(""));
+    YDB_LOG_VERIFY(!WriteStorages.contains(""));
     if (WriteStorages.contains(NTiering::NCommon::DeleteTierName)) {
-        AFL_VERIFY(WriteStorages.size() == 1);
+        YDB_LOG_VERIFY(WriteStorages.size() == 1);
     }
     Hash = 0;
     for (auto&& i : ReadStorages) {

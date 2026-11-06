@@ -17,7 +17,7 @@ namespace NKikimr::NArrow::NAccessor {
 
 void IChunkedArray::TReader::AppendPositionTo(arrow::ArrayBuilder& builder, const ui64 position, ui64* recordSize) const {
     auto address = GetReadChunk(position);
-    AFL_VERIFY(NArrow::Append(builder, *address.GetArray(), address.GetPosition(), recordSize));
+    YDB_LOG_VERIFY(NArrow::Append(builder, *address.GetArray(), address.GetPosition(), recordSize));
 }
 
 std::shared_ptr<arrow::Array> IChunkedArray::TReader::CopyRecord(const ui64 recordIndex) const {
@@ -30,38 +30,43 @@ std::shared_ptr<arrow::ChunkedArray> IChunkedArray::Slice(const ui32 offset, con
 }
 
 IChunkedArray::TFullDataAddress IChunkedArray::GetChunk(const std::optional<TAddressChain>& chunkCurrent, const ui64 position) const {
-    AFL_VERIFY(position < GetRecordsCount())("pos", position)("records", GetRecordsCount())(
-        "current", chunkCurrent ? chunkCurrent->DebugString() : Default<TString>());
+    YDB_LOG_VERIFY(position < GetRecordsCount(),
+        {"pos", position},
+        {"records", GetRecordsCount()},
+        {"current", chunkCurrent ? chunkCurrent->DebugString() : Default<TString>()});
     std::optional<TCommonChunkAddress> address;
 
     if (IsDataOwner()) {
         if (chunkCurrent) {
-            AFL_VERIFY(chunkCurrent->GetSize() == 1)("size", chunkCurrent->GetSize());
+            YDB_LOG_VERIFY(chunkCurrent->GetSize() == 1,
+                {"size", chunkCurrent->GetSize()});
         }
         auto localAddress = GetLocalData(address, position);
         TAddressChain addressChain;
         addressChain.Add(localAddress.GetAddress());
-        AFL_VERIFY(addressChain.Contains(position));
+        YDB_LOG_VERIFY(addressChain.Contains(position));
         return TFullDataAddress(localAddress.GetArray(), std::move(addressChain));
     } else {
         auto chunkedArrayAddress = GetArray(chunkCurrent, position, nullptr);
         //        if (chunkCurrent) {
-        //            AFL_VERIFY(chunkCurrent->GetSize() == chunkedArrayAddress.GetAddress().GetSize())("current", chunkCurrent->GetSize())(
+        //            YDB_LOG_VERIFY(chunkCurrent->GetSize() == chunkedArrayAddress.GetAddress().GetSize())("current", chunkCurrent->GetSize())(
         //                                                      "chunked", chunkedArrayAddress.GetAddress().GetSize());
         //        }
         auto localAddress = chunkedArrayAddress.GetArray()->GetLocalData(address, chunkedArrayAddress.GetAddress().GetLocalIndex(position));
         auto fullAddress = std::move(chunkedArrayAddress.MutableAddress());
         fullAddress.Add(localAddress.GetAddress());
-        AFL_VERIFY(fullAddress.Contains(position));
+        YDB_LOG_VERIFY(fullAddress.Contains(position));
         return TFullDataAddress(localAddress.GetArray(), std::move(fullAddress));
     }
 }
 
 IChunkedArray::TFullChunkedArrayAddress IChunkedArray::GetArray(
     const std::optional<TAddressChain>& chunkCurrent, const ui64 position, const std::shared_ptr<IChunkedArray>& selfPtr) const {
-    AFL_VERIFY(position < GetRecordsCount())("pos", position)("records_count", GetRecordsCount());
+    YDB_LOG_VERIFY(position < GetRecordsCount(),
+        {"pos", position},
+        {"recordsCount", GetRecordsCount()});
     if (IsDataOwner()) {
-        AFL_VERIFY(selfPtr);
+        YDB_LOG_VERIFY(selfPtr);
         TAddressChain chain;
         chain.Add(TCommonChunkAddress(0, GetRecordsCount(), 0));
         return IChunkedArray::TFullChunkedArrayAddress(selfPtr, std::move(chain));
@@ -81,11 +86,13 @@ IChunkedArray::TFullChunkedArrayAddress IChunkedArray::GetArray(
         chainForTemporarySave.emplace_back(nextChunkedArray.GetArray());
         currentLevel = chainForTemporarySave.back().get();
         addressChain.Add(nextChunkedArray.GetAddress());
-        AFL_VERIFY(nextChunkedArray.GetAddress().GetStartPosition() <= currentPosition);
+        YDB_LOG_VERIFY(nextChunkedArray.GetAddress().GetStartPosition() <= currentPosition);
         currentPosition -= nextChunkedArray.GetAddress().GetStartPosition();
         ++idx;
     }
-    AFL_VERIFY(!chunkCurrent || chunkCurrent->GetSize() - idx <= 1)("idx", idx)("size", chunkCurrent->GetSize());
+    YDB_LOG_VERIFY(!chunkCurrent || chunkCurrent->GetSize() - idx <= 1,
+        {"idx", idx},
+        {"size", chunkCurrent->GetSize()});
     return TFullChunkedArrayAddress(chainForTemporarySave.back(), std::move(addressChain));
 }
 
@@ -94,7 +101,7 @@ std::shared_ptr<IChunkedArray> IChunkedArray::DoApplyFilter(const TColumnFilter&
     const arrow::FieldVector fields = { std::make_shared<arrow::Field>("applied", GetDataType()) };
     auto schema = std::make_shared<arrow::Schema>(fields);
     auto table = arrow::Table::Make(schema, { arr }, GetRecordsCount());
-    AFL_VERIFY(table->num_columns() == 1);
+    YDB_LOG_VERIFY(table->num_columns() == 1);
     filter.Apply(table);
     if (table->column(0)->num_chunks() == 1) {
         return std::make_shared<TTrivialArray>(table->column(0)->chunk(0));
@@ -105,15 +112,15 @@ std::shared_ptr<IChunkedArray> IChunkedArray::DoApplyFilter(const TColumnFilter&
 
 std::shared_ptr<IChunkedArray> IChunkedArray::ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const {
     if (filter.IsTotalAllowFilter()) {
-        AFL_VERIFY(selfPtr);
+        YDB_LOG_VERIFY(selfPtr);
         return selfPtr;
     }
     if (filter.IsTotalDenyFilter()) {
         return TTrivialArray::BuildEmpty(GetDataType());
     }
     auto result = DoApplyFilter(filter);
-    AFL_VERIFY(result);
-    AFL_VERIFY(result->GetRecordsCount() == filter.GetFilteredCountVerified());
+    YDB_LOG_VERIFY(result);
+    YDB_LOG_VERIFY(result->GetRecordsCount() == filter.GetFilteredCountVerified());
     return result;
 }
 
@@ -132,7 +139,10 @@ std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArray(const TColum
     if (context.GetStartIndex() || context.GetRecordsCount()) {
         const ui32 start = context.GetStartIndex().value_or(0);
         const ui32 count = context.GetRecordsCount().value_or(GetRecordsCount() - start);
-        AFL_VERIFY(start + count <= GetRecordsCount())("start", start)("count", count)("records_count", GetRecordsCount());
+        YDB_LOG_VERIFY(start + count <= GetRecordsCount(),
+            {"start", start},
+            {"count", count},
+            {"recordsCount", GetRecordsCount()});
     }
 
     return DoGetChunkedArray(context);
@@ -162,7 +172,7 @@ TString IChunkedArray::TReader::DebugString(const ui32 position) const {
 
 std::partial_ordering IChunkedArray::TReader::CompareColumns(
     const std::vector<TReader>& l, const ui64 lPosition, const std::vector<TReader>& r, const ui64 rPosition) {
-    AFL_VERIFY(l.size() == r.size());
+    YDB_LOG_VERIFY(l.size() == r.size());
     for (ui32 i = 0; i < l.size(); ++i) {
         const TAddress lAddress = l[i].GetReadChunk(lPosition);
         const TAddress rAddress = r[i].GetReadChunk(rPosition);
@@ -175,7 +185,7 @@ std::partial_ordering IChunkedArray::TReader::CompareColumns(
 }
 
 IChunkedArray::TAddress IChunkedArray::TReader::GetReadChunk(const ui64 position) const {
-    AFL_VERIFY(position < ChunkedArray->GetRecordsCount());
+    YDB_LOG_VERIFY(position < ChunkedArray->GetRecordsCount());
     if (CurrentChunkAddress && CurrentChunkAddress->GetAddress().Contains(position)) {
     } else {
         CurrentChunkAddress = ChunkedArray->GetChunk(CurrentChunkAddress, position);
@@ -190,8 +200,12 @@ const std::partial_ordering IChunkedArray::TAddress::Compare(const TAddress& ite
 
 std::partial_ordering IChunkedArray::TFullDataAddress::Compare(
     const ui64 position, const TFullDataAddress& item, const ui64 itemPosition) const {
-    AFL_VERIFY(Address.Contains(position))("pos", position)("start", Address.DebugString());
-    AFL_VERIFY(item.Address.Contains(itemPosition))("pos", itemPosition)("start", item.Address.DebugString());
+    YDB_LOG_VERIFY(Address.Contains(position),
+        {"pos", position},
+        {"start", Address.DebugString()});
+    YDB_LOG_VERIFY(item.Address.Contains(itemPosition),
+        {"pos", itemPosition},
+        {"start", item.Address.DebugString()});
     //https://github.com/ydb-platform/ydb/issues/26933
     return TComparator::TypedCompare<false>(*Array, Address.GetLocalIndex(position), *item.Array, item.Address.GetLocalIndex(itemPosition));
 }

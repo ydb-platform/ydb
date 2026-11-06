@@ -14,8 +14,8 @@ TAllocationInfo::TAllocationInfo(const ui64 processId, const ui64 scopeId, const
     , ProcessId(processId)
     , ScopeId(scopeId)
     , Stage(stage) {
-    AFL_VERIFY(Stage);
-    AFL_VERIFY(Allocation);
+    YDB_LOG_VERIFY(Stage);
+    YDB_LOG_VERIFY(Allocation);
     YDB_LOG_INFO("",
         {"event", "add"},
         {"id", Allocation->GetIdentifier()},
@@ -36,7 +36,11 @@ bool TAllocationInfo::Allocate(const NActors::TActorId& ownerId) {
         {"event", "allocated"},
         {"allocationId", Identifier},
         {"stage", Stage->GetName()});
-    AFL_VERIFY(Allocation)("status", GetAllocationStatus())("volume", AllocatedVolume)("id", Identifier)("stage", Stage->GetName());
+    YDB_LOG_VERIFY(Allocation,
+        {"status", GetAllocationStatus()},
+        {"volume", AllocatedVolume},
+        {"id", Identifier},
+        {"stage", Stage->GetName()});
     auto allocationResult = Stage->Allocate(AllocatedVolume);
     if (allocationResult.IsFail()) {
         AllocationFailed = true;
@@ -56,7 +60,7 @@ bool TAllocationInfo::Allocate(const NActors::TActorId& ownerId) {
 }
 
 void TAllocationInfo::SetAllocatedVolume(const ui64 value) {
-    AFL_VERIFY(GetAllocationStatus() == EAllocationStatus::Allocated);
+    YDB_LOG_VERIFY(GetAllocationStatus() == EAllocationStatus::Allocated);
     AllocatedVolume = value;
 }
 
@@ -73,7 +77,9 @@ bool TAllocationInfo::NeverFitsUnrestricted() const {
 }
 
 void TAllocationInfo::Fail(const TString& errorMessage) {
-    AFL_VERIFY(GetAllocationStatus() == EAllocationStatus::Waiting)("status", GetAllocationStatus())("id", Identifier);
+    YDB_LOG_VERIFY(GetAllocationStatus() == EAllocationStatus::Waiting,
+        {"status", GetAllocationStatus()},
+        {"id", Identifier});
     YDB_LOG_DEBUG("",
         {"event", "allocation_failed"},
         {"allocationId", Identifier},
@@ -106,7 +112,7 @@ TString TAllocationInfo::DebugString() const {
        << "  AllocationExternalGroupId=" << AllocationExternalGroupId << Endl
        << "  AllocatedVolume=" << AllocatedVolume << Endl
        << "  AllocationStatus=";
-    
+
     switch (GetAllocationStatus()) {
         case EAllocationStatus::Allocated:
             sb << "Allocated";
@@ -118,13 +124,13 @@ TString TAllocationInfo::DebugString() const {
             sb << "Failed";
             break;
     }
-    
+
     sb << Endl
        << "  AllocationTime=" << GetAllocationTime().ToString() << Endl
        << "  Stage=" << (Stage ? Stage->DebugString() : "null") << Endl
        << "  Allocation=" << (Allocation ? Allocation->DebugString() : "null") << Endl
        << "}";
-    
+
     return sb;
 }
 

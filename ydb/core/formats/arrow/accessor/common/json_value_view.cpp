@@ -24,7 +24,10 @@ NBinaryJson::TBinaryJson JsonValueToBinaryJsonVerified(const NJson::TJsonValue& 
     const auto dumpedJson = WriteJsonRoundTripSafe(json);
     auto result = NBinaryJson::SerializeToBinaryJson(dumpedJson);
     if (std::holds_alternative<TString>(result)) {
-        AFL_VERIFY(false)("error", std::get<TString>(result))("type", json.GetType())("input_dump", EscapeC(dumpedJson));
+        YDB_LOG_VERIFY(false,
+            {"error", std::get<TString>(result)},
+            {"type", json.GetType()},
+            {"inputDump", EscapeC(dumpedJson)});
     }
     return std::get<NBinaryJson::TBinaryJson>(std::move(result));
 }
@@ -114,7 +117,7 @@ NJson::TJsonValue TJsonValueView::ToJsonValue() const {
         case EKind::BinaryJson: {
             const auto text = NBinaryJson::SerializeToJson(Bytes);
             NJson::TJsonValue result;
-            AFL_VERIFY(NJson::ReadJsonTree(text, &result));
+            YDB_LOG_VERIFY(NJson::ReadJsonTree(text, &result));
             return result;
         }
         case EKind::String:

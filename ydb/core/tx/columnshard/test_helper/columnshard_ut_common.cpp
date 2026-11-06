@@ -139,12 +139,12 @@ std::optional<TPlanStep> ProposeSchemaTxOptional(TTestBasicRuntime& runtime, TAc
 
 void ProposeSchemaTxFail(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {
     const auto result = ProposeSchemaTxOptional(runtime, sender, txBody, txId);
-    AFL_VERIFY(!result);
+    YDB_LOG_VERIFY(!result);
 }
 
 TPlanStep ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId) {
     const auto result = ProposeSchemaTxOptional(runtime, sender, txBody, txId);
-    AFL_VERIFY(result);
+    YDB_LOG_VERIFY(result);
     return *result;
 }
 
@@ -252,7 +252,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
 
     record.SetTxId(snap.GetPlanStep());
     record.SetScanId(scanId);
-    AFL_VERIFY(!pathIds.empty());
+    YDB_LOG_VERIFY(!pathIds.empty());
     record.SetLocalPathId(pathIds[0]);
     record.SetTablePath("/.sys/store_primary_index_portion_stats");
 
@@ -306,7 +306,9 @@ TPlanStep ProposeCommit(
     TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
     const auto now = runtime.GetTimeProvider()->Now();
     return ProposeCommitCheck(runtime, sender, shardId, txId, writeIds, lockId, [&](auto& res) {
-        AFL_VERIFY(res.GetTxId() == txId)("tx_id", txId)("res", res.GetTxId());
+        YDB_LOG_VERIFY(res.GetTxId() == txId,
+            {"txId", txId},
+            {"res", res.GetTxId()});
         UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
         UNIT_ASSERT_LE(now.MilliSeconds(), res.GetMinStep());
         UNIT_ASSERT_UNEQUAL(res.GetMaxStep(), std::numeric_limits<ui64>::max());
@@ -681,15 +683,15 @@ NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& 
         auto& type = ydbSchema[i].GetType();
 
         columns[id] = NTable::TColumn(name, id, type, "");
-        AFL_VERIFY(columnIdByName.emplace(name, id).second);
+        YDB_LOG_VERIFY(columnIdByName.emplace(name, id).second);
     }
 
     std::vector<ui32> pkIds;
     ui32 idx = 0;
     for (const auto& c : key) {
         auto it = columnIdByName.FindPtr(c.GetName());
-        AFL_VERIFY(it);
-        AFL_VERIFY(*it < columns.size());
+        YDB_LOG_VERIFY(it);
+        YDB_LOG_VERIFY(*it < columns.size());
         columns[*it].KeyOrder = idx++;
         pkIds.push_back(*it);
     }

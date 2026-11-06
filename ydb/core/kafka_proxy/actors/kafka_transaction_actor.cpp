@@ -229,7 +229,10 @@ namespace NKafka {
                 HandleCommitResponse(ctx);
                 break;
             default:
-                AFL_ENSURE(false)("reason", "Unexpected KQP request")("request", GetAsStr(LastSentToKqpRequest))("database", DatabasePath);
+                YDB_LOG_ENSURE(false,
+                    {"reason", "Unexpected KQP request"},
+                    {"request", GetAsStr(LastSentToKqpRequest)},
+                    {"database", DatabasePath});
         }
     }
 

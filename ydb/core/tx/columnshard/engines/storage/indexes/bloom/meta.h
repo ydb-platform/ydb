@@ -52,7 +52,7 @@ public:
         : TBase(indexId, indexName, columnId, storageId, inheritPortionStorage, dataExtractor, bitsStorageConstructor)
         , Request(request)
     {
-        AFL_VERIFY(Initialize());
+        YDB_LOG_VERIFY(Initialize());
     }
 
     virtual TString GetClassName() const override {

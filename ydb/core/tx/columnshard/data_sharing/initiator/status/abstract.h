@@ -37,7 +37,7 @@ public:
         : Status(status)
         , SessionId(sessionId)
     {
-        AFL_VERIFY(SessionId);
+        YDB_LOG_VERIFY(SessionId);
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TInitiator::TStatus& proto) {

@@ -61,7 +61,8 @@ size_t FilterTest(const std::vector<std::shared_ptr<arrow::Array>>& args, const 
     }
 
     sds->ReturnResources(chain->Apply(*sds, sds->ExtractResources()).DetachResult());
-    AFL_VERIFY(sds->GetResources().GetColumnsCount() == 2)("count", sds->GetResources().GetColumnsCount());
+    YDB_LOG_VERIFY(sds->GetResources().GetColumnsCount() == 2,
+        {"count", sds->GetResources().GetColumnsCount()});
     return sds->GetResources().GetRecordsCountActualVerified();
 }
 
@@ -106,7 +107,7 @@ std::vector<bool> LikeTest(const std::vector<std::string>& data, EOperation op, 
     TSchemaColumnResolver resolver(schema);
 
     NOptimization::TGraph::TBuilder builder(resolver);
-    builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(2), 
+    builder.Add(TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1}), TColumnChainInfo(2),
         std::make_shared<TSimpleFunction>(op, std::make_shared<arrow::compute::MatchSubstringOptions>(pattern, ignoreCase)), std::make_shared<TSimpleKernelLogic>()).DetachResult());
     builder.Add(std::make_shared<TProjectionProcessor>(TColumnChainInfo::BuildVector({ 2 })));
     auto chain = builder.Finish().DetachResult();
@@ -121,7 +122,7 @@ std::vector<bool> LikeTest(const std::vector<std::string>& data, EOperation op, 
     sds->ReturnResources(chain->Apply(*sds, sds->ExtractResources()).DetachResult());
     UNIT_ASSERT_VALUES_EQUAL(sds->GetResources().GetColumnsCount(), 1);
     auto arr = sds->GetResources().GetAccessorVerified(2)->GetChunkedArray();
-    AFL_VERIFY(arr->type()->id() == arrow::boolean()->id());
+    YDB_LOG_VERIFY(arr->type()->id() == arrow::boolean()->id());
     std::vector<bool> vec;
     for (auto&& i : arr->chunks()) {
         auto& resColumn = static_cast<const arrow::BooleanArray&>(*i);
@@ -157,7 +158,7 @@ struct TSumData {
             UNIT_ASSERT(!batch.HasData());
             return;
         } else {
-            AFL_VERIFY(batch.GetColumnsCount() == numKeys + 2);
+            YDB_LOG_VERIFY(batch.GetColumnsCount() == numKeys + 2);
         }
 
         auto aggXOriginal = batch.GetArrayVerified(3);
@@ -651,15 +652,16 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         }
         sds->ReturnResources(chain->Apply(*sds, sds->ExtractResources()).DetachResult());
 
-        AFL_VERIFY(sds->GetResources().GetColumnsCount() == 2);
-        AFL_VERIFY(sds->GetResources().GetRecordsCountActualVerified() == 2);
+        YDB_LOG_VERIFY(sds->GetResources().GetColumnsCount() == 2);
+        YDB_LOG_VERIFY(sds->GetResources().GetRecordsCountActualVerified() == 2);
     }
 
     Y_UNIT_TEST(TestValueFromNull) {
         arrow::UInt32Builder sb;
         sb.AppendNulls(10).ok();
         auto arr = std::dynamic_pointer_cast<arrow::UInt32Array>(*sb.Finish());
-        AFL_VERIFY(arr->Value(0) == 0)("val", arr->Value(0));
+        YDB_LOG_VERIFY(arr->Value(0) == 0,
+            {"val", arr->Value(0)});
     }
 
     Y_UNIT_TEST(MergeFilterSimple) {
@@ -674,12 +676,14 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
 
         auto chain = BuildMergeFilterSimpleGraph(false);
         Cerr << chain->DebugDOT() << Endl;
-        AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:1;];SUB:[AssembleOriginalData:1;];")("debug", chain->DebugStats());
+        YDB_LOG_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:1;];SUB:[AssembleOriginalData:1;];",
+            {"debug", chain->DebugStats()});
     }
 
     Y_UNIT_TEST(MergeFilterSimpleIndexMemory) {
         auto chain = BuildMergeFilterSimpleGraph(true);
-        AFL_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:2;];SUB:[AssembleOriginalData:1;];")("debug", chain->DebugStats());
+        YDB_LOG_VERIFY(chain->DebugStats() == "[TOTAL:Const:2;Calculation:4;Projection:1;Filter:1;FetchOriginalData:2;AssembleOriginalData:3;CheckIndexData:1;StreamLogic:1;ReserveMemory:2;];SUB:[AssembleOriginalData:1;];",
+            {"debug", chain->DebugStats()});
         UNIT_ASSERT_VALUES_EQUAL(CountIndexReservesWiredToIndexFetch(chain), 1);
     }
 

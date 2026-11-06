@@ -40,10 +40,10 @@ void TOlapOptionsDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
         CacheBlobsAfterWrite = tableSchema.GetOptions().GetCacheBlobsAfterWrite();
     }
     if (tableSchema.GetOptions().HasCompactionPlannerConstructor()) {
-        AFL_VERIFY(CompactionPlannerConstructor.DeserializeFromProto(tableSchema.GetOptions().GetCompactionPlannerConstructor()));
+        YDB_LOG_VERIFY(CompactionPlannerConstructor.DeserializeFromProto(tableSchema.GetOptions().GetCompactionPlannerConstructor()));
     }
     if (tableSchema.GetOptions().HasMetadataManagerConstructor()) {
-        AFL_VERIFY(MetadataManagerConstructor.DeserializeFromProto(tableSchema.GetOptions().GetMetadataManagerConstructor()));
+        YDB_LOG_VERIFY(MetadataManagerConstructor.DeserializeFromProto(tableSchema.GetOptions().GetMetadataManagerConstructor()));
     }
     if (tableSchema.GetOptions().HasInsertOptions()) {
         const auto& options = tableSchema.GetOptions().GetInsertOptions();

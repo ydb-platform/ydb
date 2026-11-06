@@ -220,7 +220,8 @@ public:
 
     std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const TInternalPathId pathId) const {
         auto result = GetGranuleOptional(pathId);
-        AFL_VERIFY(result)("path_id", pathId);
+        YDB_LOG_VERIFY(result,
+            {"pathId", pathId});
         return result;
     }
 
@@ -241,7 +242,7 @@ public:
     }
 
     void AddCleanupPortion(const TPortionInfo::TConstPtr& info) {
-        AFL_VERIFY(info->HasRemoveSnapshot());
+        YDB_LOG_VERIFY(info->HasRemoveSnapshot());
         CleanupPortions[info->GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
     }
 
@@ -254,7 +255,7 @@ public:
     template <class TModifier>
     void ModifyPortionOnComplete(const TPortionInfo::TConstPtr& portion, const TModifier& modifier) {
         auto exPortion = portion->MakeCopy();
-        AFL_VERIFY(portion);
+        YDB_LOG_VERIFY(portion);
         auto granule = GetGranulePtrVerified(portion->GetPathId());
         granule->ModifyPortionOnComplete(portion, modifier);
         Counters->AddPortion(*portion);

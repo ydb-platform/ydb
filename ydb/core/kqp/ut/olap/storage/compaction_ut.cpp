@@ -32,26 +32,26 @@ public:
     }
 
     TTestHelper& GetTestHelper() {
-        AFL_VERIFY(TestHelper);
+        YDB_LOG_VERIFY(TestHelper);
         return *TestHelper;
     }
 
     TLocalHelper& GetOlapHelper() {
-        AFL_VERIFY(OlapHelper);
+        YDB_LOG_VERIFY(OlapHelper);
         return *OlapHelper;
     }
 
     void SetCompaction(const TString& tablePath, uint64_t portionSize) {
         const TString alterQuery = fmt::format(R"(
                 ALTER OBJECT `{table_path}` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-                        {{"levels" : 
+                        {{"levels" :
                             [
                                 {{"class_name" : "Zero", "expected_blobs_size" : {portion_size}}},
                                 {{"class_name" : "Zero", "expected_blobs_size" : {portion_size}}}
                             ]
                         }}`);
-            )", 
-            "table_path"_a = tablePath, 
+            )",
+            "table_path"_a = tablePath,
             "portion_size"_a = portionSize);
         auto result = GetQueryClient().ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -73,9 +73,9 @@ public:
             const TString selectQuery = fmt::format(R"(
                     SELECT
                         TierName
-                    FROM `{table_path}/.sys/primary_index_portion_stats` 
+                    FROM `{table_path}/.sys/primary_index_portion_stats`
                     WHERE TierName != "__DEFAULT"
-                )", 
+                )",
                 "table_path"_a = tablePath);
             auto result = GetQueryClient().ExecuteQuery(selectQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -91,9 +91,9 @@ public:
         const TString selectQuery = fmt::format(R"(
                 SELECT
                     TierName, ColumnBlobBytes
-                FROM `{table_path}/.sys/primary_index_portion_stats` 
+                FROM `{table_path}/.sys/primary_index_portion_stats`
                 WHERE TierName != "__DEFAULT"
-            )", 
+            )",
             "table_path"_a = tablePath);
         auto result = GetQueryClient().ExecuteQuery(selectQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -102,8 +102,8 @@ public:
         while (resultSet.TryNextRow()) {
             auto tierName = resultSet.ColumnParser(0).GetOptionalUtf8().value_or("");
             auto columnBlobSize = resultSet.ColumnParser(1).GetOptionalUint64().value_or(0);
-            UNIT_ASSERT_C(leftBorder <= columnBlobSize && columnBlobSize <= rightBorder, 
-                fmt::format("Tier size is not in range for {tier_name}: {left_border} <= {value} <= {right_border}", 
+            UNIT_ASSERT_C(leftBorder <= columnBlobSize && columnBlobSize <= rightBorder,
+                fmt::format("Tier size is not in range for {tier_name}: {left_border} <= {value} <= {right_border}",
                     "tier_name"_a = tierName,
                     "left_border"_a = leftBorder,
                     "value"_a = columnBlobSize,

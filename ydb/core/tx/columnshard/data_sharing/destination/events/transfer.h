@@ -53,7 +53,7 @@ public:
         const TTransferContext& context, const TVersionedIndex& index);
 
     void InitPortionIds(ui64* lastPortionId, const std::optional<TInternalPathId> pathId = {}) {
-        AFL_VERIFY(lastPortionId);
+        YDB_LOG_VERIFY(lastPortionId);
         for (auto&& i : Portions) {
             i->MutablePortionInfo().SetPortionId(++*lastPortionId);
             if (pathId) {

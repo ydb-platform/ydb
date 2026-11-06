@@ -157,7 +157,7 @@ void FillReadBlobs(TWritePortionInfoWithBlobsResult& portion, NBlobOperations::N
         const TString& data = blob.GetResultBlob();
         for (auto&& chunkAddress : blob.GetChunks()) {
             const auto* recordInfo = portion.GetPortionResult().GetRecordPointer(chunkAddress);
-            AFL_VERIFY(recordInfo);
+            YDB_LOG_VERIFY(recordInfo);
             const auto range = portion.GetPortionResult().RestoreBlobRange(recordInfo->GetBlobRange());
             blobs.Add(IStoragesManager::DefaultStorageId, range, data.substr(range.Offset, range.Size));
         }

@@ -90,7 +90,7 @@ public:
             return;
         }
         for (auto&& i : ids.GetColumnIds()) {
-            AFL_VERIFY(Control[i].emplace(memType).second);
+            YDB_LOG_VERIFY(Control[i].emplace(memType).second);
         }
         Packs.emplace_back(ids, memType);
     }
@@ -134,8 +134,8 @@ public:
         : TBase("ASSEMBLER" + (specName ? "::" + specName : ""))
         , Columns(columns)
     {
-        AFL_VERIFY(Columns);
-        AFL_VERIFY(Columns->GetColumnsCount());
+        YDB_LOG_VERIFY(Columns);
+        YDB_LOG_VERIFY(Columns->GetColumnsCount());
     }
 };
 
@@ -170,8 +170,8 @@ public:
         : TBase("OPTIONAL_ASSEMBLER" + (specName ? "::" + specName : ""))
         , Columns(columns)
     {
-        AFL_VERIFY(Columns);
-        AFL_VERIFY(Columns->GetColumnsCount());
+        YDB_LOG_VERIFY(Columns);
+        YDB_LOG_VERIFY(Columns->GetColumnsCount());
     }
 };
 
@@ -196,7 +196,7 @@ public:
         : TBase("FETCHING_COLUMNS")
         , Columns(columns)
     {
-        AFL_VERIFY(Columns.GetColumnsCount());
+        YDB_LOG_VERIFY(Columns.GetColumnsCount());
     }
 };
 

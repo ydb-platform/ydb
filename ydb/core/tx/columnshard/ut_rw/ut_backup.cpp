@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             Cerr << "waiting " << title << Endl;
             runtime.SimulateSleep(TDuration::Seconds(1));
         }
-        AFL_VERIFY(checker());
+        YDB_LOG_VERIFY(checker());
     }
 
     Y_UNIT_TEST(ProposeBackup) {
@@ -193,9 +193,9 @@ Y_UNIT_TEST_SUITE(Backup) {
         col3.SetName("field");
         col3.SetType("Utf8");
         table.MutableSelf();
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
+        YDB_LOG_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
+        YDB_LOG_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
         SubscribeTxCompletion(runtime, sender, txId);
         PlanTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
         WaitNotifyTxCompletions(runtime, sender, { txId });
@@ -308,7 +308,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         col3_2.SetType("Utf8");
         table2.MutableSelf();
 
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
+        YDB_LOG_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
 
         // Propose both backups before waiting for propose results to let export actors run in parallel.
         ui64 backupTxId1 = ++txId;
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         UNIT_ASSERT(backupPlanStep1);
         UNIT_ASSERT(backupPlanStep2);
 
-        AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 2);
+        YDB_LOG_VERIFY(csControllerGuard->GetFinishedExportsCount() == 2);
 
         // Subscribe to both backups before planning to let them run in parallel.
         SubscribeTxCompletion(runtime, sender, backupTxId1);

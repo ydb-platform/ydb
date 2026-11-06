@@ -21,7 +21,7 @@ namespace NKikimr::NOlap::NReader::NCommon {
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 bool TStepAction::DoApply(IDataReader& owner) {
-    AFL_VERIFY(FinishedFlag);
+    YDB_LOG_VERIFY(FinishedFlag);
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"event", "apply"});
     auto& source = SourceLease->GetSource();
@@ -44,7 +44,7 @@ TConclusion<bool> TStepAction::DoExecuteImpl() {
     }
     if (result->IsPending()) {
         auto job = std::dynamic_pointer_cast<IAsyncJob>(result->ExtractPendingJob());
-        AFL_VERIFY(job);
+        YDB_LOG_VERIFY(job);
         job->Start(std::move(SourceLease));
         return false;
     }
@@ -53,7 +53,7 @@ TConclusion<bool> TStepAction::DoExecuteImpl() {
 }
 
 void TStepAction::OnFinished() {
-    AFL_VERIFY(!FinishedFlag);
+    YDB_LOG_VERIFY(!FinishedFlag);
     FinishedFlag = true;
     CacheSourceStats();
 }
@@ -268,7 +268,7 @@ TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(IDataSource& source
             continue;
         }
         const ui32 nodeId = iterator->GetCurrentNodeId();
-        AFL_VERIFY(visitor->GetExecutionNode()->GetIdentifier() == nodeId);
+        YDB_LOG_VERIFY(visitor->GetExecutionNode()->GetIdentifier() == nodeId);
         const TString categoryName = iterator->GetCurrentNode().GetSignalCategoryName();
         const auto processor = iterator->GetProcessorVerified();
         const auto& signals = GetSignals(nodeId);
@@ -308,7 +308,8 @@ TConclusion<TExecutionResult> TProgramStep::DoExecuteInplace(IDataSource& source
 
 const std::shared_ptr<TFetchingStepSignals>& TProgramStep::GetSignals(const ui32 nodeId) const {
     auto it = Signals.find(nodeId);
-    AFL_VERIFY(it != Signals.end())("node_id", nodeId);
+    YDB_LOG_VERIFY(it != Signals.end(),
+        {"nodeId", nodeId});
     return it->second;
 }
 

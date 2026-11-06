@@ -22,7 +22,7 @@ private:
 
 public:
     const TPortionInfo::TConstPtr& GetPortion() const {
-        AFL_VERIFY(Portion);
+        YDB_LOG_VERIFY(Portion);
         return Portion;
     }
 
@@ -61,7 +61,7 @@ public:
     }
 
     bool operator<(const TOrderedPortion& item) const {
-        AFL_VERIFY(Portion->GetPathId() == item.Portion->GetPathId());
+        YDB_LOG_VERIFY(Portion->GetPathId() == item.Portion->GetPathId());
         auto cmp = Start.CompareNotNull(item.Start);
         if (cmp == std::partial_ordering::equivalent) {
             return Portion->GetPortionId() < item.Portion->GetPortionId();
@@ -71,7 +71,7 @@ public:
     }
 
     bool operator==(const TOrderedPortion& item) const {
-        AFL_VERIFY(Portion->GetPathId() == item.Portion->GetPathId());
+        YDB_LOG_VERIFY(Portion->GetPathId() == item.Portion->GetPathId());
         return Portion->GetPortionId() == item.Portion->GetPortionId();
     }
 };
@@ -123,7 +123,7 @@ public:
             return TChainAddress(Portions.front()->GetPortionId(),
                 NotIncludedNextPortion ? NotIncludedNextPortion->GetPortionId() : Portions.back()->GetPortionId(), !!NotIncludedNextPortion);
         } else {
-            AFL_VERIFY(NotIncludedNextPortion);
+            YDB_LOG_VERIFY(NotIncludedNextPortion);
             return TChainAddress(NotIncludedNextPortion->GetPortionId(), NotIncludedNextPortion->GetPortionId(), true);
         }
     }
@@ -134,7 +134,7 @@ public:
         , NotIncludedNextPortion(notIncludedNextPortion)
         , ConsistBlockedPortions(consistBlockedPortions)
     {
-        AFL_VERIFY(Portions.size() || !!NotIncludedNextPortion || ConsistBlockedPortions);
+        YDB_LOG_VERIFY(Portions.size() || !!NotIncludedNextPortion || ConsistBlockedPortions);
     }
 };
 
@@ -173,7 +173,7 @@ public:
     }
 
     void SetStopSeparation(const NArrow::TSimpleRow& point) {
-        AFL_VERIFY(!StopSeparation);
+        YDB_LOG_VERIFY(!StopSeparation);
         StopSeparation = point;
     }
 
@@ -252,8 +252,8 @@ public:
     std::vector<NArrow::NMerger::TSortableBatchPosition> GetFinishPoints(const bool withMoved);
 
     void AddCurrentLevelPortion(const TPortionInfo::TConstPtr& portion, std::optional<TPortionsChain>&& chain, const bool repackMoved) {
-        AFL_VERIFY(UsedPortionIds.emplace(portion->GetPortionId()).second);
-        AFL_VERIFY(CurrentLevelPortionIds.emplace(portion->GetPortionId()).second);
+        YDB_LOG_VERIFY(UsedPortionIds.emplace(portion->GetPortionId()).second);
+        YDB_LOG_VERIFY(CurrentLevelPortionIds.emplace(portion->GetPortionId()).second);
         Portions.emplace_back(portion);
         CurrentLevelPortionsInfo.AddPortion(portion);
         if (repackMoved || (chain && chain->GetPortions().size())) {
@@ -268,13 +268,13 @@ public:
                 Chains.emplace_back(std::move(*chain));
                 for (auto&& i : Chains.back().GetPortions()) {
                     if (!UsedPortionIds.emplace(i->GetPortionId()).second) {
-                        AFL_VERIFY(NextLevelPortionIds.contains(i->GetPortionId()));
+                        YDB_LOG_VERIFY(NextLevelPortionIds.contains(i->GetPortionId()));
                         continue;
                     }
                     TargetLevelPortionsInfo.AddPortion(i);
                     Portions.emplace_back(i);
                     MemoryUsage = Predictor->AddPortion(i);
-                    AFL_VERIFY(NextLevelPortionIds.emplace(i->GetPortionId()).second);
+                    YDB_LOG_VERIFY(NextLevelPortionIds.emplace(i->GetPortionId()).second);
                 }
             }
         }
@@ -417,12 +417,12 @@ public:
     }
 
     const TSimplePortionsGroupInfo& GetPortionsInfo() const {
-        AFL_VERIFY(PortionsInfo);
+        YDB_LOG_VERIFY(PortionsInfo);
         return *PortionsInfo;
     }
 
     TSimplePortionsGroupInfo& MutablePortionsInfo() {
-        AFL_VERIFY(PortionsInfo);
+        YDB_LOG_VERIFY(PortionsInfo);
         return *PortionsInfo;
     }
 
@@ -468,13 +468,13 @@ public:
         ui32 idx = 0;
         for (auto&& i : selectors) {
             if (i->GetName() == defaultSelectorName) {
-                AFL_VERIFY(!DefaultPortionsSelector);
+                YDB_LOG_VERIFY(!DefaultPortionsSelector);
                 DefaultPortionsSelector = i;
                 PortionsInfo = &SelectivePortionsInfo[idx];
             }
             ++idx;
         }
-        AFL_VERIFY(DefaultPortionsSelector);
+        YDB_LOG_VERIFY(DefaultPortionsSelector);
     }
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const = 0;
@@ -559,7 +559,7 @@ public:
     }
 
     std::vector<TCompactionTaskData> GetOptimizationTasks(const TMayUsePortion& mayUsePortion) const {
-        AFL_VERIFY(NextLevel);
+        YDB_LOG_VERIFY(NextLevel);
         std::vector<TCompactionTaskData> result = DoGetOptimizationTasks(mayUsePortion);
         return result;
     }

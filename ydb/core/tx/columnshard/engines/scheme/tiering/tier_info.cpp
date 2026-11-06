@@ -67,7 +67,7 @@ std::optional<TInstant> TTierInfo::ScalarToInstant(const std::shared_ptr<arrow::
 
 TTiering::TTieringContext TTiering::GetTierToMove(
     const std::shared_ptr<arrow::Scalar>& max, const TInstant now, const bool skipEviction, NScheme::TTypeId columnType) const {
-    AFL_VERIFY(OrderedTiers.size());
+    YDB_LOG_VERIFY(OrderedTiers.size());
     std::optional<TString> nextTierName;
     std::optional<TDuration> nextTierDuration;
     for (auto& tierRef : GetOrderedTiers()) {

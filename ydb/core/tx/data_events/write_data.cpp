@@ -13,7 +13,7 @@ TWriteData::TWriteData(const std::shared_ptr<TWriteMeta>& writeMeta, IDataContai
     , Data(data)
     , PrimaryKeySchema(primaryKeySchema)
     , BlobsAction(blobsAction) {
-    AFL_VERIFY(WriteMeta);
+    YDB_LOG_VERIFY(WriteMeta);
     Y_ABORT_UNLESS(Data);
     Y_ABORT_UNLESS(PrimaryKeySchema);
     Y_ABORT_UNLESS(BlobsAction);

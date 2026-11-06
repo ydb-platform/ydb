@@ -12,8 +12,8 @@ public:
         YDB_ACCESSOR_DEF(std::set<ui32>, AppropriateMods);
     public:
         bool operator<(const TModuloShardingTablet& item) const {
-            AFL_VERIFY(AppropriateMods.size());
-            AFL_VERIFY(item.AppropriateMods.size());
+            YDB_LOG_VERIFY(AppropriateMods.size());
+            YDB_LOG_VERIFY(item.AppropriateMods.size());
             return *AppropriateMods.begin() < *item.AppropriateMods.begin();
         }
 
@@ -65,8 +65,8 @@ public:
     }
 
     THashMap<ui64, std::vector<ui32>> MakeShardingWrite(const std::vector<ui64>& hashes) const {
-        AFL_VERIFY(PartsCount);
-        AFL_VERIFY(IndexConstructed);
+        YDB_LOG_VERIFY(PartsCount);
+        YDB_LOG_VERIFY(IndexConstructed);
         std::vector<std::vector<ui32>> result;
         result.resize(ActiveWriteSpecialSharding.size());
         THashMap<ui64, std::vector<ui32>> resultHash;
@@ -95,7 +95,7 @@ public:
     }
 
     bool CheckUnifiedDistribution(const ui32 summaryShardsCount, std::vector<ui64>& orderedShardIds) {
-        AFL_VERIFY(IndexConstructed);
+        YDB_LOG_VERIFY(IndexConstructed);
         NKikimrSchemeOp::TColumnTableSharding proto;
         SerializeToProto(proto);
         YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
@@ -134,7 +134,9 @@ public:
             orderedTabletIdsLocal.emplace_back(i.GetTabletId());
             ++idx;
         }
-        AFL_VERIFY(orderedTabletIdsLocal.size() == summaryShardsCount)("ordered", orderedTabletIdsLocal.size())("summary", summaryShardsCount);
+        YDB_LOG_VERIFY(orderedTabletIdsLocal.size() == summaryShardsCount,
+            {"ordered", orderedTabletIdsLocal.size()},
+            {"summary", summaryShardsCount});
         std::swap(orderedTabletIdsLocal, orderedShardIds);
         return true;
     }
@@ -145,7 +147,7 @@ public:
 
     TConclusionStatus BuildActivityIndex(const std::set<ui64>& closedWriteIds, const std::set<ui64>& closedReadIds) {
         if (SpecialSharding.empty()) {
-            AFL_VERIFY(!PartsCount);
+            YDB_LOG_VERIFY(!PartsCount);
             return TConclusionStatus::Success();
         }
         ActiveReadSpecialSharding.clear();
@@ -155,7 +157,9 @@ public:
         std::set<ui32> modsWrite;
         for (auto&& i : SpecialSharding) {
             for (auto&& n : i.GetAppropriateMods()) {
-                AFL_VERIFY(n < PartsCount)("n", n)("parts_count", PartsCount);
+                YDB_LOG_VERIFY(n < PartsCount,
+                    {"n", n},
+                    {"partsCount", PartsCount});
                 if (!closedWriteIds.contains(i.GetTabletId())) {
                     modsWrite.emplace(n);
                 }
@@ -184,7 +188,7 @@ public:
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSharding& proto, const std::set<ui64>& closedWriteIds, const std::set<ui64>& closedReadIds) {
         IndexConstructed = false;
-        
+
         PartsCount = proto.GetHashSharding().GetModuloPartsCount();
         for (auto&& i : proto.GetHashSharding().GetTabletsForModulo()) {
             TModuloShardingTablet info;
@@ -194,7 +198,7 @@ public:
             }
             SpecialSharding.emplace_back(std::move(info));
         }
-        AFL_VERIFY(PartsCount || SpecialSharding.empty());
+        YDB_LOG_VERIFY(PartsCount || SpecialSharding.empty());
         return BuildActivityIndex(closedWriteIds, closedReadIds);
     }
 
@@ -204,12 +208,12 @@ public:
                 return i;
             }
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return Default<TModuloShardingTablet>();
     }
 
     void SerializeToProto(NKikimrSchemeOp::TColumnTableSharding& proto) const {
-        AFL_VERIFY(PartsCount);
+        YDB_LOG_VERIFY(PartsCount);
         proto.MutableHashSharding()->SetModuloPartsCount(PartsCount);
         for (auto&& i : SpecialSharding) {
             *proto.MutableHashSharding()->AddTabletsForModulo() = i.SerializeToProto();
@@ -243,7 +247,7 @@ public:
     void AddShardInfo(const TModuloShardingTablet& info) {
         IndexConstructed = false;
         for (auto&& i : SpecialSharding) {
-            AFL_VERIFY(i.GetTabletId() != info.GetTabletId());
+            YDB_LOG_VERIFY(i.GetTabletId() != info.GetTabletId());
         }
         SpecialSharding.emplace_back(info);
 
@@ -263,12 +267,12 @@ private:
     std::optional<TSpecificShardingInfo> SpecialShardingInfo;
 
     bool DeleteShardInfo(const ui64 tabletId) {
-        AFL_VERIFY(!!SpecialShardingInfo);
+        YDB_LOG_VERIFY(!!SpecialShardingInfo);
         return SpecialShardingInfo->DeleteShardInfo(tabletId);
     }
 
     bool UpdateShardInfo(const TSpecificShardingInfo::TModuloShardingTablet& info) {
-        AFL_VERIFY(SpecialShardingInfo);
+        YDB_LOG_VERIFY(SpecialShardingInfo);
         GetShardInfoVerified(info.GetTabletId()).IncrementVersion();
         if (SpecialShardingInfo->UpdateShardInfo(info)) {
             return true;
@@ -279,7 +283,7 @@ private:
                 return true;
             }
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return false;
     }
     virtual std::shared_ptr<IGranuleShardingLogic> DoGetTabletShardingInfoOptional(const ui64 tabletId) const override;
@@ -355,7 +359,7 @@ protected:
 
     }
     virtual void DoSerializeToProto(TProto& proto) const override {
-        AFL_VERIFY(PartsCount);
+        YDB_LOG_VERIFY(PartsCount);
         proto.MutableModulo()->SetModuloPartsCount(PartsCount);
         *proto.MutableModulo()->MutableHashing() = TBase::SerializeHashingToProto();
         *proto.MutableModulo()->MutableShardInfo() = Interval.SerializeToProto();
@@ -387,7 +391,7 @@ public:
         : TBase(columnNames)
         , PartsCount(partsCount)
         , Interval(interval) {
-        AFL_VERIFY(PartsCount);
+        YDB_LOG_VERIFY(PartsCount);
     }
 
     virtual TString GetClassName() const override {

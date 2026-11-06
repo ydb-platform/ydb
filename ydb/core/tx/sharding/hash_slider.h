@@ -54,7 +54,7 @@ public:
         , TsMin(0)
         , ChangePeriod(changePeriod.MicroSeconds())
     {
-        AFL_VERIFY(NumActive);
+        YDB_LOG_VERIFY(NumActive);
     }
 
     // tsMin = GetTsMin(tabletIdsMap, timestamp);

@@ -64,7 +64,7 @@ public:
         }
 
         TString ExtractBlob() {
-            AFL_VERIFY(!Finished);
+            YDB_LOG_VERIFY(!Finished);
             Finished = true;
             TString result;
             result.reserve(Size);
@@ -72,7 +72,9 @@ public:
                 result.append(i->GetData());
             }
             ChunksOrdered.clear();
-            AFL_VERIFY(result.size() == Size)("result", result.size())("expected", Size);
+            YDB_LOG_VERIFY(result.size() == Size,
+                {"result", result.size()},
+                {"expected", Size});
             return result;
         }
     };
@@ -84,11 +86,13 @@ private:
     explicit TWritePortionInfoWithBlobsConstructor(TPortionAccessorConstructor&& portionConstructor)
         : PortionConstructor(std::move(portionConstructor))
     {
-        AFL_VERIFY(!PortionConstructor->HaveBlobsData());
+        YDB_LOG_VERIFY(!PortionConstructor->HaveBlobsData());
     }
 
     TBlobInfo& MutableBlobInfoVerified(const ui32 blobIndex) {
-        AFL_VERIFY(blobIndex < Blobs.size())("index", blobIndex)("size", Blobs.size());
+        YDB_LOG_VERIFY(blobIndex < Blobs.size(),
+            {"index", blobIndex},
+            {"size", Blobs.size()});
         return Blobs[blobIndex];
     }
 
@@ -120,7 +124,7 @@ public:
     }
 
     TPortionAccessorConstructor& GetPortionConstructor() {
-        AFL_VERIFY(!!PortionConstructor);
+        YDB_LOG_VERIFY(!!PortionConstructor);
         return *PortionConstructor;
     }
 };
@@ -137,7 +141,7 @@ public:
 
     public:
         const TUnifiedBlobId& GetBlobIdVerified() const {
-            AFL_VERIFY(BlobId);
+            YDB_LOG_VERIFY(BlobId);
             return *BlobId;
         }
 
@@ -169,12 +173,12 @@ private:
             for (auto&& b : i.GetChunks()) {
                 if (b.GetEntityId() == entityId && b.GetChunkIdx() == chunkIdx) {
                     auto* recordInfo = GetPortionResult().GetRecordPointer(TChunkAddress(entityId, chunkIdx));
-                    AFL_VERIFY(recordInfo);
+                    YDB_LOG_VERIFY(recordInfo);
                     return recordInfo->GetBlobRange().GetBlobData(i.GetResultBlob());
                 }
             }
         }
-        AFL_VERIFY(false);
+        YDB_LOG_VERIFY(false);
         return "";
     }
 
@@ -217,14 +221,14 @@ public:
     }
 
     void FinalizePortionConstructor(const TSnapshot& finalizationSnapshot) {
-        AFL_VERIFY(!!PortionConstructor);
-        AFL_VERIFY(!PortionResult);
+        YDB_LOG_VERIFY(!!PortionConstructor);
+        YDB_LOG_VERIFY(!PortionResult);
         if (PortionConstructor->MutablePortionConstructor().GetType() == EPortionType::Compacted) {
             auto* cPortion = static_cast<TCompactedPortionInfoConstructor*>(&PortionConstructor->MutablePortionConstructor());
             if (!cPortion->GetAppearanceSnapshot()) {
                 cPortion->SetAppearanceSnapshot(finalizationSnapshot);
             } else {
-                AFL_VERIFY(cPortion->GetAppearanceSnapshot()->Valid());
+                YDB_LOG_VERIFY(cPortion->GetAppearanceSnapshot()->Valid());
             }
         }
         PortionResult = PortionConstructor->Build(true);
@@ -232,27 +236,27 @@ public:
     }
 
     const TPortionDataAccessor& GetPortionResult() const {
-        AFL_VERIFY(!PortionConstructor);
-        AFL_VERIFY(!!PortionResult);
-        AFL_VERIFY(!!*PortionResult);
+        YDB_LOG_VERIFY(!PortionConstructor);
+        YDB_LOG_VERIFY(!!PortionResult);
+        YDB_LOG_VERIFY(!!*PortionResult);
         return **PortionResult;
     }
 
     const std::shared_ptr<TPortionDataAccessor>& GetPortionResultPtr() const {
-        AFL_VERIFY(!PortionConstructor);
-        AFL_VERIFY(!!PortionResult);
-        AFL_VERIFY(!!*PortionResult);
+        YDB_LOG_VERIFY(!PortionConstructor);
+        YDB_LOG_VERIFY(!!PortionResult);
+        YDB_LOG_VERIFY(!!*PortionResult);
         return *PortionResult;
     }
 
     TPortionAccessorConstructor& GetPortionConstructor() {
-        AFL_VERIFY(!!PortionConstructor);
-        AFL_VERIFY(!PortionResult);
+        YDB_LOG_VERIFY(!!PortionConstructor);
+        YDB_LOG_VERIFY(!PortionResult);
         return *PortionConstructor;
     }
 
     std::shared_ptr<TPortionAccessorConstructor> DetachPortionConstructor() {
-        AFL_VERIFY(PortionConstructor);
+        YDB_LOG_VERIFY(PortionConstructor);
         return std::make_shared<TPortionAccessorConstructor>(std::move(*PortionConstructor));
     }
 };

@@ -24,7 +24,8 @@ public:
         : IndexIds(indexIds.begin(), indexIds.end())
         , IndexIdsSet(indexIds)
     {
-        AFL_VERIFY(IndexIds.size() == IndexIdsSet.size())("indexes", JoinSeq(",", IndexIds));
+        YDB_LOG_VERIFY(IndexIds.size() == IndexIdsSet.size(),
+            {"indexes", JoinSeq(",", IndexIds)});
     }
 
     TIndexesSet(const ui32& indexId)
@@ -193,7 +194,7 @@ public:
         : TBase(columnIds)
         , FullReadSchema(fullReadSchema)
     {
-        AFL_VERIFY(!!FullReadSchema);
+        YDB_LOG_VERIFY(!!FullReadSchema);
         Schema = FullReadSchema->GetIndexInfo().GetColumnsSchema(ColumnIds);
         Rebuild();
     }
@@ -202,18 +203,18 @@ public:
         : TBase(columnIds)
         , FullReadSchema(fullReadSchema)
     {
-        AFL_VERIFY(!!FullReadSchema);
+        YDB_LOG_VERIFY(!!FullReadSchema);
         Schema = FullReadSchema->GetIndexInfo().GetColumnsSchema(ColumnIds);
         Rebuild();
     }
 
     const ISnapshotSchema& GetFilteredSchemaVerified() const {
-        AFL_VERIFY(FilteredSchema);
+        YDB_LOG_VERIFY(FilteredSchema);
         return *FilteredSchema;
     }
 
     const std::shared_ptr<ISnapshotSchema>& GetFilteredSchemaPtrVerified() const {
-        AFL_VERIFY(FilteredSchema);
+        YDB_LOG_VERIFY(FilteredSchema);
         return FilteredSchema;
     }
 

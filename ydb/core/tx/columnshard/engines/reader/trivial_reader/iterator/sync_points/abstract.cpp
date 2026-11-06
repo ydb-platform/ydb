@@ -29,20 +29,22 @@ void ISyncPoint::OnSourcePrepared(std::unique_ptr<NCommon::TDataSourceLease> lea
         {"eventLog", source.GetEventsReport()},
         {"count", SourcesSequentially.size()},
         {"sourceIdx", source.GetSourceIdx()});
-    AFL_VERIFY(source.IsSyncSection())("source_idx", source.GetSourceIdx());
+    YDB_LOG_VERIFY(source.IsSyncSection(),
+        {"sourceIdx", source.GetSourceIdx()});
     InitSourceTracingMetrics(source);
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"event", "OnSourcePrepared"},
         {"sourceIdx", source.GetSourceIdx()},
         {"prepared", IsSourcePrepared(source)});
-    AFL_VERIFY(SourcesSequentially.size());
+    YDB_LOG_VERIFY(SourcesSequentially.size());
     const auto itEntry = FindIf(SourcesSequentially, [&](const TSourceEntry& entry) {
         return entry.SourceIdx == source.GetSourceIdx();
     });
-    AFL_VERIFY(itEntry != SourcesSequentially.end())("source_idx", source.GetSourceIdx());
-    AFL_VERIFY(!itEntry->Lease);
+    YDB_LOG_VERIFY(itEntry != SourcesSequentially.end(),
+        {"sourceIdx", source.GetSourceIdx()});
+    YDB_LOG_VERIFY(!itEntry->Lease);
     itEntry->Lease = std::move(lease);
-    AFL_VERIFY(itEntry != SourcesSequentially.begin() || IsPrepared(*itEntry));
+    YDB_LOG_VERIFY(itEntry != SourcesSequentially.begin() || IsPrepared(*itEntry));
     bool drain = true;
     while (drain && SourcesSequentially.size() && IsPrepared(SourcesSequentially.front())) {
         auto& front = SourcesSequentially.front();
@@ -140,22 +142,22 @@ TString ISyncPoint::DebugString() const {
 }
 
 void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainReadData& /*reader*/) {
-    AFL_VERIFY(PointIndex == continueAddress.GetSyncPointIndex());
-    AFL_VERIFY(SourcesSequentially.size() && SourcesSequentially.front().SourceIdx == continueAddress.GetSourceIdx())(
-                                                                                      "first_source_idx", SourcesSequentially.front().SourceIdx)(
-                                                                                      "continue_source_idx", continueAddress.GetSourceIdx());
+    YDB_LOG_VERIFY(PointIndex == continueAddress.GetSyncPointIndex());
+    YDB_LOG_VERIFY(SourcesSequentially.size() && SourcesSequentially.front().SourceIdx == continueAddress.GetSourceIdx(),
+        {"firstSourceIdx", SourcesSequentially.front().SourceIdx},
+        {"continueSourceIdx", continueAddress.GetSourceIdx()});
     YDB_LOG_CREATE_CONTEXT(
         {"syncPoint", GetPointName()},
         {"event", "continue_source"});
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"sourceIdx", SourcesSequentially.front().SourceIdx});
     auto& front = SourcesSequentially.front();
-    AFL_VERIFY(front.Lease);
+    YDB_LOG_VERIFY(front.Lease);
     IDataSource::ContinueCursor(std::move(front.Lease));
 }
 
 void ISyncPoint::AddSource(std::unique_ptr<NCommon::TDataSourceLease> lease) {
-    AFL_VERIFY(lease);
+    YDB_LOG_VERIFY(lease);
     auto& source = lease->GetSource();
     YDB_LOG_CREATE_CONTEXT(
         {"syncPoint", GetPointName()},
@@ -163,12 +165,14 @@ void ISyncPoint::AddSource(std::unique_ptr<NCommon::TDataSourceLease> lease) {
         {"tabletId", Context->GetCommonContext()->GetReadMetadata()->GetTabletId()});
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"sourceIdx", source.GetSourceIdx()});
-    AFL_VERIFY(!AbortFlag);
+    YDB_LOG_VERIFY(!AbortFlag);
     source.MutableAs<IDataSource>()->SetPurposeSyncPointIndex(GetPointIndex());
     // Sources arrive in increasing SourceIdx order, which is what keeps the result stream ordered.
     // Conflicting sources are scanned first and produce no rows, so they carry no place in that order.
     if (!source.IsConflicting()) {
-        AFL_VERIFY(!LastSourceIdx || *LastSourceIdx < source.GetSourceIdx())("idx_last", LastSourceIdx)("idx_new", source.GetSourceIdx());
+        YDB_LOG_VERIFY(!LastSourceIdx || *LastSourceIdx < source.GetSourceIdx(),
+            {"idxLast", LastSourceIdx},
+            {"idxNew", source.GetSourceIdx()});
         LastSourceIdx = source.GetSourceIdx();
     }
     if (auto toProcess = OnAddSource(std::move(lease))) {

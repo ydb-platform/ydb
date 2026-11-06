@@ -133,7 +133,7 @@ public:
         , Registry(std::move(registry))
         , MinSnapshotForNewReads(BuildRegistryMinSnapshotForNewReads(passedStep, lastCleanupSnapshot, Registry, longTxConfig))
     {
-        AFL_VERIFY(Registry);
+        YDB_LOG_VERIFY(Registry);
     }
 
     NOlap::TSnapshot GetMinSnapshotForNewReads() const override {
@@ -142,7 +142,7 @@ public:
 
     bool MayStartScanAt(const NOlap::TSnapshot& snapshot, const TSchemeShardLocalPathId& schemeShardLocalPathId) const override {
         if (const auto copySnapshot = PathIdTranslator.GetCopyVersionOptional(schemeShardLocalPathId)) {
-            AFL_VERIFY(*copySnapshot == snapshot);
+            YDB_LOG_VERIFY(*copySnapshot == snapshot);
             return true;
         }
         if (MinSnapshotForNewReads <= snapshot) {

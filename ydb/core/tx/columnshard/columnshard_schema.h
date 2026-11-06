@@ -1092,12 +1092,13 @@ public:
         PathId = TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexPortions::PathId>());
         PortionId = rowset.template GetValue<NColumnShard::Schema::IndexPortions::PortionId>();
         const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexPortions::Metadata>();
-        AFL_VERIFY(rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotPlanStep>() == rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotTxId>());
+        YDB_LOG_VERIFY(rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotPlanStep>() == rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotTxId>());
         if (rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotPlanStep>()) {
             DeprecatedMinSnapshot = NOlap::TSnapshot(rowset.template GetValue<NColumnShard::Schema::IndexPortions::MinSnapshotPlanStep>(),
                 rowset.template GetValue<NColumnShard::Schema::IndexPortions::MinSnapshotTxId>());
         }
-        AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
+        YDB_LOG_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()),
+            {"event", "cannot parse metadata as protobuf"});
     }
 };
 
@@ -1143,7 +1144,9 @@ public:
         , MinSnapshotDeprecated(rowset.template GetValue<NColumnShard::Schema::IndexColumns::PlanStep>(),
               rowset.template GetValue<NColumnShard::Schema::IndexColumns::TxId>())
     {
-        AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
+        YDB_LOG_VERIFY(Address.GetColumnId(),
+            {"event", "incorrect address"},
+            {"address", Address.DebugString()});
         TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Blob>();
         Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
         TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
@@ -1152,10 +1155,13 @@ public:
         BlobRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Size>();
         PathId = TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexColumns::PathId>());
         PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Portion>();
-        AFL_VERIFY(BlobRange.BlobId.IsValid() && BlobRange.Size)("event", "incorrect blob")("blob", BlobRange.ToString());
+        YDB_LOG_VERIFY(BlobRange.BlobId.IsValid() && BlobRange.Size,
+            {"event", "incorrect blob"},
+            {"blob", BlobRange});
 
         const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Metadata>();
-        AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
+        YDB_LOG_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()),
+            {"event", "cannot parse metadata as protobuf"});
     }
 };
 
@@ -1207,11 +1213,14 @@ public:
               rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::Offset>(),
               rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::Size>())
     {
-        AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
+        YDB_LOG_VERIFY(Address.GetColumnId(),
+            {"event", "incorrect address"},
+            {"address", Address.DebugString()});
         PathId = TInternalPathId::FromRawValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PathId>());
         PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PortionId>();
         const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::Metadata>();
-        AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
+        YDB_LOG_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()),
+            {"event", "cannot parse metadata as protobuf"});
     }
 };
 
@@ -1235,7 +1244,8 @@ public:
         const TString blobIdsProto = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::BlobIds>();
 
         NKikimrTxColumnShard::TIndexPortionBlobsInfo blobsProto;
-        AFL_VERIFY(blobsProto.ParseFromArray(blobIdsProto.data(), blobIdsProto.size()))("event", "cannot parse blobs data as protobuf");
+        YDB_LOG_VERIFY(blobsProto.ParseFromArray(blobIdsProto.data(), blobIdsProto.size()),
+            {"event", "cannot parse blobs data as protobuf"});
         for (auto&& i : blobsProto.GetBlobIds()) {
             TLogoBlobID logoBlobId = TLogoBlobID::FromBinary(i.data());
             BlobIds.emplace_back(NOlap::TUnifiedBlobId(dsGroupSelector.GetGroup(logoBlobId), logoBlobId));
@@ -1259,14 +1269,15 @@ public:
             : BlobIds(std::move(blobIds))
             , Records(std::move(records))
         {
-            AFL_VERIFY(BlobIds.size());
+            YDB_LOG_VERIFY(BlobIds.size());
         }
     };
 
     TBuildInfo CreateBuildInfo() {
         std::vector<TColumnChunkLoadContextV1> records;
         NKikimrTxColumnShard::TIndexPortionAccessor metaProto;
-        AFL_VERIFY(metaProto.ParseFromArray(MetadataProto.data(), MetadataProto.size()))("event", "cannot parse metadata as protobuf");
+        YDB_LOG_VERIFY(metaProto.ParseFromArray(MetadataProto.data(), MetadataProto.size()),
+            {"event", "cannot parse metadata as protobuf"});
         for (auto&& i : metaProto.GetChunks()) {
             TColumnChunkLoadContextV1 result(PathId, PortionId, TChunkAddress(i.GetSSColumnId(), i.GetChunkIdx()),
                 TBlobRangeLink16::BuildFromProto(i.GetBlobRangeLink()).DetachResult(), i.GetChunkMetadata());
@@ -1298,7 +1309,7 @@ public:
         } else if (BlobRangeAddress) {
             return BlobRangeAddress->GetSize();
         } else {
-            AFL_VERIFY(!!BlobData);
+            YDB_LOG_VERIFY(!!BlobData);
             return BlobData->size();
         }
     }
@@ -1308,7 +1319,7 @@ public:
     }
 
     TIndexChunk BuildIndexChunk(const TBlobRangeLink16::TLinkId blobLinkId) const {
-        AFL_VERIFY(BlobRangeAddress);
+        YDB_LOG_VERIFY(BlobRangeAddress);
         return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, BlobRangeAddress->BuildLink(blobLinkId));
     }
 
@@ -1316,7 +1327,7 @@ public:
         if (BlobRangeLink16) {
             return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, *BlobRangeLink16);
         } else {
-            AFL_VERIFY(BlobData);
+            YDB_LOG_VERIFY(BlobData);
             return TIndexChunk(Address.GetColumnId(), Address.GetChunkIdx(), RecordsCount, RawBytes, *BlobData);
         }
     }
@@ -1327,13 +1338,13 @@ public:
         } else if (BlobRangeLink16) {
             return BuildIndexChunk();
         } else {
-            AFL_VERIFY(BlobRangeAddress);
+            YDB_LOG_VERIFY(BlobRangeAddress);
             for (ui32 i = 0; i < blobIds.size(); ++i) {
                 if (blobIds[i] == BlobRangeAddress->BlobId) {
                     return BuildIndexChunk(i);
                 }
             }
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
             return BuildIndexChunk();
         }
     }
@@ -1347,27 +1358,33 @@ public:
         , RecordsCount(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RecordsCount>())
         , RawBytes(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RawBytes>())
     {
-        AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
+        YDB_LOG_VERIFY(Address.GetColumnId(),
+            {"event", "incorrect address"},
+            {"address", Address.DebugString()});
         if (rowset.template HaveValue<NColumnShard::Schema::IndexIndexes::BlobIdx>()) {
             TBlobRangeLink16& bRange = BlobRangeLink16.emplace();
             bRange.BlobIdx = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::BlobIdx>();
             bRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Offset>();
             bRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Size>();
-            AFL_VERIFY(bRange.Size)("event", "incorrect blob")("blob", bRange.ToString());
+            YDB_LOG_VERIFY(bRange.Size,
+                {"event", "incorrect blob"},
+                {"blob", bRange});
         } else if (rowset.template HaveValue<NColumnShard::Schema::IndexIndexes::Blob>()) {
             TBlobRange& bRange = BlobRangeAddress.emplace();
             TString strBlobId = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Blob>();
             Y_ABORT_UNLESS(strBlobId.size() == sizeof(TLogoBlobID), "Size %" PRISZT "  doesn't match TLogoBlobID", strBlobId.size());
             TLogoBlobID logoBlobId((const ui64*)strBlobId.data());
-            AFL_VERIFY(dsGroupSelector);
+            YDB_LOG_VERIFY(dsGroupSelector);
             bRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
             bRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Offset>();
             bRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::Size>();
-            AFL_VERIFY(bRange.BlobId.IsValid() && bRange.Size)("event", "incorrect blob")("blob", bRange.ToString());
+            YDB_LOG_VERIFY(bRange.BlobId.IsValid() && bRange.Size,
+                {"event", "incorrect blob"},
+                {"blob", bRange});
         } else if (rowset.template HaveValue<NColumnShard::Schema::IndexIndexes::BlobData>()) {
             BlobData = rowset.template GetValue<NColumnShard::Schema::IndexIndexes::BlobData>();
         } else {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
     }
 };

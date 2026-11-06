@@ -12,13 +12,14 @@ namespace NKikimr::NColumnShard {
 NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFlightRequest(
     ui64 cookie, const NOlap::TVersionedIndex* /*index*/, const TInstant now) {
     auto it = RequestsMeta.find(cookie);
-    AFL_VERIFY(it != RequestsMeta.end())("cookie", cookie);
-    AFL_VERIFY(ActorIds.erase(cookie));
+    YDB_LOG_VERIFY(it != RequestsMeta.end(),
+        {"cookie", cookie});
+    YDB_LOG_VERIFY(ActorIds.erase(cookie));
     const NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase = it->second;
 
     {
         auto it = SnapshotsLive.find(readMetaBase->GetRequestSnapshot());
-        AFL_VERIFY(it != SnapshotsLive.end());
+        YDB_LOG_VERIFY(it != SnapshotsLive.end());
         Y_UNUSED(it->second.DelRequest(cookie, now));
     }
     Counters->OnSnapshotsInfo(SnapshotsLive.size(), GetOldestLiveSnapshot());
@@ -29,7 +30,7 @@ NOlap::NReader::TReadMetadataBase::TConstPtr TInFlightReadsTracker::ExtractInFli
 
 void TInFlightReadsTracker::AddToInFlightRequest(
     const ui64 cookie, NOlap::NReader::TReadMetadataBase::TConstPtr readMetaBase, const NOlap::TVersionedIndex* /*index*/) {
-    AFL_VERIFY(RequestsMeta.emplace(cookie, readMetaBase).second);
+    YDB_LOG_VERIFY(RequestsMeta.emplace(cookie, readMetaBase).second);
 }
 
 NOlap::TLocalActiveSnapshots TInFlightReadsTracker::GetActiveSnapshots(const NOlap::TSnapshot until) const {
@@ -77,7 +78,7 @@ public:
         , SaveSnapshots(std::move(saveSnapshots))
         , RemoveSnapshots(std::move(removeSnapshots))
     {
-        AFL_VERIFY(SaveSnapshots.size() || RemoveSnapshots.size());
+        YDB_LOG_VERIFY(SaveSnapshots.size() || RemoveSnapshots.size());
     }
 };
 }   // namespace
@@ -121,7 +122,7 @@ bool TInFlightReadsTracker::LoadFromDatabase(NTable::TDatabase& tableDB) {
     while (!rowset.EndOfSet()) {
         const NOlap::TSnapshot snapshot(
             rowset.GetValue<Schema::InFlightSnapshots::PlanStep>(), rowset.GetValue<Schema::InFlightSnapshots::TxId>());
-        AFL_VERIFY(SnapshotsLive.emplace(snapshot, TSnapshotLiveInfo::BuildFromDatabase(snapshot)).second);
+        YDB_LOG_VERIFY(SnapshotsLive.emplace(snapshot, TSnapshotLiveInfo::BuildFromDatabase(snapshot)).second);
 
         if (!rowset.Next()) {
             return false;

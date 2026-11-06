@@ -20,7 +20,12 @@ TWorkersPool::TWorkersPool(const TString& conveyorName, const NActors::TActorId&
         Workers.emplace_back(usage, std::make_unique<TWorker>(conveyorName, usage, distributorId, i, Counters.SendFwdHistogram, Counters.SendFwdDuration));
         MaxWorkerThreads += usage;
     }
-    AFL_VERIFY(WorkersCount)("name", conveyorName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)("count", WorkersCount);
+    YDB_LOG_VERIFY(WorkersCount,
+        {"name", conveyorName},
+        {"action", "conveyor_registered"},
+        {"config", config.DebugString()},
+        {"actorId", distributorId},
+        {"count", WorkersCount});
     Counters.AmountCPULimit->Set(0);
     Counters.AvailableWorkersCount->Set(0);
     Counters.WorkersCountLimit->Set(WorkersCount);
@@ -31,19 +36,19 @@ bool TWorkersPool::HasFreeWorker() const {
 }
 
 void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch) {
-    AFL_VERIFY(HasFreeWorker());
+    YDB_LOG_VERIFY(HasFreeWorker());
     const auto workerIdx = ActiveWorkersIdx.back();
     ActiveWorkersIdx.pop_back();
     Counters.AvailableWorkersCount->Set(ActiveWorkersIdx.size());
 
-    AFL_VERIFY(workerIdx < ActiveWorkersCount);
+    YDB_LOG_VERIFY(workerIdx < ActiveWorkersCount);
     auto& worker = Workers[workerIdx];
     worker.OnStartTask();
     TActivationContext::Send(worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch)));
 }
 
 void TWorkersPool::ReleaseWorker(const ui32 workerIdx) {
-    AFL_VERIFY(workerIdx < Workers.size());
+    YDB_LOG_VERIFY(workerIdx < Workers.size());
     Workers[workerIdx].OnStopTask();
     if (workerIdx < ActiveWorkersCount) {
         ActiveWorkersIdx.emplace_back(workerIdx);
@@ -56,7 +61,7 @@ void TWorkersPool::ChangeAmountCPULimit(const double delta) {
     if (std::abs(AmountCPULimit) < Eps) {
         AmountCPULimit = 0;
     }
-    AFL_VERIFY(AmountCPULimit >= 0);
+    YDB_LOG_VERIFY(AmountCPULimit >= 0);
     Counters.AmountCPULimit->Set(AmountCPULimit);
     Counters.ChangeCPULimitRate->Inc();
 
@@ -79,7 +84,7 @@ void TWorkersPool::ChangeAmountCPULimit(const double delta) {
         numberThreads -= worker.GetCPUSoftLimit();
         ++ActiveWorkersCount;
     }
-    AFL_VERIFY(std::abs(numberThreads) < Eps);
+    YDB_LOG_VERIFY(std::abs(numberThreads) < Eps);
 }
 
 TDistributor::TDistributor(const TConfig& config, const TString& conveyorName, const bool enableProcesses, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
@@ -169,7 +174,7 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
             {"count", tasks.size()});
         WorkersPool->RunTask(std::move(tasks));
     } else {
-        AFL_VERIFY(!WaitingTasksCount.Val() || !hasFreeWorker);
+        YDB_LOG_VERIFY(!WaitingTasksCount.Val() || !hasFreeWorker);
         YDB_LOG_DEBUG("",
             {"action", "return_worker"},
             {"id", evExt->Sender});
@@ -178,7 +183,7 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
-    AFL_VERIFY(EnableProcesses);
+    YDB_LOG_VERIFY(EnableProcesses);
     auto& event = *ev->Get();
     auto it = Processes.find(event.GetProcessId());
     LWPROBE(RegisterProcess, ConveyorName, event.GetProcessId(), WaitingTasksCount.Val());
@@ -192,19 +197,19 @@ void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
 
 void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     auto& event = *ev->Get();
-    AFL_VERIFY(EnableProcesses);
+    YDB_LOG_VERIFY(EnableProcesses);
     auto it = Processes.find(event.GetProcessId());
-    AFL_VERIFY(it != Processes.end());
+    YDB_LOG_VERIFY(it != Processes.end());
     LWPROBE(UnregisterProcess, ConveyorName, event.GetProcessId(), WaitingTasksCount.Val());
     if (it->second.DecRegistration()) {
         if (it->second.GetTasks().size()) {
-            AFL_VERIFY(ProcessesOrdered.erase(it->second.GetAddress(WorkersPool->GetAmountCPULimit())));
+            YDB_LOG_VERIFY(ProcessesOrdered.erase(it->second.GetAddress(WorkersPool->GetAmountCPULimit())));
         }
         const auto cpuGroup = it->second.GetCPUGroup();
         Processes.erase(it);
         if (cpuGroup->DecProcesses()) {
             ChangeAmountCPULimit(-cpuGroup->GetCPUThreadsLimit());
-            AFL_VERIFY(CPUGroups.erase(cpuGroup->GetName()));
+            YDB_LOG_VERIFY(CPUGroups.erase(cpuGroup->GetName()));
         }
     }
     Counters.ProcessesCount->Set(Processes.size());
@@ -265,7 +270,7 @@ void TDistributor::AddProcess(const ui64 processId, const TCPULimitsConfig& cpuL
     it->second->IncProcesses();
 
     ProcessesOrdered.clear();
-    AFL_VERIFY(Processes.emplace(processId, TProcess(processId, it->second)).second);
+    YDB_LOG_VERIFY(Processes.emplace(processId, TProcess(processId, it->second)).second);
     LastAddProcessInstant = TMonotonic::Now();
     const auto amountCPULimit = WorkersPool->GetAmountCPULimit();
     for (auto&& i : Processes) {
@@ -283,19 +288,19 @@ void TDistributor::AddCPUTime(const ui64 processId, const TDuration d) {
     }
     const auto amountCPULimit = WorkersPool->GetAmountCPULimit();
     if (it->second.GetTasks().size()) {
-        AFL_VERIFY(ProcessesOrdered.erase(it->second.GetAddress(amountCPULimit)));
+        YDB_LOG_VERIFY(ProcessesOrdered.erase(it->second.GetAddress(amountCPULimit)));
     }
     it->second.AddCPUTime(d);
     if (it->second.GetTasks().size()) {
-        AFL_VERIFY(ProcessesOrdered.emplace(it->second.GetAddress(amountCPULimit)).second);
+        YDB_LOG_VERIFY(ProcessesOrdered.emplace(it->second.GetAddress(amountCPULimit)).second);
     }
 }
 
 TWorkerTask TDistributor::PopTask() {
-    AFL_VERIFY(ProcessesOrdered.size());
+    YDB_LOG_VERIFY(ProcessesOrdered.size());
     auto it = Processes.find(ProcessesOrdered.begin()->GetProcessId());
-    AFL_VERIFY(it != Processes.end());
-    AFL_VERIFY(it->second.GetTasks().size());
+    YDB_LOG_VERIFY(it != Processes.end());
+    YDB_LOG_VERIFY(it->second.GetTasks().size());
     WaitingTasksCount.Dec();
     if (it->second.GetTasks().size() == 1) {
         ProcessesOrdered.erase(ProcessesOrdered.begin());
@@ -305,9 +310,9 @@ TWorkerTask TDistributor::PopTask() {
 
 void TDistributor::PushTask(const TWorkerTask& task) {
     auto it = Processes.find(task.GetProcessId());
-    AFL_VERIFY(it != Processes.end());
+    YDB_LOG_VERIFY(it != Processes.end());
     if (it->second.GetTasks().size() == 0) {
-        AFL_VERIFY(ProcessesOrdered.emplace(it->second.GetAddress(WorkersPool->GetAmountCPULimit())).second);
+        YDB_LOG_VERIFY(ProcessesOrdered.emplace(it->second.GetAddress(WorkersPool->GetAmountCPULimit())).second);
     }
     it->second.MutableTasks().push(task);
     WaitingTasksCount.Inc();

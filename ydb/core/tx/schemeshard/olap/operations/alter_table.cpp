@@ -53,7 +53,7 @@ public:
 
         for (auto& shard : txState->Shards) {
             const TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
-            AFL_VERIFY(shard.TabletType == ETabletType::ColumnShard);
+            YDB_LOG_VERIFY(shard.TabletType == ETabletType::ColumnShard);
             auto txShardString = update->GetShardTxBodyString((ui64)tabletId, seqNo);
             auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
                 update->GetShardTransactionKind(),

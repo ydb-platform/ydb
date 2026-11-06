@@ -103,7 +103,7 @@ public:
         }
 
         TGuard<TSpinLock> g(DuplicatesManagerLock);
-        AFL_VERIFY(!DuplicatesManager);
+        YDB_LOG_VERIFY(!DuplicatesManager);
     }
 };
 

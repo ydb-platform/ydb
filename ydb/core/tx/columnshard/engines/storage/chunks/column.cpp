@@ -7,7 +7,7 @@
 namespace NKikimr::NOlap::NChunks {
 
 void TChunkPreparation::DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const {
-    AFL_VERIFY(!bRange.IsValid());
+    YDB_LOG_VERIFY(!bRange.IsValid());
     TChunkMeta metaCopy = Record.GetMeta();
     TColumnRecord rec(GetChunkAddressVerified(), bRange, std::move(metaCopy));
     portionInfo.AppendOneChunkColumn(std::move(rec));

@@ -34,7 +34,7 @@ private:
         NKikimrTxColumnShard::TSchemaTxBody result;
         result.MutableSeqNo()->SetGeneration(seqNo.Generation);
         result.MutableSeqNo()->SetRound(seqNo.Round);
-        AFL_VERIFY(NewShardIds.contains(tabletId) || ModifiedShardIds.contains(tabletId) || DeleteShardIds.contains(tabletId));
+        YDB_LOG_VERIFY(NewShardIds.contains(tabletId) || ModifiedShardIds.contains(tabletId) || DeleteShardIds.contains(tabletId));
         if (NewShardIds.contains(tabletId)) {
             auto& alter = *result.MutableEnsureTables();
             auto& create = *alter.AddTables();
@@ -50,7 +50,7 @@ private:
                 shardingInfo.SetPathId(TargetInStoreTable->GetPathId().LocalPathId);
                 shardingInfo.SetVersionId(Sharding->GetShardInfoVerified(tabletId).GetShardingVersion());
                 *shardingInfo.MutableContainer() = container.SerializeToProto();
-                AFL_VERIFY(ModifiedShardIds.contains(tabletId));
+                YDB_LOG_VERIFY(ModifiedShardIds.contains(tabletId));
             }
         }
         return result.SerializeAsString();

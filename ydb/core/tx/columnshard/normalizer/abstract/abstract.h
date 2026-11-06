@@ -130,7 +130,7 @@ public:
     TTrivialNormalizerTask(const INormalizerChanges::TPtr& changes)
         : Changes(changes)
     {
-        AFL_VERIFY(Changes);
+        YDB_LOG_VERIFY(Changes);
     }
 
     void Start(const TNormalizationController& /* controller */, const TNormalizationContext& /*nCtx*/) override;
@@ -224,7 +224,7 @@ public:
 
         [[nodiscard]] ui64 DecActiveCounters() {
             const i64 result = AtomicDecrement(ActiveTasksCount);
-            AFL_VERIFY(result >= 0);
+            YDB_LOG_VERIFY(result >= 0);
             return result;
         }
 
@@ -237,7 +237,7 @@ public:
 
         ENormalizerSequentialId GetEnumSequentialIdVerified() const {
             auto type = GetEnumSequentialId();
-            AFL_VERIFY(!!type);
+            YDB_LOG_VERIFY(!!type);
             return *type;
         }
 
@@ -252,7 +252,7 @@ public:
 
         ui32 GetSequentialIdVerified() const {
             auto result = GetSequentialId();
-            AFL_VERIFY(!!result);
+            YDB_LOG_VERIFY(!!result);
             return *result;
         }
 
@@ -301,12 +301,12 @@ public:
         : StoragesManager(storagesManager)
         , TaskSubscription("CS::NORMALIZER", counters)
     {
-        AFL_VERIFY(StoragesManager);
+        YDB_LOG_VERIFY(StoragesManager);
     }
 
     void SetDataAccessorsManager(const NDataAccessorControl::TDataAccessorsManagerContainer& dataAccessorsManager) {
-        AFL_VERIFY(!DataAccessorsManager);
-        AFL_VERIFY(!!dataAccessorsManager);
+        YDB_LOG_VERIFY(!DataAccessorsManager);
+        YDB_LOG_VERIFY(!!dataAccessorsManager);
         DataAccessorsManager = dataAccessorsManager;
     }
 
@@ -324,7 +324,7 @@ public:
     bool InitControllerState(NIceDb::TNiceDb& db);
 
     std::shared_ptr<IStoragesManager> GetStoragesManager() const {
-        AFL_VERIFY(!!StoragesManager);
+        YDB_LOG_VERIFY(!!StoragesManager);
         return StoragesManager;
     }
 

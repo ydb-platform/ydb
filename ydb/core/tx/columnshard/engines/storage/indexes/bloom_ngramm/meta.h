@@ -28,7 +28,7 @@ private:
     }
 
     [[nodiscard]] bool Initialize() {
-        AFL_VERIFY(!ResultSchema);
+        YDB_LOG_VERIFY(!ResultSchema);
         if (auto c = ValidateRequest(); c.IsFail()) {
             YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"indexInit", c.GetErrorMessage()});
@@ -89,8 +89,8 @@ protected:
         TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
-        AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
-        AFL_VERIFY(proto.HasBloomNGrammFilter());
+        YDB_LOG_VERIFY(TBase::DoDeserializeFromProto(proto));
+        YDB_LOG_VERIFY(proto.HasBloomNGrammFilter());
         const auto& bFilter = proto.GetBloomNGrammFilter();
 
         {
@@ -141,7 +141,7 @@ public:
         : TBase(indexId, indexName, columnId, storageId, inheritPortionIndex, dataExtractor, bitsStorageConstructor)
         , Request(request)
     {
-        AFL_VERIFY(Initialize());
+        YDB_LOG_VERIFY(Initialize());
     }
 
     virtual TString GetClassName() const override {

@@ -63,8 +63,8 @@ void TManager::AllocationUpdated(const ui64 externalProcessId, const ui64 extern
 }
 
 void TManager::RelinkProcess(TProcessMemory& process, const TProcessMemoryUsage& oldAddress) {
-    AFL_VERIFY(ProcessesOrdered.erase(oldAddress));
-    AFL_VERIFY(ProcessesOrdered.emplace(process.BuildUsageAddress(), &process).second);
+    YDB_LOG_VERIFY(ProcessesOrdered.erase(oldAddress));
+    YDB_LOG_VERIFY(ProcessesOrdered.emplace(process.BuildUsageAddress(), &process).second);
     WaitingProcesses.erase(oldAddress);
     if (process.HasWaitingAllocations()) {
         WaitingProcesses.emplace(process.BuildUsageAddress());
@@ -115,9 +115,9 @@ bool TManager::ScheduleOneUnrestricted() {
 void TManager::TryAllocateWaiting() {
     if (!Config.IsUnrestrictedEnabled() && Processes.size()) {
         auto it = Processes.find(ProcessIds.GetMinInternalIdVerified());
-        AFL_VERIFY(it != Processes.end());
+        YDB_LOG_VERIFY(it != Processes.end());
         TProcessMemory& process = it->second;
-        AFL_VERIFY(process.IsPriorityProcess());
+        YDB_LOG_VERIFY(process.IsPriorityProcess());
         process.TryAllocateWaiting(0);
         UpdateWaitingProcesses(&process);
     }
@@ -127,7 +127,7 @@ void TManager::TryAllocateWaiting() {
             break;
         }
         auto it = ProcessesOrdered.find(*waitingIt);
-        AFL_VERIFY(it != ProcessesOrdered.end());
+        YDB_LOG_VERIFY(it != ProcessesOrdered.end());
         TProcessMemory* process = it->second;
         if (!process->TryAllocateWaiting(1)) {
             ++waitingIt;
@@ -136,7 +136,7 @@ void TManager::TryAllocateWaiting() {
 
         ProcessesOrdered.erase(it);
         auto [_, emplaced] = ProcessesOrdered.emplace(process->BuildUsageAddress(), process);
-        AFL_VERIFY(emplaced);
+        YDB_LOG_VERIFY(emplaced);
 
         waitingIt = WaitingProcesses.erase(waitingIt);
 
@@ -145,7 +145,7 @@ void TManager::TryAllocateWaiting() {
         }
 
         auto [waitingItNew, emplacedWaiting] = WaitingProcesses.emplace(process->BuildUsageAddress());
-        AFL_VERIFY(emplacedWaiting);
+        YDB_LOG_VERIFY(emplacedWaiting);
         if (waitingIt == WaitingProcesses.end() || *waitingItNew < *waitingIt) {
             waitingIt = waitingItNew;
         }
@@ -176,7 +176,7 @@ bool TManager::ForceOneOnDeadlock() {
     }
     for (const auto& address : WaitingProcesses) {
         auto it = ProcessesOrdered.find(address);
-        AFL_VERIFY(it != ProcessesOrdered.end());
+        YDB_LOG_VERIFY(it != ProcessesOrdered.end());
         TProcessMemory* process = it->second;
         const auto step = process->ForceOneUnrestricted();
         if (step == EUnrestrictedScheduleResult::Idle) {
@@ -215,9 +215,11 @@ void TManager::RegisterAllocation(const ui64 externalProcessId, const ui64 exter
         }
     } else {
         LWPROBE(Allocated, "on_register", allocation->GetIdentifier(), "", std::numeric_limits<ui64>::max(), std::numeric_limits<ui64>::max(), 0, 0, TDuration::Zero(), false, false);
-        AFL_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory(), nullptr), allocation))(
-                                                               "process", externalProcessId)("scope", externalScopeId)(
-                                                               "ext_group", externalGroupId)("stage_idx", stageIdx);
+        YDB_LOG_VERIFY(!allocation->OnAllocated(std::make_shared<TAllocationGuard>(externalProcessId, externalScopeId, allocation->GetIdentifier(), OwnerActorId, allocation->GetMemory(), nullptr), allocation),
+            {"process", externalProcessId},
+            {"scope", externalScopeId},
+            {"extGroup", externalGroupId},
+            {"stageIdx", stageIdx});
     }
     RefreshSignals();
 }
@@ -229,14 +231,16 @@ void TManager::RegisterProcess(const ui64 externalProcessId, const std::vector<s
         auto info = Processes.emplace(
             internalProcessId, TProcessMemory(externalProcessId, internalProcessId, OwnerActorId, Processes.empty(), stages, DefaultStage,
                 Config.IsUnrestrictedEnabled(), Config.GetMaxUnrestrictedGroupsPerScope()));
-        AFL_VERIFY(info.second);
+        YDB_LOG_VERIFY(info.second);
         ProcessesOrdered.emplace(info.first->second.BuildUsageAddress(), &info.first->second);
         UpdateWaitingProcesses(&info.first->second);
     } else {
         auto& process = Processes.find(*internalId)->second;
-        AFL_VERIFY(process.GetStages().size() == stages.size())("external_process_id", externalProcessId)(
-            "registered_stages", process.GetStages().size())("new_stages", stages.size())(
-            "reason", "process_id_collision: externalProcessId reused for a different set of stages");
+        YDB_LOG_VERIFY(process.GetStages().size() == stages.size(),
+            {"externalProcessId", externalProcessId},
+            {"registeredStages", process.GetStages().size()},
+            {"newStages", stages.size()},
+            {"reason", "process_id_collision: externalProcessId reused for a different set of stages"});
         ++process.MutableLinksCount();
     }
     RefreshSignals();
@@ -245,13 +249,13 @@ void TManager::RegisterProcess(const ui64 externalProcessId, const std::vector<s
 void TManager::UnregisterProcess(const ui64 externalProcessId) {
     const ui64 internalProcessId = ProcessIds.GetInternalIdVerified(externalProcessId);
     auto it = Processes.find(internalProcessId);
-    AFL_VERIFY(it != Processes.end());
+    YDB_LOG_VERIFY(it != Processes.end());
     if (--it->second.MutableLinksCount()) {
         return;
     }
     Y_UNUSED(ProcessIds.ExtractInternalIdVerified(externalProcessId));
     auto processUsageAddress = it->second.BuildUsageAddress();
-    AFL_VERIFY(ProcessesOrdered.erase(processUsageAddress));
+    YDB_LOG_VERIFY(ProcessesOrdered.erase(processUsageAddress));
     WaitingProcesses.erase(processUsageAddress);
     it->second.Unregister();
     Processes.erase(it);
@@ -278,13 +282,13 @@ void TManager::UnregisterProcessScope(const ui64 externalProcessId, const ui64 e
 }
 
 void TManager::SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func) {
-    AFL_ENSURE(DefaultStage);
+    YDB_LOG_ENSURE(DefaultStage);
 
     DefaultStage->SetMemoryConsumptionUpdateFunction(std::move(func));
 }
 
 void TManager::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, const std::optional<ui64>& unrestrictedSoft) {
-    AFL_ENSURE(DefaultStage);
+    YDB_LOG_ENSURE(DefaultStage);
     bool isLimitIncreased = false;
     DefaultStage->UpdateMemoryLimits(limit, hardLimit, isLimitIncreased, unrestrictedSoft);
     if (Config.IsUnrestrictedEnabled()) {
@@ -329,7 +333,7 @@ TString TManager::DebugString() const {
                                  : "null") << Endl
        << "  }" << Endl
        << "  Processes=[" << Endl;
-    
+
     bool first = true;
     for (const auto& [internalId, process] : Processes) {
         if (!first) {
@@ -338,10 +342,10 @@ TString TManager::DebugString() const {
         first = false;
         sb << "    {InternalId=" << internalId << ";Process=" << process.DebugString() << "}";
     }
-    
+
     sb << Endl << "  ]" << Endl
        << "  ProcessesOrdered=[" << Endl;
-    
+
     first = true;
     for (const auto& [usage, processPtr] : ProcessesOrdered) {
         if (!first) {
@@ -350,10 +354,10 @@ TString TManager::DebugString() const {
         first = false;
         sb << "    {Usage=" << usage.DebugString() << ";ProcessPtr=" << (processPtr ? "exists" : "null") << "}";
     }
-    
+
     sb << Endl << "  ]" << Endl
        << "  WaitingProcesses=[" << Endl;
-    
+
     first = true;
     for (const auto& usage : WaitingProcesses) {
         if (!first) {
@@ -362,7 +366,7 @@ TString TManager::DebugString() const {
         first = false;
         sb << "    " << usage.DebugString();
     }
-    
+
     sb << Endl << "  ]" << Endl << "}";
     return sb;
 }

@@ -46,7 +46,7 @@ public:
         NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /*normalizationContext*/) const override {
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Insertions) {
-            AFL_VERIFY(i.GetDedupId());
+            YDB_LOG_VERIFY(i.GetDedupId());
             YDB_LOG_WARN("",
                 {"event", "correct_record"},
                 {"dedup", i.GetDedupId()});
@@ -77,12 +77,12 @@ private:
 
 public:
     void SetInserted(const TInsertTableRecordLoadContext& context) {
-        AFL_VERIFY(!Inserted);
+        YDB_LOG_VERIFY(!Inserted);
         Inserted = context;
     }
 
     void SetAborted(const TInsertTableRecordLoadContext& context) {
-        AFL_VERIFY(!Aborted);
+        YDB_LOG_VERIFY(!Aborted);
         Aborted = context;
     }
 };
@@ -101,14 +101,14 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
         TInsertTableRecordLoadContext constructor;
         constructor.ParseFromDatabase(rowset);
         if (constructor.GetRecType() == NColumnShard::Schema::EInsertTableIds::Committed) {
-            AFL_VERIFY(constructor.GetPlanStep());
+            YDB_LOG_VERIFY(constructor.GetPlanStep());
         } else {
             if (constructor.GetRecType() == NColumnShard::Schema::EInsertTableIds::Aborted) {
                 insertions[constructor.GetInsertWriteId()].SetAborted(constructor);
             } else if (constructor.GetRecType() == NColumnShard::Schema::EInsertTableIds::Inserted) {
                 insertions[constructor.GetInsertWriteId()].SetInserted(constructor);
             } else {
-                AFL_VERIFY(false);
+                YDB_LOG_VERIFY(false);
             }
         }
         if (!rowset.Next()) {
@@ -134,7 +134,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
                 toCleanDedup.emplace_back(*i.GetInserted());
             }
         } else {
-            AFL_VERIFY(false);
+            YDB_LOG_VERIFY(false);
         }
         if (toCleanDedup.size() == 1000) {
             result.emplace_back(std::make_shared<TTrivialNormalizerTask>(std::make_shared<TNormalizerCleanDedupChanges>(toCleanDedup)));

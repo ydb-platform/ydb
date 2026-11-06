@@ -54,7 +54,8 @@ void TGCTask::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
     }
     TBlobAddress bAddress(ev->Cookie, ev->Get()->Channel);
     auto itGroup = ListsByGroupId.find(bAddress);
-    AFL_VERIFY(itGroup != ListsByGroupId.end())("address", bAddress.DebugString());
+    YDB_LOG_VERIFY(itGroup != ListsByGroupId.end(),
+        {"address", bAddress.DebugString()});
     ListsByGroupId.erase(itGroup);
 }
 
@@ -64,7 +65,7 @@ static TAtomicCounter PerGenerationCounter = 1;
 
 std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> TGCTask::BuildRequest(const TBlobAddress& address) const {
     auto it = ListsByGroupId.find(address);
-    AFL_VERIFY(it != ListsByGroupId.end());
+    YDB_LOG_VERIFY(it != ListsByGroupId.end());
     if (++it->second.RequestsCount >= TGCLists::RequestsLimit) {
         YDB_LOG_CRIT("",
             {"event", "build_gc_request"},

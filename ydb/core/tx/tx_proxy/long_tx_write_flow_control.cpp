@@ -294,7 +294,8 @@ private:
     void HandleQueuedResult(TEvTryAdmitResult::TPtr& ev, const TActorContext& ctx) {
         // A queued waiter leaves the wait queue only through the drain path, which always answers
         // Allow; every other decision is taken before the waiter is enqueued.
-        AFL_VERIFY(ev->Get()->GetDecision() == EAdmitDecision::Allow)("decision", (ui64)ev->Get()->GetDecision());
+        YDB_LOG_VERIFY(ev->Get()->GetDecision() == EAdmitDecision::Allow,
+            {"decision", (ui64)ev->Get()->GetDecision()});
         Queued = false;
         StartWrite(ctx);
         Finish(ctx);
@@ -306,7 +307,7 @@ private:
         }
         // StateQueued is entered only from EnterQueued, which sets Queued and arms this wakeup, and
         // every path that clears Queued also passes away.
-        AFL_VERIFY(Queued);
+        YDB_LOG_VERIFY(Queued);
         CancelAndReject(ctx);
     }
 
@@ -346,7 +347,7 @@ private:
     void AddIssue(TStringBuf message) {
         // Every entry point into the write path owns an issues container; without one the client
         // would silently lose the reject reason.
-        AFL_VERIFY(Tx.GetIssues());
+        YDB_LOG_VERIFY(Tx.GetIssues());
         Tx.GetIssues()->AddIssue(NYql::TIssue(TString(message)));
     }
 

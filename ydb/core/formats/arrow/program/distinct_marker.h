@@ -21,7 +21,7 @@ public:
         : TBase({ TColumnChainInfo(keyColumnId) }, {}, EProcessorType::DistinctMarker)
         , KeyColumnId(keyColumnId)
     {
-        AFL_VERIFY(KeyColumnId);
+        YDB_LOG_VERIFY(KeyColumnId);
     }
 
     ui32 GetKeyColumnId() const {

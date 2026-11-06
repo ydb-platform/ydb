@@ -13,19 +13,19 @@ void TExecutionContext::OnStartProgramStepExecution(const ui32 nodeId, const std
     if (!CurrentProgramNodeId) {
         CurrentNodeStart = TMonotonic::Now();
         CurrentProgramNodeId = nodeId;
-        AFL_VERIFY(!CurrentStepSignals);
+        YDB_LOG_VERIFY(!CurrentStepSignals);
         CurrentStepSignals = signals;
     } else {
-        AFL_VERIFY(CurrentProgramNodeId == nodeId);
-        AFL_VERIFY(!!CurrentStepSignals);
-        AFL_VERIFY(!!CurrentNodeStart);
+        YDB_LOG_VERIFY(CurrentProgramNodeId == nodeId);
+        YDB_LOG_VERIFY(!!CurrentStepSignals);
+        YDB_LOG_VERIFY(!!CurrentNodeStart);
     }
 }
 
 void TExecutionContext::OnFinishProgramStepExecution() {
-    AFL_VERIFY(!!CurrentProgramNodeId);
-    AFL_VERIFY(!!CurrentStepSignals);
-    AFL_VERIFY(!!CurrentNodeStart);
+    YDB_LOG_VERIFY(!!CurrentProgramNodeId);
+    YDB_LOG_VERIFY(!!CurrentStepSignals);
+    YDB_LOG_VERIFY(!!CurrentNodeStart);
     CurrentStepSignals->AddTotalDuration(TMonotonic::Now() - *CurrentNodeStart);
     CurrentProgramNodeId.reset();
     CurrentStepSignals = nullptr;
@@ -52,7 +52,7 @@ void TExecutionContext::Start(
 }
 
 const TFetchingStepSignals& TExecutionContext::GetCurrentStepSignalsVerified() const {
-    AFL_VERIFY(!!CurrentStepSignals);
+    YDB_LOG_VERIFY(!!CurrentStepSignals);
     return *CurrentStepSignals;
 }
 
@@ -65,28 +65,28 @@ const TFetchingStepSignals* TExecutionContext::GetCurrentStepSignalsOptional() c
 
 void TExecutionContext::SetProgramIterator(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& it,
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& visitor) {
-    AFL_VERIFY(!ProgramIterator);
+    YDB_LOG_VERIFY(!ProgramIterator);
     ProgramIterator = it;
     ExecutionVisitor = visitor;
 }
 
 void TExecutionContext::SetCursorStep(const TFetchingScriptCursor& step) {
-    AFL_VERIFY(!CursorStep);
+    YDB_LOG_VERIFY(!CursorStep);
     CursorStep = step;
 }
 
 const TFetchingScriptCursor& TExecutionContext::GetCursorStep() const {
-    AFL_VERIFY(!!CursorStep);
+    YDB_LOG_VERIFY(!!CursorStep);
     return *CursorStep;
 }
 
 const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& TExecutionContext::GetProgramIteratorVerified() const {
-    AFL_VERIFY(!!ProgramIterator);
+    YDB_LOG_VERIFY(!!ProgramIterator);
     return ProgramIterator;
 }
 
 const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& TExecutionContext::GetExecutionVisitorVerified() const {
-    AFL_VERIFY(!!ExecutionVisitor);
+    YDB_LOG_VERIFY(!!ExecutionVisitor);
     return ExecutionVisitor;
 }
 
@@ -94,7 +94,7 @@ ui64 IDataSource::DoGetSourceRecordsCount() const {
     if (RecordsCountImpl) {
         return *RecordsCountImpl;
     } else {
-        AFL_VERIFY(!!GetRecordsCountVirtual());
+        YDB_LOG_VERIFY(!!GetRecordsCountVirtual());
         return GetRecordsCountVirtual();
     }
 }
@@ -124,7 +124,7 @@ TConclusion<TExecutionResult> IDataSource::DoStartFetch(
 }
 
 ui32 IDataSource::GetRecordsCountVirtual() const {
-    AFL_VERIFY(false);
+    YDB_LOG_VERIFY(false);
     return 0;
 }
 
@@ -137,27 +137,27 @@ ui64 IDataSource::GetReservedMemory() const {
 }
 
 const TPortionDataAccessor& IDataSource::GetPortionAccessor() const {
-    AFL_VERIFY(!!Accessor);
+    YDB_LOG_VERIFY(!!Accessor);
     return *Accessor;
 }
 
 std::shared_ptr<TPortionDataAccessor> IDataSource::ExtractPortionAccessor() {
-    AFL_VERIFY(!!Accessor);
+    YDB_LOG_VERIFY(!!Accessor);
     auto result = std::move(Accessor);
     Accessor.reset();
     return result;
 }
 
 void IDataSource::SetPortionAccessor(std::shared_ptr<TPortionDataAccessor>&& acc) {
-    AFL_VERIFY(!!acc);
-    AFL_VERIFY(!Accessor);
+    YDB_LOG_VERIFY(!!acc);
+    YDB_LOG_VERIFY(!Accessor);
     Accessor = std::move(acc);
 }
 
 void IDataSource::InitRecordsCount(const ui32 recordsCount) {
-    AFL_VERIFY(!RecordsCountImpl);
+    YDB_LOG_VERIFY(!RecordsCountImpl);
     RecordsCountImpl = recordsCount;
-    AFL_VERIFY(StageData);
+    YDB_LOG_VERIFY(StageData);
     StageData->InitRecordsCount(recordsCount);
 }
 
@@ -165,13 +165,13 @@ ui32 IDataSource::GetRecordsCount() const {
     if (RecordsCountImpl) {
         return *RecordsCountImpl;
     } else {
-        AFL_VERIFY(!!GetRecordsCountVirtual());
+        YDB_LOG_VERIFY(!!GetRecordsCountVirtual());
         return GetRecordsCountVirtual();
     }
 }
 
 void IDataSource::OnStartProcessing() {
-    AFL_VERIFY(!SourceCreatedTimestamp);
+    YDB_LOG_VERIFY(!SourceCreatedTimestamp);
     SourceCreatedTimestamp = TMonotonic::Now();
     GetContext()->GetCommonContext()->GetCounters().OnSourceStartProcessing(IsConflicting());
     if (!NLWTrace::HasShuttles(DataSourceOrbit) && !NLWTrace::HasShuttles(*GetContext()->GetCommonContext()->GetScanOrbit()) &&
@@ -191,19 +191,19 @@ void IDataSource::OnStartProcessing() {
 }
 
 void IDataSource::StartAsyncSection() {
-    AFL_VERIFY(AtomicCas(&SyncSectionFlag, 0, 1));
+    YDB_LOG_VERIFY(AtomicCas(&SyncSectionFlag, 0, 1));
 }
 
 void IDataSource::CheckAsyncSection() {
-    AFL_VERIFY(AtomicGet(SyncSectionFlag) == 0);
+    YDB_LOG_VERIFY(AtomicGet(SyncSectionFlag) == 0);
 }
 
 void IDataSource::StartSyncSection() {
-    AFL_VERIFY(AtomicCas(&SyncSectionFlag, 1, 0));
+    YDB_LOG_VERIFY(AtomicCas(&SyncSectionFlag, 1, 0));
 }
 
 void IDataSource::AddEvent(const TString& evDescription) {
-    AFL_VERIFY(!!Events);
+    YDB_LOG_VERIFY(!!Events);
     Events->AddEvent(evDescription);
 }
 
@@ -212,27 +212,27 @@ TString IDataSource::GetEventsReport() const {
 }
 
 const std::shared_ptr<ISnapshotSchema>& IDataSource::GetSourceSchema() const {
-    AFL_VERIFY(false);
+    YDB_LOG_VERIFY(false);
     return Default<std::shared_ptr<ISnapshotSchema>>();
 }
 
 TString IDataSource::GetColumnStorageId(const ui32 /*columnId*/) const {
-    AFL_VERIFY(false);
+    YDB_LOG_VERIFY(false);
     return "";
 }
 
 TString IDataSource::GetEntityStorageId(const ui32 /*entityId*/) const {
-    AFL_VERIFY(false);
+    YDB_LOG_VERIFY(false);
     return "";
 }
 
 TString IDataSource::GetIndexStorageId(const ui32 /*indexId*/) const {
-    AFL_VERIFY(false);
+    YDB_LOG_VERIFY(false);
     return "";
 }
 
 TBlobRange IDataSource::RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const {
-    AFL_VERIFY(false);
+    YDB_LOG_VERIFY(false);
     return TBlobRange();
 }
 
@@ -261,26 +261,26 @@ std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> IDataSourc
 }
 
 bool IDataSource::IsSourceInMemory() const {
-    AFL_VERIFY(IsSourceInMemoryFlag);
+    YDB_LOG_VERIFY(IsSourceInMemoryFlag);
     return *IsSourceInMemoryFlag;
 }
 
 void IDataSource::SetSourceInMemory(const bool value) {
-    AFL_VERIFY(!IsSourceInMemoryFlag);
+    YDB_LOG_VERIFY(!IsSourceInMemoryFlag);
     IsSourceInMemoryFlag = value;
     if (!value) {
-        AFL_VERIFY(StageData);
+        YDB_LOG_VERIFY(StageData);
         StageData->SetUseFilter(value);
     }
 }
 
 void IDataSource::SetMemoryGroupId(const ui64 groupId) {
-    AFL_VERIFY(!MemoryGroupId);
+    YDB_LOG_VERIFY(!MemoryGroupId);
     MemoryGroupId = groupId;
 }
 
 ui64 IDataSource::GetMemoryGroupId() const {
-    AFL_VERIFY(!!MemoryGroupId);
+    YDB_LOG_VERIFY(!!MemoryGroupId);
     return *MemoryGroupId;
 }
 
@@ -300,22 +300,22 @@ void IDataSource::AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, c
 }
 
 void IDataSource::ResetSourceFinishedFlag() {
-    AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 0, 1));
+    YDB_LOG_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 0, 1));
 }
 
 void IDataSource::OnSourceFetchingFinishedSafe(IDataReader& owner, std::unique_ptr<TDataSourceLease> self) {
-    AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 1, 0));
-    AFL_VERIFY(self && &self->GetSource() == this);
+    YDB_LOG_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 1, 0));
+    YDB_LOG_VERIFY(self && &self->GetSource() == this);
     DoOnSourceFetchingFinishedSafe(owner, std::move(self));
 }
 
 void IDataSource::OnEmptyStageData() {
-    AFL_VERIFY(AtomicCas(&StageResultBuiltFlag, 1, 0));
-    AFL_VERIFY(!StageResult);
-    AFL_VERIFY(StageData);
+    YDB_LOG_VERIFY(AtomicCas(&StageResultBuiltFlag, 1, 0));
+    YDB_LOG_VERIFY(!StageResult);
+    YDB_LOG_VERIFY(StageData);
     DoOnEmptyStageData();
-    AFL_VERIFY(StageResult);
-    AFL_VERIFY(!StageData);
+    YDB_LOG_VERIFY(StageResult);
+    YDB_LOG_VERIFY(!StageData);
 
     const TDuration durationMs = GetAndResetWaitDuration();
     LWTRACK(SourceFinished, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetSourceId(), 0,
@@ -325,12 +325,12 @@ void IDataSource::OnEmptyStageData() {
 
 void IDataSource::BuildStageResult() {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-    AFL_VERIFY(AtomicCas(&StageResultBuiltFlag, 1, 0));
-    AFL_VERIFY(!StageResult);
-    AFL_VERIFY(StageData);
+    YDB_LOG_VERIFY(AtomicCas(&StageResultBuiltFlag, 1, 0));
+    YDB_LOG_VERIFY(!StageResult);
+    YDB_LOG_VERIFY(StageData);
     DoBuildStageResult();
-    AFL_VERIFY(StageResult);
-    AFL_VERIFY(!StageData);
+    YDB_LOG_VERIFY(StageResult);
+    YDB_LOG_VERIFY(!StageData);
 
     const TDuration durationMs = GetAndResetWaitDuration();
     LWTRACK(SourceFinished, DataSourceOrbit, GetRawPathId(), GetTabletId(), GetTxId(), GetSourceId(), 0,
@@ -351,34 +351,36 @@ bool IDataSource::AddTxConflict() {
 }
 
 void IDataSource::InitStageData(std::unique_ptr<TFetchedData>&& data) {
-    AFL_VERIFY(!StageData);
+    YDB_LOG_VERIFY(!StageData);
     StageData = std::move(data);
 }
 
 std::unique_ptr<TFetchedData> IDataSource::ExtractStageData() {
-    AFL_VERIFY(StageData)("source_idx", SourceIdx);
+    YDB_LOG_VERIFY(StageData,
+        {"sourceIdx", SourceIdx});
     auto result = std::move(StageData);
     StageData.reset();
     return std::move(result);
 }
 
 const TFetchedData& IDataSource::GetStageData() const {
-    AFL_VERIFY(StageData)("source_idx", SourceIdx);
+    YDB_LOG_VERIFY(StageData,
+        {"sourceIdx", SourceIdx});
     return *StageData;
 }
 
 TFetchedData& IDataSource::MutableStageData() {
-    AFL_VERIFY(StageData);
+    YDB_LOG_VERIFY(StageData);
     return *StageData;
 }
 
 const TFetchedResult& IDataSource::GetStageResult() const {
-    AFL_VERIFY(!!StageResult);
+    YDB_LOG_VERIFY(!!StageResult);
     return *StageResult;
 }
 
 TFetchedResult& IDataSource::MutableStageResult() {
-    AFL_VERIFY(!!StageResult);
+    YDB_LOG_VERIFY(!!StageResult);
     return *StageResult;
 }
 

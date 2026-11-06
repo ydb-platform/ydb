@@ -3435,8 +3435,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         class TTestExecutor: public TManyColumnShardsWithRestartsExecutor {
         private:
             virtual void OnAfterTest() const override {
-                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
-                AFL_VERIFY(!NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
+                YDB_LOG_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
+                YDB_LOG_VERIFY(!NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
             }
             virtual void FillSettings(Tests::TServerSettings& settings) const override {
                 settings.SetDomainName("Root").SetUseRealThreads(false).SetNodeCount(2).SetColumnShardReaderClassName("SIMPLE");
@@ -3449,8 +3449,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         class TTestExecutor: public TManyColumnShardsWithRestartsExecutor {
         private:
             virtual void OnAfterTest() const override {
-                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
-                AFL_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
+                YDB_LOG_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetInitScanCounter().Val());
+                YDB_LOG_VERIFY(NYDBTest::TControllers::GetKqpControllerAs<NYDBTest::TTestKqpController>()->GetResolvingCounter().Val());
             }
             virtual void FillSettings(Tests::TServerSettings& settings) const override {
                 settings.SetDomainName("Root")
@@ -4733,7 +4733,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY level
             )");
 
-            AFL_VERIFY(rows.size() == 4)("count", rows.size());
+            YDB_LOG_VERIFY(rows.size() == 4,
+                {"count", rows.size()});
             if (GetUint64(rows[0].at("sum_records_count")) == 0 && GetUint64(rows[1].at("sum_records_count")) == 0 &&
                 GetUint64(rows[2].at("sum_records_count")) == 0 && GetUint64(rows[3].at("sum_records_count")) == 70000) {
                 break;

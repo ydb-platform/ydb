@@ -21,7 +21,7 @@ private:
 
 public:
     const std::shared_ptr<ISyncPoint>& GetSyncPoint(const ui32 index) const {
-        AFL_VERIFY(index < SyncPoints.size());
+        YDB_LOG_VERIFY(index < SyncPoints.size());
         return SyncPoints[index];
     }
 

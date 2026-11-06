@@ -132,7 +132,7 @@ public:
             !HasOlapTable &&
             (!Database.empty() || AppData()->EnableMvccSnapshotWithLegacyDomainRoot)
         );
-        AFL_ENSURE(!forceSnapshot || Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+        YDB_LOG_ENSURE(!forceSnapshot || Request.IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
 
         return forceSnapshot;
     }
@@ -219,7 +219,7 @@ public:
             MakeResponseAndPassAway();
             return;
         }  else if (Request.LocksOp == ELocksOp::Commit) {
-            AFL_ENSURE(!ReadOnlyTx);
+            YDB_LOG_ENSURE(!ReadOnlyTx);
             Become(&TKqpDataExecuter::FinalizeState);
             YDB_LOG_DEBUG("Send Commit to BufferActor",
                 {"marker", "KQPDATA"},
@@ -334,7 +334,7 @@ public:
     }
 
     void HandleFinalize(TEvents::TEvUndelivered::TPtr& ev) {
-        AFL_ENSURE(ev->Sender == BufferActorId);
+        YDB_LOG_ENSURE(ev->Sender == BufferActorId);
         YDB_LOG_WARN("Got Undelivered from BufferActor",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},
@@ -1437,7 +1437,7 @@ private:
                     // shards it sent EvLocks to; other shards (e.g. locked by plain
                     // reads) are registered without it.
                     if (const auto* meta = shardMetas.FindPtr(lock.GetDataShard())) {
-                        AFL_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
+                        YDB_LOG_ENSURE(Request.IsolationLevel == NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
                         TxManager->AddShard(lock.GetDataShard(), stageInfo.Meta.TableKind == ETableKind::Olap, stageInfo.Meta.TablePath, *meta);
                         TxManager->AddAction(lock.GetDataShard(), IKqpTransactionManager::EAction::PESSIMISTIC_LOCK | IKqpTransactionManager::EAction::READ, Request.QuerySpanId);
                     } else {

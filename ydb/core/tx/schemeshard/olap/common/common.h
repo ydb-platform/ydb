@@ -21,12 +21,12 @@ namespace NKikimr::NSchemeShard {
         }
 
         void AddError(const TEvSchemeShard::EStatus& errorStatus, const TString& errorMsg) override {
-            AFL_VERIFY(Result.Ok());
+            YDB_LOG_VERIFY(Result.Ok());
             Result = TResult::Fail(errorStatus, errorMsg);
         }
 
         void AddError(const TString& errorMsg) override {
-            AFL_VERIFY(Result.Ok());
+            YDB_LOG_VERIFY(Result.Ok());
             Result = TResult::Fail(errorMsg);
         }
     };

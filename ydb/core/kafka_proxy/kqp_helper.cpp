@@ -35,7 +35,9 @@ bool TKqpTxHelper::HandleCreateSessionResponse(TEvKqp::TEvCreateSessionResponse:
     }
 
     KqpSessionId = record.GetResponse().GetSessionId();
-    AFL_ENSURE(!KqpSessionId.empty())("reason", "KqpSessionId is empty")("database", DataBase);
+    YDB_LOG_ENSURE(!KqpSessionId.empty(),
+        {"reason", "KqpSessionId is empty"},
+        {"database", DataBase});
 
     return true;
 }

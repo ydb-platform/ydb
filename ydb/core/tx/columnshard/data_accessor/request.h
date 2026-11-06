@@ -24,7 +24,7 @@ public:
 
     TDataAccessorsResult(std::vector<std::shared_ptr<TPortionDataAccessor>>&& portions) {
         for (auto&& i : portions) {
-            AFL_VERIFY(i);
+            YDB_LOG_VERIFY(i);
             const ui64 portionId = i->GetPortionInfo().GetPortionId();
             PortionsById.emplace(portionId, std::move(i));
         }
@@ -49,25 +49,25 @@ public:
 
     void Merge(TDataAccessorsResult&& result) {
         for (auto&& i : result.ErrorsByPathId) {
-            AFL_VERIFY(ErrorsByPathId.emplace(i.first, i.second).second);
+            YDB_LOG_VERIFY(ErrorsByPathId.emplace(i.first, i.second).second);
         }
         for (auto&& i : result.PortionsById) {
-            AFL_VERIFY(PortionsById.emplace(i.first, std::move(i.second)).second);
+            YDB_LOG_VERIFY(PortionsById.emplace(i.first, std::move(i.second)).second);
         }
         for (auto&& i : result.RemovedAddresses) {
-            AFL_VERIFY(RemovedAddresses.emplace(i).second);
+            YDB_LOG_VERIFY(RemovedAddresses.emplace(i).second);
         }
     }
 
     const TPortionDataAccessor& GetPortionAccessorVerified(const ui64 portionId) const {
         auto it = PortionsById.find(portionId);
-        AFL_VERIFY(it != PortionsById.end());
+        YDB_LOG_VERIFY(it != PortionsById.end());
         return *it->second;
     }
 
     std::shared_ptr<TPortionDataAccessor> ExtractPortionAccessorVerified(const ui64 portionId) {
         auto it = PortionsById.find(portionId);
-        AFL_VERIFY(it != PortionsById.end());
+        YDB_LOG_VERIFY(it != PortionsById.end());
         auto result = std::move(it->second);
         PortionsById.erase(it);
         return result;
@@ -78,8 +78,8 @@ public:
             PortionsById = std::move(accessors);
         } else {
             for (auto&& [portionId, i] : accessors) {
-                AFL_VERIFY(i);
-                AFL_VERIFY(PortionsById.emplace(portionId, std::move(i)).second);
+                YDB_LOG_VERIFY(i);
+                YDB_LOG_VERIFY(PortionsById.emplace(portionId, std::move(i)).second);
             }
         }
     }
@@ -105,7 +105,7 @@ public:
     }
 
     TString GetErrorMessage() const {
-        AFL_VERIFY(HasErrors());
+        YDB_LOG_VERIFY(HasErrors());
         TStringBuilder sb;
         sb << '[';
         for (const auto& [_, error] : ErrorsByPathId) {
@@ -134,7 +134,7 @@ private:
 
 public:
     void OnResult(const ui64 requestId, TDataAccessorsResult&& result) {
-        AFL_VERIFY(RequestIds.erase(requestId));
+        YDB_LOG_VERIFY(RequestIds.erase(requestId));
         if (!Result) {
             Result = std::move(result);
         } else {
@@ -173,14 +173,14 @@ private:
 
 public:
     std::shared_ptr<IDataAccessorRequestsSubscriber> ExtractSubscriber() {
-        AFL_VERIFY(HasSubscriber());
+        YDB_LOG_VERIFY(HasSubscriber());
         return std::move(Subscriber);
     }
 
     THashSet<NGeneralCache::TGlobalPortionAddress> BuildAddresses(const NActors::TActorId tabletActorId) const {
         THashSet<NGeneralCache::TGlobalPortionAddress> result;
         for (auto&& [_, p] : Portions) {
-            AFL_VERIFY(result.emplace(NGeneralCache::TGlobalPortionAddress(tabletActorId, p->GetAddress())).second);
+            YDB_LOG_VERIFY(result.emplace(NGeneralCache::TGlobalPortionAddress(tabletActorId, p->GetAddress())).second);
         }
         return result;
     }
@@ -208,13 +208,13 @@ public:
     }
 
     bool IsAborted() const {
-        AFL_VERIFY(HasSubscriber());
+        YDB_LOG_VERIFY(HasSubscriber());
         auto flag = Subscriber->GetAbortionFlag();
         return flag && flag->Val();
     }
 
     const std::shared_ptr<const TAtomicCounter>& GetAbortionFlag() const {
-        AFL_VERIFY(HasSubscriber());
+        YDB_LOG_VERIFY(HasSubscriber());
         return Subscriber->GetAbortionFlag();
     }
 
@@ -243,14 +243,14 @@ public:
     }
 
     void RegisterSubscriber(const std::shared_ptr<IDataAccessorRequestsSubscriber>& subscriber) {
-        AFL_VERIFY(!Subscriber);
+        YDB_LOG_VERIFY(!Subscriber);
         Subscriber = subscriber;
         Subscriber->RegisterRequestId(*this);
     }
 
     void AddPortion(const TPortionInfo::TConstPtr& portion) {
-        AFL_VERIFY(portion);
-        AFL_VERIFY(Portions.emplace(portion->GetPortionId(), portion).second);
+        YDB_LOG_VERIFY(portion);
+        YDB_LOG_VERIFY(Portions.emplace(portion->GetPortionId(), portion).second);
     }
 
     TString GetTaskId() const {

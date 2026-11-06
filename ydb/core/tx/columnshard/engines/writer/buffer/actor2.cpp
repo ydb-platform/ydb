@@ -47,7 +47,7 @@ void TActor::Handle(TEvFlushBuffer::TPtr& /*ev*/) {
 
 void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
     auto* evBase = ev->Get();
-    AFL_VERIFY(evBase->GetWriteData()->GetBlobsAction()->GetStorageId() == NOlap::IStoragesManager::DefaultStorageId);
+    YDB_LOG_VERIFY(evBase->GetWriteData()->GetBlobsAction()->GetStorageId() == NOlap::IStoragesManager::DefaultStorageId);
     bool isBulkUpsert = evBase->GetContext()->GetIsBulk();
 
     SumSize += evBase->GetWriteData()->GetSize();

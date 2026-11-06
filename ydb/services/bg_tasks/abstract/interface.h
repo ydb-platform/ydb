@@ -139,7 +139,7 @@ public:
     }
 
     std::shared_ptr<IInterface> GetObjectPtrVerified() const {
-        AFL_VERIFY(Object);
+        YDB_LOG_VERIFY(Object);
         return Object;
     }
 
@@ -157,17 +157,17 @@ public:
     }
 
     const IInterface& GetObjectVerified() const {
-        AFL_VERIFY(Object);
+        YDB_LOG_VERIFY(Object);
         return *Object;
     }
 
     const IInterface* operator->() const {
-        AFL_VERIFY(Object);
+        YDB_LOG_VERIFY(Object);
         return Object.get();
     }
 
     IInterface* operator->() {
-        AFL_VERIFY(Object);
+        YDB_LOG_VERIFY(Object);
         return Object.get();
     }
 
@@ -192,7 +192,8 @@ public:
     using TBase::TBase;
 
     [[nodiscard]] bool Initialize(const TString& className, const bool maybeExists = false) {
-        AFL_VERIFY(maybeExists || !Object)("problem", "initialize for not-empty-object");
+        YDB_LOG_VERIFY(maybeExists || !Object,
+            {"problem", "initialize for not-empty-object"});
         Object.reset(TFactory::Construct(className));
         if (!Object) {
             YDB_LOG_ERROR_COMP(NKikimrServices::BG_TASKS, "Incorrect class name",

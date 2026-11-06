@@ -615,8 +615,8 @@ using TStreamReadProcessorPtr = TIntrusivePtr<TStreamReadProcessor<TResponsePart
 
 template <typename TRpc, typename... TRpcActorArgs>
 TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database,
-    const TMaybe<TString>& token, const TMaybe<TString>& requestType, const TActorContext& ctx,
-    const TMap<TString, TString>& peerMeta, bool internalCall, TRpcActorArgs... args)
+    const TMaybe<TString>& token, const TMaybe<TString>& requestType, const TActorContext& ctx, const TMap<TString, TString>& peerMeta,
+    bool internalCall, TRpcActorArgs... args)
 {
     using TCbWrapper = std::function<void(const typename TRpc::TResponse&)>;
     using TLocalRpcStreamCtx = TStreamReadProcessor<typename TRpc::TResponse>;
@@ -662,8 +662,8 @@ template <typename TRpc, typename... TRpcActorArgs>
 TStreamReadProcessorPtr<typename TRpc::TResponse> DoLocalRpcStreamSameMailbox(typename TRpc::TRequest&& proto, const TString& database,
     const TMaybe<TString>& token, const TMaybe<TString>& requestType, const TActorContext& ctx, bool internalCall, TRpcActorArgs... args)
 {
-    return DoLocalRpcStreamSameMailbox<TRpc>(std::move(proto), database, token, requestType, ctx,
-        TMap<TString, TString>{}, internalCall, args...);
+    return DoLocalRpcStreamSameMailbox<TRpc>(
+        std::move(proto), database, token, requestType, ctx, TMap<TString, TString>{}, internalCall, args...);
 }
 
 template <typename TRpc, typename... TRpcActorArgs>

@@ -277,8 +277,8 @@ void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxCont
     if (MvccVersion) {
         peerMeta.emplace(NKqp::YDB_MVCC_VERSION_HEADER, NKqp::FormatMvccVersion(*MvccVersion));
     }
-    Subscribe<Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(
-        DoLocalRpc<TExecuteDataQueryRequest>(std::move(request), Database, token, RequestType, TActivationContext::ActorSystem(), peerMeta, true));
+    Subscribe<Table::ExecuteDataQueryResponse, TEvQueryBasePrivate::TEvDataQueryResult>(DoLocalRpc<TExecuteDataQueryRequest>(
+        std::move(request), Database, token, RequestType, TActivationContext::ActorSystem(), peerMeta, true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {

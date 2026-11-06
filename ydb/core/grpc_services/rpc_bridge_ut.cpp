@@ -738,11 +738,14 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
 
         Ydb::Bridge::ListDatabaseSynchronizationRequest query;
         query.set_database_path("/Root/app/");
+        query.set_storage_mode(Ydb::Bridge::MIXED);
         auto future = setup.Start(query);
         const auto request = setup.GrabStorageQuery();
         const auto rpc = request->Sender;
         UNIT_ASSERT(request->Get()->Record.GetView() == NKikimrBridge::TStorageQuery::DATABASES);
         UNIT_ASSERT(request->Get()->Record.GetFilterPools());
+        UNIT_ASSERT(request->Get()->Record.HasStorageMode());
+        UNIT_ASSERT(request->Get()->Record.GetStorageMode() == Ydb::Bridge::MIXED);
         UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.PoolNamesSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.GetPoolNames(0), pools[0]);
         UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.GetPoolNames(1), pools[1]);
@@ -944,8 +947,9 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
         Ydb::Bridge::ListDatabaseSynchronizationRequest relativeDatabase;
         relativeDatabase.set_database_path("Root/app");
         check(relativeDatabase);
-        Ydb::Bridge::ListGroupSynchronizationRequest unscoped;
-        check(unscoped);
+        Ydb::Bridge::ListGroupSynchronizationRequest emptyGroupDatabase;
+        emptyGroupDatabase.set_database_path("");
+        check(emptyGroupDatabase);
         Ydb::Bridge::ListGroupSynchronizationRequest emptyPool;
         emptyPool.set_storage_pool_name("");
         check(emptyPool);
@@ -980,7 +984,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
         }
     }
 
-    Y_UNIT_TEST(PileCountsKeepObservationIdentityAndSystemGroupsSeparate) {
+    Y_UNIT_TEST(PileDatabaseCountsKeepObservationIdentityAndPlacementPresence) {
         TStorageSetup setup;
         auto future = setup.Start(Ydb::Bridge::ListPileSynchronizationRequest{});
         const auto request = setup.GrabStorageQuery();
@@ -990,31 +994,69 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
         summary->set_cluster_state_generation(7);
         summary->mutable_observed_at()->set_seconds(123);
         summary->mutable_observed_at()->set_nanos(456789000);
+        summary->set_unattributed_storage_pools(4);
         auto* pile = summary->add_piles();
         pile->set_pile_name("");
-        auto* counts = pile->mutable_user_groups();
-        counts->set_required(100);
+        auto* counts = pile->mutable_databases();
+        counts->set_total(120);
         counts->set_synced(80);
         counts->set_syncing(10);
         counts->set_pending(8);
         counts->set_unknown(2);
-        pile->mutable_system_groups()->set_required(3);
-        pile->mutable_system_groups()->set_synced(3);
+        counts->set_not_required(20);
+        auto* unplaced = summary->add_piles();
+        unplaced->mutable_databases()->set_total(1);
+        unplaced->mutable_databases()->set_not_required(1);
         setup.ReplyWithStorage(request->Sender, state);
         const auto result = OperationResult<Ydb::Bridge::ListPileSynchronizationResult>(setup.Runtime.WaitFuture(future));
         UNIT_ASSERT_VALUES_EQUAL(result.cluster_state_generation(), 7);
         UNIT_ASSERT_VALUES_EQUAL(result.observed_at().seconds(), 123);
         UNIT_ASSERT_VALUES_EQUAL(result.observed_at().nanos(), 456789000);
-        UNIT_ASSERT_VALUES_EQUAL(result.piles_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.piles_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result.unattributed_storage_pools(), 4);
         const auto& row = result.piles(0);
+        UNIT_ASSERT(row.has_pile_name());
         UNIT_ASSERT_VALUES_EQUAL(row.pile_name(), "");
-        UNIT_ASSERT_VALUES_EQUAL(row.user_groups().required(), 100);
-        UNIT_ASSERT_VALUES_EQUAL(row.user_groups().synced(), 80);
-        UNIT_ASSERT_VALUES_EQUAL(row.user_groups().syncing(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(row.user_groups().pending(), 8);
-        UNIT_ASSERT_VALUES_EQUAL(row.user_groups().unknown(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(row.system_groups().required(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(row.system_groups().synced(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(row.databases().total(), 120);
+        UNIT_ASSERT_VALUES_EQUAL(row.databases().synced(), 80);
+        UNIT_ASSERT_VALUES_EQUAL(row.databases().syncing(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(row.databases().pending(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(row.databases().unknown(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(row.databases().not_required(), 20);
+        UNIT_ASSERT(!result.piles(1).has_pile_name());
+        UNIT_ASSERT_VALUES_EQUAL(result.piles(1).databases().total(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.piles(1).databases().not_required(), 1);
+    }
+
+    Y_UNIT_TEST(AllGroupScopePreservesMissingPoolAndZeroGroupId) {
+        TStorageSetup setup;
+        Ydb::Bridge::ListGroupSynchronizationRequest query;
+        query.set_pile_name("");
+        query.add_statuses(Ydb::Bridge::SYNCED);
+        auto future = setup.Start(query);
+        const auto request = setup.GrabStorageQuery();
+        const auto& forwarded = request->Get()->Record;
+        UNIT_ASSERT(forwarded.GetView() == NKikimrBridge::TStorageQuery::GROUPS);
+        UNIT_ASSERT(!forwarded.HasStoragePool());
+        UNIT_ASSERT(!forwarded.HasStoragePoolId());
+        UNIT_ASSERT(!forwarded.GetFilterPools());
+        UNIT_ASSERT(forwarded.HasPileName());
+        UNIT_ASSERT(forwarded.GetPileName().empty());
+        UNIT_ASSERT_VALUES_EQUAL(forwarded.StatusesSize(), 1);
+        NKikimrBridge::TStorageState state;
+        state.SetStatus(Ydb::StatusIds::SUCCESS);
+        auto* group = state.MutableGroups()->add_groups();
+        group->set_group_id(0);
+        group->set_physical_group_id(1);
+        group->set_pile_name("");
+        group->set_sync_status(Ydb::Bridge::SYNCED);
+        setup.ReplyWithStorage(request->Sender, state);
+        const auto result = OperationResult<Ydb::Bridge::ListGroupSynchronizationResult>(setup.Runtime.WaitFuture(future));
+        UNIT_ASSERT_VALUES_EQUAL(result.groups_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.groups(0).group_id(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(result.groups(0).physical_group_id(), 1);
+        UNIT_ASSERT(result.groups(0).has_pile_name());
+        UNIT_ASSERT(!result.groups(0).has_storage_pool());
     }
 
     Y_UNIT_TEST(ControllerObservationDoesNotRequireLocalClusterState) {

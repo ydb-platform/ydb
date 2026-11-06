@@ -115,15 +115,27 @@ struct TGroupSyncCounts {
     uint64_t Unknown = 0;
 };
 
+//! Counts storage owners with known IDs, not all logical databases.
+//! Serverless databases sharing storage count as one owner.
+//! Total = Synced + Syncing + Pending + Unknown + NotRequired.
+struct TDatabaseSyncCounts {
+    uint64_t Total = 0;
+    uint64_t Synced = 0;
+    uint64_t Syncing = 0;
+    uint64_t Pending = 0;
+    uint64_t Unknown = 0;
+    uint64_t NotRequired = 0;
+};
+
 struct TSynchronizationError {
     std::string Message;
     std::optional<TInstant> OccurredAt;
 };
 
 struct TPileSynchronization {
-    std::string PileName;
-    TGroupSyncCounts UserGroups;
-    TGroupSyncCounts SystemGroups;
+    //! Absent for the row of databases with unknown placement; an empty name is a real pile.
+    std::optional<std::string> PileName;
+    TDatabaseSyncCounts Databases;
 };
 
 //! Synchronization of the listed storage pools, attributed to their storage owner when known.
@@ -144,7 +156,8 @@ struct TGroupSynchronization {
     uint32_t GroupId = 0;
     //! Physical group with VDisks, for low-level diagnostics; it may not exist yet.
     std::optional<uint32_t> PhysicalGroupId;
-    TStoragePool StoragePool;
+    //! Absent when the group has no storage pool affiliation.
+    std::optional<TStoragePool> StoragePool;
     //! Ordinary groups spanning several piles have one row per pile; absent for unknown placement.
     std::optional<std::string> PileName;
     ESynchronizationStatus SyncStatus = ESynchronizationStatus::Unspecified;
@@ -161,14 +174,23 @@ struct TListDatabaseSynchronizationSettings: public TOperationRequestSettings<TL
     //! Absence selects all placements; an explicitly empty name is a real pile.
     FLUENT_SETTING_OPTIONAL(std::string, PileName);
     FLUENT_SETTING_DEFAULT(bool, OnlyIncomplete, false);
+    //! Select owners whose storage pools have this aggregate mode.
+    FLUENT_SETTING_OPTIONAL(EStorageMode, StorageMode);
 };
 
-//! Exactly one database or pool is selected. Pool IDs survive renames and disambiguate names.
+//! Explicitly select all groups, or groups owned by a database or storage pool.
+//! Database/pool scopes exclude groups without matching ownership. Pool IDs survive renames.
+//! Explicit empty database paths or pool names are rejected by the server; use All() for all groups.
 class TGroupSynchronizationScope {
 public:
     enum class EKind { Database,
                        StoragePoolName,
-                       StoragePoolId };
+                       StoragePoolId,
+                       All };
+
+    static TGroupSynchronizationScope All() {
+        return {EKind::All, {}, {}};
+    }
 
     static TGroupSynchronizationScope Database(std::string path) {
         return {EKind::Database, std::move(path), {}};
@@ -185,7 +207,7 @@ public:
     EKind GetKind() const {
         return Kind_;
     }
-    //! Database path or pool name, according to GetKind(). Empty for a pool ID selector.
+    //! Database path or pool name, according to GetKind(). Empty for All or a pool ID selector.
     const std::string& GetName() const {
         return Name_;
     }
@@ -278,17 +300,18 @@ private:
 
 using TAsyncGetClusterStateResult = NThreading::TFuture<TGetClusterStateResult>;
 
-//! Synchronization counts for all piles, observed independently of their committed states.
+//! Synchronization counts by pile, with a separate row for unknown database placement.
+//! Observed independently of the committed pile states.
 class TListPileSynchronizationResult: public TStatus {
 public:
     TListPileSynchronizationResult(TStatus&& status, std::vector<TPileSynchronization> rows = {},
                                   uint64_t clusterStateGeneration = 0, TInstant observedAt = {},
-                                  uint64_t ordinaryGroups = 0)
+                                  uint64_t unattributedStoragePools = 0)
         : TStatus(std::move(status))
         , Piles_(std::move(rows))
         , ClusterStateGeneration_(clusterStateGeneration)
         , ObservedAt_(observedAt)
-        , OrdinaryGroups_(ordinaryGroups)
+        , UnattributedStoragePools_(unattributedStoragePools)
     {
     }
 
@@ -301,17 +324,17 @@ public:
     TInstant GetObservedAt() const {
         return ObservedAt_;
     }
-    //! Logical groups in ordinary storage pools, counted once across the cluster.
-    //! They do not require bridge synchronization; this counter is not broken down by pile.
-    uint64_t GetOrdinaryGroups() const {
-        return OrdinaryGroups_;
+    //! Pools with unknown storage owner IDs, excluded from database counts.
+    //! This counter measures pools, not databases; a missing owner name alone does not exclude a database.
+    uint64_t GetUnattributedStoragePools() const {
+        return UnattributedStoragePools_;
     }
 
 private:
     std::vector<TPileSynchronization> Piles_;
     uint64_t ClusterStateGeneration_ = 0;
     TInstant ObservedAt_;
-    uint64_t OrdinaryGroups_ = 0;
+    uint64_t UnattributedStoragePools_ = 0;
 };
 
 //! The complete selected list. Oversized requests fail; results are never truncated.

@@ -48,9 +48,13 @@ namespace NKikimr::NBsController::NBridgeStorage {
         ui64 Running = 0;
         ui64 Pending = 0;
         ui64 Unknown = 0;
+        ui64 NotRequired = 0;
 
         void Count(ECopyState state);
+        void CountDatabase(ECopyState state);
+        ECopyState GetStatus() const;
         void ToProto(Ydb::Bridge::GroupSyncCounts* to) const;
+        void ToProto(Ydb::Bridge::DatabaseSyncCounts* to) const;
     };
 
     // Bound both the scan and the full serialized answer. Space is reserved for its envelope.
@@ -66,7 +70,7 @@ namespace NKikimr::NBsController::NBridgeStorage {
     struct TGroupRow {
         ui32 GroupId;
         std::optional<ui32> PhysicalGroupId;
-        const Ydb::Bridge::StoragePool& Pool;
+        const Ydb::Bridge::StoragePool* Pool = nullptr;
         std::optional<TStringBuf> PileName;
         TCopyObservation Copy;
     };

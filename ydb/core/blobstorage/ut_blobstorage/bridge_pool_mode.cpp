@@ -457,13 +457,13 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
         const auto overview = QueryStorageDiagnostics(env, query);
         UNIT_ASSERT_C(overview.GetStatus() == Ydb::StatusIds::SUCCESS, overview.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().piles_size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().ordinary_groups(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().unattributed_storage_pools(), 2);
         UNIT_ASSERT_VALUES_EQUAL(overview.GetPiles().cluster_state_generation(), QueryStorageConfig(env).GetClusterState().GetGeneration());
         UNIT_ASSERT(overview.GetPiles().has_observed_at());
         for (const auto& row : overview.GetPiles().piles()) {
-            UNIT_ASSERT_VALUES_EQUAL(row.user_groups().required(), logical.size());
-            UNIT_ASSERT_VALUES_EQUAL(row.user_groups().synced(), logical.size());
-            UNIT_ASSERT(row.system_groups().required());
+            UNIT_ASSERT_VALUES_EQUAL(row.databases().total(), 0); // pools have no owner metadata yet
+            UNIT_ASSERT_VALUES_EQUAL(row.databases().synced(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(row.databases().unknown(), 0); // an unattributed pool is not an unknown database
         }
         query.SetView(NKikimrBridge::TStorageQuery::GROUPS);
         query.SetStoragePool(ReadStoragePool(env, 1).GetName());
@@ -572,6 +572,120 @@ Y_UNIT_TEST_SUITE(BridgePoolMode) {
             UNIT_ASSERT_VALUES_EQUAL(ownerRow.groups().required(), logical.size());
             UNIT_ASSERT(!ownerRow.has_database_path()); // enriched by RPC, not the controller
         }
+        query.SetView(NKikimrBridge::TStorageQuery::PILES);
+        query.ClearStorageMode();
+        const auto mixedOverview = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(mixedOverview.GetStatus() == Ydb::StatusIds::SUCCESS, mixedOverview.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(mixedOverview.GetPiles().unattributed_storage_pools(), 0);
+        for (const auto& row : mixedOverview.GetPiles().piles()) {
+            UNIT_ASSERT_VALUES_EQUAL(row.databases().total(), 1); // two groups and two pools, one storage owner
+            UNIT_ASSERT_VALUES_EQUAL(row.databases().synced(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(row.databases().not_required(), 0);
+        }
+
+        auto ordinaryPool = ReadStoragePool(env, 2);
+        ordinaryPool.MutableScopeId()->SetX2(6);
+        NKikimrBlobStorage::TConfigRequest separateOwner;
+        separateOwner.AddCommand()->MutableDefineStoragePool()->CopyFrom(ordinaryPool);
+        const auto separated = env.Invoke(separateOwner);
+        UNIT_ASSERT_C(separated.GetSuccess(), separated.GetErrorDescription());
+        const auto separateOverview = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(separateOverview.GetStatus() == Ydb::StatusIds::SUCCESS, separateOverview.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(separateOverview.GetPiles().unattributed_storage_pools(), 0);
+        for (const auto& row : separateOverview.GetPiles().piles()) {
+            UNIT_ASSERT(row.has_pile_name());
+            UNIT_ASSERT_VALUES_EQUAL(row.databases().total(), row.pile_name() == "pile_2" ? 2 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(row.databases().synced(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(row.databases().not_required(), row.pile_name() == "pile_2" ? 1 : 0);
+        }
+
+        auto emptyPool = ReadStoragePool(env, 2);
+        emptyPool.SetStoragePoolId(3);
+        emptyPool.SetName("empty-ordinary-pool");
+        emptyPool.SetNumGroups(0);
+        emptyPool.ClearItemConfigGeneration();
+        emptyPool.MutableScopeId()->SetX2(7);
+        NKikimrBlobStorage::TConfigRequest createEmpty;
+        createEmpty.AddCommand()->MutableDefineStoragePool()->CopyFrom(emptyPool);
+        const auto createdEmpty = env.Invoke(createEmpty);
+        UNIT_ASSERT_C(createdEmpty.GetSuccess(), createdEmpty.GetErrorDescription());
+        const auto withUnplaced = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(withUnplaced.GetStatus() == Ydb::StatusIds::SUCCESS, withUnplaced.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(withUnplaced.GetPiles().piles_size(), 3);
+        bool foundUnplaced = false;
+        for (const auto& row : withUnplaced.GetPiles().piles()) {
+            if (!row.has_pile_name()) {
+                foundUnplaced = true;
+                UNIT_ASSERT_VALUES_EQUAL(row.databases().total(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(row.databases().not_required(), 1);
+            }
+        }
+        UNIT_ASSERT(foundUnplaced);
+
+        const auto staticConfig = QueryStorageConfig(env);
+        const NKikimrBlobStorage::TGroupInfo* staticLogical = nullptr;
+        for (const auto& group : staticConfig.GetBlobStorageConfig().GetServiceSet().GetGroups()) {
+            if (group.HasBridgeGroupState()) {
+                staticLogical = &group;
+                break;
+            }
+        }
+        UNIT_ASSERT(staticLogical);
+        UNIT_ASSERT_VALUES_EQUAL(staticLogical->GetGroupID(), 0);
+        query.Clear();
+        query.SetView(NKikimrBridge::TStorageQuery::GROUPS);
+        const auto allGroups = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(allGroups.GetStatus() == Ydb::StatusIds::SUCCESS, allGroups.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(allGroups.GetGroups().groups_size(), 2 * logical.size() + 3);
+        size_t withoutPool = 0;
+        for (const auto& row : allGroups.GetGroups().groups()) {
+            if (!row.has_storage_pool()) {
+                ++withoutPool;
+                UNIT_ASSERT_VALUES_EQUAL(row.group_id(), 0);
+                UNIT_ASSERT(row.has_pile_name());
+                UNIT_ASSERT(row.sync_status() == Ydb::Bridge::SYNCED);
+                const auto* part = NBridge::GetGroupPile(staticLogical->GetBridgeGroupState(),
+                    TBridgePileId::FromPileIndex(row.pile_name() == "pile_1" ? 0 : 1));
+                UNIT_ASSERT(part);
+                UNIT_ASSERT_VALUES_EQUAL(row.physical_group_id(), part->GetGroupId());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(withoutPool, 2);
+        query.SetPileName("pile_2");
+        const auto onePile = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(onePile.GetStatus() == Ydb::StatusIds::SUCCESS, onePile.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(onePile.GetGroups().groups_size(), logical.size() + 2);
+        for (const auto& row : onePile.GetGroups().groups()) {
+            UNIT_ASSERT_VALUES_EQUAL(row.pile_name(), "pile_2");
+        }
+        query.ClearPileName();
+        query.AddStatuses(Ydb::Bridge::NOT_REQUIRED);
+        const auto notRequired = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(notRequired.GetStatus() == Ydb::StatusIds::SUCCESS, notRequired.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(notRequired.GetGroups().groups_size(), 1);
+        UNIT_ASSERT(notRequired.GetGroups().groups(0).has_storage_pool());
+
+        query.ClearStatuses();
+        query.MutableStoragePoolId()->set_box_id(1);
+        query.MutableStoragePoolId()->set_pool_id(1);
+        const auto scopedGroups = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(scopedGroups.GetStatus() == Ydb::StatusIds::SUCCESS, scopedGroups.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(scopedGroups.GetGroups().groups_size(), 2 * logical.size());
+        for (const auto& row : scopedGroups.GetGroups().groups()) {
+            UNIT_ASSERT(row.has_storage_pool());
+        }
+        query.ClearStoragePoolId();
+        query.SetFilterPools(true);
+        query.AddPoolNames(emptyPool.GetName());
+        const auto emptyDatabaseGroups = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT_C(emptyDatabaseGroups.GetStatus() == Ydb::StatusIds::SUCCESS, emptyDatabaseGroups.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(emptyDatabaseGroups.GetGroups().groups_size(), 0);
+        query.SetFilterPools(false);
+        query.ClearPoolNames();
+        query.SetStoragePool("");
+        const auto emptyScope = QueryStorageDiagnostics(env, query);
+        UNIT_ASSERT(emptyScope.GetStatus() == Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT(!emptyScope.HasGroups());
     }
 
     // ordinary groups residing in single piles become inline piles, get their parts in the other pile, which are synced

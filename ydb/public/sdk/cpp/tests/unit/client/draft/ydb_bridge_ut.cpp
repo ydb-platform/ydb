@@ -86,12 +86,30 @@ namespace {
         counts->set_unknown(2);
     }
 
+    void SetCounts(Ydb::Bridge::DatabaseSyncCounts* counts) {
+        counts->set_total(20);
+        counts->set_synced(5);
+        counts->set_syncing(4);
+        counts->set_pending(3);
+        counts->set_unknown(2);
+        counts->set_not_required(6);
+    }
+
     void CheckCounts(const TGroupSyncCounts& counts) {
         UNIT_ASSERT_VALUES_EQUAL(counts.Required, 14);
         UNIT_ASSERT_VALUES_EQUAL(counts.Synced, 5);
         UNIT_ASSERT_VALUES_EQUAL(counts.Syncing, 4);
         UNIT_ASSERT_VALUES_EQUAL(counts.Pending, 3);
         UNIT_ASSERT_VALUES_EQUAL(counts.Unknown, 2);
+    }
+
+    void CheckCounts(const TDatabaseSyncCounts& counts) {
+        UNIT_ASSERT_VALUES_EQUAL(counts.Total, 20);
+        UNIT_ASSERT_VALUES_EQUAL(counts.Synced, 5);
+        UNIT_ASSERT_VALUES_EQUAL(counts.Syncing, 4);
+        UNIT_ASSERT_VALUES_EQUAL(counts.Pending, 3);
+        UNIT_ASSERT_VALUES_EQUAL(counts.Unknown, 2);
+        UNIT_ASSERT_VALUES_EQUAL(counts.NotRequired, 6);
     }
 
     template <class TResult>
@@ -140,23 +158,28 @@ Y_UNIT_TEST_SUITE(BridgeClient) {
         TFixture fixture;
         auto& proto = fixture.Service.Piles.Result;
         SetObservation(proto);
-        proto.set_ordinary_groups(4);
+        proto.set_unattributed_storage_pools(3);
         auto* pile = proto.add_piles();
         pile->set_pile_name("");
-        SetCounts(pile->mutable_user_groups());
-        SetCounts(pile->mutable_system_groups());
+        SetCounts(pile->mutable_databases());
+        auto* unplaced = proto.add_piles();
+        unplaced->mutable_databases()->set_total(1);
+        unplaced->mutable_databases()->set_not_required(1);
         const auto result = fixture.Client.ListPileSynchronization(
                                               TListPileSynchronizationSettings().OperationTimeout(TDuration::Seconds(3)))
                                 .GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetClusterStateGeneration(), 11);
         UNIT_ASSERT_VALUES_EQUAL(result.GetObservedAt().MicroSeconds(), 123456789);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetOrdinaryGroups(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetUnattributedStoragePools(), 3);
         const auto& piles = result.GetPiles();
-        UNIT_ASSERT_VALUES_EQUAL(piles.size(), 1);
-        UNIT_ASSERT(piles[0].PileName.empty());
-        CheckCounts(piles[0].UserGroups);
-        CheckCounts(piles[0].SystemGroups);
+        UNIT_ASSERT_VALUES_EQUAL(piles.size(), 2);
+        UNIT_ASSERT(piles[0].PileName.has_value());
+        UNIT_ASSERT(piles[0].PileName->empty());
+        CheckCounts(piles[0].Databases);
+        UNIT_ASSERT(!piles[1].PileName);
+        UNIT_ASSERT_VALUES_EQUAL(piles[1].Databases.Total, 1);
+        UNIT_ASSERT_VALUES_EQUAL(piles[1].Databases.NotRequired, 1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Service.Piles.LastRequest.operation_params().operation_timeout().seconds(), 3);
     }
 
@@ -179,7 +202,7 @@ Y_UNIT_TEST_SUITE(BridgeClient) {
         SetPool(anonymous->add_storage_pools(), 9, 9, "unresolved");
         anonymous->mutable_last_sync_error()->set_message("timestamp unavailable");
 
-        const auto settings = TListDatabaseSynchronizationSettings().DatabasePath("/Root/serverless").PileName("").OnlyIncomplete(true);
+        const auto settings = TListDatabaseSynchronizationSettings().DatabasePath("/Root/serverless").PileName("").OnlyIncomplete(true).StorageMode(EStorageMode::Ordinary);
         const auto result = fixture.Client.ListDatabaseSynchronization(settings).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         const auto& request = fixture.Service.Databases.LastRequest;
@@ -188,6 +211,8 @@ Y_UNIT_TEST_SUITE(BridgeClient) {
         UNIT_ASSERT(request.has_pile_name());
         UNIT_ASSERT(request.pile_name().empty());
         UNIT_ASSERT(request.only_incomplete());
+        UNIT_ASSERT(request.has_storage_mode());
+        UNIT_ASSERT(request.storage_mode() == Ydb::Bridge::ORDINARY);
         UNIT_ASSERT_VALUES_EQUAL(result.GetClusterStateGeneration(), 11);
         UNIT_ASSERT_VALUES_EQUAL(result.GetObservedAt().MicroSeconds(), 123456789);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStorageOwnerDatabasePath().value(), "/Root/shared");
@@ -250,9 +275,10 @@ Y_UNIT_TEST_SUITE(BridgeClient) {
         UNIT_ASSERT(row.PhysicalGroupId.has_value());
         UNIT_ASSERT_VALUES_EQUAL(row.PhysicalGroupId.value(), 0);
         UNIT_ASSERT(row.PileName.has_value() && row.PileName.value().empty());
-        UNIT_ASSERT_VALUES_EQUAL(row.StoragePool.Id.BoxId, 2);
-        UNIT_ASSERT_VALUES_EQUAL(row.StoragePool.Id.PoolId, 5);
-        UNIT_ASSERT_VALUES_EQUAL(row.StoragePool.Name, "pool");
+        UNIT_ASSERT(row.StoragePool);
+        UNIT_ASSERT_VALUES_EQUAL(row.StoragePool->Id.BoxId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(row.StoragePool->Id.PoolId, 5);
+        UNIT_ASSERT_VALUES_EQUAL(row.StoragePool->Name, "pool");
         UNIT_ASSERT(row.SyncStatus == ESynchronizationStatus::Syncing);
         UNIT_ASSERT_VALUES_EQUAL(row.SyncPhase, "WRITE_KEEP");
         UNIT_ASSERT(row.LastSyncError);
@@ -266,12 +292,35 @@ Y_UNIT_TEST_SUITE(BridgeClient) {
 
     Y_UNIT_TEST(PoolScopeAndDefaultSettings) {
         TFixture fixture;
+        auto* unowned = fixture.Service.Groups.Result.add_groups();
+        unowned->set_group_id(0);
+        unowned->set_physical_group_id(0);
+        unowned->set_pile_name("");
+        unowned->set_sync_status(Ydb::Bridge::SYNCED);
+        const auto all = fixture.Client.ListGroupSynchronization(TGroupSynchronizationScope::All()).GetValueSync();
+        UNIT_ASSERT_C(all.IsSuccess(), all.GetIssues().ToString());
+        UNIT_ASSERT(fixture.Service.Groups.LastRequest.scope_case() == Ydb::Bridge::ListGroupSynchronizationRequest::SCOPE_NOT_SET);
+        UNIT_ASSERT_VALUES_EQUAL(all.GetGroups().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(all.GetGroups()[0].GroupId, 0);
+        UNIT_ASSERT(all.GetGroups()[0].PhysicalGroupId.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(all.GetGroups()[0].PhysicalGroupId.value(), 0);
+        UNIT_ASSERT(!all.GetGroups()[0].StoragePool);
+        UNIT_ASSERT(all.GetGroups()[0].PileName.has_value() && all.GetGroups()[0].PileName->empty());
+        fixture.Service.Groups.Result.clear_groups();
         auto result = fixture.Client.ListGroupSynchronization(TGroupSynchronizationScope::PoolName("pool,ssd")).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(fixture.Service.Groups.LastRequest.storage_pool_name(), "pool,ssd");
         UNIT_ASSERT(!fixture.Service.Groups.LastRequest.has_pile_name());
         UNIT_ASSERT(fixture.Service.Groups.LastRequest.statuses().empty());
         UNIT_ASSERT(!result.GetStorageOwnerDatabasePath());
+        fixture.Service.Groups.Status = Ydb::StatusIds::BAD_REQUEST;
+        fixture.Service.Groups.Issue = "storage pool name must not be empty";
+        const auto emptyPool = fixture.Client.ListGroupSynchronization(TGroupSynchronizationScope::PoolName("")).GetValueSync();
+        UNIT_ASSERT(emptyPool.GetStatus() == EStatus::BAD_REQUEST);
+        UNIT_ASSERT(fixture.Service.Groups.LastRequest.scope_case() == Ydb::Bridge::ListGroupSynchronizationRequest::kStoragePoolName);
+        UNIT_ASSERT(fixture.Service.Groups.LastRequest.storage_pool_name().empty());
+        fixture.Service.Groups.Status = Ydb::StatusIds::SUCCESS;
+        fixture.Service.Groups.Issue.clear();
         result = fixture.Client.ListGroupSynchronization(TGroupSynchronizationScope::PoolId({7, 13})).GetValueSync();
         UNIT_ASSERT(result.IsSuccess());
         UNIT_ASSERT(fixture.Service.Groups.LastRequest.scope_case() == Ydb::Bridge::ListGroupSynchronizationRequest::kStoragePoolId);
@@ -282,6 +331,7 @@ Y_UNIT_TEST_SUITE(BridgeClient) {
         UNIT_ASSERT(!fixture.Service.Databases.LastRequest.has_database_path());
         UNIT_ASSERT(!fixture.Service.Databases.LastRequest.has_pile_name());
         UNIT_ASSERT(!fixture.Service.Databases.LastRequest.only_incomplete());
+        UNIT_ASSERT(!fixture.Service.Databases.LastRequest.has_storage_mode());
         UNIT_ASSERT(databases.GetDatabases().empty());
     }
 

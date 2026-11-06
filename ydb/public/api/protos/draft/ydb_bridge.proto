@@ -71,10 +71,8 @@ message ListPileSynchronizationResult {
     repeated PileSynchronization piles = 1;
     uint64 cluster_state_generation = 2;
     google.protobuf.Timestamp observed_at = 3;
-    // Logical groups in storage pools with bridge mode disabled, counted once
-    // across the cluster, including ordinary pools of mixed-mode databases.
-    // They are excluded from the per-pile required-group counters.
-    uint64 ordinary_groups = 4;
+    // Pools lacking a complete storage-owner ID. They are excluded from database counts.
+    uint64 unattributed_storage_pools = 4;
 }
 
 message ListDatabaseSynchronizationRequest {
@@ -86,6 +84,9 @@ message ListDatabaseSynchronizationRequest {
     // Required groups whose synchronization is not confirmed, including UNKNOWN.
     // Ordinary storage and zero required groups do not match.
     bool only_incomplete = 4;
+    // Optional policy filter, applied after combining all pools of an owner.
+    // Supported values: BRIDGED, ORDINARY, MIXED.
+    optional StorageMode storage_mode = 5;
 }
 
 message ListDatabaseSynchronizationResponse {
@@ -103,7 +104,8 @@ message ListDatabaseSynchronizationResult {
 
 message ListGroupSynchronizationRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    // Exactly one nonempty scope is required. Names must identify a unique pool;
+    // Absent scope selects all groups, including groups outside dynamic pools.
+    // Explicit paths/names must be nonempty. Pool names must be unique;
     // use its ID when names are ambiguous. The ID is independent of pool renames.
     oneof scope {
         string database_path = 2;
@@ -169,10 +171,23 @@ message GroupSyncCounts {
     uint64 unknown = 5;
 }
 
+// Known storage owners observed in this pile, counted once regardless of the
+// number of their pools or groups. Total is the sum of the five status counts.
+// NOT_REQUIRED includes ordinary storage, inactive piles and empty storage.
+message DatabaseSyncCounts {
+    uint64 total = 1;
+    uint64 synced = 2;
+    uint64 syncing = 3;
+    uint64 pending = 4;
+    uint64 unknown = 5;
+    uint64 not_required = 6;
+}
+
 message PileSynchronization {
-    string pile_name = 1;
-    GroupSyncCounts user_groups = 2;
-    GroupSyncCounts system_groups = 3;
+    // Absent for known databases whose placement cannot be determined.
+    // A present empty name identifies an actual pile named "".
+    optional string pile_name = 1;
+    DatabaseSyncCounts databases = 2;
 }
 
 message SynchronizationError {
@@ -202,6 +217,7 @@ message GroupSynchronization {
     // ID of its physical group with VDisks, for low-level diagnostics.
     // Absent when the required physical group has not been created yet.
     optional uint32 physical_group_id = 2;
+    // Absent for groups outside dynamic storage pools.
     StoragePool storage_pool = 3;
     // Pile of this observation. An ordinary physical group spanning several
     // piles has one row per pile; absent if placement cannot be determined.

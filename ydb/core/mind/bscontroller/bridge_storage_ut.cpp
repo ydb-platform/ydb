@@ -110,6 +110,50 @@ Y_UNIT_TEST_SUITE(BridgeStorageState) {
         UNIT_ASSERT_VALUES_EQUAL(proto.syncing(), 1);
         UNIT_ASSERT_VALUES_EQUAL(proto.pending(), 1);
         UNIT_ASSERT_VALUES_EQUAL(proto.unknown(), 1);
+        Ydb::Bridge::DatabaseSyncCounts databases;
+        counts.ToProto(&databases);
+        UNIT_ASSERT_VALUES_EQUAL(databases.total(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(databases.synced(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(databases.syncing(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(databases.pending(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(databases.unknown(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(databases.not_required(), 0);
+        UNIT_ASSERT(counts.GetStatus() == Ydb::Bridge::SYNCING);
+    }
+
+    Y_UNIT_TEST(DatabaseStatusUsesRequiredGroupAggregate) {
+        TCounts groups;
+        UNIT_ASSERT(groups.GetStatus() == Ydb::Bridge::NOT_REQUIRED);
+        groups.Count(Ydb::Bridge::PENDING);
+        UNIT_ASSERT(groups.GetStatus() == Ydb::Bridge::PENDING);
+        groups.Count(Ydb::Bridge::UNKNOWN);
+        UNIT_ASSERT(groups.GetStatus() == Ydb::Bridge::UNKNOWN);
+        groups.Count(Ydb::Bridge::SYNCING);
+        UNIT_ASSERT(groups.GetStatus() == Ydb::Bridge::SYNCING);
+        TCounts complete;
+        complete.Count(Ydb::Bridge::SYNCED);
+        complete.Count(Ydb::Bridge::SYNCED);
+        UNIT_ASSERT(complete.GetStatus() == Ydb::Bridge::SYNCED);
+    }
+
+    Y_UNIT_TEST(DatabaseCountsPartitionIncludesNotRequired) {
+        TCounts counts;
+        for (const auto status : {Ydb::Bridge::SYNCED, Ydb::Bridge::SYNCING, Ydb::Bridge::PENDING,
+                                  Ydb::Bridge::UNKNOWN, Ydb::Bridge::NOT_REQUIRED}) {
+            counts.CountDatabase(status);
+        }
+        Ydb::Bridge::DatabaseSyncCounts proto;
+        counts.ToProto(&proto);
+        UNIT_ASSERT_VALUES_EQUAL(proto.total(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(proto.synced(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(proto.syncing(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(proto.pending(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(proto.unknown(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(proto.not_required(), 1);
+        TCounts ordinary;
+        ordinary.CountDatabase(Ydb::Bridge::NOT_REQUIRED);
+        ordinary.CountDatabase(Ydb::Bridge::NOT_REQUIRED);
+        UNIT_ASSERT(ordinary.GetStatus() == Ydb::Bridge::NOT_REQUIRED);
     }
 
     Y_UNIT_TEST(AppendGroupPreservesPoolAndOptionalPlacement) {
@@ -119,7 +163,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageState) {
         pool.set_name("pool,ssd");
         TReportBudget budget;
         Ydb::Bridge::ListGroupSynchronizationResult result;
-        UNIT_ASSERT(AppendGroup({100, std::nullopt, pool, TStringBuf(""),
+        UNIT_ASSERT(AppendGroup({100, std::nullopt, &pool, TStringBuf(""),
                                  {.State = Ydb::Bridge::PENDING}}, budget, result));
         const auto& pending = result.groups(0);
         UNIT_ASSERT(pending.has_pile_name());
@@ -128,10 +172,16 @@ Y_UNIT_TEST_SUITE(BridgeStorageState) {
         UNIT_ASSERT_VALUES_EQUAL(pending.storage_pool().id().box_id(), 2);
         UNIT_ASSERT_VALUES_EQUAL(pending.storage_pool().id().pool_id(), 5);
         UNIT_ASSERT_VALUES_EQUAL(pending.storage_pool().name(), "pool,ssd");
-        UNIT_ASSERT(AppendGroup({101, 101, pool, std::nullopt,
+        UNIT_ASSERT(AppendGroup({101, 101, &pool, std::nullopt,
                                  {.State = Ydb::Bridge::NOT_REQUIRED}}, budget, result));
         UNIT_ASSERT(!result.groups(1).has_pile_name());
         UNIT_ASSERT_VALUES_EQUAL(result.groups(1).physical_group_id(), 101);
+        UNIT_ASSERT(AppendGroup({0, 0, nullptr, TStringBuf("pile"),
+                                 {.State = Ydb::Bridge::SYNCED}}, budget, result));
+        UNIT_ASSERT_VALUES_EQUAL(result.groups(2).group_id(), 0);
+        UNIT_ASSERT(result.groups(2).has_physical_group_id());
+        UNIT_ASSERT_VALUES_EQUAL(result.groups(2).physical_group_id(), 0);
+        UNIT_ASSERT(!result.groups(2).has_storage_pool());
     }
 
     Y_UNIT_TEST(LargeUpstreamErrorIsRejectedBeforeAppending) {
@@ -140,7 +190,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageState) {
         pool.set_name("pool");
         TReportBudget budget;
         Ydb::Bridge::ListGroupSynchronizationResult result;
-        UNIT_ASSERT(!AppendGroup({100, 101, pool, TStringBuf("pile"),
+        UNIT_ASSERT(!AppendGroup({100, 101, &pool, TStringBuf("pile"),
                                   {.State = Ydb::Bridge::PENDING, .LastError = &error}}, budget, result));
         UNIT_ASSERT_VALUES_EQUAL(result.groups_size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(budget.Bytes, 1024);
@@ -185,7 +235,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageState) {
                     UNIT_ASSERT(budget.Visit());
                     const auto copy = ObserveCopy({.Group = context, .PileId = TBridgePileId::FromPileIndex(pile),
                                                    .PileState = TCluster::SYNCHRONIZED});
-                    UNIT_ASSERT(AppendGroup({0x82000000 + i, copy.Part->GetGroupId(), pool,
+                    UNIT_ASSERT(AppendGroup({0x82000000 + i, copy.Part->GetGroupId(), &pool,
                                              pileNames[pile], copy}, budget, result));
                 }
             }

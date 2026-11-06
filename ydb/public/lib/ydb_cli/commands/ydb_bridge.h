@@ -64,6 +64,7 @@ private:
     TString StoragePool;
     std::optional<NBridge::TStoragePoolId> StoragePoolId;
     std::optional<TString> PileName;
+    std::optional<NBridge::EStorageMode> StorageModeFilter;
 };
 
 class TCommandBridgeSwitchover : public TYdbCommand {

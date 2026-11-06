@@ -58,12 +58,44 @@ namespace NKikimr::NBsController::NBridgeStorage {
         }
     }
 
+    void TCounts::CountDatabase(ECopyState state) {
+        if (state == Ydb::Bridge::NOT_REQUIRED) {
+            ++Total;
+            ++NotRequired;
+        } else {
+            Count(state);
+        }
+    }
+
+    ECopyState TCounts::GetStatus() const {
+        const ui64 required = Total - NotRequired;
+        if (!required) {
+            return Ydb::Bridge::NOT_REQUIRED;
+        }
+        if (Synced == required) {
+            return Ydb::Bridge::SYNCED;
+        }
+        if (Running) {
+            return Ydb::Bridge::SYNCING;
+        }
+        return Unknown ? Ydb::Bridge::UNKNOWN : Ydb::Bridge::PENDING;
+    }
+
     void TCounts::ToProto(Ydb::Bridge::GroupSyncCounts* to) const {
         to->set_required(Total);
         to->set_synced(Synced);
         to->set_syncing(Running);
         to->set_pending(Pending);
         to->set_unknown(Unknown);
+    }
+
+    void TCounts::ToProto(Ydb::Bridge::DatabaseSyncCounts* to) const {
+        to->set_total(Total);
+        to->set_synced(Synced);
+        to->set_syncing(Running);
+        to->set_pending(Pending);
+        to->set_unknown(Unknown);
+        to->set_not_required(NotRequired);
     }
 
     bool TReportBudget::Visit() {
@@ -100,8 +132,9 @@ namespace NKikimr::NBsController::NBridgeStorage {
     bool AppendGroup(const TGroupRow& input, TReportBudget& budget, Ydb::Bridge::ListGroupSynchronizationResult& result) {
         const ui64 errorBytes = input.Copy.LastError ? input.Copy.LastError->size() : 0;
         const ui64 pileBytes = input.PileName ? input.PileName->size() : 0;
-        if (!budget.Fits(errorBytes) || !budget.Fits(pileBytes) || !budget.Fits(input.Pool.name().size()) ||
-            !budget.Fits(errorBytes + pileBytes + input.Pool.name().size() + 128)) {
+        const ui64 poolBytes = input.Pool ? input.Pool->name().size() : 0;
+        if (!budget.Fits(errorBytes) || !budget.Fits(pileBytes) || !budget.Fits(poolBytes) ||
+            !budget.Fits(errorBytes + pileBytes + poolBytes + 128)) {
             return false; // reject before copying an arbitrarily long upstream error
         }
         Ydb::Bridge::GroupSynchronization row;
@@ -109,7 +142,9 @@ namespace NKikimr::NBsController::NBridgeStorage {
         if (input.PhysicalGroupId) {
             row.set_physical_group_id(*input.PhysicalGroupId);
         }
-        row.mutable_storage_pool()->CopyFrom(input.Pool);
+        if (input.Pool) {
+            row.mutable_storage_pool()->CopyFrom(*input.Pool);
+        }
         if (input.PileName) {
             row.set_pile_name(input.PileName->data(), input.PileName->size());
         }
@@ -213,7 +248,7 @@ namespace NKikimr::NBsController {
             }
             namedMatches += pool.Name == query.GetStoragePool();
             if ((!query.GetFilterPools() || requested.contains(pool.Name)) &&
-                (query.GetStoragePool().empty() || pool.Name == query.GetStoragePool())) {
+                (!query.HasStoragePool() || pool.Name == query.GetStoragePool())) {
                 selected.insert(id);
             }
         }
@@ -223,7 +258,7 @@ namespace NKikimr::NBsController {
                 return Ydb::StatusIds::PRECONDITION_FAILED;
             }
         }
-        if (!query.GetStoragePool().empty() && namedMatches != 1) {
+        if (query.HasStoragePool() && namedMatches != 1) {
             error = namedMatches ? "Storage pool name is ambiguous" : "Storage pool not found";
             return namedMatches ? Ydb::StatusIds::PRECONDITION_FAILED : Ydb::StatusIds::NOT_FOUND;
         }
@@ -255,11 +290,18 @@ namespace NKikimr::NBsController {
         if (query.GetView() != TQuery::PILES && query.GetView() != TQuery::DATABASES && query.GetView() != TQuery::GROUPS) {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Unknown storage diagnostic view");
         }
-        if (query.HasStoragePoolId() && (!query.GetStoragePoolId().pool_id() || !query.GetStoragePool().empty() || query.GetFilterPools())) {
+        if (query.HasStoragePool() && query.GetStoragePool().empty()) {
+            return fail(Ydb::StatusIds::BAD_REQUEST, "Storage pool name must not be empty");
+        }
+        if (query.HasStoragePoolId() && (!query.GetStoragePoolId().pool_id() || query.HasStoragePool() || query.GetFilterPools())) {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Select storage pools by database, name, or a nonzero pool ID");
         }
         if ((query.StatusesSize() && query.GetView() != TQuery::GROUPS) || (query.GetNotSynced() && query.GetView() != TQuery::DATABASES)) {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Synchronization statuses filter groups; incomplete summaries filter databases");
+        }
+        if (query.HasStorageMode() && (query.GetView() != TQuery::DATABASES ||
+                query.GetStorageMode() < Ydb::Bridge::BRIDGED || query.GetStorageMode() > Ydb::Bridge::MIXED)) {
+            return fail(Ydb::StatusIds::BAD_REQUEST, "storage_mode requires database synchronization and must be BRIDGED, ORDINARY, or MIXED");
         }
         ui32 statusMask = 0;
         for (const auto status : query.GetStatuses()) {
@@ -267,9 +309,6 @@ namespace NKikimr::NBsController {
                 return fail(Ydb::StatusIds::BAD_REQUEST, "Unknown synchronization status");
             }
             statusMask |= 1u << status;
-        }
-        if (query.GetView() == TQuery::GROUPS && !query.HasStoragePoolId() && query.GetStoragePool().empty() && !query.GetFilterPools()) {
-            return fail(Ydb::StatusIds::BAD_REQUEST, "Group diagnostics require a database or storage pool filter");
         }
         NBridgeStorage::TReportBudget budget;
         TVector<const TBridgeInfo::TPile*> piles;
@@ -305,7 +344,7 @@ namespace NKikimr::NBsController {
             report.MutableGroups()->set_cluster_state_generation(generation);
             SetTimestamp(observedAt, report.MutableGroups()->mutable_observed_at());
         }
-        std::map<TBridgePileId, NBridgeStorage::TCounts> userCounts, systemCounts;
+        std::map<TBridgePileId, NBridgeStorage::TCounts> databaseCounts;
         std::map<std::pair<TPathId, TBoxStoragePoolId>, TOwnerSummary> owners;
         auto resolveOrdinaryPlacement = [&](const TGroupInfo& group, const NBridgeStorage::TGroupContext& context,
                 std::set<TBridgePileId>& placement, std::optional<ui32>& physical) {
@@ -334,22 +373,28 @@ namespace NKikimr::NBsController {
             }
             return true;
         };
-        ui64 ordinaryGroups = 0;
+        ui64 unattributedPools = 0;
         for (const auto& poolId : selected) {
             const auto& pool = StoragePools.at(poolId);
             TOwnerSummary* owner = nullptr;
-            if (query.GetView() == TQuery::DATABASES) {
+            if (query.GetView() != TQuery::GROUPS) {
                 const TPathId path(pool.SchemeshardId.GetOrElse(0), pool.PathItemId.GetOrElse(0));
                 const bool known = path.OwnerId && path.LocalPathId;
+                if (!known && query.GetView() == TQuery::PILES) {
+                    ++unattributedPools;
+                    continue; // a pool without an owner is not a database
+                }
                 owner = &owners[{known ? path : TPathId(0, 0), known ? TBoxStoragePoolId{} : poolId}];
                 const auto mode = pool.BridgeMode ? Ydb::Bridge::BRIDGED : Ydb::Bridge::ORDINARY;
                 owner->Mode = owner->Mode == Ydb::Bridge::STORAGE_MODE_UNSPECIFIED ? mode : owner->Mode == mode ? mode
                                                                                                                 : Ydb::Bridge::MIXED;
-                owner->Pools.push_back(poolId);
-                if (!budget.Fits(pool.Name.size() + 64) || !budget.Fits(owner->PoolBytes + pool.Name.size() + 64)) {
-                    return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
+                if (query.GetView() == TQuery::DATABASES) {
+                    owner->Pools.push_back(poolId);
+                    if (!budget.Fits(pool.Name.size() + 64) || !budget.Fits(owner->PoolBytes + pool.Name.size() + 64)) {
+                        return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
+                    }
+                    owner->PoolBytes += pool.Name.size() + 64;
                 }
-                owner->PoolBytes += pool.Name.size() + 64;
                 if (pool.BridgeMode) {
                     for (const auto* pile : piles) {
                         if (!budget.Visit()) {
@@ -373,10 +418,6 @@ namespace NKikimr::NBsController {
                 }
                 const auto* group = FindGroup(it->second);
                 if (!group || (group->BridgePileId && !group->BridgeGroupInfo) || group->VirtualGroupState) {
-                    continue;
-                }
-                if (!pool.BridgeMode && query.GetView() == TQuery::PILES) {
-                    ++ordinaryGroups;
                     continue;
                 }
                 const NBridgeStorage::TGroupContext context(group->BridgeGroupInfo ? &group->BridgeGroupInfo->GetBridgeGroupState() : nullptr);
@@ -412,9 +453,7 @@ namespace NKikimr::NBsController {
                     } else {
                         copy.State = Ydb::Bridge::NOT_REQUIRED;
                     }
-                    if (query.GetView() == TQuery::PILES) {
-                        userCounts[pile->BridgePileId].Count(copy.State);
-                    } else if (owner) {
+                    if (owner) {
                         owner->Copies[pile ? pile->BridgePileId : TBridgePileId()].Add(copy);
                     } else if (!statusMask || (statusMask & (1u << copy.State))) {
                         if (!poolFilled) {
@@ -426,7 +465,7 @@ namespace NKikimr::NBsController {
                         }
                         const auto physical = !pool.BridgeMode ? ordinaryPhysical :
                             copy.Part ? std::optional<ui32>(copy.Part->GetGroupId()) : std::nullopt;
-                        if (!NBridgeStorage::AppendGroup({group->ID.GetRawId(), physical, publicPool,
+                        if (!NBridgeStorage::AppendGroup({group->ID.GetRawId(), physical, &publicPool,
                                                           pile ? std::optional<TStringBuf>(pile->Name) : std::nullopt, copy}, budget, *report.MutableGroups())) {
                             return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                         }
@@ -434,40 +473,121 @@ namespace NKikimr::NBsController {
                 }
             }
         }
-        if (query.GetView() == TQuery::PILES) {
-            report.MutablePiles()->set_ordinary_groups(ordinaryGroups);
+        if (query.GetView() == TQuery::GROUPS && !query.HasStoragePool() && !query.HasStoragePoolId() && !query.GetFilterPools()) {
             for (const auto& [id, group] : StaticGroups) {
-                Y_UNUSED(id);
                 if (!budget.Visit()) {
                     return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                 }
-                if (group.Info && group.Info->Group && group.Info->Group->HasBridgeGroupState()) {
-                    const NBridgeStorage::TGroupContext context(&group.Info->Group->GetBridgeGroupState());
+                if (!group.Info || !group.Info->Group) {
+                    continue;
+                }
+                const auto& proto = *group.Info->Group;
+                if (!proto.HasBridgeGroupState() && proto.HasBridgeProxyGroupId() &&
+                        TGroupId::FromProto(&proto, &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId) != id) {
+                    continue; // physical parts are represented through their logical group
+                }
+                if (proto.HasBridgeGroupState()) {
+                    const NBridgeStorage::TGroupContext context(&proto.GetBridgeGroupState());
                     for (const auto* pile : piles) {
                         if (!budget.Visit()) {
                             return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                         }
-                        systemCounts[pile->BridgePileId].Count(ObserveBridgeStorageCopy(context, *pile,
-                                                                                        syncStates.at(pile->BridgePileId), true)
-                                                                   .State);
+                        const auto copy = ObserveBridgeStorageCopy(context, *pile, syncStates.at(pile->BridgePileId), true);
+                        if (!statusMask || (statusMask & (1u << copy.State))) {
+                            const auto physical = copy.Part ? std::optional<ui32>(copy.Part->GetGroupId()) : std::nullopt;
+                            if (!NBridgeStorage::AppendGroup({id.GetRawId(), physical, nullptr, TStringBuf(pile->Name), copy},
+                                    budget, *report.MutableGroups())) {
+                                return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
+                            }
+                        }
+                    }
+                    continue;
+                }
+                if (statusMask && !(statusMask & (1u << Ydb::Bridge::NOT_REQUIRED))) {
+                    continue;
+                }
+                const auto& members = group.Info->GetDynamicInfo().ServiceIdForOrderNumber;
+                std::set<TBridgePileId> placement;
+                bool complete = !members.empty();
+                for (const auto& member : members) {
+                    if (!budget.Visit()) {
+                        return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
+                    }
+                    const auto* pile = BridgeInfo->GetPileForNode(member.NodeId());
+                    if (!pile || pile->IsFreeSlot) {
+                        complete = false;
+                        break;
+                    }
+                    placement.insert(pile->BridgePileId);
+                }
+                if (!complete) {
+                    placement.clear();
+                }
+                TVector<const TBridgeInfo::TPile*> actualPiles;
+                if (placement.empty() && !query.HasPileName()) {
+                    actualPiles.push_back(nullptr);
+                }
+                for (const auto pileId : placement) {
+                    const auto* pile = BridgeInfo->GetPile(pileId);
+                    if (!query.HasPileName() || pile->Name == query.GetPileName()) {
+                        actualPiles.push_back(pile);
+                    }
+                }
+                for (const auto* pile : actualPiles) {
+                    if (!budget.Visit() || !NBridgeStorage::AppendGroup({id.GetRawId(), id.GetRawId(), nullptr,
+                            pile ? std::optional<TStringBuf>(pile->Name) : std::nullopt, {.State = Ydb::Bridge::NOT_REQUIRED}},
+                            budget, *report.MutableGroups())) {
+                        return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                     }
                 }
             }
+        }
+        if (query.GetView() == TQuery::PILES) {
+            for (auto& [key, owner] : owners) {
+                Y_UNUSED(key);
+                if (!budget.Visit()) {
+                    return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
+                }
+                if (owner.Mode == Ydb::Bridge::ORDINARY && owner.Copies.empty() && !query.HasPileName()) {
+                    owner.Copies.try_emplace(TBridgePileId());
+                }
+                for (const auto& [pileId, copy] : owner.Copies) {
+                    if (!pileId && owner.Mode == Ydb::Bridge::MIXED) {
+                        continue;
+                    }
+                    if (!budget.Visit()) {
+                        return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
+                    }
+                    databaseCounts[pileId].CountDatabase(copy.Counts.GetStatus());
+                }
+            }
+            report.MutablePiles()->set_unattributed_storage_pools(unattributedPools);
             for (const auto* pile : piles) {
-                if (!budget.Fits(pile->Name.size() + 128)) {
+                if (!budget.Visit() || !budget.Fits(pile->Name.size() + 128)) {
                     return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                 }
                 Ydb::Bridge::PileSynchronization row;
                 row.set_pile_name(pile->Name);
-                userCounts[pile->BridgePileId].ToProto(row.mutable_user_groups());
-                systemCounts[pile->BridgePileId].ToProto(row.mutable_system_groups());
+                databaseCounts[pile->BridgePileId].ToProto(row.mutable_databases());
                 if (!budget.Account(row)) {
                     return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                 }
                 report.MutablePiles()->add_piles()->Swap(&row);
             }
+            const auto unplaced = databaseCounts.find(TBridgePileId());
+            if (unplaced != databaseCounts.end() && unplaced->second.Total) {
+                Ydb::Bridge::PileSynchronization row;
+                unplaced->second.ToProto(row.mutable_databases());
+                if (!budget.Visit() || !budget.Account(row)) {
+                    return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
+                }
+                report.MutablePiles()->add_piles()->Swap(&row); // no pile name for unresolved placement
+            }
         } else if (query.GetView() == TQuery::DATABASES) {
             for (auto& [key, owner] : owners) {
+                if (query.HasStorageMode() && query.GetStorageMode() != owner.Mode) {
+                    continue; // match the full owner mode, never an individual pool
+                }
                 if (owner.Mode == Ydb::Bridge::ORDINARY && owner.Copies.empty() && !query.HasPileName()) {
                     owner.Copies.try_emplace(TBridgePileId());
                 }

@@ -14,13 +14,14 @@ message TStorageQuery {
         GROUPS = 3;
     }
     EView View = 1;
-    string StoragePool = 2;
+    optional string StoragePool = 2;
     optional string PileName = 3;
     bool NotSynced = 4; // incomplete database summaries only
     repeated string PoolNames = 7;
     bool FilterPools = 8;
     Ydb.Bridge.StoragePoolId StoragePoolId = 9;
     repeated Ydb.Bridge.SynchronizationStatus Statuses = 10;
+    optional Ydb.Bridge.StorageMode StorageMode = 11;
 }
 
 message TStorageState {

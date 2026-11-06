@@ -53,9 +53,13 @@ namespace NKikimr::NGRpcService {
                 if (DatabasePath && (!DatabasePath->StartsWith('/') || NKikimr::SplitPath(*DatabasePath).empty())) {
                     return Fail(Ydb::StatusIds::BAD_REQUEST, "database_path must be an absolute database path");
                 }
+                if (Query.HasStorageMode() && (Query.GetView() != TStorageQuery::DATABASES ||
+                        Query.GetStorageMode() < Ydb::Bridge::BRIDGED || Query.GetStorageMode() > Ydb::Bridge::MIXED)) {
+                    return Fail(Ydb::StatusIds::BAD_REQUEST, "storage_mode requires database synchronization and must be BRIDGED, ORDINARY, or MIXED");
+                }
                 if (Query.GetView() == TStorageQuery::GROUPS) {
-                    if (!DatabasePath && Query.GetStoragePool().empty() && !Query.HasStoragePoolId()) {
-                        return Fail(Ydb::StatusIds::BAD_REQUEST, "Group synchronization requires a database or storage pool scope");
+                    if (Query.HasStoragePool() && Query.GetStoragePool().empty()) {
+                        return Fail(Ydb::StatusIds::BAD_REQUEST, "Storage pool name must not be empty");
                     }
                     if (Query.HasStoragePoolId() && !Query.GetStoragePoolId().pool_id()) {
                         return Fail(Ydb::StatusIds::BAD_REQUEST, "storage_pool_id.pool_id must not be zero");
@@ -281,6 +285,9 @@ namespace NKikimr::NGRpcService {
         TStorageQuery query;
         query.SetView(TStorageQuery::DATABASES);
         query.SetNotSynced(proto->only_incomplete());
+        if (proto->has_storage_mode()) {
+            query.SetStorageMode(proto->storage_mode());
+        }
         if (proto->has_pile_name()) {
             query.SetPileName(proto->pile_name());
         }

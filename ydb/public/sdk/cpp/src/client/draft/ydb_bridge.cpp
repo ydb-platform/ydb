@@ -41,6 +41,17 @@ TGroupSyncCounts GroupSyncCountsFromProto(const Ydb::Bridge::GroupSyncCounts& pr
     };
 }
 
+TDatabaseSyncCounts DatabaseSyncCountsFromProto(const Ydb::Bridge::DatabaseSyncCounts& proto) {
+    return {
+        .Total = proto.total(),
+        .Synced = proto.synced(),
+        .Syncing = proto.syncing(),
+        .Pending = proto.pending(),
+        .Unknown = proto.unknown(),
+        .NotRequired = proto.not_required(),
+    };
+}
+
 ESynchronizationStatus SynchronizationStatusFromProto(Ydb::Bridge::SynchronizationStatus status) {
     switch (status) {
         case Ydb::Bridge::SYNCHRONIZATION_STATUS_UNSPECIFIED:
@@ -84,9 +95,8 @@ TSynchronizationError SynchronizationErrorFromProto(const Ydb::Bridge::Synchroni
 
 TPileSynchronization PileSynchronizationFromProto(const Ydb::Bridge::PileSynchronization& proto) {
     return {
-        .PileName = proto.pile_name(),
-        .UserGroups = GroupSyncCountsFromProto(proto.user_groups()),
-        .SystemGroups = GroupSyncCountsFromProto(proto.system_groups()),
+        .PileName = proto.has_pile_name() ? std::optional<std::string>(proto.pile_name()) : std::nullopt,
+        .Databases = DatabaseSyncCountsFromProto(proto.databases()),
     };
 }
 
@@ -113,7 +123,7 @@ TGroupSynchronization GroupSynchronizationFromProto(const Ydb::Bridge::GroupSync
     return {
         .GroupId = proto.group_id(),
         .PhysicalGroupId = proto.has_physical_group_id() ? std::optional<uint32_t>(proto.physical_group_id()) : std::nullopt,
-        .StoragePool = StoragePoolFromProto(proto.storage_pool()),
+        .StoragePool = proto.has_storage_pool() ? std::optional<TStoragePool>(StoragePoolFromProto(proto.storage_pool())) : std::nullopt,
         .PileName = proto.has_pile_name() ? std::optional<std::string>(proto.pile_name()) : std::nullopt,
         .SyncStatus = SynchronizationStatusFromProto(proto.sync_status()),
         .SyncPhase = proto.sync_phase(),
@@ -238,7 +248,8 @@ public:
                 piles.push_back(PileSynchronizationFromProto(row));
             }
             promise.SetValue(TListPileSynchronizationResult(TStatus(std::move(status)), std::move(piles),
-                                                          proto.cluster_state_generation(), ProtoTimestampToInstant(proto.observed_at()), proto.ordinary_groups()));
+                                                          proto.cluster_state_generation(), ProtoTimestampToInstant(proto.observed_at()),
+                                                          proto.unattributed_storage_pools()));
         };
         Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::ListPileSynchronizationRequest, Ydb::Bridge::ListPileSynchronizationResponse>(
             std::move(request), extractor, &Ydb::Bridge::V1::BridgeService::Stub::AsyncListPileSynchronization,
@@ -255,6 +266,9 @@ public:
             request.set_pile_name(*settings.PileName_);
         }
         request.set_only_incomplete(settings.OnlyIncomplete_);
+        if (settings.StorageMode_) {
+            request.set_storage_mode(static_cast<Ydb::Bridge::StorageMode>(*settings.StorageMode_));
+        }
         auto promise = NThreading::NewPromise<TListDatabaseSynchronizationResult>();
         auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
             Ydb::Bridge::ListDatabaseSynchronizationResult proto;
@@ -281,6 +295,8 @@ public:
                                                                   const TListGroupSynchronizationSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Bridge::ListGroupSynchronizationRequest>(settings);
         switch (scope.GetKind()) {
+            case TGroupSynchronizationScope::EKind::All:
+                break;
             case TGroupSynchronizationScope::EKind::Database:
                 request.set_database_path(scope.GetName());
                 break;

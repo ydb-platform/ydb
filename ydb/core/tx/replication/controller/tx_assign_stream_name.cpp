@@ -53,7 +53,19 @@ public:
             return true;
         }
 
-        target->SetStreamName(CreateGuidAsString());
+        TString streamName;
+        if (target->GetKind() == TReplication::ETargetKind::Secret) {
+            for (const auto* other : Replication->GetTargets()) {
+                if (other->GetKind() == TReplication::ETargetKind::Secret && !other->GetStreamName().empty()) {
+                    streamName = other->GetStreamName();
+                    break;
+                }
+            }
+        }
+        if (streamName.empty()) {
+            streamName = CreateGuidAsString();
+        }
+        target->SetStreamName(streamName);
 
         TString consumerName;
         if (Replication->GetConfig().HasTransferSpecific()) {

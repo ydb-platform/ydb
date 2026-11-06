@@ -44,7 +44,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
                 ProxyGeneration);
             break;
         case TReplication::ETargetKind::Secret:
-            Send(YdbProxy, new TEvYdbProxy::TEvDropTopicRequest(StreamName, NYdb::NTopic::TDropTopicSettings()),
+            Send(YdbProxy, new TEvYdbProxy::TEvDropTopicRequest(StreamPath, NYdb::NTopic::TDropTopicSettings()),
                 0, ProxyGeneration);
             break;
         case TReplication::ETargetKind::Transfer:
@@ -102,7 +102,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         }
         if (result.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
             // The shared topic may already have been removed by another target.
-            Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(StreamName, NYdb::NTopic::TDescribeTopicSettings()),
+            Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(StreamPath, NYdb::NTopic::TDescribeTopicSettings()),
                 0, ProxyGeneration);
             return;
         }
@@ -162,7 +162,8 @@ public:
             ui64 tid,
             TReplication::ETargetKind kind,
             const TString& srcPath,
-            const TString& streamName)
+            const TString& streamName,
+            const TString& streamPath)
         : Parent(parent)
         , YdbProxy(proxy)
         , ReplicationId(rid)
@@ -170,6 +171,7 @@ public:
         , Kind(kind)
         , SrcPath(srcPath)
         , StreamName(streamName)
+        , StreamPath(streamPath)
         , LogPrefix(CreateActorLogPrefix("StreamRemover", ReplicationId, TargetId))
     {
     }
@@ -204,6 +206,7 @@ private:
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
     const TString StreamName;
+    const TString StreamPath;
     const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
 }; // TStreamRemover
@@ -212,13 +215,13 @@ IActor* CreateStreamRemover(TReplication* replication, ui64 targetId, const TAct
     const auto* target = replication->FindTarget(targetId);
     Y_ABORT_UNLESS(target);
     return CreateStreamRemover(ctx.SelfID, replication->GetYdbProxy(),
-        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetStreamName());
+        replication->GetId(), target->GetId(), target->GetKind(), target->GetSrcPath(), target->GetStreamName(), target->GetStreamPath());
 }
 
 IActor* CreateStreamRemover(const TActorId& parent, const TActorId& proxy, ui64 rid, ui64 tid,
-        TReplication::ETargetKind kind, const TString& srcPath, const TString& streamName)
+        TReplication::ETargetKind kind, const TString& srcPath, const TString& streamName, const TString& streamPath)
 {
-    return new TStreamRemover(parent, proxy, rid, tid, kind, srcPath, streamName);
+    return new TStreamRemover(parent, proxy, rid, tid, kind, srcPath, streamName, streamPath);
 }
 
 }

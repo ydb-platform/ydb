@@ -61,9 +61,15 @@ public:
             if (inserted) {
                 Paths.push_back(sourcePath);
             }
-            TopicPath = CanonizePath(target->GetStreamName());
             if (target->GetDstState() == TReplication::EDstState::Done) {
                 Completed.insert(target->GetId());
+            } else {
+                const auto topicPath = target->GetStreamPath();
+                if (TopicPath.empty()) {
+                    TopicPath = topicPath;
+                } else if (TopicPath != topicPath) {
+                    InconsistentTopicPaths = true;
+                }
             }
         }
     }
@@ -75,6 +81,9 @@ public:
         }
         if (Completed.size() == TargetCount) {
             return Finish(NYdb::EStatus::SUCCESS);
+        }
+        if (InconsistentTopicPaths) {
+            return Finish(NYdb::EStatus::BAD_REQUEST, "Secret targets must use a shared replication topic");
         }
         auto request = MakeHolder<TNavigate>();
         request->DatabaseName = Replication->GetDatabase();
@@ -388,6 +397,7 @@ private:
     bool CreateInFlight = false;
     bool ReaderCreating = false;
     bool DroppingTopic = false;
+    bool InconsistentTopicPaths = false;
 };
 
 IActor* CreateSecretCopier(const TActorId& parent, TReplication::TPtr replication) {

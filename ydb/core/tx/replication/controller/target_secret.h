@@ -14,16 +14,10 @@ public:
 
     TTargetSecret(TReplication* replication, ui64 id, const IConfig::TPtr& config)
         : TTargetWithStream(replication, ETargetKind::Secret, id, config)
-    {
-        SetStreamConsumerName(ReplicationConsumerName);
-    }
-
-    TString GetStreamPath() const override { return GetStreamName(); }
-    bool UpdateStats(ui64, const NKikimrReplication::TWorkerStats&) override { return false; }
-    void WorkerStatusChanged(ui64, ui64) override {}
-    const TReplication::ITargetStats* GetStats() override { return nullptr; }
+    {}
 
 protected:
+    TString BuildStreamPath() const override;
     void ProgressDestination(const TActorContext& ctx) override;
     bool WaitForStreamCreatorOnRemoval() const override { return true; }
     IActor* CreateWorkerRegistar(const TActorContext&) const override {

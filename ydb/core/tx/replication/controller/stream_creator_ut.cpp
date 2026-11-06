@@ -46,21 +46,94 @@ Y_UNIT_TEST_SUITE(ReplicationTestEnv) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TargetStreamPath) {
+    Y_UNIT_TEST(TableStreamPath) {
+        NKikimrReplication::TReplicationConfig config;
+        auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root");
+        const auto id = replication->AddTarget(TReplication::ETargetKind::Table,
+            std::make_shared<TTargetTable::TTableConfig>("/Source/table", "/Root/table"));
+        auto* target = replication->FindTarget(id);
+        target->SetStreamName("Stream");
+        UNIT_ASSERT_VALUES_EQUAL(target->GetStreamPath(), "/Source/table/Stream");
+    }
+
+    Y_UNIT_TEST(IndexTableStreamPath) {
+        NKikimrReplication::TReplicationConfig config;
+        auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root");
+        const auto id = replication->AddTarget(TReplication::ETargetKind::IndexTable,
+            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Source/table/index", "/Root/table/index"));
+        auto* target = replication->FindTarget(id);
+        target->SetStreamName("Stream");
+        UNIT_ASSERT_VALUES_EQUAL(target->GetStreamPath(), "/Source/table/index/indexImplTable/Stream");
+    }
+
+    Y_UNIT_TEST(SecretTargetsShareStreamInSourceDatabase) {
+        NKikimrReplication::TReplicationConfig config;
+        config.MutableSrcConnectionParams()->SetDatabase("/SourceDatabase");
+        auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root");
+        const auto first = replication->AddTarget(TReplication::ETargetKind::Secret,
+            std::make_shared<TTargetSecret::TSecretConfig>("/SourceDatabase/first", "/Root/first"));
+        const auto second = replication->AddTarget(TReplication::ETargetKind::Secret,
+            std::make_shared<TTargetSecret::TSecretConfig>("/SourceDatabase/nested/second", "/Root/second"));
+        for (const auto id : {first, second}) {
+            auto* target = replication->FindTarget(id);
+            UNIT_ASSERT(target->GetStreamName().empty());
+            UNIT_ASSERT(target->GetStreamConsumerName().empty());
+            target->SetStreamName("Stream");
+            UNIT_ASSERT_VALUES_EQUAL(target->GetStreamPath(), "/SourceDatabase/secretImpl/Stream");
+        }
+    }
+
+    Y_UNIT_TEST(SecretStreamPathFallsBackToReplicationDatabase) {
+        NKikimrReplication::TReplicationConfig config;
+        auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root/tenant");
+        const auto id = replication->AddTarget(TReplication::ETargetKind::Secret,
+            std::make_shared<TTargetSecret::TSecretConfig>("/Other/secret", "/Root/tenant/secret"));
+        auto* target = replication->FindTarget(id);
+        target->SetStreamName("Stream");
+        UNIT_ASSERT_VALUES_EQUAL(target->GetStreamPath(), "/Root/tenant/secretImpl/Stream");
+    }
+
+    Y_UNIT_TEST(TransferStreamPath) {
+        NKikimrReplication::TReplicationConfig config;
+        auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root");
+        const auto id = replication->AddTarget(TReplication::ETargetKind::Transfer,
+            std::make_shared<TTargetTransfer::TTransferConfig>("/Source/topic", "/Root/table", config));
+        auto* target = replication->FindTarget(id);
+        target->SetStreamName("Stream");
+        UNIT_ASSERT_VALUES_EQUAL(target->GetStreamPath(), "/Source/topic");
+    }
+}
+
 Y_UNIT_TEST_SUITE(StreamCreator) {
     using namespace NTestHelpers;
 
-    void SecretTopicSetup(bool existing, bool important = true) {
+    void SecretTopicSetup(bool existing, bool important = true,
+            NYdb::EStatus directoryStatus = NYdb::EStatus::SUCCESS) {
         TTestActorRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto parent = runtime.AllocateEdgeActor();
         const auto proxy = runtime.AllocateEdgeActor();
         const auto creator = runtime.Register(CreateStreamCreator(parent, proxy, 1, 1,
             std::make_shared<TTargetSecret::TSecretConfig>("/Root/source", "/Root/copy"),
-            "/Root/secret-topic", "replicationConsumer", TDuration::Days(1)));
+            "Stream", "/Root/secretImpl/Stream", "replicationConsumer", TDuration::Days(1)));
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(parent));
         runtime.Send(creator, parent, new TEvPrivate::TEvAllowCreateStream());
+        const auto directory = runtime.GrabEdgeEvent<TEvYdbProxy::TEvMakeDirectoryRequest>(proxy);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(directory->Get()->GetArgs()), "/Root/secretImpl");
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(
+            proxy, TDuration::MilliSeconds(100)));
+        runtime.Send(new IEventHandle(creator, proxy, new TEvYdbProxy::TEvMakeDirectoryResponse(
+            NYdb::TStatus(directoryStatus, {})), 0, directory->Cookie));
+        if (directoryStatus != NYdb::EStatus::SUCCESS && directoryStatus != NYdb::EStatus::ALREADY_EXISTS) {
+            const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(parent);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status.GetStatus(), directoryStatus);
+            UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(
+                proxy, TDuration::MilliSeconds(100)));
+            return;
+        }
         const auto request = runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(proxy);
-        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(request->Get()->GetArgs()), "/Root/secret-topic");
+        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(request->Get()->GetArgs()), "/Root/secretImpl/Stream");
         Ydb::Topic::CreateTopicRequest settings;
         std::get<NYdb::NTopic::TCreateTopicSettings>(request->Get()->GetArgs()).SerializeTo(settings);
         UNIT_ASSERT_VALUES_EQUAL(settings.partitioning_settings().min_active_partitions(), 1);
@@ -87,6 +160,14 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
 
     Y_UNIT_TEST(CreatesSecretTopicWithImportantConsumer) {
         SecretTopicSetup(false);
+    }
+
+    Y_UNIT_TEST(CreatesSecretTopicInExistingDirectory) {
+        SecretTopicSetup(false, true, NYdb::EStatus::ALREADY_EXISTS);
+    }
+
+    Y_UNIT_TEST(DirectoryCreationFailureStopsSecretTopicCreation) {
+        SecretTopicSetup(false, true, NYdb::EStatus::UNAUTHORIZED);
     }
 
     Y_UNIT_TEST(ReusesSecretTopicWithImportantConsumer) {
@@ -146,7 +227,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         creator = runtime.Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1, 1,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), TDuration::Seconds(10)));
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), TDuration::Seconds(10)));
         runtime.EnableScheduleForActor(creator);
         UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender(), TDuration::Seconds(30)));
         runtime.Send(creator, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
@@ -217,7 +298,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         creator = runtime.Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1, 1,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt));
         runtime.EnableScheduleForActor(creator);
         const auto request = runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(
             env.GetSender(), TDuration::Seconds(30));
@@ -302,7 +383,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         env.GetRuntime().Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), resolvedTimestamps
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), resolvedTimestamps
         ));
         {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
@@ -353,7 +434,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         env.GetRuntime().Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1, 1,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Restored"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
             false, true, false, false));
         auto request = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
         env.GetRuntime().Send(request->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
@@ -381,7 +462,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         env.GetRuntime().Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1 /* rid */, 1 /* tid */,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt, enabled
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt, enabled
         ));
         {
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
@@ -421,7 +502,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         env.GetRuntime().Register(CreateStreamCreator(
             env.GetSender(), env.GetYdbProxy(), 1, 1,
             std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
+            "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
             true, true, true));
         auto request = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
         env.GetRuntime().Send(request->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
@@ -450,7 +531,7 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
             env.GetRuntime().Register(CreateStreamCreator(
                 env.GetSender(), env.GetYdbProxy(), 1, 1,
                 std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
-                "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
+                "Stream", "/Root/Table/Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
                 false, true, schemaChanges));
             const auto request = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
             env.GetRuntime().Send(request->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
@@ -487,7 +568,8 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
                 config = std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Root/Table/Index", "/Root/Replica");
             }
             Creator = Runtime.Register(CreateStreamCreator(Parent, Proxy, 1, 1, config,
-                "Stream", "replicationConsumer", TDuration::Days(1), std::nullopt,
+                "Stream", transfer ? "/Root/Topic" : "/Root/Table/Index/indexImplTable/Stream",
+                "replicationConsumer", TDuration::Days(1), std::nullopt,
                 false, true, false, true, describeOnly, retention, availability));
             Runtime.EnableScheduleForActor(Creator);
         }

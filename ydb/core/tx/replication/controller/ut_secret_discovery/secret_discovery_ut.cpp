@@ -31,7 +31,7 @@ struct TSecretRemovalSetup {
         Parent = Runtime.AllocateEdgeActor();
         Proxy = Runtime.AllocateEdgeActor();
         Remover = Runtime.Register(CreateStreamRemover(Parent, Proxy, 1, 2,
-            TReplication::ETargetKind::Secret, "/Root/source", "/Root/secret-topic"));
+            TReplication::ETargetKind::Secret, "/Root/source", "Stream", "/Root/secretImpl/Stream"));
         Runtime.EnableScheduleForActor(Remover);
     }
 
@@ -70,7 +70,9 @@ public:
         Replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root");
         TargetId = Replication->AddTarget(TReplication::ETargetKind::Secret,
             std::make_shared<TTargetSecret::TSecretConfig>("/Root/source", "/Root/copy"));
-        Replication->FindTarget(TargetId)->SetStreamName("/Root/secret-topic");
+        auto* target = Replication->FindTarget(TargetId);
+        target->SetStreamName("Stream");
+        target->SetStreamConsumerName("replicationConsumer");
     }
 
     void Bootstrap() {
@@ -132,6 +134,13 @@ private:
     TActorId Creator;
 };
 
+void PrepareSecretDirectory(TTestActorRuntime& runtime, const TActorId& proxy) {
+    const auto directory = runtime.GrabEdgeEvent<TEvYdbProxy::TEvMakeDirectoryRequest>(proxy);
+    UNIT_ASSERT_VALUES_EQUAL(std::get<0>(directory->Get()->GetArgs()), "/Root/secretImpl");
+    runtime.Send(new IEventHandle(directory->Sender, proxy, new TEvYdbProxy::TEvMakeDirectoryResponse(
+        NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), 0, directory->Cookie));
+}
+
 }
 
 Y_UNIT_TEST_SUITE(SecretDiscovery) {
@@ -141,7 +150,7 @@ Y_UNIT_TEST_SUITE(SecretDiscovery) {
             setup.Proxy, TDuration::MilliSeconds(100)));
         setup.Allow();
         const auto request = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(setup.Proxy);
-        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(request->Get()->GetArgs()), "/Root/secret-topic");
+        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(request->Get()->GetArgs()), "/Root/secretImpl/Stream");
         setup.ReplyDrop(request->Cookie, NYdb::EStatus::SUCCESS);
         setup.Finish();
     }
@@ -152,7 +161,7 @@ Y_UNIT_TEST_SUITE(SecretDiscovery) {
         const auto drop = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(setup.Proxy);
         setup.ReplyDrop(drop->Cookie, NYdb::EStatus::SCHEME_ERROR);
         const auto describe = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicRequest>(setup.Proxy);
-        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(describe->Get()->GetArgs()), "/Root/secret-topic");
+        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(describe->Get()->GetArgs()), "/Root/secretImpl/Stream");
         UNIT_ASSERT(!setup.Runtime.GrabEdgeEvent<TEvPrivate::TEvDropStreamResult>(
             setup.Parent, TDuration::MilliSeconds(100)));
         setup.ReplyDescribe(describe->Cookie, NYdb::EStatus::SCHEME_ERROR);
@@ -209,11 +218,17 @@ Y_UNIT_TEST_SUITE(SecretDiscovery) {
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto parent = runtime.AllocateEdgeActor();
         const auto proxy = runtime.AllocateEdgeActor();
-        auto observer = runtime.AddObserver<TEvYdbProxy::TEvCreateTopicRequest>([&](auto& ev) {
-            ev->Rewrite(ev->GetTypeRewrite(), proxy);
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->GetTypeRewrite() == TEvYdbProxy::TEvMakeDirectoryRequest::EventType
+                || ev->GetTypeRewrite() == TEvYdbProxy::TEvCreateTopicRequest::EventType)
+            {
+                ev->Rewrite(ev->GetTypeRewrite(), proxy);
+            }
         });
         runtime.Register(new TSecretTargetSetup(parent));
+        PrepareSecretDirectory(runtime, proxy);
         const auto create = runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(proxy);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(create->Get()->GetArgs()), "/Root/secretImpl/Stream");
         runtime.Send(new IEventHandle(create->Sender, proxy, new TEvYdbProxy::TEvCreateTopicResponse(
             NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), 0, create->Cookie));
         const auto completed = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(parent);
@@ -226,13 +241,15 @@ Y_UNIT_TEST_SUITE(SecretDiscovery) {
         const auto parent = runtime.AllocateEdgeActor();
         const auto proxy = runtime.AllocateEdgeActor();
         auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
-            if (ev->GetTypeRewrite() == TEvYdbProxy::TEvCreateTopicRequest::EventType
+            if (ev->GetTypeRewrite() == TEvYdbProxy::TEvMakeDirectoryRequest::EventType
+                || ev->GetTypeRewrite() == TEvYdbProxy::TEvCreateTopicRequest::EventType
                 || ev->GetTypeRewrite() == TEvYdbProxy::TEvDropTopicRequest::EventType)
             {
                 ev->Rewrite(ev->GetTypeRewrite(), proxy);
             }
         });
         const auto target = runtime.Register(new TSecretTargetSetup(parent));
+        PrepareSecretDirectory(runtime, proxy);
         const auto create = runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(proxy);
         runtime.Send(target, parent, new TEvents::TEvWakeup());
         const auto retained = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(parent);
@@ -241,6 +258,7 @@ Y_UNIT_TEST_SUITE(SecretDiscovery) {
         runtime.Send(new IEventHandle(create->Sender, proxy, new TEvYdbProxy::TEvCreateTopicResponse(
             NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), 0, create->Cookie));
         const auto drop = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(proxy);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(drop->Get()->GetArgs()), "/Root/secretImpl/Stream");
         runtime.Send(new IEventHandle(drop->Sender, proxy, new TEvYdbProxy::TEvDropTopicResponse(
             NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), 0, drop->Cookie));
         const auto completed = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(parent);
@@ -310,7 +328,8 @@ Y_UNIT_TEST_SUITE(SecretDiscovery) {
         auto* target = replication->FindTarget(id);
         target->SetDstState(TReplication::EDstState::Done);
         target->SetStreamState(TReplication::EStreamState::Ready);
-        target->SetStreamName("/Source/secret-topic");
+        target->SetStreamName("Stream");
+        target->SetStreamConsumerName("replicationConsumer");
         runtime.Register(CreateSecretCopier(parent, replication));
         const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvSecretsCopied>(parent, TDuration::Seconds(5));
         UNIT_ASSERT(result);

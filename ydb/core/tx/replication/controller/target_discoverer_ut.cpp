@@ -345,19 +345,21 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
             description.GetPathDescription().GetReplicationDescription().GetControllerId(), std::move(request));
         UNIT_ASSERT(state->Get()->Record.GetStatus() == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(state->Get()->Record.TargetsSize(), 2);
-        THashSet<TString> topics;
+        THashSet<TString> streamNames;
         for (const auto& target : state->Get()->Record.GetTargets()) {
             UNIT_ASSERT(!target.GetSrcStreamName().empty());
-            topics.insert(target.GetSrcStreamName());
+            UNIT_ASSERT_VALUES_EQUAL(target.GetSrcStreamName().find('/'), TString::npos);
+            streamNames.insert(target.GetSrcStreamName());
         }
-        UNIT_ASSERT_VALUES_EQUAL(topics.size(), 1);
-        const auto& topic = *topics.begin();
+        UNIT_ASSERT_VALUES_EQUAL(streamNames.size(), 1);
+        const TString topic = TStringBuilder() << "/Root/secretImpl/" << *streamNames.begin();
         NYdb::NTopic::TTopicClient topicClient(env.GetDriver(),
             NYdb::NTopic::TTopicClientSettings().AuthToken("root@builtin"));
         const auto exported = topicClient.DescribeTopic(topic,
             NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
         UNIT_ASSERT_C(exported.IsSuccess(), exported.GetIssues().ToString());
         const auto& topicDescription = exported.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetOwner(), "root@builtin");
         UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetTotalPartitionsCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetPartitions().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(topicDescription.GetConsumers().size(), 1);

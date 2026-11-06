@@ -29,6 +29,7 @@ private:
     void Handle(TEvYdbProxy::TEvDescribeTableRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvExportSecretRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvCreateTopicRequest::TPtr& ev);
+    void Handle(TEvYdbProxy::TEvMakeDirectoryRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev);
 
     STATEFN(StateWork);

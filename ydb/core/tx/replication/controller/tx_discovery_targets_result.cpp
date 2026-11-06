@@ -1,8 +1,6 @@
 #include "controller_impl.h"
 #include "target_transfer.h"
 
-#include <util/generic/guid.h>
-
 #include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -60,23 +58,8 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         if (Ev->Get()->IsSuccess()) {
-            TString secretTopic;
             for (const auto& target : Ev->Get()->ToAdd) {
                 const auto tid = Replication->AddTarget(target.Kind, target.Config);
-
-                if (target.Kind == TReplication::ETargetKind::Secret) {
-                    if (!secretTopic) {
-                        const auto& sourceDatabase = Replication->GetConfig().GetSrcConnectionParams().GetDatabase();
-                        secretTopic = (sourceDatabase ? sourceDatabase : Replication->GetDatabase())
-                            + "/replication_secrets_" + CreateGuidAsString();
-                    }
-                    auto* secret = Replication->FindTarget(tid);
-                    secret->SetStreamName(secretTopic);
-                    db.Table<Schema::SrcStreams>().Key(rid, tid).Update(
-                        NIceDb::TUpdate<Schema::SrcStreams::Name>(secretTopic),
-                        NIceDb::TUpdate<Schema::SrcStreams::ConsumerName>(secret->GetStreamConsumerName()),
-                        NIceDb::TUpdate<Schema::SrcStreams::State>(secret->GetStreamState()));
-                }
 
                 TString transformLambda;
                 TString runAsUser;

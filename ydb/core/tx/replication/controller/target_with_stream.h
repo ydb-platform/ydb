@@ -84,6 +84,8 @@ public:
     bool IsExpectedStreamCreator(const TActorId& actorId) const override;
     void FinishStreamCreation() override;
 
+    TString GetStreamPath() const override;
+
     void WorkerStatusChanged(ui64 workerId, ui64 status) override;
     bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& newStats) override;
 
@@ -94,6 +96,7 @@ public:
     void SetLocation();
 
 protected:
+    virtual TString BuildStreamPath() const = 0;
     virtual void ProgressDestination(const TActorContext& ctx);
     virtual bool WaitForStreamCreatorOnRemoval() const { return false; }
     THolder<NKikimrReplication::TReplicationLocationConfig> Location;

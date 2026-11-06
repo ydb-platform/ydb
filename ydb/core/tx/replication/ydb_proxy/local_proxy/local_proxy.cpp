@@ -69,6 +69,13 @@ auto CreateCallback(std::shared_ptr<T>&& ctx) {
     };
 }
 
+void TLocalProxyActor::Handle(TEvYdbProxy::TEvMakeDirectoryRequest::TPtr& ev) {
+    NYdb::NIssue::TIssues issues;
+    issues.AddIssue("Directory creation requires an explicit source connection");
+    Send(ev->Sender, new TEvYdbProxy::TEvMakeDirectoryResponse(
+        NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues))), 0, ev->Cookie);
+}
+
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvCreateTopicRequest::TPtr& ev) {
     NYdb::NIssue::TIssues issues;
     issues.AddIssue("Topic creation requires an explicit source connection");
@@ -222,6 +229,7 @@ STATEFN(TLocalProxyActor::StateWork) {
         hFunc(TEvYdbProxy::TEvDescribeTableRequest, Handle);
         hFunc(TEvYdbProxy::TEvExportSecretRequest, Handle);
         hFunc(TEvYdbProxy::TEvCreateTopicRequest, Handle);
+        hFunc(TEvYdbProxy::TEvMakeDirectoryRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribeTopicRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribePathRequest, Handle);
         sFunc(TEvents::TEvPoison, PassAway);

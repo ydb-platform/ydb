@@ -20,6 +20,70 @@ DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
 DEFAULT_BLACK_FILE_PROCESSING_TIME = "1.5"  # in seconds
 
 
+PY3_RESFS_PACK_GROUP = 32
+
+
+def _root_relative(path, unit):
+    """
+    The source path relative to the source or the build root, also for generated sources like ${BINDIR}/x.py,
+    compiled into the bytecode (resfs/src gets ${rootrel} rendered by ymake, see _PY3_RESFS_PACK).
+    """
+    rel = rootrel_arc_src(path, unit)
+    if rel.startswith('${BINDIR}/'):
+        return unit.path()[3:] + '/' + rel[len('${BINDIR}/') :]
+    resolved = unit.resolve_arc_path(rel)
+    if resolved.startswith(('$S/', '$B/')):
+        return resolved[3:]
+    return rel
+
+
+def _py3_resfs_pack_groups(items, group_size):
+    """
+    Content-defined grouping: items are ordered by resource name and a group ends after an item
+    whose name hash hits 1/group_size (or once the group grows to 4 * group_size items). Adding or
+    removing a file reshapes only its own group instead of shifting all the groups after it.
+    """
+    group = []
+    for item in sorted(items, key=lambda item: item[1]):
+        group.append(item)
+        boundary = int(md5(item[1].encode('utf-8')).hexdigest()[:8], 16) % group_size == 0
+        if boundary or len(group) >= 4 * group_size:
+            yield group
+            group = []
+    if group:
+        yield group
+
+
+def _add_py3_resfs_packs(unit, items, with_py, with_pyc, kv):
+    """
+    items: [(srcx, dest, path)], kv: ['key=value']. Groups the items and calls _PY3_RESFS_PACK for each
+    group (see tools/pyres_pack); the kv records go to the first group. Returns False if nothing is packed.
+    """
+    if not with_py and not with_pyc:
+        return False
+    flags = []
+    if not with_py:
+        flags.append('--no-py')
+    if not with_pyc:
+        flags.append('--no-pyc')
+
+    group_size = max(1, int(unit.get('PY3_RESFS_PACK_GROUP') or PY3_RESFS_PACK_GROUP))
+    for idx, group in enumerate(_py3_resfs_pack_groups(items, group_size)):
+        extra = kv if idx == 0 else []
+        # named after the content, so that untouched groups keep their outputs (and cache hits)
+        name = md5(json.dumps([flags, group, extra]).encode('utf-8')).hexdigest()[:16]
+        args = ['pyres_{}.pyres'.format(name)]
+        if flags:
+            args += ['FLAGS'] + flags
+        args += ['SRCX'] + [srcx for srcx, _, _ in group]
+        args += ['DEST'] + [dest for _, dest, _ in group]
+        args += ['SRC'] + [path for _, _, path in group]
+        if extra:
+            args += ['KV'] + extra
+        unit.on_py3_resfs_pack(args)
+    return True
+
+
 def _split_macro_call(macro_call, data, item_size, chunk_size=1024, compress=False):
     index = 0
     length = len(data)
@@ -567,6 +631,8 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
         if py3:
             mod_list_md5 = md5()
             resfs_mocks = []
+            static_pack = unit.get('_PY3_RESFS_STATIC') == 'yes'
+            pack_items = []
 
             for path, mod in pys:
                 mod_list_md5.update(mod.encode('utf-8'))
@@ -580,6 +646,8 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
                 # - https://docs.yandex-team.ru/ya-make/manual/python/vars
                 if external_py_files_mode and is_extended_source_search_enabled(path, unit):
                     resfs_mocks += ['-', 'resfs/src/resfs/file/' + dest + '=' + rootrel_arc_src(path, unit)]
+                elif static_pack:
+                    pack_items.append((_root_relative(path, unit) + '-', dest, path))
                 else:
                     if with_py:
                         res += ['DEST', dest, path]
@@ -592,7 +660,19 @@ def PY_SRCS(unit: ymake.Unit, *args: str):
             if resfs_mocks:
                 unit.onresource(['DONT_COMPRESS'] + resfs_mocks)
 
-            if py_namespaces:
+            ns_packed = False
+            if pack_items:
+                # The namespace records travel in the pack as well. Their keys only need a unique prefix:
+                # derived from the record itself, it does not change when modules are added or removed.
+                ns_kv = []
+                for path, ns in sorted(py_namespaces.items()):
+                    record = '{}={}'.format(path, ':'.join(sorted(ns)))
+                    ns_kv.append(
+                        '{}/{}/{}'.format(PY_NAMESPACE_PREFIX, md5(record.encode('utf-8')).hexdigest(), record)
+                    )
+                ns_packed = _add_py3_resfs_packs(unit, pack_items, with_py, with_pyc, ns_kv)
+
+            if py_namespaces and not ns_packed:
                 # Note: Add md5 to key to prevent key collision if two or more PY_SRCS() used in the same ya.make
                 ns_res = ['DONT_COMPRESS']
                 for path, ns in sorted(py_namespaces.items()):

@@ -214,41 +214,90 @@ Y_UNIT_TEST_SUITE(YaemWorkload) {
 
     Y_UNIT_TEST(GeneratedWriteHasYaemTimestamps) {
         TYaemWorkloadParams params;
-        params.Shards = 16;
+        params.Shards = 1;
         params.IntColumnsCnt = 2;
         params.StrColumnsCnt = 1;
         params.KeyColumnsCnt = 1;
         params.Validate(TWorkloadParams::ECommandType::Run, static_cast<int>(TYaemGenerator::EType::BulkUpsert));
+        UNIT_ASSERT_VALUES_EQUAL(params.GetWriteSpan(), TDuration::Seconds(10));
         TYaemGenerator generator(&params);
 
         const TInstant now = TInstant::Now();
         ui64 rowsTotal = 0;
         ui64 within1m = 0;
         ui64 future = 0;
-        for (size_t write = 0; write < 200; ++write) {
+        for (size_t write = 0; write < 3000; ++write) {
             const auto rows = generator.GenerateWrite(now);
             UNIT_ASSERT_GE(rows.size(), 1);
-            UNIT_ASSERT_LE(rows.size(), 16 * 129);
+            UNIT_ASSERT_LE(rows.size(), 129);
+            TInstant newest = TInstant::Zero();
+            TInstant oldest = TInstant::Max();
             for (const auto& row : rows) {
                 UNIT_ASSERT(!row.LogId.empty());
                 UNIT_ASSERT_VALUES_EQUAL(row.IngestedAt, now);
-                UNIT_ASSERT(row.Ts < now + TDuration::Minutes(1));
-                UNIT_ASSERT(row.Ts >= now - TDuration::Days(7));
                 UNIT_ASSERT_VALUES_EQUAL(row.Ints.size(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(row.Strings.size(), 1);
                 UNIT_ASSERT(row.Ints[0] != 0); // key column is never null
-                ++rowsTotal;
-                if (row.Ts > now) {
-                    ++future;
-                } else if (now - row.Ts < TDuration::Minutes(1)) {
-                    ++within1m;
-                }
+                newest = Max(newest, row.Ts);
+                oldest = Min(oldest, row.Ts);
+            }
+            // One lag per write: every row lies within the write span below the newest row.
+            UNIT_ASSERT(newest < now + TDuration::Minutes(1));
+            UNIT_ASSERT(newest >= now - TDuration::Days(7));
+            UNIT_ASSERT(newest - oldest < TDuration::Seconds(10));
+            rowsTotal += rows.size();
+            if (newest > now) {
+                future += rows.size();
+            } else if (now - newest < TDuration::Minutes(1)) {
+                within1m += rows.size();
             }
         }
-        UNIT_ASSERT_GT(rowsTotal, 100'000);
+        UNIT_ASSERT_GT(rowsTotal, 50'000);
         const double within1mShare = 100.0 * within1m / rowsTotal;
-        UNIT_ASSERT_C(std::abs(within1mShare - 58.426) < 1.5, "share of rows within a minute: " << within1mShare);
-        UNIT_ASSERT_C(100.0 * future / rowsTotal < 0.2, "share of future rows: " << 100.0 * future / rowsTotal);
+        UNIT_ASSERT_C(std::abs(within1mShare - 58.426) < 5, "share of rows within a minute: " << within1mShare);
+        UNIT_ASSERT_C(100.0 * future / rowsTotal < 1, "share of future rows: " << 100.0 * future / rowsTotal);
+    }
+
+    Y_UNIT_TEST(WriteSpanAndOptionErrors) {
+        TYaemWorkloadParams params;
+        params.Shards = 1;
+        params.WriteSpanSpec = "0";
+        const int bulkUpsert = static_cast<int>(TYaemGenerator::EType::BulkUpsert);
+        params.Validate(TWorkloadParams::ECommandType::Run, bulkUpsert);
+        UNIT_ASSERT_VALUES_EQUAL(params.GetWriteSpan(), TDuration::Zero());
+        TYaemGenerator generator(&params);
+        const TInstant now = TInstant::Now();
+        for (size_t write = 0; write < 100; ++write) {
+            const auto rows = generator.GenerateWrite(now);
+            for (const auto& row : rows) {
+                UNIT_ASSERT_VALUES_EQUAL(row.Ts, rows.front().Ts);
+            }
+        }
+
+        params.WriteSpanSpec = "2m";
+        params.Validate(TWorkloadParams::ECommandType::Run, bulkUpsert);
+        UNIT_ASSERT_VALUES_EQUAL(params.GetWriteSpan(), TDuration::Minutes(2));
+
+        params.WriteSpanSpec = "soon";
+        UNIT_ASSERT_EXCEPTION(params.Validate(TWorkloadParams::ECommandType::Run, bulkUpsert), yexception);
+        params.WriteSpanSpec = "10s";
+
+        params.LagSpec = "0-1m";
+        UNIT_ASSERT_EXCEPTION(params.Validate(TWorkloadParams::ECommandType::Run, bulkUpsert), yexception);
+        params.LagSpec = TLagDistribution::DefaultSpec();
+
+        params.RowsPerShardSpec = "50";
+        UNIT_ASSERT_EXCEPTION(params.Validate(TWorkloadParams::ECommandType::Run, bulkUpsert), yexception);
+        params.RowsPerShardSpec = TYaemWorkloadParams::DefaultRowsPerShardSpec();
+
+        params.Shards = 0;
+        UNIT_ASSERT_EXCEPTION(params.Validate(TWorkloadParams::ECommandType::Run, bulkUpsert), yexception);
+        params.Shards = 1;
+
+        // Options are not checked for commands other than run.
+        params.Shards = 0;
+        params.Validate(TWorkloadParams::ECommandType::Init, 0);
+        params.Validate(TWorkloadParams::ECommandType::Run, static_cast<int>(TYaemGenerator::EType::Select));
     }
 
     Y_UNIT_TEST(WorkloadTypesAndQueries) {

@@ -67,7 +67,7 @@ private:
 };
 
 // The log table and row content of the `log` workload, written the way the yaem service does:
-// writes of varying size whose rows carry a heavy-tailed timestamp lag.
+// writes of varying size, each delayed by a heavy-tailed lag shared by all of its rows.
 class TYaemWorkloadParams final: public NLog::TLogWorkloadParams {
 public:
     TYaemWorkloadParams();
@@ -88,14 +88,19 @@ public:
     const TPercentileDistribution& GetRowsPerShard() const {
         return RowsPerShard;
     }
+    TDuration GetWriteSpan() const {
+        return WriteSpan;
+    }
 
     ui64 Shards = 128;
     TString RowsPerShardSpec = DefaultRowsPerShardSpec();
     TString LagSpec = TLagDistribution::DefaultSpec();
+    TString WriteSpanSpec = "10s";
 
 private:
     TPercentileDistribution RowsPerShard;
     TLagDistribution Lag;
+    TDuration WriteSpan;
 };
 
 class TYaemGenerator final: public NLog::TLogGenerator {
@@ -112,7 +117,8 @@ public:
     TQueryInfoList GetWorkload(int type) override;
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
 
-    // The rows of one write issued at `now`: `ingested_at` is `now`, `timestamp` is `now` minus a sampled lag.
+    // The rows of one write issued at `now`: `ingested_at` is `now`; the lag is sampled once per write,
+    // the newest row's `timestamp` is `now` minus the lag and the other rows are up to the write span older.
     TVector<TRow> GenerateWrite(TInstant now) const;
 
 private:

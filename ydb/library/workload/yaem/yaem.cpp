@@ -225,6 +225,7 @@ const TString& TYaemWorkloadParams::DefaultRowsPerShardSpec() {
 TYaemWorkloadParams::TYaemWorkloadParams()
     : RowsPerShard(TPercentileDistribution::Parse(RowsPerShardSpec))
     , Lag(TLagDistribution::Parse(LagSpec))
+    , WriteSpan(TDuration::Parse(WriteSpanSpec))
 {
     TableName = "yaem";
 }
@@ -249,11 +250,14 @@ void TYaemWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
                 "comma separated '<percentile>:<rows>' points. The quantile function is linear between the points; "
                 "the points 0 and 100 are extrapolated when absent.")
                 .DefaultValue(RowsPerShardSpec).StoreResult(&RowsPerShardSpec);
-            opts.AddLongOption("lag-distribution", "Distribution of the lag between the write time and the timestamp of a row: "
-                "comma separated '<bucket>:<percent>' pairs. A bucket is '<from>-<to><unit>' with unit s, m, h, d or w, "
-                "'future' (up to one minute ahead of the write time) or '><from><unit>' (<from> to twice <from>). "
+            opts.AddLongOption("lag-distribution", "Distribution of the lag between the write time and the timestamp of the newest row "
+                "of the write, sampled once per write: comma separated '<bucket>:<percent>' pairs. A bucket is '<from>-<to><unit>' "
+                "with unit s, m, h, d or w, 'future' (up to one minute ahead of the write time) or '><from><unit>' (<from> to twice <from>). "
                 "The lag is uniform inside a bucket; the percents are normalized by their sum.")
                 .DefaultValue(LagSpec).StoreResult(&LagSpec);
+            opts.AddLongOption("write-span", "Spread of the timestamps inside one write: the rows are uniformly up to this much older "
+                "than the newest row of the write. A duration such as '10s' or '1m'; '0' gives one timestamp per write.")
+                .DefaultValue(WriteSpanSpec).StoreResult(&WriteSpanSpec);
             break;
         case TYaemGenerator::EType::Select:
             break;
@@ -281,6 +285,9 @@ void TYaemWorkloadParams::Validate(const ECommandType commandType, int workloadT
             } catch (const yexception& e) {
                 throw yexception() << "Invalid `lag-distribution` option: " << e.what();
             }
+            if (!TDuration::TryParse(WriteSpanSpec, WriteSpan)) {
+                throw yexception() << "Invalid `write-span` option: '" << WriteSpanSpec << "' is not a duration";
+            }
             break;
         case TYaemGenerator::EType::Select:
             break;
@@ -306,18 +313,19 @@ ui64 TYaemWorkloadParams::SampleRowsPerWrite() const {
 
 namespace {
 
+// Rows of one write: `ingested_at` is the write time, `timestamp` lies within the write span below the newest row.
 class TYaemRowGenerator final: public NLog::TRandomLogGenerator {
 public:
-    TYaemRowGenerator(const TYaemWorkloadParams& params, TInstant now)
+    TYaemRowGenerator(const TYaemWorkloadParams& params, TInstant now, TInstant newest)
         : TRandomLogGenerator(params)
-        , Lag(params.GetLag())
         , Now(now)
+        , Newest(newest)
+        , SpanUs(params.GetWriteSpan().MicroSeconds())
     {}
 
 protected:
     TInstant GenerateTimestamp() const override {
-        const i64 lagUs = Lag.SampleLagUs();
-        return lagUs >= 0 ? Now - TDuration::MicroSeconds(lagUs) : Now + TDuration::MicroSeconds(-lagUs);
+        return SpanUs ? Newest - TDuration::MicroSeconds(RandomNumber<ui64>(SpanUs)) : Newest;
     }
 
     TInstant GenerateIngestedAt() const override {
@@ -325,8 +333,9 @@ protected:
     }
 
 private:
-    const TLagDistribution& Lag;
     const TInstant Now;
+    const TInstant Newest;
+    const ui64 SpanUs;
 };
 
 } // namespace
@@ -337,14 +346,16 @@ TYaemGenerator::TYaemGenerator(const TYaemWorkloadParams* params)
 {}
 
 TVector<TYaemGenerator::TRow> TYaemGenerator::GenerateWrite(TInstant now) const {
-    return TYaemRowGenerator(YaemParams, now).GenerateRandomRows(YaemParams.SampleRowsPerWrite());
+    const i64 lagUs = YaemParams.GetLag().SampleLagUs();
+    const TInstant newest = lagUs >= 0 ? now - TDuration::MicroSeconds(lagUs) : now + TDuration::MicroSeconds(-lagUs);
+    return TYaemRowGenerator(YaemParams, now, newest).GenerateRandomRows(YaemParams.SampleRowsPerWrite());
 }
 
 TVector<IWorkloadQueryGenerator::TWorkloadType> TYaemGenerator::GetSupportedWorkloadTypes() const {
     TVector<TWorkloadType> result;
-    result.emplace_back(static_cast<int>(EType::Insert), "insert", "Insert one write of rows: the row count follows the rows-per-shard distribution, the timestamps the lag distribution");
-    result.emplace_back(static_cast<int>(EType::Upsert), "upsert", "Upsert one write of rows: the row count follows the rows-per-shard distribution, the timestamps the lag distribution");
-    result.emplace_back(static_cast<int>(EType::BulkUpsert), "bulk-upsert", "Bulk upsert one write of rows: the row count follows the rows-per-shard distribution, the timestamps the lag distribution");
+    result.emplace_back(static_cast<int>(EType::Insert), "insert", "Insert one write of rows: the row count follows the rows-per-shard distribution, the timestamp lag of the write the lag distribution");
+    result.emplace_back(static_cast<int>(EType::Upsert), "upsert", "Upsert one write of rows: the row count follows the rows-per-shard distribution, the timestamp lag of the write the lag distribution");
+    result.emplace_back(static_cast<int>(EType::BulkUpsert), "bulk-upsert", "Bulk upsert one write of rows: the row count follows the rows-per-shard distribution, the timestamp lag of the write the lag distribution");
     result.emplace_back(static_cast<int>(EType::Select), "select", "Select some agregated queries");
     return result;
 }

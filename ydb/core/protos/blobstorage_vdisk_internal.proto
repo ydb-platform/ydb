@@ -132,6 +132,7 @@ message TSyncerEntryPoint {
     repeated TSyncerVDiskEntry Entries = 10;
     // Info about YDB version of VDisk which made this record
     optional NKikimrConfig.TStoredCompatibilityInfo CompatibilityInfo = 15;
+    optional NKikimrBlobStorage.TSyncGuidHistory GuidHistory = 16;
 };
 
 message TIncrHugeChunks {

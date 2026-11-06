@@ -7,6 +7,11 @@ SPLIT_FACTOR(50)
 # libpthread's 32-bit .debug_aranges relocation then fails with R_X86_64_32.
 # Type units are deduplicated and keep that section under the limit.
 CXXFLAGS(-fdebug-types-section)
+# Dependencies and system objects (libpthread, ICU data) are already compiled
+# without -fdebug-types-section, so the flag above does not bring the linked
+# .debug_info back under 4 GiB. Drop debug sections while linking this binary.
+# The symbol table stays, so backtraces still have function names.
+LDFLAGS(-Wl,--strip-debug)
 
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)

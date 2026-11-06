@@ -1,14 +1,15 @@
 name: Dispatch remote executor
 
-# pull (default): upload remote-ticket artifact → wait claim → ingest.
-#   Webhook cannot carry workflow_dispatch inputs; the artifact does.
-# push: workflow_dispatch via GH_PERSONAL_ACCESS_TOKEN (legacy).
+# Reusable from Run-and-debug / PR-check / etc.:
+#   enqueue remote-ticket artifact → wait host claim on remote S3 → ingest.
+# Platform never workflow_dispatch'es the host; the host VM starts the executor
+# after the webhook and writes remote-claims/ + artifacts to host S3 only.
 # Config: resolve_remote_execution.py / REMOTE_PULL.md.
 on:
   workflow_call:
     inputs:
       config:
-        description: JSON from resolve_remote_execution (handoff, repos, S3, inputs, …)
+        description: JSON from resolve_remote_execution (repos, S3, inputs, …)
         required: true
         type: string
     outputs:
@@ -24,36 +25,18 @@ jobs:
     runs-on: ${{ fromJSON(inputs.config).wait && fromJSON('["self-hosted", "runner-waiter"]') || fromJSON('["ubuntu-latest"]') }}
     timeout-minutes: 15
     outputs:
-      platform_run_id: ${{ steps.handoff.outputs.platform_run_id }}
-      ticket_url: ${{ steps.handoff.outputs.ticket_url }}
-      ticket_artifact: ${{ steps.handoff.outputs.ticket_artifact }}
-      executor_run_id: ${{ steps.handoff.outputs.executor_run_id }}
-      executor_run_url: ${{ steps.handoff.outputs.executor_run_url }}
+      platform_run_id: ${{ steps.ticket.outputs.platform_run_id }}
+      ticket_artifact: ${{ steps.ticket.outputs.ticket_artifact }}
     steps:
       - uses: actions/checkout@v5
         with:
           sparse-checkout: |
             .github/scripts/ci
-            .github/actions/s3cmd
           sparse-checkout-cone-mode: false
 
-      - name: Configure ticket s3cmd
-        if: >-
-          (fromJSON(inputs.config).handoff || 'pull') != 'push' &&
-          fromJSON(inputs.config).ticket_s3_bucket != '' &&
-          fromJSON(inputs.config).ticket_s3_endpoint != ''
-        uses: ./.github/actions/s3cmd
-        with:
-          s3_key_id: ${{ secrets.AWS_KEY_ID }}
-          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
-          s3_bucket: ${{ fromJSON(inputs.config).ticket_s3_bucket }}
-          s3_endpoint: ${{ fromJSON(inputs.config).ticket_s3_endpoint }}
-          build_preset: relwithdebinfo
-
-      - name: Enqueue or push-dispatch
-        id: handoff
+      - name: Write remote-ticket
+        id: ticket
         env:
-          GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           CONFIG_JSON: ${{ inputs.config }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PLATFORM_RUN_ID: ${{ github.run_id }}
@@ -61,18 +44,11 @@ jobs:
           PLATFORM_WORKFLOW: ${{ github.workflow }}
           PLATFORM_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           TICKET_PATH: remote-ticket.json
-          TICKET_AWS_ENDPOINT: ${{ fromJSON(inputs.config).ticket_s3_endpoint }}
-          TICKET_AWS_BUCKET: ${{ fromJSON(inputs.config).ticket_s3_bucket }}
           REPO: ${{ fromJSON(inputs.config).repository || github.repository }}
-          WORKFLOW_FILE: ${{ fromJSON(inputs.config).workflow_file }}
           WORKFLOW_NAME: ${{ fromJSON(inputs.config).workflow_name }}
-          EXECUTOR_REF: ${{ fromJSON(inputs.config).executor_ref }}
-          INPUTS_JSON: ${{ toJSON(fromJSON(inputs.config).inputs) }}
-          WAIT_MODE: ${{ fromJSON(inputs.config).wait && 'wait+mirror' || 'fire-and-forget' }}
-        run: python3 .github/scripts/ci/dispatch_remote_executor.py start
+        run: python3 .github/scripts/ci/dispatch_remote_executor.py enqueue
 
       - name: Upload remote-ticket artifact
-        if: (fromJSON(inputs.config).handoff || 'pull') != 'push'
         uses: actions/upload-artifact@v4
         with:
           name: remote-ticket
@@ -99,11 +75,10 @@ jobs:
       - name: Wait for claim + executor
         id: wait
         env:
+          # Read host Actions run status (public repo may work without; PAT if private).
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           CONFIG_JSON: ${{ inputs.config }}
           PLATFORM_RUN_ID: ${{ github.run_id }}
-          EXECUTOR_RUN_ID: ${{ needs.enqueue.outputs.executor_run_id }}
-          EXECUTOR_RUN_URL: ${{ needs.enqueue.outputs.executor_run_url }}
           REPO: ${{ fromJSON(inputs.config).repository }}
           WORKFLOW_NAME: ${{ fromJSON(inputs.config).workflow_name }}
           AWS_ENDPOINT: ${{ fromJSON(inputs.config).summary_s3_endpoint || fromJSON(inputs.config).claim_s3_endpoint }}
@@ -117,11 +92,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           CONFIG_JSON: ${{ inputs.config }}
           PLATFORM_RUN_ID: ${{ github.run_id }}
-          EXECUTOR_RUN_ID: ${{ steps.wait.outputs.executor_run_id || needs.enqueue.outputs.executor_run_id }}
-          EXECUTOR_RUN_URL: ${{ steps.wait.outputs.executor_run_url || needs.enqueue.outputs.executor_run_url }}
+          EXECUTOR_RUN_ID: ${{ steps.wait.outputs.executor_run_id }}
+          EXECUTOR_RUN_URL: ${{ steps.wait.outputs.executor_run_url }}
           REPO: ${{ fromJSON(inputs.config).repository }}
-          TICKET_AWS_ENDPOINT: ${{ fromJSON(inputs.config).ticket_s3_endpoint }}
-          TICKET_AWS_BUCKET: ${{ fromJSON(inputs.config).ticket_s3_bucket }}
+          AWS_ENDPOINT: ${{ fromJSON(inputs.config).summary_s3_endpoint || fromJSON(inputs.config).claim_s3_endpoint }}
+          AWS_BUCKET: ${{ fromJSON(inputs.config).summary_s3_bucket || fromJSON(inputs.config).claim_s3_bucket }}
         run: python3 .github/scripts/ci/dispatch_remote_executor.py cancel
 
   ingest:

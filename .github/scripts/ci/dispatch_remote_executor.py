@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-"""Remote executor handoff: pull (artifact/claim) or push (PAT workflow_dispatch).
+"""Platform remote dispatcher: publish remote-ticket artifact, wait for claim, cancel.
 
-Pull publishes a GitHub Actions artifact `remote-ticket` with the full resolve
-config (webhook payloads lack workflow_dispatch inputs). Optional S3 ticket
-mirror when ticket_s3_* is configured.
+Reusable from Run-and-debug / PR-check / etc. via dispatch_remote.yml.
+Does not start the remote executor — the host VM does that after the webhook.
+The executor writes remote-claims/{platform_run_id}.json on *its* public S3.
 """
 from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -126,37 +124,6 @@ def load_config():
     return cfg
 
 
-def handoff(cfg):
-    mode = str(cfg.get("handoff") or "pull").strip().lower()
-    return mode if mode in ("pull", "push") else "pull"
-
-
-def ticket_s3_optional(cfg):
-    """Optional legacy mirror; empty means artifact-only pull."""
-    ep = (cfg.get("ticket_s3_endpoint") or "").strip() or env_opt("TICKET_AWS_ENDPOINT")
-    bucket = (cfg.get("ticket_s3_bucket") or "").strip() or env_opt("TICKET_AWS_BUCKET")
-    if not ep or not bucket:
-        return None
-    return ep.rstrip("/"), bucket
-
-
-def build_ticket(cfg):
-    run_id = env("PLATFORM_RUN_ID")
-    repo = env_opt("PLATFORM_REPOSITORY") or env_opt("GITHUB_REPOSITORY")
-    workflow = env_opt("PLATFORM_WORKFLOW") or env_opt("GITHUB_WORKFLOW") or "unknown"
-    run_url = env_opt("PLATFORM_RUN_URL") or f"https://github.com/{repo}/actions/runs/{run_id}"
-    return {
-        "version": 1,
-        "kind": "remote-ticket",
-        "platform_run_id": run_id,
-        "platform_repository": repo,
-        "platform_workflow": workflow,
-        "platform_run_url": run_url,
-        "config": cfg,
-        "created_at": utc_now(),
-    }
-
-
 def claim_s3(cfg):
     ep = (
         (cfg.get("claim_s3_endpoint") or "").strip()
@@ -169,39 +136,12 @@ def claim_s3(cfg):
         or env_opt("AWS_BUCKET")
     )
     if not ep or not bucket:
-        die("claim S3 endpoint/bucket missing")
+        die("claim S3 endpoint/bucket missing (remote host public S3)")
     return ep.rstrip("/"), bucket
 
 
 def public_url(endpoint, bucket, key):
     return f"{endpoint}/{bucket}/{key}"
-
-
-def s3cmd_put(local: Path, s3_uri: str):
-    cmd = [
-        "s3cmd", "put", "--acl-public", "--no-progress",
-        "--no-mime-magic", "--guess-mime-type", str(local), s3_uri,
-    ]
-    print("+", " ".join(cmd), flush=True)
-    subprocess.check_call(cmd)
-
-
-def coerce_dispatch_inputs(raw):
-    if not isinstance(raw, dict):
-        die("inputs_json must be a JSON object")
-    out = {}
-    for key, val in raw.items():
-        if not isinstance(key, str) or not key:
-            die(f"invalid inputs_json key: {key!r}")
-        if val is None:
-            continue
-        if isinstance(val, bool):
-            out[key] = "true" if val else "false"
-        elif isinstance(val, (dict, list)):
-            out[key] = json.dumps(val, separators=(",", ":"))
-        else:
-            out[key] = str(val)
-    return out
 
 
 def run_root_file_url(run_id, filename):
@@ -225,6 +165,23 @@ def utc_now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def build_ticket(cfg):
+    run_id = env("PLATFORM_RUN_ID")
+    repo = env_opt("PLATFORM_REPOSITORY") or env_opt("GITHUB_REPOSITORY")
+    workflow = env_opt("PLATFORM_WORKFLOW") or env_opt("GITHUB_WORKFLOW") or "unknown"
+    run_url = env_opt("PLATFORM_RUN_URL") or f"https://github.com/{repo}/actions/runs/{run_id}"
+    return {
+        "version": 1,
+        "kind": "remote-ticket",
+        "platform_run_id": run_id,
+        "platform_repository": repo,
+        "platform_workflow": workflow,
+        "platform_run_url": run_url,
+        "config": cfg,
+        "created_at": utc_now(),
+    }
+
+
 def cmd_enqueue():
     cfg = load_config()
     ticket = build_ticket(cfg)
@@ -234,90 +191,20 @@ def cmd_enqueue():
     path.write_text(json.dumps(ticket, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote {path} ({path.stat().st_size} bytes)")
 
-    ticket_url = ""
-    s3 = ticket_s3_optional(cfg)
-    if s3:
-        endpoint, bucket = s3
-        key = f"remote-tickets/{run_id}.json"
-        ticket_url = public_url(endpoint, bucket, key)
-        try:
-            s3cmd_put(path, f"s3://{bucket}/{key}")
-            print(f"Mirrored ticket to {ticket_url}")
-        except Exception as e:
-            print(f"::warning::optional S3 ticket mirror failed: {e}")
-            ticket_url = ""
-
     set_outputs(
         platform_run_id=run_id,
         ticket_path=str(path),
         ticket_artifact=TICKET_ARTIFACT_NAME,
-        ticket_url=ticket_url,
         executor_run_id="",
         executor_run_url="",
     )
-    lines = [
-        "### Remote pull enqueue\n",
-        f"- **platform run:** [{run_id}]({run_url})\n",
-        f"- **ticket artifact:** `{TICKET_ARTIFACT_NAME}` (`{path.name}`)\n",
-        f"- **claim key:** `remote-claims/{run_id}.json` on remote public S3\n",
-    ]
-    if ticket_url:
-        lines.append(f"- **S3 mirror:** [{ticket_url}]({quote_url(ticket_url)})\n")
-    lines.append("\n")
-    append_summary("".join(lines))
-    print(f"::notice title=Remote ticket artifact ready::{TICKET_ARTIFACT_NAME} on run {run_id}")
-
-
-def cmd_start():
-    if not env_opt("GH_TOKEN"):
-        die("push handoff requires GH_TOKEN")
-    executor_ref = env("EXECUTOR_REF")
-    wf_file = env("WORKFLOW_FILE")
-    wait_mode = env("WAIT_MODE")
-    inputs = coerce_dispatch_inputs(json.loads(env("INPUTS_JSON")))
-
-    print(f"Dispatching {wf_file} --ref {executor_ref}")
-    _, wf = gh("GET", f"{api()}/actions/workflows/{wf_file}")
-    workflow_id = wf.get("id")
-    if not workflow_id:
-        die(f"workflow {wf_file} not found")
-
-    before = datetime.now(timezone.utc).timestamp() - 5
-    code, _ = gh(
-        "POST",
-        f"{api()}/actions/workflows/{workflow_id}/dispatches",
-        body={"ref": executor_ref, "inputs": inputs},
-        retries=5,
-    )
-    if code != 204:
-        die(f"dispatch failed HTTP {code}")
-
-    run_id = run_url = None
-    for _ in range(30):
-        time.sleep(2)
-        _, runs = gh(
-            "GET",
-            f"{api()}/actions/workflows/{workflow_id}/runs"
-            f"?branch={urllib.parse.quote(executor_ref)}&event=workflow_dispatch&per_page=10",
-        )
-        for r in runs.get("workflow_runs") or []:
-            created = datetime.fromisoformat(r["created_at"].replace("Z", "+00:00")).timestamp()
-            if created >= before:
-                run_id, run_url = r["id"], r["html_url"]
-                break
-        if run_id:
-            break
-    if not run_id:
-        die("could not resolve executor run id after dispatch")
-
-    set_outputs(executor_run_id=run_id, executor_run_url=run_url)
     append_summary(
-        f"### Dispatched remote executor\n"
-        f"- **workflow:** `{wf_file}`\n"
-        f"- **executor run:** [{run_id}]({run_url})\n"
-        f"- **mode:** `{wait_mode}`\n\n"
+        "### Remote enqueue\n"
+        f"- **platform run:** [{run_id}]({run_url})\n"
+        f"- **ticket artifact:** `{TICKET_ARTIFACT_NAME}`\n"
+        f"- **claim (host S3):** `remote-claims/{run_id}.json`\n\n"
     )
-    print(f"::notice title=Remote executor dispatched::{run_url}")
+    print(f"::notice title=Remote ticket artifact ready::{TICKET_ARTIFACT_NAME} on run {run_id}")
 
 
 def wait_for_claim(cfg):
@@ -341,7 +228,6 @@ def wait_for_claim(cfg):
                     f"### Remote claim\n- **executor run:** [{run_id}]({run_url})\n\n"
                 )
                 return run_id, run_url
-            # pending claim: keep waiting for executor_run_id
         if i % 10 == 0:
             print(f"{time.strftime('%H:%M:%S', time.gmtime())} waiting for claim...")
         time.sleep(30)
@@ -383,9 +269,9 @@ def wait_executor_done(run_id, run_url):
     else:
         art_url = run_root_file_url(run_id, "remote_artifacts.json")
         if fetch_retries(art_url, attempts=5, sleep_s=2):
-            print(f"::warning::missing job_summary.md; remote_artifacts.json present")
+            print("::warning::missing job_summary.md; remote_artifacts.json present")
         else:
-            print(f"::warning::missing job_summary.md and remote_artifacts.json")
+            print("::warning::missing job_summary.md and remote_artifacts.json")
 
     if conclusion == "success":
         return
@@ -397,67 +283,46 @@ def wait_executor_done(run_id, run_url):
 
 def cmd_wait():
     cfg = load_config()
-    if handoff(cfg) == "pull":
-        run_id, run_url = wait_for_claim(cfg)
-        set_outputs(executor_run_id=run_id, executor_run_url=run_url)
-        os.environ["REPO"] = (cfg.get("repository") or "").strip() or env_opt("REPO")
-        os.environ["WORKFLOW_NAME"] = (cfg.get("workflow_name") or "").strip() or env_opt("WORKFLOW_NAME")
-        ep, bucket = claim_s3(cfg)
-        os.environ["AWS_ENDPOINT"] = ep
-        os.environ["AWS_BUCKET"] = bucket
-        wait_executor_done(run_id, run_url)
-        return
-
-    run_id = env("EXECUTOR_RUN_ID")
-    run_url = env_opt("EXECUTOR_RUN_URL") or f"https://github.com/{env('REPO')}/actions/runs/{run_id}"
+    run_id, run_url = wait_for_claim(cfg)
     set_outputs(executor_run_id=run_id, executor_run_url=run_url)
+    os.environ["REPO"] = (cfg.get("repository") or "").strip() or env_opt("REPO")
+    os.environ["WORKFLOW_NAME"] = (cfg.get("workflow_name") or "").strip() or env_opt("WORKFLOW_NAME")
+    ep, bucket = claim_s3(cfg)
+    os.environ["AWS_ENDPOINT"] = ep
+    os.environ["AWS_BUCKET"] = bucket
     wait_executor_done(run_id, run_url)
 
 
 def cmd_cancel():
-    cfg = load_config()
-    platform_run_id = env_opt("PLATFORM_RUN_ID")
     run_id = env_opt("EXECUTOR_RUN_ID")
-
-    if handoff(cfg) == "pull" and platform_run_id:
-        s3 = ticket_s3_optional(cfg)
-        if s3:
-            endpoint, bucket = s3
-            key = f"remote-tickets/{platform_run_id}.cancel"
-            with tempfile.TemporaryDirectory(prefix="remote-cancel-") as tmp:
-                path = Path(tmp) / "cancel.json"
-                path.write_text(
-                    json.dumps(
-                        {"version": 1, "platform_run_id": platform_run_id, "cancelled_at": utc_now()},
-                        indent=2,
-                    )
-                    + "\n",
-                    encoding="utf-8",
-                )
-                try:
-                    s3cmd_put(path, f"s3://{bucket}/{key}")
-                    append_summary(f"### Caller cancelled\n- cancel marker `s3://{bucket}/{key}`\n")
-                except Exception as e:
-                    print(f"::warning::cancel marker failed: {e}")
-    if run_id and env_opt("GH_TOKEN"):
-        run_url = env_opt("EXECUTOR_RUN_URL") or f"https://github.com/{env('REPO')}/actions/runs/{run_id}"
-        code, _ = gh(
-            "POST", f"{api()}/actions/runs/{run_id}/cancel",
-            retries=3, ok_codes=(202, 204, 409),
-        )
-        append_summary(f"### Caller cancelled\n- executor [{run_id}]({run_url}) HTTP {code}\n")
+    if not run_id:
+        # Claim may not exist yet; try reading it so we can still cancel.
+        cfg = load_config()
+        platform_run_id = env_opt("PLATFORM_RUN_ID")
+        if platform_run_id:
+            endpoint, bucket = claim_s3(cfg)
+            body = http_get(public_url(endpoint, bucket, f"remote-claims/{platform_run_id}.json"))
+            if body:
+                run_id = str(json.loads(body).get("executor_run_id") or "").strip()
+    if not run_id or not env_opt("GH_TOKEN"):
+        append_summary("### Caller cancelled\n- no executor run id to cancel yet\n")
+        return
+    run_url = env_opt("EXECUTOR_RUN_URL") or f"https://github.com/{env('REPO')}/actions/runs/{run_id}"
+    code, _ = gh(
+        "POST", f"{api()}/actions/runs/{run_id}/cancel",
+        retries=3, ok_codes=(202, 204, 409),
+    )
+    append_summary(f"### Caller cancelled\n- executor [{run_id}]({run_url}) HTTP {code}\n")
 
 
 def main():
     if len(sys.argv) != 2 or sys.argv[1] not in ("enqueue", "start", "wait", "cancel"):
         die("usage: dispatch_remote_executor.py enqueue|start|wait|cancel")
     apply_to_environ()
-    cfg = load_config()
     cmd = sys.argv[1]
-    if cmd == "enqueue" or (cmd == "start" and handoff(cfg) == "pull"):
+    # `start` kept as an alias for enqueue (workflow_call step name).
+    if cmd in ("enqueue", "start"):
         cmd_enqueue()
-    elif cmd == "start":
-        cmd_start()
     elif cmd == "wait":
         cmd_wait()
     else:

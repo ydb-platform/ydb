@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Merge remote execution JSON with defaults → dispatch_remote `config` output.
 
+Callers (Run-and-debug, PR-check, …) pass optional REMOTE_JSON; this script
+emits one opaque config for dispatch_remote.yml (artifact → wait claim → ingest).
+
 Env:
   REMOTE_JSON — optional caller override (object or empty)
   CODE_REF / GITHUB_SHA, GITHUB_WORKFLOW, GITHUB_EVENT_NAME, GITHUB_RUN_ID,
   PULL_NUMBER, ANALYTICS_JOB_NAME (optional top-level overrides)
   GITHUB_OUTPUT — write `config<<EOF...`
-
-The resulting config is the single opaque blob passed into dispatch_remote.yml.
 """
 from __future__ import annotations
 
@@ -20,19 +21,14 @@ from typing import Any
 
 
 DEFAULT_REMOTE: dict[str, Any] = {
+    # Host repo / workflow identity (waiter polls GH; VM dispatches this WF).
     "repository": "nebius/ydb",
     "workflow_file": "ci_remote_executor.yml",
     "workflow_name": "CI remote executor",
     "executor_ref": "nebius-ci",
-    # pull = Actions artifact remote-ticket + remote poller/claim (no launch PAT).
-    # push = workflow_dispatch + PAT.
-    "handoff": "pull",
     "wait": True,
     "fail_on_remote_failure": True,
-    # Optional legacy S3 mirror of the same ticket JSON (empty = artifact only).
-    "ticket_s3_endpoint": "",
-    "ticket_s3_bucket": "",
-    # Artifacts + claims on remote host public S3.
+    # Host public S3: claims + build artifacts (platform only reads).
     "summary_s3_endpoint": "https://s3.us-east-1.amazonaws.com",
     "summary_s3_bucket": "ydb-nebius-ci-public-609722444123-us-east-1",
     "claim_s3_endpoint": "",
@@ -192,10 +188,9 @@ def build_config() -> dict[str, Any]:
 
     cfg["wait"] = _truthy(cfg.get("wait"), True)
     cfg["fail_on_remote_failure"] = _truthy(cfg.get("fail_on_remote_failure"), True)
-    handoff = _as_str(cfg.get("handoff"), "pull").strip().lower() or "pull"
-    if handoff not in ("pull", "push"):
-        die(f"handoff must be pull|push, got {handoff!r}")
-    cfg["handoff"] = handoff
+    cfg.pop("handoff", None)
+    cfg.pop("ticket_s3_endpoint", None)
+    cfg.pop("ticket_s3_bucket", None)
     cfg["platform_repository"] = (
         _as_str(cfg.get("platform_repository")).strip()
         or (os.environ.get("GITHUB_REPOSITORY") or "").strip()
@@ -205,8 +200,10 @@ def build_config() -> dict[str, Any]:
     if not _as_str(cfg.get("claim_s3_bucket")).strip():
         cfg["claim_s3_bucket"] = cfg.get("summary_s3_bucket") or ""
 
-    # Executor workflow_dispatch payload (poller / push start).
+    # Payload the host VM passes into ci_remote_executor workflow_dispatch.
     cfg["inputs"] = {
+        "platform_run_id": source_run,
+        "platform_repository": cfg["platform_repository"],
         "code_ref": code_ref,
         "job_inputs": job_inputs,
         "runs_on": runs_on_str,

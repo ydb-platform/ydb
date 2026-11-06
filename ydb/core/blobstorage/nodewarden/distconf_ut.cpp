@@ -2419,6 +2419,36 @@ Y_UNIT_TEST_SUITE(TDistconfNodeRoleTest) {
         CheckRootAfterNodeLoss(true);
     }
 
+    Y_UNIT_TEST(ConfigChangeWithoutScepterIsRetryable) {
+        const auto config = MakeStorageConfig(3);
+        TNodeWardenTestState state;
+        TTestActorSystem runtime(3);
+        runtime.Start();
+        Y_DEFER { runtime.Stop(); };
+        runtime.StopNode(2);
+        runtime.StopNode(3);
+        const TActorId keeper = RegisterKeeper(runtime, config, 1, state);
+        const TActorId edge = runtime.AllocateEdgeActor(1);
+        auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        request->Record.MutableRemoveBridgePile()->SetPileName("pile1");
+        runtime.Send(new IEventHandle(keeper, edge, request.release()), 1);
+        const auto response = runtime.WaitForEdgeActorEvent<NStorage::TEvNodeConfigInvokeOnRootResult>(edge);
+        const auto& record = response->Get()->Record;
+        UNIT_ASSERT_EQUAL_C(record.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE,
+            record.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(record.GetErrorReason(), "No scepter");
+        UNIT_ASSERT(!record.HasScepter());
+
+        std::vector<TActorId> keepers{keeper};
+        for (ui32 nodeId : {2, 3}) {
+            runtime.StartNode(nodeId);
+            keepers.push_back(RegisterKeeper(runtime, config, nodeId, state));
+        }
+        UNIT_ASSERT(SimUntil(runtime, [&] { return FindConvergedRoot(runtime, keepers).has_value(); }));
+        const auto root = FindConvergedRoot(runtime, keepers);
+        UNIT_ASSERT(QueryKeeper(runtime, keepers[*root - 1]).HasScepter());
+    }
+
     Y_UNIT_TEST(OfflineLowerPeerDoesNotBlockBinding) {
         const auto config = MakeStorageConfig(3, 1, {3});
         TNodeWardenTestState state;
@@ -5009,6 +5039,12 @@ selector_config: []
             runtime.StartNode(nodeId);
             fixture.Keepers[nodeId - 1] = RegisterKeeper(runtime, fixture.Config, nodeId, fixture.State);
         }
+        auto push = std::make_unique<NStorage::TEvNodeConfigPush>();
+        push->Record.SetInitial(true);
+        auto *bound = push->Record.AddBoundNodes();
+        bound->MutableNodeId()->CopyFrom(expanded.GetAllNodes(3));
+        bound->MutableMeta()->CopyFrom(NStorage::TStorageConfigMeta(expanded));
+        runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), fixture.Keepers[3], push.release()), 4);
         UNIT_ASSERT(SimUntil(runtime, [&] { return rejectedBinding; }));
         for (ui32 nodeId : {1, 2, 3}) {
             UNIT_ASSERT_VALUES_EQUAL(fixture.Metadata(nodeId).GetCommittedStorageConfig().GetGeneration(), 2);
@@ -11240,6 +11276,32 @@ Y_UNIT_TEST_SUITE(TDeriveStorageConfigBridgeTest) {
         UNIT_ASSERT_STRING_CONTAINS(error, "unknown pile name '' for node 2");
         UNIT_ASSERT(!derive({std::nullopt, "a"}, {"a", "b"}, &error));
         UNIT_ASSERT_STRING_CONTAINS(error, "mandatory pile name is missing for node 1");
+    }
+
+    // node warden takes the rate of its syncer quoter from the derived config, so a value lost here is replaced with the
+    // default one as soon as distconf provides the config
+    Y_UNIT_TEST(BridgeSyncRateBytesPerSecond) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableNameserviceConfig();
+        auto *bsFrom = appConfig.MutableBlobStorageConfig();
+        NKikimrBlobStorage::TStorageConfig config;
+        const auto& bsTo = *config.MutableBlobStorageConfig();
+        TString error;
+
+        bsFrom->SetBridgeSyncRateBytesPerSecond(123'000'000);
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(appConfig, &config, &error), error);
+        UNIT_ASSERT_VALUES_EQUAL(bsTo.GetBridgeSyncRateBytesPerSecond(), 123'000'000);
+
+        // zero turns the throttling off, it isn't the same as the value being unset
+        bsFrom->SetBridgeSyncRateBytesPerSecond(0);
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(appConfig, &config, &error), error);
+        UNIT_ASSERT(bsTo.HasBridgeSyncRateBytesPerSecond());
+        UNIT_ASSERT_VALUES_EQUAL(bsTo.GetBridgeSyncRateBytesPerSecond(), 0);
+
+        // the value dropped from the new config doesn't stick from the previous one
+        bsFrom->ClearBridgeSyncRateBytesPerSecond();
+        UNIT_ASSERT_C(NStorage::DeriveStorageConfig(appConfig, &config, &error), error);
+        UNIT_ASSERT(!bsTo.HasBridgeSyncRateBytesPerSecond());
     }
 
     // parts of static groups get new generations when the pile becomes unsynced; donors and VDisks being destroyed are

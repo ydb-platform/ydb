@@ -38,8 +38,9 @@ namespace NKikimr::NStorage {
 
         if (vdisk.RuntimeData) {
             vdiskRunning = true;
+            vdisk.ShutdownActorId = vdisk.RuntimeData->ActorId;
             vdisk.TIntrusiveListItem<TVDiskRecord, TGroupRelationTag>::Unlink();
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.GetVDiskServiceId(), {}, nullptr, 0));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.RuntimeData->ActorId, {}, nullptr, 0));
             vdisk.RuntimeData.reset();
         }
 
@@ -61,7 +62,7 @@ namespace NKikimr::NStorage {
         vdisk.ScrubCookie = 0; // disable reception of Scrub messages from this disk
         vdisk.ScrubCookieForController = 0; // and from controller too
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
-        vdisk.ShutdownPending = vdiskRunning; // Shutdown pending only if VDisk was running before poison
+        vdisk.ShutdownPending |= vdiskRunning;
         VDiskStatusChanged = true;
     }
 
@@ -84,6 +85,10 @@ namespace NKikimr::NStorage {
 
         if (SlayInFlight.contains(vslotId)) {
             return;
+        }
+
+        if (!donorMode && EjectedGroups.contains(vdisk.GetGroupId())) {
+            return; // its group is gone, only the destruction of this slot is yet to come
         }
 
         if (PDiskRestartInFlight.contains(vslotId.PDiskId)) {
@@ -430,6 +435,7 @@ namespace NKikimr::NStorage {
 
         vdisk.RuntimeData.emplace(TVDiskRecord::TRuntimeData{
             .GroupInfo = groupInfo,
+            .ActorId = actorId,
             .OrderNumber = groupInfo->GetOrderNumber(TVDiskIdShort(vdiskId)),
             .DonorMode = donorMode,
             .ReadOnly = readOnly,
@@ -448,18 +454,40 @@ namespace NKikimr::NStorage {
         if (const auto it = VDiskIdByActor.find(ev->Sender); it != VDiskIdByActor.end()) {
             if (const auto jt = LocalVDisks.find(it->second); jt != LocalVDisks.end()) {
                 TVDiskRecord& vdisk = jt->second;
-                Y_ABORT_UNLESS(vdisk.ShutdownPending);
-                vdisk.ShutdownPending = false;
-                if (std::exchange(vdisk.RestartAfterShutdown, false)) {
-                    StartLocalVDiskActor(vdisk);
+                if (vdisk.ShutdownActorId == ev->Sender) {
+                    vdisk.ShutdownActorId = {};
+                    vdisk.ShutdownPending = false;
+                    if (std::exchange(vdisk.RestartAfterShutdown, false)) {
+                        StartLocalVDiskActor(vdisk);
+                    }
                 }
             }
             VDiskIdByActor.erase(it);
         }
     }
 
-    void TNodeWarden::ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet) {
+    void TNodeWarden::ApplyServiceSetVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet, bool isStatic) {
+        THashMap<TPDiskKey, ui64> pdiskGuids;
+        if (!isStatic) {
+            for (const auto& pdisk : StaticServices.GetPDisks()) {
+                pdiskGuids.emplace(pdisk, pdisk.GetPDiskGuid());
+            }
+            for (const auto& pdisk : DynamicServices.GetPDisks()) {
+                pdiskGuids.emplace(pdisk, pdisk.GetPDiskGuid());
+            }
+        }
         for (const auto& vdisk : serviceSet.GetVDisks()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            if (!isStatic && loc.GetNodeID() == LocalNodeId && !vdisk.GetDoDestroy() && !vdisk.GetDoWipe()
+                    && vdisk.GetEntityStatus() != NKikimrBlobStorage::DESTROY) {
+                const auto it = pdiskGuids.find(TPDiskKey(loc.GetNodeID(), loc.GetPDiskID()));
+                if (it == pdiskGuids.end() || it->second != loc.GetPDiskGuid()) {
+                    YDB_LOG_NOTICE("Ignoring VDisk with unknown or superseded PDisk identity",
+                        {"marker", "NW125"}, {"vdisk", vdisk});
+                    ControllerServicesDropped = true;
+                    continue;
+                }
+            }
             ApplyLocalVDiskInfo(vdisk);
         }
     }
@@ -521,9 +549,14 @@ namespace NKikimr::NStorage {
             }
         }
 
+        const TPDiskKey pdiskKey(vslotId.NodeId, vslotId.PDiskId);
+        const auto pdiskIt = LocalPDisks.find(pdiskKey);
+        const bool pdiskMissing = pdiskIt == LocalPDisks.end()
+            || pdiskIt->second.Record.GetPDiskGuid() != loc.GetPDiskGuid();
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
-            if (record.UnderlyingPDiskDestroyed) {
+            if (record.UnderlyingPDiskDestroyed || pdiskMissing) {
                 PoisonLocalVDisk(record);
+                SlayInFlight.erase(vslotId);
                 SendVDiskReport(vslotId, record.GetVDiskId(), NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED);
                 record.UnderlyingPDiskDestroyed = false;
             } else {

@@ -7,6 +7,7 @@
 
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -966,6 +967,23 @@ config:
     void Sim(TDuration delta = TDuration::Zero()) {
         TInstant barrier = Runtime->GetClock() + delta;
         Runtime->Sim([&] { return Runtime->GetClock() <= barrier; });
+    }
+
+    // Stops the tablet and makes the resolver forget it, so that it starts anew. The time runs on for settlingTime then.
+    void RebootTablet(ui64 tabletId, TDuration settlingTime = TDuration::Zero()) {
+        const TActorId sender = Runtime->AllocateEdgeActor(Settings.ControllerNodeId, __FILE__, __LINE__);
+        Runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvForward(tabletId,
+            new IEventHandle(TActorId(), sender, new TEvents::TEvPoison), {}, TEvTabletResolver::TEvForward::EActor::Tablet)),
+            sender.NodeId());
+        const auto res = WaitForEdgeActorEvent<TEvTabletResolver::TEvForwardResult>(sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(res->Get()->Status, NKikimrProto::OK, res->Get()->ToString());
+        Sim(TDuration::Seconds(5));
+        Runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId,
+            TActorId())), sender.NodeId());
+        if (settlingTime) {
+            Sim(settlingTime);
+        }
+        Runtime->DestroyActor(sender);
     }
 
     TString Dump(const TActorId& vdiskActorId, const TVDiskID& vdiskId) {

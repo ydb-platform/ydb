@@ -361,4 +361,7 @@ message TFeatureFlags {
     optional bool EnableKeyValueRequestInFlightLimit = 363 [default = false];
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
+    // Show REPLICATING VDisks with only phantom-like blobs remaining as READY ones in node whiteboard and system views
+    // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
+    optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
 }

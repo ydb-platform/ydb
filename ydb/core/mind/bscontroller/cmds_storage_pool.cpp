@@ -305,6 +305,7 @@ namespace NKikimr::NBsController {
                 throw TExError() << "GroupId# " << groupId << " not found";
             }
         }
+        storagePools.erase(id);
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TChangeStoragePoolBridgeMode& cmd,

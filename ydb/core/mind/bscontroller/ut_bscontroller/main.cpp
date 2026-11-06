@@ -546,6 +546,46 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
         checkPlacement(1, "1", 2);
         checkPlacement(2, "2", 1);
+
+        // Exercise persistence through configuration commits when filters move
+        // between the legacy and location tables, including mixed filter sets.
+        const auto plainPool = readPool(3);
+        pool = plainPool;
+        location(pool.MutablePDiskFilter(0))->SetDataCenter("1");
+        *pool.AddPDiskFilter() = plainPool.GetPDiskFilter(0);
+        response = definePool(pool);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(readPool(3).PDiskFilterSize(), 2);
+
+        pool = readPool(3);
+        pool.ClearPDiskFilter();
+        *pool.AddPDiskFilter() = plainPool.GetPDiskFilter(0);
+        response = definePool(pool);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(readPool(3).PDiskFilterSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(readPool(3).GetPDiskFilter(0).PropertySize(), 2);
+
+        pool = readPool(3);
+        location(pool.MutablePDiskFilter(0))->SetDataCenter("2");
+        response = definePool(pool);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        request.Clear();
+        auto* remove = request.AddCommand()->MutableDeleteStoragePool();
+        remove->SetBoxId(1);
+        remove->SetStoragePoolId(3);
+        remove->SetItemConfigGeneration(readPool(3).GetItemConfigGeneration());
+        response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+
+        pool = plainPool;
+        pool.SetItemConfigGeneration(0);
+        response = definePool(pool);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(readPool(3).PDiskFilterSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(readPool(3).GetPDiskFilter(0).PropertySize(), 2);
     }
 
     Y_UNIT_TEST(PDiskLocationFilterCapacity) {
@@ -864,11 +904,13 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             m->SetStoragePoolId(1);
             m->SetItemConfigGeneration(1);
             request.AddCommand()->MutableQueryBaseConfig();
+            request.AddCommand()->MutableReadStoragePool()->SetBoxId(1);
             response = env.Invoke(request);
             UNIT_ASSERT(response.GetSuccess());
             const auto& baseConfig = response.GetStatus(1).GetBaseConfig();
             UNIT_ASSERT(baseConfig.GetGroup().empty());
             UNIT_ASSERT(baseConfig.GetVSlot().empty());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(2).StoragePoolSize(), 0);
         });
     }
 

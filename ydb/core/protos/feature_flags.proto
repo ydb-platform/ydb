@@ -228,4 +228,5 @@ message TFeatureFlags {
     optional bool EnableHullCompStorageRatioOptimization = 364 [default = false];
     // Skip StorageRatio calculation at compaction rank >= 10 while continuing compaction selection.
     optional bool EnableHullCompStorageRatioHighRankSkip = 365 [default = false];
+    optional bool EnableCoroutineCompactionSelector = 379 [default = false];
 }

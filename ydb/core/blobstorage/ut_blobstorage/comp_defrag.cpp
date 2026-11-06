@@ -1,3 +1,5 @@
+#include <ydb/library/actors/core/actor_coroutine.h>
+
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/load_test/service_actor.h>
@@ -1716,4 +1718,47 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         UNIT_ASSERT_VALUES_EQUAL(tokenResults, tokenResultsBeforeBrokerShutdown);
     }
 
+    Y_UNIT_TEST(EnablingCoroSelector) {
+        for (bool useCoro : {false, true}) {
+            TEnvironmentSetup env({
+                .NodeCount = 1,
+                .Erasure = TBlobStorageGroupType::ErasureNone,
+            });
+
+            auto& runtime = env.Runtime;
+            runtime->GetNode(1)->AppData->FeatureFlags.SetEnableCoroutineCompactionSelector(useCoro);
+            ui32 selectorsSeen = 0;
+
+            runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+                switch (ev->GetTypeRewrite()) {
+                    case TEvents::TSystem::Bootstrap: {
+                        IActor* actor = runtime->GetActor(ev->GetRecipientRewrite());
+                        if (actor &&
+                            actor->GetActivityType() == NKikimrServices::TActivity::BS_HULLCOMP_SELECTOR) {
+                            UNIT_ASSERT_VALUES_EQUAL(
+                                dynamic_cast<NActors::TActorCoro*>(actor) != nullptr,
+                                useCoro);
+                            ++selectorsSeen;
+                        }
+                        break;
+                    }
+                }
+                return true;
+            };
+
+            env.CreateBoxAndPool(1, 1);
+            env.Sim(TDuration::Minutes(1));
+
+            const auto groups = env.GetGroups();
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+            const auto info = env.GetGroupInfo(groups.front());
+
+            const TString data(100, 'x');
+            const TLogoBlobID blobId(1, 1, 1, 0, data.size(), 0);
+            env.PutBlob(groups.front(), blobId, data);
+            env.CompactVDisk(info->GetActorId(0));
+
+            UNIT_ASSERT_GT(selectorsSeen, 0);
+        }
+    }
 }

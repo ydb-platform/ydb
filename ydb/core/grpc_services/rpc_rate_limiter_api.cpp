@@ -25,12 +25,9 @@ public:
 
     TRateLimiterRequest(IRequestOpCtx* msg)
         : TBase(msg)
+        , CoordinationNodePath(this->Request_->NormalizePath(
+            this->GetProtoRequest()->coordination_node_path()))
     {}
-
-    void Bootstrap(const TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-        CoordinationNodePath = this->Request_->NormalizePath(this->GetProtoRequest()->coordination_node_path());
-    }
 
     static bool ValidateMetric (const Ydb::RateLimiter::MeteringConfig::Metric& srcMetric, Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
         static const TSet<TString> supportedFields{
@@ -130,7 +127,7 @@ protected:
     }
 
 private:
-    TString CoordinationNodePath;
+    const TString CoordinationNodePath;
 };
 
 template <class TEvRequest>

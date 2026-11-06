@@ -93,6 +93,7 @@ class TReadRowsRPC : public TActorBootstrapped<TReadRowsRPC> {
 public:
     explicit TReadRowsRPC(IRequestNoOpCtx* request)
         : Request(request)
+        , TablePath(Request->NormalizePath(GetProto()->path()))
         , PipeCache(MakePipePerNodeCacheID(true))
         , Span(TWilsonGrpc::RequestActor, Request->GetWilsonTraceId(), "ReadRowsRpc")
     {}
@@ -326,7 +327,6 @@ public:
     }
 
     void Bootstrap(const NActors::TActorContext& ctx) {
-        TablePath = Request->NormalizePath(GetProto()->path());
         StartTime = TAppData::TimeProvider->Now();
         if (!ResolveTable()) {
             return;
@@ -824,7 +824,7 @@ public:
 
 private:
     std::unique_ptr<IRequestNoOpCtx> Request;
-    TString TablePath;
+    const TString TablePath;
     TInstant StartTime;
     TActorId TimeoutTimerActorId;
     TActorId PipeCache;

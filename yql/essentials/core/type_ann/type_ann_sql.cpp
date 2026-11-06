@@ -592,7 +592,7 @@ bool ScanColumns(
                 isError = true;
                 return false;
             }
-        } else if (node->IsCallable("PgQualifiedStar")) {
+        } else if (node->IsCallable({"YqlQualifiedStar", "PgQualifiedStar"})) {
             if (!hasStar || !qualifiedRefs) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), "Star is not allowed here"));
                 isError = true;
@@ -1624,7 +1624,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
             YQL_ENSURE(false, "Missing input");
         }
 
-        if (node->IsCallable("PgQualifiedStar")) {
+        if (node->IsCallable({"YqlQualifiedStar", "PgQualifiedStar"})) {
             TExprNode::TListType members;
             for (ui32 priority : { TInput::Projection, TInput::Current, TInput::External }) {
                 for (const auto& x : inputs) {
@@ -2871,6 +2871,26 @@ IGraphTransformer::TStatus SqlStarWrapper(const TExprNode::TPtr& input, TExprNod
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus SqlQualifiedStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool isUniversal;
+    if (!EnsureAtomOrUniversal(input->Head(), ctx.Expr, isUniversal)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isUniversal) {
+        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus SqlColumnRefWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
@@ -3489,7 +3509,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                                 o.AddColumn(name);
                                             }
                                         }
-                                    } else if (lambda.Tail().IsCallable("PgQualifiedStar")) {
+                                    } else if (lambda.Tail().IsCallable({"YqlQualifiedStar", "PgQualifiedStar"})) {
                                         auto alias = lambda.Tail().Head().Content();
                                         bool found = false;
                                         for (ui32 priority : {TInput::Projection, TInput::Current, TInput::External}) {

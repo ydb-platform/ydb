@@ -95,11 +95,6 @@ protected:
         //GetRuntime().SetLogPriority(NKikimrServices::TX_MEDIATOR, NActors::NLog::PRI_DEBUG);
         //GetRuntime().SetLogPriority(NKikimrServices::TX_COORDINATOR, NActors::NLog::PRI_DEBUG);
 
-        GetRuntime().SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_TRACE);
-        GetRuntime().SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_TRACE);
-        GetRuntime().SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
-        GetRuntime().SetLogPriority(NKikimrServices::SCHEME_BOARD_POPULATOR, NActors::NLog::PRI_DEBUG);
-        GetRuntime().SetLogPriority(NKikimrServices::SCHEME_BOARD_SUBSCRIBER, NActors::NLog::PRI_DEBUG);
     }
 
     void InitRoot() {

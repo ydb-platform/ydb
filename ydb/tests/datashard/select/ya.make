@@ -2,10 +2,10 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(45)
+SPLIT_FACTOR(29)
 
 SIZE(MEDIUM)
-REQUIREMENTS(cpu:2)
+REQUIREMENTS(cpu:1)
 
 TEST_SRCS(
     test_select.py

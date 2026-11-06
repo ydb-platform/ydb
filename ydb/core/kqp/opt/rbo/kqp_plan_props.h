@@ -192,13 +192,24 @@ private:
  * Global plan properties
  */
 struct TPlanProps {
+    const TStage& GetStage(const IOperator& op) const;
+    TStageEdge* GetStageInputEdge(const IOperator& consumer, ui32 childIndex);
+    const TStageEdge* GetStageInputEdge(const IOperator& consumer, ui32 childIndex) const;
+    void BindStageInput(IOperator& consumer, ui32 childIndex, const TStageEdge& edge);
+
     TInfoUnitRegistry InfoUnitRegistry;
     TStageGraph StageGraph;
     TSubplans Subplans;
     TColumnLineage ColumnLineage;
     bool PgSyntax = false;
+    // Logical query-block phase and write order, preserved through RBO rules.
+    ui64 PhysicalTxGroup = 0;
+    ui64 EffectPriority = 0;
     bool WithEffects = false;
     bool WithReturning = false;
+    // Public result order is independent of the read/effect transaction order.
+    std::optional<ui32> ResultIndex;
+    TExprNode::TPtr ReturningRowsLimit;
 };
 
 }

@@ -27,7 +27,7 @@ inline bool IsAnonymousName(const TString& name) {
 }
 
 inline bool IsStreamingService(const TString& service) {
-    return service == NYql::RtmrProviderName || service == NYql::PqProviderName;
+    return service == NYql::PqProviderName;
 }
 
 struct TNodeWithUsageInfo: public TThrRefBase {
@@ -416,7 +416,7 @@ public:
 
     THashMap<TString, ui32> PackageVersions;
     NYql::TWarningPolicy WarningPolicy;
-    TString PqReadByRtmrCluster;
+    bool PqReadByDq = false;
     bool EmitStartsWith = true;
     TMaybe<bool> EmitAggApply;
     bool UseBlocks = false;

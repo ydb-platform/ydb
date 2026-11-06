@@ -604,26 +604,34 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         importSettings.SymmetricKey(key);
         WaitOpSuccess(YdbImportClient().ImportFromS3(importSettings).GetValueSync());
 
-        auto reader = session.ReadTable("/Root/LargeBatchRestored/Table",
-            NYdb::NTable::TReadTableSettings().Ordered(true).ReturnNotNullAsOptional(false)).GetValueSync();
-        UNIT_ASSERT_C(reader.IsSuccess(), reader.GetIssues().ToString());
-        ui32 row = 0;
-        for (;;) {
-            auto part = reader.ReadNext().GetValueSync();
-            if (part.EOS()) {
-                break;
+        auto readStatus = YdbTableClient().RetryOperationSync([&](NYdb::NTable::TSession readSession) -> TStatus {
+            auto reader = readSession.ReadTable("/Root/LargeBatchRestored/Table",
+                NYdb::NTable::TReadTableSettings().Ordered(true).ReturnNotNullAsOptional(false)).GetValueSync();
+            if (!reader.IsSuccess()) {
+                return reader;
             }
-            UNIT_ASSERT_C(part.IsSuccess(), part.GetIssues().ToString());
-            TResultSetParser parser(part.GetPart());
-            while (parser.TryNextRow()) {
-                UNIT_ASSERT_LT(row, rowCount);
-                UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetUint32(), row);
-                const auto value = parser.ColumnParser("Value").GetOptionalString();
-                UNIT_ASSERT_C(value && *value == makeValue(row), "Restored value differs at row " << row);
-                ++row;
+            ui32 row = 0;
+            for (;;) {
+                auto part = reader.ReadNext().GetValueSync();
+                if (part.EOS()) {
+                    break;
+                }
+                if (!part.IsSuccess()) {
+                    return part;
+                }
+                TResultSetParser parser(part.GetPart());
+                while (parser.TryNextRow()) {
+                    UNIT_ASSERT_LT(row, rowCount);
+                    UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Key").GetUint32(), row);
+                    const auto value = parser.ColumnParser("Value").GetOptionalString();
+                    UNIT_ASSERT_C(value && *value == makeValue(row), "Restored value differs at row " << row);
+                    ++row;
+                }
             }
-        }
-        UNIT_ASSERT_VALUES_EQUAL(row, rowCount);
+            UNIT_ASSERT_VALUES_EQUAL(row, rowCount);
+            return TStatus(EStatus::SUCCESS, {});
+        }, NYdb::NTable::TRetryOperationSettings().Idempotent(true).MaxTimeout(DEFAULT_OPERATION_WAIT_TIME));
+        UNIT_ASSERT_C(readStatus.IsSuccess(), readStatus.GetIssues().ToString());
     }
 
     Y_UNIT_TEST_TWIN(EncryptionAndCompression, IsOlap) {

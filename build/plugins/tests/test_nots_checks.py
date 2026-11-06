@@ -1,9 +1,33 @@
+import base64
 from types import SimpleNamespace
 
 import nots
 import pytest
 
 from nots import _library_for_paths, _parse_ts_checks, _ts_check_size
+
+
+@pytest.mark.parametrize(
+    ("for_mod", "expected_error"),
+    [
+        ("devtools/dummy_arcadia/typescript/simple_jest", None),
+        (".", "Tests should be for parent module"),
+        ("./", "Tests should be for parent module"),
+        ("../simple_jest", "You are using a relative path for a module"),
+    ],
+)
+def test_ts_test_for_validates_target_path(monkeypatch, for_mod, expected_error):
+    errors = []
+    unit = SimpleNamespace(get=lambda name: "no" if name == "_ALLOW_REL_FOR_PATH" else "")
+    monkeypatch.setattr(nots.ymake, "report_configure_error", errors.append, raising=False)
+
+    nots._VALIDATE_TS_TEST_FOR_ARGS(unit, for_mod, "${ARCADIA_ROOT}")
+
+    if expected_error:
+        assert len(errors) == 1
+        assert expected_error in errors[0]
+    else:
+        assert errors == []
 
 
 def test_parse_ts_checks_preserves_command_with_spaces_and_multiple_checks():
@@ -106,3 +130,63 @@ def test_library_configure_preserves_regular_build_script_behavior(
     nots._TS_LIBRARY_CONFIGURE(unit)
 
     assert commands == expected_commands
+
+
+@pytest.mark.parametrize("hermetic", [False, True])
+def test_ts_check_preserves_docker_images_and_runs_user_recipes_after_setup(monkeypatch, hermetic):
+    image = "docker://registry.yandex.net/test@sha256:" + "a" * 64 + "=test:latest"
+    values = {
+        "_TS_CHECK_LIST": "~~~nots:test test no",
+        "_TS_CHECK_SEPARATOR": "~~~",
+        "TEST_RECIPES_VALUE": "podman-compose",
+        "DOCKER_IMAGES_VALUE": image,
+    }
+
+    def append_recipe(name):
+        values["TEST_RECIPES_VALUE"] += " " + name
+
+    records = []
+    unit = SimpleNamespace(
+        get=lambda name: values.get(name, ""),
+        get_subst=lambda name: values.get(name, ""),
+        set=lambda pair: values.update([pair]),
+        enabled=lambda _: False,
+        set_property=lambda pair: records.append(pair),
+        on_setup_extract_node_modules_layer_recipe=lambda _: append_recipe("extract-node-modules-layer"),
+        on_setup_install_node_modules_recipe=lambda _: append_recipe("install-node-modules"),
+        on_setup_extract_output_tars_recipe=lambda _: append_recipe("extract-outputs"),
+    )
+    pm = SimpleNamespace(
+        module_path="app",
+        sources_path="app",
+        get_local_peers_from_package_json=lambda: [],
+        load_package_json_from_dir=lambda _: SimpleNamespace(data={}),
+    )
+    monkeypatch.setattr(nots, "_create_pm", lambda _: pm)
+    monkeypatch.setattr(nots, "_use_hermetic_node_modules", lambda _: hermetic)
+    monkeypatch.setattr(nots, "_create_erm_json", lambda _: "{}")
+    monkeypatch.setattr(nots.df.TestFiles, "ts_check_srcs", lambda *_: "src/test.ts")
+
+    create_dart_record = nots.create_dart_record
+
+    def recipe_and_image_record(fields, unit, flat_args, spec_args):
+        # Keep real field selection and serialization, without unrelated toolchain metadata.
+        return create_dart_record(
+            [field for field in fields if field.__self__ in (nots.df.TestRecipes, nots.df.DockerImage)],
+            unit,
+            flat_args,
+            spec_args,
+        )
+
+    monkeypatch.setattr(nots, "create_dart_record", recipe_and_image_record)
+    monkeypatch.setattr(nots.ytest, "dump_test", lambda _, record: record)
+
+    nots._TS_CHECK_CONFIGURE(unit, "TS_TEST_FOR")
+
+    assert len(records) == 1
+    record = records[0][1]
+    assert nots.df.deserialize_list(record[nots.df.DockerImage.KEY]) == [image]
+    setup = "extract-node-modules-layer" if hermetic else "install-node-modules"
+    assert base64.b64decode(record[nots.df.TestRecipes.KEY]).decode().split() == [
+        setup, "extract-outputs", "podman-compose"
+    ]

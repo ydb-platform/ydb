@@ -3,6 +3,10 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
+#include <deque>
+#include <map>
+#include <set>
+
 // helpers shared by bridge tests
 namespace NBridgeTest {
 
@@ -146,18 +150,39 @@ namespace NBridgeTest {
 
     inline NKikimrBlobStorage::TStorageConfig QueryStorageConfig(TEnvironmentSetup& env, ui32 nodeId = 1,
             TInstant deadline = TInstant::Max()) {
-        const auto res = InvokeDistconf(env, [](auto& record) { record.MutableQueryConfig(); }, nodeId, deadline);
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
-        return res.GetQueryConfig().GetConfig();
+        deadline = Min(deadline, env.Runtime->GetClock() + TDuration::Seconds(30));
+        for (;;) {
+            const auto res = InvokeDistconf(env, [](auto& record) { record.MutableQueryConfig(); }, nodeId, deadline);
+            if (res.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+                return res.GetQueryConfig().GetConfig();
+            }
+            UNIT_ASSERT_C(res.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE
+                && env.Runtime->GetClock() < deadline, res.DebugString());
+            env.Sim(TDuration::MilliSeconds(10));
+        }
     }
 
     inline void SwitchBridgePileState(TEnvironmentSetup& env, ui32 pileIndex,
             NKikimrBridge::TClusterState::EPileState state) {
+        using TState = NKikimrBridge::TClusterState;
         const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+        std::optional<std::pair<ui64, TState::EPileState>> previous;
         for (;;) {
             const auto config = QueryStorageConfig(env, 1, deadline);
+            const auto& current = config.GetClusterState();
+            const auto currentState = current.GetPerPileState(pileIndex);
+            const bool rejoining = previous && state == TState::NOT_SYNCHRONIZED_1
+                && (previous->second == TState::DISCONNECTED || previous->second == TState::SUSPENDED
+                    || previous->second == TState::NOT_SYNCHRONIZED_1);
+            if (previous && current.GetGeneration() > previous->first
+                    && (currentState == state || (rejoining
+                        && (currentState == TState::NOT_SYNCHRONIZED_2 || currentState == TState::SYNCHRONIZED)))) {
+                return;
+            }
             const auto response = InvokeDistconf(env, [&](auto& record) {
-                auto *next = record.MutableSwitchBridgeClusterState()->MutableNewClusterState();
+                auto *cmd = record.MutableSwitchBridgeClusterState();
+                cmd->SetExpectedGeneration(config.GetClusterState().GetGeneration());
+                auto *next = cmd->MutableNewClusterState();
                 next->CopyFrom(config.GetClusterState());
                 next->SetPerPileState(pileIndex, state);
                 next->SetGeneration(next->GetGeneration() + 1);
@@ -165,12 +190,12 @@ namespace NBridgeTest {
             if (response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
                 return;
             }
-            // Synchronization can advance another pile between QueryConfig and the command.
-            const auto current = QueryStorageConfig(env, 1, deadline).GetClusterState();
-            UNIT_ASSERT_C(current.GetGeneration() > config.GetClusterState().GetGeneration()
-                && env.Runtime->GetClock() < deadline,
-                response.DebugString() << " before# " << config.GetClusterState().ShortDebugString()
-                    << " current# " << current.ShortDebugString());
+            UNIT_ASSERT_C((response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE
+                    || response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::GENERATION_MISMATCH
+                    || response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM)
+                && env.Runtime->GetClock() < deadline, response.DebugString());
+            previous.emplace(current.GetGeneration(), currentState);
+            env.Sim(TDuration::MilliSeconds(10));
         }
     }
 
@@ -415,5 +440,79 @@ namespace NBridgeTest {
         UNIT_ASSERT_VALUES_EQUAL(details.GetNonUniformStorageEnabled(), skipStoragePoolConversion);
         return groupId;
     }
+
+    inline void SetBridgeSyncMaxSyncers(TEnvironmentSetup& env, ui32 maxSyncers) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableUpdateSettings()->AddBridgeSyncMaxSyncers(maxSyncers);
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    // Follows the syncers of dynamic groups as BSC assigns them to nodes, and holds their completions on demand, so that
+    // they stay running. Updates for different nodes may come in any order, so the numbers are exact when things settle.
+    struct TSyncerTracker {
+        bool Hold = false;
+        std::map<ui32, std::set<ui32>> NodeSyncers; // node -> target groups, as the last update from BSC says
+        std::vector<std::pair<ui32, ui32>> Started; // node and target group, in the order of starting
+        std::deque<std::pair<ui32, std::unique_ptr<IEventHandle>>> Held;
+        std::set<const void*> Released;
+
+        // to be called from the filter function, whose result it returns
+        bool OnEvent(ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>()->Record;
+                if (record.GetUpdateSyncers()) {
+                    std::set<ui32> targets;
+                    for (const auto& syncer : record.GetSyncers()) {
+                        if (TGroupID(syncer.GetBridgeProxyGroupId()).ConfigurationType() == EGroupConfigurationType::Dynamic) {
+                            targets.insert(syncer.GetTargetGroupId());
+                        }
+                    }
+                    auto& current = NodeSyncers[nodeId];
+                    for (ui32 target : targets) {
+                        if (!current.contains(target)) {
+                            Started.emplace_back(nodeId, target);
+                        }
+                    }
+                    current = std::move(targets);
+                }
+            } else if (Hold && ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
+                const auto *msg = ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>();
+                if (IsDynamicGroup(msg->BridgeProxyGroupId) && !Released.erase(msg)) {
+                    Held.emplace_back(nodeId, std::move(ev));
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        size_t GetNumRunning() const {
+            size_t res = 0;
+            for (const auto& [nodeId, targets] : NodeSyncers) {
+                res += targets.size();
+            }
+            return res;
+        }
+
+        void ReleaseOne(TEnvironmentSetup& env) {
+            UNIT_ASSERT(!Held.empty());
+            auto [nodeId, ev] = std::move(Held.front());
+            Held.pop_front();
+            Released.insert(ev->Get<NStorage::TEvNodeWardenNotifySyncerFinished>());
+            env.Runtime->Send(ev.release(), nodeId);
+        }
+
+        // lets held syncers finish one by one until the condition is met, checking the number of the running ones
+        void RunUntil(TEnvironmentSetup& env, size_t maxRunning, const std::function<bool()>& condition) {
+            for (ui32 i = 0; i < 1000 && !condition(); ++i) {
+                env.Sim(TDuration::Seconds(1));
+                UNIT_ASSERT_LE(GetNumRunning(), maxRunning);
+                if (!Held.empty()) {
+                    ReleaseOne(env);
+                }
+            }
+            UNIT_ASSERT(condition());
+        }
+    };
 
 } // NBridgeTest

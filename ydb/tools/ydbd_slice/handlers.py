@@ -689,12 +689,9 @@ mon={mon}""".format(
             pids = _parse_pids(stdout)
             pid_set = set(pids)
             probe_ok = retcode in (0, None)
-            restarted = (
-                probe_ok
-                and not (old_set & pid_set)
-                and len(pids) >= min_count
-                and len(pids) > 0
-            )
+            # min_count == 0: wait only until old pids are gone (drained host).
+            have_replacements = min_count == 0 or (len(pids) >= min_count and len(pids) > 0)
+            restarted = probe_ok and not (old_set & pid_set) and have_replacements
             if restarted:
                 if pid_set != stable_pid_set:
                     # Crash-looping services can show a fresh PID each poll; require
@@ -758,16 +755,28 @@ mon={mon}""".format(
         logger.info(message, *args)
         time.sleep(interval_sec)
 
+    def _rolling_probe_old_pids(self, host, list_cmd, phase, index, total):
+        """List kikimr pids before stop. Fail if the probe itself did not succeed."""
+        if getattr(self.nodes, '_dry_run', False):
+            return []
+        stdout, retcode, stderr = self._host_probe(host, list_cmd)
+        if retcode != 0:
+            raise RuntimeError(
+                "failed to list kikimr pids on %s before %s restart (%d/%d): "
+                "retcode=%s stderr=%s stdout=%s"
+                % (host, phase, index, total, retcode, stderr, stdout)
+            )
+        return _parse_pids(stdout)
+
     def _rolling_restart_static_host(self, host, index, total):
         list_cmd = _static_pids_command()
-        old_stdout, _, _ = self._host_probe(host, list_cmd)
-        old_pids = _parse_pids(old_stdout)
+        old_pids = self._rolling_probe_old_pids(host, list_cmd, "storage", index, total)
         logger.info(
             "rolling restart storage %d/%d %s: stop/start kikimr (old pids: %s)",
             index,
             total,
             host,
-            old_stdout or "none",
+            ' '.join(old_pids) or "none",
         )
         self.nodes.execute_async(
             "sudo service kikimr stop",
@@ -794,8 +803,7 @@ mon={mon}""".format(
 
     def _rolling_restart_dynamic_host(self, host, index, total, host_assignments):
         list_cmd = _dynamic_pids_command()
-        old_stdout, _, _ = self._host_probe(host, list_cmd)
-        old_pids = _parse_pids(old_stdout)
+        old_pids = self._rolling_probe_old_pids(host, list_cmd, "dynamic", index, total)
         logger.info(
             "rolling restart dynamic %d/%d %s: stop all local slots, start %d assigned "
             "(old pids: %s)",
@@ -803,7 +811,7 @@ mon={mon}""".format(
             total,
             host,
             len(host_assignments),
-            old_stdout or "none",
+            ' '.join(old_pids) or "none",
         )
         # One SSH call stops every kikimr_* dir, including slots removed from the
         # current config. Then start only the assignments from this update.
@@ -812,12 +820,31 @@ mon={mon}""".format(
             self._start_slot_for_tenant(slot, tenant, host=host, node_bind=node_bind)
 
         if not host_assignments:
-            logger.info(
-                "rolling restart dynamic %d/%d %s: no assigned slots, skip wait",
-                index,
-                total,
-                host,
-            )
+            if old_pids:
+                # Drained host: still confirm previously running slots actually died.
+                logger.info(
+                    "rolling restart dynamic %d/%d %s: no assigned slots, "
+                    "waiting until old pids are gone",
+                    index,
+                    total,
+                    host,
+                )
+                self._wait_kikimr_back(
+                    host,
+                    list_cmd,
+                    old_pids=old_pids,
+                    min_count=0,
+                    phase="dynamic",
+                    index=index,
+                    total=total,
+                )
+            else:
+                logger.info(
+                    "rolling restart dynamic %d/%d %s: no assigned slots, skip wait",
+                    index,
+                    total,
+                    host,
+                )
             return
 
         self._wait_kikimr_back(
@@ -864,14 +891,15 @@ mon={mon}""".format(
             storage_hosts = self._storage_hosts()
             storage_host_set = set(storage_hosts)
             skip_hosts = [node for node in self.nodes.nodes_list if node not in storage_host_set]
-            if skip_hosts:
-                # Mirror _start_static: shut down static on hosts that must not run storage.
-                self._stop_static_on_hosts(skip_hosts)
+            # Roll remaining storage first so storage:false hosts stay up for quorum,
+            # then stop them (mirrors _start_static's skip_hosts stop, but after the roll).
             self._rolling_restart_hosts(
                 storage_hosts,
                 interval_sec,
                 phase="storage",
             )
+            if skip_hosts:
+                self._stop_static_on_hosts(skip_hosts)
             did_storage = bool(storage_hosts)
         if "dynamic_slots" in self.components:
             if did_storage and interval_sec > 0:

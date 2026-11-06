@@ -280,13 +280,22 @@ static_erasure: none
             )
 
         assignment = (slot, tenant, compute, None)
-        with mock.patch.object(slice_obj, '_rolling_restart_static_host') as static_host, \
-                mock.patch.object(slice_obj, '_rolling_restart_dynamic_host') as dynamic_host, \
-                mock.patch.object(slice_obj, '_stop_static_on_hosts') as stop_static, \
+        order = []
+        with mock.patch.object(
+                slice_obj, '_rolling_restart_static_host',
+                side_effect=lambda *a, **k: order.append('static')) as static_host, \
+                mock.patch.object(
+                    slice_obj, '_rolling_restart_dynamic_host',
+                    side_effect=lambda *a, **k: order.append('dynamic')) as dynamic_host, \
+                mock.patch.object(
+                    slice_obj, '_stop_static_on_hosts',
+                    side_effect=lambda *a, **k: order.append('stop_skip')) as stop_static, \
                 mock.patch.object(slice_obj, '_iter_dynamic_assignments', return_value=[assignment]), \
                 mock.patch.object(handlers.time, 'sleep') as sleep:
             slice_obj._rolling_restart(5)
 
+        # storage:false hosts are stopped only after remaining storage has rolled.
+        self.assertEqual(order, ['static', 'stop_skip', 'dynamic', 'dynamic'])
         stop_static.assert_called_once_with([compute])
         static_host.assert_called_once_with(storage, 1, 1)
         self.assertEqual(
@@ -422,3 +431,102 @@ static_erasure: none
         start_slot.assert_called_once_with(slot_new, tenant, host=host, node_bind=None)
         self.assertEqual(waited['min_count'], 1)
         self.assertEqual(waited['old_pids'], ['11', '22', '33'])
+
+    def test_rolling_probe_old_pids_fails_on_bad_retcode(self):
+        host = 'host.search.yandex.net'
+        cluster_details = SimpleNamespace(
+            hosts=[SimpleNamespace(hostname=host)],
+            grpc_config={'port': 2135},
+            host_dynamic_slot_counts={},
+            host_storage_enabled={},
+            host_storage_profile={},
+            host_dynamic_profiles={},
+        )
+        with mock.patch.object(handlers.config_client, 'ConfigClient'):
+            slice_obj = handlers.Slice(
+                {'kikimr': ['bin']},
+                nodes.Nodes([host]),
+                cluster_details,
+            )
+
+        with mock.patch.object(slice_obj, '_host_probe', return_value=('', 255, 'ssh failed')), \
+                mock.patch.object(slice_obj.nodes, 'execute_async') as execute_async:
+            with self.assertRaises(RuntimeError) as raised:
+                slice_obj._rolling_restart_static_host(host, 1, 1)
+
+        self.assertIn('failed to list kikimr pids', str(raised.exception))
+        execute_async.assert_not_called()
+
+    def test_rolling_restart_dynamic_drained_host_waits_for_old_pids(self):
+        host = 'host.search.yandex.net'
+        cluster_details = SimpleNamespace(
+            hosts=[SimpleNamespace(hostname=host)],
+            grpc_config={'port': 2135},
+            host_dynamic_slot_counts={},
+            host_storage_enabled={},
+            host_storage_profile={},
+            host_dynamic_profiles={},
+            dynamic_slots=[],
+        )
+        with mock.patch.object(handlers.config_client, 'ConfigClient'):
+            slice_obj = handlers.Slice(
+                {'dynamic_slots': ['all']},
+                nodes.Nodes([host]),
+                cluster_details,
+            )
+
+        waited = {}
+
+        def fake_wait(_host, _cmd, old_pids, min_count, phase, index, total):
+            waited['min_count'] = min_count
+            waited['old_pids'] = old_pids
+
+        with mock.patch.object(slice_obj, '_host_probe', return_value=('11 22', 0, '')), \
+                mock.patch.object(slice_obj, '_stop_all_slots') as stop_all, \
+                mock.patch.object(slice_obj, '_start_slot_for_tenant') as start_slot, \
+                mock.patch.object(slice_obj, '_wait_kikimr_back', side_effect=fake_wait):
+            slice_obj._rolling_restart_dynamic_host(host, 1, 1, [])
+
+        stop_all.assert_called_once_with(hosts=[host])
+        start_slot.assert_not_called()
+        self.assertEqual(waited['min_count'], 0)
+        self.assertEqual(waited['old_pids'], ['11', '22'])
+
+    def test_wait_kikimr_back_min_count_zero_waits_until_gone(self):
+        host = 'host.search.yandex.net'
+        cluster_details = SimpleNamespace(
+            hosts=[SimpleNamespace(hostname=host)],
+            grpc_config={'port': 2135},
+            host_dynamic_slot_counts={},
+            host_storage_enabled={},
+            host_storage_profile={},
+            host_dynamic_profiles={},
+        )
+        with mock.patch.object(handlers.config_client, 'ConfigClient'):
+            slice_obj = handlers.Slice(
+                {'dynamic_slots': ['all']},
+                nodes.Nodes([host]),
+                cluster_details,
+            )
+
+        probes = [
+            ('11', 0, ''),  # still there
+            ('', 0, ''),    # gone, poll 1
+            ('', 0, ''),    # poll 2
+            ('', 0, ''),    # poll 3
+        ]
+
+        with mock.patch.object(slice_obj, '_host_probe', side_effect=lambda *_: probes.pop(0)), \
+                mock.patch.object(handlers.time, 'sleep'), \
+                mock.patch.object(handlers, 'ROLLING_RESTART_STABLE_POLLS', 3):
+            slice_obj._wait_kikimr_back(
+                host,
+                'list-cmd',
+                old_pids=['11'],
+                min_count=0,
+                phase='dynamic',
+                index=1,
+                total=1,
+            )
+
+        self.assertEqual(probes, [])

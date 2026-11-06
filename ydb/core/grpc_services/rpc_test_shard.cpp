@@ -251,11 +251,11 @@ public:
 
     explicit TCreateTestShardSetRequest(IRequestOpCtx* request)
         : TBase(request)
+        , Path(Request_->NormalizePath(GetProtoRequest()->path()))
     {}
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
-        Path = Request_->NormalizePath(GetProtoRequest()->path());
         Become(&TCreateTestShardSetRequest::StateFunc);
         SendProposeRequest(ctx);
     }
@@ -360,7 +360,7 @@ public:
     }
 
 private:
-    TString Path;
+    const TString Path;
 };
 
 class TDeleteTestShardSetRequest : public TRpcSchemeRequestActor<TDeleteTestShardSetRequest, TEvDeleteTestShardSetRequest> {

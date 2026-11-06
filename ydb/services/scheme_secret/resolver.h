@@ -15,8 +15,11 @@
 namespace NKikimr::NSecret {
 
 struct TDescribeSecretSettings {
-    // Overrides both stages. If unset, SchemeCache uses short retries and SchemeShard uses long retries.
+    // Common policy for SchemeShard and SchemeCache, nullptr means ShortRetryPolicy
     IRetryPolicy<>::TPtr RetryPolicy;
+
+    // Pointer should be aсquired through this method
+    IRetryPolicy<>::TPtr GetRetryPolicy() const;
 };
 
 IRetryPolicy<>::TPtr MakeShortRetryPolicy();

@@ -494,7 +494,9 @@ namespace NKikimr::NBsController {
         YDB_LOG_DEBUG("Sending TEvControllerValidateConfigRequest to console",
             {"marker", "BSC36"},
             {"consolePipe", ConsolePipe});
-        NTabletPipe::SendData(Self.SelfId(), ConsolePipe, validateConfigEv.release());
+        // the reply comes with the cookie of the request, so a late one is told from the reply to a newer request
+        ValidationRequestCookie = ExpectedValidationTimeoutCookie;
+        NTabletPipe::SendData(Self.SelfId(), ConsolePipe, validateConfigEv.release(), ExpectedValidationTimeoutCookie);
     }
 
     void TBlobStorageController::TConsoleInteraction::Handle(TEvBlobStorage::TEvControllerFetchConfigRequest::TPtr &ev) {
@@ -531,13 +533,20 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::TConsoleInteraction::HandleValidationTimeout(TAutoPtr<IEventHandle>& ev) {
         Y_ABORT_UNLESS(ValidationTimeout); // sanity check
-        ValidationTimeout = {};
 
-        if (ev->Cookie == ExpectedValidationTimeoutCookie) {
+        // the replacement going on still waits for Console to validate it
+        const bool pending = ClientId && ValidationRequestCookie == ExpectedValidationTimeoutCookie;
+        if (ev->Cookie == ExpectedValidationTimeoutCookie || (pending && ValidationTimeout <= TActivationContext::Now())) {
+            // the timer of a finished request may come late, after the deadline of the one going on
+            ValidationTimeout = {};
             IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::ValidationTimeout, "validation timeout");
-        } else if (ValidationTimeout) {
+        } else if (pending) {
+            // the timer of a finished request; the one going on now relies on it for its deadline, as no timer of
+            // its own was scheduled while this one was
             TActivationContext::Schedule(ValidationTimeout, new IEventHandle(TEvPrivate::EvValidationTimeout, 0,
                 Self.SelfId(), TActorId(), nullptr, ExpectedValidationTimeoutCookie));
+        } else {
+            ValidationTimeout = {};
         }
     }
 
@@ -574,6 +583,14 @@ namespace NKikimr::NBsController {
         YDB_LOG_DEBUG("Console validate config response",
             {"marker", "BSC27"},
             {"response", ev->Get()->Record});
+        if (ev->Cookie != ExpectedValidationTimeoutCookie || !ClientId) {
+            // the request it replies to has timed out, a newer one may be going on
+            YDB_LOG_DEBUG("Late console validate config response ignored",
+                {"marker", "BSC56"},
+                {"cookie", ev->Cookie},
+                {"expectedCookie", ExpectedValidationTimeoutCookie});
+            return;
+        }
         ++ExpectedValidationTimeoutCookie; // spoil validation timeout cookie to prevent event from firing
         using TResponseProto = NKikimrBlobStorage::TEvControllerReplaceConfigResponse;
         auto& record = ev->Get()->Record;

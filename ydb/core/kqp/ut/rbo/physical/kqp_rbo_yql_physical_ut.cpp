@@ -1740,6 +1740,153 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
+    Y_UNIT_TEST(PushTopSortThroughUnionAll) {
+        // Column-shard schema caches are process-wide and keyed by path ID, which every new runner reuses,
+        // and earlier tests have these columns in a different primary key.
+        NOlap::TSchemaCachesManager::DropCaches();
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        const auto schemaResult = dbSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/olap1` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                primary key(a)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/olap2` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                primary key(a)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/nullable` (
+                a Int64 NOT NULL,
+                b Int64,
+                primary key(a)
+            ) WITH (STORE = column);
+
+            CREATE TABLE `/Root/row` (
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                primary key(a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        const auto upsert = [&](const TString& table, const std::vector<std::pair<i64, i64>>& data) {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [a, b] : data) {
+                rows.AddListItem().BeginStruct().AddMember("a").Int64(a).AddMember("b").Int64(b).EndStruct();
+            }
+            rows.EndList();
+            const auto result = db.BulkUpsert(table, rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        upsert("/Root/olap1", {{1, 10}, {2, 20}, {3, 30}});
+        upsert("/Root/olap2", {{11, 10}, {12, 20}, {13, 40}});
+        upsert("/Root/row", {{21, 10}, {22, 50}});
+
+        NYdb::TValueBuilder nullableRows;
+        nullableRows.BeginList();
+        nullableRows.AddListItem().BeginStruct().AddMember("a").Int64(31).AddMember("b").OptionalInt64(std::nullopt).EndStruct();
+        nullableRows.AddListItem().BeginStruct().AddMember("a").Int64(32).AddMember("b").OptionalInt64(10).EndStruct();
+        nullableRows.EndList();
+        const auto nullableResult = db.BulkUpsert("/Root/nullable", nullableRows.Build()).GetValueSync();
+        UNIT_ASSERT_C(nullableResult.IsSuccess(), nullableResult.GetIssues().ToString());
+
+        const auto run = [&](const TString& query, NYdb::NQuery::EExecMode execMode, const NYdb::TParams& params) {
+            auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params,
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(execMode)).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString() << " Query: " << query);
+            return result;
+        };
+
+        const auto noParams = NYdb::TParamsBuilder().Build();
+        const TString pragma = "PRAGMA YqlSelect = \"force\"; ";
+
+        struct TCase {
+            TString Query;
+            TString Expected;
+            // How many top sorts the plan has: one above the union and one per input when the rule applies.
+            std::optional<ui32> TopSorts;
+            // How many reads get a limit.
+            std::optional<ui32> ReadLimits;
+        };
+
+        const TString olap12 = "select a, b from `/Root/olap1` union all select a, b from `/Root/olap2`";
+        const std::vector<TCase> cases = {
+            // Primary key order reaches each read.
+            {"select a from (" + olap12 + ") order by a limit 2", "[[1];[2]]", 3, 2},
+            {"select a from (" + olap12 + ") order by a desc limit 2", "[[13];[12]]", 3, 2},
+            // The rows can come from different inputs.
+            {"select a from (" + olap12 + ") order by a desc limit 4", "[[13];[12];[11];[3]]", 3, 2},
+            // Other columns cannot use the read, but each input still has a top sort.
+            {"select a from (" + olap12 + ") order by b, a limit 3", "[[1];[11];[2]]", 3, 0},
+            // The offset applies once, over all inputs, so each input keeps limit + offset rows.
+            {"select a from (" + olap12 + ") order by a limit 2 offset 1", "[[2];[3]]", 3, 2},
+            {"select a from (" + olap12 + ") order by b, a limit 2 offset 2", "[[2];[12]]", 3, 0},
+            // Limits that are not literals.
+            {"select a from (" + olap12 + ") order by a limit 1 + 1", "[[1];[2]]", 3, 2},
+            // Each input uses its own columns, even when the names cross over.
+            {"select x from (select a as x, b as y from `/Root/olap1` union all select b as x, a as y from `/Root/olap2`) order by x limit 2", "[[1];[2]]", 3, std::nullopt},
+            {"select x from (select a as x, b as y from `/Root/olap1` union all select b as x, a as y from `/Root/olap2`) order by y desc limit 2", "[[3];[2]]", 3, std::nullopt},
+            // Two sort keys can be one column of an input.
+            {"select x, y from (select a as x, a as y from `/Root/olap1` union all select a as x, b as y from `/Root/olap2`) order by x, y limit 1", "[[1;1]]", std::nullopt, std::nullopt},
+            // More inputs, and a row table.
+            {"select a from (select a, b from `/Root/olap1` union all select a, b from `/Root/olap2` union all select a, b from `/Root/nullable`) order by a limit 2", "[[1];[2]]", 4, 3},
+            {"select a from (select a, b from `/Root/olap1` union all select a, b from `/Root/row`) order by a limit 2", "[[1];[2]]", 3, std::nullopt},
+            // Together with a pushed filter.
+            {"select a from (" + olap12 + ") where b = 10 order by a limit 1", "[[1]]", 3, std::nullopt},
+            // An input with its own top sort keeps it, and its limit applies first.
+            {"select a from (select a, b from (select a, b from `/Root/olap1` order by a desc limit 1) union all select a, b from `/Root/olap2`) order by a limit 2", "[[3];[11]]", 3, std::nullopt},
+            // A map between the sort and the union: a copied column can go down, a computed one cannot.
+            {"select a as x from (" + olap12 + ") order by x limit 2", "[[1];[2]]", 3, std::nullopt},
+            {"select a + 1 as c from (" + olap12 + ") order by c limit 2", "[[2];[3]]", 1, 0},
+            // The maximum limit keeps every row, so there is nothing to push.
+            {"select a from (" + olap12 + ") order by a limit 18446744073709551615 offset 4", "[[12];[13]]", 0, std::nullopt},
+            // A sort without a limit stays above the union.
+            {"select a from (" + olap12 + ") order by a", "[[1];[2];[3];[11];[12];[13]]", 0, 0},
+            // Union with duplicate removal has an aggregate between the sort and the union.
+            {"select a from (" + olap12 + " union select a, b from `/Root/olap1`) order by a limit 2", "[[1];[2]]", 1, std::nullopt},
+            // Optional and non-optional columns in one union.
+            {"select a from (select a, b from `/Root/nullable` union all select a, b from `/Root/olap1`) order by b, a limit 2", "[[31];[1]]", std::nullopt, std::nullopt},
+            {"select a from (select a, b from `/Root/olap1` union all select a, b from `/Root/nullable`) order by b, a limit 2", "[[31];[1]]", std::nullopt, std::nullopt},
+            // One shared subquery in both inputs.
+            {"$t = (select a, b from `/Root/olap1`); select a from (select a, b from $t union all select a, b from $t) order by a limit 2", "[[1];[1]]", std::nullopt, std::nullopt},
+        };
+
+        for (const auto& testCase : cases) {
+            const TString query = TStringBuilder() << pragma << testCase.Query << ";";
+            const auto ast = *run(query, NYdb::NQuery::EExecMode::Explain, noParams).GetStats()->GetAst();
+            if (testCase.TopSorts) {
+                UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "TopSort"), *testCase.TopSorts, query << " AST: " << ast);
+            }
+            if (testCase.ReadLimits) {
+                UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(ast, "ItemsLimit"), *testCase.ReadLimits, query << " AST: " << ast);
+            }
+            CompareYson(testCase.Expected, FormatResultSetYson(run(query, NYdb::NQuery::EExecMode::Execute, noParams).GetResultSet(0)));
+        }
+
+        // A limit and an offset as parameters.
+        const TString paramQuery = pragma + "declare $limit as Uint64; declare $offset as Uint64; select a from (" + olap12 + ") order by a limit $limit offset $offset;";
+        const auto paramAst = *run(paramQuery, NYdb::NQuery::EExecMode::Explain, noParams).GetStats()->GetAst();
+        UNIT_ASSERT_VALUES_EQUAL_C(CountNumberOfCallables(paramAst, "TopSort"), 3, paramAst);
+        NYdb::TParamsBuilder params;
+        params.AddParam("$limit").Uint64(2).Build();
+        params.AddParam("$offset").Uint64(1).Build();
+        CompareYson("[[2];[3]]", FormatResultSetYson(run(paramQuery, NYdb::NQuery::EExecMode::Execute, params.Build()).GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(PropagateAggregateThroughStages) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

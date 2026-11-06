@@ -617,6 +617,8 @@ message TUpdateSettings {
     // (GREEN means the same as DatabaseSpaceBlockColor)
     repeated NKikimrBlobStorage.TPDiskSpaceColor.E DatabaseSpaceBlockColor = 16;
     repeated NKikimrBlobStorage.TPDiskSpaceColor.E DatabaseSpaceUnblockColor = 17;
+    // limit of bridge syncer reads over the links between piles for the whole cluster, 0 means no limit
+    repeated uint64 BridgeSyncTotalRateBytesPerSecond = 18;
 }
 
 message TBscConfig {
@@ -640,6 +642,7 @@ message TBscConfig {
     optional uint64 BlobCheckerPeriodicitySeconds = 17;
     optional NKikimrBlobStorage.TPDiskSpaceColor.E DatabaseSpaceBlockColor = 18;
     optional NKikimrBlobStorage.TPDiskSpaceColor.E DatabaseSpaceUnblockColor = 19;
+    optional uint64 BridgeSyncTotalRateBytesPerSecond = 20; // see TUpdateSettings
 }
 
 message TBoxStoragePoolId {
@@ -859,6 +862,10 @@ message TConfigRequest {
 
     // ignore disintegrated groups checking
     bool IgnoreDisintegratedGroupsChecks = 11;
+
+    // treat all REPLICATING VDisks with only phantom-like blobs remaining as working ones when calculating group
+    // failure model and DEGRADED state; it is up to the caller to ensure that these blobs are really phantoms
+    bool TreatPhantomsOnlyVDisksAsWorking = 16;
 
     // do not settle slots over non-operating PDisks
     bool SettleOnlyOnOperationalDisks = 9;

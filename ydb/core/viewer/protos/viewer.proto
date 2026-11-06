@@ -387,7 +387,7 @@ message TStorageUsage {
     // In TTenant.DatabaseStorage Limit is the capacity of the storage groups.
     // In TTenant.TablesStorage Limit is equal to SoftQuota, and absent quotas mean no limit. When SchemeShard reports
     // TTenant.DiskSpaceQuota.DiskSpaceQuotaUsage, these are the effective quotas it enforces: the database quota
-    // is attached to the only storage type (or to the main one when there are several), and the quotas of pool kinds
+    // is attached to the main storage type (which also holds the topics size), and the quotas of pool kinds
     // are summed up by storage type (no limit when any pool kind of the type has no limit).
     optional uint64 Limit = 3;
     optional uint64 SoftQuota = 4;

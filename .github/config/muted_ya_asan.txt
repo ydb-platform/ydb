@@ -1,22 +1,9 @@
-ydb/apps/bridge_skipper/ydbd_mock/tests test_replication.py.StaleReplicaTest.test_disconnected_pile_is_not_pulled_to_and_rejoin_brings_it_back
-ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeDataKind.InterpilePutResultKeepsResultFields
-ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeKeepFlags.PutBeyondBarrierReported
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery11
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut unittest.[*/*] chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
-ydb/core/kqp/ut/rbo KqpRboOlap.OlapPerfQueries
-ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
-ydb/core/kqp/ut/rbo KqpRboOlapDistinctPushdown.DistinctLimitSyncPoint_IncrementsScanCounter
-ydb/core/kqp/ut/rbo KqpRboOlapDistinctPushdown.DistinctLimitSyncPoint_IncrementsScanCounter_TrivialReader
-ydb/core/kqp/ut/rbo KqpRboYql.AggregationShuffleEliminationSettingDoesNotEnableTransactionLayout
-ydb/core/kqp/ut/rbo KqpRboYql.Decorrelation+ColumnStore+EqualNullsJoinKeys
-ydb/core/kqp/ut/rbo KqpRboYql.ExplainAnalyzeMultipleResultContainers+ConcurrentResults
-ydb/core/kqp/ut/rbo KqpRboYql.ExplainAnalyzeMultipleResultContainers-ConcurrentResults
-ydb/core/kqp/ut/rbo KqpRboYql.TPCH_9
-ydb/core/kqp/ut/rbo KqpRboYql.WindowAggregates-ColumnStore
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationOnlineRO
 ydb/core/kqp/ut/tx KqpTx.SchemeChangeIsolationReadCommittedRW
@@ -40,6 +27,7 @@ ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
 ydb/core/tx/replication/controller/ut_schema_change AttachmentLifecycle.PublicDoneRetriesResourceExhaustionAcrossRestart
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ChangedCredentialsBeforeDeferredReset+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.DropDuringDeferredDoneResolvesFreshSecret
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ForceDropReplayedAfterLegacyAdmission+Cascade
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.LateResultsDuringAndAfterDone+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.LateResultsDuringAndAfterDone-ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.PublicForceEscalationReplayedAfterRestart+Cascade
@@ -197,8 +185,6 @@ ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tp
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[9]
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
-ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
-ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_commit_reread[old_sdk]
@@ -209,6 +195,4 @@ ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPa
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_commit_reread[scale_aware_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[old_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[scale_aware_sdk]
-ydb/tests/stress/vector_workload/tests py3test.sole chunk
-ydb/tests/stress/vector_workload/tests test_workload.py.TestYdbVectorWorkload.test
 ydb/tools/mnc/viewer/ut py3test.sole chunk

@@ -5249,6 +5249,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.DstPathId = TPathId(rowset.GetValueOrDefault<Schema::ImportItems::DstPathOwnerId>(InvalidOwnerId),
                                              rowset.GetValueOrDefault<Schema::ImportItems::DstPathLocalId>(InvalidLocalPathId));
 
+                    if (rowset.HaveValue<Schema::ImportItems::ReplicationConfig>()) {
+                        NKikimrSchemeOp::TTableReplicationConfig config;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(config, rowset.GetValue<Schema::ImportItems::ReplicationConfig>()));
+                        item.ReplicationConfig = std::move(config);
+                    }
+
                     if (rowset.HaveValue<Schema::ImportItems::Scheme>()) {
                         Ydb::Table::CreateTableRequest table;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(table, rowset.GetValue<Schema::ImportItems::Scheme>()));
@@ -5778,7 +5784,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         rowset.GetValue<Schema::SnapshotTables::TableOwnerId>(),
                         rowset.GetValue<Schema::SnapshotTables::TableLocalId>());
 
-                    Self->TablesWithSnapshots.emplace(tableId, id);
+                    Self->TablesWithSnapshots[tableId].insert(id);
                     Self->SnapshotTables[id].insert(tableId);
                     ++records;
 

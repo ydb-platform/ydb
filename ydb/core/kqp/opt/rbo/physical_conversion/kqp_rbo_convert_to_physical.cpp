@@ -257,7 +257,7 @@ TExprNode::TPtr ConvertToPhysical(const TVector<TIntrusivePtr<TOpRoot>>& roots, 
                     const auto stageInput = makeStageInput(*op);
                     currentStageBody = NPhysicalConvertionUtils::TStageBody::Narrow(stageInput);
                 }
-                currentStageBody = Build<TPhysicalSortBuilder>(sort, ctx, op->Pos, names, currentStageBody);
+                currentStageBody = TPhysicalSortBuilder(sort, ctx, op->Pos, names, rboCtx.TypeCtx).BuildPhysicalOp(currentStageBody);
 
                 stageBodies[opStageId] = currentStageBody;
                 stagePos[opStageId] = op->Pos;

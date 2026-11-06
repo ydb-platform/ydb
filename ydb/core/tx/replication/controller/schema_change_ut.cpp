@@ -369,58 +369,6 @@ using TCommitWritesRecorder = TProposalRecorder<false>;
 using TCreateCdcStreamRequestGate = TProposalRecorder<true>;
 using TDropCdcStreamRequestGate = TProposalRecorder<false, true>;
 
-class TAttachAllocationGate: public TActorBootstrapped<TAttachAllocationGate> {
-    static constexpr ui64 Ready = 6;
-    static constexpr ui64 Blocked = 7;
-    static constexpr ui64 Release = 8;
-
-    void Handle(TEvTxUserProxy::TEvAllocateTxId::TPtr& ev) {
-        if (++Allocations[ev->Sender] == 2) {
-            UNIT_ASSERT(!PendingRequest);
-            PendingRequest = std::move(ev);
-            Send(Notify, new TEvents::TEvWakeup(Blocked));
-        } else {
-            Send(ev->Forward(TxProxy));
-        }
-    }
-
-    void Handle(TEvents::TEvWakeup::TPtr& ev) {
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Tag, Release);
-        UNIT_ASSERT(PendingRequest);
-        Send(PendingRequest->Forward(TxProxy));
-    }
-
-public:
-    TAttachAllocationGate(const TActorId& txProxy, const TActorId& notify)
-        : TxProxy(txProxy)
-        , Notify(notify)
-    {}
-
-    void Bootstrap() {
-        Become(&TThis::StateWork);
-        Send(Notify, new TEvents::TEvWakeup(Ready));
-    }
-
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxUserProxy::TEvAllocateTxId, Handle);
-            hFunc(TEvents::TEvWakeup, Handle);
-        default:
-            Send(ev->Forward(TxProxy));
-        }
-    }
-
-    static ui64 ReadyTag() { return Ready; }
-    static ui64 BlockedTag() { return Blocked; }
-    static ui64 ReleaseTag() { return Release; }
-
-private:
-    const TActorId TxProxy;
-    const TActorId Notify;
-    THashMap<TActorId, ui32> Allocations;
-    TEvTxUserProxy::TEvAllocateTxId::TPtr PendingRequest;
-};
-
 class TWorkerRemovalGate: public TDecorator {
 public:
     static constexpr ui64 Blocked = 22;
@@ -490,122 +438,6 @@ private:
     const TActorId Notify;
     bool Blocking = true;
     TVector<TAutoPtr<IEventHandle>> Pending;
-};
-
-class TAttachmentResultGate: public TDecorator {
-    const bool HoldOnce;
-
-public:
-    TAttachmentResultGate(THolder<IActor> actor, TActorId notify, bool holdOnce = false)
-        : TDecorator(std::move(actor))
-        , HoldOnce(holdOnce)
-        , Notify(notify)
-    {}
-
-    bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) override {
-        if (ev->GetTypeRewrite() == TEvPrivate::TEvCreateDstResult::EventType) {
-            const auto* result = ev->Get<TEvPrivate::TEvCreateDstResult>();
-            if (!result->IsSuccess() || Released.contains(result->TargetId)) {
-                return true;
-            }
-
-            auto reply = MakeHolder<TEvPrivate::TEvCreateDstResult>(
-                result->ReplicationId,
-                result->TargetId,
-                result->DstPathId);
-            ctx.Send(new IEventHandle(Notify, ev->Sender, reply.Release()));
-            if (HoldOnce) {
-                Released.insert(result->TargetId);
-            }
-            Pending[result->TargetId] = std::move(ev);
-            return false;
-        }
-        if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
-            const auto it = Pending.find(ev->Get<TEvents::TEvWakeup>()->Tag);
-            UNIT_ASSERT(it != Pending.end());
-            Released.insert(it->first);
-            ctx.Send(it->second.Release());
-            Pending.erase(it);
-            return false;
-        }
-        return true;
-    }
-
-private:
-    const TActorId Notify;
-    THashMap<ui64, TAutoPtr<IEventHandle>> Pending;
-    THashSet<ui64> Released;
-};
-
-class TDstCreatorResultGate: public TDecorator {
-public:
-    static constexpr ui64 ReleasePrepare = 30;
-    static constexpr ui64 ReleaseResult = 31;
-
-    TDstCreatorResultGate(THolder<IActor> actor, TActorId notify)
-        : TDecorator(std::move(actor))
-        , Notify(notify)
-    {}
-
-    bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) override {
-        if (ev->GetTypeRewrite() == TEvPrivate::TEvPrepareAttachDst::EventType
-            && !Released.contains(ev->Sender))
-        {
-            const auto* prepare = ev->Get<TEvPrivate::TEvPrepareAttachDst>();
-            ctx.Send(new IEventHandle(
-                Notify,
-                ev->Sender,
-                new TEvPrivate::TEvPrepareAttachDst(
-                    prepare->ReplicationId,
-                    prepare->TargetId,
-                    prepare->DstPathId)));
-            Creator = ev->Sender;
-            Preparations.push_back(std::move(ev));
-            return false;
-        }
-        if (ev->GetTypeRewrite() == TEvPrivate::TEvCreateDstResult::EventType
-            && ev->Sender == Creator
-            && HoldResult
-            && ev->Get<TEvPrivate::TEvCreateDstResult>()->IsSuccess())
-        {
-            const auto* result = ev->Get<TEvPrivate::TEvCreateDstResult>();
-            ctx.Send(new IEventHandle(
-                Notify,
-                ev->Sender,
-                new TEvPrivate::TEvCreateDstResult(
-                    result->ReplicationId,
-                    result->TargetId,
-                    result->DstPathId)));
-            Result = std::move(ev);
-            return false;
-        }
-        if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
-            switch (ev->Get<TEvents::TEvWakeup>()->Tag) {
-            case ReleasePrepare: {
-                UNIT_ASSERT(!Preparations.empty());
-                auto prepare = std::move(Preparations.front());
-                Preparations.pop_front();
-                Released.insert(prepare->Sender);
-                ctx.Send(prepare.Release());
-                return false;
-            }
-            case ReleaseResult:
-                UNIT_ASSERT(Result);
-                HoldResult = false;
-                ctx.Send(Result.Release());
-                return false;
-            }
-        }
-        return true;
-    }
-
-private:
-    const TActorId Notify;
-    TActorId Creator;
-    THashSet<TActorId> Released;
-    TDeque<TAutoPtr<IEventHandle>> Preparations;
-    TAutoPtr<IEventHandle> Result;
-    bool HoldResult = true;
 };
 
 class TWorkerStartCounter: public TDecorator {
@@ -771,7 +603,11 @@ TReplicationTestInfo StartReplication(
     NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
         .DiscoveryEndpoint(env.GetEndpoint())
         .Database(env.GetDatabase()));
-    auto session = CreateTableSession(env, client);
+    auto session = env.RunCall([&] {
+        auto result = client.CreateSession().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        return result.GetSession();
+    });
     for (int i = 1; i <= targetCount; ++i) {
         if (withIndex) {
             const auto status = env.RunCall([&] {
@@ -1187,43 +1023,59 @@ struct TSchemaAltererTestEnv {
     }
 };
 
-struct TPendingAttachment {
+struct TImportedReplicationInfo {
     TReplicationTestInfo Info;
     ui64 TargetId = 0;
     TPathId DstPathId;
-    TActorId Creator;
 };
 
-void SendAttachmentResult(TTestEnv& env, const TPendingAttachment& pending, TEvPrivate::TEvCreateDstResult* result) {
-    env.GetRuntime().Send(new IEventHandle(
-        ResolveTablet(env.GetRuntime(), pending.Info.ControllerId),
-        pending.Creator,
-        result));
+void CompleteDestinationImport(TTestEnv& env, const TReplicationTestInfo& info, ui64 targetId) {
+    UNIT_ASSERT(WaitFor([&] {
+        if (!env.GetRuntime().IsRealThreads()) {
+            env.GetRuntime().SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        NKikimrMiniKQL::TResult result;
+        const auto status = LocalQuery(env.GetRuntime(), info.ControllerId, Sprintf(R"((
+            (let key '('('ReplicationId (Uint64 '1)) '('Id (Uint64 '%lu))))
+            (return (AsList (SetResult 'State (SelectRow 'Targets key '('DstState)))))
+        ))", targetId), result);
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+        const auto& row = result.GetValue().GetStruct(0).GetOptional();
+        return row.HasOptional() && row.GetOptional().GetStruct(0).GetOptional().GetUint32()
+            == static_cast<ui32>(TReplication::EDstState::WaitingImport);
+    }));
+    const auto description = env.GetDescription("/Root/replica1");
+    UNIT_ASSERT_VALUES_EQUAL(description.GetPathDescription().GetTable().GetReplicationConfig().GetImportState(),
+        NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
+
+    const ui64 txId = 100500;
+    const auto schemeShardId = env.GetSchemeshardId("/Root/replica1");
+    auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShardId);
+    auto& tx = *request->Record.AddTransaction();
+    tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+    tx.SetInternal(true);
+    env.GetPathId("/Root/replica1").ToProto(tx.MutableAlterTable()->MutablePathId());
+    auto& config = *tx.MutableAlterTable()->MutableReplicationConfig();
+    config = description.GetPathDescription().GetTable().GetReplicationConfig();
+    config.SetImportState(NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+    const auto result = env.Send<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransactionResult>(
+        schemeShardId, std::move(request));
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Record.GetStatus(), NKikimrScheme::StatusAccepted,
+        result->Get()->Record.GetReason());
+    env.Send<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(schemeShardId,
+        new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion(txId));
 }
 
-TPendingAttachment StartPendingAttachment(TTestEnv& env, bool withIndex = false) {
+TImportedReplicationInfo StartImportedReplication(TTestEnv& env) {
     env.GetRuntime().GetAppData().ReplicationConfig.SetInitialScan(false);
-    if (withIndex) {
-        auto client = CreateTableClient(env);
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        const auto result = session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/replica1` (
-                key Uint32, value Utf8, PRIMARY KEY (key),
-                INDEX by_value GLOBAL SYNC ON (value)
-            );
-        )").GetValueSync();
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    } else {
-        CreateSourceTable(env, "replica1");
-    }
-    const auto info = StartReplication(env, 1, "root@builtin", false, withIndex);
+    const auto info = StartReplication(env);
     UNIT_ASSERT(!info.Config.GetInitialScan());
 
     ui64 targetId = 0;
     bool foundTarget = false;
     for (ui32 attempt = 0; attempt < 50; ++attempt) {
         const auto result = DescribeReplication(env, info);
-        if (result->Get()->Record.TargetsSize() == (withIndex ? 2 : 1)) {
+        if (result->Get()->Record.TargetsSize() == 1) {
             for (const auto& target : result->Get()->Record.GetTargets()) {
                 if (target.GetDstPath() == "/Root/replica1") {
                     targetId = target.GetId();
@@ -1238,45 +1090,16 @@ TPendingAttachment StartPendingAttachment(TTestEnv& env, bool withIndex = false)
     }
     UNIT_ASSERT(foundTarget);
 
-    // Finish real source setup before starting the attachment so its late result
-    // cannot progress a destination before the test installs its gate.
-    UNIT_ASSERT_C(
-        WaitFor([&] {
-            return SourceStreamsReady(env, info, withIndex ? 2 : 1);
-        }),
-        "Source stream setup did not finish before attachment");
+    // Destination creation follows source stream creation. Wait for both so
+    // workers can resolve the real topic when the replication is resumed.
+    CompleteDestinationImport(env, info, targetId);
 
-    // Hold the real controller-owned creator's final result after its local DDL
-    // commits. Later replies must carry this actor's identity.
-    const auto controller = InstallControllerGate(
-        env,
-        info.ControllerId,
-        [](THolder<IActor> actor, TActorId notify) {
-            return new TAttachmentResultGate(std::move(actor), notify, true);
-        });
-    auto resume = MakeAlterReplicationRequest(info, 90);
+    auto resume = MakeAlterReplicationRequest(info, 99);
     resume->Record.MutableSwitchState()->MutableStandBy();
     const auto resumed = env.Send<TEvController::TEvAlterReplicationResult>(info.ControllerId, std::move(resume));
-    UNIT_ASSERT_VALUES_EQUAL(
-        resumed->Get()->Record.GetStatus(),
+    UNIT_ASSERT_VALUES_EQUAL(resumed->Get()->Record.GetStatus(),
         NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-
-    TPendingAttachment pending{info, targetId, {}, {}};
-    for (ui32 i = 0; i < (withIndex ? 2 : 1); ++i) {
-        const auto attached = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-        UNIT_ASSERT(attached->Get()->IsSuccess());
-        if (attached->Get()->TargetId == targetId) {
-            pending.DstPathId = attached->Get()->DstPathId;
-            pending.Creator = attached->Sender;
-        } else {
-            env.SendAsync(controller, new TEvents::TEvWakeup(attached->Get()->TargetId));
-        }
-    }
-    UNIT_ASSERT(pending.Creator);
-    UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription()
-        .GetTable().GetReplicationConfig().GetMode(),
-        NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-    return pending;
+    return {info, targetId, env.GetPathId("/Root/replica1")};
 }
 
 void AssertEventuallyDone(TTestEnv& env, const TReplicationTestInfo& info) {
@@ -1289,79 +1112,6 @@ void AssertDestinationWritable(TTestEnv& env) {
     UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription()
         .GetTable().GetReplicationConfig().GetMode(),
         NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
-}
-
-void AssertAttachmentPaths(
-        TTestEnv& env,
-        const TPendingAttachment& attachment,
-        const TPathId& pendingPathId,
-        const TPathId& dstPathId = {})
-{
-    NKikimrMiniKQL::TResult result;
-    const auto status = LocalQuery(env.GetRuntime(), attachment.Info.ControllerId, Sprintf(R"((
-        (let key '('('ReplicationId (Uint64 '1)) '('Id (Uint64 '%lu))))
-        (return (AsList (SetResult 'Paths (SelectRow 'Targets key
-            '('DstPathLocalId 'DstPathOwnerId 'PendingDstPathLocalId 'PendingDstPathOwnerId)))))
-    ))", attachment.TargetId), result);
-    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
-    const auto& row = result.GetValue().GetStruct(0).GetOptional();
-    UNIT_ASSERT_C(row.HasOptional(), result.DebugString());
-    const auto& paths = row.GetOptional();
-    const auto readPath = [&paths](ui32 localIndex, ui32 ownerIndex) {
-        const auto& local = paths.GetStruct(localIndex);
-        const auto& owner = paths.GetStruct(ownerIndex);
-        UNIT_ASSERT_VALUES_EQUAL(local.HasOptional(), owner.HasOptional());
-        // Before the first destination result, an empty path is stored as NULL.
-        return local.HasOptional()
-            ? TPathId(owner.GetOptional().GetUint64(), local.GetOptional().GetUint64())
-            : TPathId();
-    };
-    UNIT_ASSERT_VALUES_EQUAL(readPath(0, 1), dstPathId);
-    UNIT_ASSERT_VALUES_EQUAL(readPath(2, 3), pendingPathId);
-}
-
-void CheckDoneAfterAttachmentError(bool restart, bool doneBeforeError = false) {
-    TTestEnv env;
-    const auto pending = StartPendingAttachment(env);
-    const auto& info = pending.Info;
-    const auto requestDone = [&] {
-        const auto result = env.Send<TEvController::TEvAlterReplicationResult>(
-            info.ControllerId, MakeDoneRequest(info, 105));
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-    };
-    if (doneBeforeError) {
-        requestDone();
-        UNIT_ASSERT(!DescribeReplication(env, info)->Get()->Record.GetState().HasDone());
-    }
-
-    // The attachment ALTER has committed, but its post-ALTER description failed
-    // validation. The controller has only the persisted pending path to detach.
-    SendAttachmentResult(
-        env,
-        pending,
-        new TEvPrivate::TEvCreateDstResult(
-            1,
-            pending.TargetId,
-            NKikimrScheme::StatusSchemeError,
-            "Replication consistency level mismatch"));
-    if (!doneBeforeError) {
-        UNIT_ASSERT(WaitFor([&] {
-            return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
-        }));
-        AssertAttachmentPaths(env, pending, pending.DstPathId);
-
-        if (restart) {
-            RestartController(env, info.ControllerId);
-            UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasError());
-            AssertAttachmentPaths(env, pending, pending.DstPathId);
-        }
-        requestDone();
-    }
-
-    AssertEventuallyDone(env, info);
-    AssertDestinationWritable(env);
-    AssertAttachmentPaths(env, pending, {});
 }
 
 void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
@@ -1377,46 +1127,22 @@ void AssertIndexCancellationCleanedUp(TIndexBuildTestEnv& env) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(ReplicationCreation) {
-    Y_UNIT_TEST(InitialScanDisabledDoesNotTouchMissingDestination) {
-        TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
-        auto& runtime = env.GetRuntime();
-        CreateSourceTable(env, "bootstrap");
+    Y_UNIT_TEST(InitialScanDisabledCreatesWaitingImportDestination) {
+        // SDK requests use real gRPC threads, so keep actor timers on real time too.
+        TTestEnv env;
         const TString destination = "/Root/replica1";
         const auto missingDestinationStatus = static_cast<int>(NKikimrScheme::StatusPathDoesNotExist);
         UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
 
-        ui32 destinationCreators = 0;
-        TTestActorRuntimeBase::TRegistrationObserver previousRegistrationObserver;
-        previousRegistrationObserver = runtime.SetRegistrationObserverFunc(
-            [&](TTestActorRuntimeBase& actorRuntime, const TActorId& parent, const TActorId& actorId) {
-                previousRegistrationObserver(actorRuntime, parent, actorId);
-                if (actorRuntime.FindActor(actorId)->GetActivityType()
-                    == NKikimrServices::TActivity::REPLICATION_CONTROLLER_DST_CREATOR)
-                {
-                    ++destinationCreators;
-                }
-            });
-        Y_DEFER {
-            runtime.SetRegistrationObserverFunc(std::move(previousRegistrationObserver));
-        };
-
-        bool streamCreated = false;
-        auto streamObserver = runtime.AddObserver(
-            [&](IEventHandle::TPtr& ev) {
-                if (ev->GetTypeRewrite() != TEvPrivate::EvCreateStreamResult || !ev->HasEvent()) {
-                    return;
-                }
-                // Private event numbers are shared by unrelated actors.
-                if (const auto* result = dynamic_cast<TEvPrivate::TEvCreateStreamResult*>(ev->GetBase())) {
-                    UNIT_ASSERT_C(result->IsSuccess(), result->Status.GetIssues().ToString());
-                    streamCreated = true;
-                }
-            });
-
         const auto info = StartReplication(env, 1, "root@builtin", false, false,
             NKikimrSchemeOp::EIndexTypeGlobal, true, false);
         UNIT_ASSERT(!info.Config.GetInitialScan());
-        runtime.WaitFor("source stream creation", [&] { return streamCreated; }, TDuration::Seconds(60));
+        // Destination creation follows source stream creation. Observe the
+        // persisted result instead of actor registration or private events.
+        UNIT_ASSERT(WaitFor([&] {
+            return env.GetDescription(destination).GetPathDescription().GetTable().GetReplicationConfig().GetImportState()
+                == NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT;
+        }));
 
         const auto state = DescribeReplication(env, info);
         UNIT_ASSERT_C(state->Get()->Record.GetStatus() == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS,
@@ -1426,16 +1152,18 @@ Y_UNIT_TEST_SUITE(ReplicationCreation) {
         const auto targetId = state->Get()->Record.GetTargets(0).GetId();
         // The committed stream capability proves source setup has completed.
         UNIT_ASSERT(ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, targetId, 0)).has_value());
-        UNIT_ASSERT_VALUES_EQUAL(destinationCreators, 0);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
+        const auto placeholderId = env.GetPathId(destination);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetPathDescription().GetTable().GetReplicationConfig().GetMode(),
+            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
 
         // Reloading the ready source stream also exercises target progress during startup.
         RestartController(env, info.ControllerId);
         const auto restarted = DescribeReplication(env, info);
         UNIT_ASSERT_C(restarted->Get()->Record.GetState().HasPaused(), restarted->Get()->Record.DebugString());
         UNIT_ASSERT_VALUES_EQUAL(restarted->Get()->Record.TargetsSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(destinationCreators, 0);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetSchemeStatus(), missingDestinationStatus);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId(destination), placeholderId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(destination).GetPathDescription().GetTable().GetReplicationConfig().GetImportState(),
+            NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
     }
 
     Y_UNIT_TEST_TWIN(InitialScan, ConfigInitialScan) {
@@ -1443,19 +1171,8 @@ Y_UNIT_TEST_SUITE(ReplicationCreation) {
             TTestEnv env;
             env.GetRuntime().GetAppData().ReplicationConfig.SetInitialScan(ConfigInitialScan);
             const bool expectedInitialScan = initialScan.GetOrElse(ConfigInitialScan);
-            if (!expectedInitialScan) {
-                CreateSourceTable(env, "replica1");
-            }
-
-            const auto info = StartReplication(
-                env,
-                1,
-                "root@builtin",
-                false,
-                false,
-                NKikimrSchemeOp::EIndexTypeGlobal,
-                true,
-                initialScan);
+            const auto info = StartReplication(env, 1, "root@builtin", false, false,
+                NKikimrSchemeOp::EIndexTypeGlobal, true, initialScan);
             UNIT_ASSERT_VALUES_EQUAL(info.Config.GetInitialScan(), expectedInitialScan);
 
             const auto desc = env.GetDescription("/Root/replication").GetPathDescription().GetReplicationDescription();
@@ -1471,7 +1188,7 @@ Y_UNIT_TEST_SUITE(StatsDescription) {
         UNIT_ASSERT(!runtime.IsRealThreads());
         runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
         for (ui32 i = 1; i <= targetCount; ++i) {
-            CreateSourceTable(env, Sprintf("replica%u", i));
+            CreateSourceTable(env, Sprintf("bootstrap%u", i));
         }
         THashSet<ui64> streams;
         auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
@@ -1517,7 +1234,7 @@ Y_UNIT_TEST_SUITE(StatsDescription) {
         TTestEnv env;
         auto& runtime = env.GetRuntime();
         runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        CreateSourceTable(env, "replica1");
+        CreateSourceTable(env, "bootstrap");
         const auto info = StartReplication(env);
         UNIT_ASSERT(WaitFor([&] {
             return SourceStreamsReady(env, info, 1);
@@ -1565,7 +1282,7 @@ Y_UNIT_TEST_SUITE(StatsDescription) {
     Y_UNIT_TEST(MissingProxy) {
         TTestEnv env;
         env.GetRuntime().GetAppData().ReplicationConfig.SetInitialScan(false);
-        CreateSourceTable(env, "replica1");
+        CreateSourceTable(env, "bootstrap");
         const auto info = StartReplication(env);
         UNIT_ASSERT(WaitFor([&] { return DescribeReplication(env, info)->Get()->Record.TargetsSize() == 1; }));
         auto update = MakeAlterReplicationRequest(info, 118);
@@ -1781,7 +1498,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoveryResults) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        CreateSourceTable(env, "replica1");
+        CreateSourceTable(env, "bootstrap");
         TDiscoveryResultGate gate(env);
         const auto info = StartReplication(env);
         gate.Wait(1);
@@ -1836,7 +1553,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoveryResults) {
     Y_UNIT_TEST(CurrentFailureAndRetry) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
         env.GetRuntime().GetAppData().ReplicationConfig.SetInitialScan(false);
-        CreateSourceTable(env, "replica1");
+        CreateSourceTable(env, "bootstrap");
         TDiscoveryResultGate gate(env);
         const auto info = StartReplication(env);
         gate.Wait(1);
@@ -1854,7 +1571,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoveryResults) {
     Y_UNIT_TEST(EmptyDiscoveryIsConsumed) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
         env.GetRuntime().GetAppData().ReplicationConfig.SetInitialScan(false);
-        CreateSourceTable(env, "replica1");
+        CreateSourceTable(env, "bootstrap");
         TDiscoveryResultGate gate(env);
         const auto info = StartReplication(env);
         gate.Wait(1);
@@ -1876,7 +1593,7 @@ Y_UNIT_TEST_SUITE(TargetDiscoveryResults) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        CreateSourceTable(env, "replica1");
+        CreateSourceTable(env, "bootstrap");
         TDiscoveryResultGate gate(env);
         const auto info = StartReplication(env);
         gate.Wait(1);
@@ -2123,6 +1840,8 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
         const auto info = StartPausedReplicationWithSourceStreams(env);
+        const auto targetId = DescribeReplication(env, info)->Get()->Record.GetTargets(0).GetId();
+        CompleteDestinationImport(env, info, targetId);
         auto resume = MakeAlterReplicationRequest(info, 138);
         resume->Record.MutableSwitchState()->MutableStandBy();
         Alter(env, info, std::move(resume));
@@ -2841,6 +2560,13 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
         runtime.Send(pending.back().Release());
 
         const auto assertPaused = [&] {
+            runtime.WaitFor(
+                "waiting import placeholder",
+                [&] {
+                    return ReadPersistedDstState(runtime, info.ControllerId, worker)
+                        == TReplication::EDstState::WaitingImport;
+                },
+                TDuration::Seconds(30));
             const auto description = DescribeReplication(env, info);
             UNIT_ASSERT_C(description->Get()->Record.GetState().HasPaused(), description->Get()->Record.DebugString());
             NKikimrMiniKQL::TResult target;
@@ -2854,14 +2580,15 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
             const auto& row = target.GetValue().GetStruct(0).GetOptional().GetOptional();
             UNIT_ASSERT_VALUES_EQUAL(
                 row.GetStruct(0).GetOptional().GetUint32(),
-                static_cast<ui32>(TReplication::EDstState::Creating));
+                static_cast<ui32>(TReplication::EDstState::WaitingImport));
             UNIT_ASSERT_VALUES_EQUAL(row.GetStruct(1).GetOptional().GetText(), "");
             UNIT_ASSERT_VALUES_EQUAL(readStream(TReplication::EStreamState::Ready), stream);
-            UNIT_ASSERT_VALUES_EQUAL(destinationCreators, 0);
+            UNIT_ASSERT_VALUES_EQUAL(destinationCreators, 1);
             UNIT_ASSERT_VALUES_EQUAL(workerStarts, 0);
             UNIT_ASSERT_VALUES_EQUAL(
-                env.GetDescription("/Root/replica1").GetSchemeStatus(),
-                static_cast<int>(NKikimrScheme::StatusPathDoesNotExist));
+                env.GetDescription("/Root/replica1").GetPathDescription()
+                    .GetTable().GetReplicationConfig().GetImportState(),
+                NKikimrSchemeOp::TTableReplicationConfig::WAITING_IMPORT);
             UNIT_ASSERT(env.GetDescription("/Root/replication").GetPathDescription()
                 .GetReplicationDescription().GetState().HasPaused());
         };
@@ -2896,7 +2623,7 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
     Y_UNIT_TEST(PausedConfigPreservesDestinationError) {
         TTestEnv env(true, NTestHelpers::ERuntimeMode::Simulated);
         auto& runtime = env.GetRuntime();
-        CreateSourceTable(env, "replica1");
+        CreateSourceTable(env, "bootstrap");
         const auto info = StartReplication(
             env,
             1,
@@ -2915,6 +2642,11 @@ Y_UNIT_TEST_SUITE(StreamRetry) {
                 return session.ExecuteSchemeQuery(query).GetValueSync();
             });
         };
+        runtime.WaitFor("discovered import target", [&] {
+            return DescribeReplication(env, info)->Get()->Record.TargetsSize() == 1;
+        }, TDuration::Seconds(30));
+        const auto targetId = DescribeReplication(env, info)->Get()->Record.GetTargets(0).GetId();
+        CompleteDestinationImport(env, info, targetId);
         UNIT_ASSERT(alter("STATE = \"STANDBY\"").IsSuccess());
         const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
         const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
@@ -3214,11 +2946,8 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
     Y_UNIT_TEST_TWIN(ObsoletePauseResultDuringDone, Restart) {
         TTestEnv env;
         auto& runtime = env.GetRuntime();
-        const auto pending = StartPendingAttachment(env);
+        const auto pending = StartImportedReplication(env);
         const auto& info = pending.Info;
-        // Accept the real attachment completion for the restored table before
-        // testing PAUSE followed by DONE on that same destination.
-        env.SendAsync(ResolveTablet(runtime, info.ControllerId), new TEvents::TEvWakeup(pending.TargetId));
         const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
         const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
         AttachWorkers(env, info.ControllerId, {worker});
@@ -3302,88 +3031,6 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         RestartController(env, info.ControllerId);
         AssertEventuallyDone(env, info);
         AssertDestinationWritable(env);
-    }
-
-    Y_UNIT_TEST(ObsoleteDestinationCreatorResults) {
-        TTestEnv env;
-        auto& runtime = env.GetRuntime();
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        CreateSourceTable(env, "replica1");
-        const auto info = StartReplication(env);
-        UNIT_ASSERT(WaitFor([&] {
-            return DescribeReplication(env, info)->Get()->Record.TargetsSize() == 1;
-        }));
-        const auto description = DescribeReplication(env, info);
-        UNIT_ASSERT_VALUES_EQUAL(description->Get()->Record.TargetsSize(), 1);
-        const auto targetId = description->Get()->Record.GetTargets(0).GetId();
-        UNIT_ASSERT(WaitFor([&] {
-            return ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, targetId, 0)).has_value();
-        }));
-        const auto controller = InstallControllerGate(
-            env,
-            info.ControllerId,
-            [](THolder<IActor> actor, TActorId notify) {
-                return new TDstCreatorResultGate(std::move(actor), notify);
-            });
-        const auto resume = [&](ui64 txId) {
-            auto request = MakeAlterReplicationRequest(info, txId);
-            request->Record.MutableSwitchState()->MutableStandBy();
-            UNIT_ASSERT_VALUES_EQUAL(
-                env.Send<TEvController::TEvAlterReplicationResult>(
-                    info.ControllerId,
-                    std::move(request))->Get()->Record.GetStatus(),
-                NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-            return runtime.GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
-        };
-        const auto obsolete = resume(140);
-        const auto current = resume(141);
-        UNIT_ASSERT(obsolete->Sender != current->Sender);
-        const TPendingAttachment pending{info, targetId, current->Get()->DstPathId, current->Sender};
-
-        // The real preparation from the canceled creator must not persist a path
-        // or acknowledge DDL. Its late result must not finish replacement setup.
-        env.SendAsync(controller, new TEvents::TEvWakeup(TDstCreatorResultGate::ReleasePrepare));
-        DescribeReplication(env, info);
-        AssertAttachmentPaths(env, pending, {});
-        const auto deliverObsolete = [&] {
-            for (const bool success : {false, true}) {
-                runtime.Send(new IEventHandle(
-                    controller,
-                    obsolete->Sender,
-                    success
-                        ? new TEvPrivate::TEvCreateDstResult(1, targetId, pending.DstPathId)
-                        : new TEvPrivate::TEvCreateDstResult(
-                            1,
-                            targetId,
-                            NKikimrScheme::StatusSchemeError,
-                            "obsolete creator failure")));
-                UNIT_ASSERT(!DescribeReplication(env, info)->Get()->Record.GetState().HasError());
-            }
-        };
-        deliverObsolete();
-        AssertAttachmentPaths(env, pending, {});
-
-        env.SendAsync(controller, new TEvents::TEvWakeup(TDstCreatorResultGate::ReleasePrepare));
-        const auto attached = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-        UNIT_ASSERT_VALUES_EQUAL(attached->Sender, current->Sender);
-        AssertAttachmentPaths(env, pending, pending.DstPathId);
-        deliverObsolete();
-        AssertAttachmentPaths(env, pending, pending.DstPathId);
-        env.SendAsync(controller, new TEvents::TEvWakeup(TDstCreatorResultGate::ReleaseResult));
-        runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
-        AssertAttachmentPaths(env, pending, {}, pending.DstPathId);
-        SendAttachmentResult(
-            env,
-            pending,
-            new TEvPrivate::TEvCreateDstResult(
-                1,
-                targetId,
-                NKikimrScheme::StatusSchemeError,
-                "duplicate current creator failure"));
-        UNIT_ASSERT(!DescribeReplication(env, info)->Get()->Record.GetState().HasError());
-        RestartController(env, info.ControllerId);
-        AssertAttachmentPaths(env, pending, {}, pending.DstPathId);
-        UNIT_ASSERT(!DescribeReplication(env, info)->Get()->Record.GetState().HasError());
     }
 
     Y_UNIT_TEST_TWIN(StreamLimiterCancellation, Create) {
@@ -3510,341 +3157,11 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         cancel(next);
     }
 
-    Y_UNIT_TEST_TWIN(StateAlterDuringPausedStreamCreation, Resume) {
-        TTestEnv env;
-        auto& runtime = env.GetRuntime();
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        runtime.GetAppData().ReplicationConfig.MutableSchemeOperationLimits()->SetInflightCreateStreamLimit(1);
-        for (ui32 i = 1; i <= 3; ++i) {
-            CreateSourceTable(env, Sprintf("replica%u", i));
-        }
-        const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
-        runtime.RegisterService(
-            MakeTxProxyID(),
-            runtime.Register(
-                new TCreateCdcStreamRequestGate(txProxy, env.GetSender())));
-        Y_DEFER {
-            runtime.RegisterService(MakeTxProxyID(), txProxy);
-        };
-        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
-        const auto info = StartReplication(env, 3);
-        auto oldRequest = runtime.GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransaction>(env.GetSender());
-        runtime.RegisterService(MakeTxProxyID(), txProxy);
-
-        auto request = MakeAlterReplicationRequest(info, 123);
-        if constexpr (Resume) {
-            request->Record.MutableSwitchState()->MutableStandBy();
-        } else {
-            request->Record.MutableSwitchState()->MutablePaused();
-        }
-        const auto altered = env.Send<TEvController::TEvAlterReplicationResult>(info.ControllerId, std::move(request));
-        UNIT_ASSERT_VALUES_EQUAL(altered->Get()->Record.GetStatus(), NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-        const auto description = DescribeReplication(env, info);
-        UNIT_ASSERT_VALUES_EQUAL(description->Get()->Record.TargetsSize(), 3);
-        for (const auto& target : description->Get()->Record.GetTargets()) {
-            UNIT_ASSERT_C(
-                WaitFor([&] {
-                    return ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, target.GetId(), 0)).has_value();
-                }),
-                "State ALTER stranded source setup behind a cancelled stream creator");
-        }
-        if constexpr (Resume) {
-            THashSet<ui64> started;
-            while (started.size() != 3) {
-                const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
-                started.insert(TWorkerId::Parse(run->Get()->Record.GetWorker()).TargetId());
-            }
-        } else {
-            WaitForPaused(env, info);
-        }
-        // The original DDL can commit after cancellation. Its response goes to
-        // the dead creator and cannot consume another actor's permission.
-        runtime.Send(oldRequest->Forward(txProxy));
-        const auto final = DescribeReplication(env, info);
-        UNIT_ASSERT_VALUES_EQUAL(final->Get()->Record.GetState().HasStandBy(), Resume);
-        UNIT_ASSERT_VALUES_EQUAL(final->Get()->Record.GetState().HasPaused(), !Resume);
-    }
-
-    void PauseAfterMultiTargetAttachmentError(bool restart, bool reverseCompletion) {
-        TTestEnv env;
-        auto& runtime = env.GetRuntime();
-        for (ui32 i = 1; i <= 3; ++i) {
-            CreateSourceTable(env, Sprintf("replica%u", i));
-        }
-        const auto starts = std::make_shared<std::atomic<ui32>>(0);
-        const auto info = StartReplication(
-            env,
-            3,
-            "root@builtin",
-            false,
-            false,
-            NKikimrSchemeOp::EIndexTypeGlobal,
-            false,
-            false,
-            starts);
-        WaitForPaused(env, info);
-        // Let real source setup finish before resuming. Cancelling an inflight
-        // stream creator exercises a separate limiter lifecycle problem.
-        UNIT_ASSERT(WaitFor([&] {
-            return SourceStreamsReady(env, info, 3);
-        }));
-        const auto gate = InstallControllerGate(
-            env,
-            info.ControllerId,
-            [](THolder<IActor> actor, TActorId notify) {
-                return new TAttachmentResultGate(std::move(actor), notify);
-            });
-
-        auto resume = MakeAlterReplicationRequest(info, 120);
-        resume->Record.MutableSwitchState()->MutableStandBy();
-        UNIT_ASSERT_VALUES_EQUAL(
-            env.Send<TEvController::TEvAlterReplicationResult>(
-                info.ControllerId,
-                std::move(resume))->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-
-        TVector<ui64> targets;
-        THashMap<ui64, TActorId> creators;
-        for (ui32 i = 0; i < 3; ++i) {
-            const auto attached = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-            targets.push_back(attached->Get()->TargetId);
-            creators[attached->Get()->TargetId] = attached->Sender;
-        }
-        Sort(targets);
-        const auto failed = targets[0];
-        const auto first = targets[reverseCompletion ? 2 : 1];
-        const auto last = targets[reverseCompletion ? 1 : 2];
-        // A creator may fail its final source validation after the local ALTER.
-        // The other two real attachment results are still pending at the controller.
-        runtime.Send(new IEventHandle(
-            ResolveTablet(runtime, info.ControllerId),
-            creators.at(failed),
-            new TEvPrivate::TEvCreateDstResult(
-                1,
-                failed,
-                NKikimrScheme::StatusSchemeError,
-                "injected final validation failure")));
-        UNIT_ASSERT(WaitFor([&] {
-            return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
-        }));
-        RequestPause(env, info, 121);
-
-        const auto state = [&](ui64 target) {
-            return ReadPersistedDstState(runtime, info.ControllerId, TWorkerId(1, target, 0));
-        };
-        UNIT_ASSERT(WaitFor([&] { return state(failed) == TReplication::EDstState::Paused; }));
-        env.SendAsync(gate, new TEvents::TEvWakeup(first));
-        UNIT_ASSERT(WaitFor([&] { return state(first) != TReplication::EDstState::Attaching; }));
-        // Keep the last target pending long enough for a mistakenly Ready sibling
-        // to register and start a real worker, including after Error -> PAUSE.
-        Sleep(TDuration::Seconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(starts->load(), 0);
-        UNIT_ASSERT(state(first) == TReplication::EDstState::Paused);
-        UNIT_ASSERT(state(last) == TReplication::EDstState::Attaching);
-
-        if (restart) {
-            RestartController(env, info.ControllerId);
-        } else {
-            env.SendAsync(gate, new TEvents::TEvWakeup(last));
-        }
-        WaitForPaused(env, info);
-        UNIT_ASSERT(state(last) == TReplication::EDstState::Paused);
-
-        NYdb::NTable::TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        for (ui32 i = 1; i <= 3; ++i) {
-            const auto write = session.ExecuteDataQuery(
-                Sprintf(
-                    "UPSERT INTO `/Root/table%u` (key, value) VALUES (1, 'after pause');",
-                    i),
-                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
-        }
-        // Exercise the real service/writer path, then verify that PAUSED stays
-        // quiescent through a second controller recovery as well.
-        for (ui32 attempt = 0; attempt < 10; ++attempt) {
-            for (ui32 i = 1; i <= 3; ++i) {
-                const auto read = session.ExecuteDataQuery(
-                    Sprintf(
-                        "SELECT key FROM `/Root/replica%u`;",
-                        i),
-                    NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-                UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
-                UNIT_ASSERT_VALUES_EQUAL(read.GetResultSet(0).RowsCount(), 0);
-            }
-            Sleep(TDuration::MilliSeconds(100));
-        }
-        RestartController(env, info.ControllerId);
-        WaitForPaused(env, info);
-        UNIT_ASSERT_VALUES_EQUAL(starts->load(), 0);
-
-        auto standby = MakeAlterReplicationRequest(info, 122);
-        standby->Record.MutableSwitchState()->MutableStandBy();
-        UNIT_ASSERT_VALUES_EQUAL(
-            env.Send<TEvController::TEvAlterReplicationResult>(
-                info.ControllerId,
-                std::move(standby))->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-        // Prove that the real workers can start and replay the rows written
-        // during PAUSE, including recovery of the failed target's pending path.
-        for (ui32 i = 1; i <= 3; ++i) {
-            UNIT_ASSERT_C(
-                WaitFor(
-                    [&] {
-                        const auto read = session.ExecuteDataQuery(
-                            Sprintf(
-                                "SELECT key FROM `/Root/replica%u`;",
-                                i),
-                            NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-                        // Recovery serializes another attachment ALTER. Its new schema
-                        // version can invalidate the SELECT cached while paused.
-                        if (read.GetStatus() == NYdb::EStatus::SCHEME_ERROR || read.GetStatus() == NYdb::EStatus::ABORTED) {
-                            return false;
-                        }
-                        UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
-                        return read.GetResultSet(0).RowsCount() == 1;
-                    },
-                    100),
-                "Replication did not resume for target " << i);
-        }
-        UNIT_ASSERT(starts->load() >= 3);
-    }
-
-    Y_UNIT_TEST_TWIN(PauseAfterMultiTargetAttachmentError, ReverseCompletion) {
-        PauseAfterMultiTargetAttachmentError(false, ReverseCompletion);
-    }
-
-    Y_UNIT_TEST_TWIN(PauseAfterMultiTargetAttachmentErrorAndRestart, ReverseCompletion) {
-        PauseAfterMultiTargetAttachmentError(true, ReverseCompletion);
-    }
-
-    enum class EAttachmentAlter {
-        Pause,
-        StandBy,
-        Credentials,
-    };
-
-    void AlterDuringAttachmentRevalidation(EAttachmentAlter alter) {
-        TTestEnv env;
-        const auto pending = StartPendingAttachment(env);
-        const auto& info = pending.Info;
-        auto& runtime = env.GetRuntime();
-
-        const auto schemeCache = runtime.GetLocalServiceId(MakeSchemeCacheID());
-        const auto gate = runtime.Register(new TDescribePathRequestGate(
-            schemeCache,
-            env.GetSender(),
-            "/Root/table1"));
-        runtime.RegisterService(MakeSchemeCacheID(), gate);
-        Y_DEFER {
-            runtime.RegisterService(MakeSchemeCacheID(), schemeCache);
-        };
-
-        RestartController(env, info.ControllerId);
-        UNIT_ASSERT_VALUES_EQUAL(
-            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TDescribePathRequestGate::RequestBlockedTag());
-
-        auto resume = MakeAlterReplicationRequest(info, 109);
-        resume->Record.MutableSwitchState()->MutableStandBy();
-        const auto resumed = env.Send<TEvController::TEvAlterReplicationResult>(
-            info.ControllerId,
-            std::move(resume));
-        UNIT_ASSERT_VALUES_EQUAL(
-            resumed->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(
-            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TDescribePathRequestGate::RequestBlockedTag());
-
-        RestartController(env, info.ControllerId);
-        UNIT_ASSERT_VALUES_EQUAL(
-            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TDescribePathRequestGate::RequestBlockedTag());
-        AssertAttachmentPaths(env, pending, pending.DstPathId);
-
-        auto request = MakeAlterReplicationRequest(info, 110);
-        switch (alter) {
-        case EAttachmentAlter::Pause:
-            request->Record.MutableSwitchState()->MutablePaused();
-            break;
-        case EAttachmentAlter::StandBy:
-            request->Record.MutableSwitchState()->MutableStandBy();
-            break;
-        case EAttachmentAlter::Credentials:
-            // A credential-only update takes the !alter branch in the controller.
-            request->Record.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken("");
-            break;
-        }
-        const auto result = env.Send<TEvController::TEvAlterReplicationResult>(
-            info.ControllerId,
-            std::move(request));
-        UNIT_ASSERT_VALUES_EQUAL(
-            result->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-        // The retained creator must issue a fresh request through the new proxy.
-        UNIT_ASSERT_VALUES_EQUAL(
-            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TDescribePathRequestGate::RequestBlockedTag());
-        AssertAttachmentPaths(env, pending, pending.DstPathId);
-
-        runtime.RegisterService(MakeSchemeCacheID(), schemeCache);
-        env.SendAsync(gate, new TEvents::TEvWakeup(TDescribePathRequestGate::ReleaseRequestTag()));
-        UNIT_ASSERT_C(
-            WaitFor([&] {
-                const auto state = DescribeReplication(env, info)->Get()->Record.GetState();
-                return alter == EAttachmentAlter::Pause ? state.HasPaused() : state.HasStandBy();
-            }),
-            "Attachment did not finish after replacing the source proxy");
-        // Ready can already be the replication state while the target is attaching.
-        UNIT_ASSERT_C(
-            WaitFor([&] {
-                const auto expectedState = alter == EAttachmentAlter::Pause
-                    ? TReplication::EDstState::Paused : TReplication::EDstState::Ready;
-                const auto state = ReadPersistedDstState(runtime, info.ControllerId, TWorkerId(1, pending.TargetId, 0));
-                return state == expectedState;
-            }),
-            "Destination attachment did not complete");
-        AssertAttachmentPaths(env, pending, {}, pending.DstPathId);
-        AssertDestinationMode(
-            env,
-            "/Root/replica1",
-            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-
-        if (alter == EAttachmentAlter::Pause) {
-            auto standby = MakeAlterReplicationRequest(info, 111);
-            standby->Record.MutableSwitchState()->MutableStandBy();
-            const auto result = env.Send<TEvController::TEvAlterReplicationResult>(
-                info.ControllerId,
-                std::move(standby));
-            UNIT_ASSERT_VALUES_EQUAL(
-                result->Get()->Record.GetStatus(),
-                NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-            UNIT_ASSERT(WaitFor([&] {
-                return DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy();
-            }));
-            AssertAttachmentPaths(env, pending, {}, pending.DstPathId);
-        }
-    }
-
-    Y_UNIT_TEST(PauseDuringAttachmentRevalidationAfterRestart) {
-        AlterDuringAttachmentRevalidation(EAttachmentAlter::Pause);
-    }
-
-    Y_UNIT_TEST(StandByDuringAttachmentRevalidationAfterRestart) {
-        AlterDuringAttachmentRevalidation(EAttachmentAlter::StandBy);
-    }
-
-    Y_UNIT_TEST(CredentialsDuringAttachmentRevalidationAfterRestart) {
-        AlterDuringAttachmentRevalidation(EAttachmentAlter::Credentials);
-    }
-
     void CredentialsDuringPausedStreamSetup(bool describeCapability) {
         TTestEnv env;
         auto& runtime = env.GetRuntime();
         runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
         runtime.GetAppData().ReplicationConfig.MutableSchemeOperationLimits()->SetInflightCreateStreamLimit(1);
-        CreateSourceTable(env, "replica1");
         const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
         const auto createGate = runtime.Register(new TCreateCdcStreamRequestGate(txProxy, env.GetSender()));
         runtime.RegisterService(MakeTxProxyID(), createGate);
@@ -3900,7 +3217,7 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
             }),
             "Credential update stranded initial PAUSED source setup");
         UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasPaused());
-        AssertDestinationWritable(env);
+        CompleteDestinationImport(env, info, worker.TargetId());
 
         if (!describeCapability) {
             // The old source request can still reach SchemeShard after the
@@ -4059,113 +3376,36 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         DoneDuringSourceSetup(true, true);
     }
 
-    void RefreshSourceDuringAttachment(bool retry) {
+    Y_UNIT_TEST_TWIN(ImportedReplicaResumesAfterPause, RestartBeforeResume) {
         TTestEnv env;
-        auto& runtime = env.GetRuntime();
-        CreateSourceTable(env, "table1");
-        CreateSourceTable(env, "replica1");
-        const auto oldProxy = runtime.AllocateEdgeActor();
-        const auto newProxy = runtime.AllocateEdgeActor();
-        const auto dstPathId = env.GetPathId("/Root/replica1");
-        const auto creator = runtime.Register(CreateDstCreator(
-            env.GetSender(),
-            dstPathId.OwnerId,
-            oldProxy,
-            "/Root",
-            env.GetPathId("/Root"),
-            1,
-            1,
-            TReplication::ETargetKind::Table,
-            "/Root/table1",
-            "/Root/replica1",
-            EReplicationMode::ReadOnly,
-            EConsistencyLevel::Row,
-            false,
-            dstPathId));
-        const auto oldRequest = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTableRequest>(oldProxy);
-        if (retry) {
-            runtime.Send(new IEventHandle(
-                creator,
-                oldProxy,
-                new TEvYdbProxy::TEvDescribeTableResponse(
-                    NYdb::TStatus(NYdb::EStatus::OVERLOADED, {}),
-                    Ydb::Table::DescribeTableResult{},
-                    NYdb::NTable::TDescribeTableSettings()),
-                0,
-                oldRequest->Cookie));
+        const auto pending = StartImportedReplication(env);
+        const auto& info = pending.Info;
+        const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, info.ControllerId, {worker});
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable()
+            .GetReplicationConfig().GetImportState(), NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
+
+        RequestPause(env, info, 106);
+        env.GetRuntime().GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        SendWorkerStopped(env, info.ControllerId, worker);
+        WaitForPaused(env, info);
+        if (RestartBeforeResume) {
+            RestartController(env, info.ControllerId);
+            env.SendAsync(info.ControllerId, new TEvService::TEvStatus());
         }
 
-        env.SendAsync(creator, new TEvPrivate::TEvUpdateYdbProxy(newProxy));
-        auto newRequest = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTableRequest>(newProxy);
-        UNIT_ASSERT_VALUES_UNEQUAL(newRequest->Cookie, oldRequest->Cookie);
-        // Old retries and terminal failures must not affect the new validation.
-        env.SendAsync(creator, new TEvents::TEvWakeup(oldRequest->Cookie));
-        runtime.Send(new IEventHandle(
-            creator,
-            oldProxy,
-            new TEvYdbProxy::TEvDescribeTableResponse(
-                NYdb::TStatus(NYdb::EStatus::UNAUTHORIZED, {}),
-                Ydb::Table::DescribeTableResult{},
-                NYdb::NTable::TDescribeTableSettings()),
-            0,
-            oldRequest->Cookie));
-        runtime.Send(newRequest->Forward(env.GetYdbProxy()));
-        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, dstPathId);
-    }
-
-    Y_UNIT_TEST(RefreshAttachmentSourceWithDelayedResponse) {
-        RefreshSourceDuringAttachment(false);
-    }
-
-    Y_UNIT_TEST(RefreshAttachmentSourceWithPendingRetry) {
-        RefreshSourceDuringAttachment(true);
-    }
-
-    Y_UNIT_TEST(RefreshAttachmentSourceDuringLocalDdl) {
-        TTestEnv env;
-        auto& runtime = env.GetRuntime();
-        CreateSourceTable(env, "table1");
-        CreateSourceTable(env, "replica1");
-        const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
-        const auto gate = runtime.Register(new TAttachAllocationGate(txProxy, env.GetSender()));
-        runtime.RegisterService(MakeTxProxyID(), gate);
-        Y_DEFER {
-            runtime.RegisterService(MakeTxProxyID(), txProxy);
-        };
-        UNIT_ASSERT_VALUES_EQUAL(
-            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TAttachAllocationGate::ReadyTag());
-        const auto dstPathId = env.GetPathId("/Root/replica1");
-        const auto creator = runtime.Register(CreateDstCreator(
-            env.GetSender(),
-            dstPathId.OwnerId,
-            env.GetYdbProxy(),
-            "/Root",
-            env.GetPathId("/Root"),
-            1,
-            1,
-            TReplication::ETargetKind::Table,
-            "/Root/table1",
-            "/Root/replica1",
-            EReplicationMode::ReadOnly,
-            EConsistencyLevel::Row,
-            false));
-        runtime.GrabEdgeEvent<TEvPrivate::TEvPrepareAttachDst>(env.GetSender());
-        env.SendAsync(creator, new TEvPrivate::TEvPrepareAttachDstResult());
-        UNIT_ASSERT_VALUES_EQUAL(
-            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TAttachAllocationGate::BlockedTag());
-
-        // Once local DDL starts, refreshing an unavailable source must leave the
-        // allocation/result reconciliation alive rather than restart validation.
-        env.SendAsync(creator, new TEvPrivate::TEvUpdateYdbProxy(runtime.AllocateEdgeActor()));
-        runtime.RegisterService(MakeTxProxyID(), txProxy);
-        env.SendAsync(gate, new TEvents::TEvWakeup(TAttachAllocationGate::ReleaseTag()));
-        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
-        UNIT_ASSERT_C(result->Get()->IsSuccess(), result->Get()->Error);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, dstPathId);
+        auto resume = MakeAlterReplicationRequest(info, 107);
+        resume->Record.MutableSwitchState()->MutableStandBy();
+        const auto resumed = env.Send<TEvController::TEvAlterReplicationResult>(info.ControllerId, std::move(resume));
+        UNIT_ASSERT_VALUES_EQUAL(resumed->Get()->Record.GetStatus(),
+            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
+        UNIT_ASSERT(WaitFor([&] {
+            return DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy();
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), pending.DstPathId);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable()
+            .GetReplicationConfig().GetImportState(), NKikimrSchemeOp::TTableReplicationConfig::IMPORTED);
     }
 
     Y_UNIT_TEST(DoneAfterDestinationNameConflict) {
@@ -4215,848 +3455,6 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
         }
     }
 
-    Y_UNIT_TEST(DoneAfterAttachmentValidationError) {
-        CheckDoneAfterAttachmentError(false);
-    }
-
-    Y_UNIT_TEST(DoneAfterAttachmentValidationErrorAndRestartWithoutSource) {
-        CheckDoneAfterAttachmentError(true);
-    }
-
-    Y_UNIT_TEST(DoneBeforeAttachmentValidationError) {
-        CheckDoneAfterAttachmentError(false, true);
-    }
-
-    Y_UNIT_TEST(DoneAfterPendingDestinationDeleted) {
-        TTestEnv env;
-        const auto pending = StartPendingAttachment(env);
-        const auto& info = pending.Info;
-
-        SendAttachmentResult(
-            env,
-            pending,
-            new TEvPrivate::TEvCreateDstResult(
-                1,
-                pending.TargetId,
-                NKikimrScheme::StatusSchemeError,
-                "Cannot validate attached destination"));
-        UNIT_ASSERT(WaitFor([&] {
-            return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
-        }));
-        AssertAttachmentPaths(env, pending, pending.DstPathId);
-
-        NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
-            .DiscoveryEndpoint(env.GetEndpoint())
-            .Database(env.GetDatabase()));
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        const auto drop = session.ExecuteSchemeQuery("DROP TABLE `/Root/replica1`;").GetValueSync();
-        UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
-
-        const auto result = env.Send<TEvController::TEvAlterReplicationResult>(
-            info.ControllerId, MakeDoneRequest(info, 106));
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-        AssertEventuallyDone(env, info);
-        AssertAttachmentPaths(env, pending, {});
-        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetSchemeStatus(),
-            NKikimrScheme::StatusPathDoesNotExist);
-    }
-
-    Y_UNIT_TEST(DoneAfterAttachAlterBeforeResult) {
-        TTestEnv env;
-        const auto pending = StartPendingAttachment(env);
-        const auto& info = pending.Info;
-        const auto targetId = pending.TargetId;
-        const auto dstPathId = pending.DstPathId;
-
-        auto request = MakeHolder<TEvController::TEvAlterReplication>();
-        info.PathId.ToProto(request->Record.MutablePathId());
-        request->Record.MutableConfig()->CopyFrom(info.Config);
-        request->Record.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken("root@builtin");
-        request->Record.MutableSwitchState()->MutableDone()->SetFailoverMode(
-            NKikimrReplication::TReplicationState::TDone::FAILOVER_MODE_FORCE);
-        request->Record.MutableOperationId()->SetTxId(100);
-
-        env.SendAsync(info.ControllerId, std::move(request));
-        const auto result = env.GetRuntime().GrabEdgeEvent<TEvController::TEvAlterReplicationResult>(env.GetSender());
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-        UNIT_ASSERT(!DescribeReplication(env, info)->Get()->Record.GetState().HasDone());
-
-        SendAttachmentResult(
-            env,
-            pending,
-            new TEvPrivate::TEvCreateDstResult(1, targetId, dstPathId));
-        AssertEventuallyDone(env, info);
-        AssertDestinationWritable(env);
-    }
-
-    Y_UNIT_TEST(DoneAfterRestartWithoutSource) {
-        TTestEnv env;
-        const auto pending = StartPendingAttachment(env);
-        const auto& info = pending.Info;
-
-        auto request = MakeHolder<TEvController::TEvAlterReplication>();
-        info.PathId.ToProto(request->Record.MutablePathId());
-        request->Record.MutableConfig()->CopyFrom(info.Config);
-        auto* connection = request->Record.MutableConfig()->MutableSrcConnectionParams();
-        connection->SetEndpoint("localhost:1");
-        connection->MutableOAuthToken()->SetToken("root@builtin");
-        request->Record.MutableSwitchState()->MutableDone()->SetFailoverMode(
-            NKikimrReplication::TReplicationState::TDone::FAILOVER_MODE_FORCE);
-        request->Record.MutableOperationId()->SetTxId(101);
-
-        env.SendAsync(info.ControllerId, std::move(request));
-        const auto result = env.GetRuntime().GrabEdgeEvent<TEvController::TEvAlterReplicationResult>(env.GetSender());
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-        UNIT_ASSERT(!DescribeReplication(env, info)->Get()->Record.GetState().HasDone());
-
-        RestartController(env, info.ControllerId);
-        AssertEventuallyDone(env, info);
-        AssertDestinationWritable(env);
-    }
-
-    Y_UNIT_TEST(DoneDuringAttachmentRevalidationAfterRestart) {
-        TTestEnv env;
-        const auto pending = StartPendingAttachment(env);
-        const auto& info = pending.Info;
-        auto& runtime = env.GetRuntime();
-
-        const auto schemeCache = runtime.GetLocalServiceId(MakeSchemeCacheID());
-        const auto gate = runtime.Register(new TDescribePathRequestGate(
-            schemeCache,
-            env.GetSender(),
-            "/Root/table1"));
-        runtime.RegisterService(MakeSchemeCacheID(), gate);
-        Y_DEFER {
-            runtime.RegisterService(MakeSchemeCacheID(), schemeCache);
-        };
-
-        // Persist desired Ready while keeping the attachment and source Describe
-        // unfinished. Restart must resume source validation before DONE arrives.
-        RestartController(env, info.ControllerId);
-        UNIT_ASSERT_VALUES_EQUAL(
-            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TDescribePathRequestGate::RequestBlockedTag());
-
-        auto resume = MakeAlterReplicationRequest(info, 107);
-        resume->Record.MutableSwitchState()->MutableStandBy();
-        const auto resumed = env.Send<TEvController::TEvAlterReplicationResult>(
-            info.ControllerId,
-            std::move(resume));
-        UNIT_ASSERT_VALUES_EQUAL(
-            resumed->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(
-            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TDescribePathRequestGate::RequestBlockedTag());
-        AssertAttachmentPaths(env, pending, pending.DstPathId);
-
-        RestartController(env, info.ControllerId);
-        UNIT_ASSERT_VALUES_EQUAL(
-            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TDescribePathRequestGate::RequestBlockedTag());
-        AssertAttachmentPaths(env, pending, pending.DstPathId);
-
-        // DONE also replaces the source endpoint: no source response or another
-        // controller restart may be needed to finish local reconciliation/detach.
-        const auto result = env.Send<TEvController::TEvAlterReplicationResult>(
-            info.ControllerId,
-            MakeDoneRequest(info, 108));
-        UNIT_ASSERT_VALUES_EQUAL(
-            result->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-        AssertEventuallyDone(env, info);
-        AssertDestinationWritable(env);
-
-        env.SendAsync(gate, new TEvents::TEvWakeup(TDescribePathRequestGate::ReleaseRequestTag()));
-    }
-
-    Y_UNIT_TEST_TWIN(DropDuringAttachmentRevalidationAfterRestart, Cascade) {
-        TTestEnv env;
-        const auto pending = StartPendingAttachment(env);
-        const auto& info = pending.Info;
-        auto& runtime = env.GetRuntime();
-        // Hold stream cleanup independently of the blocked source validation.
-        // Its completion below must be what allows local attachment cleanup.
-        runtime.GetAppData().ReplicationConfig.MutableSchemeOperationLimits()->SetInflightDropStreamLimit(0);
-
-        const auto schemeCache = runtime.GetLocalServiceId(MakeSchemeCacheID());
-        const auto gate = runtime.Register(new TDescribePathRequestGate(
-            schemeCache,
-            env.GetSender(),
-            "/Root/table1"));
-        runtime.RegisterService(MakeSchemeCacheID(), gate);
-        Y_DEFER {
-            runtime.RegisterService(MakeSchemeCacheID(), schemeCache);
-        };
-
-        RestartController(env, info.ControllerId);
-        UNIT_ASSERT_VALUES_EQUAL(
-            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TDescribePathRequestGate::RequestBlockedTag());
-
-        auto resume = MakeAlterReplicationRequest(info, 113);
-        resume->Record.MutableSwitchState()->MutableStandBy();
-        const auto resumed = env.Send<TEvController::TEvAlterReplicationResult>(
-            info.ControllerId,
-            std::move(resume));
-        UNIT_ASSERT_VALUES_EQUAL(
-            resumed->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(
-            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TDescribePathRequestGate::RequestBlockedTag());
-
-        RestartController(env, info.ControllerId);
-        UNIT_ASSERT_VALUES_EQUAL(
-            runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
-            TDescribePathRequestGate::RequestBlockedTag());
-        AssertAttachmentPaths(env, pending, pending.DstPathId);
-
-        auto request = MakeHolder<TEvController::TEvDropReplication>();
-        info.PathId.ToProto(request->Record.MutablePathId());
-        request->Record.MutableOperationId()->SetTxId(114);
-        request->Record.SetCascade(Cascade);
-        env.SendAsync(info.ControllerId, std::move(request));
-        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetStatus()
-            == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
-        AssertAttachmentPaths(env, pending, pending.DstPathId);
-        AssertDestinationMode(
-            env,
-            "/Root/replica1",
-            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-
-        env.SendAsync(
-            info.ControllerId,
-            new TEvPrivate::TEvDropStreamResult(
-                1,
-                pending.TargetId,
-                NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
-        // No source response, synthetic attachment result, or second restart is
-        // needed after stream cleanup: the retained creator must reconcile locally.
-        UNIT_ASSERT_C(
-            WaitFor([&] {
-                return DescribeReplication(env, info)->Get()->Record.GetStatus()
-                    == NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND;
-            }),
-            "DROP did not finish while attachment source validation was blocked");
-        const auto dropped = runtime.GrabEdgeEvent<TEvController::TEvDropReplicationResult>(env.GetSender());
-        UNIT_ASSERT(dropped->Get()->Record.GetStatus()
-            == NKikimrReplication::TEvDropReplicationResult::SUCCESS);
-        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetStatus()
-            == NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), pending.DstPathId);
-        AssertDestinationWritable(env);
-
-        runtime.RegisterService(MakeSchemeCacheID(), schemeCache);
-        env.SendAsync(gate, new TEvents::TEvWakeup(TDescribePathRequestGate::ReleaseRequestTag()));
-    }
-
-    Y_UNIT_TEST(DropCascadeDuringAttachment) {
-        TTestEnv env;
-        const auto pending = StartPendingAttachment(env);
-        const auto& info = pending.Info;
-
-        auto request = MakeHolder<TEvController::TEvDropReplication>();
-        info.PathId.ToProto(request->Record.MutablePathId());
-        request->Record.MutableOperationId()->SetTxId(102);
-        request->Record.SetCascade(true);
-
-        env.SendAsync(info.ControllerId, std::move(request));
-        DescribeReplication(env, info);
-        env.SendAsync(info.ControllerId, new TEvPrivate::TEvDropStreamResult(1, pending.TargetId,
-            NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
-        SendAttachmentResult(
-            env,
-            pending,
-            new TEvPrivate::TEvCreateDstResult(1, pending.TargetId, pending.DstPathId));
-
-        const auto result = env.GetRuntime().GrabEdgeEvent<TEvController::TEvDropReplicationResult>(env.GetSender());
-        UNIT_ASSERT(result->Get()->Record.GetStatus()
-            == NKikimrReplication::TEvDropReplicationResult::SUCCESS);
-        AssertDestinationWritable(env);
-    }
-
-    void DropWithAttachedIndex(TReplication::EDstState baseState, bool cascade, bool indexFirst = false) {
-        NTestHelpers::TFeatureFlags flags;
-        flags.SetEnableChangefeedsOnIndexTables(true);
-        TTestEnv env(flags);
-        const auto pending = StartPendingAttachment(env, true);
-        const auto& info = pending.Info;
-        auto& runtime = env.GetRuntime();
-        runtime.GetAppData().ReplicationConfig.MutableSchemeOperationLimits()->SetInflightDropStreamLimit(0);
-
-        const TString indexPath = "/Root/replica1/by_value/indexImplTable";
-        ui64 indexTargetId = 0;
-        const auto description = DescribeReplication(env, info);
-        for (const auto& target : description->Get()->Record.GetTargets()) {
-            if (target.GetDstPath() == indexPath) {
-                indexTargetId = target.GetId();
-            }
-        }
-        UNIT_ASSERT(indexTargetId);
-        const auto indexPathId = env.GetPathId(indexPath);
-        UNIT_ASSERT(WaitFor([&] {
-            const auto state = ReadPersistedDstState(runtime, info.ControllerId, TWorkerId(1, indexTargetId, 0));
-            return state == TReplication::EDstState::Ready;
-        }));
-        const TPendingAttachment index{info, indexTargetId, indexPathId, {}};
-        AssertAttachmentPaths(env, index, {}, indexPathId);
-        AssertDestinationMode(
-            env,
-            indexPath,
-            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-
-        if (baseState == TReplication::EDstState::Error) {
-            SendAttachmentResult(
-                env,
-                pending,
-                new TEvPrivate::TEvCreateDstResult(
-                    1,
-                    pending.TargetId,
-                    NKikimrScheme::StatusSchemeError,
-                    "Cannot validate attached destination"));
-            UNIT_ASSERT(WaitFor([&] {
-                return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
-            }));
-        } else if (baseState == TReplication::EDstState::Ready) {
-            SendAttachmentResult(
-                env,
-                pending,
-                new TEvPrivate::TEvCreateDstResult(1, pending.TargetId, pending.DstPathId));
-            DescribeReplication(env, info);
-        }
-        const bool pendingBase = baseState != TReplication::EDstState::Ready;
-        const bool detach = baseState == TReplication::EDstState::Attaching || (cascade && pendingBase);
-        const bool deleted = cascade && !pendingBase;
-        AssertAttachmentPaths(
-            env,
-            pending,
-            pendingBase ? pending.DstPathId : TPathId(),
-            pendingBase ? TPathId() : pending.DstPathId);
-
-        auto request = MakeHolder<TEvController::TEvDropReplication>();
-        info.PathId.ToProto(request->Record.MutablePathId());
-        request->Record.MutableOperationId()->SetTxId(114);
-        request->Record.SetCascade(cascade);
-        env.SendAsync(info.ControllerId, std::move(request));
-        DescribeReplication(env, info);
-        if (baseState == TReplication::EDstState::Attaching) {
-            SendAttachmentResult(
-                env,
-                pending,
-                new TEvPrivate::TEvCreateDstResult(1, pending.TargetId, pending.DstPathId));
-        }
-        env.SendAsync(
-            info.ControllerId,
-            new TEvPrivate::TEvDropStreamResult(
-                1,
-                indexFirst ? indexTargetId : pending.TargetId,
-                NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
-        UNIT_ASSERT_C(
-            WaitFor([&] {
-                const auto description = DescribeReplication(env, info);
-                return description->Get()->Record.TargetsSize() == 1
-                    && description->Get()->Record.GetTargets(0).GetId()
-                        == (indexFirst ? pending.TargetId : indexTargetId);
-            }),
-            "First target was not removed before the second target's cleanup");
-
-        // In the base-first case its metadata is now gone. The decision to
-        // detach the index must survive independently across controller restart.
-        RestartController(env, info.ControllerId);
-        if (!indexFirst) {
-            AssertAttachmentPaths(env, index, detach ? indexPathId : TPathId(), indexPathId);
-        }
-        env.SendAsync(
-            info.ControllerId,
-            new TEvPrivate::TEvDropStreamResult(
-                1,
-                indexFirst ? pending.TargetId : indexTargetId,
-                NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
-        UNIT_ASSERT_C(
-            WaitFor([&] {
-                return DescribeReplication(env, info)->Get()->Record.GetStatus()
-                    == NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND;
-            }),
-            "DROP did not finish after index cleanup");
-
-        if (deleted) {
-            UNIT_ASSERT_VALUES_EQUAL(
-                env.GetDescription("/Root/replica1").GetSchemeStatus(),
-                NKikimrScheme::StatusPathDoesNotExist);
-            UNIT_ASSERT_VALUES_EQUAL(
-                env.GetDescription(indexPath).GetSchemeStatus(),
-                NKikimrScheme::StatusPathDoesNotExist);
-            return;
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), pending.DstPathId);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId(indexPath), indexPathId);
-        if (!detach) {
-            // Ordinary plain DROP retains fully attached destinations, and an
-            // Error base is not reconciled merely because it has a pending path.
-            for (const TString& path : {TString("/Root/replica1"), indexPath}) {
-                AssertDestinationMode(
-                    env,
-                    path,
-                    NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-            }
-            return;
-        }
-        AssertDestinationWritable(env);
-        AssertDestinationMode(
-            env,
-            indexPath,
-            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE);
-
-        auto client = CreateTableClient(env);
-        const auto write = client.RetryOperationSync([](NYdb::NTable::TSession session) {
-            return session.ExecuteDataQuery(
-                "UPSERT INTO `/Root/replica1` (key, value) VALUES (1, 'writable');",
-                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-        });
-        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        const auto read = session.ExecuteDataQuery(
-            "SELECT key FROM `/Root/replica1` VIEW by_value WHERE value = 'writable';",
-            NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(read.GetResultSet(0).RowsCount(), 1);
-    }
-
-    void DropAfterEarlyBaseValidationError(bool cascade) {
-        NTestHelpers::TFeatureFlags flags;
-        flags.SetEnableChangefeedsOnIndexTables(true);
-        TTestEnv env(flags);
-        auto& runtime = env.GetRuntime();
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        CreateSourceTable(env, "bootstrap");
-        auto client = CreateTableClient(env);
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        // The extra non-indexed column rejects the base before attachment
-        // preparation, while the restored index still matches its source.
-        const auto create = session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/replica1` (
-                key Uint32, value Utf8, extra Uint64, PRIMARY KEY (key),
-                INDEX by_value GLOBAL SYNC ON (value)
-            );
-        )").GetValueSync();
-        UNIT_ASSERT_C(create.IsSuccess(), create.GetIssues().ToString());
-        const TString indexPath = "/Root/replica1/by_value/indexImplTable";
-        const auto basePathId = env.GetPathId("/Root/replica1");
-        const auto indexPathId = env.GetPathId(indexPath);
-        const auto info = StartReplication(env, 1, "root@builtin", false, true);
-        UNIT_ASSERT(WaitFor([&] {
-            return SourceStreamsReady(env, info, 2);
-        }));
-        auto resume = MakeAlterReplicationRequest(info, 115);
-        resume->Record.MutableSwitchState()->MutableStandBy();
-        const auto resumed = env.Send<TEvController::TEvAlterReplicationResult>(
-            info.ControllerId,
-            std::move(resume));
-        UNIT_ASSERT_VALUES_EQUAL(
-            resumed->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-        UNIT_ASSERT(WaitFor([&] {
-            return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
-        }));
-        const auto description = DescribeReplication(env, info);
-        UNIT_ASSERT_STRING_CONTAINS(
-            description->Get()->Record.GetState().GetError().DebugString(),
-            "Columns size mismatch");
-        ui64 baseTargetId = 0, indexTargetId = 0;
-        for (const auto& target : description->Get()->Record.GetTargets()) {
-            (target.GetDstPath() == indexPath ? indexTargetId : baseTargetId) = target.GetId();
-        }
-        UNIT_ASSERT(baseTargetId && indexTargetId);
-        const TPendingAttachment base{info, baseTargetId, basePathId, {}};
-        const TPendingAttachment index{info, indexTargetId, indexPathId, {}};
-        // No pending or confirmed base path exists; the index attached through
-        // the real creator and persisted its confirmed path independently.
-        AssertAttachmentPaths(env, base, {});
-        UNIT_ASSERT(WaitFor([&] {
-            const auto state = ReadPersistedDstState(runtime, info.ControllerId, TWorkerId(1, indexTargetId, 0));
-            return state == TReplication::EDstState::Ready;
-        }));
-        AssertAttachmentPaths(env, index, {}, indexPathId);
-        AssertDestinationMode(
-            env,
-            indexPath,
-            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-
-        // Remove the base first, then restart without its metadata to check
-        // that the index retains its own durable cleanup ownership.
-        runtime.GetAppData().ReplicationConfig.MutableSchemeOperationLimits()->SetInflightDropStreamLimit(2);
-        const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
-        const auto gate = runtime.Register(new TDropCdcStreamRequestGate(txProxy, env.GetSender()));
-        runtime.RegisterService(MakeTxProxyID(), gate);
-        Y_DEFER {
-            runtime.RegisterService(MakeTxProxyID(), txProxy);
-        };
-        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
-        auto request = MakeHolder<TEvController::TEvDropReplication>();
-        info.PathId.ToProto(request->Record.MutablePathId());
-        request->Record.MutableOperationId()->SetTxId(116);
-        request->Record.SetCascade(cascade);
-        env.SendAsync(info.ControllerId, std::move(request));
-        auto first = runtime.GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransaction>(env.GetSender());
-        auto second = runtime.GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransaction>(env.GetSender());
-        const auto& tx = first->Get()->Record.GetTransaction().GetModifyScheme();
-        const bool firstIsIndex = tx.GetDropCdcStream().GetTableName() == "indexImplTable";
-        if (firstIsIndex) {
-            std::swap(first, second);
-        }
-        runtime.Send(first->Forward(txProxy));
-        const auto baseRemoved = [&] {
-            const auto description = DescribeReplication(env, info);
-            return description->Get()->Record.TargetsSize() == 1
-                && description->Get()->Record.GetTargets(0).GetId() == indexTargetId;
-        };
-        UNIT_ASSERT_C(WaitFor(baseRemoved), "First target was not removed before restart");
-        auto& limits = *runtime.GetAppData().ReplicationConfig.MutableSchemeOperationLimits();
-        limits.SetInflightDropStreamLimit(0);
-        runtime.RegisterService(MakeTxProxyID(), txProxy);
-        RestartController(env, info.ControllerId);
-        AssertAttachmentPaths(env, index, cascade ? indexPathId : TPathId(), indexPathId);
-        limits.SetInflightDropStreamLimit(2);
-        env.SendAsync(info.ControllerId, new TEvPrivate::TEvCancelDropStream());
-        const auto replicationRemoved = [&] {
-            return DescribeReplication(env, info)->Get()->Record.GetStatus()
-                == NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND;
-        };
-        UNIT_ASSERT_C(WaitFor(replicationRemoved, 150), "DROP did not finish after restart");
-        for (const TString& path : {TString("/Root/table1"), TString("/Root/table1/by_value/indexImplTable")}) {
-            UNIT_ASSERT_VALUES_EQUAL(env.GetDescription(path).GetPathDescription().GetTable().CdcStreamsSize(), 0);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), basePathId);
-        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId(indexPath), indexPathId);
-        AssertDestinationWritable(env);
-        const auto expectedMode = cascade
-            ? NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_NONE
-            : NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY;
-        AssertDestinationMode(env, indexPath, expectedMode);
-        if (!cascade) {
-            return;
-        }
-
-        const auto write = client.RetryOperationSync([](NYdb::NTable::TSession session) {
-            return session.ExecuteDataQuery(
-                "UPSERT INTO `/Root/replica1` (key, value) VALUES (1, 'writable');",
-                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-        });
-        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
-        const auto read = session.ExecuteDataQuery(
-            "SELECT key FROM `/Root/replica1` VIEW by_value WHERE value = 'writable';",
-            NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(read.GetResultSet(0).RowsCount(), 1);
-    }
-
-    Y_UNIT_TEST(DropCascadeAfterEarlyBaseValidationErrorAndRestart) {
-        DropAfterEarlyBaseValidationError(true);
-    }
-
-    Y_UNIT_TEST(DropAfterEarlyBaseValidationErrorPreservesReadonlyIndex) {
-        DropAfterEarlyBaseValidationError(false);
-    }
-
-    Y_UNIT_TEST_TWIN(DropCascadeWithPartiallyAttachedIndex, AttachmentError) {
-        DropWithAttachedIndex(
-            AttachmentError
-                ? TReplication::EDstState::Error : TReplication::EDstState::Attaching,
-            true);
-    }
-
-    Y_UNIT_TEST_TWIN(DropCascadeWithDestinationCdc, GlobalConsistency) {
-        TTestEnv env;
-        CreateSourceTable(env, "replica1");
-        auto client = CreateTableClient(env);
-        auto session = CreateTableSession(env, client);
-        const auto cdc = session.ExecuteSchemeQuery(R"(
-            ALTER TABLE `/Root/replica1` ADD CHANGEFEED restored_cdc
-            WITH (FORMAT = "JSON", MODE = "UPDATES");
-        )").GetValueSync();
-        UNIT_ASSERT_C(cdc.IsSuccess(), cdc.GetIssues().ToString());
-
-        const auto info = StartReplication(
-            env, 1, "root@builtin", GlobalConsistency, false,
-            NKikimrSchemeOp::EIndexTypeGlobal, false, false);
-        WaitForPaused(env, info);
-        UNIT_ASSERT_C(WaitFor([&] {
-            return SourceStreamsReady(env, info, 1);
-        }), "Source stream setup did not finish before resuming replication");
-
-        const auto resumed = session.ExecuteSchemeQuery(R"(
-            ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = "STANDBY");
-        )").GetValueSync();
-        UNIT_ASSERT_C(resumed.IsSuccess(), resumed.GetIssues().ToString());
-
-        const auto write = session.ExecuteDataQuery(
-            "UPSERT INTO `/Root/table1` (key, value) VALUES (1, 'delivered');",
-            NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-        UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
-        UNIT_ASSERT_C(WaitFor([&] {
-            const auto read = session.ExecuteDataQuery(
-                "SELECT key FROM `/Root/replica1` WHERE key = 1 AND value = 'delivered';",
-                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            if (read.GetStatus() == NYdb::EStatus::SCHEME_ERROR || read.GetStatus() == NYdb::EStatus::ABORTED) {
-                return false;
-            }
-            UNIT_ASSERT_C(read.IsSuccess(), read.GetIssues().ToString());
-            return read.GetResultSet(0).RowsCount() == 1;
-        }, 300), "Replication did not deliver the row to the destination with CDC");
-        AssertDestinationMode(
-            env, "/Root/replica1",
-            NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
-        UNIT_ASSERT_VALUES_EQUAL(
-            env.GetDescription("/Root/replica1/restored_cdc").GetSchemeStatus(),
-            NKikimrScheme::StatusSuccess);
-
-        // An independent CDC change on an active replica must remain forbidden.
-        const auto dropCdc = session.ExecuteSchemeQuery(R"(
-            ALTER TABLE `/Root/replica1` DROP CHANGEFEED restored_cdc;
-        )").GetValueSync();
-        UNIT_ASSERT(!dropCdc.IsSuccess());
-        UNIT_ASSERT_STRING_CONTAINS(dropCdc.GetIssues().ToString(), "path is an async replica table");
-
-        const auto dropped = session.ExecuteSchemeQuery(
-            "DROP ASYNC REPLICATION `/Root/replication` CASCADE;").GetValueSync();
-        UNIT_ASSERT_C(dropped.IsSuccess(), dropped.GetIssues().ToString());
-        for (const auto* path : {
-                "/Root/replication",
-                "/Root/replica1",
-                "/Root/replica1/restored_cdc",
-                "/Root/replica1/restored_cdc/streamImpl"}) {
-            const auto description = env.GetDescription(path);
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                description.GetSchemeStatus(), NKikimrScheme::StatusPathDoesNotExist,
-                "CASCADE left a destination path: " << path << ": " << description.DebugString());
-        }
-    }
-
-    Y_UNIT_TEST(DropCascadeWithFullyAttachedIndex) {
-        DropWithAttachedIndex(TReplication::EDstState::Ready, true);
-    }
-
-    Y_UNIT_TEST_TWIN(DropWithPartiallyAttachedIndex, IndexFirst) {
-        DropWithAttachedIndex(TReplication::EDstState::Attaching, false, IndexFirst);
-    }
-
-    Y_UNIT_TEST_TWIN(DropWithAttachedIndexPreservesReadonlyDestinations, AttachmentError) {
-        DropWithAttachedIndex(
-            AttachmentError
-                ? TReplication::EDstState::Error : TReplication::EDstState::Ready,
-            false);
-    }
-
-    Y_UNIT_TEST(DropCascadeAfterPendingDestinationDeleted) {
-        TTestEnv env;
-        const auto pending = StartPendingAttachment(env);
-        const auto& info = pending.Info;
-
-        SendAttachmentResult(
-            env,
-            pending,
-            new TEvPrivate::TEvCreateDstResult(
-                1,
-                pending.TargetId,
-                NKikimrScheme::StatusSchemeError,
-                "Cannot validate attached destination"));
-        UNIT_ASSERT(WaitFor([&] {
-            return DescribeReplication(env, info)->Get()->Record.GetState().HasError();
-        }));
-        AssertAttachmentPaths(env, pending, pending.DstPathId);
-
-        auto client = CreateTableClient(env);
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        const auto drop = session.ExecuteSchemeQuery("DROP TABLE `/Root/replica1`;").GetValueSync();
-        UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
-
-        auto request = MakeHolder<TEvController::TEvDropReplication>();
-        info.PathId.ToProto(request->Record.MutablePathId());
-        request->Record.MutableOperationId()->SetTxId(107);
-        request->Record.SetCascade(true);
-        env.SendAsync(info.ControllerId, std::move(request));
-        DescribeReplication(env, info);
-        env.SendAsync(
-            info.ControllerId,
-            new TEvPrivate::TEvDropStreamResult(
-                1,
-                pending.TargetId,
-                NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
-
-        const auto result = env.GetRuntime().GrabEdgeEvent<TEvController::TEvDropReplicationResult>(env.GetSender());
-        UNIT_ASSERT(result->Get()->Record.GetStatus()
-            == NKikimrReplication::TEvDropReplicationResult::SUCCESS);
-        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetStatus()
-            == NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND);
-        UNIT_ASSERT_VALUES_EQUAL(
-            env.GetDescription("/Root/replica1").GetSchemeStatus(),
-            NKikimrScheme::StatusPathDoesNotExist);
-    }
-
-    Y_UNIT_TEST(DropCascadeAfterRestartWithoutSource) {
-        TTestEnv env;
-        const auto pending = StartPendingAttachment(env);
-        const auto& info = pending.Info;
-        env.GetRuntime().GetAppData().ReplicationConfig.MutableSchemeOperationLimits()->SetInflightDropStreamLimit(0);
-
-        // Keep DesiredState Ready while making source revalidation unavailable.
-        auto resume = MakeAlterReplicationRequest(info, 107, true);
-        resume->Record.MutableSwitchState()->MutableStandBy();
-        const auto altered = env.Send<TEvController::TEvAlterReplicationResult>(
-            info.ControllerId,
-            std::move(resume));
-        UNIT_ASSERT_VALUES_EQUAL(
-            altered->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-
-        auto request = MakeHolder<TEvController::TEvDropReplication>();
-        info.PathId.ToProto(request->Record.MutablePathId());
-        request->Record.MutableOperationId()->SetTxId(108);
-        request->Record.SetCascade(true);
-        env.SendAsync(info.ControllerId, std::move(request));
-        DescribeReplication(env, info);
-        // Restart before stream cleanup completes. Once it does, recovery must
-        // reconcile the local ALTER without a source response before detaching.
-        NKikimrMiniKQL::TResult persisted;
-        const auto status = LocalQuery(
-            env.GetRuntime(),
-            info.ControllerId,
-            Sprintf(
-                R"((
-            (let replicationKey '('('Id (Uint64 '1))))
-            (let targetKey '('('ReplicationId (Uint64 '1)) '('Id (Uint64 '%lu))))
-            (let streamKey '('('ReplicationId (Uint64 '1)) '('TargetId (Uint64 '%lu))))
-            (return (AsList
-                (SetResult 'Replication (SelectRow 'Replications replicationKey '('State 'DesiredState)))
-                (SetResult 'Target (SelectRow 'Targets targetKey
-                    '('DstState 'PendingDstPathOwnerId 'PendingDstPathLocalId)))
-                (SetResult 'Stream (SelectRow 'SrcStreams streamKey '('State)))))
-        ))",
-                pending.TargetId,
-                pending.TargetId),
-            persisted);
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
-        const auto readColumn = [&](TStringBuf resultName, TStringBuf columnName) {
-            const auto& results = persisted.GetType().GetStruct();
-            for (ui32 i = 0; i < results.MemberSize(); ++i) {
-                const auto& result = results.GetMember(i);
-                if (result.GetName() != resultName) {
-                    continue;
-                }
-                const auto& row = persisted.GetValue().GetStruct(i).GetOptional();
-                UNIT_ASSERT_C(row.HasOptional(), persisted.DebugString());
-                const auto& columns = result.GetType().GetOptional().GetItem().GetOptional().GetItem().GetStruct();
-                for (ui32 j = 0; j < columns.MemberSize(); ++j) {
-                    if (columns.GetMember(j).GetName() == columnName) {
-                        const auto& column = row.GetOptional().GetStruct(j);
-                        UNIT_ASSERT_C(column.HasOptional(), persisted.DebugString());
-                        return column.GetOptional();
-                    }
-                }
-            }
-            UNIT_FAIL("Missing persisted column: " << resultName << "." << columnName);
-            return NKikimrMiniKQL::TValue{};
-        };
-        UNIT_ASSERT_VALUES_EQUAL(readColumn("Replication", "State").GetUint32(), static_cast<ui32>(TReplication::EState::Removing));
-        UNIT_ASSERT_VALUES_EQUAL(readColumn("Replication", "DesiredState").GetUint32(), static_cast<ui32>(TReplication::EState::Ready));
-        UNIT_ASSERT_VALUES_EQUAL(readColumn("Target", "DstState").GetUint32(), static_cast<ui32>(TReplication::EDstState::Attaching));
-        UNIT_ASSERT_VALUES_EQUAL(readColumn("Stream", "State").GetUint32(), static_cast<ui32>(TReplication::EStreamState::Removing));
-        UNIT_ASSERT_VALUES_EQUAL(
-            TPathId(
-                readColumn("Target", "PendingDstPathOwnerId").GetUint64(),
-                readColumn("Target", "PendingDstPathLocalId").GetUint64()),
-            pending.DstPathId);
-
-        RestartController(env, info.ControllerId);
-        env.SendAsync(
-            info.ControllerId,
-            new TEvPrivate::TEvDropStreamResult(
-                1,
-                pending.TargetId,
-                NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
-        UNIT_ASSERT_C(
-            WaitFor([&] {
-                return DescribeReplication(env, info)->Get()->Record.GetStatus()
-                    == NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND;
-            }),
-            "DROP did not finish after restarting without the source");
-        UNIT_ASSERT_VALUES_EQUAL(env.GetPathId("/Root/replica1"), pending.DstPathId);
-        AssertDestinationWritable(env);
-    }
-
-    Y_UNIT_TEST(DropWaitsForDelayedAttachAllocation) {
-        TTestEnv env;
-        auto& runtime = env.GetRuntime();
-        runtime.GetAppData().ReplicationConfig.SetInitialScan(false);
-        CreateSourceTable(env, "replica1");
-        const auto info = StartReplication(env);
-
-        ui64 targetId = 0;
-        for (ui32 attempt = 0; attempt < 50; ++attempt) {
-            const auto result = DescribeReplication(env, info);
-            if (result->Get()->Record.TargetsSize()) {
-                targetId = result->Get()->Record.GetTargets(0).GetId();
-                break;
-            }
-
-            Sleep(TDuration::MilliSeconds(100));
-        }
-
-        UNIT_ASSERT(targetId);
-
-        UNIT_ASSERT_C(
-            WaitFor([&] {
-                return ReadStreamSchemaChanges(env, info.ControllerId, TWorkerId(1, targetId, 0)).has_value();
-            }),
-            "Source setup did not finish before delaying attachment allocation");
-
-        const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
-        const auto gate = runtime.Register(new TAttachAllocationGate(txProxy, env.GetSender()));
-        runtime.RegisterService(MakeTxProxyID(), gate);
-        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())
-            ->Get()->Tag, TAttachAllocationGate::ReadyTag());
-
-        auto resume = MakeHolder<TEvController::TEvAlterReplication>();
-        info.PathId.ToProto(resume->Record.MutablePathId());
-        resume->Record.MutableConfig()->CopyFrom(info.Config);
-        resume->Record.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken("root@builtin");
-        resume->Record.MutableSwitchState()->MutableStandBy();
-        resume->Record.MutableOperationId()->SetTxId(103);
-        const auto resumed = env.Send<TEvController::TEvAlterReplicationResult>(info.ControllerId, std::move(resume));
-        UNIT_ASSERT_VALUES_EQUAL(resumed->Get()->Record.GetStatus(),
-            NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())
-            ->Get()->Tag, TAttachAllocationGate::BlockedTag());
-
-        runtime.RegisterService(MakeTxProxyID(), txProxy);
-
-        auto drop = MakeHolder<TEvController::TEvDropReplication>();
-        info.PathId.ToProto(drop->Record.MutablePathId());
-        drop->Record.MutableOperationId()->SetTxId(104);
-        drop->Record.SetCascade(true);
-
-        env.SendAsync(info.ControllerId, std::move(drop));
-        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetStatus()
-            == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
-
-        env.SendAsync(info.ControllerId, new TEvPrivate::TEvDropStreamResult(1, targetId,
-            NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues())));
-        Sleep(TDuration::MilliSeconds(200));
-        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetStatus()
-            == NKikimrReplication::TEvDescribeReplicationResult::SUCCESS);
-        AssertDestinationWritable(env);
-
-        env.SendAsync(gate, new TEvents::TEvWakeup(TAttachAllocationGate::ReleaseTag()));
-        const auto dropped = runtime.GrabEdgeEvent<TEvController::TEvDropReplicationResult>(env.GetSender());
-        UNIT_ASSERT(dropped->Get()->Record.GetStatus()
-            == NKikimrReplication::TEvDropReplicationResult::SUCCESS);
-        AssertDestinationWritable(env);
-    }
 }
 
 Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {

@@ -600,7 +600,8 @@ void TNodeWarden::Bootstrap() {
         CreateSyncBrokerActor(MaxInProgressSyncCount)));
 
     // create bridge syncer rate quoter
-    SyncRateQuoter = std::make_shared<TReplQuoter>(Cfg->BlobStorageConfig->GetBridgeSyncRateBytesPerSecond());
+    SyncRateConfigLimit = Cfg->BlobStorageConfig->GetBridgeSyncRateBytesPerSecond();
+    SyncRateQuoter = std::make_shared<TReplQuoter>(SyncRateConfigLimit);
 
     // start compaction broker
     actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(
@@ -1150,6 +1151,25 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
             yaml.HasStorageConfigVersion() ? std::make_optional(yaml.GetStorageConfigVersion()) : std::nullopt);
 
         ExpectedSaveConfigCookie++;
+    }
+
+    if (record.HasControllerGeneration() && record.GetControllerGeneration() < ControllerGeneration) {
+        // the current BSC doesn't know about this and wouldn't correct the node until something changes for it
+        YDB_LOG_INFO_COMP(BS_NODE, "ignoring syncers and share from a previous BS_CONTROLLER instance",
+            {"marker", "NW106"},
+            {"generation", record.GetControllerGeneration()},
+            {"currentGeneration", ControllerGeneration});
+        return;
+    }
+    ControllerGeneration = Max(ControllerGeneration, record.GetControllerGeneration());
+
+    if (record.HasBridgeSyncNodeRateBytesPerSecond()) {
+        SyncRateControllerLimit = record.GetBridgeSyncNodeRateBytesPerSecond();
+        UpdateSyncRateQuoter();
+    } else if (record.GetComprehensive() && !record.GetKeepBridgeSyncNodeRate() && SyncRateControllerLimit) {
+        // this BSC doesn't support shares and won't ever update the one got from a newer instance
+        SyncRateControllerLimit = 0;
+        UpdateSyncRateQuoter();
     }
 
     if (record.GetUpdateSyncers()) {

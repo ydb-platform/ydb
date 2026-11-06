@@ -326,7 +326,7 @@ message TFeatureFlags {
     optional bool EnableCompactFulltextIndex = 280 [default = true];
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
     optional bool EnableFulltextIndexPrefix = 282 [default = true];
-    reserved 283; reserved "EnableAccessServiceV2Interface";
+    optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
     optional bool EnableTopicDeferredPublish = 286 [default = false];
@@ -469,4 +469,9 @@ message TFeatureFlags {
     optional bool EnableDstTopicReplicationDisabled = 377 [default = false];
     optional bool EnableMLPConsumerInFlightMutateDisabled = 378 [default = false];
     optional bool EnableCoroutineCompactionSelector = 379 [default = false];
+    // Show REPLICATING VDisks with only phantom-like blobs remaining as READY ones in node whiteboard and system views
+    // (and thus in health check, viewer and CMS); BS_CONTROLLER logic still treats them as replicating ones
+    optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
+    optional bool EnableCsPortionsCacheAcrossRestarts = 381 [default = false];
+    optional bool EnableCsGeneralCacheConsumerWeights = 382 [default = false];
 }

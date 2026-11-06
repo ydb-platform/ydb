@@ -701,12 +701,25 @@ public:
 
         THashMap<NKikimrViewer::TStorageUsage::EType, ui64> tablesStorageByType;
         THashMap<NKikimrViewer::TStorageUsage::EType, TStorageQuota> storageQuotasByType;
+        const auto guessedStorageType = GuessStorageType(domainDescription);
 
+        // sizes: tables by storage type, topics are attributed to the main storage type
         for (const auto& poolUsage : domainDescription.GetDiskSpaceUsage().GetStoragePoolsUsage()) {
             auto type = GetStorageType(poolUsage.GetPoolKind());
             tablesStorageByType[type] += poolUsage.GetTotalSize();
         }
 
+        if (tablesStorageByType.empty() && domainDescription.HasDiskSpaceUsage()) {
+            tablesStorageByType[guessedStorageType] =
+                domainDescription.GetDiskSpaceUsage().GetTables().GetTotalSize();
+        }
+
+        if (domainDescription.HasDiskSpaceUsage()) {
+            tablesStorageByType[guessedStorageType] +=
+                domainDescription.GetDiskSpaceUsage().GetTopics().GetDataSize();
+        }
+
+        // quotas: the effective ones reported by SchemeShard, when available
         const auto& quotaUsage = domainDescription.GetDiskSpaceQuotaUsage();
         const auto mode = domainDescription.HasDiskSpaceQuotaUsage() ? quotaUsage.GetMode() : TQuotaUsage::MODE_UNSPECIFIED;
         if (mode == TQuotaUsage::MODE_STORAGE_POOL_KINDS) {
@@ -728,23 +741,15 @@ public:
                 storageQuotasByType.erase(type);
             }
         } else if (mode == TQuotaUsage::MODE_DATABASE && quotaUsage.GetEntries().size() == 1) {
-            // the database quota is checked against the total usage of all storage types (and topics)
+            // the database quota is checked against the total usage of all storage types (and topics),
+            // it is attached to the main storage type
             const auto& entry = quotaUsage.GetEntries(0);
-            if (tablesStorageByType.empty()) {
-                tablesStorageByType[GuessStorageType(domainDescription)] = entry.GetUsage();
-            }
-            const auto type = tablesStorageByType.size() == 1 ? tablesStorageByType.begin()->first : GuessStorageType(domainDescription);
-            auto& quotas = storageQuotasByType[type];
+            auto& quotas = storageQuotasByType[guessedStorageType];
             quotas.SoftQuota = entry.GetSoftQuota();
             quotas.HardQuota = entry.GetHardQuota();
         } else {
-            // older SchemeShard (or a mode unknown to this version)
-            if (tablesStorageByType.empty() && domainDescription.HasDiskSpaceUsage()) {
-                tablesStorageByType[GuessStorageType(domainDescription)] =
-                    domainDescription.GetDiskSpaceUsage().GetTables().GetTotalSize()
-                    + domainDescription.GetDiskSpaceUsage().GetTopics().GetDataSize();
-            }
-            auto& quotas = storageQuotasByType[GuessStorageType(domainDescription)];
+            // older SchemeShard (or a mode unknown to this version): raw database quotas
+            auto& quotas = storageQuotasByType[guessedStorageType];
             quotas.HardQuota = domainDescription.GetDatabaseQuotas().data_size_hard_quota();
             quotas.SoftQuota = domainDescription.GetDatabaseQuotas().data_size_soft_quota();
         }

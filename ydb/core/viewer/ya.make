@@ -861,6 +861,7 @@ PEERDIR(
     ydb/core/grpc_services
     ydb/core/grpc_services/local_rpc
     ydb/core/health_check
+    ydb/core/kqp/common/events
     ydb/core/mon
     ydb/core/node_whiteboard
     ydb/core/path_aliasing
@@ -871,8 +872,8 @@ PEERDIR(
     ydb/core/tx/tx_proxy
     ydb/core/util
     ydb/core/viewer/json
-    ydb/core/viewer/yaml
     ydb/core/viewer/protos
+    ydb/core/viewer/yaml
     ydb/library/actors/core
     ydb/library/actors/helpers
     ydb/library/computation_graph_renderer

@@ -158,6 +158,7 @@ void TController::RunTxRemoveWorker(const TWorkerId& id, const TActorContext& ct
 
 class TController::TTxCompleteWorkerSet: public TTxBase {
     TEvPrivate::TEvCompleteWorkerSet::TPtr Event;
+    bool Accepted = false;
 
 public:
     TTxCompleteWorkerSet(TController* self, TEvPrivate::TEvCompleteWorkerSet::TPtr& ev)
@@ -171,14 +172,23 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         const auto key = std::make_pair(Event->Get()->ReplicationId, Event->Get()->TargetId);
+        const auto replication = Self->Find(key.first);
+        if (!replication || !replication->FindTarget(key.second)) {
+            // A late registrar completion must not recreate a removed target.
+            return true;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Targets>().Key(key.first, key.second).Update(
             NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(true));
+        Accepted = true;
         return true;
     }
 
     void Complete(const TActorContext&) override {
-        Self->CompleteWorkerSets.insert({Event->Get()->ReplicationId, Event->Get()->TargetId});
+        if (Accepted) {
+            Self->CompleteWorkerSets.insert({Event->Get()->ReplicationId, Event->Get()->TargetId});
+        }
     }
 };
 

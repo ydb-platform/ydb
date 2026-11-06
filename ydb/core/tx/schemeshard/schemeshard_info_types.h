@@ -3876,6 +3876,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+    bool EnableBackupTableChecksum = false;
     bool EnableChecksums = false;
     bool EnablePermissions = false;
     bool IncludeIndexData = false;
@@ -3995,6 +3996,13 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
             CreateConsumers,
         };
 
+        // In-memory progress; the persisted state stays Transferring until validation completes
+        enum class EChecksumState : ui8 {
+            None,
+            Pending,
+            Validating,
+        };
+
         TString DstPathName;
         TPathId DstPathId;
         TString SrcPrefix;
@@ -4013,9 +4021,11 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
         EChangefeedState ChangefeedState = EChangefeedState::CreateChangefeed;
+        EChecksumState ChecksumState = EChecksumState::None;
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
+        TActorId ChecksumActor;
         int NextIndexIdx = 0;
         int NextChangefeedIdx = 0;
         TString Issue;
@@ -4057,6 +4067,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TMaybe<NBackup::TSchemaMapping> SchemaMapping;
     TActorId SchemaMappingGetter;
 
+    bool EnableBackupTableChecksum = false;
     EState State = EState::Invalid;
     TString Issue;
     TVector<TItem> Items;

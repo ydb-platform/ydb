@@ -26,6 +26,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/core/backup/common/feature_flags.h>
+#include <ydb/core/backup/query/table_checksum.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/maybe.h>
@@ -392,6 +393,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         importInfo->SanitizedToken = request.GetSanitizedToken();
 
         NIceDb::TNiceDb db(txc.DB);
+        importInfo->EnableBackupTableChecksum = AppData()->FeatureFlags.GetEnableBackupTableChecksum();
         Self->PersistCreateImport(db, *importInfo);
 
         importInfo->State = initialState;
@@ -499,6 +501,7 @@ private:
 struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase {
     using EState = TImportInfo::EState;
     using ESubState = TImportInfo::TItem::ESubState;
+    using EChecksumState = TImportInfo::TItem::EChecksumState;
 
     static constexpr ui32 IssuesSizeLimit = 2 * 1024;
 
@@ -510,6 +513,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
     TEvIndexBuilder::TEvCreateResponse::TPtr CreateIndexResult = nullptr;
+    NBackup::TEvTableChecksum::TEvResult::TPtr ChecksumResult;
     TTxId CompletedTxId = InvalidTxId;
 
     explicit TTxProgress(TSelf* self, ui64 id, const TMaybe<ui32>& itemIdx)
@@ -562,6 +566,11 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     {
     }
 
+    explicit TTxProgress(TSelf* self, NBackup::TEvTableChecksum::TEvResult::TPtr& ev)
+        : TXxport::TTxBase(self)
+        , ChecksumResult(ev)
+    {}
+
     TTxType GetTxType() const override {
         return TXTYPE_IMPORT_PROGRESS;
     }
@@ -581,6 +590,8 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
             OnModifyResult(txc, ctx);
         } else if (CreateIndexResult) {
             OnCreateIndexResult(txc, ctx);
+        } else if (ChecksumResult) {
+            OnChecksumResult(txc, ctx);
         } else if (CompletedTxId) {
             OnNotifyResult(txc, ctx);
         } else {
@@ -595,6 +606,86 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     }
 
 private:
+    void ContinueAfterData(TImportInfo& info, ui32 idx) {
+        auto& item = info.Items.at(idx);
+        if (PrepareNextBuildableIndex(Self, item)) {
+            item.State = EState::BuildIndexes;
+            AllocateTxId(info, idx);
+        } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
+                   AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
+            item.State = EState::CreateChangefeed;
+            AllocateTxId(info, idx);
+        } else {
+            FinishImportItem(info, idx);
+        }
+    }
+
+    void AdvanceChecksumValidation(TImportInfo& info, const TActorContext& ctx) {
+        ui32 running = CountIf(info.Items, [](const auto& item) {
+            return item.ChecksumState == EChecksumState::Validating;
+        });
+        for (ui32 idx : xrange(info.Items.size())) {
+            auto& item = info.Items[idx];
+            if (item.ChecksumState == EChecksumState::Pending) {
+                if (running >= 4) {
+                    continue;
+                }
+                item.ChecksumState = EChecksumState::Validating;
+                ++running;
+            }
+            if (item.ChecksumState != EChecksumState::Validating || item.ChecksumActor) {
+                continue;
+            }
+            item.ChecksumActor = ctx.Register(NBackup::CreateTableChecksumQuery(Self->SelfId(), info.Id, idx,
+                TPath::Init(info.DomainPathId, Self).PathString(), item.DstPathName, true));
+            Self->RunningTableChecksumQueries.insert(item.ChecksumActor);
+            Send(item.ChecksumActor, new NBackup::TEvTableChecksum::TEvStart());
+        }
+    }
+
+    void OnChecksumResult(TTransactionContext& txc, const TActorContext& ctx) {
+        const auto& result = *ChecksumResult->Get();
+        auto info = Self->Imports.Value(result.OperationId, nullptr);
+        if (!info || info->State != EState::Waiting || result.ItemIdx >= info->Items.size()) {
+            return;
+        }
+        auto& item = info->Items[result.ItemIdx];
+        if (item.ChecksumState != EChecksumState::Validating || item.ChecksumActor != ChecksumResult->Sender) {
+            return;
+        }
+        Self->RunningTableChecksumQueries.erase(std::exchange(item.ChecksumActor, {}));
+        item.ChecksumState = EChecksumState::None;
+        item.WaitTxId = InvalidTxId;
+        NIceDb::TNiceDb db(txc.DB);
+        if (result.Status != Ydb::StatusIds::SUCCESS) {
+            return CancelAndPersist(db, info, result.ItemIdx,
+                TStringBuilder() << item.DstPathName << ": table checksum query failed: " << result.Error,
+                "checksum query failed");
+        }
+        const auto& expected = *item.Metadata.GetTableChecksum();
+        if (expected != result.Checksum) {
+            return CancelAndPersist(db, info, result.ItemIdx,
+                TStringBuilder() << item.DstPathName << ": table checksum mismatch (version "
+                                 << NBackup::TTableChecksum::Version << "): expected " << expected.ToString()
+                                 << "; actual " << result.Checksum.ToString(), "checksum mismatch");
+        }
+        ContinueAfterData(*info, result.ItemIdx);
+        Self->PersistImportItemState(db, *info, result.ItemIdx);
+        const auto stateCounts = CountItemsByState(info->Items);
+        if (AllDone(stateCounts)) {
+            info->State = EState::Done;
+            info->EndTime = TAppData::TimeProvider->Now();
+        } else if (AllDoneOrWaiting(stateCounts)) {
+            RetrySchemeObjectsCreation(*info, db, ctx);
+        }
+        Self->PersistImportState(db, *info);
+        AdvanceChecksumValidation(*info, ctx);
+        SendNotificationsIfFinished(info);
+        if (info->IsFinished()) {
+            AuditLogImportEnd(*info.Get(), Self);
+        }
+    }
+
     void GetScheme(TImportInfo::TPtr importInfo, ui32 itemIdx, const TActorContext& ctx) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
@@ -1162,6 +1253,10 @@ private:
     }
 
     void KillChildActors(TImportInfo::TItem& item) {
+        if (auto actor = std::exchange(item.ChecksumActor, {})) {
+            Send(actor, new TEvents::TEvPoisonPill());
+            Self->RunningTableChecksumQueries.erase(actor);
+        }
         if (auto schemeGetter = std::exchange(item.SchemeGetter, {})) {
             Send(schemeGetter, new TEvents::TEvPoisonPill());
             Self->RunningImportSchemeGetters.erase(schemeGetter);
@@ -1364,7 +1459,9 @@ private:
                 case EState::BuildIndexes:
                 case EState::CreateChangefeed:
                 case EState::FinalizeImport:
-                    if (item.WaitTxId == InvalidTxId) {
+                    if (item.ChecksumState != EChecksumState::None) {
+                        AdvanceChecksumValidation(*importInfo, ctx);
+                    } else if (item.WaitTxId == InvalidTxId) {
                         if (!IsCreatedByQuery(item) || item.PreparedCreationQuery) {
                             AllocateTxId(*importInfo, itemIdx);
                         } else {
@@ -2205,15 +2302,15 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during restore " + *issue);
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                if (PrepareNextBuildableIndex(Self, item)) {
-                    item.State = EState::BuildIndexes;
-                    AllocateTxId(*importInfo, itemIdx);
-                } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
-                           AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
-                    item.State = EState::CreateChangefeed;
-                    AllocateTxId(*importInfo, itemIdx);
+                if (importInfo->EnableBackupTableChecksum && item.ParentIdx == Max<ui32>() &&
+                    item.Metadata.GetTableChecksum().has_value()) {
+                    // Retain the completed restore ID for recovery, including by older binaries.
+                    // Replaying its completion resumes validation here or the legacy import flow.
+                    item.WaitTxId = txId;
+                    item.ChecksumState = EChecksumState::Pending;
+                    AdvanceChecksumValidation(*importInfo, ctx);
                 } else {
-                    FinishImportItem(*importInfo, itemIdx);
+                    ContinueAfterData(*importInfo, itemIdx);
                 }
             }
             break;
@@ -2320,6 +2417,10 @@ ITransaction* TSchemeShard::CreateTxProgressImport(TEvIndexBuilder::TEvCreateRes
 
 ITransaction* TSchemeShard::CreateTxProgressImport(TTxId completedTxId) {
     return new TImport::TTxProgress(this, completedTxId);
+}
+
+ITransaction* TSchemeShard::CreateTxProgressImport(NBackup::TEvTableChecksum::TEvResult::TPtr& ev) {
+    return new TImport::TTxProgress(this, ev);
 }
 
 } // NSchemeShard

@@ -5,6 +5,7 @@
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/backup/query/table_checksum.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/metering/metering.h>
@@ -386,7 +387,7 @@ namespace {
             return {};
         }
 
-        ui64 StartCompletionMarkerExport(bool autoDropping = true) {
+        ui64 StartCompletionMarkerExport(bool autoDropping = true, bool withRows = false, bool withChangefeed = false) {
             Env();
             Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(autoDropping);
             TestCreateTable(Runtime(), 100, "/MyRoot", R"(
@@ -397,7 +398,25 @@ namespace {
                 UniformPartitionsCount: 2
             )");
             Env().TestWaitNotification(Runtime(), 100);
-            TestExport(Runtime(), 101, "/MyRoot", Sprintf(R"(
+            if (withRows) {
+                UpdateRow(Runtime(), "Table", 1, "first");
+                UpdateRow(Runtime(), "Table", 2, "second");
+            }
+            const ui64 exportId = withChangefeed ? 102 : 101;
+            if (withChangefeed) {
+                Runtime().GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
+                TestCreateCdcStream(Runtime(), TTestTxConfig::SchemeShard, 101, "/MyRoot", R"(
+                    TableName: "Table"
+                    StreamDescription {
+                        Name: "stream"
+                        Mode: ECdcStreamModeUpdate
+                        Format: ECdcStreamFormatJson
+                        State: ECdcStreamStateReady
+                    }
+                )");
+                Env().TestWaitNotification(Runtime(), 101);
+            }
+            TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
                 ExportToS3Settings {
                     endpoint: "localhost:%d"
                     scheme: HTTP
@@ -405,7 +424,7 @@ namespace {
                     items { source_path: "/MyRoot/Table" destination_prefix: "backup/table" }
                 }
             )", S3Port()));
-            return 101;
+            return exportId;
         }
 
         NKikimrExport::TListExportsResponse ListExports(ui64 pageSize = 10, const TString& pageToken = {}) {
@@ -496,6 +515,152 @@ namespace {
                 Env().TestWaitNotification(Runtime(), exportId);
                 TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
             }
+        }
+
+        void RunTableChecksumMetadataRecovery(bool dataShard, bool withChangefeed = false) {
+            Env();
+            Runtime().GetAppData().FeatureFlags.SetEnableBackupTableChecksum(true);
+            using namespace NKikimr::NWrappers::NExternalStorage;
+            ui32 changefeedUploads = 0;
+            auto observer = Runtime().AddObserver<TEvPutObjectRequest>([&](auto& ev) {
+                changefeedUploads += TString(ev->Get()->Request.GetKey()).EndsWith("stream/changefeed_description.pb");
+            });
+            TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(Runtime());
+            TBlockEvents<TEvPutObjectRequest> metadata(Runtime(), [](auto& ev) {
+                return TString(ev->Get()->Request.GetKey()).EndsWith("backup/table/metadata.json");
+            });
+            const ui64 id = StartCompletionMarkerExport(true, false, withChangefeed);
+            Runtime().WaitFor("checksum start", [&] {
+                return !starts.empty();
+            });
+            const auto& start = starts.front();
+            Runtime().Send(new IEventHandle(start->Sender, start->GetRecipientRewrite(),
+                new NBackup::TEvTableChecksum::TEvResult(id, 0, Ydb::StatusIds::SUCCESS, {}, "")));
+            Runtime().Send(new IEventHandle(start->GetRecipientRewrite(), {}, new TEvents::TEvPoisonPill()));
+            Runtime().WaitFor("final metadata after data", [&] {
+                return !metadata.empty() && HasS3File("/backup/table/data_00.csv") &&
+                       HasS3File("/backup/table/data_01.csv");
+            });
+            const TString expected = metadata.front()->Get()->Body;
+            Runtime().GetAppData().FeatureFlags.SetEnableBackupTableChecksum(false);
+            if (withChangefeed) {
+                UNIT_ASSERT_VALUES_EQUAL(changefeedUploads, 1);
+            }
+            metadata.Stop();
+            if (dataShard) {
+                const auto shards =
+                    GetTableShards(Runtime(), TTestTxConfig::SchemeShard, Sprintf("/MyRoot/export-%" PRIu64 "/0", id));
+                RebootTablet(Runtime(), shards.front(), Runtime().AllocateEdgeActor());
+            } else {
+                RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+                metadata.Unblock();
+            }
+            Env().TestWaitNotification(Runtime(), id);
+            TestGetExport(Runtime(), id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(starts.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/backup/table/metadata.json"), expected);
+            if (withChangefeed) {
+                UNIT_ASSERT_VALUES_EQUAL(changefeedUploads, 2);
+            }
+            metadata.Unblock();
+        }
+
+        void RunTableChecksumMetadataRetry(bool checksumFile) {
+            EnvOptions().EnableChecksumsExport(true);
+            Env();
+            Runtime().GetAppData().FeatureFlags.SetEnableBackupTableChecksum(true);
+            using namespace NKikimr::NWrappers::NExternalStorage;
+            TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(Runtime());
+            TVector<TString> payloads;
+            bool injected = false;
+            auto observer = Runtime().AddObserver<TEvPutObjectRequest>([&](auto& ev) {
+                const TString key(ev->Get()->Request.GetKey());
+                const bool metadata = key.EndsWith("backup/table/metadata.json");
+                if (metadata) {
+                    payloads.push_back(ev->Get()->Body);
+                }
+                if (injected || !(checksumFile ? key.EndsWith("backup/table/metadata.json.sha256") : metadata)) {
+                    return;
+                }
+                injected = true;
+                Aws::Client::AWSError<Aws::S3::S3Errors> error(
+                    Aws::S3::S3Errors::SLOW_DOWN, "SlowDown", "Injected metadata failure", true);
+                error.SetResponseCode(Aws::Http::HttpResponseCode::SERVICE_UNAVAILABLE);
+                Runtime().Send(
+                    new IEventHandle(ev->Sender, ev->Recipient,
+                        new TEvPutObjectResponse(key, TEvPutObjectResponse::TOutcome(std::move(error)))), 0, true);
+                ev.Reset();
+            });
+            const ui64 id = StartCompletionMarkerExport();
+            Runtime().WaitFor("checksum start", [&] {
+                return !starts.empty();
+            });
+            const auto& start = starts.front();
+            Runtime().Send(new IEventHandle(start->Sender, start->GetRecipientRewrite(),
+                new NBackup::TEvTableChecksum::TEvResult(id, 0, Ydb::StatusIds::SUCCESS, {}, "")));
+            Runtime().Send(new IEventHandle(start->GetRecipientRewrite(), {}, new TEvents::TEvPoisonPill()));
+            Env().TestWaitNotification(Runtime(), id);
+            TestGetExport(Runtime(), id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(payloads.size(), 2);
+            UNIT_ASSERT(!payloads.front().empty());
+            UNIT_ASSERT_VALUES_EQUAL(payloads.front(), payloads.back());
+            UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/backup/table/metadata.json"), payloads.front());
+            UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/backup/table/metadata.json.sha256"),
+                NBackup::ComputeChecksum(payloads.front()) + " metadata.json");
+        }
+
+        void RunTableChecksumFailureDuringMultipart(bool atCompletion) {
+            Env();
+            Runtime().GetAppData().FeatureFlags.SetEnableBackupTableChecksum(true);
+            using namespace NKikimr::NWrappers::NExternalStorage;
+            auto observer = Runtime().AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+                auto& record = ev->Get()->Record;
+                if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
+                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                    UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
+                    if (tx.HasBackup()) {
+                        tx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
+                        tx.MutableBackup()->MutableS3Settings()->MutableLimits()->SetMinWriteBatchSize(1);
+                        record.SetTxBody(tx.SerializeAsString());
+                    }
+                }
+            });
+            TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(Runtime());
+            THolder<IEventHandle> lateResponse;
+            auto partReplies = Runtime().AddObserver<TEvUploadPartResponse>([&](auto& ev) {
+                if (!atCompletion && !lateResponse) {
+                    lateResponse.Reset(ev.Release());
+                }
+            });
+            auto completeReplies = Runtime().AddObserver<TEvCompleteMultipartUploadResponse>([&](auto& ev) {
+                if (atCompletion && !lateResponse) {
+                    lateResponse.Reset(ev.Release());
+                }
+            });
+            TBlockEvents<TEvDataShard::TEvS3Upload> aborts(Runtime(), [](auto& ev) {
+                return ev->Get()->Upload && ev->Get()->Upload->Status == NDataShard::TS3Upload::EStatus::Abort;
+            });
+            const ui64 id = StartCompletionMarkerExport(true, true);
+            Runtime().WaitFor("checksum and in-flight multipart request", [&] {
+                return !starts.empty() && bool(lateResponse);
+            });
+            const auto& start = starts.front();
+            Runtime().Send(new IEventHandle(start->Sender, start->GetRecipientRewrite(),
+                new NBackup::TEvTableChecksum::TEvResult(
+                    id, 0, Ydb::StatusIds::GENERIC_ERROR, {}, "Injected checksum failure")));
+            Runtime().Send(new IEventHandle(start->GetRecipientRewrite(), {}, new TEvents::TEvPoisonPill()));
+            Runtime().WaitFor("durable multipart abort", [&] {
+                return !aborts.empty();
+            });
+            partReplies.Remove();
+            completeReplies.Remove();
+            Runtime().Send(lateResponse.Release(), 0, true);
+            aborts.Stop().Unblock();
+            Env().TestWaitNotification(Runtime(), id);
+            const auto status = TestGetExport(Runtime(), id, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT_STRING_CONTAINS(status.DebugString(), "Injected checksum failure");
+            UNIT_ASSERT(!HasS3File("/backup/table/metadata.json"));
+            UNIT_ASSERT(!HasS3File("/backup/table/data_complete.json"));
         }
 
         void CheckCompletionMarkerContents(ui64 exportId) {
@@ -1722,6 +1887,107 @@ namespace {
 } // anonymous
 
 Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
+    // Query execution is covered by the service tests; hold its start here to
+    // deterministically exercise the uploader's independent completion branches
+    Y_UNIT_TEST(TableChecksumDoesNotBlockData) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableBackupTableChecksum(true);
+        using namespace NKikimr::NSchemeShard;
+        TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(Runtime());
+        const ui64 id = StartCompletionMarkerExport();
+        Runtime().WaitFor("data export while checksum is paused", [&] {
+            return !starts.empty() && HasS3File("/backup/table/data_00.csv") && HasS3File("/backup/table/data_01.csv");
+        });
+        UNIT_ASSERT(!HasS3File("/backup/table/metadata.json"));
+        UNIT_ASSERT(!HasS3File("/backup/table/data_complete.json"));
+        const auto& start = starts.front();
+        Runtime().Send(new IEventHandle(start->Sender, start->GetRecipientRewrite(),
+            new NBackup::TEvTableChecksum::TEvResult(id, 0, Ydb::StatusIds::SUCCESS, {}, "")));
+        Runtime().Send(new IEventHandle(start->GetRecipientRewrite(), {}, new TEvents::TEvPoisonPill()));
+        Env().TestWaitNotification(Runtime(), id);
+        TestGetExport(Runtime(), id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/backup/table/metadata.json"), true);
+        UNIT_ASSERT(metadata.GetTableChecksum());
+        UNIT_ASSERT_VALUES_EQUAL(metadata.GetTableChecksum()->Count, 0);
+        CheckCompletionMarkerContents(id);
+    }
+
+    Y_UNIT_TEST(TableChecksumBeforeData) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableBackupTableChecksum(true);
+        using namespace NKikimr::NWrappers::NExternalStorage;
+        TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(Runtime());
+        TBlockEvents<NKikimr::TEvDataShard::TEvStoreBackupChecksumRequest> checksum(Runtime());
+        TBlockEvents<TEvPutObjectRequest> data(Runtime(), [](auto& ev) {
+            return TString(ev->Get()->Request.GetKey()).EndsWith(".csv");
+        });
+        const ui64 id = StartCompletionMarkerExport();
+        Runtime().WaitFor("paused checksum and data", [&] {
+            return !starts.empty() && !data.empty();
+        });
+        const auto& start = starts.front();
+        Runtime().Send(new IEventHandle(start->Sender, start->GetRecipientRewrite(),
+            new NBackup::TEvTableChecksum::TEvResult(id, 0, Ydb::StatusIds::SUCCESS, {}, "")));
+        Runtime().Send(new IEventHandle(start->GetRecipientRewrite(), {}, new TEvents::TEvPoisonPill()));
+        Runtime().WaitFor("checksum complete while data is paused", [&] {
+            return !checksum.empty();
+        });
+        UNIT_ASSERT(!HasS3File("/backup/table/metadata.json"));
+        UNIT_ASSERT(!HasS3File("/backup/table/data_complete.json"));
+        checksum.Stop().Unblock();
+        data.Stop().Unblock();
+        Env().TestWaitNotification(Runtime(), id);
+        TestGetExport(Runtime(), id, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        CheckCompletionMarkerContents(id);
+    }
+
+    Y_UNIT_TEST(TableChecksumMetadataRecovery) {
+        RunTableChecksumMetadataRecovery(false);
+    }
+
+    Y_UNIT_TEST(TableChecksumDataShardRecovery) {
+        RunTableChecksumMetadataRecovery(true);
+    }
+
+    Y_UNIT_TEST(TableChecksumChangefeedRecovery) {
+        RunTableChecksumMetadataRecovery(true, true);
+    }
+
+    Y_UNIT_TEST(TableChecksumMetadataRetry) {
+        RunTableChecksumMetadataRetry(false);
+    }
+
+    Y_UNIT_TEST(TableChecksumMetadataChecksumRetry) {
+        RunTableChecksumMetadataRetry(true);
+    }
+
+    Y_UNIT_TEST(TableChecksumFailureDuringUploadPart) {
+        RunTableChecksumFailureDuringMultipart(false);
+    }
+
+    Y_UNIT_TEST(TableChecksumFailureDuringMultipartCompletion) {
+        RunTableChecksumFailureDuringMultipart(true);
+    }
+
+    Y_UNIT_TEST(TableChecksumCancellation) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableBackupTableChecksum(true);
+        using namespace NKikimr::NSchemeShard;
+        TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(Runtime());
+        const ui64 id = StartCompletionMarkerExport();
+        Runtime().WaitFor("paused checksum", [&] {
+            return !starts.empty();
+        });
+        TestCancelExport(Runtime(), id + 100, "/MyRoot", id);
+        Env().TestWaitNotification(Runtime(), id);
+        TestGetExport(Runtime(), id, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& start = starts.front();
+        Runtime().Send(new IEventHandle(start->Sender, start->GetRecipientRewrite(),
+            new NBackup::TEvTableChecksum::TEvResult(id, 0, Ydb::StatusIds::SUCCESS, {}, "")));
+        TestGetExport(Runtime(), id, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT(!HasS3File("/backup/table/data_complete.json"));
+    }
+
     Y_UNIT_TEST(CompletionMarkerDestination) {
         struct TCase {
             TString Destination;

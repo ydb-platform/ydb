@@ -5,15 +5,17 @@ import json
 import logging
 import os
 import time
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import urlopen
 
 import grpc
 import pytest
+import yaml
 
 from ydb.public.api.grpc.draft import ydb_distributed_storage_v1_pb2_grpc as distributed_storage_grpc
+from ydb.public.api.protos.draft import ydb_dynamic_config_pb2 as dynamic_config
 from ydb.public.api.protos.draft import ydb_distributed_storage_pb2 as distributed_storage
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+from ydb.tests.library.clients.kikimr_dynconfig_client import DynConfigClient
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
@@ -31,7 +33,6 @@ HIGH_RATE = 16 * MIB
 LOW_RATE_WINDOW_SECONDS = 5
 HIGH_RATE_WINDOW_SECONDS = 2
 
-REPL_RATE_CONTROL = "VDiskControls.ReplTotalRequestBytesPerSecond"
 REPL_BYTES_COUNTER = "ReplVGetBytesReceived"
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,16 @@ def cluster():
         yield instance
     finally:
         instance.stop()
+
+
+@pytest.fixture(scope="function")
+def dynconfig_client(cluster):
+    node = cluster.nodes[1]
+    client = DynConfigClient(node.host, node.grpc_port)
+    try:
+        yield client
+    finally:
+        client.close()
 
 
 def stream_vdisks(stub):
@@ -139,14 +150,31 @@ def reassign_vdisk(stub, vdisk, target_pdisk):
     return result.target_slot_id
 
 
-def set_icb(node, name, value):
-    url = "http://{}:{}/actors/icb".format(node.host, node.mon_port)
-    data = urlencode({name: value}).encode("ascii")
-    with urlopen(Request(url, data=data, method="POST"), timeout=30) as response:
-        assert response.status == 200
-        body = response.read().decode("utf-8")
-    expected_input = "name='{}' type='text' value='{}'".format(name, value)
-    assert expected_input in body, "ICB did not apply {}={}".format(name, value)
+def make_dynamic_config(client):
+    response = client.fetch_startup_config()
+    assert response.operation.status == StatusIds.SUCCESS, response.operation
+
+    result = dynamic_config.FetchStartupConfigResult()
+    assert response.operation.result.Unpack(result), response.operation.result
+    return {
+        "metadata": {
+            "kind": "MainConfig",
+            "version": 0,
+            "cluster": "",
+        },
+        "config": yaml.safe_load(result.config),
+    }
+
+
+def set_replication_rate(client, config, value):
+    blob_storage_config = config["config"].setdefault("blob_storage_config", {})
+    service_set = blob_storage_config.setdefault("service_set", {})
+    repl_broker_config = service_set.setdefault("repl_broker_config", {})
+    repl_broker_config["total_request_bytes_per_second"] = value
+
+    response = client.replace_config(yaml.safe_dump(config))
+    assert response.operation.status == StatusIds.SUCCESS, response.operation
+    config["metadata"]["version"] += 1
 
 
 def read_counter(node, sensor_name):
@@ -238,7 +266,10 @@ def write_test_data(cluster, table_path):
     return value, keys
 
 
-def test_replication_rate_control_is_applied_at_runtime(cluster):
+def test_replication_rate_control_is_applied_at_runtime(cluster, dynconfig_client):
+    config = make_dynamic_config(dynconfig_client)
+    set_replication_rate(dynconfig_client, config, LOW_RATE)
+
     table_path = "/Root/replication-rate-control"
     value, keys = write_test_data(cluster, table_path)
 
@@ -251,7 +282,6 @@ def test_replication_rate_control_is_applied_at_runtime(cluster):
         target_pdisk = find_target_pdisk(cluster, group_vdisks)
         target_node = cluster.nodes[target_pdisk[0]]
 
-        set_icb(target_node, REPL_RATE_CONTROL, LOW_RATE)
         initial_counter = read_counter(target_node, REPL_BYTES_COUNTER)
         target_slot = reassign_vdisk(stub, source_vdisk, target_pdisk)
 
@@ -279,7 +309,7 @@ def test_replication_rate_control_is_applied_at_runtime(cluster):
             % (low_rate / MIB, LOW_RATE / MIB)
         )
 
-        set_icb(target_node, REPL_RATE_CONTROL, HIGH_RATE)
+        set_replication_rate(dynconfig_client, config, HIGH_RATE)
         wait_for_rate_above(target_node, REPL_BYTES_COUNTER, low_rate * 2.5)
         high_rate = measure_rate(target_node, REPL_BYTES_COUNTER, HIGH_RATE_WINDOW_SECONDS)
         logger.info(
@@ -288,7 +318,7 @@ def test_replication_rate_control_is_applied_at_runtime(cluster):
             high_rate / MIB,
         )
         assert high_rate >= low_rate * 2.5, (
-            "Replication rate did not increase enough after the runtime ICB update: "
+            "Replication rate did not increase enough after the runtime dynconfig update: "
             "low %.2f MiB/s, high %.2f MiB/s"
             % (low_rate / MIB, high_rate / MIB)
         )

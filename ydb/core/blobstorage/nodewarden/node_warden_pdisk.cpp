@@ -463,29 +463,9 @@ namespace NKikimr::NStorage {
         }
 
         TPDiskCategory category(record.Record.GetPDiskCategory());
-        const TControlWrapper *readBytesPerSecond = nullptr;
-        const TControlWrapper *writeBytesPerSecond = nullptr;
-        switch (category.Type()) {
-            case NPDisk::DEVICE_TYPE_ROT:
-                readBytesPerSecond = &ReplPDiskReadBytesPerSecondHDD;
-                writeBytesPerSecond = &ReplPDiskWriteBytesPerSecondHDD;
-                break;
-            case NPDisk::DEVICE_TYPE_SSD:
-                readBytesPerSecond = &ReplPDiskReadBytesPerSecondSSD;
-                writeBytesPerSecond = &ReplPDiskWriteBytesPerSecondSSD;
-                break;
-            case NPDisk::DEVICE_TYPE_NVME:
-                readBytesPerSecond = &ReplPDiskReadBytesPerSecondNVME;
-                writeBytesPerSecond = &ReplPDiskWriteBytesPerSecondNVME;
-                break;
-            default:
-                break;
-        }
-        if (readBytesPerSecond) {
-            record.ReplPDiskReadQuoter = std::make_shared<TReplQuoter>(*readBytesPerSecond);
-        }
-        if (writeBytesPerSecond) {
-            record.ReplPDiskWriteQuoter = std::make_shared<TReplQuoter>(*writeBytesPerSecond);
+        if (const auto it = ReplPDiskRates.find(category.Type()); it != ReplPDiskRates.end()) {
+            record.ReplPDiskReadQuoter = std::make_shared<TReplQuoter>(it->second.ReadBytesPerSecond);
+            record.ReplPDiskWriteQuoter = std::make_shared<TReplQuoter>(it->second.WriteBytesPerSecond);
         }
 
         const ui32 pdiskID = pdisk.GetPDiskID();

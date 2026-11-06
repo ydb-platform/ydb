@@ -1,7 +1,5 @@
 #pragma once
 
-#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
-
 #include <functional>
 
 namespace NKikimr {
@@ -17,24 +15,15 @@ namespace NKikimr {
         TAtomicMonotonic NextQueueItemTimestamp;
         // End of last throttled interval
         TAtomicMonotonic ThrottledUntilTimestamp;
-        TControlWrapper DefaultBytesPerSecond;
+        std::atomic_uint64_t DefaultBytesPerSecond = 0;
 
     public:
-        TEventsQuoter()
-            : DefaultBytesPerSecond(0)
-        {
+        TEventsQuoter() {
             NextQueueItemTimestamp = TMonotonic::Zero();
             ThrottledUntilTimestamp = TMonotonic::Zero();
         }
 
         TEventsQuoter(ui64 bytesPerSecond)
-            : DefaultBytesPerSecond(bytesPerSecond)
-        {
-            NextQueueItemTimestamp = TMonotonic::Zero();
-            ThrottledUntilTimestamp = TMonotonic::Zero();
-        }
-
-        TEventsQuoter(const TControlWrapper& bytesPerSecond)
             : DefaultBytesPerSecond(bytesPerSecond)
         {
             NextQueueItemTimestamp = TMonotonic::Zero();
@@ -60,7 +49,7 @@ namespace NKikimr {
         }
 
         void UpdateBytesPerSecond(ui64 defaultBytesPerSecond) {
-            DefaultBytesPerSecond = defaultBytesPerSecond;
+            DefaultBytesPerSecond.store(defaultBytesPerSecond);
         }
 
         static void QuoteMessage(const TPtr& quoter, std::unique_ptr<IEventHandle> ev, ui64 bytes, ui64 bytesPerSecond = 0,
@@ -106,7 +95,7 @@ namespace NKikimr {
 
     private:
         ui64 GetBytesRate(ui64 bytesPerSecond = 0) const {
-            return bytesPerSecond ? bytesPerSecond : static_cast<ui64>(DefaultBytesPerSecond);
+            return bytesPerSecond ? bytesPerSecond : DefaultBytesPerSecond.load();
         }
     };
 

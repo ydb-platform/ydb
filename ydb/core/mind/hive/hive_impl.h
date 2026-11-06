@@ -135,6 +135,12 @@ TString GetResourceValuesHtml(const TResourceRawValues& values);
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values);
 NJson::TJsonValue GetResourceValuesJson(const TResourceRawValues& values, const TResourceRawValues& maximum);
 TString GetResourceValuesHtml(const NKikimrTabletBase::TMetrics& values);
+
+// value of a THiveConfig field in single-line text form; a repeated field is rendered as [a, b, c], an absent singular field as <unset>
+TString GetHiveConfigFieldText(const NKikimrConfig::THiveConfig& config, const google::protobuf::FieldDescriptor* field);
+
+// "Field: from -> to" for every field that differs between the two configs, "; "-separated; empty when they are equal
+TString GetHiveConfigDiffText(const NKikimrConfig::THiveConfig& from, const NKikimrConfig::THiveConfig& to);
 TString GetResourceValuesHtml(const TMetrics& values);
 NJson::TJsonValue GetResourceValuesJson(const NKikimrTabletBase::TMetrics& values);
 ui64 GetReadThroughput(const NKikimrTabletBase::TMetrics& values);
@@ -255,10 +261,12 @@ protected:
 
     bool IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool IsItPossibleToStartBalancer(EBalancerType balancerType);
-    void StartHiveBalancer(TBalancerSettings&& settings);
+    // balancerType is empty when the suppression is not about a specific type
+    void LogBalancerNotStarted(const TString& balancerType, EBalancerSuppressReason reason);
+    bool StartHiveBalancer(TBalancerSettings&& settings);
     void StartHiveDrain(TNodeId nodeId, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
-    void StartHiveStorageBalancer(TStorageBalancerSettings settings);
+    bool StartHiveStorageBalancer(TStorageBalancerSettings settings);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
@@ -400,6 +408,9 @@ protected:
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     std::unordered_set<TNodeId> BalancerNodes; // all nodes, affected by running balancers
     EBalancerType LastBalancerTrigger = EBalancerType::Manual;
+    ui32 NextBalancerRunId = 0; // stamps the tablets a balancer run counted, see TTabletInfo::BalancerRunId
+    // last "balancer not started" line written at INFO, repeats of it go to DEBUG
+    std::optional<std::pair<TString, EBalancerSuppressReason>> LastBalancerSuppression;
     std::array<TBalancerStats, EBalancerTypeSize> BalancerStats;
     NKikimrHive::EMigrationState MigrationState = NKikimrHive::EMigrationState::MIGRATION_UNKNOWN;
     i32 MigrationProgress = 0;

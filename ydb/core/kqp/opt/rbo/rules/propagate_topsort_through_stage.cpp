@@ -159,12 +159,10 @@ bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusiveP
         return false;
     }
 
-    // Try to match pk prefix.
+    // Try to match pk prefix. The key is unique, so sort columns after the full key cannot change the order.
     const auto& keyColumns = metadataPtr->KeyColumnNames;
-    if (keyColumns.size() < sortElements.size()) {
-        return false;
-    }
-    for (ui32 i = 0, e = sortElements.size(); i < e; ++i) {
+    const auto keyPrefixLen = std::min(keyColumns.size(), sortElements.size());
+    for (size_t i = 0; i < keyPrefixLen; ++i) {
         if (keyColumns[i] != registry.Get(sortElements[i].first).GetColumnName()) {
             return false;
         }

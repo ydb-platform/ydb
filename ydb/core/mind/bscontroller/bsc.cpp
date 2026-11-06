@@ -6,9 +6,11 @@
 #include "console_interaction.h"
 #include "group_geometry_info.h"
 #include "group_layout_checker.h"
+#include "layout_helpers.h"
 #include "util.h"
 
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/blobstorage/base/storage_pool_pile_override.h>
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
@@ -107,24 +109,44 @@ bool TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
     return Status != prev;
 }
 
-void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageController *self,
-        TBlobStorageGroupInfo::TTopology *topology, const std::function<TGroupGeometryInfo()>& getGeom) {
+void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageController* self,
+        const std::function<TGroupGeometryInfo()>& getGeom) {
     LayoutCorrect = true;
     if (VDisksInGroup) {
-        NLayoutChecker::TGroupLayout layout(*topology);
         NLayoutChecker::TDomainMapper mapper;
-        auto geom = getGeom();
+        const TGroupGeometryInfo geom = getGeom();
+        TGroupMapper::TGroupDefinition group;
+        geom.ResizeGroup(group);
+        std::unordered_map<TPDiskId, NLayoutChecker::TPDiskLayoutPosition> pdisks;
 
-        for (size_t index = 0; index < VDisksInGroup.size(); ++index) {
-            const TVSlotInfo *slot = VDisksInGroup[index];
-            TPDiskId pdiskId = slot->VSlotId.ComprisingPDiskId();
+        for (const TVSlotInfo* slot : VDisksInGroup) {
+            const TPDiskId pdiskId = slot->VSlotId.ComprisingPDiskId();
             const auto& location = self->HostRecords->GetLocation(pdiskId.NodeId);
-            const bool decommitted = slot->PDisk && slot->PDisk->Decommitted();
-            const std::optional<TString> diskScope = slot->PDisk ? slot->PDisk->DiskScope : std::nullopt;
-            layout.AddDisk({mapper, location, diskScope, pdiskId, geom}, index, decommitted);
+            std::optional<TString> diskScope;
+            if (slot->PDisk) {
+                diskScope = slot->PDisk->DiskScope;
+            }
+            const TVDiskIdShort vdiskId = slot->GetShortVDiskId();
+            group[vdiskId.FailRealm][vdiskId.FailDomain][vdiskId.VDisk] = pdiskId;
+            pdisks.emplace(pdiskId, NLayoutChecker::TPDiskLayoutPosition(mapper, location, diskScope, pdiskId, geom));
         }
 
-        LayoutCorrect = layout.IsCorrect();
+        TString error;
+        LayoutCorrect = CheckLayoutByGroupDefinition(group, pdisks, geom, self->AllowMultipleRealmsOccupation, error);
+    }
+}
+
+void TBlobStorageController::UpdateGroupLayoutStatus() {
+    for (const auto& [groupId, group] : GroupMap) {
+        group->CalculateLayoutStatus(this, [&] {
+            return TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
+                GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
+        });
+        SysViewChangedGroups.insert(groupId);
+    }
+    for (auto& [groupId, group] : StaticGroups) {
+        group.UpdateLayoutCorrect(this);
+        SysViewChangedGroups.insert(groupId);
     }
 }
 
@@ -447,7 +469,7 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
                 return google::protobuf::util::MessageDifferencer::Equals(a, b);
             })) {
             for (auto& [groupId, group] : GroupMap) {
-                group->CalculateLayoutStatus(this, group->Topology.get(), [&] {
+                group->CalculateLayoutStatus(this, [&] {
                     return TGroupGeometryInfo::FromStoragePool(group->Topology->GType,
                         GetStoragePoolForPile(group->StoragePoolId, group->BridgePileId));
                 });
@@ -1427,32 +1449,49 @@ void TBlobStorageController::TStaticGroupInfo::UpdateStatus(TMonotonic mono, TBl
     };
 }
 
-void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageController *controller) {
+TGroupGeometryInfo TBlobStorageController::GetStaticGroupGeometry(TBlobStorageGroupType type, TBridgePileId pileId) const {
+    auto selfManagementConfig = StorageConfig->GetSelfManagementConfig();
+    if (BridgeInfo) {
+        if (const TBridgeInfo::TPile* pile = BridgeInfo->FindPile(pileId)) {
+            if (const auto* rule = FindStoragePoolPileOverride(StorageConfig->GetBlobStorageConfig(),
+                    pile->Name, std::nullopt)) {
+                ApplyStoragePoolPileOverride(selfManagementConfig, *rule);
+            }
+        }
+    }
+    return TGroupGeometryInfo(type, selfManagementConfig.GetGeometry());
+}
+
+void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageController* controller) {
     LayoutCorrect = true;
     if (!Info || (Info->IsBridged() && !Info->IsInlinePile()) || !controller->SelfManagementEnabled) {
         return;
     }
 
-    NLayoutChecker::TGroupLayout layout(Info->GetTopology());
     NLayoutChecker::TDomainMapper mapper;
-    TGroupGeometryInfo geom(Info->Type, controller->SelfManagementEnabled
-        ? controller->StorageConfig->GetSelfManagementConfig().GetGeometry()
-        : NKikimrBlobStorage::TGroupGeometry());
+    const TGroupGeometryInfo geom = controller->GetStaticGroupGeometry(Info->Type, Info->GetBridgePileId());
+    TGroupMapper::TGroupDefinition group;
+    geom.ResizeGroup(group);
+    std::unordered_map<TPDiskId, NLayoutChecker::TPDiskLayoutPosition> pdisks;
 
-    for (size_t i = 0; i < Info->GetTotalVDisksNum(); ++i) {
-        const auto& [nodeId, pdiskId, vdiskSlotId] = DecomposeVDiskServiceId(Info->GetDynamicInfo().ServiceIdForOrderNumber[i]);
-        TPDiskId fullPDiskId(nodeId, pdiskId);
+    for (ui32 orderNumber = 0; orderNumber < Info->GetTotalVDisksNum(); ++orderNumber) {
+        const auto [nodeId, pdiskId, vslotId] = DecomposeVDiskServiceId(
+            Info->GetDynamicInfo().ServiceIdForOrderNumber[orderNumber]);
+        const TPDiskId fullPDiskId(nodeId, pdiskId);
         std::optional<TString> diskScope;
         if (const TPDiskInfo* pdiskInfo = controller->FindPDisk(fullPDiskId)) {
             diskScope = pdiskInfo->DiskScope;
         } else if (const auto it = controller->StaticPDisks.find(fullPDiskId); it != controller->StaticPDisks.end()) {
             diskScope = it->second.DiskScope;
         }
-        layout.AddDisk({mapper, controller->HostRecords->GetLocation(nodeId), diskScope,
-            {nodeId, pdiskId}, geom}, i, false);
+        const TVDiskIdShort vdiskId = Info->GetTopology().GetVDiskId(orderNumber);
+        group[vdiskId.FailRealm][vdiskId.FailDomain][vdiskId.VDisk] = fullPDiskId;
+        pdisks.emplace(fullPDiskId, NLayoutChecker::TPDiskLayoutPosition(mapper,
+            controller->HostRecords->GetLocation(fullPDiskId.NodeId), diskScope, fullPDiskId, geom));
     }
 
-    LayoutCorrect = layout.IsCorrect();
+    TString error;
+    LayoutCorrect = CheckLayoutByGroupDefinition(group, pdisks, geom, controller->AllowMultipleRealmsOccupation, error);
 }
 
 namespace {

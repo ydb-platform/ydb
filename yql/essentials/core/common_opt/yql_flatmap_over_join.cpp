@@ -1299,12 +1299,6 @@ bool IsExtractOrPredicatesOverEquiJoinEnabled(const TTypeAnnotationContext* type
     return IsOptimizerEnabled<Flag>(*types) && !IsOptimizerDisabled<Flag>(*types);
 }
 
-bool IsNormalizeEqualityFilterOverJoinEnabled(const TTypeAnnotationContext* types) {
-    YQL_ENSURE(types);
-    static const char Flag[] = "NormalizeEqualityFilterOverJoin";
-    return !IsOptimizerDisabled<Flag>(*types);
-}
-
 struct TExtraInputPredicates {
     TExprNode::TPtr Row;
     TExprNodeList Preds;
@@ -2052,12 +2046,9 @@ TExprBase FlatMapOverEquiJoin(
             }
         }
 
-        if (IsNormalizeEqualityFilterOverJoinEnabled(types)) {
-            auto newNode = NormalizeEqualityFilterOverJoin(node, labels, backRenameMap, parentsMap, ctx);
-            if (newNode.Raw() != node.Raw()) {
-                YQL_CLOG(DEBUG, Core) << "NormalizeEqualityFilterOverJoin";
-                return newNode;
-            }
+        if (auto newNode = NormalizeEqualityFilterOverJoin(node, labels, backRenameMap, parentsMap, ctx); newNode.Raw() != node.Raw()) {
+            YQL_CLOG(DEBUG, Core) << "NormalizeEqualityFilterOverJoin";
+            return newNode;
         }
 
         if (IsEqualityFilterOverJoinEnabled(types)) {

@@ -30,6 +30,23 @@ namespace NKikimr::NGRpcService {
         return PathNormalizer_ ? PathNormalizer_->NormalizePath(path) : TString(path);
     }
 
+    TString IRequestCtxBaseMtSafe::NormalizePath(TStringBuf path, TStringBuf base) const {
+        TString resolved(path);
+        const auto* appData = HasAppData() ? AppData() : nullptr;
+        if (appData && appData->FeatureFlags.GetEnableRelativePaths() && !path.empty() && !path.StartsWith('/')) {
+            auto database = GetDatabaseName().GetOrElse(TString());
+            if (const auto header = GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER); header && !header->empty() && appData->DomainsInfo && appData->DomainsInfo->Domain) {
+                database = PrependDomainIfNeeded("/" + appData->DomainsInfo->Domain->Name, CGIUnescapeRet(*header));
+            }
+            resolved = PrependDomainIfNeeded(
+                base.empty() ? database : PrependDomainIfNeeded(database, base), path);
+            if (resolved.StartsWith('/')) {
+                resolved = CanonizePath(resolved);
+            }
+        }
+        return PathNormalizer_ ? PathNormalizer_->NormalizePath(resolved) : resolved;
+    }
+
     void IRequestProxyCtx::InitializePathNormalization(
         std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer)
     {

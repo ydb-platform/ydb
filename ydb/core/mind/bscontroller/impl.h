@@ -776,8 +776,7 @@ public:
         // group layout status: whether it is positioned correctly
         bool LayoutCorrect = false;
 
-        void CalculateLayoutStatus(TBlobStorageController *self, TBlobStorageGroupInfo::TTopology *topology,
-            const std::function<TGroupGeometryInfo()>& getGeom);
+        void CalculateLayoutStatus(TBlobStorageController* self, const std::function<TGroupGeometryInfo()>& getGeom);
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -2062,6 +2061,8 @@ private:
     THostRecordMap HostRecords;
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void SetHostRecords(THostRecordMap hostRecords);
+    void UpdateGroupLayoutStatus();
+    TGroupGeometryInfo GetStaticGroupGeometry(TBlobStorageGroupType type, TBridgePileId pileId) const;
 
 public:
     // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move
@@ -2299,6 +2300,13 @@ private:
     TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
     TMonotonic SyncersRetryAt = TMonotonic::Max(); // when ProcessSyncers is scheduled to start the syncers that failed
 
+    // the limit for the whole cluster gets divided equally between the nodes hosting syncers; the nodes get a new share
+    // only when one of them starts hosting or stops doing so, or when the limit changes
+    ui64 BridgeSyncTotalRate = 0;
+    std::optional<ui64> BridgeSyncNodeRate; // unset until nodes have had time to report their syncers after BSC start
+    bool BridgeSyncNodeRatesDirty = true; // syncer placement or the limit has changed since BridgeSyncNodeRate was found
+    THashMap<TNodeId, ui64> SentBridgeSyncNodeRates; // the rate last sent to a node by this BSC instance
+
     bool CheckingUnsyncedBridgePiles = false;
     bool NotifyBridgeSyncFinishedErrors = false;
     bool RecheckUnsyncedBridgePiles = false;
@@ -2409,6 +2417,10 @@ private:
     void CheckSyncerDisconnectedNodes();
 
     void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});
+    void SendSyncersToNodes(const THashSet<TNodeId>& nodeIds);
+    bool IsNodeHostingSyncers(TNodeId nodeId) const;
+    void UpdateBridgeSyncNodeRates(const THashSet<TNodeId>& nodesToUpdate);
+    void FillBridgeSyncNodeRate(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update);
     void HandleRetrySyncers();
 
     void SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,

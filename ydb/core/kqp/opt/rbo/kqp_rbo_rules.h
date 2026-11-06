@@ -375,6 +375,28 @@ class TPushFilterThroughAggregateRule : public ISimplifiedRule {
 };
 
 /**
+ * Push filter into every input of union all.
+ */
+class TPushFilterThroughUnionAllRule : public ISimplifiedRule {
+  public:
+    TPushFilterThroughUnionAllRule() : ISimplifiedRule("Push filter through union all", ERuleProperties::RequireParents) {}
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Add a top sort to every input of union all, keeping the top sort above it.
+ */
+class TPushTopSortThroughUnionAllRule : public ISimplifiedRule {
+  public:
+    TPushTopSortThroughUnionAllRule() : ISimplifiedRule("Push top sort through union all", ERuleProperties::RequireParents) {}
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Extract common conjuncts from OR branches to expose top-level filters.
  */
 class TExtractCommonConjunctsRule : public ISimplifiedRule {

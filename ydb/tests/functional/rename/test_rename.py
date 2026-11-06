@@ -222,8 +222,6 @@ CLUSTER_CONFIG = dict(
         'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
         'SCHEME_BOARD_POPULATOR': LogLevels.WARN,
         'SCHEME_BOARD_SUBSCRIBER': LogLevels.WARN,
-        'TX_DATASHARD': LogLevels.DEBUG,
-        'CHANGE_EXCHANGE': LogLevels.DEBUG,
     },
 )
 

@@ -5,7 +5,7 @@ import logging
 import time
 
 from ydb.tests.library.common.delayed import wait_tablets_state_by_id
-from ydb.tests.library.common.msgbus_types import MessageBusStatus, EReplyStatus
+from ydb.tests.library.common.msgbus_types import MessageBusStatus, EReplyStatus, SchemeStatus
 from ydb.tests.library.common.protobuf import TCmdCreateTablet
 from ydb.tests.library.common.types import TabletTypes, TabletStates
 from ydb.tests.library.matchers.response_matchers import DynamicFieldsProtobufMatcher
@@ -58,12 +58,27 @@ def create_tablets_and_wait_for_start(
     return all_tablet_ids
 
 
+def get_kv_volume_tablet_ids(kikimr_client, path, number_of_tablets):
+    # Whiteboard discovery can return only part of a newly created volume.
+    description = kikimr_client.describe(path, token='')
+    assert_that(description.Status == MessageBusStatus.MSTATUS_OK)
+    assert_that(description.SchemeStatus == SchemeStatus.StatusSuccess)
+    volume = description.PathDescription.SolomonDescription
+    all_tablet_ids = sorted(partition.TabletId for partition in volume.Partitions)
+    assert_that(volume.PartitionCount == number_of_tablets)
+    assert_that(len(all_tablet_ids) == number_of_tablets)
+    assert_that(len(set(all_tablet_ids)) == number_of_tablets)
+    assert_that(all(all_tablet_ids))
+
+    return all_tablet_ids
+
+
 def create_kv_tablets_and_wait_for_start(
         kikimr_client, kv_client, swagger_client, number_of_tablets, path, timeout_seconds=120, skip_generations=None
 ):
     response = kv_client.create_tablets(number_of_tablets, path)
     assert_that(response.operation.status == StatusIds.SUCCESS)
-    all_tablet_ids = get_kv_tablet_ids(swagger_client)
+    all_tablet_ids = get_kv_volume_tablet_ids(kikimr_client, path, number_of_tablets)
     wait_tablets_state_by_id(
         kikimr_client,
         TabletStates.Active,
@@ -75,7 +90,6 @@ def create_kv_tablets_and_wait_for_start(
 
 
 def get_kv_tablet_ids(swagger_client, retry_count=4, retry_min_sleep=0.1, retry_max_sleep=5):
-    data = swagger_client.tablet_info('KeyValue')
     tablet_state_info = {}
     retries = retry_count
     next_sleep = retry_min_sleep

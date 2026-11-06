@@ -1,5 +1,7 @@
 #pragma once
 
+// CI probe: rebuild common-header consumers with directory test outputs. Do not merge.
+
 // DO_NOT_STYLE
 
 #include "platform.h"

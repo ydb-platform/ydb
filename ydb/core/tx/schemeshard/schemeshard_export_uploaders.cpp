@@ -638,7 +638,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
                 if (!NYdb::NBackup::PrintProto(semaphore, content)) {
                     return Finish(false, "Cannot serialize coordination node semaphore");
                 }
-                if (!AddFileWithChecksum(prefix + "/" + NYdb::NDump::NFiles::CreateSemaphore().FileName,
+                if (!AddFileWithChecksum(prefix + "/create_semaphore.pb",
                         content, NBackup::EBackupFileType::CoordinationNodeCreateSemaphore, index))
                 {
                     return;

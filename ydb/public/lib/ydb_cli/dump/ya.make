@@ -33,7 +33,6 @@ GENERATE_ENUM_SERIALIZATION(dump.h)
 END()
 
 RECURSE_FOR_TESTS(
-    files
     util
     ut
 )

@@ -210,6 +210,10 @@ namespace NKikimr::NBsController {
                             db.Table<T>().Key(true).Update<T::BridgeSyncTotalRate>(Self->BridgeSyncTotalRate);
                             Self->BridgeSyncNodeRatesDirty = true;
                         }
+                        for (ui32 value : settings.GetBridgeSyncMaxSyncers()) {
+                            Self->BridgeSyncMaxSyncers = value;
+                            db.Table<T>().Key(true).Update<T::BridgeSyncMaxSyncers>(Self->BridgeSyncMaxSyncers);
+                        }
                         return;
                     }
 

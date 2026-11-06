@@ -619,6 +619,9 @@ message TUpdateSettings {
     repeated NKikimrBlobStorage.TPDiskSpaceColor.E DatabaseSpaceUnblockColor = 17;
     // limit of bridge syncer reads over the links between piles for the whole cluster, 0 means no limit
     repeated uint64 BridgeSyncTotalRateBytesPerSecond = 18;
+    // limit of bridge syncers running at once for the whole cluster, 0 means no limit; syncers of static groups count, but
+    // don't wait for their turn
+    repeated uint32 BridgeSyncMaxSyncers = 19;
 }
 
 message TBscConfig {
@@ -643,6 +646,7 @@ message TBscConfig {
     optional NKikimrBlobStorage.TPDiskSpaceColor.E DatabaseSpaceBlockColor = 18;
     optional NKikimrBlobStorage.TPDiskSpaceColor.E DatabaseSpaceUnblockColor = 19;
     optional uint64 BridgeSyncTotalRateBytesPerSecond = 20; // see TUpdateSettings
+    optional uint32 BridgeSyncMaxSyncers = 21; // see TUpdateSettings
 }
 
 message TBoxStoragePoolId {

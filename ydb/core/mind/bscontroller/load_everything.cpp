@@ -107,6 +107,7 @@ public:
                 Self->DatabaseSpace.SetThresholds(state.GetValue<T::DatabaseSpaceBlockColor>(),
                     state.GetValue<T::DatabaseSpaceUnblockColor>());
                 Self->BridgeSyncTotalRate = state.GetValue<T::BridgeSyncTotalRate>();
+                Self->BridgeSyncMaxSyncers = state.GetValue<T::BridgeSyncMaxSyncers>();
                 Self->GroupLayoutSanitizerEnabled = state.GetValue<T::GroupLayoutSanitizer>();
                 Self->AllowMultipleRealmsOccupation = state.GetValueOrDefault<T::AllowMultipleRealmsOccupation>();
                 Self->SysViewChangedSettings = true;

@@ -2778,9 +2778,14 @@ Y_UNIT_TEST_SUITE(TDqHashJoinResourceKeyTest) {
                 columns.push_back(pb.LastScalarIndexBlock());
             }
             auto* multi = pb.NewMultiType(columns);
-            auto* inputType = BlockJoin ? pb.NewStreamType(multi) : pb.NewFlowType(multi);
-            TCallableBuilder builder(*setup.Env, "ExternalNode", inputType);
-            return TRuntimeNode(builder.Build(), false);
+            // ExternalNode is a stream node. Scalar hash join needs a wide flow, which ToFlow
+            // produces from a wide stream. A flow-typed ExternalNode is not IComputationWideFlowNode.
+            TCallableBuilder builder(*setup.Env, "ExternalNode", pb.NewStreamType(multi));
+            TRuntimeNode stream(builder.Build(), false);
+            if constexpr (BlockJoin) {
+                return stream;
+            }
+            return pb.ToFlow(stream, {});
         };
         auto* returnType = BlockJoin
             ? pb.NewStreamType(pb.NewMultiType({pb.NewBlockType(returnItemType, TBlockType::EShape::Many),

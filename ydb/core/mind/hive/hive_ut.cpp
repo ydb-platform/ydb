@@ -39,6 +39,7 @@
 #include <util/system/sanitizers.h>
 
 #include <google/protobuf/text_format.h>
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #ifdef NDEBUG
@@ -8365,14 +8366,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 testerTablet = MakeTabletID(false, 1);
         const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
         runtime.EnableScheduleForActor(hiveActor);
-        MakeSureTabletIsUp(runtime, hiveTablet, 0);
-        TActorId sender = runtime.AllocateEdgeActor(0);
 
+        // Connecting to Hive can process the initial TEvSyncTablets, so wait for it first.
         {
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvLocal::EvSyncTablets);
             runtime.DispatchEvents(options);
         }
+
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TActorId sender = runtime.AllocateEdgeActor(0);
 
         std::vector<ui64> tablets;
 

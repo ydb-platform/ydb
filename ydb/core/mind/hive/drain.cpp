@@ -331,31 +331,25 @@ std::unordered_set<TBridgePileId> THive::GetPilesWithTabletsToDrain() {
     if (!BridgeInfo) {
         return piles;
     }
-    auto addNode = [&](const TTabletInfo& tablet, const TNodeInfo* node) {
-        if (node == nullptr) {
-            return;
+    auto hasTabletsToDrain = [](const TNodeInfo& node) {
+        for (const auto& [state, tablets] : node.Tablets) {
+            for (const auto* tablet : tablets) {
+                if (tablet->CanBeAlive() &&
+                    !(tablet->IsLeader() && tablet->AsLeader().IsLockedToActor()) &&
+                    !tablet->GetNodeFilter().IsAllowedPile(node.BridgePileId)) {
+                    return true;
+                }
+            }
         }
-        const auto it = BridgePiles.find(node->BridgePileId);
-        if (it != BridgePiles.end() && it->second.Drain && !tablet.GetNodeFilter().IsAllowedPile(node->BridgePileId)) {
-            piles.insert(node->BridgePileId);
-        }
+        return false;
     };
-    auto addTablet = [&](const TTabletInfo& tablet) {
-        if (tablet.IsLeader() && tablet.AsLeader().IsLockedToActor()) {
-            return;
+    for (const auto& [nodeId, node] : Nodes) {
+        const auto it = BridgePiles.find(node.BridgePileId);
+        if (it == BridgePiles.end() || !it->second.Drain || piles.contains(node.BridgePileId)) {
+            continue;
         }
-        if (tablet.CanBeAlive()) {
-            addNode(tablet, tablet.Node);
-        }
-        // A fast move may still be waiting to stop its previous instance.
-        if (tablet.LastNodeId != 0) {
-            addNode(tablet, FindNode(tablet.LastNodeId));
-        }
-    };
-    for (const auto& [tabletId, tablet] : Tablets) {
-        addTablet(tablet);
-        for (const auto& follower : tablet.Followers) {
-            addTablet(follower);
+        if (hasTabletsToDrain(node)) {
+            piles.insert(node.BridgePileId);
         }
     }
     return piles;

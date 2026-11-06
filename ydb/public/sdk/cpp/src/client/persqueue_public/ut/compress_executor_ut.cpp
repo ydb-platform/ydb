@@ -1,12 +1,29 @@
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
+#include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/tests/integration/topic/utils/managed_executor.h>
+
+#include <util/thread/pool.h>
 
 #include <atomic>
 
 namespace NYdb::NPersQueue::NTests {
 
 Y_UNIT_TEST_SUITE(CompressExecutor) {
+    Y_UNIT_TEST(RawWritesWithExternalInlineExecutor) {
+        TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
+        auto pool = ::CreateThreadPool(1, 0);
+        auto executor = NAdapters::CreateExternalThreadPoolExecutorAdapter(
+            std::shared_ptr<IThreadPool>(pool.Release()));
+        UNIT_ASSERT(!executor->IsAsync());
+
+        auto settings = setup.GetWriteSessionSettings();
+        settings.Codec(ECodec::RAW).CompressionExecutor(executor);
+        auto writer = setup.GetPersQueueClient().CreateSimpleBlockingWriteSession(settings);
+        UNIT_ASSERT(writer->Write("message", std::nullopt, std::nullopt, TDuration::Seconds(30)));
+        UNIT_ASSERT(writer->Close(TDuration::Seconds(30)));
+    }
+
     Y_UNIT_TEST(RawWritesUseCompressionExecutor) {
         TPersQueueYdbSdkTestSetup setup(TEST_CASE_NAME);
         for (const bool runExecutor : {false, true}) {

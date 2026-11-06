@@ -40,7 +40,8 @@ void TThreadPoolExecutor::Post(std::function<void()>&& f) {
 }
 
 bool TThreadPoolExecutor::IsAsync() const {
-    return true;
+    // TFakeThreadPool executes tasks inline, including CreateThreadPool(1).
+    return dynamic_cast<TFakeThreadPool*>(ThreadPool_.get()) == nullptr;
 }
 
 }

@@ -459,13 +459,14 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
             MakeSettings({
                 {"/Root/topic1", 0, 0, 1_KB},
                 {"/Root/topic1", 1, 0, 1_KB},
-            }, /*maxWaitTimeMs=*/200, /*totalMaxBytes=*/2_KB),
+            }, /*maxWaitTimeMs=*/200, /*totalMaxBytes=*/100),
             TDuration::Seconds(2));
 
         UNIT_ASSERT_VALUES_EQUAL_C(ev->Status, Ydb::StatusIds::SUCCESS, ev->Message);
         UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 2);
         AssertErrorCode(ev->Response.GetPartResult(0), ::NPersQueue::NErrorCode::OK);
         UNIT_ASSERT_VALUES_EQUAL(ev->Response.GetPartResult(0).GetReadResult().GetMaxOffset(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.GetPartResult(0).GetReadResult().ResultSize(), 1);
         AssertErrorCode(ev->Response.GetPartResult(1), ::NPersQueue::NErrorCode::READ_NOT_DONE);
     }
 

@@ -149,6 +149,11 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
         ctx.Send(request.Sender, response.Release());
     };
 
+    if (request.Deadline <= ctx.Now()) {
+        sendResponse(0, false);
+        return true;
+    }
+
     if (!IsActive()) {
         if (request.Offset < GetEndOffset() && (!request.ReadTimestamp || *request.ReadTimestamp <= EndWriteTimestamp)) {
             sendResponse(GetSizeLag(request.Offset), false);
@@ -265,10 +270,11 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     }
 
     THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
-        record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
+        record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp,
+        TInstant::MilliSeconds(record.GetDeadline())};
 
     if (!InitDone || !ProcessHasDataRequest(req, ctx)) {
-        THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
+        THasDataDeadline dl{req.Deadline, req};
         auto res = HasDataRequests.insert(std::move(req));
         HasDataDeadlines.insert(dl);
         PQ_ENSURE(res.second);

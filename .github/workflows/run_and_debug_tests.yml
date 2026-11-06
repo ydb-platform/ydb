@@ -47,69 +47,6 @@ jobs:
     runs-on: ${{ fromJSON(inputs.runs_on) }}
     timeout-minutes: 1200
     steps:
-      - name: Checkout CI helpers
-        uses: actions/checkout@v5
-        with:
-          sparse-checkout: |
-            .github/actions/s3cmd
-          sparse-checkout-cone-mode: false
-
-      - name: Configure s3cmd
-        uses: ./.github/actions/s3cmd
-        with:
-          s3_key_id: ${{ secrets.AWS_KEY_ID }}
-          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
-          s3_bucket: ${{ vars.AWS_BUCKET }}
-          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
-          build_preset: relwithdebinfo
-
-      - name: Publish claim for platform waiter
-        env:
-          PLATFORM_RUN_ID: ${{ inputs.platform_run_id }}
-          PLATFORM_REPOSITORY: ${{ inputs.platform_repository }}
-          CLAIM_BUCKET: ${{ vars.AWS_BUCKET }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "${PLATFORM_RUN_ID}" ]; then
-            echo "::error::platform_run_id is required"
-            exit 1
-          fi
-          python3 - <<'PY'
-          import json, os, subprocess, tempfile
-          from datetime import datetime, timezone
-          from pathlib import Path
-
-          platform_run_id = os.environ["PLATFORM_RUN_ID"]
-          bucket = os.environ["CLAIM_BUCKET"]
-          run_id = os.environ["GITHUB_RUN_ID"]
-          repo = os.environ["GITHUB_REPOSITORY"]
-          server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
-          claim = {
-              "version": 1,
-              "status": "dispatched",
-              "platform_run_id": platform_run_id,
-              "platform_repository": os.environ.get("PLATFORM_REPOSITORY") or "",
-              "executor_run_id": run_id,
-              "executor_run_url": f"{server}/{repo}/actions/runs/{run_id}",
-              "executor_repository": repo,
-              "claimed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-          }
-          key = f"remote-claims/{platform_run_id}.json"
-          with tempfile.TemporaryDirectory() as tmp:
-              path = Path(tmp) / "claim.json"
-              path.write_text(json.dumps(claim, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-              cmd = [
-                  "s3cmd", "put", "--acl-public", "--no-progress",
-                  "--no-mime-magic", "--guess-mime-type",
-                  str(path), f"s3://{bucket}/{key}",
-              ]
-              print("+", " ".join(cmd), flush=True)
-              subprocess.check_call(cmd)
-          print(json.dumps(claim, indent=2))
-          print(f"::notice title=Claim published::s3://{bucket}/{key}")
-          PY
-
       - name: Parse job_inputs
         id: ya
         env:
@@ -187,12 +124,69 @@ jobs:
             echo "- **runs_on:** \`${{ inputs.runs_on }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Full tree (no sparse): sparse left build_and_test_ya missing for local action.
       - name: Checkout code_ref
         uses: actions/checkout@v5
         with:
           ref: ${{ steps.ref.outputs.code }}
           fetch-depth: ${{ steps.ya.outputs.fetch_depth }}
           persist-credentials: false
+
+      - name: Configure s3cmd
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          s3_bucket: ${{ vars.AWS_BUCKET }}
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          build_preset: relwithdebinfo
+
+      - name: Publish claim for platform waiter
+        env:
+          PLATFORM_RUN_ID: ${{ inputs.platform_run_id }}
+          PLATFORM_REPOSITORY: ${{ inputs.platform_repository }}
+          CLAIM_BUCKET: ${{ vars.AWS_BUCKET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${PLATFORM_RUN_ID}" ]; then
+            echo "::error::platform_run_id is required"
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json, os, subprocess, tempfile
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          platform_run_id = os.environ["PLATFORM_RUN_ID"]
+          bucket = os.environ["CLAIM_BUCKET"]
+          run_id = os.environ["GITHUB_RUN_ID"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+          claim = {
+              "version": 1,
+              "status": "dispatched",
+              "platform_run_id": platform_run_id,
+              "platform_repository": os.environ.get("PLATFORM_REPOSITORY") or "",
+              "executor_run_id": run_id,
+              "executor_run_url": f"{server}/{repo}/actions/runs/{run_id}",
+              "executor_repository": repo,
+              "claimed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+          }
+          key = f"remote-claims/{platform_run_id}.json"
+          with tempfile.TemporaryDirectory() as tmp:
+              path = Path(tmp) / "claim.json"
+              path.write_text(json.dumps(claim, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+              cmd = [
+                  "s3cmd", "put", "--acl-public", "--no-progress",
+                  "--no-mime-magic", "--guess-mime-type",
+                  str(path), f"s3://{bucket}/{key}",
+              ]
+              print("+", " ".join(cmd), flush=True)
+              subprocess.check_call(cmd)
+          print(json.dumps(claim, indent=2))
+          print(f"::notice title=Claim published::s3://{bucket}/{key}")
+          PY
 
       - name: Build and test
         uses: ./.github/actions/build_and_test_ya

@@ -474,4 +474,6 @@ message TFeatureFlags {
     optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
     optional bool EnableCsPortionsCacheAcrossRestarts = 381 [default = false];
     optional bool EnableCsGeneralCacheConsumerWeights = 382 [default = false];
+    // Send per-partition KeyValue storage usage to SchemeShard for disk quota accounting.
+    optional bool EnableKeyValueStorageUsageReports = 383 [default = false];
 }

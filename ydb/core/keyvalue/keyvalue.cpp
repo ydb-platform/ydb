@@ -96,7 +96,7 @@ void TKeyValueFlat::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& e
 }
 
 void TKeyValueFlat::ReportStorageUsage() {
-    if (QuotaSchemeShardId) {
+    if (QuotaSchemeShardId && AppData()->FeatureFlags.GetEnableKeyValueStorageUsageReports()) {
         auto report = MakeHolder<TEvKeyValue::TEvStorageUsageReport>();
         State.FillStorageUsageReport(report->Record);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(report.Release(), QuotaSchemeShardId, false));

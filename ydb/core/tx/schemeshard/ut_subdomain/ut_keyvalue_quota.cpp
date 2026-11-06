@@ -15,8 +15,9 @@ struct TEnv {
     ui64 TxId = 100;
     TVector<ui64> Tablets;
 
-    explicit TEnv(bool separatePools) {
+    explicit TEnv(bool separatePools, bool reportStorageUsage = true) {
         Runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(separatePools);
+        Runtime.GetAppData().FeatureFlags.SetEnableKeyValueStorageUsageReports(reportStorageUsage);
         TestCreateSubDomain(Runtime, ++TxId, "/MyRoot", R"(
             Name: "Tenant"
             PlanResolution: 50
@@ -70,6 +71,31 @@ struct TEnv {
         Runtime.SimulateSleep(TDuration::MilliSeconds(100));
     }
 };
+
+Y_UNIT_TEST(ToggleStorageUsageReports) {
+    TEnv env(false, false);
+    const ui64 tablet = env.Tablets.front();
+    ui64 reports = 0;
+    auto observer = env.Runtime.AddObserver<TEvKeyValue::TEvStorageUsageReport>([&](auto& ev) {
+        if (ev->Get()->Record.tablet_id() == tablet) {
+            ++reports;
+        }
+    });
+
+    RebootTablet(env.Runtime, tablet, env.Edge);
+    env.Refresh(tablet);
+    UNIT_ASSERT_VALUES_EQUAL(reports, 0);
+
+    auto& flags = env.Runtime.GetAppData().FeatureFlags;
+    flags.SetEnableKeyValueStorageUsageReports(true);
+    env.Refresh(tablet);
+    UNIT_ASSERT_GT(reports, 0);
+
+    flags.SetEnableKeyValueStorageUsageReports(false);
+    const ui64 beforeRefresh = reports;
+    env.Refresh(tablet);
+    UNIT_ASSERT_VALUES_EQUAL(reports, beforeRefresh);
+}
 
 Y_UNIT_TEST(EnforceAcrossPartitionsAndReboot) {
     TEnv env(false);

@@ -2,7 +2,6 @@
 
 #include "events.h"
 
-#include <ydb/core/keyvalue/defs.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
 #include <ydb/library/actors/core/actor.h>

@@ -8,7 +8,6 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/core/base
-    ydb/core/keyvalue
     ydb/core/protos
     ydb/core/persqueue/public/counters
     ydb/core/tablet

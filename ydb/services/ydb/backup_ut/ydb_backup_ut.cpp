@@ -4191,6 +4191,34 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
     }
 
+    // __omit_export marks objects that backups must leave out.
+    Y_UNIT_TEST(OmittedTablesAreNotDumped) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        TTableClient tableClient(driver);
+        auto session = tableClient.CreateSession().ExtractValueSync().GetSession();
+
+        ExecuteDataDefinitionQuery(session, "CREATE TABLE `/Root/kept` (k Uint32, PRIMARY KEY (k));");
+        ExecuteDataDefinitionQuery(session, "CREATE TABLE `/Root/omitted` (k Uint32, PRIMARY KEY (k));");
+        {
+            const auto result = session.AlterTable("/Root/omitted", TAlterTableSettings()
+                .BeginAlterAttributes().Add("__omit_export", "true").EndAlterAttributes()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+        NDump::TClient backupClient(driver);
+        const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        TVector<TString> children;
+        pathToBackup.ListNames(children);
+        UNIT_ASSERT_C(FindPtr(children, "kept"), JoinSeq(", ", children));
+        UNIT_ASSERT_C(!FindPtr(children, "omitted"), JoinSeq(", ", children));
+    }
+
     Y_UNIT_TEST(SkipEmptyDirsOnRestore) {
         TKikimrWithGrpcAndRootSchema server;
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
@@ -4304,6 +4332,10 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
         ui16 GetS3Port() const {
             return S3Port;
+        }
+
+        const TS3Mock& GetS3Mock() const {
+            return S3Mock;
         }
     };
 
@@ -4449,6 +4481,43 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
         );
+    }
+
+    // Items marked with __omit_export are dropped from the export, whether the
+    // client listed them explicitly or the server expanded a directory.
+    Y_UNIT_TEST(OmittedTablesAreNotExported) {
+        TS3TestEnv testEnv;
+        auto& session = testEnv.GetTableSession();
+
+        ExecuteDataDefinitionQuery(session, "CREATE TABLE `/Root/kept` (k Uint32, PRIMARY KEY (k));");
+        ExecuteDataDefinitionQuery(session, "CREATE TABLE `/Root/omitted` (k Uint32, PRIMARY KEY (k));");
+        {
+            const auto result = session.AlterTable("/Root/omitted", TAlterTableSettings()
+                .BeginAlterAttributes().Add("__omit_export", "true").EndAlterAttributes()
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port())();
+
+        bool keptExported = false;
+        for (const auto& [key, content] : testEnv.GetS3Mock().GetData()) {
+            UNIT_ASSERT_C(!key.Contains("omitted"), key);
+            keptExported |= key.Contains("kept");
+        }
+        UNIT_ASSERT(keptExported);
+
+        const auto clientSettings = TCommonClientSettings().Database("/Root");
+        NExport::TExportClient exportClient(testEnv.GetDriver(), clientSettings);
+        auto exportSettings = NExport::TExportToS3Settings()
+            .Endpoint(Sprintf("localhost:%u", testEnv.GetS3Port()))
+            .Scheme(ES3Scheme::HTTP)
+            .Bucket("test_bucket")
+            .AccessKey("test_key")
+            .SecretKey("test_secret")
+            .AppendItem({.Src = "/Root/omitted", .Dst = "only_omitted"});
+        const auto response = exportClient.ExportToS3(exportSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(response.Status().GetStatus(), EStatus::BAD_REQUEST, response.Status().GetIssues().ToString());
     }
 
     Y_UNIT_TEST(RestoreIndexTablePartitioningSettings) {

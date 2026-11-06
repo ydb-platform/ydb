@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/util
     ydb/library/yverify_stream
+    ydb/public/api/protos
 )
 
 GENERATE_ENUM_SERIALIZATION(metadata.h)

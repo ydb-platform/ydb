@@ -38,8 +38,9 @@ namespace {
         }, entry.Type);
     }
 
-    TStatus FilterAsyncReplicaTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
-        auto isAsyncReplicaTable = [&session](const NScheme::TSchemeEntry& entry) {
+    // Replica tables and tables marked with __omit_export are not exportable.
+    TStatus FilterNotExportableTables(NTable::TSession& session, TVector<NScheme::TSchemeEntry>& entries) {
+        auto isNotExportable = [&session](const NScheme::TSchemeEntry& entry) {
             if (entry.Type != NScheme::ESchemeEntryType::Table) {
                 return false;
             }
@@ -47,12 +48,17 @@ namespace {
             NStatusHelpers::ThrowOnErrorOrPrintIssues(describeResult);
 
             const auto& attributes = describeResult.GetTableDescription().GetAttributes();
-            auto it = attributes.find("__async_replica");
-            return it != attributes.end() && it->second == "true";
+            for (const auto* name : {"__async_replica", "__omit_export"}) {
+                auto it = attributes.find(name);
+                if (it != attributes.end() && it->second == "true") {
+                    return true;
+                }
+            }
+            return false;
         };
 
         try {
-            std::erase_if(entries, isAsyncReplicaTable);
+            std::erase_if(entries, isNotExportable);
         } catch (NStatusHelpers::TYdbErrorException& e) {
             return e.ExtractStatus();
         }
@@ -74,7 +80,7 @@ namespace {
         NStatusHelpers::ThrowOnErrorOrPrintIssues(ret.Status);
 
         tableClient.RetryOperationSync([&ret](NTable::TSession session) {
-            return FilterAsyncReplicaTables(session, ret.Entries);
+            return FilterNotExportableTables(session, ret.Entries);
         });
 
         if (ret.Entries.size() == 1 && srcPath == ret.Entries[0].Name) {

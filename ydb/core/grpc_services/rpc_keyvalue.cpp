@@ -12,6 +12,9 @@
 #include <ydb/core/mind/local.h>
 #include <ydb/core/protos/local.pb.h>
 
+#include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
 
 namespace NKikimr::NGRpcService {
 
@@ -556,7 +559,7 @@ Ydb::StatusIds::StatusCode PullStatus(const TResult &result) {
     case NKikimrKeyValue::Statuses::RSTATUS_BLOCKED:
         return Ydb::StatusIds::UNAVAILABLE;
     case NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED:
-        return Ydb::StatusIds::PRECONDITION_FAILED;
+        return Ydb::StatusIds::UNAVAILABLE;
     case NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST:
         return Ydb::StatusIds::BAD_REQUEST;
     default:
@@ -1188,7 +1191,16 @@ protected:
             : PullStatus(ev->Get()->Record);
         if constexpr (HasMsgV<decltype(ev->Get()->Record)>) {
             if (status != Ydb::StatusIds::SUCCESS && !requestLimitReached) {
-                this->Reply(status, ev->Get()->Record.msg(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
+                const auto& record = ev->Get()->Record;
+                if (record.status() == NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED) {
+                    google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage> issues;
+                    auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED, record.msg());
+                    NYql::IssueToMessage(issue, issues.Add());
+                    this->Reply(status, issues);
+                } else {
+                    this->Reply(status, record.msg(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR);
+                }
+
                 return;
             }
         }

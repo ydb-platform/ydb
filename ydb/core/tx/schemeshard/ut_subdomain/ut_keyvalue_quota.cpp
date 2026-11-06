@@ -32,9 +32,11 @@ struct TEnv {
             Mediators: 1
             TimeCastBucketsPerMediator: 2
             StoragePools { Name: "data" Kind: "ssd" }
+            StoragePools { Name: "cold" Kind: "hdd" }
             DatabaseQuotas {
                 data_size_hard_quota: 10
                 storage_quotas { unit_kind: "ssd" data_size_hard_quota: 10 }
+                storage_quotas { unit_kind: "hdd" data_size_hard_quota: 20 }
             }
         )";
         if (settings.ExternalSubdomain) {
@@ -55,6 +57,7 @@ struct TEnv {
                 Channel { PreferredPoolKind: "ssd" }
                 Channel { PreferredPoolKind: "ssd" }
                 Channel { PreferredPoolKind: "ssd" }
+                Channel { PreferredPoolKind: "hdd" }
             }
         )");
         Env.TestWaitNotification(Runtime, TxId, SchemeShard);
@@ -191,6 +194,29 @@ Y_UNIT_TEST(EnforceExternalSubdomainQuota) {
 
     response = write("x");
     UNIT_ASSERT_C(response.status() == NKikimrKeyValue::Statuses::RSTATUS_OK, response.ShortDebugString());
+}
+
+Y_UNIT_TEST(EnforceQuotaForThePoolHoldingTheValue) {
+    TEnv env({.SeparatePools = true});
+    const ui64 tablet = env.Tablets.front();
+    const ui32 ssdChannel = NKeyValue::MainStorageChannelInPublicApi;
+    const ui32 hddChannel = ssdChannel + 1;
+    const TString value(12, 'v');
+    const auto writeToChannel = [&](ui32 channel) {
+        auto* request = new TEvKeyValue::TEvExecuteTransaction;
+        auto* write = request->Record.add_commands()->mutable_write();
+        write->set_key("k");
+        write->set_value(value);
+        write->set_storage_channel(channel);
+        const auto response = env.Request<TEvKeyValue::TEvExecuteTransaction, TEvKeyValue::TEvExecuteTransactionResponse>(tablet, request);
+        UNIT_ASSERT_C(response.status() == NKikimrKeyValue::Statuses::RSTATUS_OK, response.ShortDebugString());
+        env.Refresh(tablet);
+    };
+
+    writeToChannel(hddChannel);
+    env.CheckUsage(value.size(), false);
+    writeToChannel(ssdChannel);
+    env.CheckUsage(value.size(), true);
 }
 
 Y_UNIT_TEST(IgnoreOldReportsAndReleasePoolQuotaOnDrop) {

@@ -20,6 +20,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -863,6 +864,53 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
             UNIT_ASSERT(stub->ExecuteTransaction(&ctx, request, &response).ok());
             checkResponse(response);
         }
+    }
+
+    Y_UNIT_TEST_BOTH_VERSION(DiskQuotaExceeded) {
+        TKikimrWithGrpcAndRootSchema server;
+        const TString path = "/Root/kv";
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GetPort()), grpc::InsecureChannelCredentials());
+        MakeTable(channel, path);
+        WaitTableCreation(server, path);
+        auto stub = std::make_unique<Stub<StubVersion>>(channel);
+        Write<StubVersion>(path, 0, "key", "value", 0, stub);
+
+        Tests::TClient client(*server.ServerSettings);
+        auto* runtime = server.GetRuntime();
+        const auto volume = client.Describe(runtime, path);
+        const auto& partitions = volume.GetPathDescription().GetSolomonDescription().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+        const auto tablet = ResolveTablet(*runtime, partitions.Get(0).GetTabletId());
+
+        auto root = client.Describe(runtime, "/Root");
+        auto* domain = root.MutablePathDescription()->MutableDomainDescription();
+        const auto& key = domain->GetDomainKey();
+        const TPathId domainId(key.GetSchemeShard(), key.GetPathId());
+        domain->MutableDomainState()->SetDiskQuotaExceeded(true);
+        runtime->Send(new IEventHandle(tablet, runtime->AllocateEdgeActor(),
+            new TEvTxProxySchemeCache::TEvWatchNotifyUpdated(domainId.OwnerId, "/Root", domainId,
+                NSchemeCache::TDescribeResult::Create(std::move(root)))), 0, true);
+
+        Ydb::KeyValue::ExecuteTransactionRequest request;
+        request.set_path(path);
+        auto* write = request.add_commands()->mutable_write();
+        write->set_key("key");
+        write->set_value("new value");
+        typename RequestToResponse<StubVersion, Ydb::KeyValue::ExecuteTransactionRequest>::type response;
+        grpc::ClientContext ctx;
+        AdjustCtxForDB(ctx);
+        UNIT_ASSERT(stub->ExecuteTransaction(&ctx, request, &response).ok());
+        UNIT_ASSERT_STATUS_EQUALS(StubHelper<StubVersion>::GetStatus(response), Ydb::StatusIds::UNAVAILABLE);
+        const auto& issues = [&]() -> const auto& {
+            if constexpr (StubVersion == Version::V1) {
+                return response.operation().issues();
+            } else {
+                return response.issues();
+            }
+        }();
+
+        UNIT_ASSERT_VALUES_EQUAL(issues.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(issues.Get(0).issue_code(), NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED);
     }
 
 #ifndef KIKIMR_DISABLE_S3_OPS

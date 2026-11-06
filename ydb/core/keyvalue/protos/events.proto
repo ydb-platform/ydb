@@ -39,6 +39,7 @@ message StorageUsageReport {
     uint64 tablet_id = 1;
     uint32 generation = 2;
     uint64 round = 3;
+    // SchemeShard maps channels to storage pool kinds when checking per-pool quotas.
     map<uint32, uint64> bytes_by_channel = 4;
 }
 

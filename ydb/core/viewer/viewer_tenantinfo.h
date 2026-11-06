@@ -67,8 +67,8 @@ class TJsonTenantInfo : public TViewerPipeClient {
     NKikimrViewer::TTenantInfo Result;
 
     struct TStorageQuota {
-        uint64 SoftQuota = 0;
-        uint64 HardQuota = 0;
+        ui64 SoftQuota = 0;
+        ui64 HardQuota = 0;
     };
 
 public:
@@ -680,6 +680,92 @@ public:
         return type;
     }
 
+    static void FillDiskSpaceQuota(NKikimrViewer::TTenant& tenant, const NKikimrSubDomains::TDomainDescription& domainDescription) {
+        auto& diskSpaceQuota = *tenant.MutableDiskSpaceQuota();
+        if (domainDescription.HasDiskSpaceQuotaUsage()) {
+            diskSpaceQuota.MutableDiskSpaceQuotaUsage()->CopyFrom(domainDescription.GetDiskSpaceQuotaUsage());
+        }
+        // SchemeShard sets only the flags that are true, so they are set explicitly here
+        const auto& domainState = domainDescription.GetDomainState();
+        diskSpaceQuota.SetDiskQuotaExceeded(domainState.GetDiskQuotaExceeded());
+        diskSpaceQuota.SetStorageSpaceExhausted(domainState.GetStorageSpaceExhausted());
+        diskSpaceQuota.SetSmallBlobsQuotaExceeded(domainState.GetSmallBlobsQuotaExceeded());
+    }
+
+    static void AddQuota(ui64& sum, ui64 quota) {
+        sum += Min(quota, Max<ui64>() - sum);
+    }
+
+    void FillTablesStorage(NKikimrViewer::TTenant& tenant, const NKikimrSubDomains::TDomainDescription& domainDescription) {
+        using TQuotaUsage = NKikimrSubDomains::TDiskSpaceQuotaUsage;
+
+        THashMap<NKikimrViewer::TStorageUsage::EType, ui64> tablesStorageByType;
+        THashMap<NKikimrViewer::TStorageUsage::EType, TStorageQuota> storageQuotasByType;
+
+        for (const auto& poolUsage : domainDescription.GetDiskSpaceUsage().GetStoragePoolsUsage()) {
+            auto type = GetStorageType(poolUsage.GetPoolKind());
+            tablesStorageByType[type] += poolUsage.GetTotalSize();
+        }
+
+        const auto& quotaUsage = domainDescription.GetDiskSpaceQuotaUsage();
+        const auto mode = domainDescription.HasDiskSpaceQuotaUsage() ? quotaUsage.GetMode() : TQuotaUsage::MODE_UNSPECIFIED;
+        if (mode == TQuotaUsage::MODE_STORAGE_POOL_KINDS) {
+            // the quotas of the pool kinds are summed up by storage type,
+            // the storage type has no limit when any of its pool kinds has no limit
+            THashSet<NKikimrViewer::TStorageUsage::EType> unlimitedTypes;
+            for (const auto& entry : quotaUsage.GetEntries()) {
+                auto type = GetStorageType(entry.GetPoolKind());
+                tablesStorageByType.emplace(type, 0); // pool kind with a quota, but without usage yet
+                if (entry.GetHardQuota() == 0 || entry.GetSoftQuota() == 0) {
+                    unlimitedTypes.insert(type);
+                    continue;
+                }
+                auto& quotas = storageQuotasByType[type];
+                AddQuota(quotas.SoftQuota, entry.GetSoftQuota());
+                AddQuota(quotas.HardQuota, entry.GetHardQuota());
+            }
+            for (auto type : unlimitedTypes) {
+                storageQuotasByType.erase(type);
+            }
+        } else if (mode == TQuotaUsage::MODE_DATABASE && quotaUsage.GetEntries().size() == 1) {
+            // the database quota is checked against the total usage of all storage types (and topics)
+            const auto& entry = quotaUsage.GetEntries(0);
+            if (tablesStorageByType.empty()) {
+                tablesStorageByType[GuessStorageType(domainDescription)] = entry.GetUsage();
+            }
+            const auto type = tablesStorageByType.size() == 1 ? tablesStorageByType.begin()->first : GuessStorageType(domainDescription);
+            auto& quotas = storageQuotasByType[type];
+            quotas.SoftQuota = entry.GetSoftQuota();
+            quotas.HardQuota = entry.GetHardQuota();
+        } else {
+            // older SchemeShard (or a mode unknown to this version)
+            if (tablesStorageByType.empty() && domainDescription.HasDiskSpaceUsage()) {
+                tablesStorageByType[GuessStorageType(domainDescription)] =
+                    domainDescription.GetDiskSpaceUsage().GetTables().GetTotalSize()
+                    + domainDescription.GetDiskSpaceUsage().GetTopics().GetDataSize();
+            }
+            auto& quotas = storageQuotasByType[GuessStorageType(domainDescription)];
+            quotas.HardQuota = domainDescription.GetDatabaseQuotas().data_size_hard_quota();
+            quotas.SoftQuota = domainDescription.GetDatabaseQuotas().data_size_soft_quota();
+        }
+
+        for (const auto& [type, size] : tablesStorageByType) {
+            auto& tablesStorage = *tenant.AddTablesStorage();
+            tablesStorage.SetType(type);
+            tablesStorage.SetSize(size);
+            auto it = storageQuotasByType.find(type);
+            if (it != storageQuotasByType.end()) {
+                if (it->second.SoftQuota) {
+                    tablesStorage.SetLimit(it->second.SoftQuota);
+                    tablesStorage.SetSoftQuota(it->second.SoftQuota);
+                }
+                if (it->second.HardQuota) {
+                    tablesStorage.SetHardQuota(it->second.HardQuota);
+                }
+            }
+        }
+    }
+
     std::vector<TString> Problems;
 
     void AddProblem(const TString& problem) {
@@ -941,7 +1027,6 @@ public:
 
                 if (Storage) {
                     THashMap<NKikimrViewer::TStorageUsage::EType, TDatabaseStorageStats> databaseStorageByType;
-                    THashMap<NKikimrViewer::TStorageUsage::EType, TStorageQuota> storageQuotasByType;
 
                     auto itDescribeScheme = DescribeSchemeResult.find(name);
                     if (itDescribeScheme != DescribeSchemeResult.end() && itDescribeScheme->second.IsOk()) {
@@ -974,47 +1059,16 @@ public:
                             auto& databaseStorage = *tenant.AddDatabaseStorage();
                             databaseStorage.SetType(type);
                             databaseStorage.SetSize(ds.Size);
-                            databaseStorage.SetLimit(ds.Limit);
+                            if (ds.Limit) {
+                                databaseStorage.SetLimit(ds.Limit);
+                            }
                             databaseStorage.SetGroups(ds.Groups);
                         }
 
-                        THashMap<NKikimrViewer::TStorageUsage::EType, ui64> tablesStorageByType;
-
-                        for (const auto& poolUsage : domainDescription.GetDiskSpaceUsage().GetStoragePoolsUsage()) {
-                            auto type = GetStorageType(poolUsage.GetPoolKind());
-                            tablesStorageByType[type] += poolUsage.GetTotalSize();
+                        if (record.GetPathDescription().HasDomainDescription()) {
+                            FillDiskSpaceQuota(tenant, domainDescription);
                         }
-
-                        if (tablesStorageByType.empty() && domainDescription.HasDiskSpaceUsage()) {
-                            tablesStorageByType[GuessStorageType(domainDescription)] =
-                                domainDescription.GetDiskSpaceUsage().GetTables().GetTotalSize()
-                                + domainDescription.GetDiskSpaceUsage().GetTopics().GetDataSize();
-                        }
-
-                        if (storageQuotasByType.empty()) {
-                            auto& quotas = storageQuotasByType[GuessStorageType(domainDescription)];
-                            quotas.HardQuota = domainDescription.GetDatabaseQuotas().data_size_hard_quota();
-                            quotas.SoftQuota = domainDescription.GetDatabaseQuotas().data_size_soft_quota();
-                        }
-
-                        for (const auto& [type, size] : tablesStorageByType) {
-                            auto it = storageQuotasByType.find(type);
-                            auto& tablesStorage = *tenant.AddTablesStorage();
-                            tablesStorage.SetType(type);
-                            tablesStorage.SetSize(size);
-                            if (it != storageQuotasByType.end()) {
-                                tablesStorage.SetLimit(it->second.SoftQuota);
-                                tablesStorage.SetSoftQuota(it->second.SoftQuota);
-                                tablesStorage.SetHardQuota(it->second.HardQuota);
-                            }
-                        }
-                    }
-
-                    for (const auto& quota : tenant.GetDatabaseQuotas().storage_quotas()) {
-                        auto type = GetStorageType(quota.unit_kind());
-                        auto& usage = storageQuotasByType[type];
-                        usage.SoftQuota += quota.data_size_soft_quota();
-                        usage.HardQuota += quota.data_size_hard_quota();
+                        FillTablesStorage(tenant, domainDescription);
                     }
                 }
 

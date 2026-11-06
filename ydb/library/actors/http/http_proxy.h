@@ -67,6 +67,7 @@ struct TEvHttpProxy {
         EvHttpOutgoingResponseProgress,
         EvHttpDumpStateRequest,
         EvHttpDumpStateResponse,
+        EvHttpOutgoingRequestAccepted,
         EvEnd
     };
 
@@ -133,8 +134,14 @@ struct TEvHttpProxy {
     };
 
     struct TEvHttpOutgoingRequest : NActors::TEventLocal<TEvHttpOutgoingRequest, EvHttpOutgoingRequest> {
+        enum class ENotification {
+            None,
+            Accepted,
+        };
+
         THttpOutgoingRequestPtr Request;
         TDuration Timeout;
+        ENotification Notification = ENotification::None;
         bool AllowConnectionReuse = false;
         bool UseHttp2 = false;
         std::vector<TString> StreamContentTypes;
@@ -153,6 +160,8 @@ struct TEvHttpProxy {
             , AllowConnectionReuse(allowConnectionReuse)
         {}
     };
+
+    struct TEvHttpOutgoingRequestAccepted : NActors::TEventLocal<TEvHttpOutgoingRequestAccepted, EvHttpOutgoingRequestAccepted> {};
 
     struct TEvHttpIncomingResponse : NActors::TEventLocal<TEvHttpIncomingResponse, EvHttpIncomingResponse> {
         THttpOutgoingRequestPtr Request;

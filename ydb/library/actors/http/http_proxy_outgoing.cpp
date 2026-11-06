@@ -23,6 +23,8 @@ public:
     TString Destination;
     TActorId RequestOwner;
     ui64 RequestCookie = 0;
+    TEvHttpProxy::TEvHttpOutgoingRequest::ENotification RequestNotification =
+        TEvHttpProxy::TEvHttpOutgoingRequest::ENotification::None;
     THttpOutgoingRequestPtr Request;
     THttpIncomingResponsePtr Response;
     TInstant LastActivity;
@@ -219,6 +221,7 @@ protected:
         Response = nullptr;
         RequestOwner = event->Sender;
         RequestCookie = event->Cookie;
+        RequestNotification = event->Get()->Notification;
         if (event->Get()->Timeout) {
             ConnectionTimeout = event->Get()->Timeout;
         }
@@ -238,6 +241,14 @@ protected:
         Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
         LastActivity = NActors::TActivationContext::Now();
         TBase::Become(&TOutgoingConnectionActor::StateResolving);
+        NotifyAccepted();
+    }
+
+    void NotifyAccepted() {
+        if (RequestNotification == TEvHttpProxy::TEvHttpOutgoingRequest::ENotification::Accepted) {
+            Send(RequestOwner, new TEvHttpProxy::TEvHttpOutgoingRequestAccepted(), 0, RequestCookie);
+            RequestNotification = TEvHttpProxy::TEvHttpOutgoingRequest::ENotification::None;
+        }
     }
 
     void FlushOutput() {
@@ -674,6 +685,7 @@ protected:
         YDB_LOG_TRACE("Request:\n",
             {"socketName", GetSocketName()},
             {"obfuscatedData", Request->GetObfuscatedData()});
+        NotifyAccepted();
         FlushOutput();
         PullInput();
     }
@@ -723,10 +735,15 @@ protected:
         }
     }
 
+    void HandleSetupPoison() {
+        ReplyErrorAndPassAway("Connection closed");
+    }
+
     STATEFN(StateResolving) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvHttpProxy::TEvResolveHostResponse, HandleResolving);
             cFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
+            cFunc(NActors::TEvents::TEvPoison::EventType, HandleSetupPoison);
         }
     }
 
@@ -735,6 +752,7 @@ protected:
             hFunc(NActors::TEvPollerReady, HandleConnecting);
             cFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
             hFunc(NActors::TEvPollerRegisterResult, HandleConnecting);
+            cFunc(NActors::TEvents::TEvPoison::EventType, HandleSetupPoison);
         }
     }
 
@@ -750,6 +768,7 @@ protected:
     STATEFN(StateFailed) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvHttpProxy::TEvHttpOutgoingRequest, HandleFailed);
+            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }
     }
 
@@ -768,7 +787,13 @@ protected:
 
     void HandleConnectedHttp2(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
         LastActivity = NActors::TActivationContext::Now();
+        const auto notification = event->Get()->Notification;
+        const auto sender = event->Sender;
+        const auto cookie = event->Cookie;
         SendH2Request(std::move(event->Get()->Request), event->Sender, event->Cookie);
+        if (notification == TEvHttpProxy::TEvHttpOutgoingRequest::ENotification::Accepted) {
+            Send(sender, new TEvHttpProxy::TEvHttpOutgoingRequestAccepted(), 0, cookie);
+        }
         if (!FlushH2Output()) {
             PassAway();
         }

@@ -10,6 +10,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <array>
+#include <chrono>
+#include <thread>
 
 namespace {
 
@@ -251,6 +253,129 @@ void CheckCacheCookies(EBackendResult result) {
 }
 
 Y_UNIT_TEST_SUITE(HttpProxyCookies) {
+    Y_UNIT_TEST(ProxyAcknowledgesAcceptedRequest) {
+        TSocketFixture f(EProtocol::Http1);
+        auto request = f.Request("accepted");
+        auto* event = f.RequestEvent(request);
+        event->Notification = TEv::TEvHttpOutgoingRequest::ENotification::Accepted;
+        f.Runtime.Send(new IEventHandle(f.Proxy, f.Caller, event, 0, CookieA), 0, true);
+        const auto accepted = Receive<TEv::TEvHttpOutgoingRequestAccepted>(f.Runtime, f.Caller);
+        UNIT_ASSERT_VALUES_EQUAL(accepted->Cookie, CookieA);
+        const auto incoming = Receive<TEv::TEvHttpIncomingRequest>(f.Runtime, f.Server);
+        f.Reply(incoming, "ok");
+        UNIT_ASSERT_VALUES_EQUAL(accepted->Sender, f.ExpectResponse(request, CookieA, "ok"));
+    }
+
+    Y_UNIT_TEST(ResolvingConnectionStopsOnPoison) {
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        const auto owner = runtime.AllocateEdgeActor();
+        const auto caller = runtime.AllocateEdgeActor();
+        auto request = THttpOutgoingRequest::CreateRequestGet("http://127.0.0.1:9/cookie");
+        auto* event = new TEv::TEvHttpOutgoingRequest(request);
+        event->Notification = TEv::TEvHttpOutgoingRequest::ENotification::Accepted;
+        TEv::TEvHttpOutgoingRequest::TPtr envelope = static_cast<TEventHandle<TEv::TEvHttpOutgoingRequest>*>(
+            new IEventHandle(owner, caller, event, 0, CookieA));
+        const auto connection = runtime.Register(CreateOutgoingConnectionActor(owner, envelope));
+        Receive<TEv::TEvHttpOutgoingRequestAccepted>(runtime, caller);
+        const auto control = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(connection, control, new TEvents::TEvPoisonPill()), 0, true);
+        runtime.Send(new IEventHandle(TEvents::TSystem::CheckActorLiveness,
+            TEvents::TEvCheckActorLiveness::RequestFlags, connection, control, nullptr, 0), 0, true);
+        TAutoPtr<IEventHandle> handle;
+        runtime.GrabEdgeEvents<TEvents::TEvActorAlive, TEvents::TEvActorDead>(handle, WaitBudget);
+        UNIT_ASSERT(handle);
+        UNIT_ASSERT_VALUES_EQUAL(handle->GetTypeRewrite(), TEvents::TEvActorDead::EventType);
+        runtime.Send(new IEventHandle(caller, control, new TEvents::TEvWakeup()), 0, true);
+        runtime.GrabEdgeEvents<TEv::TEvHttpIncomingResponse, TEvents::TEvWakeup>(handle, WaitBudget);
+        UNIT_ASSERT(handle);
+        UNIT_ASSERT_VALUES_EQUAL(handle->GetTypeRewrite(), TEv::TEvHttpIncomingResponse::EventType);
+        UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, CookieA);
+        const auto* response = handle->Get<TEv::TEvHttpIncomingResponse>();
+        UNIT_ASSERT_VALUES_EQUAL(response->Request.Get(), request.Get());
+        UNIT_ASSERT(response->Error);
+    }
+
+    Y_UNIT_TEST(PoisonStopsTricklingHttp1Connection) {
+        TSocketFixture f(EProtocol::Http1);
+        auto request = f.Request("trickle");
+        auto* event = f.RequestEvent(request);
+        event->AllowConnectionReuse = false;
+        event->Timeout = TDuration::Seconds(10);
+        event->Notification = TEv::TEvHttpOutgoingRequest::ENotification::Accepted;
+        event->StreamContentTypes = {"application/json"};
+        f.Runtime.Send(new IEventHandle(f.Proxy, f.Caller, event, 0, CookieA), 0, true);
+        const auto accepted = Receive<TEv::TEvHttpOutgoingRequestAccepted>(f.Runtime, f.Caller);
+        auto incoming = Receive<TEv::TEvHttpIncomingRequest>(f.Runtime, f.Server);
+        auto response = incoming->Get()->Request->CreateResponseString(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n");
+        f.Runtime.Send(new IEventHandle(incoming->Sender, f.Server,
+            new TEv::TEvHttpOutgoingResponse(response)), 0, true);
+
+        std::jthread writer([&](std::stop_token stop) {
+            while (!stop.stop_requested()) {
+                f.Runtime.Send(new IEventHandle(incoming->Sender, f.Server,
+                    new TEv::TEvHttpOutgoingDataChunk(response->CreateDataChunk("x"))), 0, true);
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+        });
+        Receive<TEv::TEvHttpIncompleteIncomingResponse>(f.Runtime, f.Caller);
+        const auto chunk = Receive<TEv::TEvHttpIncomingDataChunk>(f.Runtime, f.Caller);
+        UNIT_ASSERT_VALUES_EQUAL(chunk->Get()->Data, "x");
+        const auto control = f.Runtime.AllocateEdgeActor();
+        f.Runtime.Send(new IEventHandle(accepted->Sender, control, new TEvents::TEvPoisonPill()), 0, true);
+        f.Runtime.Send(new IEventHandle(TEvents::TSystem::CheckActorLiveness,
+            TEvents::TEvCheckActorLiveness::RequestFlags, accepted->Sender, control, nullptr, 0), 0, true);
+        TAutoPtr<IEventHandle> handle;
+        f.Runtime.GrabEdgeEvents<TEvents::TEvActorAlive, TEvents::TEvActorDead>(handle, WaitBudget);
+        writer.request_stop();
+        writer.join();
+        UNIT_ASSERT(handle);
+        UNIT_ASSERT_VALUES_EQUAL(handle->GetTypeRewrite(), TEvents::TEvActorDead::EventType);
+    }
+
+    Y_UNIT_TEST(AcceptanceBypassesOutgoingCache) {
+        TTestActorRuntimeBase runtime(1, true);
+        runtime.Initialize();
+        const auto backend = runtime.AllocateEdgeActor();
+        const auto caller = runtime.AllocateEdgeActor();
+        TCachePolicy policy;
+        policy.TimeToExpire = TDuration::Minutes(1);
+        const auto cache = runtime.Register(CreateOutgoingHttpCache(backend, [policy](const THttpRequest*) { return policy; }));
+        auto request = THttpOutgoingRequest::CreateRequestGet("http://example.com/cookie");
+        auto* event = new TEv::TEvHttpOutgoingRequest(request);
+        event->Notification = TEv::TEvHttpOutgoingRequest::ENotification::Accepted;
+        runtime.Send(new IEventHandle(cache, caller, event, 0, CookieA), 0, true);
+        const auto forwarded = Receive<TEv::TEvHttpOutgoingRequest>(runtime, backend);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded->Sender, caller);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded->Cookie, CookieA);
+        UNIT_ASSERT_VALUES_EQUAL(forwarded->Get()->Request.Get(), request.Get());
+        UNIT_ASSERT(forwarded->Get()->Notification == TEv::TEvHttpOutgoingRequest::ENotification::Accepted);
+    }
+
+    Y_UNIT_TEST(DirectHttp2RequestSendsAcceptance) {
+        TSocketFixture f(EProtocol::Http2);
+        auto warm = f.Request("acceptance-warm");
+        f.SendRequest(f.Proxy, warm, CookieA);
+        auto warmIncoming = Receive<TEv::TEvHttpIncomingRequest>(f.Runtime, f.Server);
+        f.Reply(warmIncoming, "warm");
+        const auto connection = f.ExpectResponse(warm, CookieA, "warm");
+
+        auto request = f.Request("accepted-h2");
+        auto* event = f.RequestEvent(request);
+        event->Notification = TEv::TEvHttpOutgoingRequest::ENotification::Accepted;
+        f.Runtime.Send(new IEventHandle(connection, f.Caller, event, 0, CookieB), 0, true);
+        const auto incoming = Receive<TEv::TEvHttpIncomingRequest>(f.Runtime, f.Server);
+        f.Reply(incoming, "ok");
+        TAutoPtr<IEventHandle> accepted;
+        f.Runtime.GrabEdgeEvents<TEv::TEvHttpOutgoingRequestAccepted, TEv::TEvHttpIncomingResponse>(accepted, WaitBudget);
+        UNIT_ASSERT(accepted);
+        UNIT_ASSERT_VALUES_EQUAL(accepted->GetTypeRewrite(), TEv::TEvHttpOutgoingRequestAccepted::EventType);
+        UNIT_ASSERT_VALUES_EQUAL(accepted->Sender, connection);
+        UNIT_ASSERT_VALUES_EQUAL(accepted->Cookie, CookieB);
+        f.ExpectResponse(request, CookieB, "ok");
+    }
+
     Y_UNIT_TEST(ReusedConnectionEchoesCurrentRequestCookieIncludingZero) {
         TSocketFixture f(EProtocol::Http1);
         const std::array<ui64, 3> cookies{CookieA, CookieB, 0};

@@ -3,6 +3,7 @@
 
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/http/http.h>
@@ -24,6 +25,8 @@
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
 #include <openssl/x509.h>
+
+#include <util/generic/scope.h>
 
 #include <chrono>
 
@@ -58,7 +61,7 @@ void ReplyHttp(
     rt->Send(
         new IEventHandle(
             req->Sender, proxy,
-            new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(req->Get()->Request, resp)),
+            new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(req->Get()->Request, resp), 0, req->Cookie),
         node);
 }
 
@@ -70,7 +73,7 @@ void ReplyHttpError(
     rt->Send(
         new IEventHandle(
             req->Sender, proxy,
-            new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(req->Get()->Request, nullptr, err)),
+            new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(req->Get()->Request, nullptr, err), 0, req->Cookie),
         node);
 }
 
@@ -315,6 +318,19 @@ NKikimrProto::TExternalIdpConfig MakeConfig(
     return c;
 }
 
+class TTestConnection : public TActorBootstrapped<TTestConnection> {
+public:
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            cFunc(TEvents::TEvPoison::EventType, PassAway);
+        }
+    }
+};
+
 struct TSetup : public NUnitTest::TBaseFixture {
     std::unique_ptr<TTestActorSystem> Rt;
     TActorId Proxy;
@@ -346,7 +362,34 @@ struct TSetup : public NUnitTest::TBaseFixture {
     }
 
     auto WaitHttp() {
-        return Rt->WaitForEdgeActorEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(Proxy, false);
+        auto request = Rt->WaitForEdgeActorEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(Proxy, false);
+        AcceptHttp(request);
+        return request;
+    }
+
+    TActorId AcceptHttp(const std::unique_ptr<TEventHandle<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>>& request) {
+        using TEv = NHttp::TEvHttpProxy;
+        if (request->Get()->Notification == TEv::TEvHttpOutgoingRequest::ENotification::Accepted) {
+            const auto connection = Rt->Register(new TTestConnection(), Node);
+            Rt->Send(new IEventHandle(request->Sender, connection, new TEv::TEvHttpOutgoingRequestAccepted(), 0, request->Cookie), Node);
+            return connection;
+        }
+        return {};
+    }
+
+    std::unique_ptr<TEventHandle<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>> WaitHttpFor(TDuration timeout) {
+        const auto timer = Rt->AllocateEdgeActor(Node);
+        Rt->Schedule(timeout, new IEventHandle(timer, Edge, new TEvents::TEvWakeup()), nullptr, Node);
+        auto event = Rt->WaitForEdgeActorEvent({Proxy, timer});
+        Rt->DestroyActor(timer);
+        if (event->GetRecipientRewrite() != Proxy) {
+            return {};
+        }
+        UNIT_ASSERT_VALUES_EQUAL(event->GetTypeRewrite(), NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::EventType);
+        auto request = std::unique_ptr<TEventHandle<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>>(
+            reinterpret_cast<TEventHandle<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>*>(event.release()));
+        AcceptHttp(request);
+        return request;
     }
 
     void DoDiscoveryAndJwks(const TString& iss, const TString& jwksUri, const TString& kid, const TString& x5c) {
@@ -372,6 +415,164 @@ const TString KID = "test-key-1";
 } // namespace
 
 Y_UNIT_TEST_SUITE(TExternalIdpProviderTest) {
+
+    Y_UNIT_TEST_F(DoesNotRetryUntilTimedOutConnectionStops, TSetup) {
+        using TEv = NHttp::TEvHttpProxy;
+        auto config = MakeConfig(ISS);
+        config.MutableDiscoveryPeriodicSettings()->SetRequestTimeout("2s");
+        config.MutableDiscoveryPeriodicSettings()->SetMaxErrorRefreshPeriod("1s");
+        std::ignore = RegProvider(config);
+        auto first = Rt->WaitForEdgeActorEvent<TEv::TEvHttpOutgoingRequest>(Proxy, false);
+        const auto connection = AcceptHttp(first);
+        UNIT_ASSERT(connection);
+        bool delayed = false;
+        Y_DEFER { Rt->FilterFunction = {}; };
+        Rt->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (!delayed && event->GetRecipientRewrite() == connection && event->GetTypeRewrite() == TEvents::TEvPoison::EventType) {
+                delayed = true;
+                Rt->Schedule(TDuration::Seconds(5), event.release(), nullptr, node);
+                return false;
+            }
+            return true;
+        };
+        auto early = WaitHttpFor(TDuration::Seconds(5));
+        UNIT_ASSERT_C(!early, "A retry started while the previous connection was still alive");
+        auto retry = WaitHttpFor(TDuration::Seconds(10));
+        Rt->FilterFunction = {};
+        UNIT_ASSERT_C(delayed, "Connection shutdown was not requested");
+        UNIT_ASSERT_C(retry, "The provider did not retry after the connection stopped");
+    }
+
+    Y_UNIT_TEST_F(DoesNotQueueRetriesUntilProxyAcceptsExpiredRequest, TSetup) {
+        auto config = MakeConfig(ISS);
+        config.MutableDiscoveryPeriodicSettings()->SetRequestTimeout("2s");
+        config.MutableDiscoveryPeriodicSettings()->SetMaxErrorRefreshPeriod("1s");
+        std::ignore = RegProvider(config);
+        auto first = Rt->WaitForEdgeActorEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(Proxy, false);
+
+        UNIT_ASSERT_C(!WaitHttpFor(TDuration::Seconds(15)), "The provider queued a retry while its previous request was unaccepted");
+        AcceptHttp(first);
+        UNIT_ASSERT_C(WaitHttpFor(TDuration::Seconds(10)), "The provider did not retry after the proxy accepted the expired request");
+    }
+
+    Y_UNIT_TEST_F(UndeliveredProxyRequestDoesNotBlockRetry, TSetup) {
+        using TEv = NHttp::TEvHttpProxy;
+        auto config = MakeConfig(ISS);
+        config.MutableDiscoveryPeriodicSettings()->SetMaxErrorRefreshPeriod("1s");
+        std::ignore = RegProvider(config);
+        auto first = Rt->WaitForEdgeActorEvent<TEv::TEvHttpOutgoingRequest>(Proxy, false);
+        Rt->Send(new IEventHandle(first->Sender, Proxy,
+            new TEvents::TEvUndelivered(TEv::TEvHttpOutgoingRequest::EventType, TEvents::TEvUndelivered::ReasonActorUnknown),
+            0, first->Cookie), Node);
+        UNIT_ASSERT_C(WaitHttpFor(TDuration::Seconds(10)), "An undelivered request blocked discovery retries");
+    }
+
+    Y_UNIT_TEST_F(DiscoveryRequestDeadlineRetriesAndIgnoresLateResponse, TSetup) {
+        auto config = MakeConfig(ISS);
+        config.MutableDiscoveryPeriodicSettings()->SetRequestTimeout("2s");
+        config.MutableDiscoveryPeriodicSettings()->SetMaxErrorRefreshPeriod("1s");
+        std::ignore = RegProvider(config);
+
+        auto first = WaitHttp();
+        UNIT_ASSERT_VALUES_EQUAL(first->Get()->Timeout, TDuration::Seconds(2));
+        auto retry = WaitHttpFor(TDuration::Seconds(10));
+        UNIT_ASSERT_C(retry, "Discovery was not retried after the request deadline");
+        UNIT_ASSERT_UNEQUAL(first->Get()->Request.Get(), retry->Get()->Request.Get());
+
+        ReplyHttp(Rt.get(), Node, Proxy, first, "200", "OK", BuildDiscoveryJson(ISS, ISS + "/stale"));
+        ReplyHttp(Rt.get(), Node, Proxy, retry, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+        auto jwks = WaitHttpFor(TDuration::Seconds(10));
+        UNIT_ASSERT_C(jwks, "Discovery retry did not start a JWKS request");
+        UNIT_ASSERT_STRING_CONTAINS(TString{jwks->Get()->Request->URL}, "jwks.json");
+    }
+
+    Y_UNIT_TEST_F(JwksRequestDeadlineRetriesAndIgnoresLateResponse, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        auto config = MakeConfig(ISS);
+        config.MutableJwksPeriodicSettings()->SetRequestTimeout("2s");
+        config.MutableJwksPeriodicSettings()->SetMaxErrorRefreshPeriod("1s");
+        const auto id = RegProvider(config);
+
+        auto discovery = WaitHttp();
+        ReplyHttp(Rt.get(), Node, Proxy, discovery, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+        auto first = WaitHttp();
+        UNIT_ASSERT_VALUES_EQUAL(first->Get()->Timeout, TDuration::Seconds(2));
+        auto retry = WaitHttpFor(TDuration::Seconds(10));
+        UNIT_ASSERT_C(retry, "JWKS was not retried after the request deadline");
+        UNIT_ASSERT_UNEQUAL(first->Get()->Request.Get(), retry->Get()->Request.Get());
+
+        ReplyHttp(Rt.get(), Node, Proxy, first, "200", "OK", BuildJwksJson("stale", keys.X5cBase64));
+        ReplyHttp(Rt.get(), Node, Proxy, retry, "200", "OK", BuildJwksJson(KID, keys.X5cBase64));
+        SendAuth(id, "current", CreateJwt(keys, KID, ISS, "user", {}));
+        const auto response = WaitAuth();
+        UNIT_ASSERT_EQUAL(response->Get()->Status, TEvExternalIdpProvider::EStatus::SUCCESS);
+
+        ReplyHttp(Rt.get(), Node, Proxy, first, "200", "OK", BuildJwksJson("stale", keys.X5cBase64));
+        SendAuth(id, "stale", CreateJwt(keys, "stale", ISS, "user", {}));
+        const auto staleResponse = WaitAuth();
+        UNIT_ASSERT_EQUAL(staleResponse->Get()->Status, TEvExternalIdpProvider::EStatus::UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST_F(ZeroRequestTimeoutUsesDefaultDeadline, TSetup) {
+        auto config = MakeConfig(ISS);
+        config.MutableDiscoveryPeriodicSettings()->SetRequestTimeout("0s");
+        config.MutableDiscoveryPeriodicSettings()->SetMaxErrorRefreshPeriod("1s");
+        std::ignore = RegProvider(config);
+        std::ignore = WaitHttp();
+        UNIT_ASSERT(!WaitHttpFor(TDuration::Seconds(5)));
+        UNIT_ASSERT_C(WaitHttpFor(TDuration::Seconds(65)), "The default connection deadline did not trigger a retry");
+    }
+
+    Y_UNIT_TEST_F(ResponseProcessedAfterDeadlineDoesNotUpdateDiscovery, TSetup) {
+        auto config = MakeConfig(ISS);
+        config.MutableDiscoveryPeriodicSettings()->SetRequestTimeout("2s");
+        config.MutableDiscoveryPeriodicSettings()->SetMaxErrorRefreshPeriod("1s");
+        const auto id = RegProvider(config);
+        auto first = WaitHttp();
+        const auto deadline = Rt->GetClock() + TDuration::Seconds(2);
+        size_t delayed = 0;
+        Rt->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetRecipientRewrite() == id &&
+                event->GetTypeRewrite() == TEvents::TEvResumeRunnable::EventType && Rt->GetClock() == deadline)
+            {
+                ++delayed;
+                Rt->Schedule(TDuration::Seconds(5), event.release(), nullptr, node);
+                return false;
+            }
+            return true;
+        };
+        const auto barrier = Rt->AllocateEdgeActor(Node);
+        Rt->Schedule(TDuration::Seconds(3), new IEventHandle(barrier, Edge, new TEvents::TEvWakeup()), nullptr, Node);
+        Rt->WaitForEdgeActorEvent<TEvents::TEvWakeup>(barrier);
+        ReplyHttp(Rt.get(), Node, Proxy, first, "200", "OK", BuildDiscoveryJson(ISS, JWKS));
+        auto next = WaitHttpFor(TDuration::Seconds(10));
+        Rt->FilterFunction = {};
+
+        UNIT_ASSERT_C(delayed, "The deadline event was not delayed");
+        UNIT_ASSERT_C(next, "Discovery did not retry");
+        UNIT_ASSERT_STRING_CONTAINS(TString{next->Get()->Request->URL}, ".well-known/openid-configuration");
+    }
+
+    Y_UNIT_TEST_F(JwksRetriesRetainSourceBackoff, TSetup) {
+        const auto keys = GenerateRsaKeyPair();
+        auto config = MakeConfig(ISS);
+        config.MutableJwksPeriodicSettings()->SetSuccessRefreshPeriod("1s");
+        config.MutableJwksPeriodicSettings()->SetMaxErrorRefreshPeriod("60s");
+        std::ignore = RegProvider(config);
+        DoDiscoveryAndJwks(ISS, JWKS, KID, keys.X5cBase64);
+
+        auto request = WaitHttpFor(TDuration::Seconds(10));
+        UNIT_ASSERT(request);
+        TDuration lastDelay;
+        for (size_t attempt = 0; attempt < 3; ++attempt) {
+            const auto failedAt = Rt->GetClock();
+            ReplyHttpError(Rt.get(), Node, Proxy, request, "Connection refused");
+            request = WaitHttpFor(TDuration::Seconds(20));
+            UNIT_ASSERT(request);
+            lastDelay = Rt->GetClock() - failedAt;
+        }
+        UNIT_ASSERT_C(lastDelay >= TDuration::Seconds(4), "The source backoff was reset between requests");
+    }
 
     Y_UNIT_TEST_F(DiscoveryFetchOnBootstrap, TSetup) {
         std::ignore = RegProvider(MakeConfig(ISS));

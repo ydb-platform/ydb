@@ -371,6 +371,10 @@ public:
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr event) {
+        if (event->Get()->Notification == TEvHttpProxy::TEvHttpOutgoingRequest::ENotification::Accepted) {
+            Send(event->Forward(HttpProxyId));
+            return;
+        }
         const THttpOutgoingRequest* request = event->Get()->Request.Get();
         auto policy = GetCachePolicy(request);
         if (policy.TimeToExpire == TDuration()) {

@@ -6,10 +6,14 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/library/actors/async/sleep.h>
+#include <ydb/library/actors/async/timeout.h>
+#include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http.h>
+#include <ydb/library/actors/http/http_config.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/security/util.h>
 #include <ydb/library/services/services.pb.h>
@@ -121,10 +125,9 @@ public:
     );
 
     bool CanSendRequest(TInstant now) const;
-    bool IsSameRequest(NHttp::THttpOutgoingRequestPtr request) const;
     void ResetBackoff();
 
-    TDuration OnRequestSending(TInstant now, NHttp::THttpOutgoingRequestPtr request);
+    TDuration OnRequestSending(TInstant now);
     void OnSuccessReceived(TInstant now);
     void OnErrorReceived(TInstant now);
 
@@ -144,7 +147,7 @@ private:
     TInstant Ended{TInstant::Zero()};
     ui64 RetryCount{0};
 
-    NHttp::THttpOutgoingRequestPtr InFlight{nullptr};
+    bool RequestInFlight{false};
 
     NMonitoring::THistogramPtr ResponseTime{nullptr};
     NMonitoring::TDynamicCounters::TCounterPtr Successes{nullptr};
@@ -197,8 +200,15 @@ private:
     // Authenticate request flow
     void Handle(TEvExternalIdpProvider::TEvAuthenticateRequest::TPtr& ev, const TActorContext& ctx);
     // Discovery / JWKS HTTP fetches
-    void StartDiscoveryFetch(const TInstant& now);
-    void StartJwksFetch(const TInstant& now);
+    enum class ESource {
+        Discovery,
+        Jwks,
+    };
+
+    void RefreshLoop(ESource source);
+    NActors::async<NActors::IEventHandle::TPtr> Fetch(
+        NHttp::THttpOutgoingRequestPtr request, TDuration timeout, ui64 cookie, TActorId& connection);
+    NActors::async<void> StopConnection(TActorId connection);
 
     void Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev, const TActorContext& ctx);
 
@@ -250,15 +260,11 @@ TRecurringPeriod::TRecurringPeriod(
 {}
 
 bool TRecurringPeriod::CanSendRequest(TInstant now) const {
-    return InFlight == nullptr && Scheduled < now;
-}
-
-bool TRecurringPeriod::IsSameRequest(NHttp::THttpOutgoingRequestPtr request) const {
-    return InFlight != nullptr && InFlight == request;
+    return !RequestInFlight && Scheduled < now;
 }
 
 void TRecurringPeriod::ResetBackoff() {
-    if (InFlight != nullptr) {
+    if (RequestInFlight) {
         return;
     }
 
@@ -266,11 +272,11 @@ void TRecurringPeriod::ResetBackoff() {
     Scheduled = TInstant::Zero();
 }
 
-TDuration TRecurringPeriod::OnRequestSending(TInstant now, NHttp::THttpOutgoingRequestPtr request) {
+TDuration TRecurringPeriod::OnRequestSending(TInstant now) {
     Started = now;
     Ended = TInstant::Zero();
 
-    InFlight = request;
+    RequestInFlight = true;
     return RequestTimeout;
 }
 
@@ -304,7 +310,7 @@ TString TRecurringPeriod::GetHtml() const {
     html << "<tr><td scope=\"row\">Max error refresh period</td><td>" << MaxErrorRefreshPeriod << "</td></tr>";
     html << "<tr><td scope=\"row\">Request timeout</td><td>" << RequestTimeout << "</td></tr>";
 
-    if (InFlight == nullptr) {
+    if (!RequestInFlight) {
         html << "<tr><td scope=\"row\">Request in progress</td><td>FALSE</td></tr>";
         html << "<tr><td scope=\"row\">Previous request sent</td><td>" << Started << "</td></tr>";
         html << "<tr><td scope=\"row\">Previous request received</td><td>" << Ended << "</td></tr>";
@@ -324,7 +330,7 @@ TString TRecurringPeriod::GetHtml() const {
 
 void TRecurringPeriod::OnReceived(TInstant now) {
     Ended = now;
-    InFlight = nullptr;
+    RequestInFlight = false;
 
     ResponseTime->Collect((Ended - Started).MilliSeconds());
 }
@@ -422,6 +428,10 @@ void TExternalIdpProvider::Bootstrap(const TActorContext& ctx) {
     );
 
     Become(&TThis::StateWork, REFRESH_PERIOD, new NActors::TEvents::TEvWakeup());
+    if (Config.HasIssuer() && !Config.GetIssuer().empty()) {
+        RefreshLoop(ESource::Discovery);
+        RefreshLoop(ESource::Jwks);
+    }
 }
 
 void TExternalIdpProvider::StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
@@ -707,52 +717,105 @@ void TExternalIdpProvider::Handle(TEvExternalIdpProvider::TEvAuthenticateRequest
     Send(ev->Sender, resp.Release());
 }
 
-void TExternalIdpProvider::StartDiscoveryFetch(const TInstant& now) {
-    if (!Config.HasIssuer() || Config.GetIssuer().empty() || !DiscoveryRefresh.CanSendRequest(now)) {
-        return;
+void TExternalIdpProvider::RefreshLoop(ESource source) {
+    for (;;) {
+        co_await NActors::AsyncSleepFor(REFRESH_PERIOD);
+
+        auto& refresh = source == ESource::Discovery ? DiscoveryRefresh : JwksRefresh;
+        const auto now = NActors::TActivationContext::Now();
+        if (!refresh.CanSendRequest(now) || (source == ESource::Jwks && JwksUrl.empty())) {
+            continue;
+        }
+
+        const TString url = source == ESource::Discovery ? BuildDiscoveryUrl(Config.GetIssuer()) : JwksUrl;
+        if (source == ESource::Discovery) {
+            YDB_LOG_DEBUG("Discovery fetch IdP", {"issuer", Config.GetIssuer()}, {"url", url});
+        } else {
+            YDB_LOG_DEBUG("JWKS fetch IdP", {"issuer", Config.GetIssuer()}, {"url", url});
+        }
+        auto request = NHttp::THttpOutgoingRequest::CreateRequestGet(url);
+        const auto timeout = refresh.OnRequestSending(now);
+        const auto duration = timeout ? timeout : NHttp::THttpConfig::CONNECTION_TIMEOUT;
+        const auto deadline = duration == TDuration::Max()
+            ? TMonotonic::Max() : NActors::TActivationContext::Monotonic() + duration;
+        const ui64 cookie = NActors::AllocateWaitCookie();
+        TActorId connection;
+        auto result = co_await NActors::WithDeadline(deadline, Fetch(request, timeout, cookie, connection));
+
+        const auto completedAt = NActors::TActivationContext::Now();
+        const bool expired = !result || NActors::TActivationContext::Monotonic() >= deadline;
+        const auto* received = result && (*result)->GetTypeRewrite() == NHttp::TEvHttpProxy::TEvHttpIncomingResponse::EventType
+            ? (*result)->Get<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>() : nullptr;
+        const NHttp::TEvHttpProxy::TEvHttpIncomingResponse failed(
+            request, nullptr, expired ? "Request deadline exceeded" : "Unexpected HTTP response");
+        const auto& response = !expired && received && received->Request == request ? *received : failed;
+        if (source == ESource::Discovery) {
+            HandleDiscoveryResponse(response, completedAt);
+        } else {
+            HandleJwksResponse(response, completedAt);
+        }
+
+        if (!result && !connection) {
+            for (;;) {
+                auto event = co_await NActors::ActorWaitForEvent<NActors::IEventHandle>(cookie);
+                const auto type = event->GetTypeRewrite();
+                if (type == NHttp::TEvHttpProxy::TEvHttpOutgoingRequestAccepted::EventType) {
+                    connection = event->Sender;
+                    break;
+                }
+                if (type == NHttp::TEvHttpProxy::TEvHttpIncomingResponse::EventType ||
+                    type == NActors::TEvents::TEvUndelivered::EventType)
+                {
+                    break;
+                }
+            }
+        }
+        if (connection) {
+            co_await StopConnection(connection);
+        }
     }
-    const auto discoveryUrl = BuildDiscoveryUrl(Config.GetIssuer());
-
-    YDB_LOG_DEBUG("Discovery fetch IdP",
-        {"issuer", Config.GetIssuer()},
-        {"url", discoveryUrl}
-    );
-
-    const auto request = NHttp::THttpOutgoingRequest::CreateRequestGet(discoveryUrl);
-    const auto timeout = DiscoveryRefresh.OnRequestSending(now, request);
-    Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request, timeout));
 }
 
-void TExternalIdpProvider::StartJwksFetch(const TInstant& now) {
-    if (JwksUrl.empty() || !JwksRefresh.CanSendRequest(now)) {
-        return;
+NActors::async<NActors::IEventHandle::TPtr> TExternalIdpProvider::Fetch(
+    NHttp::THttpOutgoingRequestPtr request, TDuration timeout, ui64 cookie, TActorId& connection)
+{
+    auto* event = new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(std::move(request), timeout);
+    event->Notification = NHttp::TEvHttpProxy::TEvHttpOutgoingRequest::ENotification::Accepted;
+    Send(HttpProxyId, event, NActors::IEventHandle::FlagTrackDelivery, cookie);
+    for (;;) {
+        auto reply = co_await NActors::ActorWaitForEvent<NActors::IEventHandle>(cookie);
+        const auto type = reply->GetTypeRewrite();
+        if (type == NHttp::TEvHttpProxy::TEvHttpOutgoingRequestAccepted::EventType) {
+            connection = reply->Sender;
+        } else if (type == NHttp::TEvHttpProxy::TEvHttpIncomingResponse::EventType ||
+                   type == NActors::TEvents::TEvUndelivered::EventType) {
+            co_return std::move(reply);
+        }
     }
+}
 
-    YDB_LOG_DEBUG("JWKS fetch IdP",
-        {"issuer", Config.GetIssuer()},
-        {"url", JwksUrl}
-    );
-
-    const auto request = NHttp::THttpOutgoingRequest::CreateRequestGet(JwksUrl);
-    const auto timeout = JwksRefresh.OnRequestSending(now, request);
-    Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(request, timeout));
+NActors::async<void> TExternalIdpProvider::StopConnection(TActorId connection) {
+    Send(connection, new NActors::TEvents::TEvPoisonPill());
+    for (;;) {
+        const ui64 cookie = NActors::AllocateWaitCookie();
+        NActors::TActivationContext::Send(new NActors::IEventHandle(
+            NActors::TEvents::TSystem::CheckActorLiveness,
+            NActors::TEvents::TEvCheckActorLiveness::RequestFlags,
+            connection, SelfId(), nullptr, cookie));
+        auto reply = co_await NActors::ActorWaitForEvent<NActors::IEventHandle>(cookie);
+        if (reply->GetTypeRewrite() == NActors::TEvents::TEvActorDead::EventType) {
+            co_return;
+        }
+        co_await NActors::AsyncSleepFor(REFRESH_PERIOD);
+    }
 }
 
 void TExternalIdpProvider::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev, const TActorContext& ctx) {
-    const auto now = ctx.Now();
     const auto* msg = ev->Get();
-
-    if (DiscoveryRefresh.IsSameRequest(msg->Request)) {
-        return HandleDiscoveryResponse(*msg, now);
-    }
-
-    if (JwksRefresh.IsSameRequest(msg->Request)) {
-        return HandleJwksResponse(*msg, now);
-    }
-
-    YDB_LOG_ERROR("Got unexpected HTTP response",
+    Y_UNUSED(ctx);
+    YDB_LOG_DEBUG("Got late or unexpected HTTP response",
         {"issuer", Config.GetIssuer()},
-        {"request", msg->Request->AsString()}
+        {"request", msg->Request ? msg->Request->AsString() : TString()}
     );
 }
 
@@ -952,9 +1015,6 @@ void TExternalIdpProvider::Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorConte
 
 void TExternalIdpProvider::HandleWakeup(const TActorContext& ctx) {
     const auto now = ctx.Now();
-
-    StartDiscoveryFetch(now);
-    StartJwksFetch(now);
 
     if (JwksCache.IsStale(now)) {
         JwksCache.Clear();

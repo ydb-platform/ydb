@@ -786,12 +786,39 @@ public:
 
         auto reportStatsSettings = ReportStatsSettingsFromProto(runtimeSettings);
 
+        ::NMonitoring::TDynamicCounterPtr taskCountersRoot = nullptr;
+        switch (StatsMode) {
+            case NYql::NDqProto::DQ_STATS_MODE_PROFILE:
+                if (!AppData()->FeatureFlags.GetEnableStreamingQueriesCounters()) {
+                    break;
+                }
+                taskCountersRoot = Counters_->GetRootCounters();
+                break;
+            case NYql::NDqProto::DQ_STATS_MODE_FULL:
+            case NYql::NDqProto::DQ_STATS_MODE_BASIC:
+            case NYql::NDqProto::DQ_STATS_MODE_NONE:
+            case NYql::NDqProto::DQ_STATS_MODE_UNSPECIFIED:
+            case NYql::NDqProto::EDqStatsMode_INT_MIN_SENTINEL_DO_NOT_USE_:
+            case NYql::NDqProto::EDqStatsMode_INT_MAX_SENTINEL_DO_NOT_USE_:
+                break;
+        }
+
         for (auto& dqTask: *msg.MutableTasks()) {
 
             const auto taskId = dqTask.GetId();
 
             const auto taskMemory = taskMemoryOf(dqTask);
             const auto initialMemoryLimit = taskMemory.Initial;
+            ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr;
+            if (taskCountersRoot) {
+                if (auto it = dqTask.GetTaskParams().find("query_path"); it != dqTask.GetTaskParams().end()) {
+                    taskCounters = taskCountersRoot->GetSubgroup("group", "dq_tasks");
+                    taskCounters = taskCounters->GetSubgroup("query_path", it->second);
+                    if (StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
+                        taskCounters = taskCounters->GetSubgroup("task", ToString(dqTask.GetId()));
+                    }
+                }
+            }
 
             NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
                 .ExecuterId = executerId,
@@ -824,6 +851,7 @@ public:
                 .Query = query,
                 .UseBatchPool = msg.GetUseBatchPool(),
                 // TODO: block tracking mode is not set!
+                .Counters = taskCounters,
             };
             if (msg.HasUserToken() && msg.GetUserToken()) {
                 createArgs.UserToken.Reset(MakeIntrusive<NACLib::TUserToken>(msg.GetUserToken()));

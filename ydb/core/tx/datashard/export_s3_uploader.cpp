@@ -10,6 +10,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/core/backup/common/changefeed.h>
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 #include <ydb/core/backup/common/metadata.h>
@@ -1152,6 +1153,10 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
             Ydb::Table::ChangefeedDescription changefeed;
             const auto& cdcStream = cdcStreams.at(i);
             FillChangefeedDescription(changefeed, cdcStream);
+            if (NBackup::IsAsyncReplicationChangefeed(changefeed)) {
+                // Managed by async replication: see IsAsyncReplicationChangefeed.
+                continue;
+            }
 
             Ydb::Topic::DescribeTopicResult topic;
             const auto& pq = persQueues.at(i);
@@ -1167,7 +1172,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
             if (encrypted) {
                 // Anonymize changefeed name in export
                 std::stringstream prefix;
-                prefix << std::setfill('0') << std::setw(3) << std::right << (i + 1);
+                prefix << std::setfill('0') << std::setw(3) << std::right << changefeeds.size();
                 descr.Prefix = prefix.str();
             } else {
                 descr.Prefix = descr.Name;

@@ -16,7 +16,7 @@
 
 namespace {
 
-const TString DefaultSinkName("default");
+const TString DefaultSinkName("Default");
 
 }
 
@@ -257,7 +257,7 @@ TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TL
     NKikimr::NKqp::NEventLog::TBaseColumnShardLogWriter::TDatabaseSettings settings;
 
 #define SET_PROPERTY(X)                                             \
-    if (!sink.Has##X()) {                                           \
+    if (sink.Has##X()) {                                            \
         settings.X = sink.Get##X();                                 \
     } else if (defaultSink != nullptr && defaultSink->Has##X()) {   \
         settings.X = defaultSink->Get##X();                         \
@@ -288,6 +288,21 @@ TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TL
 
 #undef SET_PROPERTY
 
+    // Apply default store and table name
+    Cerr << "Check defaults databasePath= " << settings.DatabasePath << " storeName=" << settings.StoreName << " TableName=" << settings.TableName << Endl;
+    if (settings.StoreName.empty() || settings.TableName.empty()) {
+        auto defs = GetDefaultStoreTableName(sink.GetSource());
+
+        if (settings.StoreName.empty()) {
+            settings.StoreName = defs.first;
+            Cerr << "Set storeName=" << settings.StoreName << Endl;
+        }
+
+        if (settings.TableName.empty()) {
+            settings.TableName = defs.second;
+            Cerr << "Set tableName=" << settings.TableName << Endl;
+        }
+    }
     return settings;
 }
 
@@ -371,8 +386,6 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
             continue;
         }
 
-        Cerr << "       sink " << sinkConfig << Endl;
-
         auto it = oldSinks.find(sinkConfig);
         if (it != end(oldSinks)) {
             YDB_LOG_INFO("LogSinksConfig: Don't reconfigure sink");
@@ -382,10 +395,12 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
         } else {
             auto sinkPtr = CreateLogSink(sink, defaultSinkPtr);
             if (sinkPtr != nullptr) {
+                Cerr << "       sink " << sinkConfig << " created" << Endl;
                 YDB_LOG_INFO("LogSinksConfig: Create sink");
 
                 newSinks[sinkConfig] = sinkPtr;
             } else {
+                Cerr << "       sink " << sinkConfig << " not created" << Endl;
                 YDB_LOG_ERROR("LogSinksConfig: Can't create sink");
             }
         }

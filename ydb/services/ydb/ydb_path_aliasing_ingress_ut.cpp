@@ -391,8 +391,8 @@ namespace NKikimr::NGRpcService {
             Success(Call(*stub, &TTable::AlterTable, relative, "/alias"));
         }
 
-        Y_UNIT_TEST(TopicRewritesNestedDlqPathsOnly) {
-            TFixture fixture;
+        Y_UNIT_TEST_TWIN(TopicRewritesNestedDlqPathsOnly, enableRelativePaths) {
+            TFixture fixture(false, true, true, false, enableRelativePaths);
             auto stub = Ydb::Topic::V1::TopicService::NewStub(fixture.Channel);
 
             auto createTopic = [&](const TString& path) {
@@ -411,12 +411,17 @@ namespace NKikimr::NGRpcService {
             auto* aliasPolicy = aliasConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
             aliasPolicy->set_enabled(true);
             aliasPolicy->mutable_move_action()->set_dead_letter_queue("/alias/dlq");
+            auto* sqsConsumer = create.add_consumers();
+            sqsConsumer->set_name("sqs_consumer");
+            auto* sqsPolicy = sqsConsumer->mutable_shared_consumer_type()->mutable_dead_letter_policy();
+            sqsPolicy->set_enabled(true);
+            sqsPolicy->mutable_move_action()->set_dead_letter_queue("sqs://account/queue");
             Success(Call(*stub, &TTopic::CreateTopic, create, "/alias"));
 
             Ydb::Topic::AlterTopicRequest alter;
             alter.set_path("/alias/source");
             auto* added = alter.add_add_consumers();
-            added->set_name("sqs_consumer");
+            added->set_name("added_sqs_consumer");
             auto* addedPolicy = added->mutable_shared_consumer_type()->mutable_dead_letter_policy();
             addedPolicy->set_enabled(true);
             addedPolicy->mutable_move_action()->set_dead_letter_queue("sqs://account/queue");
@@ -424,6 +429,10 @@ namespace NKikimr::NGRpcService {
             changed->set_name("alias_consumer");
             changed->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
                 ->mutable_alter_move_action()->set_set_dead_letter_queue("/alias/dlq");
+            auto* changedSqs = alter.add_alter_consumers();
+            changedSqs->set_name("sqs_consumer");
+            changedSqs->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+                ->mutable_alter_move_action()->set_set_dead_letter_queue("sqs://account/updated");
             Success(Call(*stub, &TTopic::AlterTopic, alter, "/alias"));
 
             Ydb::Topic::AlterTopicRequest setMove;
@@ -432,15 +441,20 @@ namespace NKikimr::NGRpcService {
             changedMove->set_name("alias_consumer");
             changedMove->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
                 ->mutable_set_move_action()->set_dead_letter_queue("/alias/dlq");
+            auto* changedSqsMove = setMove.add_alter_consumers();
+            changedSqsMove->set_name("sqs_consumer");
+            changedSqsMove->mutable_alter_shared_consumer_type()->mutable_alter_dead_letter_policy()
+                ->mutable_set_move_action()->set_dead_letter_queue("sqs://account/final");
             Success(Call(*stub, &TTopic::AlterTopic, setMove, "/alias"));
 
             Ydb::Topic::DescribeTopicRequest describe;
             describe.set_path("/alias/source");
             const auto result = Result<Ydb::Topic::DescribeTopicResult>(
                 Call(*stub, &TTopic::DescribeTopic, describe, "/alias"));
-            const std::array<std::pair<std::string, std::string>, 2> expected{{
+            const std::array<std::pair<std::string, std::string>, 3> expected{{
                 {"alias_consumer", "/Root/kfront/dlq"},
-                {"sqs_consumer", "sqs://account/queue"},
+                {"sqs_consumer", "sqs://account/final"},
+                {"added_sqs_consumer", "sqs://account/queue"},
             }};
             for (const auto& [name, dlq] : expected) {
                 bool found = false;

@@ -17,6 +17,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAct
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestart4Plus2BlockMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3of4MemoryLimit10_KB
+<<<<<<< HEAD
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadMirror3dcMemoryLimit200_B
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadMirror3of4MemoryLimit10_KB
@@ -31,11 +32,28 @@ ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneB
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOneWithReconnects
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk unittest.[*/*] chunk
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
+=======
+ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
+ydb/core/driver_lib/run/ut unittest.[*/*] chunk
+ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
+ydb/core/kqp/executer_actor/ut unittest.sole chunk
+ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
+ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
+ydb/core/kqp/ut/query unittest.[*/*] chunk
+ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
+>>>>>>> 707c4cf800b (Update muted_ya for release-msan main)
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
+<<<<<<< HEAD
 ydb/core/tx/schemeshard/ut_metrics unittest.[*/*] chunk
+=======
+ydb/core/tx/datashard/ut_truncate unittest.[*/*] chunk
+ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplaysRelease
+ydb/core/tx/replication/service/ut_worker unittest.[*/*] chunk
+ydb/core/wrappers/ut unittest.[*/*] chunk
+>>>>>>> 707c4cf800b (Update muted_ya for release-msan main)
 ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma
 ydb/library/actors/interconnect/ut Interconnect.RdmaSimultaneousReconnectDoesNotLoop
 ydb/library/actors/interconnect/ut Interconnect.RdmaXdcCatchReplayAfterPartialPayloadRead

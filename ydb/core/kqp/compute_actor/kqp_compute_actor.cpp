@@ -192,7 +192,8 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     RegisterKqpVectorSearchActor(*factory, counters, std::move(vectorIndexLevelsCache));
     RegisterKqpFullTextSource(*factory, counters);
     RegisterKqpSysViewSource(*factory, counters);
-    bool enableStreamingQueriesCounters = NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesCounters();
+    const auto* appData = NKikimr::AppData();
+    bool enableStreamingQueriesCounters = appData->FeatureFlags.GetEnableStreamingQueriesCounters();
     NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory, enableStreamingQueriesCounters ? counters->GetKqpCounters() : nullptr);
 
     RegisterDqSourceKikimrLookupProviderFactories(*factory);
@@ -235,9 +236,12 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
             counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSourceTracker"),
             {},
             enableStreamingQueriesCounters,
-            NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueryTopicAutopartitioning());
+            appData->FeatureFlags.GetEnableStreamingQueryTopicAutopartitioning());
         NYql::NDq::RegisterYtMessageStreamReadActorFactory(*factory, federatedQuerySetup->CredentialsFactory);
-        NYql::NDq::RegisterDqPqWriteActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway, counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters, NKikimr::AppData()->FeatureFlags.GetEnableStreamingQueriesPqSinkDeduplication());
+        NYql::NDq::RegisterDqPqWriteActorFactory(
+            *factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway,
+            counters->GetKqpCounters()->GetSubgroup("subsystem", "DqSinkTracker"), enableStreamingQueriesCounters,
+            [appData] { return appData->FeatureFlags.GetEnableStreamingQueriesPqSinkDeduplication(); });
         NYql::NDq::RegisterDqPqInfoAggregationActorFactory(*factory);
         NYql::NDq::RegisterDqPqControlPlaneActorFactory(*factory, *driver, federatedQuerySetup->CredentialsFactory, pqGateway);
     }

@@ -35,6 +35,7 @@ SRCS(
     topic_service_ut.cpp
     topic_deferred_publish_ut.cpp
     persqueue_v1_gaps_ut.cpp
+    read_init_auth_ut.cpp
     read_session_multi_topic_ut.cpp
     demo_tx.cpp
 

@@ -187,6 +187,7 @@ public:
                                     .CdcStream = isCDCStream,
                                     .CdcStreamName = cdcStreamName,
                                     .CreateStep = entry.CreateStep,
+                                    .IsServerless = entry.DomainInfo && entry.DomainInfo->IsServerless(),
                                     .Info = entry.PQGroupInfo,
                                     .Self = entry.Self,
                                     .SecurityObject = entry.SecurityObject

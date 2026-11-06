@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/persqueue/public/metrics
     ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/dataplane
+    ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/reset_offset
     ydb/core/persqueue/writer
     ydb/core/protos

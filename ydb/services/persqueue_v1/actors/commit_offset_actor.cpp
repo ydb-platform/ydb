@@ -96,7 +96,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
 
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
             ctx, ctx.SelfID, ClientId, 0, TString("read_info:") + Request().GetPeerName(),
-            SchemeCache, NewSchemeCache, Counters, token, topicsList, TopicsHandler->GetLocalCluster()
+            Request().GetDatabaseName().GetOrElse(TString()), NewSchemeCache, Counters, token, topicsList, TopicsHandler->GetLocalCluster()
     ));
 }
 

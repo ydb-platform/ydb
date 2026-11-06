@@ -1,3 +1,5 @@
+* Added support for database paths relative to the cluster root in the YDB CLI when the server's `EnableRelativePaths` flag is enabled. Only paths starting with `/` are absolute; slashless paths starting with the cluster name are now relative too.
+* Resource paths in the YDB CLI are relative to the database unless they start with `/`. The CLI expands relative database names against the cluster root before resolving resource paths. Existing CLI handling of `.` and `./path` is preserved. `ydb tools restore` supports relative destinations whose parent directories do not yet exist.
 * Added `--expected-generation` option to `ydb admin cluster bridge update` to apply a cluster state update only if the cluster state still has the given generation.
 * Added `ydb admin cluster bridge set-database-mode` to enable or disable bridge mode for the database selected with `--target-database`. Use `bridged` or `ordinary` as the required mode argument, and optionally `--retain-pile` with `ordinary`.
 * Added `ydb admin cluster bridge destroy-pile` command to destroy a DISCONNECTED pile along with all its data (asks for confirmation unless `-y` is given).

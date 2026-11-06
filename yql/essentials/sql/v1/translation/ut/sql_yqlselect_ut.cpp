@@ -119,7 +119,9 @@ Y_UNIT_TEST(AutoFallbackPreservesHints) {
             FROM plato.x
             GROUP /*+ COMPACT() */ BY k
         ) AS grouped
-        SELECT grouped.*;
+        SELECT
+            grouped.*,
+            ROW_NUMBER() OVER (ORDER BY random(TableRow())) AS row_number;
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
@@ -696,10 +698,11 @@ Y_UNIT_TEST(QualifiedAsteriskJoin) {
         USE plato;
         SELECT xx.* FROM xx JOIN yy ON xx.id = yy.id;
     )sql", settings);
-    UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(
-        Err2Str(res),
-        "YqlSelect unsupported: an_id DOT ASTERISK");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {{TString("YqlQualifiedStar"), 0}};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlQualifiedStar"], 1);
 }
 
 Y_UNIT_TEST(Join2Alias) {

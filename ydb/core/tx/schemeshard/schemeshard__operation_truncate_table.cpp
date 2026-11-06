@@ -66,24 +66,26 @@ public:
             Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
 
             Y_ABORT_UNLESS(txState->Shards.size());
+
+            // The body is identical for all shards of the table: build and
+            // serialize it once, before the loop.
+            TPathId targetPathId = txState->TargetPathId;
+            TString txBody;
+            {
+                auto seqNo = context.SS->StartRound(*txState);
+
+                NKikimrTxDataShard::TFlatSchemeTransaction tx;
+                context.SS->FillSeqNo(tx, seqNo);
+                auto truncateTable = tx.MutableTruncateTable();
+                auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+                truncateTable->SetTableSchemaVersion(table->AlterVersion + 1);
+                targetPathId.ToProto(truncateTable->MutablePathId());
+                Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+            }
+
             for (ui32 i = 0; i < txState->Shards.size(); ++i) {
                 auto idx = txState->Shards[i].Idx;
                 auto datashardId = context.SS->ShardInfos[idx].TabletID;
-
-                TPathId targetPathId = txState->TargetPathId;
-
-                TString txBody;
-                {
-                    auto seqNo = context.SS->StartRound(*txState);
-
-                    NKikimrTxDataShard::TFlatSchemeTransaction tx;
-                    context.SS->FillSeqNo(tx, seqNo);
-                    auto truncateTable = tx.MutableTruncateTable();
-                    auto table = context.SS->Tables.at(tablePath.Base()->PathId);
-                    truncateTable->SetTableSchemaVersion(table->AlterVersion + 1);
-                    targetPathId.ToProto(truncateTable->MutablePathId());
-                    Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
-                }
 
                 auto event = context.SS->MakeDataShardProposal(targetPathId, OperationId, txBody, context.Ctx);
                 context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());

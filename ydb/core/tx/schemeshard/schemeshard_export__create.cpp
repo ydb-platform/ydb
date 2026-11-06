@@ -375,7 +375,12 @@ private:
                 // table metadata. Other impl tables could never be found on import.
                 THashSet<TString> listedImplTables;
                 if (encrypted) {
-                    for (const auto& index : GetTableIndexesExportMetadata(Self, path.Base()->PathId, encrypted)) {
+                    const auto indexes = GetTableIndexesExportMetadata(Self, path.Base()->PathId, encrypted);
+                    if (!indexes) {
+                        explain = indexes.GetErrorMessage();
+                        return false;
+                    }
+                    for (const auto& index : indexes.GetResult()) {
                         listedImplTables.insert(index.ImplTablePrefix);
                     }
                 }
@@ -479,7 +484,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         YDB_LOG_DEBUG("TExport::TTxProgress: DoExecute");
 
         if (AllocateResult) {
-            OnAllocateResult();
+            OnAllocateResult(txc);
         } else if (ModifyResult) {
             OnModifyResult(txc, ctx);
         } else if (SchemeUploadResult) {
@@ -522,9 +527,14 @@ private:
         Send(Self->SelfId(), CopyTablesPropose(Self, txId, exportInfo));
     }
 
-    void TransferData(TExportInfo& exportInfo, ui32 itemIdx, TTxId txId) {
+    bool TransferData(TExportInfo& exportInfo, ui32 itemIdx, TTxId txId, TString& error) {
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         auto& item = exportInfo.Items[itemIdx];
+
+        auto propose = BackupPropose(Self, txId, exportInfo, itemIdx, error);
+        if (!propose) {
+            return false;
+        }
 
         item.SubState = ESubState::Proposed;
 
@@ -535,7 +545,8 @@ private:
         );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        Send(Self->SelfId(), BackupPropose(Self, txId, exportInfo, itemIdx));
+        Send(Self->SelfId(), std::move(propose));
+        return true;
     }
 
     template <typename Func>
@@ -704,7 +715,12 @@ private:
             for (const auto& [parentIdx, implTables] : indexItemsByParent) {
                 auto& prefixes = *exportInfo.ExportMetadata.MutableSchemaMapping(parentIdx)->MutableIndexExportPrefixes();
                 const auto& parentItem = exportInfo.Items.at(parentIdx);
-                for (const auto& index : GetTableIndexesExportMetadata(Self, parentItem.SourcePathId, true)) {
+                const auto indexes = GetTableIndexesExportMetadata(Self, parentItem.SourcePathId, true);
+                if (!indexes) {
+                    issues = indexes.GetErrorMessage();
+                    return false;
+                }
+                for (const auto& index : indexes.GetResult()) {
                     if (implTables.contains(index.ImplTablePrefix)) {
                         auto& entry = *prefixes.AddIndexes();
                         entry.SetImplTablePrefix(index.ImplTablePrefix);
@@ -832,7 +848,7 @@ private:
         }
     }
 
-    void UploadCompletion(TExportInfo& exportInfo, ui32 itemIdx, const TActorContext& ctx) {
+    void UploadCompletion(TExportInfo& exportInfo, ui32 itemIdx, NIceDb::TNiceDb& db, const TActorContext& ctx) {
         const bool operationMarker = itemIdx == Max<ui32>();
         auto& uploader = operationMarker
             ? exportInfo.ExportMetadataUploader
@@ -844,11 +860,21 @@ private:
 
         Ydb::Export::ExportToS3Settings settings;
         Y_ABORT_UNLESS(settings.ParseFromString(exportInfo.Settings));
-        const TString prefix = operationMarker
-            ? GetExportCompletionPrefix(settings)
+        const auto prefix = operationMarker
+            ? TConclusion<TString>(GetExportCompletionPrefix(settings))
             : ExportItemDestinationPrefix(Self, exportInfo, itemIdx);
+        if (!prefix) {
+            auto& item = exportInfo.Items.at(itemIdx);
+            Self->TxIdToExport.erase(item.WaitTxId);
+            item.WaitTxId = InvalidTxId;
+            item.State = EState::Cancelled;
+            item.Issue = prefix.GetErrorMessage();
+            Self->PersistExportItemState(db, exportInfo, itemIdx);
+            CancelAndPersistExport(Self->Exports.at(exportInfo.Id), itemIdx, "invalid index description", db);
+            return;
+        }
 
-        uploader = ctx.Register(CreateExportCompletionUploader(Self->SelfId(), exportInfo.Id, itemIdx, settings, prefix));
+        uploader = ctx.Register(CreateExportCompletionUploader(Self->SelfId(), exportInfo.Id, itemIdx, settings, prefix.GetResult()));
         Self->RunningExportSchemeUploaders.emplace(uploader);
         // Bootstrap waits for this event: no S3 request is issued before commit.
         Send(uploader, new TEvents::TEvWakeup());
@@ -868,7 +894,7 @@ private:
         }
 
         if (exportInfo->Kind == TExportInfo::EKind::S3) {
-            UploadCompletion(*exportInfo, Max<ui32>(), ctx);
+            UploadCompletion(*exportInfo, Max<ui32>(), db, ctx);
         } else {
             CompleteTransfer(exportInfo, db);
         }
@@ -1154,7 +1180,7 @@ private:
         case EState::Transferring: {
             const bool allItemsDone = AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone);
             if (exportInfo->Kind == TExportInfo::EKind::S3 && allItemsDone) {
-                UploadCompletion(*exportInfo, Max<ui32>(), ctx);
+                UploadCompletion(*exportInfo, Max<ui32>(), db, ctx);
                 break;
             }
             TDeque<ui32> pendingTables;
@@ -1252,7 +1278,7 @@ private:
         AuditLogExportEnd(*exportInfo, Self);
     }
 
-    void OnAllocateResult() {
+    void OnAllocateResult(TTransactionContext& txc) {
         Y_ABORT_UNLESS(AllocateResult);
 
         const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
@@ -1288,7 +1314,16 @@ private:
             }
             itemIdx = PopFront(exportInfo->PendingItems);
             if (IsPathTypeTransferrable(exportInfo->Items.at(itemIdx))) {
-                TransferData(*exportInfo, itemIdx, txId);
+                TString error;
+                if (!TransferData(*exportInfo, itemIdx, txId, error)) {
+                    NIceDb::TNiceDb db(txc.DB);
+                    auto& item = exportInfo->Items.at(itemIdx);
+                    item.State = EState::Cancelled;
+                    item.Issue = std::move(error);
+                    Self->PersistExportItemState(db, *exportInfo, itemIdx);
+                    CancelAndPersistExport(exportInfo, itemIdx, "invalid index description", db);
+                    return;
+                }
             } else {
                 YDB_LOG_WARN("TExport::TTxProgress: OnAllocateResult allocated a needless txId for an item transferring",
                     {"id", id},
@@ -1791,7 +1826,7 @@ private:
             if (needsCompletionMarker) {
                 // Keep the durable backup tx id until the marker is acknowledged.
                 // Recovery can recheck BackupHistory and safely repeat the PUT.
-                UploadCompletion(*exportInfo, itemIdx, ctx);
+                UploadCompletion(*exportInfo, itemIdx, db, ctx);
                 return;
             }
 

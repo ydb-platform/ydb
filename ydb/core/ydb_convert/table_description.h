@@ -145,6 +145,9 @@ void FillTableBoundary(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in, const NKikimrMiniKQL::TType& splitKeyType);
 
 // out
+// DescribeTableIndex may omit impl tables while an index is being rebuilt.
+bool ValidateIndexImplTableDescriptions(const NKikimrSchemeOp::TTableDescription& table, TString& error);
+
 void FillIndexDescription(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 void FillIndexDescription(Ydb::Table::CreateTableRequest& out,

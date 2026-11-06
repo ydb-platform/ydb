@@ -627,6 +627,54 @@ column_families {
 
     using TFillIndexDescFn = void(*)(Ydb::Table::DescribeTableResult&, const NKikimrSchemeOp::TTableDescription&);
 
+    Y_UNIT_TEST(IndexDescriptionRejectsMissingImplTables) {
+        using namespace NKikimrSchemeOp;
+        const std::pair<EIndexType, int> cases[] = {
+            {EIndexTypeGlobal, 1},
+            {EIndexTypeGlobalAsync, 1},
+            {EIndexTypeGlobalUnique, 1},
+            {EIndexTypeGlobalVectorKmeansTree, 2},
+            {EIndexTypeGlobalVectorKmeansTree, 3},
+            {EIndexTypeGlobalFulltextPlain, 1},
+            {EIndexTypeGlobalFulltextCompact, 1},
+            {EIndexTypeGlobalFulltextRelevance, 4},
+            {EIndexTypeGlobalFulltextCompactRelevance, 3},
+            {EIndexTypeGlobalJson, 1},
+            {EIndexTypeGlobalJsonCompact, 1},
+        };
+        for (const auto& [type, implTables] : cases) {
+            TTableDescription table;
+            auto& index = *table.AddTableIndexes();
+            index.SetName("index_under_rebuild");
+            index.SetType(type);
+            if (type == EIndexTypeGlobalVectorKmeansTree && implTables == 3) {
+                index.AddKeyColumnNames("prefix");
+            }
+            index.AddKeyColumnNames("value");
+
+            for (int count = 0; count < implTables; ++count) {
+                Ydb::Table::CreateTableRequest create;
+                Ydb::Table::DescribeTableResult describe;
+                UNIT_ASSERT_EXCEPTION_CONTAINS(FillIndexDescription(create, table), yexception,
+                    "Incomplete description of index 'index_under_rebuild'");
+                UNIT_ASSERT_EXCEPTION_CONTAINS(FillIndexDescription(describe, table), yexception,
+                    "Incomplete description of index 'index_under_rebuild'");
+                UNIT_ASSERT_VALUES_EQUAL(create.indexes_size(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(describe.indexes_size(), 0);
+                index.AddIndexImplTableDescriptions();
+            }
+
+            // Complete descriptions still convert, including an extra transient build table.
+            for (int extra = 0; extra < 2; ++extra) {
+                Ydb::Table::CreateTableRequest create;
+                FillIndexDescription(create, table);
+                UNIT_ASSERT_VALUES_EQUAL(create.indexes_size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(create.indexes(0).name(), "index_under_rebuild");
+                index.AddIndexImplTableDescriptions();
+            }
+        }
+    }
+
     Y_UNIT_TEST(IndexDescriptionLocalBloomFilter) {
         Test<NKikimrSchemeOp::TTableDescription, Ydb::Table::DescribeTableResult>(
             static_cast<TFillIndexDescFn>(&FillIndexDescription), R"(

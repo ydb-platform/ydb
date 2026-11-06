@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/library/conclusion/result.h>
 
 #include <util/generic/ptr.h>
 
@@ -25,7 +26,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo,
-    ui32 itemIdx
+    ui32 itemIdx,
+    TString& error
 );
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
@@ -47,13 +49,13 @@ THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(
 );
 
 TString ExportItemPathName(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx);
-TString ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx);
+TConclusion<TString> ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx);
 
 // IV of a separate index impl-table export item
 NBackup::TEncryptionIV MakeExportIndexItemIV(const NBackup::TEncryptionIV& exportIV, ui32 itemIdx);
 
 // Index impl tables that DataShard lists in the table metadata.json on export
-TVector<NBackup::TIndexMetadata> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId, bool encrypted);
+TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId, bool encrypted);
 
 void PrepareDropping(TSchemeShard* ss, TExportInfo& exportInfo, NIceDb::TNiceDb& db,
     TExportInfo::EState droppingState, std::function<void(ui64)> func);

@@ -11288,6 +11288,126 @@ enum class EIndexBackupScenario {
     RebootBeforeBackupPropose,
 };
 
+enum class EIncompleteIndexStage {
+    BeforeExport,
+    BeforeMetadata,
+    BeforeBackup,
+};
+
+void RejectIncompleteVectorIndexExport(bool isFs, bool prefixed, EIncompleteIndexStage stage) {
+    TBackupStorage storage(isFs);
+    TTestBasicRuntime runtime;
+    TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
+    runtime.GetAppData().FeatureFlags.SetEnableFsBackups(isFs);
+    runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+    runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+    ui64 txId = 100;
+
+    TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+        TableDescription {
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: ["key"]
+        }
+        IndexDescription {
+            Name: "vector_idx"
+            Type: EIndexTypeGlobalVectorKmeansTree
+            KeyColumnNames: [%s "embedding"]
+            VectorIndexKmeansTreeDescription {
+                Settings {
+                    settings { metric: DISTANCE_COSINE vector_type: VECTOR_TYPE_FLOAT vector_dimension: 2 }
+                    clusters: 2
+                    levels: 1
+                }
+            }
+        }
+    )", prefixed ? "\"key\"," : ""));
+    env.TestWaitNotification(runtime, txId);
+
+    const auto removeImplTable = [&] {
+        // Reproduce the interval between dropping and recreating regular impl
+        // tables during an in-place rebuild, without depending on its scheduling.
+        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(++txId, TTestTxConfig::SchemeShard);
+        auto& tx = *request->Record.AddTransaction();
+        tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
+        tx.SetInternal(true);
+        tx.SetWorkingDir("/MyRoot/Table/vector_idx");
+        tx.MutableDrop()->SetName(prefixed ? "indexImplPrefixTable" : "indexImplPostingTable");
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request.Release());
+        TestModificationResult(runtime, txId);
+        env.TestWaitNotification(runtime, txId);
+
+        const auto description = DescribePath(runtime, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(description.GetPathDescription().GetTable().TableIndexesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(description.GetPathDescription().GetTable().GetTableIndexes(0)
+            .IndexImplTableDescriptionsSize(), prefixed ? 2 : 1);
+    };
+
+    ui64 copyTxId = 0;
+    auto copyObserver = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](const auto& ev) {
+        for (const auto& tx : ev->Get()->Record.GetTransaction()) {
+            if (tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
+                copyTxId = ev->Get()->Record.GetTxId();
+            }
+        }
+    });
+    TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> mkdir(runtime, [&](const auto& ev) {
+        return stage == EIncompleteIndexStage::BeforeMetadata
+            && ev->Get()->Record.TransactionSize()
+            && ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMkDir;
+    });
+    TBlockEvents<TEvSchemeShard::TEvNotifyTxCompletionResult> copyComplete(runtime, [&](const auto& ev) {
+        return stage == EIncompleteIndexStage::BeforeBackup && copyTxId
+            && ev->Get()->Record.GetTxId() == copyTxId;
+    });
+
+    if (stage == EIncompleteIndexStage::BeforeExport) {
+        removeImplTable();
+    }
+    const ui64 exportTxId = ++txId;
+    AsyncExport(runtime, exportTxId, "/MyRoot", Sprintf(R"(
+        %s {
+            %s
+            %s
+            encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key { key: "0123456789012345" }
+            }
+            include_index_data: true
+            items { source_path: "/MyRoot/Table" %s: "backup" }
+        }
+    )", isFs ? "ExportToFsSettings" : "ExportToS3Settings", storage.Settings().c_str(),
+        isFs ? "" : "destination_prefix: \"export\"", isFs ? "destination_path" : "destination_prefix"));
+    TAutoPtr<IEventHandle> handle;
+    const auto* response = runtime.GrabEdgeEvent<TEvExport::TEvCreateExportResponse>(handle);
+    const auto& entry = response->Record.GetResponse().GetEntry();
+    TString issues;
+    if (stage == EIncompleteIndexStage::BeforeExport) {
+        UNIT_ASSERT_VALUES_EQUAL_C(entry.GetStatus(), Ydb::StatusIds::BAD_REQUEST, entry.GetIssues());
+        issues = NYql::IssuesFromMessageAsString(entry.GetIssues());
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL_C(entry.GetStatus(), Ydb::StatusIds::SUCCESS, entry.GetIssues());
+        runtime.WaitFor("export paused before index description", [&] {
+            return stage == EIncompleteIndexStage::BeforeMetadata ? !mkdir.empty() : !copyComplete.empty();
+        });
+        removeImplTable();
+        mkdir.Stop().Unblock();
+        copyComplete.Stop().Unblock();
+        env.TestWaitNotification(runtime, exportTxId);
+        const auto result = TestGetExport(runtime, exportTxId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        issues = NYql::IssuesFromMessageAsString(result.GetResponse().GetEntry().GetIssues());
+    }
+    UNIT_ASSERT_STRING_CONTAINS(issues, "Incomplete description of index 'vector_idx'");
+    UNIT_ASSERT_STRING_CONTAINS(issues, prefixed
+        ? "expected at least 3 implementation table descriptions, got 2"
+        : "expected at least 2 implementation table descriptions, got 1");
+
+    // Rejection must leave SchemeShard able to process subsequent operations.
+    TestMkDir(runtime, ++txId, "/MyRoot", "AfterRejectedExport");
+    env.TestWaitNotification(runtime, txId);
+}
+
 void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
         Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode,
         const TString& algorithm = "ChaCha20-Poly1305",
@@ -11747,6 +11867,18 @@ void ExportGlobalIndexWithLocalBloom(bool isFs) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
+    Y_UNIT_TEST_QUAD(RejectIncompleteVectorIndex, IsFs, Prefixed) {
+        RejectIncompleteVectorIndexExport(IsFs, Prefixed, EIncompleteIndexStage::BeforeExport);
+    }
+
+    Y_UNIT_TEST_FLAG(RejectIncompleteIndexBeforeMetadata, IsFs) {
+        RejectIncompleteVectorIndexExport(IsFs, false, EIncompleteIndexStage::BeforeMetadata);
+    }
+
+    Y_UNIT_TEST_FLAG(RejectIncompleteIndexBeforeBackup, IsFs) {
+        RejectIncompleteVectorIndexExport(IsFs, false, EIncompleteIndexStage::BeforeBackup);
+    }
+
     Y_UNIT_TEST_QUAD(Export, IsFs, Aes) {
         ExportImportMaterializedIndexes(IsFs, true,
             Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,

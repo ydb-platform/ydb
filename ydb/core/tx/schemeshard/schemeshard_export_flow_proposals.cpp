@@ -88,7 +88,12 @@ static NKikimrSchemeOp::TPathDescription GetDescription(TSchemeShard* ss, const 
     return record.GetPathDescription();
 }
 
-static TVector<NBackup::TIndexMetadata> GetTableIndexesExportMetadata(const NKikimrSchemeOp::TTableDescription& table, bool encrypted) {
+static TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(const NKikimrSchemeOp::TTableDescription& table, bool encrypted) {
+    TString error;
+    if (!ValidateIndexImplTableDescriptions(table, error)) {
+        return TConclusionStatus::Fail(error);
+    }
+
     // Must match the list that DataShard writes into the table metadata.json
     // (see TS3Export::CreateUploader and GenRowTableScheme): DataShard numbers
     // anonymized index prefixes after the exported changefeeds, lists only the
@@ -100,7 +105,7 @@ static TVector<NBackup::TIndexMetadata> GetTableIndexesExportMetadata(const NKik
         FillTableBoundary(scheme, table, mkqlKeyType);
         FillIndexDescription(scheme, table);
     } catch (const yexception&) {
-        return {};
+        return TVector<NBackup::TIndexMetadata>{};
     }
 
     const auto& featureFlags = AppData()->FeatureFlags;
@@ -109,12 +114,12 @@ static TVector<NBackup::TIndexMetadata> GetTableIndexesExportMetadata(const NKik
         featureFlags.GetEnableCompactFulltextIndex());
 }
 
-TVector<NBackup::TIndexMetadata> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId, bool encrypted) {
+TConclusion<TVector<NBackup::TIndexMetadata>> GetTableIndexesExportMetadata(TSchemeShard* ss, const TPathId& tablePathId, bool encrypted) {
     // The same description that FillTableDescription passes to DataShard
     return GetTableIndexesExportMetadata(GetDescription(ss, tablePathId).GetTable(), encrypted);
 }
 
-static TString ComputeIndexItemSuffix(
+static TConclusion<TString> ComputeIndexItemSuffix(
     TSchemeShard* ss,
     const TExportInfo& exportInfo,
     const TExportInfo::TItem& item,
@@ -146,7 +151,11 @@ static TString ComputeIndexItemSuffix(
     const auto& parentItem = exportInfo.Items[item.ParentIdx];
     auto parentPath = TPath::Init(parentItem.SourcePathId, ss);
     if (parentPath.IsResolved()) {
-        for (const auto& index : GetTableIndexesExportMetadata(ss, parentPath.Base()->PathId, encrypted)) {
+        const auto indexes = GetTableIndexesExportMetadata(ss, parentPath.Base()->PathId, encrypted);
+        if (!indexes) {
+            return indexes.GetError();
+        }
+        for (const auto& index : indexes.GetResult()) {
             if (index.ImplTablePrefix == item.SourcePathName) {
                 return index.ExportPrefix;
             }
@@ -158,7 +167,7 @@ static TString ComputeIndexItemSuffix(
 }
 
 template <typename TSettings>
-TString ComputeIndexItemPath(
+TConclusion<TString> ComputeIndexItemPath(
     TSchemeShard* ss,
     const TExportInfo::TItem& item,
     ui32 itemIdx, const TExportInfo& exportInfo,
@@ -174,13 +183,17 @@ TString ComputeIndexItemPath(
         if (!itemPath.empty() && itemPath.back() != '/') {
             itemPath += '/';
         }
-        itemPath += ComputeIndexItemSuffix(ss, exportInfo, item, itemIdx,
+        auto suffix = ComputeIndexItemSuffix(ss, exportInfo, item, itemIdx,
             exportSettings.has_encryption_settings());
+        if (!suffix) {
+            return suffix.GetError();
+        }
+        itemPath += suffix.GetResult();
     }
     return itemPath;
 }
 
-TString ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx) {
+TConclusion<TString> ExportItemDestinationPrefix(TSchemeShard* ss, const TExportInfo& exportInfo, ui32 itemIdx) {
     Ydb::Export::ExportToS3Settings settings;
     Y_ABORT_UNLESS(settings.ParseFromString(exportInfo.Settings));
     return ComputeIndexItemPath(ss, exportInfo.Items.at(itemIdx), itemIdx, exportInfo, settings);
@@ -299,7 +312,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo,
-    ui32 itemIdx
+    ui32 itemIdx,
+    TString& error
 ) {
     Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
     const auto& item = exportInfo.Items[itemIdx];
@@ -338,6 +352,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), parentPath.Child(childName));
     }
 
+    // Recheck the actual description sent to DataShard: the source index may
+    // have entered a rebuild after the export was accepted.
+    if (!ValidateIndexImplTableDescriptions(task.GetTable().GetTable(), error)) {
+        return nullptr;
+    }
+
     task.SetNeedToBill(!exportInfo.UserSID || !ss->SystemBackupSIDs.contains(*exportInfo.UserSID));
     task.SetSnapshotStep(exportInfo.SnapshotStep);
     task.SetSnapshotTxId(exportInfo.SnapshotTxId);
@@ -374,7 +394,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             backupSettings.SetStorageClass(exportSettings.storage_class());
             backupSettings.SetUseVirtualAddressing(!exportSettings.disable_virtual_addressing());
 
-            backupSettings.SetObjectKeyPattern(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
+            auto prefix = ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings);
+            if (!prefix) {
+                error = prefix.GetErrorMessage();
+                return nullptr;
+            }
+            backupSettings.SetObjectKeyPattern(prefix.GetResult());
 
             switch (exportSettings.scheme()) {
             case Ydb::Export::ExportToS3Settings::HTTP:
@@ -425,7 +450,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             task.SetNumberOfRetries(exportSettings.number_of_retries());
             auto& backupSettings = *task.MutableFSSettings();
             backupSettings.SetBasePath(exportSettings.base_path());
-            backupSettings.SetPath(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
+            auto prefix = ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings);
+            if (!prefix) {
+                error = prefix.GetErrorMessage();
+                return nullptr;
+            }
+            backupSettings.SetPath(prefix.GetResult());
             
             // TODO: Parquet format support for FS will be added after public API approval
 

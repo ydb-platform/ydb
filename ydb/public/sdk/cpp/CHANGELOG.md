@@ -1,3 +1,5 @@
+* Added optional `TReplicationDescription::GetTransactions()` to report assigned global-consistency replication transactions and versions pending transaction-ID assignment.
+
 * Added availability-period reporting to draft async replication descriptions, including finite, unlimited, unknown, and invalid policies.
 
 * Fixed async credentials acquisition for unary and streaming RPCs and Topic/PersQueue write sessions; the SDK now uses the token returned by `GetAuthInfoAsync()` without a second synchronous lookup.

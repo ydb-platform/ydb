@@ -326,38 +326,29 @@ void THive::StartPileDrain(TBridgePileInfo& pile) {
     pile.DrainActor = StartHiveDrain(pile.Id, TDrainSettings{.DownPolicy = NKikimrHive::DRAIN_POLICY_NO_DOWN, .Forward = false});
 }
 
-std::unordered_set<TBridgePileId> THive::GetPilesWithTabletsToDrain() {
-    std::unordered_set<TBridgePileId> piles;
+bool THive::HasTabletsToDrain(TBridgePileId pileId) const {
     if (!BridgeInfo) {
-        return piles;
+        return false;
     }
-    auto hasTabletsToDrain = [](const TNodeInfo& node) {
+    for (const auto& [nodeId, node] : Nodes) {
+        if (node.BridgePileId != pileId) {
+            continue;
+        }
         for (const auto& [state, tablets] : node.Tablets) {
             for (const auto* tablet : tablets) {
                 if (tablet->CanBeAlive() &&
                     !(tablet->IsLeader() && tablet->AsLeader().IsLockedToActor()) &&
-                    !tablet->GetNodeFilter().IsAllowedPile(node.BridgePileId)) {
+                    !tablet->GetNodeFilter().IsAllowedPile(pileId)) {
                     return true;
                 }
             }
         }
-        return false;
-    };
-    for (const auto& [nodeId, node] : Nodes) {
-        const auto it = BridgePiles.find(node.BridgePileId);
-        if (it == BridgePiles.end() || !it->second.Drain || piles.contains(node.BridgePileId)) {
-            continue;
-        }
-        if (hasTabletsToDrain(node)) {
-            piles.insert(node.BridgePileId);
-        }
     }
-    return piles;
+    return false;
 }
 
 void THive::ProcessPileDrains() {
-    if (ProcessPileDrainsScheduled || !BridgeInfo ||
-        std::none_of(BridgePiles.begin(), BridgePiles.end(), [](const auto& item) { return item.second.Drain; })) {
+    if (ProcessPileDrainsScheduled || !BridgeInfo) {
         return;
     }
     ProcessPileDrainsScheduled = true;
@@ -366,10 +357,9 @@ void THive::ProcessPileDrains() {
 
 void THive::Handle(TEvPrivate::TEvProcessPileDrains::TPtr&) {
     ProcessPileDrainsScheduled = false;
-    if (!BridgeInfo) {
+    if (!BridgeInfo || std::none_of(BridgePiles.begin(), BridgePiles.end(), [](const auto& item) { return item.second.Drain; })) {
         return;
     }
-    std::optional<std::unordered_set<TBridgePileId>> pilesWithTablets;
     for (auto& [pileId, pile] : BridgePiles) {
         if (!pile.Drain) {
             continue;
@@ -378,10 +368,7 @@ void THive::Handle(TEvPrivate::TEvProcessPileDrains::TPtr&) {
             pile.DrainRetry = true;
             continue;
         }
-        if (!pilesWithTablets) {
-            pilesWithTablets = GetPilesWithTabletsToDrain();
-        }
-        if (IsPrimaryPile(pileId) || !pilesWithTablets->contains(pileId)) {
+        if (IsPrimaryPile(pileId) || !HasTabletsToDrain(pileId)) {
             Execute(CreateSwitchDrainOff(pileId, NKikimrProto::OK, 0));
         } else {
             StartPileDrain(pile);

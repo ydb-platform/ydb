@@ -273,7 +273,7 @@ protected:
     bool StartHiveBalancer(TBalancerSettings&& settings);
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartPileDrain(TBridgePileInfo& pile);
-    std::unordered_set<TBridgePileId> GetPilesWithTabletsToDrain();
+    bool HasTabletsToDrain(TBridgePileId pileId) const;
     void ProcessPileDrains();
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     bool StartHiveStorageBalancer(TStorageBalancerSettings settings);

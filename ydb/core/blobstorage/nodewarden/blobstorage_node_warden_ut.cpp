@@ -1609,10 +1609,25 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     CUSTOM_UNIT_TEST(TestMetadataRequestsWaitForDeviceRelease) {
         TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
         Y_DEFER { runtime.FilterFunction = {}; };
+        class TNoReplyPDiskActor : public TActor<TNoReplyPDiskActor> {
+        public:
+            TNoReplyPDiskActor()
+                : TActor(&TThis::StateFunc)
+            {}
+
+            STFUNC(StateFunc) {
+                if (ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
+                    PassAway();
+                }
+            }
+        };
         class TNoReplyPDiskServiceFactory : public IPDiskServiceFactory {
         public:
-            void Create(const TActorContext&, ui32, const TIntrusivePtr<TPDiskConfig>&,
-                    const NPDisk::TMainKey&, ui32, ui32) override {}
+            void Create(const TActorContext& ctx, ui32 pdiskId, const TIntrusivePtr<TPDiskConfig>&,
+                    const NPDisk::TMainKey&, ui32 poolId, ui32 nodeId) override {
+                const auto actor = ctx.Register(new TNoReplyPDiskActor, TMailboxType::HTSwap, poolId);
+                ctx.ActorSystem()->RegisterLocalService(MakeBlobStoragePDiskID(nodeId, pdiskId), actor);
+            }
         };
         const auto warden = SetupNodeWardenForMetadataTest(runtime, new TNoReplyPDiskServiceFactory);
         const ui32 pdiskId = 2095;

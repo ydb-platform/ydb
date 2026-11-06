@@ -47,7 +47,7 @@ private:
     void OnReadResponse(
         THostIndex host,
         const TDBGReadBlocksResponse& response);
-    void Reply(NProto::TError error);
+    void Reply(NProto::TError error, TBlockChecksums checksums = {});
 
     void ScheduleHedging(TDuration hedgingDelay);
     void ScheduleRequestTimeout();

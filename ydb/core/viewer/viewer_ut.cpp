@@ -845,6 +845,69 @@ Y_UNIT_TEST_SUITE(Viewer) {
         StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Red, 10, 100, true, "Red");
     }
 
+    void CheckTenantInfoTablesStorage(ui64 tablesSize, ui64 topicsSize, bool withPoolUsage)
+    {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvDescribeSchemeResult) {
+                auto* response = ev->Get<TEvSchemeShard::TEvDescribeSchemeResult>();
+                auto* domain = response->MutableRecord()->MutablePathDescription()->MutableDomainDescription();
+                domain->ClearStoragePools();
+                auto* pool = domain->AddStoragePools();
+                pool->SetName("ssd");
+                pool->SetKind("ssd");
+
+                auto* diskSpaceUsage = domain->MutableDiskSpaceUsage();
+                if (withPoolUsage) {
+                    auto* poolUsage = diskSpaceUsage->AddStoragePoolsUsage();
+                    poolUsage->SetPoolKind("ssd");
+                    poolUsage->SetTotalSize(tablesSize);
+                } else {
+                    diskSpaceUsage->MutableTables()->SetTotalSize(tablesSize);
+                }
+                diskSpaceUsage->MutableTopics()->SetDataSize(topicsSize);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/tenantinfo?storage=true&use_cache=false HTTP/1.1\r\n\r\n", endpoint, {});
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Response->Status, "200", result->Response->Body);
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        const auto& tenants = json["TenantInfo"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(tenants.size(), 1);
+        const auto& tablesStorage = tenants[0]["TablesStorage"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(tablesStorage.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tablesStorage[0]["Type"].GetString(), "SSD");
+        UNIT_ASSERT_VALUES_EQUAL(tablesStorage[0]["Size"].GetString(), ToString(tablesSize + topicsSize));
+    }
+
+    Y_UNIT_TEST(TenantInfoTablesStorageIncludesTopicsWithPoolUsage)
+    {
+        CheckTenantInfoTablesStorage(100, 200, true);
+    }
+
+    Y_UNIT_TEST(TenantInfoTablesStorageIncludesTopicsWithoutPoolUsage)
+    {
+        CheckTenantInfoTablesStorage(0, 200, false);
+    }
+
     Y_UNIT_TEST(StorageGroupDiskSpaceDoesNotDependOnUsage)
     {
         TStorageGroups::TGroup group;

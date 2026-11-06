@@ -776,8 +776,7 @@ public:
         // group layout status: whether it is positioned correctly
         bool LayoutCorrect = false;
 
-        void CalculateLayoutStatus(TBlobStorageController *self, TBlobStorageGroupInfo::TTopology *topology,
-            const std::function<TGroupGeometryInfo()>& getGeom);
+        void CalculateLayoutStatus(TBlobStorageController* self, const std::function<TGroupGeometryInfo()>& getGeom);
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -2062,6 +2061,8 @@ private:
     THostRecordMap HostRecords;
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void SetHostRecords(THostRecordMap hostRecords);
+    void UpdateGroupLayoutStatus();
+    TGroupGeometryInfo GetStaticGroupGeometry(TBlobStorageGroupType type, TBridgePileId pileId) const;
 
 public:
     // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move

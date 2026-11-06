@@ -922,7 +922,7 @@ namespace NKikimr {
 
                 groupInfo->FinishVDisksInGroup();
                 groupInfo->CalculateGroupStatus();
-                groupInfo->CalculateLayoutStatus(&State.Self, groupInfo->Topology.get(), [&] {
+                groupInfo->CalculateLayoutStatus(&State.Self, [&] {
                     const auto& pools = State.StoragePools.Get();
                     if (const auto it = pools.find(groupInfo->StoragePoolId); it != pools.end()) {
                         return TGroupGeometryInfo::FromStoragePool(groupInfo->Topology->GType,

@@ -352,13 +352,21 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs);
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
-            pos.push_back(ReadUnaligned<ui32>(iter->Next().Data()));
+            ui32 blobPos = ReadUnaligned<ui32>(iter->Next().Data());
+            AFL_ENSURE(blobPos < totalBlobs);
+            pos.push_back(blobPos);
         }
         sourceIdCount = ReadUnaligned<ui32>(iter->Next().Data());
+        AFL_ENSURE(sourceIdCount > 0 || totalBlobs == 0);
+        AFL_ENSURE(sourceIdCount <= totalBlobs);
         end.reserve(sourceIdCount);
         for (ui32 i = 0; i < sourceIdCount; ++i) {
-            end.push_back(ReadUnaligned<ui32>(iter->Next().Data()));
+            ui32 sourceIdEnd = ReadUnaligned<ui32>(iter->Next().Data());
+            AFL_ENSURE(sourceIdEnd <= totalBlobs);
+            AFL_ENSURE(end.empty() || end.back() < sourceIdEnd);
+            end.push_back(sourceIdEnd);
         }
+        AFL_ENSURE(end.empty() || end.back() == totalBlobs);
     }
 
     sourceIds.reserve(sourceIdCount);
@@ -371,6 +379,7 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
             sourceIds.emplace_back(ref.Data(), ref.Size());
         }
     }
+    AFL_ENSURE(sourceIds.size() == end.size());
     TVector<ui64> seqNo;
     seqNo.reserve(totalBlobs);
 
@@ -499,6 +508,7 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
     blobs->resize(totalBlobs);
     ui32 currentSID = 0;
     for (ui32 i = 0; i < totalBlobs; ++i) {
+        AFL_ENSURE(currentSID < end.size());
         TMaybe<TPartData> pd;
         if (auto it = partData.find(pos[i]); it != partData.end()) {
             pd = it->second;
@@ -529,6 +539,7 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
             ++currentSID;
         }
     }
+    AFL_ENSURE(currentSID == sourceIds.size());
 }
 
 template<>

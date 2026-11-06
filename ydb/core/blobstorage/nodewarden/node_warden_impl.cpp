@@ -1084,6 +1084,16 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         ExpectedSaveConfigCookie++;
     }
 
+    if (record.HasControllerGeneration() && record.GetControllerGeneration() < ControllerGeneration) {
+        // the current BSC doesn't know about this and wouldn't correct the node until something changes for it
+        YDB_LOG_INFO_COMP(BS_NODE, "ignoring syncers and share from a previous BS_CONTROLLER instance",
+            {"marker", "NW106"},
+            {"generation", record.GetControllerGeneration()},
+            {"currentGeneration", ControllerGeneration});
+        return;
+    }
+    ControllerGeneration = Max(ControllerGeneration, record.GetControllerGeneration());
+
     if (record.HasBridgeSyncNodeRateBytesPerSecond()) {
         SyncRateControllerLimit = record.GetBridgeSyncNodeRateBytesPerSecond();
         UpdateSyncRateQuoter();

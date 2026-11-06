@@ -2315,6 +2315,7 @@ private:
     void CheckSyncerDisconnectedNodes();
 
     void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});
+    void SendSyncersToNodes(const THashSet<TNodeId>& nodeIds);
     bool IsNodeHostingSyncers(TNodeId nodeId) const;
     void UpdateBridgeSyncNodeRates(const THashSet<TNodeId>& nodesToUpdate);
     void FillBridgeSyncNodeRate(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update);

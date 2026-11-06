@@ -1452,14 +1452,17 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
     }
 
     UpdateBridgeSyncNodeRates(nodesToUpdate);
+    SendSyncersToNodes(nodesToUpdate);
+}
 
-    for (TNodeId nodeId : nodesToUpdate) {
+void TBlobStorageController::SendSyncersToNodes(const THashSet<TNodeId>& nodeIds) {
+    for (TNodeId nodeId : nodeIds) {
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
         TSet<TGroupId> groupIdsToRead;
         SerializeSyncers(nodeId, &ev->Record, groupIdsToRead);
         FillBridgeSyncNodeRate(nodeId, &ev->Record);
         ReadGroups(groupIdsToRead, false, ev.get(), nodeId);
-        YDB_LOG_DEBUG("ProcessSyncers: sending an update",
+        YDB_LOG_DEBUG("SendSyncersToNodes: sending an update",
             {"marker", "BSCBR09"},
             {"nodeId", nodeId},
             {"record", ev->Record});
@@ -1517,6 +1520,7 @@ void TBlobStorageController::UpdateBridgeSyncNodeRates(const THashSet<TNodeId>& 
 
 void TBlobStorageController::FillBridgeSyncNodeRate(TNodeId nodeId,
         NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update) {
+    update->SetControllerGeneration(Executor()->Generation());
     if (!BridgeSyncNodeRate) {
         update->SetKeepBridgeSyncNodeRate(true);
         return;
@@ -1751,14 +1755,7 @@ void TBlobStorageController::ApplyStaticGroupUpdateForSyncers(std::map<TGroupId,
     }
 
     // kick syncers for changed groups
-    for (TNodeId nodeId : nodesToUpdate) {
-        auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
-        TSet<TGroupId> groupIdsToRead;
-        SerializeSyncers(nodeId, &ev->Record, groupIdsToRead);
-        FillBridgeSyncNodeRate(nodeId, &ev->Record);
-        ReadGroups(groupIdsToRead, false, ev.get(), nodeId);
-        SendToWarden(nodeId, std::move(ev), 0);
-    }
+    SendSyncersToNodes(nodesToUpdate);
 }
 
 void TBlobStorageController::CommitSyncerUpdates(TConfigState& state, TTransactionContext& txc) {
@@ -1766,10 +1763,37 @@ void TBlobStorageController::CommitSyncerUpdates(TConfigState& state, TTransacti
     // whole bridged group gets decommitted, inline pile stays, but it isn't a pile anymore); a group is a pile iff it has
     // BridgePileId, which is checked when loading
     THashSet<TGroupId> targetGroupIds;
+    THashSet<TGroupId> proxyGroupsWithNewGeneration;
     for (const auto& [base, overlay] : state.Groups.Diff()) {
         if (base && (!overlay->second || (base->second->BridgePileId && !overlay->second->BridgePileId))) {
             targetGroupIds.insert(base->first);
         }
+        if (base && overlay->second && overlay->second->BridgeGroupInfo &&
+                base->second->Generation != overlay->second->Generation) {
+            proxyGroupsWithNewGeneration.insert(overlay->first);
+        }
+    }
+
+    if (!proxyGroupsWithNewGeneration.empty()) {
+        // queries of a syncer running with the old generation get rejected, so its node has to know at once; a report of
+        // the syncer would tell BSC about it only after the syncer has made some progress, which it can't
+        state.Callbacks.push_back([this, groupIds = std::move(proxyGroupsWithNewGeneration)] {
+            THashSet<TNodeId> nodeIds;
+            for (TGroupId groupId : groupIds) {
+                if (const TGroupInfo *group = FindGroup(groupId); group && group->BridgeGroupInfo) {
+                    NBridge::ForEachGroupPile(group->BridgeGroupInfo->GetBridgeGroupState(), [&](TBridgePileId,
+                            const NKikimrBridge::TGroupState::TPile& pile) {
+                        const auto targetGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                        if (const auto it = TargetGroupToSyncerState.find(targetGroupId); it != TargetGroupToSyncerState.end()) {
+                            for (TNodeId nodeId : it->second.NodeIds | std::views::keys) {
+                                nodeIds.insert(nodeId);
+                            }
+                        }
+                    });
+                }
+            }
+            SendSyncersToNodes(nodeIds);
+        });
     }
 
     for (const TGroupId groupId : targetGroupIds) {

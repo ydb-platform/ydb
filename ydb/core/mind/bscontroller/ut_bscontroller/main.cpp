@@ -487,7 +487,6 @@ namespace {
         }
 
         NKikimrBlobStorage::TConfigRequest DefineRealms(const TMap<ui32, NKikimrBlobStorage::TGroupInfo>& groups) {
-            using TDefinition = NKikimrBlobStorage::TDefineGroupState::TGroupDefinition;
             NKikimrBlobStorage::TConfigRequest request;
             auto* command = request.AddCommand()->MutableDefineGroupState();
             for (const auto& [id, group] : groups) {
@@ -1332,7 +1331,6 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
     }
 
     Y_UNIT_TEST(FailRealmStatesOnlyUpdatesRequestedGroups) {
-        using Definition = NKikimrBlobStorage::TDefineGroupState::TGroupDefinition;
         TDataCenterStatesEnv env;
         const auto before = env.ReadGroups();
         auto request = env.DefineRealms(before);
@@ -1356,7 +1354,6 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
     }
 
     Y_UNIT_TEST(FailRealmStatesValidationAndAtomicity) {
-        using Definition = NKikimrBlobStorage::TDefineGroupState::TGroupDefinition;
         TDataCenterStatesEnv env;
         const auto before = env.ReadGroups();
         auto valid = env.DefineRealms(before);
@@ -1414,7 +1411,6 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
     }
 
     Y_UNIT_TEST(FailRealmStatesIdempotencyAndForce) {
-        using Definition = NKikimrBlobStorage::TDefineGroupState::TGroupDefinition;
         TDataCenterStatesEnv env;
         const auto before = env.ReadGroups();
         auto request = env.DefineRealms(before);

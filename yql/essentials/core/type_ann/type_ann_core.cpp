@@ -16592,7 +16592,7 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     Functions["SqlProjectStarItem"] = &SqlProjectItemWrapper;
     Functions["PgSelf"] = &SqlSelfWrapper;
     Functions["PgStar"] = &SqlStarWrapper;
-    Functions["PgQualifiedStar"] = &PgQualifiedStarWrapper;
+    Functions["PgQualifiedStar"] = &SqlQualifiedStarWrapper;
     Functions["PgColumnRef"] = &SqlColumnRefWrapper;
     Functions["PgResultItem"] = &SqlResultItemWrapper;
     Functions["PgReplaceUnknown"] = &SqlReplaceUnknownWrapper;
@@ -16980,6 +16980,7 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     Functions["YqlSubLink"] = &SqlSubLinkWrapper;
     Functions["YqlSelf"] = &SqlSelfWrapper;
     Functions["YqlStar"] = &SqlStarWrapper;
+    Functions["YqlQualifiedStar"] = &SqlQualifiedStarWrapper;
     Functions["YqlWhere"] = &SqlWhereWrapper;
     Functions["YqlSort"] = &SqlSortWrapper;
     Functions["YqlGroup"] = &SqlWhereWrapper;

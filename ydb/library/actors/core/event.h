@@ -12,6 +12,8 @@
 #include <util/system/hp_timer.h>
 #include <util/generic/maybe.h>
 
+#include <typeinfo>
+
 namespace NInterconnect::NRdma {
     class IMemPool;
 }
@@ -102,37 +104,51 @@ namespace NActors {
 
         template <typename TEventType>
         TEventType* Get() {
-            Y_ENSURE(Type == TEventType::EventType,
-                "Event type " << Type << " doesn't match the expected type " << TEventType::EventType
-                << " class " << TypeName<TEventType>());
-
-            if (!Event) {
-                if constexpr (TEventWithLoadSupport<TEventType>) {
-                    // Note: we require Load to return the correct derived type
-                    // This makes sure static_cast below is always type-safe
-                    TEventType* loaded = TEventType::Load(Buffer ? Buffer.Get() : &EmptyBuffer);
-                    Event.Reset(loaded);
-                    Buffer.Reset();
-                } else {
-                    Y_ENSURE(false, "Event type " << Type << " cannot be loaded by class " << TypeName<TEventType>());
-                }
-            }
-
-            if (Event) {
+            // Fast path: the event is already local and has the expected type.
+            // Anything else (type mismatch, loading from Buffer, errors) is handled out of line
+            // by a non-template function, so that per-type instantiations stay small.
+            if (Y_LIKELY(Type == TEventType::EventType && Event)) {
                 return static_cast<TEventType*>(Event.Get());
             }
-
-            Y_ENSURE(false, "Failed to Load() event type " << Type << " class " << TypeName<TEventType>());
+            return static_cast<TEventType*>(GetSlow(TEventType::EventType, GetEventLoader<TEventType>(), typeid(TEventType)));
         }
 
         template <typename T>
         TAutoPtr<T> Release() {
             TAutoPtr<T> x = Get<T>();
             Y_UNUSED(Event.Release());
-            Buffer.Reset();
+            if (Buffer) {
+                ResetBuffer();
+            }
             return x;
         }
 
+    private:
+        using TEventLoader = IEventBase* (*)(const TEventSerializedData*);
+
+        template <typename TEventType>
+        static IEventBase* LoadEvent(const TEventSerializedData* input) {
+            // Note: we require Load to return the correct derived type
+            // This makes sure static_cast in Get() is always type-safe
+            TEventType* loaded = TEventType::Load(input);
+            return loaded;
+        }
+
+        template <typename TEventType>
+        static constexpr TEventLoader GetEventLoader() {
+            if constexpr (TEventWithLoadSupport<TEventType>) {
+                return &LoadEvent<TEventType>;
+            } else {
+                return nullptr;
+            }
+        }
+
+        // Cold, type-independent part of Get<T>(): checks the type, loads the event from Buffer
+        // using loader (nullptr when the event class has no Load), and throws on any failure.
+        Y_NO_INLINE IEventBase* GetSlow(ui32 expectedType, TEventLoader loader, const std::type_info& typeInfo);
+        Y_NO_INLINE void ResetBuffer();
+
+    public:
         // Note that ChannelBits bits in Flags are reserved for channel
         enum EFlags: ui32 {
             FlagTrackDelivery = 1 << 0,

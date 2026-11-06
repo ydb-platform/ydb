@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/backup/common
+    ydb/core/util
     ydb/library/query_actor
 )
 

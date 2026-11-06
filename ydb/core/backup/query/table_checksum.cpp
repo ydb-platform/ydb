@@ -1,5 +1,6 @@
 #include "table_checksum.h"
 
+#include <ydb/core/util/backoff.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <util/string/subst.h>
 #include <util/string/builder.h>
@@ -105,9 +106,12 @@ namespace {
         }
 
     private:
+        static constexpr TDuration RetryWindow = TDuration::Minutes(5);
+        static constexpr TDuration InitialRetryDelay = TDuration::Seconds(1);
+        static constexpr TDuration MaxRetryDelay = TDuration::Seconds(10);
+
         void Start() {
             if (!Query) {
-                ++Attempts;
                 Query = Register(new TChecksumQuery(SelfId(), OperationId, ItemIdx, Database, TablePath, Importing));
             }
         }
@@ -116,10 +120,16 @@ namespace {
             if (ev->Sender == Query) {
                 Query = {};
                 const auto status = ev->Get()->Status;
-                if (Attempts < 3 && (status == Ydb::StatusIds::OVERLOADED || status == Ydb::StatusIds::UNAVAILABLE ||
-                                        status == Ydb::StatusIds::ABORTED)) {
-                    Schedule(TDuration::MilliSeconds(100 * Attempts), new TEvents::TEvWakeup());
-                    return;
+                if (status == Ydb::StatusIds::OVERLOADED || status == Ydb::StatusIds::UNAVAILABLE ||
+                    status == Ydb::StatusIds::ABORTED) {
+                    const auto now = TActivationContext::Monotonic();
+                    if (!RetryDeadline) {
+                        RetryDeadline = now + RetryWindow;
+                    }
+                    if (now < RetryDeadline) {
+                        Schedule(Min(RetryBackoff.Next(), RetryDeadline - now), new TEvents::TEvWakeup());
+                        return;
+                    }
                 }
                 Send(ReplyTo, ev->Release().Release());
                 PassAway();
@@ -149,7 +159,8 @@ namespace {
         TString TablePath;
         bool Importing;
         TActorId Query;
-        ui32 Attempts = 0;
+        TMonotonic RetryDeadline;
+        TBackoff RetryBackoff{ InitialRetryDelay, MaxRetryDelay };
     };
 
 } // namespace

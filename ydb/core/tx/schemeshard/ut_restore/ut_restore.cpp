@@ -8,6 +8,7 @@
 #include <ydb/core/backup/query/table_checksum.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -10165,6 +10166,132 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
         }
     };
+
+    enum class EChecksumRetryCase {
+        Recovery,
+        Expiry,
+        PermanentError,
+        Cancellation,
+        LateSuccess,
+    };
+
+    void TableChecksumRetries(
+        EChecksumRetryCase scenario, Ydb::StatusIds::StatusCode transient = Ydb::StatusIds::UNAVAILABLE) {
+        TTestBasicRuntime runtime;
+        TTestEnv testEnv(runtime, TTestEnvOptions().SetupKqpProxy(true));
+        const auto edge = runtime.AllocateEdgeActor();
+        ui32 attempts = 0;
+        auto sessions = runtime.AddObserver<NKqp::TEvKqp::TEvCreateSessionRequest>([&](auto& ev) {
+            if (ev->Get()->Record.GetRequest().GetDatabase() != "/MyRoot") {
+                return;
+            }
+            ++attempts;
+            auto response = MakeHolder<NKqp::TEvKqp::TEvCreateSessionResponse>();
+            response->Record.SetYdbStatus(
+                scenario == EChecksumRetryCase::PermanentError ? Ydb::StatusIds::BAD_REQUEST : transient);
+            runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), response.Release()), 0, true);
+            ev.Reset();
+        });
+        TBlockEvents<NBackup::TEvTableChecksum::TEvResult> results(runtime);
+        const auto query =
+            runtime.Register(NBackup::CreateTableChecksumQuery(edge, 100, 0, "/MyRoot", "/MyRoot/Table", true));
+        runtime.Send(new IEventHandle(query, edge, new NBackup::TEvTableChecksum::TEvStart()), 0, true);
+        TMaybe<TInstant> firstFailure;
+        while (true) {
+            runtime.WaitFor("checksum attempt result", [&] {
+                return !results.empty();
+            });
+            auto& event = results.front();
+            auto& result = *event->Get();
+            if (event->GetRecipientRewrite() == edge) {
+                const auto elapsed = runtime.GetCurrentTime() - *firstFailure;
+                if (scenario == EChecksumRetryCase::Recovery || scenario == EChecksumRetryCase::LateSuccess) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::SUCCESS);
+                    UNIT_ASSERT_VALUES_EQUAL(result.Checksum.Count, 1);
+                    UNIT_ASSERT_VALUES_EQUAL(result.Checksum.Hash, 17);
+                    UNIT_ASSERT_GE(elapsed,
+                        scenario == EChecksumRetryCase::Recovery ? TDuration::Minutes(1) : TDuration::Minutes(5));
+                } else if (scenario == EChecksumRetryCase::PermanentError) {
+                    UNIT_ASSERT_VALUES_EQUAL(result.Status, Ydb::StatusIds::BAD_REQUEST);
+                    UNIT_ASSERT_VALUES_EQUAL(attempts, 1);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(result.Status, transient);
+                    UNIT_ASSERT_GE(elapsed, TDuration::Minutes(5));
+                    UNIT_ASSERT_LT(elapsed, TDuration::Minutes(5) + TDuration::Seconds(20));
+                }
+                if (scenario != EChecksumRetryCase::PermanentError) {
+                    UNIT_ASSERT_GT(attempts, 3);
+                }
+                const auto finalAttempts = attempts;
+                results.clear();
+                runtime.AdvanceCurrentTime(TDuration::Minutes(6));
+                runtime.SimulateSleep(TDuration::MilliSeconds(1));
+                UNIT_ASSERT_VALUES_EQUAL(attempts, finalAttempts);
+                UNIT_ASSERT(results.empty());
+                return;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(event->GetRecipientRewrite(), query);
+            UNIT_ASSERT_C(attempts < 100, "Checksum retry window must expire");
+            if (!firstFailure) {
+                firstFailure = runtime.GetCurrentTime();
+            }
+            const auto elapsed = runtime.GetCurrentTime() - *firstFailure;
+            const bool recover = (scenario == EChecksumRetryCase::Recovery && elapsed >= TDuration::Minutes(1)) ||
+                                 (scenario == EChecksumRetryCase::LateSuccess && elapsed >= TDuration::Minutes(5));
+            if (recover) {
+                result.Status = Ydb::StatusIds::SUCCESS;
+                result.Checksum = { .Count = 1, .Hash = 17 };
+                result.Error.clear();
+            }
+            const bool firstAttempt = attempts == 1;
+            results.Unblock(1);
+            runtime.SimulateSleep(TDuration::MilliSeconds(500));
+            if (firstAttempt && scenario != EChecksumRetryCase::PermanentError) {
+                UNIT_ASSERT_VALUES_EQUAL(attempts, 1);
+                UNIT_ASSERT_C(results.empty(), "Transient checksum retry must have a pause");
+            }
+            if (scenario == EChecksumRetryCase::Cancellation) {
+                runtime.Send(new IEventHandle(query, edge, new TEvents::TEvPoisonPill()), 0, true);
+                runtime.SimulateSleep(TDuration::MilliSeconds(1));
+                runtime.AdvanceCurrentTime(TDuration::Minutes(6));
+                runtime.SimulateSleep(TDuration::MilliSeconds(1));
+                UNIT_ASSERT_VALUES_EQUAL(attempts, 1);
+                UNIT_ASSERT(results.empty());
+                return;
+            }
+            if (results.empty()) {
+                runtime.AdvanceCurrentTime(TDuration::Seconds(15));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryRecoversAfterTabletStartup) {
+        TableChecksumRetries(EChecksumRetryCase::Recovery);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryWindow) {
+        TableChecksumRetries(EChecksumRetryCase::Expiry);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryOverloaded) {
+        TableChecksumRetries(EChecksumRetryCase::Expiry, Ydb::StatusIds::OVERLOADED);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryAborted) {
+        TableChecksumRetries(EChecksumRetryCase::Expiry, Ydb::StatusIds::ABORTED);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryPermanentError) {
+        TableChecksumRetries(EChecksumRetryCase::PermanentError);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetryCancellation) {
+        TableChecksumRetries(EChecksumRetryCase::Cancellation);
+    }
+
+    Y_UNIT_TEST(TableChecksumRetrySuccessAfterWindow) {
+        TableChecksumRetries(EChecksumRetryCase::LateSuccess);
+    }
 
     template <bool IsFs>
     void TableChecksumValidation(bool cancel) {

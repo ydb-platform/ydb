@@ -319,6 +319,16 @@ def regenerate_summary(
         cmd.extend(["--pr_number", pull_number])
     if oom.is_file():
         cmd.extend(["--oom_dmesg_log", str(oom)])
+    testowners = workspace / ".github/TESTOWNERS"
+    if not testowners.is_file():
+        print(
+            f"::warning::{testowners} missing (sparse checkout?); "
+            "skipping generate-summary, keeping remote job_summary with caller S3 links"
+        )
+        if remote_body:
+            job_summary.write_text(remote_body, encoding="utf-8")
+        return job_summary
+
     cmd.extend(["Tests", str(html_path), str(report_path)])
     try:
         run(cmd, cwd=str(workspace))
@@ -587,6 +597,11 @@ def main() -> None:
         attempts = discover_attempts(public_dir, meta)
         print(f"attempts={json.dumps(attempts, ensure_ascii=False)}")
 
+        # Publish rewritten tree first so caller-S3 links are live even if
+        # generate-summary fails later (previous dogfood: NoSuchKey on index.html).
+        s3cmd_sync_upload(public_dir, caller_s3_path)
+        print(f"::notice title=Caller artifacts uploaded::{new_public}/index.html")
+
         job_summary = regenerate_summary(
             workspace=workspace,
             public_dir=public_dir,
@@ -617,7 +632,7 @@ def main() -> None:
         meta_path = public_dir / "remote_artifacts.json"
         meta_path.write_text(json.dumps(meta_out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-        # One sync after rewrite + regenerate + meta rewrite.
+        # Re-sync enriched summary / regenerated HTML, then pin run-root copies.
         s3cmd_sync_upload(public_dir, caller_s3_path)
         s3cmd_put(job_summary, f"{caller_run_root}/job_summary.md")
         s3cmd_put(meta_path, f"{caller_run_root}/remote_artifacts.json")

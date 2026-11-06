@@ -111,12 +111,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          sparse-checkout: |
-            .github/actions
-            .github/scripts
-            .github/config
-            .github/TESTOWNERS
-          sparse-checkout-cone-mode: false
+          # Whole .github tree: generate-summary needs TESTOWNERS (+ scripts/actions).
+          sparse-checkout: .github
 
       - uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:

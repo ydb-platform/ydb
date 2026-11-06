@@ -47,6 +47,7 @@ struct TTopicHolderBase {
         MeteringMode = info.MeteringMode;
         FullConverter = info.TopicNameConverter;
         Partitions = info.Partitions;
+        IsAsyncReplication = info.IsAsyncReplication;
     }
 
     ui64 TabletID = 0;

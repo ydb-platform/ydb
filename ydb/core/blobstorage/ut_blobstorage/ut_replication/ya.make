@@ -9,6 +9,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 SRCS(
     replication.cpp
     replication_huge.cpp
+    recover_lost_data_restart.cpp
 )
 
 PEERDIR(

@@ -31,6 +31,7 @@ def do(args):
         'MaxScrubbedDisksAtOnce',
         'EnableGroupLayoutSanitizer',
         'PDiskSpaceColorBorder',
+        'BridgeSyncTotalRateBytesPerSecond',
         'SerialManagementStage',
     ]
 

@@ -22,6 +22,8 @@ def add_options(p):
     g.add_argument('--max-scrubbed-disks-at-once', type=int, metavar='N', help='Maximum number of simultaneously scrubbed PDisks')
     choices = disk_color.TPDiskSpaceColor.E.keys()
     g.add_argument('--pdisk-space-color-border', choices=choices, help='PDisk space color border')
+    g.add_argument('--bridge-sync-total-rate', type=int, metavar='BYTES_PER_SECOND',
+                   help='Limit of bridge syncer reads for the whole cluster in bytes per second (0 means no limit)')
     choices = kikimr_bsconfig.TSerialManagementStage.E.keys()
     g.add_argument('--disk-management-mode', type=str, choices=choices, help='Disk management mode')
     g.add_argument('--enable-self-heal-local-policy', action='store_const', const=True, dest='self_heal_local_policy', help='Enable SelfHeal local policy for cluster')
@@ -69,6 +71,8 @@ def create_request(args):
         cmd.MaxScrubbedDisksAtOnce.append(args.max_scrubbed_disks_at_once)
     if args.pdisk_space_color_border is not None:
         cmd.PDiskSpaceColorBorder.append(disk_color.TPDiskSpaceColor.E.Value(args.pdisk_space_color_border))
+    if args.bridge_sync_total_rate is not None:
+        cmd.BridgeSyncTotalRateBytesPerSecond.append(args.bridge_sync_total_rate)
     if args.self_heal_local_policy is not None:
         cmd.UseSelfHealLocalPolicy.append(args.self_heal_local_policy)
 

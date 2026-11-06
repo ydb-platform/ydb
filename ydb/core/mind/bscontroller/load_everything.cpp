@@ -42,6 +42,7 @@ public:
             auto boxStoragePool = db.Table<Schema::BoxStoragePool>().Range().Select();
             auto boxStoragePoolUser = db.Table<Schema::BoxStoragePoolUser>().Range().Select();
             auto boxStoragePoolPDiskFilter = db.Table<Schema::BoxStoragePoolPDiskFilter>().Range().Select();
+            auto boxStoragePoolPDiskFilterV2 = db.Table<Schema::BoxStoragePoolPDiskFilterV2>().Range().Select();
             auto groupStoragePool = db.Table<Schema::GroupStoragePool>().Range().Select();
             auto groupLatencies = db.Table<Schema::GroupLatencies>().Select();
             auto scrubState = db.Table<Schema::ScrubState>().Select();
@@ -63,6 +64,7 @@ public:
                     || !boxStoragePool.IsReady()
                     || !boxStoragePoolUser.IsReady()
                     || !boxStoragePoolPDiskFilter.IsReady()
+                    || !boxStoragePoolPDiskFilterV2.IsReady()
                     || !groupStoragePool.IsReady()
                     || !groupLatencies.IsReady()
                     || !scrubState.IsReady()
@@ -97,6 +99,7 @@ public:
                 Self->GroupReservePart = state.GetValue<T::GroupReservePart>();
                 Self->MaxScrubbedDisksAtOnce = state.GetValue<T::MaxScrubbedDisksAtOnce>();
                 Self->PDiskSpaceColorBorder = state.GetValue<T::PDiskSpaceColorBorder>();
+                Self->BridgeSyncTotalRate = state.GetValue<T::BridgeSyncTotalRate>();
                 Self->GroupLayoutSanitizerEnabled = state.GetValue<T::GroupLayoutSanitizer>();
                 Self->AllowMultipleRealmsOccupation = state.GetValueOrDefault<T::AllowMultipleRealmsOccupation>();
                 Self->SysViewChangedSettings = true;
@@ -286,7 +289,10 @@ public:
                 || !NTableAdapter::FetchTable<Schema::BlobDepotDeleteQueue>(db, Self, Self->BlobDepotDeleteQueue)) {
             return false;
         }
-        for (const auto& [storagePoolId, storagePool] : Self->StoragePools) {
+        for (auto& [storagePoolId, storagePool] : Self->StoragePools) {
+            if (!storagePool.LoadPDiskFilters(db, storagePoolId)) {
+                return false;
+            }
             Self->SysViewChangedStoragePools.insert(storagePoolId);
         }
 

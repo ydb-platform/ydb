@@ -10230,7 +10230,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
     }
 
     template <bool IsFs>
-    void TableChecksumQueue(bool cancel, bool disableChecksumOnRecovery = false) {
+    void TableChecksumParallel(bool cancel, bool disableChecksumOnRecovery = false) {
         TTestBasicRuntime runtime;
         TTestEnv testEnv(runtime, TTestEnvOptions());
         const auto data = GenerateTestData(R"(
@@ -10277,12 +10277,12 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(runtime);
         const ui64 id = 100;
         AsyncImport(runtime, id, "/MyRoot", storage.Request);
-        runtime.WaitFor("four admitted checksum checks", [&] {
-            return starts.size() == 4;
+        runtime.WaitFor("all checksum checks started in parallel", [&] {
+            return starts.size() == tables;
         });
 
         using EState = TImportInfo::EState;
-        const auto readStates = [&](bool checkRestoreIds = true) {
+        const auto readStates = [&] {
             const auto stored = ReadSystemTable(
                 runtime, TTestTxConfig::SchemeShard, "ImportItems", { "ImportId", "Index" }, { "State", "WaitTxId" });
             const auto value = NClient::TValue::Create(stored);
@@ -10291,7 +10291,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             for (size_t idx = 0; idx < rows.Size(); ++idx) {
                 const ui8 state = rows[static_cast<int>(idx)]["State"];
                 const ui64 waitTxId = rows[static_cast<int>(idx)]["WaitTxId"];
-                if (checkRestoreIds && static_cast<EState>(state) == EState::Transferring) {
+                if (static_cast<EState>(state) == EState::Transferring) {
                     // An older binary can subscribe to this completed restore and continue normally
                     UNIT_ASSERT(restoreTxIds.contains(waitTxId));
                 } else if (static_cast<EState>(state) == EState::Done) {
@@ -10301,19 +10301,9 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
             return counts;
         };
-        THashMap<EState, ui32> queuedStates;
-        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
-        do {
-            queuedStates = readStates(false);
-            if (queuedStates.Value(EState::Transferring, 0u) == tables && completedRestores.size() == tables) {
-                break;
-            }
-            runtime.SimulateSleep(TDuration::MilliSeconds(10));
-        } while (TInstant::Now() < deadline);
-        UNIT_ASSERT_VALUES_EQUAL(queuedStates.Value(EState::Transferring, 0u), tables);
+        UNIT_ASSERT_VALUES_EQUAL(readStates().Value(EState::Transferring, 0u), tables);
         UNIT_ASSERT_VALUES_EQUAL(completedRestores.size(), tables);
         UNIT_ASSERT_VALUES_EQUAL(restoreTxIds.size(), tables);
-        readStates();
         const auto complete = [&](size_t index) {
             const auto& start = starts[index];
             // Only the item owning this query actor accepts the synthetic result
@@ -10327,11 +10317,11 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         if (cancel) {
             TestCancelImport(runtime, id + 1, "/MyRoot", id);
             testEnv.TestWaitNotification(runtime, id);
-            for (size_t idx = 0; idx < 4; ++idx) {
+            for (size_t idx = 0; idx < tables; ++idx) {
                 complete(idx);
             }
             TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::CANCELLED);
-            UNIT_ASSERT_VALUES_EQUAL(starts.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(starts.size(), tables);
             return;
         }
 
@@ -10340,13 +10330,13 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         if (disableChecksumOnRecovery) {
             testEnv.TestWaitNotification(runtime, id);
             TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(starts.size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(starts.size(), tables);
             UNIT_ASSERT_VALUES_EQUAL(readStates().Value(EState::Done, 0u), tables);
             UNIT_ASSERT_VALUES_EQUAL(restoreTxIds.size(), tables);
             return;
         }
-        runtime.WaitFor("four resumed checks, queued checks still waiting", [&] {
-            return starts.size() == 8;
+        runtime.WaitFor("all checksum checks resumed in parallel", [&] {
+            return starts.size() == 2 * tables;
         });
         const auto recovered = readStates();
         UNIT_ASSERT_VALUES_EQUAL(recovered.Value(EState::Transferring, 0u), tables);
@@ -10354,35 +10344,25 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
         UNIT_ASSERT_VALUES_EQUAL(
             status.GetResponse().GetEntry().GetProgress(), Ydb::Import::ImportProgress::PROGRESS_TRANSFER_DATA);
 
-        complete(4);
-        runtime.WaitFor("queued checksum admitted after a slot is freed", [&] {
-            return starts.size() == 9;
-        });
-        const auto admitted = readStates();
-        UNIT_ASSERT_VALUES_EQUAL(admitted.Value(EState::Transferring, 0u), tables - 1);
-        UNIT_ASSERT_VALUES_EQUAL(admitted.Value(EState::Done, 0u), 1);
-        for (size_t idx = 5; idx < 10; ++idx) {
-            runtime.WaitFor("next checksum check", [&] {
-                return starts.size() > idx;
-            });
+        for (size_t idx = tables; idx < 2 * tables; ++idx) {
             complete(idx);
         }
         testEnv.TestWaitNotification(runtime, id);
         TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT_VALUES_EQUAL(starts.size(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(starts.size(), 2 * tables);
         UNIT_ASSERT_VALUES_EQUAL(restoreTxIds.size(), tables);
     }
 
-    Y_UNIT_TEST_TWIN(TableChecksumQueueRecovery, IsFs) {
-        TableChecksumQueue<IsFs>(false);
+    Y_UNIT_TEST_TWIN(TableChecksumParallelRecovery, IsFs) {
+        TableChecksumParallel<IsFs>(false);
     }
 
-    Y_UNIT_TEST_TWIN(TableChecksumQueueCancellation, IsFs) {
-        TableChecksumQueue<IsFs>(true);
+    Y_UNIT_TEST_TWIN(TableChecksumParallelCancellation, IsFs) {
+        TableChecksumParallel<IsFs>(true);
     }
 
     Y_UNIT_TEST_TWIN(TableChecksumDisabledOnRecovery, IsFs) {
-        TableChecksumQueue<IsFs>(false, true);
+        TableChecksumParallel<IsFs>(false, true);
     }
 
     template <bool IsFs>

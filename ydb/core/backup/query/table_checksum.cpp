@@ -3,7 +3,6 @@
 #include <ydb/library/query_actor/query_actor.h>
 #include <util/string/subst.h>
 #include <util/string/builder.h>
-#include <atomic>
 
 namespace NKikimr::NBackup {
 namespace {
@@ -101,28 +100,12 @@ namespace {
             , Importing(importing)
         {}
 
-        ~TChecksumQueryStarter() override {
-            if (Admitted) {
-                ActiveQueries.fetch_sub(1, std::memory_order_relaxed);
-            }
-        }
-
         void Bootstrap() {
             Become(&TChecksumQueryStarter::StateFunc);
         }
 
     private:
         void Start() {
-            if (!Admitted) {
-                ui32 active = ActiveQueries.load(std::memory_order_relaxed);
-                do {
-                    if (active >= 4) {
-                        Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup());
-                        return;
-                    }
-                } while (!ActiveQueries.compare_exchange_weak(active, active + 1, std::memory_order_relaxed));
-                Admitted = true;
-            }
             if (!Query) {
                 ++Attempts;
                 Query = Register(new TChecksumQuery(SelfId(), OperationId, ItemIdx, Database, TablePath, Importing));
@@ -167,8 +150,6 @@ namespace {
         bool Importing;
         TActorId Query;
         ui32 Attempts = 0;
-        bool Admitted = false;
-        inline static std::atomic<ui32> ActiveQueries = 0;
     };
 
 } // namespace

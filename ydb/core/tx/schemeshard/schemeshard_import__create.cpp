@@ -620,27 +620,16 @@ private:
         }
     }
 
-    void AdvanceChecksumValidation(TImportInfo& info, const TActorContext& ctx) {
-        ui32 running = CountIf(info.Items, [](const auto& item) {
-            return item.ChecksumState == EChecksumState::Validating;
-        });
-        for (ui32 idx : xrange(info.Items.size())) {
-            auto& item = info.Items[idx];
-            if (item.ChecksumState == EChecksumState::Pending) {
-                if (running >= 4) {
-                    continue;
-                }
-                item.ChecksumState = EChecksumState::Validating;
-                ++running;
-            }
-            if (item.ChecksumState != EChecksumState::Validating || item.ChecksumActor) {
-                continue;
-            }
-            item.ChecksumActor = ctx.Register(NBackup::CreateTableChecksumQuery(Self->SelfId(), info.Id, idx,
-                TPath::Init(info.DomainPathId, Self).PathString(), item.DstPathName, true));
-            Self->RunningTableChecksumQueries.insert(item.ChecksumActor);
-            Send(item.ChecksumActor, new NBackup::TEvTableChecksum::TEvStart());
+    void StartChecksumValidation(TImportInfo& info, ui32 itemIdx, const TActorContext& ctx) {
+        auto& item = info.Items.at(itemIdx);
+        if (item.ChecksumActor) {
+            return;
         }
+        item.ChecksumState = EChecksumState::Validating;
+        item.ChecksumActor = ctx.Register(NBackup::CreateTableChecksumQuery(Self->SelfId(), info.Id, itemIdx,
+            TPath::Init(info.DomainPathId, Self).PathString(), item.DstPathName, true));
+        Self->RunningTableChecksumQueries.insert(item.ChecksumActor);
+        Send(item.ChecksumActor, new NBackup::TEvTableChecksum::TEvStart());
     }
 
     void OnChecksumResult(TTransactionContext& txc, const TActorContext& ctx) {
@@ -679,7 +668,6 @@ private:
             RetrySchemeObjectsCreation(*info, db, ctx);
         }
         Self->PersistImportState(db, *info);
-        AdvanceChecksumValidation(*info, ctx);
         SendNotificationsIfFinished(info);
         if (info->IsFinished()) {
             AuditLogImportEnd(*info.Get(), Self);
@@ -1460,7 +1448,7 @@ private:
                 case EState::CreateChangefeed:
                 case EState::FinalizeImport:
                     if (item.ChecksumState != EChecksumState::None) {
-                        AdvanceChecksumValidation(*importInfo, ctx);
+                        StartChecksumValidation(*importInfo, itemIdx, ctx);
                     } else if (item.WaitTxId == InvalidTxId) {
                         if (!IsCreatedByQuery(item) || item.PreparedCreationQuery) {
                             AllocateTxId(*importInfo, itemIdx);
@@ -2307,8 +2295,7 @@ private:
                     // Retain the completed restore ID for recovery, including by older binaries.
                     // Replaying its completion resumes validation here or the legacy import flow.
                     item.WaitTxId = txId;
-                    item.ChecksumState = EChecksumState::Pending;
-                    AdvanceChecksumValidation(*importInfo, ctx);
+                    StartChecksumValidation(*importInfo, itemIdx, ctx);
                 } else {
                     ContinueAfterData(*importInfo, itemIdx);
                 }

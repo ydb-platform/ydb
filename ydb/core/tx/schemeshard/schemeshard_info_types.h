@@ -3999,7 +3999,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         // In-memory progress; the persisted state stays Transferring until validation completes
         enum class EChecksumState : ui8 {
             None,
-            Pending,
             Validating,
         };
 

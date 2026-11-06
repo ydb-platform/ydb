@@ -233,22 +233,22 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
             const auto roles = MakeColumnRoles(userTypes.SelectSide(side).size(), keyColumns);
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
             layouts.SelectSide(side)->ApplyEqualNulls(
-                EqualNullsInputColumns(Meta_->Settings.EqualNullsKeys, keyColumns));
+                EqualNullsInputColumns(HashJoinEqualNullsKeys(Meta_->Settings), keyColumns));
         }
         const auto& userNullTypes = userTypes.SelectSide(Join.NullSupplying());
 
         std::unique_ptr<IBlockLayoutConverter> markConverter;
-        std::optional<TMarkJoinKey> markKey;
+        std::optional<TMarkJoinKeys> markKeys;
         if constexpr (Join.Mark) {
             markConverter = MakeBlockLayoutConverter(helper, {Meta_->MarkType}, {NPackedTuple::EColumnRole::Payload},
                                                      &ctx.ArrowMemoryPool);
-            markKey = MakeMarkJoinKey(Meta_->Settings,
-                                      TSides<IBlockLayoutConverter*>{.Build = layouts.Build.get(), .Probe = layouts.Probe.get()},
-                                      userTypes);
+            markKeys = MakeMarkJoinKeys(Meta_->Settings,
+                                        TSides<IBlockLayoutConverter*>{.Build = layouts.Build.get(), .Probe = layouts.Probe.get()},
+                                        userTypes);
         }
 
         return ctx.HolderFactory.Create<TStreamValue>(
-            ctx, Streams_, std::move(layouts), std::move(markConverter), markKey, Meta_.get(), userNullTypes,
+            ctx, Streams_, std::move(layouts), std::move(markConverter), std::move(markKeys), Meta_.get(), userNullTypes,
             TPackedTuplePairFilter::TryCreate(ctx, Filters_, userTypes, Meta_->KeyColumns, Meta_->ColumnPermutation));
     }
 
@@ -260,7 +260,7 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
       public:
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationNode*> streams,
                      TSides<std::unique_ptr<IBlockLayoutConverter>> converters,
-                     std::unique_ptr<IBlockLayoutConverter> markConverter, std::optional<TMarkJoinKey> markKey,
+                     std::unique_ptr<IBlockLayoutConverter> markConverter, std::optional<TMarkJoinKeys> markKeys,
                      const TDqBlockJoinContext* meta, const TVector<TType*>& userBuildTypes,
                      std::optional<TPackedTuplePairFilter> pairFilter)
             : TBase(memInfo)
@@ -272,7 +272,7 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
                     ctx, "BlockHashJoin",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
                                                               .Probe = Converters_.Probe->GetTupleLayout()},
-                    markKey)
+                    std::move(markKeys))
             , Ctx_(&ctx)
             , Output_(meta,
                       {.Build = MarkConverter_ ? MarkConverter_.get() : Converters_.Build.get(),

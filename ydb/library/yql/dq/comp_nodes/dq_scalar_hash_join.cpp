@@ -232,7 +232,7 @@ private:
     public:
         TStreamState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationWideFlowNode*> flows,
                      TSides<std::unique_ptr<IScalarLayoutConverter>> converters,
-                     std::unique_ptr<IScalarLayoutConverter> markConverter, std::optional<TMarkJoinKey> markKey,
+                     std::unique_ptr<IScalarLayoutConverter> markConverter, std::optional<TMarkJoinKeys> markKeys,
                      const TDqScalarJoinMetadata* meta, std::optional<TPackedTuplePairFilter> pairFilter)
             : TBase(memInfo)
             , Meta_(meta)
@@ -249,7 +249,7 @@ private:
                     ctx, "ScalarHashJoinPacked",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
                                                               .Probe = Converters_.Probe->GetTupleLayout()},
-                    markKey)
+                    std::move(markKeys))
             , Output_(meta, {.Build = MarkConverter_ ? MarkConverter_.get() : Converters_.Build.get(),
                              .Probe = Converters_.Probe.get()})
             , PairFilter_(std::move(pairFilter))
@@ -319,22 +319,22 @@ private:
             converters.SelectSide(side) =
                 MakeScalarLayoutConverter(helper, Meta_->UserTypes.SelectSide(side), roles, ctx.HolderFactory);
             converters.SelectSide(side)->ApplyEqualNulls(
-                EqualNullsInputColumns(Meta_->Settings.EqualNullsKeys, keyColumns));
+                EqualNullsInputColumns(HashJoinEqualNullsKeys(Meta_->Settings), keyColumns));
         }
 
         std::unique_ptr<IScalarLayoutConverter> markConverter;
-        std::optional<TMarkJoinKey> markKey;
+        std::optional<TMarkJoinKeys> markKeys;
         if constexpr (Join.Mark) {
             markConverter = MakeScalarLayoutConverter(helper, {Meta_->MarkType}, {NPackedTuple::EColumnRole::Payload},
                                                       ctx.HolderFactory);
-            markKey = MakeMarkJoinKey(
+            markKeys = MakeMarkJoinKeys(
                 Meta_->Settings,
                 TSides<IScalarLayoutConverter*>{.Build = converters.Build.get(), .Probe = converters.Probe.get()},
                 Meta_->UserTypes);
         }
 
         state = ctx.HolderFactory.Create<TStreamState>(
-            ctx, Flows_, std::move(converters), std::move(markConverter), markKey, Meta_.get(),
+            ctx, Flows_, std::move(converters), std::move(markConverter), std::move(markKeys), Meta_.get(),
             TPackedTuplePairFilter::TryCreate(ctx, Filters_, Meta_->UserTypes, Meta_->KeyColumns,
                                               Meta_->ColumnPermutation));
     }

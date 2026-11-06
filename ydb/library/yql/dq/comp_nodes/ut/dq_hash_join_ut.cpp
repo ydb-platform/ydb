@@ -23,6 +23,7 @@
 
 #include <bit>
 #include <limits>
+#include <map>
 #include <numeric>
 
 namespace NKikimr::NMiniKQL {
@@ -869,10 +870,10 @@ TJoinTestData SerializedListKeySpillingTestData() {
     return td;
 }
 
-void AsMarkJoin(TJoinTestData& td, std::optional<ui32> markKey) {
+void AsMarkJoin(TJoinTestData& td, TVector<ui32> markKeys) {
     td.Kind = EJoinKind::LeftSemi;
     td.JoinSettings.Mark = true;
-    td.JoinSettings.MarkKey = markKey;
+    td.JoinSettings.MarkKeys = std::move(markKeys);
 }
 
 TJoinTestData MarkJoinTwoValuedTestData() {
@@ -888,7 +889,7 @@ TJoinTestData MarkJoinTwoValuedTestData() {
     td.Right = ConvertVectorsToTuples(setup, rightKeys);
     td.Result = ConvertVectorsToTuples(setup, leftKeys, leftValues, expectedMarks);
     td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
-    AsMarkJoin(td, std::nullopt);
+    AsMarkJoin(td, {});
     return td;
 }
 
@@ -912,7 +913,7 @@ TJoinTestData MarkJoinThreeValuedTestData(bool rightHasNull) {
     td.LeftKeyColmns = {1};
     td.RightKeyColmns = {0};
     td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
-    AsMarkJoin(td, 0);
+    AsMarkJoin(td, {0});
     return td;
 }
 
@@ -943,7 +944,7 @@ TJoinTestData MarkJoinEmptyRightTestData() {
     td.Right = ConvertVectorsToTuples(setup, rightKeys);
     td.Result = ConvertVectorsToTuples(setup, leftKeys, expectedMarks);
     td.Renames = {{0, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
-    AsMarkJoin(td, 0);
+    AsMarkJoin(td, {0});
     return td;
 }
 
@@ -966,7 +967,7 @@ TJoinTestData MarkJoinCorrelatedTestData() {
     td.LeftKeyColmns = {2, 1};
     td.RightKeyColmns = {0, 1};
     td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
-    AsMarkJoin(td, 0);
+    AsMarkJoin(td, {0});
     return td;
 }
 
@@ -989,7 +990,7 @@ TJoinTestData MarkJoinCorrelatedEqualNullsTestData() {
     td.RightKeyColmns = {0, 1};
     td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
     td.JoinSettings.EqualNullsKeys = {0};
-    AsMarkJoin(td, 1);
+    AsMarkJoin(td, {1});
     return td;
 }
 
@@ -1012,7 +1013,7 @@ TJoinTestData MarkJoinBigStringGroupsTestData() {
     td.LeftKeyColmns = {0, 1};
     td.RightKeyColmns = {0, 1};
     td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
-    AsMarkJoin(td, 1);
+    AsMarkJoin(td, {1});
     return td;
 }
 
@@ -1048,7 +1049,7 @@ TJoinTestData MarkJoinSpillingTestData() {
     td.Right = ConvertVectorsToTuples(setup, rightKeys);
     td.Result = ConvertVectorsToTuples(setup, leftKeys, leftValues, expectedMarks);
     td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
-    AsMarkJoin(td, 0);
+    AsMarkJoin(td, {0});
 
     constexpr int packedTupleSize = 2 * 8 + 5;
     constexpr ui64 joinMemory = packedTupleSize * static_cast<ui64>(0.3 * leftSize);
@@ -1108,12 +1109,199 @@ TJoinTestData MarkJoinCorrelatedSpillingTestData() {
     td.LeftKeyColmns = {2, 1};
     td.RightKeyColmns = {0, 1};
     td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
-    AsMarkJoin(td, 0);
+    AsMarkJoin(td, {0});
 
     constexpr int packedTupleSize = 3 * 8 + 5;
     constexpr ui64 joinMemory = packedTupleSize * static_cast<ui64>(0.3 * leftSize);
     td.JoinMemoryConstraint = joinMemory;
     return td;
+}
+
+using TMarkKeyRow = TVector<std::optional<ui64>>;
+
+std::optional<bool> ReferenceMark(const TMarkKeyRow& probe, const TVector<const TMarkKeyRow*>& group,
+                                  const TVector<ui32>& markKeys) {
+    bool unknown = false;
+    for (const TMarkKeyRow* build : group) {
+        bool rowFalse = false;
+        bool rowUnknown = false;
+        for (ui32 key : markKeys) {
+            if (!probe[key] || !(*build)[key]) {
+                rowUnknown = true;
+            } else if (*probe[key] != *(*build)[key]) {
+                rowFalse = true;
+            }
+        }
+        if (rowFalse) {
+            continue;
+        }
+        if (!rowUnknown) {
+            return true;
+        }
+        unknown = true;
+    }
+    return unknown ? std::nullopt : std::optional<bool>(false);
+}
+
+TVector<std::optional<bool>> ReferenceMarks(const TVector<TMarkKeyRow>& probe, const TVector<TMarkKeyRow>& build,
+                                            const TVector<ui32>& markKeys, const TVector<ui32>& equalNullsKeys) {
+    const auto isMark = [&](ui32 key) {
+        return std::find(markKeys.begin(), markKeys.end(), key) != markKeys.end();
+    };
+    const auto isEqualNulls = [&](ui32 key) {
+        return std::find(equalNullsKeys.begin(), equalNullsKeys.end(), key) != equalNullsKeys.end();
+    };
+    const auto groupOf = [&](const TMarkKeyRow& row) -> std::optional<TMarkKeyRow> {
+        TMarkKeyRow group;
+        for (ui32 key = 0; key < row.size(); ++key) {
+            if (isMark(key)) {
+                continue;
+            }
+            if (!row[key] && !isEqualNulls(key)) {
+                return std::nullopt;
+            }
+            group.push_back(row[key]);
+        }
+        return group;
+    };
+    std::map<TMarkKeyRow, TVector<const TMarkKeyRow*>> groups;
+    for (const auto& row : build) {
+        if (auto group = groupOf(row)) {
+            groups[*group].push_back(&row);
+        }
+    }
+    TVector<std::optional<bool>> marks;
+    for (const auto& row : probe) {
+        const auto group = groupOf(row);
+        const auto it = group ? groups.find(*group) : groups.end();
+        marks.push_back(it == groups.end() ? std::optional<bool>(false) : ReferenceMark(row, it->second, markKeys));
+    }
+    return marks;
+}
+
+TJoinTestData MarkJoinMultiKeyTestData(bool rightHasNull) {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftIds = {1, 2, 3, 4, 5, 6, 7};
+    TVector<std::optional<ui64>> leftA = {1, 1, std::nullopt, 9, 1, std::nullopt, 3};
+    TVector<std::optional<ui64>> leftB = {2, std::nullopt, 7, std::nullopt, 7, std::nullopt, 9};
+    TVector<std::optional<ui64>> rightC = {1, 5};
+    TVector<std::optional<ui64>> rightD = {2, 7};
+    if (rightHasNull) {
+        rightC.push_back(3);
+        rightD.push_back(std::nullopt);
+    }
+
+    const std::optional<bool> unknown = std::nullopt;
+    TVector<std::optional<bool>> expectedMarks = {true, unknown, unknown, false, false, unknown,
+                                                  rightHasNull ? unknown : std::optional<bool>(false)};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftA, leftB);
+    td.Right = ConvertVectorsToTuples(setup, rightC, rightD);
+    td.Result = ConvertVectorsToTuples(setup, leftIds, leftA, leftB, expectedMarks);
+    td.LeftKeyColmns = {1, 2};
+    td.RightKeyColmns = {0, 1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
+    AsMarkJoin(td, {0, 1});
+    return td;
+}
+
+struct TMarkJoinRandomCase {
+    int LeftRows = 0;
+    int RightRows = 0;
+    ui64 Groups = 0;
+    ui64 Values = 0;
+    int NullPercent = 0;
+    bool EqualNullsGroup = false;
+    bool Spilling = false;
+};
+
+TJoinTestData MarkJoinRandomTestData(const TMarkJoinRandomCase& testCase) {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    ui64 state = 0x9E3779B97F4A7C15ull;
+    const auto next = [&]() {
+        state = state * 6364136223846793005ull + 1442695040888963407ull;
+        return state >> 33;
+    };
+    const auto value = [&](ui64 range) -> std::optional<ui64> {
+        if (static_cast<int>(next() % 100) < testCase.NullPercent) {
+            return std::nullopt;
+        }
+        return next() % range;
+    };
+    const bool correlated = testCase.Groups > 0;
+    const auto makeRows = [&](int count) {
+        TVector<TMarkKeyRow> rows;
+        for (int i = 0; i < count; ++i) {
+            TMarkKeyRow row;
+            if (correlated) {
+                row.push_back(value(testCase.Groups));
+            }
+            row.push_back(value(testCase.Values));
+            row.push_back(value(testCase.Values));
+            rows.push_back(std::move(row));
+        }
+        return rows;
+    };
+    const TVector<TMarkKeyRow> left = makeRows(testCase.LeftRows);
+    const TVector<TMarkKeyRow> right = makeRows(testCase.RightRows);
+    const TVector<ui32> markKeys = correlated ? TVector<ui32>{1, 2} : TVector<ui32>{0, 1};
+    const TVector<ui32> equalNullsKeys = testCase.EqualNullsGroup ? TVector<ui32>{0} : TVector<ui32>{};
+    const auto expectedMarks = ReferenceMarks(left, right, markKeys, equalNullsKeys);
+
+    const auto column = [](const TVector<TMarkKeyRow>& rows, ui32 index) {
+        TVector<std::optional<ui64>> values;
+        for (const auto& row : rows) {
+            values.push_back(row[index]);
+        }
+        return values;
+    };
+    TVector<ui64> leftIds(testCase.LeftRows);
+    std::iota(leftIds.begin(), leftIds.end(), 0);
+    if (correlated) {
+        td.Left = ConvertVectorsToTuples(setup, leftIds, column(left, 0), column(left, 1), column(left, 2));
+        td.Right = ConvertVectorsToTuples(setup, column(right, 0), column(right, 1), column(right, 2));
+        td.Result = ConvertVectorsToTuples(setup, leftIds, column(left, 0), column(left, 1), column(left, 2),
+                                           expectedMarks);
+        td.LeftKeyColmns = {1, 2, 3};
+        td.RightKeyColmns = {0, 1, 2};
+        td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                      {3, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
+    } else {
+        td.Left = ConvertVectorsToTuples(setup, leftIds, column(left, 0), column(left, 1));
+        td.Right = ConvertVectorsToTuples(setup, column(right, 0), column(right, 1));
+        td.Result = ConvertVectorsToTuples(setup, leftIds, column(left, 0), column(left, 1), expectedMarks);
+        td.LeftKeyColmns = {1, 2};
+        td.RightKeyColmns = {0, 1};
+        td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
+    }
+    td.JoinSettings.EqualNullsKeys = equalNullsKeys;
+    AsMarkJoin(td, markKeys);
+    if (testCase.Spilling) {
+        td.JoinMemoryConstraint = 1_MB;
+        td.ExpectsSpilling = true;
+    }
+    return td;
+}
+
+TMarkJoinRandomCase MarkJoinCorrelatedCase(bool spilling) {
+    return {.LeftRows = 20000, .RightRows = 8000, .Groups = 500, .Values = 40, .NullPercent = 15,
+            .Spilling = spilling};
+}
+
+TMarkJoinRandomCase MarkJoinBigGroupsCase(bool spilling) {
+    return {.LeftRows = 20000, .RightRows = 8000, .Groups = 3, .Values = 3000, .NullPercent = 5,
+            .Spilling = spilling};
+}
+
+TMarkJoinRandomCase MarkJoinEqualNullsGroupCase(bool spilling) {
+    return {.LeftRows = 10000, .RightRows = 4000, .Groups = 50, .Values = 30, .NullPercent = 20,
+            .EqualNullsGroup = true, .Spilling = spilling};
+}
+
+TMarkJoinRandomCase MarkJoinUncorrelatedCase(bool spilling) {
+    return {.LeftRows = 5000, .RightRows = 1500, .Values = 200, .NullPercent = 10, .Spilling = spilling};
 }
 
 [[maybe_unused]] TJoinTestData RightOnlyTestData() {
@@ -3309,6 +3497,60 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         TestWithSlowSpiller(MarkJoinCorrelatedSpillingTestData(), BlockJoin);
     }
 
+    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKey, BlockJoin) {
+        Test(MarkJoinMultiKeyTestData(false), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyRightHasNull, BlockJoin) {
+        Test(MarkJoinMultiKeyTestData(true), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyCorrelated, BlockJoin) {
+        Test(MarkJoinRandomTestData(MarkJoinCorrelatedCase(false)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyCorrelatedSpilling, BlockJoin) {
+        Test(MarkJoinRandomTestData(MarkJoinCorrelatedCase(true)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyCorrelatedSlowSpiller, BlockJoin) {
+        TestWithSlowSpiller(MarkJoinRandomTestData(MarkJoinCorrelatedCase(true)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyBigGroupsSpilling, BlockJoin) {
+        Test(MarkJoinRandomTestData(MarkJoinBigGroupsCase(true)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyEqualNullsGroup, BlockJoin) {
+        Test(MarkJoinRandomTestData(MarkJoinEqualNullsGroupCase(false)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyEqualNullsGroupSpilling, BlockJoin) {
+        Test(MarkJoinRandomTestData(MarkJoinEqualNullsGroupCase(true)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyUncorrelated, BlockJoin) {
+        Test(MarkJoinRandomTestData(MarkJoinUncorrelatedCase(false)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyUncorrelatedSpilling, BlockJoin) {
+        Test(MarkJoinRandomTestData(MarkJoinUncorrelatedCase(true)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinMultiKeyUncorrelatedSlowSpiller, BlockJoin) {
+        TestWithSlowSpiller(MarkJoinRandomTestData(MarkJoinUncorrelatedCase(true)), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinRejectsEqualNullsMarkKey, BlockJoin) {
+        auto td = MarkJoinMultiKeyTestData(false);
+        td.JoinSettings.EqualNullsKeys = {1};
+        auto descr = MakeJoinDescription(td);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            ConstructJoinGraphStream(td.Kind, BlockJoin ? ETestedJoinAlgo::kBlockHash : ETestedJoinAlgo::kScalarHash,
+                                     descr, true, td.JoinSettings),
+            yexception, "mark key must not use EqualNulls");
+    }
+
     // Y_UNIT_TEST_TWIN(TestRightOnlyKind, BlockJoin) {
     //     Test(RightOnlyTestData(), BlockJoin);
     // }
@@ -3667,15 +3909,14 @@ Y_UNIT_TEST_SUITE(TDqHashJoinSettingsCompatibilityTest) {
             pb.NewDataLiteral(static_cast<ui32>(EBuildSide::Right)),
             pb.AsTuple(keys),
             pb.NewDataLiteral<bool>(true),
-            pb.NewDataLiteral<ui32>(1),
+            pb.AsTuple(TVector<ui32>{1, 2}),
         });
 
         const auto parsed = ParseHashJoinSettingsTuple(markSettings);
         UNIT_ASSERT_EQUAL(parsed.BuildSide, EBuildSide::Right);
         UNIT_ASSERT_VALUES_EQUAL(parsed.EqualNullsKeys, keys);
         UNIT_ASSERT(parsed.Mark);
-        UNIT_ASSERT(parsed.MarkKey);
-        UNIT_ASSERT_VALUES_EQUAL(*parsed.MarkKey, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.MarkKeys, (TVector<ui32>{1, 2}));
     }
 }
 } // namespace NKikimr::NMiniKQL

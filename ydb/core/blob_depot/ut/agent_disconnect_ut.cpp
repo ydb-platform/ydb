@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 

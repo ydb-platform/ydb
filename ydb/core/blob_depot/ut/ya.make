@@ -24,6 +24,7 @@ UNITTEST_FOR(ydb/core/blob_depot)
 
     PEERDIR(
         ydb/core/control/lib
+        ydb/core/protos
     )
 
 END()

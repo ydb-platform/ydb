@@ -1,12 +1,12 @@
 LIBRARY()
 
 SRCS(
-    udf_meta.cpp
+    parse.cpp
 )
 
 PEERDIR(
     library/cpp/json
-    yql/essentials/public/langver
+    yql/essentials/public/udf_meta/interface
 )
 
 END()

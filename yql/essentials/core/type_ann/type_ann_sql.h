@@ -61,6 +61,8 @@ IGraphTransformer::TStatus SqlIterateWrapper(const TExprNode::TPtr& input, TExpr
 
 IGraphTransformer::TStatus SqlStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
+IGraphTransformer::TStatus SqlQualifiedStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+
 IGraphTransformer::TStatus SqlColumnRefWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
 IGraphTransformer::TStatus SqlResultItemWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

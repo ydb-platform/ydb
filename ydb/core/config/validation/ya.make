@@ -10,6 +10,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/protos
+    ydb/core/path_aliasing
     ydb/core/formats/arrow/serializer
     library/cpp/protobuf/json
 )

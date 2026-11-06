@@ -88,6 +88,8 @@ struct TYdbRpcCounters {
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestInflightBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr RequestRpcError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestRelativeDatabase;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestRelativeResource;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr ResponseRpcError;
@@ -179,6 +181,14 @@ public:
         RequestsWithoutTls->Inc();
     }
 
+    void CountRelativeDatabase() override {
+        YdbCounters.RequestRelativeDatabase->Inc();
+    }
+
+    void CountRelativeResource() override {
+        YdbCounters.RequestRelativeResource->Inc();
+    }
+
     void CountRequestBytes(ui32 requestSize) override {
         InitOnce();
         *RequestBytes += requestSize;
@@ -258,6 +268,8 @@ TYdbRpcCounters::TYdbRpcCounters(const ::NMonitoring::TDynamicCounterPtr& counte
     RequestBytes = typeGroup->GetNamedCounter("name", "api.grpc.request.bytes", true);
     RequestInflightBytes = typeGroup->GetNamedCounter("name", "api.grpc.request.inflight_bytes", false);
     RequestRpcError = typeGroup->GetNamedCounter("name", "api.grpc.request.dropped_count", true);
+    RequestRelativeDatabase = typeGroup->GetNamedCounter("name", "api.grpc.request.relative_database_count", true);
+    RequestRelativeResource = typeGroup->GetNamedCounter("name", "api.grpc.request.relative_resource_count", true);
 
     ResponseBytes = typeGroup->GetNamedCounter("name", "api.grpc.response.bytes", true);
     ResponseRpcError = typeGroup->GetNamedCounter("name", "api.grpc.response.dropped_count", true);
@@ -393,7 +405,9 @@ using TYdbCounterBlockPtr = TIntrusivePtr<TYdbCounterBlock>;
     XX(DB_GRPC_RSP_NOT_FOUND, YdbCounters.ResponseByStatus[Ydb::StatusIds::NOT_FOUND]) \
     XX(DB_GRPC_RSP_SESSION_EXPIRED, YdbCounters.ResponseByStatus[Ydb::StatusIds::SESSION_EXPIRED]) \
     XX(DB_GRPC_RSP_CANCELLED, YdbCounters.ResponseByStatus[Ydb::StatusIds::CANCELLED]) \
-    XX(DB_GRPC_RSP_SESSION_BUSY, YdbCounters.ResponseByStatus[Ydb::StatusIds::SESSION_BUSY])
+    XX(DB_GRPC_RSP_SESSION_BUSY, YdbCounters.ResponseByStatus[Ydb::StatusIds::SESSION_BUSY]) \
+    XX(DB_GRPC_REQ_RELATIVE_DATABASE, YdbCounters.RequestRelativeDatabase) \
+    XX(DB_GRPC_REQ_RELATIVE_RESOURCE, YdbCounters.RequestRelativeResource)
 
 class TYdbDbCounterBlock : public TYdbCounterBlock {
 public:
@@ -623,6 +637,16 @@ public:
     void CountRequestWithoutTls() override {
         Common->CountRequestWithoutTls();
         Db->CountRequestWithoutTls();
+    }
+
+    void CountRelativeDatabase() override {
+        Common->CountRelativeDatabase();
+        Db->CountRelativeDatabase();
+    }
+
+    void CountRelativeResource() override {
+        Common->CountRelativeResource();
+        Db->CountRelativeResource();
     }
 
     void CountRequestBytes(ui32 requestSize) override {

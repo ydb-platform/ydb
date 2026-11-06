@@ -345,7 +345,7 @@ void TTopicData::Bootstrap() {
     if (!Database.empty() && TBase::NeedToRedirect()) {
         return;
     }
-    const auto& params(Event->Get()->Request.GetParams());
+    const auto& params = Params;
     Timeout = TDuration::Seconds(std::min((ui32)Timeout.Seconds(), 30u));
 
     TruncateLongMessages = FromStringWithDefault<bool>(params.Get("truncate"), true);

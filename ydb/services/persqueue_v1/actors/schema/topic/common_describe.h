@@ -82,7 +82,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             this->RegisterWithSameMailbox(NPQ::NDescriber::CreateDescriberActor(
                 this->SelfId(),
                 this->GetDatabase(),
-                { this->GetProtoRequest()->path() },
+                { this->NormalizeTopicPath(this->GetProtoRequest()->path()) },
                 {
                     .UserToken = this->GetUserToken(),
                     .AccessRights = AccessRights,

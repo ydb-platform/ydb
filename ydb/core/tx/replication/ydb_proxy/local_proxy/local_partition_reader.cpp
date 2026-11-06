@@ -136,7 +136,12 @@ private:
         Offset = resp.GetOffset();
         SentOffset = Offset;
 
-        Send(Parent, new TEvYdbProxy::TEvStartTopicReadingSession(TStringBuilder() << "Session_" << SelfId()));
+        std::optional<ui64> retainedStartOffset;
+        if (resp.HasStartOffset()) {
+            retainedStartOffset = resp.GetStartOffset();
+        }
+        Send(Parent, new TEvYdbProxy::TEvStartTopicReadingSession(
+            TStringBuilder() << "Session_" << SelfId(), Offset, retainedStartOffset));
 
         DoWork();
     }
@@ -193,6 +198,11 @@ private:
         Offset = SentOffset;
 
         if (AutoCommit && !request.SkipCommit) {
+            if (!AppData()->FeatureFlags.GetEnableClientModifications()) {
+                Send(Parent, MakeError(NYdb::EStatus::PRECONDITION_FAILED, "Consumer offset commits are disabled"));
+                PassAway();
+                return;
+            }
             request.SkipCommit = true;
             NTabletPipe::SendData(SelfId(), PartitionPipeClient, MakeCommitRequest().release());
         }

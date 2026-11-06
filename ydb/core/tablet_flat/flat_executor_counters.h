@@ -133,6 +133,7 @@ namespace NTabletFlatExecutor {
     XX(BACKUP_CHANGELOG_ERRORS, "BackupChangelogErrors") \
     XX(BACKUP_SNAPSHOT_BYTES_WRITTEN, "BackupSnapshotBytesWritten") \
     XX(BACKUP_CHANGELOG_BYTES_WRITTEN, "BackupChangelogBytesWritten") \
+    XX(GC_SENTINEL_DROPPED_MARKS, "GcSentinelDroppedMarks") \
 
 // don't change order!
 #define FLAT_EXECUTOR_PERCENTILE_COUNTERS_MAP(XX) \

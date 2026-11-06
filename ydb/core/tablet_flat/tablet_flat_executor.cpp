@@ -3,6 +3,8 @@
 #include "flat_executor.h"
 #include "util_fmt_abort.h"
 
+#include <ydb/core/base/feature_flags.h>
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
@@ -93,7 +95,8 @@ namespace NFlatExecutorSetup {
             return false;
         }
 
-        if (TabletInfo->TenantPathId != TPathId()) {
+        if (TabletInfo->TenantPathId != TPathId()
+            && !AppData()->FeatureFlags.GetEnableTenantSystemTabletBackup()) {
             return false;
         }
 
@@ -107,6 +110,8 @@ namespace NFlatExecutorSetup {
             case NKikimrTabletBase::TTabletTypes_EType_NodeBroker:
             case NKikimrTabletBase::TTabletTypes_EType_TxAllocator:
             case NKikimrTabletBase::TTabletTypes_EType_Console:
+            case NKikimrTabletBase::TTabletTypes_EType_SysViewProcessor:
+            case NKikimrTabletBase::TTabletTypes_EType_StatisticsAggregator:
                 return true;
             default:
                 return false;

@@ -3,6 +3,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/library/testlib/helpers.h>
 
@@ -38,8 +39,9 @@ const TMessage Message6 = {600, "value6"};
 
 class TFixture : public TPqIoTestFixture {
 public:
-    TFixture()
-        : LocalRowDispatcherId(CaSetup->Runtime->AllocateEdgeActor())
+    explicit TFixture(ui32 nodeCount = 1)
+        : TPqIoTestFixture(nodeCount)
+        , LocalRowDispatcherId(CaSetup->Runtime->AllocateEdgeActor())
         , CoordinatorId1(CaSetup->Runtime->AllocateEdgeActor())
         , CoordinatorId2(CaSetup->Runtime->AllocateEdgeActor())
         , RowDispatcherId1(CaSetup->Runtime->AllocateEdgeActor())
@@ -222,6 +224,7 @@ public:
         NActors::TActorId rowDispatcherId,
         ui64 generation,
         ui64 partitionId,
+        TMaybe<ui64> nextOffset = Nothing(),
         NActors::TActorId readActorId = {}
     ) const {
         CaSetup->Execute([&](TFakeActor& actor) {
@@ -238,9 +241,22 @@ public:
                 *event->Record.AddMessages() = message;
             }
             event->Record.SetPartitionId(partitionId);
-            event->Record.SetNextMessageOffset(offset);
+            event->Record.SetNextMessageOffset(nextOffset.GetOrElse(offset));
             CaSetup->Runtime->Send(new NActors::IEventHandle(readActorId ? readActorId : *actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
+    }
+
+    void AssertCheckpointOffsets(const TMap<ui32, ui64>& expected) const {
+        TSourceState state;
+        SaveSourceState(CreateCheckpoint(), state);
+        UNIT_ASSERT_VALUES_EQUAL(state.Data.size(), 1);
+        NPq::NProto::TDqPqTopicSourceState proto;
+        UNIT_ASSERT(proto.ParseFromString(state.Data.front().Blob));
+        TMap<ui32, ui64> offsets;
+        for (const auto& partition : proto.GetPartitions()) {
+            offsets[partition.GetPartition()] = partition.GetOffset();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(offsets, expected);
     }
 
     void MockSessionError(NActors::TActorId rowDispatcherId) const {
@@ -389,9 +405,75 @@ public:
     NActors::TActorId RowDispatcherId2;
 };
 
+class TRemoteFixture : public TFixture {
+public:
+    TRemoteFixture()
+        : TFixture(2)
+    {
+        RowDispatcherId1 = CaSetup->Runtime->AllocateEdgeActor(1);
+    }
+
+    void StartRemoteSession(bool acknowledge = true) const {
+        InitRdSource(Settings);
+        SourceRead<TMessage>(UVPairParser);
+        ExpectCoordinatorChangesSubscribe();
+        MockCoordinatorChanged(CoordinatorId1);
+        auto request = ExpectCoordinatorRequest(CoordinatorId1);
+        MockCoordinatorResult(CoordinatorId1, {{RowDispatcherId1, PartitionId1}}, request->Cookie);
+        ExpectStartSession({}, RowDispatcherId1, 1);
+        if (acknowledge) {
+            MockAck(RowDispatcherId1, 1, PartitionId1, {}, 1);
+        }
+    }
+};
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
+    Y_UNIT_TEST_TWIN_F(ReorderedStatisticsWaitForBatchReplay, Buffered, TRemoteFixture) {
+        StartRemoteSession();
+        MockNewDataArrived(RowDispatcherId1, 1, PartitionId1, 2);
+        ExpectGetNextBatch(RowDispatcherId1, PartitionId1);
+        MockMessageBatch(0, std::vector{Message1}, RowDispatcherId1, 1, PartitionId1, 3);
+        if (!Buffered) {
+            ReadMessages({Message1});
+        }
+
+        // Statistics overtake batch 4 while reconnect replay is still pending.
+        MockStatistics(RowDispatcherId1, 1000, 1, PartitionId1, 5);
+        if (Buffered) {
+            ReadMessages({Message1});
+        }
+        AssertCheckpointOffsets({{PartitionId1, 1}});
+
+        MockMessageBatch(1, std::vector{Message2}, RowDispatcherId1, 1, PartitionId1, 4);
+        ReadMessages({Message2});
+        AssertCheckpointOffsets({{PartitionId1, 2}});
+
+        MockStatistics(RowDispatcherId1, 1000, 1, PartitionId1, 5);
+        AssertCheckpointOffsets({{PartitionId1, 1000}});
+        MockNewDataArrived(RowDispatcherId1, 1, PartitionId1, 6);
+        auto request = ExpectGetNextBatch(RowDispatcherId1, PartitionId1);
+        UNIT_ASSERT_VALUES_EQUAL(request->Cookie, 1);
+        UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.GetTransportMeta().GetConfirmedSeqNo(), 6);
+    }
+
+    Y_UNIT_TEST_F(ReorderedNotificationBeforeAckWaitsForReplay, TRemoteFixture) {
+        StartRemoteSession(false);
+        MockNewDataArrived(RowDispatcherId1, 1, PartitionId1, 2);
+        MockAck(RowDispatcherId1, 1, PartitionId1, {}, 1);
+        MockNewDataArrived(RowDispatcherId1, 1, PartitionId1, 2);
+        auto request = ExpectGetNextBatch(RowDispatcherId1, PartitionId1);
+        UNIT_ASSERT_VALUES_EQUAL(request->Cookie, 1);
+        UNIT_ASSERT_VALUES_EQUAL(request->Get()->Record.GetTransportMeta().GetConfirmedSeqNo(), 2);
+
+        MockMessageBatch(0, std::vector{Message1}, RowDispatcherId1, 1, PartitionId1, 3);
+        ReadMessages({Message1});
+        MockMessageBatch(0, std::vector{Message1}, RowDispatcherId1, 1, PartitionId1, 3);
+        UNIT_ASSERT(SourceRead<TMessage>(UVPairParser).empty());
+        AssertCheckpointOffsets({{PartitionId1, 1}});
+    }
+
     Y_UNIT_TEST_F(TestReadFromTopic2, TFixture) {
         StartSession(Settings);
 
@@ -460,7 +542,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         const std::vector<std::pair<TMaybe<TMessage>, TMaybe<TInstant>>> firstBatch = {
             {Message1, TInstant::MicroSeconds(400)},
         };
-        MockMessageBatch(0, firstBatch, RowDispatcherId1, 1, PartitionId1, first);
+        MockMessageBatch(0, firstBatch, RowDispatcherId1, 1, PartitionId1, Nothing(), first);
         AssertDataWithWatermarks({Message1}, SourceRead<TMessage>(UVPairParser));
         if (DelayedCoordinator) {
             start(second);
@@ -468,7 +550,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         const std::vector<std::pair<TMaybe<TMessage>, TMaybe<TInstant>>> secondBatch = {
             {Message2, TInstant::MicroSeconds(200)},
         };
-        MockMessageBatch(0, secondBatch, RowDispatcherId1, 1, PartitionId1, second);
+        MockMessageBatch(0, secondBatch, RowDispatcherId1, 1, PartitionId1, Nothing(), second);
         ReadMessages({Message2, TInstant::MicroSeconds(200)});
     }
 

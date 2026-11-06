@@ -58,6 +58,46 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
+    class TBlobDepot::TBlocksManager::TTxQueryBlocks : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+        TEvBlobDepot::TEvQueryBlocks::TPtr Request;
+        std::unique_ptr<IEventHandle> Response;
+
+    public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_QUERY_BLOCKS; }
+
+        TTxQueryBlocks(TBlobDepot *self, TEvBlobDepot::TEvQueryBlocks::TPtr request)
+            : TTransactionBase(self, std::move(request->TraceId))
+            , Request(std::move(request))
+        {}
+
+        bool Execute(TTransactionContext&, const TActorContext&) override {
+            const TAgent *agent = Self->FindAgent(Request->Recipient);
+            if (!agent) {
+                return true;
+            }
+
+            const ui32 agentId = agent->Connection->NodeId;
+            const TMonotonic expirationTimestamp = TActivationContext::Monotonic() + BlockLeaseTime;
+            auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(*Request);
+            responseRecord->SetTimeToLiveMs(BlockLeaseTime.MilliSeconds());
+
+            for (const ui64 tabletId : Request->Get()->Record.GetTabletIds()) {
+                auto& block = Self->BlocksManager->Blocks[tabletId];
+                responseRecord->AddBlockedGenerations(block.BlockedGeneration);
+                block.PerAgentInfo[agentId].ExpirationTimestamp = expirationTimestamp;
+            }
+
+            Response = std::move(response);
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            if (Response) {
+                TActivationContext::Send(Response.release());
+            }
+        }
+    };
+
     class TBlobDepot::TBlocksManager::TBlockProcessorActor : public TActorBootstrapped<TBlockProcessorActor> {
         struct TEvPrivate {
             enum {
@@ -349,22 +389,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::TBlocksManager::Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev) {
-        TAgent& agent = Self->GetAgent(ev->Recipient);
-        const ui32 agentId = agent.Connection->NodeId;
-
-        const TMonotonic now = TActivationContext::Monotonic();
-
-        const auto& record = ev->Get()->Record;
-        auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(*ev);
-        responseRecord->SetTimeToLiveMs(BlockLeaseTime.MilliSeconds());
-
-        for (const ui64 tabletId : record.GetTabletIds()) {
-            auto& block = Blocks[tabletId];
-            responseRecord->AddBlockedGenerations(block.BlockedGeneration);
-            block.PerAgentInfo[agentId].ExpirationTimestamp = now + BlockLeaseTime;
-        }
-
-        TActivationContext::Send(response.release());
+        Self->Execute(std::make_unique<TTxQueryBlocks>(Self, std::move(ev)));
     }
 
     bool TBlobDepot::TBlocksManager::CheckBlock(ui64 tabletId, ui32 generation) const {

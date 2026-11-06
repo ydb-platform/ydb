@@ -83,6 +83,9 @@ namespace NKikimr::NStorage {
     }
 
     void TDistributedConfigKeeper::PassAway() {
+        CancelStateStorageSelfHealRefresh();
+        CancelConfigRefill();
+        CancelBindingLiveness();
         for (const auto& item : InvokeQ) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, item.ActorId, SelfId(), nullptr, 0));
         }
@@ -143,7 +146,19 @@ namespace NKikimr::NStorage {
                 ApplyNewNodeList(newNodeList);
             }
 
+            if (IsSelfStatic && AllBoundNodes.contains(SelfNode)) {
+                auto update = std::make_unique<TEvNodeConfigPush>();
+                UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, update.get());
+                if (Binding && Binding->SessionId && update->IsUseful()) {
+                    SendEvent(*Binding, std::move(update));
+                }
+            }
+
             QuorumValid = false;
+
+            // A generation-zero root can learn its first managed configuration
+            // from quorum recovery after BecomeRoot has already run.
+            StartStateStorageSelfHealRefresh();
 
             return true;
         } else if (StorageConfig->GetGeneration() && StorageConfig->GetGeneration() == config.GetGeneration() &&
@@ -214,6 +229,14 @@ namespace NKikimr::NStorage {
 
         // apply volatile config locally
         ApplyStorageConfig(msg.Config);
+
+        if (BridgeInfo && IsSelfStatic && Binding && Binding->SessionId && StorageConfig->GetGeneration()
+            && (!LocalCommittedStorageConfig
+                || LocalCommittedStorageConfig->GetGeneration() < StorageConfig->GetGeneration())) {
+            auto request = std::make_unique<TEvNodeConfigPush>();
+            request->Record.SetRequestedCommittedConfigGeneration(StorageConfig->GetGeneration());
+            SendEvent(*Binding, std::move(request));
+        }
     }
 
     void TDistributedConfigKeeper::HandleConfigConfirm(STATEFN_SIG) {
@@ -248,10 +271,13 @@ namespace NKikimr::NStorage {
             const auto [it, inserted] = allBoundNodesMap.emplace(nodeIdentifier.NodeId(), nodeIdentifier);
             Y_ABORT_UNLESS(inserted);
         }
+        std::multiset<ui32> subtreeHeights;
         for (const auto& [nodeId, info] : DirectBoundNodes) { // validate incoming binding
             Y_ABORT_UNLESS(allBoundNodesMap.contains(nodeId));
             Y_ABORT_UNLESS(AllBoundNodes.contains(allBoundNodesMap[nodeId]));
+            subtreeHeights.insert(info.GetSubtreeHeight());
         }
+        Y_ABORT_UNLESS(subtreeHeights == BoundSubtreeHeights);
         if (Binding) { // validate outgoing binding
             Y_ABORT_UNLESS(std::ranges::binary_search(NodeIdsForOutgoingBinding, Binding->NodeId) ||
                 std::ranges::binary_search(NodeIdsForIncomingBinding, Binding->NodeId) ||
@@ -301,6 +327,10 @@ namespace NKikimr::NStorage {
                     "Binding# " << Binding->ToString() << " Subscription# " << subs.ToString());
                 okay = true;
             }
+            if (RootProbe && RootProbe->NodeId == nodeId) {
+                Y_ABORT_UNLESS(!RootProbe->SessionId || subs.SessionId == RootProbe->SessionId);
+                okay = true;
+            }
             if (const auto it = DirectBoundNodes.find(nodeId); it != DirectBoundNodes.end()) {
                 Y_VERIFY_S(!subs.SessionId || subs.SessionId == it->second.SessionId, "sessionId# " << subs.SessionId
                     << " node.SessionId# " << it->second.SessionId);
@@ -313,6 +343,9 @@ namespace NKikimr::NStorage {
                 okay = true;
             }
             if (UnsubscribeQueue.contains(nodeId)) {
+                okay = true;
+            }
+            if (!okay && IsProvisionalPeer(nodeId)) {
                 okay = true;
             }
             if (!okay) {
@@ -336,6 +369,9 @@ namespace NKikimr::NStorage {
 
         if (Binding) {
             Y_ABORT_UNLESS(SubscribedSessions.contains(Binding->NodeId));
+        }
+        if (RootProbe) {
+            Y_ABORT_UNLESS(Scepter && !Binding && SubscribedSessions.contains(RootProbe->NodeId));
         }
         for (const auto& [nodeId, info] : DirectBoundNodes) {
             Y_VERIFY_S(SubscribedSessions.contains(nodeId), "NodeId# " << nodeId);
@@ -431,8 +467,7 @@ namespace NKikimr::NStorage {
         if (change && NodeListObtained && StorageConfigLoaded) {
             if (IsSelfStatic) {
                 UpdateBound(SelfNode.NodeId(), SelfNode, *StorageConfig, nullptr);
-                UpdateQuorums();
-                IssueNextBindRequest();
+                ReconcileNodeRole();
             }
             processPendingEvents();
         }
@@ -468,9 +503,14 @@ namespace NKikimr::NStorage {
             {"sessionId", ev->InterconnectSession},
             {"cookie", ev->Cookie});
         const ui32 senderNodeId = ev->Sender.NodeId();
-        if (ev->InterconnectSession && SubscribedSessions.contains(senderNodeId)) {
-            // keep session actors intact
-            SubscribeToPeerNode(senderNodeId, ev->InterconnectSession);
+        if (ev->InterconnectSession) {
+            if (const auto it = SubscribedSessions.find(senderNodeId); it != SubscribedSessions.end()) {
+                const auto& subs = it->second;
+                if (!subs.SubscriptionCookie && subs.SessionId != ev->InterconnectSession) {
+                    return;
+                }
+                SubscribeToPeerNode(senderNodeId, ev->InterconnectSession);
+            }
         }
         STRICT_STFUNC_BODY(
             hFunc(TEvNodeConfigPush, Handle);
@@ -479,13 +519,14 @@ namespace NKikimr::NStorage {
             hFunc(TEvNodeConfigScatter, Handle);
             hFunc(TEvNodeConfigGather, Handle);
             hFunc(TEvNodeConfigInvokeOnRoot, HandleInvokeOnRoot);
-            IgnoreFunc(TEvNodeConfigInvokeOnRootResult);
+            hFunc(TEvNodeConfigInvokeOnRootResult, Handle);
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             cFunc(TEvPrivate::EvErrorTimeout, HandleErrorTimeout);
             hFunc(TEvPrivate::TEvStorageConfigLoaded, Handle);
             hFunc(TEvPrivate::TEvStorageConfigStored, Handle);
+            hFunc(TEvPrivate::TEvScatterTaskTimeout, Handle);
             fFunc(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, HandleConfigConfirm);
             fFunc(TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe, HandleDynamicConfigSubscribe);
             hFunc(TEvNodeWardenDynamicConfigPush, Handle);
@@ -506,6 +547,9 @@ namespace NKikimr::NStorage {
             fFunc(TEvPrivate::EvRetryCollectConfigsAndPropose, HandleRetryCollectConfigsAndPropose);
             cFunc(TEvPrivate::EvRetryPersistConfig, HandleRetryPersistConfig);
             cFunc(TEvPrivate::EvFlushRetroTraceBatch, HandleFlushRetroTraceBatch);
+            fFunc(TEvPrivate::EvRootProbeTimeout, HandleRootProbeTimeout);
+            fFunc(TEvPrivate::EvBindingTimeout, HandleBindingTimeout);
+            fFunc(TEvPrivate::EvRetryConfigPropagation, HandleRetryConfigPropagation);
         )
         for (ui32 nodeId : std::exchange(UnsubscribeQueue, {})) {
             UnsubscribeInterconnect(nodeId);
@@ -517,9 +561,8 @@ namespace NKikimr::NStorage {
         }
 
         if (IsSelfStatic && StorageConfig && NodeListObtained) {
-            UpdateQuorums();
-            IssueNextBindRequest();
-            CheckRootNodeStatus();
+            ReconcileNodeRole();
+            CheckBindingLiveness();
         }
         if (StorageConfig && NodeListObtained) {
             ReportStorageConfigToNodeWarden();

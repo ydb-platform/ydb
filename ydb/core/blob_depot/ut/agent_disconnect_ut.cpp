@@ -3,8 +3,10 @@
 #include "../s3_router_events.h"
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
+#include <ydb/core/base/tablet.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -31,6 +33,8 @@ struct TTestEnv {
         Runtime.GetAppData().Icb->CreateConfigControls(true);
         TControlBoard::SetValue(1, Runtime.GetAppData().Icb->BlobDepotControls.S3MaxWritesInFlight);
 
+        // Only locator allocation is under test. Park external S3 requests in an edge actor;
+        // no HTTP server, S3 credentials or successful object uploads are needed.
         Runtime.RegisterService(MakeBlobDepotS3RouterID(TabletId), Runtime.AllocateEdgeActor());
         Observer = Runtime.AddObserver([this](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -60,7 +64,8 @@ struct TTestEnv {
         s3->MutableSyncMode();
         s3->MutableSettings()->SetBucket("test-bucket");
         Runtime.SendToPipe(TabletId, edge, config.release(), 0, GetPipeConfigWithRetries());
-        UNIT_ASSERT_C(Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvApplyConfigResult>(edge, TDuration::Seconds(5)), "BlobDepot did not apply the test configuration");
+        UNIT_ASSERT_C(Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvApplyConfigResult>(edge, TDuration::Seconds(5)),
+            "BlobDepot did not apply the test configuration");
     }
 
     TAgent Connect(ui32 nodeIndex, ui64 instanceId = 1) {
@@ -70,11 +75,13 @@ struct TTestEnv {
         auto request = std::make_unique<TEvBlobDepot::TEvRegisterAgent>();
         request->Record.SetAgentInstanceId(instanceId);
         Send(agent, request.release());
-        UNIT_ASSERT_C(Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvRegisterAgentResult>(edge, TDuration::Seconds(1)), "BlobDepot did not register the test agent");
+        UNIT_ASSERT_C(Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvRegisterAgentResult>(edge, TDuration::Seconds(1)),
+            "BlobDepot did not register the test agent");
         return agent;
     }
 
     ui64 Send(const TAgent& agent, IEventBase* event) {
+        // BlobDepot requires consecutive request cookies starting at one on every pipe.
         const ui64 cookie = ++RequestIds[agent.Pipe];
         Runtime.SendToPipe(agent.Pipe, agent.Edge, event, agent.NodeIndex, cookie);
         return cookie;
@@ -110,14 +117,23 @@ struct TTestEnv {
         UNIT_ASSERT(record.GetItems(0).HasS3Locator());
     }
 
-    void QueryBlocks(const TAgent& agent, ui64 tabletId) {
+    void SendQueryBlocks(const TAgent& agent, ui64 tabletId) {
         auto request = std::make_unique<TEvBlobDepot::TEvQueryBlocks>();
         request->Record.AddTabletIds(tabletId);
         Send(agent, request.release());
+    }
+
+    void ExpectQueryBlocks(const TAgent& agent, ui32 expectedGeneration = 0) {
         const auto response = Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvQueryBlocksResult>(
             agent.Edge, TDuration::Seconds(1));
         UNIT_ASSERT(response);
-        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetBlockedGenerations(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.BlockedGenerationsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetBlockedGenerations(0), expectedGeneration);
+    }
+
+    void QueryBlocks(const TAgent& agent, ui64 tabletId) {
+        SendQueryBlocks(agent, tabletId);
+        ExpectQueryBlocks(agent);
     }
 
     void Block(const TAgent& agent, ui64 tabletId) {
@@ -142,15 +158,18 @@ void CheckReconnectReleasesWrites(ui64 newInstanceId) {
     const auto otherAgent = env.Connect(1);
     env.Prepare(oldAgent, 1);
     env.ExpectPrepared(oldAgent, 1);
+    // The old connection owns both an allocated locator and a queued request.
     env.Prepare(oldAgent, 2);
     env.Prepare(otherAgent, 3);
     env.ExpectPending(2);
     env.ExpectPending(3);
 
+    // Register the replacement before the old pipe reports disconnection.
     const auto replacement = env.Connect(0, newInstanceId);
     env.ExpectPrepared(otherAgent, 3);
     UNIT_ASSERT(!env.PrepareResults.contains(2));
 
+    // A late disconnect of the superseded pipe must not disconnect the replacement.
     env.Disconnect(oldAgent);
     env.Prepare(replacement, 4);
     env.ExpectPending(4);
@@ -158,9 +177,59 @@ void CheckReconnectReleasesWrites(ui64 newInstanceId) {
     env.ExpectPrepared(replacement, 4);
 }
 
+void CheckQueryBlocksCommit(bool reboot) {
+    TTestEnv env;
+    constexpr ui64 tabletId = 12345;
+    const auto lessee = env.Connect(0);
+    const auto blocker = env.Connect(1);
+    env.QueryBlocks(lessee, tabletId);
+
+    ui32 observedGeneration = 0;
+    ui32 responses = 0;
+    auto queryObserver = env.Runtime.AddObserver<TEvBlobDepot::TEvQueryBlocksResult>(
+        [&](TEvBlobDepot::TEvQueryBlocksResult::TPtr& ev) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.BlockedGenerationsSize(), 1);
+            observedGeneration = ev->Get()->Record.GetBlockedGenerations(0);
+            ++responses;
+        });
+    TBlockEvents<TEvTablet::TEvCommit> commits(env.Runtime, [](const auto& ev) {
+        return ev->Get()->TabletID == TTestEnv::TabletId;
+    });
+
+    env.Block(blocker, tabletId);
+    env.Runtime.WaitFor("block commit", [&] { return !commits.empty(); }, TDuration::Seconds(1));
+    env.SendQueryBlocks(lessee, tabletId);
+    env.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+    if (reboot) {
+        const ui32 generationBeforeReboot = observedGeneration;
+        commits.Stop();
+        commits.clear();
+        RebootTablet(env.Runtime, TTestEnv::TabletId, env.Runtime.AllocateEdgeActor());
+        const auto reconnected = env.Connect(0);
+        env.QueryBlocks(reconnected, tabletId);
+
+        UNIT_ASSERT_C(generationBeforeReboot <= observedGeneration,
+                      "Blocked generation decreased after BlobDepot reboot: "
+                      << generationBeforeReboot << " -> " << observedGeneration);
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL_C(responses, 0, "QueryBlocks replied before the block was committed");
+        commits.Stop().Unblock();
+        env.ExpectQueryBlocks(lessee, 1);
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
+    Y_UNIT_TEST(QueryBlocksRemainMonotonicAfterReboot) {
+        CheckQueryBlocksCommit(true);
+    }
+
+    Y_UNIT_TEST(QueryBlocksWaitForCommit) {
+        CheckQueryBlocksCommit(false);
+    }
+
     Y_UNIT_TEST(DisconnectReleasesS3WriteSlots) {
         TTestEnv env;
         const auto owner = env.Connect(0);
@@ -224,6 +293,7 @@ Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
         env.Block(blocker, tabletId);
         env.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
 
+        // No IDs were allocated, so only BlockToDeliver can trigger the push on reconnect.
         const auto replacement = env.Connect(0);
         const auto push = env.Runtime.GrabEdgeEventRethrow<TEvBlobDepot::TEvPushNotify>(
             replacement.Edge, TDuration::MilliSeconds(100));
@@ -246,9 +316,12 @@ Y_UNIT_TEST_SUITE(BlobDepotAgentDisconnect) {
         env.QueryBlocks(lessee, tabletId);
         env.Disconnect(lessee);
 
+        // The block finishes via storage while the disconnected agent's lease is still valid.
+        // Reissuing the same generation/issuer must not collide with a stale BlockToDeliver.
         env.Block(blocker, tabletId);
         env.ExpectBlocked(blocker);
         env.Block(blocker, tabletId);
+        // The mock storage reports that the first request already installed this block.
         env.ExpectBlocked(blocker, NKikimrProto::ALREADY);
     }
 }

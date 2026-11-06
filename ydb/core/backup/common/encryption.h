@@ -11,8 +11,7 @@
 
 namespace NKikimr::NBackup {
 
-// Max block size must always be at least size of table row (~8 MB) serialized into text csv format.
-// Default export batch size is 32 MB (data_shard_config.backup_bytes_batch_size / ScanSettings.BytesBatchSize).
+// Maximum size of data in a single encryption block.
 static constexpr size_t MAX_BLOCK_SIZE = 50_MB;
 
 TString NormalizeEncryptionAlgorithmName(const TString& name);
@@ -193,13 +192,16 @@ public:
     TEncryptedFileSerializer(TString algorithm, TEncryptionKey key, TEncryptionIV iv);
     ~TEncryptedFileSerializer();
 
-    // Streaming interface
-    // File consists of blocks that contain MAC
-    // Block size should not be too big
-    // because whole block must be read before usage.
+    // Low-level interface: writes nonempty data as one encryption block.
+    // Prefer AddData() unless exact block boundaries are required (e.g. in format tests).
+    // Throws if data exceeds MAX_BLOCK_SIZE. last appends the end-of-file marker.
     TBuffer AddBlock(TStringBuf data, bool last);
 
-    // Helper that serializes the whole file at one time
+    // Appends data in blocks of at most MAX_BLOCK_SIZE. last finishes the file,
+    // including when data is empty.
+    TBuffer AddData(TStringBuf data, bool last);
+
+    // Helper that serializes the whole file at one time, splitting it into blocks up to MAX_BLOCK_SIZE.
     static TBuffer EncryptFullFile(TString algorithm, TEncryptionKey key, TEncryptionIV iv, TStringBuf data);
 
 private:

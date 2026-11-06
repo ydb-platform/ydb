@@ -38,10 +38,11 @@ struct TTestSetup {
     static const THashSet<TString> GizmoPermissions;
     static const THashSet<TString> ClusterPermissions;
 
-    TTestSetup(const TString& userSid, const TString& dbPath, const std::vector<std::pair<TString, TString>>& userAttributes)
+    TTestSetup(const TString& userSid, const TString& dbPath, const std::vector<std::pair<TString, TString>>& userAttributes,
+        bool useRealThreads = true)
         : KikimrPort(PortManager.GetPort(2134))
         , AccessServiceEndpoint("localhost:" + ToString(PortManager.GetPort(4284)))
-        , Server(std::make_unique<TServer>(GetSettings()))
+        , Server(std::make_unique<TServer>(GetSettings(useRealThreads)))
         , UserSid(userSid)
         , DbPath(dbPath)
     {
@@ -54,7 +55,7 @@ struct TTestSetup {
         return Server->GetRuntime();
     }
 
-    TServerSettings GetSettings() {
+    TServerSettings GetSettings(bool useRealThreads) {
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBlackBox(false);
         authConfig.SetUseAccessService(true);
@@ -66,6 +67,7 @@ struct TTestSetup {
 
         auto settings = TServerSettings(KikimrPort, authConfig);
         settings.SetEnableAccessServiceBulkAuthorization(true);
+        settings.SetUseRealThreads(useRealThreads);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         return settings;
@@ -344,3 +346,99 @@ Y_UNIT_TEST(CanSetPermissionsForDbWithoutCloudUserAttributes) {
 }
 
 } // CheckCloudPermissions
+
+namespace {
+
+void CheckResourceDatabaseResolution(
+    NSchemeCache::TSchemeCacheNavigate::EStatus status,
+    Ydb::StatusIds::StatusCode expectedStatus)
+{
+    TTestSetup setup("user1", "/Root/serverless", {}, false);
+    const TPathId resourceDomainKey(1, 200);
+    auto* domainDescription = setup.DescribeSchemeResult.MutablePathDescription()->MutableDomainDescription();
+    domainDescription->MutableDomainKey()->SetSchemeShard(1);
+    domainDescription->MutableDomainKey()->SetPathId(100);
+    auto* resourcesDomainKey = domainDescription->MutableResourcesDomainKey();
+    resourcesDomainKey->SetSchemeShard(resourceDomainKey.OwnerId);
+    resourcesDomainKey->SetPathId(resourceDomainKey.LocalPathId);
+
+    auto* runtime = setup.GetRuntime();
+    size_t resolveRequests = 0;
+    const auto observer = runtime->AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySet>(
+        [&](TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr& ev) {
+            auto& navigate = ev->Get()->Request;
+            if (navigate->ResultSet.size() != 1 || navigate->ResultSet.front().TableId.PathId != resourceDomainKey) {
+                return;
+            }
+            ++resolveRequests;
+            UNIT_ASSERT(!navigate->UserToken);
+            auto& entry = navigate->ResultSet.front();
+            entry.Status = status;
+            entry.Path = SplitPath("/Root/shared");
+            navigate->ErrorCount = status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok ? 0 : 1;
+            runtime->Send(new IEventHandle(ev->Sender, ev->Recipient,
+                new TEvTxProxySchemeCache::TEvNavigateKeySetResult(navigate), 0, ev->Cookie));
+            ev.Reset();
+        });
+
+    runtime->GetAppData().FeatureFlags.SetCheckDatabaseAccessPermission(false);
+    auto request = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>(
+        setup.DbPath,
+        TMaybe<TString>("Bearer " + setup.UserSid),
+        setup.FakeMonActor,
+        NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
+        "192.168.0.101");
+    setup.RequestCheckActor(std::move(request));
+
+    TAutoPtr<IEventHandle> handle;
+    const auto* response = runtime->GrabEdgeEvent<NGRpcService::TEvRequestAuthAndCheckResult>(handle);
+    UNIT_ASSERT_C(response, "Expected TEvRequestAuthAndCheckResult");
+    UNIT_ASSERT_VALUES_EQUAL(resolveRequests, 1);
+    UNIT_ASSERT_VALUES_EQUAL_C(response->Status, expectedStatus, status);
+
+    if (expectedStatus == Ydb::StatusIds::SUCCESS) {
+        UNIT_ASSERT(response->UserToken);
+        UNIT_ASSERT(response->Issues.Empty());
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(response->Issues.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Issues.begin()->GetMessage(), "Unknown resource database");
+        if (expectedStatus == Ydb::StatusIds::UNAVAILABLE) {
+            UNIT_ASSERT_VALUES_EQUAL(response->Issues.begin()->GetCode(), ui32(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR));
+        }
+    }
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(ResourceDatabaseResolution) {
+
+Y_UNIT_TEST(LookupErrorIsRetryable) {
+    CheckResourceDatabaseResolution(NSchemeCache::TSchemeCacheNavigate::EStatus::LookupError,
+        Ydb::StatusIds::UNAVAILABLE);
+}
+
+Y_UNIT_TEST(RedirectLookupErrorIsRetryable) {
+    CheckResourceDatabaseResolution(NSchemeCache::TSchemeCacheNavigate::EStatus::RedirectLookupError,
+        Ydb::StatusIds::UNAVAILABLE);
+}
+
+Y_UNIT_TEST(AccessDenied) {
+    CheckResourceDatabaseResolution(NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied,
+        Ydb::StatusIds::UNAUTHORIZED);
+}
+
+Y_UNIT_TEST(PermanentErrors) {
+    using EStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
+    for (const auto status : {EStatus::Unknown, EStatus::RootUnknown, EStatus::PathErrorUnknown,
+        EStatus::PathNotTable, EStatus::PathNotPath, EStatus::TableCreationNotComplete})
+    {
+        CheckResourceDatabaseResolution(status, Ydb::StatusIds::UNAUTHORIZED);
+    }
+}
+
+Y_UNIT_TEST(Success) {
+    CheckResourceDatabaseResolution(NSchemeCache::TSchemeCacheNavigate::EStatus::Ok,
+        Ydb::StatusIds::SUCCESS);
+}
+
+}

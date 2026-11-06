@@ -5,6 +5,9 @@
 #include <ydb/library/actors/core/actor.h>
 #include <util/generic/ptr.h>
 
+#include <memory>
+#include <optional>
+
 namespace NKikimr {
 
     enum EPDiskMockEvents {
@@ -26,11 +29,13 @@ namespace NKikimr {
 
     public:
         using TPtr = TIntrusivePtr<TPDiskMockState>;
+        using TMetadata = std::optional<TRcBuf>;
 
     public:
         TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize = 128 << 20,
                 bool isDiskReadOnly = false, NPDisk::EDeviceType deviceType = NPDisk::EDeviceType::DEVICE_TYPE_NVME,
-                ESpaceColorPolicy spaceColorPolicy = ESpaceColorPolicy::None);
+                ESpaceColorPolicy spaceColorPolicy = ESpaceColorPolicy::None,
+                std::shared_ptr<TMetadata> metadata = {});
         TPDiskMockState(std::unique_ptr<TImpl>&& impl);
         ~TPDiskMockState();
 

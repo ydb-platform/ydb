@@ -3907,22 +3907,29 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {
     };
 
     struct TTxWrite8MB : public ITransaction {
+        static constexpr ui64 PayloadSize = 8 * 1024 * 1024;
+
         i64 Key;
         ui32 TableId;
+        ui64* AllocatedSize;
 
-        explicit TTxWrite8MB(i64 key, ui32 tableId = TRowsModel::TableId)
+        explicit TTxWrite8MB(i64 key, ui32 tableId = TRowsModel::TableId, ui64* allocatedSize = nullptr)
             : Key(key)
             , TableId(tableId)
-        { }
+            , AllocatedSize(allocatedSize)
+        {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             const auto key = NScheme::TInt64::TInstance(Key);
 
-            TString str(size_t(8 * 1024 * 1024), 'x');
+            TString str(PayloadSize, 'x');
             const auto val = NScheme::TString::TInstance(str);
             NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, val };
 
             txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { ops });
+            if (AllocatedSize) {
+                *AllocatedSize = txc.DB.GetTableMemAllocatedSize(TableId);
+            }
             return true;
         }
 
@@ -3967,19 +3974,25 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
+        const ui64 lowWatermark = policy->InMemForceSizeToSnapshot * 2.5f;
+        const ui64 highWatermark = policy->InMemForceSizeToSnapshot * 4.0f;
 
         env.SendSync(rows.MakeScheme(std::move(policy)));
 
+        ui64 allocatedSize = 0;
         float rejectProbability;
         env.SendSync(new NFake::TEvCall{ [&](auto* executor, const auto& ctx) {
-            // Write 48MB
-            for (i64 key = 1; key <= 6; ++key) {
-                executor->Execute(new TTxWrite8MB(key), ctx);
+            for (i64 key = 1; allocatedSize <= lowWatermark; ++key) {
+                UNIT_ASSERT_C(ui64(key) <= lowWatermark / TTxWrite8MB::PayloadSize + 1,
+                    "Allocated size did not reach the low watermark: " << allocatedSize);
+                executor->Execute(new TTxWrite8MB(key, TRowsModel::TableId, &allocatedSize), ctx);
             }
             rejectProbability = executor->GetRejectProbability();
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
+        UNIT_ASSERT_C(allocatedSize > lowWatermark && allocatedSize < highWatermark,
+            "Allocated size " << allocatedSize << " must be between " << lowWatermark << " and " << highWatermark);
         UNIT_ASSERT_C(rejectProbability > 0.0f && rejectProbability < 1.0f,
                 "unexpected reject probability: " << rejectProbability);
     }
@@ -3994,19 +4007,25 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_RejectProbability) {
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
 
         TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy;
+        const ui64 lowWatermark = policy->InMemForceSizeToSnapshot * 2.5f;
+        const ui64 targetSize = lowWatermark / 2;
 
         env.SendSync(rows.MakeScheme(std::move(policy)));
 
+        ui64 allocatedSize = 0;
         float rejectProbability;
         env.SendSync(new NFake::TEvCall{ [&](auto* executor, const auto& ctx) {
-            // Write 32MB
-            for (i64 key = 1; key <= 4; ++key) {
-                executor->Execute(new TTxWrite8MB(key), ctx);
+            for (i64 key = 1; allocatedSize < targetSize; ++key) {
+                UNIT_ASSERT_C(ui64(key) <= targetSize / TTxWrite8MB::PayloadSize + 1,
+                    "Allocated size did not reach the target: " << allocatedSize);
+                executor->Execute(new TTxWrite8MB(key, TRowsModel::TableId, &allocatedSize), ctx);
             }
             rejectProbability = executor->GetRejectProbability();
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
+        UNIT_ASSERT_C(allocatedSize >= targetSize && allocatedSize < lowWatermark,
+            "Allocated size " << allocatedSize << " must remain below the low watermark " << lowWatermark);
         UNIT_ASSERT_C(rejectProbability <= 0.0f,
                 "unexpected reject probability: " << rejectProbability);
     }
@@ -7861,6 +7880,68 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
 
     }
 
+    Y_UNIT_TEST(TestDoNotCutHistoryEnabledAfterBoot) {
+        struct TTestStarter : NFake::TStarter {
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
+                auto *info = TStarter::MakeTabletInfo(tablet, channels);
+                info->Channels[1].History.emplace_back(1, 0);
+                info->Channels[1].History.emplace_back(2, 1);
+                return info;
+            }
+        };
+
+        TMyEnvBase env;
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableCutHistory(false);
+        TRowsModel data;
+        unsigned wasCutHistory = 0;
+        auto observer = env.Env.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTablet::EvCutTabletHistory) {
+                ++wasCutHistory;
+                ev.Reset();
+            }
+        });
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+
+        env.SendSync(data.MakeScheme(std::move(policy)));
+        env.SendSync(data.MakeRows(3000));
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        // Booting with the flag off means nothing feeds the history cutter with the blobs of
+        // already existing parts, so this tablet generation must never cut anything.
+        TTestStarter starter;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, 0, &starter);
+
+        env.WaitForWakeUp();
+
+        appData.FeatureFlags.SetEnableCutHistory(true);
+
+        // Every row is a separate commit, so this forces plenty of log snapshots, i.e. plenty
+        // of chances for the GC logic to confirm and cut.
+        env.SendSync(data.MakeRows(3000));
+        env->SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(wasCutHistory, 0u);
+
+        // The flag is latched at boot, so it only takes effect on the next one.
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, 0, &starter);
+
+        env->WaitFor("cutting history", [&] { return wasCutHistory >= 2; });
+    }
+
     Y_UNIT_TEST(TestCutTabletHistorySystemChannel) {
         struct TTestStarter : NFake::TStarter {
             NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
@@ -8085,10 +8166,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         }, 0, &starter);
 
         env->WaitFor("cutting history", [&] { return wasCutHistory >= 2; });
-        for (auto b : barriers) {
-            Cerr << b << Endl;
-        }
-        UNIT_ASSERT_EQUAL(barriers, (std::set<ui32>{0, 1}));
+        // Both cut entries live in the same group, so their barriers (generations 0 and 1)
+        // collapse into the higher one instead of racing each other on retries.
+        UNIT_ASSERT_EQUAL(barriers, (std::set<ui32>{1}));
         env.SendSync(new TEvents::TEvPoison, false, true);
     }
 }
@@ -8210,6 +8290,95 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LowPriorityTxs) {
             ++State.Destroyed;
         }
     };
+
+    struct TCallbackTx : public TSimpleTx {
+        using TCallback = std::function<bool(TTransactionContext&, const TActorContext&)>;
+
+        TCallbackTx(TTxState& state, TCallback callback)
+            : TSimpleTx(state)
+            , Callback(std::move(callback))
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+            ++State.Executed;
+            return Callback(txc, ctx);
+        }
+
+        TCallback Callback;
+    };
+
+    Y_UNIT_TEST(TestHelpNormalQueue) {
+        TMyEnvBase env;
+        env.FireDummyTablet();
+
+        TTxState first, second, third;
+        env.SendSync(new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+            x->Enqueue(new TCallbackTx(first, [&](auto&, const auto&) {
+                UNIT_ASSERT(!x->TryExecuteReadyTransaction()); // No nested execution.
+                return true;
+            }));
+            x->Enqueue(new TSimpleTx(second));
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(first.Executed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(second.Executed, 0);
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(second.Executed, 1);
+            UNIT_ASSERT(!x->TryExecuteReadyTransaction());
+
+            // Both posted activations remain; one can serve a new transaction
+            // and the other must safely handle an empty queue.
+            x->Enqueue(new TSimpleTx(third));
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+                UNIT_ASSERT_VALUES_EQUAL(third.Executed, 1);
+                UNIT_ASSERT(!x->TryExecuteReadyTransaction());
+                ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+            }});
+        }});
+    }
+
+    Y_UNIT_TEST(TestHelpLowPriorityQueue) {
+        TMyEnvBase env;
+        env.FireDummyTablet();
+
+        TTxState normal, first, second, third, fourth;
+        env.SendSync(new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+            x->EnqueueLowPriority(new TSimpleTx(first));
+            x->EnqueueLowPriority(new TSimpleTx(second));
+            x->Enqueue(new TSimpleTx(normal));
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(normal.Executed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(first.Executed, 0);
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(first.Executed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(second.Executed, 0);
+            UNIT_ASSERT(x->TryExecuteReadyTransaction());
+            UNIT_ASSERT_VALUES_EQUAL(second.Executed, 1);
+            UNIT_ASSERT(!x->TryExecuteReadyTransaction());
+
+            // The posted normal and low-priority activations must safely
+            // consume an empty queue without executing any transaction twice.
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+                UNIT_ASSERT(!x->TryExecuteReadyTransaction());
+                // After the stale events have been consumed, new low-priority
+                // work must still activate, one transaction per mailbox turn.
+                x->EnqueueLowPriority(new TSimpleTx(third));
+                x->EnqueueLowPriority(new TSimpleTx(fourth));
+                ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+                    UNIT_ASSERT_VALUES_EQUAL(third.Executed, 1);
+                    UNIT_ASSERT_VALUES_EQUAL(fourth.Executed, 0);
+                    ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+                        UNIT_ASSERT_VALUES_EQUAL(fourth.Executed, 1);
+                        ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+                    }});
+                }});
+            }});
+        }});
+        for (const auto* state : {&normal, &first, &second, &third, &fourth}) {
+            UNIT_ASSERT_VALUES_EQUAL(state->Executed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(state->Completed, 1);
+            UNIT_ASSERT_VALUES_EQUAL(state->Destroyed, 1);
+        }
+    }
 
     Y_UNIT_TEST(TestEnqueueCancel) {
         TMyEnvBase env;

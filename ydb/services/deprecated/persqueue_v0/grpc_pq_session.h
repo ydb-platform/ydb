@@ -237,6 +237,11 @@ public:
         return res;
     }
 
+    TString GetAuthority() const {
+        const auto authority = Context.ExperimentalGetAuthority();
+        return TString(authority.data(), authority.size());
+    }
+
 protected:
 
     virtual void OnCreated() = 0;

@@ -13,6 +13,13 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+std::unique_ptr<TDataSourceLease> ISourcesConstructor::TryExtractNext(
+    const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) {
+    AFL_VERIFY(!IsFinished());
+    AFL_VERIFY(InitCursorFlag);
+    return DoTryExtractNext(context, inFlightCurrentLimit);
+}
+
 TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& read, const EReaderClass readerClass) {
     SetPKRangesFilter(read.PKRangesFilter);
     InitShardingInfo(read.GetTableMetadataAccessor());

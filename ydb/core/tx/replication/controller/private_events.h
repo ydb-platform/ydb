@@ -32,11 +32,20 @@ struct TEvPrivate {
         EvResolveResourceIdResult,
         EvAlterDstResult,
         EvRemoveWorker,
+        EvCompleteWorkerSet,
         EvDescribeTargetsResult,
         EvRequestCreateStream,
         EvAllowCreateStream,
         EvRequestDropStream,
         EvAllowDropStream,
+        EvRestoreSession,
+        EvPrepareAttachDst,
+        EvPrepareAttachDstResult,
+        EvCompleteDstAttachment,
+        EvUpdateYdbProxy,
+        EvCancelCreateStream,
+        EvCancelDropStream,
+        EvExpireWorkerLag,
 
         EvEnd,
     };
@@ -153,6 +162,30 @@ struct TEvPrivate {
         TString ToString() const override;
     };
 
+    struct TEvPrepareAttachDst: public TEventLocal<TEvPrepareAttachDst, EvPrepareAttachDst> {
+        const ui64 ReplicationId;
+        const ui64 TargetId;
+        const TPathId DstPathId;
+
+        explicit TEvPrepareAttachDst(ui64 rid, ui64 tid, const TPathId& dstPathId);
+        TString ToString() const override;
+    };
+
+    struct TEvPrepareAttachDstResult: public TEventLocal<TEvPrepareAttachDstResult, EvPrepareAttachDstResult> {
+        TEvPrepareAttachDstResult() = default;
+        TString ToString() const override;
+    };
+
+    struct TEvCompleteDstAttachment: public TEventLocal<TEvCompleteDstAttachment, EvCompleteDstAttachment> {};
+
+    struct TEvUpdateYdbProxy: public TEventLocal<TEvUpdateYdbProxy, EvUpdateYdbProxy> {
+        const TActorId YdbProxy;
+
+        explicit TEvUpdateYdbProxy(const TActorId& ydbProxy)
+            : YdbProxy(ydbProxy)
+        {}
+    };
+
     struct TEvDropDstResult: public TGenericSchemeResult<TEvDropDstResult, EvDropDstResult> {
         explicit TEvDropDstResult(ui64 rid, ui64 tid,
             NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess, const TString& error = {});
@@ -184,6 +217,8 @@ struct TEvPrivate {
         explicit TEvUpdateTenantNodes(const TString& tenant);
         TString ToString() const override;
     };
+
+    struct TEvExpireWorkerLag: public TEventLocal<TEvExpireWorkerLag, EvExpireWorkerLag> {};
 
     struct TEvProcessQueues: public TEventLocal<TEvProcessQueues, EvProcessQueues> {
     };
@@ -230,6 +265,14 @@ struct TEvPrivate {
         TString ToString() const override;
     };
 
+    struct TEvCompleteWorkerSet: public TEventLocal<TEvCompleteWorkerSet, EvCompleteWorkerSet> {
+        ui64 ReplicationId;
+        ui64 TargetId;
+
+        TEvCompleteWorkerSet(ui64 rid, ui64 tid);
+        TString ToString() const override;
+    };
+
     struct TEvDescribeTargetsResult: public TEventLocal<TEvDescribeTargetsResult, EvDescribeTargetsResult> {
         using TResult = THashMap<ui64, std::optional<NYdb::NTable::TDescribeTableResult>>;
 
@@ -251,6 +294,21 @@ struct TEvPrivate {
     };
 
     struct TEvAllowDropStream: public TEventLocal<TEvAllowDropStream, EvAllowDropStream> {
+    };
+
+    struct TEvCancelCreateStream: public TEventLocal<TEvCancelCreateStream, EvCancelCreateStream> {
+    };
+
+    struct TEvCancelDropStream: public TEventLocal<TEvCancelDropStream, EvCancelDropStream> {
+    };
+
+    struct TEvRestoreSession: public TEventLocal<TEvRestoreSession, EvRestoreSession> {
+        const ui32 NodeId;
+
+        explicit TEvRestoreSession(ui32 nodeId)
+            : NodeId(nodeId)
+        {
+        }
     };
 
 }; // TEvPrivate

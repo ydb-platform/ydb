@@ -4089,7 +4089,7 @@ partitioning_settings {
         UNIT_ASSERT_VALUES_EQUAL(entry.GetCancelRequestedBy(), Authenticated ? canceller : TString());
         UNIT_ASSERT(entry.HasCancelRequestTime());
         const auto cancelTime = entry.GetCancelRequestTime();
-        const auto acceptedAt = TInstant::Seconds(cancelTime.seconds()) + TDuration::NanoSeconds(cancelTime.nanos());
+        const auto acceptedAt = TInstant::Seconds(cancelTime.seconds()) + TDuration::MicroSeconds(cancelTime.nanos() / 1000);
         UNIT_ASSERT(beforeCancel <= acceptedAt);
         UNIT_ASSERT(acceptedAt <= Runtime().GetCurrentTime());
 

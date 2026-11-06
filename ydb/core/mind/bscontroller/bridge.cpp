@@ -1260,7 +1260,7 @@ void TBlobStorageController::HandleRetrySyncers() {
 
 void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
     const TMonotonic now = TActivationContext::Monotonic();
-    if (now < LoadedAt + TDuration::Seconds(10)) {
+    if (now < LoadedAt + SyncerReportingTime) {
         // give nodes some time to connect to BSC and report their syncers: until then BSC doesn't know how many of them
         // are running, so it could exceed the limit
         SendSyncersToNodes(nodesToUpdate);
@@ -1484,7 +1484,7 @@ bool TBlobStorageController::IsNodeHostingSyncers(TNodeId nodeId) const {
 }
 
 void TBlobStorageController::UpdateBridgeSyncNodeRates(const THashSet<TNodeId>& nodesToUpdate) {
-    if (!BridgeSyncNodeRatesDirty || TActivationContext::Monotonic() < LoadedAt + TDuration::Seconds(10)) {
+    if (!BridgeSyncNodeRatesDirty || TActivationContext::Monotonic() < LoadedAt + SyncerReportingTime) {
         return; // while nodes are still reporting their syncers, any share would exceed the limit
     }
     BridgeSyncNodeRatesDirty = false;

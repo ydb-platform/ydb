@@ -45,6 +45,13 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
+IF (OS_LINUX)
+    # .debug_aranges uses 32-bit relocations. lld rejects this suite once
+    # .debug_info passes 4 GiB, including the prebuilt pthread_atfork object.
+    # ydbd already drops the section for the same reason.
+    LINKER_SCRIPT(../../../../apps/ydbd/strip_debug.ld)
+ENDIF()
+
 GENERATE_ENUM_SERIALIZATION(tiering_test_enums.h)
 
 END()

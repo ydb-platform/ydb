@@ -3131,7 +3131,7 @@ private:
         }
 
         static const THashSet<TString> supportedSettings = {
-            "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR", "TABLES_METRICS_LEVEL"
+            "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR", "MAX_ACL_BYTES_SIZE", "TABLES_METRICS_LEVEL"
         };
 
         for (const auto& setting : node.Settings()) {
@@ -3163,6 +3163,11 @@ private:
                 }
             }
             if (name == "MAX_CHILDREN_IN_DIR") {
+                if (!ValidateInteger(ctx, value, name)) {
+                    return TStatus::Error;
+                }
+            }
+            if (name == "MAX_ACL_BYTES_SIZE") {
                 if (!ValidateInteger(ctx, value, name)) {
                     return TStatus::Error;
                 }

@@ -168,25 +168,21 @@ TPKRangesFilter::TPKRangesFilter(const std::shared_ptr<arrow::RecordBatch>& data
 }
 
 std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const {
-    const ui32 pkColumnsCount = pkSchema->num_fields();
     auto fullSchema = NArrow::TStatusValidator::GetValid(
-        pkSchema->AddField(pkColumnsCount, std::make_shared<arrow::Field>(".ydb_operation_type", arrow::uint32())));
-    // The prefix length is stored explicitly: a NULL cell inside the prefix is a real key value (NULL sorts first)
-    // and must not be confused with the NULL padding of the columns beyond the prefix.
-    fullSchema = NArrow::TStatusValidator::GetValid(
-        fullSchema->AddField(pkColumnsCount + 1, std::make_shared<arrow::Field>(".ydb_columns_count", arrow::uint32())));
+        pkSchema->AddField(pkSchema->num_fields(), std::make_shared<arrow::Field>(".ydb_operation_type", arrow::uint32())));
     auto builders = NArrow::MakeBuilders(fullSchema, SortedRanges.size() * 2);
-    const auto appendPredicate = [&](const TPredicateContainer& predicate) {
-        predicate.AppendPointTo(builders);
-        for (ui32 idx = predicate.NumColumns(); idx < pkColumnsCount; ++idx) {
+    for (auto&& i : SortedRanges) {
+        i.GetPredicateFrom().AppendPointTo(builders);
+        for (ui32 idx = i.GetPredicateFrom().NumColumns(); idx < (ui32)pkSchema->num_fields(); ++idx) {
             NArrow::TStatusValidator::Validate(builders[idx]->AppendNull());
         }
-        NArrow::Append<arrow::UInt32Type>(*builders[pkColumnsCount], (ui32)predicate.GetCompareType());
-        NArrow::Append<arrow::UInt32Type>(*builders[pkColumnsCount + 1], predicate.NumColumns());
-    };
-    for (auto&& i : SortedRanges) {
-        appendPredicate(i.GetPredicateFrom());
-        appendPredicate(i.GetPredicateTo());
+        NArrow::Append<arrow::UInt32Type>(*builders[pkSchema->num_fields()], (ui32)i.GetPredicateFrom().GetCompareType());
+
+        i.GetPredicateTo().AppendPointTo(builders);
+        for (ui32 idx = i.GetPredicateTo().NumColumns(); idx < (ui32)pkSchema->num_fields(); ++idx) {
+            NArrow::TStatusValidator::Validate(builders[idx]->AppendNull());
+        }
+        NArrow::Append<arrow::UInt32Type>(*builders[pkSchema->num_fields()], (ui32)i.GetPredicateTo().GetCompareType());
     }
     return arrow::RecordBatch::Make(fullSchema, SortedRanges.size() * 2, NArrow::Finish(std::move(builders)));
 }
@@ -208,21 +204,9 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
     AFL_VERIFY(c);
     AFL_VERIFY(c->type_id() == arrow::Type::UINT32);
     auto cUi32 = static_pointer_cast<arrow::UInt32Array>(c);
-    std::shared_ptr<arrow::UInt32Array> cColumnsCount;
-    if (auto cCount = batch->GetColumnByName(".ydb_columns_count")) {
-        AFL_VERIFY(cCount->type_id() == arrow::Type::UINT32);
-        cColumnsCount = static_pointer_cast<arrow::UInt32Array>(cCount);
-    }
-    const auto cutRow = [&](const ui32 rowIdx) {
-        if (cColumnsCount) {
-            return TPredicate::CutByColumnsCount(batch, rowIdx, pkSchema, cColumnsCount->Value(rowIdx));
-        }
-        // legacy format without the explicit prefix length: the first NULL ends the prefix
-        return TPredicate::CutNulls(batch, rowIdx, pkSchema);
-    };
     for (ui32 i = 0; i < batch->num_rows();) {
         NOlap::TPredicate pFrom = [&]() {
-            auto batchRow = cutRow(i);
+            auto batchRow = TPredicate::CutNulls(batch, i, pkSchema);
             NKernels::EOperation op = (NKernels::EOperation)cUi32->Value(i);
             if (op != NKernels::EOperation::Equal) {
                 ++i;
@@ -236,7 +220,7 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
             }
         }();
         NOlap::TPredicate pTo = [&]() {
-            auto batchRow = cutRow(i);
+            auto batchRow = TPredicate::CutNulls(batch, i, pkSchema);
             NKernels::EOperation op = (NKernels::EOperation)cUi32->Value(i);
             if (op == NKernels::EOperation::LessEqual || op == NKernels::EOperation::Less) {
                 return TPredicate(op, batchRow);

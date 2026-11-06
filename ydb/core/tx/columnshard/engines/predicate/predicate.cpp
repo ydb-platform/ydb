@@ -34,15 +34,6 @@ NArrow::NMerger::TSortableBatchPosition TPredicate::CutNulls(
     return NArrow::NMerger::TSortableBatchPosition(batch, rowIdx, colsNotNull, std::vector<std::string>(), false);
 }
 
-NArrow::NMerger::TSortableBatchPosition TPredicate::CutByColumnsCount(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 rowIdx,
-    const std::shared_ptr<arrow::Schema>& pkSchema, const ui32 columnsCount) {
-    AFL_VERIFY((i64)rowIdx < batch->num_rows())("idx", rowIdx)("count", batch->num_rows());
-    AFL_VERIFY(columnsCount && columnsCount <= (ui32)pkSchema->num_fields())("columns", columnsCount)("pk", pkSchema->num_fields());
-    const auto names = pkSchema->field_names();
-    return NArrow::NMerger::TSortableBatchPosition(
-        batch, rowIdx, std::vector<std::string>(names.begin(), names.begin() + columnsCount), std::vector<std::string>(), false);
-}
-
 bool TPredicate::IsEqualSchema(const std::shared_ptr<arrow::Schema>& schema) const {
     AFL_VERIFY(schema);
     return Batch.IsSameSortingSchema(*schema);

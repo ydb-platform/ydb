@@ -1319,6 +1319,9 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
             const TBridgePileId authorityPileId = NBridge::GetAuthorityPileId(state);
             // parts of the group being made fully bridged one get synced in synchronized piles too
             const bool upgrading = poolBridgeMode && state.GetAuthorityPileId();
+            if (upgradePass && !upgrading) {
+                continue; // the group isn't being made a fully bridged one, so this pass has nothing to do for it
+            }
             for (size_t pileIndex = 0; pileIndex < state.PileSize(); ++pileIndex) {
                 const auto bridgePileId = TBridgePileId::FromPileIndex(pileIndex);
                 const auto *bridgePile = BridgeInfo->FindPile(bridgePileId);

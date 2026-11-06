@@ -116,9 +116,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
             }
         }
         if (hasNull && !GetIndexInfo().IsNullableVerifiedByIndex(targetIdx)) {
-            // Nullability comes from the table schema only (AllowNullableColumnsInPK is checked by schemeshard at creation).
             if (pkFieldIdx) {
-                // a key column identifies the row: NULL is rejected for every modification type, defaults do not apply
                 return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
             }
             switch (mType) {

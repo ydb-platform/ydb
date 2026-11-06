@@ -263,13 +263,15 @@ runs:
         . .github/scripts/utils/analytics/github_actions/analytics.sh
         analytics start init
 
-        # Remote executor hosts may run PEP 668 (externally-managed) Python;
-        # only then allow installing into the system interpreter.
+        # Remote executor hosts may run PEP 668 (externally-managed) Python
+        # and lack image-preinstalled CI deps (e.g. PyGithub for comment-pr).
         PIP_ARGS=()
+        PIP_PKGS=(ydb 'ydb[yc]' codeowners humanize plotly pyyaml)
         if [ -n "${SOURCE_RUN_ID:-}" ]; then
           PIP_ARGS+=(--break-system-packages)
+          PIP_PKGS+=(PyGithub)
         fi
-        python3 -m pip install "${PIP_ARGS[@]}" ydb 'ydb[yc]' codeowners humanize plotly pyyaml
+        python3 -m pip install "${PIP_ARGS[@]}" "${PIP_PKGS[@]}"
         analytics end init --conclusion success
         if [ "${GH_PROXY_MEASURED:-}" = 1 ]; then
           chosen_mbps="${GH_PROXY_DIRECT_MBPS}"

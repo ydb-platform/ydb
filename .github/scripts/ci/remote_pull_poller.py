@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
 """Remote-host poller: platform remote-ticket artifact → local executor → claim.
 
-Webhook / run list gives platform_run_id but not workflow_dispatch inputs.
-Those live in the platform Actions artifact `remote-ticket`.
+Webhook/list gives platform_run_id; workflow_dispatch inputs are in the
+platform Actions artifact `remote-ticket`.
 
 Env:
-  GH_TOKEN              — this (executor) repo for local workflow_dispatch
+  GH_TOKEN              — PAT/app token on THIS repo (workflow_dispatch); github.token will not start workflows
   PLATFORM_GH_TOKEN     — read artifacts/runs on platform (falls back to GH_TOKEN)
   GITHUB_REPOSITORY     — this (executor) repo
   PLATFORM_REPOSITORY   — e.g. ydb-platform/ydb
-  PLATFORM_RUN_ID       — optional single run (webhook); else list open runs
+  PLATFORM_RUN_ID       — optional single run (webhook); else scan open runs once each
   CLAIM_S3_BUCKET       — local public bucket for remote-claims/
   CLAIM_PUBLIC_BASE     — optional public HTTP base to skip already-claimed
-  TICKET_BASE_URL       — optional S3 ticket fallback (legacy)
+  TICKET_BASE_URL       — optional S3 ticket fallback
   TICKET_ARTIFACT_NAME  — default remote-ticket
-  WORKFLOW_FILE         — executor workflow file (default ci_remote_executor.yml)
-  EXECUTOR_REF          — ref to run (default: github.ref_name or main)
-  ARTIFACT_WAIT_ATTEMPTS / ARTIFACT_WAIT_SLEEP_S — poll until artifact appears
+  WORKFLOW_FILE         — default ci_remote_executor.yml
+  EXECUTOR_REF          — default ref if ticket omits executor_ref
+  ARTIFACT_WAIT_ATTEMPTS / ARTIFACT_WAIT_SLEEP_S — only when PLATFORM_RUN_ID is set
 """
 from __future__ import annotations
 
@@ -90,29 +90,32 @@ def gh(method: str, url: str, body=None, ok=(200, 201, 202, 204), token: str | N
         die(f"GitHub {method} {url} -> HTTP {e.code}: {raw}")
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def gh_download_artifact_zip(url: str, token: str) -> bytes:
-    """Download Actions artifact zip; follow redirect without forwarding the Bearer token."""
+    """GET artifact zip; follow Location without sending Bearer to the signed URL."""
     headers = {
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
     req = urllib.request.Request(url, headers=headers, method="GET")
-    opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler())
+    opener = urllib.request.build_opener(_NoRedirect)
     try:
-        # First response is often 302 to a signed URL; urllib follows and strips
-        # Authorization on cross-host redirects in modern Python.
         with opener.open(req, timeout=120) as resp:
             return resp.read()
     except urllib.error.HTTPError as e:
-        if e.code in (301, 302, 303, 307, 308):
-            loc = e.headers.get("Location")
-            if not loc:
-                die(f"artifact download redirect without Location: HTTP {e.code}")
-            with urllib.request.urlopen(loc, timeout=120) as resp:
-                return resp.read()
-        raw = e.read().decode(errors="replace")
-        die(f"GitHub GET {url} -> HTTP {e.code}: {raw}")
+        if e.code not in (301, 302, 303, 307, 308):
+            raw = e.read().decode(errors="replace")
+            die(f"GitHub GET {url} -> HTTP {e.code}: {raw}")
+        loc = e.headers.get("Location")
+        if not loc:
+            die(f"artifact download HTTP {e.code} without Location")
+        with urllib.request.urlopen(loc, timeout=120) as resp:
+            return resp.read()
 
 
 def coerce_inputs(raw: dict) -> dict:
@@ -143,7 +146,6 @@ def utc_now() -> str:
 
 
 def list_platform_run_ids(platform_repo: str) -> list[str]:
-    """Recent in-progress / queued runs on the platform repo."""
     ids: list[str] = []
     tok = platform_token()
     for status in ("in_progress", "queued"):
@@ -167,10 +169,17 @@ def list_platform_run_ids(platform_repo: str) -> list[str]:
 
 def platform_run_alive(platform_repo: str, run_id: str) -> bool:
     tok = platform_token()
-    _, data = gh("GET", f"https://api.github.com/repos/{platform_repo}/actions/runs/{run_id}", token=tok)
+    _, data = gh(
+        "GET",
+        f"https://api.github.com/repos/{platform_repo}/actions/runs/{run_id}",
+        token=tok,
+    )
     status = (data or {}).get("status") or ""
-    if status in ("completed",):
-        print(f"skip {run_id}: platform run status={status} conclusion={(data or {}).get('conclusion')}")
+    if status == "completed":
+        print(
+            f"skip {run_id}: platform run completed "
+            f"conclusion={(data or {}).get('conclusion')}"
+        )
         return False
     return True
 
@@ -178,16 +187,12 @@ def platform_run_alive(platform_repo: str, run_id: str) -> bool:
 def extract_ticket_json(zip_bytes: bytes) -> dict:
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         names = zf.namelist()
-        candidate = None
-        for name in names:
-            base = name.rsplit("/", 1)[-1]
-            if base == TICKET_JSON_NAME or base.endswith("ticket.json"):
-                candidate = name
-                break
-        if candidate is None and len(names) == 1:
-            candidate = names[0]
+        candidate = next(
+            (n for n in names if n.rsplit("/", 1)[-1] == TICKET_JSON_NAME),
+            None,
+        )
         if candidate is None:
-            die(f"remote-ticket zip has no json: {names}")
+            die(f"remote-ticket zip missing {TICKET_JSON_NAME}: {names}")
         raw = zf.read(candidate).decode()
     ticket = json.loads(raw)
     if not isinstance(ticket, dict):
@@ -196,52 +201,60 @@ def extract_ticket_json(zip_bytes: bytes) -> dict:
 
 
 def download_ticket_artifact(platform_repo: str, run_id: str) -> dict | None:
-    """Return ticket dict from Actions artifact, or None if not uploaded yet."""
     name = env_opt("TICKET_ARTIFACT_NAME") or TICKET_ARTIFACT_DEFAULT
     tok = platform_token()
-    url = f"https://api.github.com/repos/{platform_repo}/actions/runs/{run_id}/artifacts?per_page=100"
+    url = (
+        f"https://api.github.com/repos/{platform_repo}/actions/runs/{run_id}"
+        f"/artifacts?per_page=100"
+    )
     _, data = gh("GET", url, token=tok)
     arts = [
-        a for a in ((data or {}).get("artifacts") or [])
+        a
+        for a in ((data or {}).get("artifacts") or [])
         if a.get("name") == name and not a.get("expired")
     ]
     if not arts:
         return None
     art = arts[0]
-    zip_url = (
-        art.get("archive_download_url")
-        or f"https://api.github.com/repos/{platform_repo}/actions/artifacts/{art['id']}/zip"
+    zip_url = art.get("archive_download_url") or (
+        f"https://api.github.com/repos/{platform_repo}/actions/artifacts/{art['id']}/zip"
     )
     print(f"Downloading artifact {name} id={art.get('id')} for run {run_id}")
     return extract_ticket_json(gh_download_artifact_zip(zip_url, tok))
 
 
-def wait_ticket_artifact(platform_repo: str, run_id: str) -> dict | None:
-    attempts = int(env_opt("ARTIFACT_WAIT_ATTEMPTS") or "20")
-    sleep_s = int(env_opt("ARTIFACT_WAIT_SLEEP_S") or "15")
+def load_ticket(
+    platform_repo: str,
+    platform_run_id: str,
+    ticket_base: str,
+    *,
+    wait: bool,
+) -> dict | None:
+    if wait:
+        attempts = int(env_opt("ARTIFACT_WAIT_ATTEMPTS") or "20")
+        sleep_s = int(env_opt("ARTIFACT_WAIT_SLEEP_S") or "15")
+    else:
+        attempts, sleep_s = 1, 0
+
     for i in range(attempts):
-        ticket = download_ticket_artifact(platform_repo, run_id)
+        ticket = download_ticket_artifact(platform_repo, platform_run_id)
         if ticket is not None:
             return ticket
         if i + 1 < attempts:
-            print(f"artifact not ready for {run_id}; wait {sleep_s}s ({i + 1}/{attempts})")
+            print(f"artifact not ready for {platform_run_id}; wait {sleep_s}s ({i + 1}/{attempts})")
             time.sleep(sleep_s)
+
+    if ticket_base:
+        cancel_url = f"{ticket_base.rstrip('/')}/remote-tickets/{platform_run_id}.cancel"
+        if http_get(cancel_url):
+            print(f"skip {platform_run_id}: S3 cancel marker")
+            return None
+        ticket_url = f"{ticket_base.rstrip('/')}/remote-tickets/{platform_run_id}.json"
+        raw = http_get(ticket_url)
+        if raw:
+            print(f"Loaded S3 ticket fallback for {platform_run_id}")
+            return json.loads(raw)
     return None
-
-
-def load_ticket_s3_fallback(platform_run_id: str, ticket_base: str) -> dict | None:
-    if not ticket_base:
-        return None
-    ticket_url = f"{ticket_base.rstrip('/')}/remote-tickets/{platform_run_id}.json"
-    cancel_url = f"{ticket_base.rstrip('/')}/remote-tickets/{platform_run_id}.cancel"
-    if http_get(cancel_url):
-        print(f"skip {platform_run_id}: S3 cancel marker present")
-        return None
-    raw = http_get(ticket_url)
-    if not raw:
-        return None
-    print(f"Loaded S3 ticket fallback for {platform_run_id}")
-    return json.loads(raw)
 
 
 def dispatch_executor(wf_file: str, ref: str, inputs: dict) -> tuple[str, str]:
@@ -292,21 +305,26 @@ def write_claim(platform_run_id: str, executor_run_id: str, executor_run_url: st
     print(f"Wrote claim s3://{bucket}/{key}")
 
 
-def process_run(platform_repo: str, platform_run_id: str, ticket_base: str, wf_file: str, ref: str) -> bool:
+def process_run(
+    platform_repo: str,
+    platform_run_id: str,
+    ticket_base: str,
+    wf_file: str,
+    ref: str,
+    *,
+    wait_artifact: bool,
+) -> bool:
     claim_base = env_opt("CLAIM_PUBLIC_BASE")
-    if claim_base:
-        if http_get(f"{claim_base.rstrip('/')}/remote-claims/{platform_run_id}.json"):
-            print(f"skip {platform_run_id}: already claimed")
-            return False
+    if claim_base and http_get(f"{claim_base.rstrip('/')}/remote-claims/{platform_run_id}.json"):
+        print(f"skip {platform_run_id}: already claimed")
+        return False
 
     if not platform_run_alive(platform_repo, platform_run_id):
         return False
 
-    ticket = wait_ticket_artifact(platform_repo, platform_run_id)
+    ticket = load_ticket(platform_repo, platform_run_id, ticket_base, wait=wait_artifact)
     if ticket is None:
-        ticket = load_ticket_s3_fallback(platform_run_id, ticket_base)
-    if ticket is None:
-        print(f"skip {platform_run_id}: no remote-ticket artifact (and no S3 fallback)")
+        print(f"skip {platform_run_id}: no remote-ticket")
         return False
 
     cfg = ticket.get("config") or {}
@@ -315,11 +333,10 @@ def process_run(platform_repo: str, platform_run_id: str, ticket_base: str, wf_f
         print(f"::warning::ticket {platform_run_id} missing config.inputs")
         return False
 
-    # Prefer workflow_file / executor_ref from ticket config when present.
     ticket_wf = str(cfg.get("workflow_file") or "").strip() or wf_file
     ticket_ref = str(cfg.get("executor_ref") or "").strip() or ref
 
-    print(f"Claiming platform_run_id={platform_run_id} via artifact ticket")
+    print(f"Claiming platform_run_id={platform_run_id}")
     executor_run_id, executor_run_url = dispatch_executor(ticket_wf, ticket_ref, inputs)
     write_claim(platform_run_id, executor_run_id, executor_run_url)
     print(f"Dispatched executor {executor_run_id} for {platform_run_id}")
@@ -334,11 +351,17 @@ def main() -> int:
 
     single = env_opt("PLATFORM_RUN_ID")
     run_ids = [single] if single else list_platform_run_ids(platform_repo)
-    print(f"platform runs to consider: {len(run_ids)}" + (f" (single={single})" if single else ""))
+    wait_artifact = bool(single)
+    print(
+        f"platform runs to consider: {len(run_ids)}"
+        + (f" (single={single}, wait_artifact)" if single else " (scan, no wait)")
+    )
     claimed = 0
     for rid in run_ids:
         try:
-            if process_run(platform_repo, rid, ticket_base, wf_file, ref):
+            if process_run(
+                platform_repo, rid, ticket_base, wf_file, ref, wait_artifact=wait_artifact
+            ):
                 claimed += 1
         except Exception as e:
             print(f"::warning::run {rid} failed: {e}")

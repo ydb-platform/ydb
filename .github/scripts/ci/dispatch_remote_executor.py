@@ -435,12 +435,6 @@ def cmd_cancel():
                     append_summary(f"### Caller cancelled\n- cancel marker `s3://{bucket}/{key}`\n")
                 except Exception as e:
                     print(f"::warning::cancel marker failed: {e}")
-        else:
-            append_summary(
-                "### Caller cancelled\n"
-                "- no S3 cancel mirror (artifact handoff); poller should see platform run cancelled\n"
-            )
-
     if run_id and env_opt("GH_TOKEN"):
         run_url = env_opt("EXECUTOR_RUN_URL") or f"https://github.com/{env('REPO')}/actions/runs/{run_id}"
         code, _ = gh(

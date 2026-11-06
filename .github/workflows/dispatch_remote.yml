@@ -37,7 +37,6 @@ jobs:
             .github/actions/s3cmd
           sparse-checkout-cone-mode: false
 
-      # Optional legacy S3 ticket mirror (only when remote JSON sets ticket_s3_*).
       - name: Configure ticket s3cmd
         if: >-
           (fromJSON(inputs.config).handoff || 'pull') != 'push' &&
@@ -110,8 +109,6 @@ jobs:
           AWS_ENDPOINT: ${{ fromJSON(inputs.config).summary_s3_endpoint || fromJSON(inputs.config).claim_s3_endpoint }}
           AWS_BUCKET: ${{ fromJSON(inputs.config).summary_s3_bucket || fromJSON(inputs.config).claim_s3_bucket }}
           FAIL_ON_REMOTE_FAILURE: ${{ fromJSON(inputs.config).fail_on_remote_failure }}
-          CALLER_AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
-          CALLER_AWS_BUCKET: ${{ vars.AWS_BUCKET }}
         run: python3 .github/scripts/ci/dispatch_remote_executor.py wait
 
       - name: Cancel on caller cancel

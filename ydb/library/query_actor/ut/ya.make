@@ -8,8 +8,11 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    ydb/core/kqp/compute_actor
+    ydb/core/kqp/node_service
     ydb/core/kqp/ut/common
     ydb/core/testlib
+    ydb/library/yql/dq/actors/compute
     yql/essentials/sql/pg_dummy
 )
 

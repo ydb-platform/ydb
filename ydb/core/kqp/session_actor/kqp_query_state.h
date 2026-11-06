@@ -137,7 +137,12 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
-        UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType());
+        UserRequestContext->UseBatchPool = IsAnalyzeRequest(RequestEv->GetRequestType())
+            || (RequestEv->IsInternalCall()
+                && RequestEv->GetRequestType() == NRequestTypes::ChecksumTable
+                && (QueryType == NKikimrKqp::QUERY_TYPE_SQL_DML
+                    || QueryType == NKikimrKqp::QUERY_TYPE_PREPARED_DML
+                    || QueryType == NKikimrKqp::QUERY_TYPE_AST_DML));
 
         if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
             YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);

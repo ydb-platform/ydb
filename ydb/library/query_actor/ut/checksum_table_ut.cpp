@@ -1,11 +1,17 @@
 #include <ydb/core/base/request_types.h>
 #include <ydb/core/grpc_services/service_table.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_actor_factory.h>
+#include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
+#include <ydb/library/actors/core/executor_pool.h>
+#include <ydb/library/actors/core/mon_stats.h>
 #include <ydb/library/query_actor/query_actor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NKikimr {
 namespace {
@@ -23,6 +29,7 @@ struct TQueryOptions {
     TDuration Timeout;
     TDuration CancelAfter;
     TString QueryId;
+    TString Sql = ReadSql;
 };
 
 struct TResult {
@@ -61,8 +68,8 @@ private:
 
 class TTestEnv {
 public:
-    explicit TTestEnv(bool remote)
-        : Kikimr(Settings(remote))
+    explicit TTestEnv(bool remote, bool realThreads = false)
+        : Kikimr(Settings(remote, realThreads))
     {
         Kikimr.RunCall([&] {
             Kikimr.GetTestClient().CreateTable("/Root", R"(
@@ -104,7 +111,7 @@ public:
         if (options.QueryId) {
             request.mutable_query()->set_id(options.QueryId);
         } else {
-            request.mutable_query()->set_yql_text(ReadSql);
+            request.mutable_query()->set_yql_text(options.Sql);
         }
         request.mutable_tx_control()->mutable_begin_tx()->mutable_snapshot_read_only();
         request.mutable_tx_control()->set_commit_tx(true);
@@ -116,30 +123,47 @@ public:
     }
 
 private:
-    static TKikimrSettings Settings(bool remote) {
+    static TKikimrSettings Settings(bool remote, bool realThreads) {
         NKikimrConfig::TAppConfig config;
         config.MutableTableServiceConfig()->MutableQueryLimits()->SetDataQueryTimeoutMs(10000);
-        return TKikimrSettings(config).SetUseRealThreads(false).SetWithSampleTables(false).SetNodeCount(remote ? 2 : 1);
+        if (realThreads) {
+            using TExecutor = NKikimrConfig::TActorSystemConfig::TExecutor;
+            auto& actorSystem = *config.MutableActorSystemConfig();
+            for (const TString& name : { "System", "User", "Batch", "IO" }) {
+                auto& executor = *actorSystem.AddExecutor();
+                executor.SetName(name);
+                executor.SetType(name == "IO" ? TExecutor::IO : TExecutor::BASIC);
+                executor.SetThreads(1);
+                if (name != "IO") {
+                    executor.SetSpinThreshold(1);
+                }
+            }
+            actorSystem.SetSysExecutor(0);
+            actorSystem.SetUserExecutor(1);
+            actorSystem.SetBatchExecutor(2);
+            actorSystem.SetIoExecutor(3);
+        }
+        return TKikimrSettings(config).SetUseRealThreads(realThreads).SetWithSampleTables(false).SetNodeCount(remote ? 2 : 1);
     }
 
     TKikimrRunner Kikimr;
     ui32 SessionNode = 0;
 };
 
-void AssertAggregate(const NYdb::TResultSet& result) {
+void AssertAggregate(const NYdb::TResultSet& result, ui64 total = 60, ui64 rows = 3) {
     NYdb::TResultSetParser parser(result);
     UNIT_ASSERT(parser.TryNextRow());
-    UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Total").GetOptionalUint64().value(), 60);
-    UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Rows").GetUint64(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Total").GetOptionalUint64().value(), total);
+    UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Rows").GetUint64(), rows);
     UNIT_ASSERT(!parser.TryNextRow());
 }
 
-Ydb::Table::ExecuteQueryResult AssertAggregate(const Ydb::Table::ExecuteDataQueryResponse& response) {
+Ydb::Table::ExecuteQueryResult AssertAggregate(const Ydb::Table::ExecuteDataQueryResponse& response, ui64 total = 60, ui64 rows = 3) {
     UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::SUCCESS, response.DebugString());
     Ydb::Table::ExecuteQueryResult result;
     UNIT_ASSERT(response.operation().result().UnpackTo(&result));
     UNIT_ASSERT_VALUES_EQUAL(result.result_sets_size(), 1);
-    AssertAggregate(NYdb::TResultSet(result.result_sets(0)));
+    AssertAggregate(NYdb::TResultSet(result.result_sets(0)), total, rows);
     return result;
 }
 
@@ -170,11 +194,24 @@ Y_UNIT_TEST_SUITE(QueryActorChecksumTable) {
         AssertAggregate(result.ResultSets.front());
     }
 
-    Y_UNIT_TEST_TWIN(HintsFollowExecutionAndPreparedQueries, Remote) {
+    Y_UNIT_TEST_TWIN(HintsAndPoolFollowExecutionAndPreparedQueries, Remote) {
         TTestEnv env(Remote);
         const auto session = env.CreateSession();
         ui32 expectedHints = 0;
         ui32 reads = 0;
+        THashSet<TActorId> computes;
+        ui32 taskRequests = 0;
+        ui32 remoteComputes = 0;
+        auto computeObserver = env.Runtime().AddObserver<NYql::NDq::TEvDqCompute::TEvState>([&](auto& ev) {
+            computes.insert(ev->Sender);
+            if (ev->Sender.NodeId() != ev->Recipient.NodeId()) {
+                ++remoteComputes;
+            }
+        });
+        auto taskObserver = env.Runtime().AddObserver<TEvKqpNode::TEvStartKqpTasksRequest>([&](auto& ev) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetUseBatchPool(), expectedHints == ChecksumHints);
+            ++taskRequests;
+        });
         auto observer = env.Runtime().AddObserver<TEvDataShard::TEvRead>([&](auto& ev) {
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetHints(), expectedHints);
             ++reads;
@@ -185,11 +222,19 @@ Y_UNIT_TEST_SUITE(QueryActorChecksumTable) {
             for (bool checksum : { false, true, false }) {
                 expectedHints = checksum ? ChecksumHints : 0;
                 reads = 0;
+                computes.clear();
+                taskRequests = 0;
+                remoteComputes = 0;
                 TQueryOptions options;
                 options.RequestType = checksum ? TMaybe<TString>(TString(NRequestTypes::ChecksumTable)) : Nothing();
                 options.QueryId = prepared ? queryId : TString();
                 const auto result = AssertAggregate(env.Runtime().WaitFuture(env.Start(session, options)));
                 UNIT_ASSERT_C(reads >= 2, reads);
+                UNIT_ASSERT_C(computes.size() >= 2, computes.size());
+                if (Remote) {
+                    UNIT_ASSERT_GT(taskRequests, 0);
+                    UNIT_ASSERT_GT(remoteComputes, 0);
+                }
                 if (queryId) {
                     UNIT_ASSERT(result.query_stats().compilation().from_cache());
                     if (!prepared) {
@@ -205,8 +250,54 @@ Y_UNIT_TEST_SUITE(QueryActorChecksumTable) {
         // An external caller cannot select the policy by supplying the same header.
         expectedHints = 0;
         reads = 0;
+        computes.clear();
         AssertAggregate(env.Runtime().WaitFuture(env.Start(session, { .Internal = false })));
         UNIT_ASSERT_C(reads >= 2, reads);
+        UNIT_ASSERT_C(computes.size() >= 2, computes.size());
+    }
+
+    Y_UNIT_TEST_TWIN(UsesBatchPool, PointRead) {
+        TTestEnv env(false, true);
+        const auto session = env.CreateSession();
+        const auto userPool = env.Runtime().GetAppData().UserPoolId;
+        const auto batchPool = env.Runtime().GetAppData().BatchPoolId;
+        UNIT_ASSERT_VALUES_UNEQUAL(userPool, batchPool);
+
+        const auto receivedEvents = [&](ui32 poolId, NKikimrServices::TActivity::EType activity) {
+            const auto index = TActorActivityType::FromEnum(activity).GetIndex();
+            ui64 result = 0;
+            bool found = false;
+            for (auto* pool : env.Runtime().GetActorSystem(0)->GetBasicExecutorPools()) {
+                if (pool->PoolId == poolId) {
+                    found = true;
+                    TExecutorPoolStats poolStats;
+                    TVector<TExecutorThreadStats> threadStats;
+                    pool->GetCurrentStats(poolStats, threadStats);
+                    for (const auto& thread : threadStats) {
+                        result += thread.ReceivedEventsByActivity.at(index);
+                    }
+                }
+            }
+            UNIT_ASSERT(found);
+            return result;
+        };
+
+        for (bool internal : { true, false }) {
+            for (bool checksum : { false, true, false }) {
+                const auto poolId = internal && checksum ? batchPool : userPool;
+                const auto computesBefore = receivedEvents(poolId, NKikimrServices::TActivity::KQP_COMPUTE_ACTOR);
+                const auto readsBefore = receivedEvents(poolId, NKikimrServices::TActivity::KQP_SOURCE_READ_ACTOR);
+                TQueryOptions options;
+                options.Internal = internal;
+                options.RequestType = checksum ? TMaybe<TString>(TString(NRequestTypes::ChecksumTable)) : Nothing();
+                if constexpr (PointRead) {
+                    options.Sql = "SELECT Value AS Total, 1ul AS Rows FROM `/Root/Objects` WHERE Key = 1u";
+                }
+                AssertAggregate(env.Runtime().WaitFuture(env.Start(session, options)), PointRead ? 10 : 60, PointRead ? 1 : 3);
+                UNIT_ASSERT_GT(receivedEvents(poolId, NKikimrServices::TActivity::KQP_COMPUTE_ACTOR), computesBefore);
+                UNIT_ASSERT_GT(receivedEvents(poolId, NKikimrServices::TActivity::KQP_SOURCE_READ_ACTOR), readsBefore);
+            }
+        }
     }
 
     Y_UNIT_TEST(RetriesPreserveHints) {

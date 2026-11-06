@@ -1,4 +1,5 @@
 #include <ydb/core/tablet_flat/flat_compaction_outputs.h>
+#include <ydb/core/tablet_flat/flat_compaction_config.h>
 #include <ydb/core/tablet_flat/flat_fwd_blobs.h>
 #include <ydb/core/tablet_flat/flat_page_label.h>
 #include <ydb/core/tablet_flat/flat_part_loader.h>
@@ -31,6 +32,64 @@ namespace {
         }();
         return layout;
     }
+
+    struct TOutputConfigFixture {
+        static constexpr ui32 ColdTier = 42;
+        static constexpr ui32 ArchiveTier = 7;
+
+        NTest::TLayoutCook RowLayout;
+        TScheme::TTableInfo Table{"table", 1};
+        TCompactionOutputSettings Settings;
+
+        TOutputConfigFixture() {
+            RowLayout.Col(0, 0, NScheme::NTypeIds::Uint32)
+                .Col(3, 1, NScheme::NTypeIds::String)
+                .Key({0});
+            Table.Rooms[0].Main = 1;
+            Table.Rooms[0].Outer = 2;
+            Table.Rooms[0].Blobs = {3};
+            Table.Families[0].Small = 16;
+            Table.Families[0].Large = 32;
+            Table.Rooms[3].Main = 4;
+            Table.Families[3].Room = 3;
+            Table.Families[3].Codec = NPage::ECodec::LZ4;
+            Table.Families[3].Cache = NPage::ECache::Ever;
+
+            Table.Rooms[ColdTier].Main = 5;
+            Table.Rooms[ColdTier].Outer = 6;
+            Table.Rooms[ColdTier].Blobs = {7, 8};
+            auto& cold = Table.Families[ColdTier];
+            cold.Room = ColdTier;
+            cold.Codec = NPage::ECodec::LZ4;
+            cold.Small = 64;
+            cold.Large = 128;
+            cold.GroupIndexesInDescriptor = false;
+            Table.Rooms[ArchiveTier].Main = 9;
+            Table.Rooms[ArchiveTier].Outer = 10;
+            Table.Rooms[ArchiveTier].Blobs = {11};
+            Table.Families[ArchiveTier].Room = ArchiveTier;
+
+            auto policy = NLocalDb::CreateDefaultUserTablePolicy();
+            policy->Generations[1].TierId = ColdTier;
+            policy->Generations[2].TierId = ArchiveTier;
+            policy->Generations.push_back(policy->Generations.back());
+            Table.CompactionPolicy = policy;
+            Table.TieringPolicy = TTieringPolicy{
+                .ColumnTag = 0,
+                .Unit = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS,
+                .Rules = {{.TierId = ColdTier, .Ranges = {{
+                    .To = TTierRelativeBound{TDuration::Days(7)}, .ToInclusive = true}}}},
+            };
+            Settings.MaxBlobSize = 256;
+        }
+
+        void Prepare(TCompactCfg& conf) const {
+            const auto scheme = RowLayout.RowScheme();
+            TSubset subset(TEpoch::Zero(), scheme);
+            PrepareCompactionOutputs(conf, Table, *scheme, subset, Settings,
+                [](ui8 channel) { return ui32(channel) + 10; });
+        }
+    };
 
     void AddOutput(TCompactCfg& conf, ui32 id, ui8 channel = 1) {
         auto& output = conf.Outputs.emplace_back();
@@ -371,6 +430,165 @@ namespace {
         TSubset empty(TEpoch::Zero(), table->GetScheme());
         table->Replace(empty, parts, {});
         return table;
+    }
+}
+
+Y_UNIT_TEST_SUITE(TCompactionOutputConfigTest) {
+    Y_UNIT_TEST(RegularDefaultPreservesColumnFamilies) {
+        TOutputConfigFixture env;
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        UNIT_ASSERT(conf.Params->Mode == TCompactionParams::EMode::Regular);
+        env.Prepare(conf);
+
+        UNIT_ASSERT_VALUES_EQUAL(conf.Outputs.size(), 1);
+        const auto& output = conf.Outputs[0];
+        UNIT_ASSERT_VALUES_EQUAL(output.OutputId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(output.TierId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(output.Layout.Groups.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(output.Writer.Groups.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(output.Writer.Groups[0].Channel), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(output.Writer.Groups[1].Channel), 4);
+        UNIT_ASSERT(output.Layout.Groups[0].Codec == NPage::ECodec::Plain);
+        UNIT_ASSERT(output.Layout.Groups[1].Codec == NPage::ECodec::LZ4);
+        UNIT_ASSERT(output.Writer.Groups[1].Cache == NPage::ECache::Ever);
+        UNIT_ASSERT_VALUES_EQUAL(output.Layout.SmallEdge, 16);
+        UNIT_ASSERT_VALUES_EQUAL(output.Layout.LargeEdge, 32);
+        UNIT_ASSERT_VALUES_EQUAL(output.MaterializeExtEdge, 32);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(output.Writer.OuterChannel), 2);
+        UNIT_ASSERT(output.Writer.BlobsChannels == TVector<ui8>{3});
+        UNIT_ASSERT(!output.Layout.Layout.SeparateDescriptorCollection);
+    }
+
+    Y_UNIT_TEST(RegularColdUsesASingleTierOutput) {
+        TOutputConfigFixture env;
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        conf.Params->TierId = TOutputConfigFixture::ColdTier;
+        conf.Params->KeepInCache = true;
+        env.Prepare(conf);
+
+        UNIT_ASSERT_VALUES_EQUAL(conf.Outputs.size(), 1);
+        const auto& output = conf.Outputs[0];
+        UNIT_ASSERT_VALUES_EQUAL(output.OutputId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(output.TierId, TOutputConfigFixture::ColdTier);
+        UNIT_ASSERT(output.Layout.Layout.SeparateDescriptorCollection);
+        UNIT_ASSERT(output.Layout.Layout.KeyIndexInDescriptor);
+        UNIT_ASSERT(!output.Layout.Layout.GroupIndexesInDescriptor);
+        UNIT_ASSERT_VALUES_EQUAL(output.Writer.Groups.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(output.Writer.Groups[0].Channel), 1);
+        for (ui32 group = 0; group < 2; ++group) {
+            UNIT_ASSERT_VALUES_EQUAL(ui32(output.Writer.Groups[group + 1].Channel), 5);
+            UNIT_ASSERT(output.Writer.Groups[group + 1].Cache == NPage::ECache::Once);
+            UNIT_ASSERT_VALUES_EQUAL(output.Writer.Groups[group + 1].MaxBlobSize, 256);
+            UNIT_ASSERT(output.Layout.Groups[group].Codec == NPage::ECodec::LZ4);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(output.Layout.SmallEdge, 64);
+        UNIT_ASSERT_VALUES_EQUAL(output.Layout.LargeEdge, 128);
+        UNIT_ASSERT_VALUES_EQUAL(output.MaterializeExtEdge, 128);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(output.Writer.OuterChannel), 6);
+        UNIT_ASSERT(output.Writer.BlobsChannels == (TVector<ui8>{7, 8}));
+        TCompactionOutputs outputs(TLogoBlobID(1, 2, 3, 0, 0, 0), conf,
+            MakeHolder<TDefaultCompactionRouter>());
+        outputs.Start(*env.RowLayout);
+    }
+
+    Y_UNIT_TEST(TierAwarePreparesAllDistinctTiers) {
+        TOutputConfigFixture env;
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        conf.Params->Mode = TCompactionParams::EMode::TierAware;
+        conf.Params->TierId = TOutputConfigFixture::ColdTier;
+        env.Prepare(conf);
+
+        UNIT_ASSERT_VALUES_EQUAL(conf.Outputs.size(), 3);
+        const TVector<ui32> expected = {0, TOutputConfigFixture::ColdTier, TOutputConfigFixture::ArchiveTier};
+        for (ui32 i = 0; i < expected.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(conf.Outputs[i].TierId, expected[i]);
+            UNIT_ASSERT_VALUES_EQUAL(conf.Outputs[i].OutputId, i);
+            UNIT_ASSERT_VALUES_EQUAL(conf.Outputs[i].MaterializeExtEdge, Max<ui32>());
+        }
+        TCompactionOutputs outputs(TLogoBlobID(1, 2, 3, 0, 0, 0), conf,
+            MakeHolder<TDefaultCompactionRouter>());
+        outputs.Start(*env.RowLayout);
+        TWriteStats stats;
+        UNIT_ASSERT(outputs.Finish(stats).empty());
+        UNIT_ASSERT_VALUES_EQUAL(stats.Parts, 0);
+    }
+
+    Y_UNIT_TEST(SharedChannelsKeepSeparateTierOutputs) {
+        TOutputConfigFixture env;
+        env.Table.Families[TOutputConfigFixture::ArchiveTier].Room = TOutputConfigFixture::ColdTier;
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        conf.Params->Mode = TCompactionParams::EMode::TierAware;
+        env.Prepare(conf);
+
+        UNIT_ASSERT_VALUES_EQUAL(conf.Outputs.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(conf.Outputs[1].Writer.Groups[1].Channel), 5);
+        UNIT_ASSERT_VALUES_EQUAL(ui32(conf.Outputs[2].Writer.Groups[1].Channel), 5);
+        UNIT_ASSERT(conf.Outputs[1].TierId != conf.Outputs[2].TierId);
+        TCompactionOutputs outputs(TLogoBlobID(1, 2, 3, 0, 0, 0), conf,
+            MakeHolder<TDefaultCompactionRouter>());
+        outputs.Start(*env.RowLayout);
+    }
+
+    Y_UNIT_TEST(TierAwareSupportsBTreeV2WithOrWithoutShadow) {
+        for (bool shadow : {false, true}) {
+            TOutputConfigFixture env;
+            env.Settings.WriteBTreeIndexV1 = shadow;
+            env.Settings.WriteBTreeIndexV2 = true;
+            TCompactCfg conf(MakeHolder<TCompactionParams>());
+            conf.Params->Mode = TCompactionParams::EMode::TierAware;
+            env.Prepare(conf);
+            for (const auto& output : conf.Outputs) {
+                UNIT_ASSERT(!output.Layout.WriteFlatIndex);
+                UNIT_ASSERT_VALUES_EQUAL(output.Layout.WriteBTreeIndexV1, shadow);
+                UNIT_ASSERT(output.Layout.WriteBTreeIndexV2);
+            }
+            TCompactionOutputs outputs(TLogoBlobID(1, 2, 3, 0, 0, 0), conf,
+                MakeHolder<TDefaultCompactionRouter>());
+            outputs.Start(*env.RowLayout);
+        }
+    }
+
+    Y_UNIT_TEST(RegularDefaultSupportsLegacyLayoutWithoutBTree) {
+        TOutputConfigFixture env;
+        env.Settings.WriteBTreeIndexV1 = false;
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        env.Prepare(conf);
+        UNIT_ASSERT_VALUES_EQUAL(conf.Outputs.size(), 1);
+        UNIT_ASSERT(!conf.Outputs[0].Layout.Layout.SeparateDescriptorCollection);
+        UNIT_ASSERT(conf.Outputs[0].Layout.WriteFlatIndex);
+        UNIT_ASSERT(conf.Outputs[0].Writer.StickyFlatIndex);
+        TCompactionOutputs outputs(TLogoBlobID(1, 2, 3, 0, 0, 0), conf,
+            MakeHolder<TDefaultCompactionRouter>());
+        outputs.Start(*env.RowLayout);
+    }
+
+    Y_UNIT_TEST(MissingTierFamilyIsRejected) {
+        TOutputConfigFixture env;
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        conf.Params->TierId = 100;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(env.Prepare(conf), yexception, "Cannot find tier family 100");
+    }
+
+    Y_UNIT_TEST(IndexPlacementRequiresSeparateDescriptor) {
+        for (bool sameChannel : {false, true}) {
+            TOutputConfigFixture env;
+            if (sameChannel) {
+                env.Table.Rooms[TOutputConfigFixture::ColdTier].Main = 1;
+            } else {
+                env.Settings.WriteBTreeIndexV1 = false;
+            }
+            TCompactCfg conf(MakeHolder<TCompactionParams>());
+            conf.Params->TierId = TOutputConfigFixture::ColdTier;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(env.Prepare(conf), yexception, "requires a separate descriptor collection");
+        }
+    }
+
+    Y_UNIT_TEST(TierAwareFulltextIsRejected) {
+        TOutputConfigFixture env;
+        TCompactCfg conf(MakeHolder<TCompactionParams>());
+        conf.Params->Mode = TCompactionParams::EMode::TierAware;
+        conf.IsFulltextCompact = true;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(env.Prepare(conf), yexception, "Tier-aware fulltext compaction is not supported");
     }
 }
 

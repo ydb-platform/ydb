@@ -10,6 +10,7 @@
 #include "flat_executor_snapshot.h"
 #include "flat_scan_actor.h"
 #include "flat_ops_compact.h"
+#include "flat_compaction_config.h"
 #include "flat_part_loader.h"
 #include "flat_store_hotdog.h"
 #include "flat_store_solid.h"
@@ -5368,44 +5369,22 @@ void TExecutor::ReleaseWritePart(ui32 step)
 
 ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 {
+    // Do not execute a TAC with the default router before routing and cap are available.
+    Y_ENSURE(params->Mode == NTable::TCompactionParams::EMode::Regular,
+        "Tier-aware compaction execution requires tier-aware routing");
+
     if (auto logl = Logger->Log(ELnLev::Info))
         logl << NFmt::Do(*this) << " starting compaction";
-
-    using NTable::NPage::ECache;
 
     auto table = params->Table;
     auto snapshot = PrepareScanSnapshot(table, params.Get());
 
     auto rowScheme = RowScheme(table);
     auto *tableInfo = Scheme().GetTableInfo(table);
-    auto *policy = tableInfo->CompactionPolicy.Get();
-
-    const ECache cache = params->KeepInCache ? ECache::Once : ECache::None;
 
     TAutoPtr<TCompactCfg> comp = new TCompactCfg(std::move(params));
-    auto& output = comp->Outputs.emplace_back();
 
     comp->Epoch = snapshot->Subset->Epoch(); /* narrows requested to actual */
-    output.Layout.Final = comp->Params->IsFinal;
-    const bool writeBTreeIndexV1 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
-    const bool writeBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
-    const bool writeBTreeIndex = writeBTreeIndexV1 || writeBTreeIndexV2;
-    output.Layout.WriteBTreeIndexV1 = writeBTreeIndexV1;
-    output.Layout.WriteBTreeIndexV2 = writeBTreeIndexV2;
-    // V2 b-tree index replaces the flat index
-    output.Layout.WriteFlatIndex = !writeBTreeIndexV2 && AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
-    output.Writer.StickyFlatIndex = !writeBTreeIndex;
-    output.Writer.WriteBTreeIndexV1 = writeBTreeIndexV1;
-    output.Writer.WriteBTreeIndexV2 = writeBTreeIndexV2;
-    output.Layout.MaxRows = snapshot->Subset->MaxRows();
-    for (const auto& p : tableInfo->ByKeyFilterPrefixes) {
-        output.Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});
-    }
-    output.Layout.UnderlayMask = comp->Params->UnderlayMask.Get();
-    output.Layout.SplitKeys = comp->Params->SplitKeys.Get();
-    output.Layout.MinRowVersion = snapshot->Subset->MinRowVersion();
-    output.Layout.Groups.resize(rowScheme->Families.size());
-    output.Writer.Groups.resize(rowScheme->Families.size());
 
     // Detect fulltext compact tables
     if (tableInfo->SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
@@ -5429,80 +5408,19 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         }
     }
 
-    auto addChannel = [&](ui8 channel) {
-        auto group = Owner->Info()->GroupFor(channel, Generation());
-
-        output.Writer.Slots.emplace_back(channel, group);
-    };
-
-    auto addChannels = [&](const std::vector<ui8>& channels) {
-        for (auto channel : channels) {
-            addChannel(channel);
-        }
-    };
-
-    ui8 descriptorChannel = NTable::TScheme::DefaultChannel;
-
-    for (size_t group : xrange(rowScheme->Families.size())) {
-        auto familyId = rowScheme->Families[group];
-        static const NTable::TScheme::TFamily defaultFamilySettings;
-        const auto& family = tableInfo->Families.ValueRef(familyId, defaultFamilySettings); // Workaround for KIKIMR-17222
-
-        auto* room = tableInfo->Rooms.FindPtr(family.Room);
-        Y_ENSURE(room, "Cannot find room " << family.Room << " in table " << table);
-
-        auto& pageGroup = output.Layout.Groups.at(group);
-        auto& writeGroup = output.Writer.Groups.at(group);
-
-        pageGroup.Codec = family.Codec;
-        pageGroup.PageSize = policy->MinDataPageSize;
-        pageGroup.BTreeIndexNodeTargetSize = policy->MinBTreeIndexNodeSize;
-        pageGroup.BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;
-
-        writeGroup.Cache = Max(family.Cache, cache);
-        writeGroup.CacheMode = family.CacheMode;
-        writeGroup.MaxBlobSize = NBlockIO::BlockSize;
-        writeGroup.Channel = room->Main;
-        addChannel(room->Main);
-
-        if (group == 0) {
-            // Small/Large edges are taken from the leader family
-            output.Layout.SmallEdge = family.Small;
-            output.Layout.LargeEdge = family.Large;
-            output.MaterializeExtEdge = family.Large;
-
-            // Small/Large channels are taken from the leader family
-            output.Writer.BlobsChannels = room->Blobs;
-            output.Writer.OuterChannel = room->Outer;
-            addChannels(room->Blobs);
-            addChannel(room->Outer);
-
-            output.Writer.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
-
-            descriptorChannel = room->Main;
-        }
-    }
-
-    // Transaction status uses the extra channel even when the leader family
-    // stores its data in another room.
-    addChannel(output.Writer.ExtraChannel);
-
-    // Data of the main group is written to the leader family channel too until tier compaction,
-    // so parts keep descriptor pages and main group data in a single page collection
-    if (NWriter::ApplyDescriptorChannel(output.Layout, output.Writer, descriptorChannel)) {
-        // The descriptor channel differs from the main group channel then and may be missing from
-        // the slots (e.g. of a tier output); a slot of an already added channel is merged
-        addChannel(descriptorChannel);
-    }
-
     if (const auto& ranges = Database->GetRemovedRowVersions(table)) {
-        // Make a copy of removed versions for compacted table
-        // Version removal cannot be undone, so it's still valid at commit time
+        // Version removal cannot be undone, so the snapshot remains valid at commit time.
         comp->RemovedRowVersions = ranges.Snapshot();
-
-        // We have to adjust MinRowVersion, so it correctly expects an adjusted version
-        output.Layout.MinRowVersion = comp->RemovedRowVersions.AdjustDown(output.Layout.MinRowVersion);
     }
+
+    TCompactionOutputSettings outputSettings;
+    outputSettings.WriteBTreeIndexV1 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    outputSettings.WriteBTreeIndexV2 = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndexV2();
+    outputSettings.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
+    outputSettings.MaxBlobSize = NBlockIO::BlockSize;
+    outputSettings.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
+    PrepareCompactionOutputs(*comp, *tableInfo, *rowScheme, *snapshot->Subset, outputSettings,
+        [&](ui8 channel) { return Owner->Info()->GroupFor(channel, Generation()); });
 
     bool compactTxStatus = false;
     for (const auto& memTableSnapshot : snapshot->Subset->Frozen) {

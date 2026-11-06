@@ -16,6 +16,11 @@ namespace NTable {
      */
     class TCompactionParams {
     public:
+        enum class EMode {
+            Regular,
+            TierAware,
+        };
+
         TCompactionParams() = default;
 
         virtual ~TCompactionParams() = default;
@@ -25,6 +30,12 @@ namespace NTable {
 
     public:
         ui32 Table = Max<ui32>();
+
+        EMode Mode = EMode::Regular;
+
+        // Tier of the inputs and of the sole regular output (family id).
+        // Tier-aware compaction also prepares this output to retain keys.
+        ui32 TierId = 0;
 
         // Broker task id used for compaction. Once BeginCompaction is called
         // task ownership is moved to the backend, which will call FinishTask

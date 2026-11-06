@@ -48,6 +48,7 @@ namespace NTabletFlatExecutor {
             ui32 MaterializeOuterEdge;
             ui32 MaterializeExtEdge;
             ui32 OutputId = 0;
+            ui32 TierId = 0;
         };
 
         explicit TCompactCfg(THolder<NTable::TCompactionParams> params)

@@ -90,23 +90,119 @@ def load_manifest(run_id: str) -> dict[str, Any]:
     return meta
 
 
-def aws_sync_public(endpoint: str, bucket: str, key_prefix: str, dest: Path) -> None:
+_INDEX_HREF_RE = re.compile(r"""href=["']([^"']+)["']""", re.IGNORECASE)
+
+
+def parse_index_hrefs(html: str) -> list[str]:
+    """Relative file/dir links from Indexer index.html (skip parent/nav/abs)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in _INDEX_HREF_RE.findall(html):
+        href = urllib.parse.unquote(raw.strip())
+        if not href or href.startswith(("#", "?", "mailto:", "javascript:")):
+            continue
+        if "://" in href:
+            continue
+        if href.startswith("./"):
+            href = href[2:]
+        # Parent crumb in Indexer listings.
+        if href == "../" or href == ".." or href.startswith("../"):
+            continue
+        href = href.replace("\\", "/").lstrip("/")
+        if not href or href in seen:
+            continue
+        seen.add(href)
+        out.append(href)
+    return out
+
+
+def _posix_join(*parts: str) -> str:
+    return "/".join(p.strip("/") for p in parts if p and p.strip("/"))
+
+
+def _object_url(endpoint: str, bucket: str, key: str) -> str:
+    return quote_url(f"{endpoint.rstrip('/')}/{bucket}/{key.lstrip('/')}")
+
+
+def _write_bytes(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+
+
+def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest: Path) -> None:
+    """Download a public artifact tree by walking Indexer index.html pages.
+
+    Nebius (and similar) buckets often allow anonymous GetObject but deny
+    ListBucket, so `aws s3 sync --no-sign-request` fails. Indexer listings are
+    public HTML and enumerate the same objects.
+    """
     dest.mkdir(parents=True, exist_ok=True)
-    src = f"s3://{bucket}/{key_prefix.rstrip('/')}"
-    cmd = [
-        "aws",
-        "s3",
-        "sync",
-        src,
-        str(dest),
-        "--no-sign-request",
-        "--endpoint-url",
-        endpoint.rstrip("/"),
-    ]
-    try:
-        run(cmd)
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        die(f"failed to download remote artifacts ({src}): {e}")
+    root_key = key_prefix.strip("/")
+    endpoint = endpoint.rstrip("/")
+
+    # BFS over directory keys relative to root_key ("" = leaf root).
+    queue: list[str] = [""]
+    seen_dirs: set[str] = set()
+    n_ok = 0
+    n_fail = 0
+
+    while queue:
+        rel_dir = queue.pop(0)
+        if rel_dir in seen_dirs:
+            continue
+        seen_dirs.add(rel_dir)
+
+        index_key = _posix_join(root_key, rel_dir, "index.html")
+        index_url = _object_url(endpoint, bucket, index_key)
+        raw = http_get(index_url)
+        if raw is None:
+            if rel_dir == "":
+                die(f"missing index.html at {index_url}")
+            print(f"::warning::missing index.html at {index_url}; skipping subtree")
+            n_fail += 1
+            continue
+
+        local_index = dest.joinpath(*rel_dir.split("/"), "index.html") if rel_dir else dest / "index.html"
+        _write_bytes(local_index, raw)
+        n_ok += 1
+
+        try:
+            html = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            html = raw.decode("utf-8", errors="replace")
+
+        for href in parse_index_hrefs(html):
+            child_rel = _posix_join(rel_dir, href)
+
+            # Dir link: either "try_1/index.html" (recursive Indexer) or "try_1/".
+            if href.endswith("/index.html"):
+                sub = child_rel[: -len("/index.html")]
+                if sub not in seen_dirs:
+                    queue.append(sub)
+                continue
+            if href.endswith("/"):
+                sub = child_rel.rstrip("/")
+                if sub not in seen_dirs:
+                    queue.append(sub)
+                continue
+
+            file_key = _posix_join(root_key, child_rel)
+            file_url = _object_url(endpoint, bucket, file_key)
+            local_path = dest.joinpath(*child_rel.split("/"))
+            data = http_get(file_url)
+            if data is None:
+                print(f"::warning::failed to download {file_url}")
+                n_fail += 1
+                continue
+            _write_bytes(local_path, data)
+            n_ok += 1
+
+    print(
+        f"Downloaded {n_ok} object(s) via index.html crawl "
+        f"(s3://{bucket}/{root_key}/); failures={n_fail}"
+    )
+    if n_ok == 0:
+        die(f"index crawl downloaded nothing under s3://{bucket}/{root_key}/")
 
 
 def rewrite_url_prefix(root: Path, old: str, new: str) -> int:
@@ -586,8 +682,8 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory(prefix="remote-ingest-") as tmp:
         public_dir = Path(tmp) / "results"
-        print(f"Downloading s3://{remote_bucket}/{key_prefix} → {public_dir}")
-        aws_sync_public(remote_endpoint, remote_bucket, key_prefix, public_dir)
+        print(f"Downloading s3://{remote_bucket}/{key_prefix} → {public_dir} (via index.html)")
+        download_prefix_via_index(remote_endpoint, remote_bucket, key_prefix, public_dir)
 
         n = rewrite_url_prefix(public_dir, old_public, new_public)
         print(f"Rewrote URL prefix in {n} files ({old_public} → {new_public})")

@@ -1329,7 +1329,7 @@ void TWriteSessionImpl::ScheduleSendImpl() {
         SendImpl();
         return;
     }
-    if (SendImplScheduled || !IsReadyToSendNextImpl()) {
+    if (SendImplScheduled) {
         return;
     }
 
@@ -1470,6 +1470,7 @@ void TWriteSessionImpl::HandleWakeUpImpl() {
     if (Aborting.load()) {
         return;
     }
+    SendImpl();
     auto callback = [cbContext = SelfContext] (bool ok)
     {
         if (!ok) {

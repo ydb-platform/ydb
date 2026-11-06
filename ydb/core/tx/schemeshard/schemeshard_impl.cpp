@@ -2821,6 +2821,14 @@ void TSchemeShard::PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPath
 void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
+    db.Table<Schema::DatabaseFreezes>().Key(pathId.LocalPathId).Delete();
+    DatabaseFreezes.erase(pathId);
+    DatabaseFreezeProgress.erase(pathId);
+    if (const auto worker = DatabaseFreezeWorkers.find(pathId); worker != DatabaseFreezeWorkers.end()) {
+        Send(worker->second, new TEvents::TEvPoisonPill);
+        DatabaseFreezeWorkers.erase(worker);
+    }
+
     auto it = SubDomains.find(pathId);
     if (it != SubDomains.end()) {
         TSubDomainInfo::TPtr subDomain = it->second;
@@ -5983,6 +5991,7 @@ void TSchemeShard::Cleanup(const TActorContext &ctx) {
         ctx.Send(worker, new TEvents::TEvPoisonPill);
     }
     DatabaseFreezeWorkers.clear();
+    DatabaseFreezeProgress.clear();
 }
 
 void TSchemeShard::Enqueue(STFUNC_SIG) {

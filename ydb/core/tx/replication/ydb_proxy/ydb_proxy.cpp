@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <util/generic/deque.h>
 #include <util/generic/hash_set.h>
 #include <util/string/join.h>
 
@@ -185,8 +186,93 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
 
         Y_ABORT_UNLESS(!ReadRequest);
         ReadRequest.emplace(ev->Sender, ev->Cookie);
+        if (!BufferedData.empty()) {
+            auto data = std::move(BufferedData.front());
+            BufferedData.pop_front();
+            if (DeliverData(data)) {
+                ForwardPendingEvents();
+                ContinueWaiting();
+            }
+            return;
+        }
         if (!WaitingEvent) {
             WaitEvent();
+        }
+    }
+
+    bool DeliverData(TReadSessionEvent::TDataReceivedEvent& data) {
+        THolder<TEvYdbProxy::TEvReadTopicResponse> response;
+        try {
+            response = MakeHolder<TEvYdbProxy::TEvReadTopicResponse>(data);
+        } catch (...) {
+            // Locate the SDK decompression failure only on the error path, before
+            // updating pending offsets or adding this batch to DeferredCommit.
+            if (!data.HasCompressedMessages()) {
+                for (const auto& msg : data.GetMessages()) {
+                    if (!msg.HasException()) {
+                        continue;
+                    }
+                    try {
+                        msg.GetData();
+                    } catch (...) {
+                        const auto& partition = data.GetPartitionSession();
+                        auto issue = MakeDecompressionIssue(TString(partition->GetTopicPath()),
+                            partition->GetPartitionId(), msg.GetOffset(), CurrentExceptionMessage());
+                        Leave(Client, TStatus(EStatus::EXTERNAL_ERROR,
+                            NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(issue)}),
+                            TEvYdbProxy::TEvTopicReaderGone::EFailureKind::DataError);
+                        return false;
+                    }
+                }
+            }
+            auto status = TStatus(EStatus::EXTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage())});
+            Leave(Client, std::move(status));
+            return false;
+        }
+        PartitionEndWatcher.UpdatePendingCommittedOffset(data);
+        if (AutoCommit) {
+            DeferredCommit.Add(data);
+        }
+        Y_ABORT_UNLESS(ReadRequest);
+        const auto [sender, cookie] = *ReadRequest;
+        ReadRequest.reset();
+        Send(sender, response.Release(), 0, cookie);
+        return true;
+    }
+
+    void ScheduleStatusRequest() {
+        if (DetectDataLoss && PartitionSession && !StatusRequestScheduled) {
+            StatusRequestScheduled = true;
+            Schedule(StatusInterval, new TEvents::TEvWakeup());
+        }
+    }
+
+    void ForwardPendingEvents() {
+        // Control events must follow every data event that preceded them in the SDK.
+        if (!BufferedData.empty()) {
+            return;
+        }
+        if (PendingPartitionEnd) {
+            PartitionEndWatcher.SetEvent(std::move(*PendingPartitionEnd), Client);
+            PendingPartitionEnd.reset();
+        }
+        if (PendingStatusReadOffset) {
+            Send(Client, new TEvYdbProxy::TEvTopicReaderStatus(TEvYdbProxy::TTopicReaderStatusResult{
+                TString(PartitionSession->GetReadSessionId()), *PendingStatusReadOffset}));
+            PendingStatusReadOffset.reset();
+            StatusRequestPending = false;
+            ScheduleStatusRequest();
+        }
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        StatusRequestScheduled = false;
+        if (PartitionSession && !StatusRequestPending) {
+            StatusRequestPending = true;
+            PartitionSession->RequestStatus();
+            if (!WaitingEvent) {
+                WaitEvent();
+            }
         }
     }
 
@@ -216,7 +302,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
     }
 
     void ContinueWaiting() {
-        if (!SessionStarted || ReadRequest) {
+        if (!WaitingEvent && (!SessionStarted || ReadRequest || (StatusRequestPending && !PendingStatusReadOffset))) {
             WaitEvent();
         }
     }
@@ -231,55 +317,41 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         if (auto* x = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
             PartitionEndWatcher.Clear(x->GetCommittedOffset());
             x->Confirm();
+            PartitionSession = x->GetPartitionSession();
             Send(Client, new TEvYdbProxy::TEvStartTopicReadingSession(*x));
             SessionStarted = true;
+            ScheduleStatusRequest();
             return ContinueWaiting();
         } else if (auto* x = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
             x->Confirm();
             SessionStarted = false;
+            PartitionSession.Reset();
+            BufferedData.clear();
+            PendingPartitionEnd.reset();
+            PendingStatusReadOffset.reset();
+            StatusRequestPending = false;
             return ContinueWaiting();
         } else if (auto* x = std::get_if<TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
-            PartitionEndWatcher.SetEvent(std::move(*x), Client);
+            PendingPartitionEnd = std::move(*x);
+            ForwardPendingEvents();
             return ContinueWaiting();
         } else if (auto* x = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-            THolder<TEvYdbProxy::TEvReadTopicResponse> response;
-            try {
-                response = MakeHolder<TEvYdbProxy::TEvReadTopicResponse>(*x);
-            } catch (...) {
-                // Locate the SDK decompression failure only on the error path, before
-                // updating pending offsets or adding this batch to DeferredCommit.
-                if (!x->HasCompressedMessages()) {
-                    for (const auto& msg : x->GetMessages()) {
-                        if (!msg.HasException()) {
-                            continue;
-                        }
-                        try {
-                            msg.GetData();
-                        } catch (...) {
-                            const auto& partition = x->GetPartitionSession();
-                            auto issue = MakeDecompressionIssue(TString(partition->GetTopicPath()),
-                                partition->GetPartitionId(), msg.GetOffset(), CurrentExceptionMessage());
-                            return Leave(Client, TStatus(EStatus::EXTERNAL_ERROR,
-                                NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(issue)}),
-                                TEvYdbProxy::TEvTopicReaderGone::EFailureKind::DataError);
-                        }
-                    }
-                }
-                auto status = TStatus(EStatus::EXTERNAL_ERROR, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(TStringBuilder() << "Unexpected exception: " << CurrentExceptionMessage())});
-                return Leave(Client, std::move(status));
+            if (!ReadRequest) {
+                BufferedData.emplace_back(std::move(*x));
+                return ContinueWaiting();
             }
-            PartitionEndWatcher.UpdatePendingCommittedOffset(*x);
-            if (AutoCommit) {
-                DeferredCommit.Add(*x);
+            if (DeliverData(*x)) {
+                ContinueWaiting();
             }
-            Y_ABORT_UNLESS(ReadRequest);
-            const auto [sender, cookie] = *ReadRequest;
-            ReadRequest.reset();
-            return (void)Send(sender, response.Release(), 0, cookie);
+            return;
         } else if (auto* x = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
             PartitionEndWatcher.SetCommittedOffset(x->GetCommittedOffset() - 1, Client);
             return ContinueWaiting();
-        } else if (std::get_if<TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
+        } else if (auto* x = std::get_if<TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
+            if (StatusRequestPending && PartitionSession == x->GetPartitionSession()) {
+                PendingStatusReadOffset = x->GetReadOffset();
+                ForwardPendingEvents();
+            }
             return ContinueWaiting();
         } else if (auto* x = std::get_if<TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
             auto status = TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(x->DebugString())});
@@ -304,11 +376,12 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
     }
 
 public:
-    TTopicReader(const TActorId& client, const std::shared_ptr<IReadSession>& session, bool autoCommit)
+    TTopicReader(const TActorId& client, const std::shared_ptr<IReadSession>& session, bool autoCommit, bool detectDataLoss)
         : TBaseProxyActor(&TThis::StateWork)
         , Client(client)
         , Session(session)
         , AutoCommit(autoCommit)
+        , DetectDataLoss(detectDataLoss)
         , PartitionEndWatcher(this)
     {
     }
@@ -319,6 +392,7 @@ public:
             hFunc(TEvYdbProxy::TEvReadTopicRequest, Handle);
             hFunc(TEvPrivate::TEvTopicEventReady, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
+            hFunc(TEvents::TEvWakeup, Handle);
 
         default:
             return StateBase(ev);
@@ -329,12 +403,20 @@ private:
     const TActorId Client;
     std::shared_ptr<IReadSession> Session;
     const bool AutoCommit;
+    const bool DetectDataLoss;
+    const TDuration StatusInterval = TDuration::Seconds(10);
 
     TDeferredCommit DeferredCommit;
     TPartitionEndWatcher PartitionEndWatcher;
+    TPartitionSession::TPtr PartitionSession;
+    TDeque<TReadSessionEvent::TDataReceivedEvent> BufferedData;
+    std::optional<TReadSessionEvent::TEndPartitionSessionEvent> PendingPartitionEnd;
     std::optional<std::pair<TActorId, ui64>> ReadRequest;
+    std::optional<ui64> PendingStatusReadOffset;
     bool WaitingEvent = false;
     bool SessionStarted = false;
+    bool StatusRequestScheduled = false;
+    bool StatusRequestPending = false;
 
 }; // TTopicReader
 
@@ -497,7 +579,7 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         auto args = std::move(ev->Get()->GetArgs());
         const auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);
         auto session = std::invoke(&TTopicClient::CreateReadSession, client, settings.GetBase());
-        auto reader = RegisterWithSameMailbox(new TTopicReader(ev->Sender, session, settings.AutoCommit_));
+        auto reader = RegisterWithSameMailbox(new TTopicReader(ev->Sender, session, settings.AutoCommit_, settings.FailOnDataLoss_));
         Send(reader, new TEvents::TEvBootstrap());
         Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader));
     }

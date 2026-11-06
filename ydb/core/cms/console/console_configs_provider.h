@@ -12,6 +12,8 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
+#include <unordered_map>
+
 namespace NKikimr::NConsole {
 
 struct TDatabaseYamlConfig {
@@ -311,7 +313,8 @@ private:
     };
 
     TInMemorySubscriptionIndex InMemoryIndex;
-    THashMap<TActorId, EUpdate> ScheduledUpdates;
+    // Repeated begin()/erase() must not scan buckets when draining the queue.
+    std::unordered_map<TActorId, EUpdate> ScheduledUpdates;
     THashSet<TActorId> InflightUpdates;
     static constexpr ui32 MAX_INFLIGHT_UPDATES = 50;
 

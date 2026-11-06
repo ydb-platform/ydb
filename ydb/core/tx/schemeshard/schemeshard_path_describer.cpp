@@ -1003,6 +1003,10 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     diskSpaceUsage->MutableTables()->SetTotalSize(subDomainInfo->GetDiskSpaceUsage().Tables.TotalSize);
     diskSpaceUsage->MutableTables()->SetDataSize(subDomainInfo->GetDiskSpaceUsage().Tables.DataSize);
     diskSpaceUsage->MutableTables()->SetIndexSize(subDomainInfo->GetDiskSpaceUsage().Tables.IndexSize);
+    if (const ui64 bytes = subDomainInfo->GetDiskSpaceUsage().KeyValueBytes) {
+        diskSpaceUsage->SetKeyValueBytes(bytes);
+    }
+
     diskSpaceUsage->MutableTopics()->SetReserveSize(subDomainInfo->GetPQReservedStorage());
     diskSpaceUsage->MutableTopics()->SetAccountSize(subDomainInfo->GetPQAccountStorage());
     diskSpaceUsage->MutableTopics()->SetDataSize(subDomainInfo->GetDiskSpaceUsage().Topics.DataSize);

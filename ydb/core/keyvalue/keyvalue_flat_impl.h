@@ -9,6 +9,7 @@
 #include "keyvalue_simple_db_flat.h"
 #include "keyvalue_state.h"
 
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -89,6 +90,11 @@ protected:
                 // auto &alter = txc.DB.Alter();
                 // ApplyLogBatching(ctx, alter);
             }
+
+            if (!Self.LoadDiskQuota(txc)) {
+                return false;
+            }
+
             Self.State.InitExecute(Self.TabletID(), KeyValueActorId, txc.Generation, db, ctx, Self.Info());
             YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TTxInit flat Execute returns true",
                 {"keyValue", txc.Tablet});
@@ -422,6 +428,13 @@ protected:
         }
     };
 
+    struct TTxPersistDiskQuota;
+    bool LoadDiskQuota(NTabletFlatExecutor::TTransactionContext& txc);
+    bool WatchesDiskQuota() const;
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev);
+    void ReportStorageUsage();
+    ui64 QuotaSchemeShardId = 0;
+
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
     TActorId CollectorActorId;
@@ -603,6 +616,7 @@ protected:
             {"keyValue", TabletID()});
         Schedule(TDuration::MilliSeconds(PeriodicRefreshMs), new TEvKeyValue::TEvPeriodicRefresh);
         State.OnPeriodicRefresh();
+        ReportStorageUsage();
     }
 
     void Handle(TChannelBalancer::TEvUpdateWeights::TPtr ev, const TActorContext& /*ctx*/) {
@@ -813,6 +827,11 @@ public:
         if (CopyBlobActorId) {
             ctx.Send(CopyBlobActorId, new TEvents::TEvPoisonPill);
         }
+
+        if (WatchesDiskQuota()) {
+            ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove());
+        }
+
         State.Terminate(ctx);
         Die(ctx);
     }
@@ -874,6 +893,7 @@ public:
         if (HandleHook(ev))
             return;
         switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
             hFunc(TEvKeyValue::TEvRead, Handle);
             hFunc(TEvKeyValue::TEvReadRange, Handle);
             hFunc(TEvKeyValue::TEvExecuteTransaction, Handle);
@@ -925,6 +945,10 @@ public:
     void InitSchemeComplete() {
         Become(&TThis::StateWork);
         State.SetTabletInfo(Info());
+        if (WatchesDiskQuota()) {
+            Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(Info()->TenantPathId));
+        }
+
         State.OnStateWork();
         UpdateTabletYellow();
         while (!InitialEventsQueue.empty()) {

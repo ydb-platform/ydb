@@ -584,8 +584,10 @@ struct Schema : NIceDb::Schema {
         struct ShardId :        Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
         struct PartitionId :    Column<3, NScheme::NTypeIds::Uint64> {};
 
+        struct StorageUsage : Column<4, NScheme::NTypeIds::String> {};
+
         using TKey = TableKey<PathId, ShardId>;
-        using TColumns = TableColumns<PathId, ShardId, PartitionId>;
+        using TColumns = TableColumns<PathId, ShardId, PartitionId, StorageUsage>;
     };
 
     struct AlterSolomonVolumes : Table<75> {

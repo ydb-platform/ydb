@@ -26,6 +26,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    ut_keyvalue_quota.cpp
     ut_subdomain.cpp
 )
 

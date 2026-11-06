@@ -56,7 +56,7 @@ public:
         context.SS->DropPaths(paths, step, OperationId.GetTxId(), db, context.Ctx);
 
         if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {
-            context.SS->PersistRemoveSolomonVolume(db, pathId);
+            context.SS->PersistRemoveSolomonVolume(db, pathId, context.Ctx);
         }
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);

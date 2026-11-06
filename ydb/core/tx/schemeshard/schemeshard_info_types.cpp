@@ -425,6 +425,19 @@ void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpa
     }
 }
 
+void TSubDomainInfo::UpdateKeyValueUsage(const NKikimrKeyValue::PartitionStorageUsage& next,
+                                        const NKikimrKeyValue::PartitionStorageUsage& previous) {
+    DiskSpaceUsage.KeyValueBytes -= previous.total_bytes();
+    DiskSpaceUsage.KeyValueBytes += next.total_bytes();
+    for (const auto& [kind, bytes] : previous.bytes_by_pool_kind()) {
+        DiskSpaceUsage.StoragePoolsUsage.at(kind).DataSize -= bytes;
+    }
+
+    for (const auto& [kind, bytes] : next.bytes_by_pool_kind()) {
+        DiskSpaceUsage.StoragePoolsUsage[kind].DataSize += bytes;
+    }
+}
+
 void TSubDomainInfo::AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr) {
     auto& topics = DiskSpaceUsage.Topics;
     topics.DataSize += (newAggr.DataSize - oldAggr.DataSize);

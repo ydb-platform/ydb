@@ -3175,6 +3175,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     it->second->Partitions[shardIdx] = new TSolomonPartitionInfo(partitionId);
                 }
 
+                if (rowset.HaveValue<Schema::SolomonPartitions::StorageUsage>()) {
+                    auto& usage = it->second->Partitions.at(shardIdx)->StorageUsage;
+                    Y_ABORT_UNLESS(usage.ParseFromString(rowset.GetValue<Schema::SolomonPartitions::StorageUsage>()));
+                    Self->ResolveDomainInfo(pathId)->UpdateKeyValueUsage(usage);
+                }
 
                 if (!rowset.Next())
                     return false;

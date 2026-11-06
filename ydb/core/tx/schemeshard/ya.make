@@ -239,6 +239,7 @@ SRCS(
     schemeshard__storage_space.cpp
     schemeshard__sync_update_tenants.cpp
     schemeshard__table_partitions_format.cpp
+    schemeshard__keyvalue_stats.cpp
     schemeshard__table_stats.cpp
     schemeshard__table_stats_histogram.cpp
     schemeshard__tenant_shred_manager.cpp

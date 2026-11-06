@@ -1,6 +1,8 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/folder/tempdir.h>
+#include <util/stream/file.h>
 
 Y_UNIT_TEST_SUITE(NodeWardenCache) {
 
@@ -60,5 +62,37 @@ Y_UNIT_TEST_SUITE(NodeWardenCache) {
 
     Y_UNIT_TEST(StorageNodeStuckWithoutCacheWhileBscDown) {
         DoTestRecoveryWhileBscDown(/*useCache=*/false, /*expectReadableAfterRestart=*/false);
+    }
+
+    // The node keeps the main YAML and the dedicated storage YAML in its config directory. A switch to the single
+    // config comes, and saving the new main YAML fails (here the temporary file can't be made). The storage YAML the
+    // old main one relies on must stay then, until the new main YAML is saved.
+    Y_UNIT_TEST(StorageYamlKeptWhenMainYamlNotSaved) {
+        TTempDir dir;
+        TEnvironmentSetup env{{
+            .NodeCount = 1,
+            .Erasure = TBlobStorageGroupType::ErasureNone,
+            .ConfigPreprocessor = [&](ui32 nodeId, TNodeWardenConfig& config) {
+                config.ConfigDirPath = (dir.Path() / ToString(nodeId)).GetPath();
+            },
+        }};
+        env.Sim(TDuration::Seconds(10));
+
+        const TFsPath nodeDir = dir.Path() / "1";
+        nodeDir.MkDirs();
+        TFileOutput(nodeDir / "storage.yaml").Write("storage config the old main one relies on\n");
+        (nodeDir / "temp_config.yaml").MkDirs(); // the temporary file of the main YAML can't be made
+
+        auto update = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>();
+        auto *yaml = update->Record.MutableYamlConfig();
+        yaml->SetMainConfig("single config\n");
+        yaml->SetMainConfigVersion(1000);
+        // no storage config version: the single config mode, where the storage YAML file goes away
+        env.Runtime->Send(new IEventHandle(MakeBlobStorageNodeWardenID(1), env.Runtime->AllocateEdgeActor(1),
+            update.release()), 1);
+        env.Sim(TDuration::Seconds(10));
+
+        UNIT_ASSERT(!(nodeDir / "config.yaml").Exists());
+        UNIT_ASSERT_C((nodeDir / "storage.yaml").Exists(), "the storage YAML is gone while the main YAML wasn't saved");
     }
 }

@@ -67,7 +67,7 @@ STATISTICS <statistics_name>
 `<family_definition>` — это:
 
 ```yql
-FAMILY <family_name> ( <family_option> [, ...] )
+FAMILY <family_name> ( [ <family_option> [, ...] ] )
 ```
 
 {% if oss == true and backend_name == "YDB" %}

@@ -2024,6 +2024,21 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    // A heartbeat stream keeps the bootstrap in every mode; delivery must work
+    // with the implicit source-id registration flag on as well.
+    Y_UNIT_TEST(VirtualTimestampsImplicitRegistrationFlag) {
+        PqRunner::Read(SimpleTable(), WithVirtualTimestamps(KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson)), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )"}, {
+            R"({"update":{},"key":[1],"ts":"***"})",
+            R"({"update":{},"key":[2],"ts":"***"})",
+            R"({"update":{},"key":[3],"ts":"***"})",
+        }, true, nullptr, /*implicitSourceRegistration=*/true);
+    }
+
     TShardedTableOptions DocApiTable() {
         return TShardedTableOptions()
             .Columns({

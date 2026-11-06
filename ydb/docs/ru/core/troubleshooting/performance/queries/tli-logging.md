@@ -188,10 +188,9 @@ log_config:
   sink:
     - source: tli-datashard
       destination: local-db
-      database: ...
-    - source: local-db
-      destination: ...
-      database: tli-session
+      ...
+    - source: tli-session
+      destination: local-db
       ...
     ...
 ```
@@ -238,9 +237,9 @@ log_config:
 Кроме того, таблица имеет [набор стандартных полей](../../../reference/configuration/log_config.md#event-local-database-columns).
 
 Возможные значения поля `message`:
-- Commit had broken other locks
-- Query had broken other locks
-- Commit had broken other locks (deferred)
-- Query had broken other locks (deferred)
-- Commit was a victim of broken locks
-- Query was a victim of broken locks
+- `Commit had broken other locks`
+- `Query had broken other locks`
+- `Commit had broken other locks (deferred)`
+- `Query had broken other locks (deferred)`
+- `Commit was a victim of broken locks`
+- `Query was a victim of broken locks`

@@ -4,9 +4,9 @@
 
 {% include [log_sink_columnshard](../../../_includes/log_sink_columnshard.md) %}
 
-Возможна выгрузка логов запросов в локальную базу данных или какое-либо другое хранилище информации (см. [настройки логирования](../../../reference/configuration/log_config.md#events) ). Структура формируемой таблицы:
+Логи запросов могут быть выгружены в локальную базу данных или какое-либо другое хранилище информации (см. [настройки логирования](../reference/configuration/log_config.md#events) ). Структура формируемой таблицы:
 
-| Поле | Тип |Описание |
+| Поле | Тип | Описание |
 |---|---|---|
 | `req_id` | `utf8` | Идентификатор запроса |
 | `pool_id` | `utf8` | Идентификатор пула |
@@ -29,5 +29,5 @@
 | `compile_time_us` | `utf8` | Время компиляции запроса |
 
 
-Кроме того, таблица имеет [набор стандартных полей](../core/reference/configuration/log_config.md#event-local-database-columns).
+Кроме того, таблица имеет [набор стандартных полей](../reference/configuration/log_config.md#event-local-database-columns).
 

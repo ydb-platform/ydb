@@ -193,7 +193,7 @@ log_config:
 
 ### Общие принципы
 
-В процессе работы в системы происходят различные события, информация о которых может быть полезна конечным пользователям.
+В процессе работы в системе происходят различные события, информация о которых может быть полезна конечным пользователям.
 
 Каждое событие описывает некоторое действие или происшествие в системе и включает в себя набор атрибутов, характеризующих это событие. Например, для события «Авторизация пользователя» атрибутами будут время, идентификатор пользователя, способ авторизации, флаг успешности и т.п.
 
@@ -204,7 +204,7 @@ log_config:
 2. Внешнее хранилище, куда выгружается информация (например, в таблицу локальной БД).
 3. Прочие параметры, необходимые для работы синка и выгрузки информации.
 
-Выгрузка информации о событиях происходит незамедлительно: т.е. нет никакой отложенной выгрузки и т.п. Однако при выгрузке в некоторые хранилища могут быть задержки из-за буферизации записи.
+События выгружаются сразу после появления в логе. Отложенной пакетной отправки по расписанию нет. Задержки возможны из‑за буферизации при записи в хранилище.
 
 ### Настройка
 
@@ -235,35 +235,107 @@ log_config:
 | `source` | Название источника событий (см. далее). |
 | `destination` | Куда происходит выгрузка информации (пока поддерживается только `local-db` — см. далее). |
 
-Остальные параметры является опциональными и необходимы в случае конкретных значений `destination`.
+Остальные параметры являются опциональными и необходимы в случае конкретных значений `destination`.
+
+В качестве источника событий может быть указано `Default`. Перечисленные для этого синка значения являются значениями по умолчанию для всех остальных синков.
+
+### Поддерживаемые источники событий {#to-database}
+
+Выгрузка информации о событиях основана на работе лога. Поэтому для выгрузки информации из конкретного источника событий необходимо, чтобы для соответствующего компонента логирования был указан минимально необходимый уровень логирования. Кроме того, могут требоваться дополнительные настройки для логирования некоторых отдельных событий (см. [пример настроек](#event-config-sample)).
+
+В таблице перечислены поддерживаемые источники событий и их характеристики.
+
+| Название источника | Описание | Компонент логирования | Уровень логирования | Имя хранилища и таблицы по умолчанию |
+|---|---|---|---|---|
+| `kqp-requests` | Запросы | `KQP_REQUEST` | `WARN` для выгрузки информации о запросах с ошибками, `DEBUG` — для выгрузки информации обо всех запросах. | `kqp_requests/kqp_requests` |
+| `tli-datashard` | Блокировки на уровне data shard | `TLI` | `INFO` | `tli_datashard/tli_datashard` |
+| `tli-session` | Блокировки на уровне сессии | `TLI` | `INFO` | `tli_session/tli_session` |
+| `audit-schemeshard` | Операции со схемой, изменения ACL и действия по управлению пользователями | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_schemeshard/audit_schemeshard` |
+| `audit-grpc-proxy` | Внешние gRPC-запросы YDB | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_grpc_proxy/audit_grpc_proxy` |
+| `audit-grpc-conn` | События подключения и отключения клиентов | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_grpc_conn/audit_grpc_conn` |
+| `audit-grpc-login` | Попытки аутентификации в gRPC | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_grpc_login/audit_grpc_login` |
+| `audit-monitoring` | HTTP-запросы | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_monitoring/audit_monitoring` |
+| `audit-heartbeat` | Синтетические heartbeat-события, подтверждающие работоспособность аудитного логирования | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_heartbeat/audit_heartbeat` |
+| `audit-bsc` | Изменения конфигурации BlobStorage Controller из консоли | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_bsc/audit_bsc` |
+| `audit-distconf` | Обновления распределённой конфигурации | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_distconf/audit_distconf` |
+| `audit-web-login` | Взаимодействия с виджетом аутентификации веб-консоли | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_web_login/audit_web_login` |
+| `audit-console` | Операции жизненного цикла баз данных и изменения динамической конфигурации | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_console/audit_console` |
+
+Дополнительная информация:
+- [Аудитное логирование](../../security/audit-log.md#to-database)
+- [Логирование исполнения запросов](../../troubleshooting/requests.md)
+- [Логирование TLI](../../troubleshooting/performance/queries/tli-logging.md#to-database)
 
 ### Выгрузка в таблицы локальной базы данных {#event-local-database}
 
 {% include [log_sink_columnshard](../../_includes/log_sink_columnshard.md) %}
 
-Если синк выгружает информацию о событиях в таблицу локальной БД, то в настройках в разделе `sink` должны быть указаны дополнительные параметры.
+Если синк выгружает информацию о событиях в таблицу локальной БД (т.е. указано `destination : local-db`), то в настройках в разделе `sink` должны быть указаны дополнительные параметры.
 
 | Параметр | Описание | Значение по умолчанию |
 |---|---|---|
 | `database_path` | Путь к БД, куда необходимо выгружать информацию | Отсутствует. Этот параметр является обязательным |
-| `storage_name` | Название хранилища | Зависит от источника событий (см. далее) |
+| `store_name` | Название хранилища (указывается в операторе `CREATE TABLESTORE`) | Зависит от источника событий (см. далее) |
 | `table_name` | Название таблицы | Зависит от источника событий (см. далее) |
 | `max_batch_size` | Максимальный размер (количество записей) одной порции информации | `1000000` |
 | `flush_batch_size` | Размер (количество записей) порции данных, при достижении которого происходит автоматическое сохранение свежей порции информации | `1000` |
 | `flush_timeout` | Таймаут выгрузки свежей порции информации (задаётся в микросекундах) | `1000` |
 | `store_shards_count` | Значение `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` для хранилища (запрос `CREATE TABLESTORE`) | `5` |
 | `table_shards_count` | Значение `AUTO_PARTITIONING_MIN_PARTITIONS_COUNT` для таблицы. | `5` |
-| `max_write_attempts` | Максимальное количество попыток записи одной и той проции данных в случае возникновении ошибок | `10` |
+| `max_write_attempts` | Максимальное количество попыток записи одной и той порции данных в случае возникновения ошибок | `10` |
 | `max_active_writes` | Максимальное количество одновременно записываемых порций данных | `10` |
+| `try_recreate_timeout` | Таймаут перед повторной попыткой создать таблицу БД (задаётся в микросекундах) | `1000` |
 
 Таблицы создаются автоматически при первой же попытке выгрузки информации.
 
+### Пример настроек {#event-config-sample}
+
+```
+feature_flags:
+  enable_column_store: true           # Включено поколоночное хранение для создания и наполнения таблиц
+  enable_grpc_audit: true             # Включение логирования gRPC-запросов в аудитном логе
+
+audit_config:                         # Включено аудитное логирование
+  log_class_config:
+   - log_class: Default
+     enable_logging: true
+  heartbeat:
+    interval_seconds: 10
+
+log_config:
+  default_level: 5
+  entry:
+    - component: "KQP_REQUEST"        # Необходимо для логирования всех запросов
+      level: 7
+    - component: "AUDIT_LOG_WRITER"   # Необходимо для выгрузки сообщений аудитного лога
+      level: 5
+  sink:
+    - source: Default                 # Настройки для всех синков
+      destination: local-db
+      database_path: /local/testdb
+      flush_batch_size: 0             # Работа без буферизации
+      flush_timeout: 0
+    - source: kqp-requests
+    - source: audit-schemeshard
+    - source: audit-grpc-proxy
+    - source: audit-grpc-conn
+    - source: audit-grpc-login
+    - source: audit-monitoring
+    - source: audit-heartbeat
+    - source: audit-bsc
+    - source: audit-distconf
+    - source: audit-web-login
+    - source: audit-console
+    - source: tli-datashard
+    - source: tli-session
+```
+
 ### Структура таблиц локальной базы данных {#event-local-database-columns}
 
-Структура таблиц зависит от источника событий, но каждая таблица всегда имеет набор стандартых обязательных полей.
+Структура таблиц зависит от источника событий, но каждая таблица всегда имеет набор стандартных обязательных полей.
 
 | Поле | Тип | Описание |
-|-|-|-|
+|---|---|---|
 | `id` | `ui64` | Уникальный идентификатор события |
 | `timestamp` | `timestamp` | Время возникновения события |
 | `priority` | `ui16` | Приоритет события |
@@ -283,33 +355,6 @@ log_config:
 | `Null <columnName> instead of not casted value <value>` | Вставлено пустое значение, поскольку указанная колонка не может содержать указанное значение |
 | `Dummy <columnName> due to write error` | Вставлено `dummy`-значение из-за внутренних ошибок |
 | `Null <columnName> due to write error` | Вставлено пустое значение из-за внутренних ошибок |
-
-### Поддерживаемые источники событий {#to-database}
-
-Выгрузка информации о событиях основана на работе лога. Поэтому для выгрузки информации из конкретного источника событий необходимо, чтобы для соответствующего компонента логирования был указан минимально необходимый уровень логирования.
-
-Далее в таблице для каждого источника событий указаны необходимые настройки логирования.
-
-| Название источника | Описание | Компонент логирования | Уровень логирования | Имя хранилища и таблицы по умолчанию |
-|---|---|---|---|---|
-| `kqp-requests` | Запросы | `KQP_REQUESTS` | `WARN` для выгрузки информации о запросах с ошибками, `DEBUG` — для выгрузки информации обо всех запросах. | `kqp_requests/kqp_requests` |
-| `tli-datashard` | Блокировки на уровне data shard | `DATA_INTEGRITY` | `INFO` | `tli_datashard/tli_datashard` |
-| `tli-session` | Блокировки на уровне сессии | `TLI` | `INFO` | `tli_session/tli_session` |
-| `audit-schemeshard` | Операции со схемой, изменения ACL и действия по управлению пользователями | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_schemeshard/audit_schemeshard` |
-| `audit-grpc-proxy` | Внешние gRPC-запросы YDB | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_grpc_proxy/audit_grpc_proxy` |
-| `audit-grpc-conn` | События подключения и отключения клиентов | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_grpc_conn/audit_grpc_conn` |
-| `audit-grpc-login` | Попытки аутентификации в gRPC | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_grpc_login/audit_grpc_login` |
-| `audit-monitoring` | HTTP-запросы | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_monitoring/audit_monitoring` |
-| `audit-heartbeat` | Синтетические heartbeat-события, подтверждающие работоспособность аудитного логирования | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_heartbeat/audit_heartbeat` |
-| `audit-bsc` | Изменения конфигурации BlobStorage Controller из консоли | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_bsc/audit_bsc` |
-| `audit-distconf` | Обновления распределённой конфигурации | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_distconf/audit_distconf` |
-| `audit-web-login` | Взаимодействия с виджетом аутентификации веб-консоли | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_web_login/audit_web_login` |
-| `audit-console` | Операции жизненного цикла баз данных и изменения динамической конфигурации | `AUDIT_LOG_WRITER` | `NOTICE` | `audit_console/audit_console` |
-
-Дополнительная информация:
-- [Аудитное логирование](../../security/audit-log.md#to-database)
-- [Логирование исполнения запросов](../../troubleshooting/requests.md)
-- [Логирование TLI](../../troubleshooting/performance/queries/tli-logging.md#to-database)
 
 ## Примечания
 

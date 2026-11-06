@@ -43,14 +43,16 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
 
     void Init() {
         auto opts = TPartitionWriterOpts()
-            // Only the Proto format consumes the explicit message groups' routing
-            // content (key-range routing, split/merge dedup continuity), so its
-            // writer fails fast on anything less than an explicit registration.
-            // Other formats route by md5 hash and register source ids on the fly;
-            // heartbeat/schema-change writers are rejected by the pqtablet for
-            // implicit source ids in any format — those keep the strict checks.
-            .WithCheckState(RequireExplicitRegistration)
+            // The source id is registered explicitly on first use
+            // (WithExplicitRegistration): explicit ids are immune to the
+            // tablet's source-id eviction, so the dedup state survives sender
+            // restarts regardless of whether the schemeshard provided the
+            // bootstrap. The strict checks then only verify the id is
+            // explicit: a fresh source passes after its own registration; an
+            // unexpected implicit one fails loudly.
+            .WithCheckState(true)
             .WithAutoRegister(true)
+            .WithExplicitRegistration(true)
             .WithSourceId(SourceId);
         Writer = RegisterWithSameMailbox(CreatePartitionWriter(SelfId(), ShardId, PartitionId, opts));
         Become(&TThis::StateInit);
@@ -78,9 +80,7 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
         }
 
         const auto& info = result.GetResult().SourceIdInfo;
-        if (RequireExplicitRegistration) {
-            Y_ENSURE(info.GetExplicit());
-        }
+        Y_ENSURE(info.GetExplicit());
 
         MaxSeqNo = info.GetSeqNo();
         Ready();
@@ -296,16 +296,6 @@ public:
         , PartitionId(partitionId)
         , ShardId(shardId)
         , SourceId(ToString(DataShard.TabletId))
-        , RequireExplicitRegistration(
-            // Implicit source-id registration (with the schemeshard-side bootstrap
-            // skip) is one feature behind
-            // EnableCdcStreamImplicitSourceRegistration; with the flag off every
-            // stream requires an explicit registration, as before.
-            !AppData()->FeatureFlags.GetEnableCdcStreamImplicitSourceRegistration()
-            || stream.Format == TUserTable::TCdcStream::EFormat::ECdcStreamFormatProto
-            || stream.SchemaChanges
-            || stream.VirtualTimestamps
-            || stream.ResolvedTimestampsInterval != TDuration::Zero())
         , Serializer(CreateChangeRecordSerializer({
             .StreamFormat = stream.Format,
             .StreamMode = stream.Mode,
@@ -340,7 +330,6 @@ private:
     const ui32 PartitionId;
     const ui64 ShardId;
     const TString SourceId;
-    const bool RequireExplicitRegistration = true;
     THolder<IChangeRecordSerializer> Serializer;
 
     TActorId Writer;

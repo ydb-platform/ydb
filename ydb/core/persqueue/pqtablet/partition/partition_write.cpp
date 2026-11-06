@@ -913,27 +913,31 @@ void TPartition::HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TA
 void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
     LOG_T("TPartition::HandleOnWrite TEvRegisterMessageGroup");
 
-    const auto& body = ev->Get()->Body;
+    auto& body = ev->Get()->Body;
 
     auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId);
     if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
         if (!it->second.Explicit) {
-            return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
-                "Trying to register implicitly registered SourceId");
-        }
+            // An implicitly registered id (write-path auto-registration) is
+            // upgraded to an explicit one: explicit ids are immune to
+            // DropOldSourceIds eviction, and the stored SeqNo is preserved,
+            // so the dedup state survives the upgrade.
+            body.SeqNo = it->second.SeqNo;
+        } else {
 
-        switch (it->second.State) {
-        case TSourceIdInfo::EState::Registered:
-            return ReplyOk(ctx, ev->Get()->Cookie);
-        case TSourceIdInfo::EState::PendingRegistration:
-            if (!body.AfterSplit) {
-                return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
-                    "AfterSplit must be set");
+            switch (it->second.State) {
+            case TSourceIdInfo::EState::Registered:
+                return ReplyOk(ctx, ev->Get()->Cookie);
+            case TSourceIdInfo::EState::PendingRegistration:
+                if (!body.AfterSplit) {
+                    return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                        "AfterSplit must be set");
+                }
+                break;
+            default:
+                return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
+                    TStringBuilder() << "Unknown state: " << static_cast<ui32>(it->second.State));
             }
-            break;
-        default:
-            return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
-                TStringBuilder() << "Unknown state: " << static_cast<ui32>(it->second.State));
         }
     } else if (body.AfterSplit) {
         return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,

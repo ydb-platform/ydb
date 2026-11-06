@@ -606,11 +606,10 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
         if (Opts.CheckState) {
             switch (sourceIdInfo.GetState()) {
             case NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED:
-                Registered = true;
                 break;
             case NKikimrPQ::TMessageGroupInfo::STATE_PENDING_REGISTRATION:
                 if (Opts.AutoRegister) {
-                    return RegisterMessageGroup();
+                    return RegisterMessageGroup(/*afterSplit=*/true);
                 } else {
                     return InitResult("Source is not registered", std::move(record));
                 }
@@ -618,6 +617,17 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
                 return InitResult("Unknown source state", std::move(record));
             }
         }
+
+        // A source the tablet does not know reports a default info: registered,
+        // but not explicit. Self-register it explicitly: explicit ids are
+        // immune to the tablet's source-id eviction, so the dedup state
+        // survives sender restarts regardless of the schemeshard bootstrap.
+        // One extra round trip on the first use of the source only.
+        if (Opts.ExplicitRegistration && !sourceIdInfo.GetExplicit()) {
+            return RegisterMessageGroup(/*afterSplit=*/false);
+        }
+
+        Registered = true;
 
         AFL_ENSURE(sourceIdInfo.GetSeqNo() >= 0)("topic", Opts.TopicPath)("tablet_id", TabletId)("source_id", SourceId)("seq_no", sourceIdInfo.GetSeqNo());
         if (Opts.InitialSeqNo && (ui64)sourceIdInfo.GetSeqNo() < Opts.InitialSeqNo.value()) {
@@ -634,7 +644,7 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
 
     /// RegisterMessageGroup
 
-    void RegisterMessageGroup() {
+    void RegisterMessageGroup(bool afterSplit) {
         if (Registered) {
             Y_DEBUG_ABORT_UNLESS(false);
             return InitResult("Already registered", NKikimrClient::TResponse());
@@ -645,7 +655,10 @@ class TPartitionWriter : public TBaseActor<TPartitionWriter>
         auto& cmd = *ev->Record.MutablePartitionRequest()->MutableCmdRegisterMessageGroup();
         cmd.SetId(NSourceIdEncoding::EncodeSimple(SourceId));
         // TODO cmd.SetPartitionKeyRange()
-        cmd.SetAfterSplit(true);
+        // AfterSplit must be set only for a re-registration of an existing
+        // explicit source after a split; a fresh (absent) source registration
+        // with AfterSplit set is rejected by the tablet.
+        cmd.SetAfterSplit(afterSplit);
 
         NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
         Become(&TThis::StateRegisterMessageGroup);

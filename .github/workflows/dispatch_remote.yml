@@ -61,7 +61,8 @@ jobs:
     if: fromJSON(inputs.config).wait
     needs: enqueue
     runs-on: [self-hosted, runner-waiter]
-    timeout-minutes: 1200
+    # Self-hosted; allow ~24h jobs (22h runs + margin). Host WF must match.
+    timeout-minutes: 1440
     outputs:
       executor_run_id: ${{ steps.wait.outputs.executor_run_id }}
       executor_run_url: ${{ steps.wait.outputs.executor_run_url }}

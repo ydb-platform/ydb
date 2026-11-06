@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <limits>
 #include <optional>
 
 namespace NKikimr {
@@ -56,6 +57,10 @@ struct TMirror3dcGroupLayouts {
 constexpr std::optional<TMirror3dcGroupLayouts> GetMirror3dcGroupLayouts(EMirror3dcGroupState state) {
     using ELayout = EMirror3dcLayout;
     switch (state) {
+        // Proto3 adds sentinel values that do not represent group states.
+        case static_cast<EMirror3dcGroupState>(std::numeric_limits<int>::min()):
+        case static_cast<EMirror3dcGroupState>(std::numeric_limits<int>::max()):
+            return std::nullopt;
         case TGroupState::NORMAL:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_111_22};
         case TGroupState::DC_FAILURE:
@@ -102,6 +107,10 @@ constexpr EMirror3dcLayout GetMirror3dcReadLayout(EMirror3dcGroupState state) {
 constexpr std::optional<TMirror3dcFailRealmStates> GetMirror3dcRealmStates(EMirror3dcGroupState state) {
     using TFailRealm = NKikimrBlobStorage::TDataCenterState;
     switch (state) {
+        // Proto3 adds sentinel values that do not represent group states.
+        case static_cast<EMirror3dcGroupState>(std::numeric_limits<int>::min()):
+        case static_cast<EMirror3dcGroupState>(std::numeric_limits<int>::max()):
+            return std::nullopt;
         case TGroupState::NORMAL:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::INCLUDED};
         case TGroupState::DC_FAILURE:

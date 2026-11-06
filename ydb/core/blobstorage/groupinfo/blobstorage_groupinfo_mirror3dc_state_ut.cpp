@@ -1,4 +1,6 @@
 #include "blobstorage_groupinfo_mirror3dc_state.h"
+
+#include <ydb/core/protos/blobstorage_base.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <algorithm>
 
@@ -64,6 +66,11 @@ Y_UNIT_TEST_SUITE(TGroupStateTest) {
             } while (std::next_permutation(realms.begin(), realms.end()));
         }
         UNIT_ASSERT(!GetMirror3dcGroupLayouts(static_cast<EMirror3dcGroupState>(-1)));
+        for (int sentinel : {std::numeric_limits<int>::min(), std::numeric_limits<int>::max()}) {
+            EMirror3dcGroupState state = static_cast<EMirror3dcGroupState>(sentinel);
+            UNIT_ASSERT(!GetMirror3dcGroupLayouts(state));
+            UNIT_ASSERT(!GetMirror3dcRealmStates(state));
+        }
         UNIT_ASSERT(!MakeMirror3dcGroupConfiguration(static_cast<EMirror3dcGroupState>(17), {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::INCLUDED}));
         UNIT_ASSERT(!MakeMirror3dcGroupConfiguration(TGroupState::NORMAL, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED}));
     }

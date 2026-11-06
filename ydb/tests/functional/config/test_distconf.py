@@ -630,6 +630,32 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
     def test_replace_config_unknown_fields(self, location):
         check_replace_config_unknown_fields(self.cluster, self.cluster.config_client, location)
 
+    def test_bypass_checks_replaces_wrong_metadata(self):
+        # bypass_checks lets the administrator replace wrong metadata of the config with the right one
+        current = yaml.safe_load(fetch_config(self.cluster.config_client))
+        version = current['metadata']['version']
+        cluster = current['metadata'].get('cluster', '')
+        current['metadata']['version'] = version + 5
+        current['metadata']['cluster'] = 'wrong-' + cluster
+
+        def replace(bypass_checks):
+            request = config.ReplaceConfigRequest()
+            request.replace = yaml.dump(current)
+            request.bypass_checks = bypass_checks
+            return self.cluster.config_client.invoke(request, 'ReplaceConfig')
+
+        response = replace(False)
+        logger.debug(f"replace without bypass_checks: {response}")
+        assert_that(response.operation.status != StatusIds.SUCCESS)
+
+        response = replace(True)
+        logger.debug(f"replace with bypass_checks: {response}")
+        assert_that(response.operation.status == StatusIds.SUCCESS)
+
+        replaced = yaml.safe_load(fetch_config(self.cluster.config_client))
+        assert_that(replaced['metadata']['version'] == version + 1)
+        assert_that(replaced['metadata'].get('cluster', '') == cluster)
+
     def test_dry_run_valid_config_not_applied(self):
         fetched_config = fetch_config(self.cluster.config_client)
         dumped_config = yaml.safe_load(fetched_config)

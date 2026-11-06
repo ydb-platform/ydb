@@ -432,8 +432,9 @@ protected:
     bool LoadDiskQuota(NTabletFlatExecutor::TTransactionContext& txc);
     bool WatchesDiskQuota() const;
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev);
+    void UpdateQuotaPath(TPathId pathId);
     void ReportStorageUsage();
-    ui64 QuotaSchemeShardId = 0;
+    TPathId QuotaPathId;
 
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;

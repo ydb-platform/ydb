@@ -8,17 +8,24 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TKeyValueStorageQuota) {
 
+struct TSettings {
+    bool SeparatePools = false;
+    bool ReportStorageUsage = true;
+    bool ExternalSubdomain = false;
+};
+
 struct TEnv {
     TTestBasicRuntime Runtime;
     TTestEnv Env{Runtime};
     TActorId Edge = Runtime.AllocateEdgeActor();
     ui64 TxId = 100;
+    ui64 SchemeShard = TTestTxConfig::SchemeShard;
     TVector<ui64> Tablets;
 
-    explicit TEnv(bool separatePools, bool reportStorageUsage = true) {
-        Runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(separatePools);
-        Runtime.GetAppData().FeatureFlags.SetEnableKeyValueStorageUsageReports(reportStorageUsage);
-        TestCreateSubDomain(Runtime, ++TxId, "/MyRoot", R"(
+    explicit TEnv(TSettings settings = {}) {
+        Runtime.GetAppData().FeatureFlags.SetEnableSeparateDiskSpaceQuotas(settings.SeparatePools);
+        Runtime.GetAppData().FeatureFlags.SetEnableKeyValueStorageUsageReports(settings.ReportStorageUsage);
+        const TString tenant = R"(
             Name: "Tenant"
             PlanResolution: 50
             Coordinators: 1
@@ -29,9 +36,19 @@ struct TEnv {
                 data_size_hard_quota: 10
                 storage_quotas { unit_kind: "ssd" data_size_hard_quota: 10 }
             }
-        )");
-        Env.TestWaitNotification(Runtime, TxId);
-        TestCreateSolomon(Runtime, ++TxId, "/MyRoot/Tenant", R"(
+        )";
+        if (settings.ExternalSubdomain) {
+            TestCreateExtSubDomain(Runtime, ++TxId, "/MyRoot", R"(Name: "Tenant")");
+            Env.TestWaitNotification(Runtime, TxId);
+            TestAlterExtSubDomain(Runtime, ++TxId, "/MyRoot", tenant + "ExternalSchemeShard: true");
+            Env.TestWaitNotification(Runtime, TxId);
+            TestDescribeResult(DescribePath(Runtime, "/MyRoot/Tenant"), {NLs::ExtractTenantSchemeshard(&SchemeShard)});
+        } else {
+            TestCreateSubDomain(Runtime, ++TxId, "/MyRoot", tenant);
+            Env.TestWaitNotification(Runtime, TxId);
+        }
+
+        TestCreateSolomon(Runtime, SchemeShard, ++TxId, "/MyRoot/Tenant", R"(
             Name: "KV"
             PartitionCount: 2
             StorageConfig {
@@ -40,8 +57,8 @@ struct TEnv {
                 Channel { PreferredPoolKind: "ssd" }
             }
         )");
-        Env.TestWaitNotification(Runtime, TxId);
-        const auto desc = DescribePath(Runtime, "/MyRoot/Tenant/KV");
+        Env.TestWaitNotification(Runtime, TxId, SchemeShard);
+        const auto desc = DescribePath(Runtime, SchemeShard, "/MyRoot/Tenant/KV");
         for (const auto& part : desc.GetPathDescription().GetSolomonDescription().GetPartitions()) {
             Tablets.push_back(part.GetTabletId());
         }
@@ -50,7 +67,7 @@ struct TEnv {
     }
 
     void CheckUsage(ui64 bytes, bool exceeded) {
-        const auto desc = DescribePath(Runtime, "/MyRoot/Tenant");
+        const auto desc = DescribePath(Runtime, SchemeShard, "/MyRoot/Tenant");
         const auto& domain = desc.GetPathDescription().GetDomainDescription();
         UNIT_ASSERT_VALUES_EQUAL_C(domain.GetDiskSpaceUsage().GetKeyValueBytes(), bytes, domain.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(domain.GetDomainState().GetDiskQuotaExceeded(), exceeded);
@@ -73,7 +90,7 @@ struct TEnv {
 };
 
 Y_UNIT_TEST(ToggleStorageUsageReports) {
-    TEnv env(false, false);
+    TEnv env({.ReportStorageUsage = false});
     const ui64 tablet = env.Tablets.front();
     ui64 reports = 0;
     auto observer = env.Runtime.AddObserver<TEvKeyValue::TEvStorageUsageReport>([&](auto& ev) {
@@ -98,7 +115,7 @@ Y_UNIT_TEST(ToggleStorageUsageReports) {
 }
 
 Y_UNIT_TEST(EnforceAcrossPartitionsAndReboot) {
-    TEnv env(false);
+    TEnv env;
     const ui64 first = env.Tablets[0];
     const ui64 second = env.Tablets[1];
     const auto checkWrite = [&](ui64 tablet, NKikimrKeyValue::Statuses::ReplyStatus expected, bool mixed = false) {
@@ -147,8 +164,37 @@ Y_UNIT_TEST(EnforceAcrossPartitionsAndReboot) {
     checkWrite(second, NKikimrKeyValue::Statuses::RSTATUS_OK);
 }
 
+Y_UNIT_TEST(EnforceExternalSubdomainQuota) {
+    TEnv env({.ExternalSubdomain = true});
+    const ui64 tablet = env.Tablets.front();
+    const auto write = [&](const TString& value) {
+        auto* request = new TEvKeyValue::TEvExecuteTransaction;
+        auto* cmd = request->Record.add_commands()->mutable_write();
+        cmd->set_key("k");
+        cmd->set_value(value);
+        cmd->set_storage_channel(NKeyValue::InlineStorageChannelInPublicApi);
+        return env.Request<TEvKeyValue::TEvExecuteTransaction, TEvKeyValue::TEvExecuteTransactionResponse>(tablet, request);
+    };
+
+    auto response = write("12345678901");
+    UNIT_ASSERT_C(response.status() == NKikimrKeyValue::Statuses::RSTATUS_OK, response.ShortDebugString());
+    env.Refresh(tablet);
+    env.CheckUsage(11, true);
+
+    response = write("x");
+    UNIT_ASSERT_C(response.status() == NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED, response.ShortDebugString());
+    auto* del = new TEvKeyValue::TEvRequest;
+    del->Record.AddCmdDeleteRange()->MutableRange();
+    UNIT_ASSERT_VALUES_EQUAL(env.LegacyRequest(tablet, del).GetStatus(), NMsgBusProxy::MSTATUS_OK);
+    env.Refresh(tablet);
+    env.CheckUsage(0, false);
+
+    response = write("x");
+    UNIT_ASSERT_C(response.status() == NKikimrKeyValue::Statuses::RSTATUS_OK, response.ShortDebugString());
+}
+
 Y_UNIT_TEST(IgnoreOldReportsAndReleasePoolQuotaOnDrop) {
-    TEnv env(true);
+    TEnv env({.SeparatePools = true});
     const ui64 tablet = env.Tablets[0];
     const auto report = [&](ui32 generation, ui64 round, ui64 bytes) {
         auto* ev = new TEvKeyValue::TEvStorageUsageReport;

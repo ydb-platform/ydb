@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 
 namespace NKikimr {
 
@@ -70,7 +71,7 @@ struct TKeyValueFlat::TTxPersistDiskQuota : NTabletFlatExecutor::ITransaction {
 
 void TKeyValueFlat::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev) {
     const auto* msg = ev->Get();
-    if (!WatchesDiskQuota() || msg->PathId != Info()->TenantPathId) {
+    if (!WatchesDiskQuota()) {
         return;
     }
 
@@ -80,26 +81,48 @@ void TKeyValueFlat::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& e
     }
 
     const auto& domain = description.GetDomainDescription();
+    const auto& tenant = Info()->TenantPathId;
+    if (msg->PathId == tenant) {
+        // The parent describes an external database, but its own SchemeShard publishes the quota.
+        const ui64 schemeShard = domain.GetProcessingParams().GetSchemeShard();
+        UpdateQuotaPath(schemeShard && schemeShard != tenant.OwnerId
+            ? TPathId(schemeShard, NSchemeShard::RootPathId) : tenant);
+    }
+
+    if (msg->PathId != QuotaPathId) {
+        return;
+    }
+
     const bool exceeded = domain.GetDomainState().GetDiskQuotaExceeded();
     if (State.DiskQuotaExceeded != exceeded) {
         State.DiskQuotaExceeded = exceeded;
-        Execute(new TTxPersistDiskQuota(msg->PathId, exceeded), ActorContext());
-    }
-
-    // An external database has its own SchemeShard; plain subdomains are managed by their owner.
-    const ui64 schemeShard = domain.GetProcessingParams().GetSchemeShard()
-        ? domain.GetProcessingParams().GetSchemeShard() : msg->PathId.OwnerId;
-    if (QuotaSchemeShardId != schemeShard) {
-        QuotaSchemeShardId = schemeShard;
-        ReportStorageUsage();
+        Execute(new TTxPersistDiskQuota(tenant, exceeded), ActorContext());
     }
 }
 
+void TKeyValueFlat::UpdateQuotaPath(TPathId pathId) {
+    if (QuotaPathId == pathId) {
+        return;
+    }
+
+    const auto& tenant = Info()->TenantPathId;
+    if (QuotaPathId && QuotaPathId != tenant) {
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(QuotaPathId.OwnerId));
+    }
+
+    QuotaPathId = pathId;
+    if (QuotaPathId != tenant) {
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchPathId(QuotaPathId, QuotaPathId.OwnerId));
+    }
+
+    ReportStorageUsage();
+}
+
 void TKeyValueFlat::ReportStorageUsage() {
-    if (QuotaSchemeShardId && AppData()->FeatureFlags.GetEnableKeyValueStorageUsageReports()) {
+    if (QuotaPathId && AppData()->FeatureFlags.GetEnableKeyValueStorageUsageReports()) {
         auto report = MakeHolder<TEvKeyValue::TEvStorageUsageReport>();
         State.FillStorageUsageReport(report->Record);
-        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(report.Release(), QuotaSchemeShardId, false));
+        Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(report.Release(), QuotaPathId.OwnerId, false));
     }
 }
 

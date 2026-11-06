@@ -443,13 +443,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         const TString secretValue = "secret-value";
         CreateSchemaSecret(secretName, secretValue, session);
 
-        // Bypass the helpers, which substitute a short retry policy for tests.
-        auto promise = NThreading::NewPromise<NKqp::TEvDescribeSecretsResponse::TDescription>();
-        auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetActorSystem(0);
-        actorSystem->Send(
-            MakeDescribeSchemaSecretServiceId(actorSystem->NodeId),
-            new TDescribeSchemaSecretsService::TEvResolveSecret(
-                nullptr, "/Root", {secretName}, promise));
+        auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, /* settings */ {});
         AssertSecretValue(secretValue, promise);
     }
 
@@ -569,7 +563,7 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         AssertBadRequest(promise, "<main>: Error: Secret `/Root/secret-name` not found\n");
     }
 
-    Y_UNIT_TEST(SchemeShardNotAvailableWithNoRetryPolicy) {
+    Y_UNIT_TEST(SchemeShardNotAvailableWithExplicitNoRetryPolicy) {
         TKikimrSettings settings;
         auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
             /* statusOverwriteRemainingCount */ 1,

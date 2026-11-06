@@ -698,7 +698,7 @@ public:
         for (auto& [id, group] : Self->GroupMap) {
             group->CalculateGroupStatus();
 
-            group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
+            group->CalculateLayoutStatus(Self, [&] {
                 const auto [it, inserted] = cache.try_emplace(std::make_pair(group->StoragePoolId, group->BridgePileId));
                 if (inserted) {
                     if (const auto jt = Self->StoragePools.find(group->StoragePoolId); jt != Self->StoragePools.end()) {

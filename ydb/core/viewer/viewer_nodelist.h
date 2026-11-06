@@ -43,7 +43,8 @@ class TJsonNodeList : public TViewerPipeClient {
             StoragePoolsFromCache = StoragePools.IsOk();
         }
         Groups = MakeCachedRequestBSControllerGroups();
-        VSlots = MakeCachedRequestBSControllerVSlots();
+        // /pdisk/info can populate the shared cache with only one disk's VSlots.
+        VSlots = RequestBSControllerVSlots();
     }
 
     bool RequestStorageNodes() {
@@ -263,7 +264,7 @@ public:
                     default: false
                 - name: use_cache
                   in: query
-                  description: Use cached storage topology, which can be up to 60 seconds old. Defaults to true when include_storage is enabled. A required pool missing from a cached pool response triggers one refresh without the cache. A cache miss or false causes full-cluster controller system-view reads before database filtering. Has no effect when storage-node expansion is not performed.
+                  description: Use cached storage pools and groups, which can be up to 60 seconds old. Defaults to true when include_storage is enabled. VSlots are always read from the full-cluster controller system view before database filtering because the shared cache may contain a partial response. A required pool missing from a cached pool response triggers one refresh without the cache. A cache miss or false also reads pools and groups directly. Has no effect when storage-node expansion is not performed.
                   schema:
                     type: boolean
                     default: true

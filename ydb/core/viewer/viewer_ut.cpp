@@ -21,6 +21,7 @@
 #include "viewer_database_stats.h"
 #include "viewer_groups.h"
 #include "viewer_nodelist.h"
+#include "pdisk_info.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -595,6 +596,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         bool OldGenerationDonor = false;
         std::optional<bool> UseCache = false;
         ENodeListStorageCache Cache = ENodeListStorageCache::None;
+        bool ReadPDiskInfoBeforeNodeList = false;
         bool MissingCachedPool = false;
         bool Redirect = false;
         std::optional<ui32> DisconnectBscAfterResponses;
@@ -621,6 +623,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TServer server(settings);
         auto& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::VIEWER, NLog::PRI_ERROR);
+        if (options.ReadPDiskInfoBeforeNodeList) {
+            // TServer registers Viewer by node index; cache updates use the node ID.
+            const auto viewerId = runtime.GetLocalServiceId(MakeViewerID(0), 0);
+            runtime.RegisterService(MakeViewerID(runtime.GetNodeId(0)), viewerId, 0);
+        }
 
         const TPathId databaseKey(options.RootDatabase
             ? TPathId(runtime.GetAppData().DomainsInfo->GetDomain()->SchemeRoot, 1)
@@ -631,6 +638,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         std::array<ui32, 3> storageResponses = {};
         bool resolvedSharedDatabase = false;
         bool bscPipeFailureInjected = false;
+        bool pdiskVSlotsRequested = false;
+        bool pdiskVSlotsCacheUpdated = false;
+        const NSysView::TEvSysView::TEvGetVSlotsResponse* pdiskVSlotsResponse = nullptr;
         TActorId bscClientId;
         TActorId bscServerId;
         auto makePools = [](bool missingPool) {
@@ -677,10 +687,54 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
         const auto isNodeListActor = [&](const TActorId& actorId) {
             return actorId.NodeId() == runtime.GetNodeId(0)
+                && !actorId.IsService()
                 && dynamic_cast<TJsonNodeList*>(runtime.FindActor(actorId));
         };
+        const auto isPDiskInfoActor = [&](const TActorId& actorId) {
+            return actorId.NodeId() == runtime.GetNodeId(0)
+                && !actorId.IsService()
+                && dynamic_cast<TPDiskInfo*>(runtime.FindActor(actorId));
+        };
         auto observer = runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& event) {
+            if (options.ReadPDiskInfoBeforeNodeList) {
+                if (event->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsRequest
+                        && isPDiskInfoActor(event->Sender)) {
+                    const auto& record = event->Get<NSysView::TEvSysView::TEvGetVSlotsRequest>()->Record;
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetFrom().GetNodeId(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetFrom().GetPDiskId(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetTo().GetNodeId(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetTo().GetPDiskId(), 1);
+                    pdiskVSlotsRequested = true;
+                }
+                if (event->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse
+                        && isPDiskInfoActor(event->GetRecipientRewrite())) {
+                    pdiskVSlotsResponse = event->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>();
+                    auto& record = event->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>()->Record;
+                    record.ClearEntries();
+                    const auto fullVSlots = makeVSlots();
+                    for (const auto& slot : fullVSlots->Record.GetEntries()) {
+                        if (slot.GetKey().GetNodeId() == 1 && slot.GetKey().GetPDiskId() == 1) {
+                            record.AddEntries()->CopyFrom(slot);
+                        }
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(record.EntriesSize(), 2);
+                }
+                if (pdiskVSlotsResponse && event->GetTypeRewrite() == TEvViewer::EvUpdateSharedCacheTabletResponse) {
+                    const auto& response = event->Get<TEvViewer::TEvUpdateSharedCacheTabletResponse>()->Response;
+                    const auto* slots = std::get_if<std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse>>(&response);
+                    if (slots && slots->get() == pdiskVSlotsResponse) {
+                        UNIT_ASSERT_VALUES_EQUAL((*slots)->Record.EntriesSize(), 2);
+                        pdiskVSlotsCacheUpdated = true;
+                    }
+                }
+            }
             if (isNodeListActor(event->Sender)) {
+                if (options.ReadPDiskInfoBeforeNodeList
+                        && event->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsRequest) {
+                    const auto& record = event->Get<NSysView::TEvSysView::TEvGetVSlotsRequest>()->Record;
+                    UNIT_ASSERT(!record.HasFrom());
+                    UNIT_ASSERT(!record.HasTo());
+                }
                 switch (event->GetTypeRewrite()) {
                     case NSysView::TEvSysView::EvGetStoragePoolsRequest:
                     case NSysView::TEvSysView::EvGetGroupsRequest:
@@ -848,6 +902,30 @@ Y_UNIT_TEST_SUITE(Viewer) {
             runtime.Send(new IEventHandle(MakeViewerID(0), sender,
                 new TEvViewer::TEvUpdateSharedCacheTabletResponse(makeVSlots())));
         }
+        if (options.ReadPDiskInfoBeforeNodeList) {
+            const auto cacheFilledAt = runtime.GetCurrentTime();
+            TNodeListHttpRequest pdiskRequest(HTTP_METHOD_GET);
+            pdiskRequest.CgiParameters.InsertUnescaped("node_id", "1");
+            pdiskRequest.CgiParameters.InsertUnescaped("pdisk_id", "1");
+            pdiskRequest.Uri = TStringBuilder() << "/pdisk/info?" << pdiskRequest.CgiParameters.Print();
+            auto pdiskPage = MakeHolder<TMonPage>("pdisk", "title");
+            TMonService2HttpRequest pdiskMonRequest(nullptr, &pdiskRequest, nullptr, pdiskPage.Get(), "/info", nullptr);
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new NMon::TEvHttpInfo(pdiskMonRequest, token.SerializeAsString())));
+            TAutoPtr<IEventHandle> pdiskHandle;
+            const auto* pdiskResponse = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(pdiskHandle);
+            UNIT_ASSERT_C(pdiskResponse->Answer.StartsWith("HTTP/1.1 200"), pdiskResponse->Answer);
+            UNIT_ASSERT(pdiskVSlotsRequested);
+            // Let the real PDisk handler's cache update run before starting nodelist.
+            if (!pdiskVSlotsCacheUpdated) {
+                TDispatchOptions cacheOptions;
+                cacheOptions.CustomFinalCondition = [&] { return pdiskVSlotsCacheUpdated; };
+                cacheOptions.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+                runtime.DispatchEvents(cacheOptions, TDuration::Seconds(1));
+            }
+            UNIT_ASSERT(pdiskVSlotsCacheUpdated);
+            UNIT_ASSERT(runtime.GetCurrentTime() - cacheFilledAt < TDuration::Seconds(30));
+        }
         if (options.Redirect) {
             runtime.Send(new IEventHandle(MakeViewerID(0), sender,
                 new NMon::TEvHttpInfo(monRequest, token.SerializeAsString())));
@@ -934,7 +1012,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 expectedIds.insert(6);
             }
         }
-        UNIT_ASSERT(actualIds == expectedIds);
+        UNIT_ASSERT_C(actualIds == expectedIds,
+            TStringBuilder() << "Expected node IDs: {" << JoinSeq(", ", expectedIds)
+                << "}, actual: {" << JoinSeq(", ", actualIds) << "}");
     }
 
     Y_UNIT_TEST(NodeListStorageDefault) {
@@ -963,14 +1043,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(NodeListStorageDefaultCacheHit) {
         CheckNodeListStorage({.IncludeStorage = true, .UseCache = std::nullopt,
-            .Cache = ENodeListStorageCache::All, .ExpectedStorageResponses = {{0, 0, 0}}});
+            .Cache = ENodeListStorageCache::All, .ExpectedStorageResponses = {{0, 0, 1}}});
+    }
+
+    Y_UNIT_TEST(NodeListStorageKeepsNodesAfterPDiskInfo) {
+        CheckNodeListStorage({.IncludeStorage = true, .UseCache = true,
+            .Cache = ENodeListStorageCache::All, .ReadPDiskInfoBeforeNodeList = true,
+            .ExpectedStorageResponses = {{0, 0, 1}}});
     }
 
     Y_UNIT_TEST(NodeListStoragePartialCacheHit) {
         CheckNodeListStorage({.IncludeStorage = true, .UseCache = true,
             .Cache = ENodeListStorageCache::PoolsOnly, .ExpectedStorageResponses = {{0, 1, 1}}});
         CheckNodeListStorage({.IncludeStorage = true, .UseCache = true,
-            .Cache = ENodeListStorageCache::GroupsAndVSlots, .ExpectedStorageResponses = {{1, 0, 0}}});
+            .Cache = ENodeListStorageCache::GroupsAndVSlots, .ExpectedStorageResponses = {{1, 0, 1}}});
     }
 
     Y_UNIT_TEST(NodeListStorageExplicitCacheBypass) {
@@ -980,7 +1066,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(NodeListStorageRefreshesMissingCachedPool) {
         CheckNodeListStorage({.IncludeStorage = true, .UseCache = std::nullopt,
-            .Cache = ENodeListStorageCache::All, .MissingCachedPool = true});
+            .Cache = ENodeListStorageCache::All, .MissingCachedPool = true,
+            .ExpectedStorageResponses = {{1, 1, 2}}});
     }
 
     Y_UNIT_TEST(NodeListStorageRefreshesMissingPoolWithPartialCache) {
@@ -996,12 +1083,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(NodeListStorageMissingFreshPoolDoesNotRefreshCachedGroups) {
         CheckNodeListStorage({.IncludeStorage = true, .MissingPool = true, .UseCache = true,
-            .Cache = ENodeListStorageCache::GroupsAndVSlots, .ExpectedStorageResponses = {{1, 0, 0}}});
+            .Cache = ENodeListStorageCache::GroupsAndVSlots, .ExpectedStorageResponses = {{1, 0, 1}}});
     }
 
     Y_UNIT_TEST(NodeListStorageMissingPoolAfterCacheRefreshFails) {
         CheckNodeListStorage({.IncludeStorage = true, .MissingPool = true, .UseCache = true,
-            .Cache = ENodeListStorageCache::All, .MissingCachedPool = true});
+            .Cache = ENodeListStorageCache::All, .MissingCachedPool = true,
+            .ExpectedStorageResponses = {{1, 1, 2}}});
     }
 
     Y_UNIT_TEST(NodeListStorageRedirect) {

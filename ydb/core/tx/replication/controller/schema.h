@@ -70,11 +70,11 @@ struct TControllerSchema: NIceDb::Schema {
         struct WorkerSetComplete: Column<13, NScheme::NTypeIds::Bool> {
             static constexpr bool Default = false;
         };
-        struct PendingDstPathOwnerId: Column<18, NScheme::NTypeIds::Uint64> {
+        struct PendingDstPathOwnerId: Column<18, NScheme::NTypeIds::Uint64> { // Deprecated.
             using Type = TOwnerId;
             static constexpr Type Default = InvalidOwnerId;
         };
-        struct PendingDstPathLocalId: Column<19, NScheme::NTypeIds::Uint64> {
+        struct PendingDstPathLocalId: Column<19, NScheme::NTypeIds::Uint64> { // Deprecated.
             using Type = TLocalPathId;
             static constexpr Type Default = InvalidLocalPathId;
         };

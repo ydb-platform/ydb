@@ -63,9 +63,6 @@ public:
 
         if (Ev->Get()->IsSuccess()) {
             target->SetDstState(NextState(Replication->GetDesiredState()));
-            if (Replication->GetDesiredState() == TReplication::EState::Done) {
-                target->SetPendingDstPathId({});
-            }
             target->UpdateConfig(Replication->GetConfig());
 
             YDB_LOG_NOTICE_CTX(ctx, "Target dst altered",
@@ -99,8 +96,6 @@ public:
             NIceDb::TUpdate<Schema::Replications::Issue>(Replication->GetIssue())
         );
         db.Table<Schema::Targets>().Key(rid, tid).Update(
-            NIceDb::TUpdate<Schema::Targets::PendingDstPathOwnerId>(target->GetPendingDstPathId().OwnerId),
-            NIceDb::TUpdate<Schema::Targets::PendingDstPathLocalId>(target->GetPendingDstPathId().LocalPathId),
             NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
             NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
         );

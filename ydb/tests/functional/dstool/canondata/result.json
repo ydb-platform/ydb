@@ -27,9 +27,12 @@
             "uri": "file://test_canonical_requests.Test.test_cluster_balance_mismatching_size_in_units/results.txt.0"
         }
     ],
+<<<<<<< HEAD
     "test_canonical_requests.Test.test_cluster_balance_skips_not_bsc_ready": {
         "uri": "file://test_canonical_requests.Test.test_cluster_balance_skips_not_bsc_ready/results.txt"
     },
+=======
+>>>>>>> stable-26-1-1
     "test_canonical_requests.Test.test_cluster_get_set": [
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_get_set/results.txt"

@@ -36,6 +36,13 @@ Request {
   }
 }
 
+<<<<<<< HEAD
+=======
+===== http_calls =====
+GET viewer/json/vdiskinfo?... (mocked)
+GET viewer/json/vdiskinfo?... (mocked)
+
+>>>>>>> stable-26-1-1
 ===== mock_base_config =====
 
 TBaseConfig {
@@ -82,11 +89,16 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+<<<<<<< HEAD
     State: OK
     Replicated: true
   }
   Status: "READY"
   Ready: true
+=======
+  }
+  Status: "READY"
+>>>>>>> stable-26-1-1
 }
 VSlot {
   VSlotId {
@@ -99,11 +111,16 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+<<<<<<< HEAD
     State: OK
     Replicated: true
   }
   Status: "READY"
   Ready: true
+=======
+  }
+  Status: "READY"
+>>>>>>> stable-26-1-1
 }
 VSlot {
   VSlotId {
@@ -116,11 +133,16 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+<<<<<<< HEAD
     State: OK
     Replicated: true
   }
   Status: "READY"
   Ready: true
+=======
+  }
+  Status: "READY"
+>>>>>>> stable-26-1-1
 }
 VSlot {
   VSlotId {
@@ -133,11 +155,16 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+<<<<<<< HEAD
     State: OK
     Replicated: true
   }
   Status: "READY"
   Ready: true
+=======
+  }
+  Status: "READY"
+>>>>>>> stable-26-1-1
 }
 VSlot {
   VSlotId {
@@ -150,11 +177,16 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+<<<<<<< HEAD
     State: OK
     Replicated: true
   }
   Status: "READY"
   Ready: true
+=======
+  }
+  Status: "READY"
+>>>>>>> stable-26-1-1
 }
 VSlot {
   VSlotId {
@@ -167,11 +199,16 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+<<<<<<< HEAD
     State: OK
     Replicated: true
   }
   Status: "READY"
   Ready: true
+=======
+  }
+  Status: "READY"
+>>>>>>> stable-26-1-1
 }
 VSlot {
   VSlotId {
@@ -184,11 +221,16 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+<<<<<<< HEAD
     State: OK
     Replicated: true
   }
   Status: "READY"
   Ready: true
+=======
+  }
+  Status: "READY"
+>>>>>>> stable-26-1-1
 }
 VSlot {
   VSlotId {
@@ -201,11 +243,16 @@ VSlot {
   VDiskMetrics {
     AvailableSize: 0
     AllocatedSize: 0
+<<<<<<< HEAD
     State: OK
     Replicated: true
   }
   Status: "READY"
   Ready: true
+=======
+  }
+  Status: "READY"
+>>>>>>> stable-26-1-1
 }
 Group {
   GroupId: 2147483649

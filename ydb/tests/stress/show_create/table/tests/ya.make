@@ -9,7 +9,11 @@ TEST_SRCS(
     test_workload.py
 )
 
-REQUIREMENTS(ram:32 cpu:1)
+IF (NOT SANITIZER_TYPE)
+    REQUIREMENTS(ram:32 cpu:2)
+ELSE()
+    REQUIREMENTS(ram:32 cpu:1)
+ENDIF()
 
 SIZE(MEDIUM)
 

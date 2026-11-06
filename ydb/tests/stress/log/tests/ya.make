@@ -14,7 +14,11 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-REQUIREMENTS(ram:32 cpu:2)
+IF (NOT SANITIZER_TYPE)
+    REQUIREMENTS(ram:32 cpu:3)
+ELSE()
+    REQUIREMENTS(ram:32 cpu:2)
+ENDIF()
 
 DEPENDS(
     ydb/apps/ydb

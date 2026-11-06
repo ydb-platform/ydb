@@ -74,22 +74,9 @@ public:
                     return true;
                 }
                 if (Self->BridgeInfo && !(tablet->IsLeader() && tablet->AsLeader().IsLockedToActor()) &&
+                    !tablet->IsPresentOnLocal(Local) &&
                     !tablet->GetNodeFilter().IsAllowedPile(node->BridgePileId)) {
                     SideEffects.Send(Local, new TEvLocal::TEvStopTablet(tablet->GetFullTabletId(), Generation));
-                    if (tablet->IsPresentOnLocal(Local) && (!tablet->IsLeader() || Generation >= tablet->GetLeader().KnownGeneration)) {
-                        if (tablet->IsStarting() && tablet->BootTime != TInstant()) {
-                            Self->UpdateCounterTabletsStarting(-1);
-                            tablet->BootTime = {};
-                        }
-                        if (tablet->IsLeader()) {
-                            db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::LeaderNode>(0);
-                        } else {
-                            db.Table<Schema::TabletFollowerTablet>().Key(TabletId, FollowerId)
-                                .Update<Schema::TabletFollowerTablet::FollowerNode>(0);
-                        }
-                        tablet->InitiateStop(SideEffects, EHiveEventReason::PileUpdate);
-                        tablet->GetLeader().TryToBoot();
-                    }
                     return true;
                 }
                 if (tablet->IsLeader() && Generation < tablet->GetLeader().KnownGeneration) {

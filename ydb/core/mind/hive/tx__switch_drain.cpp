@@ -143,8 +143,7 @@ public:
         } else if (std::holds_alternative<TBridgePileId>(Target)) {
             const auto pileId = std::get<TBridgePileId>(Target);
             const auto it = Self->BridgePiles.find(pileId);
-            if (it != Self->BridgePiles.end() &&
-                (!Self->BridgeInfo || Self->IsPrimaryPile(pileId) || !Self->HasTabletsToDrain(pileId))) {
+            if (it != Self->BridgePiles.end() && !Self->HasTabletsToDrain(pileId)) {
                 SwitchDrainOff<Schema::BridgePile>(db, &it->second);
             }
         } else {

@@ -327,7 +327,7 @@ void THive::StartPileDrain(TBridgePileInfo& pile) {
 }
 
 bool THive::HasTabletsToDrain(TBridgePileId pileId) const {
-    if (!BridgeInfo) {
+    if (!BridgeInfo || IsPrimaryPile(pileId)) {
         return false;
     }
     for (const auto& [nodeId, node] : Nodes) {
@@ -368,7 +368,7 @@ void THive::Handle(TEvPrivate::TEvProcessPileDrains::TPtr&) {
             pile.DrainRetry = true;
             continue;
         }
-        if (IsPrimaryPile(pileId) || !HasTabletsToDrain(pileId)) {
+        if (!HasTabletsToDrain(pileId)) {
             Execute(CreateSwitchDrainOff(pileId, NKikimrProto::OK, 0));
         } else {
             StartPileDrain(pile);

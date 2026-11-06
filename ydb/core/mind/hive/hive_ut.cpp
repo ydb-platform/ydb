@@ -10514,9 +10514,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, test.HiveTablet, NHive::COUNTER_TABLETS_STARTING), 0);
     }
 
-    Y_UNIT_TEST(TestBridgePileDrainRetriesAfterNodeBecomesUp) {
+    Y_UNIT_TEST(TestBridgePileDrainResumesOnPileUpdateAfterNodeBecomesUp) {
         TBridgeDrainTest test;
         const ui64 tabletId = test.CreateTablet();
+        TBlockEvents<TEvLocal::TEvStatus> blockNodeStatus(test.Runtime);
+        test.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
         test.SetDown(1, true);
         test.Bridge.Promote(1);
         test.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
@@ -10524,13 +10526,20 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(test.DrainPending());
 
         test.SetDown(1, false);
+        test.Runtime.SimulateSleep(TDuration::Seconds(10));
+        UNIT_ASSERT_C(test.IsRunningInPile(tabletId, 0), "pile drain resumed without a new node status or pile update");
+        UNIT_ASSERT(test.DrainPending());
+
+        test.Bridge.SetPileState(1, NKikimrBridge::TClusterState::SYNCHRONIZED);
         UNIT_ASSERT_C(WaitUntil(test.Runtime, [&] { return test.IsRunningInPile(tabletId, 1) && !test.DrainPending(); }),
-            "pile drain did not resume after its target became Up");
+            "pile drain did not resume on a pile update after its target became Up");
     }
 
-    Y_UNIT_TEST(TestBridgePileDrainRetriesAfterResourcesBecomeAvailable) {
+    Y_UNIT_TEST(TestBridgePileDrainResumesOnPileUpdateAfterResourcesBecomeAvailable) {
         TBridgeDrainTest test;
         const ui64 tabletId = test.CreateTablet();
+        TBlockEvents<TEvLocal::TEvStatus> blockNodeStatus(test.Runtime);
+        test.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
         const TActorId targetSender = test.Runtime.AllocateEdgeActor(1);
         auto setTargetMemoryLimit = [&](ui64 memory) {
             auto metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
@@ -10556,16 +10565,24 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(test.DrainPending());
 
         setTargetMemoryLimit(1'000'000'000'000);
+        test.Runtime.SimulateSleep(TDuration::Seconds(10));
+        UNIT_ASSERT_C(test.IsRunningInPile(tabletId, 0), "pile drain resumed without a new node status or pile update");
+        UNIT_ASSERT(test.DrainPending());
+
+        test.Bridge.SetPileState(1, NKikimrBridge::TClusterState::SYNCHRONIZED);
         UNIT_ASSERT_C(WaitUntil(test.Runtime, [&] { return test.IsRunningInPile(tabletId, 1) && !test.DrainPending(); }),
-            "pile drain did not retry after memory became available");
+            "pile drain did not resume on a pile update after memory became available");
     }
 
-    Y_UNIT_TEST(TestBridgePileDrainRetriesAfterTimeout) {
+    Y_UNIT_TEST(TestBridgePileDrainResumesOnPileUpdateAfterTimeout) {
         TBridgeDrainTest test;
         const std::array<ui64, 2> tablets = {test.CreateTablet(0), test.CreateTablet(1)};
+        TBlockEvents<TEvLocal::TEvStatus> blockNodeStatus(test.Runtime);
+        test.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
         TBlockEvents<NHive::TEvPrivate::TEvRestartComplete> blockComplete(test.Runtime);
         test.Bridge.Promote(1);
         UNIT_ASSERT_C(WaitUntil(test.Runtime, [&] { return blockComplete.size() == 1; }), "pile drain did not move its first tablet");
+        test.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
         const TActorId drainActor = blockComplete.front()->GetRecipientRewrite();
         test.Runtime.Send(new IEventHandle(drainActor, test.Sender, new TEvents::TEvWakeup()));
         test.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
@@ -10573,9 +10590,15 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(test.IsRunningInPile(tablets[0], 0) || test.IsRunningInPile(tablets[1], 0));
 
         blockComplete.Stop().Unblock();
+        test.Runtime.SimulateSleep(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(test.Runtime, test.HiveTablet, NHive::COUNTER_DRAIN_EXECUTED), 1);
+        UNIT_ASSERT(test.IsRunningInPile(tablets[0], 0) || test.IsRunningInPile(tablets[1], 0));
+        UNIT_ASSERT(test.DrainPending());
+
+        test.Bridge.SetPileState(1, NKikimrBridge::TClusterState::SYNCHRONIZED);
         UNIT_ASSERT_C(WaitUntil(test.Runtime, [&] {
             return test.IsRunningInPile(tablets[0], 1) && test.IsRunningInPile(tablets[1], 1) && !test.DrainPending();
-        }), "pile drain did not retry the tablets left after its timeout");
+        }), "pile drain did not resume on a pile update after its timeout");
     }
 
     Y_UNIT_TEST(TestBridgePileDrainSkipsFillNode) {

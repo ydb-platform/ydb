@@ -1,5 +1,4 @@
 cluster_id: production-bridge-01
-mode: manual
 # Key each pile by the name its endpoints' SelfCheck reports, including an
 # implicit pile. Each endpoint must address exactly one YDB node, not a balancer.
 endpoints:
@@ -16,6 +15,10 @@ auth:
   token_file: null
 http:
   listen: 127.0.0.1:8080
+  # Extra exact Host authorities for DNS aliases or a reverse proxy. A proxy
+  # must preserve the public Host. Ports are optional; no DNS lookup is made.
+  # trusted_authorities: [skipper.example, 'skipper.example:8443']
+  trusted_authorities: []
 # The SelfCheck and mutation client deadlines are their operation timeouts
 # + 2 s; GetClusterState uses read_timeout as both deadlines. Startup requires
 # state_poll_interval + read_timeout < evidence_ttl,

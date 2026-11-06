@@ -10,8 +10,6 @@
 
 namespace NBridgeSkipper {
 
-enum class EMode { Manual, Auto };
-
 struct TEndpoint {
     TString Uri;
     TString Scheme;
@@ -20,6 +18,19 @@ struct TEndpoint {
 };
 
 TEndpoint ParseEndpoint(TStringBuf uri);
+
+// An HTTP Host authority. Names and IP literals are normalized without DNS;
+// an omitted port remains distinct when matching configured authorities.
+struct THttpAuthority {
+    TString Host;
+    TMaybe<ui16> Port;
+    bool Numeric = false;
+
+    bool operator==(const THttpAuthority&) const = default;
+};
+
+// Throws yexception for malformed host[:port], userinfo, paths or wildcards.
+THttpAuthority ParseHttpAuthority(TStringBuf authority);
 
 struct TYdbAuthConfig {
     TMaybe<TString> CaFile;
@@ -30,6 +41,8 @@ struct TYdbAuthConfig {
 
 struct THttpConfig {
     TString Listen = "127.0.0.1:8080";
+    // Additional exact Host authorities (host or host:port); no DNS lookups.
+    TVector<TString> TrustedAuthorities;
 };
 
 struct TTimingConfig {
@@ -53,7 +66,6 @@ struct TLoggingConfig {
 
 struct TConfig {
     TString ClusterId;
-    EMode Mode = EMode::Manual;
     // Empty pile names are valid and are verified with SelfCheck like any other.
     std::map<TString, TVector<TEndpoint>> Endpoints;
     TYdbAuthConfig Auth;

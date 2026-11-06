@@ -1,6 +1,8 @@
 #include <ydb/apps/bridge_skipper/runtime/state_file.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <util/folder/tempdir.h>
 #include <util/generic/yexception.h>
@@ -25,6 +27,7 @@ TString TemporaryPath(const TTempDir& dir) {
 TPersistentState WithPending() {
     TPersistentState state;
     state.ClusterId = "cluster";
+    state.Mode = EMode::Auto;
     state.GenerationHighWater = std::numeric_limits<ui64>::max();
     state.PendingMutation = TPendingMutation{42, {{"", EPileState::Primary}, {"dc-b", EPileState::Disconnected}}};
     return state;
@@ -59,6 +62,27 @@ Y_UNIT_TEST_SUITE(TSkipperStateFile) {
         UNIT_ASSERT(json.Contains("\"expected_generation\":\"42\""));
     }
 
+    Y_UNIT_TEST(PostRenameFailureFollowsVisibleRecordAndRequiresDurableRewrite) {
+        TTempDir dir;
+        auto file = TStateFile::Open(dir.Name(), "cluster");
+        file->SetDirectorySyncFailureForTests([] { return true; });
+        const auto expected = WithPending();
+        UNIT_ASSERT(!file->Write(expected).empty());
+        UNIT_ASSERT(file->GetState() == expected);
+        const auto bytes = TFileInput(StatePath(dir)).ReadAll();
+        UNIT_ASSERT(bytes.Contains("\"mode\":\"auto\""));
+        file->SetDirectorySyncFailureForTests({});
+        UNIT_ASSERT_VALUES_EQUAL(file->Write(expected), "");
+        file.reset();
+        UNIT_ASSERT(TStateFile::Open(dir.Name(), "cluster")->GetState() == expected);
+    }
+
+    Y_UNIT_TEST(UnversionedStateHasExplicitStartupError) {
+        TTempDir dir;
+        TFileOutput(StatePath(dir)).Write(R"({"cluster_id":"cluster","generation_high_water":"1","pending_mutation":null})");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TStateFile::Open(dir.Name(), "cluster"), yexception, "unversioned state is not supported");
+    }
+
     Y_UNIT_TEST(ClusterBindingAndExclusiveLockAreEnforced) {
         TTempDir dir;
         auto file = TStateFile::Open(dir.Name(), "cluster");
@@ -76,6 +100,7 @@ Y_UNIT_TEST_SUITE(TSkipperStateFile) {
             UNIT_ASSERT_VALUES_EQUAL(file->Write(expected), "");
             UNIT_ASSERT_VALUES_EQUAL(file->ClearPending(), "");
             expected.PendingMutation.reset();
+            expected.Mode = EMode::Observe;
             UNIT_ASSERT(file->GetState() == expected);
             UNIT_ASSERT_VALUES_EQUAL(file->ClearPending(), "");
         }
@@ -95,16 +120,29 @@ Y_UNIT_TEST_SUITE(TSkipperStateFile) {
                 TString(R"({"cluster_id":"cluster","generation_high_water":"1","pending_mutation":[]})"),
                 TString(1024 * 1024 + 1, ' '),
                 TString(R"({"cluster_id":"cluster","generation_high_water":"1","pending_mutation":{"expected_generation":"1","update":{"a":"FUTURE"}}})")}) {
+            TString bytes = corrupt;
+            NJson::TJsonValue current;
+            if (NJson::ReadJsonTree(bytes, &current) && current.IsMap()) {
+                // Exercise each malformed field behind the schema gate rather
+                // than making every case fail only for an absent version.
+                current["state_schema"] = 3;
+                current["mode"] = "observe";
+                if (current["pending_mutation"].IsMap()) {
+                    current["pending_mutation"]["kind"] = "failover";
+                    current["pending_mutation"]["origin"] = "auto";
+                }
+                bytes = NJson::WriteJson(current, false, true);
+            }
             TTempDir dir;
-            TFileOutput(StatePath(dir)).Write(corrupt);
+            TFileOutput(StatePath(dir)).Write(bytes);
             UNIT_ASSERT_EXCEPTION(TStateFile::Open(dir.Name(), "cluster"), yexception);
-            UNIT_ASSERT_VALUES_EQUAL(TFileInput(StatePath(dir)).ReadAll(), corrupt);
+            UNIT_ASSERT_VALUES_EQUAL(TFileInput(StatePath(dir)).ReadAll(), bytes);
         }
     }
 
     Y_UNIT_TEST(PendingGenerationAboveHighWaterIsCorrupt) {
         TTempDir dir;
-        const TString corrupt = R"({"cluster_id":"cluster","generation_high_water":"7","pending_mutation":{"expected_generation":"8","update":{"a":"DISCONNECTED"}}})";
+        const TString corrupt = R"({"state_schema":3,"mode":"observe","cluster_id":"cluster","generation_high_water":"7","pending_mutation":{"expected_generation":"8","update":{"a":"DISCONNECTED"},"kind":"failover","origin":"auto"}})";
         TFileOutput(StatePath(dir)).Write(corrupt);
         UNIT_ASSERT_EXCEPTION_CONTAINS(TStateFile::Open(dir.Name(), "cluster"), yexception, "exceeds generation_high_water");
         UNIT_ASSERT_VALUES_EQUAL(TFileInput(StatePath(dir)).ReadAll(), corrupt);

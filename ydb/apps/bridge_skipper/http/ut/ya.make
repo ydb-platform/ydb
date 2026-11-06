@@ -1,6 +1,9 @@
 UNITTEST_FOR(ydb/apps/bridge_skipper/http)
 
-SRCS(http_ut.cpp)
+SRCS(
+    http_ut.cpp
+    commands_ut.cpp
+)
 
 PEERDIR(
     library/cpp/json

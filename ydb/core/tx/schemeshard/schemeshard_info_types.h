@@ -555,6 +555,19 @@ private:
     ui64 CPU = 0;
 };
 
+// Fill the protobuf stats / metrics of a single shard from TPartitionStats.
+void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartitionStats& tableStats);
+void FillTableMetrics(NKikimrTabletBase::TMetrics* metrics, const TPartitionStats& tableStats);
+
+// Per-shard ready wire entries [tag + len + payload] of the PathDescription
+// repeated fields (TablePartitionStats, TablePartitionMetrics), see
+// BuildTableDescribe for the assembly; element-wise storage lets a stats
+// report renew only the changed shard.
+struct TShardStatsElems {
+    TString Stats;
+    TString Metrics;
+};
+
 // History of a partition (key range). Keyed in the map by the shard that currently backs it;
 // subdivided/merged along the partition lineage in ApplySplitMerge (children inherit the parent).
 // In-memory only; recorded only when EnableSplitMergeDemandTracking is on.
@@ -702,7 +715,9 @@ struct TTableAggregatedStats {
         return Aggregated.PartCount && UpdatedStats.size() == Aggregated.PartCount;
     }
 
-    void UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
+    // Returns whether the shard's stored stats were changed by the update
+    // (reports with stale SeqNo are ignored).
+    bool UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsageDelta, TShardIdx datashardIdx, const TPartitionStats& newStats, TInstant now);
 
     /**
      * Update the statistics data for the given shard and the given follower
@@ -711,8 +726,9 @@ struct TTableAggregatedStats {
      * @param[in] followerId The follower ID
      * @param[in] shardIdx The shard index
      * @param[in] newStats The new statistics to use for updating
+     * @return Whether the shard's stored stats were changed by the update.
      */
-    void UpdateShardStatsForFollower(
+    bool UpdateShardStatsForFollower(
         ui64 followerId,
         const TShardIdx& shardIdx,
         const TPartitionStats& newStats
@@ -989,11 +1005,21 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     TMap<TTxId, TBackupRestoreResult> BackupHistory;
     TMap<TTxId, TBackupRestoreResult> RestoreHistory;
 
-    // Preserialized TDescribeSchemeResult with PathDescription.TablePartitions field filled
-    TString PreserializedTablePartitions;
-    TString PreserializedTablePartitionsNoKeys;
-    // Preserialized TDescribeSchemeResult with PathDescription.Table.SplitBoundary field filled
-    TString PreserializedTableSplitBoundaries;
+    // Per-partition ready wire entries [tag + len + payload] of one
+    // PathDescription repeated field, framed via one-element wrapper
+    // serialization; the describe concatenates them into a single canonical
+    // PathDescription wrapper (BuildTableDescribe). Boundaries are
+    // partition-aligned (the last slot is unused). A vector sized differently
+    // from the partitioning is stale; empty entries are rebuilt lazily;
+    // split/merge splices the vectors so only touched positions rebuild.
+    TVector<TString> PreserializedTablePartitionsElems;
+    TVector<TString> PreserializedTablePartitionsNoKeysElems;
+    TVector<TString> PreserializedTableSplitBoundariesElems;
+    // Per-shard TablePartitionStats/TablePartitionMetrics entries, the
+    // positional twin of the caches above. Renewed eagerly where leader
+    // reports write the stats (RenewShardStatsElems); follower reports do not
+    // renew (they only update TopCpuUsage, not serialized into the elements).
+    TVector<TShardStatsElems> PreserializedTablePartitionStatsElems;
 
     THashMap<TShardIdx, NKikimrSchemeOp::TPartitionConfig> PerShardPartitionConfig;
 
@@ -1368,6 +1394,10 @@ public:
         const TShardIdx& shardIdx,
         const TPartitionStats& newStats
     );
+
+    // Rebuild the shard's cached wire entries from its stored stats; called
+    // where a leader report changed the stats.
+    void RenewShardStatsElems(const TShardIdx& shardIdx);
 
     void RegisterSplitMergeOp(TOperationId txId, const TTxState& txState);
 

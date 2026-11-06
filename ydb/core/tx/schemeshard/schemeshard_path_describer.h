@@ -10,6 +10,26 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+struct TTableDescribeOptions {
+    // Whether the described path element reports IsCreateFinished(); controls the
+    // KIKIMR-4337 self-clearing of per-table pre-serialization caches
+    bool CreateFinished = false;
+
+    bool ReturnBoundaries = false;
+    bool ReturnPartitioning = false;
+    bool ReturnPartitionStats = false;
+    bool ReturnRangeKey = true;
+};
+
+// Builds the partitions/boundaries/stats sections of a table describe from
+// fabricated inputs (table info + shard map + options) into the result builder,
+// updating the per-table pre-serialization caches on TTableInfo
+void BuildTableDescribe(
+    TEvSchemeShard::TEvDescribeSchemeResultBuilder& result,
+    TTableInfo& tableInfo,
+    const THashMap<TShardIdx, TShardInfo>& shardInfos,
+    const TTableDescribeOptions& opts);
+
 class TPathDescriber {
     void FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl,
         TPathElement::EPathSubType subType = TPathElement::EPathSubType::EPathSubTypeEmpty);

@@ -10535,7 +10535,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         auto setTargetMemoryLimit = [&](ui64 memory) {
             auto metrics = MakeHolder<TEvHive::TEvTabletMetrics>();
             metrics->Record.MutableResourceMaximum()->SetMemory(memory);
-            test.Runtime.SendToPipe(test.HiveTablet, targetSender, metrics.Release());
+            test.Runtime.SendToPipe(test.HiveTablet, targetSender, metrics.Release(), 1);
             TAutoPtr<IEventHandle> handle;
             test.Runtime.GrabEdgeEventRethrow<TEvLocal::TEvTabletMetricsAck>(handle);
         };

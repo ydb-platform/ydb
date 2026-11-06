@@ -414,6 +414,52 @@ Y_UNIT_TEST_SUITE(WorkerLifecycle) {
         }
     };
 
+    Y_UNIT_TEST(CommitOffsetOnReadOnlySource) {
+        TSetup s(false);
+        auto& runtime = s.Env.GetRuntime();
+        auto session = s.Session();
+        const auto waitFor = [](auto&& predicate) {
+            const auto deadline = TInstant::Now() + TDuration::Seconds(60);
+            while (TInstant::Now() < deadline) {
+                if (predicate()) {
+                    return;
+                }
+                Sleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_FAIL("Timed out waiting for replication state or committed offset");
+        };
+        const auto alterState = [&](const TString& state) {
+            auto result = session.ExecuteSchemeQuery(TStringBuilder()
+                << "ALTER ASYNC REPLICATION `/Root/replication` SET (STATE = '" << state << "');").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            waitFor([&] {
+                const auto description = s.Env.GetDescription("/Root/replication");
+                const auto& actual = description.GetPathDescription().GetReplicationDescription().GetState();
+                UNIT_ASSERT_C(!actual.HasError(), actual.DebugString());
+                return state == "PAUSED" ? actual.HasPaused() : actual.HasStandBy();
+            });
+        };
+        NYdb::NTopic::TTopicClient topics(s.Env.GetDriver());
+        const auto committedOffset = [&] {
+            auto result = topics.DescribeConsumer(s.StreamPath, "replicationConsumer",
+                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& partitions = result.GetConsumerDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            UNIT_ASSERT(partitions.front().GetPartitionConsumerStats());
+            return partitions.front().GetPartitionConsumerStats()->GetCommittedOffset();
+        };
+
+        alterState("PAUSED");
+        const auto before = committedOffset();
+        s.Upsert(101, 101);
+        runtime.GetAppData().FeatureFlags.SetEnableClientModifications(false);
+        alterState("STANDBY");
+
+        UNIT_ASSERT_VALUES_EQUAL(s.WaitReplicated(101, TDuration::Seconds(60)), 101);
+        waitFor([&] { return committedOffset() > before; });
+    }
+
     Y_UNIT_TEST(ChildrenStartOnDataEnd) {
         TSetup s;
         const auto children = s.SplitRoot();

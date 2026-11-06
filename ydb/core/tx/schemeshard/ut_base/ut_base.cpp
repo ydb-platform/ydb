@@ -12524,7 +12524,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         runtime.GetAppData().AdministrationAllowedSIDs.push_back("true-root@builtin");
 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
               Name: "table"

@@ -17,11 +17,11 @@ public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings) {}
 
-    TAsyncStatus ExportSecret(const std::string& secretPath, const std::string& topicPath,
+    TAsyncStatus ExportSecret(const std::string& path, const std::string& topicPath,
         const TExportSecretSettings& settings)
     {
         auto request = MakeOperationRequest<::Ydb::Secret::ExportSecretRequest>(settings);
-        request.set_secret_path(TStringType{secretPath});
+        request.set_secret_path(TStringType{path});
         request.set_topic_path(TStringType{topicPath});
         return RunSimple<::Ydb::Secret::V1::SecretService,
             ::Ydb::Secret::ExportSecretRequest, ::Ydb::Secret::ExportSecretResponse>(

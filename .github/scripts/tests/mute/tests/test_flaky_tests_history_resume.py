@@ -60,6 +60,24 @@ class DetermineStartDateTest(unittest.TestCase):
             start, end = self._call(end_date_override=self.end_date)
         self.assertEqual(start, expected)
 
+    def test_gap_exactly_max_resume_still_applies_lookback(self):
+        # Cap compares max(date_window), not the lookback-shifted start; at gap == 180
+        # lookback still applies (start = end - 181).
+        stale = self.end_date - datetime.timedelta(days=fth.MAX_RESUME_GAP_DAYS)
+        expected = stale - datetime.timedelta(days=fth.INCREMENTAL_LOOKBACK_DAYS)
+        with mock.patch.object(fth, 'get_max_date_from_history', return_value=stale):
+            start, end = self._call(end_date_override=self.end_date)
+        self.assertEqual(start, expected)
+        self.assertEqual(end, self.end_date)
+
+    def test_gap_one_past_max_resume_is_capped_without_lookback(self):
+        # gap == 181 -> capped to end - 180; lookback not applied on the capped branch.
+        stale = self.end_date - datetime.timedelta(days=fth.MAX_RESUME_GAP_DAYS + 1)
+        expected = self.end_date - datetime.timedelta(days=fth.MAX_RESUME_GAP_DAYS)
+        with mock.patch.object(fth, 'get_max_date_from_history', return_value=stale):
+            start, end = self._call(end_date_override=self.end_date)
+        self.assertEqual(start, expected)
+
     def test_very_stale_history_is_capped_not_unbounded(self):
         # Collection paused for ~2 years: resuming from the true last-recorded day
         # would re-create the unbounded-backfill problem this rework was meant to

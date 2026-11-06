@@ -1207,26 +1207,6 @@ IGraphTransformer::TStatus PgNullIfWrapper(const TExprNode::TPtr& input, TExprNo
     return IGraphTransformer::TStatus::Ok;
 }
 
-IGraphTransformer::TStatus PgQualifiedStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-    Y_UNUSED(output);
-    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    bool isUniversal;
-    if (!EnsureAtomOrUniversal(input->Head(), ctx.Expr, isUniversal)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    if (isUniversal) {
-        input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    input->SetTypeAnn(ctx.Expr.MakeType<TUnitExprType>());
-    return IGraphTransformer::TStatus::Ok;
-}
-
 IGraphTransformer::TStatus PgAnonWindowWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 1, ctx.Expr)) {

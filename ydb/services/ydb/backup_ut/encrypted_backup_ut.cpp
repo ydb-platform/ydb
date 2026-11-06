@@ -604,9 +604,9 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
         importSettings.SymmetricKey(key);
         WaitOpSuccess(YdbImportClient().ImportFromS3(importSettings).GetValueSync());
 
-        auto readStatus = YdbTableClient().RetryOperationSync([&](NTable::TSession readSession) -> TStatus {
+        auto readStatus = YdbTableClient().RetryOperationSync([&](NYdb::NTable::TSession readSession) -> TStatus {
             auto reader = readSession.ReadTable("/Root/LargeBatchRestored/Table",
-                NTable::TReadTableSettings().Ordered(true).ReturnNotNullAsOptional(false)).GetValueSync();
+                NYdb::NTable::TReadTableSettings().Ordered(true).ReturnNotNullAsOptional(false)).GetValueSync();
             if (!reader.IsSuccess()) {
                 return reader;
             }
@@ -630,7 +630,7 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             }
             UNIT_ASSERT_VALUES_EQUAL(row, rowCount);
             return TStatus(EStatus::SUCCESS, {});
-        }, NTable::TRetryOperationSettings().Idempotent(true).MaxTimeout(DEFAULT_OPERATION_WAIT_TIME));
+        }, NYdb::NTable::TRetryOperationSettings().Idempotent(true).MaxTimeout(DEFAULT_OPERATION_WAIT_TIME));
         UNIT_ASSERT_C(readStatus.IsSuccess(), readStatus.GetIssues().ToString());
     }
 

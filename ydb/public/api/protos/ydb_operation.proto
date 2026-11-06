@@ -130,4 +130,14 @@ message Operation {
 
     // User SID (Security ID) of the user who created this operation (if supported).
     string created_by = 10;
+
+    // Authenticated SID of the caller whose request initiated cancellation (if supported).
+    // Empty if the caller's identity is unavailable. Repeated requests do not overwrite it.
+    string cancel_requested_by = 11;
+
+    // Server time at which the request initiating cancellation was accepted (if supported).
+    // Available while cancellation is in progress; end_time records actual completion.
+    // Absent if no request initiated cancellation or for operations without this information.
+    // Repeated requests do not overwrite it.
+    google.protobuf.Timestamp cancel_request_time = 12;
 }

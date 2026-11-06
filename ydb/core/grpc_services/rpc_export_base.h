@@ -47,6 +47,13 @@ struct TExportConv: public TOperationConv<NKikimrExport::TExport> {
     static Operation ToOperation(const NKikimrExport::TExport& in) {
         auto operation = TOperationConv::ToOperation(in);
 
+        if (in.HasCancelRequestedBy()) {
+            operation.set_cancel_requested_by(in.GetCancelRequestedBy());
+        }
+        if (in.HasCancelRequestTime()) {
+            *operation.mutable_cancel_request_time() = in.GetCancelRequestTime();
+        }
+
         if (operation.status() == Ydb::StatusIds::SUCCESS) {
             operation.set_ready(in.GetProgress() == Ydb::Export::ExportProgress::PROGRESS_DONE);
         } else if (operation.status() != Ydb::StatusIds::CANCELLED) {

@@ -289,18 +289,15 @@ TLogSettingsConfigurator::GetColumnShardDatabaseSettings(const NKikimrConfig::TL
 #undef SET_PROPERTY
 
     // Apply default store and table name
-    Cerr << "Check defaults databasePath= " << settings.DatabasePath << " storeName=" << settings.StoreName << " TableName=" << settings.TableName << Endl;
     if (settings.StoreName.empty() || settings.TableName.empty()) {
         auto defs = GetDefaultStoreTableName(sink.GetSource());
 
         if (settings.StoreName.empty()) {
             settings.StoreName = defs.first;
-            Cerr << "Set storeName=" << settings.StoreName << Endl;
         }
 
         if (settings.TableName.empty()) {
             settings.TableName = defs.second;
-            Cerr << "Set tableName=" << settings.TableName << Endl;
         }
     }
     return settings;
@@ -356,17 +353,12 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
         oldSinks = *oldSinksPtr;
     }
 
-    Cerr << "Start dump sinks" << Endl;
-
     const NKikimrConfig::TLogConfig_TSink* defaultSinkPtr{nullptr};
     for(const auto& sink: config.GetSink()) {
         if (sink.GetSource() == DefaultSinkName) {
             auto sinkConfig = sink.ShortDebugString();
             YDB_LOG_INFO("LogSinksConfig: Found default sink settings",
                 {"sinkConfig", sinkConfig});
-
-            Cerr << "       found default sink " << sinkConfig << Endl;
-
             defaultSinkPtr = & sink;
             break;
         }
@@ -395,12 +387,10 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
         } else {
             auto sinkPtr = CreateLogSink(sink, defaultSinkPtr);
             if (sinkPtr != nullptr) {
-                Cerr << "       sink " << sinkConfig << " created" << Endl;
                 YDB_LOG_INFO("LogSinksConfig: Create sink");
 
                 newSinks[sinkConfig] = sinkPtr;
             } else {
-                Cerr << "       sink " << sinkConfig << " not created" << Endl;
                 YDB_LOG_ERROR("LogSinksConfig: Can't create sink");
             }
         }
@@ -410,8 +400,6 @@ void TLogSettingsConfigurator::ApplyLogSinkSettings(const NKikimrConfig::TLogCon
     for(auto& oldSink: oldSinks) {
         oldSink.second->Stop();
     }
-
-    Cerr << "Done dump sinks" << Endl;
 }
 
 IActor *CreateLogSettingsConfigurator()

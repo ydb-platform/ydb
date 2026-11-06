@@ -47,9 +47,7 @@ Ydb::Topic::CreateTopicRequest BuildCreateTopicTx(
 
     auto* consumer = request.add_consumers();
     consumer->set_name(ConsumerName);
-    if (params.MessageRetentionPeriod) {
-        consumer->mutable_availability_period()->set_seconds(params.MessageRetentionPeriod);
-    }
+    consumer->mutable_availability_period()->set_seconds(params.MessageRetentionPeriod);
     auto* consumerType = consumer->mutable_shared_consumer_type();
     consumerType->set_keep_messages_order(isFifo);
     if (params.DefaultDelayMessageTimeMs) {

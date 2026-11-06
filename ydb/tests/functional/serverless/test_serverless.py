@@ -32,26 +32,10 @@ CLUSTER_CONFIG = dict(
     nodes=1,
     enable_metering=True,
     additional_log_configs={
-        'TX_PROXY': LogLevels.DEBUG,
-        'KQP_PROXY': LogLevels.DEBUG,
-        'KQP_WORKER': LogLevels.DEBUG,
-        'KQP_GATEWAY': LogLevels.DEBUG,
-        'GRPC_PROXY': LogLevels.TRACE,
-        'KQP_YQL': LogLevels.DEBUG,
-        'TX_DATASHARD': LogLevels.DEBUG,
         'FLAT_TX_SCHEMESHARD': LogLevels.DEBUG,
-        'SCHEMESHARD_DESCRIBE': LogLevels.DEBUG,
-
-        'SCHEME_BOARD_POPULATOR': LogLevels.DEBUG,
-
         'SCHEME_BOARD_REPLICA': LogLevels.ERROR,
         'SCHEME_BOARD_SUBSCRIBER': LogLevels.ERROR,
         'TX_PROXY_SCHEME_CACHE': LogLevels.ERROR,
-
-        'CMS': LogLevels.DEBUG,
-        'CMS_TENANTS': LogLevels.DEBUG,
-        'DISCOVERY': LogLevels.TRACE,
-        'GRPC_SERVER': LogLevels.DEBUG
     },
     extra_feature_flags=['enable_serverless_exclusive_dynamic_nodes'],
     datashard_config={

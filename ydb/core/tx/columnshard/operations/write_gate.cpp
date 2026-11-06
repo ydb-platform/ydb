@@ -204,9 +204,13 @@ TWriteGate::TDrainedWrites TWriteGate::DrainWriteQueue(const TActorContext& ctx,
     return drained;
 }
 
-bool TWriteGate::ArePortionsLoaded(const NOlap::TEvPassWriteGate& batch) const {
-    return TablesManager.GetPrimaryIndexSafe().ArePortionsLoadedFrom(
-        batch.GetWriteData().GetWriteMeta().GetPathId().InternalPathId, batch.GetMinKey());
+bool TWriteGate::WaitsForLoadedPortions(const NOlap::TEvPassWriteGate& batch) const {
+    const TInternalPathId pathId = batch.GetWriteData().GetWriteMeta().GetPathId().InternalPathId;
+    const auto& engine = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    if (engine.ArePortionsLoadedFrom(pathId, batch.GetMinKey())) {
+        return false;
+    }
+    return batch.GetReadsExistingRows() || engine.GetGranuleVerified(pathId).GetOptimizerPlanner().LimitsPortionOverlaps();
 }
 
 void TWriteGate::ScheduleRetry(const TActorContext& ctx) {
@@ -230,7 +234,7 @@ TWriteGate::EBatchDecision TWriteGate::PassPreparedBatch(NOlap::TEvPassWriteGate
     if (const std::optional<ui64> lockId = ev->Get()->GetContext().GetLockId(); lockId && IsLockAborted(*lockId)) {
         return EBatchDecision::LockAborted;
     }
-    if (ArePortionsLoaded(*ev->Get())) {
+    if (!WaitsForLoadedPortions(*ev->Get())) {
         return EBatchDecision::Pass;
     }
     const std::optional<TMonotonic> deadline =
@@ -255,14 +259,14 @@ void TWriteGate::DrainWaitingForLoadedPortions(const TMonotonic now, TDrainedWri
     }
     WaitingForLoadedPortions.erase(firstTimedOut, WaitingForLoadedPortions.end());
 
-    const auto firstLoaded =
+    const auto firstReleased =
         std::stable_partition(WaitingForLoadedPortions.begin(), WaitingForLoadedPortions.end(), [&](const TWaitingForLoadedPortions& waiting) {
-            return !ArePortionsLoaded(*waiting.Event->Get());
+            return WaitsForLoadedPortions(*waiting.Event->Get());
         });
-    for (auto it = firstLoaded; it != WaitingForLoadedPortions.end(); ++it) {
+    for (auto it = firstReleased; it != WaitingForLoadedPortions.end(); ++it) {
         TActivationContext::Send(it->Event.Release());
     }
-    WaitingForLoadedPortions.erase(firstLoaded, WaitingForLoadedPortions.end());
+    WaitingForLoadedPortions.erase(firstReleased, WaitingForLoadedPortions.end());
     Counters.GetTabletCounters()->SetCounter(COUNTER_WRITES_WAITING_LOADED_PORTIONS, WaitingForLoadedPortions.size());
 }
 

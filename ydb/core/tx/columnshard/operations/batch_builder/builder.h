@@ -67,6 +67,7 @@ private:
     const NArrow::TContainerWithIndexes<arrow::RecordBatch> Batch;
     const TWritingContext Context;
     const NArrow::TSimpleRow MinKey;
+    const bool ReadsExistingRows;
 
 public:
     const NEvWrite::TWriteData& GetWriteData() const {
@@ -89,12 +90,17 @@ public:
         return MinKey;
     }
 
+    bool GetReadsExistingRows() const {
+        return ReadsExistingRows;
+    }
+
     TEvPassWriteGate(NEvWrite::TWriteData&& writeData, NArrow::TContainerWithIndexes<arrow::RecordBatch>&& batch, const TWritingContext& context,
-        NArrow::TSimpleRow&& minKey)
+        NArrow::TSimpleRow&& minKey, const bool readsExistingRows)
         : WriteData(std::move(writeData))
         , Batch(std::move(batch))
         , Context(context)
         , MinKey(std::move(minKey))
+        , ReadsExistingRows(readsExistingRows)
     {
     }
 };

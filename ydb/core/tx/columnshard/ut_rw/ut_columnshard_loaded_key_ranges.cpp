@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
 #include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
 namespace NKikimr {
@@ -24,8 +25,9 @@ Y_UNIT_TEST_SUITE(TColumnShardLoadedKeyRanges) {
     const TDuration NoAnswerWait = TDuration::Seconds(1);
 
     // rows 0..999 of the test table, committed; returns the snapshot they are visible at
-    NOlap::TSnapshot StartShardWithRows(TTestBasicRuntime & runtime, TActorId & sender) {
+    NOlap::TSnapshot StartShardWithRows(TTestBasicRuntime & runtime, TActorId & sender, const TString& compactionPreset = "tiling++") {
         TTester::Setup(runtime);
+        runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset(compactionPreset);
         sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
         TDispatchOptions options;
@@ -76,6 +78,22 @@ Y_UNIT_TEST_SUITE(TColumnShardLoadedKeyRanges) {
         const TestTableDescription table;
         UNIT_ASSERT(
             WriteData(runtime, sender, 2, TableId, MakeTestBlob(rows, table.Schema), table.Schema, false, nullptr, modificationType, lockId));
+    }
+
+    void StartSnapshotIsolatedUpsert(
+        TTestBasicRuntime & runtime, TActorId & sender, const std::pair<ui64, ui64> rows, const NOlap::TSnapshot& snapshot) {
+        const TestTableDescription table;
+        auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(2, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        write->SetLockId(LockId, 1);
+        write->Record.SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+        write->Record.MutableMvccSnapshot()->SetStep(snapshot.GetPlanStep());
+        write->Record.MutableMvccSnapshot()->SetTxId(snapshot.GetTxId());
+        auto& operation = write->AddOperation(
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, TTableId(0, TableId, 1), {}, 0, NKikimrDataEvents::FORMAT_ARROW);
+        *operation.MutablePayloadSchema() = NArrow::SerializeSchema(*NArrow::MakeArrowSchema(table.Schema));
+        NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(*write);
+        writer.AddDataToPayload(MakeTestBlob(rows, table.Schema));
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, write.release());
     }
 
     void NotifyLockGone(TTestBasicRuntime & runtime, TActorId & sender) {
@@ -205,6 +223,49 @@ Y_UNIT_TEST_SUITE(TColumnShardLoadedKeyRanges) {
         UNIT_ASSERT(!IsWriteAnswered(runtime));
 
         SetLoadedKeyRanges(runtime, sender, csControllerGuard, LoadedFromRow(100));
+        UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    }
+
+    Y_UNIT_TEST(LcBucketsWriteBelowLoadedKeysLands) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        TActorId sender;
+        Y_UNUSED(StartShardWithRows(runtime, sender, "lc-buckets"));
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, LoadedFromRow(500));
+
+        StartWrite(runtime, sender, { 100, 110 });
+        UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    }
+
+    // its own read needs the rows, so it waits at the write gate, where it has a timeout
+    Y_UNIT_TEST(LcBucketsInsertBelowLoadedKeysWaits) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        TActorId sender;
+        Y_UNUSED(StartShardWithRows(runtime, sender, "lc-buckets"));
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, LoadedFromRow(5000));
+
+        StartWrite(runtime, sender, { 2000, 2010 }, NEvWrite::EModificationType::Insert);
+        UNIT_ASSERT(!IsWriteAnswered(runtime));
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, sender, "ColumnShard/WritesWaitingLoadedPortions"), 1);
+
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, NOlap::TLoadedKeyRanges::BuildEverything());
+        UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    }
+
+    // a blind write under snapshot isolation reads the rows committed after its snapshot to find conflicts
+    Y_UNIT_TEST(LcBucketsSnapshotIsolatedUpsertBelowLoadedKeysWaits) {
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TTestBasicRuntime runtime;
+        TActorId sender;
+        const NOlap::TSnapshot snapshot = StartShardWithRows(runtime, sender, "lc-buckets");
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, LoadedFromRow(5000));
+
+        StartSnapshotIsolatedUpsert(runtime, sender, { 2000, 2010 }, snapshot);
+        UNIT_ASSERT(!IsWriteAnswered(runtime));
+        UNIT_ASSERT_VALUES_EQUAL(GetSimpleCounter(runtime, sender, "ColumnShard/WritesWaitingLoadedPortions"), 1);
+
+        SetLoadedKeyRanges(runtime, sender, csControllerGuard, NOlap::TLoadedKeyRanges::BuildEverything());
         UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
     }
 

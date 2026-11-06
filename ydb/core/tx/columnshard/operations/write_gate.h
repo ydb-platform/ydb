@@ -66,7 +66,7 @@ private:
     TOverloadStatus CheckExecutorOverload() const;
     EOverloadStatus CheckCompactionBacklog(const TInternalPathId pathId) const;
     void ReportCompactionOverload(const bool compactionWait);
-    bool ArePortionsLoaded(const NOlap::TEvPassWriteGate& batch) const;
+    bool WaitsForLoadedPortions(const NOlap::TEvPassWriteGate& batch) const;
     void DrainWaitingForLoadedPortions(const TMonotonic now, TDrainedWrites& drained);
     bool HasWaitingDeadline() const;
     void ScheduleRetry(const TActorContext& ctx);

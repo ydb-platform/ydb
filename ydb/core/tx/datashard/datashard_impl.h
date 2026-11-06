@@ -2973,9 +2973,9 @@ private:
 
     TUserTable::TTableInfos TableInfos;  // tableId -> local table info
     NKikimrTxDataShard::TDatabaseFreezeState DatabaseFreeze;
-    // Epoch whose DeliveryLost flag is known to be committed to Sys.
-    ui64 DatabaseFreezeDeliveryLostPersistedEpoch = 0;
     THashSet<ui64> DatabaseFreezeAcceptedTxIds;
+    // Local write transactions from construction through Complete(), including
+    // queued requests and requests that finish with an error.
     ui64 DatabaseFreezeLocalWrites = 0;
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
@@ -3226,7 +3226,6 @@ private:
     TSet<ui64> ChangeRecordsToRemove; // ui64 is order
     bool RequestChangeRecordsInFly = false;
     bool RemoveChangeRecordsInFly = false;
-    bool UnconfirmedChangeRecordsRemoval = false;
     THashMap<ui64, TEnqueuedRecord> ChangesQueue; // ui64 is order
     TIntrusiveList<TEnqueuedRecord, TEnqueuedRecordTag> ChangesList;
     ui64 ChangesQueueBytes = 0;

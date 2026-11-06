@@ -267,7 +267,7 @@ class TAsyncIndexChangeSenderMain
     void AutoRemove(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"eventDetails", ev->Get()->ToString()});
-        RemoveRecords(std::move(ev->Get()->Records), false);
+        RemoveRecords(std::move(ev->Get()->Records));
     }
 
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx) {

@@ -316,10 +316,6 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
             Pipeline.AddCommittingOp(*MvccVersion);
         }
 
-        if (!LocalWriteRegistered) {
-            ++Self->DatabaseFreezeLocalWrites;
-            LocalWriteRegistered = true;
-        }
         if (UseStepTxId(record)) {
             txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, TRowVersion(record.GetStep(), record.GetTxId()));
         } else {
@@ -342,6 +338,7 @@ public:
         , Ev(std::move(ev))
         , Status(new TEvChangeExchange::TEvStatus)
     {
+        ++Self->DatabaseFreezeLocalWrites;
     }
 
     TTxType GetTxType() const override {
@@ -417,9 +414,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         Y_ENSURE(Status);
 
-        if (LocalWriteRegistered) {
-            --Self->DatabaseFreezeLocalWrites;
-        }
+        --Self->DatabaseFreezeLocalWrites;
 
         if (MvccVersion) {
             Pipeline.RemoveCommittingOp(*MvccVersion);
@@ -439,7 +434,6 @@ private:
     TEvChangeExchange::TEvApplyRecords::TPtr Ev;
     THolder<TEvChangeExchange::TEvStatus> Status;
     std::optional<TRowVersion> MvccVersion;
-    bool LocalWriteRegistered = false;
 
     TSerializedCellVec KeyCells;
     TSerializedCellVec ValueCells;

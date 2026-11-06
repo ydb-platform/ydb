@@ -338,13 +338,6 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         auto it = Self->ChangeRecordsToRemove.begin();
-        if (Self->IsDatabaseFrozen() && Self->DatabaseFreeze.GetDeliveryLost()
-            && Self->DatabaseFreezeDeliveryLostPersistedEpoch != Self->DatabaseFreeze.GetEpoch())
-        {
-            // Commit the first loss atomically with removal of its records.
-            Self->PersistSys(db, Schema::Sys_DatabaseFreeze, Self->DatabaseFreeze.SerializeAsString());
-            PersistedDeliveryLostEpoch = Self->DatabaseFreeze.GetEpoch();
-        }
         while (RemovedCount < BucketSize && it != Self->ChangeRecordsToRemove.end()) {
             Self->RemoveChangeRecord(db, *it);
 
@@ -362,15 +355,10 @@ public:
             {"left", Self->ChangeRecordsToRemove.size()},
             {"tabletId", Self->TabletID()});
 
-        if (PersistedDeliveryLostEpoch && Self->DatabaseFreeze.GetEpoch() == PersistedDeliveryLostEpoch) {
-            Self->DatabaseFreezeDeliveryLostPersistedEpoch = PersistedDeliveryLostEpoch;
-        }
-
         if (Self->ChangeRecordsToRemove) {
             Self->Execute(new TTxRemoveChangeRecords(Self), ctx);
         } else {
             Self->RemoveChangeRecordsInFly = false;
-            Self->UnconfirmedChangeRecordsRemoval = false;
         }
 
         if (ChangeExchangeSplit) {
@@ -388,7 +376,6 @@ public:
 private:
     static constexpr size_t BucketSize = 1000;
     size_t RemovedCount = 0;
-    ui64 PersistedDeliveryLostEpoch = 0;
     THashSet<ui64> ActivationList;
     bool ChangeExchangeSplit = false;
 
@@ -459,17 +446,6 @@ void TDataShard::Handle(TEvPrivate::TEvRequestChangeRecords::TPtr&, const TActor
 
 /// Remove
 void TDataShard::Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx) {
-    if (!ev->Get()->DeliveryConfirmed) {
-        for (const auto order : ev->Get()->Records) {
-            if (ChangesQueue.contains(order)) {
-                UnconfirmedChangeRecordsRemoval = true;
-                if (IsDatabaseFrozen()) {
-                    DatabaseFreeze.SetDeliveryLost(true);
-                }
-                break;
-            }
-        }
-    }
     ChangeRecordsToRemove.insert(ev->Get()->Records.begin(), ev->Get()->Records.end());
     ScheduleRemoveChangeRecords(ctx);
 }

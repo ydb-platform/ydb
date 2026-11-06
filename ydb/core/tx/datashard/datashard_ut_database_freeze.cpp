@@ -2,25 +2,31 @@
 #include "change_exchange_impl.h"
 #include "datashard_ut_common_kqp.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
-#include <ydb/core/tablet_flat/flat_boot_cookie.h>
-#include <ydb/core/tablet_flat/flat_redo_player.h>
-#include <ydb/core/tablet_flat/flat_sausage_slicer.h>
+#include <ydb/core/testlib/tx_helpers.h>
 #include <ydb/core/tx/datashard/ut_common/database_freeze.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 
+#include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <google/protobuf/descriptor.h>
+#include <google/protobuf/unknown_field_set.h>
 
 #include <util/string/cast.h>
+#include <util/stream/str.h>
+#include <util/string/printf.h>
 
 namespace NKikimr {
 
@@ -153,13 +159,14 @@ struct TCdcFreezeEnv : TFreezeEnv {
         : TFreezeEnv(std::move(options), CdcConfig())
     {}
 
-    void AddStream(bool resolved = false, bool initialScan = false, ui32 partitions = 1) {
+    void AddStream(bool resolved = false, bool initialScan = false, ui32 partitions = 1, bool topicAutoPartitioning = false) {
         TShardedTableOptions::TCdcStream stream{
             .Name = "Stream",
             .Mode = NKikimrSchemeOp::ECdcStreamModeUpdate,
             .Format = NKikimrSchemeOp::ECdcStreamFormatJson,
             .TopicPartitions = partitions,
         };
+        stream.TopicAutoPartitioning = topicAutoPartitioning;
         if (resolved) {
             stream.VirtualTimestamps = true;
             // Keep periodic resolved records out of the final-ACK assertions.
@@ -190,62 +197,6 @@ struct TCdcFreezeEnv : TFreezeEnv {
 
     void Thaw(ui64 epoch = 2) {
         WaitStage(TStage::OPEN, epoch);
-    }
-};
-
-// Inspect actual durable updates without adding instrumentation to DataShard.
-// Schema ids: Sys = 1, Sys::Bytes = 2, Sys_DatabaseFreeze = 49,
-// ChangeRecords = 17.
-struct TFreezeRemovalLog {
-    TMap<ui64, size_t> DeliveryLostWrites;
-    size_t RemovedRecords = 0;
-
-    bool NeedIn(ui32 table) const {
-        return table == 1 || table == 17;
-    }
-
-    void DoUpdate(ui32 table, NTable::ERowOp op, TArrayRef<const TRawTypeValue> keys,
-            TArrayRef<const NTable::TUpdateOp> updates, TRowVersion) {
-        if (table == 17 && op == NTable::ERowOp::Erase) {
-            ++RemovedRecords;
-        } else if (table == 1 && keys.size() == 1
-                && TCell(static_cast<const char*>(keys[0].Data()), keys[0].Size()).AsValue<ui64>() == 49) {
-            for (const auto& update : updates) {
-                if (update.Tag == 2) {
-                    TStage state;
-                    UNIT_ASSERT(state.ParseFromArray(update.Value.Data(), update.Value.Size()));
-                    if (state.GetDeliveryLost()) {
-                        ++DeliveryLostWrites[state.GetEpoch()];
-                    }
-                }
-            }
-        }
-    }
-
-    template<class... TArgs> void DoBegin(TArgs&&...) {}
-    void DoAnnex(TArrayRef<const TStdPad<NPageCollection::TGlobId>>) {}
-    template<class... TArgs> void DoFlush(TArgs&&...) {}
-    template<class... TArgs> void DoUpdateTx(TArgs&&...) {}
-    template<class... TArgs> void DoCommitTx(TArgs&&...) {}
-    template<class... TArgs> void DoRemoveTx(TArgs&&...) {}
-    template<class... TArgs> void DoLockRowTx(TArgs&&...) {}
-
-    void Observe(const TEvTablet::TEvCommit& commit) {
-        if (commit.IsSnapshot) {
-            return;
-        }
-        TString redo = commit.EmbeddedLogBody;
-        for (const auto& ref : commit.References) {
-            using TCookie = NTabletFlatExecutor::NBoot::TCookie;
-            const TCookie cookie(ref.Id.Cookie());
-            if (cookie.Type() == TCookie::EType::Log && cookie.Index() == TCookie::EIdx::RedoLz4) {
-                redo.append(ref.Buffer);
-            }
-        }
-        if (redo) {
-            const TString plain = NPageCollection::TSlicer::Lz4()->Decode(redo);
-            NTable::NRedo::TPlayer<TFreezeRemovalLog>(*this).Replay({plain.data(), plain.size()});
-        }
     }
 };
 
@@ -372,25 +323,6 @@ void CheckPreparedTransactionFreezeRestart(bool afterPlan, bool isVolatile = fal
     UNIT_ASSERT_VALUES_EQUAL(env.Write(3, 30).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 }
 
-void CheckDiscardFailsFreeze(TCdcFreezeEnv& env,
-        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>& removals,
-        ui64 order)
-{
-    env.Runtime.WaitFor("discarded change record removal", [&] { return !removals.empty(); }, TDuration::Seconds(10));
-    UNIT_ASSERT_VALUES_EQUAL(removals.size(), 1);
-    const auto& removal = *removals.front()->Get();
-    UNIT_ASSERT_VALUES_EQUAL(removal.Records.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(removal.Records.front(), order);
-    UNIT_ASSERT_C(!removal.DeliveryConfirmed,
-        "Discarded change record is incorrectly reported as delivered");
-
-    removals.Stop().Unblock();
-    const auto result = env.Stage(TStage::DRAIN_INDEXES);
-    UNIT_ASSERT(result.GetReady());
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), ui32(Ydb::StatusIds::PRECONDITION_FAILED), result.ShortDebugString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssue(), "Change records were discarded during database freeze");
-}
-
 void CheckPreparedFinalResolvedAfterWriterDisconnect(ui32 partitions) {
     TCdcFreezeEnv env;
     env.AddStream(true, false, partitions);
@@ -423,14 +355,10 @@ void CheckPreparedFinalResolvedAfterWriterDisconnect(ui32 partitions) {
         }
     });
     bool finalRemoved = false;
-    bool finalRemovalConfirmed = false;
     auto removals = env.Runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>([&](auto& ev) {
         for (const auto order : ev->Get()->Records) {
             if (finalOrder && order == finalOrder) {
                 finalRemoved = true;
-                finalRemovalConfirmed |= ev->Get()->DeliveryConfirmed;
-                Cerr << "... final resolved removal: order# " << order
-                    << " deliveryConfirmed# " << ev->Get()->DeliveryConfirmed << Endl;
             }
         }
     });
@@ -461,7 +389,7 @@ void CheckPreparedFinalResolvedAfterWriterDisconnect(ui32 partitions) {
     }
 
     // Keep recreation paused while the other partition completes its broadcast ACK.
-    // This also checks that a lost delivery is retained until that later completion.
+    // The disconnected partition must still owe its final resolved ACK.
     TBlockEvents<TEvTxProxySchemeCache::TEvNavigateKeySetResult> resolving(env.Runtime, [&](const auto& ev) {
         return ev->GetRecipientRewrite() == streamSender;
     });
@@ -505,7 +433,156 @@ void CheckPreparedFinalResolvedAfterWriterDisconnect(ui32 partitions) {
     ack.Stop().Unblock();
     env.WaitStage(TStage::DRAIN_CDC);
     UNIT_ASSERT(finalRemoved);
-    UNIT_ASSERT(finalRemovalConfirmed);
+}
+
+void CheckFinalResolvedAfterTopicSplit(bool restartDataShard) {
+    TCdcFreezeEnv env;
+    env.AddStream(true, false, 2, true);
+    const auto shardActor = ResolveTablet(env.Runtime, env.Shards.at(0));
+
+    TActorId streamSender;
+    ui64 finalOrder = 0;
+    THashMap<TActorId, ui64> partitionIds;
+    THashSet<TActorId> finalRecipients;
+    THashSet<ui64> completedPartitions;
+    auto records = env.Runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRecords>([&](auto& ev) {
+        if (ev->Sender == shardActor) {
+            streamSender = ev->GetRecipientRewrite();
+        }
+        for (const auto& record : ev->Get()->Records) {
+            if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcHeartbeat) {
+                UNIT_ASSERT(!finalOrder || finalOrder == record->GetOrder());
+                finalOrder = record->GetOrder();
+                if (partitionIds.contains(ev->GetRecipientRewrite())) {
+                    finalRecipients.insert(ev->GetRecipientRewrite());
+                }
+            }
+        }
+    });
+    bool priming = false;
+    bool primed = false;
+    auto ready = env.Runtime.AddObserver<NChangeExchange::TEvChangeExchangePrivate::TEvReady>([&](auto& ev) {
+        const auto partitionId = ev->Get()->PartitionId;
+        partitionIds[ev->Sender] = partitionId;
+        if (priming && !finalOrder && ev->GetRecipientRewrite() == streamSender) {
+            primed = true;
+        }
+        if (finalRecipients.contains(ev->Sender)) {
+            completedPartitions.insert(partitionId);
+        }
+    });
+    bool finalRemoved = false;
+    auto removals = env.Runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>([&](auto& ev) {
+        for (const auto order : ev->Get()->Records) {
+            if (finalOrder && order == finalOrder) {
+                finalRemoved = true;
+            }
+        }
+    });
+
+    // Resolve the original P0/P1 topology before splitting P1. Keep the sender's
+    // metadata refresh paused, while the actual scheme operation completes.
+    TBlockEvents<NPQ::TEvPartitionWriter::TEvWriteResponse> initialAck(env.Runtime);
+    UNIT_ASSERT_VALUES_EQUAL(env.Write(1, 10).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    env.Runtime.WaitFor("initial CDC write acknowledgement", [&] { return !initialAck.empty(); }, TDuration::Seconds(10));
+    UNIT_ASSERT(streamSender);
+    UNIT_ASSERT(initialAck.front()->Get()->IsSuccess());
+    priming = true;
+    initialAck.Stop().Unblock();
+    env.Runtime.WaitFor("CDC sender using the original topic topology", [&] { return primed; }, TDuration::Seconds(10));
+    TBlockEvents<TEvTxProxySchemeCache::TEvNavigateKeySetResult> resolving(env.Runtime, [&](const auto& ev) {
+        return ev->GetRecipientRewrite() == streamSender;
+    });
+
+    auto splitRequest = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto& modify = *splitRequest->Record.MutableTransaction()->MutableModifyScheme();
+    modify.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup);
+    modify.SetWorkingDir("/Root/Table/Stream");
+    modify.SetInternal(true);
+    auto& topic = *modify.MutableAlterPersQueueGroup();
+    topic.SetName("streamImpl");
+    auto& split = *topic.AddSplit();
+    split.SetPartition(1);
+    // P1 is the upper half of the 128-bit hash space; split it at 3/4.
+    split.SetSplitBoundary(TString(1, '\xc0'));
+    env.Runtime.Send(new IEventHandle(MakeTxProxyID(), env.Sender, splitRequest.Release()));
+    const auto splitResponse = env.Runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(env.Sender);
+    UNIT_ASSERT_VALUES_EQUAL_C(splitResponse->Get()->Record.GetStatus(),
+        TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress,
+        splitResponse->Get()->Record.ShortDebugString());
+    WaitTxNotification(env.Server, env.Sender, splitResponse->Get()->Record.GetTxId());
+    UNIT_ASSERT_VALUES_EQUAL(finalOrder, 0);
+
+    TBlockEvents<NPQ::TEvPartitionWriter::TEvWriteResponse> childAcks(env.Runtime, [&](const auto& ev) {
+        if (!finalOrder || !ev->Get()->IsSuccess()) {
+            return false;
+        }
+        const auto& response = ev->Get()->Record.GetPartitionResponse();
+        if (response.CmdWriteResultSize() != 1 || response.GetCmdWriteResult(0).GetSeqNo() != i64(finalOrder)) {
+            return false;
+        }
+        const auto partitionId = partitionIds.at(ev->GetRecipientRewrite());
+        // The unaffected P0 may confirm the broadcast while topology resolution
+        // is paused. Both new children, P2 and P3, must remain unconfirmed.
+        return partitionId != 0;
+    });
+    env.WaitStage(TStage::FENCE_WRITES);
+    env.WaitStage(TStage::DRAIN_INDEXES);
+    const auto draining = env.Stage(TStage::DRAIN_CDC);
+    UNIT_ASSERT_VALUES_EQUAL(draining.GetStatus(), ui32(Ydb::StatusIds::SUCCESS));
+    UNIT_ASSERT(!draining.GetReady());
+    env.Runtime.WaitFor("final resolved confirmed by P0", [&] { return completedPartitions.contains(0); }, TDuration::Seconds(10));
+    env.Runtime.WaitFor("CDC sender refreshing the old topology", [&] { return !resolving.empty(); }, TDuration::Seconds(10));
+    UNIT_ASSERT(!finalRemoved);
+    UNIT_ASSERT(!env.Stage(TStage::DRAIN_CDC).GetReady());
+
+    resolving.Stop().Unblock();
+    env.Runtime.WaitFor("final resolved acknowledgements from both split children", [&] { return childAcks.size() == 2; }, TDuration::Seconds(10));
+    THashSet<ui64> childPartitions;
+    for (const auto& event : childAcks) {
+        childPartitions.insert(partitionIds.at(event->GetRecipientRewrite()));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(childPartitions.size(), 2);
+    UNIT_ASSERT(childPartitions.contains(2));
+    UNIT_ASSERT(childPartitions.contains(3));
+    UNIT_ASSERT(!finalRemoved);
+    UNIT_ASSERT(!env.Stage(TStage::DRAIN_CDC).GetReady());
+
+    const auto firstChild = partitionIds.at(childAcks.front()->GetRecipientRewrite());
+    childAcks.Unblock(1);
+    env.Runtime.WaitFor("one split child confirming the final resolved", [&] { return completedPartitions.contains(firstChild); }, TDuration::Seconds(10));
+    UNIT_ASSERT(!finalRemoved);
+    UNIT_ASSERT(!env.Stage(TStage::DRAIN_CDC).GetReady());
+
+    if (restartDataShard) {
+        // Both children have persisted the record, but the last ACK was not
+        // delivered. After reboot, MaxSeqNo is an alternative delivery proof.
+        TBlockEvents<NPQ::TEvPartitionWriter::TEvInitResult> recovered(env.Runtime);
+        childAcks.Stop();
+        childAcks.clear();
+        RebootTablet(env.Runtime, env.Shards.at(0), env.Sender);
+        env.Runtime.WaitFor("recovered writers for P0 and both split children", [&] { return recovered.size() == 3; }, TDuration::Seconds(10));
+        for (const auto& event : recovered) {
+            UNIT_ASSERT(event->Get()->IsSuccess());
+            UNIT_ASSERT(event->Get()->GetResult().SourceIdInfo.GetSeqNo() >= i64(finalOrder));
+        }
+        UNIT_ASSERT(!finalRemoved);
+        UNIT_ASSERT(!env.Stage(TStage::DRAIN_CDC).GetReady());
+        UNIT_ASSERT_VALUES_EQUAL(env.Write(2, 20).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+        recovered.Stop().Unblock();
+    } else {
+        childAcks.Stop().Unblock();
+    }
+    env.WaitStage(TStage::DRAIN_CDC);
+    UNIT_ASSERT(finalRemoved);
+    UNIT_ASSERT(completedPartitions.contains(0));
+    UNIT_ASSERT(completedPartitions.contains(2));
+    UNIT_ASSERT(completedPartitions.contains(3));
+    records.Remove();
+    ready.Remove();
+    removals.Remove();
+    env.Thaw();
+    UNIT_ASSERT_VALUES_EQUAL(env.Write(2, 20).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 }
 
 } // anonymous namespace
@@ -558,6 +635,14 @@ Y_UNIT_TEST_SUITE(DataShardDatabaseFreeze) {
         env.WaitStage(TStage::DRAIN_CDC);
         env.Thaw();
         UNIT_ASSERT_VALUES_EQUAL(env.Write(1, 10).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    }
+
+    Y_UNIT_TEST(FinalResolvedWaitsForSplitTopicPartitions) {
+        CheckFinalResolvedAfterTopicSplit(false);
+    }
+
+    Y_UNIT_TEST(FinalResolvedWaitsForSplitTopicPartitionsAfterDataShardRestart) {
+        CheckFinalResolvedAfterTopicSplit(true);
     }
 
     Y_UNIT_TEST(PreparedFinalResolvedSurvivesWriterDisconnect) {
@@ -641,94 +726,6 @@ Y_UNIT_TEST_SUITE(DataShardDatabaseFreeze) {
         UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, env.Shards, env.TableId), "key = 1, value = 10\nkey = 2, value = 20\n");
     }
 
-    Y_UNIT_TEST(MissingSenderDiscardFailsFreeze) {
-        TCdcFreezeEnv env;
-        env.AddStream();
-
-        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> enqueued(env.Runtime);
-        UNIT_ASSERT_VALUES_EQUAL(env.Write(1, 10).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        env.Runtime.WaitFor("change record before routing to its sender", [&] { return !enqueued.empty(); }, TDuration::Seconds(10));
-        UNIT_ASSERT_VALUES_EQUAL(enqueued.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(enqueued.front()->Get()->Records.size(), 1);
-        const auto changeSender = enqueued.front()->GetRecipientRewrite();
-        const auto pathId = enqueued.front()->Get()->Records.front().PathId;
-        const auto order = enqueued.front()->Get()->Records.front().Order;
-        env.WaitStage(TStage::FENCE_WRITES);
-
-        // Delay the enqueue until the router has removed its destination sender.
-        bool senderRemoved = false;
-        auto removeSender = env.Runtime.AddObserver<TEvChangeExchange::TEvRemoveSender>([&](auto& ev) {
-            if (ev->Sender == changeSender && ev->Get()->PathId == pathId) {
-                senderRemoved = true;
-            }
-        });
-        env.Runtime.Send(new IEventHandle(changeSender, env.Sender,
-            new TEvChangeExchange::TEvRemoveSender(pathId)), 0, true);
-        env.Runtime.WaitFor("sender removal forwarded by the router", [&] { return senderRemoved; }, TDuration::Seconds(10));
-        removeSender.Remove();
-
-        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvRemoveRecords> removals(env.Runtime, [&](const auto& ev) {
-            return ev->Sender == changeSender;
-        });
-        enqueued.Stop().Unblock();
-        CheckDiscardFailsFreeze(env, removals, order);
-    }
-
-    Y_UNIT_TEST(PendingAsyncIndexSenderDiscardFailsFreeze) {
-        TCdcFreezeEnv env(TShardedTableOptions().Indexes({
-            TShardedTableOptions::TIndex{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
-        }));
-
-        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> enqueued(env.Runtime);
-        UNIT_ASSERT_VALUES_EQUAL(env.Write(1, 10).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        env.Runtime.WaitFor("async index record before routing to its sender", [&] { return !enqueued.empty(); }, TDuration::Seconds(10));
-        UNIT_ASSERT_VALUES_EQUAL(enqueued.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(enqueued.front()->Get()->Records.size(), 1);
-        const auto indexPathId = enqueued.front()->Get()->Records.front().PathId;
-        const auto order = enqueued.front()->Get()->Records.front().Order;
-        env.WaitStage(TStage::FENCE_WRITES);
-
-        // Model a cached drop notification without issuing DDL on the fenced shard.
-        // The real async-index sender must enter StatePendingRemove before enqueue.
-        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-        TActorId indexSender;
-        bool indexUnderRemove = false;
-        auto navigate = env.Runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>([&](auto& ev) {
-            if (ev->GetRecipientRewrite() != indexSender) {
-                return;
-            }
-            auto& entries = ev->Get()->Request->ResultSet;
-            UNIT_ASSERT_VALUES_EQUAL(entries.size(), 1);
-            auto& entry = entries.front();
-            if (entry.TableId.PathId != indexPathId) {
-                return;
-            }
-            UNIT_ASSERT_VALUES_EQUAL(entry.Status, TNavigate::EStatus::Ok);
-            UNIT_ASSERT_VALUES_EQUAL(entry.Kind, TNavigate::KindIndex);
-            UNIT_ASSERT(entry.Self);
-            auto self = MakeIntrusive<TNavigate::TDirEntryInfo>();
-            self->Info.CopyFrom(entry.Self->Info);
-            self->Info.SetPathState(NKikimrSchemeOp::EPathStateDrop);
-            entry.Self = std::move(self);
-            indexUnderRemove = true;
-        });
-        const auto shardActor = ResolveTablet(env.Runtime, env.Shards.at(0));
-        indexSender = env.Runtime.Register(CreateAsyncIndexChangeSender(
-            TDataShardId{env.Shards.at(0), 1, shardActor}, env.TableId, indexPathId));
-        env.Runtime.WaitFor("async index sender entering pending removal", [&] { return indexUnderRemove; }, TDuration::Seconds(10));
-        navigate.Remove();
-
-        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvRemoveRecords> removals(env.Runtime, [&](const auto& ev) {
-            return ev->Sender == indexSender;
-        });
-        enqueued.Stop();
-        auto records = std::move(enqueued.front()->Get()->Records);
-        enqueued.pop_front();
-        env.Runtime.Send(new IEventHandle(indexSender, env.Sender,
-            new NChangeExchange::TEvChangeExchange::TEvEnqueueRecords(std::move(records))), 0, true);
-        CheckDiscardFailsFreeze(env, removals, order);
-    }
-
     Y_UNIT_TEST(UnknownTableChangeRecordReportsDrainIssue) {
         TCdcFreezeEnv env;
         env.AddStream();
@@ -796,110 +793,6 @@ Y_UNIT_TEST_SUITE(DataShardDatabaseFreeze) {
             UNIT_ASSERT_STRING_CONTAINS(result->GetIssue(), pathId.ToString());
             UNIT_ASSERT_STRING_CONTAINS(result->GetIssue(), "order# " + ToString(order));
         }
-    }
-
-    Y_UNIT_TEST(DeliveryLostIsPersistedOnceAcrossRemovalBatches) {
-        TCdcFreezeEnv env;
-        env.Runtime.GetAppData(0).FeatureFlags.SetEnableDataShardInMemoryStateMigration(false);
-        env.AddStream();
-        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords> enqueued(env.Runtime);
-
-        // More than two removal buckets, plus one record to remove after reboot.
-        constexpr ui32 recordCount = 2002;
-        std::vector<TCell> cells;
-        for (ui32 key = 1; key <= recordCount; ++key) {
-            cells.push_back(TCell::Make(key));
-            cells.push_back(TCell::Make(key));
-        }
-        auto write = MakeWriteRequest(5000, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
-            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, env.TableId,
-            std::vector<ui32>{1, 2}, cells);
-        env.Runtime.SendToPipe(env.Shards.at(0), env.Sender, write.release(), 0, GetPipeConfigWithRetries());
-        UNIT_ASSERT_VALUES_EQUAL(env.Runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(env.Sender)
-            ->Get()->Record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        TVector<ui64> orders;
-        env.Runtime.WaitFor("all CDC records enqueued", [&] {
-            orders.clear();
-            for (const auto& event : enqueued) {
-                for (const auto& record : event->Get()->Records) {
-                    orders.push_back(record.Order);
-                }
-            }
-            return orders.size() == recordCount;
-        });
-        env.WaitStage(TStage::FENCE_WRITES);
-
-        TFreezeRemovalLog log;
-        auto commits = env.Runtime.AddObserver<TEvTablet::TEvCommit>([&](auto& ev) {
-            if (ev->Get()->TabletID == env.Shards.at(0)) {
-                log.Observe(*ev->Get());
-            }
-        });
-        const ui64 lastOrder = orders.back();
-        orders.pop_back();
-        auto discard = MakeHolder<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>(std::move(orders));
-        discard->DeliveryConfirmed = false;
-        env.Runtime.Send(new IEventHandle(ResolveTablet(env.Runtime, env.Shards.at(0)), env.Sender, discard.Release()));
-        env.Runtime.WaitFor("three change record removal batches", [&] { return log.RemovedRecords == recordCount - 1; });
-        UNIT_ASSERT_VALUES_EQUAL(env.Stage(TStage::FENCE_WRITES).GetStatus(), ui32(Ydb::StatusIds::PRECONDITION_FAILED));
-
-        // The sticky failure must survive actual disk recovery. A subsequent
-        // confirmed removal must not rewrite the already durable flag either.
-        RebootTablet(env.Runtime, env.Shards.at(0), env.Sender);
-        UNIT_ASSERT_VALUES_EQUAL(env.Stage(TStage::FENCE_WRITES).GetStatus(), ui32(Ydb::StatusIds::PRECONDITION_FAILED));
-        UNIT_ASSERT_VALUES_EQUAL(env.Write(recordCount + 1, 1).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
-        auto confirmed = MakeHolder<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>(TVector<ui64>{lastOrder});
-        env.Runtime.Send(new IEventHandle(ResolveTablet(env.Runtime, env.Shards.at(0)), env.Sender, confirmed.Release()));
-        env.Runtime.WaitFor("confirmed removal after restart", [&] { return log.RemovedRecords == recordCount; });
-        UNIT_ASSERT_VALUES_EQUAL(env.Stage(TStage::FENCE_WRITES).GetStatus(), ui32(Ydb::StatusIds::PRECONDITION_FAILED));
-
-        // A new freeze epoch must persist a new delivery loss independently.
-        env.Thaw();
-        enqueued.clear();
-        UNIT_ASSERT_VALUES_EQUAL(env.Write(recordCount + 1, 1).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        env.Runtime.WaitFor("next epoch CDC record", [&] { return !enqueued.empty(); });
-        UNIT_ASSERT_VALUES_EQUAL(enqueued.front()->Get()->Records.size(), 1);
-        const ui64 nextOrder = enqueued.front()->Get()->Records.front().Order;
-        env.WaitStage(TStage::FENCE_WRITES, 3);
-        auto nextDiscard = MakeHolder<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>(TVector<ui64>{nextOrder});
-        nextDiscard->DeliveryConfirmed = false;
-        env.Runtime.Send(new IEventHandle(ResolveTablet(env.Runtime, env.Shards.at(0)), env.Sender, nextDiscard.Release()));
-        env.Runtime.WaitFor("new epoch delivery loss", [&] { return log.RemovedRecords == recordCount + 1; });
-        UNIT_ASSERT_VALUES_EQUAL(env.Stage(TStage::FENCE_WRITES, 3).GetStatus(), ui32(Ydb::StatusIds::PRECONDITION_FAILED));
-
-        UNIT_ASSERT_VALUES_EQUAL_C(log.DeliveryLostWrites[1], 1,
-            "DeliveryLost must be persisted once, atomically with the first removal; "
-            "later buckets and confirmed removals after restart must not rewrite it");
-        UNIT_ASSERT_VALUES_EQUAL(log.DeliveryLostWrites[3], 1);
-    }
-
-    Y_UNIT_TEST(UnconfirmedCdcRemovalFailsAcrossRestartUntilThaw) {
-        TCdcFreezeEnv env;
-        env.AddStream();
-        TVector<ui64> orders;
-        auto observer = env.Runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords>([&](auto& ev) {
-            if (orders.empty()) {
-                for (const auto& record : ev->Get()->Records) {
-                    orders.push_back(record.Order);
-                }
-            }
-        });
-        TBlockEvents<NPQ::TEvPartitionWriter::TEvWriteResponse> ack(env.Runtime);
-        UNIT_ASSERT_VALUES_EQUAL(env.Write(1, 10).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        env.Runtime.WaitFor("unconfirmed CDC record", [&] { return !orders.empty() && !ack.empty(); });
-        env.WaitStage(TStage::FENCE_WRITES);
-        auto discard = MakeHolder<NChangeExchange::TEvChangeExchange::TEvRemoveRecords>(std::move(orders));
-        discard->DeliveryConfirmed = false;
-        const auto shardActor = ResolveTablet(env.Runtime, env.Shards.at(0));
-        env.Runtime.Send(new IEventHandle(shardActor, env.Sender, discard.Release()));
-        UNIT_ASSERT_VALUES_EQUAL(env.Stage(TStage::DRAIN_INDEXES).GetStatus(), ui32(Ydb::StatusIds::PRECONDITION_FAILED));
-        RebootTablet(env.Runtime, env.Shards.at(0), env.Sender);
-        UNIT_ASSERT_VALUES_EQUAL(env.Stage(TStage::FENCE_WRITES).GetStatus(), ui32(Ydb::StatusIds::PRECONDITION_FAILED));
-        UNIT_ASSERT_VALUES_EQUAL(env.Write(2, 20).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
-        ack.Stop().Unblock();
-        env.Thaw();
-        UNIT_ASSERT_VALUES_EQUAL(env.Write(2, 20).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        env.Freeze(3);
     }
 
     Y_UNIT_TEST(ThawSupersedesPendingCdcDrainAndIgnoresLateAcknowledgements) {
@@ -1219,6 +1112,320 @@ Y_UNIT_TEST_SUITE(DataShardDatabaseFreeze) {
             WaitDatabaseFreezeStage(env.Runtime, shard, env.TableId.PathId.OwnerId, env.Domain(), 2, TStage::OPEN);
         }
         UNIT_ASSERT_VALUES_EQUAL(env.Write(3, 30).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    }
+
+    Y_UNIT_TEST_TWIN(SplitCannotStartAfterDatabaseFence, Reboot) {
+        TFreezeEnv env;
+        SetSplitMergePartCountLimit(&env.Runtime, -1);
+        auto& flags = env.Runtime.GetAppData(0).FeatureFlags;
+        flags.SetEnableDataShardInMemoryStateMigration(false);
+        // Exercise the invariant without terminating the whole test process.
+        flags.SetEnableTabletRestartOnUnhandledExceptions(true);
+        UNIT_ASSERT_VALUES_EQUAL(env.Write(1, 10).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        const auto shardId = env.Shards.at(0);
+        // Hold a real, otherwise valid split request before it reaches the source.
+        TBlockEvents<TEvDataShard::TEvSplit> split(env.Runtime, [&](const auto& ev) {
+            return ev->Sender != env.Sender;
+        });
+        const auto splitTxId = AsyncSplitTable(env.Server, env.Sender, "/Root/Table", shardId, 2);
+        env.Runtime.WaitFor("split request before database fence", [&] { return !split.empty(); }, TDuration::Seconds(10));
+        const auto splitRecord = split.front()->Get()->Record;
+        const auto proposer = split.front()->Sender;
+        WaitDatabaseFreezeStage(env.Runtime, shardId, env.TableId.PathId.OwnerId, env.Domain(), 1, TStage::FENCE_WRITES);
+        if (Reboot) {
+            RebootTablet(env.Runtime, shardId, env.Sender);
+        }
+
+        const auto alerts = GetServiceCounters(env.Runtime.GetAppData(0).Counters, "tablets")
+            ->GetCounter("alerts_exception", true);
+        const auto initialAlerts = alerts->Val();
+        bool restarted = false;
+        auto boots = env.Runtime.AddObserver<TEvTablet::TEvBoot>([&](auto& ev) {
+            if (ev->Get()->TabletID == shardId) {
+                restarted = true;
+            }
+        });
+        size_t splitAcks = 0;
+        auto acks = env.Runtime.AddObserver<TEvDataShard::TEvSplitAck>([&](auto& ev) {
+            if (ev->Get()->Record.GetTabletId() == shardId
+                && ev->Get()->Record.GetOperationCookie() == splitRecord.GetOperationCookie())
+            {
+                ++splitAcks;
+            }
+        });
+        auto request = MakeHolder<TEvDataShard::TEvSplit>();
+        request->Record.CopyFrom(splitRecord);
+        env.Runtime.SendToPipe(shardId, env.Sender, request.Release(), 0, GetPipeConfigWithRetries());
+        env.Runtime.WaitFor("split protocol violation restarting the frozen shard", [&] {
+            return restarted && alerts->Val() == initialAlerts + 1;
+        }, TDuration::Seconds(10));
+        WaitDatabaseFreezeStage(env.Runtime, shardId, env.TableId.PathId.OwnerId, env.Domain(), 1, TStage::FENCE_WRITES);
+        UNIT_ASSERT_VALUES_EQUAL(splitAcks, 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.Write(2, 20).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+        const auto actor = ResolveTablet(env.Runtime, shardId);
+        env.Runtime.RunCall([&] {
+            auto* shard = dynamic_cast<TDataShard*>(env.Runtime.FindActor(actor));
+            UNIT_ASSERT(shard);
+            UNIT_ASSERT_VALUES_EQUAL(shard->GetState(), ui32(TShardState::Ready));
+            UNIT_ASSERT(shard->IsDatabaseFrozen());
+            return true;
+        });
+        boots.Remove();
+        acks.Remove();
+
+        // After an explicit thaw, the same real split can still finish normally.
+        env.Thaw();
+        split.Stop();
+        split.clear();
+        auto retry = MakeHolder<TEvDataShard::TEvSplit>();
+        retry->Record.CopyFrom(splitRecord);
+        env.Runtime.Send(new IEventHandle(actor, proposer, retry.Release()), 0, true);
+        WaitTxNotification(env.Server, env.Sender, splitTxId);
+        UNIT_ASSERT_VALUES_EQUAL(GetTableShards(env.Server, env.Sender, "/Root/Table").size(), 2);
+        ExecSQL(env.Server, env.Sender, "UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);");
+    }
+
+    Y_UNIT_TEST_TWIN(DatabaseFreezeRejectsStartedSplit, Reboot) {
+        TFreezeEnv env;
+        SetSplitMergePartCountLimit(&env.Runtime, -1);
+        env.Runtime.GetAppData(0).FeatureFlags.SetEnableDataShardInMemoryStateMigration(false);
+        const auto shardId = env.Shards.at(0);
+        const ui64 txId = 1001;
+        const auto prepared = SendFreezeTestWrite(env, shardId, txId, 1, 10,
+            NKikimrDataEvents::TEvWrite::MODE_PREPARE);
+        UNIT_ASSERT_VALUES_EQUAL(prepared.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+        NKikimrTxDataShard::TEvSplit splitRecord;
+        auto splits = env.Runtime.AddObserver<TEvDataShard::TEvSplit>([&](auto& ev) {
+            splitRecord.CopyFrom(ev->Get()->Record);
+        });
+        const auto actor = ResolveTablet(env.Runtime, shardId);
+        auto* shard = dynamic_cast<TDataShard*>(env.Runtime.FindActor(actor));
+        UNIT_ASSERT(shard);
+        const auto splitTxId = AsyncSplitTable(env.Server, env.Sender, "/Root/Table", shardId, 2);
+        env.Runtime.WaitFor("split waiting for the prepared transaction", [&] {
+            return shard->GetState() == TShardState::SplitSrcWaitForNoTxInFlight;
+        }, TDuration::Seconds(10));
+        UNIT_ASSERT(splitRecord.HasOperationCookie());
+        splits.Remove();
+        if (Reboot) {
+            RebootTablet(env.Runtime, shardId, env.Sender);
+        }
+        const auto checkRejected = [&] {
+            const auto result = SendDatabaseFreeze(env.Runtime, shardId, env.TableId.PathId.OwnerId,
+                env.Domain(), 1, TStage::FENCE_WRITES);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), ui32(Ydb::StatusIds::PRECONDITION_FAILED), result.ShortDebugString());
+            UNIT_ASSERT(result.GetReady());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssue(), "stable shard topology");
+            const auto current = ResolveTablet(env.Runtime, shardId);
+            env.Runtime.RunCall([&] {
+                auto* source = dynamic_cast<TDataShard*>(env.Runtime.FindActor(current));
+                UNIT_ASSERT(source);
+                UNIT_ASSERT(!source->IsDatabaseFrozen());
+                return true;
+            });
+        };
+        checkRejected();
+        // Retrying an already accepted split is still allowed.
+        auto retry = MakeHolder<TEvDataShard::TEvSplit>();
+        retry->Record.CopyFrom(splitRecord);
+        env.Runtime.SendToPipe(shardId, env.Sender, retry.Release(), 0, GetPipeConfigWithRetries());
+        checkRejected();
+        SendProposeToCoordinator(env.Runtime, env.Sender, {shardId}, {
+            .TxId = txId,
+            .Coordinator = prepared.GetDomainCoordinators(0),
+            .MinStep = prepared.GetMinStep(),
+            .MaxStep = prepared.GetMaxStep(),
+        });
+        WaitTxNotification(env.Server, env.Sender, splitTxId);
+        const auto children = GetTableShards(env.Server, env.Sender, "/Root/Table");
+        UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
+        for (const auto child : children) {
+            FreezeDatabaseShard(env.Runtime, child, env.TableId.PathId.OwnerId, env.Domain(), 1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, children, env.TableId), "key = 1, value = 10\n");
+    }
+
+    Y_UNIT_TEST(DatabaseFreezeRejectsReceivingSplitDestination) {
+        TFreezeEnv env;
+        SetSplitMergePartCountLimit(&env.Runtime, -1);
+        UNIT_ASSERT_VALUES_EQUAL(env.Write(1, 10).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        THashSet<ui64> destinations;
+        auto inits = env.Runtime.AddObserver<TEvDataShard::TEvInitSplitMergeDestination>([&](auto& ev) {
+            for (const auto& range : ev->Get()->Record.GetSplitDescription().GetDestinationRanges()) {
+                destinations.insert(range.GetTabletID());
+            }
+        });
+        TBlockEvents<TEvDataShard::TEvSplitTransferSnapshot> snapshots(env.Runtime);
+        const auto splitTxId = AsyncSplitTable(env.Server, env.Sender, "/Root/Table", env.Shards.at(0), 2);
+        env.Runtime.WaitFor("split snapshots withheld from the destinations", [&] {
+            return snapshots.size() == 2;
+        }, TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(destinations.size(), 2);
+        for (const auto child : destinations) {
+            const auto result = SendDatabaseFreeze(env.Runtime, child, env.TableId.PathId.OwnerId,
+                env.Domain(), 1, TStage::FENCE_WRITES);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), ui32(Ydb::StatusIds::PRECONDITION_FAILED), result.ShortDebugString());
+            UNIT_ASSERT(result.GetReady());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssue(), "stable shard topology");
+        }
+        inits.Remove();
+        snapshots.Stop().Unblock();
+        WaitTxNotification(env.Server, env.Sender, splitTxId);
+        for (const auto child : destinations) {
+            FreezeDatabaseShard(env.Runtime, child, env.TableId.PathId.OwnerId, env.Domain(), 1);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, GetTableShards(env.Server, env.Sender, "/Root/Table"), env.TableId),
+            "key = 1, value = 10\n");
+    }
+
+    Y_UNIT_TEST_TWIN(LargeAcceptedTxIdsSurviveRestart, MaxConfiguredLimit) {
+        TFreezeEnv env;
+        env.Runtime.GetAppData(0).FeatureFlags.SetEnableDataShardInMemoryStateMigration(false);
+        const auto* field = NKikimrConfig::TImmediateControlsConfig::TDataShardControls::descriptor()
+            ->FindFieldByName("MaxTxInFly");
+        UNIT_ASSERT(field);
+        UNIT_ASSERT(field->options().HasExtension(NKikimrConfig::ControlOptions));
+        const auto& limits = field->options().GetExtension(NKikimrConfig::ControlOptions);
+        // CheckInflightLimit uses '>', so include the boundary transaction.
+        const ui64 txCount = (MaxConfiguredLimit ? limits.GetMaxValue() : limits.GetDefaultValue()) + 1;
+        UNIT_ASSERT(txCount > 1);
+        const auto shardActor = ResolveTablet(env.Runtime, env.Shards.at(0));
+        env.Runtime.RunCall([&] {
+            auto* shard = dynamic_cast<TDataShard*>(env.Runtime.FindActor(shardActor));
+            UNIT_ASSERT(shard);
+            UNIT_ASSERT_VALUES_EQUAL(shard->GetMaxTxInFly(), limits.GetDefaultValue());
+            return true;
+        });
+
+        // Exercise the actual Sys cell without starting thousands of user
+        // transactions. All IDs need ten varint bytes, the worst case for uint64.
+        TStage state;
+        state.SetEpoch(1);
+        state.SetStage(TStage::FENCE_WRITES);
+        for (ui64 i = 0; i < txCount; ++i) {
+            state.AddAcceptedTxIds(Max<ui64>() - i);
+        }
+        const auto serialized = state.SerializeAsString();
+        UNIT_ASSERT_C(serialized.size() >= 10 * txCount,
+            "Expected worst-case txId payload: count# " << txCount << " bytes# " << serialized.size());
+        const auto query = [&](const TString& program) {
+            auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+            request->Record.MutableProgram()->MutableProgram()->SetText(program);
+            const auto sender = env.Runtime.AllocateEdgeActor();
+            env.Runtime.SendToPipe(env.Shards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto response = env.Runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), NKikimrProto::OK,
+                response->Get()->Record.ShortDebugString());
+            return response->Get()->Record.GetExecutionEngineEvaluatedResponse();
+        };
+        // Sys_DatabaseFreeze = 49; store the same Bytes cell as PersistSys.
+        TStringStream literal;
+        NYql::EscapeArbitraryAtom(serialized, '"', &literal);
+        query(Sprintf(R"(
+            (
+                (let key '('('Id (Uint64 '49))))
+                (let update '('('Bytes (String '%s))))
+                (return (AsList (UpdateRow 'Sys key update)))
+            )
+        )", literal.Str().c_str()));
+        const auto readState = [&] {
+            const auto result = query(R"(
+                (
+                    (let key '('('Id (Uint64 '49))))
+                    (return (AsList (SetResult 'Freeze (SelectRow 'Sys key '('Bytes)))))
+                )
+            )");
+            const TString bytes = NClient::TValue::Create(result)["Freeze"]["Bytes"];
+            TStage restored;
+            UNIT_ASSERT(restored.ParseFromString(bytes));
+            return restored;
+        };
+        const auto checkState = [&](TStage::EStage stage) {
+            const auto restored = readState();
+            UNIT_ASSERT_VALUES_EQUAL(restored.GetEpoch(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(ui32(restored.GetStage()), ui32(stage));
+            UNIT_ASSERT_VALUES_EQUAL(ui64(restored.AcceptedTxIdsSize()), txCount);
+            for (size_t i = 0; i < restored.AcceptedTxIdsSize(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(restored.GetAcceptedTxIds(i), Max<ui64>() - ui64(i));
+            }
+        };
+        checkState(TStage::FENCE_WRITES);
+        RebootTablet(env.Runtime, env.Shards.at(0), env.Sender);
+        checkState(TStage::FENCE_WRITES);
+        UNIT_ASSERT_VALUES_EQUAL(env.Write(1, 10).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+
+        // The normal freeze handler must also be able to rewrite the large
+        // protobuf on stage transitions, and restore it on the next boot.
+        env.Freeze();
+        checkState(TStage::DRAIN_CDC);
+        RebootTablet(env.Runtime, env.Shards.at(0), env.Sender);
+        checkState(TStage::DRAIN_CDC);
+        UNIT_ASSERT_VALUES_EQUAL(env.Write(1, 10).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+        env.Thaw();
+        const auto opened = readState();
+        UNIT_ASSERT_VALUES_EQUAL(ui32(opened.GetStage()), ui32(TStage::OPEN));
+        UNIT_ASSERT_VALUES_EQUAL(opened.GetEpoch(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(opened.AcceptedTxIdsSize(), 0);
+        RebootTablet(env.Runtime, env.Shards.at(0), env.Sender);
+        UNIT_ASSERT_VALUES_EQUAL(env.Write(1, 10).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    }
+
+    Y_UNIT_TEST(UnknownFreezeStageDoesNotDeserializeAsOpen) {
+        const auto check = [](auto message) {
+            UNIT_ASSERT(!message.HasStage());
+            UNIT_ASSERT_VALUES_EQUAL(ui32(message.GetStage()), ui32(TStage::UNKNOWN));
+            const auto* field = message.GetDescriptor()->FindFieldByName("Stage");
+            UNIT_ASSERT(field);
+            message.GetReflection()->MutableUnknownFields(&message)->AddVarint(field->number(), Max<ui32>());
+            const auto serialized = message.SerializeAsString();
+            message.SetStage(TStage::OPEN);
+            UNIT_ASSERT(message.ParseFromString(serialized));
+            UNIT_ASSERT(!message.HasStage());
+            UNIT_ASSERT_VALUES_EQUAL(ui32(message.GetStage()), ui32(TStage::UNKNOWN));
+            const auto& unknown = message.GetReflection()->GetUnknownFields(message);
+            UNIT_ASSERT_VALUES_EQUAL(unknown.field_count(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(unknown.field(0).number(), field->number());
+            UNIT_ASSERT_VALUES_EQUAL(unknown.field(0).varint(), Max<ui32>());
+        };
+        check(TStage{});
+        check(NKikimrTxDataShard::TEvDatabaseFreeze{});
+        check(NKikimrTxDataShard::TEvDatabaseFreezeResult{});
+    }
+
+    Y_UNIT_TEST(InvalidFreezeStageCannotThawOrAdvanceEpoch) {
+        TFreezeEnv env;
+        env.Runtime.GetAppData(0).FeatureFlags.SetEnableDataShardInMemoryStateMigration(false);
+        UNIT_ASSERT_VALUES_EQUAL(env.Write(1, 10).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        env.Freeze(10);
+
+        // Cover a missing stage, explicit UNKNOWN, and an unsupported wire value.
+        TVector<NKikimrTxDataShard::TEvDatabaseFreeze> invalid(3);
+        invalid[1].SetStage(TStage::UNKNOWN);
+        invalid[2].GetReflection()->MutableUnknownFields(&invalid[2])->AddVarint(
+            NKikimrTxDataShard::TEvDatabaseFreeze::kStageFieldNumber, Max<ui32>());
+        for (const auto& value : invalid) {
+            auto request = MakeHolder<TEvDataShard::TEvDatabaseFreeze>();
+            UNIT_ASSERT(request->Record.ParseFromString(value.SerializeAsString()));
+            UNIT_ASSERT_VALUES_EQUAL(ui32(request->Record.GetStage()), ui32(TStage::UNKNOWN));
+            request->Record.SetEpoch(11);
+            request->Record.SetSchemeShardId(env.TableId.PathId.OwnerId);
+            request->Record.SetDomainOwnerId(env.Domain().OwnerId);
+            request->Record.SetDomainLocalPathId(env.Domain().LocalPathId);
+            env.Runtime.SendToPipe(env.Shards.at(0), env.Sender, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto response = env.Runtime.GrabEdgeEventRethrow<TEvDataShard::TEvDatabaseFreezeResult>(env.Sender);
+            const auto& result = response->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), ui32(Ydb::StatusIds::BAD_REQUEST), result.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(env.Write(2, 20).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+            const auto current = SendDatabaseFreeze(env.Runtime, env.Shards.at(0), env.TableId.PathId.OwnerId,
+                env.Domain(), 10, TStage::DRAIN_CDC);
+            UNIT_ASSERT_VALUES_EQUAL_C(current.GetStatus(), ui32(Ydb::StatusIds::SUCCESS), current.ShortDebugString());
+            UNIT_ASSERT(current.GetReady());
+        }
+
+        // OPEN must be persisted explicitly and survive recovery from storage.
+        env.Thaw(11);
+        RebootTablet(env.Runtime, env.Shards.at(0), env.Sender);
+        UNIT_ASSERT_VALUES_EQUAL(env.Write(2, 20).GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
     }
 
     Y_UNIT_TEST(RestartAndStaleEpoch) {

@@ -615,6 +615,19 @@ protected:
             return;
         }
 
+        if (!event->UserToken) {
+            const auto kafkaError = EKafkaErrors::SASL_AUTHENTICATION_FAILED;
+            auto responseToClient = std::make_shared<TSaslAuthenticateResponseData>();
+            responseToClient->ErrorCode = kafkaError;
+            responseToClient->ErrorMessage = "Authentication failure.";
+
+            YDB_LOG_ERROR("Successful authentication result has no user token",
+                {LogPrefix()});
+            Reply(event->ClientResponse->CorrelationId, responseToClient, kafkaError, ctx);
+            CloseConnection = true;
+            return;
+        }
+
         Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement || NKikimr::AppData()->PQConfig.GetRequireCredentialsInNewProtocol();
         Context->UserToken = event->UserToken;
         Context->DatabasePath = event->DatabasePath;

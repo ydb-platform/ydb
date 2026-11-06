@@ -266,10 +266,7 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
                     if (std::holds_alternative<TNotEnoughResources>(bestNodeResult)) {
                         NotEnoughResources = true;
                     }
-                    for (const TActorId actorToNotify : tablet->ActorsToNotifyOnRestart) {
-                        sideEffects.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
-                    }
-                    tablet->ActorsToNotifyOnRestart.clear();
+                    tablet->NotifyOnRestart("boot delay", sideEffects);
                     waitingTablets.push_back(record); // waiting for new node
                     tablet->InWaitQueue = true;
                     continue;
@@ -523,6 +520,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     TVector<TTabletId> tabletsToReleaseFromParent;
     TSideEffects sideEffects;
     sideEffects.Reset(SelfId());
+    std::vector<TReassignOperation> reassigns;
     for (auto& tab : Tablets) {
         TLeaderTabletInfo& tablet = tab.second;
         if (tablet.NeedToReleaseFromParent) {
@@ -531,9 +529,9 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         } else if (tablet.IsReadyToBoot()) {
             tablet.InitiateBoot();
         } else if (tablet.IsReadyToAssignGroups()) {
-            tablet.InitiateAssignTabletGroups();
+            reassigns.emplace_back(tablet.Id);
         } else if (tablet.IsReadyToBlockStorage()) {
-            tablet.InitiateBlockStorage(sideEffects);
+            reassigns.emplace_back(tablet.Id);
         } else if (tablet.IsDeleting()) {
             BlockStorageForDelete(tablet.Id, sideEffects);
         } else if (tablet.IsLockedToActor()) {
@@ -559,6 +557,9 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         }
     }
     sideEffects.Complete(DEPRECATED_CTX);
+    if (!reassigns.empty()) {
+        ContinueInterruptedReassigns(std::move(reassigns));
+    }
     if (AreWeRootHive()) {
         BLOG_D("Root Hive is ready");
     } else {
@@ -1027,9 +1028,12 @@ void THive::Handle(TEvHive::TEvReassignTablet::TPtr &ev) {
                 }
                 groups[i].SetGroupID(record.GetForcedGroupIDs(i));
             }
+            if (!std::exchange(tablet->IsMarkedForReassign, true)) {
+                UpdateCounterTabletsReassigning(+1);
+            }
             Execute(CreateUpdateTabletGroups(tablet->Id, std::move(groups)));
         } else {
-            Execute(CreateReassignGroups(tablet->Id, ev.Get()->Sender, channelProfileNewGroup));
+            Execute(CreateReassignGroups(tablet->Id, ev.Get()->Sender, channelProfileNewGroup, ev->Get()->Record.GetAsync()));
         }
     }
 }
@@ -1796,6 +1800,14 @@ void THive::UpdateCounterTabletsDeleting() {
     if (TabletCounters != nullptr) {
         auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_DELETING];
         counter.Set(DeleteTabletInProgress);
+    }
+}
+
+void THive::UpdateCounterTabletsReassigning(i64 tabletsReassigningDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_TABLETS_REASSIGNING];
+        auto newValue = counter.Get() + tabletsReassigningDiff;
+        counter.Set(newValue);
     }
 }
 

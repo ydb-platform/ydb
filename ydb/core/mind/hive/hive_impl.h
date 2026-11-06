@@ -178,6 +178,7 @@ protected:
     friend class THiveStorageBalancer;;
     friend struct TNodeInfo;
     friend struct TLeaderTabletInfo;
+    friend class TReassignTabletsActor;
 
     friend class TTxInitScheme;
     friend class TTxDeleteBase;
@@ -248,6 +249,7 @@ protected:
     friend class TTxProcessUpdateFollowers;
     friend class TTxMonEvent_StopDomain;
     friend class TTxProcessTabletMetrics;
+    friend class TTxUpdateLastReassign;
 
     friend class TDeleteTabletActor;
 
@@ -259,6 +261,10 @@ protected:
     void StartHiveDrain(TNodeId nodeId, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
+    // starts a new reassign for every tablet in the list
+    void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description);
+    // continues reassigns of tablets that were left in the middle of it (e.g. by a Hive restart)
+    void ContinueInterruptedReassigns(std::vector<TReassignOperation> operations);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
     ITransaction* CreateDeleteTablet(TEvHive::TEvDeleteTablet::TPtr& ev);
@@ -292,7 +298,7 @@ protected:
     ITransaction* CreateResumeTabletByTenant(TTabletId tabletId);
     ITransaction* CreateStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external = false);
     ITransaction* CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev);
-    ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup);
+    ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup, bool async);
     ITransaction* CreateReassignGroupsOnDecommit(ui32 groupId, std::unique_ptr<IEventHandle> reply);
     ITransaction* CreateLockTabletExecution(const NKikimrHive::TEvLockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
     ITransaction* CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
@@ -476,6 +482,8 @@ protected:
     std::unordered_map<TTabletTypes::EType, NKikimrHive::TDataCentersPreference> DefaultDataCentersPreference;
     std::unordered_map<TDataCenterId, TDataCenterInfo> DataCenters;
     std::unordered_set<TNodeId> ConnectedNodes;
+    TString LastReassignStatus;
+    ui32 ReassignsRunning = 0;
 
     // normalized to be sorted list of unique values
     std::vector<TTabletTypes::EType> BalancerIgnoreTabletTypes; // built from CurrentConfig
@@ -703,6 +711,7 @@ public:
     void UpdateCounterNodesFrozen(i64 nodesFrozenDiff);
     void UpdateCounterDeleteTabletQueueSize();
     void UpdateCounterTabletsDeleting();
+    void UpdateCounterTabletsReassigning(i64 tabletsReassigningDiff);
     void RecordTabletMove(const TTabletMoveInfo& info, EHiveEventReason reason, TString details = {});
     // details is the variable part of the description, reason covers the constant part
     void RecordNodeEvent(TNodeInfo& node, EHiveEventType type, EHiveEventReason reason, TString details = {});

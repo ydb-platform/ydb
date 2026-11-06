@@ -95,7 +95,7 @@ public:
                 return false;
             }
             while (!stateRowset.EndOfSet()) {
-                if (stateRowset.HaveValue<Schema::State::Value>()) {
+                if (stateRowset.HaveValue<Schema::State::Value>() || stateRowset.HaveValue<Schema::State::StringValue>()) {
                     switch (stateRowset.GetKey()) {
                     case TSchemeIds::State::DatabaseVersion:
                         break;
@@ -176,6 +176,9 @@ public:
                         break;
                     case TSchemeIds::State::TabletOwnersSynced:
                         Self->TabletOwnersSynced = (bool)stateRowset.GetValue<Schema::State::Value>();
+                        break;
+                    case TSchemeIds::State::LastReassignStatus:
+                        Self->LastReassignStatus = stateRowset.GetValue<Schema::State::StringValue>();
                         break;
                     }
                 }
@@ -864,6 +867,10 @@ public:
         ui64 tabletsTotal = 0;
         for (auto it = Self->Tablets.begin(); it != Self->Tablets.end(); ++it) {
             ++tabletsTotal;
+            if (it->second.ChannelProfileNewGroup.any()) {
+                it->second.IsMarkedForReassign = true;
+                Self->UpdateCounterTabletsReassigning(+1);
+            }
             for (const TTabletInfo& follower : it->second.Followers) {
                 ++tabletsTotal;
                 if (follower.IsLeader()) {

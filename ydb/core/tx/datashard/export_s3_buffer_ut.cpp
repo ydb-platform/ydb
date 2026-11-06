@@ -7,6 +7,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/array_ref.h>
+#include <util/generic/size_literals.h>
 #include <util/stream/mem.h>
 
 #ifndef KIKIMR_DISABLE_S3_OPS
@@ -202,6 +203,69 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
             .WithMaxBytes(1'000'000);
 
         TestMinBufferSize(dataFormat, minBufferSize);
+    }
+
+    Y_UNIT_TEST(EncryptedBatchWithLargeLastRow) {
+        // Use a key and one value column so every input row is smaller than 8 MiB.
+        for (ui32 tag = 2; tag < Tags.size(); ++tag) {
+            TableColumns().erase(tag);
+        }
+        Tags.resize(2);
+
+        const ui64 maxBytes = 32_MB;
+        const NBackup::TEncryptionKey key("256 bit test symmetric key bytes");
+        const auto iv = NBackup::TEncryptionIV::Generate();
+        Settings()
+            .WithEncryption(TS3ExportBufferSettings::TEncryptionSettings()
+                .WithAlgorithm("AES-256-GCM")
+                .WithKey(key)
+                .WithIV(iv))
+            .WithMaxRows(Max<ui64>())
+            .WithMinBytes(5_MB)
+            .WithMaxBytes(maxBytes);
+
+        const auto dataFormat = EDataFormat::YdbDump;
+        auto* buffer = Buffer(dataFormat);
+        TString expected;
+        TBuffer encrypted;
+        ui64 exportedRows = 0;
+        const auto flush = [&](bool last) {
+            NExportScan::IBuffer::TStats stats;
+            THolder<NActors::IEventBase> event(buffer->PrepareEvent(last, stats));
+            UNIT_ASSERT_C(event, buffer->GetError());
+            auto* evBuffer = dynamic_cast<TEvExportScan::TEvBuffer<TBuffer>*>(event.Get());
+            UNIT_ASSERT(evBuffer);
+            encrypted.Append(evBuffer->Buffer.Data(), evBuffer->Buffer.Size());
+            exportedRows += stats.Rows;
+        };
+        const auto collect = [&](ui32 rowKey, TStringBuf value, TStringBuf escapedValue) {
+            UNIT_ASSERT_C(CollectKeyValue(dataFormat, rowKey, value), buffer->GetError());
+            expected += TStringBuilder() << rowKey << ",\"" << escapedValue << "_1_" << rowKey << "\"\n";
+            // Follow the export scanner: check the batch limit after every row.
+            if (buffer->IsFilled()) {
+                flush(false);
+            }
+        };
+
+        const TString smallValue(1_MB, 'a');
+        for (ui32 rowKey = 0; rowKey < 31; ++rowKey) {
+            collect(rowKey, smallValue, smallValue);
+        }
+        UNIT_ASSERT_LT(expected.size(), maxBytes);
+
+        // CGI escaping expands each byte into "%01": 31 MiB + 21 MiB exceeds
+        // the encrypted block limit even though the batch limit is only 32 MiB.
+        const TString largeValue(7_MB, '\1');
+        const TString escapedLargeValue = TString("%01") * largeValue.size();
+        UNIT_ASSERT_GT(expected.size() + escapedLargeValue.size(), NBackup::MAX_BLOCK_SIZE);
+        collect(31, largeValue, escapedLargeValue);
+        flush(true);
+
+        UNIT_ASSERT_VALUES_EQUAL(exportedRows, 32);
+        const TBuffer decrypted = NBackup::TEncryptedFileDeserializer::DecryptFullFile(key, iv, std::move(encrypted));
+        UNIT_ASSERT_VALUES_EQUAL(decrypted.Size(), expected.size());
+        UNIT_ASSERT_C(TStringBuf(decrypted.Data(), decrypted.Size()) == expected,
+            "Decrypted export differs from the original rows");
     }
 
     Y_UNIT_TEST(MaxBytesCapsUncompressedSizeWithZstd) {

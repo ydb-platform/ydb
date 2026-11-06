@@ -33,6 +33,9 @@ protected:
     virtual ui32 DoGetNullsCount() const override {
         return Array->null_count();
     }
+    virtual std::optional<bool> DoHasNulls() const override {
+        return Array->null_count() != 0;
+    }
     virtual ui32 DoGetValueRawBytes() const override;
 
     virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override;
@@ -158,6 +161,9 @@ protected:
     virtual ui32 DoGetValueRawBytes() const override;
     virtual ui32 DoGetNullsCount() const override {
         return Array->null_count();
+    }
+    virtual std::optional<bool> DoHasNulls() const override {
+        return Array->null_count() != 0;
     }
     virtual TLocalDataAddress DoGetLocalData(const std::optional<TCommonChunkAddress>& chunkCurrent, const ui64 position) const override;
     virtual std::optional<ui64> DoGetRawSize() const override;

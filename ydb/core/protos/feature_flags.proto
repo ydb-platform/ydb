@@ -386,7 +386,7 @@ message TFeatureFlags {
     optional bool EnableCheckpointsCompression = 325 [default = false];
     optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
-    optional bool EnableStreamingAggregation = 328 [default = true];
+    optional bool EnableStreamingAggregation = 328 [default = false];
     optional bool EnableTableBackupAsSql = 329 [default = false];
     optional bool EnableRowDispatcherMemoryLimiting = 330 [default = false];
     // Judges a VDisk write by the space color the disk will be in once the Fresh
@@ -448,4 +448,5 @@ message TFeatureFlags {
     optional bool EnableKeyValueRequestInFlightLimit = 363 [default = false];
     // Allows client data writes and schema modifications.
     optional bool EnableClientModifications = 368 [default = true];
+    optional bool EnableComputeSchedulerMemory = 370 [default = false, (RequireRestart) = true];
 }

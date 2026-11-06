@@ -150,6 +150,115 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(Float8VectorSettings, E5M2) {
+        using T = std::conditional_t<E5M2, TFloat8E5M2, TFloat8E4M3>;
+        const auto vectorType = E5M2
+            ? Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E5M2
+            : Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT8_E4M3;
+        TString error;
+        Ydb::Table::KMeansTreeSettings settings;
+        UNIT_ASSERT(FillSetting(settings, "vector_type", E5M2 ? "Float8_E5M2" : "Float8_E4M3", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().vector_type(), vectorType);
+
+        const auto embedding = SerializeVector<T>({T(0.25f), T(-0.5f), T(1.5f)});
+        auto vectorSettings = MakeCosineSettings(vectorType, 3);
+        UNIT_ASSERT_C(ValidateSettings(vectorSettings, error), error);
+        auto clusters = CreateClusters(vectorSettings, 1, error);
+        UNIT_ASSERT_C(clusters, error);
+        UNIT_ASSERT(clusters->IsExpectedFormat(embedding));
+        UNIT_ASSERT_VALUES_EQUAL(clusters->GetEmptyRow().size(), 4);
+        UNIT_ASSERT(clusters->IsExpectedFormat(clusters->GetEmptyRow()));
+        UNIT_ASSERT(!clusters->IsExpectedFormat(SerializeVector<float>({0.25f, -0.5f, 1.5f})));
+        using TOtherFloat8 = std::conditional_t<E5M2, TFloat8E4M3, TFloat8E5M2>;
+        UNIT_ASSERT(!clusters->IsExpectedFormat(SerializeVector<TOtherFloat8>({TOtherFloat8(0.25f), TOtherFloat8(-0.5f), TOtherFloat8(1.5f)})));
+
+        vectorSettings.clear_vector_type();
+        vectorSettings.clear_vector_dimension();
+        UNIT_ASSERT(AutoSelectVectorSettings(vectorSettings, embedding));
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.vector_type(), vectorType);
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.vector_dimension(), 3);
+        vectorSettings.clear_vector_dimension();
+        UNIT_ASSERT(AutoSelectVectorSettings(vectorSettings, embedding));
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.vector_dimension(), 3);
+
+        auto detected = CreateClustersAutoDetect(vectorSettings, embedding, 1, error);
+        UNIT_ASSERT_C(detected, error);
+        UNIT_ASSERT(detected->IsExpectedFormat(embedding));
+        UNIT_ASSERT(!clusters->IsExpectedFormat(SerializeVector<i8>({1, 2, 3})));
+        UNIT_ASSERT(!clusters->IsExpectedFormat(SerializeVector<ui8>({1, 2, 3})));
+        UNIT_ASSERT(!clusters->IsExpectedFormat(embedding.substr(1)));
+        const auto single = SerializeVector<T>({T(0.5f)});
+        auto singleSettings = vectorSettings;
+        singleSettings.clear_vector_type();
+        singleSettings.clear_vector_dimension();
+        UNIT_ASSERT(AutoSelectVectorSettings(singleSettings, single));
+        UNIT_ASSERT_VALUES_EQUAL(singleSettings.vector_dimension(), 1);
+        UNIT_ASSERT(CreateClustersAutoDetect(singleSettings, single, 1, error));
+        for (const auto& invalid : {TString(), TString(1, Format<T>), TString(4, '\x7f')}) {
+            UNIT_ASSERT(!clusters->IsExpectedFormat(invalid));
+            UNIT_ASSERT(!CreateClustersAutoDetect(vectorSettings, invalid, 1, error));
+            vectorSettings.clear_vector_dimension();
+            UNIT_ASSERT(!AutoSelectVectorSettings(vectorSettings, invalid));
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(Float8VectorDistancesAndCentroids, E5M2) {
+        using T = std::conditional_t<E5M2, TFloat8E5M2, TFloat8E4M3>;
+        using TSettings = Ydb::Table::VectorIndexSettings;
+        const auto vectorType = E5M2 ? TSettings::VECTOR_TYPE_FLOAT8_E5M2 : TSettings::VECTOR_TYPE_FLOAT8_E4M3;
+        const auto first = SerializeVector<T>({T(0.25f), T(-0.5f)});
+        const auto second = SerializeVector<T>({T(0.75f), T(0.5f)});
+        const auto firstFloat = SerializeVector<float>({0.25f, -0.5f});
+        const auto secondFloat = SerializeVector<float>({0.75f, 0.5f});
+        for (auto metric : {TSettings::SIMILARITY_INNER_PRODUCT, TSettings::DISTANCE_MANHATTAN,
+                TSettings::DISTANCE_EUCLIDEAN, TSettings::SIMILARITY_COSINE, TSettings::DISTANCE_COSINE}) {
+            TString error;
+            auto settings = MakeCosineSettings(vectorType, 2);
+            settings.set_metric(metric);
+            auto clusters = CreateClusters(settings, 1, error);
+            UNIT_ASSERT_C(clusters, error);
+            settings.set_vector_type(TSettings::VECTOR_TYPE_FLOAT);
+            auto reference = CreateClusters(settings, 1, error);
+            UNIT_ASSERT_C(reference, error);
+            UNIT_ASSERT_DOUBLES_EQUAL(clusters->CalcDistance(first, second), reference->CalcDistance(firstFloat, secondFloat), 1e-6);
+
+            UNIT_ASSERT(clusters->SetClusters({first, second}));
+            UNIT_ASSERT(reference->SetClusters({firstFloat, secondFloat}));
+            UNIT_ASSERT_VALUES_EQUAL(clusters->FindCluster(second), reference->FindCluster(secondFloat));
+            std::vector<std::pair<ui32, double>> nearest, expected;
+            clusters->FindClusters(second, nearest, 2, 0);
+            reference->FindClusters(secondFloat, expected, 2, 0);
+            UNIT_ASSERT_VALUES_EQUAL(nearest.size(), expected.size());
+            for (size_t i = 0; i < nearest.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(nearest[i].first, expected[i].first);
+                UNIT_ASSERT_DOUBLES_EQUAL(nearest[i].second, expected[i].second, 1e-6);
+            }
+
+            UNIT_ASSERT(clusters->SetClusters({clusters->GetEmptyRow()}));
+            UNIT_ASSERT(reference->SetClusters({reference->GetEmptyRow()}));
+            // Weighted sums exceed the FP8 range; the centroid remains fractional.
+            clusters->AggregateToCluster(0, first, 300000);
+            clusters->AggregateToCluster(0, second, 100000);
+            reference->AggregateToCluster(0, firstFloat, 300000);
+            reference->AggregateToCluster(0, secondFloat, 100000);
+            UNIT_ASSERT(clusters->NextRound());
+            UNIT_ASSERT(reference->NextRound());
+            UNIT_ASSERT_VALUES_EQUAL(clusters->GetClusterSizes().front(), 400000);
+            const auto centroid = DeserializeVector<T>(clusters->GetClusters().front());
+            const auto expectedCentroid = DeserializeVector<float>(reference->GetClusters().front());
+            UNIT_ASSERT_VALUES_EQUAL(centroid.size(), expectedCentroid.size());
+            for (size_t i = 0; i < centroid.size(); ++i) {
+                UNIT_ASSERT_DOUBLES_EQUAL(static_cast<float>(centroid[i]), static_cast<float>(T(expectedCentroid[i])), 1e-6);
+            }
+
+            const auto zero = SerializeVector<T>({T(0.0f), T(0.0f)});
+            UNIT_ASSERT(clusters->SetClusters({zero}));
+            clusters->AggregateToCluster(0, zero);
+            UNIT_ASSERT(clusters->NextRound());
+            UNIT_ASSERT_VALUES_EQUAL(clusters->GetClusters().front(), zero);
+        }
+    }
+
     Y_UNIT_TEST(ValidateSettings) {
         Ydb::Table::KMeansTreeSettings settings;
         TString error;

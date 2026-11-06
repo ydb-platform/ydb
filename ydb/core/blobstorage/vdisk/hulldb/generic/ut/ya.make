@@ -14,6 +14,7 @@ PEERDIR(
 )
 
 SRCS(
+    hullds_idx_counters_ut.cpp
     hullds_sst_it_all_ut.cpp
     blobstorage_hullwritesst_ut.cpp
     blobstorage_hullwritesst_estimate_ut.cpp

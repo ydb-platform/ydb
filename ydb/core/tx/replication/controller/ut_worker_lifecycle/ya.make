@@ -7,6 +7,10 @@ SIZE(MEDIUM)
 TIMEOUT(600)
 
 PEERDIR(
+<<<<<<< HEAD
+=======
+    ydb/core/transfer
+>>>>>>> stable-26-3-1
     ydb/core/tx/replication/service
     ydb/core/tx/replication/ut_helpers
     library/cpp/testing/unittest

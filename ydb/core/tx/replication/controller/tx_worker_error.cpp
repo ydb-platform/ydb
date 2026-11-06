@@ -11,6 +11,10 @@ class TController::TTxWorkerError: public TTxBase {
     const TMaybe<ui64> SourceCommittedOffset;
     TMaybe<ui32> RestartWorkerNode;
     bool StopWorkers = false;
+<<<<<<< HEAD
+=======
+    bool StopReplicationWorkers = false;
+>>>>>>> stable-26-3-1
 
 public:
     explicit TTxWorkerError(TController* self, const TWorkerId& id, const TString& error, bool sourceOffsetMismatch, TMaybe<ui64> sourceCommittedOffset)
@@ -74,12 +78,21 @@ public:
             StopWorkers = true;
             return true;
         }
+<<<<<<< HEAD
+
+        YDB_LOG_ERROR_CTX(ctx, "Worker error",
+            {"rid", WorkerId.ReplicationId()},
+            {"tid", WorkerId.TargetId()},
+            {"error", Error});
+=======
+>>>>>>> stable-26-3-1
 
         YDB_LOG_ERROR_CTX(ctx, "Worker error",
             {"rid", WorkerId.ReplicationId()},
             {"tid", WorkerId.TargetId()},
             {"error", Error});
 
+        StopReplicationWorkers = replication->GetConfig().HasTransferSpecific();
         target->SetDstState(TReplication::EDstState::Error);
         target->SetIssue(Error);
 
@@ -111,6 +124,34 @@ public:
         if (StopWorkers) {
             Self->StopWorkersForMismatch(WorkerId.ReplicationId(), ctx);
         }
+<<<<<<< HEAD
+=======
+
+        if (StopReplicationWorkers) {
+            // The error is durable before stopping the remaining partitions.
+            // IsValidWorker also rejects late/recovered starts in this state.
+            for (auto& [id, worker] : Self->Workers) {
+                if (id.ReplicationId() != WorkerId.ReplicationId()) {
+                    continue;
+                }
+                Self->BootQueue.erase(id);
+                if (!worker.HasSession()) {
+                    continue;
+                }
+                if (id == WorkerId) {
+                    // This worker has already stopped; no acknowledgement will follow.
+                    const auto session = Self->Sessions.find(worker.GetSession());
+                    if (session != Self->Sessions.end()) {
+                        session->second.DetachWorker(id);
+                    }
+                    worker.ClearSession();
+                } else {
+                    Self->StopQueue.emplace(id, worker.GetSession());
+                }
+            }
+            Self->ScheduleProcessQueues();
+        }
+>>>>>>> stable-26-3-1
     }
 
 }; // TTxWorkerError

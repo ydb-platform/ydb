@@ -152,6 +152,23 @@ TReplicationDescription::TReplicationDescription(const Ydb::Replication::Describ
         }
     }
 
+<<<<<<< HEAD
+=======
+    if (desc.has_transactions()) {
+        auto& transactions = Transactions_.emplace();
+        transactions.Assigned.reserve(desc.transactions().assigned_size());
+        for (const auto& item : desc.transactions().assigned()) {
+            transactions.Assigned.push_back(TAssignedTransaction{
+                .UpperBoundBarrier = NScheme::TVirtualTimestamp(item.upper_bound_barrier()),
+                .WriteTxId = item.write_tx_id(),
+            });
+        }
+        transactions.Pending.reserve(desc.transactions().pending_size());
+        for (const auto& version : desc.transactions().pending()) {
+            transactions.Pending.emplace_back(version);
+        }
+    }
+>>>>>>> stable-26-3-1
     Items_.reserve(desc.items_size());
     for (const auto& item : desc.items()) {
         Items_.push_back(TItem{
@@ -219,6 +236,10 @@ const TGlobalConsistency& TReplicationDescription::GetGlobalConsistency() const 
     return std::get<TGlobalConsistency>(ConsistencyLevel_);
 }
 
+
+const std::optional<TReplicationDescription::TTransactions>& TReplicationDescription::GetTransactions() const {
+    return Transactions_;
+}
 
 TReplicationDescription::EState TReplicationDescription::GetState() const {
     return static_cast<EState>(State_.index());

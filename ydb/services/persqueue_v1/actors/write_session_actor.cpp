@@ -722,10 +722,11 @@ void TWriteSessionActor<Protocol>::DiscoverPartition(const NActors::TActorContex
 }
 
 template <EProtocol Protocol>
-void TWriteSessionActor<Protocol>::Handle(TEvWriteSessionsQuoter::TEvQuotaAcquired::TPtr&, const TActorContext& ctx) {
+void TWriteSessionActor<Protocol>::Handle(TEvWriteSessionsQuoter::TEvQuotaAcquired::TPtr& ev, const TActorContext& ctx) {
     if (State != ES_WAIT_WRITE_SESSION_QUOTA) {
         return;
     }
+    WriteSessionQuotaWaitTime = ev->Get()->QuotaWaitTime;
     CreatePartitionChooser(ctx);
 }
 

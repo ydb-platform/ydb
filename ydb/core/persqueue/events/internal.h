@@ -2062,7 +2062,12 @@ struct TEvWriteSessionsQuoter {
     };
 
     struct TEvQuotaAcquired : TEventLocal<TEvQuotaAcquired, EvQuotaAcquired> {
-        TEvQuotaAcquired() = default;
+        TEvQuotaAcquired(TDuration quotaWaitTime)
+            : QuotaWaitTime(quotaWaitTime)
+        {
+        }
+
+        const TDuration QuotaWaitTime;
     };
 
     struct TEvQuotaDeclined : TEventLocal<TEvQuotaDeclined, EvQuotaDeclined> {

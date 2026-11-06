@@ -910,7 +910,7 @@ Y_UNIT_TEST_SUITE(KeyValueGRPCService) {
         }();
 
         UNIT_ASSERT_VALUES_EQUAL(issues.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(issues.Get(0).issue_code(), NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED);
+        UNIT_ASSERT_VALUES_EQUAL(issues.Get(0).issue_code(), static_cast<ui32>(NYql::TIssuesIds::KIKIMR_DATABASE_DISK_SPACE_QUOTA_EXCEEDED));
     }
 
 #ifndef KIKIMR_DISABLE_S3_OPS

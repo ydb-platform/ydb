@@ -31,7 +31,7 @@ on:
         description: 'JSON array of GitHub runs-on labels'
         required: false
         type: string
-        default: '["self-hosted","linux","amd64-large"]'
+        default: '["self-hosted","auto-provisioned","build-preset-relwithdebinfo"]'
 
 concurrency:
   group: ci-remote-executor-probe-${{ inputs.platform_run_id || github.run_id }}

@@ -741,6 +741,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterThroughUnionAllRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TEliminateLeftJoinRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());
+    logicalStage_II_Rules.emplace_back(std::make_unique<TPushTopSortThroughUnionAllRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites II", std::move(logicalStage_II_Rules)));
 
     RBO.AddStage(std::make_unique<TGlobalPruningStage>("Pruning I", pruneKeyColumns));

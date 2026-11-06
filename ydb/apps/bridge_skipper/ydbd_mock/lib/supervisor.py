@@ -1000,6 +1000,31 @@ def cmd_serve(cluster: Cluster, args) -> int:
     return 0
 
 
+def cmd_skipper(cluster: Cluster, args) -> int:
+    """Launch the C++ controller with direct node addresses and a state directory per mock session."""
+    topo = cluster.topology
+    if topo.tls:
+        raise SupervisorError("skipper launcher supports plaintext mock topology; use a custom skipper config for TLS")
+    manifest = cluster.manifest()
+    config = {
+        "cluster_id": manifest["cluster_id"],
+        "mode": args.mode,
+        "endpoints": {pile.name: ["grpc://" + node.endpoint for node in pile.nodes] for pile in topo.piles},
+        "http": {"listen": args.listen},
+    }
+    config_dir = cluster.path("bridge_skipper", manifest["cluster_id"])
+    os.makedirs(config_dir, exist_ok=True)
+    config_path = os.path.join(config_dir, "config.json")
+    with open(config_path, "w") as output:
+        json.dump(config, output, indent=2)
+    state_dir = args.state_dir or config_dir
+    try:
+        os.execv(args.binary, [args.binary, "--config", config_path, "--state-dir", state_dir])
+    except OSError as error:
+        raise SupervisorError("cannot launch bridge_skipper: %s" % error) from error
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ydbd_mock cluster", description="Start, stop and control mock instances.")
     parser.add_argument("--run-dir", default=None, help="run directory (default $YDBD_MOCK_RUN_DIR)")
@@ -1086,6 +1111,12 @@ def build_parser() -> argparse.ArgumentParser:
                    ).set_defaults(fn=cmd_reset)
     sub.add_parser("endpoints", help="print the label -> endpoint map").set_defaults(fn=cmd_endpoints)
     sub.add_parser("manifest", help="print versioned logical identities and dial endpoints").set_defaults(fn=cmd_manifest)
+    skipper = sub.add_parser("skipper", help="launch the C++ bridge_skipper against this mock cluster")
+    skipper.add_argument("--binary", required=True, help="path to the built bridge_skipper executable")
+    skipper.add_argument("--mode", choices=("manual", "auto"), default="manual")
+    skipper.add_argument("--listen", default="127.0.0.1:8080")
+    skipper.add_argument("--state-dir", default=None, help="override the state directory per mock session")
+    skipper.set_defaults(fn=cmd_skipper)
     serve = sub.add_parser("serve", help="serve the cluster Lab HTTP API in the foreground")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=21999)

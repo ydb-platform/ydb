@@ -10,10 +10,11 @@ using namespace NBridgeTest;
 
 namespace {
 
-    TEnvironmentSetup::TSettings MakeTwoPileSettings() {
+    TEnvironmentSetup::TSettings MakeTwoPileSettings(std::function<void(TVDiskConfig&)> prepareVDisk = {}) {
         return {
             .NodeCount = 16,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .VDiskConfigPreprocessor = std::move(prepareVDisk),
             .LocationGenerator = GetBridgedLocation,
             .SelfManagementConfig = true,
             .NumPiles = 2,
@@ -905,7 +906,9 @@ Y_UNIT_TEST_SUITE(BridgeKeepFlags) {
 
     // the blob put behind the barrier is reported so by the bridged group as by any other, which BlobDepot checks
     Y_UNIT_TEST(PutBeyondBarrierReported) {
-        TEnvironmentSetup env(MakeTwoPileSettings());
+        TEnvironmentSetup env(MakeTwoPileSettings([](TVDiskConfig& config) {
+            config.BarrierValidation = true;
+        }));
         env.CreatePool();
         env.Sim(TDuration::Seconds(30));
         const ui32 groupId = env.GetGroups().front();

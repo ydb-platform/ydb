@@ -643,7 +643,14 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     const bool allowChannelSpilling = KqpCtx.Config->GetEnableQueryServiceSpilling()
         && (KqpCtx.IsGenericQuery() || KqpCtx.IsScanQuery()) && KqpCtx.Config->SpillingEnabled();
 
-    // Prune unused outputs before any rules that require type information.
+    // Full joins have no native filter implementation. Expand them while both
+    // input keys are still available, before pruning and read pushdown. Their
+    // shared inputs then go through the usual expansion when spilling is off.
+    TVector<std::unique_ptr<IRule>> fullJoinFilterRules;
+    fullJoinFilterRules.emplace_back(std::make_unique<TInlineJoinFiltersRule>(/*fullJoinsOnly=*/true));
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline full join filters", std::move(fullJoinFilterRules)));
+
+    // Other plans can prune unused outputs before requiring type information.
     RBO.AddStage(std::make_unique<TGlobalPruningStage>("Early pruning"));
 
     TVector<std::unique_ptr<IRule>> effectRules;
@@ -721,6 +728,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushSimpleJoinFilterRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterThroughAggregateRule>());
+    logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterThroughUnionAllRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStage_I_Rules)));
 
     TVector<std::unique_ptr<IRule>> logicalStage_II_Rules;
@@ -730,6 +738,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterThroughAggregateRule>());
+    logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterThroughUnionAllRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TEliminateLeftJoinRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites II", std::move(logicalStage_II_Rules)));

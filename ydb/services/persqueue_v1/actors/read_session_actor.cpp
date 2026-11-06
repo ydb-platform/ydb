@@ -4,6 +4,7 @@
 #include "read_init_auth_actor.h"
 
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/metrics/metrics.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
@@ -974,7 +975,7 @@ void TReadSessionActor<Protocol>::SetupBytesReadByUserAgentCounter() {
     BytesReadByUserAgent = GetServiceCounters(Counters, "pqproxy|userAgents", false)
         ->GetSubgroup("host", "")
         ->GetSubgroup("protocol", protocol)
-        ->GetSubgroup("consumer", ClientPath)
+        ->GetSubgroup("consumer", ReadWithoutConsumer ? ClientPath : NPQ::MetricsConsumerName(ClientId))
         ->GetSubgroup("sdk_build_info", CleanupCounterValueString(SdkBuildInfo))
         ->GetSubgroup("user_agent", DropUserAgentSuffix(CleanupCounterValueString(UserAgent)))
         ->GetExpiringNamedCounter("sensor", "BytesReadByUserAgent", true);
@@ -988,7 +989,7 @@ void TReadSessionActor<Protocol>::SetupCounters() {
 
     auto subGroup = GetServiceCounters(Counters, "pqproxy|readSession");
     if (!ReadWithoutConsumer) {
-        subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup("ConsumerPath", ClientPath);
+        subGroup = subGroup->GetSubgroup("Client", ClientId)->GetSubgroup("ConsumerPath", NPQ::MetricsConsumerName(ClientId));
     }
     const TString name = "sensor";
 
@@ -1020,7 +1021,7 @@ void TReadSessionActor<Protocol>::SetupTopicCounters(const NPersQueue::TTopicCon
     auto aggr = NPersQueue::GetLabels(topic);
     TVector<std::pair<TString, TString>> cons;
     if (!ReadWithoutConsumer) {
-        cons = {{"Client", ClientId}, {"ConsumerPath", ClientPath}};
+        cons = {{"Client", ClientId}, {"ConsumerPath", NPQ::MetricsConsumerName(ClientId)}};
     }
 
     topicCounters.PartitionsLocked       = NPQ::TMultiCounter(subGroup, aggr, cons, {"PartitionsLocked"}, true);
@@ -1047,7 +1048,7 @@ void TReadSessionActor<Protocol>::SetupTopicCounters(const NPersQueue::TTopicCon
     auto subGroup = NPersQueue::GetCountersForTopic(Counters, isServerless);
     auto subgroups = NPersQueue::GetSubgroupsForTopic(topic, cloudId, dbId, dbPath, folderId);
     if (!ReadWithoutConsumer)
-        subgroups.push_back({"consumer", ClientPath});
+        subgroups.push_back({"consumer", NPQ::MetricsConsumerName(ClientId)});
 
     topicCounters.PartitionsLocked       = NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.started"}, true, "name");
     topicCounters.PartitionsReleased     = NPQ::TMultiCounter(subGroup, {}, subgroups, {"api.grpc.topic.stream_read.partition_session.stopped"}, true, "name");

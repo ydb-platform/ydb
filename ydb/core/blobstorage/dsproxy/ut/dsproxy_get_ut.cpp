@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TDSProxyGetTest) {
 
 Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
     for (bool mustRestore : {false, true}) {
-        for (bool phantomCheck : {false, true}) {
+        for (const auto [phantomCheck, errorMask] : {std::pair{false, 1u}, {true, 1u}, {true, 7u}}) {
             TActorSystemStub actorSystemStub;
             TGroupMock group(0, TErasureType::ErasureMirror3dc, 4, 3, 1);
             const auto info = group.GetInfo();
@@ -64,8 +64,9 @@ Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
                 const ui32 disk = info->GetIdxInSubgroup(vdisk, uncertainId.Hash());
                 for (auto& item : *reply.Record.MutableResult()) {
                     if (LogoBlobIDFromLogoBlobID(item.GetBlobID()).FullID() == uncertainId) {
-                        // One real failure is in-model; ERROR plus NOT_YET can still hide 1+1+1.
-                        if (disk == 0) {
+                        // ERROR plus NOT_YET can hide 1+1+1. Phantom checks also cover errors
+                        // outside the failure model without aborting the other blobs in the batch.
+                        if (errorMask & (1u << disk)) {
                             item.SetStatus(NKikimrProto::ERROR);
                         } else if (!phantomCheck && (disk == 1 || disk == 2)) {
                             item.SetStatus(NKikimrProto::NOT_YET);
@@ -77,7 +78,7 @@ Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
                 UNIT_ASSERT(puts.empty());
             }
             UNIT_ASSERT_VALUES_EQUAL_C(result->Status, NKikimrProto::OK,
-                "mustRestore# " << mustRestore << " phantomCheck# " << phantomCheck);
+                "mustRestore# " << mustRestore << " phantomCheck# " << phantomCheck << " errorMask# " << errorMask);
             UNIT_ASSERT_VALUES_EQUAL(result->ResponseSz, 3);
             UNIT_ASSERT_VALUES_EQUAL(result->Responses[0].Id, uncertainId);
             UNIT_ASSERT_VALUES_EQUAL(result->Responses[0].Status, NKikimrProto::ERROR);
@@ -86,7 +87,7 @@ Y_UNIT_TEST(Mirror3dcBatchGetKeepsPerBlobErrors) {
             UNIT_ASSERT_VALUES_EQUAL(result->Responses[2].Id, absentId);
             UNIT_ASSERT_VALUES_EQUAL(result->Responses[2].Status, NKikimrProto::NODATA);
             if (phantomCheck) {
-                UNIT_ASSERT(!result->Responses[0].LooksLikePhantom.value());
+                UNIT_ASSERT_VALUES_EQUAL(result->Responses[0].LooksLikePhantom.value(), errorMask == 1);
                 UNIT_ASSERT(!result->Responses[1].LooksLikePhantom.value());
                 UNIT_ASSERT(result->Responses[2].LooksLikePhantom.value());
             } else {

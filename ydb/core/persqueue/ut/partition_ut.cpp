@@ -3742,15 +3742,26 @@ Y_UNIT_TEST_F(ReplicationDataRetriesMirroredOffsetAfterUnrelatedPersist, TPartit
 
         SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
         WaitProxyResponse({.Cookie = 1});
-        // Only the first payload advances the zero boundaries; later payloads preserve them.
-        WaitCmdWrite({.MetaStartOffset = 100, .MetaEndOffset = 100, .MetaMirroredOffset = mirroredOffset});
+        // Each newer watermark advances the empty boundaries, including nonzero ones.
+        WaitCmdWrite({.MetaStartOffset = mirroredOffset, .MetaEndOffset = mirroredOffset,
+            .MetaMirroredOffset = mirroredOffset});
 
         SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
         WaitForReplicationDataPersisted(*partition);
         UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::BlobEncoder(*partition).MirroredOffset, mirroredOffset);
-        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), 100);
-        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 100);
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), mirroredOffset);
+        UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), mirroredOffset);
     }
+
+    // Replaying an older watermark must not move the empty range backwards.
+    auto event = MakeHolder<TEvPQ::TEvReplicationData>();
+    event->MirroredOffset = 150;
+    SendEvent(event.Release());
+    WaitCmdWrite({.MetaStartOffset = 200, .MetaEndOffset = 200, .MetaMirroredOffset = 200});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitForReplicationDataPersisted(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), 200);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 200);
 }
 
 // ReplyError uses !!replyTo as IsInternal (same as TEvRead::IsInternal). Call sites must pass the
@@ -8885,6 +8896,48 @@ Y_UNIT_TEST_F(InitRestoresEmptyPartitionOffsetsFromMirroredOffset, TPartitionFix
         .UserInfos = {{0, {.Consumer = "reader", .Offset = mirroredOffset}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
     WaitProxyResponse({.Cookie = 1});
+}
+
+Y_UNIT_TEST_F(InitRestoresNonzeroEmptyPartitionOffsetsFromMirroredOffset, TPartitionFixture) {
+    constexpr ui64 previousOffset = 300081999034;
+    constexpr ui64 mirroredOffset = 300096827285;
+    const TConfigParams config{.Consumers = {{.Consumer = "reader", .Offset = previousOffset}}};
+    auto* partition = CreatePartition({
+        .Begin = previousOffset,
+        .End = previousOffset,
+        .Config = config,
+        .NoDataKeys = true,
+        .MirroredOffset = mirroredOffset,
+    }, config);
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), mirroredOffset);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), mirroredOffset);
+    const auto& encoder = TPartitionTestWrapper::BlobEncoder(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.Offset, mirroredOffset);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHead.Offset, mirroredOffset);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetUserInfo(*partition, "reader")->Offset, previousOffset);
+
+    SendSetOffset(1, "reader", previousOffset, "");
+    WaitCmdWrite({.MetaStartOffset = mirroredOffset, .MetaEndOffset = mirroredOffset,
+        .MetaMirroredOffset = mirroredOffset,
+        .UserInfos = {{0, {.Consumer = "reader", .Offset = previousOffset}}}});
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 1});
+}
+
+Y_UNIT_TEST_F(InitWithOlderMirroredOffsetPreservesEmptyPartitionOffsets, TPartitionFixture) {
+    auto* partition = CreatePartition({
+        .Begin = 30,
+        .End = 30,
+        .NoDataKeys = true,
+        .MirroredOffset = 20,
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetStartOffset(*partition), 30);
+    UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetEndOffset(*partition), 30);
+    const auto& encoder = TPartitionTestWrapper::BlobEncoder(*partition);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.Offset, 30);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHead.Offset, 30);
 }
 
 Y_UNIT_TEST_F(InitPrefersMirroredOffsetOverConsumerOffsets, TPartitionFixture) {

@@ -329,6 +329,9 @@ def wait_for_claim(cfg):
         body = http_get(url)
         if body:
             claim = json.loads(body)
+            status = str(claim.get("status") or "").strip().lower()
+            if status == "failed":
+                die(f"remote claim failed: {claim.get('error') or claim}")
             run_id = str(claim.get("executor_run_id") or "").strip()
             if run_id:
                 run_url = str(claim.get("executor_run_url") or "").strip() or (
@@ -338,6 +341,7 @@ def wait_for_claim(cfg):
                     f"### Remote claim\n- **executor run:** [{run_id}]({run_url})\n\n"
                 )
                 return run_id, run_url
+            # pending claim: keep waiting for executor_run_id
         if i % 10 == 0:
             print(f"{time.strftime('%H:%M:%S', time.gmtime())} waiting for claim...")
         time.sleep(30)

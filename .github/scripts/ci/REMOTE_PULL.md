@@ -27,8 +27,11 @@ Optional: set `ticket_s3_*` to also mirror the JSON to platform S3.
 | `PLATFORM_GH_TOKEN` | `actions:read` on platform repo (artifacts / runs) |
 | `PLATFORM_REPOSITORY` | e.g. `ydb-platform/ydb` |
 | `PLATFORM_RUN_ID` | optional single run; if set, poller waits for the artifact |
+| `PLATFORM_WORKFLOW_NAMES` | scan filter (default `Run and debug tests`; `*` = all) |
 | `CLAIM_S3_BUCKET` / `CLAIM_PUBLIC_BASE` | remote public S3 for claims |
 | `TICKET_BASE_URL` | optional S3 ticket fallback |
 | `EXECUTOR_REF` | default branch if ticket omits `executor_ref` |
+
+Claim is created with S3 `If-None-Match: *` **before** `workflow_dispatch`, then updated with `executor_run_id`. Waiter ignores `pending` and fails on `status=failed`.
 
 Config: `handoff: "pull"` (default) or `"push"` (legacy PAT dispatch).

@@ -20,7 +20,7 @@ PEERDIR(
     ydb/tests/oss/ydb_sdk_import
 )
 
-FORK_SUBTESTS()
+# Reuse the class-scoped cluster for all tests in each file.
 FORK_TEST_FILES()
 
 END()

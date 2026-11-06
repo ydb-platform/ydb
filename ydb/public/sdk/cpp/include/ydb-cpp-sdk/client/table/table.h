@@ -324,6 +324,11 @@ struct TGlobalIndexSettings {
 
 struct TVectorIndexSettings {
 public:
+    static constexpr uint64_t DefaultMinRows = 10000;
+    static constexpr uint32_t DefaultM = 16;
+    static constexpr uint32_t DefaultEfConstruction = 200;
+    static constexpr uint64_t DefaultDeltaRows = 10000;
+
     enum class EMetric {
         Unspecified = 0,
         InnerProduct,
@@ -350,11 +355,11 @@ public:
     EMetric Metric = EMetric::Unspecified;
     EVectorType VectorType = EVectorType::Unspecified;
     uint32_t VectorDimension = 0;
-    uint64_t MinRows = 10000;
-    uint32_t M = 16;
-    uint32_t EfConstruction = 200;
+    uint64_t MinRows = DefaultMinRows;
+    uint32_t M = DefaultM;
+    uint32_t EfConstruction = DefaultEfConstruction;
     // Rebuild after more than this many distinct rows change since the graph snapshot.
-    uint64_t DeltaRows = 10000;
+    uint64_t DeltaRows = DefaultDeltaRows;
 
     static TVectorIndexSettings FromProto(const Ydb::Table::VectorIndexSettings& proto);
 
@@ -403,6 +408,15 @@ public:
     void SerializeTo(Ydb::Table::KMeansTreeSettings& settings) const;
 
     void Out(IOutputStream &o) const;
+};
+
+struct THnswIndexSettings {
+    TKMeansTreeSettings VectorSettings;
+    std::vector<std::string> DataColumns;
+    TGlobalIndexSettings LevelTableSettings;
+    TGlobalIndexSettings PostingTableSettings;
+    // Used only by CreatePrefixedHnswIndex.
+    TGlobalIndexSettings PrefixTableSettings;
 };
 
 struct TFulltextIndexSettings {
@@ -541,20 +555,13 @@ public:
     static TIndexDescription CreateHnswIndex(
         const std::string& name,
         const std::string& vectorColumn,
-        const TKMeansTreeSettings& specializedIndexSettings,
-        const std::vector<std::string>& dataColumns = {},
-        const TGlobalIndexSettings& levelTableSettings = {},
-        const TGlobalIndexSettings& postingTableSettings = {}
+        const THnswIndexSettings& settings
     );
 
     static TIndexDescription CreatePrefixedHnswIndex(
         const std::string& name,
         const std::vector<std::string>& indexColumns,
-        const TKMeansTreeSettings& specializedIndexSettings,
-        const std::vector<std::string>& dataColumns = {},
-        const TGlobalIndexSettings& levelTableSettings = {},
-        const TGlobalIndexSettings& postingTableSettings = {},
-        const TGlobalIndexSettings& prefixTableSettings = {}
+        const THnswIndexSettings& settings
     );
 
     static TIndexDescription CreateFulltextPlainIndex(

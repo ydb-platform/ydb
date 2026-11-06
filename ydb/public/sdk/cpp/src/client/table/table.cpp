@@ -2738,29 +2738,22 @@ TIndexDescription TIndexDescription::CreatePrefixedVectorIndex(
 TIndexDescription TIndexDescription::CreateHnswIndex(
     const std::string& name,
     const std::string& vectorColumn,
-    const TKMeansTreeSettings& specializedIndexSettings,
-    const std::vector<std::string>& dataColumns,
-    const TGlobalIndexSettings& levelTableSettings,
-    const TGlobalIndexSettings& postingTableSettings
+    const THnswIndexSettings& settings
 ) {
     return TIndexDescription(
-        name, EIndexType::GlobalHnsw, {vectorColumn}, dataColumns,
-        {levelTableSettings, postingTableSettings}, specializedIndexSettings
+        name, EIndexType::GlobalHnsw, {vectorColumn}, settings.DataColumns,
+        {settings.LevelTableSettings, settings.PostingTableSettings}, settings.VectorSettings
     );
 }
 
 TIndexDescription TIndexDescription::CreatePrefixedHnswIndex(
     const std::string& name,
     const std::vector<std::string>& indexColumns,
-    const TKMeansTreeSettings& specializedIndexSettings,
-    const std::vector<std::string>& dataColumns,
-    const TGlobalIndexSettings& levelTableSettings,
-    const TGlobalIndexSettings& postingTableSettings,
-    const TGlobalIndexSettings& prefixTableSettings
+    const THnswIndexSettings& settings
 ) {
     return TIndexDescription(
-        name, EIndexType::GlobalHnsw, indexColumns, dataColumns,
-        {levelTableSettings, postingTableSettings, prefixTableSettings}, specializedIndexSettings
+        name, EIndexType::GlobalHnsw, indexColumns, settings.DataColumns,
+        {settings.LevelTableSettings, settings.PostingTableSettings, settings.PrefixTableSettings}, settings.VectorSettings
     );
 }
 
@@ -2972,10 +2965,10 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorInd
         .Metric = covertMetric(),
         .VectorType = convertVectorType(),
         .VectorDimension = proto.vector_dimension(),
-        .MinRows = proto.has_min_rows() ? proto.min_rows() : 10000,
-        .M = proto.has_m() ? proto.m() : 16,
-        .EfConstruction = proto.has_ef_construction() ? proto.ef_construction() : 200,
-        .DeltaRows = proto.has_delta_rows() ? proto.delta_rows() : 10000,
+        .MinRows = proto.has_min_rows() ? proto.min_rows() : DefaultMinRows,
+        .M = proto.has_m() ? proto.m() : DefaultM,
+        .EfConstruction = proto.has_ef_construction() ? proto.ef_construction() : DefaultEfConstruction,
+        .DeltaRows = proto.has_delta_rows() ? proto.delta_rows() : DefaultDeltaRows,
     };
 }
 
@@ -3027,22 +3020,22 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
     settings.set_metric(convertMetric());
     settings.set_vector_type(convertVectorType());
     settings.set_vector_dimension(VectorDimension);
-    if (MinRows != 10000) {
+    if (MinRows != DefaultMinRows) {
         settings.set_min_rows(MinRows);
     } else {
         settings.clear_min_rows();
     }
-    if (M != 16) {
+    if (M != DefaultM) {
         settings.set_m(M);
     } else {
         settings.clear_m();
     }
-    if (EfConstruction != 200) {
+    if (EfConstruction != DefaultEfConstruction) {
         settings.set_ef_construction(EfConstruction);
     } else {
         settings.clear_ef_construction();
     }
-    if (DeltaRows != 10000) {
+    if (DeltaRows != DefaultDeltaRows) {
         settings.set_delta_rows(DeltaRows);
     } else {
         settings.clear_delta_rows();

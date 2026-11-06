@@ -1170,7 +1170,15 @@ TEST(VectorIndexSettings, HnswIndexFactoriesAndProtoRoundTrip) {
         vector->set_m(24);
         vector->set_ef_construction(300);
         vector->set_delta_rows(1ULL << 40);
-        const auto settings = NTable::TKMeansTreeSettings::FromProto(tree);
+        NTable::THnswIndexSettings settings;
+        settings.VectorSettings = NTable::TKMeansTreeSettings::FromProto(tree);
+        settings.DataColumns = {"payload"};
+        settings.LevelTableSettings.Partitions = uint64_t{2};
+        settings.PostingTableSettings.Partitions = uint64_t{3};
+        settings.PrefixTableSettings.Partitions = uint64_t{4};
+        const std::vector<std::string> indexColumns = prefixed
+            ? std::vector<std::string>{"scope", "emb"}
+            : std::vector<std::string>{"emb"};
         const auto factory = prefixed
             ? NTable::TIndexDescription::CreatePrefixedHnswIndex("vidx", {"scope", "emb"}, settings)
             : NTable::TIndexDescription::CreateHnswIndex("vidx", "emb", settings);
@@ -1180,19 +1188,31 @@ TEST(VectorIndexSettings, HnswIndexFactoriesAndProtoRoundTrip) {
         EXPECT_EQ(request.index_columns_size(), prefixed ? 2 : 1);
 
         auto check = [&](const NTable::TIndexDescription& index) {
+            EXPECT_EQ(index.GetIndexName(), "vidx");
             EXPECT_EQ(index.GetIndexType(), NTable::EIndexType::GlobalHnsw);
+            EXPECT_EQ(index.GetIndexColumns(), indexColumns);
+            EXPECT_EQ(index.GetDataColumns(), settings.DataColumns);
             Ydb::Table::TableIndex serialized;
             index.SerializeTo(serialized);
             ASSERT_EQ(serialized.type_case(), Ydb::Table::TableIndex::kGlobalHnswIndex);
-            const auto& actual = serialized.global_hnsw_index().vector_settings();
+            const auto& hnsw = serialized.global_hnsw_index();
+            EXPECT_EQ(hnsw.level_table_settings().uniform_partitions(), 2u);
+            EXPECT_EQ(hnsw.posting_table_settings().uniform_partitions(), 3u);
+            EXPECT_EQ(hnsw.has_prefix_table_settings(), prefixed);
+            if (prefixed) {
+                EXPECT_EQ(hnsw.prefix_table_settings().uniform_partitions(), 4u);
+            }
+            const auto& actual = hnsw.vector_settings();
             EXPECT_EQ(actual.levels(), 1u);
             EXPECT_EQ(actual.clusters(), 1u);
             EXPECT_EQ(actual.settings().SerializeAsString(), vector->SerializeAsString());
         };
+        check(factory);
         check(TProtoAccessor::FromProto(request));
         Ydb::Table::TableIndexDescription description;
         description.set_name(request.name());
         *description.mutable_index_columns() = request.index_columns();
+        *description.mutable_data_columns() = request.data_columns();
         *description.mutable_global_hnsw_index() = request.global_hnsw_index();
         check(TProtoAccessor::FromProto(description));
     }
@@ -1264,7 +1284,7 @@ TEST(VectorIndexSettings, HnswIndexDefaultsHavePresence) {
     settings.Settings.VectorDimension = 200;
     settings.Levels = 1;
     settings.Clusters = 1;
-    const auto index = NTable::TIndexDescription::CreateHnswIndex("vidx", "emb", settings);
+    const auto index = NTable::TIndexDescription::CreateHnswIndex("vidx", "emb", {.VectorSettings = settings});
     Ydb::Table::TableIndex request;
     index.SerializeTo(request);
     const auto& vector = request.global_hnsw_index().vector_settings().settings();
@@ -1335,7 +1355,7 @@ TEST(VectorIndexSettings, HnswDiagnosticOutputIncludesSettings) {
     const TString expected = "{ similarity: inner_product, vector_type: float, vector_dimension: 200, "
                              "min_rows: 0, M: 24, ef_construction: 300, delta_rows: 1099511627776 }";
     EXPECT_EQ(ToString(settings.Settings), expected);
-    const auto index = NTable::TIndexDescription::CreateHnswIndex("vidx", "emb", settings);
+    const auto index = NTable::TIndexDescription::CreateHnswIndex("vidx", "emb", {.VectorSettings = settings});
     const auto output = index.ToString();
     EXPECT_NE(output.find("vector_settings: { settings: " + std::string(expected)), std::string::npos);
 

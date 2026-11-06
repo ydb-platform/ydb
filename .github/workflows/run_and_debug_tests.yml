@@ -18,10 +18,10 @@ on:
         type: string
         default: 'ydb-platform/ydb'
       code_ref:
-        description: 'SHA/ref to checkout and build (handoff code_ref)'
+        description: 'SHA/ref to checkout and build (use handoff branch for job_summary + quoted URLs)'
         required: false
         type: string
-        default: 'main'
+        default: 'dev/ci-remote-pull'
       job_inputs:
         description: 'JSON object of build_and_test_ya public params (no secrets)'
         required: false
@@ -208,6 +208,8 @@ jobs:
           analytics_job_name: ${{ steps.ya.outputs.analytics_job_name }}
           source_event_name: ${{ steps.ya.outputs.source_event_name }}
           source_run_id: ${{ steps.ya.outputs.source_run_id }}
+          # Handoff action input: skip QA upload (creds file not wired in this probe).
+          enable_ydb_qa: false
           additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ steps.ya.outputs.additional_ya_make_args }}
           secs: >-
             ${{ format('{{"AWS_KEY_ID":{0},"AWS_KEY_VALUE":{1},"REMOTE_CACHE_USERNAME":{2},"REMOTE_CACHE_PASSWORD":{3},"YDBOT_TELEGRAM_BOT_TOKEN":{4},"CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS":{5}}}',

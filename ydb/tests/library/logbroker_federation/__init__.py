@@ -105,6 +105,17 @@ class LogbrokerFederation(object):
     def ydb_cluster_endpoints(self):
         return {name: f"localhost:{port}" for name, port in self.__cluster_ports.items()}
 
+    def stop_cluster(self, name):
+        # Keep static nodes running to preserve in-memory storage.
+        cluster = self.__clusters[name]
+        for node in list(cluster.slots.values()):
+            node.stop()
+
+    def start_cluster(self, name):
+        cluster = self.__clusters[name]
+        for node in list(cluster.slots.values()):
+            node.start()
+
     @staticmethod
     def _forward_to_cm(method, request, context):
         # Keep database/auth metadata and the caller's deadline intact.

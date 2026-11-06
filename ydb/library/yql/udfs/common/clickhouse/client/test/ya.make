@@ -2,6 +2,10 @@ IF (OS_LINUX AND CLANG AND NOT WITH_VALGRIND)
 
 YQL_UDF_TEST()
 
+TEST_SRCS(
+    test_parse_format.py
+)
+
 DEPENDS(ydb/library/yql/udfs/common/clickhouse/client)
 
 SIZE(MEDIUM)

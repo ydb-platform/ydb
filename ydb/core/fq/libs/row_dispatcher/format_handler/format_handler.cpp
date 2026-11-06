@@ -339,24 +339,28 @@ private:
 
             OnWatermark(Offset, maybeWatermark);
 
-            const auto numberRows = newNumberRows - NumberRows;
-            const auto rowSize = newDataPackerSize - DataPackerSize;
-
-            if (!numberRows && !Watermark) {
-                return;
-            }
-
-            YDB_LOG_TRACE("OnBatchFinish",
-                {"logPrefix", LogPrefix},
-                {"offset", Offset},
-                {"numberRows", numberRows},
-                {"rowSize", rowSize},
-                {"watermark", Watermark});
-
-            Client->AddDataToClient(Offset, numberRows, rowSize, Watermark);
-
+            MessageRows += newNumberRows - NumberRows;
+            MessageSize += newDataPackerSize - DataPackerSize;
             NumberRows = newNumberRows;
             DataPackerSize = newDataPackerSize;
+
+            // All rows of a topic message share its offset. Advance the client
+            // and finish packing only after the last row, so the remaining rows
+            // cannot be discarded as historical or split across checkpoints.
+            if (rowId + 1 < Self.Offsets.size() && Self.Offsets[rowId + 1] == Offset) {
+                return;
+            }
+            if (MessageRows || Watermark) {
+                YDB_LOG_TRACE("OnBatchFinish",
+                    {"logPrefix", LogPrefix},
+                    {"offset", Offset},
+                    {"numberRows", MessageRows},
+                    {"rowSize", MessageSize},
+                    {"watermark", Watermark});
+                Client->AddDataToClient(Offset, MessageRows, MessageSize, Watermark);
+            }
+            MessageRows = 0;
+            MessageSize = 0;
             if (DataPackerSize > MAX_BATCH_SIZE) {
                 FinishPacking();
             }
@@ -417,6 +421,8 @@ private:
         ui64 Offset;
         ui64 NumberRows = 0;
         ui64 DataPackerSize = 0;
+        ui64 MessageRows = 0;
+        ui64 MessageSize = 0;
         TVector<NYql::NUdf::TUnboxedValue> FilteredRow;   // Temporary value holder for DataPacket
         TMemoryLimitedDataPacker DataPacker;
         TVector<ui64> FilteredOffsets;   // Offsets of current batch in DataPacker
@@ -749,16 +755,17 @@ private:
     }
 
     void ProcessData(ui64 numberRows) {
-        if (!numberRows) {
+        const auto lastMessageOffset = Parser->GetLastMessageOffset();
+        if (!lastMessageOffset) {
             return;
         }
 
         Y_ENSURE(numberRows <= Offsets.size());
-        const ui64 lastOffset = Offsets[numberRows - 1];
+        const ui64 lastOffset = *lastMessageOffset;
         YDB_LOG_TRACE("Send messages to programs",
             {"logPrefix", LogPrefix},
             {"numberRows", numberRows},
-            {"firstOffset", Offsets.front()},
+            {"firstOffset", Offsets.empty() ? lastOffset : Offsets.front()},
             {"lastOffset", lastOffset});
 
         if (Filters) {

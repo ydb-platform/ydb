@@ -63,6 +63,17 @@ public:
         }
 
         if (Replication->GetState() == TReplication::EState::Removing) {
+            if (record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON) {
+                NIceDb::TNiceDb db(txc.DB);
+                // An older controller may have admitted this FORCE as ordinary DROP.
+                for (auto* target : Replication->GetTargets()) {
+                    if (target->GetStreamState() != TReplication::EStreamState::Removed) {
+                        target->SetStreamState(TReplication::EStreamState::Removed);
+                        db.Table<Schema::SrcStreams>().Key(Replication->GetId(), target->GetId()).Update(
+                            NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState()));
+                    }
+                }
+            }
             Replication->SetDropOp(PubEv->Sender, std::make_pair(opId.GetTxId(), opId.GetPartId()));
             return true;
         }
@@ -99,6 +110,33 @@ public:
             Self->CompleteWorkerSets.erase({Replication->GetId(), tid});
             db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
+<<<<<<< HEAD
+
+            bool detachIndex = false;
+            if (target->GetKind() == TReplication::ETargetKind::IndexTable) {
+                const TString indexPath(ExtractParent(target->GetDstPath()));
+                const auto basePath = CanonizePath(TString(ExtractParent(indexPath)));
+                if (retainedTables.contains(basePath)) {
+                    // A base without a confirmed destination or with a pending
+                    // attachment is preserved. Persist index cleanup ownership
+                    // before the base target can disappear, including on restart.
+                    if (target->GetDstPathId() && !target->GetPendingDstPathId()) {
+                        target->SetPendingDstPathId(target->GetDstPathId());
+                        db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                            NIceDb::TUpdate<Schema::Targets::PendingDstPathOwnerId>(target->GetPendingDstPathId().OwnerId),
+                            NIceDb::TUpdate<Schema::Targets::PendingDstPathLocalId>(target->GetPendingDstPathId().LocalPathId)
+                        );
+                    }
+                    detachIndex = bool(target->GetPendingDstPathId());
+                }
+            }
+
+            const bool attaching = target->GetDstState() == TReplication::EDstState::Attaching;
+            if (!attaching) {
+                target->Shutdown(ctx);
+            }
+=======
+>>>>>>> stable-26-3-1
 
             bool detachIndex = false;
             if (target->GetKind() == TReplication::ETargetKind::IndexTable) {
@@ -124,7 +162,9 @@ public:
                 target->Shutdown(ctx);
             }
 
-            target->SetStreamState(TReplication::EStreamState::Removing);
+            target->SetStreamState(record.GetSourceCleanup() == NKikimrReplication::SOURCE_CLEANUP_POLICY_ABANDON
+                ? TReplication::EStreamState::Removed
+                : TReplication::EStreamState::Removing);
             db.Table<Schema::SrcStreams>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::SrcStreams::State>(target->GetStreamState())
             );

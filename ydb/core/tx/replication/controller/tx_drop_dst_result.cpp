@@ -63,6 +63,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
+<<<<<<< HEAD
         Self->DeleteProcessedSourceOffsets(rid, tid, db);
         db.Table<Schema::Targets>().Key(rid, tid).Delete();
         db.Table<Schema::SrcStreams>().Key(rid, tid).Delete();
@@ -70,6 +71,9 @@ public:
             db.Table<Schema::Workers>().Key(rid, tid, wid).Delete();
         }
         Replication->RemoveTarget(tid);
+=======
+        Self->RemoveTarget(db, *Replication, tid);
+>>>>>>> stable-26-3-1
 
         return true;
     }
@@ -87,6 +91,17 @@ public:
 
 void TController::RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxDropDstResult(this, ev), ctx);
+}
+
+void TController::RemoveTarget(NIceDb::TNiceDb& db, TReplication& replication, ui64 targetId) {
+    const auto rid = replication.GetId();
+    DeleteProcessedSourceOffsets(rid, targetId, db);
+    db.Table<Schema::Targets>().Key(rid, targetId).Delete();
+    db.Table<Schema::SrcStreams>().Key(rid, targetId).Delete();
+    for (const auto wid : replication.FindTarget(targetId)->GetWorkers()) {
+        db.Table<Schema::Workers>().Key(rid, targetId, wid).Delete();
+    }
+    replication.RemoveTarget(targetId);
 }
 
 }

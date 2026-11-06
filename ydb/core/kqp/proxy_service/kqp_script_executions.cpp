@@ -581,7 +581,10 @@ private:
             {"metaTtl", TDuration::MicroSeconds(metaTtl)});
 
         constexpr char sql[] = R"(
+<<<<<<< HEAD
 
+=======
+>>>>>>> stable-26-3-1
             -- TCreateScriptOperationQuery::CreateScriptExecution
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
@@ -811,7 +814,10 @@ public:
             {"logPrefix", LogPrefix()},
             {"creatorId", creatorId},
             {"runScriptActorId", RunScriptActorId});
+<<<<<<< HEAD
 
+=======
+>>>>>>> stable-26-3-1
     }
 
     void Handle(TEvPrivate::TEvCreateScriptOperationResponse::TPtr& ev) {

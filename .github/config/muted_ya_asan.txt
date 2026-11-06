@@ -4,6 +4,7 @@ ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/graph/shard/ut unittest.sole chunk
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch_MixedTableAndTopicReceipts
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch_MixedTableAndTopicReceipts_TablesFormat0
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery10
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery11
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery13
@@ -44,6 +45,7 @@ ydb/core/kqp/ut/runtime KqpScanSpilling.SpillingInRuntimeNodes+EnabledSpilling+E
 ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme GeneratedStored.CompileTimeDefaultsAlterDependencySetAndDrop
 ydb/core/kqp/ut/scheme GeneratedStored.CompileTimeDefaultsNonKeySerialDependency
+ydb/core/kqp/ut/scheme GeneratedStored.CompileTimeDefaultsPartialUpsertAndReplace
 ydb/core/kqp/ut/scheme GeneratedStored.CompositeGeneratedIndexWithCompositePrimaryKey
 ydb/core/kqp/ut/scheme GeneratedStored.CopyTablePreservesGeneratedColumn
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedWithIndex
@@ -99,6 +101,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefault-EnableCompileTimeDef
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnColumnTable
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK-EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnSequenceColumn
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnColumnTable
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK-EnableCompileTimeDefaults
@@ -164,6 +167,7 @@ ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_P
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKUInt32
 ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
 ydb/core/tx/datashard/ut_change_exchange Cdc.EnqueueRequestProcessSend
+ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanAndResolvedTimestamps
 ydb/core/tx/datashard/ut_change_exchange Cdc.InitialScanConcurrentIndexes-BaseFinishesFirst
 ydb/core/tx/datashard/ut_change_exchange unittest.[*/*] chunk
 ydb/core/tx/datashard/ut_lock_rows DataShardLockRows.RandomizedDeadlockDetection

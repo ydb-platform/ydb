@@ -9,5 +9,3 @@ items:
     href: device-list.md
   - name: Заполнение PDisk
     href: pdisk-populate.md
-  - name: Изменение режима пула bridge
-    href: pool-set-bridge-mode.md

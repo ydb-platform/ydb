@@ -599,6 +599,8 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     if (config.HasMaxRdmaRetryBackoffLevel()) {
         result.MaxRdmaRetryBackoffLevel = config.GetMaxRdmaRetryBackoffLevel();
     }
+    result.RdmaAddress = config.GetRdmaAddress();
+    result.RdmaInterface = config.GetRdmaInterface();
 
     if (config.HasCollectSubscriptionStackTrace()) {
         result.CollectSubscriptionStackTrace = config.GetCollectSubscriptionStackTrace();

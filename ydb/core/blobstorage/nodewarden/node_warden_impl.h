@@ -710,7 +710,6 @@ namespace NKikimr::NStorage {
 
         struct TGroupRecord {
             TIntrusivePtr<TBlobStorageGroupInfo> Info; // current group info
-            std::optional<TBlobStorageGroupType> GType;
             ui32 MaxKnownGeneration = 0; // maximum seen generation
             std::optional<NKikimrBlobStorage::TGroupInfo> Group; // group info as a protobuf
             NKikimrBlobStorage::TGroupInfo EncryptionParams; // latest encryption parameters; set only when encryption enabled; overlay in respect to Group
@@ -898,7 +897,11 @@ namespace NKikimr::NStorage {
         std::set<TWorkingSyncer> WorkingSyncers;
 
         TReplQuoter::TPtr SyncRateQuoter;
+        ui64 SyncRateConfigLimit = 0; // BridgeSyncRateBytesPerSecond, 0 means no limit
+        ui64 SyncRateControllerLimit = 0; // the share of the node in the limit for the cluster, 0 means no limit
+        ui32 ControllerGeneration = 0; // the newest tablet generation of BSC that has told the node its syncers and share
 
+        void UpdateSyncRateQuoter();
         void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);
         void StartSyncerIfNeeded(TWorkingSyncer& syncer);
         void Handle(TAutoPtr<TEventHandle<TEvNodeWardenNotifySyncerFinished>> ev);

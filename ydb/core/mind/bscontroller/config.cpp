@@ -529,8 +529,13 @@ namespace NKikimr::NBsController {
                         // A single non-Ready VDisk that is REPLICATING with only phantoms remaining may be ignored by
                         // the degraded check when AllowDegradedWithSinglePhantomsOnly is set. The full failure set must
                         // still pass the disintegrated check.
+                        // When TreatPhantomsOnlyVDisksAsWorking is set, all such VDisks are not counted as failed ones
+                        // at all, neither for the degraded check, nor for the disintegrated one.
                         TBlobStorageGroupInfo::TGroupVDisks allowedNonReady(&topology);
                         for (const TVSlotInfo *slot : group->VDisksInGroup) {
+                            if (parameters.TreatPhantomsOnlyVDisksAsWorking && slot->IsReplicatingWithPhantomsOnly()) {
+                                continue;
+                            }
                             if (!slot->IsReady) {
                                 failed |= {&topology, slot->GetShortVDiskId()};
 
@@ -1759,6 +1764,7 @@ namespace NKikimr::NBsController {
             settings->AddAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
             settings->AddUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
             settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
+            settings->AddBridgeSyncTotalRateBytesPerSecond(BridgeSyncTotalRate);
         }
 
         void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& /*cmd*/,

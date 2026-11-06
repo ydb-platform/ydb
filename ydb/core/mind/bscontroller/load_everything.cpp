@@ -106,6 +106,7 @@ public:
                 Self->PDiskSpaceColorBorder = state.GetValue<T::PDiskSpaceColorBorder>();
                 Self->DatabaseSpace.SetThresholds(state.GetValue<T::DatabaseSpaceBlockColor>(),
                     state.GetValue<T::DatabaseSpaceUnblockColor>());
+                Self->BridgeSyncTotalRate = state.GetValue<T::BridgeSyncTotalRate>();
                 Self->GroupLayoutSanitizerEnabled = state.GetValue<T::GroupLayoutSanitizer>();
                 Self->AllowMultipleRealmsOccupation = state.GetValueOrDefault<T::AllowMultipleRealmsOccupation>();
                 Self->SysViewChangedSettings = true;

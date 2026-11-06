@@ -328,10 +328,7 @@ namespace NKikimr {
                 }
 
                 SelectPile(groupInfo->BridgePileId);
-                if (!groupInfo->VDisksInGroup.empty() && (groupInfo->ErasureSpecies != Geometry.GetErasure()
-                        || groupInfo->Topology->GetTotalFailRealmsNum() != Geometry.GetNumFailRealms()
-                        || groupInfo->Topology->GetNumFailDomainsPerFailRealm() != Geometry.GetNumFailDomainsPerFailRealm()
-                        || groupInfo->Topology->GetNumVDisksPerFailDomain() != Geometry.GetNumVDisksPerFailDomain())) {
+                if (!groupInfo->VDisksInGroup.empty() && !Geometry.MatchesGroup(*groupInfo)) {
                     throw TExFitGroupError() << "can't change erasure or topology of existing GroupId# " << groupId;
                 }
 

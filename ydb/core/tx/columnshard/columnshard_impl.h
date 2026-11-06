@@ -22,6 +22,7 @@
 #include "data_sharing/modification/events/change_owning.h"
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/source/events/transfer.h"
+#include "engines/reader/transaction/scan_gate.h"
 #include "normalizer/abstract/abstract.h"
 #include "operations/events.h"
 #include "operations/manager.h"
@@ -313,6 +314,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& ev);
+    void Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev);
 
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
     void Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActorContext& ctx);
@@ -533,7 +535,7 @@ private:
     ui64 InProgressTxId = 0;
     bool ProgressTxScheduled = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
-    TMultiMap<NOlap::TSnapshot, TEvDataShard::TEvKqpScan::TPtr> WaitingScans;
+    NOlap::NReader::TScanGate ScanGate;
     TBackgroundController BackgroundController;
     TSettings Settings;
     TLimits Limits;

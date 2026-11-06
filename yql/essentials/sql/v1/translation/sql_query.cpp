@@ -3332,16 +3332,13 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
                 return {};
             }
 
-            // special guard to raise error on situation:
-            // use cluster1;
-            // pragma PqReadPqBy="cluster2";
-            const TString* currentClusterLiteral = ctx.Scoped->CurrCluster.GetLiteral();
-            if (currentClusterLiteral && *values[0].GetLiteral() != "dq" && *currentClusterLiteral != *values[0].GetLiteral()) {
-                query.Error() << "Cluster in PqReadPqBy pragma differs from cluster specified in USE statement: " << *values[0].GetLiteral() << " != " << *currentClusterLiteral;
+            const auto& reader = *values[0].GetLiteral();
+            if (reader && reader != "dq") {
+                query.Error() << "Expected 'dq' or an empty string for: " << pragma;
                 return {};
             }
 
-            ctx.PqReadByRtmrCluster = *values[0].GetLiteral();
+            ctx.PqReadByDq = reader == "dq";
             return TNodePtr{};
         },
     }),

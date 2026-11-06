@@ -372,6 +372,7 @@ class TFollowerGuardian : public TBaseGuardian<TFollowerGuardian> {
 
     void Ping() {
         DowntimeFrom = TInstant::Max();
+        ReplicaMissing(false);
     }
 
 public:

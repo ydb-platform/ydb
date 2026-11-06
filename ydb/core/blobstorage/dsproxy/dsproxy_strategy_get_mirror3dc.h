@@ -88,7 +88,10 @@ class TMirror3dcGetStrategy : public IStrategy {
         // Without ERROR, NOT_YET replies confirm missing data for an ordinary Get.
         const auto absenceState = checker.GetBlobState(readState.Parts,
             readState.HasErrors ? readState.Uncertain : readState.Failed);
-        // TODO(kruall): recheck phantom check logic
+        if (PhantomCheck) {
+            // A likely phantom is still an error until every disk confirms missing data.
+            state->LooksLikePhantom = absenceState != G::EBS_DISINTEGRATED;
+        }
         if (absenceState == G::EBS_DISINTEGRATED || (PhantomCheck && readState.HasErrors)) {
             state->WholeSituation = S::Error;
         } else {
@@ -136,8 +139,11 @@ class TMirror3dcGetStrategy : public IStrategy {
         if (readState.Unknown) {
             return EStrategyOutcome::IN_PROGRESS;
         }
-        if (checker.GetBlobState(readState.Parts, readState.Uncertain) == G::EBS_DISINTEGRATED
-                || (PhantomCheck && readState.HasErrors)) {
+        const auto absenceState = checker.GetBlobState(readState.Parts, readState.Uncertain);
+        if (PhantomCheck) {
+            state->LooksLikePhantom = absenceState != G::EBS_DISINTEGRATED;
+        }
+        if (absenceState == G::EBS_DISINTEGRATED || (PhantomCheck && readState.HasErrors)) {
             state->WholeSituation = S::Error;
         } else {
             state->WholeSituation = S::Absent;
@@ -216,7 +222,9 @@ public:
         readState.BlobState = checker->GetBlobState(readState.Parts, readState.Failed);
         // Return ERROR when failed disks exceed the current ensured failure model.
         // E=0 provides no failure bound, so continue reading to look for a copy.
-        if (readState.BlobState == G::EBS_DISINTEGRATED && checker->GetEnsuredLayout() != EMirror3dcLayout::LAYOUT_0) {
+        // Phantom checks collect replies and report each blob's verdict without aborting the batch.
+        if (!PhantomCheck && readState.BlobState == G::EBS_DISINTEGRATED
+                && checker->GetEnsuredLayout() != EMirror3dcLayout::LAYOUT_0) {
             return EStrategyOutcome::Error("Mirror-3-dc read exceeds the ensured failure model");
         }
         return MustRestoreFirst

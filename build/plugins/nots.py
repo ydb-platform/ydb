@@ -53,6 +53,7 @@ TS_TEST_DART_FIELDS = TS_LINT_DART_FIELDS + (
     df.TestTimeout.from_unit,  # from macro TIMEOUT()
     df.Tag.from_unit,  # from macro TAG()
     df.TsTestForPath.value,
+    df.DockerImage.value,  # from macro DOCKER_IMAGE()
 )
 
 
@@ -1140,11 +1141,15 @@ def _TS_CHECK_CONFIGURE(unit: ymake.Unit, validation_mode: str) -> None:
         return
 
     pm = _create_pm(unit)
+    # User recipes may consume node_modules and build outputs (e.g. container contexts).
+    user_recipes = unit.get_subst("TEST_RECIPES_VALUE").strip()
+    unit.set(["TEST_RECIPES_VALUE", ""])
     if _use_hermetic_node_modules(unit):
         unit.on_setup_extract_node_modules_layer_recipe(pm.module_path)
     else:
         unit.on_setup_install_node_modules_recipe(pm.module_path)
     unit.on_setup_extract_output_tars_recipe(pm.module_path)
+    __set_append(unit, "TEST_RECIPES_VALUE", user_recipes)
 
     peers = pm.get_local_peers_from_package_json()
     if peers:

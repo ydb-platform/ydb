@@ -45,7 +45,7 @@ void TDLQMoverActor::Bootstrap() {
         );
     } else {
         TopicName = Settings.DestinationTopic;
-        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }));
+        RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }, {.EnableRelativePaths = true}));
     }
     LOG_D(
         "Dump QUEUE, queueItems",
@@ -112,7 +112,7 @@ void TDLQMoverActor::Handle(NSQS::TSqsEvents::TEvConfiguration::TPtr& ev) {
         "SQS topic",
         {"name", TopicName}
     );
-    RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }));
+    RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.Database, { TopicName }, {.EnableRelativePaths = true}));
 }
 
 void TDLQMoverActor::CreateWriter() {

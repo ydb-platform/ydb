@@ -75,6 +75,7 @@ struct TDescribeSettings {
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TAccessRights AccessRights;
     bool ForceSyncVersion = false;
+    bool EnableRelativePaths = false;
 };
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,

@@ -310,11 +310,22 @@ struct TMarkJoinKey {
 
 class TMarkGroups {
   public:
-    TMarkGroups(const NPackedTuple::TTupleLayout* layout, TMarkJoinKey key)
+    TMarkGroups(const NPackedTuple::TTupleLayout* layout, TMarkJoinKey key, int buckets)
         : Layout_(layout)
         , Key_(key)
+        , PartitionsByGroup_(layout->KeyColumnsNum > 1)
+        , Buckets_(PartitionsByGroup_ ? buckets : 1)
     {
         MKQL_ENSURE(Key_.PackedKeyColumn < Layout_->KeyColumnsNum, "mark key column is out of range");
+        MKQL_ENSURE(buckets > 0 && (buckets & (buckets - 1)) == 0, "buckets number must be a power of 2");
+    }
+
+    bool PartitionsByGroup() const {
+        return PartitionsByGroup_;
+    }
+
+    int BucketIndex(TSingleTuple row) {
+        return MakeGroup(row) ? GroupBucket() : 0;
     }
 
     void Add(TSingleTuple row) {
@@ -325,9 +336,15 @@ class TMarkGroups {
         if (!MakeGroup(row)) {
             return;
         }
-        auto [it, inserted] = Groups_.emplace(Group_, markIsNull);
+        auto [it, inserted] = Buckets_[GroupBucket()].emplace(Group_, markIsNull);
         if (!inserted) {
             it->second = it->second || markIsNull;
+        }
+    }
+
+    void Add(const TPackResult& pack) {
+        for (TSingleTuple row : pack) {
+            Add(row);
         }
     }
 
@@ -335,14 +352,28 @@ class TMarkGroups {
         if (!MakeGroup(row)) {
             return EMarkValue::False;
         }
-        const auto it = Groups_.find(Group_);
-        if (it == Groups_.end()) {
+        const TGroups& groups = Buckets_[GroupBucket()];
+        const auto it = groups.find(Group_);
+        if (it == groups.end()) {
             return EMarkValue::False;
         }
         return it->second || IsNull(row, Key_.PackedKeyColumn) ? EMarkValue::Null : EMarkValue::False;
     }
 
+    void Release(int bucket) {
+        if (PartitionsByGroup_) {
+            TGroups().swap(Buckets_[bucket]);
+        }
+    }
+
   private:
+    int GroupBucket() const {
+        if (!PartitionsByGroup_) {
+            return 0;
+        }
+        return TGroupHash{}(Group_) & (Buckets_.size() - 1);
+    }
+
     bool IsNull(TSingleTuple row, ui32 column) const {
         return !((row.PackedData[Layout_->BitmaskOffset + column / 8] >> (column % 8)) & 1u);
     }
@@ -390,9 +421,13 @@ class TMarkGroups {
         }
     };
 
+    using TGroups = std::unordered_map<TGroup, bool, TGroupHash, std::equal_to<TGroup>,
+                                       TMKQLAllocator<std::pair<const TGroup, bool>>>;
+
     const NPackedTuple::TTupleLayout* Layout_;
     const TMarkJoinKey Key_;
-    std::unordered_map<TGroup, bool, TGroupHash, std::equal_to<TGroup>, TMKQLAllocator<std::pair<const TGroup, bool>>> Groups_;
+    const bool PartitionsByGroup_;
+    TMKQLVector<TGroups> Buckets_;
     TGroup Group_;
 };
 
@@ -736,11 +771,26 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     {
         MKQL_ENSURE(!markKey || Join.Mark, "mark key is set for a join without a mark");
         if (markKey) {
-            MarkGroups_.emplace(Layouts_.Build, *markKey);
+            MarkGroups_.emplace(Layouts_.Build, *markKey, Settings.Buckets);
         }
     }
 
     struct Finish {};
+
+    bool MarkGroupsByBucket() const {
+        return MarkGroups_ && MarkGroups_->PartitionsByGroup();
+    }
+
+    int BucketIndex(TSingleTuple tuple) {
+        return MarkGroupsByBucket() ? MarkGroups_->BucketIndex(tuple) : Settings.BucketIndex(tuple);
+    }
+
+    void BuildTable(TTable& table, TPackResult pack) {
+        if (MarkGroupsByBucket()) {
+            MarkGroups_->Add(pack);
+        }
+        table.BuildWith(std::move(pack));
+    }
 
     TPackResult Flatten(TMKQLVector<TPackResult> tuples) {
         return Layouts_.Build->Flatten(tuples);
@@ -884,10 +934,14 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 }
                 }
                 for (TSingleTuple tuple: *state.Pack) { 
-                    if (MarkGroups_) {
-                        MarkGroups_->Add(tuple);
+                    if (MarkGroupsByBucket()) {
+                        state.Spiller.AddRow(tuple, MarkGroups_->BucketIndex(tuple));
+                    } else {
+                        if (MarkGroups_) {
+                            MarkGroups_->Add(tuple);
+                        }
+                        state.Spiller.AddRow(tuple);
                     }
-                    state.Spiller.AddRow(tuple); 
                 }
                 state.Pack = std::nullopt;
             }
@@ -932,7 +986,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                 MKQL_ENSURE(table, "sanity check");
                 TBucket& buildBucket = state.Spiller.GetBuckets()[*smallestBucket];
 
-                table->BuildWith(Flatten(buildBucket.ReleaseInMemoryPages()));
+                BuildTable(*table, Flatten(buildBucket.ReleaseInMemoryPages()));
                 MKQL_ENSURE(state.Spiller.GetBuckets()[*smallestBucket].Empty(), "this bucket should be empty now");
             }
 
@@ -957,6 +1011,9 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                     TMKQLVector<TSpillingPage> pages;
                     state.Spiller.FlushBuildingPages();
                     for (int index = 0; index < std::ssize(state.Spiller.GetState().Buckets); ++index) {
+                        if (!state.Spiller.IsBucketSpilled(index) && MarkGroups_) {
+                            MarkGroups_->Release(index);
+                        }
                         if (state.Spiller.IsBucketSpilled(index)) {
                             TSides<TBucket>& thisPair =
                                 *std::get_if<TSides<TBucket>>(&state.Spiller.GetState().Buckets[index]);
@@ -1010,7 +1067,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         const TSingleTuple ahead{fetchedPack.PackedTuples.data() + packWidth * (first + i),
                                                  fetchedPack.Overflow.data()};
                         rows[i] = ahead.PackedData;
-                        batchTables[i] = std::get_if<TTable>(&state.Spiller.GetState().Buckets[Settings.BucketIndex(ahead)]);
+                        batchTables[i] = std::get_if<TTable>(&state.Spiller.GetState().Buckets[BucketIndex(ahead)]);
                         if (batchTables[i]) {
                             batchTables[i]->PrefetchDirectory(rows[i]);
                         }
@@ -1042,7 +1099,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                             return EFetchResult::One;
                         }
                     } else {
-                        int bucketIndex = Settings.BucketIndex(tuple);
+                        int bucketIndex = BucketIndex(tuple);
                         bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
                         if (thisBucketSpilled) {
                             if constexpr (TracksProbeMatches()) {
@@ -1130,7 +1187,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                             vec.push_back(GetPage(std::move(future), ESide::Build));
                         }
                         NJoinTable::TNeumannJoinTable table{Layouts_.Build, PreservedRowsInBuildTable()};
-                        table.BuildWith(Flatten(std::move(vec)));
+                        BuildTable(table, Flatten(std::move(vec)));
                         state.SelectedPair->Table = TTableAndSomeData{.Table = std::move(table), .Futures = {}};
                     } else {
                         return WaitWhileSpilling();
@@ -1250,6 +1307,9 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                             if (!EmitPreservedBuildRows(table->Table, table->PreservedResumeIndex, consume, isFull)) {
                                 return EFetchResult::One;
                             }
+                        }
+                        if (MarkGroups_) {
+                            MarkGroups_->Release(state.SelectedPair->BucketIndex);
                         }
                         state.SelectedPair = std::nullopt;
                     } else {

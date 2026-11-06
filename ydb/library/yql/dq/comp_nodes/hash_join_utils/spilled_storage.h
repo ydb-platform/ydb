@@ -129,8 +129,10 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
     {}
 
     void AddRow(TSingleTuple tuple) {
-        const int bucketIndex =
-            Assign_ == EBucketAssign::RoundRobin ? NextRoundRobinBucket() : Settings.BucketIndex(tuple);
+        AddRow(tuple, Assign_ == EBucketAssign::RoundRobin ? NextRoundRobinBucket() : Settings.BucketIndex(tuple));
+    }
+
+    void AddRow(TSingleTuple tuple, int bucketIndex) {
         TBucket& thisBucket = Buckets_[bucketIndex];
         thisBucket.BuildingPage.AppendTuple(tuple, Layout_);
         thisBucket.DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>();

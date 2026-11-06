@@ -1566,7 +1566,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardSingleStar) {
     {
         TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "%")
+            WHERE FulltextMatch(`Text`, "%") -- Default Keywords mode: no terms, no scan fallback.
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -1914,7 +1914,8 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardBoundaries) {
         ])", NYdb::FormatResultSetYson(result.GetResultSet(1)));
     }
 
-    for (const TString& q : {"are\%", "\%rea", "b"}) {
+    // Default Keywords mode has no terms below the analyzer's minimum length.
+    for (const TString& q : {"are%", "%rea", "b"}) {
         const TString query = std::format(R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
             WHERE FulltextMatch(`Text`, "{}")
@@ -1924,6 +1925,9 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardBoundaries) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson("[]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    // Explicit Wildcard mode scans instead, while LIKE remains case-sensitive.
+    DoValidateWildcardMatchQuery(db, "are%", R"([[[0u];["Arena"]];[[1u];["Area"]]])", "[]");
 }
 
 Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardUtf8Size) {
@@ -1969,7 +1973,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardUtf8Size) {
                     tokenizer=whitespace,
                     use_filter_lowercase=true,
                     use_filter_ngram=true,
-                    filter_ngram_min_length=2,  -- to check that single emoji or multi-byte character is ignored
+                    filter_ngram_min_length=2,  -- measured in Unicode codepoints, not UTF-8 bytes
                     filter_ngram_max_length=5
                 );
         )sql";
@@ -1977,6 +1981,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardUtf8Size) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
+    // Each query is one codepoint: Keywords mode yields no terms and does not scan.
     for (const TString& q : {"🙈", "🎶", "4", "꫞", "﷽"}) {
         const TString query = std::format(R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
@@ -2178,7 +2183,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchAndNgramWildcardUnicode, RELEVANCE, UTF8
     {
         const TString query = R"sql(
             SELECT `Key`, `Text` FROM `/Root/Texts` VIEW `fulltext_idx`
-            WHERE FulltextMatch(`Text`, "%🐶%")  -- Shorter than the n-grams: no index matches.
+            WHERE FulltextMatch(`Text`, "%🐶%")  -- Keywords mode: no terms, no scan fallback.
             ORDER BY `Key`;
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
@@ -2440,6 +2445,7 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchShorterThanMinNgram, RELEVANCE, UTF8) {
     }
 
     {
+        // Keywords is the default mode, even when the argument contains wildcard characters.
         const TString query = std::format(R"sql(
             SELECT *
             FROM `/Root/Texts` VIEW `fulltext_idx`
@@ -2468,24 +2474,36 @@ Y_UNIT_TEST(NgramScanFallback) {
     UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
 
     const auto settings = NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Basic);
-    const auto execute = [&](const TString& view, const TString& predicate, const std::string& pattern) {
+    const auto execute = [&](const TString& view, const TString& predicate, const std::string& pattern, bool explain = false) {
         const TString query = std::format(R"sql(
             DECLARE $pattern AS String;
             SELECT Key FROM `/Root/Texts` VIEW {} WHERE {} ORDER BY Key;
         )sql", view.c_str(), predicate.c_str());
         const auto params = TParamsBuilder().AddParam("$pattern").String(pattern).Build().Build();
-        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx(), params, settings).ExtractValueSync();
+        auto querySettings = settings;
+        querySettings.ExecMode(explain ? NQuery::EExecMode::Explain : NQuery::EExecMode::Execute);
+        auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx(), params, querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetStats());
         return result;
     };
+    const auto explain = [&](const TString& predicate, const std::string& pattern) {
+        const auto result = execute("fulltext_idx", predicate, pattern, true);
+        UNIT_ASSERT(result.GetStats()->GetPlan());
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+        return plan;
+    };
+    const TString wildcard = "FulltextMatch(Text, $pattern, \"Wildcard\" AS Mode)";
+    const TString fallbackInfo = "fulltext_idx: fallback when analyzer extracts no search terms";
+    const TString postingTable = TStringBuilder() << "/Root/Texts/fulltext_idx/" << NTableIndex::ImplTable;
 
     for (bool edge : {false, true}) {
         AddIndexNGram(db, 3, 3, false, edge);
         bool first = true;
         // Reuse one cached query while switching between scan and index reads.
         for (const std::string& pattern : {"%at%", "cat%", "%é%", "missing%", "%a%b%", "%", "", "%at%"}) {
-            const auto result = execute("fulltext_idx", "FulltextMatch(Text, $pattern, \"Wildcard\" AS Mode)", pattern);
+            const auto result = execute("fulltext_idx", wildcard, pattern);
             const auto primary = execute("PRIMARY KEY", "Text ILIKE $pattern", pattern);
             CompareYson(FormatResultSetYson(primary.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(0)), TString(pattern));
             const auto& stats = TProtoAccessor::GetProto(*result.GetStats());
@@ -2493,21 +2511,76 @@ Y_UNIT_TEST(NgramScanFallback) {
                 UNIT_ASSERT(stats.compilation().from_cache());
             }
             first = false;
-            if (pattern == "missing%") {
+            if (pattern == "%at%") {
+                AssertTableStats(result, "/Root/Texts", {.ExpectedReads = 9});
+                AssertTableStats(result, postingTable, {.ExpectedReads = 0});
+            } else if (pattern == "cat%") {
+                // Three candidates are looked up, then the prefix postfilter rejects key 200.
+                AssertTableStats(result, "/Root/Texts", {.ExpectedReads = 3});
+                ui64 postingReads = 0;
+                for (const auto& phase : stats.query_phases()) {
+                    for (const auto& access : phase.table_access()) {
+                        if (access.name() == postingTable) {
+                            postingReads += access.reads().rows();
+                        }
+                    }
+                }
+                UNIT_ASSERT_GT(postingReads, 0);
+            } else if (pattern == "missing%") {
                 // Indexable, but no hits: any main-table rows would come from an unwanted scan.
                 AssertTableStats(result, "/Root/Texts", {.ExpectedReads = 0});
             }
         }
 
-        const auto point = execute("fulltext_idx",
-            "Key = 200 AND FulltextMatch(Text, $pattern, \"Wildcard\" AS Mode)", "%at%");
+        const auto plan = explain(wildcard, "cat%");
+        UNIT_ASSERT(FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex").IsDefined());
+        const auto fallback = FindPlanNodeByKv(plan, "IndexSelectionInfo", fallbackInfo);
+        UNIT_ASSERT(fallback.IsDefined());
+        UNIT_ASSERT_VALUES_EQUAL(fallback["Name"].GetStringSafe(), "TableFullScan");
+        const auto table = FindPlanNodeByKv(plan["tables"], "name", "/Root/Texts");
+        const auto lookup = FindPlanNodeByKv(table["reads"], "type", "Lookup");
+        UNIT_ASSERT(lookup.IsDefined());
+        UNIT_ASSERT_VALUES_EQUAL(lookup["lookup_by"].GetArraySafe().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(lookup["lookup_by"][0].GetStringSafe(), "Key");
+        UNIT_ASSERT(FindPlanNodeByKv(table["reads"], "type", "FullScan").IsDefined());
+
+        const TString keywords = "FulltextMatch(Text, $pattern)";
+        const auto keyOnly = execute("fulltext_idx", keywords, "cats");
+        CompareYson("[[[100u]];[[200u]];[[300u]]]", FormatResultSetYson(keyOnly.GetResultSet(0)));
+        AssertTableStats(keyOnly, "/Root/Texts", {.ExpectedReads = 0});
+        const auto keyPlan = explain(keywords, "cats");
+        UNIT_ASSERT(FindPlanNodeByKv(keyPlan, "Name", "ReadFullTextIndex").IsDefined());
+        UNIT_ASSERT(!FindPlanNodeByKv(keyPlan["tables"], "name", "/Root/Texts").IsDefined());
+
+        const TString pointPredicate = "Key = 200 AND " + wildcard;
+        const auto point = execute("fulltext_idx", pointPredicate, "%at%");
         CompareYson("[[[200u]]]", FormatResultSetYson(point.GetResultSet(0)));
         AssertTableStats(point, "/Root/Texts", {.ExpectedReads = 1});
+        const auto pointPlan = explain(pointPredicate, "%at%");
+        const auto bounded = FindPlanNodeByKv(pointPlan, "IndexSelectionInfo", fallbackInfo);
+        UNIT_ASSERT(bounded.IsDefined());
+        UNIT_ASSERT_VALUES_EQUAL(bounded["Name"].GetStringSafe(), "TableRangeScan");
+        UNIT_ASSERT_VALUES_EQUAL(bounded["ReadRangesKeys"][0].GetStringSafe(), "Key");
+        const auto noPoint = execute("fulltext_idx", pointPredicate, "missing%");
+        CompareYson("[]", FormatResultSetYson(noPoint.GetResultSet(0)));
+        AssertTableStats(noPoint, "/Root/Texts", {.ExpectedReads = 0});
 
         const auto points = execute("fulltext_idx",
             "Key IN (100, 200) AND FulltextMatch(Text, $pattern, \"Wildcard\" AS Mode)", "%at%");
         CompareYson("[[[100u]];[[200u]]]", FormatResultSetYson(points.GetResultSet(0)));
         AssertTableStats(points, "/Root/Texts", {.ExpectedReads = 2});
+
+        // Multiple predicates: scan if neither has terms; otherwise use the index and postfilter both.
+        for (const std::string& pattern : {"%at%", "%cats%"}) {
+            const auto result = execute("fulltext_idx",
+                wildcard + " AND FulltextMatch(Text, \"%do%\", \"Wildcard\" AS Mode)", pattern);
+            const auto primary = execute("PRIMARY KEY", "Text ILIKE $pattern AND Text ILIKE \"%do%\"", pattern);
+            CompareYson(FormatResultSetYson(primary.GetResultSet(0)), FormatResultSetYson(result.GetResultSet(0)));
+        }
+        // Keywords cannot be rechecked on table rows, so mixing modes must not enable a scan.
+        const auto mixed = execute("fulltext_idx", keywords + " AND FulltextMatch(Text, \"%do%\", \"Wildcard\" AS Mode)", "%at%");
+        CompareYson("[]", FormatResultSetYson(mixed.GetResultSet(0)));
+        AssertTableStats(mixed, "/Root/Texts", {.ExpectedReads = 0});
 
         for (const auto& [predicate, pattern] : std::vector<std::pair<TString, std::string>>{
                 {"Text LIKE $pattern", "%é%"}, {"Text ILIKE $pattern", "%AT%"},
@@ -2550,22 +2623,34 @@ Y_UNIT_TEST(PrefixedNgramScanFallback) {
 
         const auto params = TParamsBuilder().AddParam("$prefix").String("dogs data").Build()
             .AddParam("$pattern").String("%at%").Build().Build();
-        const auto settings = NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Basic);
+        const auto settings = NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full);
         auto result = db.ExecuteQuery(R"sql(
             DECLARE $prefix AS String;
             DECLARE $pattern AS String;
-            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+            SELECT Key, Text AS Suggestion FROM `/Root/Texts` VIEW fulltext_idx
             WHERE Data = $prefix AND FulltextMatch(Text, $pattern, "Wildcard" AS Mode);
-            SELECT Key FROM `/Root/Texts` VIEW PRIMARY KEY
+            SELECT Key, Text AS Suggestion FROM `/Root/Texts` VIEW PRIMARY KEY
             WHERE Data = $prefix AND Text ILIKE $pattern;
         )sql", NQuery::TTxControl::NoTx(), params, settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson("[[[200u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson("[[[200u];[\"Dogs chase small cats.\"]]]", FormatResultSetYson(result.GetResultSet(0)));
         CompareYson(FormatResultSetYson(result.GetResultSet(1)), FormatResultSetYson(result.GetResultSet(0)));
+        // Restoring the Data prefix predicate must not expose it in the projected result.
+        const auto& columns = result.GetResultSet(0).GetColumnsMeta();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+        UNIT_ASSERT(columns == result.GetResultSet(1).GetColumnsMeta());
+        UNIT_ASSERT(result.GetStats() && result.GetStats()->GetPlan());
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+        const auto fallback = FindPlanNodeByKv(plan, "IndexSelectionInfo",
+            "fulltext_idx: fallback when analyzer extracts no search terms");
+        UNIT_ASSERT(fallback.IsDefined());
+        UNIT_ASSERT_VALUES_EQUAL(fallback["Name"].GetStringSafe(),
+            primaryKey == "Key" ? "TableFullScan" : "TableRangeScan");
         if (primaryKey != "Key") {
             // The prefix range bounds both reads to one row; the other schema needs the prefix filter.
-            UNIT_ASSERT(result.GetStats());
             AssertTableStats(result, "/Root/Texts", {.ExpectedReads = 2});
+            UNIT_ASSERT_VALUES_EQUAL(fallback["ReadRangesKeys"][0].GetStringSafe(), "Data");
         }
         auto drop = db.ExecuteQuery("DROP TABLE `/Root/Texts`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(drop.GetStatus(), EStatus::SUCCESS, drop.GetIssues().ToString());
@@ -3683,10 +3768,8 @@ Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_CompactCompositePk) {
     UNIT_ASSERT(seenKeys.contains("1/b"));
 }
 
-Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_CoveredAvoidsResolve) {
-    // When the fulltext index covers all requested columns, the runtime must NOT resolve through
-    // the unique index — the index alone has the data. Sanity check that a covered query still
-    // returns rows (the covered shortcut is documented in TFullTextSource::FetchDocumentDetails).
+Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_CoverColumn) {
+    // A projection of a COVER column returns the expected rows in row-ID mode.
     auto kikimr = KikimrRowIdOptIn();
     auto db = kikimr.GetQueryClient();
 
@@ -3706,7 +3789,7 @@ Y_UNIT_TEST(SelectWithFulltextMatch_RowIdOptIn_CoveredAvoidsResolve) {
 
     UpsertRowIdData(db);
 
-    // Project only the covered column (Data). With covered shortcut, runtime must not need PK.
+    // This checks result correctness, not whether document or row-ID lookups are skipped.
     TString query = R"sql(
         SELECT Data FROM `/Root/RowIdTexts` VIEW `fulltext_idx`
         WHERE FulltextMatch(Text, "cats")

@@ -2246,6 +2246,96 @@ TVector<std::pair<TString, TExprNode::TPtr>> ExtractSeedPrefix(TReadMatch& read,
     return seedPrefixColumns;
 }
 
+TExprBase BuildFulltextFallbackScan(const TCoFlatMap& flatMap, const TReadMatch& read,
+    const TVector<TString>& prefixColumns, const TVector<std::pair<TString, TExprNode::TPtr>>& prefixBindings,
+    const TExprNode::TPtr& noSearchTerms, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
+    TTypeAnnotationContext& typesCtx)
+{
+    const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, read.Table().Path());
+    TExprNode::TPtr prefixFilter;
+    if (!prefixBindings.empty()) {
+        // Index-key ranges cannot be reused as primary-key ranges. Restore their predicates.
+        auto row = ctx.NewArgument(flatMap.Pos(), "scanRow");
+        TExprNode::TListType predicates;
+        for (const auto& [column, value] : prefixBindings) {
+            auto member = Build<TCoMember>(ctx, flatMap.Pos()).Struct(row).Name().Build(column).Done();
+            predicates.push_back(ctx.NewCallable(flatMap.Pos(), "==", {member.Ptr(), value}));
+        }
+        auto predicate = ctx.NewCallable(flatMap.Pos(), "Coalesce", {
+            ctx.NewCallable(flatMap.Pos(), "And", std::move(predicates)),
+            Build<TCoBool>(ctx, flatMap.Pos()).Literal().Build("false").Done().Ptr()});
+        prefixFilter = ctx.NewLambda(flatMap.Pos(), ctx.NewArguments(flatMap.Pos(), {row}),
+            ctx.NewCallable(flatMap.Pos(), "OptionalIf", {predicate, row}));
+    }
+
+    // Guard the ranges themselves so an indexable pattern never starts a table scan,
+    // even when predicate extraction is disabled.
+    TExprNode::TListType boundaryItems;
+    for (const auto& key : tableDesc.Metadata->KeyColumnNames) {
+        const auto* type = ctx.MakeType<TOptionalExprType>(tableDesc.GetColumnType(key));
+        boundaryItems.push_back(ctx.NewCallable(flatMap.Pos(), "Nothing", {ExpandType(flatMap.Pos(), *type, ctx)}));
+    }
+    boundaryItems.push_back(Build<TCoInt32>(ctx, flatMap.Pos()).Literal().Build("0").Done().Ptr());
+    auto boundary = ctx.NewList(flatMap.Pos(), std::move(boundaryItems));
+    auto fullRange = ctx.NewCallable(flatMap.Pos(), "AsRange", {ctx.NewList(flatMap.Pos(), {boundary, boundary})});
+    // These bounds also guide sort elimination and CBO, so keep them conservative.
+    TKqpReadTableExplainPrompt prompt;
+    size_t extractedRangeCount = 0;
+    if (kqpCtx.Config->GetOptPredicateExtract() != EOptionalFlag::Disabled) {
+        // Preserve primary-key bounds as well as the guard that disables the fallback.
+        const auto settings = MakeKqpExtractorSettings(kqpCtx);
+        for (const auto& filter : {flatMap.Lambda().Ptr(), prefixFilter}) {
+            if (!filter || !IsPredicateFlatMap(filter->Tail())) {
+                continue;
+            }
+            auto lambda = ctx.DeepCopyLambda(*filter);
+            YQL_ENSURE(UpdateLambdaAllArgumentsTypes(lambda, {tableDesc.SchemeNode}, ctx));
+            YQL_ENSURE(UpdateLambdaConstraints(lambda, ctx, {TConstraintNode::TListType{}}) != IGraphTransformer::TStatus::Error);
+            THashSet<TString> possibleKeys;
+            auto extractor = MakePredicateRangeExtractor(settings);
+            YQL_ENSURE(extractor->Prepare(lambda, *tableDesc.SchemeNode, possibleKeys, ctx, typesCtx));
+            auto extracted = extractor->BuildComputeNode(tableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
+            if (extracted.ComputeNode) {
+                fullRange = ctx.NewCallable(flatMap.Pos(), "RangeIntersect", {fullRange, extracted.ComputeNode->HeadPtr()});
+                if (extracted.UsedPrefixLen > prompt.UsedKeyColumns.size()) {
+                    prompt.UsedKeyColumns.assign(tableDesc.Metadata->KeyColumnNames.begin(),
+                        tableDesc.Metadata->KeyColumnNames.begin() + extracted.UsedPrefixLen);
+                    prompt.SetPointPrefixLen(extracted.PointPrefixLen);
+                }
+                // An intersection can split ranges, so neither input's count bounds the result.
+                if (++extractedRangeCount == 1 && extracted.ExpectedMaxRanges) {
+                    prompt.SetExpectedMaxRanges(*extracted.ExpectedMaxRanges);
+                } else {
+                    prompt.ExpectedMaxRanges.Clear();
+                }
+            }
+        }
+    }
+    auto ranges = ctx.NewCallable(flatMap.Pos(), "RangeFinalize", {
+        ctx.NewCallable(flatMap.Pos(), "If", {noSearchTerms, fullRange, ctx.NewCallable(flatMap.Pos(), "RangeEmpty", {})})});
+
+    TKqpReadTableSettings scanSettings;
+    scanSettings.ForcePrimary = true;
+    scanSettings.IndexSelectionInfo[read.Index().StringValue()] = "fallback when analyzer extracts no search terms";
+    prompt.IndexSelectionInfo = scanSettings.IndexSelectionInfo;
+    auto scan = Build<TKqlReadTableRanges>(ctx, read.Pos())
+        .Table(read.Table())
+        .Columns(MergeColumns(read.Columns(), prefixColumns, ctx))
+        .Ranges(ranges)
+        .Settings(scanSettings.BuildNode(ctx, read.Pos()))
+        .ExplainPrompt(prompt.BuildNode(ctx, read.Pos()))
+        .Done();
+    TExprBase scanInput = scan;
+    if (prefixFilter) {
+        scanInput = Build<TCoFlatMap>(ctx, flatMap.Pos())
+            .Input(scan)
+            .Lambda(prefixFilter)
+            .Done();
+        scanInput = Build<TCoExtractMembers>(ctx, flatMap.Pos()).Input(scanInput).Members(read.Columns()).Done();
+    }
+    return scanInput;
+}
+
 TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, TTypeAnnotationContext& typesCtx)
 {
@@ -2338,7 +2428,7 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
         .Add(resultColumnsVector)
         .Done();
 
-    auto newInput = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
+    auto indexRead = Build<TKqlReadTableFullTextIndex>(ctx, node.Pos())
         .Table(read.Table())
         .Index(read.Index())
         .Columns(resultColumns.Ptr())
@@ -2347,108 +2437,43 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
         .Settings<TCoNameValueTupleList>().Add(settings).Build()
         .Done();
 
+    // A scan can replace the index only when every predicate is checked again on each row.
+    const bool canUseScanFallback = isNgram && AllOf(result.Queries, [](const TFulltextQuery& query) {
+        return query.RequiresPostfilter();
+    });
+    TExprBase input = indexRead;
+    if (canUseScanFallback) {
+        // Use the same query and analyzer as the index source, including wildcard boundaries.
+        auto queryExpr = queryData.front().Ptr();
+        for (size_t i = 1; i < queryData.size(); ++i) {
+            queryExpr = ctx.NewCallable(node.Pos(), "Concat", {queryExpr, queryData[i].Ptr()});
+        }
+        TString analyzers;
+        YQL_ENSURE(fulltextMetadataInfo.GetSettings().columns_size() == 1);
+        const auto& column = fulltextMetadataInfo.GetSettings().columns(0);
+        YQL_ENSURE(column.column() == searchColumn.Name().Value());
+        YQL_ENSURE(column.analyzers().SerializeToString(&analyzers));
+        auto tokens = ctx.NewCallable(node.Pos(), "FulltextAnalyze", {
+            queryExpr,
+            Build<TCoString>(ctx, node.Pos()).Literal().Build(analyzers).Done().Ptr(),
+            ctx.NewAtom(node.Pos(), ToString(static_cast<ui32>(NFulltext::EIndexMode::FulltextQuery)))});
+        auto noSearchTerms = ctx.NewCallable(node.Pos(), "Not", {ctx.NewCallable(node.Pos(), "HasItems", {tokens})});
+
+        auto scanInput = BuildFulltextFallbackScan(flatMap, read, prefixColumns, result.PrefixColumns,
+            noSearchTerms, ctx, kqpCtx, typesCtx);
+        // The guards select the access path, not Extend: the index returns no rows without terms,
+        // and the scan has empty ranges with terms. Both use the same query and analyzer.
+        input = Build<TCoExtend>(ctx, node.Pos()).Add(indexRead).Add(scanInput).Done();
+    }
+
     auto newLambdaBody = TCoLambda{ctx.NewLambda(
         flatMap.Lambda().Pos(),
         std::move(flatMap.Lambda().Args().Ptr()),
         ctx.ReplaceNodes(TExprNode::TListType{flatMap.Lambda().Body().Ptr()}, result.Replaces))};
-
-    auto res = Build<TCoFlatMap>(ctx, read.Pos())
-        .Input(newInput)
+    return Build<TCoFlatMap>(ctx, read.Pos())
+        .Input(input)
         .Lambda(NewLambdaFrom(ctx, flatMap.Lambda().Pos(), result.Replaces, flatMap.Lambda().Args().Ref(), newLambdaBody.Body()))
         .Done();
-
-    if (!isNgram || !AllOf(result.Queries, [](const TFulltextQuery& query) {
-        return query.RequiresPostfilter();
-    })) {
-        return res;
-    }
-
-    // Use the same query and analyzer as the index source, including wildcard boundaries.
-    auto queryExpr = queryData.front().Ptr();
-    for (size_t i = 1; i < queryData.size(); ++i) {
-        queryExpr = ctx.NewCallable(node.Pos(), "Concat", {queryExpr, queryData[i].Ptr()});
-    }
-    TString analyzers;
-    YQL_ENSURE(fulltextMetadataInfo.GetSettings().columns_size() == 1);
-    const auto& column = fulltextMetadataInfo.GetSettings().columns(0);
-    YQL_ENSURE(column.column() == searchColumn.Name().Value());
-    YQL_ENSURE(column.analyzers().SerializeToString(&analyzers));
-    auto tokens = ctx.NewCallable(node.Pos(), "FulltextAnalyze", {
-        queryExpr,
-        Build<TCoString>(ctx, node.Pos()).Literal().Build(analyzers).Done().Ptr(),
-        ctx.NewAtom(node.Pos(), ToString(static_cast<ui32>(NFulltext::EIndexMode::FulltextQuery)))});
-    auto noTerms = ctx.NewCallable(node.Pos(), "Not", {ctx.NewCallable(node.Pos(), "HasItems", {tokens})});
-
-    TExprNode::TPtr prefixFilter;
-    if (!result.PrefixColumns.empty()) {
-        // Index-key ranges cannot be reused as primary-key ranges. Restore their predicates.
-        auto row = ctx.NewArgument(node.Pos(), "scanRow");
-        TExprNode::TListType predicates;
-        for (const auto& [column, value] : result.PrefixColumns) {
-            auto member = Build<TCoMember>(ctx, node.Pos()).Struct(row).Name().Build(column).Done();
-            predicates.push_back(ctx.NewCallable(node.Pos(), "==", {member.Ptr(), value}));
-        }
-        auto predicate = ctx.NewCallable(node.Pos(), "Coalesce", {
-            ctx.NewCallable(node.Pos(), "And", std::move(predicates)),
-            Build<TCoBool>(ctx, node.Pos()).Literal().Build("false").Done().Ptr()});
-        prefixFilter = ctx.NewLambda(node.Pos(), ctx.NewArguments(node.Pos(), {row}),
-            ctx.NewCallable(node.Pos(), "OptionalIf", {predicate, row}));
-    }
-
-    // Guard the ranges themselves so an indexable pattern never starts a table scan,
-    // even when predicate extraction is disabled.
-    TExprNode::TListType boundaryItems;
-    for (const auto& key : tableDesc.Metadata->KeyColumnNames) {
-        const auto* type = ctx.MakeType<TOptionalExprType>(tableDesc.GetColumnType(key));
-        boundaryItems.push_back(ctx.NewCallable(node.Pos(), "Nothing", {ExpandType(node.Pos(), *type, ctx)}));
-    }
-    boundaryItems.push_back(Build<TCoInt32>(ctx, node.Pos()).Literal().Build("0").Done().Ptr());
-    auto boundary = ctx.NewList(node.Pos(), std::move(boundaryItems));
-    auto fullRange = ctx.NewCallable(node.Pos(), "AsRange", {ctx.NewList(node.Pos(), {boundary, boundary})});
-    if (kqpCtx.Config->GetOptPredicateExtract() != EOptionalFlag::Disabled) {
-        // Preserve primary-key bounds as well as the guard that disables the fallback.
-        const auto settings = MakeKqpExtractorSettings(kqpCtx);
-        for (const auto& filter : {flatMap.Lambda().Ptr(), prefixFilter}) {
-            if (!filter || !IsPredicateFlatMap(filter->Tail())) {
-                continue;
-            }
-            auto lambda = ctx.DeepCopyLambda(*filter);
-            YQL_ENSURE(UpdateLambdaAllArgumentsTypes(lambda, {tableDesc.SchemeNode}, ctx));
-            YQL_ENSURE(UpdateLambdaConstraints(lambda, ctx, {TConstraintNode::TListType{}}) != IGraphTransformer::TStatus::Error);
-            THashSet<TString> possibleKeys;
-            auto extractor = MakePredicateRangeExtractor(settings);
-            YQL_ENSURE(extractor->Prepare(lambda, *tableDesc.SchemeNode, possibleKeys, ctx, typesCtx));
-            auto extracted = extractor->BuildComputeNode(tableDesc.Metadata->KeyColumnNames, ctx, typesCtx);
-            if (extracted.ComputeNode) {
-                fullRange = ctx.NewCallable(node.Pos(), "RangeIntersect", {fullRange, extracted.ComputeNode->HeadPtr()});
-            }
-        }
-    }
-    auto ranges = ctx.NewCallable(node.Pos(), "RangeFinalize", {
-        ctx.NewCallable(node.Pos(), "If", {noTerms, fullRange, ctx.NewCallable(node.Pos(), "RangeEmpty", {})})});
-
-    TKqpReadTableSettings scanSettings;
-    scanSettings.ForcePrimary = true;
-    auto scan = Build<TKqlReadTableRanges>(ctx, read.Pos())
-        .Table(read.Table())
-        .Columns(MergeColumns(read.Columns(), prefixColumns, ctx))
-        .Ranges(ranges)
-        .Settings(scanSettings.BuildNode(ctx, read.Pos()))
-        .ExplainPrompt().Build()
-        .Done();
-    TExprBase scanInput = scan;
-    if (prefixFilter) {
-        scanInput = Build<TCoFlatMap>(ctx, node.Pos())
-            .Input(scan)
-            .Lambda(prefixFilter)
-            .Done();
-        scanInput = Build<TCoExtractMembers>(ctx, node.Pos()).Input(scanInput).Members(read.Columns()).Done();
-    }
-    auto fallback = Build<TCoFlatMap>(ctx, read.Pos())
-        .Input(scanInput)
-        .Lambda(ctx.DeepCopyLambda(res.Lambda().Ref()))
-        .Done();
-    return Build<TCoExtend>(ctx, node.Pos()).Add(res).Add(fallback).Done();
 }
 
 TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {

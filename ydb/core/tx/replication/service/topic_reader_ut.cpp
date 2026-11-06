@@ -11,6 +11,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/scope.h>
+
 namespace NKikimr::NReplication::NService {
 
 Y_UNIT_TEST_SUITE(RemoteTopicReader) {
@@ -348,6 +350,8 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             ui64 retainedStartOffset = 0;
             for (ui32 attempt = 0; attempt < 10 && retainedStartOffset == 0; ++attempt) {
                 runtime.AdvanceCurrentTime(TDuration::Minutes(2));
+                // Dispatch overdue retention cleanup before checking partition stats.
+                runtime.SimulateSleep(TDuration::Seconds(1));
                 auto description = Env.RunCall([&] {
                     return topicClient.DescribeTopic(TopicPath, NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)).ExtractValueSync();
                 });
@@ -423,6 +427,11 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         });
 
         const auto reader = s.StartReader();
+        Y_DEFER {
+            readObserver.Remove();
+            s.Env.SendAsync(reader, new TEvents::TEvPoison());
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        };
 
         s.Env.SendAsync(reader, new TEvWorker::TEvPoll());
         TDispatchOptions options;

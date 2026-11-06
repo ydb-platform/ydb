@@ -17,6 +17,10 @@ inputs:
     required: false
     description: "S3 bucket region (bucket_location)"
     default: "ru-central1"
+  public_acl:
+    required: false
+    description: "true → export S3_PUBLIC_ACL_FLAG=--acl-public for s3cmd put/sync; false → empty (bucket policy)"
+    default: "true"
   folder_prefix:
     required: false
     description: "folder prefix"
@@ -33,10 +37,16 @@ runs:
         S3_KEY_SECRET: ${{ inputs.s3_key_secret }}
         S3_ENDPOINT: ${{ inputs.s3_endpoint }}
         S3_REGION: ${{ inputs.s3_region }}
+        S3_PUBLIC_ACL: ${{ inputs.public_acl }}
       run: |
         umask 077
         export S3CMD_CONFIG=$(mktemp)
         echo "S3CMD_CONFIG=$S3CMD_CONFIG" >> "$GITHUB_ENV"
+        if [ "$S3_PUBLIC_ACL" = "true" ]; then
+          echo "S3_PUBLIC_ACL_FLAG=--acl-public" >> "$GITHUB_ENV"
+        else
+          echo "S3_PUBLIC_ACL_FLAG=" >> "$GITHUB_ENV"
+        fi
         host=${S3_ENDPOINT#https://}
         host=${host#http://}
         host=${host%/}

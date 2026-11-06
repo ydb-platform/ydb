@@ -166,16 +166,19 @@ def utc_now():
 
 
 def platform_run_attempt(cfg=None):
-    """Caller run attempt — distinguishes re-runs that keep the same run_id."""
+    """Caller run attempt — distinguishes re-runs that keep the same run_id.
+
+    Env wins over ticket/config so "Re-run failed jobs" (stale resolve output)
+    still matches the current github.run_attempt.
+    """
+    from_env = env_opt("PLATFORM_RUN_ATTEMPT") or env_opt("GITHUB_RUN_ATTEMPT")
+    if from_env:
+        return from_env
     if cfg and isinstance(cfg.get("inputs"), dict):
         from_cfg = str(cfg["inputs"].get("platform_run_attempt") or "").strip()
         if from_cfg:
             return from_cfg
-    return (
-        env_opt("PLATFORM_RUN_ATTEMPT")
-        or env_opt("GITHUB_RUN_ATTEMPT")
-        or "1"
-    )
+    return "1"
 
 
 def build_ticket(cfg):
@@ -287,6 +290,28 @@ def wait_executor_done(run_id, run_url):
 
     if conclusion == "success":
         return
+    # Duplicate host dispatch can cancel this run; follow the claim if it moved.
+    if conclusion == "cancelled":
+        cfg = load_config()
+        want_attempt = platform_run_attempt(cfg)
+        endpoint, bucket = claim_s3(cfg)
+        body = http_get(public_url(endpoint, bucket, f"remote-claims/{env('PLATFORM_RUN_ID')}.json"))
+        if body:
+            claim = json.loads(body)
+            claim_attempt = str(claim.get("platform_run_attempt") or "").strip()
+            new_id = str(claim.get("executor_run_id") or "").strip()
+            if (
+                new_id
+                and new_id != run_id
+                and (not claim_attempt or claim_attempt == want_attempt)
+                and str(claim.get("status") or "").strip().lower() != "failed"
+            ):
+                new_url = str(claim.get("executor_run_url") or "").strip() or (
+                    f"https://github.com/{claim.get('executor_repository') or env('REPO')}/actions/runs/{new_id}"
+                )
+                print(f"::notice::executor {run_id} cancelled; following new claim {new_id}")
+                set_outputs(executor_run_id=new_id, executor_run_url=new_url)
+                return wait_executor_done(new_id, new_url)
     msg = f"executor finished with conclusion={conclusion}"
     if fail_on_remote:
         die(msg)

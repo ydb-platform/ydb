@@ -1056,6 +1056,66 @@ TJoinTestData MarkJoinSpillingTestData() {
     return td;
 }
 
+TJoinTestData MarkJoinCorrelatedSpillingTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr ui64 leftGroupsNum = 4000;
+    constexpr ui64 rightGroupsNum = 3000;
+    constexpr int rightSize = 100000;
+    const auto groupHasNull = [](ui64 group) {
+        return group < rightGroupsNum && group % 5 == 0;
+    };
+
+    TVector<std::optional<ui64>> rightKeys;
+    TVector<ui64> rightGroups;
+    for (int i = 0; i < rightSize; ++i) {
+        rightKeys.push_back(i);
+        rightGroups.push_back(i % rightGroupsNum);
+    }
+    for (ui64 group = 0; group < rightGroupsNum; ++group) {
+        if (groupHasNull(group)) {
+            rightKeys.push_back(std::nullopt);
+            rightGroups.push_back(group);
+        }
+    }
+
+    constexpr int leftSize = 200000;
+    TVector<ui64> leftValues(leftSize);
+    TVector<ui64> leftGroups(leftSize);
+    TVector<std::optional<ui64>> leftKeys(leftSize);
+    TVector<std::optional<bool>> expectedMarks(leftSize);
+    for (int i = 0; i < leftSize; ++i) {
+        const ui64 group = i % leftGroupsNum;
+        leftValues[i] = i * 3;
+        leftGroups[i] = group;
+        if (i % 10 != 9) {
+            leftKeys[i] = i;
+        }
+        const bool groupExists = group < rightGroupsNum;
+        if (leftKeys[i] && *leftKeys[i] < rightSize && *leftKeys[i] % rightGroupsNum == group) {
+            expectedMarks[i] = true;
+        } else if (groupExists && (!leftKeys[i] || groupHasNull(group))) {
+            expectedMarks[i] = std::nullopt;
+        } else {
+            expectedMarks[i] = false;
+        }
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftValues, leftGroups, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightGroups);
+    td.Result = ConvertVectorsToTuples(setup, leftValues, leftGroups, leftKeys, expectedMarks);
+    td.LeftKeyColmns = {2, 1};
+    td.RightKeyColmns = {0, 1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
+    AsMarkJoin(td, 0);
+
+    constexpr int packedTupleSize = 3 * 8 + 5;
+    constexpr ui64 joinMemory = packedTupleSize * static_cast<ui64>(0.3 * leftSize);
+    td.JoinMemoryConstraint = joinMemory;
+    return td;
+}
+
 [[maybe_unused]] TJoinTestData RightOnlyTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -3239,6 +3299,14 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestMarkJoinSpillingSlowSpiller, BlockJoin) {
         TestWithSlowSpiller(MarkJoinSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinCorrelatedSpilling, BlockJoin) {
+        Test(MarkJoinCorrelatedSpillingTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestMarkJoinCorrelatedSpillingSlowSpiller, BlockJoin) {
+        TestWithSlowSpiller(MarkJoinCorrelatedSpillingTestData(), BlockJoin);
     }
 
     // Y_UNIT_TEST_TWIN(TestRightOnlyKind, BlockJoin) {

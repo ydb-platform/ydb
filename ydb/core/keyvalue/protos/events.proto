@@ -42,14 +42,6 @@ message StorageUsageReport {
     map<uint32, uint64> bytes_by_channel = 4;
 }
 
-// Persisted by SchemeShard with the pool bindings in effect when the report was received.
-message PartitionStorageUsage {
-    uint32 generation = 1;
-    uint64 round = 2;
-    uint64 total_bytes = 3;
-    map<string, uint64> bytes_by_pool_kind = 4;
-}
-
 message StorageStatusFlags {
 }
 

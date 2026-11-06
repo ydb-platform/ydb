@@ -75,7 +75,7 @@ Y_UNIT_TEST(EnforceAcrossPartitionsAndReboot) {
     TEnv env(false);
     const ui64 first = env.Tablets[0];
     const ui64 second = env.Tablets[1];
-    const auto write = [&](ui64 tablet, bool mixed = false) {
+    const auto checkWrite = [&](ui64 tablet, NKikimrKeyValue::Statuses::ReplyStatus expected, bool mixed = false) {
         auto request = new TEvKeyValue::TEvExecuteTransaction;
         if (mixed) {
             request->Record.add_commands()->mutable_delete_range()->mutable_range();
@@ -85,22 +85,23 @@ Y_UNIT_TEST(EnforceAcrossPartitionsAndReboot) {
         cmd->set_key("k");
         cmd->set_value("123456");
         cmd->set_storage_channel(tablet == first ? NKeyValue::InlineStorageChannelInPublicApi : NKeyValue::MainStorageChannelInPublicApi);
-        return env.Request<TEvKeyValue::TEvExecuteTransaction, TEvKeyValue::TEvExecuteTransactionResponse>(tablet, request).status();
+        const auto response = env.Request<TEvKeyValue::TEvExecuteTransaction, TEvKeyValue::TEvExecuteTransactionResponse>(tablet, request);
+        UNIT_ASSERT_C(response.status() == expected, response.ShortDebugString());
     };
 
-    UNIT_ASSERT_VALUES_EQUAL(write(first), NKikimrKeyValue::Statuses::RSTATUS_OK);
+    checkWrite(first, NKikimrKeyValue::Statuses::RSTATUS_OK);
     env.Refresh(first);
     env.CheckUsage(6, false);
-    UNIT_ASSERT_VALUES_EQUAL(write(second), NKikimrKeyValue::Statuses::RSTATUS_OK);
+    checkWrite(second, NKikimrKeyValue::Statuses::RSTATUS_OK);
     env.Refresh(second);
     env.CheckUsage(12, true);
-    UNIT_ASSERT_VALUES_EQUAL(write(first, true), NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED);
+    checkWrite(first, NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED, true);
 
     auto blockUpdates = env.Runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>([](auto& event) {
         event.Reset();
     });
     RebootTablet(env.Runtime, first, env.Edge);
-    UNIT_ASSERT_VALUES_EQUAL(write(first), NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED);
+    checkWrite(first, NKikimrKeyValue::Statuses::RSTATUS_DISK_QUOTA_EXCEEDED);
     auto* patch = new TEvKeyValue::TEvRequest;
     patch->Record.AddCmdPatch();
     UNIT_ASSERT_VALUES_EQUAL(env.LegacyRequest(first, patch).GetStatus(), NMsgBusProxy::MSTATUS_REJECTED);
@@ -117,7 +118,7 @@ Y_UNIT_TEST(EnforceAcrossPartitionsAndReboot) {
     RebootTablet(env.Runtime, first, env.Edge);
     env.Refresh(first);
     env.CheckUsage(6, false);
-    UNIT_ASSERT_VALUES_EQUAL(write(second), NKikimrKeyValue::Statuses::RSTATUS_OK);
+    checkWrite(second, NKikimrKeyValue::Statuses::RSTATUS_OK);
 }
 
 Y_UNIT_TEST(IgnoreOldReportsAndReleasePoolQuotaOnDrop) {

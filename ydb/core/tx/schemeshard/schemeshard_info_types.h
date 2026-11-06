@@ -24,7 +24,7 @@
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/storage_pools.h>
-#include <ydb/core/keyvalue/protos/events.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
@@ -2095,7 +2095,7 @@ struct TSolomonPartitionInfo: TSimpleRefCount<TSolomonPartitionInfo> {
     ui64 PartitionId;
     TTabletId TabletId;
 
-    NKikimrKeyValue::PartitionStorageUsage StorageUsage;
+    NKikimrSubDomains::TKeyValuePartitionUsage StorageUsage;
 
     TSolomonPartitionInfo(ui64 partId, TTabletId tabletId = InvalidTabletId)
         : PartitionId(partId)
@@ -2823,8 +2823,8 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpaceUsageDelta& delta);
     void AggrSmallBlobsUsage(IQuotaCounters* counters, i64 bytesDelta, i64 countDelta);
 
-    void UpdateKeyValueUsage(const NKikimrKeyValue::PartitionStorageUsage& next,
-                             const NKikimrKeyValue::PartitionStorageUsage& previous = {});
+    void UpdateKeyValueUsage(const NKikimrSubDomains::TKeyValuePartitionUsage& next,
+                             const NKikimrSubDomains::TKeyValuePartitionUsage& previous = {});
 
     void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {});
 

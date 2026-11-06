@@ -62,7 +62,6 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet_flat
     ydb/core/tx
-    ydb/core/tx/scheme_cache
     ydb/core/util
     ydb/public/lib/base
 )

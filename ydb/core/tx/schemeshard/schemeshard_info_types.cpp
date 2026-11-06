@@ -425,8 +425,8 @@ void TSubDomainInfo::AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpa
     }
 }
 
-void TSubDomainInfo::UpdateKeyValueUsage(const NKikimrKeyValue::PartitionStorageUsage& next,
-                                        const NKikimrKeyValue::PartitionStorageUsage& previous) {
+void TSubDomainInfo::UpdateKeyValueUsage(const NKikimrSubDomains::TKeyValuePartitionUsage& next,
+                                        const NKikimrSubDomains::TKeyValuePartitionUsage& previous) {
     DiskSpaceUsage.KeyValueBytes -= previous.total_bytes();
     DiskSpaceUsage.KeyValueBytes += next.total_bytes();
     for (const auto& [kind, bytes] : previous.bytes_by_pool_kind()) {

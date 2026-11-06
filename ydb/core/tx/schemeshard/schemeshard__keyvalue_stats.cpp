@@ -38,7 +38,7 @@ struct TSchemeShard::TTxStoreKeyValueUsage : NTabletFlatExecutor::TTransactionBa
         }
 
         auto domain = Self->ResolveDomainInfo(shard->PathId);
-        NKikimrKeyValue::PartitionStorageUsage next;
+        NKikimrSubDomains::TKeyValuePartitionUsage next;
         next.set_generation(report.generation());
         next.set_round(report.round());
         for (const auto& [channel, bytes] : report.bytes_by_channel()) {

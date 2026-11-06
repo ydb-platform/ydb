@@ -1,17 +1,22 @@
 #pragma once
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-
 #include <ydb/core/tx/columnshard/data_accessor/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
 
 #include <ydb/library/accessor/accessor.h>
 
+#include <util/string/builder.h>
+
 namespace NKikimr::NSchemeShard {
 
 class TOlapOptionsUpdate {
+public:
+    using TRequestedOptions = NKikimrSchemeOp::TColumnTableRequestedOptions;
+    using EOption = TRequestedOptions::EOption;
+
 private:
-    YDB_ACCESSOR(bool, SchemeNeedActualization, false);
+    YDB_ACCESSOR_DEF(std::optional<bool>, SchemeNeedActualization);
     YDB_ACCESSOR_DEF(std::optional<TString>, ScanReaderPolicyName);
     YDB_ACCESSOR_DEF(std::optional<bool>, DeduplicationEnabled);
     YDB_ACCESSOR_DEF(std::optional<bool>, CacheBlobsAfterWrite);
@@ -19,9 +24,16 @@ private:
     YDB_ACCESSOR_DEF(std::optional<ui64>, InsertOptionsBuildIndexesMinBlobBytes);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_ACCESSOR_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
+    YDB_READONLY_DEF(std::set<EOption>, ResetOptions);
+
 public:
     bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
-        SchemeNeedActualization = alterRequest.GetOptions().GetSchemeNeedActualization();
+        if (!alterRequest.HasOptions()) {
+            return true;
+        }
+        if (alterRequest.GetOptions().HasSchemeNeedActualization()) {
+            SchemeNeedActualization = alterRequest.GetOptions().GetSchemeNeedActualization();
+        }
         if (alterRequest.GetOptions().HasScanReaderPolicyName()) {
             ScanReaderPolicyName = alterRequest.GetOptions().GetScanReaderPolicyName();
         }
@@ -32,7 +44,8 @@ public:
             CacheBlobsAfterWrite = alterRequest.GetOptions().GetCacheBlobsAfterWrite();
         }
         if (alterRequest.GetOptions().HasMetadataManagerConstructor()) {
-            auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
+            auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(
+                alterRequest.GetOptions().GetMetadataManagerConstructor());
             if (container.IsFail()) {
                 errors.AddError(container.GetErrorMessage());
                 return false;
@@ -40,7 +53,8 @@ public:
             MetadataManagerConstructor = container.DetachResult();
         }
         if (alterRequest.GetOptions().HasCompactionPlannerConstructor()) {
-            auto container = NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetCompactionPlannerConstructor());
+            auto container = NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer::BuildFromProto(
+                alterRequest.GetOptions().GetCompactionPlannerConstructor());
             if (container.IsFail()) {
                 errors.AddError(container.GetErrorMessage());
                 return false;
@@ -56,10 +70,20 @@ public:
                 InsertOptionsBuildIndexesMinBlobBytes = optionsProto.GetBuildIndexesMinBlobBytes();
             }
         }
+        for (const auto rawOption : alterRequest.GetOptions().GetResetOptions()) {
+            if (!TRequestedOptions::EOption_IsValid(rawOption)) {
+                errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "unknown option to reset: " << rawOption);
+                return false;
+            }
+            ResetOptions.emplace(static_cast<EOption>(rawOption));
+        }
         return true;
     }
+
     void SerializeToProto(NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest) const {
-        alterRequest.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
+        if (SchemeNeedActualization) {
+            alterRequest.MutableOptions()->SetSchemeNeedActualization(*SchemeNeedActualization);
+        }
         if (ScanReaderPolicyName) {
             alterRequest.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
         }
@@ -84,6 +108,9 @@ public:
                 options.SetBuildIndexesMinBlobBytes(*InsertOptionsBuildIndexesMinBlobBytes);
             }
         }
+        for (const auto option : ResetOptions) {
+            alterRequest.MutableOptions()->AddResetOptions(option);
+        }
     }
 };
-}
+}   // namespace NKikimr::NSchemeShard

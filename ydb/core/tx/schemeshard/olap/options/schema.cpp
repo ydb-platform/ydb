@@ -1,10 +1,42 @@
 #include "schema.h"
 
+#include <util/string/builder.h>
+
 namespace NKikimr::NSchemeShard {
 
-bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate, IErrorCollector& /*errors*/) {
-    SchemeNeedActualization = schemaUpdate.GetSchemeNeedActualization();
-    if (!!schemaUpdate.GetScanReaderPolicyName()) {
+bool TOlapOptionsDescription::ApplyUpdate(const TOlapOptionsUpdate& schemaUpdate, IErrorCollector& errors) {
+    using TRequestedOptions = TOlapOptionsUpdate::TRequestedOptions;
+    const auto resetOption = [&](const TRequestedOptions::EOption option, const bool isSet, auto& value) {
+        if (!schemaUpdate.GetResetOptions().contains(option)) {
+            return true;
+        }
+        if (isSet) {
+            errors.AddError(NKikimrScheme::StatusInvalidParameter,
+                TStringBuilder() << "option " << TRequestedOptions::EOption_Name(option) << " is both set and reset");
+            return false;
+        }
+        // Clear the override so the columnshard falls back to its defaults.
+        value = {};
+        return true;
+    };
+    if (!resetOption(
+            TRequestedOptions::SCHEME_NEED_ACTUALIZATION, schemaUpdate.GetSchemeNeedActualization().has_value(), SchemeNeedActualization) ||
+        !resetOption(
+            TRequestedOptions::COMPACTION_PLANNER, schemaUpdate.GetCompactionPlannerConstructor().HasObject(), CompactionPlannerConstructor) ||
+        !resetOption(
+            TRequestedOptions::METADATA_MEMORY_MANAGER, schemaUpdate.GetMetadataManagerConstructor().HasObject(), MetadataManagerConstructor) ||
+        !resetOption(TRequestedOptions::SCAN_READER_POLICY_NAME, schemaUpdate.GetScanReaderPolicyName().has_value(), ScanReaderPolicyName) ||
+        !resetOption(TRequestedOptions::DEDUPLICATION_ENABLED, schemaUpdate.GetDeduplicationEnabled().has_value(), DeduplicationEnabled) ||
+        !resetOption(TRequestedOptions::INSERT_OPTIONS,
+            schemaUpdate.GetInsertOptionsBuildIndexesEnabled().has_value() ||
+                schemaUpdate.GetInsertOptionsBuildIndexesMinBlobBytes().has_value(), InsertOptions) ||
+        !resetOption(TRequestedOptions::CACHE_BLOBS_AFTER_WRITE, schemaUpdate.GetCacheBlobsAfterWrite().has_value(), CacheBlobsAfterWrite)) {
+        return false;
+    }
+    if (schemaUpdate.GetSchemeNeedActualization()) {
+        SchemeNeedActualization = *schemaUpdate.GetSchemeNeedActualization();
+    }
+    if (schemaUpdate.GetScanReaderPolicyName()) {
         ScanReaderPolicyName = *schemaUpdate.GetScanReaderPolicyName();
     }
     if (schemaUpdate.GetDeduplicationEnabled()) {
@@ -91,4 +123,4 @@ bool TOlapOptionsDescription::ValidateForStore(const NKikimrSchemeOp::TColumnTab
     return true;
 }
 
-}
+}   // namespace NKikimr::NSchemeShard

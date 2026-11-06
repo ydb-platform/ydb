@@ -404,22 +404,31 @@ private:
     // Endpoints of other piles are built from the monitoring port of this process, which is
     // common for static nodes only. A dynamic node forwards the request to a static node of its own pile.
     bool ForwardToStaticNode(const TBridgeInfo& bridgeInfo) {
-        const auto itSelf = NodeCache.find(SelfId().NodeId());
-        if (itSelf == NodeCache.end() || !itSelf->second || itSelf->second->Static
-                || !GetRequest().GetHeader("X-Forwarded-From-Node").empty()) {
+        if (!CanQueryPile(bridgeInfo, *bridgeInfo.SelfNodePile)) {
             return false;
         }
         std::vector<ui32> nodes;
+        std::vector<ui32> connectedNodes;
         for (const auto& node : NodeData) {
-            if (node.Static && node.Connected && node.PileNum == bridgeInfo.SelfNodePile->BridgePileId.GetPileIndex()) {
+            if (node.Static && node.PileNum == bridgeInfo.SelfNodePile->BridgePileId.GetPileIndex()) {
                 nodes.push_back(node.NodeId);
+                if (node.Connected) {
+                    connectedNodes.push_back(node.NodeId);
+                }
             }
+        }
+        if (!connectedNodes.empty()) {
+            nodes = std::move(connectedNodes);
         }
         if (nodes.empty()) {
             return false;
         }
         std::sort(nodes.begin(), nodes.end());
-        TBase::ReplyAndPassAway(MakeForward(nodes));
+        const ui32 nodeId = nodes[std::hash<TString>()(GetRequest().GetRemoteAddr()) % nodes.size()];
+        const TString location = TStringBuilder() << "/node/" << nodeId << GetRequest().GetUri();
+        // Allow this redirect after a /node/ proxy hop. StartPileRequests only redirects
+        // non-static nodes, so the static target will not redirect again.
+        TBase::ReplyAndPassAway(Viewer->GetHTTPFORWARD(GetRequest(), location, {}));
         return true;
     }
 
@@ -444,8 +453,17 @@ private:
         if (piles.empty()) {
             return true;
         }
-        if (ForwardToStaticNode(*bridgeInfo)) {
-            return false;
+        const auto itSelf = NodeCache.find(SelfId().NodeId());
+        if (itSelf == NodeCache.end() || !itSelf->second) {
+            AddProblem("no-pile-node-info");
+            return true;
+        }
+        if (!itSelf->second->Static) {
+            if (ForwardToStaticNode(*bridgeInfo)) {
+                return false;
+            }
+            AddProblem("no-pile-node-info");
+            return true;
         }
         const auto& config = Viewer->GetKikimrRunConfig().AppConfig.GetMonitoringConfig();
         std::vector<const TNode*> staticNodes;

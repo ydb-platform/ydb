@@ -1479,6 +1479,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TString HttpsStatus = "200";
         ui32 ExpectedHttpsRequests = 0;
         ui32 ServingNodeIndex = 0;
+        ui32 ServingMonitoringPort = 0;
         TString ExpectedStatus = "200";
         NKikimrBridge::TClusterState::EPileState LocalState = NKikimrBridge::TClusterState::SYNCHRONIZED;
         NKikimrBridge::TClusterState::EPileState RemoteState = NKikimrBridge::TClusterState::SYNCHRONIZED;
@@ -1509,7 +1510,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto& runtime = *server.GetRuntime();
         // Offload requests address viewers by node id; TServer registers them by node index.
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-            const auto viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            auto viewerId = runtime.GetLocalServiceId(MakeViewerID(nodeIndex), nodeIndex);
+            if (options.ServingMonitoringPort && nodeIndex == options.ServingNodeIndex) {
+                auto config = *settings.KikimrRunConfig;
+                config.AppConfig.MutableMonitoringConfig()->SetMonitoringPort(options.ServingMonitoringPort);
+                viewerId = runtime.Register(CreateViewer(config), nodeIndex);
+                runtime.RegisterService(MakeViewerID(nodeIndex), viewerId, nodeIndex);
+            }
             runtime.RegisterService(MakeViewerID(runtime.GetNodeId(nodeIndex)), viewerId, nodeIndex);
         }
         runtime.GetAppData(options.ServingNodeIndex).BridgeModeEnabled = true;
@@ -1734,7 +1741,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const TActorId sender = runtime.AllocateEdgeActor(options.ServingNodeIndex);
         const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(options.ServingNodeIndex), options.ServingNodeIndex);
         runtime.Send(new IEventHandle(viewerId, sender,
-            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)), options.ServingNodeIndex);
+            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)), options.ServingNodeIndex, /*viaActorSystem=*/true);
         TAutoPtr<IEventHandle> handle;
         auto* response = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL_C(response->Response->Status, options.ExpectedStatus, response->Response->Body);
@@ -1896,6 +1903,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             .OffloadMerge = true,
             .Https = true,
             .SessionCookie = sessionCookie,
+            .ForwardedFromNode = true,
             .ExpectedHttpsRequests = 1,
             .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
             .AliveNodeIndexes = {0, 1, 2, 4, 5},
@@ -1909,11 +1917,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(json["NodesTotal"].GetUIntegerSafe(), 6);
     }
 
-    Y_UNIT_TEST(ClusterBridgeComputeNodeForwardsToStorageNode) {
+    Y_UNIT_TEST_TWIN(ClusterBridgeComputeNodeForwardsToStorageNode, forwarded) {
         // Only static nodes share the monitoring port used to build endpoints of other piles.
         const auto json = GetClusterBridgeInfo({
             .Https = true,
+            .ForwardedFromNode = forwarded,
             .ServingNodeIndex = 1,
+            .ServingMonitoringPort = 8766,
             .ExpectedStatus = "307",
             .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
             // Node 0 is disconnected, node 4 is in another pile, node 3 is dynamic.
@@ -1924,19 +1934,35 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_C(location.StartsWith(TStringBuilder() << "/node/" << storageNodeId << "/viewer/json/cluster?"), location);
     }
 
-    Y_UNIT_TEST_TWIN(ClusterBridgeComputeNodeQueriesPileDirectly, forwarded) {
-        // Without a connected static node of its own pile, or when already forwarded,
-        // the compute node falls back to querying the other pile itself.
+    Y_UNIT_TEST_TWIN(ClusterBridgeComputeNodeForwardsWithoutConnectedStorageNode, forwarded) {
+        // No established interconnect session does not mean a static node is unreachable.
         const auto json = GetClusterBridgeInfo({
             .Https = true,
             .ForwardedFromNode = forwarded,
-            .ExpectedHttpsRequests = 1,
             .ServingNodeIndex = 1,
+            .ServingMonitoringPort = 8766,
+            .ExpectedStatus = "307",
             .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
-            .AliveNodeIndexes = {0, 1, 2, 4, 5},
-            .ConnectedNodeIndexes = forwarded ? std::unordered_set<ui32>{0, 2} : std::unordered_set<ui32>{3, 4},
+            .ConnectedNodeIndexes = std::unordered_set<ui32>{3, 4},
         });
-        AssertBridgePileAliveCounts(json["BridgeInfo"]["Piles"][1], 1, 1);
+        const TString location = json["Location"].GetStringSafe();
+        const ui32 firstNodeId = json["FirstNodeId"].GetUIntegerSafe();
+        UNIT_ASSERT_C(location.StartsWith(TStringBuilder() << "/node/" << firstNodeId << "/viewer/json/cluster?")
+            || location.StartsWith(TStringBuilder() << "/node/" << firstNodeId + 2 << "/viewer/json/cluster?"), location);
+    }
+
+    Y_UNIT_TEST_TWIN(ClusterBridgeComputeNodeWithoutAvailableStorageNode, inactive) {
+        const auto json = GetClusterBridgeInfo({
+            .Https = true,
+            .ForwardedFromNode = true,
+            .ServingNodeIndex = 1,
+            .ServingMonitoringPort = 8766,
+            .LocalState = inactive ? NKikimrBridge::TClusterState::INACTIVE : NKikimrBridge::TClusterState::SYNCHRONIZED,
+            .RemoteState = NKikimrBridge::TClusterState::DISCONNECTED,
+            .UnmappedNodeIndexes = inactive ? std::unordered_set<ui32>{} : std::unordered_set<ui32>{0, 2},
+        });
+        AssertBridgePileCounts(json["BridgeInfo"]["Piles"][1], 1, 1);
+        AssertBridgePileUnknownAliveCounts(json["BridgeInfo"]["Piles"][1]);
     }
 
     Y_UNIT_TEST(ClusterBridgeHttpsRetriesAnotherNode) {

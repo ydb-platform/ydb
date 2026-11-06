@@ -14,8 +14,8 @@ namespace NKikimr::NGRpcService {
 
         using namespace NActors;
         using TStorageQuery = NKikimrBridge::TStorageQuery;
-        using TSummaryCall = TGrpcRequestOperationCall<Ydb::Bridge::GetSynchronizationSummaryRequest, Ydb::Bridge::GetSynchronizationSummaryResponse>;
-        using TDatabaseCall = TGrpcRequestOperationCall<Ydb::Bridge::ListDatabaseStorageRequest, Ydb::Bridge::ListDatabaseStorageResponse>;
+        using TPileCall = TGrpcRequestOperationCall<Ydb::Bridge::ListPileSynchronizationRequest, Ydb::Bridge::ListPileSynchronizationResponse>;
+        using TDatabaseCall = TGrpcRequestOperationCall<Ydb::Bridge::ListDatabaseSynchronizationRequest, Ydb::Bridge::ListDatabaseSynchronizationResponse>;
         using TGroupCall = TGrpcRequestOperationCall<Ydb::Bridge::ListGroupSynchronizationRequest, Ydb::Bridge::ListGroupSynchronizationResponse>;
 
         template <class TCall>
@@ -110,7 +110,7 @@ namespace NKikimr::NGRpcService {
             google::protobuf::Message* Payload() {
                 switch (Query.GetView()) {
                     case TStorageQuery::PILES:
-                        return Result.HasSummary() ? Result.MutableSummary() : nullptr;
+                        return Result.HasPiles() ? Result.MutablePiles() : nullptr;
                     case TStorageQuery::DATABASES:
                         return Result.HasDatabases() ? Result.MutableDatabases() : nullptr;
                     case TStorageQuery::GROUPS:
@@ -270,13 +270,13 @@ namespace NKikimr::NGRpcService {
 
     } // namespace
 
-    void DoGetSynchronizationSummary(std::unique_ptr<IRequestOpCtx> request, const IFacilityProvider&) {
+    void DoListPileSynchronization(std::unique_ptr<IRequestOpCtx> request, const IFacilityProvider&) {
         TStorageQuery query;
         query.SetView(TStorageQuery::PILES);
-        TActivationContext::AsActorContext().Register(new TStorageRequest<TSummaryCall>(request.release(), std::move(query)));
+        TActivationContext::AsActorContext().Register(new TStorageRequest<TPileCall>(request.release(), std::move(query)));
     }
 
-    void DoListDatabaseStorage(std::unique_ptr<IRequestOpCtx> request, const IFacilityProvider&) {
+    void DoListDatabaseSynchronization(std::unique_ptr<IRequestOpCtx> request, const IFacilityProvider&) {
         const auto* proto = TDatabaseCall::GetProtoRequest(request.get());
         TStorageQuery query;
         query.SetView(TStorageQuery::DATABASES);

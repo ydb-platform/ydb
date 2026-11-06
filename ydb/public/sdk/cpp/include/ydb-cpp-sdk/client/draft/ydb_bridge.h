@@ -120,24 +120,20 @@ struct TSynchronizationError {
     std::optional<TInstant> OccurredAt;
 };
 
-struct TPileSynchronizationSummary {
+struct TPileSynchronization {
     std::string PileName;
     TGroupSyncCounts UserGroups;
     TGroupSyncCounts SystemGroups;
 };
 
-struct TSynchronizationSummary {
-    std::vector<TPileSynchronizationSummary> Piles;
-    uint64_t ClusterStateGeneration = 0;
-    TInstant ObservedAt;
-};
-
-//! Summary of the listed storage pools, attributed to their owner when its name is available.
-//! Serverless databases select shared storage. MIXED counts cover bridged pools only.
-struct TDatabaseStorageSummary {
+//! Synchronization of the listed storage pools, attributed to their storage owner when known.
+//! DatabasePath names that owner, not every logical database using the storage.
+//! Serverless requests select shared storage. MIXED counts cover bridged pools only.
+struct TDatabaseSynchronization {
     std::optional<std::string> DatabasePath;
     std::vector<TStoragePool> StoragePools;
     EStorageMode StorageMode = EStorageMode::Unspecified;
+    //! Ordinary placement is derived from group VDisks; absent when it cannot be determined.
     std::optional<std::string> PileName;
     TGroupSyncCounts Groups;
     std::optional<TSynchronizationError> LastSyncError;
@@ -149,6 +145,7 @@ struct TGroupSynchronization {
     //! Physical group with VDisks, for low-level diagnostics; it may not exist yet.
     std::optional<uint32_t> PhysicalGroupId;
     TStoragePool StoragePool;
+    //! Ordinary groups spanning several piles have one row per pile; absent for unknown placement.
     std::optional<std::string> PileName;
     ESynchronizationStatus SyncStatus = ESynchronizationStatus::Unspecified;
     //! Diagnostic protocol phase. Use SyncStatus for programmatic decisions.
@@ -156,9 +153,9 @@ struct TGroupSynchronization {
     std::optional<TSynchronizationError> LastSyncError;
 };
 
-struct TGetSynchronizationSummarySettings: public TOperationRequestSettings<TGetSynchronizationSummarySettings> {};
+struct TListPileSynchronizationSettings: public TOperationRequestSettings<TListPileSynchronizationSettings> {};
 
-struct TListDatabaseStorageSettings: public TOperationRequestSettings<TListDatabaseStorageSettings> {
+struct TListDatabaseSynchronizationSettings: public TOperationRequestSettings<TListDatabaseSynchronizationSettings> {
     //! Serverless databases select their shared database's storage.
     FLUENT_SETTING_OPTIONAL(std::string, DatabasePath);
     //! Absence selects all placements; an explicitly empty name is a real pile.
@@ -213,22 +210,6 @@ struct TListGroupSynchronizationSettings: public TOperationRequestSettings<TList
     FLUENT_SETTING_OPTIONAL(std::string, PileName);
     //! Empty selects all statuses; otherwise their union. Unspecified is invalid.
     FLUENT_SETTING_DEFAULT(std::vector<ESynchronizationStatus>, Statuses, {});
-};
-
-class TGetSynchronizationSummaryResult: public TStatus {
-public:
-    TGetSynchronizationSummaryResult(TStatus&& status, TSynchronizationSummary summary = {})
-        : TStatus(std::move(status))
-        , Summary_(std::move(summary))
-    {
-    }
-
-    const TSynchronizationSummary& GetSummary() const {
-        return Summary_;
-    }
-
-private:
-    TSynchronizationSummary Summary_;
 };
 
 // Connectivity of one distconf binding component; this is not disk health or a failover vote.
@@ -297,12 +278,48 @@ private:
 
 using TAsyncGetClusterStateResult = NThreading::TFuture<TGetClusterStateResult>;
 
-//! The complete selected list. Oversized requests fail; results are never truncated.
-class TListDatabaseStorageResult: public TStatus {
+//! Synchronization counts for all piles, observed independently of their committed states.
+class TListPileSynchronizationResult: public TStatus {
 public:
-    TListDatabaseStorageResult(TStatus&& status, std::vector<TDatabaseStorageSummary> rows = {},
-                               uint64_t clusterStateGeneration = 0, TInstant observedAt = {},
-                               std::optional<std::string> storageOwnerDatabasePath = std::nullopt)
+    TListPileSynchronizationResult(TStatus&& status, std::vector<TPileSynchronization> rows = {},
+                                  uint64_t clusterStateGeneration = 0, TInstant observedAt = {},
+                                  uint64_t ordinaryGroups = 0)
+        : TStatus(std::move(status))
+        , Piles_(std::move(rows))
+        , ClusterStateGeneration_(clusterStateGeneration)
+        , ObservedAt_(observedAt)
+        , OrdinaryGroups_(ordinaryGroups)
+    {
+    }
+
+    const std::vector<TPileSynchronization>& GetPiles() const {
+        return Piles_;
+    }
+    uint64_t GetClusterStateGeneration() const {
+        return ClusterStateGeneration_;
+    }
+    TInstant GetObservedAt() const {
+        return ObservedAt_;
+    }
+    //! Logical groups in ordinary storage pools, counted once across the cluster.
+    //! They do not require bridge synchronization; this counter is not broken down by pile.
+    uint64_t GetOrdinaryGroups() const {
+        return OrdinaryGroups_;
+    }
+
+private:
+    std::vector<TPileSynchronization> Piles_;
+    uint64_t ClusterStateGeneration_ = 0;
+    TInstant ObservedAt_;
+    uint64_t OrdinaryGroups_ = 0;
+};
+
+//! The complete selected list. Oversized requests fail; results are never truncated.
+class TListDatabaseSynchronizationResult: public TStatus {
+public:
+    TListDatabaseSynchronizationResult(TStatus&& status, std::vector<TDatabaseSynchronization> rows = {},
+                                       uint64_t clusterStateGeneration = 0, TInstant observedAt = {},
+                                       std::optional<std::string> storageOwnerDatabasePath = std::nullopt)
         : TStatus(std::move(status))
         , Databases_(std::move(rows))
         , ClusterStateGeneration_(clusterStateGeneration)
@@ -311,7 +328,7 @@ public:
     {
     }
 
-    const std::vector<TDatabaseStorageSummary>& GetDatabases() const {
+    const std::vector<TDatabaseSynchronization>& GetDatabases() const {
         return Databases_;
     }
     uint64_t GetClusterStateGeneration() const {
@@ -325,7 +342,7 @@ public:
     }
 
 private:
-    std::vector<TDatabaseStorageSummary> Databases_;
+    std::vector<TDatabaseSynchronization> Databases_;
     uint64_t ClusterStateGeneration_ = 0;
     TInstant ObservedAt_;
     std::optional<std::string> StorageOwnerDatabasePath_;
@@ -365,8 +382,8 @@ private:
     std::optional<std::string> StorageOwnerDatabasePath_;
 };
 
-using TAsyncGetSynchronizationSummaryResult = NThreading::TFuture<TGetSynchronizationSummaryResult>;
-using TAsyncListDatabaseStorageResult = NThreading::TFuture<TListDatabaseStorageResult>;
+using TAsyncListPileSynchronizationResult = NThreading::TFuture<TListPileSynchronizationResult>;
+using TAsyncListDatabaseSynchronizationResult = NThreading::TFuture<TListDatabaseSynchronizationResult>;
 using TAsyncListGroupSynchronizationResult = NThreading::TFuture<TListGroupSynchronizationResult>;
 
 class TBridgeClient {
@@ -379,9 +396,9 @@ public:
 
     TAsyncGetClusterStateResult GetClusterState(const TGetClusterStateSettings& settings = {});
 
-    TAsyncGetSynchronizationSummaryResult GetSynchronizationSummary(const TGetSynchronizationSummarySettings& settings = {});
+    TAsyncListPileSynchronizationResult ListPileSynchronization(const TListPileSynchronizationSettings& settings = {});
 
-    TAsyncListDatabaseStorageResult ListDatabaseStorage(const TListDatabaseStorageSettings& settings = {});
+    TAsyncListDatabaseSynchronizationResult ListDatabaseSynchronization(const TListDatabaseSynchronizationSettings& settings = {});
 
     TAsyncListGroupSynchronizationResult ListGroupSynchronization(const TGroupSynchronizationScope& scope,
                                                                   const TListGroupSynchronizationSettings& settings = {});

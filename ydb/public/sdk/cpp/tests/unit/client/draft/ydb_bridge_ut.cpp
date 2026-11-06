@@ -44,8 +44,8 @@ namespace {
     class TBridgeService: public Ydb::Bridge::V1::BridgeService::Service {
     public:
         TReply<Ydb::Bridge::GetClusterStateRequest, Ydb::Bridge::GetClusterStateResult> Cluster;
-        TReply<Ydb::Bridge::GetSynchronizationSummaryRequest, Ydb::Bridge::GetSynchronizationSummaryResult> Summary;
-        TReply<Ydb::Bridge::ListDatabaseStorageRequest, Ydb::Bridge::ListDatabaseStorageResult> Databases;
+        TReply<Ydb::Bridge::ListPileSynchronizationRequest, Ydb::Bridge::ListPileSynchronizationResult> Piles;
+        TReply<Ydb::Bridge::ListDatabaseSynchronizationRequest, Ydb::Bridge::ListDatabaseSynchronizationResult> Databases;
         TReply<Ydb::Bridge::ListGroupSynchronizationRequest, Ydb::Bridge::ListGroupSynchronizationResult> Groups;
 
         grpc::Status GetClusterState(grpc::ServerContext*, const Ydb::Bridge::GetClusterStateRequest* request,
@@ -53,13 +53,13 @@ namespace {
             return Cluster.Respond(*request, *response);
         }
 
-        grpc::Status GetSynchronizationSummary(grpc::ServerContext*, const Ydb::Bridge::GetSynchronizationSummaryRequest* request,
-                                               Ydb::Bridge::GetSynchronizationSummaryResponse* response) override {
-            return Summary.Respond(*request, *response);
+        grpc::Status ListPileSynchronization(grpc::ServerContext*, const Ydb::Bridge::ListPileSynchronizationRequest* request,
+                                             Ydb::Bridge::ListPileSynchronizationResponse* response) override {
+            return Piles.Respond(*request, *response);
         }
 
-        grpc::Status ListDatabaseStorage(grpc::ServerContext*, const Ydb::Bridge::ListDatabaseStorageRequest* request,
-                                         Ydb::Bridge::ListDatabaseStorageResponse* response) override {
+        grpc::Status ListDatabaseSynchronization(grpc::ServerContext*, const Ydb::Bridge::ListDatabaseSynchronizationRequest* request,
+                                                 Ydb::Bridge::ListDatabaseSynchronizationResponse* response) override {
             return Databases.Respond(*request, *response);
         }
 
@@ -136,29 +136,31 @@ Y_UNIT_TEST_SUITE(BridgeClient) {
         UNIT_ASSERT(!fixture.Service.Cluster.LastRequest.include_pile_connectivity());
     }
 
-    Y_UNIT_TEST(SynchronizationSummaryAndOperationSettings) {
+    Y_UNIT_TEST(PileSynchronizationAndOperationSettings) {
         TFixture fixture;
-        auto& proto = fixture.Service.Summary.Result;
+        auto& proto = fixture.Service.Piles.Result;
         SetObservation(proto);
+        proto.set_ordinary_groups(4);
         auto* pile = proto.add_piles();
         pile->set_pile_name("");
         SetCounts(pile->mutable_user_groups());
         SetCounts(pile->mutable_system_groups());
-        const auto result = fixture.Client.GetSynchronizationSummary(
-                                              TGetSynchronizationSummarySettings().OperationTimeout(TDuration::Seconds(3)))
+        const auto result = fixture.Client.ListPileSynchronization(
+                                              TListPileSynchronizationSettings().OperationTimeout(TDuration::Seconds(3)))
                                 .GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        const auto& summary = result.GetSummary();
-        UNIT_ASSERT_VALUES_EQUAL(summary.ClusterStateGeneration, 11);
-        UNIT_ASSERT_VALUES_EQUAL(summary.ObservedAt.MicroSeconds(), 123456789);
-        UNIT_ASSERT_VALUES_EQUAL(summary.Piles.size(), 1);
-        UNIT_ASSERT(summary.Piles[0].PileName.empty());
-        CheckCounts(summary.Piles[0].UserGroups);
-        CheckCounts(summary.Piles[0].SystemGroups);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Service.Summary.LastRequest.operation_params().operation_timeout().seconds(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetClusterStateGeneration(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetObservedAt().MicroSeconds(), 123456789);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetOrdinaryGroups(), 4);
+        const auto& piles = result.GetPiles();
+        UNIT_ASSERT_VALUES_EQUAL(piles.size(), 1);
+        UNIT_ASSERT(piles[0].PileName.empty());
+        CheckCounts(piles[0].UserGroups);
+        CheckCounts(piles[0].SystemGroups);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Service.Piles.LastRequest.operation_params().operation_timeout().seconds(), 3);
     }
 
-    Y_UNIT_TEST(DatabaseStorageSettingsAndQualifiedPools) {
+    Y_UNIT_TEST(DatabaseSynchronizationSettingsAndQualifiedPools) {
         TFixture fixture;
         auto& proto = fixture.Service.Databases.Result;
         SetObservation(proto);
@@ -177,8 +179,8 @@ Y_UNIT_TEST_SUITE(BridgeClient) {
         SetPool(anonymous->add_storage_pools(), 9, 9, "unresolved");
         anonymous->mutable_last_sync_error()->set_message("timestamp unavailable");
 
-        const auto settings = TListDatabaseStorageSettings().DatabasePath("/Root/serverless").PileName("").OnlyIncomplete(true);
-        const auto result = fixture.Client.ListDatabaseStorage(settings).GetValueSync();
+        const auto settings = TListDatabaseSynchronizationSettings().DatabasePath("/Root/serverless").PileName("").OnlyIncomplete(true);
+        const auto result = fixture.Client.ListDatabaseSynchronization(settings).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         const auto& request = fixture.Service.Databases.LastRequest;
         UNIT_ASSERT(request.has_database_path());
@@ -275,7 +277,7 @@ Y_UNIT_TEST_SUITE(BridgeClient) {
         UNIT_ASSERT(fixture.Service.Groups.LastRequest.scope_case() == Ydb::Bridge::ListGroupSynchronizationRequest::kStoragePoolId);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Service.Groups.LastRequest.storage_pool_id().box_id(), 7);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Service.Groups.LastRequest.storage_pool_id().pool_id(), 13);
-        const auto databases = fixture.Client.ListDatabaseStorage().GetValueSync();
+        const auto databases = fixture.Client.ListDatabaseSynchronization().GetValueSync();
         UNIT_ASSERT(databases.IsSuccess());
         UNIT_ASSERT(!fixture.Service.Databases.LastRequest.has_database_path());
         UNIT_ASSERT(!fixture.Service.Databases.LastRequest.has_pile_name());
@@ -325,7 +327,7 @@ Y_UNIT_TEST_SUITE(BridgeClient) {
         for (const auto& mode : modes) {
             fixture.Service.Databases.Result.add_databases()->set_storage_mode(mode.Proto);
         }
-        const auto result = fixture.Client.ListDatabaseStorage().GetValueSync();
+        const auto result = fixture.Client.ListDatabaseSynchronization().GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetDatabases().size(), modes.size());
         for (size_t i = 0; i < modes.size(); ++i) {
@@ -336,14 +338,15 @@ Y_UNIT_TEST_SUITE(BridgeClient) {
 
     Y_UNIT_TEST(DiagnosticsErrorsAndUnsupportedServer) {
         TFixture fixture;
-        fixture.Service.Summary.Status = Ydb::StatusIds::UNAVAILABLE;
-        fixture.Service.Summary.Issue = "controller unavailable";
-        const auto summary = fixture.Client.GetSynchronizationSummary().GetValueSync();
-        UNIT_ASSERT(summary.GetStatus() == EStatus::UNAVAILABLE);
-        UNIT_ASSERT_STRING_CONTAINS(summary.GetIssues().ToString(), "controller unavailable");
+        fixture.Service.Piles.Status = Ydb::StatusIds::UNAVAILABLE;
+        fixture.Service.Piles.Issue = "controller unavailable";
+        const auto piles = fixture.Client.ListPileSynchronization().GetValueSync();
+        UNIT_ASSERT(piles.GetStatus() == EStatus::UNAVAILABLE);
+        UNIT_ASSERT_STRING_CONTAINS(piles.GetIssues().ToString(), "controller unavailable");
+        UNIT_ASSERT(piles.GetPiles().empty());
         fixture.Service.Databases.Status = Ydb::StatusIds::BAD_REQUEST;
         fixture.Service.Databases.Issue = "invalid database scope";
-        const auto databases = fixture.Client.ListDatabaseStorage().GetValueSync();
+        const auto databases = fixture.Client.ListDatabaseSynchronization().GetValueSync();
         UNIT_ASSERT(databases.GetStatus() == EStatus::BAD_REQUEST);
         UNIT_ASSERT_STRING_CONTAINS(databases.GetIssues().ToString(), "invalid database scope");
         UNIT_ASSERT(databases.GetDatabases().empty());
@@ -364,12 +367,12 @@ Y_UNIT_TEST_SUITE(BridgeClient) {
 
     Y_UNIT_TEST(InvalidSuccessfulPayloadIsNotAnEmptySuccessfulObservation) {
         TFixture fixture;
-        fixture.Service.Summary.WrongResultType = true;
-        const auto result = fixture.Client.GetSynchronizationSummary().GetValueSync();
+        fixture.Service.Piles.WrongResultType = true;
+        const auto result = fixture.Client.ListPileSynchronization().GetValueSync();
         UNIT_ASSERT(result.GetStatus() == EStatus::CLIENT_INTERNAL_ERROR);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid bridge diagnostics response");
         fixture.Service.Databases.OmitResult = true;
-        const auto response = fixture.Client.ListDatabaseStorage().GetValueSync();
+        const auto response = fixture.Client.ListDatabaseSynchronization().GetValueSync();
         UNIT_ASSERT(response.GetStatus() == EStatus::CLIENT_INTERNAL_ERROR);
         UNIT_ASSERT_STRING_CONTAINS(response.GetIssues().ToString(), "Invalid bridge diagnostics response");
         UNIT_ASSERT(response.GetDatabases().empty());

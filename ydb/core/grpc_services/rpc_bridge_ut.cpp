@@ -594,12 +594,12 @@ struct TStorageSetup : TSetup {
         return promise.GetFuture();
     }
 
-    auto Start(const Ydb::Bridge::GetSynchronizationSummaryRequest& request) {
-        return StartRpc<Ydb::Bridge::GetSynchronizationSummaryRequest, Ydb::Bridge::GetSynchronizationSummaryResponse>(request, DoGetSynchronizationSummary);
+    auto Start(const Ydb::Bridge::ListPileSynchronizationRequest& request) {
+        return StartRpc<Ydb::Bridge::ListPileSynchronizationRequest, Ydb::Bridge::ListPileSynchronizationResponse>(request, DoListPileSynchronization);
     }
 
-    auto Start(const Ydb::Bridge::ListDatabaseStorageRequest& request) {
-        return StartRpc<Ydb::Bridge::ListDatabaseStorageRequest, Ydb::Bridge::ListDatabaseStorageResponse>(request, DoListDatabaseStorage);
+    auto Start(const Ydb::Bridge::ListDatabaseSynchronizationRequest& request) {
+        return StartRpc<Ydb::Bridge::ListDatabaseSynchronizationRequest, Ydb::Bridge::ListDatabaseSynchronizationResponse>(request, DoListDatabaseSynchronization);
     }
 
     auto Start(const Ydb::Bridge::ListGroupSynchronizationRequest& request) {
@@ -722,8 +722,8 @@ TResult OperationResult(const TResponse& response) {
     return result;
 }
 
-Ydb::Bridge::ListDatabaseStorageResult GetStorageResult(const Ydb::Bridge::ListDatabaseStorageResponse& response) {
-    return OperationResult<Ydb::Bridge::ListDatabaseStorageResult>(response);
+Ydb::Bridge::ListDatabaseSynchronizationResult GetStorageResult(const Ydb::Bridge::ListDatabaseSynchronizationResponse& response) {
+    return OperationResult<Ydb::Bridge::ListDatabaseSynchronizationResult>(response);
 }
 
 } // namespace
@@ -736,7 +736,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
         setup.CacheDescription("/Root/app", {setup.TenantSchemeShardId, 1},
             NKikimrSchemeOp::EPathTypeSubDomain, owner, owner, pools);
 
-        Ydb::Bridge::ListDatabaseStorageRequest query;
+        Ydb::Bridge::ListDatabaseSynchronizationRequest query;
         query.set_database_path("/Root/app/");
         auto future = setup.Start(query);
         const auto request = setup.GrabStorageQuery();
@@ -782,7 +782,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
         setup.CacheDescription("/Root/shared", shared, NKikimrSchemeOp::EPathTypeExtSubDomain,
             shared, shared, pools, true);
 
-        Ydb::Bridge::ListDatabaseStorageRequest query;
+        Ydb::Bridge::ListDatabaseSynchronizationRequest query;
         query.set_database_path("/Root/serverless");
         auto future = setup.Start(query);
         const auto request = setup.GrabStorageQuery();
@@ -822,7 +822,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
             setup.RootId, setup.RootId, {}, true);
         setup.ReverseMetadataResults = true; // correlate owners by identity, independent of result order
 
-        Ydb::Bridge::ListDatabaseStorageRequest query;
+        Ydb::Bridge::ListDatabaseSynchronizationRequest query;
         auto future = setup.Start(query);
         const auto request = setup.GrabStorageQuery();
         const auto rpc = request->Sender;
@@ -885,7 +885,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
         setup.CacheDescription("/Root/app", owner, NKikimrSchemeOp::EPathTypeExtSubDomain,
             owner, owner, pools, true);
 
-        Ydb::Bridge::ListDatabaseStorageRequest query;
+        Ydb::Bridge::ListDatabaseSynchronizationRequest query;
         auto future = setup.Start(query);
         const auto request = setup.GrabStorageQuery();
         const auto rpc = request->Sender;
@@ -938,10 +938,10 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
             const auto response = setup.Runtime.WaitFuture(future);
             UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::BAD_REQUEST, response.operation().DebugString());
         };
-        Ydb::Bridge::ListDatabaseStorageRequest emptyDatabase;
+        Ydb::Bridge::ListDatabaseSynchronizationRequest emptyDatabase;
         emptyDatabase.set_database_path("");
         check(emptyDatabase);
-        Ydb::Bridge::ListDatabaseStorageRequest relativeDatabase;
+        Ydb::Bridge::ListDatabaseSynchronizationRequest relativeDatabase;
         relativeDatabase.set_database_path("Root/app");
         check(relativeDatabase);
         Ydb::Bridge::ListGroupSynchronizationRequest unscoped;
@@ -965,7 +965,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
         for (const auto status : {Ydb::StatusIds::BAD_REQUEST, Ydb::StatusIds::NOT_FOUND,
                 Ydb::StatusIds::PRECONDITION_FAILED, Ydb::StatusIds::UNAVAILABLE}) {
             TStorageSetup setup;
-            auto future = setup.Start(Ydb::Bridge::GetSynchronizationSummaryRequest{});
+            auto future = setup.Start(Ydb::Bridge::ListPileSynchronizationRequest{});
             const auto request = setup.GrabStorageQuery();
             UNIT_ASSERT(request->Get()->Record.GetView() == NKikimrBridge::TStorageQuery::PILES);
             NKikimrBridge::TStorageState state;
@@ -982,11 +982,11 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
 
     Y_UNIT_TEST(PileCountsKeepObservationIdentityAndSystemGroupsSeparate) {
         TStorageSetup setup;
-        auto future = setup.Start(Ydb::Bridge::GetSynchronizationSummaryRequest{});
+        auto future = setup.Start(Ydb::Bridge::ListPileSynchronizationRequest{});
         const auto request = setup.GrabStorageQuery();
         NKikimrBridge::TStorageState state;
         state.SetStatus(Ydb::StatusIds::SUCCESS);
-        auto* summary = state.MutableSummary();
+        auto* summary = state.MutablePiles();
         summary->set_cluster_state_generation(7);
         summary->mutable_observed_at()->set_seconds(123);
         summary->mutable_observed_at()->set_nanos(456789000);
@@ -1001,7 +1001,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
         pile->mutable_system_groups()->set_required(3);
         pile->mutable_system_groups()->set_synced(3);
         setup.ReplyWithStorage(request->Sender, state);
-        const auto result = OperationResult<Ydb::Bridge::GetSynchronizationSummaryResult>(setup.Runtime.WaitFuture(future));
+        const auto result = OperationResult<Ydb::Bridge::ListPileSynchronizationResult>(setup.Runtime.WaitFuture(future));
         UNIT_ASSERT_VALUES_EQUAL(result.cluster_state_generation(), 7);
         UNIT_ASSERT_VALUES_EQUAL(result.observed_at().seconds(), 123);
         UNIT_ASSERT_VALUES_EQUAL(result.observed_at().nanos(), 456789000);
@@ -1019,13 +1019,13 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
 
     Y_UNIT_TEST(ControllerObservationDoesNotRequireLocalClusterState) {
         TStorageSetup setup;
-        auto future = setup.Start(Ydb::Bridge::GetSynchronizationSummaryRequest{});
+        auto future = setup.Start(Ydb::Bridge::ListPileSynchronizationRequest{});
         const auto request = setup.GrabStorageQuery();
         NKikimrBridge::TStorageState state;
         state.SetStatus(Ydb::StatusIds::SUCCESS);
-        state.MutableSummary()->set_cluster_state_generation(42);
+        state.MutablePiles()->set_cluster_state_generation(42);
         setup.ReplyWithStorage(request->Sender, state);
-        const auto result = OperationResult<Ydb::Bridge::GetSynchronizationSummaryResult>(setup.Runtime.WaitFuture(future));
+        const auto result = OperationResult<Ydb::Bridge::ListPileSynchronizationResult>(setup.Runtime.WaitFuture(future));
         UNIT_ASSERT_VALUES_EQUAL(result.cluster_state_generation(), 42);
         UNIT_ASSERT_VALUES_EQUAL(setup.BscRequests, 1);
     }
@@ -1117,7 +1117,7 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
         UNIT_ASSERT(data->ByteSizeLong() <= budget);
         UNIT_ASSERT(state.ByteSizeLong() <= budget);
 
-        auto future = setup.Start(Ydb::Bridge::ListDatabaseStorageRequest{});
+        auto future = setup.Start(Ydb::Bridge::ListDatabaseSynchronizationRequest{});
         const auto request = setup.GrabStorageQuery();
         setup.ReplyWithStorage(request->Sender, state);
         const auto response = setup.Runtime.WaitFuture(future);
@@ -1136,8 +1136,8 @@ Y_UNIT_TEST_SUITE(BridgeStorageDiagnostics) {
             UNIT_ASSERT_VALUES_EQUAL_C(response.operation().status(), Ydb::StatusIds::UNAUTHORIZED, response.operation().DebugString());
             UNIT_ASSERT(!response.operation().has_result());
         };
-        check(Ydb::Bridge::GetSynchronizationSummaryRequest{});
-        check(Ydb::Bridge::ListDatabaseStorageRequest{});
+        check(Ydb::Bridge::ListPileSynchronizationRequest{});
+        check(Ydb::Bridge::ListDatabaseSynchronizationRequest{});
         Ydb::Bridge::ListGroupSynchronizationRequest groups;
         groups.set_storage_pool_name("pool");
         check(groups);

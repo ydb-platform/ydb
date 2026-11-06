@@ -32,8 +32,8 @@ message TStorageState {
     Ydb.StatusIds.StatusCode Status = 1;
     string ErrorMessage = 2;
     oneof Result {
-        Ydb.Bridge.GetSynchronizationSummaryResult Summary = 3;
-        Ydb.Bridge.ListDatabaseStorageResult Databases = 4;
+        Ydb.Bridge.ListPileSynchronizationResult Piles = 3;
+        Ydb.Bridge.ListDatabaseSynchronizationResult Databases = 4;
         Ydb.Bridge.ListGroupSynchronizationResult Groups = 5;
     }
     repeated TOwner Owners = 6;

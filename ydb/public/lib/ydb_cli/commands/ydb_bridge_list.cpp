@@ -47,7 +47,7 @@ namespace NYdb::NConsoleClient {
             return "UNKNOWN";
         }
 
-        TString SyncStatusToString(NBridge::ESynchronizationStatus status, bool pretty = false) {
+        TString SyncStatusToString(NBridge::ESynchronizationStatus status) {
             switch (status) {
                 case NBridge::ESynchronizationStatus::Synced:
                     return "SYNCED";
@@ -56,7 +56,7 @@ namespace NYdb::NConsoleClient {
                 case NBridge::ESynchronizationStatus::Pending:
                     return "PENDING";
                 case NBridge::ESynchronizationStatus::NotRequired:
-                    return pretty ? "N/A" : "NOT_REQUIRED";
+                    return "NOT_REQUIRED";
                 default:
                     return "UNKNOWN";
             }
@@ -78,7 +78,7 @@ namespace NYdb::NConsoleClient {
 
         TString DatabaseSyncLabel(const NBridge::TGroupSyncCounts& groups) {
             if (!groups.Required) {
-                return "N/A";
+                return "NOT_REQUIRED";
             }
             if (groups.Synced == groups.Required) {
                 return "SYNCED";
@@ -226,12 +226,16 @@ namespace NYdb::NConsoleClient {
             return json;
         }
 
-        NJson::TJsonValue SummaryToJson(const NBridge::TSynchronizationSummary& summary) {
+        NJson::TJsonValue SummaryToJson(const NBridge::TListPileSynchronizationResult& summary, const std::optional<TString>& pileName) {
             NJson::TJsonValue json(NJson::JSON_MAP);
-            json.InsertValue("cluster_state_generation", summary.ClusterStateGeneration);
-            json.InsertValue("observed_at", summary.ObservedAt.ToString());
+            json.InsertValue("cluster_state_generation", summary.GetClusterStateGeneration());
+            json.InsertValue("observed_at", summary.GetObservedAt().ToString());
+            json.InsertValue("ordinary_groups", summary.GetOrdinaryGroups());
             NJson::TJsonValue piles(NJson::JSON_ARRAY);
-            for (const auto& pile : summary.Piles) {
+            for (const auto& pile : summary.GetPiles()) {
+                if (pileName && pile.PileName != *pileName) {
+                    continue;
+                }
                 NJson::TJsonValue item(NJson::JSON_MAP);
                 item.InsertValue("pile_name", pile.PileName);
                 item.InsertValue("user_groups", SyncCountsToJson(pile.UserGroups));
@@ -264,7 +268,7 @@ namespace NYdb::NConsoleClient {
             return json;
         }
 
-        NJson::TJsonValue DatabasesToJson(const std::vector<NBridge::TDatabaseStorageSummary>& databases) {
+        NJson::TJsonValue DatabasesToJson(const std::vector<NBridge::TDatabaseSynchronization>& databases) {
             NJson::TJsonValue json(NJson::JSON_ARRAY);
             for (const auto& database : databases) {
                 NJson::TJsonValue item(NJson::JSON_MAP);
@@ -322,7 +326,7 @@ namespace NYdb::NConsoleClient {
             Cout << Endl;
         }
 
-        void PrintDatabaseRows(const std::vector<NBridge::TDatabaseStorageSummary>& databases, bool detailed, bool csv) {
+        void PrintDatabaseRows(const std::vector<NBridge::TDatabaseSynchronization>& databases, bool detailed, bool csv) {
             TVector<TString> headers = csv
                                            ? TVector<TString>{"database_path", "storage_pools", "storage_mode", "pile_name", "pile_name_present", "groups_synced", "groups_required"}
                                            : TVector<TString>{"Database", "Pools", "Mode", "Pile", "Sync", "Synced groups"};
@@ -369,7 +373,7 @@ namespace NYdb::NConsoleClient {
                 if (csv) {
                     row.push_back(item.PileName ? "true" : "false");
                 }
-                row.push_back(SyncStatusToString(item.SyncStatus, !csv));
+                row.push_back(SyncStatusToString(item.SyncStatus));
                 if (detailed) {
                     row.insert(row.end(), {item.PhysicalGroupId ? ToString(*item.PhysicalGroupId) : csv ? TString{}
                                                                                                         : TString("—"),
@@ -381,10 +385,11 @@ namespace NYdb::NConsoleClient {
             PrintRows(headers, rows, csv);
         }
 
-        const NBridge::TPileSynchronizationSummary* FindPile(const NBridge::TSynchronizationSummary* summary, const std::string& name) {
+        const NBridge::TPileSynchronization* FindPile(const NBridge::TListPileSynchronizationResult* summary, const std::string& name) {
             if (summary) {
-                const auto found = std::find_if(summary->Piles.begin(), summary->Piles.end(), [&](const auto& pile) { return pile.PileName == name; });
-                if (found != summary->Piles.end()) {
+                const auto& piles = summary->GetPiles();
+                const auto found = std::find_if(piles.begin(), piles.end(), [&](const auto& pile) { return pile.PileName == name; });
+                if (found != piles.end()) {
                     return &*found;
                 }
             }
@@ -392,11 +397,11 @@ namespace NYdb::NConsoleClient {
         }
 
         void PrintPiles(const NBridge::TGetClusterStateResult& result, const std::vector<NBridge::TPileStateUpdate>& state,
-                        const NBridge::TSynchronizationSummary* summary, bool detailed, bool csv) {
+                        const NBridge::TListPileSynchronizationResult* summary, bool detailed, bool csv) {
             if (csv) {
                 WriteCsvRow(detailed
                                 ? TVector<TString>{"pile_name", "state", "groups_synced", "groups_required", "groups_syncing", "groups_pending", "groups_unknown",
-                                                   "system_groups_synced", "system_groups_required", "generation"}
+                                                   "system_groups_synced", "system_groups_required", "cluster_ordinary_groups", "generation"}
                                 : TVector<TString>{"pile_name", "state", "generation"});
                 for (const auto& pile : state) {
                     TVector<TString> row{TString(pile.PileName), PileStateToString(pile.State)};
@@ -408,6 +413,7 @@ namespace NYdb::NConsoleClient {
                         } else {
                             row.insert(row.end(), 7, TString{});
                         }
+                        row.push_back(summary ? ToString(summary->GetOrdinaryGroups()) : TString{});
                     }
                     row.push_back(ToString(result.GetGeneration()));
                     WriteCsvRow(row);
@@ -415,6 +421,10 @@ namespace NYdb::NConsoleClient {
                 return;
             }
             if (summary) {
+                if (summary->GetOrdinaryGroups()) {
+                    Cout << "Ordinary groups in cluster: " << summary->GetOrdinaryGroups()
+                         << " (bridge synchronization not enabled)" << Endl;
+                }
                 TVector<TVector<TString>> rows;
                 for (const auto& pile : state) {
                     const auto* counts = FindPile(summary, pile.PileName);
@@ -518,9 +528,9 @@ namespace NYdb::NConsoleClient {
         const bool csv = OutputFormat == EDataFormat::Csv;
         if (View == EView::Piles) {
             auto clusterFuture = client.GetClusterState();
-            std::optional<NBridge::TAsyncGetSynchronizationSummaryResult> summaryFuture;
+            std::optional<NBridge::TAsyncListPileSynchronizationResult> summaryFuture;
             if (Detailed) {
-                summaryFuture = client.GetSynchronizationSummary();
+                summaryFuture = client.ListPileSynchronization();
             }
             const auto cluster = clusterFuture.GetValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(cluster);
@@ -531,27 +541,24 @@ namespace NYdb::NConsoleClient {
                     throw TMisuseException() << "Unknown pile: " << *PileName;
                 }
             }
-            std::optional<NBridge::TSynchronizationSummary> summary;
+            std::optional<NBridge::TListPileSynchronizationResult> summary;
             TString incompleteReason;
             if (Detailed) {
-                const auto response = summaryFuture->GetValueSync();
+                auto response = summaryFuture->GetValueSync();
                 if (!response.IsSuccess()) {
                     incompleteReason = TStringBuilder() << "Synchronization summary unavailable: " << response.GetIssues().ToString();
-                } else if (response.GetSummary().ClusterStateGeneration != cluster.GetGeneration()) {
-                    incompleteReason = TStringBuilder() << "Synchronization summary generation " << response.GetSummary().ClusterStateGeneration
+                } else if (response.GetClusterStateGeneration() != cluster.GetGeneration()) {
+                    incompleteReason = TStringBuilder() << "Synchronization summary generation " << response.GetClusterStateGeneration()
                                                         << " differs from cluster-state generation " << cluster.GetGeneration() << "; retry the query";
                 } else {
                     NStatusHelpers::ThrowOnErrorOrPrintIssues(response);
-                    summary = response.GetSummary();
-                    if (PileName) {
-                        std::erase_if(summary->Piles, [&](const auto& pile) { return pile.PileName != *PileName; });
-                    }
+                    summary.emplace(std::move(response));
                 }
             }
             if (OutputFormat == EDataFormat::Json) {
                 auto json = ClusterStateToJson(cluster, state);
                 if (summary) {
-                    json.InsertValue("synchronization_summary", SummaryToJson(*summary));
+                    json.InsertValue("synchronization_summary", SummaryToJson(*summary, PileName));
                 }
                 if (!incompleteReason.empty()) {
                     json.InsertValue("incomplete_reason", incompleteReason);
@@ -567,14 +574,14 @@ namespace NYdb::NConsoleClient {
             return EXIT_SUCCESS;
         }
         if (View == EView::Databases) {
-            auto settings = NBridge::TListDatabaseStorageSettings().OnlyIncomplete(NotSynced);
+            auto settings = NBridge::TListDatabaseSynchronizationSettings().OnlyIncomplete(NotSynced);
             if (!DatabasePath.empty()) {
                 settings.DatabasePath(DatabasePath);
             }
             if (PileName) {
                 settings.PileName(*PileName);
             }
-            const auto result = client.ListDatabaseStorage(settings).GetValueSync();
+            const auto result = client.ListDatabaseSynchronization(settings).GetValueSync();
             NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
             if (OutputFormat == EDataFormat::Json) {
                 auto json = ListMetadataToJson(result.GetClusterStateGeneration(), result.GetObservedAt(), result.GetStorageOwnerDatabasePath());

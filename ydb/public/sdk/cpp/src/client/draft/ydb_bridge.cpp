@@ -82,23 +82,16 @@ TSynchronizationError SynchronizationErrorFromProto(const Ydb::Bridge::Synchroni
     };
 }
 
-TSynchronizationSummary SynchronizationSummaryFromProto(const Ydb::Bridge::GetSynchronizationSummaryResult& proto) {
-    TSynchronizationSummary result;
-    result.ClusterStateGeneration = proto.cluster_state_generation();
-    result.ObservedAt = ProtoTimestampToInstant(proto.observed_at());
-    result.Piles.reserve(proto.piles_size());
-    for (const auto& pile : proto.piles()) {
-        result.Piles.push_back({
-            .PileName = pile.pile_name(),
-            .UserGroups = GroupSyncCountsFromProto(pile.user_groups()),
-            .SystemGroups = GroupSyncCountsFromProto(pile.system_groups()),
-        });
-    }
-    return result;
+TPileSynchronization PileSynchronizationFromProto(const Ydb::Bridge::PileSynchronization& proto) {
+    return {
+        .PileName = proto.pile_name(),
+        .UserGroups = GroupSyncCountsFromProto(proto.user_groups()),
+        .SystemGroups = GroupSyncCountsFromProto(proto.system_groups()),
+    };
 }
 
-TDatabaseStorageSummary DatabaseStorageFromProto(const Ydb::Bridge::DatabaseStorageSummary& proto) {
-    TDatabaseStorageSummary result;
+TDatabaseSynchronization DatabaseSynchronizationFromProto(const Ydb::Bridge::DatabaseSynchronization& proto) {
+    TDatabaseSynchronization result;
     if (proto.has_database_path()) {
         result.DatabasePath = proto.database_path();
     }
@@ -230,25 +223,31 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncGetSynchronizationSummaryResult GetSynchronizationSummary(const TGetSynchronizationSummarySettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Bridge::GetSynchronizationSummaryRequest>(settings);
-        auto promise = NThreading::NewPromise<TGetSynchronizationSummaryResult>();
+    TAsyncListPileSynchronizationResult ListPileSynchronization(const TListPileSynchronizationSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::ListPileSynchronizationRequest>(settings);
+        auto promise = NThreading::NewPromise<TListPileSynchronizationResult>();
         auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
-            Ydb::Bridge::GetSynchronizationSummaryResult proto;
-            TSynchronizationSummary summary;
-            if (UnpackDiagnostics(any, status, proto)) {
-                summary = SynchronizationSummaryFromProto(proto);
+            Ydb::Bridge::ListPileSynchronizationResult proto;
+            if (!UnpackDiagnostics(any, status, proto)) {
+                promise.SetValue(TListPileSynchronizationResult(TStatus(std::move(status))));
+                return;
             }
-            promise.SetValue(TGetSynchronizationSummaryResult(TStatus(std::move(status)), std::move(summary)));
+            std::vector<TPileSynchronization> piles;
+            piles.reserve(proto.piles_size());
+            for (const auto& row : proto.piles()) {
+                piles.push_back(PileSynchronizationFromProto(row));
+            }
+            promise.SetValue(TListPileSynchronizationResult(TStatus(std::move(status)), std::move(piles),
+                                                          proto.cluster_state_generation(), ProtoTimestampToInstant(proto.observed_at()), proto.ordinary_groups()));
         };
-        Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::GetSynchronizationSummaryRequest, Ydb::Bridge::GetSynchronizationSummaryResponse>(
-            std::move(request), extractor, &Ydb::Bridge::V1::BridgeService::Stub::AsyncGetSynchronizationSummary,
+        Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::ListPileSynchronizationRequest, Ydb::Bridge::ListPileSynchronizationResponse>(
+            std::move(request), extractor, &Ydb::Bridge::V1::BridgeService::Stub::AsyncListPileSynchronization,
             DbDriverState_, INITIAL_DEFERRED_CALL_DELAY, TRpcRequestSettings::Make(settings));
         return promise.GetFuture();
     }
 
-    TAsyncListDatabaseStorageResult ListDatabaseStorage(const TListDatabaseStorageSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Bridge::ListDatabaseStorageRequest>(settings);
+    TAsyncListDatabaseSynchronizationResult ListDatabaseSynchronization(const TListDatabaseSynchronizationSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Bridge::ListDatabaseSynchronizationRequest>(settings);
         if (settings.DatabasePath_) {
             request.set_database_path(*settings.DatabasePath_);
         }
@@ -256,24 +255,24 @@ public:
             request.set_pile_name(*settings.PileName_);
         }
         request.set_only_incomplete(settings.OnlyIncomplete_);
-        auto promise = NThreading::NewPromise<TListDatabaseStorageResult>();
+        auto promise = NThreading::NewPromise<TListDatabaseSynchronizationResult>();
         auto extractor = [promise](google::protobuf::Any* any, TPlainStatus status) mutable {
-            Ydb::Bridge::ListDatabaseStorageResult proto;
+            Ydb::Bridge::ListDatabaseSynchronizationResult proto;
             if (!UnpackDiagnostics(any, status, proto)) {
-                promise.SetValue(TListDatabaseStorageResult(TStatus(std::move(status))));
+                promise.SetValue(TListDatabaseSynchronizationResult(TStatus(std::move(status))));
                 return;
             }
-            std::vector<TDatabaseStorageSummary> databases;
+            std::vector<TDatabaseSynchronization> databases;
             databases.reserve(proto.databases_size());
             for (const auto& row : proto.databases()) {
-                databases.push_back(DatabaseStorageFromProto(row));
+                databases.push_back(DatabaseSynchronizationFromProto(row));
             }
-            promise.SetValue(TListDatabaseStorageResult(TStatus(std::move(status)), std::move(databases),
-                                                        proto.cluster_state_generation(), ProtoTimestampToInstant(proto.observed_at()),
-                                                        proto.has_storage_owner_database_path() ? std::optional<std::string>(proto.storage_owner_database_path()) : std::nullopt));
+            promise.SetValue(TListDatabaseSynchronizationResult(TStatus(std::move(status)), std::move(databases),
+                                                                proto.cluster_state_generation(), ProtoTimestampToInstant(proto.observed_at()),
+                                                                proto.has_storage_owner_database_path() ? std::optional<std::string>(proto.storage_owner_database_path()) : std::nullopt));
         };
-        Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::ListDatabaseStorageRequest, Ydb::Bridge::ListDatabaseStorageResponse>(
-            std::move(request), extractor, &Ydb::Bridge::V1::BridgeService::Stub::AsyncListDatabaseStorage,
+        Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::ListDatabaseSynchronizationRequest, Ydb::Bridge::ListDatabaseSynchronizationResponse>(
+            std::move(request), extractor, &Ydb::Bridge::V1::BridgeService::Stub::AsyncListDatabaseSynchronization,
             DbDriverState_, INITIAL_DEFERRED_CALL_DELAY, TRpcRequestSettings::Make(settings));
         return promise.GetFuture();
     }
@@ -380,12 +379,12 @@ TAsyncGetClusterStateResult TBridgeClient::GetClusterState(const TGetClusterStat
     return Impl_->GetClusterState(settings);
 }
 
-TAsyncGetSynchronizationSummaryResult TBridgeClient::GetSynchronizationSummary(const TGetSynchronizationSummarySettings& settings) {
-    return Impl_->GetSynchronizationSummary(settings);
+TAsyncListPileSynchronizationResult TBridgeClient::ListPileSynchronization(const TListPileSynchronizationSettings& settings) {
+    return Impl_->ListPileSynchronization(settings);
 }
 
-TAsyncListDatabaseStorageResult TBridgeClient::ListDatabaseStorage(const TListDatabaseStorageSettings& settings) {
-    return Impl_->ListDatabaseStorage(settings);
+TAsyncListDatabaseSynchronizationResult TBridgeClient::ListDatabaseSynchronization(const TListDatabaseSynchronizationSettings& settings) {
+    return Impl_->ListDatabaseSynchronization(settings);
 }
 
 TAsyncListGroupSynchronizationResult TBridgeClient::ListGroupSynchronization(const TGroupSynchronizationScope& scope,

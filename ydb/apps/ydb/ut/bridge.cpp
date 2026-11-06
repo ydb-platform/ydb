@@ -81,8 +81,8 @@ public:
     TString RetainPile;
     Ydb::Bridge::GetClusterStateResult ClusterResult;
     std::atomic<size_t> ClusterCalls{0};
-    TDiagnosticReply<Ydb::Bridge::GetSynchronizationSummaryRequest, Ydb::Bridge::GetSynchronizationSummaryResult> Summary;
-    TDiagnosticReply<Ydb::Bridge::ListDatabaseStorageRequest, Ydb::Bridge::ListDatabaseStorageResult> Databases;
+    TDiagnosticReply<Ydb::Bridge::ListPileSynchronizationRequest, Ydb::Bridge::ListPileSynchronizationResult> Summary;
+    TDiagnosticReply<Ydb::Bridge::ListDatabaseSynchronizationRequest, Ydb::Bridge::ListDatabaseSynchronizationResult> Databases;
     TDiagnosticReply<Ydb::Bridge::ListGroupSynchronizationRequest, Ydb::Bridge::ListGroupSynchronizationResult> Groups;
     std::atomic<size_t> ModeCalls{0};
     std::atomic<size_t> JoinCalls{0};
@@ -97,13 +97,13 @@ public:
         return status;
     }
 
-    grpc::Status GetSynchronizationSummary(grpc::ServerContext* context, const Ydb::Bridge::GetSynchronizationSummaryRequest* request,
-            Ydb::Bridge::GetSynchronizationSummaryResponse* response) override {
+    grpc::Status ListPileSynchronization(grpc::ServerContext* context, const Ydb::Bridge::ListPileSynchronizationRequest* request,
+            Ydb::Bridge::ListPileSynchronizationResponse* response) override {
         return ReplyDiagnostic(context, *request, *response, Summary);
     }
 
-    grpc::Status ListDatabaseStorage(grpc::ServerContext* context, const Ydb::Bridge::ListDatabaseStorageRequest* request,
-            Ydb::Bridge::ListDatabaseStorageResponse* response) override {
+    grpc::Status ListDatabaseSynchronization(grpc::ServerContext* context, const Ydb::Bridge::ListDatabaseSynchronizationRequest* request,
+            Ydb::Bridge::ListDatabaseSynchronizationResponse* response) override {
         return ReplyDiagnostic(context, *request, *response, Databases);
     }
 
@@ -211,14 +211,14 @@ public:
         result.mutable_observed_at()->set_seconds(1);
     }
 
-    Ydb::Bridge::GetSynchronizationSummaryResult& PrepareSummary() {
+    Ydb::Bridge::ListPileSynchronizationResult& PrepareSummary() {
         auto& reply = Service<TBridgeService>().Summary;
         reply.ExpectedRequest.emplace();
         SetObservation(reply.Result);
         return reply.Result;
     }
 
-    Ydb::Bridge::ListDatabaseStorageResult& PrepareDatabases() {
+    Ydb::Bridge::ListDatabaseSynchronizationResult& PrepareDatabases() {
         auto& reply = Service<TBridgeService>().Databases;
         reply.ExpectedRequest.emplace();
         SetObservation(reply.Result);
@@ -290,7 +290,9 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
     }
 
     Y_UNIT_TEST_F(DetailedPileViewMergesSynchronizationSummary, TBridgeCliFixture) {
-        auto* pile = PrepareSummary().add_piles();
+        auto& summary = PrepareSummary();
+        summary.set_ordinary_groups(4);
+        auto* pile = summary.add_piles();
         pile->set_pile_name("secondary");
         pile->mutable_user_groups()->set_required(8);
         pile->mutable_user_groups()->set_synced(5);
@@ -301,6 +303,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         const auto output = RunList({"--detailed", "--pile", "secondary"});
         UNIT_ASSERT_STRING_CONTAINS(output, "5/8");
         UNIT_ASSERT_STRING_CONTAINS(output, "1/1");
+        UNIT_ASSERT_STRING_CONTAINS(output, "Ordinary groups in cluster: 4");
         for (const auto* header : {"Synced groups", "Syncing groups", "Pending groups", "Unknown groups", "Synced system groups"}) {
             UNIT_ASSERT_STRING_CONTAINS(output, header);
         }
@@ -309,10 +312,14 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT(NJson::ReadJsonTree(RunList({"--detailed", "--pile", "secondary", "--format", "json"}), &json));
         UNIT_ASSERT_VALUES_EQUAL(json["piles"].GetArray().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(json["synchronization_summary"]["cluster_state_generation"].GetUInteger(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(json["synchronization_summary"]["ordinary_groups"].GetUInteger(), 4);
         UNIT_ASSERT_VALUES_EQUAL(json["synchronization_summary"]["piles"][0]["user_groups"]["required"].GetUInteger(), 8);
         UNIT_ASSERT(!json.Has("storage_state"));
-        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().Summary.Calls.load(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ClusterCalls.load(), 2);
+        const auto csv = RunList({"--detailed", "--pile", "secondary", "--format", "csv"});
+        UNIT_ASSERT_STRING_CONTAINS(csv, "cluster_ordinary_groups");
+        UNIT_ASSERT_STRING_CONTAINS(csv, ",4,42\n");
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().Summary.Calls.load(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(Service<TBridgeService>().ClusterCalls.load(), 3);
     }
 
     Y_UNIT_TEST_F(SummaryGenerationMismatchRetainsOnlyBaselineState, TBridgeCliFixture) {
@@ -343,8 +350,8 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         ExpectFail();
         TString error;
         UNIT_ASSERT_VALUES_EQUAL(RunList({"--detailed", "--format", "csv"}, &error),
-            "pile_name,state,groups_synced,groups_required,groups_syncing,groups_pending,groups_unknown,system_groups_synced,system_groups_required,generation\n"
-            "primary,PRIMARY,,,,,,,,42\nsecondary,SYNCHRONIZED,,,,,,,,42\n");
+            "pile_name,state,groups_synced,groups_required,groups_syncing,groups_pending,groups_unknown,system_groups_synced,system_groups_required,cluster_ordinary_groups,generation\n"
+            "primary,PRIMARY,,,,,,,,,42\nsecondary,SYNCHRONIZED,,,,,,,,,42\n");
         UNIT_ASSERT_STRING_CONTAINS(error, "controller unavailable");
     }
 
@@ -422,7 +429,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT(!database.Has("database_path"));
         UNIT_ASSERT(!database.Has("pile_name"));
         UNIT_ASSERT_VALUES_EQUAL(database["groups"]["required"].GetUInteger(), 0);
-        UNIT_ASSERT_STRING_CONTAINS(RunList({"--databases"}), "N/A");
+        UNIT_ASSERT_STRING_CONTAINS(RunList({"--databases"}), "NOT_REQUIRED");
         UNIT_ASSERT_STRING_CONTAINS(RunList({"--databases", "--format", "csv"}), ",ordinary,,false,0,0\n");
     }
 
@@ -448,6 +455,7 @@ Y_UNIT_TEST_SUITE(BridgeCli) {
         UNIT_ASSERT_STRING_CONTAINS(csv, ",,true,UNKNOWN\n");
         UNIT_ASSERT_STRING_CONTAINS(csv, ",,false,NOT_REQUIRED\n");
         UNIT_ASSERT(!csv.Contains("physical_group_id"));
+        UNIT_ASSERT_STRING_CONTAINS(RunList({"--groups", "--path", "/Root/app"}), "NOT_REQUIRED");
         result.mutable_groups()->RemoveLast();
         Service<TBridgeService>().Groups.ExpectedRequest->set_pile_name("");
         UNIT_ASSERT_STRING_CONTAINS(RunList({"--groups", "--path", "/Root/app", "--pile", ""}), "\"\"");

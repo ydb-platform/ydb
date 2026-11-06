@@ -296,8 +296,8 @@ namespace NKikimr::NBsController {
         const auto generation = StorageConfig->GetClusterState().GetGeneration();
         const auto observedAt = TActivationContext::Now();
         if (query.GetView() == TQuery::PILES) {
-            report.MutableSummary()->set_cluster_state_generation(generation);
-            SetTimestamp(observedAt, report.MutableSummary()->mutable_observed_at());
+            report.MutablePiles()->set_cluster_state_generation(generation);
+            SetTimestamp(observedAt, report.MutablePiles()->mutable_observed_at());
         } else if (query.GetView() == TQuery::DATABASES) {
             report.MutableDatabases()->set_cluster_state_generation(generation);
             SetTimestamp(observedAt, report.MutableDatabases()->mutable_observed_at());
@@ -307,6 +307,34 @@ namespace NKikimr::NBsController {
         }
         std::map<TBridgePileId, NBridgeStorage::TCounts> userCounts, systemCounts;
         std::map<std::pair<TPathId, TBoxStoragePoolId>, TOwnerSummary> owners;
+        auto resolveOrdinaryPlacement = [&](const TGroupInfo& group, const NBridgeStorage::TGroupContext& context,
+                std::set<TBridgePileId>& placement, std::optional<ui32>& physical) {
+            const TGroupInfo* actual = &group;
+            if (context.AuthorityPileId) {
+                const auto* part = NBridge::GetGroupPile(*context.State, context.AuthorityPileId);
+                actual = part ? FindGroup(TGroupId::FromValue(part->GetGroupId())) : nullptr;
+            }
+            if (!actual) {
+                return true;
+            }
+            physical = actual->ID.GetRawId();
+            if (actual->VDisksInGroup.empty()) {
+                return true;
+            }
+            for (const TVSlotInfo* slot : actual->VDisksInGroup) {
+                if (!budget.Visit()) {
+                    return false;
+                }
+                const auto* pile = slot ? BridgeInfo->GetPileForNode(slot->VSlotId.NodeId) : nullptr;
+                if (!pile || pile->IsFreeSlot) {
+                    placement.clear(); // partial knowledge must not look like complete placement
+                    return true;
+                }
+                placement.insert(pile->BridgePileId);
+            }
+            return true;
+        };
+        ui64 ordinaryGroups = 0;
         for (const auto& poolId : selected) {
             const auto& pool = StoragePools.at(poolId);
             TOwnerSummary* owner = nullptr;
@@ -331,7 +359,9 @@ namespace NKikimr::NBsController {
                     }
                 }
             }
-            if (!pool.BridgeMode && query.GetView() != TQuery::GROUPS) {
+            if (!pool.BridgeMode && ((query.GetView() == TQuery::GROUPS && statusMask &&
+                    !(statusMask & (1u << Ydb::Bridge::NOT_REQUIRED))) ||
+                    (query.GetView() == TQuery::DATABASES && query.GetNotSynced()))) {
                 continue;
             }
             Ydb::Bridge::StoragePool publicPool;
@@ -345,20 +375,47 @@ namespace NKikimr::NBsController {
                 if (!group || (group->BridgePileId && !group->BridgeGroupInfo) || group->VirtualGroupState) {
                     continue;
                 }
+                if (!pool.BridgeMode && query.GetView() == TQuery::PILES) {
+                    ++ordinaryGroups;
+                    continue;
+                }
                 const NBridgeStorage::TGroupContext context(group->BridgeGroupInfo ? &group->BridgeGroupInfo->GetBridgeGroupState() : nullptr);
-                for (const auto* pile : piles) {
-                    const bool unplaced = !pool.BridgeMode && !context.AuthorityPileId;
-                    if (!pool.BridgeMode && (context.AuthorityPileId ? context.AuthorityPileId != pile->BridgePileId : query.HasPileName() || pile != piles.front())) {
-                        continue;
+                TVector<const TBridgeInfo::TPile*> ordinaryPiles;
+                const auto* groupPiles = &piles;
+                std::optional<ui32> ordinaryPhysical;
+                if (!pool.BridgeMode) {
+                    std::set<TBridgePileId> placement;
+                    if (!resolveOrdinaryPlacement(*group, context, placement, ordinaryPhysical)) {
+                        return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                     }
+                    if (placement.empty()) {
+                        if (!query.HasPileName()) {
+                            ordinaryPiles.push_back(nullptr);
+                        }
+                    } else {
+                        for (const auto id : placement) {
+                            const auto* pile = BridgeInfo->GetPile(id);
+                            if (!query.HasPileName() || pile->Name == query.GetPileName()) {
+                                ordinaryPiles.push_back(pile);
+                            }
+                        }
+                    }
+                    groupPiles = &ordinaryPiles;
+                }
+                for (const auto* pile : *groupPiles) {
                     if (!budget.Visit()) {
                         return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                     }
-                    const auto copy = ObserveBridgeStorageCopy(context, *pile, syncStates.at(pile->BridgePileId), pool.BridgeMode);
+                    NBridgeStorage::TCopyObservation copy;
+                    if (pool.BridgeMode) {
+                        copy = ObserveBridgeStorageCopy(context, *pile, syncStates.at(pile->BridgePileId), true);
+                    } else {
+                        copy.State = Ydb::Bridge::NOT_REQUIRED;
+                    }
                     if (query.GetView() == TQuery::PILES) {
                         userCounts[pile->BridgePileId].Count(copy.State);
                     } else if (owner) {
-                        owner->Copies[pile->BridgePileId].Add(copy);
+                        owner->Copies[pile ? pile->BridgePileId : TBridgePileId()].Add(copy);
                     } else if (!statusMask || (statusMask & (1u << copy.State))) {
                         if (!poolFilled) {
                             if (!budget.Fits(pool.Name.size() + 64)) {
@@ -367,10 +424,10 @@ namespace NKikimr::NBsController {
                             CopyPool(poolId, pool.Name, &publicPool);
                             poolFilled = true;
                         }
-                        const auto physical = copy.Part ? std::optional<ui32>(copy.Part->GetGroupId()) : !pool.BridgeMode && !context.State ? std::optional<ui32>(group->ID.GetRawId())
-                                                                                                                                            : std::nullopt;
+                        const auto physical = !pool.BridgeMode ? ordinaryPhysical :
+                            copy.Part ? std::optional<ui32>(copy.Part->GetGroupId()) : std::nullopt;
                         if (!NBridgeStorage::AppendGroup({group->ID.GetRawId(), physical, publicPool,
-                                                          unplaced ? std::nullopt : std::optional<TStringBuf>(pile->Name), copy}, budget, *report.MutableGroups())) {
+                                                          pile ? std::optional<TStringBuf>(pile->Name) : std::nullopt, copy}, budget, *report.MutableGroups())) {
                             return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                         }
                     }
@@ -378,6 +435,7 @@ namespace NKikimr::NBsController {
             }
         }
         if (query.GetView() == TQuery::PILES) {
+            report.MutablePiles()->set_ordinary_groups(ordinaryGroups);
             for (const auto& [id, group] : StaticGroups) {
                 Y_UNUSED(id);
                 if (!budget.Visit()) {
@@ -399,24 +457,24 @@ namespace NKikimr::NBsController {
                 if (!budget.Fits(pile->Name.size() + 128)) {
                     return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                 }
-                Ydb::Bridge::PileSynchronizationSummary row;
+                Ydb::Bridge::PileSynchronization row;
                 row.set_pile_name(pile->Name);
                 userCounts[pile->BridgePileId].ToProto(row.mutable_user_groups());
                 systemCounts[pile->BridgePileId].ToProto(row.mutable_system_groups());
                 if (!budget.Account(row)) {
                     return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                 }
-                report.MutableSummary()->add_piles()->Swap(&row);
+                report.MutablePiles()->add_piles()->Swap(&row);
             }
         } else if (query.GetView() == TQuery::DATABASES) {
             for (auto& [key, owner] : owners) {
-                if (owner.Mode == Ydb::Bridge::ORDINARY) {
-                    if (query.HasPileName()) {
-                        continue;
-                    }
+                if (owner.Mode == Ydb::Bridge::ORDINARY && owner.Copies.empty() && !query.HasPileName()) {
                     owner.Copies.try_emplace(TBridgePileId());
                 }
                 for (const auto& [pileId, copy] : owner.Copies) {
+                    if (!pileId && owner.Mode == Ydb::Bridge::MIXED) {
+                        continue; // ordinary placement uncertainty is not a bridge synchronization row
+                    }
                     if (!budget.Visit()) {
                         return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                     }
@@ -430,7 +488,7 @@ namespace NKikimr::NBsController {
                         !budget.Fits(owner.PoolBytes + errorBytes + pileBytes + 128)) {
                         return fail(Ydb::StatusIds::PRECONDITION_FAILED, TString(LimitError));
                     }
-                    Ydb::Bridge::DatabaseStorageSummary row;
+                    Ydb::Bridge::DatabaseSynchronization row;
                     row.set_storage_mode(owner.Mode);
                     for (const auto& poolId : owner.Pools) {
                         CopyPool(poolId, StoragePools.at(poolId).Name, row.add_storage_pools());

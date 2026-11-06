@@ -247,7 +247,7 @@ bool BuildStatsBTreeIndex(const TSubset& subset, TStats& stats, ui32 histogramBu
     for (const auto& part : subset.Flatten) {
         LOG_BUILD_STATS("Adding part",
             {"label", part->Label.ToString()},
-            {"dataSize", HumanReadableSize(part->DataSize()), SF_BYTES)});
+            {"dataSize", HumanReadableSize(part->DataSize(), SF_BYTES)});
 
         AddIndexSize(stats.IndexSize, *part);
         for (const auto& [_, bloom] : part->ByKeyPrefixes) {

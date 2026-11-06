@@ -7,6 +7,14 @@
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
+    void RunWithoutDefaultDirectory(TTestWithReboots& t,
+            std::function<void(TTestActorRuntime& runtime, bool& activeZone)> testScenario)
+    {
+        // CDC scenarios create their own table under /MyRoot and never use /MyRoot/DirA.
+        t.CreateDefaultDirectory = false;
+        t.Run(std::move(testScenario));
+    }
+
     void CreateStream(TTestWithReboots& t, const TMaybe<NKikimrSchemeOp::ECdcStreamState>& state = Nothing(), bool vt = false, bool onIndex = false,
         bool userSIDs = false,
         bool traceIds = false)
@@ -15,7 +23,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             .EnableChangefeedInitialScan(true)
             .EnableChangefeedsOnIndexTables(true);
 
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
                 runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
@@ -120,7 +128,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithAwsRegion, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.GetTestEnvOptions().EnableChangefeedDynamoDBStreamsFormat(true);
 
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
@@ -156,7 +164,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithResolvedTimestamps, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
@@ -189,7 +197,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateStreamWithSchemaChanges, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
@@ -222,7 +230,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DisableStream, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
@@ -274,7 +282,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(GetReadyStream, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
 
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
                 runtime.GetAppData().DisableCdcAutoSwitchingToReadyStateForTests = true;
@@ -336,7 +344,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
             .EnableChangefeedInitialScan(true)
             .EnableChangefeedsOnIndexTables(true);
 
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             const TString path = !onIndex ? "/MyRoot" : "/MyRoot/Table/Index";
             const TString tableName = !onIndex ? "Table": "indexImplTable";
 
@@ -422,7 +430,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(DropMultipleStreams, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
@@ -480,7 +488,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CreateDropRecreate, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
 
             {
@@ -546,7 +554,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(Attributes, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
@@ -586,7 +594,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RacySplitAndDropTable, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
@@ -632,7 +640,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(InitialScan, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
         t.GetTestEnvOptions().EnableChangefeedInitialScan(true);
 
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
 
@@ -743,7 +751,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     void SplitTable(TTestWithReboots& t, const TString& cdcStreamDesc) {
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             NKikimrScheme::TEvDescribeSchemeResult initialTableDesc;
             {
                 TInactiveZone inactive(activeZone);
@@ -805,7 +813,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     void MergeTable(TTestWithReboots& t, const TString& cdcStreamDesc) {
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             NKikimrScheme::TEvDescribeSchemeResult initialTableDesc;
             {
                 TInactiveZone inactive(activeZone);
@@ -869,7 +877,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(RacySplitTableAndCreateStream, 2 /*rebootBuckets*/, 1 /*pipeResetBuckets*/, false /*killOnCommit*/) {
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
@@ -912,7 +920,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithRebootsTests) {
         t.GetTestEnvOptions()
             .EnableChangefeedInitialScan(true);
 
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        RunWithoutDefaultDirectory(t, [&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);
                 TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(

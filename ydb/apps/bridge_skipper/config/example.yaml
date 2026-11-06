@@ -1,0 +1,36 @@
+cluster_id: production-bridge-01
+mode: manual
+# Key each pile by the name its endpoints' SelfCheck reports, including an
+# implicit pile. Each endpoint must address exactly one YDB node, not a balancer.
+endpoints:
+  dc-a: [grpcs://ydb-a1.example:2135, grpcs://ydb-a2.example:2135]
+  dc-b: [grpcs://ydb-b1.example:2135, grpcs://ydb-b2.example:2135]
+auth:
+  # CA, cert and key are loaded once at startup; token_file is re-read before every
+  # UpdateClusterState and after any UNAUTHORIZED reply. Configure cert_file and
+  # key_file together. ca_file, cert_file and key_file require grpcs://
+  # endpoints.
+  ca_file: null
+  cert_file: null
+  key_file: null
+  token_file: null
+http:
+  listen: 127.0.0.1:8080
+# The SelfCheck and mutation client deadlines are their operation timeouts
+# + 2 s; GetClusterState uses read_timeout as both deadlines. Startup requires
+# state_poll_interval + read_timeout < evidence_ttl,
+# selfcheck_operation_timeout + 2 + round_interval < evidence_ttl and
+# bsc_warmup >= 20.
+# A SelfCheck still in flight at a round boundary is sent again as soon as it settles.
+timing:
+  state_poll_interval_seconds: 1
+  read_timeout_seconds: 5
+  round_interval_seconds: 10
+  selfcheck_operation_timeout_seconds: 12
+  evidence_ttl_seconds: 30
+  confirm_seconds: 20
+  bsc_warmup_seconds: 30
+  mutation_operation_timeout_seconds: 25
+health_endpoints_per_pile: 2
+logging:
+  level: info

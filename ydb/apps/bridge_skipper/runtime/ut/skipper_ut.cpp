@@ -1,0 +1,1464 @@
+#include <ydb/apps/bridge_skipper/runtime/skipper.h>
+#include <ydb/apps/bridge_skipper/runtime/events.h>
+
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/public/api/protos/ydb_monitoring.pb.h>
+
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/logger/backend.h>
+#include <library/cpp/logger/record.h>
+#include <library/cpp/testing/unittest/registar.h>
+
+#include <util/folder/tempdir.h>
+
+#include <sys/stat.h>
+#include <unistd.h>
+
+namespace NBridgeSkipper {
+namespace {
+
+const TString A = "grpc://a:1";
+const TString A2 = "grpc://a:2";
+const TString A3 = "grpc://a:3";
+const TString B = "grpc://b:1";
+const TString FastRounds = "{round_interval_seconds: 1, confirm_seconds: 1, bsc_warmup_seconds: 20}";
+const TString SlowRounds = "{round_interval_seconds: 10, confirm_seconds: 10, bsc_warmup_seconds: 20}";
+
+struct TStateCall {
+    TRpcRequest Request;
+    EYdbMethod Method;
+    TMonotonic SentAt;
+    std::function<void(TStateResult)> Completed;
+    bool Done = false;
+};
+
+struct THealthCall {
+    TRpcRequest Request;
+    TMonotonic SentAt;
+    std::function<void(TSelfCheckResult)> Completed;
+    bool Done = false;
+};
+
+struct TUpdateCall {
+    TRpcRequest Request;
+    TPlan Plan;
+    TMonotonic SentAt;
+    std::function<void(TUpdateResult)> Completed;
+    bool Done = false;
+};
+
+class TFakeClients final : public IYdbClients {
+public:
+    std::function<TMonotonic()> Now;
+    std::vector<TStateCall> States;
+    std::vector<THealthCall> Health;
+    std::vector<TUpdateCall> Updates;
+    std::function<void()> PrepareUpdate;
+
+    void GetState(TRpcRequest request, EYdbMethod method, std::function<void(TStateResult)> completed) override {
+        for (const auto& call : States) {
+            UNIT_ASSERT(call.Done || call.Request.Endpoint != request.Endpoint || call.Method != method);
+        }
+        States.push_back({std::move(request), method, Now(), std::move(completed)});
+    }
+
+    void SelfCheck(TRpcRequest request, std::function<void(TSelfCheckResult)> completed) override {
+        for (const auto& call : Health) {
+            UNIT_ASSERT(call.Done || call.Request.Endpoint != request.Endpoint);
+        }
+        Health.push_back({std::move(request), Now(), std::move(completed)});
+    }
+
+    bool Update(TRpcRequest request, TPlan plan, TUpdateAuthorization authorization,
+        std::function<void(TUpdateResult)> completed) override
+    {
+        if (PrepareUpdate) {
+            PrepareUpdate();
+        }
+        if (Now() > authorization.ValidUntil) {
+            return false;
+        }
+        for (const auto& call : Updates) {
+            UNIT_ASSERT(call.Done || call.Request.Endpoint != request.Endpoint);
+        }
+        Updates.push_back({std::move(request), std::move(plan), Now(), std::move(completed)});
+        return true;
+    }
+
+    void Stop() override {
+    }
+};
+
+NJson::TJsonValue Json(TStringBuf text) {
+    NJson::TJsonValue result;
+    NJson::ReadJsonTree(text, &result, true);
+    return result;
+}
+
+class TRecordLogBackend final : public TLogBackend {
+public:
+    explicit TRecordLogBackend(std::vector<TString>& records)
+        : Records(records) {
+    }
+
+    void WriteData(const TLogRecord& record) override {
+        Records.emplace_back(record.Data, record.Len);
+    }
+
+    void ReopenLog() override {
+    }
+
+private:
+    std::vector<TString>& Records;
+};
+
+TLoadedCredentials TestCredentials() {
+    TLoadedCredentials credentials;
+    credentials.Token = "test-private-token";
+    return credentials;
+}
+
+struct THarness {
+    // The runtime and its logger are destroyed before their captured records.
+    std::vector<TString> Records;
+    NActors::TTestActorRuntimeBase Runtime;
+    TTempDir Directory;
+    std::shared_ptr<TStateFile> File;
+    std::shared_ptr<TFakeClients> Clients = std::make_shared<TFakeClients>();
+    std::shared_ptr<TSnapshotStore> Store = std::make_shared<TSnapshotStore>();
+    // Emulates the production SDK boundary, which redacts before delivery.
+    const TRedactor Redactor{TestCredentials()};
+    TConfig Config;
+    NActors::TActorId Actor;
+    NActors::TActorId Edge;
+    ui64 Generation = 7;
+    TNamedPileStates Piles = {{"a", EPileState::Primary}, {"b", EPileState::Synchronized}};
+    std::set<std::pair<TString, EYdbMethod>> Held;
+    std::map<TString, TString> Identities;
+    // SelfCheck replies from these endpoints omit location.pile.
+    std::set<TString> PileLess;
+    std::set<TString> Failed = {"b"};
+    std::map<TString, std::set<TString>> EndpointFailures;
+    std::set<std::pair<TString, EYdbMethod>> FailedMethods;
+    // The SDK status of the calls listed in FailedMethods.
+    NYdb::EStatus FailedStatus = NYdb::EStatus::TIMEOUT;
+    // Connectivity reports show these piles without node quorum.
+    std::set<TString> NoQuorum;
+    std::map<TString, std::set<TString>> EndpointNoQuorum;
+    std::set<TString> FallbackEndpoints;
+    std::function<void(const TPersistentState&)> AfterWrite;
+    bool Fallback = false;
+    bool Truncated = false;
+    // Endpoints of pile b report b as PROMOTED.
+    bool Conflict = false;
+    bool OmitConnectivity = false;
+    bool Binding = false;
+    std::optional<ui64> ConnectivityGeneration;
+    // SelfCheck replies arrive this long after they were sent.
+    std::optional<TDuration> SelfCheckDelay;
+
+    explicit THarness(
+        EMode mode = EMode::Auto,
+        std::optional<TPersistentState> restored = {},
+        size_t survivorEndpoints = 1,
+        const TString& timing = FastRounds)
+    {
+        Runtime.SetLogBackend(new TRecordLogBackend(Records));
+        Runtime.Initialize();
+        Runtime.UpdateCurrentTime(TInstant::Seconds(100), true);
+        auto settings = Runtime.GetLogSettings(0);
+        settings->Append(SkipperLogComponent, SkipperLogComponent + 1, [](NActors::NLog::EComponent) -> const TString& {
+            static const TString name = "BRIDGE_SKIPPER";
+            return name;
+        });
+        settings->Format = NActors::NLog::TSettings::JSON_FORMAT;
+        settings->SetEnableStructuredLogInJson(true);
+        Runtime.SetLogPriority(SkipperLogComponent, NActors::NLog::PRI_DEBUG);
+        File = TStateFile::Open(Directory.Name(), "test");
+        if (restored) {
+            UNIT_ASSERT_VALUES_EQUAL(File->Write(*restored), "");
+        }
+        Config = ParseConfig(TString("cluster_id: test\nendpoints: {a: [grpc://a:1], b: [grpc://b:1]}\ntiming: ") + timing + "\n");
+        Config.Mode = mode;
+        for (const auto& extra : {A2, A3}) {
+            if (Config.Endpoints["a"].size() < survivorEndpoints) {
+                Config.Endpoints["a"].push_back(ParseEndpoint(extra));
+            }
+        }
+        Clients->Now = [&] {
+            return Runtime.GetCurrentMonotonicTime();
+        };
+        Edge = Runtime.AllocateEdgeActor();
+        TSkipperOptions options;
+        options.Config = Config;
+        options.Clients = Clients;
+        options.StateFile = File;
+        options.Snapshots = Store;
+        options.WriteState = [&](const TPersistentState& state) {
+            const auto error = File->Write(state);
+            if (error.empty() && AfterWrite) {
+                AfterWrite(state);
+            }
+            return error;
+        };
+        options.ScheduleTicks = false;
+        Actor = Runtime.Register(CreateSkipperActor(std::move(options)));
+        Tick();
+    }
+
+    void Tick() {
+        Runtime.SendAsync(new NActors::IEventHandle(Actor, Edge, new TEvSkipper::TEvTick()));
+        Runtime.GrabEdgeEvent<TEvSkipper::TEvTickComplete>(Edge);
+    }
+
+    // A directory in place of the temporary file fails every state write.
+    void BreakWrites() {
+        UNIT_ASSERT_VALUES_EQUAL(mkdir((Directory.Name() + "/state.json.tmp").c_str(), 0700), 0);
+    }
+
+    void RestoreWrites() {
+        UNIT_ASSERT_VALUES_EQUAL(rmdir((Directory.Name() + "/state.json.tmp").c_str()), 0);
+    }
+
+    TRpcResult Rpc(const TRpcRequest& request, EYdbMethod method, TMonotonic sentAt) {
+        TRpcResult rpc;
+        rpc.Request = request;
+        rpc.Method = method;
+        rpc.SentAt = sentAt;
+        rpc.FinishedAt = Runtime.GetCurrentMonotonicTime();
+        rpc.Success = true;
+        rpc.SdkStatus = NYdb::EStatus::SUCCESS;
+        rpc.Status = "SUCCESS";
+        return rpc;
+    }
+
+    TStateResult StateReply(const TStateCall& call) {
+        TStateResult result;
+        result.Rpc = Rpc(call.Request, call.Method, call.SentAt);
+        TClusterView view;
+        view.Generation = Generation;
+        view.Piles = Piles;
+        if (Conflict && call.Request.Pile == "b") {
+            view.Piles["b"] = EPileState::Promoted;
+        }
+        view.Endpoint = call.Request.Endpoint;
+        view.SentAt = call.SentAt;
+        result.View = view;
+        if (call.Method == EYdbMethod::ConnectivityState && !OmitConnectivity) {
+            TConnectivity connectivity;
+            connectivity.Generation = ConnectivityGeneration.value_or(Generation);
+            connectivity.BindingInProgress = Binding;
+            connectivity.VantagePile = call.Request.Pile;
+            connectivity.SentAt = call.SentAt;
+            for (const auto& [name, state] : Piles) {
+                (void)state;
+                const auto& noQuorum = EndpointNoQuorum.contains(call.Request.Endpoint)
+                    ? EndpointNoQuorum.at(call.Request.Endpoint) : NoQuorum;
+                connectivity.Piles[name] = noQuorum.contains(name)
+                    ? TPileConnectivity{3, 0, false, true, false} : TPileConnectivity{3, 3, true, true, true};
+            }
+            result.Connectivity = std::move(connectivity);
+        }
+        return result;
+    }
+
+    void ReplyReads() {
+        for (auto& call : Clients->States) {
+            if (call.Done || Held.contains({call.Request.Endpoint, call.Method})) {
+                continue;
+            }
+            call.Done = true;
+            auto result = StateReply(call);
+            if (FailedMethods.contains({call.Request.Endpoint, call.Method})) {
+                result.Rpc.Success = false;
+                result.Rpc.SdkStatus = FailedStatus;
+                result.Rpc.Status = SdkStatusName(FailedStatus);
+                result.View.reset();
+                result.Error = result.Rpc.Status;
+                result.Connectivity.reset();
+            }
+            call.Completed(std::move(result));
+        }
+        for (auto& call : Clients->Health) {
+            if (call.Done || Held.contains({call.Request.Endpoint, EYdbMethod::SelfCheck})) {
+                continue;
+            }
+            if (SelfCheckDelay && call.SentAt + *SelfCheckDelay > Runtime.GetCurrentMonotonicTime()) {
+                continue;
+            }
+            call.Done = true;
+            TSelfCheckResult result;
+            result.Rpc = Rpc(call.Request, EYdbMethod::SelfCheck, call.SentAt);
+            if (FailedMethods.contains({call.Request.Endpoint, EYdbMethod::SelfCheck})) {
+                result.Rpc.Success = false;
+                result.Rpc.SdkStatus = FailedStatus;
+                result.Rpc.Status = SdkStatusName(FailedStatus);
+                call.Completed(std::move(result));
+                continue;
+            }
+            Ydb::Monitoring::SelfCheckResult proto;
+            const auto& failures = EndpointFailures.contains(call.Request.Endpoint) ? EndpointFailures.at(call.Request.Endpoint) : Failed;
+            for (const auto& failed : failures) {
+                auto* issue = proto.add_issue_log();
+                issue->set_type("BRIDGE_GROUP");
+                issue->set_status(Ydb::Monitoring::StatusFlag::RED);
+                issue->mutable_location()->mutable_storage()->mutable_pool()->mutable_group()->mutable_pile()->set_name(failed);
+            }
+            if (Fallback || FallbackEndpoints.contains(call.Request.Endpoint)) {
+                auto* issue = proto.add_issue_log();
+                issue->set_type("STORAGE");
+                issue->set_status(Ydb::Monitoring::StatusFlag::RED);
+                issue->set_message("System tablet BSC didn't provide information");
+            }
+            if (Truncated) {
+                auto* issue = proto.add_issue_log();
+                issue->set_type("HEALTHCHECK_STATUS");
+                issue->set_status(Ydb::Monitoring::StatusFlag::RED);
+            }
+            TSelfCheckReply reply;
+            reply.Endpoint = call.Request.Endpoint;
+            reply.SentAt = call.SentAt;
+            if (!PileLess.contains(call.Request.Endpoint)) {
+                reply.ResponderPile = Identities.contains(call.Request.Endpoint) ? Identities.at(call.Request.Endpoint) : call.Request.Pile;
+            }
+            reply.Classification = ClassifySelfCheck(proto);
+            result.Reply = std::move(reply);
+            result.ResponderNodeId = 42;
+            call.Completed(std::move(result));
+        }
+    }
+
+    void Step() {
+        Runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        Tick();
+        ReplyReads();
+        Tick();
+    }
+
+    void Run(size_t seconds) {
+        for (size_t i = 0; i < seconds; ++i) {
+            Step();
+        }
+    }
+
+    void Outcome(size_t index, NYdb::EStatus status) {
+        auto& call = Clients->Updates.at(index);
+        UNIT_ASSERT(!call.Done);
+        call.Done = true;
+        TUpdateResult result;
+        result.Rpc = Rpc(call.Request, EYdbMethod::Update, call.SentAt);
+        result.Rpc.SdkStatus = status;
+        result.Rpc.Status = SdkStatusName(status);
+        result.Rpc.Success = status == NYdb::EStatus::SUCCESS;
+        result.Rpc.Issues = Redactor.Redact("credential test-private-token; remote detail");
+        result.Plan = call.Plan;
+        result.Outcome = ClassifyUpdateOutcome(status);
+        call.Completed(std::move(result));
+        Tick();
+    }
+
+    size_t CallsAt(EYdbMethod method, TMonotonic sentAt) const {
+        size_t count = 0;
+        if (method == EYdbMethod::SelfCheck) {
+            for (const auto& call : Clients->Health) {
+                count += call.SentAt == sentAt;
+            }
+        } else {
+            for (const auto& call : Clients->States) {
+                count += call.Method == method && call.SentAt == sentAt;
+            }
+        }
+        return count;
+    }
+
+    TEndpointSnapshot Endpoint(const TString& uri) const {
+        const auto snapshot = Store->Read();
+        for (const auto& endpoint : snapshot->Endpoints) {
+            if (endpoint.Uri == uri) {
+                return endpoint;
+            }
+        }
+        UNIT_FAIL("missing endpoint");
+        return {};
+    }
+
+    std::vector<NJson::TJsonValue> Logs(TStringBuf eventName) {
+        // A logger mailbox barrier ensures all preceding actor logs reached the
+        // actual native JSON backend before inspecting its output.
+        Runtime.SendAsync(new NActors::IEventHandle(Runtime.GetLogSettings(0)->LoggerActorId, Edge,
+            new NActors::TLogComponentLevelRequest(NActors::NLog::PRI_DEBUG, SkipperLogComponent)));
+        Runtime.GrabEdgeEvent<NActors::TLogComponentLevelResponse>(Edge);
+        std::vector<NJson::TJsonValue> result;
+        for (const auto& line : Records) {
+            auto record = Json(line);
+            if (record["event"].IsString() && record["event"].GetString() == eventName) {
+                result.push_back(std::move(record));
+            }
+        }
+        return result;
+    }
+};
+
+TPersistentState Pending(const TExactUpdate& update = {{"b", EPileState::Disconnected}}) {
+    return {"test", 7, TPendingMutation{7, update}};
+}
+
+void VerifyPileLessReplyRetainsCandidateVeto(bool fallback) {
+    THarness fixture;
+    for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+        fixture.Held.insert({A, method});
+    }
+    fixture.NoQuorum = {"a"};
+    fixture.Fallback = fallback;
+    fixture.Run(5);
+    UNIT_ASSERT(fixture.Store->Read()->Piles.at("a").Confirmed);
+    UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoCandidate);
+    UNIT_ASSERT(fixture.Clients->Updates.empty());
+    const auto cachedSend = fixture.Endpoint(B).SelfCheck->SentAt;
+    fixture.PileLess.insert(B);
+    fixture.Run(3);
+    // The only health source is now pile-less. It must not erase either the
+    // BSC availability/RED verdict or a still-fresh fallback part on b.
+    UNIT_ASSERT(fixture.Clients->Updates.empty());
+    UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoCandidate);
+    UNIT_ASSERT(fixture.Endpoint(B).Identity == EEndpointIdentity::Verified);
+    UNIT_ASSERT(fixture.Endpoint(B).LastError.Contains("ENDPOINT_PILE_UNVERIFIED"));
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Endpoint(B).SelfCheck->SentAt, cachedSend);
+    UNIT_ASSERT(fixture.Endpoint(B).SelfCheck->ResponderPile == TString("b"));
+    // Keeping the observation never refreshes its send time. Once it expires,
+    // current connectivity may qualify the no-BSC policy as before.
+    fixture.Run(31);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+    UNIT_ASSERT(fixture.Clients->Updates.front().Plan.Update == TExactUpdate({
+        {"a", EPileState::Disconnected}, {"b", EPileState::Primary}}));
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(TSkipperActor) {
+    Y_UNIT_TEST(PileLessSelfCheckPreservesFreshBscVeto) {
+        VerifyPileLessReplyRetainsCandidateVeto(false);
+    }
+
+    Y_UNIT_TEST(PileLessSelfCheckPreservesFreshFallbackVeto) {
+        VerifyPileLessReplyRetainsCandidateVeto(true);
+    }
+
+    Y_UNIT_TEST(SuccessfulSlowPersistenceCannotDispatchExpiredEvidence) {
+        for (const bool highWaterWrite : {false, true}) {
+            THarness fixture;
+            fixture.EndpointNoQuorum[A] = {"a"};
+            fixture.Run(5);
+            UNIT_ASSERT(fixture.Clients->Updates.empty());
+            UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoMutationEndpoint);
+            bool delayed = false;
+            fixture.AfterWrite = [&](const TPersistentState& state) {
+                if (!delayed && (highWaterWrite ? state.GenerationHighWater == 8 : state.PendingMutation.has_value())) {
+                    delayed = true;
+                    fixture.Runtime.AdvanceCurrentTime(TDuration::Seconds(30));
+                }
+            };
+            if (highWaterWrite) {
+                fixture.Generation = 8;
+            }
+            fixture.EndpointNoQuorum.clear();
+            for (size_t i = 0; i < 3 && !delayed; ++i) {
+                fixture.Step();
+            }
+            UNIT_ASSERT(delayed);
+            UNIT_ASSERT(fixture.Clients->Updates.empty());
+            UNIT_ASSERT(fixture.File->GetState().PendingMutation);
+            UNIT_ASSERT(!fixture.Store->Read()->LastMutation);
+            UNIT_ASSERT(fixture.Logs("mutation_sent").empty());
+            fixture.AfterWrite = {};
+            fixture.Run(3);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+            UNIT_ASSERT(fixture.Clients->Updates.front().Plan.Update
+                == fixture.File->GetState().PendingMutation->Update);
+        }
+    }
+
+    Y_UNIT_TEST(PreparationWithinEvidenceLifetimeDispatchesOnce) {
+        THarness fixture;
+        fixture.EndpointNoQuorum[A] = {"a"};
+        fixture.Run(5);
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+        bool prepared = false;
+        fixture.AfterWrite = [&](const TPersistentState& state) {
+            if (!prepared && state.PendingMutation) {
+                prepared = true;
+                fixture.Runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+            }
+        };
+        fixture.EndpointNoQuorum.clear();
+        fixture.Step();
+        UNIT_ASSERT(prepared);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Logs("mutation_sent").size(), 1);
+    }
+
+    Y_UNIT_TEST(ClientPreparationExpiryDoesNotStrandSlotsOrPublishAnInvocation) {
+        THarness fixture;
+        fixture.EndpointNoQuorum[A] = {"a"};
+        fixture.Run(5);
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+        bool prepared = false;
+        fixture.Clients->PrepareUpdate = [&] {
+            prepared = true;
+            fixture.Runtime.AdvanceCurrentTime(TDuration::Seconds(30));
+        };
+        fixture.EndpointNoQuorum.clear();
+        fixture.Step();
+        UNIT_ASSERT(prepared);
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+        UNIT_ASSERT(fixture.File->GetState().PendingMutation);
+        UNIT_ASSERT(!fixture.Store->Read()->LastMutation);
+        UNIT_ASSERT(fixture.Store->Read()->Counters.MutationTotal.empty());
+        UNIT_ASSERT(fixture.Logs("mutation_sent").empty());
+        fixture.Clients->PrepareUpdate = {};
+        fixture.Run(3);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Logs("mutation_sent").size(), 1);
+    }
+
+    Y_UNIT_TEST(MutationRoutingRequiresTheReceivingNodesOwnComponent) {
+        for (const TString& isolated : {A, A2}) {
+            THarness fixture(EMode::Auto, {}, 2);
+            fixture.EndpointNoQuorum[isolated] = {"a"};
+            fixture.FallbackEndpoints.insert(isolated);
+            fixture.Run(22);
+            const TString capable = isolated == A ? A2 : A;
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.front().Plan.Endpoint, capable);
+            fixture.Outcome(0, NYdb::EStatus::TIMEOUT);
+            fixture.Run(30);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.back().Plan.Endpoint, capable);
+        }
+    }
+
+    Y_UNIT_TEST(ManualAndAutoPublishTheSamePlan) {
+        THarness manual(EMode::Manual);
+        THarness automatic;
+        manual.Run(22);
+        automatic.Run(22);
+        const auto expected = manual.Store->Read()->Decision;
+        UNIT_ASSERT(expected.Kind == EDecisionKind::Ready);
+        UNIT_ASSERT(expected.Plan == automatic.Store->Read()->Decision.Plan);
+        UNIT_ASSERT_VALUES_EQUAL(expected.CliCommand, automatic.Store->Read()->Decision.CliCommand);
+        UNIT_ASSERT(manual.Clients->Updates.empty());
+        UNIT_ASSERT_VALUES_EQUAL(automatic.Clients->Updates.size(), 1);
+        UNIT_ASSERT(automatic.Clients->Updates.at(0).Plan == *expected.Plan);
+    }
+
+    Y_UNIT_TEST(HungSelfCheckNeverReleasesItsSlotOrDelaysTicksAndPolls) {
+        THarness fixture;
+        fixture.Held.insert({A, EYdbMethod::SelfCheck});
+        fixture.Run(40);
+        size_t health = 0;
+        size_t polls = 0;
+        for (const auto& call : fixture.Clients->Health) {
+            health += call.Request.Endpoint == A;
+        }
+        for (const auto& call : fixture.Clients->States) {
+            polls += call.Request.Endpoint == A && call.Method == EYdbMethod::PlainState;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(health, 1);
+        UNIT_ASSERT(polls >= 40);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->LastTickAt, fixture.Runtime.GetCurrentMonotonicTime());
+    }
+
+    Y_UNIT_TEST(BusySelfCheckSlotAtTheRoundBoundaryStartsWhenItSettles) {
+        THarness fixture(EMode::Manual, {}, 1, SlowRounds);
+        fixture.Held.insert({A, EYdbMethod::SelfCheck});
+        // The first view at 101 starts rounds at 102 and 112; the call sent at 100
+        // is still outstanding at both, so only b's endpoint is sampled at 112.
+        fixture.Run(12);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.CallsAt(EYdbMethod::SelfCheck, TMonotonic::Seconds(112)), 1);
+        fixture.Held.clear();
+        fixture.Step();
+        // The deferred sample goes out as soon as the slot settles, not at the next round.
+        UNIT_ASSERT_VALUES_EQUAL(fixture.CallsAt(EYdbMethod::SelfCheck, TMonotonic::Seconds(113)), 1);
+        size_t outstanding = 0;
+        for (const auto& call : fixture.Clients->Health) {
+            outstanding += call.Request.Endpoint == A && !call.Done;
+        }
+        UNIT_ASSERT(outstanding <= 1);
+    }
+
+    Y_UNIT_TEST(GenerationChangeStartsAHealthRound) {
+        THarness fixture(EMode::Manual, {}, 1, SlowRounds);
+        fixture.Run(4);
+        const auto before = fixture.Clients->Health.size();
+        fixture.Generation = 8;
+        fixture.Step();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Selection.View->Generation, 8);
+        fixture.Runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        fixture.Tick();
+        // The scheduled round is still 4 s away.
+        UNIT_ASSERT(fixture.Clients->Health.size() > before);
+    }
+
+    Y_UNIT_TEST(FreshRedAndStageTwoEvidenceSurviveFailedAttemptsUntilTtl) {
+        THarness fixture(EMode::Manual);
+        fixture.Piles["c"] = EPileState::NotSynchronized;
+        fixture.Failed.insert("c");
+        fixture.Run(3);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("c").Verdict.Verdict == EPileVerdict::Failed);
+        const auto sentAt = fixture.Endpoint(A).View->SentAt;
+        for (const auto& [pile, endpoints] : fixture.Config.Endpoints) {
+            (void)pile;
+            for (const auto& endpoint : endpoints) {
+                for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+                    fixture.FailedMethods.insert({endpoint.Uri, method});
+                }
+            }
+        }
+        fixture.Run(2);
+        UNIT_ASSERT(fixture.Store->Read()->Selection.View);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("c").Verdict.Verdict == EPileVerdict::Failed);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Failed);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Endpoint(A).View->SentAt, sentAt);
+        UNIT_ASSERT(fixture.Endpoint(A).LastError.Contains("TIMEOUT"));
+        fixture.Run(31);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoView);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.empty());
+    }
+
+    Y_UNIT_TEST(FailedAttemptDoesNotEraseFreshContradictoryBscReply) {
+        THarness fixture(EMode::Manual);
+        fixture.EndpointFailures[A] = {};
+        fixture.Run(3);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Unknown);
+        fixture.FailedMethods.insert({A, EYdbMethod::SelfCheck});
+        fixture.Run(2);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Unknown);
+        fixture.Run(31);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Failed);
+    }
+
+    Y_UNIT_TEST(PlainReadFailuresOnOneEndpointAreIgnoredWhileTheOthersAnswer) {
+        for (const auto status : {NYdb::EStatus::UNAVAILABLE, NYdb::EStatus::NOT_FOUND, NYdb::EStatus::UNSUPPORTED}) {
+            THarness fixture(EMode::Manual, {}, 2);
+            fixture.FailedStatus = status;
+            fixture.FailedMethods = {{A, EYdbMethod::PlainState}, {A, EYdbMethod::ConnectivityState}};
+            fixture.Run(22);
+            const auto snapshot = fixture.Store->Read();
+            UNIT_ASSERT(snapshot->Selection.View);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot->Selection.View->Generation, 7);
+            UNIT_ASSERT(!snapshot->Selection.CurrentEndpoints.contains(A));
+            UNIT_ASSERT(snapshot->Selection.CurrentEndpoints.contains(A2));
+            UNIT_ASSERT(snapshot->Decision.Kind == EDecisionKind::Ready);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot->Decision.Plan->Endpoint, A2);
+            UNIT_ASSERT(!fixture.Endpoint(A).View);
+            UNIT_ASSERT(fixture.Endpoint(A).LastError.StartsWith(SdkStatusName(status)));
+            UNIT_ASSERT(fixture.Endpoint(A2).View);
+            UNIT_ASSERT(fixture.Endpoint(B).View);
+            size_t attempts = 0;
+            for (const auto& call : fixture.Clients->States) {
+                attempts += call.Request.Endpoint == A && call.Method == EYdbMethod::PlainState;
+            }
+            UNIT_ASSERT(attempts >= 2);
+            UNIT_ASSERT(snapshot->Counters.RpcTotal.at({EYdbMethod::PlainState, SdkStatusName(status)}) >= 2);
+        }
+    }
+
+    Y_UNIT_TEST(SuccessfulFallbackTruncationAndMismatchReplacePriorGoodEvidence) {
+        for (const bool fallback : {false, true}) {
+            THarness fixture(EMode::Manual);
+            fixture.Failed.clear();
+            fixture.Run(22);
+            UNIT_ASSERT(fixture.Store->Read()->Piles.at("a").Verdict.Verdict == EPileVerdict::Healthy);
+            fixture.Fallback = fallback;
+            fixture.Truncated = !fallback;
+            fixture.Step();
+            UNIT_ASSERT(fixture.Store->Read()->Piles.at("a").Verdict.Verdict == EPileVerdict::Unknown);
+            UNIT_ASSERT(fixture.Endpoint(A).SelfCheck->Classification.Mode == (fallback ? ESelfCheckMode::Fallback : ESelfCheckMode::Bsc));
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Endpoint(A).SelfCheck->Classification.Truncated, !fallback);
+            fixture.Identities[A] = "wrong";
+            fixture.Identities[B] = "wrong";
+            fixture.Step();
+            UNIT_ASSERT(fixture.Endpoint(A).Identity == EEndpointIdentity::Mismatch);
+            // Views of misidentified endpoints are not used.
+            UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoView);
+        }
+    }
+
+    Y_UNIT_TEST(ViewWithoutTheEndpointsOwnPileIsIgnored) {
+        THarness fixture(EMode::Manual);
+        fixture.Run(3);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Selection.View->Generation, 7);
+        // A newer view omitting B's configured pile must not raise high-water,
+        // even while the endpoint's pile identity remains VERIFIED.
+        fixture.Runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        fixture.Tick();
+        for (auto& call : fixture.Clients->States) {
+            if (!call.Done && call.Request.Endpoint == B) {
+                call.Done = true;
+                auto result = fixture.StateReply(call);
+                result.View->Generation = 9;
+                result.View->Piles.erase("b");
+                call.Completed(std::move(result));
+            }
+        }
+        fixture.ReplyReads();
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Endpoint(B).View->Generation, 9);
+        UNIT_ASSERT(fixture.Endpoint(B).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(fixture.Store->Read()->Selection.View);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Selection.View->Generation, 7);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.File->GetState().GenerationHighWater, 7);
+    }
+
+    Y_UNIT_TEST(UnusableConnectivityKeepsValidReportAndRepollsAtNextStatePoll) {
+        // 0: binding in progress, usable but not settled; 1: report absent; 2: report
+        // from another generation. The settled reports sent at 102 keep Lost until their TTL.
+        for (const size_t mode : {0, 1, 2}) {
+            THarness fixture(EMode::Manual, {}, 1, SlowRounds);
+            fixture.Failed.clear();
+            fixture.NoQuorum.insert("b");
+            fixture.Run(3);
+            const auto lost = [&] {
+                const auto snapshot = fixture.Store->Read();
+                const auto& pile = snapshot->Piles.at("b");
+                return pile.Verdict.Verdict == EPileVerdict::Lost && !pile.Connectivity.empty();
+            };
+            UNIT_ASSERT(lost());
+            fixture.Binding = mode == 0;
+            fixture.OmitConnectivity = mode == 1;
+            if (mode == 2) {
+                fixture.ConnectivityGeneration = 6;
+            }
+            // The round at 112 returns binding or unusable reports; those sent at 102 stay valid.
+            fixture.Run(9);
+            UNIT_ASSERT(lost());
+            UNIT_ASSERT(fixture.Store->Read()->Selection.View);
+            if (mode == 0) {
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Endpoint(A).LastError, "");
+            } else {
+                UNIT_ASSERT(fixture.Endpoint(A).LastError.StartsWith("CONNECTIVITY_"));
+            }
+            // The re-poll goes out at the next state poll, not at the next round.
+            fixture.Step();
+            UNIT_ASSERT(fixture.CallsAt(EYdbMethod::ConnectivityState, TMonotonic::Seconds(113)) > 0);
+            UNIT_ASSERT(lost());
+            // The retained settled reports still expire at their TTL; binding reports never prove Lost.
+            fixture.Run(20);
+            const auto snapshot = fixture.Store->Read();
+            const auto& pile = snapshot->Piles.at("b");
+            UNIT_ASSERT(pile.Verdict.Verdict != EPileVerdict::Lost);
+            if (mode == 0) {
+                UNIT_ASSERT(!pile.Connectivity.empty());
+                for (const auto& report : pile.Connectivity) {
+                    UNIT_ASSERT(report.BindingInProgress);
+                }
+            } else {
+                UNIT_ASSERT(pile.Connectivity.empty());
+            }
+        }
+    }
+
+    // Plan step 4.2 "done when": B1 and P1 together. A PRIMARY with BSC, b black-holed,
+    // 12 s SelfCheck replies, every connectivity report binding: Ready within
+    // warm-up + confirm + one round.
+    Y_UNIT_TEST(BlackHoledPileWithSlowSelfCheckAndBindingReportsIsDisconnected) {
+        THarness fixture(EMode::Auto, {}, 1, SlowRounds);
+        fixture.Binding = true;
+        fixture.NoQuorum = {"b"};
+        fixture.SelfCheckDelay = TDuration::Seconds(12);
+        for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+            fixture.Held.insert({B, method});
+        }
+        fixture.Run(45);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        const auto& update = fixture.Clients->Updates.front();
+        UNIT_ASSERT(update.Plan.Update == TExactUpdate({{"b", EPileState::Disconnected}}));
+        UNIT_ASSERT_VALUES_EQUAL(update.Plan.ExpectedGeneration, 7);
+        UNIT_ASSERT_VALUES_EQUAL(update.Request.Endpoint, A);
+        const auto snapshot = fixture.Store->Read();
+        const auto& reports = snapshot->Piles.at("b").Connectivity;
+        UNIT_ASSERT(!reports.empty());
+        for (const auto& report : reports) {
+            UNIT_ASSERT(report.BindingInProgress);
+        }
+    }
+
+    Y_UNIT_TEST(NewerViewResolvesRestoredPendingInOnePoll) {
+        THarness fixture(EMode::Manual, Pending());
+        fixture.Generation = 8;
+        fixture.Step();
+        UNIT_ASSERT(!fixture.File->GetState().PendingMutation);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.File->GetState().GenerationHighWater, 8);
+    }
+
+    Y_UNIT_TEST(DifferentPendingUpdateBlocksAndIdenticalRestartResendsOnce) {
+        THarness different(EMode::Auto, Pending({{"a", EPileState::Disconnected}, {"b", EPileState::Primary}}));
+        different.Run(22);
+        UNIT_ASSERT(different.Store->Read()->Decision.Blocker == EBlockerReason::PendingMutation);
+        UNIT_ASSERT(different.Clients->Updates.empty());
+        THarness identical(EMode::Auto, Pending());
+        identical.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(identical.Clients->Updates.size(), 1);
+        identical.Run(35);
+        UNIT_ASSERT_VALUES_EQUAL(identical.Clients->Updates.size(), 1);
+    }
+
+    Y_UNIT_TEST(PendingWriteFailureBlocksUntilAcknowledged) {
+        THarness fixture;
+        fixture.Run(1);
+        fixture.BreakWrites();
+        fixture.Run(4);
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::StateWriteFailed);
+        UNIT_ASSERT(!fixture.Store->Read()->PersistentState.PendingMutation);
+        fixture.RestoreWrites();
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        UNIT_ASSERT(fixture.Store->Read()->PersistentState.PendingMutation);
+    }
+
+    Y_UNIT_TEST(FailedPendingWriteLeavesNoUnsentRecord) {
+        THarness fixture;
+        fixture.Piles["c"] = EPileState::Synchronized;
+        fixture.Run(1);
+        fixture.BreakWrites();
+        fixture.Run(4);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::StateWriteFailed);
+        // The plan changes while the unacknowledged record for {b} is retried.
+        fixture.Failed.insert("c");
+        fixture.Run(4);
+        fixture.RestoreWrites();
+        fixture.Run(2);
+        const TExactUpdate expected = {{"b", EPileState::Disconnected}, {"c", EPileState::Disconnected}};
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker != EBlockerReason::PendingMutation);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        UNIT_ASSERT(fixture.Clients->Updates[0].Plan.Update == expected);
+        UNIT_ASSERT(fixture.File->GetState().PendingMutation->Update == expected);
+    }
+
+    Y_UNIT_TEST(SuccessAndFailedTerminalWriteBothRejectStaleHistory) {
+        for (const bool failWrite : {false, true}) {
+            THarness fixture;
+            fixture.Run(22);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+            if (failWrite) {
+                fixture.BreakWrites();
+            }
+            fixture.Outcome(0, NYdb::EStatus::SUCCESS);
+            fixture.Run(3);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->GenerationHighWater, 8);
+            if (failWrite) {
+                UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->PersistentState.GenerationHighWater, 7);
+                UNIT_ASSERT(fixture.Store->Read()->PersistentState.PendingMutation);
+                fixture.RestoreWrites();
+                fixture.Tick();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(fixture.File->GetState().GenerationHighWater, 8);
+            UNIT_ASSERT(!fixture.File->GetState().PendingMutation);
+            UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::StaleHistory);
+        }
+    }
+
+    Y_UNIT_TEST(NotAppliedHereImmediatelyUsesAnotherQualifiedEndpoint) {
+        THarness fixture(EMode::Auto, {}, 2);
+        fixture.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[0].Plan.Endpoint, A);
+        fixture.Outcome(0, NYdb::EStatus::UNAVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[1].Plan.Endpoint, A2);
+        UNIT_ASSERT(fixture.Clients->Updates[0].Plan.Update == fixture.Clients->Updates[1].Plan.Update);
+    }
+
+    Y_UNIT_TEST(NotAppliedHereUsesAnotherEndpointAtStatePoll) {
+        THarness fixture(EMode::Auto, {}, 2);
+        fixture.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+
+        fixture.Runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        fixture.Outcome(0, NYdb::EStatus::UNAVAILABLE);
+
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[0].Plan.Endpoint, A);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[1].Plan.Endpoint, A2);
+        UNIT_ASSERT(fixture.Clients->Updates[0].Plan.Update == fixture.Clients->Updates[1].Plan.Update);
+    }
+
+    Y_UNIT_TEST(NotAppliedHereRetriesOnlyQualifiedEndpointAfterStatePoll) {
+        THarness fixture;
+        fixture.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+
+        fixture.Runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        fixture.Outcome(0, NYdb::EStatus::UNAVAILABLE);
+
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoMutationEndpoint);
+
+        fixture.Run(1);
+
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[1].Plan.Endpoint, A);
+    }
+
+    Y_UNIT_TEST(TwoNotAppliedHereEndpointsAreRetriedOncePerStatePoll) {
+        THarness fixture(EMode::Auto, {}, 2);
+        fixture.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[0].Plan.Endpoint, A);
+        fixture.Outcome(0, NYdb::EStatus::UNAVAILABLE);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[1].Plan.Endpoint, A2);
+        fixture.Outcome(1, NYdb::EStatus::UNAVAILABLE);
+
+        // Both endpoints stay excluded within this state-poll interval.
+        for (size_t i = 0; i < 3; ++i) {
+            fixture.Runtime.AdvanceCurrentTime(TDuration::MilliSeconds(250));
+            fixture.Tick();
+            fixture.ReplyReads();
+            fixture.Tick();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoMutationEndpoint);
+
+        // The next state poll finds no selectable endpoint and clears the exclusion.
+        fixture.Runtime.AdvanceCurrentTime(TDuration::MilliSeconds(250));
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 3);
+        UNIT_ASSERT(fixture.Clients->Updates[2].Plan.Update == fixture.Clients->Updates[0].Plan.Update);
+    }
+
+    Y_UNIT_TEST(AmbiguousBackoffAndRejectedRestartBehavior) {
+        THarness ambiguous;
+        ambiguous.Run(22);
+        ambiguous.Outcome(0, NYdb::EStatus::TIMEOUT);
+        ambiguous.Run(5);
+        UNIT_ASSERT_VALUES_EQUAL(ambiguous.Clients->Updates.size(), 1);
+        ambiguous.Run(30);
+        UNIT_ASSERT_VALUES_EQUAL(ambiguous.Clients->Updates.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(ambiguous.Store->Read()->LastMutation->AmbiguousResends, 1);
+        ambiguous.Outcome(1, NYdb::EStatus::TIMEOUT);
+        ambiguous.Run(25);
+        UNIT_ASSERT_VALUES_EQUAL(ambiguous.Clients->Updates.size(), 2);
+        ambiguous.Run(5);
+        UNIT_ASSERT_VALUES_EQUAL(ambiguous.Clients->Updates.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(ambiguous.Store->Read()->LastMutation->AmbiguousResends, 2);
+        THarness rejected;
+        rejected.Run(22);
+        rejected.Outcome(0, NYdb::EStatus::BAD_REQUEST);
+        rejected.Run(40);
+        UNIT_ASSERT_VALUES_EQUAL(rejected.Clients->Updates.size(), 1);
+        THarness restart(EMode::Auto, rejected.File->GetState());
+        restart.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(restart.Clients->Updates.size(), 1);
+    }
+
+    Y_UNIT_TEST(RejectedRetryCannotForgetAmbiguousAttemptAcrossRestart) {
+        THarness fixture;
+        fixture.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        const auto original = fixture.Clients->Updates.front().Plan.Update;
+        fixture.Outcome(0, NYdb::EStatus::TIMEOUT);
+        fixture.Run(30);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+        UNIT_ASSERT(fixture.Clients->Updates.back().Plan.Update == original);
+        fixture.Outcome(1, NYdb::EStatus::UNAUTHORIZED);
+        fixture.Run(5);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+
+        // The first invocation can still commit after its client timed out.
+        // Restart with observations that would instead promote b at the same G.
+        THarness restart(EMode::Auto, fixture.File->GetState());
+        restart.Failed = {"a"};
+        restart.Run(25);
+        UNIT_ASSERT(restart.Clients->Updates.empty());
+        UNIT_ASSERT(restart.Store->Read()->Decision.Blocker == EBlockerReason::PendingMutation);
+        UNIT_ASSERT(restart.File->GetState().PendingMutation->Update == original);
+    }
+
+    Y_UNIT_TEST(RejectedSupersetCannotForgetOutstandingAttemptAcrossRestart) {
+        THarness fixture(EMode::Auto, {}, 2);
+        fixture.Piles["c"] = EPileState::Synchronized;
+        fixture.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        fixture.Failed.insert("c");
+        fixture.Run(5);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+        UNIT_ASSERT(!fixture.Clients->Updates.front().Done);
+        const auto superset = fixture.Clients->Updates.back().Plan.Update;
+        fixture.Outcome(1, NYdb::EStatus::BAD_REQUEST);
+
+        THarness restart(EMode::Auto, fixture.File->GetState());
+        restart.Piles["c"] = EPileState::Synchronized;
+        restart.Failed = {"a"};
+        restart.Run(25);
+        UNIT_ASSERT(restart.Clients->Updates.empty());
+        UNIT_ASSERT(restart.Store->Read()->Decision.Blocker == EBlockerReason::PendingMutation);
+        UNIT_ASSERT(restart.File->GetState().PendingMutation->Update == superset);
+    }
+
+    Y_UNIT_TEST(NoPendingIsCreatedUntilASurvivingDispatchSlotExists) {
+        THarness fixture;
+        fixture.Piles["c"] = EPileState::Synchronized;
+        fixture.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        fixture.Generation = 8;
+        fixture.Run(23);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        UNIT_ASSERT(!fixture.File->GetState().PendingMutation);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoMutationEndpoint);
+        // A new failure at this same generation changes the unsent plan. It
+        // must not be frozen by a record created without a dispatch slot.
+        fixture.Failed.insert("c");
+        fixture.Run(2);
+        UNIT_ASSERT(!fixture.File->GetState().PendingMutation);
+        fixture.Outcome(0, NYdb::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.back().Plan.ExpectedGeneration, 8);
+        UNIT_ASSERT(fixture.Clients->Updates.back().Plan.Update.contains("b"));
+        UNIT_ASSERT(fixture.Clients->Updates.back().Plan.Update.contains("c"));
+        UNIT_ASSERT(fixture.File->GetState().PendingMutation->Update == fixture.Clients->Updates.back().Plan.Update);
+    }
+
+    Y_UNIT_TEST(OlderOutcomeCannotClearNewerPending) {
+        THarness fixture(EMode::Auto, {}, 2);
+        fixture.Run(22);
+        fixture.Generation = 8;
+        fixture.Run(23);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.File->GetState().PendingMutation->ExpectedGeneration, 8);
+        fixture.Outcome(0, NYdb::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.File->GetState().PendingMutation->ExpectedGeneration, 8);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.File->GetState().GenerationHighWater, 8);
+    }
+
+    // B2 (D2): a same-primary superset plan replaces the unresolved record at G.
+    Y_UNIT_TEST(SupersetPlanReplacesThePendingRecordAtTheSameGeneration) {
+        THarness fixture(EMode::Auto, {}, 2);
+        fixture.Piles["c"] = EPileState::Synchronized;
+        fixture.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        UNIT_ASSERT(fixture.Clients->Updates[0].Plan.Update == TExactUpdate({{"b", EPileState::Disconnected}}));
+        // c fails while the first invocation is still outstanding on A.
+        fixture.Failed.insert("c");
+        fixture.Run(5);
+        const TExactUpdate expected = {{"b", EPileState::Disconnected}, {"c", EPileState::Disconnected}};
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+        UNIT_ASSERT(fixture.Clients->Updates[1].Plan.Update == expected);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[1].Plan.ExpectedGeneration, 7);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[1].Plan.Endpoint, A2);
+        UNIT_ASSERT(fixture.File->GetState().PendingMutation->Update == expected);
+        // The superseded invocation's outcome is report-only.
+        fixture.Outcome(0, NYdb::EStatus::SUCCESS);
+        UNIT_ASSERT(fixture.File->GetState().PendingMutation->Update == expected);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+    }
+
+    Y_UNIT_TEST(LateConnectivityAndOptionalFailureDoNotReplaceNewerPlainView) {
+        THarness fixture(EMode::Manual);
+        fixture.Held.insert({A, EYdbMethod::ConnectivityState});
+        fixture.Step();
+        size_t heldIndex = 0;
+        while (heldIndex < fixture.Clients->States.size()
+            && (fixture.Clients->States[heldIndex].Request.Endpoint != A || fixture.Clients->States[heldIndex].Method != EYdbMethod::ConnectivityState)) {
+            ++heldIndex;
+        }
+        const auto old = fixture.StateReply(fixture.Clients->States.at(heldIndex));
+        fixture.Generation = 8;
+        fixture.Step();
+        fixture.Clients->States.at(heldIndex).Done = true;
+        fixture.Clients->States.at(heldIndex).Completed(old);
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Endpoint(A).View->Generation, 8);
+        fixture.Held.erase({A, EYdbMethod::ConnectivityState});
+        fixture.Runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        fixture.Tick();
+        for (auto& call : fixture.Clients->States) {
+            if (!call.Done && call.Request.Endpoint == A && call.Method == EYdbMethod::ConnectivityState) {
+                call.Done = true;
+                TStateResult failed;
+                failed.Rpc = fixture.Rpc(call.Request, call.Method, call.SentAt);
+                failed.Rpc.Success = false;
+                failed.Rpc.Status = "UNSUPPORTED";
+                failed.Error = "UNSUPPORTED";
+                call.Completed(std::move(failed));
+            }
+        }
+        fixture.Tick();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Endpoint(A).View->Generation, 8);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Selection.View->Generation, 8);
+    }
+
+    Y_UNIT_TEST(ActualCallerExcludesStaleEndpointDespiteMatchingGeneration) {
+        THarness fixture(EMode::Auto, {}, 2);
+        fixture.Held.insert({A, EYdbMethod::PlainState});
+        fixture.Held.insert({A, EYdbMethod::ConnectivityState});
+        fixture.Held.insert({A, EYdbMethod::SelfCheck});
+        // Seed A at G, then leave its state methods outstanding. Its identity
+        // becomes verified only after that view expires, while A2 stays fresh.
+        for (auto& call : fixture.Clients->States) {
+            if (!call.Done && call.Request.Endpoint == A) {
+                call.Done = true;
+                call.Completed(fixture.StateReply(call));
+            }
+        }
+        fixture.Run(35);
+        fixture.Held.erase({A, EYdbMethod::SelfCheck});
+        fixture.Step();
+        UNIT_ASSERT(fixture.Endpoint(A).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Endpoint(A).View->Generation, fixture.Generation);
+        UNIT_ASSERT(fixture.Runtime.GetCurrentMonotonicTime() - fixture.Endpoint(A).View->SentAt > fixture.Config.Timing.EvidenceTtl);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Plan);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Decision.Plan->Endpoint, A2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.front().Plan.Endpoint, A2);
+    }
+
+    Y_UNIT_TEST(FreshIncompatibleEndpointViewsBlockActualDispatch) {
+        THarness fixture(EMode::Auto, {}, 2);
+        fixture.Run(1);
+        fixture.Runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        fixture.Tick();
+        for (auto& call : fixture.Clients->States) {
+            if (!call.Done && call.Request.Endpoint == A2) {
+                call.Done = true;
+                auto result = fixture.StateReply(call);
+                result.View->Piles["b"] = EPileState::NotSynchronized;
+                call.Completed(std::move(result));
+            }
+        }
+        fixture.ReplyReads();
+        fixture.Tick();
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::ViewConflict);
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+    }
+
+    Y_UNIT_TEST(MismatchedAndPileLessEndpointsKeepTheirIdentityRules) {
+        THarness fixture(EMode::Manual);
+        fixture.Identities[A] = "wrong";
+        fixture.Run(3);
+        UNIT_ASSERT(fixture.Endpoint(A).Identity == EEndpointIdentity::Mismatch);
+        fixture.Identities.erase(A);
+        fixture.Run(3);
+        UNIT_ASSERT(fixture.Endpoint(A).Identity == EEndpointIdentity::Verified);
+        // A node whose storage config is not ready answers without a pile.
+        fixture.PileLess.insert(A);
+        fixture.Run(3);
+        UNIT_ASSERT(fixture.Endpoint(A).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(fixture.Endpoint(A).LastError.Contains("ENDPOINT_PILE_UNVERIFIED"));
+    }
+
+    Y_UNIT_TEST(PileLessSelfCheckKeepsVerifiedIdentityAndEligibility) {
+        THarness fixture;
+        fixture.Run(3);
+        UNIT_ASSERT(fixture.Endpoint(A).Identity == EEndpointIdentity::Verified);
+        // A node whose storage config is not ready answers without a pile.
+        fixture.PileLess.insert(A);
+        fixture.Run(22);
+        UNIT_ASSERT(fixture.Endpoint(A).Identity == EEndpointIdentity::Verified);
+        UNIT_ASSERT(fixture.Endpoint(A).LastError.Contains("ENDPOINT_PILE_UNVERIFIED"));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates[0].Plan.Endpoint, A);
+    }
+
+    Y_UNIT_TEST(NoViewBreaksWarmupAndDownContinuity) {
+        THarness fixture(EMode::Manual);
+        fixture.Run(22);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Kind == EDecisionKind::Ready);
+        for (const auto& [pile, endpoints] : fixture.Config.Endpoints) {
+            (void)pile;
+            for (const auto& endpoint : endpoints) {
+                for (const auto method : {EYdbMethod::PlainState, EYdbMethod::ConnectivityState, EYdbMethod::SelfCheck}) {
+                    fixture.Held.insert({endpoint.Uri, method});
+                }
+            }
+        }
+        fixture.Run(32);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoView);
+        fixture.Held.clear();
+        fixture.Run(2);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Kind != EDecisionKind::Ready);
+        fixture.Run(21);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Kind == EDecisionKind::Ready);
+    }
+
+    // Warm-up, confirmation and the schedule on one timeline: a role change at
+    // t = 10 restarts the survivor's clean window, so the primary's loss at t = 20,
+    // confirmed by t = 26, is acted on only at t = 40, when b becomes Healthy.
+    Y_UNIT_TEST(FailoverWaitsForTheWarmupAfterARoleChangeAndForConfirmation) {
+        THarness fixture(EMode::Auto, {}, 1, "{round_interval_seconds: 1, confirm_seconds: 5, bsc_warmup_seconds: 30}");
+        fixture.Piles = {{"a", EPileState::Synchronized}, {"b", EPileState::Primary}};
+        fixture.Failed.clear();
+        fixture.Run(10);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Kind == EDecisionKind::Unknown);
+        fixture.Piles = {{"a", EPileState::Primary}, {"b", EPileState::Synchronized}};
+        fixture.Generation = 8;
+        fixture.Run(10);
+        fixture.Failed = {"a"};
+        fixture.Run(10);
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoCandidate);
+        fixture.Run(8);
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+        fixture.Run(5);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        const auto& update = fixture.Clients->Updates.front();
+        UNIT_ASSERT(update.SentAt >= TMonotonic::Seconds(140));
+        UNIT_ASSERT(update.Plan.Update == TExactUpdate({{"a", EPileState::Disconnected}, {"b", EPileState::Primary}}));
+        UNIT_ASSERT_VALUES_EQUAL(update.Plan.ExpectedGeneration, 8);
+    }
+
+    Y_UNIT_TEST(RoleChangeWarmupDoesNotReuseCachedHealthAfterFailedCalls) {
+        THarness fixture(EMode::Manual);
+        fixture.Failed.clear();
+        fixture.ReplyReads();
+        fixture.Tick();
+        fixture.FailedMethods.insert({A, EYdbMethod::SelfCheck});
+        fixture.FailedMethods.insert({B, EYdbMethod::SelfCheck});
+        fixture.Run(28);
+        fixture.Piles = {{"a", EPileState::Synchronized}, {"b", EPileState::Primary}};
+        fixture.Generation = 8;
+        fixture.Step();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Selection.View->Generation, 8);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Unknown);
+        fixture.FailedMethods.clear();
+        fixture.Step();
+        // The first new clean send at 130 cannot extend the cached send at 100
+        // through the role change observed at 129. The configured warm-up is 20 s.
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Unknown);
+        fixture.Run(19);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Unknown);
+        fixture.Run(2);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Healthy);
+    }
+
+    Y_UNIT_TEST(SuccessfulRoleChangeKeepsWarmupHistoryThroughStaleSelection) {
+        THarness fixture(EMode::Auto, {}, 1,
+            "{round_interval_seconds: 1, confirm_seconds: 1, bsc_warmup_seconds: 30}");
+        fixture.Failed = {"a"};
+        fixture.Run(32);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        UNIT_ASSERT(fixture.Clients->Updates.front().Plan.Update == TExactUpdate({
+            {"a", EPileState::Disconnected}, {"b", EPileState::Primary}}));
+        const auto cachedSend = fixture.Endpoint(B).SelfCheck->SentAt;
+        fixture.FailedMethods.insert({A, EYdbMethod::SelfCheck});
+        fixture.FailedMethods.insert({B, EYdbMethod::SelfCheck});
+        fixture.Run(2);
+        fixture.Outcome(0, NYdb::EStatus::SUCCESS);
+        // Success raises the floor before independently polled state catches up.
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::StaleHistory);
+        UNIT_ASSERT(!fixture.Store->Read()->Selection.View);
+        fixture.Piles = {{"a", EPileState::Disconnected}, {"b", EPileState::Primary}};
+        fixture.Generation = 8;
+        fixture.Step();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Selection.View->Generation, 8);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Endpoint(B).SelfCheck->SentAt, cachedSend);
+        const auto firstCleanSend = cachedSend + fixture.Config.Timing.BscWarmup;
+        while (fixture.Runtime.GetCurrentMonotonicTime() + TDuration::Seconds(1) < firstCleanSend) {
+            fixture.Step();
+        }
+        fixture.FailedMethods.clear();
+        fixture.Step();
+        const auto firstPostChangeSend = fixture.Endpoint(B).SelfCheck->SentAt;
+        // A call launched at the preceding tick may settle first. Also settle
+        // the deferred sample launched now, so the old window would span 30 s.
+        fixture.ReplyReads();
+        fixture.Tick();
+        UNIT_ASSERT(fixture.Endpoint(B).SelfCheck->SentAt >= firstCleanSend);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Unknown);
+        while (fixture.Runtime.GetCurrentMonotonicTime() + TDuration::Seconds(1)
+            < firstPostChangeSend + fixture.Config.Timing.BscWarmup)
+        {
+            fixture.Step();
+        }
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Unknown);
+        fixture.Step();
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Healthy);
+    }
+
+    Y_UNIT_TEST(ViewConflictRecoveryPreservesAnEstablishedRoleBoundary) {
+        THarness fixture(EMode::Manual, {}, 1,
+            "{round_interval_seconds: 1, confirm_seconds: 1, bsc_warmup_seconds: 30}");
+        fixture.Failed.clear();
+        fixture.ReplyReads();
+        fixture.Tick();
+        fixture.FailedMethods.insert({A, EYdbMethod::SelfCheck});
+        fixture.FailedMethods.insert({B, EYdbMethod::SelfCheck});
+        fixture.Run(24);
+        fixture.Piles["b"] = EPileState::Promoted;
+        fixture.Generation = 8;
+        fixture.Step();
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Unknown);
+        fixture.Runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        fixture.Tick();
+        for (auto& call : fixture.Clients->States) {
+            if (!call.Done && call.Request.Endpoint == A) {
+                call.Done = true;
+                auto result = fixture.StateReply(call);
+                result.View->Piles["b"] = EPileState::Synchronized;
+                call.Completed(std::move(result));
+            }
+        }
+        fixture.ReplyReads();
+        fixture.Tick();
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::ViewConflict);
+        fixture.Run(3);
+        UNIT_ASSERT(fixture.Store->Read()->Selection.View);
+        fixture.FailedMethods.clear();
+        fixture.Step();
+        // Recovery has the same roles as before the conflict. The boundary at
+        // 125 must still exclude the cached send at 100 from this new window.
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Endpoint(B).SelfCheck->SentAt, TMonotonic::Seconds(130));
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Unknown);
+        fixture.Run(29);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Unknown);
+        fixture.Run(1);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Healthy);
+    }
+
+    Y_UNIT_TEST(InitialViewDelayPreservesStartupHealthSendTimes) {
+        THarness fixture(EMode::Manual, {}, 1,
+            "{round_interval_seconds: 1, confirm_seconds: 1, bsc_warmup_seconds: 30}");
+        fixture.Failed.clear();
+        for (const auto& endpoint : {A, B}) {
+            fixture.Held.insert({endpoint, EYdbMethod::PlainState});
+            fixture.Held.insert({endpoint, EYdbMethod::ConnectivityState});
+        }
+        fixture.ReplyReads();
+        fixture.Tick();
+        fixture.FailedMethods.insert({A, EYdbMethod::SelfCheck});
+        fixture.FailedMethods.insert({B, EYdbMethod::SelfCheck});
+        fixture.Run(12);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Blocker == EBlockerReason::NoView);
+        fixture.Held.clear();
+        fixture.Run(17);
+        UNIT_ASSERT(fixture.Store->Read()->Selection.View);
+        fixture.FailedMethods.clear();
+        fixture.Step();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Runtime.GetCurrentMonotonicTime(), TMonotonic::Seconds(130));
+        // There was no previously established role: genuine startup still uses
+        // the initial send at 100 when its first view arrives at 113.
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("b").Verdict.Verdict == EPileVerdict::Healthy);
+    }
+
+    Y_UNIT_TEST(StopAcknowledgesBeforeLateCompletionsAndPreventsNewCalls) {
+        THarness fixture;
+        const auto count = fixture.Clients->States.size() + fixture.Clients->Health.size();
+        fixture.Runtime.SendAsync(new NActors::IEventHandle(fixture.Actor, fixture.Edge, new TEvSkipper::TEvStop()));
+        fixture.Runtime.GrabEdgeEvent<TEvSkipper::TEvStopped>(fixture.Edge);
+        fixture.ReplyReads();
+        fixture.Run(5);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->States.size() + fixture.Clients->Health.size(), count);
+        UNIT_ASSERT(fixture.Clients->Updates.empty());
+    }
+
+    // S14 (B1): slow SelfCheck replies do not starve the BSC warm-up.
+    Y_UNIT_TEST(SlowSelfCheckRepliesDoNotStarveTheWarmup) {
+        THarness fixture(EMode::Manual, {}, 1, "{round_interval_seconds: 10, confirm_seconds: 10, bsc_warmup_seconds: 30}");
+        fixture.Failed.clear();
+        fixture.SelfCheckDelay = TDuration::Seconds(12);
+        fixture.Run(50);
+        UNIT_ASSERT(fixture.Store->Read()->Piles.at("a").Verdict.Verdict == EPileVerdict::Healthy);
+        for (size_t i = 0; i < 60; ++i) {
+            fixture.Step();
+            UNIT_ASSERT(fixture.Store->Read()->Piles.at("a").Verdict.Verdict == EPileVerdict::Healthy);
+        }
+    }
+
+    // A rejection stops Auto locally while preserving the durable same-G overlay.
+    Y_UNIT_TEST(RejectedOutcomePreservesThePendingLockAndStopsAutoUntilNextGeneration) {
+        THarness fixture;
+        fixture.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        fixture.Outcome(0, NYdb::EStatus::BAD_REQUEST);
+        UNIT_ASSERT(fixture.File->GetState().PendingMutation);
+        fixture.Run(40);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        const auto decision = fixture.Store->Read()->Decision;
+        UNIT_ASSERT(decision.Kind == EDecisionKind::Ready);
+        UNIT_ASSERT(decision.Reason.Contains("REJECTED_BY_SERVER"));
+        UNIT_ASSERT(!decision.CliCommand.empty());
+        // The next generation is a new decision and is sent.
+        fixture.Generation = 8;
+        fixture.Run(25);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.back().Plan.ExpectedGeneration, 8);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TSkipperObservability) {
+    Y_UNIT_TEST(DecisionChangesAreLogged) {
+        THarness fixture(EMode::Manual);
+        fixture.Run(22);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Kind == EDecisionKind::Ready);
+        const auto decisions = fixture.Logs("decision");
+        UNIT_ASSERT(!decisions.empty());
+        UNIT_ASSERT_VALUES_EQUAL(decisions.back()["kind"].GetString(), "READY");
+    }
+
+    Y_UNIT_TEST(DecisionIsLoggedOncePerChange) {
+        THarness fixture(EMode::Manual);
+        fixture.Run(22);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Kind == EDecisionKind::Ready);
+        const auto count = fixture.Logs("decision").size();
+        fixture.Run(3);
+        UNIT_ASSERT(fixture.Store->Read()->Decision.Kind == EDecisionKind::Ready);
+        const auto decisions = fixture.Logs("decision");
+        UNIT_ASSERT_VALUES_EQUAL(decisions.size(), count);
+        size_t ready = 0;
+        for (const auto& record : decisions) {
+            ready += record["kind"].GetString() == "READY";
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ready, 1);
+    }
+
+    Y_UNIT_TEST(ViewChangesLogInitialOnceAndWarnWhenUnexplained) {
+        THarness fixture(EMode::Manual);
+        fixture.Failed.clear();
+        fixture.Step();
+        auto views = fixture.Logs("view_change");
+        UNIT_ASSERT_VALUES_EQUAL(views.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(views[0]["priority"].GetString(), "INFO");
+        UNIT_ASSERT_VALUES_EQUAL(views[0]["explanation"].GetString(), "Initial");
+        UNIT_ASSERT_VALUES_EQUAL(Json(views[0]["states"].GetString())["b"].GetString(), "SYNCHRONIZED");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Counters.UnexplainedStateChanges, 0);
+        fixture.Piles["b"] = EPileState::Disconnected;
+        ++fixture.Generation;
+        fixture.Step();
+        fixture.Run(2);
+        views = fixture.Logs("view_change");
+        UNIT_ASSERT_VALUES_EQUAL(views.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(views[1]["priority"].GetString(), "WARN");
+        UNIT_ASSERT_VALUES_EQUAL(views[1]["explanation"].GetString(), "Unexplained");
+        UNIT_ASSERT_VALUES_EQUAL(Json(views[1]["states"].GetString())["b"].GetString(), "DISCONNECTED");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Counters.UnexplainedStateChanges, 1);
+        // A generation jump with unchanged piles is explained.
+        fixture.Generation += 2;
+        fixture.Step();
+        views = fixture.Logs("view_change");
+        UNIT_ASSERT_VALUES_EQUAL(views.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(views.back()["explanation"].GetString(), "Explained");
+        UNIT_ASSERT_VALUES_EQUAL(views.back()["priority"].GetString(), "INFO");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Counters.UnexplainedStateChanges, 1);
+    }
+
+    Y_UNIT_TEST(OwnSuccessfulMutationIsExplained) {
+        THarness fixture;
+        fixture.Run(22);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Clients->Updates.size(), 1);
+        fixture.Outcome(0, NYdb::EStatus::SUCCESS);
+        UNIT_ASSERT(!fixture.File->GetState().PendingMutation);
+        fixture.Generation = 8;
+        fixture.Piles["b"] = EPileState::Disconnected;
+        fixture.Step();
+        const auto views = fixture.Logs("view_change");
+        UNIT_ASSERT_VALUES_EQUAL(views.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(views.back()["explanation"].GetString(), "Explained");
+        UNIT_ASSERT_VALUES_EQUAL(views.back()["priority"].GetString(), "INFO");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Store->Read()->Counters.UnexplainedStateChanges, 0);
+    }
+}
+
+} // namespace NBridgeSkipper

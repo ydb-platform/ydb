@@ -38,4 +38,9 @@ enum class ENullPosition {
     Last,
 };
 
+enum class ESnapshotRead {
+    Projection,
+    NullCount,
+};
+
 } // namespace NKikimr::NKqp::NSetNotNull

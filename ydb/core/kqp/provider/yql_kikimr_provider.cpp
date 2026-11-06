@@ -850,6 +850,9 @@ void TableDescriptionToTableInfoImpl(const TKikimrTableDescription& desc, TYdbOp
     info.MutableTableId()->SetOwnerId(desc.Metadata->PathId.OwnerId());
     info.MutableTableId()->SetTableId(desc.Metadata->PathId.TableId());
     info.SetSchemaVersion(desc.Metadata->SchemaVersion);
+    if (desc.Metadata->NotNullSince) {
+        desc.Metadata->NotNullSince.ToProto(info.MutableNotNullSince());
+    }
 
     if (desc.Metadata->Indexes) {
         info.SetHasIndexTables(true);

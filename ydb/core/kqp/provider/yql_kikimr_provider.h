@@ -190,6 +190,7 @@ public:
     TKikimrTableMetadataPtr Metadata = nullptr;
     const TStructExprType* SchemeNode = nullptr;
     TMaybe<TString> RelativePath;
+    bool HasReadIntent = false;
 
     bool Load(TExprContext& ctx, bool withVirtualColumns = false);
     void ToYson(NYson::TYsonWriter& writer) const;

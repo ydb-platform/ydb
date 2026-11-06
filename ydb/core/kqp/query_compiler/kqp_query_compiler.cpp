@@ -780,6 +780,15 @@ public:
 
         bool enableDiscardSelect = Config->GetEnableDiscardSelect();
 
+        // A predicate folded using NOT NULL can eliminate the entire scan. Its logical
+        // table must still participate in snapshot and cached-plan validation.
+        TSet<TString> notNullReads;
+        for (const auto& [key, table] : TablesData->GetTables()) {
+            if (key.first == Cluster && table.HasReadIntent && table.Metadata && table.Metadata->NotNullSince) {
+                notNullReads.insert(key.second);
+            }
+        }
+
         TDynBitMap resultDiscardFlags;
         ui32 resultCount = 0;
         for (const auto& queryBlock : dataQueryBlocks) {
@@ -810,7 +819,13 @@ public:
 
                 const auto& desc = TablesData->GetTable(Cluster, tableName);
                 TableDescriptionToTableInfo(desc, operation, *queryProto.MutableTableInfos());
+                notNullReads.erase(tableName);
             }
+        }
+
+        for (const auto& tableName : notNullReads) {
+            const auto& desc = TablesData->GetTable(Cluster, tableName);
+            TableDescriptionToTableInfo(desc, TYdbOperation::Select, *queryProto.MutableTableInfos());
         }
 
         THashSet<std::pair<ui32, ui32>> shouldCreateChannel;

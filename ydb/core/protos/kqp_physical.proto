@@ -5,6 +5,7 @@ package NKqpProto;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "google/protobuf/any.proto";
+import "ydb/core/protos/base.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 
 import "ydb/core/protos/kqp_tablemetadata.proto";
@@ -777,6 +778,7 @@ message TKqpTableInfo {
     string TableName = 2;
     uint64 SchemaVersion = 3;
     bool HasIndexTables = 4;
+    NKikimrProto.TRowVersion NotNullSince = 5;
 }
 
 message TKqpTableOp {

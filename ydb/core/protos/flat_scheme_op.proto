@@ -1,3 +1,4 @@
+import "ydb/core/protos/base.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/core/protos/blockstore_config.proto";
@@ -427,6 +428,9 @@ message TTableDescription {
     // Actual number of table partitions (shards), always filled in describe
     // results, so clients don't need to request the TablePartitions list.
     optional uint64 PartitionCount = 55;
+
+    // First snapshot compatible with the most recent nullable to NOT NULL transition.
+    optional NKikimrProto.TRowVersion NotNullSince = 56;
 }
 
 message TCompressionOptions {
@@ -1067,6 +1071,9 @@ message TColumnTableDescription {
     optional bool IsBackup = 17;
 
     repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 18;
+
+    // First snapshot compatible with the most recent nullable to NOT NULL transition.
+    optional NKikimrProto.TRowVersion NotNullSince = 19;
 }
 
 message TAlterColumnTable {

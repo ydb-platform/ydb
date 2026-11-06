@@ -716,7 +716,8 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
                 NIceDb::TUpdate<Schema::MigratedTables::AlterVersion>(tableDescr.GetAlterVersion()),
                 //NIceDb::TUpdate<Schema::MigratedTables::AlterTable>(),
                 //NIceDb::TUpdate<Schema::MigratedTables::AlterTableFull>(),
-                NIceDb::TUpdate<Schema::MigratedTables::PartitioningVersion>(tableDescr.GetPartitioningVersion()));
+                NIceDb::TUpdate<Schema::MigratedTables::PartitioningVersion>(tableDescr.GetPartitioningVersion()),
+                NIceDb::TUpdate<Schema::MigratedTables::NotNullSince>(tableDescr.GetNotNullSince().SerializeAsString()));
 
             for (const NKikimrScheme::TMigrateColumn& colDescr: tableDescr.GetColumns()) {
                 db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, colDescr.GetId()).Update(

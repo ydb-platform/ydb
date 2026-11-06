@@ -549,6 +549,8 @@ public:
             auto tableInfo = context.SS->ColumnTables.BuildNew(
                 dstPath.Base()->PathId,
                 std::make_shared<TColumnTableInfo>(*srcTable));
+            // Reads of this path always use its fixed copy snapshot.
+            tableInfo->Description.ClearNotNullSince();
             tableInfo->AlterVersion += 1;
             tableInfo->IsReadOnly = true;
             tableInfo->Stats = {};

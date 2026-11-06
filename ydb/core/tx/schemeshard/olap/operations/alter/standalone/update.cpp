@@ -1,6 +1,7 @@
 #include "update.h"
 #include <ydb/core/tx/schemeshard/olap/operations/alter/abstract/converter.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 
@@ -47,6 +48,14 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
         }
     }
 
+    for (const auto& column : alterCS.GetAlterSchema().GetAlterColumns()) {
+        const auto* previous = originalSchema.GetColumns().GetByName(column.GetName());
+        if (column.GetNotNull() && previous && !previous->IsNotNull()) {
+            SetsNotNull = true;
+            break;
+        }
+    }
+
     TOlapMultiColumnStatisticsDescription targetMultiColumnStatistics = originalTable.GetTableMultiColumnStatisticsVerified();
     if (AlterMultiColumnStatistics) {
         if (!targetMultiColumnStatistics.ApplyUpdate(targetSchema, *AlterMultiColumnStatistics, collector)) {
@@ -89,6 +98,19 @@ NKikimr::TConclusionStatus TStandaloneSchemaUpdate::DoInitializeImpl(const TUpda
 
     auto targetInfo = std::make_shared<TColumnTableInfo>(originalTable.GetTableInfoVerified().AlterVersion + 1, std::move(description), std::move(saSharding), alterCS);
     TargetStandalone = std::make_shared<TStandaloneTable>(context.GetOriginalEntity().GetPathId(), targetInfo);
+
+    return TConclusionStatus::Success();
+}
+
+TConclusionStatus TStandaloneSchemaUpdate::DoFinishImpl(const TUpdateFinishContext& context) {
+    if (SetsNotNull) {
+        const auto& snapshot = context.GetSnapshotVerified();
+        const auto pathId = context.GetObjectPath()->Base()->PathId;
+        const auto table = context.GetSSOperationContext()->SS->ColumnTables.GetVerifiedPtr(pathId);
+        auto* since = table->AlterData->Description.MutableNotNullSince();
+        since->SetStep(snapshot.GetPlanStep());
+        since->SetTxId(snapshot.GetTxId());
+    }
 
     return TConclusionStatus::Success();
 }

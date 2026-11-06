@@ -82,7 +82,7 @@ private:
             return TStatus::Error;
         }
 
-        return HandleKey(cluster, key, sysViewRewritten);
+        return HandleKey(cluster, key, sysViewRewritten, node.Ref());
     }
 
     TStatus HandleRead(TExprBase node, TExprContext& ctx) override {
@@ -105,7 +105,7 @@ private:
             return TStatus::Error;
         }
 
-        return HandleKey(cluster, key, sysViewRewritten);
+        return HandleKey(cluster, key, sysViewRewritten, node.Ref());
     }
 
     TStatus HandleLength(TExprBase node, TExprContext& ctx) override {
@@ -121,7 +121,7 @@ private:
     }
 
 private:
-    TStatus HandleKey(const TStringBuf& cluster, const TKikimrKey& key, bool sysViewRewritten = false) {
+    TStatus HandleKey(const TStringBuf& cluster, const TKikimrKey& key, bool sysViewRewritten, const TExprNode& read) {
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Database:
                 return TStatus::Ok;
@@ -133,6 +133,8 @@ private:
 
                 if (key.GetKeyType() == TKikimrKey::Type::TableScheme) {
                     table.RequireStats();
+                } else if (!IsShowCreate(read)) {
+                    table.HasReadIntent = true;
                 }
 
                 return TStatus::Ok;

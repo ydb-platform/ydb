@@ -277,6 +277,7 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
     tableMeta->PathId = NYql::TKikimrPathId(entry.TableId.PathId.OwnerId, entry.TableId.PathId.LocalPathId);
     tableMeta->SysView = entry.TableId.SysViewInfo;
     tableMeta->SchemaVersion = entry.TableId.SchemaVersion;
+    tableMeta->NotNullSince = entry.NotNullSince;
 
     if (!tableMeta->SysView.empty()) {
         if (entry.Kind == EKind::KindColumnTable) {

@@ -350,6 +350,82 @@ Y_UNIT_TEST_SUITE(KqpOlapSetNotNull) {
         f.CheckRows(R"([[1u;"one"];[2u;"two"]])");
     }
 
+    Y_UNIT_TEST(SnapshotReadAfterSetNotNull, ETableKind, ESnapshotRead) {
+        const auto tableKind = Arg<0>();
+        const bool project = Arg<1>() == ESnapshotRead::Projection;
+        const TString query = project ? "SELECT k, v FROM `/Root/t` ORDER BY k;" : "SELECT COUNT(*) FROM `/Root/t` WHERE v IS NULL;";
+        auto controller = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        controller->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        TFixture f(tableKind, true, 1);
+        TStringBuilder anchor;
+        anchor << "CREATE TABLE `/Root/anchor` (k Uint64 NOT NULL, PRIMARY KEY(k))";
+        if (tableKind == ETableKind::Column) {
+            anchor << " PARTITION BY HASH(k) WITH (STORE=COLUMN, PARTITION_COUNT=1)";
+        }
+
+        f.Success(anchor, true);
+        f.Success("UPSERT INTO `/Root/anchor` (k) VALUES (1u);");
+        f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, NULL), (2u, 'keep'u);");
+
+        // Pin the data snapshot without resolving the schema of the target table.
+        const auto beginSnapshot = [&] {
+            return f.Kikimr.RunCall([&] {
+                auto session = f.Client.GetSession().GetValueSync().GetSession();
+                auto result = session.ExecuteQuery("SELECT k FROM `/Root/anchor`;",
+                    NQuery::TTxControl::BeginTx(NQuery::TTxSettings::SnapshotRO())).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                CompareYson("[[1u]]", FormatResultSetYson(result.GetResultSet(0)));
+                UNIT_ASSERT(result.GetTransaction() && result.GetTransaction()->IsActive());
+                return *result.GetTransaction();
+            });
+        };
+
+        const auto readSnapshot = [&](const NQuery::TTransaction& tx) {
+            return f.Kikimr.RunCall([&] {
+                return tx.GetSession().ExecuteQuery(query, NQuery::TTxControl::Tx(tx).CommitTx(),
+                    NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Basic)
+                        .RetrySettings(NRetry::TRetryOperationSettings().MaxRetries(0))).GetValueSync();
+            });
+        };
+
+        auto controlTx = beginSnapshot();
+        auto oldTx = beginSnapshot();
+        f.Success("DELETE FROM `/Root/t` WHERE k = 1u;");
+        auto control = readSnapshot(controlTx);
+        UNIT_ASSERT_C(control.IsSuccess(), control.GetIssues().ToString());
+        CompareYson(project ? R"([[1u;#];[2u;["keep"]]])" : "[[1u]]", FormatResultSetYson(control.GetResultSet(0)));
+
+        f.Success(SetNotNull, true);
+        std::optional<NQuery::TTransaction> afterSet;
+        if (project) {
+            afterSet = beginSnapshot();
+            auto& server = f.Kikimr.GetTestServer();
+            auto& runtime = *server.GetRuntime();
+            const auto schemeShard = Tests::ChangeStateStorage(Tests::SchemeRoot, server.GetSettings().Domain);
+            RebootTablet(runtime, schemeShard, runtime.AllocateEdgeActor());
+            f.Success("ALTER TABLE `/Root/t` ADD COLUMN extra Uint64;", true);
+        }
+
+        // Warm the query cache with a plan compiled against the new schema.
+        auto fresh = f.Execute(query);
+        UNIT_ASSERT_C(fresh.IsSuccess(), fresh.GetIssues().ToString());
+        CompareYson(project ? R"([[2u;"keep"]])" : "[[0u]]", FormatResultSetYson(fresh.GetResultSet(0)));
+
+        if (afterSet) {
+            auto compatible = readSnapshot(*afterSet);
+            UNIT_ASSERT_C(compatible.IsSuccess(), compatible.GetIssues().ToString());
+            CompareYson(R"([[2u;"keep"]])", FormatResultSetYson(compatible.GetResultSet(0)));
+            UNIT_ASSERT(compatible.GetStats() && compatible.GetStats()->GetCompilation());
+            UNIT_ASSERT(compatible.GetStats()->GetCompilation()->IsFromCache());
+        }
+
+        auto historical = readSnapshot(oldTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(historical.GetStatus(), EStatus::ABORTED, historical.GetIssues().ToString());
+        UNIT_ASSERT_C(HasIssue(historical.GetIssues(), NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, [](const auto& issue) {
+            return TStringBuf(issue.GetMessage()).Contains("SET NOT NULL");
+        }), historical.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(ColumnAddedAfterData, ETableKind) {
         TFixture f(Arg<0>());
         f.Success("UPSERT INTO `/Root/t` (k, v) VALUES (1u, 'one'u);");

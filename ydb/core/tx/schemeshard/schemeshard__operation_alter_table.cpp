@@ -460,6 +460,16 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+        for (const auto& [id, column] : table->AlterData->Columns) {
+            const auto* previous = table->Columns.FindPtr(id);
+            if (column.NotNull && previous && !previous->NotNull) {
+                auto* since = table->TableDescription.MutableNotNullSince();
+                since->SetStep(ev->Get()->StepId);
+                since->SetTxId(ev->Get()->TxId);
+                break;
+            }
+        }
+
         table->FinishAlter();
 
         path->SetAsyncReplica(table->IsAsyncReplica());

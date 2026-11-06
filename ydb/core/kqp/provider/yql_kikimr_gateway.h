@@ -17,6 +17,7 @@
 #include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 
+#include <ydb/core/base/row_version.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
@@ -1027,6 +1028,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TKikimrPathId PathId;
     TString SysView;
     ui64 SchemaVersion = 0;
+    NKikimr::TRowVersion NotNullSince = NKikimr::TRowVersion::Min();
     THashMap<TString, TString> Attributes;
     EKikimrTableKind Kind = EKikimrTableKind::Unspecified;
     ETableType TableType = ETableType::Table;
@@ -1109,6 +1111,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
         , PathId(&message->GetPathId())
         , SysView(message->GetSysView())
         , SchemaVersion(message->GetSchemaVersion())
+        , NotNullSince(NKikimr::TRowVersion::FromProto(message->GetNotNullSince()))
         , Kind(static_cast<EKikimrTableKind>(message->GetKind()))
         , RecordsCount(message->GetRecordsCount())
         , DataSize(message->GetDataSize())
@@ -1195,6 +1198,10 @@ struct TKikimrTableMetadata : public TThrRefBase {
         message->SetSysView(SysView);
         PathId.ToMessage(message->MutablePathId());
         message->SetSchemaVersion(SchemaVersion);
+        if (NotNullSince) {
+            NotNullSince.ToProto(message->MutableNotNullSince());
+        }
+
         message->SetKind(static_cast<ui32>(Kind));
         message->SetStatsLoaded(StatsLoaded);
         message->SetRecordsCount(RecordsCount);

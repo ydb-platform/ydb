@@ -15,7 +15,9 @@ private:
     std::optional<TOlapTTLUpdate> AlterTTL;
     std::optional<TOlapMultiColumnStatisticsUpdate> AlterMultiColumnStatistics;
     std::shared_ptr<TStandaloneTable> TargetStandalone;
+    bool SetsNotNull = false;
     virtual TConclusionStatus DoInitializeImpl(const TUpdateInitializationContext& context) override;
+    virtual TConclusionStatus DoFinishImpl(const TUpdateFinishContext& context) override;
 
     virtual std::shared_ptr<TColumnTableInfo> GetTargetTableInfo() const override {
         return TargetStandalone->GetTableInfoPtrVerified();

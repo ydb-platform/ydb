@@ -65,6 +65,7 @@ jobs:
           CALLER_WORKFLOW: ${{ github.workflow }}
           SOURCE_EVENT_NAME: ${{ github.event_name }}
           SOURCE_RUN_ID: ${{ github.run_id }}
+          PLATFORM_RUN_ATTEMPT: ${{ github.run_attempt }}
           PULL_NUMBER: ${{ github.event.pull_request.number || github.event.number || '' }}
           # Seed job.build_* when remote JSON omits them.
           DEFAULT_BUILD_TARGET: ${{ inputs.test_targets }}

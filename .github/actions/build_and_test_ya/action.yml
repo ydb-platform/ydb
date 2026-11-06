@@ -140,6 +140,7 @@ runs:
       with:
         s3_bucket: ${{ fromJSON( inputs.vars ).AWS_BUCKET }}
         s3_endpoint: ${{ fromJSON( inputs.vars ).AWS_ENDPOINT }}
+        s3_region: ${{ fromJSON( inputs.vars ).AWS_REGION || 'ru-central1' }}
         s3_key_id: ${{ fromJSON( inputs.secs ).AWS_KEY_ID }}
         s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
         folder_prefix: ${{ env.folder_prefix }}

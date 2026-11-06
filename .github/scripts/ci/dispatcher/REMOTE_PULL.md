@@ -28,6 +28,8 @@ The remote executor does **not** post GitHub commit statuses (`build_*` /
 Checks / PR attribution stay on the platform (waiter + ingest).
 
 `platform_run_id` = caller `github.run_id`.
+`platform_run_attempt` = caller `github.run_attempt` (in ticket `config.inputs` and
+host claim) so a platform re-run does not attach to a previous attempt's claim.
 
 Layout under `.github/scripts/ci/`:
 

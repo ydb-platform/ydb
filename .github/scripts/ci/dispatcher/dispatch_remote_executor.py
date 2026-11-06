@@ -165,15 +165,33 @@ def utc_now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def platform_run_attempt(cfg=None):
+    """Caller run attempt — distinguishes re-runs that keep the same run_id."""
+    if cfg and isinstance(cfg.get("inputs"), dict):
+        from_cfg = str(cfg["inputs"].get("platform_run_attempt") or "").strip()
+        if from_cfg:
+            return from_cfg
+    return (
+        env_opt("PLATFORM_RUN_ATTEMPT")
+        or env_opt("GITHUB_RUN_ATTEMPT")
+        or "1"
+    )
+
+
 def build_ticket(cfg):
     run_id = env("PLATFORM_RUN_ID")
+    attempt = platform_run_attempt(cfg)
     repo = env_opt("PLATFORM_REPOSITORY") or env_opt("GITHUB_REPOSITORY")
     workflow = env_opt("PLATFORM_WORKFLOW") or env_opt("GITHUB_WORKFLOW") or "unknown"
     run_url = env_opt("PLATFORM_RUN_URL") or f"https://github.com/{repo}/actions/runs/{run_id}"
+    # Mirror attempt onto config.inputs for the host VM / executor claim.
+    if isinstance(cfg.get("inputs"), dict):
+        cfg["inputs"].setdefault("platform_run_attempt", attempt)
     return {
         "version": 1,
         "kind": "remote-ticket",
         "platform_run_id": run_id,
+        "platform_run_attempt": attempt,
         "platform_repository": repo,
         "platform_workflow": workflow,
         "platform_run_url": run_url,
@@ -204,14 +222,25 @@ def cmd_enqueue():
 
 def wait_for_claim(cfg):
     platform_run_id = env("PLATFORM_RUN_ID")
+    want_attempt = platform_run_attempt(cfg)
     endpoint, bucket = claim_s3(cfg)
     url = public_url(endpoint, bucket, f"remote-claims/{platform_run_id}.json")
-    print(f"Waiting for claim at {url} ...")
+    print(f"Waiting for claim at {url} (attempt={want_attempt}) ...")
     for i in range(2400):
         body = http_get(url)
         if body:
             claim = json.loads(body)
             status = str(claim.get("status") or "").strip().lower()
+            claim_attempt = str(claim.get("platform_run_attempt") or "").strip()
+            # Ignore leftover claims from a previous platform run attempt.
+            if claim_attempt and claim_attempt != want_attempt:
+                if i % 10 == 0:
+                    print(
+                        f"{time.strftime('%H:%M:%S', time.gmtime())} "
+                        f"stale claim attempt={claim_attempt} (want {want_attempt}); waiting..."
+                    )
+                time.sleep(30)
+                continue
             if status == "failed":
                 die(f"remote claim failed: {claim.get('error') or claim}")
             run_id = str(claim.get("executor_run_id") or "").strip()

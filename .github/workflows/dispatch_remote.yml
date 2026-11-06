@@ -40,6 +40,7 @@ jobs:
           CONFIG_JSON: ${{ inputs.config }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PLATFORM_RUN_ID: ${{ github.run_id }}
+          PLATFORM_RUN_ATTEMPT: ${{ github.run_attempt }}
           PLATFORM_REPOSITORY: ${{ github.repository }}
           PLATFORM_WORKFLOW: ${{ github.workflow }}
           PLATFORM_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -79,6 +80,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           CONFIG_JSON: ${{ inputs.config }}
           PLATFORM_RUN_ID: ${{ github.run_id }}
+          PLATFORM_RUN_ATTEMPT: ${{ github.run_attempt }}
           REPO: ${{ fromJSON(inputs.config).repository }}
           WORKFLOW_NAME: ${{ fromJSON(inputs.config).workflow_name }}
           AWS_ENDPOINT: ${{ fromJSON(inputs.config).summary_s3_endpoint || fromJSON(inputs.config).claim_s3_endpoint }}

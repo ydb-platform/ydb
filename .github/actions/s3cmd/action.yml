@@ -12,7 +12,11 @@ inputs:
     description: "s3 bucket"
   s3_endpoint:
     required: true
-    description: "s3 endpoint"
+    description: "s3 endpoint (https://host); used for both s3cmd host_base and public URL prefixes"
+  s3_region:
+    required: false
+    description: "S3 bucket region (bucket_location)"
+    default: "ru-central1"
   folder_prefix:
     required: false
     description: "folder prefix"
@@ -24,36 +28,46 @@ runs:
   steps:
     - name: configure s3cmd
       shell: bash
+      env:
+        S3_KEY_ID: ${{ inputs.s3_key_id }}
+        S3_KEY_SECRET: ${{ inputs.s3_key_secret }}
+        S3_ENDPOINT: ${{ inputs.s3_endpoint }}
+        S3_REGION: ${{ inputs.s3_region }}
       run: |
+        umask 077
         export S3CMD_CONFIG=$(mktemp)
-        echo "S3CMD_CONFIG=$S3CMD_CONFIG" >> $GITHUB_ENV
-        cat <<EOF > $S3CMD_CONFIG
+        echo "S3CMD_CONFIG=$S3CMD_CONFIG" >> "$GITHUB_ENV"
+        host=${S3_ENDPOINT#https://}
+        host=${host#http://}
+        host=${host%/}
+        if [ -z "$host" ]; then
+          echo "::error::s3_endpoint is empty or invalid: ${S3_ENDPOINT}"
+          exit 1
+        fi
+        cat <<EOF > "$S3CMD_CONFIG"
         [default]
-        access_key = ${s3_key_id}
-        secret_key = ${s3_secret_access_key}
-        bucket_location = ru-central1
-        host_base = storage.yandexcloud.net
-        host_bucket = %(bucket)s.storage.yandexcloud.net
+        access_key = ${S3_KEY_ID}
+        secret_key = ${S3_KEY_SECRET}
+        bucket_location = ${S3_REGION}
+        host_base = ${host}
+        host_bucket = %(bucket)s.${host}
         EOF
 
-        # specify mime type for correct content-type in s3cmd sync 
+        # specify mime type for correct content-type in s3cmd sync
         # we want to .out/.err files treat as text
         MIME_TYPES_LINE="text/plain                                      out err log"
         MIME_TYPES_FILE='/etc/mime.types'
         # add if not exists
         sudo bash -c "grep -qF -- '$MIME_TYPES_LINE' '$MIME_TYPES_FILE' || echo '$MIME_TYPES_LINE' >> '$MIME_TYPES_FILE'"
-      env:
-        s3_key_id: ${{ inputs.s3_key_id }}
-        s3_secret_access_key: ${{ inputs.s3_key_secret }}
 
     - name: export s3 path variables
       shell: bash
       if: inputs.build_preset
       run: |
         folder="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
-        
+
         BUILD_PRESET="${{ inputs.build_preset }}"
-        
+
         case "$BUILD_PRESET" in
           relwithdebinfo)
             ;;

@@ -201,10 +201,18 @@ def build_config() -> dict[str, Any]:
     if not _as_str(cfg.get("claim_s3_bucket")).strip():
         cfg["claim_s3_bucket"] = cfg.get("summary_s3_bucket") or ""
 
+    # Attempt identity so platform re-runs do not attach to a previous claim.
+    platform_run_attempt = (
+        (os.environ.get("PLATFORM_RUN_ATTEMPT") or "").strip()
+        or (os.environ.get("GITHUB_RUN_ATTEMPT") or "").strip()
+        or "1"
+    )
+
     # Only these fields are passed to the host executor (from Actions artifact
     # via VM). Host launch context is never taken from platform S3.
     cfg["inputs"] = {
         "platform_run_id": source_run,
+        "platform_run_attempt": platform_run_attempt,
         "platform_repository": cfg["platform_repository"],
         "code_ref": code_ref,
         "job_inputs": job_inputs,

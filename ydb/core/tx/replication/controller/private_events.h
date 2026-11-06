@@ -32,7 +32,6 @@ struct TEvPrivate {
         EvResolveResourceIdResult,
         EvAlterDstResult,
         EvRemoveWorker,
-        EvCompleteWorkerSet,
         EvDescribeTargetsResult,
         EvRequestCreateStream,
         EvAllowCreateStream,
@@ -262,14 +261,6 @@ struct TEvPrivate {
         const TWorkerId Id;
 
         explicit TEvRemoveWorker(ui64 rid, ui64 tid, ui64 wid);
-        TString ToString() const override;
-    };
-
-    struct TEvCompleteWorkerSet: public TEventLocal<TEvCompleteWorkerSet, EvCompleteWorkerSet> {
-        ui64 ReplicationId;
-        ui64 TargetId;
-
-        TEvCompleteWorkerSet(ui64 rid, ui64 tid);
         TString ToString() const override;
     };
 

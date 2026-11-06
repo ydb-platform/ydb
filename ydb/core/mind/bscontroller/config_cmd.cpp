@@ -18,6 +18,7 @@ namespace NKikimr::NBsController {
             std::optional<TConfigState> State;
             bool Success = true;
             bool RollbackSuccess = false;
+            bool GroupLayoutPolicyChanged = false;
             TString Error;
 
         public:
@@ -183,6 +184,7 @@ namespace NKikimr::NBsController {
                             Self->Send(Self->SelfHealId, ev.release());
                         }
                         for (bool value : settings.GetAllowMultipleRealmsOccupation()) {
+                            GroupLayoutPolicyChanged |= Self->AllowMultipleRealmsOccupation != value;
                             Self->AllowMultipleRealmsOccupation = value;
                             db.Table<T>().Key(true).Update<T::AllowMultipleRealmsOccupation>(Self->AllowMultipleRealmsOccupation);
                             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
@@ -202,6 +204,11 @@ namespace NKikimr::NBsController {
                             auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
                             ev->TryToRelocateBrokenDisksLocallyFirst = Self->TryToRelocateBrokenDisksLocallyFirst;
                             Self->Send(Self->SelfHealId, ev.release());
+                        }
+                        for (ui64 value : settings.GetBridgeSyncTotalRateBytesPerSecond()) {
+                            Self->BridgeSyncTotalRate = value;
+                            db.Table<T>().Key(true).Update<T::BridgeSyncTotalRate>(Self->BridgeSyncTotalRate);
+                            Self->BridgeSyncNodeRatesDirty = true;
                         }
                         return;
                     }
@@ -328,6 +335,7 @@ namespace NKikimr::NBsController {
                     .SuppressDegradedGroupsChecking = Cmd.GetIgnoreDegradedGroupsChecks(),
                     .SuppressDisintegratedGroupsChecking = Cmd.GetIgnoreDisintegratedGroupsChecks(),
                     .AllowDegradedWithSinglePhantomsOnly = SelfHeal,
+                    .TreatPhantomsOnlyVDisksAsWorking = Cmd.GetTreatPhantomsOnlyVDisksAsWorking(),
                 };
                 Success = Success && Self->ValidateConfigUpdates(*State, validationParameters, &Error, Response);
 
@@ -461,6 +469,9 @@ namespace NKikimr::NBsController {
             }
 
             void Complete(const TActorContext&) override {
+                if (GroupLayoutPolicyChanged) {
+                    Self->UpdateGroupLayoutStatus();
+                }
                 if (auto state = std::exchange(State, std::nullopt)) {
                     ui64 configTxSeqNo = state->ApplyConfigUpdates();
                     YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "Transaction complete",

@@ -114,7 +114,9 @@ struct TPhysicalOpProps {
         Analysis.Clear();
     }
 
-    std::optional<int> StageId;
+    std::optional<TStageId> StageId;
+    // Physical boundary bindings, indexed by operator child.
+    TVector<std::optional<TStageEdgeId>> StageInputEdges;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
 
@@ -141,6 +143,7 @@ struct TPhysicalOpProps {
 private:
     void CopyPhysicalFrom(const TPhysicalOpProps& other) {
         StageId = other.StageId;
+        StageInputEdges = other.StageInputEdges;
         Algorithm = other.Algorithm;
         OrderEnforcer = other.OrderEnforcer;
         Metadata = other.Metadata;
@@ -1200,6 +1203,8 @@ public:
     TExpression GetLimitCond() const { return LimitCond; }
     bool HasOffset() const { return OffsetCond.has_value(); }
     std::optional<TExpression> GetOffsetCond() const { return OffsetCond; }
+    // The number of input rows this limit consumes: the rows it returns and the rows its offset skips.
+    TExpression GetInputRowsLimit(TExprContext& ctx, TPlanProps& props) const;
 
     // Make private.
     TExpression LimitCond;

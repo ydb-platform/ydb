@@ -38,6 +38,9 @@ namespace NKikimr::NBsController {
         if (config.HasDatabaseSpaceUnblockColor()) {
             result.AddDatabaseSpaceUnblockColor(config.GetDatabaseSpaceUnblockColor());
         }
+        if (config.HasBridgeSyncTotalRateBytesPerSecond()) {
+            result.AddBridgeSyncTotalRateBytesPerSecond(config.GetBridgeSyncTotalRateBytesPerSecond());
+        }
         if (config.HasEnableGroupLayoutSanitizer()) {
             result.AddEnableGroupLayoutSanitizer(config.GetEnableGroupLayoutSanitizer());
         }

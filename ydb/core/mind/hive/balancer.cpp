@@ -561,14 +561,16 @@ public:
     }
 };
 
-void THive::StartHiveBalancer(TBalancerSettings&& settings) {
+bool THive::StartHiveBalancer(TBalancerSettings&& settings) {
     if (IsItPossibleToStartBalancer(settings.Type)) {
         LastBalancerTrigger = settings.Type;
         LastBalancerSuppression.reset();
         auto* balancer = new THiveBalancer(this, std::move(settings));
         SubActors.emplace_back(balancer);
         RegisterWithSameMailbox(balancer);
+        return true;
     }
+    return false;
 }
 
 } // NHive

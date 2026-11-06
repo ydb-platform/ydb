@@ -416,6 +416,63 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
             }
             UNIT_ASSERT(t.Run(true) == EStrategyOutcome::DONE);
             UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == (recoveryReply == S::Error ? S::Error : S::Absent));
+            UNIT_ASSERT(t.Blackboard[t.Id].LooksLikePhantom == true);
+        }
+    }
+
+    Y_UNIT_TEST(PhantomCheckUsesEnsuredLayout) {
+        struct TCase {
+            TStates States;
+            ui32 ErrorsPerNormalRealm;
+            bool LooksLikePhantom;
+        };
+        const TCase cases[] = {
+            {{R::N1, R::N1, R::R}, 1, false}, // E = 1+1 fits; W = 1+1+1 OR 2+2 does not.
+            {{R::N1, R::F, R::F}, 1, false}, // E = 1 fits; W = 2 does not.
+            {{R::N2, R::F, R::F}, 1, true}, // One error cannot hide E = 2.
+            {{R::N0, R::F, R::F}, 0, false}, // E = 0 cannot prove absence even with no errors.
+        };
+        for (const auto& test : cases) {
+            for (ui32 cookie = 0; cookie < 3; ++cookie) {
+                TTest t(test.States, cookie);
+                for (ui32 disk = 0; disk < 9; ++disk) {
+                    const auto realm = test.States[t.Realm(disk)];
+                    const bool normal = realm != R::F && realm != R::R;
+                    t.Reply(disk, normal && disk / 3 < test.ErrorsPerNormalRealm ? S::Error : S::Absent);
+                }
+                UNIT_ASSERT(t.Run(true) == EStrategyOutcome::DONE);
+                UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == S::Error);
+                UNIT_ASSERT(t.Blackboard[t.Id].LooksLikePhantom == test.LooksLikePhantom);
+                UNIT_ASSERT(t.Blackboard.GroupDiskRequests.GetsPending.empty());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PhantomCheckContinuesReadingPastFailureModel) {
+        for (bool legacy : {false, true}) {
+            for (bool found : {false, true}) {
+                TTest t({R::N0, R::N0, R::N0});
+                for (ui32 disk = 0; disk < 3; ++disk) {
+                    t.Reply(disk, S::Error); // One error in every realm can hide 1+1+1.
+                }
+                ui32 replies = 0;
+                while (t.Run(true, legacy) == EStrategyOutcome::IN_PROGRESS) {
+                    UNIT_ASSERT(++replies <= 6);
+                    UNIT_ASSERT(!t.Blackboard[t.Id].LooksLikePhantom.has_value());
+                    const ui32 disk = t.RequestedDisk();
+                    if (found && replies == 6) {
+                        t.Data(disk);
+                    } else {
+                        t.Reply(disk, S::Absent);
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(replies, 6);
+                UNIT_ASSERT(t.Run(true, legacy) == EStrategyOutcome::DONE);
+                UNIT_ASSERT(t.Blackboard[t.Id].WholeSituation == (found ? S::Present : S::Error));
+                if (!found) {
+                    UNIT_ASSERT(t.Blackboard[t.Id].LooksLikePhantom == false);
+                }
+            }
         }
     }
 
@@ -545,6 +602,8 @@ Y_UNIT_TEST_SUITE(TMirror3dcGetStrategyTest) {
                     "errors " << errors << " phantom " << phantom);
                 UNIT_ASSERT_VALUES_EQUAL_C(ui32(current.Blackboard[current.Id].WholeSituation),
                     ui32(legacy.Blackboard[legacy.Id].WholeSituation), "errors " << errors << " phantom " << phantom);
+                UNIT_ASSERT_C(current.Blackboard[current.Id].LooksLikePhantom
+                    == legacy.Blackboard[legacy.Id].LooksLikePhantom, "errors " << errors << " phantom " << phantom);
             }
         }
     }

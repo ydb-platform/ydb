@@ -17,6 +17,9 @@ namespace {
         auto env = std::make_unique<TEnvironmentSetup>(TEnvironmentSetup::TSettings{
             .NodeCount = 8 * 2,
             .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .VDiskConfigPreprocessor = [](TVDiskConfig& config) {
+                config.BarrierValidation = true;
+            },
             .LocationGenerator = GetBridgedLocation,
             .FeatureFlags = featureFlags,
             .SelfManagementConfig = true,

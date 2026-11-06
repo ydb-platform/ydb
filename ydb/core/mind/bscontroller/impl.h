@@ -19,6 +19,7 @@
 #include "yaml_config_helpers.h"
 
 #include <ydb/core/base/bridge.h>
+#include <ydb/core/base/feature_flags_service.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/pdisk_filter.h>
@@ -775,8 +776,7 @@ public:
         // group layout status: whether it is positioned correctly
         bool LayoutCorrect = false;
 
-        void CalculateLayoutStatus(TBlobStorageController *self, TBlobStorageGroupInfo::TTopology *topology,
-            const std::function<TGroupGeometryInfo()>& getGeom);
+        void CalculateLayoutStatus(TBlobStorageController* self, const std::function<TGroupGeometryInfo()>& getGeom);
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -933,6 +933,7 @@ public:
             }
         }
 
+        static unsigned __int128 ScaleGroupResource(ui64 value, size_t numVDisks, TBlobStorageGroupType type);
         ui64 ScaleGroupResource(ui64 value) const;
 
         bool FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
@@ -1826,6 +1827,10 @@ private:
     std::unordered_set<TGroupId, THash<TGroupId>> SysViewChangedGroups;
     std::unordered_set<TBoxStoragePoolId, THash<TBoxStoragePoolId>> SysViewChangedStoragePools;
     bool SysViewChangedSettings = false;
+    bool ReportPhantomsOnlyVDisksAsReady = false; // last seen feature flag value affecting VSlots in system views
+
+    void SubscribeToFeatureFlags();
+    void Handle(TEvFeatureFlags::TEvChanged::TPtr ev);
 
     IActor* CreateSystemViewsCollector();
     void UpdateSystemViews();
@@ -1835,6 +1840,7 @@ private:
         bool SuppressDegradedGroupsChecking = false;
         bool SuppressDisintegratedGroupsChecking = false;
         bool AllowDegradedWithSinglePhantomsOnly = false;
+        bool TreatPhantomsOnlyVDisksAsWorking = false;
     };
 
     bool ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
@@ -2055,6 +2061,8 @@ private:
     THostRecordMap HostRecords;
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void SetHostRecords(THostRecordMap hostRecords);
+    void UpdateGroupLayoutStatus();
+    TGroupGeometryInfo GetStaticGroupGeometry(TBlobStorageGroupType type, TBridgePileId pileId) const;
 
 public:
     // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move
@@ -2292,6 +2300,13 @@ private:
     TIntrusiveList<TSyncerState, TSyncersRequiringAction> SyncersRequiringAction;
     TMonotonic SyncersRetryAt = TMonotonic::Max(); // when ProcessSyncers is scheduled to start the syncers that failed
 
+    // the limit for the whole cluster gets divided equally between the nodes hosting syncers; the nodes get a new share
+    // only when one of them starts hosting or stops doing so, or when the limit changes
+    ui64 BridgeSyncTotalRate = 0;
+    std::optional<ui64> BridgeSyncNodeRate; // unset until nodes have had time to report their syncers after BSC start
+    bool BridgeSyncNodeRatesDirty = true; // syncer placement or the limit has changed since BridgeSyncNodeRate was found
+    THashMap<TNodeId, ui64> SentBridgeSyncNodeRates; // the rate last sent to a node by this BSC instance
+
     bool CheckingUnsyncedBridgePiles = false;
     bool NotifyBridgeSyncFinishedErrors = false;
     bool RecheckUnsyncedBridgePiles = false;
@@ -2402,6 +2417,10 @@ private:
     void CheckSyncerDisconnectedNodes();
 
     void ProcessSyncers(THashSet<TNodeId> nodesToUpdate = {});
+    void SendSyncersToNodes(const THashSet<TNodeId>& nodeIds);
+    bool IsNodeHostingSyncers(TNodeId nodeId) const;
+    void UpdateBridgeSyncNodeRates(const THashSet<TNodeId>& nodesToUpdate);
+    void FillBridgeSyncNodeRate(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update);
     void HandleRetrySyncers();
 
     void SerializeSyncers(TNodeId nodeId, NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate *update,
@@ -2611,6 +2630,8 @@ public:
         YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "LoadFinished",
             {"marker", "BSC09"});
         Become(&TThis::StateWork);
+
+        SubscribeToFeatureFlags();
 
         ValidateInternalState();
         UpdatePDisksCounters();

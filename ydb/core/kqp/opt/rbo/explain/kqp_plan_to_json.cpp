@@ -39,7 +39,7 @@ NJson::TJsonValue MakeJson(IOperator* op, ui32 operatorId, ui32 explainFlags, co
 }
 
 struct TExplainJsonContext {
-    const TStageGraph& StageGraph;
+    const TPlanProps& PlanProps;
     const TInfoUnitRegistry& Registry;
     ui64& NodeCounter;
     const THashMap<IOperator*, ui32>& OperatorIds;
@@ -49,33 +49,6 @@ struct TExplainJsonContext {
         return NodeCounter++;
     }
 };
-
-TIntrusivePtr<TConnection> GetChildStageConnection(IOperator* op, ui32 childIndex, const TStageGraph& graph) {
-    if (!op->Props.StageId || childIndex >= op->GetChildren().size()) {
-        return {};
-    }
-
-    const auto& child = op->GetChildren()[childIndex];
-    if (!child->Props.StageId || *op->Props.StageId == *child->Props.StageId) {
-        return {};
-    }
-
-    const auto parentStageId = static_cast<ui32>(*op->Props.StageId);
-    const auto childStageId = static_cast<ui32>(*child->Props.StageId);
-
-    // Operator children are wired to stage inputs in the same order as TStageGraph::Connect calls.
-    ui32 childStageOccurrence = 0;
-    for (ui32 i = 0; i < childIndex; ++i) {
-        const auto& sibling = op->GetChildren()[i];
-        if (sibling->Props.StageId && *sibling->Props.StageId != *op->Props.StageId
-            && static_cast<ui32>(*sibling->Props.StageId) == childStageId)
-        {
-            ++childStageOccurrence;
-        }
-    }
-
-    return graph.TryGetConnection(childStageId, parentStageId, childStageOccurrence);
-}
 
 bool IsReplicateOperator(const IOperator& op) {
     return op.Kind == EOperator::Replicate;
@@ -107,8 +80,9 @@ NJson::TJsonValue GetExplainJsonRec(IOperator* op, TExplainJsonContext& ctx) {
         auto childJson = GetExplainJsonRec(child, ctx);
 
         // Explicitly show all connections except TMapConnection
-        const auto connection = GetChildStageConnection(op, childIndex, ctx.StageGraph);
-        if (connection && !IsConnection<TMapConnection>(connection)) {
+        const auto* edge = ctx.PlanProps.GetStageInputEdge(*op, childIndex);
+        const auto* connection = edge ? &edge->Connection() : nullptr;
+        if (connection && !IsConnection<TMapConnection>(*connection)) {
             auto connectionJson = connection->ToJson(ctx.Registry);
             connectionJson["PlanNodeId"] = ctx.NextNodeId();
 
@@ -440,10 +414,13 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
         stages.insert(stageId);
     }
 
-    THashMap<std::pair<int, int>, TVector<NJson::TJsonValue>> processedStages;
+    THashMap<TStageEdgeId, NJson::TJsonValue> processedStages;
 
-    // Iterate though stages in acsending order, this guarantees that we will build a tree in the right order
-    for (int stageId : stages) {
+    for (const auto* graphStage : PlanProps.StageGraph.TopologicalOrder()) {
+        const auto stageId = graphStage->Id();
+        if (!stages.contains(stageId)) {
+            continue;
+        }
         auto ops = stageOpMap.at(stageId);
         TString stageName;
 
@@ -461,19 +438,16 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
 
         // Build a list of subplans - these are connection objects of input stages
         auto planList = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-        const auto & stageInputs = PlanProps.StageGraph.StageInputs.at(stageId);
-        THashMap<int, size_t> inputOccurrences;
-        for (auto inputId : stageInputs) {
-            planList.AppendValue(processedStages.at(std::make_pair(inputId, stageId))
-                .at(inputOccurrences[inputId]++));
+        const auto& stageInputs = PlanProps.StageGraph.IncomingEdges(*graphStage);
+        for (const auto* edge : stageInputs) {
+            planList.AppendValue(processedStages.at(edge->Id()));
         }
-
-        const auto & stageOutputs = PlanProps.StageGraph.StageOutputs.at(stageId);
+        const auto& stageOutputs = PlanProps.StageGraph.OutgoingEdges(*graphStage);
 
         // If this is the final stage, add the child plans and operators to it
         if(stageOutputs.empty()) {
             finalStage["Node Type"] = stageName;
-            finalStage["StageGuid"] = PlanProps.StageGraph.StageGUIDs.at(stageId);
+            finalStage["StageGuid"] = graphStage->Guid();
             if (ops.size()) {
                 finalStage["Operators"] = operatorList;
             }
@@ -484,14 +458,9 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
 
         // A stage with multiple outputs is rendered once. Other connections refer to it as a CTE.
         else {
-            THashMap<int, size_t> outputOccurrences;
             TString cteName;
-            for (int outputStageId : stageOutputs) {
-                const auto& conns = PlanProps.StageGraph.GetConnections(stageId, outputStageId);
-                // Replicate ports can connect the same two stages more than once.
-                const auto& conn = conns.at(outputOccurrences[outputStageId]++);
-
-                auto connJson = conn->ToJson(PlanProps.InfoUnitRegistry);
+            for (const auto* edge : stageOutputs) {
+                auto connJson = edge->Connection().ToJson(PlanProps.InfoUnitRegistry);
                 connJson["PlanNodeId"] = nodeCounter++;
 
                 if (!cteName.empty()) {
@@ -499,7 +468,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
                 } else {
                     auto stage = NJson::TJsonValue(NJson::EJsonValueType::JSON_MAP);
                     stage["Node Type"] = stageName;
-                    stage["StageGuid"] = PlanProps.StageGraph.StageGUIDs.at(stageId);
+                    stage["StageGuid"] = graphStage->Guid();
 
                     if (ops.size()) {
                         stage["Operators"] = operatorList;
@@ -517,7 +486,7 @@ NJson::TJsonValue TOpRoot::GetExecutionJson(ui64& nodeCounter, ui32& operatorIdx
                     connJson["Plans"].AppendValue(std::move(stage));
                 }
 
-                processedStages[std::make_pair(stageId, outputStageId)].push_back(std::move(connJson));
+                processedStages.emplace(edge->Id(), std::move(connJson));
             }
         }
     }
@@ -536,7 +505,7 @@ NJson::TJsonValue TOpRoot::GetExplainJson(ui64& nodeCounter, const THashMap<IOpe
     result["Node Type"] = "ResultSet";
 
     NJson::TJsonValue plans = NJson::TJsonValue(NJson::EJsonValueType::JSON_ARRAY);
-    TExplainJsonContext ctx{PlanProps.StageGraph, PlanProps.InfoUnitRegistry, nodeCounter, operatorIds, explainFlags};
+    TExplainJsonContext ctx{PlanProps, PlanProps.InfoUnitRegistry, nodeCounter, operatorIds, explainFlags};
     plans.AppendValue(GetExplainJsonRec(GetInput().Get(), ctx));
     result["Plans"] = plans;
 

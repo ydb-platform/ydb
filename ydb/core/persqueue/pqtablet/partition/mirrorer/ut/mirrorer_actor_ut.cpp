@@ -515,6 +515,11 @@ struct TMirrorerEnv {
         Dispatch();
     }
 
+    void SendPersistDone(ui64 endOffset) {
+        Runtime.Send(new IEventHandle(Mirrorer, Partition, new TEvPQ::TEvPersistDone(endOffset)), 0, true);
+        Dispatch();
+    }
+
     void SendChangeConfig(const NKikimrPQ::TMirrorPartitionConfig& mirrorFrom) {
         NKikimrPQ::TPQTabletConfig config;
         *config.MutablePartitionConfig()->MutableMirrorFrom() = mirrorFrom;
@@ -779,6 +784,51 @@ Y_UNIT_TEST(ReplicationDataSendsConsumerOffsetsWithoutAck) {
 
     env.PushReplicationData(9);
     UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 3);
+    UNIT_ASSERT(env.CapturedRequests.empty());
+}
+
+Y_UNIT_TEST(PersistDoneAdvancesConsumerOffsetsWithoutMessages) {
+    for (ui64 confirmedOffset : {10ULL, 300000000001ULL}) {
+        TMirrorerEnv env({.MirrorConsumerOffsets = true});
+        env.Advance(TDuration::Seconds(1));
+        env.StartSession(0, 0, confirmedOffset + 1);
+        env.PushReplicationData(confirmedOffset + 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), 0u);
+
+        // Only the owning partition can confirm the persisted boundary.
+        env.Runtime.Send(new IEventHandle(env.Mirrorer, env.Tablet,
+            new TEvPQ::TEvPersistDone(confirmedOffset + 1)), 0, true);
+        env.Dispatch();
+        UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1u);
+
+        env.SendPersistDone(confirmedOffset);
+        UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), confirmedOffset);
+
+        // Repeated and older notifications must neither rewind nor resend offsets.
+        env.SendPersistDone(confirmedOffset);
+        env.SendPersistDone(confirmedOffset - 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 2u);
+
+        env.SendPersistDone(confirmedOffset + 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), confirmedOffset + 1);
+        UNIT_ASSERT(env.CapturedRequests.empty());
+    }
+}
+
+Y_UNIT_TEST(PersistDoneDuringInitializationIsPreserved) {
+    TMirrorerEnv env({.MirrorConsumerOffsets = true, .PendingCredentials = true});
+    UNIT_ASSERT(env.Factory.Sessions.empty());
+    env.SendPersistDone(10);
+    env.Factory.PendingCredentials = false;
+    env.Factory.CredentialsPromise.SetValue(NYdb::CreateInsecureCredentialsProviderFactory());
+    env.Advance(TDuration::Seconds(1));
+    env.StartSession(0, 0, 20);
+    env.PushReplicationData(15);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(env.CapturedReplicationData.back()->OffsetsByConsumers.at("consumer"), 10u);
     UNIT_ASSERT(env.CapturedRequests.empty());
 }
 

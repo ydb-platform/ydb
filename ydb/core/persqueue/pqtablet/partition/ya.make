@@ -42,6 +42,7 @@ PEERDIR(
     ydb/core/persqueue/pqtablet/partition/mlp
     ydb/core/persqueue/pqtablet/quota
     ydb/core/persqueue/public
+    ydb/core/persqueue/public/metrics
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/public/write_meta
     ydb/core/protos

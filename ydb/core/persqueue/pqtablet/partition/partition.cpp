@@ -1000,6 +1000,13 @@ bool CheckDiskStatus(const TStorageStatusFlags status) {
 }
 
 void TPartition::InitComplete(const TActorContext& ctx) {
+    if (GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
+        && BlobEncoder.IsEmpty() && CompactionBlobEncoder.IsEmpty()) {
+        // Restore the position of an empty mirror before starting consumers and the mirrorer.
+        BlobEncoder.StartOffset = BlobEncoder.EndOffset = BlobEncoder.MirroredOffset;
+        BlobEncoder.Head.Offset = BlobEncoder.NewHead.Offset = BlobEncoder.MirroredOffset;
+    }
+
     if (BlobEncoder.StartOffset == BlobEncoder.EndOffset && BlobEncoder.EndOffset == 0) {
         for (auto&& [user, info] : UsersInfoStorage->ViewAll()) {
             if (info.Offset > 0 && BlobEncoder.StartOffset < (ui64)info.Offset) {
@@ -3271,6 +3278,23 @@ void TPartition::RunPersist() {
         && PersistRequest->Record.CmdRenameSize() == 0;
 
     if (haveChanges || !requestEmpty) {
+        // EndOffset still describes the previous KV state: accepted messages may
+        // already be buffered, including an incomplete multipart message at offset 0.
+        const auto hasNoBufferedMessages = [](const TPartitionBlobEncoder& encoder) {
+            return encoder.IsEmpty()
+                && encoder.Head.GetBatches().empty()
+                && encoder.NewHead.GetBatches().empty()
+                && !encoder.PartitionedBlob.IsInited();
+        };
+        if (GetStartOffset() == GetEndOffset() && GetMirroredOffset() > GetEndOffset()
+            && PendingRequests.empty() && QuotaWaitingRequests.empty()
+            && UserActionAndTransactionEvents.empty() && UserActionAndTxPendingWrite.empty()
+            && WriteInflightSize == 0 && WriteInfosApplied.empty()
+            && hasNoBufferedMessages(BlobEncoder) && hasNoBufferedMessages(CompactionBlobEncoder)) {
+            BlobEncoder.StartOffset = BlobEncoder.EndOffset = GetMirroredOffset();
+            BlobEncoder.Head.Offset = BlobEncoder.NewHead.Offset = GetMirroredOffset();
+        }
+
         AddMessageDeduplicatorKeys(PersistRequest.Get());
         AddMetaKey(PersistRequest.Get());
 
@@ -4125,7 +4149,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
     for (auto& user : AffectedUsers) {
         if (auto* actual = GetPendingUserIfExists(user)) {
             TUserInfo& userInfo = UsersInfoStorage->GetOrCreate(user, ctx);
-            bool offsetHasChanged = (userInfo.Offset != actual->Offset);
+            const auto previousOffset = userInfo.Offset;
             if (userInfo.Type == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_REPLICATION
                 && !actual->Session.empty() && actual->ReadSessionActor
                 && (userInfo.Session != actual->Session || userInfo.Generation != actual->Generation
@@ -4158,6 +4182,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 userInfo.Offset = GetStartOffset();
             }
 
+            const bool offsetHasChanged = userInfo.Offset != previousOffset;
             if (offsetHasChanged && !userInfo.UpdateTimestampFromCache()) {
                 userInfo.ActualTimestamps = false;
                 ReadTimestampForOffset(user, userInfo, ctx);
@@ -5248,6 +5273,12 @@ void TPartition::DestroyMirrorer() {
     if (Mirrorer) {
         Send(Mirrorer->Actor, new TEvents::TEvPoisonPill());
         Mirrorer.Reset();
+    }
+}
+
+void TPartition::NotifyMirrorerPersistDone() {
+    if (Mirrorer) {
+        Send(Mirrorer->Actor, new TEvPQ::TEvPersistDone(GetEndOffset()));
     }
 }
 

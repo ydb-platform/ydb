@@ -1,0 +1,4 @@
+self_check_result: EMERGENCY
+issue_log { id: "bsc" status: RED type: "STORAGE" message: "System tablet BSC didn't provide information" }
+issue_log { id: "group" status: GREY type: "STORAGE_GROUP" message: "Group has disks with no data" location { storage { pool { name: "/Root:test" group { id: "1" pile { name: "b" } } } } } reason: "disk" }
+issue_log { id: "disk" status: GREY type: "VDISK" message: "VDisk has no data" }

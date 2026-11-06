@@ -38,6 +38,7 @@ PY3TEST()
 
     PEERDIR(
         contrib/python/parameterized
+        library/python/retry
         ydb/tests/library
         ydb/tests/library/test_meta
         ydb/tests/olap/common

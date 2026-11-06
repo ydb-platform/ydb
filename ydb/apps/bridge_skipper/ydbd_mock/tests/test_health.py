@@ -41,8 +41,7 @@ class MinimalStyleTest(HealthCase):
         self.assertEqual(piles, ["pile2", "pile3"])
         for issue in result.issue_log:
             self.assertEqual((issue.type, issue.status, issue.level), ("BRIDGE_GROUP", Flag.RED, 5))
-        self.assertIn("connectivity", result.issue_log[0].message)
-        self.assertIn("storage", result.issue_log[1].message)
+            self.assertEqual(issue.message, "Group failed")
         self.assertEqual(len({i.id for i in result.issue_log}), 2)
 
     async def test_blame_is_per_node(self):
@@ -141,7 +140,35 @@ class AutomaticBlameTest(HealthCase):
         inst = c.inst("pile1")
         inst.set_blocked([1])
         self.assertEqual(health.blame(inst, 0), {})
-        self.assertEqual(self.build(c).self_check_result, ydb_monitoring_pb2.SelfCheck.GOOD)
+        # The blocked pile still yields RED PILE_* issues, so only the absence of parts is checked.
+        self.assertFalse(any(i.type == "BRIDGE_GROUP" for i in self.build(c).issue_log))
+
+    async def test_pile_without_static_quorum_has_state_storage_issues(self):
+        c = await self.make()
+        inst = c.inst("pile1")
+        inst.set_blocked([1])
+        result = self.build(c)
+        piles = [i for i in result.issue_log if i.type.startswith("PILE_")]
+        self.assertEqual(len(piles), 3)
+        self.assertEqual([i.type for i in piles], ["PILE_STATE_STORAGE", "PILE_SCHEME_BOARD", "PILE_BOARD"])
+        for issue in piles:
+            self.assertEqual((issue.status, issue.message, issue.location.compute.state_storage.pile.name),
+                             (Flag.RED, "There is not enough functional rings", "pile2"))
+        self.assertEqual(result.self_check_result, ydb_monitoring_pb2.SelfCheck.EMERGENCY)
+        state = inst.state.copy()
+        state.per_pile[1] = model.Stored.NOT_SYNCHRONIZED_2
+        inst.replica.force(state, False)
+        self.assertFalse(any(i.type.startswith("PILE_") for i in self.build(c).issue_log))
+        state.per_pile[1] = model.Stored.SYNCHRONIZED
+        inst.replica.force(state, False)
+        inst.set_blocked([])
+        c.inst("pile2").node_faults[0].down = True
+        await inst.heartbeat_once()
+        result = self.build(c)
+        piles = [i for i in result.issue_log if i.type.startswith("PILE_")]
+        self.assertEqual([(i.status, i.message, i.location.compute.state_storage.pile.name) for i in piles],
+                         [(Flag.BLUE, "One ring has unavailable replicas", "pile2")] * 3)
+        self.assertEqual(result.self_check_result, ydb_monitoring_pb2.SelfCheck.DEGRADED)
 
     async def test_three_piles_each_blame_only_the_dead_one(self):
         c = await self.make(piles=3)
@@ -226,7 +253,62 @@ class RealisticStyleTest(HealthCase):
         result = self.build(c)
         parent = result.issue_log[-1]
         self.assertEqual((parent.type, parent.status), ("STORAGE_GROUP", Flag.RED))
-        self.assertEqual(parent.location.storage.pool.group.pile.name, "pile1")
+        # The stage-2 pile's replicating part is the second reason, so the parent names no pile.
+        parts = [i for i in result.issue_log if i.type == "BRIDGE_GROUP"]
+        self.assertEqual([i.location.storage.pool.group.pile.name for i in parts], ["pile1", "pile2"])
+        self.assertEqual(list(parent.reason), [i.id for i in parts])
+        self.assertFalse(parent.location.storage.pool.group.HasField("pile"))
+
+    async def test_stage2_pile_replicates_with_blue_vdisk_reasons(self):
+        c = await self.make(policies=Policies(issue_style="realistic"))
+        inst = c.inst("pile1")
+        state = inst.state.copy()
+        state.per_pile[1] = model.Stored.NOT_SYNCHRONIZED_2
+        inst.replica.force(state, False)
+        result = self.build(c)
+        self.assertEqual([i.type for i in result.issue_log], ["BRIDGE_GROUP", "VDISK", "STORAGE_GROUP"])
+        part, vdisk, parent = result.issue_log
+        self.assertEqual((part.status, part.message, part.location.storage.pool.group.pile.name),
+                         (Flag.RED, "Group failed", "pile2"))
+        self.assertEqual(list(part.reason), [vdisk.id])
+        self.assertEqual((vdisk.status, vdisk.message), (Flag.BLUE, "Replication in progress"))
+        self.assertEqual(parent.status, Flag.ORANGE)
+        self.assertEqual(list(parent.reason), [part.id])
+        self.assertEqual(result.self_check_result, ydb_monitoring_pb2.SelfCheck.MAINTENANCE_REQUIRED)
+        self.assertEqual(result.database_status[0].storage.pools[0].groups[0].overall, Flag.ORANGE)
+        inst.set_blocked([1])
+        result = self.build(c)
+        self.assertEqual([i.type for i in result.issue_log], ["BRIDGE_GROUP", "STORAGE_GROUP"])
+        part = result.issue_log[0]
+        self.assertEqual((part.status, part.location.storage.pool.group.pile.name), (Flag.RED, "pile2"))
+        self.assertTrue(part.id.endswith("-connectivity"))
+        self.assertEqual(list(part.reason), [])
+
+    async def test_healthcheck_status_appends_the_size_issue_and_red_drops_vdisk_reasons(self):
+        c = await self.make(policies=Policies(issue_style="realistic"))
+        inst = c.inst("pile1")
+        state = inst.state.copy()
+        state.per_pile[1] = model.Stored.NOT_SYNCHRONIZED_2
+        inst.replica.force(state, False)
+        verdict = self.build(c).self_check_result
+        inst.node_faults[0].healthcheck_status = "YELLOW"
+        result = self.build(c)
+        last = result.issue_log[-1]
+        self.assertEqual((last.type, last.status, last.level, last.message),
+                         ("HEALTHCHECK_STATUS", Flag.YELLOW, 1, "Healthcheck response size exceeds 30 MB"))
+        vdisks = [i.id for i in result.issue_log if i.type == "VDISK"]
+        self.assertEqual(len(vdisks), 1)
+        self.assertEqual(result.self_check_result, verdict)
+        inst.node_faults[0].healthcheck_status = "RED"
+        result = self.build(c)
+        self.assertFalse(any(i.type == "VDISK" for i in result.issue_log))
+        part = next(i for i in result.issue_log if i.type == "BRIDGE_GROUP")
+        self.assertEqual(list(part.reason), vdisks)
+        last = result.issue_log[-1]
+        self.assertEqual((last.type, last.status, last.level, last.message),
+                         ("HEALTHCHECK_STATUS", Flag.RED, 1, "Healthcheck response size exceeds 50 MB and will be truncated"))
+        self.assertRegex(last.id, r"^RED-[0-9a-f]{4}$")
+        self.assertEqual(result.self_check_result, verdict)
 
     async def test_dead_synchronized_piles_with_healthy_stage2_have_some_piles_message(self):
         c = await self.make(piles=3, policies=Policies(issue_style="realistic"))

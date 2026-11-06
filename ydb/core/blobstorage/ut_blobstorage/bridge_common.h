@@ -146,18 +146,39 @@ namespace NBridgeTest {
 
     inline NKikimrBlobStorage::TStorageConfig QueryStorageConfig(TEnvironmentSetup& env, ui32 nodeId = 1,
             TInstant deadline = TInstant::Max()) {
-        const auto res = InvokeDistconf(env, [](auto& record) { record.MutableQueryConfig(); }, nodeId, deadline);
-        UNIT_ASSERT_EQUAL_C(res.GetStatus(), NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK, res.GetErrorReason());
-        return res.GetQueryConfig().GetConfig();
+        deadline = Min(deadline, env.Runtime->GetClock() + TDuration::Seconds(30));
+        for (;;) {
+            const auto res = InvokeDistconf(env, [](auto& record) { record.MutableQueryConfig(); }, nodeId, deadline);
+            if (res.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+                return res.GetQueryConfig().GetConfig();
+            }
+            UNIT_ASSERT_C(res.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE
+                && env.Runtime->GetClock() < deadline, res.DebugString());
+            env.Sim(TDuration::MilliSeconds(10));
+        }
     }
 
     inline void SwitchBridgePileState(TEnvironmentSetup& env, ui32 pileIndex,
             NKikimrBridge::TClusterState::EPileState state) {
+        using TState = NKikimrBridge::TClusterState;
         const auto deadline = env.Runtime->GetClock() + TDuration::Seconds(30);
+        std::optional<std::pair<ui64, TState::EPileState>> previous;
         for (;;) {
             const auto config = QueryStorageConfig(env, 1, deadline);
+            const auto& current = config.GetClusterState();
+            const auto currentState = current.GetPerPileState(pileIndex);
+            const bool rejoining = previous && state == TState::NOT_SYNCHRONIZED_1
+                && (previous->second == TState::DISCONNECTED || previous->second == TState::SUSPENDED
+                    || previous->second == TState::NOT_SYNCHRONIZED_1);
+            if (previous && current.GetGeneration() > previous->first
+                    && (currentState == state || (rejoining
+                        && (currentState == TState::NOT_SYNCHRONIZED_2 || currentState == TState::SYNCHRONIZED)))) {
+                return;
+            }
             const auto response = InvokeDistconf(env, [&](auto& record) {
-                auto *next = record.MutableSwitchBridgeClusterState()->MutableNewClusterState();
+                auto *cmd = record.MutableSwitchBridgeClusterState();
+                cmd->SetExpectedGeneration(config.GetClusterState().GetGeneration());
+                auto *next = cmd->MutableNewClusterState();
                 next->CopyFrom(config.GetClusterState());
                 next->SetPerPileState(pileIndex, state);
                 next->SetGeneration(next->GetGeneration() + 1);
@@ -165,12 +186,12 @@ namespace NBridgeTest {
             if (response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
                 return;
             }
-            // Synchronization can advance another pile between QueryConfig and the command.
-            const auto current = QueryStorageConfig(env, 1, deadline).GetClusterState();
-            UNIT_ASSERT_C(current.GetGeneration() > config.GetClusterState().GetGeneration()
-                && env.Runtime->GetClock() < deadline,
-                response.DebugString() << " before# " << config.GetClusterState().ShortDebugString()
-                    << " current# " << current.ShortDebugString());
+            UNIT_ASSERT_C((response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE
+                    || response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::GENERATION_MISMATCH
+                    || response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM)
+                && env.Runtime->GetClock() < deadline, response.DebugString());
+            previous.emplace(current.GetGeneration(), currentState);
+            env.Sim(TDuration::MilliSeconds(10));
         }
     }
 

@@ -746,6 +746,7 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 TPropagateAggregateThroughStageRule rule;
                 UNIT_ASSERT(rule.MatchAndApply(aggregateSlot, f.RboCtx, root->PlanProps));
                 auto& final = CastOperator<TOpAggregate>(*aggregateSlot);
+                root->ComputeParents();
                 UNIT_ASSERT(rule.MatchAndApply(final.GetInput(), f.RboCtx, root->PlanProps));
                 auto& partial = CastOperator<TOpAggregate>(*final.GetInput());
                 UNIT_ASSERT(partial.GetInput() == aggregated);
@@ -759,15 +760,16 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                 UNIT_ASSERT(hub->GetInput() == read);
                 UNIT_ASSERT(aggregated->GetOutputIUs() == (TUnorderedIUs{aggregateKey, aggregateValue}));
                 UNIT_ASSERT(raw->GetInput() == read);
-                const auto& connection = root->PlanProps.StageGraph.GetConnections(producerStage, finalStage).front();
-                UNIT_ASSERT_VALUES_EQUAL(connection->GetOutputIndex(), outputIndex);
+                auto* edge = root->PlanProps.StageGraph.EdgesBetween(root->PlanProps.StageGraph.GetStage(producerStage), root->PlanProps.StageGraph.GetStage(finalStage)).front();
+                const auto& connection = edge->Connection();
+                UNIT_ASSERT_VALUES_EQUAL(edge->OutputIndex(), outputIndex);
                 if (testCase.Scalar) {
                     UNIT_ASSERT(IsConnection<TUnionAllConnection>(connection));
                 } else if (testCase.EliminateShuffle) {
                     UNIT_ASSERT(IsConnection<TMapConnection>(connection));
                 } else {
                     UNIT_ASSERT(IsConnection<TShuffleConnection>(connection));
-                    UNIT_ASSERT(connection->GetUsedIUs() == (testCase.Distinct
+                    UNIT_ASSERT(connection.GetUsedIUs() == (testCase.Distinct
                         ? partial.GetAggregationTraits().Keys() : TUnorderedIUs{aggregateKey}));
                 }
                 // The partial is an ordinary node, visible to both liveness
@@ -832,11 +834,9 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
                     item.Current->Props.Statistics.emplace();
                     item.Current->Props.Cost = 0;
                 }
-                for (const auto& [stages, connections] : root->PlanProps.StageGraph.Connections) {
-                    for (const auto& connection : connections) {
-                        if (IsConnection<TShuffleConnection>(connection)) {
-                            static_cast<TShuffleConnection&>(*connection).HashFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
-                        }
+                for (auto* edge : root->PlanProps.StageGraph.Edges()) {
+                    if (IsConnection<TShuffleConnection>(edge->Connection())) {
+                        edge->SetShuffleHashFunction(NYql::NDq::EHashShuffleFuncType::HashV2);
                     }
                 }
                 ui64 nodeId = 0;
@@ -889,7 +889,7 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
         TAssignStagesStage().RunStage(*root, f.RboCtx);
         UNIT_ASSERT_VALUES_EQUAL(GetReplicateOutputIndex(*leftPort).value(), 0);
         UNIT_ASSERT_VALUES_EQUAL(GetReplicateOutputIndex(*rightPort).value(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(root->PlanProps.StageGraph.StageIds.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(root->PlanProps.StageGraph.Stages().size(), 2);
         ComputePlanLiveness(*root);
         UNIT_ASSERT(GetLiveOut(leftPort) == TUnorderedIUs{leftKey});
         UNIT_ASSERT(GetLiveOut(rightPort) == TUnorderedIUs{rightKey});
@@ -899,11 +899,10 @@ Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
             item.Current->Props.Statistics.emplace();
             item.Current->Props.Cost = 0;
         }
-        const auto& connections = root->PlanProps.StageGraph.GetConnections(
-            *leftPort->Props.StageId, *root->GetInput()->Props.StageId);
+        const auto& connections = root->PlanProps.StageGraph.EdgesBetween(root->PlanProps.StageGraph.GetStage(*leftPort->Props.StageId), root->PlanProps.GetStage(*root->GetInput()));
         UNIT_ASSERT_VALUES_EQUAL(connections.size(), 2);
         for (const auto& connection : connections) {
-            static_cast<TShuffleConnection&>(*connection).HashFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
+            connection->SetShuffleHashFunction(NYql::NDq::EHashShuffleFuncType::HashV2);
         }
         ui64 nodeId = 0;
         ui32 operatorIndex = 0;

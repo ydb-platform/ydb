@@ -22,6 +22,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 33,
+                "ColumnName": "BridgeSyncTotalRate",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 4,
                 "ColumnName": "SchemaVersion",
                 "ColumnType": "Uint32"
@@ -140,11 +145,6 @@
                 "ColumnId": 28,
                 "ColumnName": "ExpectedStorageYamlConfigVersion",
                 "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 33,
-                "ColumnName": "BridgeSyncTotalRate",
-                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -154,6 +154,7 @@
                     29,
                     1,
                     2,
+                    33,
                     4,
                     5,
                     6,
@@ -177,8 +178,7 @@
                     24,
                     26,
                     27,
-                    28,
-                    33
+                    28
                 ],
                 "RoomID": 0,
                 "Codec": 0,

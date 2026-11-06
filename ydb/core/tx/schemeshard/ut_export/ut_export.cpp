@@ -609,11 +609,8 @@ namespace {
                 NBackup::ComputeChecksum(payloads.front()) + " metadata.json");
         }
 
-        void RunTableChecksumFailureDuringMultipart(bool atCompletion) {
-            Env();
-            Runtime().GetAppData().FeatureFlags.SetEnableBackupTableChecksum(true);
-            using namespace NKikimr::NWrappers::NExternalStorage;
-            auto observer = Runtime().AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+        auto ForceMultipartUpload() {
+            return Runtime().AddObserver<TEvDataShard::TEvProposeTransaction>([](auto& ev) {
                 auto& record = ev->Get()->Record;
                 if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCHEME) {
                     NKikimrTxDataShard::TFlatSchemeTransaction tx;
@@ -625,6 +622,13 @@ namespace {
                     }
                 }
             });
+        }
+
+        void RunTableChecksumFailureDuringMultipart(bool atCompletion) {
+            Env();
+            Runtime().GetAppData().FeatureFlags.SetEnableBackupTableChecksum(true);
+            using namespace NKikimr::NWrappers::NExternalStorage;
+            auto observer = ForceMultipartUpload();
             TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(Runtime());
             THolder<IEventHandle> lateResponse;
             auto partReplies = Runtime().AddObserver<TEvUploadPartResponse>([&](auto& ev) {
@@ -659,6 +663,166 @@ namespace {
             Env().TestWaitNotification(Runtime(), id);
             const auto status = TestGetExport(Runtime(), id, "/MyRoot", Ydb::StatusIds::CANCELLED);
             UNIT_ASSERT_STRING_CONTAINS(status.DebugString(), "Injected checksum failure");
+            UNIT_ASSERT(!HasS3File("/backup/table/metadata.json"));
+            UNIT_ASSERT(!HasS3File("/backup/table/data_complete.json"));
+        }
+
+        enum class EUploadStartStage {
+            Lookup,
+            Creation,
+            CreationFailure,
+            Persistence,
+            RecoveredLookup,
+            RestartAbort,
+        };
+
+        void RunTableChecksumFailureDuringUploadStart(EUploadStartStage stage) {
+            Env();
+            Runtime().GetAppData().FeatureFlags.SetEnableBackupTableChecksum(true);
+            using namespace NKikimr::NWrappers::NExternalStorage;
+            const bool reboot = stage == EUploadStartStage::RecoveredLookup || stage == EUploadStartStage::RestartAbort;
+            auto proposals = ForceMultipartUpload();
+            TBlockEvents<NBackup::TEvTableChecksum::TEvStart> starts(Runtime());
+            TBlockEvents<TEvDataShard::TEvGetS3Upload> lookups(Runtime());
+            THolder<IEventHandle> lateResponse;
+            THolder<IEventHandle> firstPart;
+            bool restarted = false;
+            bool captureEnabled = true;
+            bool checksumFailed = false;
+            bool finished = false;
+            ui32 creations = 0;
+            TVector<TString> abortedIds;
+            TString uploadId;
+            auto observer = Runtime().AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+                if (starts.empty()) {
+                    return;
+                }
+                const auto owner = starts.back()->Sender;
+                const bool toOwner = ev->GetRecipientRewrite() == owner;
+                const bool fromOwner = ev->Sender == owner;
+                bool delay = false;
+                switch (ev->GetTypeRewrite()) {
+                    case TEvCreateMultipartUploadRequest::EventType:
+                        if (fromOwner) {
+                            ++creations;
+                            delay = stage == EUploadStartStage::CreationFailure;
+                        }
+                        break;
+                    case TEvCreateMultipartUploadResponse::EventType:
+                        if (toOwner && ev->Get<TEvCreateMultipartUploadResponse>()->Result.IsSuccess()) {
+                            uploadId =
+                                ev->Get<TEvCreateMultipartUploadResponse>()->Result.GetResult().GetUploadId().c_str();
+                            delay = stage == EUploadStartStage::Creation;
+                        }
+                        break;
+                    case TEvDataShard::TEvS3Upload::EventType:
+                        if (toOwner) {
+                            const auto& upload = ev->Get<TEvDataShard::TEvS3Upload>()->Upload;
+                            delay = (stage == EUploadStartStage::Lookup && !upload) ||
+                                    (upload && upload->Status == NDataShard::TS3Upload::EStatus::UploadParts &&
+                                        (stage == EUploadStartStage::Persistence ||
+                                            (stage == EUploadStartStage::RecoveredLookup && restarted)));
+                        }
+                        break;
+                    case TEvUploadPartResponse::EventType:
+                        if (toOwner && reboot && !restarted && !firstPart) {
+                            firstPart.Reset(ev.Release());
+                            return;
+                        }
+                        break;
+                    case TEvAbortMultipartUploadRequest::EventType:
+                        if (fromOwner) {
+                            abortedIds.push_back(
+                                ev->Get<TEvAbortMultipartUploadRequest>()->GetRequest().GetUploadId().c_str());
+                        }
+                        break;
+                    case TEvAbortMultipartUploadResponse::EventType:
+                        delay = toOwner && stage == EUploadStartStage::RestartAbort && restarted;
+                        break;
+                    case NBackup::TEvTableChecksum::TEvResult::EventType:
+                        checksumFailed |= toOwner && ev->Get<NBackup::TEvTableChecksum::TEvResult>()->Status !=
+                                                         Ydb::StatusIds::SUCCESS;
+                        break;
+                    case NDataShard::TEvExportScan::TEvFinish::EventType:
+                        finished |= fromOwner;
+                        break;
+                }
+                if (delay && captureEnabled) {
+                    captureEnabled = false;
+                    lateResponse.Reset(ev.Release());
+                }
+            });
+            TBlockEvents<TEvDataShard::TEvS3Upload> aborts(Runtime(), [&](auto& ev) {
+                return !starts.empty() && ev->GetRecipientRewrite() == starts.back()->Sender && ev->Get()->Upload &&
+                       ev->Get()->Upload->Status == NDataShard::TS3Upload::EStatus::Abort;
+            });
+            const ui64 id = StartCompletionMarkerExport(true, true);
+            Runtime().WaitFor("checksum owner before upload lookup", [&] {
+                return !starts.empty() && !lookups.empty();
+            });
+            UNIT_ASSERT_VALUES_EQUAL(lookups.front()->Get()->ReplyTo, starts.back()->Sender);
+            lookups.Unblock();
+            if (reboot) {
+                Runtime().WaitFor("persisted multipart session", [&] {
+                    return !starts.empty() && bool(firstPart);
+                });
+                restarted = true;
+                const auto shards =
+                    GetTableShards(Runtime(), TTestTxConfig::SchemeShard, Sprintf("/MyRoot/export-%" PRIu64 "/0", id));
+                RebootTablet(Runtime(), shards.front(), Runtime().AllocateEdgeActor());
+                Runtime().WaitFor("recovered checksum owner before upload lookup", [&] {
+                    return starts.size() == 2 && !lookups.empty();
+                });
+                UNIT_ASSERT_VALUES_EQUAL(lookups.front()->Get()->ReplyTo, starts.back()->Sender);
+                lookups.Unblock();
+            }
+            lookups.Stop();
+            Runtime().WaitFor("pending multipart initialization", [&] {
+                return bool(lateResponse) && starts.size() == (reboot ? 2 : 1);
+            });
+            checksumFailed = false;
+            finished = false;
+            const auto& start = starts.back();
+            Runtime().Send(new IEventHandle(start->Sender, start->GetRecipientRewrite(),
+                               new NBackup::TEvTableChecksum::TEvResult(
+                                   id, 0, Ydb::StatusIds::GENERIC_ERROR, {}, "Injected checksum failure")), 0, true);
+            Runtime().Send(new IEventHandle(start->GetRecipientRewrite(), {}, new TEvents::TEvPoisonPill()));
+            Runtime().WaitFor("checksum failure processed", [&] {
+                return checksumFailed;
+            });
+            Runtime().Send(new IEventHandle(start->Sender, {}, new TEvents::TEvWakeup()), 0, true);
+            Runtime().SimulateSleep(TDuration::MilliSeconds(10));
+            UNIT_ASSERT_C(!finished, "Uploader must wait for pending multipart initialization");
+
+            if (stage == EUploadStartStage::CreationFailure) {
+                Aws::Client::AWSError<Aws::S3::S3Errors> error(Aws::S3::S3Errors::ACCESS_DENIED, false);
+                Runtime().Send(new IEventHandle(lateResponse->Sender, lateResponse->GetRecipientRewrite(),
+                                   new TEvCreateMultipartUploadResponse(std::nullopt,
+                                       TEvCreateMultipartUploadResponse::TOutcome(std::move(error)))), 0, true);
+                lateResponse.Reset();
+            } else {
+                Runtime().Send(lateResponse.Release(), 0, true);
+            }
+            const bool hasUpload = stage != EUploadStartStage::Lookup && stage != EUploadStartStage::CreationFailure;
+            if (hasUpload) {
+                Runtime().WaitFor("committed multipart abort", [&] {
+                    return !aborts.empty();
+                });
+                Runtime().Send(new IEventHandle(start->Sender, {}, new TEvents::TEvWakeup()), 0, true);
+                Runtime().SimulateSleep(TDuration::MilliSeconds(10));
+                UNIT_ASSERT_VALUES_EQUAL(abortedIds.size(), stage == EUploadStartStage::RestartAbort ? 1 : 0);
+                aborts.Stop().Unblock();
+            }
+            Env().TestWaitNotification(Runtime(), id);
+            const auto status = TestGetExport(Runtime(), id, "/MyRoot", Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT_STRING_CONTAINS(status.DebugString(), "Injected checksum failure");
+            UNIT_ASSERT_VALUES_EQUAL(creations, stage == EUploadStartStage::Lookup ? 0 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(abortedIds.size(), !hasUpload                                 ? 0
+                                                        : stage == EUploadStartStage::RestartAbort ? 2
+                                                                                                   : 1);
+            for (const auto& abortedId : abortedIds) {
+                UNIT_ASSERT_VALUES_EQUAL(abortedId, uploadId);
+            }
             UNIT_ASSERT(!HasS3File("/backup/table/metadata.json"));
             UNIT_ASSERT(!HasS3File("/backup/table/data_complete.json"));
         }
@@ -1967,6 +2131,30 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
 
     Y_UNIT_TEST(TableChecksumFailureDuringMultipartCompletion) {
         RunTableChecksumFailureDuringMultipart(true);
+    }
+
+    Y_UNIT_TEST(TableChecksumFailureDuringUploadLookup) {
+        RunTableChecksumFailureDuringUploadStart(EUploadStartStage::Lookup);
+    }
+
+    Y_UNIT_TEST(TableChecksumFailureDuringMultipartCreation) {
+        RunTableChecksumFailureDuringUploadStart(EUploadStartStage::Creation);
+    }
+
+    Y_UNIT_TEST(TableChecksumFailureDuringFailedMultipartCreation) {
+        RunTableChecksumFailureDuringUploadStart(EUploadStartStage::CreationFailure);
+    }
+
+    Y_UNIT_TEST(TableChecksumFailureDuringUploadPersistence) {
+        RunTableChecksumFailureDuringUploadStart(EUploadStartStage::Persistence);
+    }
+
+    Y_UNIT_TEST(TableChecksumFailureDuringRecoveredUploadLookup) {
+        RunTableChecksumFailureDuringUploadStart(EUploadStartStage::RecoveredLookup);
+    }
+
+    Y_UNIT_TEST(TableChecksumFailureDuringRestartAbort) {
+        RunTableChecksumFailureDuringUploadStart(EUploadStartStage::RestartAbort);
     }
 
     Y_UNIT_TEST(TableChecksumCancellation) {

@@ -78,6 +78,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         TActorId Query;
         EMetadataState State = EMetadataState::Initial;
         bool DataUploaded = false;
+        // Wait for setup and abort-state replies before finishing
+        bool MultipartUploadPending = false;
     };
 
     void Handle(TEvDataShard::TEvStoreBackupChecksumResponse::TPtr& ev) {
@@ -574,6 +576,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             this->Send(Client, new TEvExternalStorage::TEvPutObjectRequest(request, std::move(Buffer)));
         } else {
             if (!UploadId) {
+                if (TableChecksum) {
+                    TableChecksum->MultipartUploadPending = true;
+                }
                 this->Send(DataShard, new TEvDataShard::TEvGetS3Upload(this->SelfId(), TxId));
                 return;
             }
@@ -611,6 +616,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     void CreateMultipartUpload() {
+        if (TableChecksum) {
+            TableChecksum->MultipartUploadPending = true;
+        }
         CurrentObjectKey = Settings.GetDataKey(DataFormat, CompressionCodec);
         auto request = Aws::S3::Model::CreateMultipartUploadRequest()
             .WithKey(CurrentObjectKey);
@@ -623,10 +631,16 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         YDB_LOG_DEBUG("[Export] Handle TEvDataShard::TEvS3Upload",
             {"upload", upload});
 
+        const bool uploadPending = TableChecksum && std::exchange(TableChecksum->MultipartUploadPending, false);
         if (TableChecksum && TableChecksum->State == EMetadataState::Failed) {
-            if (upload && upload->Status == TS3Upload::EStatus::Abort) {
-                UploadId = upload->Id;
+            if (!upload) {
+                return PassAway();
+            }
+            UploadId = upload->Id;
+            if (upload->Status == TS3Upload::EStatus::Abort) {
                 AbortTableUpload();
+            } else if (uploadPending) {
+                Finish(false, TString(*Error));
             }
             return;
         }
@@ -634,6 +648,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         if (!upload) {
             CreateMultipartUpload();
         } else if (ForceNewUpload) {
+            if (TableChecksum) {
+                TableChecksum->MultipartUploadPending = true;
+            }
             ForceNewUpload = false;
             UploadId.Clear();
             Parts.clear();
@@ -642,6 +659,10 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
                 this->SelfId(), TxId,
                 TS3Upload::EStatus::UploadParts, TVector<TString>{}));
         } else if (upload->Status == TS3Upload::EStatus::UploadParts && !UploadId) {
+            if (TableChecksum) {
+                TableChecksum->MultipartUploadPending = true;
+                UploadId = upload->Id;
+            }
             // A new scan must use a fresh session: the old one may have extra parts or requests in flight.
             RestartingUpload = true;
             CurrentObjectKey = Settings.GetDataKey(DataFormat, CompressionCodec);
@@ -698,6 +719,12 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         YDB_LOG_DEBUG("[Export] Handle TEvExternalStorage::TEvCreateMultipartUploadResponse",
             {"result", result});
 
+        if (!result.IsSuccess() && TableChecksum) {
+            TableChecksum->MultipartUploadPending = false;
+            if (TableChecksum->State == EMetadataState::Failed) {
+                return Finish(false, TString(*Error));
+            }
+        }
         if (!CheckResult(result, TStringBuf("CreateMultipartUpload"))) {
             return;
         }
@@ -826,6 +853,12 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
         if (RestartingUpload) {
             RestartingUpload = false;
+            if (TableChecksum) {
+                TableChecksum->MultipartUploadPending = false;
+                if (TableChecksum->State == EMetadataState::Failed) {
+                    return Finish(false, TString(*Error));
+                }
+            }
             if (!result.IsSuccess() && result.GetError().GetErrorType() != Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
                 YDB_LOG_WARN("[Export] Cannot abort previous multipart upload before restarting",
                     {"key", CurrentObjectKey},
@@ -922,6 +955,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
     }
 
     void HandleTableAbort(TEvExternalStorage::TEvAbortMultipartUploadResponse::TPtr& ev) {
+        if (RestartingUpload) {
+            return Handle(ev);
+        }
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess() || result.GetError().GetErrorType() == Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
             return PassAway();
@@ -959,6 +995,11 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             return PassAway();
         }
 
+        if (TableChecksum && !success && TableChecksum->MultipartUploadPending) {
+            this->Become(&TThis::StateAbortTable);
+            return;
+        }
+
         if (!MultiPart || !UploadId) {
             if (!Scanner) {
                 if (TableChecksum && TableChecksum->State == EMetadataState::Failed) {
@@ -977,6 +1018,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
                 this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
                     TS3Upload::EStatus::Complete, std::move(Parts)));
             } else {
+                if (TableChecksum) {
+                    TableChecksum->MultipartUploadPending = true;
+                }
                 this->Send(DataShard, new TEvDataShard::TEvChangeS3UploadStatus(this->SelfId(), TxId,
                     TS3Upload::EStatus::Abort, *Error));
             }
@@ -1083,7 +1127,9 @@ public:
         }
 
         if (TableChecksum && TableChecksum->State == EMetadataState::Failed) {
-            if (UploadId) {
+            if (TableChecksum->MultipartUploadPending) {
+                this->Become(&TThis::StateAbortTable);
+            } else if (UploadId) {
                 AbortTableUpload();
             } else if (Scanner) {
                 PassAway();
@@ -1122,6 +1168,7 @@ public:
     STATEFN(StateAbortTable) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDataShard::TEvS3Upload, Handle);
+            hFunc(TEvExternalStorage::TEvCreateMultipartUploadResponse, Handle);
             hFunc(TEvExternalStorage::TEvAbortMultipartUploadResponse, HandleTableAbort);
             default:
                 return StateBase(ev);

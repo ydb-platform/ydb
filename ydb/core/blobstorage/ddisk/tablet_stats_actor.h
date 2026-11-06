@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ddisk.h"
+#include "monitoring_snapshot.h"
 #include "tablet_stats.h"
 
 #include <ydb/library/actors/core/actor.h>
@@ -46,12 +47,24 @@ struct TEvGetTabletStats : NActors::TEventLocal<TEvGetTabletStats, TEv::EvGetTab
     std::optional<ui64> TabletId;
     std::optional<ui64> AfterTabletId;
     ui32 Limit = TTabletStatsLimits::MaxBatch;
+    TString RankBy; // Empty: ID pagination; otherwise iops, throughput or chunks.
 };
 
 struct TEvTabletStats : NActors::TEventLocal<TEvTabletStats, TEv::EvTabletStats> {
     bool Available = true;
+    ui64 TotalChunks = 0;
+    double TotalIops = 0;
+    double TotalBytesPerSecond = 0;
     std::vector<TTabletStats> Tablets;
     std::optional<ui64> NextTabletId;
+};
+
+struct TEvGetTabletStatsSnapshot : NActors::TEventLocal<TEvGetTabletStatsSnapshot, TEv::EvGetTabletStatsSnapshot> {
+    TTabletStatsSnapshotQuery Query;
+};
+
+struct TEvTabletStatsSnapshot : NActors::TEventLocal<TEvTabletStatsSnapshot, TEv::EvTabletStatsSnapshot> {
+    TTabletStatsSnapshot Info;
 };
 
 NActors::IActor* CreateTabletStatsActor(NActors::TActorId owner);

@@ -61,9 +61,7 @@ public:
     }
 
     bool ExecuteHandshake(NIceDb::TNiceDb& db, const NKikimrChangeExchange::TEvHandshake& req, NKikimrChangeExchange::TEvStatus& resp) {
-        if (Self->State != TShardState::Ready
-            || Self->DatabaseFreeze.GetStage() >= NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC)
-        {
+        if (!Self->CanReceiveChangeRecords()) {
             resp.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
             resp.SetReason(NKikimrChangeExchange::TEvStatus::REASON_WRONG_STATE);
             return true;
@@ -346,9 +344,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        if (Self->State != TShardState::Ready
-            || Self->DatabaseFreeze.GetStage() >= NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC)
-        {
+        if (!Self->CanReceiveChangeRecords()) {
             Status->Record.SetStatus(NKikimrChangeExchange::TEvStatus::STATUS_REJECT);
             Status->Record.SetReason(NKikimrChangeExchange::TEvStatus::REASON_WRONG_STATE);
             return true;

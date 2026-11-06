@@ -1719,6 +1719,11 @@ public:
         return IsStateFrozen() || IsDatabaseFrozen();
     }
 
+    bool CanReceiveChangeRecords() const {
+        return State == TShardState::Ready
+            && DatabaseFreeze.GetStage() < NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC;
+    }
+
     bool IsDatabaseWriteBlocked(const TOperation* op) const;
     bool HasDatabaseFreezeWrites() const;
     bool HasDatabaseFreezeIndexRecords() const;

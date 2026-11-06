@@ -148,7 +148,8 @@ std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, con
 // offset, partNo - index of first rec
 // count - diff of last record offset and first record offset in blob
 // internalPartsCount - number of internal parts
-// offsetDelta (ui32, 10 decimal digits, same as count) - optional extension; absent in legacy keys;
+// offsetDelta (ui64 in memory, limited to ui32 when serialized as 10 decimal digits)
+// - optional extension; absent in legacy keys;
 // means that all offsets in this blob are between offset and offset + offsetDelta
 // A4|A5B1B2C1C2C3|D1 - Offset A, partNo 5, count 2, internalPartsCount 3
 // ^    ^   ^ ^
@@ -167,21 +168,21 @@ public:
                         const ui16 partNo,
                         const ui32 count,
                         const ui16 internalPartsCount,
-                        const TMaybe<ui32>& offsetDelta = Nothing());
+                        const TMaybe<ui64>& offsetDelta = Nothing());
     static TKey ForHead(EType type,
                         const TPartitionId& partition,
                         const ui64 offset,
                         const ui16 partNo,
                         const ui32 count,
                         const ui16 internalPartsCount,
-                        const TMaybe<ui32>& offsetDelta = Nothing());
+                        const TMaybe<ui64>& offsetDelta = Nothing());
     static TKey ForFastWrite(EType type,
                              const TPartitionId& partition,
                              const ui64 offset,
                              const ui16 partNo,
                              const ui32 count,
                              const ui16 internalPartsCount,
-                             const TMaybe<ui32>& offsetDelta = Nothing());
+                             const TMaybe<ui64>& offsetDelta = Nothing());
 
     static TKey FromString(const TString& s) { return {s}; }
     static TKey FromString(const TString& s, const TPartitionId& partition);
@@ -247,27 +248,14 @@ public:
         return InternalPartsCount;
     }
 
-    void SetOffsetDelta(const TMaybe<ui32>& offsetDelta) {
-        EnsureValidBodySize();
-        OffsetDelta = offsetDelta;
-        const TMaybe<char> suffix = GetSuffix();
-        const ui32 bodySize = offsetDelta.Defined() ? KeySizeWithOffsetDelta() : KeySize();
-        Resize(bodySize + suffix.Defined());
-        if (offsetDelta.Defined()) {
-            Data()[KeySize()] = '_';
-            memcpy(PtrOffsetDelta(), Sprintf("%.10" PRIu32, *offsetDelta).data(), 10);
-        }
-        if (suffix.Defined()) {
-            Data()[bodySize] = *suffix;
-        }
+    void SetOffsetDelta(const TMaybe<ui64>& offsetDelta);
+    void SetOffsetDelta(ui64 offsetDelta);
+
+    void ClearOffsetDelta() {
+        SetOffsetDelta(Nothing());
     }
 
-    void SetOffsetDelta(ui64 offsetDelta) {
-        AFL_ENSURE(offsetDelta <= Max<ui32>());
-        SetOffsetDelta(TMaybe<ui32>(static_cast<ui32>(offsetDelta)));
-    }
-
-    TMaybe<ui32> GetOffsetDelta() const {
+    TMaybe<ui64> GetOffsetDelta() const {
         EnsureValidBodySize();
         return OffsetDelta;
     }
@@ -353,7 +341,7 @@ private:
         AFL_ENSURE(bodySize == KeySize() || bodySize == KeySizeWithOffsetDelta());
     }
 
-    TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const TMaybe<char> suffix, const TMaybe<ui32> offsetDelta = Nothing())
+    TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const TMaybe<char> suffix, const TMaybe<ui64> offsetDelta = Nothing())
         : TKeyPrefix(type, partition)
         , Offset(offset)
         , Count(count)
@@ -389,7 +377,7 @@ private:
 
         if (bodySize == KeySizeWithOffsetDelta()) {
             AFL_ENSURE(Data()[KeySize()] == '_');
-            OffsetDelta = FromString<ui32>(TStringBuf{PtrOffsetDelta(), 10});
+            OffsetDelta = FromString<ui64>(TStringBuf{PtrOffsetDelta(), 10});
         } else {
             OffsetDelta = Nothing();
         }
@@ -440,7 +428,7 @@ private:
     ui32 Count;
     ui16 PartNo;
     ui16 InternalPartsCount;
-    TMaybe<ui32> OffsetDelta;
+    TMaybe<ui64> OffsetDelta;
 };
 
 inline

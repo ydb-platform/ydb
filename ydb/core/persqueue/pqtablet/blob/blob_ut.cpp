@@ -1159,6 +1159,79 @@ Y_UNIT_TEST_SUITE(Head) {
         UNIT_ASSERT_VALUES_EQUAL(head.FindPos(106, 0), 1u);
     }
 
+    Y_UNIT_TEST(FindPosRewindsMultipartClientBatch) {
+        const TTestMaxHeaderSizeGuard guard(true);
+        const auto ts = TInstant::Seconds(1);
+        constexpr ui64 offset = 100;
+        constexpr ui16 totalParts = 3;
+
+        for (ui32 logicalMessageCount : {1u, 5u}) {
+            for (ui32 bytesPerPart : {4u, static_cast<ui32>(512_KB)}) {
+                for (bool packed : {false, true}) {
+                    THead head;
+                    head.Offset = offset - 2;
+                    head.AddBatch(TBatch(offset - 2, 0));
+                    head.AddBlob(MakeSimpleBlob("src", 1, "before-a"));
+                    head.AddBlob(MakeSimpleBlob("src", 2, "before-b"));
+                    for (ui16 partNo = 0; partNo < totalParts; ++partNo) {
+                        if (partNo > 0) {
+                            head.AddBatch(TBatch(offset, partNo));
+                        }
+                        head.AddBlob(TClientBlob(
+                            TString("src"), 3, TString(bytesPerPart, 'x'),
+                            TPartData{partNo, totalParts, bytesPerPart * totalParts},
+                            ts, ts, bytesPerPart * totalParts, "", "",
+                            logicalMessageCount, logicalMessageCount > 1));
+                    }
+                    head.AddBlob(MakeSimpleBlob("src", 4, "after"));
+                    if (packed) {
+                        for (ui32 i = 0; i < totalParts; ++i) {
+                            head.MutableBatch(i).Pack();
+                        }
+                    }
+
+                    UNIT_ASSERT_VALUES_EQUAL(head.FindPos(offset - 3, 0), Max<ui32>());
+                    UNIT_ASSERT_VALUES_EQUAL(head.FindPos(offset - 1, 0), 0u);
+                    for (ui16 partNo = 0; partNo < totalParts; ++partNo) {
+                        // Both the container's start and an interior logical offset
+                        // must select the storage batch holding the requested part.
+                        UNIT_ASSERT_VALUES_EQUAL(head.FindPos(offset, partNo), partNo);
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            head.FindPos(offset + logicalMessageCount - 1, partNo), partNo);
+                    }
+                    // The next message is in the last storage batch: do not rewind.
+                    UNIT_ASSERT_VALUES_EQUAL(head.FindPos(offset + logicalMessageCount, 0), 2u);
+                    for (ui32 i = 0; i < totalParts; ++i) {
+                        UNIT_ASSERT_VALUES_EQUAL(head.GetBatch(i).Packed, packed);
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(FindPosKeepsLegacyBatchesAndGaps) {
+        THead head;
+        head.Offset = 100;
+        TBatch legacy(100, 0);
+        legacy.AddBlob(MakeSimpleBlob("src", 1, "legacy"));
+        legacy.ClearOffsetDelta();
+        legacy.Pack();
+        head.AddBatch(legacy);
+
+        TBatch batch(110, 0);
+        batch.AddBlob(MakeSimpleBlob("src", 2, "client batch", 5, true));
+        batch.Pack();
+        head.AddBatch(batch);
+
+        UNIT_ASSERT(!head.GetBatch(0).HasOffsetDelta());
+        UNIT_ASSERT(head.GetBatch(1).HasOffsetDelta());
+        UNIT_ASSERT_VALUES_EQUAL(head.FindPos(99, 0), Max<ui32>());
+        UNIT_ASSERT_VALUES_EQUAL(head.FindPos(100, 0), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(head.FindPos(105, 0), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(head.FindPos(110, 0), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(head.FindPos(113, 0), 1u);
+    }
+
     Y_UNIT_TEST(AddBlobUpdatesInternalParts) {
         THead head;
         head.Offset = 0;
@@ -1233,6 +1306,92 @@ Y_UNIT_TEST_SUITE(Head) {
         UNIT_ASSERT(!head.GetLastBatch().Packed);
         UNIT_ASSERT_VALUES_EQUAL(head.GetLastBatch().Blobs[0].LogicalMessageCount, 3u);
         UNIT_ASSERT(head.GetLastBatch().Blobs[0].IsBatch);
+    }
+
+    Y_UNIT_TEST(OffsetDeltaWithoutBatchingSurvivesPack) {
+        THead head;
+        head.Offset = 100;
+        head.AddBatch(TBatch(100, 0));
+        head.AddBlob(MakeSimpleBlob("src", 1, "ordinary message"));
+
+        UNIT_ASSERT(!head.GetLastBatch().HasOffsetDelta());
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+        head.MutableLastBatch().Pack();
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+        head.MutableLastBatch().Unpack();
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+    }
+
+    Y_UNIT_TEST(OffsetDeltaWithoutBatchingIncludesLastPackedBatch) {
+        THead head;
+        head.Offset = 100;
+        // These are internal storage batches; every client message occupies one offset.
+        for (ui64 offset : {100u, 105u}) {
+            head.AddBatch(TBatch(offset, 0));
+            for (ui64 i = 0; i < 5; ++i) {
+                head.AddBlob(MakeSimpleBlob("src", offset + i, "ordinary message"));
+            }
+            UNIT_ASSERT(!head.GetLastBatch().HasOffsetDelta());
+            head.MutableLastBatch().Pack();
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(head.GetCount(), 10u);
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 10u);
+    }
+
+    void CheckOrdinaryMultipartOffsetDelta(bool includeFirstPart) {
+        THead head;
+        head.Offset = 100;
+        head.PartNo = includeFirstPart ? 0 : 1;
+        const auto ts = TInstant::Seconds(1);
+        if (includeFirstPart) {
+            head.AddBatch(TBatch(100, 0));
+            head.AddBlob(TClientBlob(
+                TString("src"), 1, TString(512_KB, 'x'), TPartData{0, 2, 1_MB},
+                ts, ts, 1_MB, "", ""));
+            head.MutableLastBatch().Pack();
+        }
+
+        // An internal batch may end with an intermediate part; offset delta still
+        // includes that message once the head ends on its last part.
+        head.AddBatch(TBatch(100, 1));
+        head.AddBlob(TClientBlob(
+            TString("src"), 1, TString(512_KB, 'x'), TPartData{1, 2, 1_MB},
+            ts, ts, 1_MB, "", ""));
+
+        UNIT_ASSERT(!head.GetLastBatch().HasOffsetDelta());
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+        head.MutableLastBatch().Pack();
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+        head.MutableLastBatch().Unpack();
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+    }
+
+    Y_UNIT_TEST(OffsetDeltaWithoutBatchingMultipartAcrossBatchesSurvivesPack) {
+        CheckOrdinaryMultipartOffsetDelta(true);
+    }
+
+    Y_UNIT_TEST(OffsetDeltaWithoutBatchingLastPartSurvivesPack) {
+        CheckOrdinaryMultipartOffsetDelta(false);
+    }
+
+    Y_UNIT_TEST(GetOffsetDeltaIncludesIncompleteTrailingPart) {
+        THead head;
+        head.Offset = 100;
+        head.AddBatch(TBatch(100, 0));
+        const auto ts = TInstant::Seconds(1);
+        head.AddBlob(TClientBlob(
+            TString("src"), 1, TString(512_KB, 'x'), TPartData{0, 2, 1_MB},
+            ts, ts, 1_MB, "", ""));
+
+        UNIT_ASSERT_VALUES_EQUAL(head.GetCount(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+
+        head.AddBlob(TClientBlob(
+            TString("src"), 1, TString(512_KB, 'y'), TPartData{1, 2, 1_MB},
+            ts, ts, 1_MB, "", ""));
+        UNIT_ASSERT_VALUES_EQUAL(head.GetCount(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
     }
 
     Y_UNIT_TEST(GetOffsetDeltaWithLMC) {

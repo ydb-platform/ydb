@@ -6,18 +6,10 @@
 #include <util/string/escape.h>
 #include <util/system/unaligned_mem.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/persqueue/public/config.h>
 
 namespace NKikimr {
 namespace NPQ {
-
-namespace {
-
-bool CanWriteOffsetDeltaInKeys() {
-    return HasAppData() && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys();
-}
-
-}
 
 //
 // TPartData
@@ -169,7 +161,7 @@ void TBatch::AddBlob(const TClientBlob &b) {
         InternalPartsPos.push_back(i);
     }
 
-    if (Header.HasOffsetDelta() || b.LogicalMessageCount > 1) {
+    if (CanWriteOffsetDeltaInKeys() || Header.HasOffsetDelta() || b.LogicalMessageCount > 1) {
         Header.SetOffsetDelta(offsetDelta);
     } else {
         Header.ClearOffsetDelta();
@@ -312,12 +304,24 @@ ui32 THead::FindPos(const ui64 offset, const ui16 partNo) const {
         --i;
     }
 
-    if (i == 0) {
-        if (Batches[i].IsGreaterThan(offset, partNo)) {
-            return Max<ui32>();
-        } else {
-            return 0;
+    if (Batches[i].IsGreaterThan(offset, partNo)) {
+        return Max<ui32>();
+    }
+
+    // Parts of one client batch share its starting offset, even when the batch
+    // contains several logical messages. For example, a client batch covering
+    // offsets [100, 105) may have parts 0, 1 and 2 in separate storage batches:
+    //     B0: (100, 0)    B1: (100, 1)    B2: (100, 2)
+    // For a read at (103, 0), the search above stops at B2, but we need B0.
+    // Walk back while the current batch starts after the requested part and
+    // the previous batch still covers the requested offset. OffsetDelta in
+    // its header lets us check this without unpacking the batch.
+    while (i > 0 && Batches[i].GetPartNo() > partNo) {
+        const auto& previous = Batches[i - 1];
+        if (!previous.HasOffsetDelta() || previous.GetOffset() + previous.GetOffsetDelta() <= offset) {
+            break;
         }
+        --i;
     }
 
     return i;
@@ -326,11 +330,19 @@ ui32 THead::FindPos(const ui64 offset, const ui16 partNo) const {
 void THead::AddBatch(const TBatch& batch) {
     auto& b = Batches.emplace_back(batch);
     InternalPartsCount += b.GetInternalPartsCount();
+
+    if (!batch.Packed && !batch.Blobs.empty()) {
+        const auto& lastBlob = batch.Blobs.back();
+        TrailingOffsetDelta = !lastBlob.IsLastPart() ? lastBlob.LogicalMessageCount : 0;
+    } else {
+        TrailingOffsetDelta = 0;
+    }
 }
 
 void THead::ClearBatches() {
     Batches.clear();
     InternalPartsCount = 0;
+    TrailingOffsetDelta = 0;
 }
 
 const std::deque<TBatch>& THead::GetBatches() const {
@@ -360,11 +372,12 @@ void THead::AddBlob(const TClientBlob& blob) {
     InternalPartsCount -= batch.GetInternalPartsCount();
     batch.AddBlob(blob);
     InternalPartsCount += batch.GetInternalPartsCount();
+    TrailingOffsetDelta = !blob.IsLastPart() ? blob.LogicalMessageCount : 0;
 }
 
 void THead::Clear()
 {
-    Offset = PartNo = PackedSize = 0;
+    Offset = PartNo = PackedSize = TrailingOffsetDelta = 0;
     ClearBatches();
 }
 
@@ -396,17 +409,7 @@ ui64 THead::GetOffsetDelta() const
     if (Batches.empty())
         return 0;
 
-    if (Batches.back().HasOffsetDelta()) {
-        return Batches.back().GetOffset() - Offset + Batches.back().GetOffsetDelta();
-    }
-
-    ui64 lastBatchOffsetDelta = 0;
-    if (!Batches.back().Blobs.empty()) {
-        const auto& lastBlob = Batches.back().Blobs.back();
-        lastBatchOffsetDelta = Batches.back().GetCount() + (!lastBlob.IsLastPart() ? 1 : 0);
-    }
-
-    return Batches.back().GetOffset() - Offset + lastBatchOffsetDelta;
+    return GetCount() + TrailingOffsetDelta;
 }
 
 
@@ -626,13 +629,13 @@ ui64 TPartitionedBlob::GetOffsetDelta() const {
         offsetDelta += NewHead.GetOffsetDelta();
     }
 
-    if (!Blobs.empty()) {
-        for (const auto& blob : Blobs) {
-            if (!blob.PartData || blob.PartData->PartNo == 0) {
-                offsetDelta += blob.LogicalMessageCount;
-            }
+    for (size_t i = 0; i < Blobs.size(); ++i) {
+        const auto& blob = Blobs[i];
+        if (!blob.PartData || blob.PartData->PartNo == 0 || (i == 0 && !headIncluded && !newHeadIncluded)) {
+            offsetDelta += blob.LogicalMessageCount;
         }
     }
+
     return offsetDelta;
 }
 
@@ -646,10 +649,9 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
     AFL_ENSURE(NewHead.GetNextOffset() >= (GlueHead ? Head.Offset : NewHead.Offset));
 
     const ui64 offsetDelta = CanWriteOffsetDeltaInKeys() ? GetOffsetDelta() : 0;
-    TMaybe<ui32> keyOffsetDelta;
+    TMaybe<ui64> keyOffsetDelta;
     if (offsetDelta > 0) {
-        AFL_ENSURE(offsetDelta <= Max<ui32>());
-        keyOffsetDelta = static_cast<ui32>(offsetDelta);
+        keyOffsetDelta = offsetDelta;
     }
 
     TKey tmpKey, dataKey;
@@ -735,7 +737,7 @@ auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
     }
     BlobsSize += size + GetMaxHeaderSize();
     ++NextPartNo;
-    Blobs.push_back(blob);
+    Blobs.push_back(std::move(blob));
     if (!IsComplete()) {
         ++InternalPartsCount;
     }

@@ -596,7 +596,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 //                for (auto&& i : stats) {
 //                    YDB_LOG_VERIFY(i.IsArray());
 //                    YDB_LOG_VERIFY(i.GetArraySafe().size() == 0,
-                          {"json", i});
+//                          {"json", i});
 //                }
             }
         }
@@ -613,7 +613,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 //                    YDB_LOG_VERIFY(i.GetArraySafe().size() == 1);
 //                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["chunk_idx"].GetInteger() == 0);
 //                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["entity_id"].GetInteger() == 5,
-                          {"json", i});
+//                          {"json", i});
 //                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() >= 799992);
 //                    YDB_LOG_VERIFY(i.GetArraySafe()[0]["data"].GetIntegerRobust() <= 799999);
 //                    YDB_LOG_INFO("",

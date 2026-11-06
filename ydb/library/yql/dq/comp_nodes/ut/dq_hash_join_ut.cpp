@@ -2765,6 +2765,62 @@ Y_UNIT_TEST_SUITE(TDqHashJoinPgTypesTest) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TDqHashJoinResourceKeyTest) {
+    template <bool BlockJoin>
+    TRuntimeNode MakeHashJoin(TDqSetup<false>& setup, TVector<TType*> leftColumns, TVector<TType*> rightColumns,
+                              const TVector<ui32>& leftKeys, const TVector<ui32>& rightKeys, TType* returnItemType) {
+        auto& pb = setup.GetDqProgramBuilder();
+        auto source = [&](TVector<TType*> columns) {
+            if constexpr (BlockJoin) {
+                for (auto*& type : columns) {
+                    type = pb.NewBlockType(type, TBlockType::EShape::Many);
+                }
+                columns.push_back(pb.LastScalarIndexBlock());
+            }
+            auto* multi = pb.NewMultiType(columns);
+            // ExternalNode is a stream node. Scalar hash join needs a wide flow, which ToFlow
+            // produces from a wide stream. A flow-typed ExternalNode is not IComputationWideFlowNode.
+            TCallableBuilder builder(*setup.Env, "ExternalNode", pb.NewStreamType(multi));
+            TRuntimeNode stream(builder.Build(), false);
+            if constexpr (BlockJoin) {
+                return stream;
+            }
+            return pb.ToFlow(stream, {});
+        };
+        auto* returnType = BlockJoin
+            ? pb.NewStreamType(pb.NewMultiType({pb.NewBlockType(returnItemType, TBlockType::EShape::Many),
+                                                pb.LastScalarIndexBlock()}))
+            : pb.NewFlowType(pb.NewMultiType({returnItemType}));
+        const auto lhs = source(std::move(leftColumns));
+        const auto rhs = source(std::move(rightColumns));
+        if constexpr (BlockJoin) {
+            return pb.DqBlockHashJoin(lhs, rhs, EJoinKind::Inner, leftKeys, rightKeys, {0, 0}, {}, returnType);
+        } else {
+            return pb.DqScalarHashJoin(lhs, rhs, EJoinKind::Inner, leftKeys, rightKeys, {0, 0}, {}, returnType);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(RejectResourceKey, BlockJoin) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* resourceType = pb.NewResourceType("Test.Resource");
+        const auto join = MakeHashJoin<BlockJoin>(setup, {resourceType, intType}, {resourceType, intType}, {0}, {0}, intType);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(setup.BuildGraph(join), yexception,
+            "Resource types are not supported as hash join keys");
+    }
+
+    Y_UNIT_TEST_TWIN(AllowResourcePayload, BlockJoin) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        auto* intType = pb.NewDataType(NUdf::EDataSlot::Int64);
+        auto* resourceType = pb.NewResourceType("Test.Resource");
+        const auto join = MakeHashJoin<BlockJoin>(setup, {intType, resourceType}, {intType, resourceType}, {0}, {0}, intType);
+        auto graph = setup.BuildGraph(join);
+        UNIT_ASSERT(graph.Get() != nullptr);
+    }
+}
+
 Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
     Y_UNIT_TEST(InnerAndCrossKeepPreservedSide) {
         const auto inner = DispatchPhysicalJoin(EJoinKind::Inner, ESide::Build, false);

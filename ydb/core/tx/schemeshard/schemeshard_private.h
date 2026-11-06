@@ -3,10 +3,10 @@
 
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
-#include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/kesus.pb.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/library/actors/core/event_local.h>
@@ -203,7 +203,7 @@ namespace TEvPrivate {
     struct TEvKesusSemaphoresDescribeResult: public TEventLocal<TEvKesusSemaphoresDescribeResult, EvKesusSemaphoresDescribeResult> {
         bool Success = false;
         TString Error;
-        TVector<Ydb::Coordination::SessionRequest::CreateSemaphore> Semaphores;
+        TVector<NKikimrKesus::TEvCreateSemaphore> Semaphores;
     };
 
     struct TEvExportUploadMetadataResult: public TEventLocal<TEvExportUploadMetadataResult, EvExportUploadMetadataResult> {

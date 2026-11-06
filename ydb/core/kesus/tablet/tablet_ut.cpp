@@ -64,13 +64,15 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), 1);
         const auto& semaphore = result.GetSemaphores(0);
-        UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), "../persistent");
-        UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), data);
-        UNIT_ASSERT_VALUES_EQUAL(semaphore.req_id(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.GetName(), "../persistent");
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.GetLimit(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.GetData(), data);
+        UNIT_ASSERT(semaphore.GetKesusPath().empty());
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.GetProxyGeneration(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.GetSessionId(), 0);
 
         // Replaying a definition creates a free semaphore, despite active owners/waiters at the source.
-        ctx.CreateSemaphore("restored", semaphore.limit(), semaphore.data());
+        ctx.CreateSemaphore("restored", semaphore.GetLimit(), semaphore.GetData());
         const auto restored = ctx.DescribeSemaphore("restored", true);
         UNIT_ASSERT_VALUES_EQUAL(restored.Data, data);
         UNIT_ASSERT_VALUES_EQUAL(restored.Limit, 2);
@@ -93,10 +95,10 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), count);
         THashSet<TString> names;
         for (const auto& semaphore : result.GetSemaphores()) {
-            UNIT_ASSERT(names.insert(semaphore.name()).second);
-            UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), ToString(semaphore.limit() - 1));
-            UNIT_ASSERT(semaphore.limit() >= 1 && semaphore.limit() <= count);
-            UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), data);
+            UNIT_ASSERT(names.insert(semaphore.GetName()).second);
+            UNIT_ASSERT_VALUES_EQUAL(semaphore.GetName(), ToString(semaphore.GetLimit() - 1));
+            UNIT_ASSERT(semaphore.GetLimit() >= 1 && semaphore.GetLimit() <= count);
+            UNIT_ASSERT_VALUES_EQUAL(semaphore.GetData(), data);
         }
     }
 
@@ -113,21 +115,21 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
                 const TString name = ToString(i);
                 ctx.CreateSemaphore(name, 1, data);
                 auto* semaphore = expected.Record.AddSemaphores();
-                semaphore->set_name(name);
-                semaphore->set_limit(1);
-                semaphore->set_data(data);
+                semaphore->SetName(name);
+                semaphore->SetLimit(1);
+                semaphore->SetData(data);
             }
 
             auto* boundary = expected.Record.AddSemaphores();
-            boundary->set_name("boundary");
-            boundary->set_limit(Max<ui64>());
-            boundary->set_data(data);
+            boundary->SetName("boundary");
+            boundary->SetLimit(Max<ui64>());
+            boundary->SetData(data);
             const size_t size = expected.CalculateSerializedSize();
             UNIT_ASSERT(size > NActors::EventMaxByteSize);
             const size_t excess = size - NActors::EventMaxByteSize;
             UNIT_ASSERT(excess < data.size());
             boundaryData = data.substr(0, data.size() - excess);
-            boundary->set_data(boundaryData);
+            boundary->SetData(boundaryData);
             UNIT_ASSERT_VALUES_EQUAL(expected.CalculateSerializedSize(), NActors::EventMaxByteSize);
         }
 
@@ -167,10 +169,10 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
             UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), 2);
             THashSet<TString> names;
             for (const auto& semaphore : result.GetSemaphores()) {
-                UNIT_ASSERT(names.insert(semaphore.name()).second);
-                UNIT_ASSERT(semaphore.name() == "B" || semaphore.name() == "C");
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), semaphore.name() == "B" ? 2 : 3);
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), semaphore.name() == "B" ? "changed" : "new");
+                UNIT_ASSERT(names.insert(semaphore.GetName()).second);
+                UNIT_ASSERT(semaphore.GetName() == "B" || semaphore.GetName() == "C");
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.GetLimit(), semaphore.GetName() == "B" ? 2 : 3);
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.GetData(), semaphore.GetName() == "B" ? "changed" : "new");
             }
         }
     }

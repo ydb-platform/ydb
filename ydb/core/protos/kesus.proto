@@ -104,7 +104,7 @@ message TEvDescribeSemaphores {}
 
 message TEvDescribeSemaphoresResult {
     TKesusError Error = 1;
-    repeated Ydb.Coordination.SessionRequest.CreateSemaphore Semaphores = 2;
+    repeated TEvCreateSemaphore Semaphores = 2;
 }
 
 message TEvCreateSemaphore {

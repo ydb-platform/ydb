@@ -3,6 +3,7 @@
 #include "schemeshard.h"
 #include "schemeshard_xxport__helpers.h"
 
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
@@ -380,7 +381,7 @@ private:
         }
         // The source is a hash map; use names for reproducible file numbering.
         std::sort(result->Semaphores.begin(), result->Semaphores.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.name() < rhs.name();
+            return lhs.GetName() < rhs.GetName();
         });
         Send(Owner, result.Release());
         PassAway();
@@ -634,8 +635,12 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
             for (ui32 index = 0; index < KesusSemaphores.size(); ++index) {
                 const auto& semaphore = KesusSemaphores[index];
                 const TString prefix = semaphoresPrefix + "/" + Sprintf("%03u", index + 1);
+                Ydb::Coordination::SessionRequest::CreateSemaphore request;
+                request.set_name(semaphore.GetName());
+                request.set_limit(semaphore.GetLimit());
+                request.set_data(semaphore.GetData());
                 TString content;
-                if (!NYdb::NBackup::PrintProto(semaphore, content)) {
+                if (!NYdb::NBackup::PrintProto(request, content)) {
                     return Finish(false, "Cannot serialize coordination node semaphore");
                 }
                 if (!AddFileWithChecksum(prefix + "/create_semaphore.pb",
@@ -643,7 +648,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
                 {
                     return;
                 }
-                semaphores.push_back({.ExportPrefix = prefix, .Name = semaphore.name()});
+                semaphores.push_back({.ExportPrefix = prefix, .Name = semaphore.GetName()});
             }
             Metadata.SetSemaphores(std::move(semaphores));
             KesusSemaphores.clear();
@@ -761,7 +766,7 @@ private:
     NBackup::TMetadata Metadata;
     TActorId ResourcesDescriber;
     TVector<Ydb::RateLimiter::Resource> KesusResources;
-    TVector<Ydb::Coordination::SessionRequest::CreateSemaphore> KesusSemaphores;
+    TVector<NKikimrKesus::TEvCreateSemaphore> KesusSemaphores;
     ui64 KesusTabletId = 0;
 }; // TSchemeUploader
 

@@ -32,10 +32,10 @@ struct TKesusTablet::TTxSemaphoresDescribe : public TTxBase {
             if (info.Ephemeral) {
                 continue;
             }
-            Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
-            semaphore.set_name(info.Name);
-            semaphore.set_data(info.Data);
-            semaphore.set_limit(info.Limit);
+            NKikimrKesus::TEvCreateSemaphore semaphore;
+            semaphore.SetName(info.Name);
+            semaphore.SetData(info.Data);
+            semaphore.SetLimit(info.Limit);
             bytes += semaphoreTagSize + WireFormatLite::MessageSize(semaphore);
             if (bytes > NActors::EventMaxByteSize) {
                 result.ClearSemaphores();

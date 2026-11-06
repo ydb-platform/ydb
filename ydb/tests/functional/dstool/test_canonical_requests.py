@@ -551,7 +551,11 @@ class Test(TestBase):
             fake_grpc_handler = FakeReassignGroupDiskHandler(pending_reassigns, base_config)
             return self._trace('--verbose', 'cluster', 'balance', '--only-from-overpopulated-pdisks',
                                '--storage-pool=test-pool', '--max-iterations=1',
+<<<<<<< HEAD
                                with_grpc_calls=True,
+=======
+                               with_grpc_calls=True, allow_http_fetch=True,
+>>>>>>> stable-26-1-1
                                mock_base_config=base_config,
                                fake_grpc_handler=fake_grpc_handler)
 
@@ -563,6 +567,7 @@ class Test(TestBase):
                 builder=make_builder(2, [2, 2, 2, 2, 1, 2, 2, 2, 2]),
                 pending_reassigns={0x80000005: (1, 1002, 1000)}),
         ]
+<<<<<<< HEAD
 
     def test_filter_healthy_groups_requires_bsc_ready(self):
         """Status=READY alone is not enough: BSC ReadyStablePeriod uses TVSlot.Ready."""
@@ -632,3 +637,5 @@ class Test(TestBase):
             mock_base_config=base_config,
             fake_grpc_handler=fake_grpc_handler,
         )
+=======
+>>>>>>> stable-26-1-1

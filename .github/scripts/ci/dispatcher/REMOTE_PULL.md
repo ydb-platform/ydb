@@ -25,4 +25,10 @@ with `config.inputs`.
 
 `platform_run_id` = caller `github.run_id`.
 
-Build config: `resolve_remote_execution.py` → opaque JSON into `dispatch_remote.yml`.
+Layout under `.github/scripts/ci/`:
+
+- `dispatcher/` — platform only (resolve, enqueue/wait/cancel, ingest)
+- `remote_executor/` — host/executor build helpers (e.g. artifacts manifest)
+
+Build config: `dispatcher/resolve_remote_execution.py` → opaque JSON into
+`dispatch_remote.yml`.

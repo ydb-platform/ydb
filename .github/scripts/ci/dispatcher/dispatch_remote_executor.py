@@ -317,7 +317,7 @@ def cmd_cancel():
 
 def main():
     if len(sys.argv) != 2 or sys.argv[1] not in ("enqueue", "start", "wait", "cancel"):
-        die("usage: dispatch_remote_executor.py enqueue|start|wait|cancel")
+        die("usage: dispatcher/dispatch_remote_executor.py enqueue|start|wait|cancel")
     apply_to_environ()
     cmd = sys.argv[1]
     # `start` kept as an alias for enqueue (workflow_call step name).

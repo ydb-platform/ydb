@@ -4,7 +4,7 @@ name: Dispatch remote executor
 #   enqueue remote-ticket Actions artifact → wait host claim → ingest.
 # Host gets launch context from that artifact only (never from platform S3).
 # Platform never workflow_dispatch'es the host; host VM does after the webhook.
-# Config: resolve_remote_execution.py / REMOTE_PULL.md.
+# Config: scripts/ci/dispatcher/resolve_remote_execution.py + REMOTE_PULL.md.
 on:
   workflow_call:
     inputs:
@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           sparse-checkout: |
-            .github/scripts/ci
+            .github/scripts/ci/dispatcher
           sparse-checkout-cone-mode: false
 
       - name: Write remote-ticket
@@ -46,7 +46,7 @@ jobs:
           TICKET_PATH: remote-ticket.json
           REPO: ${{ fromJSON(inputs.config).repository || github.repository }}
           WORKFLOW_NAME: ${{ fromJSON(inputs.config).workflow_name }}
-        run: python3 .github/scripts/ci/dispatch_remote_executor.py enqueue
+        run: python3 .github/scripts/ci/dispatcher/dispatch_remote_executor.py enqueue
 
       - name: Upload remote-ticket artifact
         uses: actions/upload-artifact@v4
@@ -69,7 +69,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           sparse-checkout: |
-            .github/scripts/ci
+            .github/scripts/ci/dispatcher
           sparse-checkout-cone-mode: false
 
       - name: Wait for claim + executor
@@ -84,7 +84,7 @@ jobs:
           AWS_ENDPOINT: ${{ fromJSON(inputs.config).summary_s3_endpoint || fromJSON(inputs.config).claim_s3_endpoint }}
           AWS_BUCKET: ${{ fromJSON(inputs.config).summary_s3_bucket || fromJSON(inputs.config).claim_s3_bucket }}
           FAIL_ON_REMOTE_FAILURE: ${{ fromJSON(inputs.config).fail_on_remote_failure }}
-        run: python3 .github/scripts/ci/dispatch_remote_executor.py wait
+        run: python3 .github/scripts/ci/dispatcher/dispatch_remote_executor.py wait
 
       - name: Cancel on caller cancel
         if: cancelled()
@@ -97,7 +97,7 @@ jobs:
           REPO: ${{ fromJSON(inputs.config).repository }}
           AWS_ENDPOINT: ${{ fromJSON(inputs.config).summary_s3_endpoint || fromJSON(inputs.config).claim_s3_endpoint }}
           AWS_BUCKET: ${{ fromJSON(inputs.config).summary_s3_bucket || fromJSON(inputs.config).claim_s3_bucket }}
-        run: python3 .github/scripts/ci/dispatch_remote_executor.py cancel
+        run: python3 .github/scripts/ci/dispatcher/dispatch_remote_executor.py cancel
 
   ingest:
     if: >-
@@ -151,4 +151,4 @@ jobs:
           SOURCE_RUN_ID: ${{ github.run_id }}
           PULL_NUMBER: ${{ github.event.pull_request.number || github.event.number || '' }}
           WORKSPACE: ${{ github.workspace }}
-        run: python3 .github/scripts/ci/ingest_remote_executor_results.py
+        run: python3 .github/scripts/ci/dispatcher/ingest_remote_executor_results.py

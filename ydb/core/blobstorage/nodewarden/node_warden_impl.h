@@ -899,6 +899,7 @@ namespace NKikimr::NStorage {
         TReplQuoter::TPtr SyncRateQuoter;
         ui64 SyncRateConfigLimit = 0; // BridgeSyncRateBytesPerSecond, 0 means no limit
         ui64 SyncRateControllerLimit = 0; // the share of the node in the limit for the cluster, 0 means no limit
+        ui32 ControllerGeneration = 0; // the newest tablet generation of BSC that has told the node its syncers and share
 
         void UpdateSyncRateQuoter();
         void ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update);

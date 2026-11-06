@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 break;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(promoted.GetMirror3dcState(), NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(promoted.GetMirror3dcState()), static_cast<ui32>(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1));
         UNIT_ASSERT_VALUES_EQUAL(promoted.GetGroupGeneration(), initialGeneration + 1);
         UNIT_ASSERT_VALUES_EQUAL(probes, 6);
         // Enabling the second invariant changes the group state while I/I/X stays unchanged.
@@ -710,7 +710,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 break;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(promoted.GetMirror3dcState(), NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(promoted.GetMirror3dcState()), static_cast<ui32>(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2));
         UNIT_ASSERT_VALUES_EQUAL(ui32(promoted.GetRings(0).GetState()), ui32(TFailRealm::INCLUDED));
         UNIT_ASSERT_VALUES_EQUAL(ui32(promoted.GetRings(1).GetState()), ui32(TFailRealm::INCLUDED));
         UNIT_ASSERT_VALUES_EQUAL(ui32(promoted.GetRings(2).GetState()), ui32(TFailRealm::EXCLUDED));
@@ -745,11 +745,11 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         request.MutableCommand(0)->MutableDefineGroupState()->MutableGroups(0)->SetGroupState(S::DC_FAILURE_INV1_PENDING);
         UNIT_ASSERT(env.Invoke(request).GetSuccess());
         auto pending = env.ReadGroups().at(id);
-        UNIT_ASSERT_VALUES_EQUAL(pending.GetMirror3dcState(), S::DC_FAILURE_INV1_PENDING);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(pending.GetMirror3dcState()), static_cast<ui32>(S::DC_FAILURE_INV1_PENDING));
         // An idempotent request explicitly preserves PENDING and the physical roles.
         UNIT_ASSERT(env.Invoke(env.SetGroupStates(id, {R::INCLUDED, R::INCLUDED, R::EXCLUDED}, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING)).GetSuccess());
         pending = env.ReadGroups().at(id);
-        UNIT_ASSERT_VALUES_EQUAL(pending.GetMirror3dcState(), S::DC_FAILURE_INV1_PENDING);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(pending.GetMirror3dcState()), static_cast<ui32>(S::DC_FAILURE_INV1_PENDING));
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(id).SerializeAsString(), pending.SerializeAsString());
     }
@@ -914,14 +914,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(env.Invoke(request).GetSuccess());
         for (const auto& [id, group] : env.ReadGroups()) {
             if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
-                UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState(), NKikimrBlobStorage::TGroupState::DC_SOLO_INV2);
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(group.GetMirror3dcState()), static_cast<ui32>(NKikimrBlobStorage::TGroupState::DC_SOLO_INV2));
             }
         }
         NKikimrBlobStorage::TConfigRequest returnRealm = env.Define({{"2", TDataCenter::EXCLUDED}});
         UNIT_ASSERT(env.Invoke(returnRealm).GetSuccess());
         for (const auto& [id, group] : env.ReadGroups()) {
             if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
-                UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState(), NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING);
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(group.GetMirror3dcState()), static_cast<ui32>(NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING));
             }
         }
         NKikimrBlobStorage::TConfigRequest excludeReturnedRealm = env.Define(
@@ -929,7 +929,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(env.Invoke(excludeReturnedRealm).GetSuccess());
         for (const auto& [id, group] : env.ReadGroups()) {
             if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
-                UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState(), NKikimrBlobStorage::TGroupState::DC_SOLO_INV2);
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(group.GetMirror3dcState()), static_cast<ui32>(NKikimrBlobStorage::TGroupState::DC_SOLO_INV2));
             }
         }
     }
@@ -950,7 +950,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         for (const auto& [id, group] : env.ReadGroups()) {
             if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
                 UNIT_ASSERT(group.HasMirror3dcState());
-                UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState(), NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER);
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(group.GetMirror3dcState()), static_cast<ui32>(NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER));
             }
         }
         before = env.ReadGroups();

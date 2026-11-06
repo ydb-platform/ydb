@@ -699,7 +699,7 @@ Y_UNIT_TEST_SUITE(Osiris) {
         UNIT_ASSERT_VALUES_EQUAL(stateResponse->Get()->Record.GetStatus(), NKikimrProto::OK);
         UNIT_ASSERT_VALUES_EQUAL(stateResponse->Get()->Record.GetServiceSet().GroupsSize(), 1);
         const NKikimrBlobStorage::TGroupInfo& finalGroup = stateResponse->Get()->Record.GetServiceSet().GetGroups(0);
-        UNIT_ASSERT_VALUES_EQUAL(finalGroup.GetMirror3dcState(), NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(finalGroup.GetMirror3dcState()), static_cast<ui32>(NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2));
         UNIT_ASSERT_VALUES_EQUAL(ui32(finalGroup.GetRings(0).GetState()), ui32(TDataCenterState::INCLUDED));
         UNIT_ASSERT_VALUES_EQUAL(ui32(finalGroup.GetRings(1).GetState()), ui32(TDataCenterState::INCLUDED));
         UNIT_ASSERT_VALUES_EQUAL(ui32(finalGroup.GetRings(2).GetState()), ui32(TDataCenterState::EXCLUDED));

@@ -496,8 +496,7 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             UNIT_ASSERT_VALUES_EQUAL(consumerPartitions.front().GetPartitionConsumerStats()->GetCommittedOffset(), InitialOffset);
         }
 
-        void ExpireFirstMessageAndWriteLater() {
-            ExpireFirstMessage();
+        void WriteLater() {
             const auto alter = Env.Send<TEvYdbProxy::TEvAlterTopicResponse>(Env.GetYdbProxy(),
                 new TEvYdbProxy::TEvAlterTopicRequest(TopicPath,
                     NYdb::NTopic::TAlterTopicSettings().SetRetentionPeriod(TDuration::Days(1))));

@@ -1037,6 +1037,8 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
         entry->MutableDomainState()->SetSmallBlobsQuotaExceeded(true);
     }
 
+    subDomainInfo->FillDiskSpaceQuotaUsage(*entry->MutableDiskSpaceQuotaUsage());
+
     if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
         entry->MutableAuditSettings()->CopyFrom(*auditSettings);
     }

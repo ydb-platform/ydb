@@ -559,6 +559,16 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
     return true;
 }
 
+const IRetryPolicy<>::TPtr DEFAULT_RETRY_POLICY = MakeShortRetryPolicy();
+
+IRetryPolicy<>::TPtr TDescribeSecretSettings::GetRetryPolicy() const {
+    if (RetryPolicy) {
+        return RetryPolicy;
+    }
+
+    return DEFAULT_RETRY_POLICY;
+}
+
 bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& requestId,
     const TString& unresolvedSecretPath
 ) {
@@ -566,10 +576,7 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& request
     Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
 
     if (!requestIt->second.SchemeCacheRetryState) {
-        static const auto defaultSchemeCacheRetryPolicy = MakeShortRetryPolicy();
-        const auto& retryPolicy = requestIt->second.Request->Settings.RetryPolicy
-            ? requestIt->second.Request->Settings.RetryPolicy
-            : defaultSchemeCacheRetryPolicy;
+        const auto retryPolicy = requestIt->second.Request->Settings.GetRetryPolicy();
         requestIt->second.SchemeCacheRetryState = retryPolicy->CreateRetryState();
     }
 
@@ -591,10 +598,7 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeShardRetry(const ui64& request
     const auto requestIt = RequestsInFlight.find(requestId);
     Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
 
-    static const auto defaultSchemeShardRetryPolicy = MakeLongRetryPolicy();
-    const auto& retryPolicy = requestIt->second.Request->Settings.RetryPolicy
-        ? requestIt->second.Request->Settings.RetryPolicy
-        : defaultSchemeShardRetryPolicy;
+    const auto retryPolicy = requestIt->second.Request->Settings.GetRetryPolicy();
 
     auto& retryState = requestIt->second.SchemeShardRetryStates[secretPath];
     if (!retryState) {
@@ -636,6 +640,7 @@ IRetryPolicy<>::TPtr MakeLongRetryPolicy() {
         /* maxTime */ TDuration::Minutes(60)
     );
 }
+
 
 void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId, const TResponseContext& responseCtx) {
     if (responseCtx.FilledSecretsCnt != responseCtx.Secrets.size()) {

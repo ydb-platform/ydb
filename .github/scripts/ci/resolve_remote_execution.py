@@ -28,7 +28,8 @@ DEFAULT_REMOTE: dict[str, Any] = {
     "executor_ref": "nebius-ci",
     "wait": True,
     "fail_on_remote_failure": True,
-    # Host public S3: claims + build artifacts (platform only reads).
+    # Host public S3 only (claims + build outputs). Platform waiter/ingest read
+    # these; the host must never be pointed at platform/YC S3 for launch context.
     "summary_s3_endpoint": "https://s3.us-east-1.amazonaws.com",
     "summary_s3_bucket": "ydb-nebius-ci-public-609722444123-us-east-1",
     "claim_s3_endpoint": "",
@@ -200,7 +201,8 @@ def build_config() -> dict[str, Any]:
     if not _as_str(cfg.get("claim_s3_bucket")).strip():
         cfg["claim_s3_bucket"] = cfg.get("summary_s3_bucket") or ""
 
-    # Payload the host VM passes into ci_remote_executor workflow_dispatch.
+    # Only these fields are passed to the host executor (from Actions artifact
+    # via VM). Host launch context is never taken from platform S3.
     cfg["inputs"] = {
         "platform_run_id": source_run,
         "platform_repository": cfg["platform_repository"],

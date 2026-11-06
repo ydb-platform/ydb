@@ -1,9 +1,9 @@
 name: Dispatch remote executor
 
 # Reusable from Run-and-debug / PR-check / etc.:
-#   enqueue remote-ticket artifact → wait host claim on remote S3 → ingest.
-# Platform never workflow_dispatch'es the host; the host VM starts the executor
-# after the webhook and writes remote-claims/ + artifacts to host S3 only.
+#   enqueue remote-ticket Actions artifact → wait host claim → ingest.
+# Host gets launch context from that artifact only (never from platform S3).
+# Platform never workflow_dispatch'es the host; host VM does after the webhook.
 # Config: resolve_remote_execution.py / REMOTE_PULL.md.
 on:
   workflow_call:

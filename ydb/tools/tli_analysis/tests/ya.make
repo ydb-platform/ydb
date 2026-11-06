@@ -5,11 +5,7 @@ TEST_SRCS(
     test_find_tli_chain.py
 )
 
-IF (NOT SANITIZER_TYPE)
-    REQUIREMENTS(ram:32 cpu:2)
-ELSE()
-    REQUIREMENTS(ram:32 cpu:1)
-ENDIF()
+REQUIREMENTS(ram:32 cpu:1)
 
 SIZE(MEDIUM)
 

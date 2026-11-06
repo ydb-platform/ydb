@@ -7,8 +7,4 @@ SRCS(
     vhost_test.cpp
 )
 
-IF (NOT SANITIZER_TYPE)
-    REQUIREMENTS(cpu:1)
-ENDIF()
-
 END()

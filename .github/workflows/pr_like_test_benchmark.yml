@@ -8,7 +8,7 @@ on:
 
 jobs:
   # Keep runner and build/test settings in sync with the build_and_test job in pr_check.yml.
-  # Experiment: 128-core runner, four linkers, and CPU requirements from #56768.
+  # Experiment: 128-core runner and four linkers; test requirements match main.
   # Run the full configured test selection with remote cache reads/writes disabled.
   benchmark:
     name: Build and test relwithdebinfo

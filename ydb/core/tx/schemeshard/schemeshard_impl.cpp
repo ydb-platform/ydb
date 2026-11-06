@@ -7751,7 +7751,8 @@ void TSchemeShard::RestartPipeTx(TTabletId tabletId, const TActorContext& ctx) {
                             << ", msg cookie: " << msgCookie
                             << ", at schemeshardId: " << TabletID());
 
-            PipeClientCache->Send(ctx, ui64(tabletId),  msg.Type, msg.Data, msgCookie.second);
+            // msg.Materialize() is idempotent
+            PipeClientCache->Send(ctx, ui64(tabletId),  msg.Type, msg.Materialize(), msgCookie.second);
         }
     }
 }

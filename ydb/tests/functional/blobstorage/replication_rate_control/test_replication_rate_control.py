@@ -32,6 +32,8 @@ LOW_RATE = 2 * MIB
 HIGH_RATE = 16 * MIB
 LOW_RATE_WINDOW_SECONDS = 5
 HIGH_RATE_WINDOW_SECONDS = 2
+MIN_EXPECTED_RATE_FACTOR = 0.5
+MAX_EXPECTED_RATE_FACTOR = 1.5
 
 REPL_BYTES_COUNTER = "ReplVGetBytesReceived"
 
@@ -222,6 +224,22 @@ def measure_rate(node, sensor_name, duration):
     return (final_value - initial_value) / elapsed
 
 
+def assert_rate_matches_limit(measured_rate, configured_rate, phase):
+    min_expected_rate = configured_rate * MIN_EXPECTED_RATE_FACTOR
+    max_expected_rate = configured_rate * MAX_EXPECTED_RATE_FACTOR
+    assert min_expected_rate <= measured_rate <= max_expected_rate, (
+        "%s replication rate %.2f MiB/s is outside the expected range "
+        "[%.2f, %.2f] MiB/s for the configured %.2f MiB/s limit"
+        % (
+            phase,
+            measured_rate / MIB,
+            min_expected_rate / MIB,
+            max_expected_rate / MIB,
+            configured_rate / MIB,
+        )
+    )
+
+
 def wait_for_rate_above(node, sensor_name, threshold, timeout=30):
     deadline = time.monotonic() + timeout
     previous_time = time.monotonic()
@@ -302,26 +320,28 @@ def test_replication_rate_control_is_applied_at_runtime(cluster, dynconfig_clien
             "reassigned and replicating",
         )
         wait_for_counter_increase(target_node, REPL_BYTES_COUNTER, initial_counter)
-
-        low_rate = measure_rate(target_node, REPL_BYTES_COUNTER, LOW_RATE_WINDOW_SECONDS)
-        assert low_rate <= LOW_RATE * 1.5, (
-            "Low replication rate %.2f MiB/s exceeds the configured %.2f MiB/s"
-            % (low_rate / MIB, LOW_RATE / MIB)
+        wait_for_rate_above(
+            target_node,
+            REPL_BYTES_COUNTER,
+            LOW_RATE * MIN_EXPECTED_RATE_FACTOR,
         )
 
+        low_rate = measure_rate(target_node, REPL_BYTES_COUNTER, LOW_RATE_WINDOW_SECONDS)
+        assert_rate_matches_limit(low_rate, LOW_RATE, "Low")
+
         set_replication_rate(dynconfig_client, config, HIGH_RATE)
-        wait_for_rate_above(target_node, REPL_BYTES_COUNTER, low_rate * 2.5)
+        wait_for_rate_above(
+            target_node,
+            REPL_BYTES_COUNTER,
+            HIGH_RATE * MIN_EXPECTED_RATE_FACTOR,
+        )
         high_rate = measure_rate(target_node, REPL_BYTES_COUNTER, HIGH_RATE_WINDOW_SECONDS)
         logger.info(
             "Measured replication rates: low %.2f MiB/s, high %.2f MiB/s",
             low_rate / MIB,
             high_rate / MIB,
         )
-        assert high_rate >= low_rate * 2.5, (
-            "Replication rate did not increase enough after the runtime dynconfig update: "
-            "low %.2f MiB/s, high %.2f MiB/s"
-            % (low_rate / MIB, high_rate / MIB)
-        )
+        assert_rate_matches_limit(high_rate, HIGH_RATE, "High")
 
         wait_for_dynamic_vdisk(
             stub,

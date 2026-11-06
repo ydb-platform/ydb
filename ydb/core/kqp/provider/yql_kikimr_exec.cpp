@@ -159,7 +159,7 @@ namespace {
                 }
                 schemeLimits->SetMaxChildrenInDir(value);
             }
-            if (name == "MAX_ACL_BYTES_SIZE") {
+            if (name == "MAX_ACL_BYTES_SIZE"sv) {
                 ui64 value;
                 YQL_ENSURE(ParseInteger(setting.Value(), value));
                 if (!schemeLimits) {

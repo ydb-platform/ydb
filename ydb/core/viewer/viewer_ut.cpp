@@ -1730,7 +1730,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 << (options.ForwardedFromNode ? "X-Forwarded-From-Node: 1\r\n" : "")
                 << (options.SessionCookie ? "Cookie: ydb_session_id=test-session; unrelated=secret\r\n"
                                           : "Authorization: Bearer test-token\r\n")
-                << "\r\n", endpoint, {});
+                << "\r\n", endpoint, std::make_shared<TSockAddrInet>("127.0.0.1", 12345));
         const TActorId sender = runtime.AllocateEdgeActor(options.ServingNodeIndex);
         const TActorId viewerId = runtime.GetLocalServiceId(MakeViewerID(options.ServingNodeIndex), options.ServingNodeIndex);
         runtime.Send(new IEventHandle(viewerId, sender,

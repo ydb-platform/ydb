@@ -177,7 +177,7 @@ NLs::TCheckFunc LsCheckDiskSpaceQuotaUsage(
             }
         }
 
-        UNIT_ASSERT_VALUES_EQUAL_C(static_cast<size_t>(quotaUsage.EntriesSize()), expected.size(), hint);
+        UNIT_ASSERT_VALUES_EQUAL_C(quotaUsage.EntriesSize(), expected.size(), hint);
         int i = 0;
         for (const auto& [poolKind, expectedEntry] : expected) {
             const auto& entry = quotaUsage.GetEntries(i++);
@@ -4816,8 +4816,8 @@ Y_UNIT_TEST_SUITE(TStoragePoolsQuotasTest) {
                     UNIT_ASSERT_VALUES_EQUAL_C(
                         NKikimrSubDomains::TDiskSpaceQuotaUsage::EMode_Name(quotaUsage.GetMode()), expectedMode, hint
                     );
-                    UNIT_ASSERT_VALUES_EQUAL_C(static_cast<size_t>(quotaUsage.EntriesSize()), expectedEntries.size(), hint);
-                    for (int i = 0; i < quotaUsage.EntriesSize(); ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(quotaUsage.EntriesSize(), expectedEntries.size(), hint);
+                    for (size_t i = 0; i < quotaUsage.EntriesSize(); ++i) {
                         const auto& entry = quotaUsage.GetEntries(i);
                         UNIT_ASSERT_VALUES_EQUAL_C(entry.GetPoolKind(), expectedEntries[i].PoolKind, hint);
                         UNIT_ASSERT_VALUES_EQUAL_C(entry.GetSoftQuota(), expectedEntries[i].SoftQuota, hint);

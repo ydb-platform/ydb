@@ -107,6 +107,7 @@ ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_twice
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_csv_no_header_select_price[True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_csv_with_names_projection_column_order[True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[drop-join-row]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[drop-native_join-row]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[recreate-output-column]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[recreate-output-row]
@@ -151,6 +152,7 @@ ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[1-no_sha
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[2-no_shared]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
+ydb/tests/functional/api py3test.[test_public_api.py] chunk
 ydb/tests/functional/blobstorage test_other.py.TestOther.test_nodata
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_disabled_enabled
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_enabled

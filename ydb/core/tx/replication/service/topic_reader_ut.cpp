@@ -7,6 +7,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/services/persqueue_v1/actors/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -331,6 +332,15 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
                 .AppendTopics(NYdb::NTopic::TTopicReadSettings().Path(TopicPath).AppendPartitionIds(0));
         }
 
+        TActorId StartReader() {
+            const auto reader = CreateReader(Env, ReaderSettings());
+            const auto started = Env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvReaderStarted>(Env.GetSender(), TDuration::Seconds(30));
+            UNIT_ASSERT(started);
+            UNIT_ASSERT_VALUES_EQUAL(started->Sender, reader);
+            UNIT_ASSERT_VALUES_EQUAL(started->Get()->CommittedOffset, 0);
+            return reader;
+        }
+
         void ExpireFirstMessage() {
             auto& runtime = Env.GetRuntime();
             NYdb::NTopic::TTopicClient topicClient(Env.GetDriver(), NYdb::NTopic::TTopicClientSettings()
@@ -373,6 +383,21 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             WriteLater();
         }
 
+        void AssertDataLoss(const TActorId& reader) {
+            auto& runtime = Env.GetRuntime();
+            TAutoPtr<IEventHandle> result;
+            runtime.GrabEdgeEvents<TEvWorker::TEvData, TEvWorker::TEvGone>(result, TDuration::Seconds(30));
+            Env.SendAsync(reader, new TEvents::TEvPoison());
+            runtime.DispatchEvents(TDispatchOptions{}, TDuration::Seconds(1));
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_VALUES_EQUAL(result->Sender, reader);
+            if (result->GetTypeRewrite() == TEvWorker::EvData) {
+                UNIT_FAIL("Reader delivered data after retention advanced beyond committed offset 0");
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result->Get<TEvWorker::TEvGone>()->Status, TEvWorker::TEvGone::DATA_LOSS);
+            UNIT_ASSERT_STRING_CONTAINS(result->Get<TEvWorker::TEvGone>()->ErrorDescription, "expected offset 0, got 1");
+        }
+
         void AssertStartupDataLoss(const TActorId& reader) {
             TAutoPtr<IEventHandle> result;
             Env.GetRuntime().GrabEdgeEvents<TEvWorker::TEvReaderStarted, TEvWorker::TEvGone>(
@@ -387,6 +412,33 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
                 "read offset 0 is before retained start offset 1");
         }
     };
+
+    Y_UNIT_TEST(RetentionGapAfterSessionStartWithLaterMessageReportsDataLoss) {
+        TRetentionGapTest s;
+        auto& runtime = s.Env.GetRuntime();
+
+        TVector<TAutoPtr<IEventHandle>> heldReads;
+        auto readObserver = runtime.AddObserver<NGRpcProxy::V1::TEvPQProxy::TEvRead>([&](NGRpcProxy::V1::TEvPQProxy::TEvRead::TPtr& ev) {
+            heldReads.emplace_back(ev.Release());
+        });
+
+        const auto reader = s.StartReader();
+
+        s.Env.SendAsync(reader, new TEvWorker::TEvPoll());
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] { return !heldReads.empty(); };
+        runtime.DispatchEvents(options, TDuration::Seconds(30));
+        UNIT_ASSERT(!heldReads.empty());
+
+        s.ExpireFirstMessageAndWriteLater();
+
+        readObserver.Remove();
+        for (auto& read : heldReads) {
+            runtime.Send(read.Release());
+        }
+
+        s.AssertDataLoss(reader);
+    }
 
     Y_UNIT_TEST(RetentionGapBeforeSessionStartWithLaterMessageReportsDataLoss) {
         TRetentionGapTest s;

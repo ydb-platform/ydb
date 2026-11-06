@@ -75,16 +75,26 @@ private:
     /// scraped every few seconds, so a one-second staleness costs nothing.
     static constexpr TDuration SnapshotsPublishPeriod = TDuration::Seconds(1);
     mutable TInstant SnapshotsPublished = TInstant::Zero();
+    mutable ui64 PublishedSnapshotSeconds = 0;
+    mutable bool PublishedSettled = false;
 
+    /// The throttle holds back only a report equal to the last one (2026-10-28): the engine hands a changed portion
+    /// to the planner as a removal and then an addition, two calls, and the first of them publishes S without the
+    /// portion; a throttled second call left that reading on the gauges until the shard's next change, minutes on
+    /// an idle shard, which read as the node's oldest S jumping forward and back.
     void PublishSnapshots(const TCore::TClock& clock) const {
         const TInstant now = TInstant::MilliSeconds(clock.Now.GetPlanStep());
-        if (now < SnapshotsPublished + SnapshotsPublishPeriod) {
+        const auto s = Core.GetForcedCompactedSnapshot();
+        const bool settled = !s;
+        const ui64 snapshotSeconds = (s ? *s : clock.SettledBefore).GetPlanStep() / 1000;
+        const bool unchanged = settled == PublishedSettled && (settled || snapshotSeconds == PublishedSnapshotSeconds);
+        if (unchanged && now < SnapshotsPublished + SnapshotsPublishPeriod) {
             return;
         }
         SnapshotsPublished = now;
-        const auto s = Core.GetForcedCompactedSnapshot();
-        const ui64 snapshotSeconds = (s ? *s : clock.SettledBefore).GetPlanStep() / 1000;
-        Counters.GetCompactedSnapshotCounters().Set(PlannerId, snapshotSeconds, clock.Now.GetPlanStep() / 1000, /*settled=*/!s);
+        PublishedSnapshotSeconds = snapshotSeconds;
+        PublishedSettled = settled;
+        Counters.GetCompactedSnapshotCounters().Set(PlannerId, snapshotSeconds, clock.Now.GetPlanStep() / 1000, settled);
     }
 
     static bool IsLockedBy(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const TPortionInfo::TConstPtr& p) {

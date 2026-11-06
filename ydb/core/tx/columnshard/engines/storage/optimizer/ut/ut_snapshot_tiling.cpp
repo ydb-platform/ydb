@@ -940,10 +940,14 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         UNIT_ASSERT(!f.Core.GetSchedulingCompactedSnapshot());
         UNIT_ASSERT(!f.Core.HasAdvanceTarget());
         // The engine commits the move: the same portion comes back with level 1 persisted.
+        const i64 landed = f.Counters.AdvanceMoveLanded->Val();
+        const i64 returned = f.Counters.AdvanceMoveReturned->Val();
         f.Core.ModifyPortions({ LinePortion(2, 20, 29, 11) }, { task->Portions.front() });
         f.Check();
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(2), LINE_LEVEL);
         UNIT_ASSERT(!f.Core.GetForcedCompactedSnapshot());
+        UNIT_ASSERT_VALUES_EQUAL(f.Counters.AdvanceMoveLanded->Val(), landed + 1);
+        UNIT_ASSERT_VALUES_EQUAL(f.Counters.AdvanceMoveReturned->Val(), returned);
     }
 
     Y_UNIT_TEST(MoveWhoseDestinationWasTakenIsPlacedByTheArrivalRule) {
@@ -955,10 +959,15 @@ Y_UNIT_TEST_SUITE(SnapshotTilingAdvance) {
         // An old free arrival takes the destination while the move runs.
         f.Add(Portion(3, 25, 35, 10));
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(3), LINE_LEVEL);
+        const i64 landed = f.Counters.AdvanceMoveLanded->Val();
+        const i64 returned = f.Counters.AdvanceMoveReturned->Val();
         f.Core.ModifyPortions({ LinePortion(2, 20, 29, 11) }, { task->Portions.front() });
         f.Check();
         UNIT_ASSERT_VALUES_EQUAL(f.LevelOf(2), FIRST_TREE_LEVEL);
         UNIT_ASSERT_VALUES_EQUAL(*f.Core.GetForcedCompactedSnapshot(), 11);
+        // The returned move is what the node-wide counter Advance/Move/Returned counts.
+        UNIT_ASSERT_VALUES_EQUAL(f.Counters.AdvanceMoveLanded->Val(), landed);
+        UNIT_ASSERT_VALUES_EQUAL(f.Counters.AdvanceMoveReturned->Val(), returned + 1);
     }
 
     Y_UNIT_TEST(AbortedAdvanceKeepsAFloorPriority) {

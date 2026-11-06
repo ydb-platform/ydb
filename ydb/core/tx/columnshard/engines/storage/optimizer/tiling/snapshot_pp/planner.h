@@ -1362,8 +1362,10 @@ private:
 
     /// The arrival rule (Placing an arriving portion; decision 26 for a committed metadata move).
     void Place(const TPtr& p) {
+        // A portion that arrives with the line's level is a committed metadata move (or a line portion at bootstrap).
+        const bool committedMove = p->GetCompactionLevel() == LINE_LEVEL;
         ui8 level = ACCUMULATOR_LEVEL;
-        if (p->GetCompactionLevel() == LINE_LEVEL && !IntersectsLine(*p)) {
+        if (committedMove && !IntersectsLine(*p)) {
             level = LINE_LEVEL;
         } else if (IsSmall(*p)) {
             level = ACCUMULATOR_LEVEL;
@@ -1371,6 +1373,9 @@ private:
             level = LINE_LEVEL;
         } else {
             level = ChooseTreeLevel(*p);
+        }
+        if (committedMove) {
+            (level == LINE_LEVEL ? Counters.AdvanceMoveLanded : Counters.AdvanceMoveReturned)->Inc();
         }
         Insert(p, level);
     }

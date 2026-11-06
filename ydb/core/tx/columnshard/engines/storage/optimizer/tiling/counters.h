@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/counters/histogram_borders.h>
 #include <ydb/core/tx/columnshard/counters/portions.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -227,6 +228,10 @@ private:
     const NMonitoring::THistogramPtr AdvanceIdealTaskBytes;
     const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMemoryShortageBytes;
     const NMonitoring::TDynamicCounters::TCounterPtr AdvanceBudgetCuts;
+    /// Outcome of a committed metadata move (decision 26, 2026-10-28): the portion landed in the line, or its
+    /// destination was taken while it ran and the arrival rule put it back outside the line, to be advanced again.
+    const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMoveLanded;
+    const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMoveReturned;
     /// Time spent inside the tiling-s adapter per engine call, in microseconds (2026-10-27): the planner's share of the
     /// shard's transaction Complete phases.
     const NMonitoring::THistogramPtr PlannerModifyPortionsUs;
@@ -240,9 +245,11 @@ public:
         : TBase("TilingCompactionOptimizer")
         , TasksSkippedByPriorityGap(TBase::GetDeriviative("Tasks/SkippedByPriorityGap/Count"))
         , GeneratedTasksPriorityLevel(TBase::GetHistogram("Tasks/GeneratedByPriorityLevel", NMonitoring::LinearHistogram(12, 0, 1)))
-        , AdvanceIdealTaskBytes(TBase::GetHistogram("Advance/IdealTaskBytes", NMonitoring::ExponentialHistogram(25, 2, 1024)))
+        , AdvanceIdealTaskBytes(TBase::GetHistogram("Advance/IdealTaskBytes", NColumnShard::THistorgamBorders::TaskBytesHistogram()))
         , AdvanceMemoryShortageBytes(TBase::GetDeriviative("Advance/MemoryShortage/Bytes"))
         , AdvanceBudgetCuts(TBase::GetDeriviative("Advance/BudgetCut/Count"))
+        , AdvanceMoveLanded(TBase::GetDeriviative("Advance/Move/Landed/Count"))
+        , AdvanceMoveReturned(TBase::GetDeriviative("Advance/Move/Returned/Count"))
         , PlannerModifyPortionsUs(TBase::GetHistogram("Planner/ModifyPortionsUs", NMonitoring::ExponentialHistogram(22, 2)))
         , PlannerUsefulMetricUs(TBase::GetHistogram("Planner/UsefulMetricUs", NMonitoring::ExponentialHistogram(22, 2)))
         , PlannerNextTaskUs(TBase::GetHistogram("Planner/NextTaskUs", NMonitoring::ExponentialHistogram(22, 2)))
@@ -299,6 +306,14 @@ public:
         return Singleton<TGlobalCounters>()->AdvanceBudgetCuts;
     }
 
+    static const NMonitoring::TDynamicCounters::TCounterPtr& GetAdvanceMoveLanded() {
+        return Singleton<TGlobalCounters>()->AdvanceMoveLanded;
+    }
+
+    static const NMonitoring::TDynamicCounters::TCounterPtr& GetAdvanceMoveReturned() {
+        return Singleton<TGlobalCounters>()->AdvanceMoveReturned;
+    }
+
     static const NMonitoring::THistogramPtr& GetPlannerModifyPortionsUs() {
         return Singleton<TGlobalCounters>()->PlannerModifyPortionsUs;
     }
@@ -342,6 +357,10 @@ public:
     const NMonitoring::THistogramPtr AdvanceIdealTaskBytes;
     const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMemoryShortageBytes;
     const NMonitoring::TDynamicCounters::TCounterPtr AdvanceBudgetCuts;
+    /// Outcome of a committed metadata move (decision 26, 2026-10-28): the portion landed in the line, or its
+    /// destination was taken while it ran and the arrival rule put it back outside the line, to be advanced again.
+    const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMoveLanded;
+    const NMonitoring::TDynamicCounters::TCounterPtr AdvanceMoveReturned;
     const NMonitoring::THistogramPtr PlannerModifyPortionsUs;
     const NMonitoring::THistogramPtr PlannerUsefulMetricUs;
     const NMonitoring::THistogramPtr PlannerNextTaskUs;
@@ -356,6 +375,8 @@ public:
         , AdvanceIdealTaskBytes(TGlobalCounters::GetAdvanceIdealTaskBytes())
         , AdvanceMemoryShortageBytes(TGlobalCounters::GetAdvanceMemoryShortageBytes())
         , AdvanceBudgetCuts(TGlobalCounters::GetAdvanceBudgetCuts())
+        , AdvanceMoveLanded(TGlobalCounters::GetAdvanceMoveLanded())
+        , AdvanceMoveReturned(TGlobalCounters::GetAdvanceMoveReturned())
         , PlannerModifyPortionsUs(TGlobalCounters::GetPlannerModifyPortionsUs())
         , PlannerUsefulMetricUs(TGlobalCounters::GetPlannerUsefulMetricUs())
         , PlannerNextTaskUs(TGlobalCounters::GetPlannerNextTaskUs())

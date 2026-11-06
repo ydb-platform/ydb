@@ -14,8 +14,8 @@ namespace NKikimr::NOlap::NChanges {
 
 /// The counters of one compaction task reason, under the subgroup reason=<name> of GeneralCompaction: accumulator, level,
 /// snapshot_merge, snapshot_prefix and snapshot_move for tiling-s, generic for planners that give none. Rates as
-/// derivative counters, distributions as histograms with exponential borders, so that the monitoring system can take
-/// percentiles (histogram_percentile over Histogram/Tasks/...).
+/// derivative counters, distributions as histograms with three buckets per doubling (THistorgamBorders), so that the monitoring
+/// system can take percentiles (histogram_percentile over Histogram/Tasks/...) within 25% of the true value.
 class TCompactionTaskReasonCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = NColumnShard::TCommonCountersOwner;
@@ -54,11 +54,11 @@ public:
         , RawBytesOut(TBase::GetDeriviative("Tasks/RawBytesOut/Bytes"))
         , RowsIn(TBase::GetDeriviative("Tasks/RowsIn/Count"))
         , RowsOut(TBase::GetDeriviative("Tasks/RowsOut/Count"))
-        , HistogramRawBytesIn(TBase::GetHistogram("Tasks/RawBytesIn", NMonitoring::ExponentialHistogram(25, 2, 1024)))
-        , HistogramPortionsIn(TBase::GetHistogram("Tasks/PortionsIn", NMonitoring::ExponentialHistogram(15, 2)))
-        , HistogramBytesIn(TBase::GetHistogram("Tasks/BytesIn", NMonitoring::ExponentialHistogram(25, 2, 1024)))
-        , HistogramPortionsOut(TBase::GetHistogram("Tasks/PortionsOut", NMonitoring::ExponentialHistogram(15, 2)))
-        , HistogramBytesOut(TBase::GetHistogram("Tasks/BytesOut", NMonitoring::ExponentialHistogram(25, 2, 1024)))
+        , HistogramRawBytesIn(TBase::GetHistogram("Tasks/RawBytesIn", NColumnShard::THistorgamBorders::TaskBytesHistogram()))
+        , HistogramPortionsIn(TBase::GetHistogram("Tasks/PortionsIn", NColumnShard::THistorgamBorders::TaskCountHistogram()))
+        , HistogramBytesIn(TBase::GetHistogram("Tasks/BytesIn", NColumnShard::THistorgamBorders::TaskBytesHistogram()))
+        , HistogramPortionsOut(TBase::GetHistogram("Tasks/PortionsOut", NColumnShard::THistorgamBorders::TaskCountHistogram()))
+        , HistogramBytesOut(TBase::GetHistogram("Tasks/BytesOut", NColumnShard::THistorgamBorders::TaskBytesHistogram()))
         , HistogramDurationMs(TBase::GetHistogram("Tasks/DurationMs", NMonitoring::ExponentialHistogram(25, 2)))
         , HistogramWaitMs(TBase::GetHistogram("Tasks/WaitMs", NMonitoring::ExponentialHistogram(25, 2)))
     {

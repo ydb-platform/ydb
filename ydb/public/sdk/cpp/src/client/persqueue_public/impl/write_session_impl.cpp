@@ -1333,18 +1333,14 @@ void TWriteSessionImpl::ScheduleSendImpl() {
         return;
     }
 
-    try {
-        CompressionExecutor->Post([cbContext = SelfContext] {
-            if (auto self = cbContext->LockShared()) {
-                std::lock_guard guard(self->Lock);
-                self->SendImplScheduled = false;
-                self->SendImpl();
-            }
-        });
-        SendImplScheduled = true;
-    } catch (...) {
-        SendImpl();
-    }
+    CompressionExecutor->Post([cbContext = SelfContext] {
+        if (auto self = cbContext->LockShared()) {
+            std::lock_guard guard(self->Lock);
+            self->SendImplScheduled = false;
+            self->SendImpl();
+        }
+    });
+    SendImplScheduled = true;
 }
 
 void TWriteSessionImpl::SendImpl() {

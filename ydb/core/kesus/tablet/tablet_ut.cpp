@@ -100,13 +100,48 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         }
     }
 
-    Y_UNIT_TEST(TestSemaphoresBackupResponseTooLarge) {
+    Y_UNIT_TEST(TestSemaphoresBackupResponseSizeLimit) {
         TTestContext ctx;
         ctx.Setup();
         const TString data(1024 * 1024, 'x');
-        for (ui32 i = 0; i <= NActors::EventMaxByteSize / data.size(); ++i) {
-            ctx.CreateSemaphore(ToString(i), 1, data);
+        const ui32 count = NActors::EventMaxByteSize / data.size();
+        TString boundaryData;
+        {
+            TEvKesus::TEvDescribeSemaphoresResult expected;
+            expected.Record.MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);
+            for (ui32 i = 0; i + 1 < count; ++i) {
+                const TString name = ToString(i);
+                ctx.CreateSemaphore(name, 1, data);
+                auto* semaphore = expected.Record.AddSemaphores();
+                semaphore->set_name(name);
+                semaphore->set_limit(1);
+                semaphore->set_data(data);
+            }
+
+            auto* boundary = expected.Record.AddSemaphores();
+            boundary->set_name("boundary");
+            boundary->set_limit(Max<ui64>());
+            boundary->set_data(data);
+            const size_t size = expected.CalculateSerializedSize();
+            UNIT_ASSERT(size > NActors::EventMaxByteSize);
+            const size_t excess = size - NActors::EventMaxByteSize;
+            UNIT_ASSERT(excess < data.size());
+            boundaryData = data.substr(0, data.size() - excess);
+            boundary->set_data(boundaryData);
+            UNIT_ASSERT_VALUES_EQUAL(expected.CalculateSerializedSize(), NActors::EventMaxByteSize);
         }
+
+        ctx.CreateSemaphore("boundary", Max<ui64>(), boundaryData);
+        {
+            TEvKesus::TEvDescribeSemaphoresResult response;
+            response.Record = DescribeSemaphoresForBackup(ctx);
+            UNIT_ASSERT_VALUES_EQUAL(response.Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(response.Record.SemaphoresSize(), count);
+            UNIT_ASSERT_VALUES_EQUAL(response.CalculateSerializedSize(), NActors::EventMaxByteSize);
+        }
+
+        boundaryData += 'x';
+        ctx.UpdateSemaphore("boundary", boundaryData);
         const auto result = DescribeSemaphoresForBackup(ctx);
         UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED);
         UNIT_ASSERT_VALUES_EQUAL(result.SemaphoresSize(), 0);

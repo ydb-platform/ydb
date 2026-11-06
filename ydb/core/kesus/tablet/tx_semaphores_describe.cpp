@@ -1,5 +1,7 @@
 #include "tablet_impl.h"
 
+#include <google/protobuf/wire_format_lite.h>
+
 namespace NKikimr::NKesus {
 
 struct TKesusTablet::TTxSemaphoresDescribe : public TTxBase {
@@ -20,9 +22,12 @@ struct TKesusTablet::TTxSemaphoresDescribe : public TTxBase {
         auto& result = Reply->Record;
         result.MutableError()->SetStatus(Ydb::StatusIds::SUCCESS);
 
-        // Leave room for the tablet-pipe envelope in the serialized event.
-        constexpr size_t maxBytes = NActors::EventMaxByteSize - 1024;
-        size_t bytes = 0;
+        using google::protobuf::internal::WireFormatLite;
+        const size_t semaphoreTagSize = WireFormatLite::TagSize(
+            NKikimrKesus::TEvDescribeSemaphoresResult::kSemaphoresFieldNumber,
+            WireFormatLite::TYPE_MESSAGE);
+        // Include Error, then account for each repeated message without rescanning the list.
+        size_t bytes = Reply->CalculateSerializedSize();
         for (const auto& [id, info] : Self->Semaphores) {
             if (info.Ephemeral) {
                 continue;
@@ -31,8 +36,8 @@ struct TKesusTablet::TTxSemaphoresDescribe : public TTxBase {
             semaphore.set_name(info.Name);
             semaphore.set_data(info.Data);
             semaphore.set_limit(info.Limit);
-            bytes += semaphore.ByteSizeLong() + 16;
-            if (bytes > maxBytes) {
+            bytes += semaphoreTagSize + WireFormatLite::MessageSize(semaphore);
+            if (bytes > NActors::EventMaxByteSize) {
                 result.ClearSemaphores();
                 TEvKesus::FillError(result.MutableError(), Ydb::StatusIds::PRECONDITION_FAILED,
                     "Semaphore definitions exceed the export response size limit");

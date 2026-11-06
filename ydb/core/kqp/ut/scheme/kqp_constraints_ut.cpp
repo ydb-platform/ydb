@@ -287,6 +287,17 @@ public:
         CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    TString ShowCreateTable(const TString& tablePath) {
+        const auto result = Session.ExecuteQuery(TStringBuilder() << "SHOW CREATE TABLE `" << tablePath << "`;",
+            TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        const auto query = parser.ColumnParser("CreateQuery").GetOptionalUtf8();
+        UNIT_ASSERT(query);
+        return TString(*query);
+    }
+
     void CheckNoDefault(const TString& tablePath, const TVector<TString>& names, bool notNull = false) {
         const auto describe = Kikimr.GetTestClient().Ls(tablePath);
         const auto& table = describe->Record.GetPathDescription().GetTable();
@@ -7057,6 +7068,255 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value SET DEFAULT 'restored';");
         fixture.Exec("INSERT INTO TestTable (k) VALUES (5);");
         fixture.Check("SELECT value FROM TestTable WHERE k = 5;", R"([["restored"]])");
+    }
+
+    Y_UNIT_TEST_TWIN(DefaultNullPrimaryKeyWrites, CompileTimeDefaults) {
+        for (const bool streamWrite : {false, true}) {
+            auto settings = DefaultsSettings(CompileTimeDefaults);
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(streamWrite);
+            TConstraintsFixture fixture(settings);
+            fixture.Exec(R"(
+                CREATE TABLE NullableKey (tenant Int32 NOT NULL, k Int32 DEFAULT NULL,
+                    value String, payload String, PRIMARY KEY (tenant, k));
+            )");
+            fixture.CheckLiteralNull("/Root/NullableKey", {"k"});
+            for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {
+                fixture.Exec("DELETE FROM NullableKey WHERE tenant IN (1, 2, 3);");
+                fixture.Exec(operation + " INTO NullableKey (tenant, value, payload) VALUES (1, 'omitted', 'saved');");
+                fixture.Exec(operation + " INTO NullableKey (tenant, k, value, payload) VALUES (2, NULL, 'null', 'saved');");
+                fixture.Exec(operation + " INTO NullableKey (tenant, k, value, payload) VALUES (3, 42, 'explicit', 'saved');");
+                fixture.Check("SELECT tenant, k, value, payload FROM NullableKey ORDER BY tenant;",
+                    R"([[1;#;["omitted"];["saved"]];[2;#;["null"];["saved"]];[3;[42];["explicit"];["saved"]]])");
+                fixture.Check(R"(
+                    UPSERT INTO NullableKey (tenant, value) VALUES (1, 'updated') RETURNING tenant, k, value, payload;
+                )", R"([[1;#;["updated"];["saved"]]])");
+                fixture.Check("SELECT tenant, k, value, payload FROM NullableKey WHERE tenant = 1;",
+                    R"([[1;#;["updated"];["saved"]]])");
+            }
+
+            fixture.Exec("CREATE TABLE RequiredKey (k Int32 NOT NULL DEFAULT NULL, value String, PRIMARY KEY (k));");
+            fixture.CheckLiteralNull("/Root/RequiredKey", {"k"}, true);
+            int key = 0;
+            for (const TString operation : {"INSERT", "REPLACE", "UPSERT"}) {
+                fixture.Exec(TStringBuilder() << operation << " INTO RequiredKey (k, value) VALUES (" << ++key << ", 'explicit');");
+                fixture.Reject(operation + " INTO RequiredKey (value) VALUES ('omitted');", "not null");
+                fixture.Reject(operation + " INTO RequiredKey (k, value) VALUES (NULL, 'null');", "Failed to convert type");
+            }
+            fixture.Check("SELECT k, value FROM RequiredKey ORDER BY k;",
+                R"([[1;["explicit"]];[2;["explicit"]];[3;["explicit"]]])");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DefaultNullIndexes, CompileTimeDefaults) {
+        for (const bool streamWrite : {false, true}) {
+            auto settings = DefaultsSettings(CompileTimeDefaults);
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(streamWrite);
+            TConstraintsFixture fixture(settings);
+            fixture.Exec(R"(
+                CREATE TABLE TestTable (k Int32 NOT NULL, value String DEFAULT NULL,
+                    number Int32 DEFAULT NULL, required Int32 NOT NULL DEFAULT NULL, payload String,
+                    INDEX required_index GLOBAL ON (required) COVER (value, number, payload), PRIMARY KEY (k));
+            )");
+            fixture.Exec(R"(
+                INSERT INTO TestTable (k, required, payload) VALUES (1, 10, 'initial');
+                INSERT INTO TestTable (k, value, number, required, payload) VALUES (2, 'explicit', 42, 20, 'initial');
+            )");
+            fixture.Exec("ALTER TABLE TestTable ADD INDEX nullable_index GLOBAL ON (value) COVER (number, required, payload);");
+            fixture.Exec("UPSERT INTO TestTable (k, required, payload) VALUES (1, 10, 'updated'), (2, 20, 'updated');");
+            fixture.Check(R"(
+                UPSERT INTO TestTable (k, required, payload) VALUES (2, 20, 'returned')
+                RETURNING k, value, number, required, payload;
+            )", R"([[2;["explicit"];[42];20;["returned"]]])");
+            fixture.Reject("UPSERT INTO TestTable (k, payload) VALUES (1, 'changed');", "not null");
+            fixture.Reject("UPSERT INTO TestTable (k, payload) VALUES (3, 'new');", "not null");
+            fixture.Reject("UPSERT INTO TestTable (k, payload) VALUES (1, 'changed'), (3, 'new');", "not null");
+            for (const TString index : {"nullable_index", "required_index"}) {
+                fixture.Check("SELECT k, value, number, required, payload FROM TestTable VIEW " + index + " ORDER BY k;",
+                    R"([[1;#;#;10;["updated"]];[2;["explicit"];[42];20;["returned"]]])");
+            }
+            fixture.Exec("REPLACE INTO TestTable (k, required, payload) VALUES (1, 11, 'replaced');");
+            fixture.Exec("UPSERT INTO TestTable (k, value, required) VALUES (2, NULL, 20);");
+            fixture.Check("SELECT k, value, number, required, payload FROM TestTable VIEW nullable_index ORDER BY k;",
+                R"([[1;#;#;11;["replaced"]];[2;#;[42];20;["returned"]]])");
+            fixture.Check("SELECT k FROM TestTable VIEW nullable_index WHERE value = 'explicit';", "[]");
+            fixture.Check("SELECT k FROM TestTable VIEW required_index WHERE required = 10;", "[]");
+            fixture.Check("SELECT k, value, number, required, payload FROM TestTable ORDER BY k;",
+                R"([[1;#;#;11;["replaced"]];[2;#;[42];20;["returned"]]])");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DefaultNullNativeSchemaRoundTrip, CompileTimeDefaults) {
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (k Int32 NOT NULL, value String DEFAULT NULL, number Int32 DEFAULT NULL,
+                counter Uint32 DEFAULT NULL, amount Decimal(22,9) DEFAULT NULL, flag Bool DEFAULT NULL,
+                stamp Timestamp DEFAULT NULL, document Json DEFAULT NULL, required Utf8 NOT NULL DEFAULT NULL,
+                plain String, PRIMARY KEY (k));
+        )");
+        const TVector<TString> nullableColumns{"value", "number", "counter", "amount", "flag", "stamp", "document"};
+        fixture.CheckLiteralNull("/Root/TestTable", nullableColumns);
+        fixture.CheckLiteralNull("/Root/TestTable", {"required"}, true);
+        const auto before = fixture.Kikimr.GetTestClient().Ls("/Root/TestTable")->Record.GetPathDescription().GetTable();
+        const auto ddl = fixture.ShowCreateTable("/Root/TestTable");
+        fixture.Exec("DROP TABLE TestTable;");
+        fixture.Exec(ddl);
+
+        const auto after = fixture.Kikimr.GetTestClient().Ls("/Root/TestTable")->Record.GetPathDescription().GetTable();
+        UNIT_ASSERT_VALUES_EQUAL(after.ColumnsSize(), before.ColumnsSize());
+        for (const auto& column : before.GetColumns()) {
+            const auto restored = FindIf(after.GetColumns(), [&](const auto& item) { return item.GetName() == column.GetName(); });
+            UNIT_ASSERT_C(restored != after.GetColumns().end(), column.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(restored->GetType(), column.GetType());
+            UNIT_ASSERT_VALUES_EQUAL(restored->GetTypeInfo().SerializeAsString(), column.GetTypeInfo().SerializeAsString());
+            UNIT_ASSERT_VALUES_EQUAL(restored->GetNotNull(), column.GetNotNull());
+            UNIT_ASSERT_C(restored->GetDefaultValueCase() == column.GetDefaultValueCase(), restored->DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(restored->GetDefaultFromLiteral().SerializeAsString(), column.GetDefaultFromLiteral().SerializeAsString());
+        }
+        fixture.CheckLiteralNull("/Root/TestTable", nullableColumns);
+        fixture.CheckLiteralNull("/Root/TestTable", {"required"}, true);
+        fixture.CheckNoDefault("/Root/TestTable", {"plain"});
+
+        auto loader = std::make_shared<TKqpTableMetadataLoader>("local_ut",
+            fixture.Kikimr.GetTestServer().GetRuntime()->GetAnyNodeActorSystem(), nullptr);
+        const auto loaded = loader->LoadTableMetadata("local_ut", "/Root/TestTable", {}, "/Root", nullptr).GetValueSync();
+        UNIT_ASSERT_C(loaded.Success(), loaded.Issues().ToString());
+        NKikimrKqp::TKqpTableMetadataProto serialized;
+        loaded.Metadata->ToMessage(&serialized);
+        NKikimrKqp::TKqpTableMetadataProto parsed;
+        UNIT_ASSERT(parsed.ParseFromString(serialized.SerializeAsString()));
+        const NYql::TKikimrTableMetadata metadata(&parsed);
+        for (const auto& [name, column] : loaded.Metadata->Columns) {
+            const auto& restored = metadata.Columns.at(name);
+            UNIT_ASSERT_C(restored.DefaultKind == column.DefaultKind, name);
+            UNIT_ASSERT_VALUES_EQUAL(restored.NotNull, column.NotNull);
+            UNIT_ASSERT_VALUES_EQUAL(restored.Type, column.Type);
+            UNIT_ASSERT_VALUES_EQUAL(restored.DefaultFromLiteral.SerializeAsString(), column.DefaultFromLiteral.SerializeAsString());
+        }
+        fixture.CheckDefaultGeneration("/Root/TestTable", "k, required", "100, 'explicit'u", !CompileTimeDefaults);
+        fixture.Reject("INSERT INTO TestTable (k) VALUES (1);", "not null");
+        fixture.Exec("INSERT INTO TestTable (k, required) VALUES (1, 'saved'u);");
+        fixture.Reject("UPSERT INTO TestTable (k) VALUES (1);", "not null");
+        fixture.Exec("UPSERT INTO TestTable (k, required) VALUES (1, 'updated'u);");
+        fixture.Check("SELECT value, number, counter, amount, flag, stamp, document, required, plain FROM TestTable;",
+            R"([[#;#;#;#;#;#;#;"updated";#]])");
+    }
+
+    Y_UNIT_TEST_TWIN(DefaultNullShowCreateTable, CompileTimeDefaults) {
+        TConstraintsFixture fixture(DefaultsSettings(CompileTimeDefaults));
+        fixture.Exec(R"(
+            CREATE TABLE TestTable (k Int32 NOT NULL DEFAULT NULL, value String DEFAULT NULL,
+                number Uint32, required Utf8 NOT NULL DEFAULT NULL, PRIMARY KEY (k));
+        )");
+        auto checkDefaults = [&](size_t expected) {
+            const auto ddl = fixture.ShowCreateTable("/Root/TestTable");
+            size_t count = 0;
+            for (size_t pos = ddl.find("DEFAULT NULL"); pos != TString::npos; pos = ddl.find("DEFAULT NULL", pos + 1)) {
+                ++count;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(count, expected, ddl);
+        };
+        checkDefaults(3);
+        fixture.Exec("INSERT INTO TestTable (k, value, number, required) VALUES (1, 'existing', 7u, 'saved'u);");
+        fixture.Exec("ALTER TABLE TestTable ADD COLUMN extra Uint32 DEFAULT NULL;");
+        checkDefaults(4);
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN number SET DEFAULT NULL;");
+        checkDefaults(5);
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN value DROP DEFAULT;");
+        checkDefaults(4);
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN k DROP DEFAULT;");
+        fixture.Exec("ALTER TABLE TestTable ALTER COLUMN required SET DEFAULT NULL;");
+        checkDefaults(3);
+        fixture.Check("SELECT k, value, number, required, extra FROM TestTable;",
+            R"([[1;["existing"];[7u];"saved";#]])");
+
+        const auto ddl = fixture.ShowCreateTable("/Root/TestTable");
+        fixture.Exec("DROP TABLE TestTable;");
+        fixture.Exec(ddl);
+        checkDefaults(3);
+        fixture.CheckLiteralNull("/Root/TestTable", {"number", "extra"});
+        fixture.CheckLiteralNull("/Root/TestTable", {"required"}, true);
+        fixture.CheckNoDefault("/Root/TestTable", {"value"});
+        fixture.CheckNoDefault("/Root/TestTable", {"k"}, true);
+        fixture.Exec("INSERT INTO TestTable (k, required) VALUES (2, 'new'u);");
+        fixture.Check("SELECT k, value, number, required, extra FROM TestTable;",
+            R"([[2;#;#;"new";#]])");
+    }
+
+    Y_UNIT_TEST_TWIN(DefaultNullChangefeed, CompileTimeDefaults) {
+        for (const bool streamWrite : {false, true}) {
+            auto settings = DefaultsSettings(CompileTimeDefaults);
+            settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(streamWrite);
+            TConstraintsFixture fixture(settings);
+            fixture.Exec(R"(
+                CREATE TABLE TestTable (k Int32 NOT NULL, value Int32 DEFAULT NULL,
+                    required Int32 NOT NULL DEFAULT NULL, payload Utf8, PRIMARY KEY (k));
+            )");
+            fixture.Exec("ALTER TABLE TestTable ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'JSON');");
+            fixture.Exec("ALTER TOPIC `/Root/TestTable/feed` ADD CONSUMER test_consumer;");
+            fixture.Exec("UPSERT INTO TestTable (k, required, payload) VALUES (1, 42, 'inserted'u);");
+            fixture.Exec("UPSERT INTO TestTable (k, required, payload) VALUES (1, 42, 'updated'u);");
+            fixture.Exec("REPLACE INTO TestTable (k, required, payload) VALUES (1, 43, 'replaced'u);");
+            fixture.Reject("UPSERT INTO TestTable (k, payload) VALUES (1, 'changed'u);", "not null");
+            fixture.Reject("UPSERT INTO TestTable (k, payload) VALUES (2, 'rejected'u);", "not null");
+            fixture.Reject("UPSERT INTO TestTable (k, payload) VALUES (1, 'changed'u), (2, 'rejected'u);", "not null");
+            fixture.Exec("UPSERT INTO TestTable (k, value, required, payload) VALUES (3, 7, 45, 'explicit'u);");
+            fixture.Exec("UPSERT INTO TestTable (k, required, payload) VALUES (3, 45, 'preserved'u);");
+            fixture.Check("SELECT value FROM TestTable WHERE k = 3;", "[[[7]]]");
+            fixture.Exec("UPSERT INTO TestTable (k, value, required, payload) VALUES (3, NULL, 45, 'null'u);");
+            fixture.Check("SELECT k, value, required, payload FROM TestTable ORDER BY k;",
+                R"([[1;#;43;["replaced"]];[3;#;45;["null"]]])");
+
+            TTopicClient topicClient(fixture.Kikimr.GetDriver());
+            TReadSessionSettings readSettings;
+            readSettings.ConsumerName("test_consumer");
+            TTopicReadSettings topicSettings;
+            topicSettings.Path("/Root/TestTable/feed");
+            readSettings.AppendTopics(topicSettings);
+            auto reader = topicClient.CreateReadSession(readSettings);
+            TVector<TString> messages;
+            const auto deadline = TInstant::Now() + TDuration::Seconds(20);
+            while (messages.size() < 6) {
+                const auto now = TInstant::Now();
+                if (now >= deadline || !reader->WaitEvent().Wait(deadline - now)) {
+                    break;
+                }
+                for (auto& event : reader->GetEvents(false)) {
+                    if (auto* start = std::get_if<NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
+                        start->Confirm();
+                    } else if (auto* data = std::get_if<NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                        for (const auto& message : data->GetMessages()) {
+                            messages.emplace_back(message.GetData());
+                        }
+                        data->Commit();
+                    }
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 6);
+            TMap<TString, NJson::TJsonValue> events;
+            for (const auto& message : messages) {
+                NJson::TJsonValue json;
+                UNIT_ASSERT_C(NJson::ReadJsonTree(message, &json), message);
+                const auto& values = json.Has("update") ? json["update"] : json["reset"];
+                const auto payload = values["payload"].GetString();
+                UNIT_ASSERT_C(events.emplace(payload, json).second, message);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(events.at("inserted")["key"][0].GetInteger(), 1);
+            UNIT_ASSERT(events.at("inserted")["update"].Has("value"));
+            UNIT_ASSERT(events.at("inserted")["update"]["value"].IsNull());
+            UNIT_ASSERT_VALUES_EQUAL(events.at("inserted")["update"]["required"].GetInteger(), 42);
+            const auto& updated = events.at("updated")["update"];
+            UNIT_ASSERT(!updated.Has("value") || updated["value"].IsNull());
+            UNIT_ASSERT_VALUES_EQUAL(updated["required"].GetInteger(), 42);
+            UNIT_ASSERT(events.at("replaced")["reset"].Has("value"));
+            UNIT_ASSERT(events.at("replaced")["reset"]["value"].IsNull());
+            UNIT_ASSERT_VALUES_EQUAL(events.at("replaced")["reset"]["required"].GetInteger(), 43);
+            UNIT_ASSERT_VALUES_EQUAL(events.at("explicit")["key"][0].GetInteger(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(events.at("explicit")["update"]["value"].GetInteger(), 7);
+            const auto& preserved = events.at("preserved")["update"];
+            UNIT_ASSERT(!preserved.Has("value") || preserved["value"].GetInteger() == 7);
+            UNIT_ASSERT(events.at("null")["update"].Has("value"));
+            UNIT_ASSERT(events.at("null")["update"]["value"].IsNull());
+        }
     }
 
     Y_UNIT_TEST_TWIN(DefaultNullPostgreSqlTypes, CompileTimeDefaults) {

@@ -6,6 +6,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/public/lib/value/value.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -111,6 +112,56 @@ Y_UNIT_TEST_SUITE(ColumnBuildTest) {
         WriteOp(runtime, TTestTxConfig::SchemeShard, ++fixture.TxId, "/MyRoot/Table", 0,
             NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT, {1, 2}, TSerializedCellMatrix(cells, 1, 2), false);
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), Populated ? 3 : 2);
+    }
+
+    Y_UNIT_TEST_FLAG(NullDefaultBackfillRecovery, RebootSchemeShard) {
+        TColumnBuildFixture fixture;
+        auto& runtime = fixture.Runtime;
+        WriteRow(runtime, ++fixture.TxId, "/MyRoot/Table", 0, 1, "first");
+        WriteRow(runtime, ++fixture.TxId, "/MyRoot/Table", 1, 101, "second");
+        const auto shards = GetTableShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2);
+        TBlockEvents<TEvDataShard::TEvUploadRowsRequest> uploads(runtime);
+        Ydb::TypedValue literal;
+        literal.mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::UINT32);
+        literal.mutable_value()->set_null_flag_value(NProtoBuf::NULL_VALUE);
+        const auto created = fixture.CreateBuild("extra", literal, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(created.GetStatus(), Ydb::StatusIds::SUCCESS, created.DebugString());
+        const ui64 buildId = fixture.TxId;
+        runtime.WaitFor("column backfill upload", [&] { return !uploads.empty(); });
+        if (RebootSchemeShard) {
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        } else {
+            for (const auto shard : shards) {
+                RebootTablet(runtime, shard, runtime.AllocateEdgeActor());
+            }
+        }
+        uploads.Stop().Unblock();
+        const auto finished = fixture.FinishBuild(buildId);
+        UNIT_ASSERT_VALUES_EQUAL_C(finished.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+            finished.DebugString());
+        const auto description = DescribePath(runtime, "/MyRoot/Table");
+        TestDescribeResult(description, {NLs::CheckColumns("Table", {"key", "value", "extra"}, {}, {"key"}, true)});
+        for (const auto& column : description.GetPathDescription().GetTable().GetColumns()) {
+            UNIT_ASSERT_C(!column.GetIsBuildInProgress(), column.DebugString());
+            if (column.GetName() == "extra") {
+                UNIT_ASSERT_C(column.HasDefaultFromLiteral(), column.DebugString());
+                UNIT_ASSERT_C(column.GetDefaultFromLiteral().value().has_null_flag_value(), column.DebugString());
+                UNIT_ASSERT_C(!column.GetNotNull(), column.DebugString());
+            }
+        }
+        for (size_t i = 0; i < shards.size(); ++i) {
+            const auto data = ReadTable(runtime, shards[i], "Table", {"key"}, {"key", "value", "extra"});
+            const auto rows = NClient::TValue::Create(data)["Result"]["List"];
+            UNIT_ASSERT_VALUES_EQUAL(rows.Size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(rows[0]["key"]), i ? 101 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(TString(rows[0]["value"]), i ? "second" : "first");
+            UNIT_ASSERT_C(rows[0]["extra"].IsNull(), data.DebugString());
+        }
+        TVector<TCell> cells{TCell::Make(ui32(2)), TCell(TStringBuf("after reboot")), TCell()};
+        WriteOp(runtime, TTestTxConfig::SchemeShard, ++fixture.TxId, "/MyRoot/Table", 0,
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, {1, 2, 3}, TSerializedCellMatrix(cells, 1, 3), true);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/Table"), 3);
     }
 
     Y_UNIT_TEST(ValidDefaultValue) {

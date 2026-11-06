@@ -32,10 +32,14 @@ namespace NKikimr {
         using TMetadata = std::optional<TRcBuf>;
 
     public:
+        // With sectorFormat (the default) the mock lays data chunks out as a real encrypted PDisk does: the append
+        // block is the sector payload (sector size minus footer and canary), chunks have nonces, and owners get a
+        // format context to send PreformattedSectors writes and RawSectors reads. Without it data chunks are plain:
+        // the append block is the whole sector and there is no format context.
         TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize = 128 << 20,
                 bool isDiskReadOnly = false, NPDisk::EDeviceType deviceType = NPDisk::EDeviceType::DEVICE_TYPE_NVME,
                 ESpaceColorPolicy spaceColorPolicy = ESpaceColorPolicy::None,
-                std::shared_ptr<TMetadata> metadata = {});
+                std::shared_ptr<TMetadata> metadata = {}, bool sectorFormat = true);
         TPDiskMockState(std::unique_ptr<TImpl>&& impl);
         ~TPDiskMockState();
 
@@ -58,6 +62,10 @@ namespace NKikimr {
         void SetReportVDiskMetrics(bool reportVDiskMetrics);
 
         bool IsDiskReadOnly() const;
+
+        // How many PreformattedSectors writes and RawSectors reads the mock has served.
+        ui64 GetPreformattedSectorWrites() const;
+        ui64 GetRawSectorReads() const;
     };
 
     struct TEvMoveDrive : TEventLocal<TEvMoveDrive, EvReplaceData> {

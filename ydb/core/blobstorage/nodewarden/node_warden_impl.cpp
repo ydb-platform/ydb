@@ -95,6 +95,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , VolatilePhantomFlagStorageBlobSizeLimitBytes(1'000'000, 1, 10'000'000)
     , EnableChecksumReadValidationOnVDisk(0, 0, 1)
     , EnableChecksumWriteValidationOnVDisk(0, 0, 1)
+    , EnableVDiskSectorPreparation(0, 0, 1)
     , EnableChunkKeeper(0, 0, 1)
     , SpaceReportPeriodSeconds(0, 0, 86400)
     , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
@@ -512,6 +513,7 @@ void TNodeWarden::Bootstrap() {
                 icb->VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes);
         TControlBoard::RegisterSharedControl(EnableChecksumReadValidationOnVDisk, icb->VDiskControls.EnableChecksumReadValidationOnVDisk);
         TControlBoard::RegisterSharedControl(EnableChecksumWriteValidationOnVDisk, icb->VDiskControls.EnableChecksumWriteValidationOnVDisk);
+        TControlBoard::RegisterSharedControl(EnableVDiskSectorPreparation, icb->VDiskControls.EnableVDiskSectorPreparation);
         TControlBoard::RegisterSharedControl(EnableChunkKeeper, icb->VDiskControls.EnableChunkKeeper);
         TControlBoard::RegisterSharedControl(SpaceReportPeriodSeconds, icb->VDiskControls.SpaceReportPeriodSeconds);
 

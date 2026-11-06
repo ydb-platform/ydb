@@ -56,7 +56,8 @@ def http_get(url: str, timeout: int = 60) -> bytes | None:
 
 
 def quote_url(url: str) -> str:
-    return urllib.parse.quote(url, safe=":/")
+    # Keep '/' and already-encoded '%xx' so re-quoting is idempotent.
+    return urllib.parse.quote(url, safe=":/%")
 
 
 def run(cmd: list[str], **kwargs: Any) -> None:
@@ -575,7 +576,8 @@ def main() -> None:
 
     leaf = key_prefix.rstrip("/").rsplit("/", 1)[-1]
     dest_key_prefix = f"{caller_repo}/{caller_workflow}/{caller_run_id}/remote-{run_id}/{leaf}"
-    new_public = f"{caller_endpoint}/{caller_bucket}/{dest_key_prefix}"
+    # HTTP URLs must be percent-encoded (workflow names with spaces break Markdown links).
+    new_public = quote_url(f"{caller_endpoint}/{caller_bucket}/{dest_key_prefix}")
     caller_s3_path = f"s3://{caller_bucket}/{dest_key_prefix}"
     caller_run_root = f"s3://{caller_bucket}/{caller_repo}/{caller_workflow}/{caller_run_id}/remote-{run_id}"
 

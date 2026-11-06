@@ -107,7 +107,7 @@ def http_get(url, timeout=60):
 
 
 def quote_url(url):
-    return urllib.parse.quote(url, safe=":/")
+    return urllib.parse.quote(url, safe=":/%")
 
 
 def _truthy_env(name, default="true"):

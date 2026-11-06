@@ -115,17 +115,19 @@ void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb
 template <typename TDerived>
 class TBaseBSConfigRequest {
 protected:
-    void OnBootstrap() {
+    // returns false if the request is answered already and the actor is gone
+    bool OnBootstrap() {
         auto self = static_cast<TDerived*>(this);
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         NYql::TIssues issues;
         if (!self->ValidateRequest(status, issues)) {
             self->Reply(status, issues, self->ActorContext());
-            return;
+            return false;
         }
         if (const auto& userToken = self->Request_->GetSerializedToken()) {
             UserToken = new NACLib::TUserToken(userToken);
         }
+        return true;
     }
 
     bool CheckAccess(const TString& path, TIntrusivePtr<TSecurityObject> securityObject, ui32 access) {
@@ -163,7 +165,9 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
         auto *self = Self();
-        self->OnBootstrap();
+        if (!self->OnBootstrap()) {
+            return;
+        }
         self->Become(&TBSConfigRequestGrpc::StateFunc);
         // ask Node Warden for configuration to see whether we are using distconf
         self->Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvNodeWardenQueryStorageConfig(false));

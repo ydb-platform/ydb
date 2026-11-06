@@ -203,7 +203,7 @@ namespace TEvPrivate {
     struct TEvKesusSemaphoresDescribeResult: public TEventLocal<TEvKesusSemaphoresDescribeResult, EvKesusSemaphoresDescribeResult> {
         bool Success = false;
         TString Error;
-        TVector<NKikimrKesus::TEvCreateSemaphore> Semaphores;
+        TVector<NKikimrKesus::TSemaphoreDescription> Semaphores;
     };
 
     struct TEvExportUploadMetadataResult: public TEventLocal<TEvExportUploadMetadataResult, EvExportUploadMetadataResult> {

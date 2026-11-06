@@ -754,7 +754,7 @@ private:
     NBackup::TMetadata Metadata;
     TActorId ResourcesDescriber;
     TVector<Ydb::RateLimiter::Resource> KesusResources;
-    TVector<NKikimrKesus::TEvCreateSemaphore> KesusSemaphores;
+    TVector<NKikimrKesus::TSemaphoreDescription> KesusSemaphores;
     ui64 KesusTabletId = 0;
 }; // TSchemeUploader
 

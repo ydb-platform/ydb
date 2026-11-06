@@ -99,12 +99,24 @@ message TEvDescribeSemaphoreChanged {
     bool OwnersChanged = 3;
 }
 
-// Internal backup enumeration. Only persistent semaphore definitions are returned.
+message TSemaphoreDescription {
+    // Keep definition field numbers compatible with earlier TEvCreateSemaphore responses.
+    reserved 1, 2, 3;
+    string Name = 4;
+    uint64 Limit = 5;
+    bytes Data = 6;
+
+    // Number of tokens currently acquired by owners.
+    uint64 Count = 7;
+    bool Ephemeral = 8;
+}
+
+// Only persistent semaphore descriptions are returned.
 message TEvDescribeSemaphores {}
 
 message TEvDescribeSemaphoresResult {
     TKesusError Error = 1;
-    repeated TEvCreateSemaphore Semaphores = 2;
+    repeated TSemaphoreDescription Semaphores = 2;
 }
 
 message TEvCreateSemaphore {

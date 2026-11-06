@@ -32,15 +32,17 @@ struct TKesusTablet::TTxSemaphoresDescribe : public TTxBase {
             if (info.Ephemeral) {
                 continue;
             }
-            NKikimrKesus::TEvCreateSemaphore semaphore;
+            NKikimrKesus::TSemaphoreDescription semaphore;
             semaphore.SetName(info.Name);
             semaphore.SetData(info.Data);
             semaphore.SetLimit(info.Limit);
+            semaphore.SetCount(info.Count);
+            semaphore.SetEphemeral(info.Ephemeral);
             bytes += semaphoreTagSize + WireFormatLite::MessageSize(semaphore);
             if (bytes > NActors::EventMaxByteSize) {
                 result.ClearSemaphores();
                 TEvKesus::FillError(result.MutableError(), Ydb::StatusIds::PRECONDITION_FAILED,
-                    "Semaphore definitions exceed the export response size limit");
+                    "Semaphore descriptions exceed the response size limit");
                 return true;
             }
             *result.AddSemaphores() = std::move(semaphore);

@@ -67,9 +67,8 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         UNIT_ASSERT_VALUES_EQUAL(semaphore.GetName(), "../persistent");
         UNIT_ASSERT_VALUES_EQUAL(semaphore.GetLimit(), 2);
         UNIT_ASSERT_VALUES_EQUAL(semaphore.GetData(), data);
-        UNIT_ASSERT(semaphore.GetKesusPath().empty());
-        UNIT_ASSERT_VALUES_EQUAL(semaphore.GetProxyGeneration(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(semaphore.GetSessionId(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(semaphore.GetCount(), 2);
+        UNIT_ASSERT(!semaphore.GetEphemeral());
 
         // Replaying a definition creates a free semaphore, despite active owners/waiters at the source.
         ctx.CreateSemaphore("restored", semaphore.GetLimit(), semaphore.GetData());
@@ -99,6 +98,8 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
             UNIT_ASSERT_VALUES_EQUAL(semaphore.GetName(), ToString(semaphore.GetLimit() - 1));
             UNIT_ASSERT(semaphore.GetLimit() >= 1 && semaphore.GetLimit() <= count);
             UNIT_ASSERT_VALUES_EQUAL(semaphore.GetData(), data);
+            UNIT_ASSERT_VALUES_EQUAL(semaphore.GetCount(), 0);
+            UNIT_ASSERT(!semaphore.GetEphemeral());
         }
     }
 

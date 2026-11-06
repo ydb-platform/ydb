@@ -1157,6 +1157,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "IndexExportPrefixes",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -1235,17 +1240,13 @@
                 "ColumnId": 16,
                 "ColumnName": "Compression",
                 "ColumnType": "String"
-            },
-            {
-                "ColumnId": 17,
-                "ColumnName": "IndexExportPrefixes",
-                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -1261,8 +1262,7 @@
                     13,
                     14,
                     15,
-                    16,
-                    17
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

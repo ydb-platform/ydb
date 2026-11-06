@@ -11598,8 +11598,10 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
             return scenario == EIndexBackupScenario::RebootDuringImport
                 && createTableTxId && ev->Get()->Record.GetTxId() == createTableTxId;
         });
-        TBlockEvents<NKikimr::NSchemeShard::TEvPrivate::TEvImportSchemeReady> schemeReady(runtime, [&](const auto&) {
-            return scenario == EIndexBackupScenario::RebootBeforeScheme;
+        TBlockEvents<NKikimr::NSchemeShard::TEvPrivate::TEvImportSchemeReady> schemeReady(runtime, [&](const auto& ev) {
+            // Private event IDs overlap: the executor's TEvLeaseExtend has the same ID.
+            return scenario == EIndexBackupScenario::RebootBeforeScheme
+                && dynamic_cast<NKikimr::NSchemeShard::TEvPrivate::TEvImportSchemeReady*>(ev->GetBase());
         });
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             %s {

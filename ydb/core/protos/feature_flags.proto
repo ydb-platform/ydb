@@ -474,4 +474,8 @@ message TFeatureFlags {
     optional bool ReportPhantomsOnlyVDisksAsReady = 380 [default = false];
     optional bool EnableCsPortionsCacheAcrossRestarts = 381 [default = false];
     optional bool EnableCsGeneralCacheConsumerWeights = 382 [default = false];
+    // Enables policy-driven data tiering for row-oriented tables.
+    // When disabled, no new migrations to colder tiers are scheduled.
+    // Existing data in all tiers remains readable.
+    optional bool EnableDataTiering = 383 [default = false];    
 }

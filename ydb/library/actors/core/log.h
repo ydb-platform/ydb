@@ -676,10 +676,10 @@ namespace NActors {
         [[noreturn]] ~TEnsureFormattedRecordWriter() noexcept(false);
     };
 
-    void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
+    [[noreturn]] void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
         const NActors::NStructuredLog::TStructuredMessage& addMessage);
 
-    void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
+    [[noreturn]] void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
         const NActors::NStructuredLog::TStructuredMessage& addMessage);
 }
 

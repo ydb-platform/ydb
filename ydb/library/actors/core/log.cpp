@@ -945,7 +945,7 @@ namespace NActors {
         }
     }
 
-    void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
+    [[noreturn]] void LogVerifyFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
         const NActors::NStructuredLog::TStructuredMessage& addMessage) {
         NActors::NStructuredLog::TStructuredMessage structuredMessage = NActors::NStructuredLog::TLogStack::GetTop();
         YDB_LOG_UPDATE_MESSAGE(structuredMessage,
@@ -960,7 +960,7 @@ namespace NActors {
         Y_ABORT("%s", textMessage.data());
     }
 
-    void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
+    [[noreturn]] void LogEnsureFailed(const char* condition, const TStringBuf& filename, ui16 lineNum,
         const NActors::NStructuredLog::TStructuredMessage& addMessage) {
         // Construct structured message
         NActors::NStructuredLog::TStructuredMessage structuredMessage = NActors::NStructuredLog::TLogStack::GetTop();

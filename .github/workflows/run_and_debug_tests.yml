@@ -1,7 +1,8 @@
 # TEMP: stand-in for the remote host executor under the Run-and-debug name.
 # Manual dogfood: (1) start remote Run-and-debug from the handoff PR with
 # remote JSON pointing repository/workflow at this repo name + platform S3;
-# (2) start this WF with webhook-like inputs (platform_run_id, runs_on, job).
+# (2) start this WF with webhook-like inputs from remote-ticket config.inputs
+# (platform_run_id, platform_run_attempt, code_ref, job_inputs, runs_on).
 # Do not merge; close after the probe.
 name: Run and debug tests
 
@@ -12,6 +13,11 @@ on:
         description: 'Platform handoff run id (claim key / waiter)'
         required: true
         type: string
+      platform_run_attempt:
+        description: 'Platform github.run_attempt (avoids re-run attaching to stale claim)'
+        required: false
+        type: string
+        default: '1'
       platform_repository:
         description: 'Repo that published remote-ticket'
         required: false
@@ -34,12 +40,11 @@ on:
         default: '["self-hosted","auto-provisioned","build-preset-relwithdebinfo"]'
 
 concurrency:
-  group: ci-remote-executor-probe-${{ inputs.platform_run_id || github.run_id }}
-  cancel-in-progress: false
+  group: ci-remote-executor-probe-${{ inputs.platform_run_id }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
   execute:
@@ -51,10 +56,11 @@ jobs:
         id: ya
         env:
           JOB_INPUTS: ${{ inputs.job_inputs }}
+          PLATFORM_RUN_ID: ${{ inputs.platform_run_id }}
         shell: bash
         run: |
           python3 - <<'PY'
-          import json, os, sys
+          import json, os, sys, uuid
 
           raw = os.environ.get("JOB_INPUTS") or "{}"
           try:
@@ -99,29 +105,66 @@ jobs:
           if out["increment"].lower() in ("1", "true", "yes"):
               out["fetch_depth"] = "0"
 
+          missing = [
+              k for k in ("custom_branch_name", "analytics_job_name", "source_run_id")
+              if not out[k].strip()
+          ]
+          if missing:
+              print(f"::error::job_inputs missing required fields: {', '.join(missing)}")
+              sys.exit(1)
+
+          platform_run_id = (os.environ.get("PLATFORM_RUN_ID") or "").strip()
+          if platform_run_id and out["source_run_id"] != platform_run_id:
+              print(
+                  f"::error::job_inputs.source_run_id={out['source_run_id']!r} "
+                  f"!= platform_run_id={platform_run_id!r}"
+              )
+              sys.exit(1)
+
           path = os.environ["GITHUB_OUTPUT"]
           with open(path, "a", encoding="utf-8") as f:
               for k, v in out.items():
-                  f.write(f"{k}={v}\n")
+                  if "\n" in v or "\r" in v:
+                      delim = f"ghadelimiter_{uuid.uuid4().hex}"
+                      f.write(f"{k}<<{delim}\n{v}\n{delim}\n")
+                  else:
+                      f.write(f"{k}={v}\n")
           print(json.dumps(out, ensure_ascii=False, indent=2))
           PY
 
       - name: Resolve code_ref
         id: ref
+        env:
+          CODE_REF: ${{ inputs.code_ref }}
+          PLATFORM_RUN_ID: ${{ inputs.platform_run_id }}
+          PLATFORM_REPOSITORY: ${{ inputs.platform_repository }}
+          PLATFORM_RUN_ATTEMPT: ${{ inputs.platform_run_attempt }}
+          CUSTOM_BRANCH_NAME: ${{ steps.ya.outputs.custom_branch_name }}
+          ANALYTICS_JOB_NAME: ${{ steps.ya.outputs.analytics_job_name }}
+          SOURCE_EVENT_NAME: ${{ steps.ya.outputs.source_event_name }}
+          SOURCE_RUN_ID: ${{ steps.ya.outputs.source_run_id }}
+          BUILD_PRESET: ${{ steps.ya.outputs.build_preset }}
+          BUILD_TARGET: ${{ steps.ya.outputs.build_target }}
+          RUNS_ON: ${{ inputs.runs_on }}
         shell: bash
         run: |
-          code_ref='${{ inputs.code_ref }}'
+          set -euo pipefail
+          code_ref="${CODE_REF:-dev/ci-remote-pull}"
           if [ -z "$code_ref" ]; then
-            code_ref='main'
+            code_ref='dev/ci-remote-pull'
           fi
           echo "code=$code_ref" >> "$GITHUB_OUTPUT"
           {
             echo "### Executor probe (Run and debug stand-in)"
-            echo "- **platform run:** \`${{ inputs.platform_run_id }}\` (\`${{ inputs.platform_repository }}\`)"
-            echo "- **code ref:** \`$code_ref\`"
-            echo "- **preset:** \`${{ steps.ya.outputs.build_preset }}\`"
-            echo "- **target:** \`${{ steps.ya.outputs.build_target }}\`"
-            echo "- **runs_on:** \`${{ inputs.runs_on }}\`"
+            printf -- '- **platform run:** `%s` (`%s`) attempt `%s`\n' \
+              "$PLATFORM_RUN_ID" "$PLATFORM_REPOSITORY" "${PLATFORM_RUN_ATTEMPT:-1}"
+            printf -- '- **code ref:** `%s`\n' "$code_ref"
+            printf -- '- **analytics branch:** `%s`\n' "$CUSTOM_BRANCH_NAME"
+            printf -- '- **analytics job:** `%s`\n' "$ANALYTICS_JOB_NAME"
+            printf -- '- **source event:** `%s` / `%s`\n' "$SOURCE_EVENT_NAME" "$SOURCE_RUN_ID"
+            printf -- '- **preset:** `%s`\n' "$BUILD_PRESET"
+            printf -- '- **target:** `%s`\n' "$BUILD_TARGET"
+            printf -- '- **runs_on:** `%s`\n' "$RUNS_ON"
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Full tree (no sparse): sparse left build_and_test_ya missing for local action.
@@ -139,13 +182,18 @@ jobs:
           s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
           s3_bucket: ${{ vars.AWS_BUCKET }}
           s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_region: ${{ vars.AWS_REGION || 'ru-central1' }}
+          public_acl: 'true'
           build_preset: relwithdebinfo
 
       - name: Publish claim for platform waiter
+        id: claim
         env:
           PLATFORM_RUN_ID: ${{ inputs.platform_run_id }}
+          PLATFORM_RUN_ATTEMPT: ${{ inputs.platform_run_attempt }}
           PLATFORM_REPOSITORY: ${{ inputs.platform_repository }}
           CLAIM_BUCKET: ${{ vars.AWS_BUCKET }}
+          S3_PUBLIC_ACL_FLAG: ${{ env.S3_PUBLIC_ACL_FLAG }}
         shell: bash
         run: |
           set -euo pipefail
@@ -159,14 +207,17 @@ jobs:
           from pathlib import Path
 
           platform_run_id = os.environ["PLATFORM_RUN_ID"]
+          attempt = (os.environ.get("PLATFORM_RUN_ATTEMPT") or "1").strip() or "1"
           bucket = os.environ["CLAIM_BUCKET"]
           run_id = os.environ["GITHUB_RUN_ID"]
           repo = os.environ["GITHUB_REPOSITORY"]
           server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+          acl = (os.environ.get("S3_PUBLIC_ACL_FLAG") or "").strip()
           claim = {
               "version": 1,
               "status": "dispatched",
               "platform_run_id": platform_run_id,
+              "platform_run_attempt": attempt,
               "platform_repository": os.environ.get("PLATFORM_REPOSITORY") or "",
               "executor_run_id": run_id,
               "executor_run_url": f"{server}/{repo}/actions/runs/{run_id}",
@@ -178,14 +229,16 @@ jobs:
               path = Path(tmp) / "claim.json"
               path.write_text(json.dumps(claim, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
               cmd = [
-                  "s3cmd", "put", "--acl-public", "--no-progress",
+                  "s3cmd", "put", "--no-progress",
                   "--no-mime-magic", "--guess-mime-type",
                   str(path), f"s3://{bucket}/{key}",
               ]
+              if acl:
+                  cmd.insert(2, acl)
               print("+", " ".join(cmd), flush=True)
               subprocess.check_call(cmd)
           print(json.dumps(claim, indent=2))
-          print(f"::notice title=Claim published::s3://{bucket}/{key}")
+          print(f"::notice title=Claim published::s3://{bucket}/{key} attempt={attempt}")
           PY
 
       - name: Build and test
@@ -208,7 +261,6 @@ jobs:
           analytics_job_name: ${{ steps.ya.outputs.analytics_job_name }}
           source_event_name: ${{ steps.ya.outputs.source_event_name }}
           source_run_id: ${{ steps.ya.outputs.source_run_id }}
-          # Handoff action input: skip QA upload (creds file not wired in this probe).
           enable_ydb_qa: false
           additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ steps.ya.outputs.additional_ya_make_args }}
           secs: >-
@@ -217,9 +269,60 @@ jobs:
               toJSON(secrets.REMOTE_CACHE_USERNAME), toJSON(secrets.REMOTE_CACHE_PASSWORD),
               toJSON(secrets.YDBOT_TELEGRAM_BOT_TOKEN),
               toJSON(secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS)) }}
-          # Do not embed vars.YDB_QA_CONFIG here — it blows GHA's 21k expression limit
-          # when build_and_test_ya expands fromJSON(inputs.vars) inside the build script.
+          # Do not embed vars.YDB_QA_CONFIG here — it blows GHA's 21k expression limit.
           vars: >-
             ${{ format('{{"AWS_BUCKET":{0},"AWS_ENDPOINT":{1},"AWS_REGION":{2},"REMOTE_CACHE_URL":{3},"GH_ALERTS_TG_LOGINS":{4},"GH_ALERTS_TG_CHAT":{5}}}',
               toJSON(vars.AWS_BUCKET), toJSON(vars.AWS_ENDPOINT), toJSON(vars.AWS_REGION),
               toJSON(vars.REMOTE_CACHE_URL_YA), toJSON(vars.GH_ALERTS_TG_LOGINS), toJSON(vars.GH_ALERTS_TG_CHAT)) }}
+
+      - name: Publish failed claim
+        if: failure() && steps.claim.outcome != 'success'
+        continue-on-error: true
+        env:
+          PLATFORM_RUN_ID: ${{ inputs.platform_run_id }}
+          PLATFORM_RUN_ATTEMPT: ${{ inputs.platform_run_attempt }}
+          PLATFORM_REPOSITORY: ${{ inputs.platform_repository }}
+          CLAIM_BUCKET: ${{ vars.AWS_BUCKET }}
+          S3_PUBLIC_ACL_FLAG: ${{ env.S3_PUBLIC_ACL_FLAG }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess, tempfile
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          platform_run_id = os.environ["PLATFORM_RUN_ID"]
+          attempt = (os.environ.get("PLATFORM_RUN_ATTEMPT") or "1").strip() or "1"
+          bucket = os.environ["CLAIM_BUCKET"]
+          run_id = os.environ["GITHUB_RUN_ID"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+          acl = (os.environ.get("S3_PUBLIC_ACL_FLAG") or "").strip()
+          claim = {
+              "version": 1,
+              "status": "failed",
+              "error": "executor probe failed before claim was published",
+              "platform_run_id": platform_run_id,
+              "platform_run_attempt": attempt,
+              "platform_repository": os.environ.get("PLATFORM_REPOSITORY") or "",
+              "executor_run_id": run_id,
+              "executor_run_url": f"{server}/{repo}/actions/runs/{run_id}",
+              "executor_repository": repo,
+              "claimed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+          }
+          key = f"remote-claims/{platform_run_id}.json"
+          with tempfile.TemporaryDirectory() as tmp:
+              path = Path(tmp) / "claim.json"
+              path.write_text(json.dumps(claim, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+              cmd = [
+                  "s3cmd", "put", "--no-progress",
+                  "--no-mime-magic", "--guess-mime-type",
+                  str(path), f"s3://{bucket}/{key}",
+              ]
+              if acl:
+                  cmd.insert(2, acl)
+              print("+", " ".join(cmd), flush=True)
+              subprocess.check_call(cmd)
+          print(json.dumps(claim, indent=2))
+          PY

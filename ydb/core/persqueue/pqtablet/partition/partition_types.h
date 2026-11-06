@@ -33,6 +33,12 @@ struct TOwnershipMsg {
 struct TRegisterMessageGroupMsg {
     ui64 Cookie;
     TEvPQ::TEvRegisterMessageGroup::TBody Body;
+    // The registration upgrades an implicitly registered source (see
+    // TPartition::HandleOnWrite): at execution time it must not regress the
+    // source's dedup watermark below what that source already committed -
+    // unlike ordinary registrations (e.g. Kafka producer-epoch changes),
+    // which may legitimately reset the sequence.
+    bool UpgradeFromImplicit = false;
 
     explicit TRegisterMessageGroupMsg(TEvPQ::TEvRegisterMessageGroup& ev)
         : Cookie(ev.Cookie)

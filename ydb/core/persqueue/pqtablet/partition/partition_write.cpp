@@ -930,34 +930,39 @@ void TPartition::HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TA
 void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
     LOG_T("TPartition::HandleOnWrite TEvRegisterMessageGroup");
 
-    const auto& body = ev->Get()->Body;
+    TRegisterMessageGroupMsg msg(*ev->Get());
+    auto& body = msg.Body;
 
     auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId);
     if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
         if (!it->second.Explicit) {
-            return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
-                "Trying to register implicitly registered SourceId");
-        }
-
-        switch (it->second.State) {
-        case TSourceIdInfo::EState::Registered:
-            return ReplyOk(ctx, ev->Get()->Cookie);
-        case TSourceIdInfo::EState::PendingRegistration:
-            if (!body.AfterSplit) {
-                return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
-                    "AfterSplit must be set");
+            // An implicitly registered id (write-path auto-registration) is
+            // upgraded to an explicit one: explicit ids are immune to
+            // DropOldSourceIds eviction, and the stored SeqNo is preserved,
+            // so the dedup state survives the upgrade.
+            body.SeqNo = it->second.SeqNo;
+            msg.UpgradeFromImplicit = true;
+        } else {
+            switch (it->second.State) {
+            case TSourceIdInfo::EState::Registered:
+                return ReplyOk(ctx, ev->Get()->Cookie);
+            case TSourceIdInfo::EState::PendingRegistration:
+                if (!body.AfterSplit) {
+                    return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                        "AfterSplit must be set");
+                }
+                break;
+            default:
+                return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
+                    TStringBuilder() << "Unknown state: " << static_cast<ui32>(it->second.State));
             }
-            break;
-        default:
-            return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::ERROR,
-                TStringBuilder() << "Unknown state: " << static_cast<ui32>(it->second.State));
         }
     } else if (body.AfterSplit) {
         return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
             "SourceId not found, registration cannot be completed");
     }
 
-    EmplacePendingRequest(TRegisterMessageGroupMsg(*ev->Get()), NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.Partition.RegisterMessageGroup"), ctx);
+    EmplacePendingRequest(std::move(msg), NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.Partition.RegisterMessageGroup"), ctx);
 }
 
 void TPartition::HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx)
@@ -1092,6 +1097,35 @@ void TPartition::ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& p
     TMaybe<TPartitionKeyRange> keyRange;
     if (body.KeyRange) {
         keyRange = TPartitionKeyRange::Parse(*body.KeyRange);
+    }
+
+    if (msg.UpgradeFromImplicit) {
+        // The upgrade may have been queued while a data write of the same
+        // source was still in flight. TxAffectedSourcesIds spans KV-write
+        // sent to KV-write complete, and OnHandleWriteResponse applies the
+        // committed source state before ProcessTxsAndUserActs drains the
+        // pending queue - so the in-memory read below sees the write's
+        // committed SeqNo. The upgrade must preserve that watermark:
+        // otherwise the persisted registration carries the stale captured
+        // SeqNo and a retry of the already committed write is accepted again
+        // after a restart. Ordinary registrations (including Kafka
+        // producer-epoch changes, which legitimately reset the sequence)
+        // keep their own value. The batch-staged read is defensive only - no
+        // reachable ordering leaves a staged entry visible here. Residual
+        // window: if the implicit source is evicted before the queued
+        // registration executes, the committed SeqNo is unrecoverable and
+        // the captured value is the best available - accepted, since the
+        // source is fresh (recent write) and the pending queue drains on
+        // write completion, so eviction cannot realistically win the race.
+        const auto& staged = parameters.SourceIdBatch.GetStagedRegistrations();
+        auto st = staged.find(body.SourceId);
+        if (st != staged.end() && st->second.SeqNo > body.SeqNo) {
+            body.SeqNo = st->second.SeqNo;
+        }
+        auto it = SourceIdStorage.GetInMemorySourceIds().find(body.SourceId);
+        if (it != SourceIdStorage.GetInMemorySourceIds().end() && it->second.SeqNo > body.SeqNo) {
+            body.SeqNo = it->second.SeqNo;
+        }
     }
 
     body.AssignedOffset = parameters.CurOffset;

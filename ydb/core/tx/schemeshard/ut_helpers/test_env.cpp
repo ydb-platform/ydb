@@ -656,6 +656,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     }
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.FeatureFlags.SetEnableTableDatetime64(true);
+    if (opts.CdcStreamBootstrapSkip_) {
+        app.FeatureFlags.SetEnableCdcStreamBootstrapSkip(*opts.CdcStreamBootstrapSkip_);
+    }
     app.FeatureFlags.SetEnableAddUniqueIndex(true);
     app.FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
     app.FeatureFlags.SetEnableFulltextIndex(true);

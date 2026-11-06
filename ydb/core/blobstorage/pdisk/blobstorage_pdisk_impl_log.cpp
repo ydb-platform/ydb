@@ -314,7 +314,8 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         }
     }
     SysLogRecord = *sysLogRecord;
-    SysLogRecord.Version = PDISK_SYS_LOG_RECORD_VERSION_8;
+    SysLogRecord.Version = PDISK_SYS_LOG_RECORD_VERSION_9;
+    SysLogDiskState = {};
 
     // Set initial chunk owners
     // Use actual format info to set busy chunks mask
@@ -584,8 +585,22 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         }
     }
 
-    // needed for further parsing
-    Y_UNUSED(ownersSizeInUnitsInfoEnd);
+    if (sysLogRecord->Version >= PDISK_SYS_LOG_RECORD_VERSION_9) {
+        Y_VERIFY_S(ownersSizeInUnitsInfoEnd, PCtx->PDiskLogPrefix);
+        const ui64 minSize = (ownersSizeInUnitsInfoEnd - lastSysLogRecord.data()) + sizeof(TSysLogDiskState);
+        if (lastSysLogRecord.size() < minSize) {
+            errorReason = TStringBuilder() << "SysLogRecord is too small for disk state, minSize# "
+                << minSize << " size# " << lastSysLogRecord.size();
+            YDB_LOG_P_LOG(PRI_ERROR, errorReason,
+                {"marker", "BPD01"});
+            return false;
+        }
+        memcpy(&SysLogDiskState, ownersSizeInUnitsInfoEnd, sizeof(SysLogDiskState));
+    }
+
+    YDB_LOG_P_LOG(PRI_NOTICE, "SysLog disk state is read",
+        {"marker", "BPD01"},
+        {"slow", SysLogDiskState.IsSlow()});
 
     PrintChunksDebugInfo();
     return true;
@@ -847,7 +862,7 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
 
     ui32 recordSize = sizeof(TSysLogRecord) + chunkOwnersSize + sizeof(TSysLogFirstNoncesToKeep)
         + sizeof(ui64) + chunkIsTrimmedSize + sizeof(ui32) + sizeof(ui32) + compatibilityInfoSize
-        + sizeof(ownersSizeInUnitsInfoSize) + ownersSizeInUnitsInfoSize;
+        + sizeof(ownersSizeInUnitsInfoSize) + ownersSizeInUnitsInfoSize + sizeof(SysLogDiskState);
     ui64 beginSectorIdx = SysLogger->SectorIdx;
     *Mon.BandwidthPSysLogPayload += recordSize;
     *Mon.BandwidthPSysLogRecordHeader += sizeof(TFirstLogPageHeader);
@@ -865,6 +880,7 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
     if (ownersSizeInUnitsInfoSize > 0) {
         SysLogger->LogDataPart(&ownersSizeInUnitsInfo[0], ownersSizeInUnitsInfoSize, reqId, traceId);
     }
+    SysLogger->LogDataPart(&SysLogDiskState, sizeof(SysLogDiskState), reqId, traceId);
     SysLogger->TerminateLog(reqId, traceId);
     SysLogger->Flush(reqId, traceId, action);
 
@@ -1831,7 +1847,11 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             }
 
             // Now it's ok to write both logs and data.
-            *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::Normal;
+            const bool isSlow = SysLogDiskState.IsSlow();
+            *Mon.SlowPDisk = isSlow;
+            *Mon.PDiskState = isSlow
+                ? NKikimrBlobStorage::TPDiskState::Slow
+                : NKikimrBlobStorage::TPDiskState::Normal;
             *Mon.PDiskBriefState = TPDiskMon::TPDisk::OK;
             *Mon.PDiskDetailedState = TPDiskMon::TPDisk::EverythingIsOk;
 

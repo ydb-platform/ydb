@@ -726,6 +726,16 @@ public:
             // the quotas of the pool kinds are summed up by storage type,
             // the storage type has no limit when any of its pool kinds has no limit
             THashSet<NKikimrViewer::TStorageUsage::EType> unlimitedTypes;
+            THashSet<TString> entryPoolKinds;
+            for (const auto& entry : quotaUsage.GetEntries()) {
+                entryPoolKinds.insert(entry.GetPoolKind());
+            }
+            // Entries omit pool kinds with neither usage nor a quota, but such pool kinds have no limit as well
+            for (const auto& pool : domainDescription.GetStoragePools()) {
+                if (entryPoolKinds.count(pool.GetKind()) == 0) {
+                    unlimitedTypes.insert(GetStorageType(pool.GetKind()));
+                }
+            }
             for (const auto& entry : quotaUsage.GetEntries()) {
                 auto type = GetStorageType(entry.GetPoolKind());
                 tablesStorageByType.emplace(type, 0); // pool kind with a quota, but without usage yet

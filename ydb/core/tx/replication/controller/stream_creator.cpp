@@ -434,7 +434,7 @@ public:
             // A schema barrier snapshots its partition membership, so topic
             // repartitioning is unsupported for schema-aware streams.
             {"supports_topic_autopartitioning", supportsTopicAutopartitioning && !schemaChanges},
-        }, schemaChanges, initialScan, binaryFormat && AppData()->FeatureFlags.GetEnableBinaryChangefeedForAsyncReplication(), zstdCompression))
+        }, schemaChanges, initialScan, binaryFormat, zstdCompression))
         , StreamRetentionPeriod(streamRetentionPeriod)
         , ConsumerAvailabilityPeriod(consumerAvailabilityPeriod)
         , ConsumerImportant(consumerImportant)

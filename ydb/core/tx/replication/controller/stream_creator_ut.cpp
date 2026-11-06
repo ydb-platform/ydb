@@ -108,74 +108,128 @@ Y_UNIT_TEST_SUITE(TargetStreamPath) {
 Y_UNIT_TEST_SUITE(StreamCreator) {
     using namespace NTestHelpers;
 
-    void SecretTopicSetup(bool existing, bool important = true,
-            NYdb::EStatus directoryStatus = NYdb::EStatus::SUCCESS) {
-        TTestActorRuntime runtime;
-        runtime.Initialize(TAppPrepare().Unwrap());
-        const auto parent = runtime.AllocateEdgeActor();
-        const auto proxy = runtime.AllocateEdgeActor();
-        const auto creator = runtime.Register(CreateStreamCreator(parent, proxy, 1, 1,
-            std::make_shared<TTargetSecret::TSecretConfig>("/Root/source", "/Root/copy"),
-            "Stream", "/Root/secretImpl/Stream", "replicationConsumer", TDuration::Days(1)));
-        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(parent));
-        runtime.Send(creator, parent, new TEvPrivate::TEvAllowCreateStream());
-        const auto directory = runtime.GrabEdgeEvent<TEvYdbProxy::TEvMakeDirectoryRequest>(proxy);
-        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(directory->Get()->GetArgs()), "/Root/secretImpl");
-        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(
-            proxy, TDuration::MilliSeconds(100)));
-        runtime.Send(new IEventHandle(creator, proxy, new TEvYdbProxy::TEvMakeDirectoryResponse(
-            NYdb::TStatus(directoryStatus, {})), 0, directory->Cookie));
-        if (directoryStatus != NYdb::EStatus::SUCCESS && directoryStatus != NYdb::EStatus::ALREADY_EXISTS) {
-            const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(parent);
-            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status.GetStatus(), directoryStatus);
-            UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(
-                proxy, TDuration::MilliSeconds(100)));
-            return;
+    struct TSecretExportSetup {
+        TTestActorRuntime Runtime;
+        TActorId Parent;
+        TActorId Proxy;
+        TActorId Creator;
+
+        TSecretExportSetup() {
+            Runtime.Initialize(TAppPrepare().Unwrap());
+            Parent = Runtime.AllocateEdgeActor();
+            Proxy = Runtime.AllocateEdgeActor();
+            Creator = Runtime.Register(CreateStreamCreator(Parent, Proxy, 1, 2,
+                std::make_shared<TTargetSecret::TSecretConfig>("/SourceDatabase/source", "/Root/copy"),
+                "Stream", "/SourceDatabase/secretImpl/Stream", "replicationConsumer", TDuration::Days(1)));
         }
-        const auto request = runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(proxy);
-        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(request->Get()->GetArgs()), "/Root/secretImpl/Stream");
-        Ydb::Topic::CreateTopicRequest settings;
-        std::get<NYdb::NTopic::TCreateTopicSettings>(request->Get()->GetArgs()).SerializeTo(settings);
-        UNIT_ASSERT_VALUES_EQUAL(settings.partitioning_settings().min_active_partitions(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(settings.partitioning_settings().max_active_partitions(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(settings.retention_period().seconds(), 86400);
-        UNIT_ASSERT_VALUES_EQUAL(settings.consumers_size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(settings.consumers(0).name(), "replicationConsumer");
-        UNIT_ASSERT(settings.consumers(0).important());
-        runtime.Send(new IEventHandle(creator, proxy, new TEvYdbProxy::TEvCreateTopicResponse(
-            NYdb::TStatus(existing ? NYdb::EStatus::ALREADY_EXISTS : NYdb::EStatus::SUCCESS, {})), 0, request->Cookie));
-        if (existing) {
-            const auto describe = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicRequest>(proxy);
-            Ydb::Topic::DescribeTopicResult topic;
-            auto* consumer = topic.add_consumers();
-            consumer->set_name("replicationConsumer");
-            consumer->set_important(important);
-            runtime.Send(new IEventHandle(creator, proxy, new TEvYdbProxy::TEvDescribeTopicResponse(
-                NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(topic)), 0, describe->Cookie));
+
+        void Allow() {
+            const auto permission = Runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(Parent);
+            UNIT_ASSERT_VALUES_EQUAL(permission->Sender, Creator);
+            UNIT_ASSERT(!Runtime.GrabEdgeEvent<TEvYdbProxy::TEvExportSecretRequest>(
+                Proxy, TDuration::MilliSeconds(100)));
+            Runtime.Send(Creator, Parent, new TEvPrivate::TEvAllowCreateStream());
         }
-        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(parent);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status.GetStatus(),
-            existing && !important ? NYdb::EStatus::PRECONDITION_FAILED : NYdb::EStatus::SUCCESS);
+
+        TEvYdbProxy::TEvExportSecretRequest::TPtr GrabExport() {
+            auto request = Runtime.GrabEdgeEvent<TEvYdbProxy::TEvExportSecretRequest>(Proxy);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<0>(request->Get()->GetArgs()), "/SourceDatabase/source");
+            UNIT_ASSERT_VALUES_EQUAL(std::get<1>(request->Get()->GetArgs()), "/SourceDatabase/secretImpl/Stream");
+            return request;
+        }
+
+        void Reply(ui64 cookie, NYdb::EStatus status, const TString& issue = {}) {
+            NYdb::NIssue::TIssues issues;
+            if (!issue.empty()) {
+                issues.AddIssue(issue);
+            }
+            Runtime.Send(new IEventHandle(Creator, Proxy, new TEvYdbProxy::TEvExportSecretResponse(
+                NYdb::TStatus(status, std::move(issues))), 0, cookie));
+        }
+
+        void Finish(NYdb::EStatus status = NYdb::EStatus::SUCCESS, const TString& issue = {}) {
+            const auto result = Runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(Parent);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status.GetStatus(), status);
+            if (!issue.empty()) {
+                UNIT_ASSERT_STRING_CONTAINS(result->Get()->Status.GetIssues().ToString(), issue);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->ReplicationId, 1);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->TargetId, 2);
+            UNIT_ASSERT(!result->Get()->SchemaChanges);
+            UNIT_ASSERT(!Runtime.GrabEdgeEvent<TEvYdbProxy::TEvMakeDirectoryRequest>(
+                Proxy, TDuration::MilliSeconds(100)));
+            UNIT_ASSERT(!Runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(
+                Proxy, TDuration::MilliSeconds(100)));
+            UNIT_ASSERT(!Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicRequest>(
+                Proxy, TDuration::MilliSeconds(100)));
+        }
+    };
+
+    Y_UNIT_TEST(SecretStreamWaitsForSourceExportCompletion) {
+        TSecretExportSetup setup;
+        setup.Allow();
+        const auto request = setup.GrabExport();
+        UNIT_ASSERT(!setup.Runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(
+            setup.Parent, TDuration::MilliSeconds(100)));
+        setup.Reply(request->Cookie, NYdb::EStatus::SUCCESS);
+        setup.Finish();
     }
 
-    Y_UNIT_TEST(CreatesSecretTopicWithImportantConsumer) {
-        SecretTopicSetup(false);
+    Y_UNIT_TEST(SecretStreamReportsSourceExportFailure) {
+        for (const auto status : {NYdb::EStatus::UNAUTHORIZED, NYdb::EStatus::SCHEME_ERROR,
+                NYdb::EStatus::BAD_REQUEST})
+        {
+            TSecretExportSetup setup;
+            setup.Allow();
+            const auto request = setup.GrabExport();
+            setup.Reply(request->Cookie, status, "source export rejected");
+            setup.Finish(status, "source export rejected");
+        }
     }
 
-    Y_UNIT_TEST(CreatesSecretTopicInExistingDirectory) {
-        SecretTopicSetup(false, true, NYdb::EStatus::ALREADY_EXISTS);
+    Y_UNIT_TEST(SecretStreamRetriesSourceExportAndIgnoresOldCookies) {
+        for (const auto status : {NYdb::EStatus::TRANSPORT_UNAVAILABLE, NYdb::EStatus::UNAVAILABLE}) {
+            TSecretExportSetup setup;
+            setup.Runtime.EnableScheduleForActor(setup.Creator);
+            setup.Allow();
+            const auto request = setup.GrabExport();
+            const auto startedAt = setup.Runtime.GetCurrentTime();
+            setup.Reply(request->Cookie, status);
+            const auto retry = setup.GrabExport();
+            UNIT_ASSERT(setup.Runtime.GetCurrentTime() - startedAt >= TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_UNEQUAL(retry->Cookie, request->Cookie);
+            setup.Reply(request->Cookie, NYdb::EStatus::SUCCESS);
+            setup.Runtime.Send(setup.Creator, setup.Parent, new TEvents::TEvWakeup(request->Cookie));
+            UNIT_ASSERT(!setup.Runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(
+                setup.Parent, TDuration::MilliSeconds(100)));
+            UNIT_ASSERT(!setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvExportSecretRequest>(
+                setup.Proxy, TDuration::MilliSeconds(100)));
+            setup.Reply(retry->Cookie, NYdb::EStatus::SUCCESS);
+            setup.Finish();
+        }
     }
 
-    Y_UNIT_TEST(DirectoryCreationFailureStopsSecretTopicCreation) {
-        SecretTopicSetup(false, true, NYdb::EStatus::UNAUTHORIZED);
-    }
-
-    Y_UNIT_TEST(ReusesSecretTopicWithImportantConsumer) {
-        SecretTopicSetup(true);
-    }
-
-    Y_UNIT_TEST(RejectsSecretTopicWithOrdinaryConsumer) {
-        SecretTopicSetup(true, false);
+    Y_UNIT_TEST(SecretStreamReplaysExportOnProxyUpdate) {
+        TSecretExportSetup setup;
+        setup.Allow();
+        const auto request = setup.GrabExport();
+        setup.Reply(request->Cookie, NYdb::EStatus::UNAVAILABLE);
+        const auto oldProxy = setup.Proxy;
+        setup.Proxy = setup.Runtime.AllocateEdgeActor();
+        setup.Runtime.Send(setup.Creator, setup.Parent, new TEvPrivate::TEvUpdateYdbProxy(setup.Proxy));
+        const auto retry = setup.GrabExport();
+        UNIT_ASSERT_VALUES_UNEQUAL(retry->Cookie, request->Cookie);
+        setup.Runtime.Send(new IEventHandle(setup.Creator, oldProxy, new TEvYdbProxy::TEvExportSecretResponse(
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), 0, request->Cookie));
+        setup.Runtime.Send(setup.Creator, setup.Parent, new TEvents::TEvWakeup(request->Cookie));
+        UNIT_ASSERT(!setup.Runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(
+            setup.Parent, TDuration::MilliSeconds(100)));
+        UNIT_ASSERT(!setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvExportSecretRequest>(
+            setup.Proxy, TDuration::MilliSeconds(100)));
+        UNIT_ASSERT(!setup.Runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(
+            setup.Parent, TDuration::MilliSeconds(100)));
+        setup.Reply(retry->Cookie, NYdb::EStatus::SUCCESS);
+        setup.Finish();
     }
 
     enum class EBootstrapStage {

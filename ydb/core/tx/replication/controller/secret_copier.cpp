@@ -55,12 +55,8 @@ public:
                 continue;
             }
             const auto sourcePath = ResolveSecretPath(target->GetSrcPath(), database);
-            auto [it, inserted] = Targets.try_emplace(sourcePath);
-            it->second.push_back(target->GetId());
+            Targets[sourcePath].push_back(target->GetId());
             ++TargetCount;
-            if (inserted) {
-                Paths.push_back(sourcePath);
-            }
             if (target->GetDstState() == TReplication::EDstState::Done) {
                 Completed.insert(target->GetId());
             } else {
@@ -106,35 +102,7 @@ private:
             return Finish(NYdb::EStatus::SCHEME_ERROR, "Cannot resolve secret replication owner");
         }
         Owner = entries.front().SecurityObject->GetOwnerSID();
-        ExportNext();
-    }
-
-    void ExportNext() {
-        if (StopRequested) {
-            return DropTopic();
-        }
-        if (NextExport == Paths.size()) {
-            return CreateReader();
-        }
-        ExportInFlight = true;
-        Send(Proxy, new TEvYdbProxy::TEvExportSecretRequest(Paths.at(NextExport), TopicPath,
-            NYdb::NSecret::TExportSecretSettings()));
-    }
-
-    void Handle(TEvYdbProxy::TEvExportSecretResponse::TPtr& ev) {
-        ExportInFlight = false;
-        if (StopRequested) {
-            return DropTopic();
-        }
-        const auto& status = ev->Get()->Result;
-        YDB_LOG_INFO("Source secret export completed", {"status", status.GetStatus()},
-            {"issues", status.GetIssues().ToOneLineString()});
-        if (!status.IsSuccess()) {
-            return Finish(status.GetStatus(), TStringBuilder() << "Cannot export source secret: "
-                << status.GetIssues().ToOneLineString());
-        }
-        ++NextExport;
-        ExportNext();
+        CreateReader();
     }
 
     void CreateReader() {
@@ -321,7 +289,7 @@ private:
 
     void Handle(TEvPrivate::TEvCancelSecretCopy::TPtr&) {
         StopRequested = true;
-        if (!ExportInFlight && !CreateInFlight && !ReaderCreating) {
+        if (!CreateInFlight && !ReaderCreating) {
             DropTopic();
         }
     }
@@ -353,7 +321,6 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvPrivate::TEvCancelSecretCopy, Handle);
-            hFunc(TEvYdbProxy::TEvExportSecretResponse, Handle);
             hFunc(TEvYdbProxy::TEvCreateTopicReaderResponse, Handle);
             hFunc(TEvYdbProxy::TEvStartTopicReadingSession, Handle);
             hFunc(TEvYdbProxy::TEvReadTopicResponse, Handle);
@@ -376,8 +343,6 @@ private:
     TString ReadSessionId;
     TString Owner;
     TString CurrentValue;
-    TVector<TString> Paths;
-    size_t NextExport = 0;
     THashMap<TString, TVector<ui64>> Targets;
     THashSet<ui64> Completed;
     THashMap<ui64, TPathId> Created;
@@ -393,7 +358,6 @@ private:
     TActorId Reader;
     TActorId PipeCache;
     bool StopRequested = false;
-    bool ExportInFlight = false;
     bool CreateInFlight = false;
     bool ReaderCreating = false;
     bool DroppingTopic = false;

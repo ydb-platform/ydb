@@ -5,7 +5,6 @@
 #include "util.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/path.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -84,10 +83,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
                 ++RequestCookie);
             break;
         case TReplication::ETargetKind::Secret:
-            Send(YdbProxy, new TEvYdbProxy::TEvMakeDirectoryRequest(TString{ExtractParent(SrcStreamPath)},
-                NYdb::NScheme::TMakeDirectorySettings()), 0, ++RequestCookie);
-            Become(&TThis::StateCreateSecretDirectory);
-            return;
+            Send(YdbProxy, new TEvYdbProxy::TEvExportSecretRequest(SrcPath, SrcStreamPath,
+                NYdb::NSecret::TExportSecretSettings()), 0, ++RequestCookie);
+            break;
         case TReplication::ETargetKind::Transfer:
             return CreateConsumer();
         }
@@ -100,7 +98,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             {"actorState", "StateCreateStream"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
-            hFunc(TEvYdbProxy::TEvCreateTopicResponse, Handle);
+            hFunc(TEvYdbProxy::TEvExportSecretResponse, Handle);
             hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
@@ -132,51 +130,18 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         }
     }
 
-    void Handle(TEvYdbProxy::TEvCreateTopicResponse::TPtr& ev) {
+    void Handle(TEvYdbProxy::TEvExportSecretResponse::TPtr& ev) {
         if (ev->Cookie != RequestCookie) {
             return;
         }
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         auto& result = ev->Get()->Result;
-        if (result.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
-            return CheckConsumerExists();
-        }
         if (!result.IsSuccess() && IsRetryableError(result)) {
+            YDB_LOG_DEBUG("Retry CreateStream");
             return Retry();
         }
         Reply(std::move(result));
-    }
-
-    STATEFN(StateCreateSecretDirectory) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvYdbProxy::TEvMakeDirectoryResponse, Handle);
-            hFunc(TEvents::TEvWakeup, Handle);
-        default:
-            return StateBase(ev);
-        }
-    }
-
-    void Handle(TEvYdbProxy::TEvMakeDirectoryResponse::TPtr& ev) {
-        if (ev->Cookie != RequestCookie) {
-            return;
-        }
-        auto& result = ev->Get()->Result;
-        if (!result.IsSuccess() && result.GetStatus() != NYdb::EStatus::ALREADY_EXISTS) {
-            if (IsRetryableError(result)) {
-                return Retry();
-            }
-            return Reply(std::move(result));
-        }
-        Send(YdbProxy, new TEvYdbProxy::TEvCreateTopicRequest(SrcStreamPath,
-            NYdb::NTopic::TCreateTopicSettings()
-                .RetentionPeriod(BootstrapRetentionPeriod)
-                .BeginConfigurePartitioningSettings()
-                    .MinActivePartitions(1)
-                    .MaxActivePartitions(1)
-                .EndConfigurePartitioningSettings()
-                .BeginAddConsumer(SrcConsumerName)
-                    .Important(true)
-                .EndAddConsumer()), 0, ++RequestCookie);
-        Become(&TThis::StateCreateStream);
     }
 
     bool IsOwnedChangefeed() const {
@@ -395,7 +360,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
     void RetryCurrentOperation() {
         const auto state = CurrentStateFunc();
-        if (state == &TThis::StateCreateStream || state == &TThis::StateCreateSecretDirectory) {
+        if (state == &TThis::StateCreateStream) {
             CreateStream();
         } else if (state == &TThis::StateAlterTopic) {
             AlterTopic(TopicOperation);
@@ -466,7 +431,6 @@ public:
         , SrcPath(config->GetSrcPath())
         , SrcStreamPath(streamPath)
         , SrcConsumerName(consumerName)
-        , BootstrapRetentionPeriod(retentionPeriod)
         , Changefeed(MakeChangefeed(streamName, retentionPeriod, resolvedTimestamps, NJson::TJsonMap{
             {"path", config->GetDstPath()},
             {"id", ToString(rid)},
@@ -520,7 +484,6 @@ private:
     const TString SrcPath;
     const TString SrcStreamPath;
     const TString SrcConsumerName;
-    const TDuration BootstrapRetentionPeriod;
     const NYdb::NTable::TChangefeedDescription Changefeed;
     const TDuration StreamRetentionPeriod;
     const TDuration ConsumerAvailabilityPeriod;

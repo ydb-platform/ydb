@@ -134,13 +134,6 @@ private:
     TActorId Creator;
 };
 
-void PrepareSecretDirectory(TTestActorRuntime& runtime, const TActorId& proxy) {
-    const auto directory = runtime.GrabEdgeEvent<TEvYdbProxy::TEvMakeDirectoryRequest>(proxy);
-    UNIT_ASSERT_VALUES_EQUAL(std::get<0>(directory->Get()->GetArgs()), "/Root/secretImpl");
-    runtime.Send(new IEventHandle(directory->Sender, proxy, new TEvYdbProxy::TEvMakeDirectoryResponse(
-        NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), 0, directory->Cookie));
-}
-
 }
 
 Y_UNIT_TEST_SUITE(SecretDiscovery) {
@@ -222,41 +215,50 @@ Y_UNIT_TEST_SUITE(SecretDiscovery) {
             if (ev->GetTypeRewrite() == TEvYdbProxy::TEvMakeDirectoryRequest::EventType
                 || ev->GetTypeRewrite() == TEvYdbProxy::TEvCreateTopicRequest::EventType)
             {
+                UNIT_FAIL("Receiver must prepare secret transport through source ExportSecret");
+            }
+            if (ev->GetTypeRewrite() == TEvYdbProxy::TEvExportSecretRequest::EventType) {
                 ev->Rewrite(ev->GetTypeRewrite(), proxy);
             }
         });
         runtime.Register(new TSecretTargetSetup(parent));
-        PrepareSecretDirectory(runtime, proxy);
-        const auto create = runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(proxy);
-        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(create->Get()->GetArgs()), "/Root/secretImpl/Stream");
-        runtime.Send(new IEventHandle(create->Sender, proxy, new TEvYdbProxy::TEvCreateTopicResponse(
-            NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), 0, create->Cookie));
+        const auto request = runtime.GrabEdgeEvent<TEvYdbProxy::TEvExportSecretRequest>(proxy);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(request->Get()->GetArgs()), "/Root/source");
+        UNIT_ASSERT_VALUES_EQUAL(std::get<1>(request->Get()->GetArgs()), "/Root/secretImpl/Stream");
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvents::TEvWakeup>(parent, TDuration::MilliSeconds(100)));
+        runtime.Send(new IEventHandle(request->Sender, proxy, new TEvYdbProxy::TEvExportSecretResponse(
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), 0, request->Cookie));
         const auto completed = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(parent);
         UNIT_ASSERT_VALUES_EQUAL(completed->Get()->Tag, 3);
     }
 
-    Y_UNIT_TEST(DropWaitsForPendingTopicCreation) {
+    Y_UNIT_TEST(DropWaitsForPendingSecretExport) {
         TTestActorRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
         const auto parent = runtime.AllocateEdgeActor();
         const auto proxy = runtime.AllocateEdgeActor();
         auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
             if (ev->GetTypeRewrite() == TEvYdbProxy::TEvMakeDirectoryRequest::EventType
-                || ev->GetTypeRewrite() == TEvYdbProxy::TEvCreateTopicRequest::EventType
+                || ev->GetTypeRewrite() == TEvYdbProxy::TEvCreateTopicRequest::EventType)
+            {
+                UNIT_FAIL("Receiver must prepare secret transport through source ExportSecret");
+            }
+            if (ev->GetTypeRewrite() == TEvYdbProxy::TEvExportSecretRequest::EventType
                 || ev->GetTypeRewrite() == TEvYdbProxy::TEvDropTopicRequest::EventType)
             {
                 ev->Rewrite(ev->GetTypeRewrite(), proxy);
             }
         });
         const auto target = runtime.Register(new TSecretTargetSetup(parent));
-        PrepareSecretDirectory(runtime, proxy);
-        const auto create = runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(proxy);
+        const auto request = runtime.GrabEdgeEvent<TEvYdbProxy::TEvExportSecretRequest>(proxy);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(request->Get()->GetArgs()), "/Root/source");
+        UNIT_ASSERT_VALUES_EQUAL(std::get<1>(request->Get()->GetArgs()), "/Root/secretImpl/Stream");
         runtime.Send(target, parent, new TEvents::TEvWakeup());
         const auto retained = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(parent);
         UNIT_ASSERT_VALUES_EQUAL(retained->Get()->Tag, 1);
         UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(proxy, TDuration::MilliSeconds(100)));
-        runtime.Send(new IEventHandle(create->Sender, proxy, new TEvYdbProxy::TEvCreateTopicResponse(
-            NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), 0, create->Cookie));
+        runtime.Send(new IEventHandle(request->Sender, proxy, new TEvYdbProxy::TEvExportSecretResponse(
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), 0, request->Cookie));
         const auto drop = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(proxy);
         UNIT_ASSERT_VALUES_EQUAL(std::get<0>(drop->Get()->GetArgs()), "/Root/secretImpl/Stream");
         runtime.Send(new IEventHandle(drop->Sender, proxy, new TEvYdbProxy::TEvDropTopicResponse(

@@ -217,8 +217,9 @@ jobs:
               toJSON(secrets.REMOTE_CACHE_USERNAME), toJSON(secrets.REMOTE_CACHE_PASSWORD),
               toJSON(secrets.YDBOT_TELEGRAM_BOT_TOKEN),
               toJSON(secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS)) }}
+          # Do not embed vars.YDB_QA_CONFIG here — it blows GHA's 21k expression limit
+          # when build_and_test_ya expands fromJSON(inputs.vars) inside the build script.
           vars: >-
-            ${{ format('{{"AWS_BUCKET":{0},"AWS_ENDPOINT":{1},"AWS_REGION":{2},"REMOTE_CACHE_URL":{3},"GH_ALERTS_TG_LOGINS":{4},"GH_ALERTS_TG_CHAT":{5},"YDB_QA_CONFIG":{6}}}',
+            ${{ format('{{"AWS_BUCKET":{0},"AWS_ENDPOINT":{1},"AWS_REGION":{2},"REMOTE_CACHE_URL":{3},"GH_ALERTS_TG_LOGINS":{4},"GH_ALERTS_TG_CHAT":{5}}}',
               toJSON(vars.AWS_BUCKET), toJSON(vars.AWS_ENDPOINT), toJSON(vars.AWS_REGION),
-              toJSON(vars.REMOTE_CACHE_URL_YA), toJSON(vars.GH_ALERTS_TG_LOGINS), toJSON(vars.GH_ALERTS_TG_CHAT),
-              toJSON(vars.YDB_QA_CONFIG)) }}
+              toJSON(vars.REMOTE_CACHE_URL_YA), toJSON(vars.GH_ALERTS_TG_LOGINS), toJSON(vars.GH_ALERTS_TG_CHAT)) }}

@@ -1,5 +1,6 @@
 #include <ydb/core/blobstorage/base/data_center_states.h>
 #include <ydb/core/protos/blobstorage.pb.h>
+#include <ydb/core/protos/blobstorage_base.pb.h>
 
 #include <google/protobuf/text_format.h>
 

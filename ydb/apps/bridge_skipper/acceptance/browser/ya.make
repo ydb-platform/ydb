@@ -26,5 +26,3 @@ DATA(
 # installs npm packages, downloads a browser, or uses a host-installed browser.
 
 END()
-
-RECURSE_FOR_TESTS(provenance)

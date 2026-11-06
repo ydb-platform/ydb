@@ -4,6 +4,18 @@ This `PY3TEST` launches the real C++ Skipper and mock SDK endpoints. Production
 has no Node process, npm package or frontend build. Test-only Node is the existing
 repository resource at `build/platform/nodejs/24.22.1`.
 
+This target is excluded from test recursion and runs only when named explicitly.
+The independent offline `browser/provenance` target remains in acceptance test
+recursion. From the checkout root, run browser acceptance manually with a prepared
+bundle for the host platform (the example uses macOS arm64):
+
+```sh
+$HOME/repos/my-env/bin/yamake --build=release -DCFLAGS=-fno-omit-frame-pointer \
+  -tt --test-size-timeout=medium=100 \
+  --test-env=SKIPPER_PREPARED_BROWSER_BUNDLE=/private/tmp/skipper-browser-bundles/output/darwin-arm64 \
+  ydb/apps/bridge_skipper/acceptance/browser
+```
+
 Required browser bundle, pinned by this task:
 
 - `playwright-core` **1.64.1**, whose `browsers.json` must pin

@@ -47,8 +47,10 @@ an uncertain POST automatically. Added command cases cover Observe GET/HEAD,
 Manual failover single-use/replay, exact lifecycle overlays, mode races and
 restart token fencing.
 
-The [browser target](browser/README.md) uses test-only pinned Node, Playwright
+The [browser target](browser/README.md) runs only when explicitly requested and
+is excluded from test recursion. It uses test-only pinned Node, Playwright
 1.64.1 and Chromium headless-shell r1248. Required browser bundle registration is
-still pending repository-owner approval; until registered the browser target
-fails with a specific missing-resource error. Do not report complete subtree or
-browser automation verification while that prerequisite is unresolved.
+still pending repository-owner approval; an explicit run needs a prepared bundle
+or fails with a specific missing-resource error. Recursive runs include the
+independent offline `browser/provenance` checks. A passing recursive run does not
+establish browser acceptance.

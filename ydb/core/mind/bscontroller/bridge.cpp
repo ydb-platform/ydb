@@ -1426,9 +1426,24 @@ void TBlobStorageController::ProcessSyncers(THashSet<TNodeId> nodesToUpdate) {
                 continue;
             }
 
-            // pick random one
-            const size_t index = RandomNumber(nodes.size());
-            const TNodeId nodeId = nodes[index];
+            // pick a random one of the nodes having the fewest syncers, so that syncers run on as many nodes as possible
+            size_t minSyncers = Max<size_t>();
+            std::vector<TNodeId> leastLoadedNodes;
+            for (TNodeId candidateId : nodes) {
+                size_t numSyncers = 0;
+                for (auto jt = NodeToSyncerState.lower_bound({candidateId, nullptr}); jt != NodeToSyncerState.end() &&
+                        std::get<0>(*jt) == candidateId; ++jt) {
+                    ++numSyncers;
+                }
+                if (numSyncers < minSyncers) {
+                    minSyncers = numSyncers;
+                    leastLoadedNodes.clear();
+                }
+                if (numSyncers == minSyncers) {
+                    leastLoadedNodes.push_back(candidateId);
+                }
+            }
+            const TNodeId nodeId = leastLoadedNodes[RandomNumber(leastLoadedNodes.size())];
 
             YDB_LOG_DEBUG("ProcessSyncers: starting syncer",
                 {"marker", "BSCBR03"},

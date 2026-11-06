@@ -439,6 +439,7 @@ struct THeldSyncersEnv {
     }};
     std::map<ui32, ui64> Rates;
     std::map<ui32, bool> Hosting;
+    std::map<ui32, ui32> NodeSyncers; // the number of syncers on a node, as the last update from BSC says
     std::function<void(ui32, const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate&)> OnUpdate;
     bool DropRates = false;
     bool HoldSyncers = false;
@@ -460,6 +461,7 @@ struct THeldSyncersEnv {
                 }
                 if (record.GetUpdateSyncers()) {
                     Hosting[nodeId] = record.SyncersSize() != 0;
+                    NodeSyncers[nodeId] = record.SyncersSize();
                 }
             }
             if (HoldSyncers && ev->GetTypeRewrite() == NStorage::TEvNodeWardenNotifySyncerFinished::EventType) {
@@ -1157,6 +1159,24 @@ Y_UNIT_TEST_SUITE(BridgeSyncerQuota) {
 
     Y_UNIT_TEST(ZeroLimitsMeanNoLimit) {
         TestSyncRate(0, 0, 10'000'000, Max<double>());
+    }
+}
+
+Y_UNIT_TEST_SUITE(BridgeSyncerPlacement) {
+    // Each group has VDisks on all 8 nodes of the pile, so 8 syncers of dynamic groups and the one of the static group
+    // fit 8 nodes with no more than 2 syncers on a node. Random placement would hardly ever do this.
+    Y_UNIT_TEST(SyncersSpreadOverNodes) {
+        THeldSyncersEnv test;
+        std::map<ui32, ui32> numSyncers;
+        for (const auto& [nodeId, syncers] : test.NodeSyncers) {
+            if (syncers) {
+                numSyncers.emplace(nodeId, syncers);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(numSyncers.size(), 8);
+        for (const auto& [nodeId, syncers] : numSyncers) {
+            UNIT_ASSERT_LE_C(syncers, 2, "nodeId# " << nodeId);
+        }
     }
 }
 

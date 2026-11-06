@@ -2,6 +2,7 @@
 #include "cdc_schema_change.h"
 #include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
+#include "datashard_repl_offsets.h"
 #include "execution_unit_ctors.h"
 
 #include <utility>
@@ -192,7 +193,7 @@ private:
 
 TAlterTableUnit::TAlterTableUnit(TDataShard &dataShard,
                                  TPipeline &pipeline)
-    : TExecutionUnit(EExecutionUnitKind::AlterTable, false, dataShard, pipeline)
+    : TExecutionUnit(EExecutionUnitKind::AlterTable, true, dataShard, pipeline)
 {
 }
 
@@ -233,6 +234,38 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
     }
 
     auto oldInfo = DataShard.FindUserTable(tableId);
+    using TReplicationConfig = NKikimrSchemeOp::TTableReplicationConfig;
+    if (alterTableTx.HasReplicationConfig()
+        && alterTableTx.GetReplicationConfig().GetMode() == TReplicationConfig::REPLICATION_MODE_NONE
+        && !oldInfo->IsIncrementalRestore()) {
+        if (oldInfo->IsReplicated()) {
+            // Persist NONE before deleting offsets, so delayed replication writes
+            // cannot recreate them. Keep the schema version until ALTER completes.
+            TUserTable::TPtr stopped = new TUserTable(*oldInfo);
+            stopped->ReplicationConfig.Mode = TReplicationConfig::REPLICATION_MODE_NONE;
+            NKikimrSchemeOp::TTableDescription schema;
+            stopped->GetSchema(schema);
+            stopped->ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
+            stopped->SetSchema(schema);
+            NIceDb::TNiceDb db(txc.DB);
+            DataShard.PersistUserTable(db, tableId.LocalPathId, *stopped);
+            TDataShardLocksDb locksDb(DataShard, txc);
+            DataShard.ReplaceUserTable(tableId, stopped, locksDb);
+            DataShard.ReplicatedTables.erase(tableId);
+            return EExecutionStatus::Reschedule;
+        }
+
+        DataShard.ReplicatedTables.erase(tableId);
+        TReplicationSourceOffsetsDb rdb(txc);
+        switch (rdb.RemoveTableBatch(tableId)) {
+        case TReplicationSourceOffsetsDb::ECleanupStatus::NotReady:
+            return EExecutionStatus::Restart;
+        case TReplicationSourceOffsetsDb::ECleanupStatus::More:
+            return EExecutionStatus::Reschedule;
+        case TReplicationSourceOffsetsDb::ECleanupStatus::Done:
+            break;
+        }
+    }
     auto newInfo = DataShard.AlterUserTable(ctx, txc, alterTableTx);
     TDataShardLocksDb locksDb(DataShard, txc);
     DataShard.ReplaceUserTable(tableId, newInfo, locksDb);

@@ -5,8 +5,6 @@
 
 #include <library/cpp/json/json_writer.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
-
 namespace NKikimr::NHive {
 
 class TTxUpdateLastReassign : public TTransactionBase<THive> {
@@ -115,14 +113,12 @@ public:
                 break;
             }
             default: {
-                YDB_LOG_DEBUG("Reassign: tablet is not in the middle of a reassign, skipping it",
-                    {"logPrefix", GetLogPrefix()},
-                    {"tabletId", tablet.Id},
-                    {"state", ETabletStateName(tablet.State)});
+                BLOG_D("Reassign: tablet is not in the middle of a reassign, skipping it"
+                    << " tabletId# " << tablet.Id << " state# " << ETabletStateName(tablet.State));
                 return false;
             }
         }
-        sideEffects.Complete(TActivationContext::AsActorContext(), Hive->Requests);
+        sideEffects.Complete(TActivationContext::AsActorContext());
         return true;
     }
 

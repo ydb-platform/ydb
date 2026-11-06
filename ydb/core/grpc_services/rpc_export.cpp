@@ -8,6 +8,7 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/feature_flags.h>
+#include <ydb/core/backup/common/omit_export.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
@@ -173,6 +174,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     }
 
     static bool IsItemSupportedInExport(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        if (NBackup::IsOmittedFromExport(entry.Attributes)) {
+            return false;
+        }
+
         switch (entry.Kind) {
             case NSchemeCache::TSchemeCacheNavigate::KindTable: {
                 auto it = entry.Attributes.find("__async_replica");
@@ -406,6 +411,17 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 }
                 it->second.Resolved = true;
                 const NSchemeCache::TSchemeCacheNavigate::EKind kind = entry.Kind;
+                if (NBackup::IsOmittedFromExport(entry.Attributes)) {
+                    // Clients expand directories themselves and cannot see
+                    // attributes, so an omitted item is dropped, not refused.
+                    YDB_LOG_INFO("Skip item omitted from export",
+                        {"logPrefix", GetLogPrefix()},
+                        {"selfId", this->SelfId()},
+                        {"txId", this->TxId},
+                        {"path", path});
+                    ExportItems.erase(it);
+                    continue;
+                }
                 if (IsLikeDirectory(kind)) {
                     DirectoryItems[path] = it->second;
                 }
@@ -431,6 +447,15 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 if (!entry.ListNodeEntry) {
                     return this->Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, TStringBuilder() << "Directory \""
                         << path << "\" does not have list entry");
+                }
+                if (NBackup::IsOmittedFromExport(entry.Attributes)) {
+                    YDB_LOG_INFO("Skip directory omitted from export",
+                        {"logPrefix", GetLogPrefix()},
+                        {"selfId", this->SelfId()},
+                        {"txId", this->TxId},
+                        {"path", path});
+                    DirectoryItems.erase(it);
+                    continue;
                 }
                 const bool isRoot = path == canonizedDatabasePath;
                 for (const NSchemeCache::TSchemeCacheNavigate::TListNodeEntry::TChild& child : entry.ListNodeEntry->Children) {

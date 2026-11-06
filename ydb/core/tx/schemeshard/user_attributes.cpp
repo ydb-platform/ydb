@@ -60,6 +60,7 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
                 HANDLE_ATTR(ASYNC_REPLICATION);
                 HANDLE_ATTR(ASYNC_REPLICA);
                 HANDLE_ATTR(INCREMENTAL_BACKUP);
+                HANDLE_ATTR(OMIT_EXPORT);
 
             #undef HANDLE_ATTR
             return EAttribute::UNKNOWN;
@@ -154,6 +155,14 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
             case EAttribute::INCREMENTAL_BACKUP:
                 // TODO(enjection): check ops
                 return CheckValueJson(name, value, errStr);
+            case EAttribute::OMIT_EXPORT:
+                // Presence is what export checks; refuse values that would
+                // read as "not omitted" while still marking the object.
+                if (value != "true") {
+                    errStr = Sprintf("UserAttributes: attribute '%s' accepts only 'true', got '%s'", name.c_str(), value.c_str());
+                    return false;
+                }
+                return true;
         }
 
         Y_UNREACHABLE();
@@ -198,6 +207,8 @@ inline bool IsValidPathName_WeakCheck(const TString& name) {
                 return false;
             case EAttribute::INCREMENTAL_BACKUP:
                 // TODO(enjection): check ops
+                return true;
+            case EAttribute::OMIT_EXPORT:
                 return true;
         }
 

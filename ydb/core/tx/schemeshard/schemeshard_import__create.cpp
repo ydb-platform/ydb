@@ -1982,7 +1982,14 @@ private:
                     return OnNotifyResult(txc, ctx);
                 }
 
-                return CancelAndPersist(db, importInfo, itemIdx, record.GetReason(), "unhappy propose");
+                TString issue = record.GetReason();
+                if (item.State == EState::CreateChangefeed) {
+                    Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
+                    const auto& changefeed = item.Changefeeds.GetChangefeeds()[item.NextChangefeedIdx].GetChangefeed();
+                    issue = TStringBuilder() << "Cannot create changefeed '" << changefeed.name()
+                        << "' of " << item.DstPathName << ": " << issue;
+                }
+                return CancelAndPersist(db, importInfo, itemIdx, issue, "unhappy propose");
             }
 
             Self->TxIdToImport[txId] = {importInfo->Id, itemIdx};

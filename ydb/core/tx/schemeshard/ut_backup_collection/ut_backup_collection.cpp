@@ -430,6 +430,40 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             env.TestWaitNotification(runtime, txId);
         }
 
+        Y_UNIT_TEST(BackupOmittedTableRejected) {
+            TTestBasicRuntime runtime;
+            TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+            ui64 txId = 100;
+
+            SetupLogging(runtime);
+
+            PrepareDirs(runtime, env, txId);
+
+            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", DefaultCollectionSettings());
+            env.TestWaitNotification(runtime, txId);
+
+            TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )");
+            env.TestWaitNotification(runtime, txId);
+
+            TestUserAttrs(runtime, ++txId, "/MyRoot", "Table1", AlterUserAttrs({{"__omit_export", "true"}}));
+            env.TestWaitNotification(runtime, txId);
+
+            TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")",
+                {NKikimrScheme::EStatus::StatusPreconditionFailed});
+
+            TestUserAttrs(runtime, ++txId, "/MyRoot", "Table1", AlterUserAttrs({}, {"__omit_export"}));
+            env.TestWaitNotification(runtime, txId);
+
+            TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            env.TestWaitNotification(runtime, txId);
+        }
+
         Y_UNIT_TEST(BackupNonIncrementalCollection) {
             TTestBasicRuntime runtime;
             TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));

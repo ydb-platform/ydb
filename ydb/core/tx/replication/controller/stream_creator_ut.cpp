@@ -308,6 +308,19 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         UNIT_ASSERT_VALUES_EQUAL(stream.GetVirtualTimestamps(), resolvedTimestamps.has_value());
         UNIT_ASSERT_VALUES_EQUAL(stream.GetResolvedTimestampsIntervalMs(), resolvedTimestamps.value_or(TDuration::Zero()).MilliSeconds());
 
+        // The feed is an implementation detail of the replication: backups must leave it out.
+        {
+            const auto streamDesc = env.GetDescription("/Root/Table/Stream");
+            bool omitExport = false;
+            for (const auto& attr : streamDesc.GetPathDescription().GetUserAttributes()) {
+                if (attr.GetKey() == "__omit_export") {
+                    UNIT_ASSERT_VALUES_EQUAL(attr.GetValue(), "true");
+                    omitExport = true;
+                }
+            }
+            UNIT_ASSERT_C(omitExport, streamDesc.DebugString());
+        }
+
         const auto topic = env.GetDescription("/Root/Table/Stream/streamImpl");
         const auto& config = topic.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
         UNIT_ASSERT_VALUES_EQUAL(config.GetPartitionConfig().GetLifetimeSeconds(), 1);

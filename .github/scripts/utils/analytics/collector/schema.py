@@ -44,11 +44,6 @@ CREDENTIAL_ENVS = (
     "ANALYTICS_YDB_CREDENTIALS",
     "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS",
 )
-DISABLE_YDB_QA_ENV = "CI_DISABLE_YDB_QA"
-
-
-def is_ydb_qa_disabled() -> bool:
-    return os.environ.get(DISABLE_YDB_QA_ENV, "").strip().lower() in ("1", "true", "yes")
 INTERNAL_FIELD_KEYS = ("file", "attach", "enrich", "flush", "table_path")
 
 

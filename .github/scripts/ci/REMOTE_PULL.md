@@ -1,37 +1,24 @@
-# Remote CI handoff: pull (no cross-repo launch PAT)
+# Remote CI handoff: pull (platform)
 
-Default handoff: platform uploads Actions artifact `remote-ticket` (full resolve
-config). Remote poller reads it by `platform_run_id` (webhook or open-run scan),
-starts the local executor, writes a claim on **its** public S3. Platform waiter
-polls the claim, then ingest.
+Default `handoff: pull`: platform enqueue uploads Actions artifact `remote-ticket`
+(full resolve config). A remote-host poller (not in this repo) downloads it by
+`platform_run_id`, starts the executor, and writes `remote-claims/{id}.json` on
+**remote** public S3. Platform waiter follows the claim, then ingest.
 
-GitHub webhooks omit `workflow_dispatch` inputs — the artifact carries them.
+Webhooks omit `workflow_dispatch` inputs — the artifact carries them.
 
-## Objects
+## Platform objects
 
-| Object | Where | Who writes |
-|--------|--------|------------|
-| artifact `remote-ticket` | platform Actions run | platform enqueue |
-| `remote-claims/{platform_run_id}.json` | remote public S3 | remote poller |
-| artifacts / `remote_artifacts.json` | remote public S3 | executor |
+| Object | Where |
+|--------|--------|
+| artifact `remote-ticket` | this Actions run (enqueue job) |
+| claim (read) | remote public S3 (`claim_s3_*` / `summary_s3_*`) |
+| ingest | reupload + analytics from remote `remote_artifacts.json` |
 
 `platform_run_id` = caller `github.run_id`.
 
-Optional: set `ticket_s3_*` to also mirror the JSON to platform S3.
+Optional: `ticket_s3_*` mirrors the same JSON to platform S3.  
+`handoff: push` = legacy PAT `workflow_dispatch` to the remote repo.
 
-## Poller secrets / env
-
-| Name | Role |
-|------|------|
-| `GH_DISPATCH_TOKEN` → `GH_TOKEN` | PAT/app on **this** repo for `workflow_dispatch` (`github.token` will not start workflows) |
-| `PLATFORM_GH_TOKEN` | `actions:read` on platform repo (artifacts / runs) |
-| `PLATFORM_REPOSITORY` | e.g. `ydb-platform/ydb` |
-| `PLATFORM_RUN_ID` | optional single run; if set, poller waits for the artifact |
-| `PLATFORM_WORKFLOW_NAMES` | scan filter (default `Run and debug tests`; `*` = all) |
-| `CLAIM_S3_BUCKET` / `CLAIM_PUBLIC_BASE` | remote public S3 for claims |
-| `TICKET_BASE_URL` | optional S3 ticket fallback |
-| `EXECUTOR_REF` | default branch if ticket omits `executor_ref` |
-
-Claim is created with S3 `If-None-Match: *` **before** `workflow_dispatch`, then updated with `executor_run_id`. Waiter ignores `pending` and fails on `status=failed`.
-
-Config: `handoff: "pull"` (default) or `"push"` (legacy PAT dispatch).
+Host poller / executor live in the Nebius repo (see nebius/ydb). Config builder:
+`resolve_remote_execution.py` → `dispatch_remote.yml`.

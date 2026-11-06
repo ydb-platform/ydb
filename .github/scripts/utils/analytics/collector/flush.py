@@ -17,7 +17,6 @@ from .schema import (
     build_column_types,
     build_create_table_sql,
     default_metrics_file,
-    is_ydb_qa_disabled,
     resolve_table_path,
 )
 from .values import default_env_defaults, merge_defaults, normalize_metric, normalize_skip_reason
@@ -26,8 +25,6 @@ _ENSURED_TABLES: set[str] = set()
 
 
 def has_send_credentials(envs: Sequence[str] = CREDENTIAL_ENVS) -> bool:
-    if is_ydb_qa_disabled():
-        return False
     return any(os.environ.get(name) for name in envs)
 
 
@@ -147,19 +144,6 @@ def flush_file(
         )
         if not rows:
             print(f"No valid metric rows in {metrics_path}, keeping local batch")
-            return 0
-        if is_ydb_qa_disabled():
-            # Keep JSONL on disk for S3 publish + caller-side flush; do not advance offset.
-            export_path = (os.environ.get("ANALYTICS_EXPORT_FILE") or "").strip() or metrics_path
-            if os.path.abspath(export_path) != os.path.abspath(metrics_path):
-                parent = os.path.dirname(export_path)
-                if parent:
-                    os.makedirs(parent, exist_ok=True)
-                with open(metrics_path, "rb") as src, open(export_path, "wb") as dst:
-                    dst.write(src.read())
-                print(f"CI_DISABLE_YDB_QA: exported {len(rows)} pending row(s) to {export_path}")
-            else:
-                print(f"CI_DISABLE_YDB_QA: {len(rows)} pending row(s) kept in {metrics_path}")
             return 0
         if not has_send_credentials():
             print("Analytics YDB credentials are missing, keeping local batch")

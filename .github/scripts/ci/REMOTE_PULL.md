@@ -5,7 +5,7 @@ or any other caller.
 
 ## Hard rule
 
-**Nebius / host never reads platform S3.** Run context (`code_ref`, `job_inputs`,
+**Remote host never reads platform S3.** Run context (`code_ref`, `job_inputs`,
 `runs_on`, `platform_run_id`, …) comes only from the GitHub Actions artifact
 `remote-ticket` on the platform run (via webhook → host VM →
 `workflow_dispatch`). Host writes claims and build outputs to **host** public

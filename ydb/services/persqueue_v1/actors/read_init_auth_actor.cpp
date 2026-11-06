@@ -143,19 +143,65 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
 void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
     LOG_D("Handle describe topics response");
 
+    const auto* response = ev->Get();
+    if (!response->Result) {
+        LOG_C("Describe topics response has no scheme cache result");
+        return CloseSession("Internal error describing topics", PersQueue::ErrorCode::ERROR, ctx);
+    }
+
+    const auto& topicsRequested = response->TopicsRequested;
+    const auto& resultSet = response->Result->ResultSet;
+    if (topicsRequested.size() != resultSet.size()) {
+        LOG_C("Describe topics response size mismatch",
+            {"topics", topicsRequested.size()},
+            {"results", resultSet.size()});
+        return CloseSession("Internal error describing topics", PersQueue::ErrorCode::ERROR, ctx);
+    }
+
     bool reDescribe = false;
-    auto i = 0u;
-    auto& topicsRequested = ev->Get()->TopicsRequested;
-    for (const auto& entry : ev->Get()->Result->ResultSet) {
-        const auto& path = topicsRequested[i++]->GetOriginalPath();
+    for (size_t i = 0; i < resultSet.size(); ++i) {
+        const auto& entry = resultSet[i];
+        const auto& converter = topicsRequested[i];
+        if (!converter) {
+            LOG_C("Describe topics response has an empty converter", {"index", i});
+            return CloseSession("Internal error describing topics", PersQueue::ErrorCode::ERROR, ctx);
+        }
+
+        // GetOriginalPath dereferences the converter. A missing path used to abort the process;
+        // close this read session instead.
+        const TString path = converter->GetOriginalPath();
+        if (path.empty()) {
+            LOG_C("Describe topics response has an empty topic path",
+                {"index", i},
+                {"topic", converter->GetOriginalTopic()},
+                {"valid", converter->IsValid()},
+                {"reason", converter->GetReason()});
+            return CloseSession("Internal error describing topics", PersQueue::ErrorCode::ERROR, ctx);
+        }
+
         auto it = Topics.find(path);
-        AFL_ENSURE(it != Topics.end());
+        if (it == Topics.end()) {
+            LOG_C("Describe topics response path is not in the read session",
+                {"path", path},
+                {"topic", converter->GetOriginalTopic()});
+            return CloseSession(TStringBuilder() << "Internal error describing topic '" << path << "'",
+                PersQueue::ErrorCode::ERROR, ctx);
+        }
 
         if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-            AFL_ENSURE(entry.ListNodeEntry->Children.size() == 1);
+            if (!entry.ListNodeEntry || entry.ListNodeEntry->Children.size() != 1) {
+                LOG_C("CDC stream describe entry has no single child topic", {"path", path});
+                return CloseSession(TStringBuilder() << "Internal error describing CDC stream '" << path << "'",
+                    PersQueue::ErrorCode::ERROR, ctx);
+            }
             const auto& topic = entry.ListNodeEntry->Children.at(0);
+            if (topic.Name.empty()) {
+                LOG_C("CDC stream child topic name is empty", {"path", path});
+                return CloseSession(TStringBuilder() << "Internal error describing CDC stream '" << path << "'",
+                    PersQueue::ErrorCode::ERROR, ctx);
+            }
 
-            // primary path used to re-describe
+            // primary path used to re-describe; GetOriginalPath keeps the path this session was keyed by
             it->second.DiscoveryConverter->SetPrimaryPath(JoinPath(ChildPath(entry.Path, topic.Name)));
             it->second.CdcStreamPath = CanonizePath(entry.Path);
 

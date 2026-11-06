@@ -435,23 +435,60 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
 
     NKikimrPQ::TBootstrapConfig bootstrapConfig;
     if (txState->TxType == TTxState::TxCreatePQGroup && topicPath.Parent().IsCdcStream()) {
-        auto tablePath = topicPath.Parent().Parent(); // table/cdc_stream/topic
-        Y_ABORT_UNLESS(tablePath.IsResolved());
+        // The bootstrap's only logical function is to make the tablet's
+        // explicit-source-id set cover every source-table datashard from the
+        // moment the topic exists. That is required only where the tablet
+        // waits for a quorum over the explicit-id set: heartbeat
+        // (virtual/resolved timestamps) and schema-change markers are emitted
+        // only after EVERY explicit id has reported, and the marker promises
+        // all changes up to its version are delivered. With writers that
+        // self-register (the CDC change sender registers its id explicitly at
+        // writer init), the explicit set would grow lazily: a shard with
+        // pending records can stay invisible for the init round trip, another
+        // shard's heartbeat completes the quorum over the known ids, and the
+        // marker is emitted while that shard's changes are undelivered. The
+        // bootstrap (plus the table split/merge re-registration, which lands
+        // before the split ack) keeps the set complete synchronously, so
+        // streams that can emit heartbeats or schema changes keep it in every
+        // mode. Plain streams — any format — have no quorum semantics: dedup
+        // is per-source SeqNo and the sender self-registers before any record
+        // is sent, so their bootstrap — an O(source-table-shards) part staged
+        // with every per-shard message — is skipped (plain Proto routes via
+        // CreateDefaultPartitionResolver over the scheme-cache partitioning
+        // and never consults the bootstrap groups either). Gated by
+        // EnableCdcStreamBootstrapSkip; the writer self-registers regardless
+        // of the flag - with the flag off every cdc stream keeps the
+        // bootstrap, as before.
+        bool buildBootstrapConfig = true;
+        if (AppData()->FeatureFlags.GetEnableCdcStreamBootstrapSkip()) {
+            const auto& streamPathId = topicPath.Parent().Base()->PathId;
+            if (context.SS->CdcStreams.contains(streamPathId)) {
+                const auto& stream = context.SS->CdcStreams.at(streamPathId);
+                buildBootstrapConfig = stream->SchemaChanges
+                    || stream->VirtualTimestamps
+                    || stream->ResolvedTimestamps != TDuration::Zero();
+            }
+        }
 
-        Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-        auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+        if (buildBootstrapConfig) {
+            auto tablePath = topicPath.Parent().Parent(); // table/cdc_stream/topic
+            Y_ABORT_UNLESS(tablePath.IsResolved());
 
-        for (const auto* p : table->GetPartitions()) {
-            const auto* shardInfo = context.SS->ShardInfos.FindPtr(p->ShardIdx);
-            Y_ABORT_UNLESS(shardInfo != nullptr);
+            Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+            auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
-            auto& mg = *bootstrapConfig.AddExplicitMessageGroups();
-            mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shardInfo->TabletID)));
+            for (const auto* p : table->GetPartitions()) {
+                const auto* shardInfo = context.SS->ShardInfos.FindPtr(p->ShardIdx);
+                Y_ABORT_UNLESS(shardInfo != nullptr);
 
-            //NOTE: No KeyRange on the group: nothing consumes the key ranges on the pqtablet side.
-            // Routing is datashard-side over the topic partitioning, split continuity is
-            // the change-exchange re-registration, and the table split/merge re-registration
-            // produces rangeless ids anyway.
+                auto& mg = *bootstrapConfig.AddExplicitMessageGroups();
+                mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shardInfo->TabletID)));
+
+                //NOTE: No KeyRange on the group: nothing consumes the key ranges on the pqtablet side.
+                // Routing is datashard-side over the topic partitioning, split continuity is
+                // the change-exchange re-registration, and the table split/merge re-registration
+                // produces rangeless ids anyway.
+            }
         }
     }
 

@@ -4401,6 +4401,82 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         UNIT_ASSERT_VALUES_EQUAL(disabledIlike, 0);
         UNIT_ASSERT_VALUES_EQUAL(disabledSecond, 0);
     }
+
+    Y_UNIT_TEST(ComplexIlikeAfterIndexCaseActualization) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableCsPatternIndexHints(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName("SIMPLE");
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+        ExecQuery(kikimr, true, R"(
+            CREATE TABLE `/Root/complexIlikeActualized` (
+                key Int32 NOT NULL,
+                value String NOT NULL,
+                PRIMARY KEY (key)
+            )
+            PARTITION BY HASH (key)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        )");
+        ExecQuery(kikimr, true, R"(
+            ALTER TABLE `/Root/complexIlikeActualized`
+            ADD INDEX idx LOCAL USING bloom_ngram_filter
+                ON (value)
+                WITH (ngram_size = 3, false_positive_probability = 0.01, case_sensitive = true);
+        )");
+        ExecQuery(kikimr, true, R"(
+            ALTER OBJECT `/Root/complexIlikeActualized` (TYPE TABLE) SET (
+                ACTION = UPSERT_OPTIONS,
+                `INSERT_OPTIONS.BUILD_INDEXES_ENABLED` = `true`
+            );
+        )");
+        ExecQuery(kikimr, true, R"(
+            REPLACE INTO `/Root/complexIlikeActualized` (key, value) VALUES (1, "AAABBB");
+        )");
+
+        auto tableClient = kikimr.GetTableClient();
+        auto runScan = [&](const TString& query) {
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            return StreamResultToYson(it);
+        };
+        CompareYson(R"([[1u]])", runScan(R"(
+            SELECT COUNT(*) AS cnt FROM `/Root/complexIlikeActualized/.sys/primary_index_stats`
+            WHERE EntityName = "idx"
+        )"));
+
+        const TString schemaVersionQuery = R"(
+            SELECT CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.schema_version") AS Uint64) AS SchemaVersion
+            FROM `/Root/complexIlikeActualized/.sys/primary_index_portion_stats`
+            WHERE Activity = 1
+        )";
+        const TString beforeSchemaVersion = runScan(schemaVersionQuery);
+
+        ExecQuery(kikimr, true, R"(
+            ALTER TABLE `/Root/complexIlikeActualized` ALTER INDEX idx SET (case_sensitive = false);
+        )");
+        ExecQuery(kikimr, true, R"(
+            ALTER OBJECT `/Root/complexIlikeActualized` (TYPE TABLE) SET (
+                ACTION = UPSERT_OPTIONS,
+                SCHEME_NEED_ACTUALIZATION = `true`
+            );
+        )");
+        csController->WaitCondition(TDuration::Minutes(2), [&]() {
+            return runScan(schemaVersionQuery) != beforeSchemaVersion;
+        });
+        CompareYson(R"([[[1u]]])", runScan(R"(
+            SELECT SUM(Rows) AS rows FROM `/Root/complexIlikeActualized/.sys/primary_index_portion_stats`
+            WHERE Activity = 1
+        )"));
+        CompareYson(R"([[1u]])", runScan(R"(
+            SELECT COUNT(*) AS cnt FROM `/Root/complexIlikeActualized/.sys/primary_index_stats`
+            WHERE EntityName = "idx"
+        )"));
+        CompareYson(R"([[1]])", runScan(R"(
+            SELECT key FROM `/Root/complexIlikeActualized` WHERE value ILIKE '%aaa%bbb%'
+        )"));
+    }
 }
 
 }   // namespace NKikimr::NKqp

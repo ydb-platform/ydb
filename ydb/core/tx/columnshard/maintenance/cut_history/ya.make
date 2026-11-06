@@ -10,7 +10,7 @@ PEERDIR(
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/data_accessor/cache_policy
     ydb/core/tx/columnshard/engines
-    ydb/core/tx/columnshard/tablet/cut_history/lib/intervals
+    ydb/core/tx/columnshard/maintenance/cut_history/intervals
     ydb/core/tx/general_cache/usage
     ydb/library/actors/core
 )
@@ -21,4 +21,5 @@ END()
 
 RECURSE_FOR_TESTS(
     intervals
+    ut
 )

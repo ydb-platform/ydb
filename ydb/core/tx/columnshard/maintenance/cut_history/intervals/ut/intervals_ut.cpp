@@ -1,4 +1,4 @@
-#include <ydb/core/tx/columnshard/tablet/cut_history/lib/intervals/intervals.h>
+#include <ydb/core/tx/columnshard/maintenance/cut_history/intervals/intervals.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -1,6 +1,6 @@
 #include "find_empty_history_intervals.h"
 
-#include "intervals/portions.h"
+#include "intervals/exclude_portion_blobs.h"
 
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
@@ -35,7 +35,7 @@ TDuration ComputeContinuationDelay(const NKikimrConfig::TColumnShardConfig::TCut
     return TDuration::MilliSeconds(Max<ui32>(1, config.GetContinuationDelayMs()) + (jitter ? RandomNumber<ui64>(jitter + 1) : 0));
 }
 
-struct TEvAccessorsReady: NActors::TEventLocal<TEvAccessorsReady, TEvColumnShard::EvFindEmptyHistoryIntervalsAccessorsReady> {
+struct TEvAccessorsReady: NActors::TEventLocal<TEvAccessorsReady, TEvFindEmptyHistoryIntervals::EvAccessorsReady> {
     THashMap<TAddress, TCachePolicy::TObject> Accessors;
     bool Failed;
 

@@ -72,7 +72,15 @@ struct TEmptyHistoryIntervalsScanResult {
 };
 
 struct TEvFindEmptyHistoryIntervals {
-    struct TEvContinue: NActors::TEventLocal<TEvContinue, TEvColumnShard::EvFindEmptyHistoryIntervalsContinue> {};
+    enum EEv {
+        EvContinue = EventSpaceBegin(TEvents::ES_PRIVATE),
+        EvAccessorsReady,
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE));
+
+    struct TEvContinue: NActors::TEventLocal<TEvContinue, EvContinue> {};
 
     struct TEvScanFinished: NActors::TEventLocal<TEvScanFinished, TEvColumnShard::EvFindEmptyHistoryIntervalsScanFinished> {
         TEmptyHistoryIntervalsScanResult Result;

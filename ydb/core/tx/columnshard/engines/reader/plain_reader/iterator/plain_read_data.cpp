@@ -10,7 +10,6 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     : TBase(context)
     , SpecialReadContext(std::make_shared<TSpecialReadContext>(context))
 {
-    std::deque<std::shared_ptr<IDataSource>> sources;
     const auto readMetadata = GetReadMetadataVerifiedAs<const TReadMetadata>();
     auto constructor = GetReadMetadata()->ExtractSelectInfo();
     constructor->FillReadStats(GetReadMetadata()->ReadStats);

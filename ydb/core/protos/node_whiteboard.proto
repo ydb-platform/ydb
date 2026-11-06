@@ -153,6 +153,10 @@ message TPDiskStateInfo {
     optional uint32 SlotSizeInUnits = 25;
     optional double PDiskUsage = 26; // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
     optional NKikimrBlobStorage.TPDiskSpaceColor.E PDiskCapacityAlert = 27; // Max(SharedQuota.Color, CommonLog.Color)
+    // Filled by viewer from the BlobStorage controller system view.
+    optional string Status = 29;
+    optional string DecommitStatus = 30;
+    optional string MaintenanceStatus = 31;
 }
 
 message TEvPDiskStateRequest {

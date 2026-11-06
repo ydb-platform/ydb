@@ -712,6 +712,81 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
         }, true);
     }
 
+    Y_UNIT_TEST(MergeBySizeDisabledByIcbControl) {
+        NDataShard::gDbStatsDataSizeResolution = 1;
+        NDataShard::gDbStatsRowCountResolution = 1;
+
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.EnableBackgroundCompaction(false);
+        opts.DataShardStatsReportIntervalSeconds(0);
+        TTestEnv env(runtime, opts);
+
+        ui64 txId = 100;
+
+        // Two partitions with an explicit policy (MinPartitionsCount + SizeToSplit):
+        // the case where merge-by-size is enabled by table config alone.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                        Name: "Table"
+                        Columns { Name: "key"       Type: "Utf8"}
+                        KeyColumnNames: ["key"]
+                        SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } }}}
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 1
+                                SizeToSplit: 100500
+                            }
+                        }
+                        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionKeys({"A", ""})});
+
+        // Disable merge-by-size cluster-wide via the ICB control.
+        TControlBoard::SetValue(0, runtime.GetAppData().Icb->SchemeShardControls.MergeBySizeEnabled);
+
+        // Let a full wave of stats through and give schemeshard time to react.
+        {
+            TBlockEvents<TEvDataShard::TEvPeriodicTableStats> statsBlocker(runtime);
+            runtime.WaitFor("stats from both shards", [&]{ return statsBlocker.size() >= 2; });
+            statsBlocker.Unblock(2);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+
+        // No merge must have happened while the control is off.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionKeys({"A", ""})});
+
+        // Re-enable merge-by-size; the next stats wave must merge both shards into one.
+        TControlBoard::SetValue(1, runtime.GetAppData().Icb->SchemeShardControls.MergeBySizeEnabled);
+
+        TVector<ui64> shards;
+        auto shardCollector = [&shards](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+            const auto& partitions = record.GetPathDescription().GetTablePartitions();
+            shards.clear();
+            shards.reserve(partitions.size());
+            for (const auto& partition : partitions) {
+                shards.emplace_back(partition.GetDatashardId());
+            }
+        };
+
+        while (true) {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true), {shardCollector});
+            if (shards.size() > 1) {
+                // If a merge happens, old shards are deleted and replaced with a new one.
+                env.TestWaitTabletDeletion(runtime, shards);
+            } else {
+                break;
+            }
+        }
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
+                           {NLs::PartitionKeys({""})});
+    }
+
     void TryMergeWithInflyLimit(TTestActorRuntime &runtime, TTestEnv &env, const ui64 mergeNum, const ui64 remainMergeNum, const ui64 acceptedMergeNum, ui64 &txId) {
         const ui64 shardsNum = mergeNum * 2;
         const ui64 startMergePart = mergeNum - remainMergeNum;

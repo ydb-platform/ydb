@@ -80,7 +80,15 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev) {
     request->set_path(TStringBuilder() << Database << "/" << path);
 
     for (const auto& consumer : settings.AddConsumers_) {
-        request->add_add_consumers()->set_name(consumer.ConsumerName_);
+        consumer.SerializeTo(*request->add_add_consumers());
+    }
+
+    for (const auto& consumer : settings.AlterConsumers_) {
+        consumer.SerializeTo(*request->add_alter_consumers());
+    }
+
+    if (settings.SetRetentionPeriod_) {
+        request->mutable_set_retention_period()->set_seconds(settings.SetRetentionPeriod_->Seconds());
     }
 
     for (const auto& consumerName : settings.DropConsumers_) {
@@ -137,6 +145,17 @@ void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev) {
 
     auto cb = CreateCallback(std::make_shared<TDescribeTopicContext>(ev->Sender, ev->Cookie));
     NGRpcService::DoDescribeTopicRequest(std::make_unique<TLocalProxyRequest>(path, Database, std::move(request), cb), *this);
+}
+
+void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribeConsumerRequest::TPtr& ev) {
+    YDB_LOG_TRACE("Handle",
+        {"ev", ev->Get()->ToString()});
+
+    // The DescribeConsumer rpc handler requires a grpc request context, it cannot be called in-process
+    NYdb::NIssue::TIssues issues;
+    issues.AddIssue("DescribeConsumer is not supported by the local proxy");
+    NYdb::NTopic::TDescribeConsumerResult result(NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues)), {});
+    Send(ev->Sender, new TEvYdbProxy::TEvDescribeConsumerResponse(std::move(result)), 0, ev->Cookie);
 }
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvDescribePathRequest::TPtr& ev) {
@@ -199,6 +218,7 @@ STATEFN(TLocalProxyActor::StateWork) {
         hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribeTableRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribeTopicRequest, Handle);
+        hFunc(TEvYdbProxy::TEvDescribeConsumerRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribePathRequest, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
     default:

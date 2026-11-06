@@ -3,6 +3,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/library/actors/core/mon.h>
 
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
@@ -117,6 +118,45 @@ void ValidateCountMinSketch(TTestActorRuntime& runtime, const TPathId& pathId) {
     };
 
     CheckCountMinSketch(runtime, pathId, expected);
+}
+
+class TMonRequestStub : public NMonitoring::IMonHttpRequest {
+public:
+    const TCgiParameters& GetParams() const override { return Params; }
+
+    IOutputStream& Output() override { Y_ABORT("Not implemented"); }
+    HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPathInfo() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
+    const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
+    const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
+    TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
+
+private:
+    TCgiParameters Params;
+};
+
+// Reads the LoadQueriesInFlight counter from the stat service monitoring page.
+size_t GetLoadQueriesInFlight(TTestActorRuntime& runtime, ui32 nodeIdx = 1) {
+    TMonRequestStub request;
+    auto sender = runtime.AllocateEdgeActor(nodeIdx);
+    runtime.Send(MakeStatServiceID(runtime.GetNodeId(nodeIdx)), sender,
+        new NMon::TEvHttpInfo(request), nodeIdx, true);
+    auto res = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(sender);
+    const TString& answer = static_cast<NMon::TEvHttpInfoRes*>(res->Get())->Answer;
+
+    constexpr TStringBuf prefix = "LoadQueriesInFlight: ";
+    const auto pos = answer.find(prefix);
+    UNIT_ASSERT_C(pos != TString::npos, answer);
+    TStringBuf value = TStringBuf(answer).substr(pos + prefix.size());
+    return FromString<size_t>(value.NextTok('\n'));
 }
 
 } // namespace
@@ -380,6 +420,59 @@ Y_UNIT_TEST_SUITE(ColumnStatistics) {
         UNIT_ASSERT(resp.CountMinSketch.CountMin);
         UNIT_ASSERT_VALUES_EQUAL(
             resp.CountMinSketch.CountMin->GetElementCount(), ColumnTableRowsNumber);
+    }
+
+    Y_UNIT_TEST(LoadQueriesCleanedUpAfterReply) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "Table1");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        for (size_t i = 0; i < 3; ++i) {
+            ValidateCountMinSketch(runtime, tableInfo.PathId);
+            UNIT_ASSERT_VALUES_EQUAL(GetLoadQueriesInFlight(runtime), 0);
+        }
+    }
+
+    Y_UNIT_TEST(LoadQueriesCleanedUpAfterRequestFailed) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareTable(env, "Database", "Table1");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        // TBlockEvents can't be used here: it logs the sender name, and load responses
+        // are sent from a future callback without a sender actor.
+        std::vector<TEvStatistics::TEvLoadStatisticsQueryResponse::TPtr> blockedLoads;
+        auto blockObserver = runtime.AddObserver<TEvStatistics::TEvLoadStatisticsQueryResponse>(
+            [&](auto& ev) { blockedLoads.emplace_back(std::move(ev)); });
+
+        const ui32 nodeIdx = 1;
+        const auto statServiceId = MakeStatServiceID(runtime.GetNodeId(nodeIdx));
+        auto sender = runtime.AllocateEdgeActor(nodeIdx);
+
+        auto evGet = std::make_unique<TEvStatistics::TEvGetStatistics>();
+        evGet->StatType = EStatType::COUNT_MIN_SKETCH;
+        for (ui32 tag : {GetTag("Key"), GetTag("LowCardinalityString")}) {
+            evGet->StatRequests.push_back(TRequest{ .PathId = tableInfo.PathId, .ColumnTags = tag });
+        }
+        runtime.Send(statServiceId, sender, evGet.release(), nodeIdx, true);
+        runtime.WaitFor("load statistics responses", [&]{ return blockedLoads.size() == 2; });
+
+        // Fail the request while its load queries are still in flight.
+        runtime.Send(statServiceId, sender, new TEvStatistics::TEvStatisticsIsDisabled(), nodeIdx, true);
+        auto evResult = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvGetStatisticsResult>(sender);
+        UNIT_ASSERT(!evResult->Get()->Success);
+        UNIT_ASSERT_VALUES_EQUAL(GetLoadQueriesInFlight(runtime), 2);
+
+        blockObserver.Remove();
+        for (auto& ev : blockedLoads) {
+            runtime.Send(ev.Release(), nodeIdx, true);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(GetLoadQueriesInFlight(runtime), 0);
     }
 }
 

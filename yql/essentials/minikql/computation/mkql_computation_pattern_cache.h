@@ -32,6 +32,8 @@ struct TPatternCacheEntry {
     std::atomic<size_t> AccessTimes = 0; // set only by cache
     std::atomic<bool> IsInCache = false; // set only by cache
 
+    bool CompilationIsNotRequired = false;
+
     void UpdateSizeForCache() {
         Y_DEBUG_ABORT_UNLESS(!SizeForCache);
         SizeForCache = Alloc.GetAllocated();

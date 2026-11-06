@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     read_attributes_utils.cpp
     rewrite_io_utils.cpp
+    sql_path_aliases.cpp
     yql_kikimr_constraints.cpp
     yql_kikimr_datasink.cpp
     yql_kikimr_datasource.cpp
@@ -35,6 +36,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc
+    ydb/core/util
     ydb/library/aclib
     ydb/library/aclib/protos
     ydb/library/ydb_issue/proto

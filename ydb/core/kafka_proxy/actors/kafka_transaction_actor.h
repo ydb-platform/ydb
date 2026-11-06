@@ -75,9 +75,7 @@ namespace NKafka {
                     YDB_LOG_CRIT_COMP(NKikimrServices::KAFKA_PROXY, "Critical error happened",
                         {LogPrefix()},
                         {"reason", y.what()});
-                    if (EndTxnRequestPtr) {
-                        SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::UNKNOWN_SERVER_ERROR, y.what());
-                    }
+                    ReplyPendingEndTxn(EKafkaErrors::UNKNOWN_SERVER_ERROR, y.what());
                     Die(ActorContext());
                 }
             }
@@ -107,6 +105,7 @@ namespace NKafka {
 
             // helper methods
             void Die(const TActorContext &ctx);
+            void ReplyPendingEndTxn(EKafkaErrors errorCode, const TString& errorMessage = {});
             bool TxnExpired();
             template<class EventType>
             bool ProducerInRequestIsValid(TMessagePtr<EventType> kafkaRequest);
@@ -133,9 +132,9 @@ namespace NKafka {
             // helper fields
             const TString DatabasePath;
             const TString ResourceDatabasePath;
-            // This field need to preserve request details between several requests to KQP
-            // In case something goes off road, we can always send error back to client
-            TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;
+            // The connection processes one in-flight Kafka request, so at most one EndTxn is pending
+            // while KQP commits. Extra EndTxn on this actor is rejected with CONCURRENT_TRANSACTIONS.
+            TEvKafka::TEvEndTxnRequest::TPtr PendingEndTxnRequest;
             bool CommitStarted = false;
             ui64 TxnTimeoutMs;
             TInstant CreatedAt;

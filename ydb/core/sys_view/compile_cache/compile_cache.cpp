@@ -1,8 +1,11 @@
 #include "compile_cache.h"
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/interop/cast.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/sys_view/auth/auth_scan_base.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/registry.h>
@@ -176,6 +179,11 @@ public:
 
 private:
     void ProceedToScan() override {
+        if (IsServerlessDatabase) {
+            ReplyUnsupportedDatabase("serverless");
+            return;
+        }
+
         Become(&TCompileCacheQueriesScan::StateScan);
 
         if (UserToken) {
@@ -183,6 +191,7 @@ private:
             bool isDatabaseAdmin = AppData()->FeatureFlags.GetEnableDatabaseAdmin()
                 && IsDatabaseAdministrator(UserToken.Get(), DatabaseOwner);
             IsAdmin = isClusterAdmin || isDatabaseAdmin;
+            IsMetadataUser = UserToken->GetUserSID() == NACLib::TSystemUsers::Metadata().GetUserSID();
         }
 
         if (!MissingSchemaColumns.empty()) {
@@ -320,10 +329,9 @@ private:
             return;
         }
 
-        // Check if database is serverless: for serverless databases, TenantName != AppData()->TenantName
-        // This is a simple heuristic - serverless databases use shared compute resources
+        // Keep the node/tenant locality check separate from database type.
         if (TenantName != AppData()->TenantName) {
-            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Compile cache is not available for this database");
+            ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "Compile cache view is not available for this database");
             return;
         }
 
@@ -413,6 +421,16 @@ private:
         if (record.HasStatus() && record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues peerIssues;
             NYql::IssuesFromMessage(record.GetIssues(), peerIssues);
+            bool accessDenied = false;
+            for (const auto& topIssue : peerIssues) {
+                NYql::WalkThroughIssues(topIssue, false, [&](const NYql::TIssue& issue, ui16) {
+                    accessDenied |= issue.GetCode() == NKikimrIssues::TIssuesIds::ACCESS_DENIED;
+                });
+            }
+            if (record.GetStatus() == Ydb::StatusIds::UNSUPPORTED && accessDenied) {
+                ReplyErrorAndDie(Ydb::StatusIds::UNSUPPORTED, peerIssues);
+                return;
+            }
             SkipCurrentNode("node returned error", responseNodeId, &peerIssues);
             return;
         }
@@ -458,27 +476,42 @@ private:
     }
 
     bool CanAccessEntry(const TCompileCacheQuery& entry) const {
-        if (!UserToken || IsAdmin) {
-            return true;
+        if (!entry.HasDatabase() || entry.GetDatabase() != DatabaseName) {
+            return false;
         }
 
-        // Filter by database: user can only see queries from their own database
-        if (entry.HasDatabase() && entry.GetDatabase() != DatabaseName) {
-            return false;
+        if (!UserToken || IsAdmin || IsMetadataUser) {
+            return true;
         }
 
         // Filter by user SID: non-admin user can only see their own queries
         return entry.GetUserSID() == UserToken->GetUserSID();
     }
 
+    void ReplyUnsupportedDatabase(TStringBuf databaseType) {
+        NYql::TIssues issues;
+        issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED,
+            TStringBuilder() << "Compile cache view and warmup are not supported for " << databaseType << " databases"));
+        ReplyErrorAndDie(Ydb::StatusIds::UNSUPPORTED, issues);
+    }
+
     void ProcessRows() {
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         auto nodeId = LastResponse.GetNodeId();
 
-        for(int idx = 0; idx < LastResponse.GetCacheCacheQueries().size(); ++idx) {
-            const auto& entry = LastResponse.GetCacheCacheQueries(idx);
+        for (auto& entry : *LastResponse.MutableCacheCacheQueries()) {
             if (!CanAccessEntry(entry)) {
                 continue;
+            }
+
+            if (!IsMetadataUser && entry.HasMetaInfo()) {
+                NJson::TJsonValue metadata;
+                if (NJson::ReadJsonTree(entry.GetMetaInfo(), &metadata, false) && metadata.IsMap()) {
+                    metadata.EraseValue("user_group_sids");
+                    entry.SetMetaInfo(NJson::WriteJson(metadata, false));
+                } else {
+                    entry.ClearMetaInfo();
+                }
             }
 
             TVector<TCell> cells;
@@ -545,6 +578,7 @@ private:
 
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     bool IsAdmin = false;
+    bool IsMetadataUser = false;
 
     static constexpr TDuration NodeRequestTimeout = TDuration::Seconds(10);
 

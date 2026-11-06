@@ -285,7 +285,7 @@ private:
 TReadSessionActor::TReadSessionActor(
         IReadSessionHandlerRef handler, const NPersQueue::TTopicsListController& topicsHandler, const ui64 cookie,
         const TActorId& pqMetaCache, const TActorId& newSchemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-        const TMaybe<TString> clientDC
+        const TMaybe<TString> clientDC, TString authority
 )
     : Handler(handler)
     , StartTimestamp(TInstant::Now())
@@ -318,6 +318,7 @@ TReadSessionActor::TReadSessionActor(
     , CommitInterval(DEFAULT_COMMIT_RATE)
     , CommitsInfly(0)
     , Cookie(cookie)
+    , Authority(std::move(authority))
     , Counters(counters)
     , BytesInflight_(0)
     , RequestedBytes(0)
@@ -335,6 +336,8 @@ void TReadSessionActor::Bootstrap(const TActorContext& ctx) {
     if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         ++(*GetServiceCounters(Counters, "pqproxy|readSession")->GetCounter("SessionsCreatedTotal", true));
     }
+    YDB_LOG_DEBUG_CTX(ctx, "PQv0 ReadSession",
+        {"authority", Authority});
     StartTime = ctx.Now();
     Become(&TThis::StateFunc);
 }
@@ -2051,6 +2054,11 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::sh
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
+    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
+            "Consumer offset commits are disabled", NPersQueue::NErrorCode::PRECONDITION_FAILED));
+        return;
+    }
     // extend the lifetime for PartitionGraph
     auto partitionGraph = TopicHolder->GetPartitionGraph();
     const auto& parents = GetParents(partitionGraph);

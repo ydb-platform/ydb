@@ -981,6 +981,27 @@ void FillColumnDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TColumnTab
             newColumn->set_family(column.GetColumnFamilyName());
         }
 
+        const auto& compression = column.GetSerializer().GetArrowCompression();
+        if (compression.HasCodec()) {
+            auto* newCompression = newColumn->mutable_compression();
+            switch (compression.GetCodec()) {
+                case NKikimrSchemeOp::ColumnCodecPlain:
+                    newCompression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_OFF);
+                    break;
+                case NKikimrSchemeOp::ColumnCodecLZ4:
+                    newCompression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_LZ4);
+                    break;
+                case NKikimrSchemeOp::ColumnCodecZSTD:
+                    newCompression->set_algorithm(Ydb::Table::ColumnCompression::ALGORITHM_ZSTD);
+                    break;
+                default:
+                    ythrow yexception() << "Unsupported column compression codec: " << static_cast<int>(compression.GetCodec());
+            }
+            if (compression.HasLevel()) {
+                newCompression->set_compression_level(compression.GetLevel());
+            }
+        }
+
         if (column.HasDataAccessorConstructor()) {
             switch (column.GetDataAccessorConstructor().Implementation_case()) {
                 case NKikimrArrowAccessorProto::TConstructor::ImplementationCase::kDictionary:
@@ -3076,7 +3097,9 @@ bool FillSysViewDescription(Ydb::Table::DescribeSystemViewResult& out, const NKi
 
     const auto sysViewType = in.GetSysViewDescription().GetType();
     out.set_sys_view_id(sysViewType);
-    TString sysViewTypeName = NKikimrSysView::ESysViewType_Name(sysViewType).substr(1);
+    TString sysViewTypeName = NKikimrSysView::ESysViewType_IsValid(sysViewType)
+        ? NKikimrSysView::ESysViewType_Name(static_cast<NKikimrSysView::ESysViewType>(sysViewType)).substr(1)
+        : "UnknownType";
     NProtobufJson::ToSnakeCase(&sysViewTypeName);
     out.set_sys_view_name(std::move(sysViewTypeName));
 

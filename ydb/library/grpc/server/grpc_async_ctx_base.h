@@ -32,6 +32,11 @@ public:
         return ip;
     }
 
+    TString GetAuthority() const {
+        const auto authority = Context.ExperimentalGetAuthority();
+        return TString(authority.data(), authority.size());
+    }
+
     TInstant Deadline() const {
         // The timeout transferred in "grpc-timeout" header [1] and calculated from the deadline
         // right before the request is getting to be send.

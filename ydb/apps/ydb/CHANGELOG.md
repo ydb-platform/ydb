@@ -1,3 +1,4 @@
+* Async replication descriptions and SQL dumps now include the availability period.
 
 * Added support for the new `setnotnull` operation in the `ydb operation` subcommands.
 

@@ -454,6 +454,17 @@ Y_UNIT_TEST_SUITE(YdbProxy) {
         }
     }
 
+    Y_UNIT_TEST(LocalSecretExportRequiresSourceConnection) {
+        TEnv env;
+        const auto proxy = env.GetRuntime().Register(CreateLocalYdbProxy(env.GetDatabase()));
+        const auto created = env.Send<TEvYdbProxy::TEvCreateTopicResponse>(proxy,
+            new TEvYdbProxy::TEvCreateTopicRequest("/Root/export-topic", {}));
+        UNIT_ASSERT_VALUES_EQUAL(created->Get()->Result.GetStatus(), NYdb::EStatus::UNSUPPORTED);
+        const auto exported = env.Send<TEvYdbProxy::TEvExportSecretResponse>(proxy,
+            new TEvYdbProxy::TEvExportSecretRequest("/Root/secret", "/Root/export-topic", {}));
+        UNIT_ASSERT_VALUES_EQUAL(exported->Get()->Result.GetStatus(), NYdb::EStatus::UNSUPPORTED);
+    }
+
     Y_UNIT_TEST(CreateCdcStream) {
         TEnv<false> env;
         // create table

@@ -109,6 +109,7 @@ public:
         virtual EStreamState GetStreamState() const = 0;
         virtual void SetStreamState(EStreamState value) = 0;
         virtual bool IsExpectedStreamCreator(const TActorId& actorId) const = 0;
+        virtual void FinishStreamCreation() {}
 
         virtual std::optional<bool> GetStreamSchemaChanges() const = 0;
         virtual void SetStreamSchemaChanges(bool value) = 0;

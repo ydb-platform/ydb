@@ -17,24 +17,16 @@ public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings) {}
 
-    TAsyncStatus ExportSecrets(const std::string& topicPath, const std::vector<std::string>& secretPaths,
-        const NScheme::TDescribePathSettings& settings)
+    TAsyncStatus ExportSecret(const std::string& secretPath, const std::string& topicPath,
+        const TExportSecretSettings& settings)
     {
-        auto request = MakeOperationRequest<::Ydb::Secret::ExportSecretsRequest>(settings);
-        request.set_topic_path(topicPath);
-        for (const auto& path : secretPaths) {
-            request.add_secret_paths(path);
-        }
-        auto promise = NThreading::NewPromise<TStatus>();
-        Connections_->RunDeferred<::Ydb::Secret::V1::SecretService,
-            ::Ydb::Secret::ExportSecretsRequest, ::Ydb::Secret::ExportSecretsResponse>(
-            std::move(request),
-            [promise](google::protobuf::Any*, TPlainStatus status) mutable {
-                promise.SetValue(TStatus(std::move(status)));
-            },
-            &::Ydb::Secret::V1::SecretService::Stub::AsyncExportSecrets,
-            DbDriverState_, INITIAL_DEFERRED_CALL_DELAY, TRpcRequestSettings::Make(settings));
-        return promise.GetFuture();
+        auto request = MakeOperationRequest<::Ydb::Secret::ExportSecretRequest>(settings);
+        request.set_secret_path(TStringType{secretPath});
+        request.set_topic_path(TStringType{topicPath});
+        return RunSimple<::Ydb::Secret::V1::SecretService,
+            ::Ydb::Secret::ExportSecretRequest, ::Ydb::Secret::ExportSecretResponse>(
+            std::move(request), &::Ydb::Secret::V1::SecretService::Stub::AsyncExportSecret,
+            TRpcRequestSettings::Make(settings));
     }
 
     TAsyncDescribeSecretResult DescribeSecret(const std::string& path, const NScheme::TDescribePathSettings& settings) {
@@ -104,10 +96,10 @@ TSecretClient::TSecretClient(const TDriver& driver, const TCommonClientSettings&
     : Impl_(new TImpl(CreateInternalInterface(driver), settings))
 {}
 
-TAsyncStatus TSecretClient::ExportSecrets(const std::string& topicPath, const std::vector<std::string>& secretPaths,
-    const NScheme::TDescribePathSettings& settings)
+TAsyncStatus TSecretClient::ExportSecret(const std::string& secretPath, const std::string& topicPath,
+    const TExportSecretSettings& settings)
 {
-    return Impl_->ExportSecrets(topicPath, secretPaths, settings);
+    return Impl_->ExportSecret(secretPath, topicPath, settings);
 }
 
 TAsyncDescribeSecretResult TSecretClient::DescribeSecret(const std::string& path, const NScheme::TDescribePathSettings& settings) {

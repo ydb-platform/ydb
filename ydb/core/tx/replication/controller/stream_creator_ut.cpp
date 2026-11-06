@@ -2,6 +2,7 @@
 #include "private_events.h"
 #include "stream_creator.h"
 #include "target_table.h"
+#include "target_secret.h"
 #include "target_transfer.h"
 
 #include <ydb/core/testlib/basics/appdata.h>
@@ -47,6 +48,54 @@ Y_UNIT_TEST_SUITE(ReplicationTestEnv) {
 
 Y_UNIT_TEST_SUITE(StreamCreator) {
     using namespace NTestHelpers;
+
+    void SecretTopicSetup(bool existing, bool important = true) {
+        TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        const auto parent = runtime.AllocateEdgeActor();
+        const auto proxy = runtime.AllocateEdgeActor();
+        const auto creator = runtime.Register(CreateStreamCreator(parent, proxy, 1, 1,
+            std::make_shared<TTargetSecret::TSecretConfig>("/Root/source", "/Root/copy"),
+            "/Root/secret-topic", "replicationConsumer", TDuration::Days(1)));
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(parent));
+        runtime.Send(creator, parent, new TEvPrivate::TEvAllowCreateStream());
+        const auto request = runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(proxy);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(request->Get()->GetArgs()), "/Root/secret-topic");
+        Ydb::Topic::CreateTopicRequest settings;
+        std::get<NYdb::NTopic::TCreateTopicSettings>(request->Get()->GetArgs()).SerializeTo(settings);
+        UNIT_ASSERT_VALUES_EQUAL(settings.partitioning_settings().min_active_partitions(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(settings.partitioning_settings().max_active_partitions(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(settings.retention_period().seconds(), 86400);
+        UNIT_ASSERT_VALUES_EQUAL(settings.consumers_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(settings.consumers(0).name(), "replicationConsumer");
+        UNIT_ASSERT(settings.consumers(0).important());
+        runtime.Send(new IEventHandle(creator, proxy, new TEvYdbProxy::TEvCreateTopicResponse(
+            NYdb::TStatus(existing ? NYdb::EStatus::ALREADY_EXISTS : NYdb::EStatus::SUCCESS, {})), 0, request->Cookie));
+        if (existing) {
+            const auto describe = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicRequest>(proxy);
+            Ydb::Topic::DescribeTopicResult topic;
+            auto* consumer = topic.add_consumers();
+            consumer->set_name("replicationConsumer");
+            consumer->set_important(important);
+            runtime.Send(new IEventHandle(creator, proxy, new TEvYdbProxy::TEvDescribeTopicResponse(
+                NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), std::move(topic)), 0, describe->Cookie));
+        }
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(parent);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status.GetStatus(),
+            existing && !important ? NYdb::EStatus::PRECONDITION_FAILED : NYdb::EStatus::SUCCESS);
+    }
+
+    Y_UNIT_TEST(CreatesSecretTopicWithImportantConsumer) {
+        SecretTopicSetup(false);
+    }
+
+    Y_UNIT_TEST(ReusesSecretTopicWithImportantConsumer) {
+        SecretTopicSetup(true);
+    }
+
+    Y_UNIT_TEST(RejectsSecretTopicWithOrdinaryConsumer) {
+        SecretTopicSetup(true, false);
+    }
 
     enum class EBootstrapStage {
         Changefeed,

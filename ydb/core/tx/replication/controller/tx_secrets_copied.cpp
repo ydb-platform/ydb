@@ -34,9 +34,7 @@ public:
                     target->SetDstState(TReplication::EDstState::Done);
                 }
             }
-            if (Ev->Get()->Status.IsSuccess() && !dropping) {
-                target->SetStreamState(TReplication::EStreamState::Removed);
-            } else if (!Ev->Get()->Status.IsSuccess() && !dropping
+            if (!Ev->Get()->Status.IsSuccess() && !dropping
                 && target->GetDstState() != TReplication::EDstState::Done)
             {
                 target->SetDstState(TReplication::EDstState::Error);

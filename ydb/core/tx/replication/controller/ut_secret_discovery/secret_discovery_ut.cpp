@@ -7,13 +7,131 @@
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NReplication::NController {
 
+namespace {
+
+class TSecretTargetSetup: public TActorBootstrapped<TSecretTargetSetup> {
+public:
+    explicit TSecretTargetSetup(const TActorId& parent)
+        : Parent(parent)
+    {
+        NKikimrReplication::TReplicationConfig config;
+        config.MutableSpecific();
+        config.MutableSrcConnectionParams()->SetDatabase("/Root");
+        Replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root");
+        TargetId = Replication->AddTarget(TReplication::ETargetKind::Secret,
+            std::make_shared<TTargetSecret::TSecretConfig>("/Root/source", "/Root/copy"));
+        Replication->FindTarget(TargetId)->SetStreamName("/Root/secret-topic");
+    }
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+        Replication->Progress(ActorContext());
+    }
+
+private:
+    void Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev) {
+        Creator = ev->Sender;
+        Send(Creator, new TEvPrivate::TEvAllowCreateStream());
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        auto* target = Replication->FindTarget(TargetId);
+        Replication->SetState(TReplication::EState::Removing);
+        target->Shutdown(ActorContext());
+        target->SetStreamState(TReplication::EStreamState::Removing);
+        target->Progress(ActorContext());
+        Send(Parent, new TEvents::TEvWakeup(target->IsExpectedStreamCreator(Creator) ? 1 : 0));
+    }
+
+    void Handle(TEvPrivate::TEvCreateStreamResult::TPtr& ev) {
+        auto* target = Replication->FindTarget(TargetId);
+        UNIT_ASSERT(target->IsExpectedStreamCreator(ev->Sender));
+        target->FinishStreamCreation();
+        if (Replication->GetState() != TReplication::EState::Removing) {
+            target->SetStreamState(TReplication::EStreamState::Ready);
+        }
+        target->Progress(ActorContext());
+        if (Replication->GetState() != TReplication::EState::Removing) {
+            Send(Parent, new TEvents::TEvWakeup(3));
+        }
+    }
+
+    void Handle(TEvPrivate::TEvDropStreamResult::TPtr&) {
+        Replication->Shutdown(ActorContext());
+        Send(Parent, new TEvents::TEvWakeup(2));
+        PassAway();
+    }
+
+    STATEFN(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPrivate::TEvRequestCreateStream, Handle);
+            hFunc(TEvPrivate::TEvCreateStreamResult, Handle);
+            hFunc(TEvPrivate::TEvDropStreamResult, Handle);
+            hFunc(TEvents::TEvWakeup, Handle);
+        }
+    }
+
+    const TActorId Parent;
+    TReplication::TPtr Replication;
+    ui64 TargetId = 0;
+    TActorId Creator;
+};
+
+}
+
 Y_UNIT_TEST_SUITE(SecretDiscovery) {
+    Y_UNIT_TEST(ReadySecretDoesNotStartTableDestination) {
+        TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        const auto parent = runtime.AllocateEdgeActor();
+        const auto proxy = runtime.AllocateEdgeActor();
+        auto observer = runtime.AddObserver<TEvYdbProxy::TEvCreateTopicRequest>([&](auto& ev) {
+            ev->Rewrite(ev->GetTypeRewrite(), proxy);
+        });
+        runtime.Register(new TSecretTargetSetup(parent));
+        const auto create = runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(proxy);
+        runtime.Send(new IEventHandle(create->Sender, proxy, new TEvYdbProxy::TEvCreateTopicResponse(
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), 0, create->Cookie));
+        const auto completed = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(parent);
+        UNIT_ASSERT_VALUES_EQUAL(completed->Get()->Tag, 3);
+    }
+
+    Y_UNIT_TEST(DropWaitsForPendingTopicCreation) {
+        TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+        const auto parent = runtime.AllocateEdgeActor();
+        const auto proxy = runtime.AllocateEdgeActor();
+        auto observer = runtime.AddObserver([&](IEventHandle::TPtr& ev) {
+            if (ev->GetTypeRewrite() == TEvYdbProxy::TEvCreateTopicRequest::EventType
+                || ev->GetTypeRewrite() == TEvYdbProxy::TEvDropTopicRequest::EventType)
+            {
+                ev->Rewrite(ev->GetTypeRewrite(), proxy);
+            }
+        });
+        const auto target = runtime.Register(new TSecretTargetSetup(parent));
+        const auto create = runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicRequest>(proxy);
+        runtime.Send(target, parent, new TEvents::TEvWakeup());
+        const auto retained = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(parent);
+        UNIT_ASSERT_VALUES_EQUAL(retained->Get()->Tag, 1);
+        UNIT_ASSERT(!runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(proxy, TDuration::MilliSeconds(100)));
+        runtime.Send(new IEventHandle(create->Sender, proxy, new TEvYdbProxy::TEvCreateTopicResponse(
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), 0, create->Cookie));
+        const auto drop = runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(proxy);
+        runtime.Send(new IEventHandle(drop->Sender, proxy, new TEvYdbProxy::TEvDropTopicResponse(
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, {})), 0, drop->Cookie));
+        const auto completed = runtime.GrabEdgeEvent<TEvents::TEvWakeup>(parent);
+        UNIT_ASSERT_VALUES_EQUAL(completed->Get()->Tag, 2);
+    }
+
     Y_UNIT_TEST(DecodesEmptyValueAndRejectsIncompleteRecords) {
         NKikimrReplication::TSecretRecord source;
         source.SetSourcePath("/Root/source");
@@ -57,6 +175,27 @@ Y_UNIT_TEST_SUITE(SecretDiscovery) {
         auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root");
         replication->AddTarget(TReplication::ETargetKind::Table,
             std::make_shared<TTargetTable::TTableConfig>("/Source/table", "/Root/table"));
+        runtime.Register(CreateSecretCopier(parent, replication));
+        const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvSecretsCopied>(parent, TDuration::Seconds(5));
+        UNIT_ASSERT(result);
+        UNIT_ASSERT(result->Get()->Status.IsSuccess());
+        UNIT_ASSERT(result->Get()->Created.empty());
+    }
+
+    Y_UNIT_TEST(CompletedSecretsFinishWithoutTransport) {
+        NActors::TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        runtime.GetLogSettings(0)->Append(NKikimrServices::EServiceKikimr_MIN,
+            NKikimrServices::EServiceKikimr_MAX, NKikimrServices::EServiceKikimr_Name);
+        const auto parent = runtime.AllocateEdgeActor();
+        NKikimrReplication::TReplicationConfig config;
+        auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root");
+        const auto id = replication->AddTarget(TReplication::ETargetKind::Secret,
+            std::make_shared<TTargetSecret::TSecretConfig>("/Source/secret", "/Root/secret"));
+        auto* target = replication->FindTarget(id);
+        target->SetDstState(TReplication::EDstState::Done);
+        target->SetStreamState(TReplication::EStreamState::Ready);
+        target->SetStreamName("/Source/secret-topic");
         runtime.Register(CreateSecretCopier(parent, replication));
         const auto result = runtime.GrabEdgeEvent<TEvPrivate::TEvSecretsCopied>(parent, TDuration::Seconds(5));
         UNIT_ASSERT(result);

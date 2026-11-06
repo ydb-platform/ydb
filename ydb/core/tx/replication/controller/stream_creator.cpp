@@ -84,7 +84,17 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
                 ++RequestCookie);
             break;
         case TReplication::ETargetKind::Secret:
-            Y_ABORT("Secret targets use initial copying");
+            Send(YdbProxy, new TEvYdbProxy::TEvCreateTopicRequest(BuildStreamPath(),
+                NYdb::NTopic::TCreateTopicSettings()
+                    .RetentionPeriod(BootstrapRetentionPeriod)
+                    .BeginConfigurePartitioningSettings()
+                        .MinActivePartitions(1)
+                        .MaxActivePartitions(1)
+                    .EndConfigurePartitioningSettings()
+                    .BeginAddConsumer(SrcConsumerName)
+                        .Important(true)
+                    .EndAddConsumer()), 0, ++RequestCookie);
+            break;
         case TReplication::ETargetKind::Transfer:
             return CreateConsumer();
         }
@@ -97,6 +107,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
             {"actorState", "StateCreateStream"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
+            hFunc(TEvYdbProxy::TEvCreateTopicResponse, Handle);
             hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
@@ -128,6 +139,20 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         }
     }
 
+    void Handle(TEvYdbProxy::TEvCreateTopicResponse::TPtr& ev) {
+        if (ev->Cookie != RequestCookie) {
+            return;
+        }
+        auto& result = ev->Get()->Result;
+        if (result.GetStatus() == NYdb::EStatus::ALREADY_EXISTS) {
+            return CheckConsumerExists();
+        }
+        if (!result.IsSuccess() && IsRetryableError(result)) {
+            return Retry();
+        }
+        Reply(std::move(result));
+    }
+
     TString BuildStreamPath() const {
         switch (Kind) {
         case TReplication::ETargetKind::Table:
@@ -135,14 +160,14 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         case TReplication::ETargetKind::IndexTable:
             return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", TString{Changefeed.GetName()}}));
         case TReplication::ETargetKind::Secret:
-            Y_ABORT("Secret targets use initial copying");
+            return SrcStreamName;
         case TReplication::ETargetKind::Transfer:
             return CanonizePath(SplitPath(SrcPath));
         }
     }
 
     bool IsOwnedChangefeed() const {
-        return Kind != TReplication::ETargetKind::Transfer;
+        return Kind == TReplication::ETargetKind::Table || Kind == TReplication::ETargetKind::IndexTable;
     }
 
     enum class ETopicOperation {
@@ -287,6 +312,11 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         }
 
         if (consumer != consumers.end()) {
+            if (Kind == TReplication::ETargetKind::Secret && !consumer->GetImportant()) {
+                NYdb::NIssue::TIssues issues;
+                issues.AddIssue("Secret export consumer must be important");
+                return Reply(NYdb::TStatus(NYdb::EStatus::PRECONDITION_FAILED, std::move(issues)));
+            }
             Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()));
         } else {
             NYdb::NIssue::TIssues issues;
@@ -421,7 +451,9 @@ public:
         , TargetId(tid)
         , Kind(config->GetKind())
         , SrcPath(config->GetSrcPath())
+        , SrcStreamName(streamName)
         , SrcConsumerName(consumerName)
+        , BootstrapRetentionPeriod(retentionPeriod)
         , Changefeed(MakeChangefeed(streamName, retentionPeriod, resolvedTimestamps, NJson::TJsonMap{
             {"path", config->GetDstPath()},
             {"id", ToString(rid)},
@@ -473,7 +505,9 @@ private:
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
     const TString SrcPath;
+    const TString SrcStreamName;
     const TString SrcConsumerName;
+    const TDuration BootstrapRetentionPeriod;
     const NYdb::NTable::TChangefeedDescription Changefeed;
     const TDuration StreamRetentionPeriod;
     const TDuration ConsumerAvailabilityPeriod;

@@ -69,10 +69,17 @@ auto CreateCallback(std::shared_ptr<T>&& ctx) {
     };
 }
 
-void TLocalProxyActor::Handle(TEvYdbProxy::TEvExportSecretsRequest::TPtr& ev) {
+void TLocalProxyActor::Handle(TEvYdbProxy::TEvCreateTopicRequest::TPtr& ev) {
+    NYdb::NIssue::TIssues issues;
+    issues.AddIssue("Topic creation requires an explicit source connection");
+    Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicResponse(
+        NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues))), 0, ev->Cookie);
+}
+
+void TLocalProxyActor::Handle(TEvYdbProxy::TEvExportSecretRequest::TPtr& ev) {
     NYdb::NIssue::TIssues issues;
     issues.AddIssue("Secret export requires an explicit source connection");
-    Send(ev->Sender, new TEvYdbProxy::TEvExportSecretsResponse(
+    Send(ev->Sender, new TEvYdbProxy::TEvExportSecretResponse(
         NYdb::TStatus(NYdb::EStatus::UNSUPPORTED, std::move(issues))), 0, ev->Cookie);
 }
 
@@ -213,7 +220,8 @@ STATEFN(TLocalProxyActor::StateWork) {
         hFunc(TEvYdbProxy::TEvAlterTopicRequest, Handle);
         hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribeTableRequest, Handle);
-        hFunc(TEvYdbProxy::TEvExportSecretsRequest, Handle);
+        hFunc(TEvYdbProxy::TEvExportSecretRequest, Handle);
+        hFunc(TEvYdbProxy::TEvCreateTopicRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribeTopicRequest, Handle);
         hFunc(TEvYdbProxy::TEvDescribePathRequest, Handle);
         sFunc(TEvents::TEvPoison, PassAway);

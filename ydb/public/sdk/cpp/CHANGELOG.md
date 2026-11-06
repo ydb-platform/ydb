@@ -1,3 +1,5 @@
+* Added `TSecretClient::ExportSecret()` to export one secret into an existing topic owned by a cluster administrator, with status-only responses.
+
 * Added `TConvertToBridgeSettings::SkipStoragePoolConversion()` to leave existing storage pools and their groups non-bridged when converting a cluster into a bridged one.
 
 ## v3.25.0

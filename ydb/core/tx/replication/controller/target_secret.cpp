@@ -17,25 +17,45 @@ class TSecretTopicRemover: public TActorBootstrapped<TSecretTopicRemover> {
     }
 
     void Retry() {
-        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
+        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup(ProxyGeneration));
     }
 
     void Handle(TEvYdbProxy::TEvDropTopicResponse::TPtr& ev) {
+        if (ev->Cookie != ProxyGeneration) {
+            return;
+        }
         const auto& status = ev->Get()->Result;
         if (status.IsSuccess()) {
             Complete();
         } else if (status.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
-            Send(Proxy, new TEvYdbProxy::TEvDescribeTopicRequest(Path, NYdb::NTopic::TDescribeTopicSettings()));
+            Send(Proxy, new TEvYdbProxy::TEvDescribeTopicRequest(Path, NYdb::NTopic::TDescribeTopicSettings()), 0, ProxyGeneration);
         } else {
             Retry();
         }
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+        if (ev->Cookie != ProxyGeneration) {
+            return;
+        }
         if (ev->Get()->Result.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
             Complete();
         } else {
             Retry();
+        }
+    }
+
+    void Handle(TEvPrivate::TEvUpdateYdbProxy::TPtr& ev) {
+        if (Proxy != ev->Get()->YdbProxy) {
+            Proxy = ev->Get()->YdbProxy;
+            ++ProxyGeneration;
+            Bootstrap();
+        }
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == ProxyGeneration) {
+            Bootstrap();
         }
     }
 
@@ -49,7 +69,7 @@ public:
     {}
 
     void Bootstrap() {
-        Send(Proxy, new TEvYdbProxy::TEvDropTopicRequest(Path, NYdb::NTopic::TDropTopicSettings()));
+        Send(Proxy, new TEvYdbProxy::TEvDropTopicRequest(Path, NYdb::NTopic::TDropTopicSettings()), 0, ProxyGeneration);
         Become(&TThis::StateWork);
     }
 
@@ -57,14 +77,16 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDropTopicResponse, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
-            sFunc(TEvents::TEvWakeup, Bootstrap);
+            hFunc(TEvPrivate::TEvUpdateYdbProxy, Handle);
+            hFunc(TEvents::TEvWakeup, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
 
 private:
     const TActorId Parent;
-    const TActorId Proxy;
+    TActorId Proxy;
+    ui64 ProxyGeneration = 0;
     const ui64 ReplicationId;
     const ui64 TargetId;
     const TString Path;
@@ -72,24 +94,20 @@ private:
 
 }
 
-void TTargetSecret::Progress(const TActorContext& ctx) {
-    auto* replication = GetReplication();
-    if (replication->GetState() != TReplication::EState::Removing) {
-        return;
-    }
-    if (GetStreamState() == TReplication::EStreamState::Removing) {
-        if (!TopicRemover && replication->GetYdbProxy()) {
-            TopicRemover = ctx.Register(new TSecretTopicRemover(ctx.SelfID, replication->GetYdbProxy(),
-                replication->GetId(), GetId(), GetStreamName()));
-        }
-    } else if (GetDstState() == TReplication::EDstState::Removing) {
+void TTargetSecret::ProgressDestination(const TActorContext& ctx) {
+    // TSecretCopier creates the destination during initial copy. Only its
+    // removal belongs to the common destination lifecycle.
+    if (GetReplication()->GetState() == TReplication::EState::Removing
+        && GetDstState() == TReplication::EDstState::Removing)
+    {
         TTargetBase::Progress(ctx);
     }
 }
 
-void TTargetSecret::Shutdown(const TActorContext& ctx) {
-    Reset(TopicRemover);
-    TTargetBase::Shutdown(ctx);
+IActor* TTargetSecret::CreateStreamRemoverActor(const TActorContext& ctx) const {
+    auto* replication = GetReplication();
+    return new TSecretTopicRemover(ctx.SelfID, replication->GetYdbProxy(),
+        replication->GetId(), GetId(), GetStreamName());
 }
 
 }

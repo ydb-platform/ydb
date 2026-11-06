@@ -9,14 +9,18 @@ class TDescribeSecretResult;
 
 using TAsyncDescribeSecretResult = NThreading::TFuture<TDescribeSecretResult>;
 
+struct TExportSecretSettings : public TOperationRequestSettings<TExportSecretSettings> {};
+
 class TSecretClient {
     class TImpl;
 
 public:
     TSecretClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
-    TAsyncStatus ExportSecrets(const std::string& topicPath, const std::vector<std::string>& secretPaths,
-        const NScheme::TDescribePathSettings& settings = NScheme::TDescribePathSettings());
+    // Publish one secret to partition 0 of an existing cluster administrator-owned topic.
+    // The response contains status only; retries in the same topic are deduplicated.
+    TAsyncStatus ExportSecret(const std::string& secretPath, const std::string& topicPath,
+        const TExportSecretSettings& settings = TExportSecretSettings());
 
     TAsyncDescribeSecretResult DescribeSecret(const std::string& path,
         const NScheme::TDescribePathSettings& settings = NScheme::TDescribePathSettings());

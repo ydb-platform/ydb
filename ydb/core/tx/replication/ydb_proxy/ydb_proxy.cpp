@@ -5,7 +5,6 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/secret/secret.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
@@ -447,8 +446,8 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         CallSession<TEvYdbProxy::TEvDescribeTableResponse>(ev, &TSession::DescribeTable);
     }
 
-    void Handle(TEvYdbProxy::TEvExportSecretsRequest::TPtr& ev) {
-        Call<TEvYdbProxy::TEvExportSecretsResponse>(ev, &NYdb::NSecret::TSecretClient::ExportSecrets);
+    void Handle(TEvYdbProxy::TEvExportSecretRequest::TPtr& ev) {
+        Call<TEvYdbProxy::TEvExportSecretResponse>(ev, &NYdb::NSecret::TSecretClient::ExportSecret);
     }
 
     void Handle(TEvYdbProxy::TEvCreateTopicRequest::TPtr& ev) {
@@ -548,7 +547,7 @@ public:
             hFunc(TEvYdbProxy::TEvRenameTablesRequest, Handle);
             hFunc(TEvYdbProxy::TEvDescribeTableRequest, Handle);
             // Topic
-            hFunc(TEvYdbProxy::TEvExportSecretsRequest, Handle);
+            hFunc(TEvYdbProxy::TEvExportSecretRequest, Handle);
             hFunc(TEvYdbProxy::TEvCreateTopicRequest, Handle);
             hFunc(TEvYdbProxy::TEvAlterTopicRequest, Handle);
             hFunc(TEvYdbProxy::TEvDropTopicRequest, Handle);

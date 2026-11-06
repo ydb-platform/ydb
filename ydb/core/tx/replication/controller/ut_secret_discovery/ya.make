@@ -6,6 +6,7 @@ SIZE(SMALL)
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/core/testlib/basics
     ydb/core/testlib/pg
     ydb/library/actors/testlib
 )

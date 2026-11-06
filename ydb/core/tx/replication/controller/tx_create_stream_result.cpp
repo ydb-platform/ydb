@@ -53,6 +53,12 @@ public:
             return true;
         }
 
+        target->FinishStreamCreation();
+        if (Replication->GetState() == TReplication::EState::Removing) {
+            // Complete will resume cleanup after the source create finishes.
+            return true;
+        }
+
         if (Replication->GetDesiredState() == TReplication::EState::Done) {
             // The source request may have committed before its creator stopped.
             // Preserve its cleanup metadata without reviving setup or failing DONE.

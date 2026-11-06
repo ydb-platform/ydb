@@ -74,7 +74,7 @@ public:
             return Finish(NYdb::EStatus::SUCCESS);
         }
         if (Completed.size() == TargetCount) {
-            return DropTopic();
+            return Finish(NYdb::EStatus::SUCCESS);
         }
         auto request = MakeHolder<TNavigate>();
         request->DatabaseName = Replication->GetDatabase();
@@ -97,12 +97,22 @@ private:
             return Finish(NYdb::EStatus::SCHEME_ERROR, "Cannot resolve secret replication owner");
         }
         Owner = entries.front().SecurityObject->GetOwnerSID();
-        ExportInFlight = true;
-        Send(Proxy, new TEvYdbProxy::TEvExportSecretsRequest(TopicPath, Paths,
-            NYdb::NScheme::TDescribePathSettings()));
+        ExportNext();
     }
 
-    void Handle(TEvYdbProxy::TEvExportSecretsResponse::TPtr& ev) {
+    void ExportNext() {
+        if (StopRequested) {
+            return DropTopic();
+        }
+        if (NextExport == Paths.size()) {
+            return CreateReader();
+        }
+        ExportInFlight = true;
+        Send(Proxy, new TEvYdbProxy::TEvExportSecretRequest(Paths.at(NextExport), TopicPath,
+            NYdb::NSecret::TExportSecretSettings()));
+    }
+
+    void Handle(TEvYdbProxy::TEvExportSecretResponse::TPtr& ev) {
         ExportInFlight = false;
         if (StopRequested) {
             return DropTopic();
@@ -111,9 +121,14 @@ private:
         YDB_LOG_INFO("Source secret export completed", {"status", status.GetStatus()},
             {"issues", status.GetIssues().ToOneLineString()});
         if (!status.IsSuccess()) {
-            return Finish(status.GetStatus(), TStringBuilder() << "Cannot export source secrets: "
+            return Finish(status.GetStatus(), TStringBuilder() << "Cannot export source secret: "
                 << status.GetIssues().ToOneLineString());
         }
+        ++NextExport;
+        ExportNext();
+    }
+
+    void CreateReader() {
         auto settings = TEvYdbProxy::TTopicReaderSettings()
             .ConsumerName("replicationConsumer")
             .AutoCommit(false)
@@ -136,11 +151,20 @@ private:
         Send(Reader, new TEvYdbProxy::TEvReadTopicRequest(TEvYdbProxy::TReadTopicSettings()));
     }
 
+    void Handle(TEvYdbProxy::TEvStartTopicReadingSession::TPtr& ev) {
+        ReadSessionId = ev->Get()->Result.ReadSessionId;
+    }
+
     void Handle(TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {
         if (StopRequested) {
             return DropTopic();
         }
+        PartitionId = ev->Get()->Result.PartitionId;
         Records = std::move(ev->Get()->Result.Messages);
+        if (Records.empty()) {
+            return ReadNext();
+        }
+        NextOffset = Records.back().GetOffset() + 1;
         YDB_LOG_INFO("Read initial secret records", {"count", Records.size()});
         NextRecord = 0;
         ApplyNext();
@@ -177,11 +201,24 @@ private:
             NextTarget = 0;
             CurrentValue = record.GetValue();
         }
-        if (Completed.size() == TargetCount) {
-            DropTopic();
-        } else {
-            ReadNext();
+        Send(Proxy, new TEvYdbProxy::TEvCommitOffsetRequest(TopicPath, PartitionId,
+            "replicationConsumer", NextOffset, NYdb::NTopic::TCommitOffsetSettings().ReadSessionId(ReadSessionId)));
+    }
+
+    void Handle(TEvYdbProxy::TEvCommitOffsetResponse::TPtr& ev) {
+        if (StopRequested) {
+            return DropTopic();
         }
+        const auto& status = ev->Get()->Result;
+        if (!status.IsSuccess()) {
+            return Finish(status.GetStatus(), "Cannot commit copied secret records");
+        }
+        Send(Reader, new TEvYdbProxy::TEvCommitOffsetRequest(TopicPath, PartitionId,
+            "replicationConsumer", NextOffset, NYdb::NTopic::TCommitOffsetSettings().ReadSessionId(ReadSessionId)));
+        if (Completed.size() == TargetCount) {
+            return Finish(NYdb::EStatus::SUCCESS);
+        }
+        ReadNext();
     }
 
     void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
@@ -307,9 +344,11 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvPrivate::TEvCancelSecretCopy, Handle);
-            hFunc(TEvYdbProxy::TEvExportSecretsResponse, Handle);
+            hFunc(TEvYdbProxy::TEvExportSecretResponse, Handle);
             hFunc(TEvYdbProxy::TEvCreateTopicReaderResponse, Handle);
+            hFunc(TEvYdbProxy::TEvStartTopicReadingSession, Handle);
             hFunc(TEvYdbProxy::TEvReadTopicResponse, Handle);
+            hFunc(TEvYdbProxy::TEvCommitOffsetResponse, Handle);
             hFunc(TEvYdbProxy::TEvDropTopicResponse, Handle);
             hFunc(TEvYdbProxy::TEvTopicReaderGone, Handle);
             hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
@@ -317,7 +356,6 @@ private:
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(NSchemeEvents::TEvNotifyTxCompletionResult, Handle);
             IgnoreFunc(NSchemeEvents::TEvNotifyTxCompletionRegistered);
-            IgnoreFunc(TEvYdbProxy::TEvStartTopicReadingSession);
             sFunc(TEvents::TEvPoison, PassAway);
         }
     }
@@ -326,9 +364,11 @@ private:
     const TReplication::TPtr Replication;
     const TActorId Proxy;
     TString TopicPath;
+    TString ReadSessionId;
     TString Owner;
     TString CurrentValue;
-    std::vector<std::string> Paths;
+    TVector<TString> Paths;
+    size_t NextExport = 0;
     THashMap<TString, TVector<ui64>> Targets;
     THashSet<ui64> Completed;
     THashMap<ui64, TPathId> Created;
@@ -337,6 +377,8 @@ private:
     size_t NextTarget = 0;
     TVector<TTopicMessage> Records;
     size_t NextRecord = 0;
+    ui64 PartitionId = 0;
+    ui64 NextOffset = 0;
     ui64 CurrentTarget = 0;
     TPathId CurrentPathId;
     TActorId Reader;

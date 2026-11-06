@@ -119,12 +119,18 @@ class TReplication::TImpl: public TLagProvider {
             return;
         }
         bool pendingSecrets = false;
+        bool secretTopicsReady = true;
         for (const auto& [_, target] : Targets) {
-            pendingSecrets |= target->GetKind() == ETargetKind::Secret
+            const bool pending = target->GetKind() == ETargetKind::Secret
                 && target->GetStreamState() != EStreamState::Removed
-                && target->GetDstState() != EDstState::Error;
+                && target->GetDstState() != EDstState::Error
+                && target->GetDstState() != EDstState::Done;
+            pendingSecrets |= pending;
+            if (pending) {
+                secretTopicsReady &= target->GetStreamState() == EStreamState::Ready;
+            }
         }
-        if (pendingSecrets && !SecretCopier && YdbProxy && Database
+        if (pendingSecrets && secretTopicsReady && !SecretCopier && YdbProxy && Database
             && State == EState::Ready && DesiredState == EState::Ready)
         {
             SecretCopier = ctx.Register(CreateSecretCopier(ctx.SelfID, TReplication::TPtr(self)));

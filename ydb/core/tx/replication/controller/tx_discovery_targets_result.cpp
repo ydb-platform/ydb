@@ -74,6 +74,7 @@ public:
                     secret->SetStreamName(secretTopic);
                     db.Table<Schema::SrcStreams>().Key(rid, tid).Update(
                         NIceDb::TUpdate<Schema::SrcStreams::Name>(secretTopic),
+                        NIceDb::TUpdate<Schema::SrcStreams::ConsumerName>(secret->GetStreamConsumerName()),
                         NIceDb::TUpdate<Schema::SrcStreams::State>(secret->GetStreamState()));
                 }
 

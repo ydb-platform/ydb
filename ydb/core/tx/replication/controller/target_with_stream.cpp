@@ -244,7 +244,7 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
         Reset(StreamCreator);
         // Keep the stream metadata so a later DROP can clean up a stream whose
         // creation was already submitted when DONE was requested.
-        TTargetBase::Progress(ctx);
+        ProgressDestination(ctx);
         return;
     }
 
@@ -268,10 +268,12 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
         }
         return;
     case EStreamState::Removing:
-        if (HasWorkers()) {
+        if (WaitForStreamCreatorOnRemoval() && StreamCreator) {
+            return;
+        } else if (HasWorkers()) {
             RemoveWorkers(ctx);
         } else if (!StreamRemover) {
-            StreamRemover = ctx.Register(CreateStreamRemover(replication, GetId(), ctx));
+            StreamRemover = ctx.Register(CreateStreamRemoverActor(ctx));
         }
         return;
     case EStreamState::Ready:
@@ -287,11 +289,27 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
         break;
     }
 
+    ProgressDestination(ctx);
+}
+
+void TTargetWithStream::ProgressDestination(const TActorContext& ctx) {
     TTargetBase::Progress(ctx);
 }
 
+IActor* TTargetWithStream::CreateStreamRemoverActor(const TActorContext& ctx) const {
+    return CreateStreamRemover(GetReplication(), GetId(), ctx);
+}
+
 void TTargetWithStream::Shutdown(const TActorContext& ctx) {
+    const bool retainCreator = WaitForStreamCreatorOnRemoval()
+        && GetReplication()->GetState() == TReplication::EState::Removing
+        && GetStreamState() == EStreamState::Creating;
     for (auto* x : TVector<TActorId*>{&StreamCreator, &StreamRemover}) {
+        // DROP changes Creating to Removing after Shutdown. A pending source
+        // create must settle before the final removal attempt.
+        if (x == &StreamCreator && retainCreator) {
+            continue;
+        }
         if (auto actorId = std::exchange(*x, {})) {
             ctx.Send(actorId, new TEvents::TEvPoison());
         }
@@ -302,6 +320,10 @@ void TTargetWithStream::Shutdown(const TActorContext& ctx) {
 
 bool TTargetWithStream::IsExpectedStreamCreator(const TActorId& actorId) const {
     return StreamCreator && StreamCreator == actorId;
+}
+
+void TTargetWithStream::FinishStreamCreation() {
+    StreamCreator = {};
 }
 
 void TTargetWithStream::WorkerStatusChanged(ui64, ui64) {

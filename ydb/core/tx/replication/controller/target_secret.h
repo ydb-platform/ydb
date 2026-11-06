@@ -25,7 +25,6 @@ public:
 
 protected:
     void ProgressDestination(const TActorContext& ctx) override;
-    IActor* CreateStreamRemoverActor(const TActorContext& ctx) const override;
     bool WaitForStreamCreatorOnRemoval() const override { return true; }
     IActor* CreateWorkerRegistar(const TActorContext&) const override {
         Y_ABORT("Secret targets use initial copying");

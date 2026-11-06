@@ -1,11 +1,13 @@
 #include <ydb/core/tx/replication/controller/private_events.h>
 #include <ydb/core/tx/replication/controller/target_discoverer.h>
 #include <ydb/core/tx/replication/controller/secret_copier.h>
+#include <ydb/core/tx/replication/controller/stream_remover.h>
 #include <ydb/core/tx/replication/controller/target_secret.h>
 #include <ydb/core/tx/replication/controller/target_table.h>
 #include <ydb/core/tx/replication/controller/protos/secret_copy.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -17,6 +19,45 @@
 namespace NKikimr::NReplication::NController {
 
 namespace {
+
+struct TSecretRemovalSetup {
+    TTestActorRuntime Runtime;
+    TActorId Parent;
+    TActorId Proxy;
+    TActorId Remover;
+
+    TSecretRemovalSetup() {
+        Runtime.Initialize(TAppPrepare().Unwrap());
+        Parent = Runtime.AllocateEdgeActor();
+        Proxy = Runtime.AllocateEdgeActor();
+        Remover = Runtime.Register(CreateStreamRemover(Parent, Proxy, 1, 2,
+            TReplication::ETargetKind::Secret, "/Root/source", "/Root/secret-topic"));
+        Runtime.EnableScheduleForActor(Remover);
+    }
+
+    void Allow() {
+        const auto permission = Runtime.GrabEdgeEvent<TEvPrivate::TEvRequestDropStream>(Parent);
+        UNIT_ASSERT_VALUES_EQUAL(permission->Sender, Remover);
+        Runtime.Send(Remover, Parent, new TEvPrivate::TEvAllowDropStream());
+    }
+
+    void ReplyDrop(ui64 cookie, NYdb::EStatus status) {
+        Runtime.Send(new IEventHandle(Remover, Proxy, new TEvYdbProxy::TEvDropTopicResponse(
+            NYdb::TStatus(status, {})), 0, cookie));
+    }
+
+    void ReplyDescribe(ui64 cookie, NYdb::EStatus status) {
+        Runtime.Send(new IEventHandle(Remover, Proxy, new TEvYdbProxy::TEvDescribeTopicResponse(
+            NYdb::TStatus(status, {}), Ydb::Topic::DescribeTopicResult()), 0, cookie));
+    }
+
+    void Finish() {
+        const auto result = Runtime.GrabEdgeEvent<TEvPrivate::TEvDropStreamResult>(Parent);
+        UNIT_ASSERT(result->Get()->Status.IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->ReplicationId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->TargetId, 2);
+    }
+};
 
 class TSecretTargetSetup: public TActorBootstrapped<TSecretTargetSetup> {
 public:
@@ -41,6 +82,10 @@ private:
     void Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev) {
         Creator = ev->Sender;
         Send(Creator, new TEvPrivate::TEvAllowCreateStream());
+    }
+
+    void Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev) {
+        Send(ev->Sender, new TEvPrivate::TEvAllowDropStream());
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
@@ -74,6 +119,7 @@ private:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPrivate::TEvRequestCreateStream, Handle);
+            hFunc(TEvPrivate::TEvRequestDropStream, Handle);
             hFunc(TEvPrivate::TEvCreateStreamResult, Handle);
             hFunc(TEvPrivate::TEvDropStreamResult, Handle);
             hFunc(TEvents::TEvWakeup, Handle);
@@ -89,6 +135,75 @@ private:
 }
 
 Y_UNIT_TEST_SUITE(SecretDiscovery) {
+    Y_UNIT_TEST(SecretTopicRemovalWaitsForControllerPermission) {
+        TSecretRemovalSetup setup;
+        UNIT_ASSERT(!setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(
+            setup.Proxy, TDuration::MilliSeconds(100)));
+        setup.Allow();
+        const auto request = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(setup.Proxy);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(request->Get()->GetArgs()), "/Root/secret-topic");
+        setup.ReplyDrop(request->Cookie, NYdb::EStatus::SUCCESS);
+        setup.Finish();
+    }
+
+    Y_UNIT_TEST(SecretTopicRemovalConfirmsMissingTopic) {
+        TSecretRemovalSetup setup;
+        setup.Allow();
+        const auto drop = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(setup.Proxy);
+        setup.ReplyDrop(drop->Cookie, NYdb::EStatus::SCHEME_ERROR);
+        const auto describe = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicRequest>(setup.Proxy);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<0>(describe->Get()->GetArgs()), "/Root/secret-topic");
+        UNIT_ASSERT(!setup.Runtime.GrabEdgeEvent<TEvPrivate::TEvDropStreamResult>(
+            setup.Parent, TDuration::MilliSeconds(100)));
+        setup.ReplyDescribe(describe->Cookie, NYdb::EStatus::SCHEME_ERROR);
+        setup.Finish();
+    }
+
+    Y_UNIT_TEST(SecretTopicRemovalRetriesWhenTopicStillExists) {
+        TSecretRemovalSetup setup;
+        setup.Allow();
+        const auto drop = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(setup.Proxy);
+        setup.ReplyDrop(drop->Cookie, NYdb::EStatus::SCHEME_ERROR);
+        const auto describe = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicRequest>(setup.Proxy);
+        setup.ReplyDescribe(describe->Cookie, NYdb::EStatus::SUCCESS);
+        const auto retry = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(setup.Proxy);
+        setup.ReplyDrop(retry->Cookie, NYdb::EStatus::SUCCESS);
+        setup.Finish();
+    }
+
+    Y_UNIT_TEST(SecretTopicRemovalRetriesErrors) {
+        for (const auto status : {NYdb::EStatus::UNAVAILABLE, NYdb::EStatus::UNAUTHORIZED}) {
+            TSecretRemovalSetup setup;
+            setup.Allow();
+            const auto drop = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(setup.Proxy);
+            setup.ReplyDrop(drop->Cookie, status);
+            const auto retry = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(setup.Proxy);
+            setup.ReplyDrop(retry->Cookie, NYdb::EStatus::SUCCESS);
+            setup.Finish();
+        }
+    }
+
+    Y_UNIT_TEST(SecretTopicRemovalIgnoresOldProxyRepliesAndTimers) {
+        TSecretRemovalSetup setup;
+        setup.Allow();
+        const auto oldDrop = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(setup.Proxy);
+        setup.ReplyDrop(oldDrop->Cookie, NYdb::EStatus::SCHEME_ERROR);
+        const auto oldDescribe = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDescribeTopicRequest>(setup.Proxy);
+        setup.Proxy = setup.Runtime.AllocateEdgeActor();
+        setup.Runtime.Send(setup.Remover, setup.Parent, new TEvPrivate::TEvUpdateYdbProxy(setup.Proxy));
+        const auto drop = setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(setup.Proxy);
+        UNIT_ASSERT_VALUES_UNEQUAL(drop->Cookie, oldDrop->Cookie);
+        setup.ReplyDescribe(oldDescribe->Cookie, NYdb::EStatus::SCHEME_ERROR);
+        setup.ReplyDrop(oldDrop->Cookie, NYdb::EStatus::SUCCESS);
+        setup.Runtime.Send(setup.Remover, setup.Parent, new TEvents::TEvWakeup(oldDrop->Cookie));
+        UNIT_ASSERT(!setup.Runtime.GrabEdgeEvent<TEvPrivate::TEvDropStreamResult>(
+            setup.Parent, TDuration::MilliSeconds(100)));
+        UNIT_ASSERT(!setup.Runtime.GrabEdgeEvent<TEvYdbProxy::TEvDropTopicRequest>(
+            setup.Proxy, TDuration::MilliSeconds(100)));
+        setup.ReplyDrop(drop->Cookie, NYdb::EStatus::SUCCESS);
+        setup.Finish();
+    }
+
     Y_UNIT_TEST(ReadySecretDoesNotStartTableDestination) {
         TTestActorRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());

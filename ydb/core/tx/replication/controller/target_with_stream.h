@@ -95,7 +95,6 @@ public:
 
 protected:
     virtual void ProgressDestination(const TActorContext& ctx);
-    virtual IActor* CreateStreamRemoverActor(const TActorContext& ctx) const;
     virtual bool WaitForStreamCreatorOnRemoval() const { return false; }
     THolder<NKikimrReplication::TReplicationLocationConfig> Location;
     virtual TTargetWithStreamStats* GetStatsImpl();

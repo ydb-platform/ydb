@@ -9,6 +9,7 @@ PEERDIR(
     ydb/core/testlib/basics
     ydb/core/testlib/pg
     ydb/library/actors/testlib
+    ydb/public/api/protos
 )
 
 SRCS(

@@ -44,7 +44,9 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
                 ProxyGeneration);
             break;
         case TReplication::ETargetKind::Secret:
-            Y_ABORT("Secret targets use initial copying");
+            Send(YdbProxy, new TEvYdbProxy::TEvDropTopicRequest(StreamName, NYdb::NTopic::TDropTopicSettings()),
+                0, ProxyGeneration);
+            break;
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("Unreachable");
         }
@@ -57,6 +59,8 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
             {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvAlterTableResponse, Handle);
+            hFunc(TEvYdbProxy::TEvDropTopicResponse, Handle);
+            hFunc(TEvYdbProxy::TEvDescribeTopicResponse, Handle);
             hFunc(TEvents::TEvWakeup, Handle);
         default:
             return StateBase(ev);
@@ -74,7 +78,7 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
                 YDB_LOG_DEBUG("Retry");
-                return Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup(ProxyGeneration));
+                return Retry();
             }
 
             YDB_LOG_ERROR("Error",
@@ -85,7 +89,43 @@ class TStreamRemover: public TActorBootstrapped<TStreamRemover> {
                 {"issues", result.GetIssues().ToOneLineString()});
         }
 
-        Send(Parent, new TEvPrivate::TEvDropStreamResult(ReplicationId, TargetId, std::move(result)));
+        Finish(std::move(result));
+    }
+
+    void Handle(TEvYdbProxy::TEvDropTopicResponse::TPtr& ev) {
+        if (ev->Cookie != ProxyGeneration) {
+            return;
+        }
+        const auto& result = ev->Get()->Result;
+        if (result.IsSuccess()) {
+            return Finish(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}));
+        }
+        if (result.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
+            // The shared topic may already have been removed by another target.
+            Send(YdbProxy, new TEvYdbProxy::TEvDescribeTopicRequest(StreamName, NYdb::NTopic::TDescribeTopicSettings()),
+                0, ProxyGeneration);
+            return;
+        }
+        Retry();
+    }
+
+    void Handle(TEvYdbProxy::TEvDescribeTopicResponse::TPtr& ev) {
+        if (ev->Cookie != ProxyGeneration) {
+            return;
+        }
+        if (ev->Get()->Result.GetStatus() == NYdb::EStatus::SCHEME_ERROR) {
+            Finish(NYdb::TStatus(NYdb::EStatus::SUCCESS, {}));
+        } else {
+            Retry();
+        }
+    }
+
+    void Retry() {
+        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup(ProxyGeneration));
+    }
+
+    void Finish(NYdb::TStatus&& status) {
+        Send(Parent, new TEvPrivate::TEvDropStreamResult(ReplicationId, TargetId, std::move(status)));
         PassAway();
     }
 
@@ -139,9 +179,8 @@ public:
         switch (Kind) {
         case TReplication::ETargetKind::Table:
         case TReplication::ETargetKind::IndexTable:
-            return RequestPermission();
         case TReplication::ETargetKind::Secret:
-            Y_ABORT("Secret targets use initial copying");
+            return RequestPermission();
         case TReplication::ETargetKind::Transfer:
             Y_ABORT("Unreachable");
         }

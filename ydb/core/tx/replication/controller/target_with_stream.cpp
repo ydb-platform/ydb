@@ -273,7 +273,7 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
         } else if (HasWorkers()) {
             RemoveWorkers(ctx);
         } else if (!StreamRemover) {
-            StreamRemover = ctx.Register(CreateStreamRemoverActor(ctx));
+            StreamRemover = ctx.Register(CreateStreamRemover(replication, GetId(), ctx));
         }
         return;
     case EStreamState::Ready:
@@ -294,10 +294,6 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
 
 void TTargetWithStream::ProgressDestination(const TActorContext& ctx) {
     TTargetBase::Progress(ctx);
-}
-
-IActor* TTargetWithStream::CreateStreamRemoverActor(const TActorContext& ctx) const {
-    return CreateStreamRemover(GetReplication(), GetId(), ctx);
 }
 
 void TTargetWithStream::Shutdown(const TActorContext& ctx) {

@@ -1364,6 +1364,57 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
     }
 
+    Y_UNIT_TEST(ExtendedTtlTypesFeatureFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        for (const TString type : {"DyNumber", "Date32", "Datetime64", "Timestamp64"}) {
+            const TString ttl = TStringBuilder() << "Enabled { ColumnName: \"ts\" ExpireAfterSeconds: 300 ColumnUnit: "
+                << (type == "DyNumber" ? "UNIT_SECONDS" : "UNIT_AUTO") << " }";
+            const TString schema = TStringBuilder() << R"(
+                Name: ")" << type << R"("
+                ColumnShardCount: 1
+                Schema {
+                    Columns { Id: 1 Name: "id" Type: "Uint64" NotNull: true }
+                    Columns { Id: 2 Name: "ts" Type: ")" << type << R"(" }
+                    KeyColumnNames: "id"
+                    Indexes {
+                        Id: 3 Name: "ttl_max" ClassName: "MIN_MAX"
+                        StorageId: "__LOCAL_METADATA" InheritPortionStorage: false
+                        MinMaxIndex { ColumnId: 2 }
+                    }
+                }
+            )";
+            const TString alter = TStringBuilder() << "Name: \"" << type << "\" AlterTtlSettings { " << ttl << " }";
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(false);
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema + " TtlSettings { " + ttl + " }",
+                {NKikimrScheme::StatusSchemeError});
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema);
+            env.TestWaitNotification(runtime, txId);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", alter, {NKikimrScheme::StatusSchemeError});
+
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(true);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", alter);
+            env.TestWaitNotification(runtime, txId);
+            TestLs(runtime, "/MyRoot/" + type, false, NLs::HasColumnTableTtlSettingsEnabled("ts", TDuration::Seconds(300)));
+
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(false);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot",
+                TStringBuilder() << "Name: \"" << type << "\" AlterTtlSettings { Disabled {} }");
+            env.TestWaitNotification(runtime, txId);
+            TestLs(runtime, "/MyRoot/" + type, false, NLs::HasColumnTableTtlSettingsDisabled());
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", alter, {NKikimrScheme::StatusSchemeError});
+
+            runtime.GetAppData().FeatureFlags.SetEnableColumnShardExtendedTtlTypes(true);
+            TestAlterColumnTable(runtime, ++txId, "/MyRoot", alter);
+            env.TestWaitNotification(runtime, txId);
+            TestDropColumnTable(runtime, ++txId, "/MyRoot", type);
+            env.TestWaitNotification(runtime, txId);
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", schema + " TtlSettings { " + ttl + " }");
+            env.TestWaitNotification(runtime, txId);
+        }
+    }
+
     Y_UNIT_TEST(CreateTableTtl) {
         TTestBasicRuntime runtime;
         TTestEnvOptions options;

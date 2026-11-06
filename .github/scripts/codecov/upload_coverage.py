@@ -14,12 +14,17 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 from codecov_suites import COVERAGE_EXCLUDE_REGEXP, SUITES
+
+
+UPLOAD_TIMEOUT_SECONDS = 15 * 60
 
 
 class UploadError(Exception):
@@ -130,7 +135,7 @@ def upload(args: argparse.Namespace) -> int:
     reserved = {"--file", "-f", "--files-search-direct-file", "--coverage-files-search-direct-file",
                 "--network-root-folder", "--network-filter", "--network-prefix", "--plugin",
                 "--disable-file-fixes", "--disable-search", "--recurse-submodules"}
-    if any(arg.split("=", 1)[0] in reserved for arg in cli_args):
+    if any(arg.split("=", 1)[0] in reserved or arg.startswith("-f") for arg in cli_args):
         raise UploadError("report selection and source metadata options are managed by this helper")
 
     with tempfile.TemporaryDirectory(prefix="codecov-upload-", dir=args.temp_dir) as temporary:
@@ -149,20 +154,52 @@ def upload(args: argparse.Namespace) -> int:
         started = time.monotonic()
         expired = False
         payload_bytes = None
+        timed_out = threading.Event()
         with subprocess.Popen(
             command, cwd=directory, env=clean_environment(os.environ),
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-            encoding="utf-8", errors="replace",
+            encoding="utf-8", errors="replace", start_new_session=True,
         ) as process:
-            for line in process.stdout:
-                expired = expired or "ExpiredToken" in line
-                size = re.search(r"Sending upload \((\d+) bytes\)", line)
-                if size:
-                    payload_bytes = int(size[1])
-                print(safe_output(line), end="", flush=True)
-            code = process.wait()
+            def stop_upload_processes() -> None:
+                try:
+                    # Kill descendants too: they may keep stdout open after
+                    # the CLI exits and prevent the reader from reaching EOF.
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+            def expire() -> None:
+                timed_out.set()
+                stop_upload_processes()
+
+            # A timeout on wait() alone cannot interrupt a blocked stdout read.
+            watchdog = threading.Timer(UPLOAD_TIMEOUT_SECONDS, expire)
+            watchdog.daemon = True
+            watchdog.start()
+            try:
+                for line in process.stdout:
+                    expired = expired or "ExpiredToken" in line
+                    size = re.search(r"Sending upload \((\d+) bytes\)", line)
+                    if size:
+                        payload_bytes = int(size[1])
+                    # A killed CLI can leave a partial last line. The GitHub
+                    # error annotation below must start on its own line.
+                    print(safe_output(line), end="" if line.endswith("\n") else "\n", flush=True)
+                code = process.wait()
+            except BaseException:
+                # Popen.__exit__ waits for the child, including when streaming
+                # fails. Stop it before cancelling the watchdog below.
+                stop_upload_processes()
+                raise
+            finally:
+                watchdog.cancel()
+                watchdog.join()
         elapsed = time.monotonic() - started
-        reason = "ExpiredToken: Codecov storage rejected an expired upload URL" if expired else f"CLI exit code {code}"
+        if timed_out.is_set():
+            code = 124
+            reason = f"Codecov CLI timed out after {UPLOAD_TIMEOUT_SECONDS:g}s; upload processes stopped"
+        else:
+            reason = "ExpiredToken: Codecov storage rejected an expired upload URL" if expired else f"CLI exit code {code}"
         if code:
             annotation(f"Coverage report is ready, but publication failed: {reason}. Tests were not rerun.")
         summary = os.environ.get("GITHUB_STEP_SUMMARY")

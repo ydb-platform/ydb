@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -49,7 +50,7 @@ class UploadCoverageTest(unittest.TestCase):
         self.cli = self.directory / "fake-codecov"
         self.cli.write_text(
             f"#!{sys.executable}\n"
-            "import json, os, pathlib, sys\n"
+            "import json, os, pathlib, subprocess, sys, time\n"
             "root = pathlib.Path.cwd()\n"
             "files = {str(p.relative_to(root)): p.read_bytes().hex() "
             "for p in root.rglob('*') if p.is_file()}\n"
@@ -57,6 +58,17 @@ class UploadCoverageTest(unittest.TestCase):
             "'git_env': {k: v for k, v in os.environ.items() if k.startswith('GIT_')}, "
             "'token_available': bool(os.environ.get('CODECOV_TOKEN'))}\n"
             "pathlib.Path(os.environ['VALIDATION_CAPTURE_PATH']).write_text(json.dumps(data))\n"
+            "hang = os.environ.get('VALIDATION_HANG')\n"
+            "if hang:\n"
+            "    if hang == 'partial-line':\n"
+            "        print('Upload stalled without a newline', end='', flush=True)\n"
+            "    elif hang == 'closed-output':\n"
+            "        os.close(1)\n"
+            "        os.close(2)\n"
+            "    elif hang == 'descendant':\n"
+            "        subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'])\n"
+            "        sys.exit(0)\n"
+            "    time.sleep(30)\n"
             "print('Sending upload (1234 bytes) to storage')\n"
             "if os.environ.get('VALIDATION_FAIL'):\n"
             "    print('ExpiredToken https://storage.example/report?signature=secret-query ' "
@@ -96,7 +108,7 @@ class UploadCoverageTest(unittest.TestCase):
             "--name", "cli-123-2", "--pull-request-number", "456", *extra,
         ]
 
-    def invoke(self, *extra: str, fail: bool = False) -> tuple[int, str]:
+    def invoke(self, *extra: str, fail: bool = False, hang: str = "") -> tuple[int, str]:
         env = {
             "VALIDATION_CAPTURE_PATH": str(self.capture),
             "GITHUB_STEP_SUMMARY": str(self.summary),
@@ -106,6 +118,7 @@ class UploadCoverageTest(unittest.TestCase):
             "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.worktree",
             "GIT_CONFIG_VALUE_0": str(self.root),
             "VALIDATION_FAIL": "1" if fail else "",
+            "VALIDATION_HANG": hang,
         }
         output = io.StringIO()
         with mock.patch.dict(os.environ, env), contextlib.redirect_stdout(output):
@@ -232,9 +245,29 @@ class UploadCoverageTest(unittest.TestCase):
                 self.assertFalse(self.capture.exists())
                 self.assertEqual(list(parent.glob("codecov-upload-*")), [])
 
+    def test_timeout_interrupts_output_reads_wait_and_inherited_output(self) -> None:
+        for hang in ("silent", "partial-line", "closed-output", "descendant"):
+            with self.subTest(hang=hang), mock.patch.object(upload_coverage, "UPLOAD_TIMEOUT_SECONDS", 1):
+                before = self.report.read_bytes()
+                started = time.monotonic()
+                code, output = self.invoke(hang=hang)
+                self.assertLess(time.monotonic() - started, 10)
+                self.assertEqual(code, 124, output)
+                self.assertRegex(output, r"(?m)^::error title=Codecov publication::")
+                self.assertIn("Codecov CLI timed out after 1s", output)
+                self.assertIn("Tests were not rerun", output)
+                self.assertIn("failed", self.summary.read_text(encoding="utf-8"))
+                self.assertIn("timed out", self.summary.read_text(encoding="utf-8"))
+                self.assertEqual(self.report.read_bytes(), before)
+                self.assertFalse(Path(json.loads(self.capture.read_text())["cwd"]).exists())
+                self.assertEqual(list(self.temp_dir.iterdir()), [])
+                if hang == "partial-line":
+                    self.assertIn("Upload stalled without a newline", output)
+
     def test_reserved_selection_arguments_cannot_broaden_scope(self) -> None:
         for option in (
-            "--file=other.lcov", "-f", "--network-root-folder=/", "--network-prefix=x",
+            "--file=other.lcov", "-f", "-fother.lcov", "-f/path/to/other.lcov", "-f=other.lcov",
+            "--network-root-folder=/", "--network-prefix=x",
             "--network-filter=y", "--plugin=gcov", "--disable-file-fixes",
             "--disable-search", "--recurse-submodules",
             "--files-search-direct-file", "--coverage-files-search-direct-file",

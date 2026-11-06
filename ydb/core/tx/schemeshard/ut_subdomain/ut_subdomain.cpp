@@ -265,6 +265,27 @@ NLs::TCheckFunc LsCheckDiskQuotaExceeded(
     };
 }
 
+// The parent schemeshard keeps only a stub of an external subdomain, so it must not report the quota state
+// that is owned by the tenant schemeshard.
+void CheckNoQuotaUsageInParentDescription(TTestActorRuntime& runtime,
+                                          ui64 schemeShard,
+                                          const TString& pathToSubdomain,
+                                          const TString& debugHint
+) {
+    if (schemeShard == TTestTxConfig::SchemeShard) {
+        // the database is hosted by the root schemeshard itself
+        return;
+    }
+    TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard, pathToSubdomain), {
+        [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            const auto& desc = record.GetPathDescription().GetDomainDescription();
+            UNIT_ASSERT_C(!desc.HasDiskSpaceQuotaUsage(),
+                debugHint << ", parent schemeshard's description:\n" << desc.DebugString()
+            );
+        }
+    });
+}
+
 void CheckQuotaExceedance(TTestActorRuntime& runtime,
                           ui64 schemeShard,
                           const TString& pathToSubdomain,
@@ -275,6 +296,7 @@ void CheckQuotaExceedance(TTestActorRuntime& runtime,
         LsCheckDiskQuotaExceeded(expectExceeded, debugHint),
         LsCheckDiskSpaceQuotaUsage(runtime, expectExceeded, debugHint)
     });
+    CheckNoQuotaUsageInParentDescription(runtime, schemeShard, pathToSubdomain, debugHint);
 }
 
 void CheckQuotaExceedance(TTestActorRuntime& runtime,
@@ -291,6 +313,7 @@ void CheckQuotaExceedance(TTestActorRuntime& runtime,
         ),
         LsCheckDiskSpaceQuotaUsage(runtime, !expectedExceeders.empty(), debugHint)
     });
+    CheckNoQuotaUsageInParentDescription(runtime, schemeShard, pathToSubdomain, debugHint);
 }
 
 TTableId ResolveTableId(TTestActorRuntime& runtime, const TString& path) {

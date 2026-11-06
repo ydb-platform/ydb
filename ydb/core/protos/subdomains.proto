@@ -124,7 +124,7 @@ message TDiskSpaceQuotaUsage {
         // Entries contain a single item with an empty PoolKind.
         MODE_DATABASE = 1;
         // DatabaseQuotas.storage_quotas are checked against the usage of the storage pool kind with the same name
-        // (tables only); the overall database quota is ignored. Writes are blocked when any pool kind exceeds its hard quota.
+        // (tables only); the overall database quota is ignored.
         // Entries contain an item for every pool kind that has either usage or a quota.
         MODE_STORAGE_POOL_KINDS = 2;
     }
@@ -133,14 +133,19 @@ message TDiskSpaceQuotaUsage {
         optional string PoolKind = 1; // empty in MODE_DATABASE
         optional uint64 Usage = 2; // bytes, the value compared with the quotas
         // Effective quotas in bytes: when only one of the quotas is configured, the other one is equal to it.
-        // 0 means no limit. Writes are blocked when Usage > HardQuota and unblocked when Usage < SoftQuota.
+        // 0 means no limit. See QuotaExceeded for how they are combined into the database state.
         optional uint64 SoftQuota = 3;
         optional uint64 HardQuota = 4;
     }
 
     optional EMode Mode = 1;
     repeated TEntry Entries = 2;
-    // Persisted quota hysteresis state. Unlike DomainState.DiskQuotaExceeded, it is not affected by StorageSpaceExhausted.
+    // Persisted database-wide quota hysteresis state, recomputed whenever the usage or the quotas change:
+    // - becomes true when Usage > HardQuota for any entry with a non-zero HardQuota;
+    // - becomes false only when Usage < SoftQuota for every entry with a non-zero SoftQuota;
+    // - otherwise keeps its previous value.
+    // Unlike DomainState.DiskQuotaExceeded, it is not affected by StorageSpaceExhausted,
+    // so writes can stay blocked after QuotaExceeded becomes false.
     optional bool QuotaExceeded = 3;
 }
 
@@ -183,7 +188,8 @@ message TDomainDescription {
 
     optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel TablesMetricsLevel = 26;
 
-    // Always set by SchemeShard versions that support it; absence means an older SchemeShard.
+    // Set only by the SchemeShard that enforces the quotas of the database. Absent in older SchemeShard versions
+    // and in the parent SchemeShard's description of an external subdomain: describe it via its tenant SchemeShard.
     optional TDiskSpaceQuotaUsage DiskSpaceQuotaUsage = 27;
 }
 

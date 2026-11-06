@@ -29,6 +29,12 @@ public:
         auto* alias = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
         alias->SetSrc(Table0Path);
         alias->SetDst("/Root/RecursiveFolderProcessing/Table0");
+        alias = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
+        alias->SetSrc("/Root/export-base-alias");
+        alias->SetDst("/Root/RecursiveFolderProcessing");
+        alias = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
+        alias->SetSrc("/Root/import-base-alias");
+        alias->SetDst("/Root/RestorePrefix");
     }
 };
 
@@ -428,14 +434,15 @@ void ExportKesusIcbImpl(TBackupTestFixture& f, bool throughDirectory) {
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
-void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
+void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap, bool enableRelativePaths = false) {
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
 
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
 
     {
-        auto exportSettings = traits.MakeExportSettings(f, "/Root/RecursiveFolderProcessing");
+        auto exportSettings = traits.MakeExportSettings(f, enableRelativePaths ? "RecursiveFolderProcessing" : "/Root/RecursiveFolderProcessing");
         exportSettings
                 .AppendItem(typename TExportSettings::TItem{.Src = "Table0", .Dst = "Table0_Prefix"})
                 .AppendItem(typename TExportSettings::TItem{.Src = "dir1/Table1", .Dst = "Table1_Prefix"})
@@ -484,15 +491,15 @@ void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap) {
     }
 
     {
-        auto importSettings = traits.MakeImportSettings(f, "/Root/RestorePrefix");
+        auto importSettings = traits.MakeImportSettings(f, enableRelativePaths ? "RestorePrefix/" : "/Root/RestorePrefix");
         importSettings
-                .AppendItem(traits.MakeImportItem("/Root/RestorePrefix/Table123", "dir1/dir2//Table2"))
+                .AppendItem(traits.MakeImportItem(enableRelativePaths ? "nested//Table123" : "/Root/RestorePrefix/Table123", "dir1/dir2//Table2"))
                 .AppendItem(traits.MakeImportItem("/Root/RestorePrefix/Table321", "Table0"));
         auto res = traits.Import(f, importSettings);
         f.WaitOpSuccess(res);
 
         f.ValidateHasYdbPaths({
-            TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/Table123", isOlap),
+            TBackupTestFixture::TEntryPath::TablePath(enableRelativePaths ? "/Root/RestorePrefix/nested/Table123" : "/Root/RestorePrefix/Table123", isOlap),
             TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/Table321", isOlap),
         });
         f.ValidateDoesNotHaveYdbTables({
@@ -545,6 +552,23 @@ void ExportUnexistingExplicitPathImpl(TBackupTestFixture& f, bool /*isOlap*/) {
         .AppendItem(typename TExportSettings::TItem{.Src = "unexisting"});
     auto res = traits.Export(f, exportSettings);
     f.WaitOpStatus(res, EStatus::SCHEME_ERROR);
+
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
+    for (const auto& paths : TVector<TVector<TString>>{
+        {"Root/RecursiveFolderProcessing/dir1/unexisting"},
+        {"/Root/RecursiveFolderProcessing/dir1/unexisting"},
+        {"unexisting"},
+        {"Root/RecursiveFolderProcessing/dir1/unexisting", "/Root/RecursiveFolderProcessing/dir1/unexisting"},
+        {"Root/RecursiveFolderProcessing/dir1/unexisting", "unexisting"},
+    }) {
+        auto settings = traits.MakeExportSettings(f, "RecursiveFolderProcessing/dir1");
+        for (ui32 i = 0; i < paths.size(); ++i) {
+            settings.AppendItem(typename TExportSettings::TItem{.Src = paths[i], .Dst = ToString(i)});
+        }
+        const auto result = traits.Export(f, settings);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.Status().GetStatus(), EStatus::SCHEME_ERROR,
+            result.Status().GetIssues().ToString());
+    }
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
@@ -2304,6 +2328,23 @@ void CancelWhileProcessingImpl(TBackupTestFixture& f, bool isOlap) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE_F(PathAliasingExplicitExport, TPathAliasExplicitExportFixture) {
+    Y_UNIT_TEST(RelativeExportAndImportItemsUseAliases) {
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableRelativePaths(true);
+        auto exportSettings = MakeExportSettings("export-base-alias/");
+        exportSettings.AppendItem(NExport::TExportToFsSettings::TItem{.Src = "dir1//Table1", .Dst = "archive"});
+        auto exportFuture = YdbExportClient().ExportToFs(exportSettings);
+        UNIT_ASSERT_C(exportFuture.Wait(TDuration::Seconds(60)), "Export request did not complete");
+        WaitOpSuccess(exportFuture.ExtractValueSync());
+        UNIT_ASSERT((TFsPath(GetTempDir().Path()) / "archive" / "scheme.pb").Exists());
+
+        auto importSettings = MakeImportSettings("import-base-alias/");
+        importSettings.AppendItem(NImport::TImportFromFsSettings::TItem{.Src = "archive", .Dst = "nested//Table1"});
+        auto importFuture = YdbImportClient().ImportFromFs(importSettings);
+        UNIT_ASSERT_C(importFuture.Wait(TDuration::Seconds(60)), "Import request did not complete");
+        WaitOpSuccess(importFuture.ExtractValueSync());
+        ValidateHasYdbTables({"/Root/RestorePrefix/nested/Table1"});
+    }
+
     Y_UNIT_TEST(ExplicitItemSourceAliasIsRewritten) {
         auto settings = MakeExportSettings("/Root/RecursiveFolderProcessing");
         settings.AppendItem(NExport::TExportToFsSettings::TItem{.Src = "/export-alias", .Dst = "archive"});
@@ -2325,6 +2366,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
 
     Y_UNIT_TEST(ImportFilterByYdbObjectPath) {
         ImportFilterByYdbObjectPathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
+    }
+    Y_UNIT_TEST(ImportFilterByYdbObjectPathRelative) {
+        ImportFilterByYdbObjectPathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false, true);
     }
     Y_UNIT_TEST(ExplicitDuplicatedItems) {
         ExplicitDuplicatedItemsImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
@@ -2484,6 +2528,9 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     Y_UNIT_TEST_TWIN(ImportFilterByYdbObjectPath, IsOlap) {
         ImportFilterByYdbObjectPathImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+    }
+    Y_UNIT_TEST_TWIN(ImportFilterByYdbObjectPathRelative, IsOlap) {
+        ImportFilterByYdbObjectPathImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap, true);
     }
 
     Y_UNIT_TEST_TWIN(EncryptedImportWithoutCommonPrefix, IsOlap) {

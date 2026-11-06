@@ -6,7 +6,6 @@ from ydb.core.protos.cms_pb2 import EAvailabilityMode
 from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
@@ -26,7 +25,6 @@ class AbstractLocalClusterTest(object):
         configurator = KikimrConfigGenerator(Erasure.NONE,
                                              nodes=5,
                                              use_in_memory_pdisks=False,
-                                             additional_log_configs={'CMS': LogLevels.DEBUG},
                                              state_storage_rings=list(range(1, 6)),
                                              n_to_select=5,
                                              )

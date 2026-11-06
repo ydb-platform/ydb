@@ -198,8 +198,8 @@ namespace {
             env.TestWaitNotification(runtime, txId, schemeshardId);
         }
 
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
         const auto initialStatus = expectedStatus == Ydb::StatusIds::PRECONDITION_FAILED
             ? expectedStatus
@@ -595,7 +595,7 @@ namespace {
         }
 
         ui64 ExportWithRetryInjection(ui64 txId, const TString& compression = "", const TString& encryptionBlock = "", ui64 minWriteBatchSize = 1, const TString& formatBlock = "") {
-            Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
             if (encryptionBlock) {
                 Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
@@ -708,8 +708,8 @@ namespace {
                 Env().TestWaitNotification(Runtime(), txId);
             }
 
-            Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-            Runtime().SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
             THolder<IEventHandle> delayed;
             auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -823,8 +823,8 @@ namespace {
                 Env().TestWaitNotification(Runtime(), txId);
             }
 
-            Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-            Runtime().SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
             bool dropNotification = false;
             THolder<IEventHandle> delayed;
@@ -910,9 +910,9 @@ namespace {
             UpdateRow(Runtime(), "Table", 1, "valueA");
             UpdateRow(Runtime(), "Table", 2, "valueB");
 
-            Runtime().SetLogPriority(NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_TRACE);
-            Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-            Runtime().SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
             TMaybe<ui64> backupTxId;
             TMaybe<ui64> tabletId;
@@ -2005,10 +2005,10 @@ namespace {
         void InitColumnTableExportSlowS3Test(bool enableScanWriteLog = true) {
             Env();
             Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
-            Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+            TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
             if (enableScanWriteLog) {
-                Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-                Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
+                TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
+                TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
             }
         }
 
@@ -2907,8 +2907,8 @@ partitioning_settings {
         )");
         Env().TestWaitNotification(Runtime(), txId);
 
-        Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        Runtime().SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
 
         bool dropNotification = false;
         THolder<IEventHandle> delayed;
@@ -3646,7 +3646,7 @@ partitioning_settings {
 
         UpdateRow(runtime, "Table", 1, "valueA");
         UpdateRow(runtime, "Table", 2, "valueB");
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
         THolder<IEventHandle> injectResult;
         auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -3873,7 +3873,7 @@ partitioning_settings {
 
         UpdateRow(runtime, "Table", 1, "valueA");
         UpdateRow(runtime, "Table", 2, "valueB");
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
         // An earlier scan may have uploaded more parts. Reusing that session leaves its tail
         // on the server even after a shorter scan overwrites all the parts it needs.
@@ -6239,8 +6239,8 @@ state: STATE_ENABLED
         TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port,
         bool withRelevance, bool withRowId)
     {
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::IMPORT, NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::EXPORT, NLog::PRI_TRACE);
+        TTestEnv::SetVerboseLogPriority(runtime, NKikimrServices::IMPORT, NLog::PRI_TRACE);
 
         ui64 txId = 100;
         auto expectedIndexType = withRelevance
@@ -7262,7 +7262,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
     Y_UNIT_TEST(ShouldNotCorruptEncryptedBufferOnRetry) {
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
-        Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+        TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -7601,7 +7601,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
         EnableParquetFormats(Runtime());
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
         TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -7840,7 +7840,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
         EnableParquetFormats(Runtime());
-        Runtime().SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        TTestEnv::SetVerboseLogPriority(Runtime(), NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         ui64 txId = 100;
 
         TestCreateColumnTable(Runtime(), ++txId, "/MyRoot", R"(

@@ -15,6 +15,28 @@
 using namespace NKikimr;
 using namespace NStorage;
 
+namespace {
+    std::set<TPDiskKey> FindPDiskConflicts(const NKikimrBlobStorage::TNodeWardenServiceSet& cached,
+            const NKikimrBlobStorage::TNodeWardenServiceSet& current) {
+        std::map<std::pair<ui32, TString>, ui32> idsByPath;
+        std::map<TPDiskKey, ui64> guidsById;
+        for (const auto& pdisk : current.GetPDisks()) {
+            idsByPath.emplace(std::make_pair(pdisk.GetNodeID(), pdisk.GetPath()), pdisk.GetPDiskID());
+            guidsById.emplace(TPDiskKey(pdisk), pdisk.GetPDiskGuid());
+        }
+        std::set<TPDiskKey> conflicts;
+        for (const auto& pdisk : cached.GetPDisks()) {
+            const auto it = idsByPath.find({pdisk.GetNodeID(), pdisk.GetPath()});
+            const auto guid = guidsById.find(TPDiskKey(pdisk));
+            if ((it != idsByPath.end() && it->second != pdisk.GetPDiskID())
+                    || (guid != guidsById.end() && guid->second != pdisk.GetPDiskGuid())) {
+                conflicts.emplace(pdisk);
+            }
+        }
+        return conflicts;
+    }
+}
+
 void TNodeWarden::RegisterPendingActor(const TActorId& actorId) {
     const bool inserted = PendingMessageQ.emplace(actorId, std::deque<std::unique_ptr<IEventHandle>>()).second;
     Y_ABORT_UNLESS(inserted);
@@ -40,21 +62,44 @@ void TNodeWarden::IssuePendingMessages(const TActorId& actorId) {
     PendingMessageQ.erase(it);
 }
 
-void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet &serviceSet, bool isStatic,
-        bool comprehensive, bool updateCache, const char *origin) {
-    if (Cfg->IsCacheEnabled() && updateCache) {
-        Y_ABORT_UNLESS(!isStatic);
-        return EnqueueSyncOp(WrapCacheOp(UpdateServiceSet(serviceSet, comprehensive, [=, this] {
-            ApplyServiceSet(serviceSet, false, comprehensive, false, origin);
-        })));
+void TNodeWarden::ApplyControllerServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet &serviceSet, bool comprehensive) {
+    const ui64 generation = ControllerServiceSetGeneration;
+    auto apply = [=, this] {
+        if (generation == ControllerServiceSetGeneration && CanConnectToController()) {
+            ApplyServiceSet(serviceSet, false, comprehensive, "controller");
+            if (comprehensive) {
+                LastConfirmedControllerServiceSetGeneration = generation;
+            }
+        } else if (comprehensive && generation >= LastConfirmedControllerServiceSetGeneration) {
+            // Keep recovery possible if the first response's cache write outlives its pipe, but filter
+            // identities superseded by static configuration, like a replay of the cache itself.
+            // An incremental update may omit the PDisk needed to validate its VDisks.
+            ApplyCachedServiceSet(serviceSet);
+        } else if (generation == ControllerServiceSetGeneration) {
+            // A disconnected pile can still receive updates over an existing BSC pipe.
+            // Keep its group generations current without recreating disk services:
+            // otherwise a local proxy can race with VDisks that already know the newer generation.
+            ApplyGroupInfoFromServiceSet(serviceSet, false, false);
+        }
+    };
+    if (Cfg->IsCacheEnabled()) {
+        return EnqueueSyncOp(WrapCacheOp(UpdateServiceSet(serviceSet, comprehensive, std::move(apply))));
     }
+    return apply();
+}
 
+void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet &serviceSet, bool isStatic,
+        bool comprehensive, const char *origin) {
     YDB_LOG_DEBUG("ApplyServiceSet",
         {"marker", "NW18"},
         {"isStatic", isStatic},
         {"comprehensive", comprehensive},
         {"origin", origin},
         {"serviceSet", serviceSet});
+
+    if (comprehensive) {
+        PruneLocalVDisks(serviceSet, isStatic);
+    }
 
     for (const auto& incomingGroup : serviceSet.GetGroups()) {
         const ui32 groupId = incomingGroup.GetGroupID();
@@ -94,16 +139,25 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
         to->Clear();
     }
     MergeServiceSetPDisks(to, serviceSet.GetPDisks(), pdisksToRestart);
+    RetireConflictingDynamicPDisks(isStatic);
 
     UpdateBlobStorageExecutorPoolMapping();
     for (const TServiceSetPDisk& pdisk : pdisksToRestart) {
-        DoRestartLocalPDisk(pdisk);
+        // Reconciliation can reject a disk after the merge has already queued its restart.
+        // Check the surviving configuration, rather than the running actor: MovePDisk can change its GUID.
+        const bool configured = std::ranges::any_of(target->GetPDisks(), [&](const auto& current) {
+            return TPDiskKey(current) == TPDiskKey(pdisk)
+                && current.GetPDiskGuid() == pdisk.GetPDiskGuid() && current.GetPath() == pdisk.GetPath();
+        });
+        if (configured) {
+            DoRestartLocalPDisk(pdisk);
+        }
     }
 
     if (!EnableProxyMock) {
         // in mock mode we don't need PDisk/VDisk instances
         ApplyServiceSetPDisks();
-        ApplyServiceSetVDisks(serviceSet);
+        ApplyServiceSetVDisks(serviceSet, isStatic);
     }
 
     for (auto& [vslotId, vdisk] : LocalVDisks) {
@@ -115,6 +169,73 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
             vdisk.UnderlyingPDiskDestroyed = false;
         }
     }
+}
+
+void TNodeWarden::ApplyCachedServiceSet(NKikimrBlobStorage::TNodeWardenServiceSet serviceSet) {
+    // Cache recovery may run after distconf has already installed a replacement on the same path.
+    // Never let that delayed replay resurrect the superseded PDisk or its VDisks.
+    auto conflicts = FindPDiskConflicts(serviceSet, StaticServices);
+    conflicts.merge(FindPDiskConflicts(serviceSet, DynamicServices));
+    EraseIf(*serviceSet.MutablePDisks(), [&](const auto& pdisk) {
+        const bool conflicting = conflicts.contains(TPDiskKey(pdisk));
+        if (conflicting) {
+            YDB_LOG_NOTICE("Ignoring cached PDisk conflicting with current configuration",
+                {"marker", "NW123"}, {"pdisk", pdisk});
+        }
+        return conflicting;
+    });
+    EraseIf(*serviceSet.MutableVDisks(), [&](const auto& vdisk) {
+        const auto& loc = vdisk.GetVDiskLocation();
+        return conflicts.contains({loc.GetNodeID(), loc.GetPDiskID()});
+    });
+
+    ApplyServiceSet(serviceSet, false, false, "cache");
+}
+
+bool TNodeWarden::CanConnectToController() const {
+    return !BridgeInfo || !BridgeInfo->SelfNodePile
+        || NBridge::PileStateTraits(BridgeInfo->SelfNodePile->State).AllowsConnection;
+}
+
+template<typename TPredicate>
+void TNodeWarden::RetireLocalVDisksIf(TPredicate&& predicate) {
+    for (auto it = LocalVDisks.begin(); it != LocalVDisks.end(); ) {
+        TVDiskRecord& vdisk = it->second;
+        const bool staticVDisk = TGroupID(vdisk.GetGroupId()).ConfigurationType() == EGroupConfigurationType::Static;
+        if (predicate(it->first, vdisk, staticVDisk)) {
+            YDB_LOG_NOTICE("Retiring superseded local VDisk",
+                {"marker", "NW122"},
+                {"VSlotId", vdisk.GetVSlotId()},
+                {"VDiskId", vdisk.GetVDiskId()});
+            PoisonLocalVDisk(vdisk);
+            DestroyLocalVDisk(vdisk);
+            it = LocalVDisks.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void TNodeWarden::RetireConflictingDynamicPDisks(bool isStatic) {
+    const auto conflicts = FindPDiskConflicts(DynamicServices, StaticServices);
+    if (conflicts.empty()) {
+        return;
+    }
+    // Static identities are authoritative when the two configurations disagree. Retire conflicting
+    // dynamic actors without slaying or clearing media, including delayed updates on a live BSC pipe.
+    // A controller update losing to a static configuration may just be ahead of it: restore it after a catch-up.
+    ControllerServicesDropped |= !isStatic;
+    EraseIf(*DynamicServices.MutablePDisks(), [&](const auto& pdisk) {
+        const bool conflicting = conflicts.contains(TPDiskKey(pdisk));
+        if (conflicting) {
+            YDB_LOG_NOTICE("Retiring PDisk superseded by static configuration",
+                {"marker", "NW124"}, {"pdisk", pdisk});
+        }
+        return conflicting;
+    });
+    RetireLocalVDisksIf([&](const TVSlotId& slot, const TVDiskRecord&, bool staticVDisk) {
+        return conflicts.contains({slot.NodeId, slot.PDiskId}) && (isStatic || !staticVDisk);
+    });
 }
 
 void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
@@ -135,12 +256,26 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     StorageConfig = std::move(msg->Config);
     CommittedStorageConfig = std::move(msg->CommittedConfig);
     SelfManagementEnabled = msg->SelfManagementEnabled;
+    const bool couldConnect = CanConnectToController();
     BridgeInfo = std::move(msg->BridgeInfo);
+    const bool canConnect = CanConnectToController();
+    if (!canConnect || !couldConnect) {
+        // A rejected handshake can deliver this config before the old BSC pipe reports failure.
+        // Fence controller updates still waiting for their cache writes before applying replacements.
+        ++ControllerServiceSetGeneration;
+    }
+    // Disk services received while the pile was disallowed to connect were ignored.
+    ControllerServicesDropped |= !couldConnect && canConnect;
 
     if (StorageConfig->HasBlobStorageConfig()) {
         const auto& bsConfig = StorageConfig->GetBlobStorageConfig();
         if (bsConfig.HasServiceSet()) {
             ApplyStorageConfig(bsConfig.GetServiceSet());
+            if (ControllerServicesDropped && PipeClientId && canConnect) {
+                // BSC sends full state only in reply to registration; the destroyed pipe gets reestablished.
+                ControllerServicesDropped = false;
+                NTabletPipe::CloseClient(SelfId(), PipeClientId);
+            }
         }
         SyncRateConfigLimit = bsConfig.GetBridgeSyncRateBytesPerSecond();
         UpdateSyncRateQuoter();
@@ -347,8 +482,24 @@ void TNodeWarden::ApplyStateStorageConfig() {
     }
 }
 
+void TNodeWarden::PruneLocalVDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& ss, bool isStatic) {
+    // A node recovering from old disk metadata or BSC cache may have missed the DESTROY records.
+    // Omitted slots must not keep obsolete PDisks occupying device paths after a comprehensive update.
+    std::map<TVSlotId, ui64> slots;
+    for (const auto& vdisk : ss.GetVDisks()) {
+        if (vdisk.GetVDiskLocation().GetNodeID() == LocalNodeId) {
+            slots.emplace(TVSlotId(vdisk.GetVDiskLocation()), vdisk.GetVDiskLocation().GetPDiskGuid());
+        }
+    }
+    RetireLocalVDisksIf([&](const TVSlotId& slot, const TVDiskRecord& vdisk, bool staticVDisk) {
+        const auto expected = slots.find(slot);
+        return staticVDisk == isStatic && (expected == slots.end()
+            || expected->second != vdisk.Config.GetVDiskLocation().GetPDiskGuid());
+    });
+}
+
 void TNodeWarden::ApplyStaticServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet& ss) {
-    ApplyServiceSet(ss, true /*isStatic*/, true /*comprehensive*/, false /*updateCache*/, "distconf");
+    ApplyServiceSet(ss, true /*isStatic*/, true /*comprehensive*/, "distconf");
 }
 
 void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {

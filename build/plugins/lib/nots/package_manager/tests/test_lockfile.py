@@ -1,90 +1,64 @@
 import pytest
-import io
+import json
 
 from build.plugins.lib.nots.package_manager.lockfile import Lockfile, PnpmLockfileHelper
+from build.plugins.lib.nots.package_manager import lockfile as lockfile_module
 
 
-@pytest.fixture()
-def patch_open_v6(monkeypatch):
-    def mock_open(a, b):
-        file_like = io.BytesIO(b'lockfileVersion: "6.0"')
-        return io.BufferedReader(file_like)
-
-    monkeypatch.setattr(io, "open", mock_open)
-
-
-@pytest.fixture()
-def patch_open_v9(monkeypatch):
-    def mock_open(a, b):
-        file_like = io.BytesIO(b'lockfileVersion: "9.0"')
-        return io.BufferedReader(file_like)
-
-    monkeypatch.setattr(io, "open", mock_open)
+@pytest.mark.parametrize("version", ["9.0", 9.0])
+def test_lockfile_read_v9(tmp_path, version):
+    path = tmp_path / "pnpm-lock.yaml"
+    data = {"lockfileVersion": version, "importers": {".": {}}}
+    path.write_text(json.dumps(data))
+    lf = Lockfile.load(str(path))
+    assert lf.data == {"lockfileVersion": "9.0", "importers": {".": {}}}
 
 
-@pytest.fixture()
-def patch_open_incorrect_version(monkeypatch):
-    def mock_open(a, b):
-        file_like = io.BytesIO(b'lockfileVersion: 0')
-        return io.BufferedReader(file_like)
-
-    monkeypatch.setattr(io, "open", mock_open)
-
-
-@pytest.fixture()
-def patch_open_no_version(monkeypatch):
-    def mock_open(a, b):
-        file_like = io.BytesIO(b'some text')
-        return io.BufferedReader(file_like)
-
-    monkeypatch.setattr(io, "open", mock_open)
+@pytest.mark.parametrize("version", ["6.0", "8.0", "9.1", "10.0", 0, None])
+def test_lockfile_rejects_unsupported_version(tmp_path, version):
+    path = tmp_path / "pnpm-lock.yaml"
+    path.write_text(json.dumps({"lockfileVersion": version}))
+    with pytest.raises(ValueError) as exc:
+        Lockfile.load(str(path))
+    assert str(path) in str(exc.value)
+    assert f"lockfileVersion: {version}" in str(exc.value)
+    assert "Only lockfileVersion 9.0 is supported" in str(exc.value)
+    assert "ya tool nots --clean update-lockfile" in str(exc.value)
 
 
-def test_lockfile_read_v6(patch_open_v6):
-    lf = Lockfile(path="/pnpm-lock.yaml")
-
-    lf.read()
-
-    assert lf.data == {"lockfileVersion": "9.0"}
-
-
-def test_lockfile_read_v9(patch_open_v9):
-    lf = Lockfile(path="/pnpm-lock.yaml")
-
-    lf.read()
-
-    assert lf.data == {"lockfileVersion": "9.0"}
+@pytest.mark.parametrize("data", [[], {"packages": {}}, "some text"])
+def test_lockfile_rejects_missing_version(tmp_path, data):
+    path = tmp_path / "pnpm-lock.yaml"
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="lockfileVersion: <no-version>"):
+        Lockfile.load(str(path))
 
 
-def test_lockfile_read_yaml_error_incorrect_lockfile_version(patch_open_incorrect_version):
-    lf = Lockfile(path="/pnpm-lock.yaml")
+@pytest.mark.parametrize(
+    "snapshot, package_id, name",
+    [
+        ("pkg@1.2.3", "pkg@1.2.3", "pkg"),
+        ("@scope/pkg@1.2.3", "@scope/pkg@1.2.3", "@scope/pkg"),
+        ("pkg@1.2.3(peer@4.5.6)", "pkg@1.2.3", "pkg"),
+        ("@scope/pkg@1.2.3(@peer/a@2.0.0)(b@3.0.0(@peer/nested@4.0.0))", "@scope/pkg@1.2.3", "@scope/pkg"),
+    ],
+)
+def test_v9_package_ids_keep_peer_contexts_separate(snapshot, package_id, name):
+    assert PnpmLockfileHelper.package_id_from_snapshot_id(snapshot) == package_id
+    assert PnpmLockfileHelper.package_name_from_package_id(package_id) == name
 
-    with pytest.raises(Exception) as e:
-        lf.read()
 
-    assert str(e.value) == (
-        'Error of project configuration: /pnpm-lock.yaml has lockfileVersion: 0.\n'
-        + 'This version is not supported. Please, delete pnpm-lock.yaml and regenerate it using `ya tool nots --clean update-lockfile`'
-    )
-
-
-def test_lockfile_read_yaml_error_no_lockfile_version(patch_open_no_version):
-    lf = Lockfile(path="/pnpm-lock.yaml")
-
-    with pytest.raises(Exception) as e:
-        lf.read()
-
-    assert str(e.value) == (
-        'Error of project configuration: /pnpm-lock.yaml has lockfileVersion: <no-version>.\n'
-        + 'This version is not supported. Please, delete pnpm-lock.yaml and regenerate it using `ya tool nots --clean update-lockfile`'
-    )
+def test_get_importers_does_not_convert_legacy_root_dependencies():
+    lf = Lockfile("/pnpm-lock.yaml")
+    lf.data = {"lockfileVersion": "9.0", "dependencies": {"pkg": "1.0.0"}, "specifiers": {"pkg": "^1"}}
+    assert lf.get_importers() == {}
 
 
 def test_lockfile_get_packages_meta_ok():
     lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
-            "/@babel/cli/7.6.2_@babel+core@7.6.2": {
+            "@babel/cli@7.6.2": {
                 "resolution": {
                     "integrity": "sha512-JDZ+T/br9pPfT2lmAMJypJDTTTHM9ePD/ED10TRjRzJVdEVy+JB3iRlhzYmTt5YkNgHvxWGlUVnLtdv6ruiDrQ==",
                     "tarball": "@babel%2fcli/-/cli-7.6.2.tgz?rbtorrent=cb1849da3e4947e56a8f6bde6a1ec42703ddd187",
@@ -184,21 +158,21 @@ def test_package_meta_missing_resolution():
     lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
-            "/valid@1.2.3": {},
+            "valid@1.2.3": {},
         },
     }
 
     with pytest.raises(TypeError) as e:
         list(lf.get_packages_meta())
 
-    assert str(e.value) == "Invalid package meta for '/valid@1.2.3', missing 'resolution' key"
+    assert str(e.value) == "Invalid package meta for 'valid@1.2.3', missing 'resolution' key"
 
 
 def test_package_meta_missing_integrity_without_tarball():
     lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
-            "/valid@1.2.3": {
+            "valid@1.2.3": {
                 "resolution": {},
             },
         },
@@ -207,7 +181,7 @@ def test_package_meta_missing_integrity_without_tarball():
     with pytest.raises(TypeError) as e:
         list(lf.get_packages_meta())
 
-    assert str(e.value) == "Invalid package meta for '/valid@1.2.3', missing 'integrity' key"
+    assert str(e.value) == "Invalid package meta for 'valid@1.2.3', missing 'integrity' key"
 
 
 @pytest.mark.parametrize(
@@ -218,8 +192,7 @@ def test_package_meta_missing_integrity_without_tarball():
         ("@scope.name/Foo_bar-baz@1.2.3", "@scope.name%2fFoo_bar-baz/-/Foo_bar-baz-1.2.3.tgz"),
         ("@scope~name/pkg!name@1.2.3", "@scope~name%2fpkg!name/-/pkg!name-1.2.3.tgz"),
         ("pkg@1.2.3-rc.1+build.2", "pkg/-/pkg-1.2.3-rc.1+build.2.tgz"),
-        ("/@emnapi/runtime@1.11.2", "@emnapi%2fruntime/-/runtime-1.11.2.tgz"),
-        ("/pkg@1.2.3(@scope/peer@4.5.6)", "pkg/-/pkg-1.2.3.tgz"),
+        ("pkg@1.2.3(@scope/peer@4.5.6)", "pkg/-/pkg-1.2.3.tgz"),
     ],
 )
 def test_lockfile_infers_missing_tarball(key, path):
@@ -319,172 +292,11 @@ def test_lockfile_infers_tarball_for_valid_fixed_semver(version):
     assert pkg.tarball_path == "pkg/-/pkg-" + version + ".tgz"
 
 
-def test_lockfile_convertion_to_v9_simple():
-    data = {
-        "lockfileVersion": "6.0",
-        "packages": {
-            "/abc@1.2.3": {
-                "resolution": {
-                    "integrity": "some-integrity",
-                    "tarball": "https://npm.yandex-team.ru/some/module/path",
-                },
-                "dependencies": {
-                    "dep1": "2.3.4",
-                    "dep2": "3.4.5",
-                },
-                "dev": False,
-            }
-        },
-    }
-
-    converted_data = PnpmLockfileHelper.ensure_v9(data)
-
-    assert converted_data == {
-        "lockfileVersion": "9.0",
-        "packages": {
-            "abc@1.2.3": {
-                "resolution": {"integrity": "some-integrity", "tarball": "https://npm.yandex-team.ru/some/module/path"}
-            }
-        },
-        "snapshots": {"abc@1.2.3": {"dependencies": {"dep1": "2.3.4", "dep2": "3.4.5"}}},
-    }
-
-
-def test_lockfile_convertion_to_v9_dependencies():
-    data = {
-        "lockfileVersion": "6.0",
-        "dependencies": {
-            "@yandex-int/static-uploader": {
-                "specifier": "^1.0.1",
-                "version": "1.0.3",
-            }
-        },
-        "packages": {
-            "/abc@1.2.3": {
-                "resolution": {
-                    "integrity": "some-integrity",
-                    "tarball": "https://npm.yandex-team.ru/some/module/path",
-                },
-                "dependencies": {
-                    "dep1": "2.3.4",
-                    "dep2": "3.4.5",
-                },
-                "dev": False,
-            }
-        },
-    }
-
-    converted_data = PnpmLockfileHelper.ensure_v9(data)
-
-    assert converted_data == {
-        "lockfileVersion": "9.0",
-        "packages": {
-            "abc@1.2.3": {
-                "resolution": {"integrity": "some-integrity", "tarball": "https://npm.yandex-team.ru/some/module/path"}
-            }
-        },
-        "importers": {
-            ".": {"dependencies": {"@yandex-int/static-uploader": {"specifier": "^1.0.1", "version": "1.0.3"}}}
-        },
-        "snapshots": {"abc@1.2.3": {"dependencies": {"dep1": "2.3.4", "dep2": "3.4.5"}}},
-    }
-
-
-def test_lockfile_convertion_to_v9():
-    data = {
-        "lockfileVersion": "6.0",
-        "packages": {
-            "/ajv@6.12.6": {
-                "resolution": {
-                    "integrity": "sha512-j3fVLgvTo527anyYyJOGTYJbG+vnnQYvE0m5mmkc1TK+nxAppkCLMIL0aZ4dblVCNoGShhm+kzE4ZUykBoMg4g==",
-                    "tarball": "https://npm.yandex-team.ru/ajv/-/ajv-6.12.6.tgz?rbtorrent=8700a2f2e42ac5b59b5c6d8142cd2bfd19a56001",
-                },
-                "dependencies": {
-                    "fast-deep-equal": "3.1.3",
-                    "fast-json-stable-stringify": "2.1.0",
-                },
-                "engines": {"node": '>=10'},
-                "dev": False,
-            },
-            "/@typescript-eslint/visitor-keys@8.7.0": {
-                "resolution": {
-                    "integrity": "sha512-b1tx0orFCCh/THWPQa2ZwWzvOeyzzp36vkJYOpVg0u8UVOIsfVrnuC9FqAw9gRKn+rG2VmWQ/zDJZzkxUnj/XQ==",
-                    "tarball": "https://npm.yandex-team.ru/@typescript-eslint%2fvisitor-keys/-/visitor-keys-8.7.0.tgz?rbtorrent=",
-                },
-                "dependencies": {
-                    "@typescript-eslint/types": "8.7.0",
-                    "eslint-visitor-keys": "3.4.3",
-                },
-                "engines": {"node": ">=12"},
-                "dev": False,
-            },
-            "/@csstools/media-query-list-parser@3.0.1(@csstools/css-parser-algorithms@3.0.1)(@csstools/css-tokenizer@3.0.1)": {
-                "resolution": {
-                    "integrity": "sha512-HNo8gGD02kHmcbX6PvCoUuOQvn4szyB9ca63vZHKX5A81QytgDG4oxG4IaEfHTlEZSZ6MjPEMWIVU+zF2PZcgw==",
-                    "tarball": "https://npm.yandex-team.ru/@csstools%2fmedia-query-list-parser/-/media-query-list-parser-3.0.1.tgz?rbtorrent=",
-                },
-                "engines": {"node": ">=18"},
-                "peerDependencies": {
-                    "@csstools/css-parser-algorithms": "^3.0.1",
-                    "@csstools/css-tokenizer": "^3.0.1",
-                },
-                "dependencies": {
-                    "@csstools/css-parser-algorithms": "3.0.1(@csstools/css-tokenizer@3.0.1)",
-                    "@csstools/css-tokenizer": "3.0.1",
-                },
-                "dev": False,
-            },
-        },
-    }
-
-    converted_data = PnpmLockfileHelper.ensure_v9(data)
-
-    assert converted_data == {
-        "lockfileVersion": "9.0",
-        "packages": {
-            "ajv@6.12.6": {
-                "resolution": {
-                    "integrity": "sha512-j3fVLgvTo527anyYyJOGTYJbG+vnnQYvE0m5mmkc1TK+nxAppkCLMIL0aZ4dblVCNoGShhm+kzE4ZUykBoMg4g==",
-                    "tarball": "https://npm.yandex-team.ru/ajv/-/ajv-6.12.6.tgz?rbtorrent=8700a2f2e42ac5b59b5c6d8142cd2bfd19a56001",
-                },
-                "engines": {"node": ">=10"},
-            },
-            "@typescript-eslint/visitor-keys@8.7.0": {
-                "resolution": {
-                    "integrity": "sha512-b1tx0orFCCh/THWPQa2ZwWzvOeyzzp36vkJYOpVg0u8UVOIsfVrnuC9FqAw9gRKn+rG2VmWQ/zDJZzkxUnj/XQ==",
-                    "tarball": "https://npm.yandex-team.ru/@typescript-eslint%2fvisitor-keys/-/visitor-keys-8.7.0.tgz?rbtorrent=",
-                },
-                "engines": {"node": ">=12"},
-            },
-            "@csstools/media-query-list-parser@3.0.1": {
-                "resolution": {
-                    "integrity": "sha512-HNo8gGD02kHmcbX6PvCoUuOQvn4szyB9ca63vZHKX5A81QytgDG4oxG4IaEfHTlEZSZ6MjPEMWIVU+zF2PZcgw==",
-                    "tarball": "https://npm.yandex-team.ru/@csstools%2fmedia-query-list-parser/-/media-query-list-parser-3.0.1.tgz?rbtorrent=",
-                },
-                "engines": {"node": ">=18"},
-                "peerDependencies": {"@csstools/css-parser-algorithms": "^3.0.1", "@csstools/css-tokenizer": "^3.0.1"},
-            },
-        },
-        "snapshots": {
-            "ajv@6.12.6": {"dependencies": {"fast-deep-equal": "3.1.3", "fast-json-stable-stringify": "2.1.0"}},
-            "@typescript-eslint/visitor-keys@8.7.0": {
-                "dependencies": {"@typescript-eslint/types": "8.7.0", "eslint-visitor-keys": "3.4.3"}
-            },
-            "@csstools/media-query-list-parser@3.0.1(@csstools/css-parser-algorithms@3.0.1)(@csstools/css-tokenizer@3.0.1)": {
-                "dependencies": {
-                    "@csstools/css-parser-algorithms": "3.0.1(@csstools/css-tokenizer@3.0.1)",
-                    "@csstools/css-tokenizer": "3.0.1",
-                }
-            },
-        },
-    }
-
-
 def test_package_meta_missing_rbtorrent():
     lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
-            "/valid@1.2.3": {
+            "valid@1.2.3": {
                 "resolution": {
                     "integrity": "sha512-JDZ+T/br9pPfT2lmAMJypJDTTTHM9ePD/ED10TRjRzJVdEVy+JB3iRlhzYmTt5YkNgHvxWGlUVnLtdv6ruiDrQ==",
                     "tarball": "valid-without-rbtorrent-1.2.3.tgz",
@@ -504,7 +316,7 @@ def test_lockfile_meta_file_tarball_prohibits_file_protocol():
     lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
-            "/@babel/cli@7.6.2": {
+            "@babel/cli@7.6.2": {
                 "resolution": {
                     "integrity": "sha512-JDZ+T/br9pPfT2lmAMJypJDTTTHM9ePD/ED10TRjRzJVdEVy+JB3iRlhzYmTt5YkNgHvxWGlUVnLtdv6ruiDrQ==",
                     "tarball": "file:/some/abs/path.tgz",
@@ -518,7 +330,7 @@ def test_lockfile_meta_file_tarball_prohibits_file_protocol():
 
     assert (
         str(e.value)
-        == "Invalid package meta for '/@babel/cli@7.6.2', parse error: tarball cannot point to a file, got 'file:/some/abs/path.tgz'"
+        == "Invalid package meta for '@babel/cli@7.6.2', parse error: tarball cannot point to a file, got 'file:/some/abs/path.tgz'"
     )
 
 
@@ -526,7 +338,7 @@ def test_lockfile_update_tarball_resolutions_ok():
     lf = Lockfile(path="/pnpm-lock.yaml")
     lf.data = {
         "packages": {
-            "/@babel/cli@7.6.2_@babel+core@7.6.2": {
+            "@babel/cli@7.6.2_@babel+core@7.6.2": {
                 "resolution": {
                     "integrity": "sha512-JDZ+T/br9pPfT2lmAMJypJDTTTHM9ePD/ED10TRjRzJVdEVy+JB3iRlhzYmTt5YkNgHvxWGlUVnLtdv6ruiDrQ==",
                     "tarball": "@babel%2fcli/-/cli-7.6.2.tgz?rbtorrent=cb1849da3e4947e56a8f6bde6a1ec42703ddd187",
@@ -538,237 +350,39 @@ def test_lockfile_update_tarball_resolutions_ok():
     lf.update_tarball_resolutions(lambda p: p.tarball_url)
 
     assert (
-        lf.data["packages"]["/@babel/cli@7.6.2_@babel+core@7.6.2"]["resolution"]["tarball"]
+        lf.data["packages"]["@babel/cli@7.6.2_@babel+core@7.6.2"]["resolution"]["tarball"]
         == "@babel%2fcli/-/cli-7.6.2.tgz"
     )
 
 
-def test_lockfile_merge():
-    lf1 = Lockfile(path="/foo/pnpm-lock.yaml")
-    lf1.data = {
-        "lockfileVersion": "9.0",
-        "dependencies": {
-            "a": "1.0.0",
-        },
-        "packages": {
-            "a@1.0.0": {},
-        },
-        "snapshots": {
-            "a@1.0.0": {},
-        },
-    }
+@pytest.mark.parametrize("content", [None, "", " \n\t\n", "# no dependencies\n", "{}\n", "null\n"])
+def test_lockfile_accepts_missing_or_empty_file(tmp_path, content):
+    path = tmp_path / "pnpm-lock.yaml"
+    if content is not None:
+        path.write_text(content)
 
-    lf2 = Lockfile(path="/bar/pnpm-lock.yaml")
-    lf2.data = {
-        "lockfileVersion": "9.0",
-        "dependencies": {
-            "b": "1.0.0",
-        },
-        "packages": {
-            "b@1.0.0": {},
-        },
-        "snapshots": {
-            "b@1.0.0": {},
-        },
-    }
+    lockfile = Lockfile.load(str(path))
 
-    lf3 = Lockfile(path="/another/baz/pnpm-lock.yaml")
-    lf3.data = {
-        "lockfileVersion": "9.0",
-        "importers": {
-            ".": {
-                "dependencies": {
-                    "@a/qux": "link:../qux",
-                    "a": "1.0.0",
-                },
-                "specifiers": {
-                    "@a/qux": "workspace:../qux",
-                    "a": "1.0.0",
-                },
-            },
-            "../qux": {
-                "dependencies": {
-                    "b": "1.0.1",
-                },
-                "specifiers": {
-                    "b": "1.0.1",
-                },
-            },
-        },
-        "packages": {
-            "a@1.0.0": {},
-            "b@1.0.1": {},
-        },
-        "snapshots": {
-            "a@1.0.0": {},
-            "b@1.0.1": {},
-        },
-    }
-
-    lf4 = Lockfile(path="/another/quux/pnpm-lock.yaml")
-    lf4.data = {
-        "lockfileVersion": "9.0",
-        "importers": {
-            ".": {
-                "dependencies": {
-                    "@a/bar": "link:../../bar",
-                }
-            }
-        },
-        "specifiers": {
-            "@a/bar": "workspace:../../bar",
-        },
-    }
-
-    lf1.merge(lf2)
-    lf1.merge(lf3)
-    lf1.merge(lf4)
-
-    assert lf1.data == {
-        "lockfileVersion": "9.0",
-        "packages": {"a@1.0.0": {}, "b@1.0.0": {}, "b@1.0.1": {}},
-        "snapshots": {"a@1.0.0": {}, "b@1.0.0": {}, "b@1.0.1": {}},
-        "importers": {
-            ".": {"dependencies": {"a": "1.0.0"}},
-            "../bar": {"dependencies": {"b": "1.0.0"}},
-            "../another/baz": {
-                "dependencies": {"@a/qux": "link:../qux", "a": "1.0.0"},
-                "specifiers": {"@a/qux": "workspace:../qux", "a": "1.0.0"},
-            },
-            "../another/qux": {"dependencies": {"b": "1.0.1"}, "specifiers": {"b": "1.0.1"}},
-            "../another/quux": {"dependencies": {"@a/bar": "link:../../bar"}},
-        },
-    }
+    assert lockfile.data == {"lockfileVersion": "9.0"}
+    assert lockfile.get_importers() == {}
+    assert list(lockfile.get_packages_meta()) == []
+    if content is None:
+        assert not path.exists()
+    else:
+        assert path.read_text() == content
 
 
-def test_lockfile_merge_rebases_injected_package_paths():
-    root = Lockfile(path="/build/tsg/cli/pnpm-lock.yaml")
-    root.data = {"lockfileVersion": "9.0", "importers": {".": {}}}
+def test_lockfile_read_with_file_only_yaml_loader(tmp_path, monkeypatch):
+    # The ymake YAML backend treats bytes/strings as filenames, unlike PyYAML.
+    path = tmp_path / "pnpm-lock.yaml"
+    path.write_text("lockfileVersion: '9.0'\nimporters:\n  .: {}\n")
+    original_load = lockfile_module.yaml.load
 
-    dependency = Lockfile(path="/build/tsg/libs/i18n-utils/pnpm-lock.yaml")
-    dependency.data = {
-        "lockfileVersion": "9.0",
-        "importers": {
-            ".": {
-                "devDependencies": {
-                    "@yatool/vitest-reporter": {
-                        "specifier": "workspace:../../../../../library/typescript/test-reporters/vitest",
-                        "version": "file:../../../../../library/typescript/test-reporters/vitest(vitest@4.1.9)",
-                    }
-                }
-            }
-        },
-        "packages": {
-            "@yatool/ci-reporter@file:../../../../../library/typescript/ci-reporter": {
-                "resolution": {
-                    "directory": "../../../../../library/typescript/ci-reporter",
-                    "type": "directory",
-                }
-            },
-            "@yatool/vitest-reporter@file:../../../../../library/typescript/test-reporters/vitest": {
-                "resolution": {
-                    "directory": "../../../../../library/typescript/test-reporters/vitest",
-                    "type": "directory",
-                }
-            },
-        },
-        "snapshots": {
-            "@yatool/vitest-reporter@file:../../../../../library/typescript/test-reporters/vitest(vitest@4.1.9)": {
-                "dependencies": {"@yatool/ci-reporter": "file:../../../../../library/typescript/ci-reporter"}
-            }
-        },
-    }
+    def load_file(stream, **kwargs):
+        assert hasattr(stream, "read")
+        assert stream.tell() == 0
+        return original_load(stream, **kwargs)
 
-    root.merge(dependency)
+    monkeypatch.setattr(lockfile_module.yaml, "load", load_file)
 
-    importer = root.get_importers()["../libs/i18n-utils"]
-    assert (
-        importer["devDependencies"]["@yatool/vitest-reporter"]["version"]
-        == "file:../../../../../library/typescript/test-reporters/vitest(vitest@4.1.9)"
-    )
-    assert root.data["packages"]["@yatool/ci-reporter@file:../../../../../library/typescript/ci-reporter"] == {
-        "resolution": {"directory": "../../../library/typescript/ci-reporter", "type": "directory"}
-    }
-    snapshot = root.data["snapshots"][
-        "@yatool/vitest-reporter@file:../../../../../library/typescript/test-reporters/vitest(vitest@4.1.9)"
-    ]
-    assert snapshot["dependencies"]["@yatool/ci-reporter"] == "file:../../../../../library/typescript/ci-reporter"
-
-
-def test_lockfile_merge_dont_overrides_packages():
-    lf1 = Lockfile(path="/foo/pnpm-lock.yaml")
-    lf1.data = {
-        "lockfileVersion": "9.0",
-        "dependencies": {
-            "a": "1.0.0",
-        },
-        "importers": {
-            ".": {
-                "dependencies": {
-                    "a": "1.0.0",
-                }
-            }
-        },
-        "packages": {
-            "a@1.0.0": {},
-        },
-        "snapshots": {
-            "a@1.0.0": {},
-        },
-    }
-
-    lf2 = Lockfile(path="/bar/pnpm-lock.yaml")
-    lf2.data = {
-        "lockfileVersion": "9.0",
-        "dependencies": {
-            "a": "1.0.0",
-            "b": "1.0.0",
-        },
-        "specifiers": {
-            "a": "1.0.0",
-            "b": "1.0.0",
-        },
-        "packages": {
-            "a@1.0.0": {
-                "overriden": True,
-            },
-            "b@1.0.0": {},
-        },
-        "snapshots": {
-            "a@1.0.0": {
-                "overriden": True,
-            },
-            "b@1.0.0": {},
-        },
-    }
-
-    lf1.merge(lf2)
-
-    assert lf1.data == {
-        "lockfileVersion": "9.0",
-        "importers": {
-            ".": {
-                "dependencies": {
-                    "a": "1.0.0",
-                },
-            },
-            "../bar": {
-                "dependencies": {
-                    "a": "1.0.0",
-                    "b": "1.0.0",
-                },
-                "specifiers": {
-                    "a": "1.0.0",
-                    "b": "1.0.0",
-                },
-            },
-        },
-        "packages": {
-            "a@1.0.0": {},
-            "b@1.0.0": {},
-        },
-        "snapshots": {
-            "a@1.0.0": {},
-            "b@1.0.0": {},
-        },
-    }
+    assert Lockfile.load(str(path)).data == {"lockfileVersion": "9.0", "importers": {".": {}}}

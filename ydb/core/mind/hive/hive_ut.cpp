@@ -10626,9 +10626,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         TAutoPtr<IEventHandle> handle;
         const auto* response = test.Runtime.GrabEdgeEventRethrow<TEvHive::TEvFillNodeResult>(handle);
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NKikimrProto::OK);
+        test.Bridge.SetPileState(1, NKikimrBridge::TClusterState::SYNCHRONIZED);
         UNIT_ASSERT_C(WaitUntil(test.Runtime, [&] {
             return test.IsRunningInPile(tablets[0], 1) && test.IsRunningInPile(tablets[1], 1) && !test.DrainPending();
-        }), "pile drain did not retry the node released by its fill");
+        }), "pile drain did not resume on a pile update after its fill finished");
     }
 
     enum class EBridgeDrainScenario {

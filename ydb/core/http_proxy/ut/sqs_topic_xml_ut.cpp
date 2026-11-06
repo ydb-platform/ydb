@@ -5,6 +5,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
+#include <ydb/services/sqs_topic/limits.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
@@ -1335,6 +1336,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
             description.GetPartitionWriteBurstMessages(),
             NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
+        UNIT_ASSERT_VALUES_EQUAL(description.GetRetentionPeriod(), NKikimr::NSqsTopic::V1::TOPIC_RETENTION_PERIOD);
+        UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            description.GetConsumers()[0].GetAvailabilityPeriod(),
+            NKikimr::NSqsTopic::V1::DEFAULT_MESSAGE_RETENTION_PERIOD);
 
         driver.Stop(true);
     }
@@ -1814,6 +1820,15 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
             {"AttributeNames", NJson::TJsonArray{"MessageRetentionPeriod"}}
         });
         UNIT_ASSERT_VALUES_EQUAL(attrJson["Attributes"]["MessageRetentionPeriod"], "7200");
+
+        auto driver = MakeDriver(*this);
+        auto client = TTopicClient(driver);
+        auto desc = client.DescribeTopic("TestSetAttrsRetention").GetValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetRetentionPeriod(), NKikimr::NSqsTopic::V1::TOPIC_RETENTION_PERIOD);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetConsumers().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(7200));
+        driver.Stop(true);
     }
 
     Y_UNIT_TEST_F(TestPurgeQueueInvalid, TFixture) {

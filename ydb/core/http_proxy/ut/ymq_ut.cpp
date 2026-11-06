@@ -608,6 +608,11 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         NYdb::NTopic::TTopicClient topicClient(driver);
         auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl").GetValueSync();
         UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetRetentionPeriod(), TDuration::Minutes(1));
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            describe.GetTopicDescription().GetConsumers()[0].GetAvailabilityPeriod(),
+            TDuration::Days(4));
 
         driver.Stop(true);
     }
@@ -2878,6 +2883,8 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetEnabled(), true);
             UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetDeadLetterQueue(), "sqs://cloud4/folder4/DLQ.fifo");
             UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetRetentionPeriod(), TDuration::Minutes(1));
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetAvailabilityPeriod(), TDuration::Seconds(678));
         }
 
         driver.Stop(true);

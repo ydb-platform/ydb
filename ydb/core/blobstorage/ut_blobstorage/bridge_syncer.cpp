@@ -1384,6 +1384,63 @@ Y_UNIT_TEST_SUITE(BridgeSyncerLimit) {
         }
         NBridgeTest::WaitForPileState(env, 1, NKikimrBridge::TClusterState::SYNCHRONIZED);
     }
+
+    // The parts of a pile going out and getting back during its sync get reset and their syncers get restarted. They keep
+    // their slots meanwhile, and no slot is left taken in the end.
+    Y_UNIT_TEST(PileGoingOutAndBackDuringSync) {
+        TLimitedSyncersEnv test(2);
+        auto& env = test.Env;
+        test.Tracker.RunUntil(env, 2, "sync going on", [&] { return test.Tracker.Started.size() >= 4; });
+
+        NBridgeTest::SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        NBridgeTest::WaitForPileState(env, 1, NKikimrBridge::TClusterState::DISCONNECTED);
+        env.Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_LE(test.Tracker.GetNumRunning(), 2);
+
+        NBridgeTest::SwitchBridgePileState(env, 1, NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1);
+        test.Tracker.RunUntil(env, 2, "pile synchronized", [&] {
+            return NBridgeTest::GetPileState(env, 1) == NKikimrBridge::TClusterState::SYNCHRONIZED;
+        });
+        env.Sim(TDuration::Seconds(5));
+        UNIT_ASSERT_VALUES_EQUAL(test.Tracker.GetNumRunning(), 0);
+    }
+
+    // The syncers of a lost node give their slots up, so that the waiting ones start, and the sync goes on without the node.
+    Y_UNIT_TEST(LostNodeGivesSlotsUp) {
+        TLimitedSyncersEnv test(2);
+        auto& env = test.Env;
+        auto& tracker = test.Tracker;
+        const ui32 lostNode = tracker.Started.front().first;
+        const size_t numStarted = tracker.Started.size();
+
+        env.StopNode(lostNode);
+        tracker.NodeSyncers.erase(lostNode); // BSC can't tell it to the node
+        std::erase_if(tracker.Held, [&](const auto& held) { return held.first == lostNode; });
+
+        NBridgeTest::WaitUntil(env, [&] { return tracker.Started.size() > numStarted; }, "syncer started instead of the lost one",
+            TDuration::Seconds(1), 30);
+        UNIT_ASSERT_UNEQUAL(tracker.Started.back().first, lostNode);
+        UNIT_ASSERT_LE(tracker.GetNumRunning(), 2);
+
+        tracker.RunUntil(env, 2, "pile synchronized", [&] {
+            return NBridgeTest::GetPileState(env, 1) == NKikimrBridge::TClusterState::SYNCHRONIZED;
+        });
+    }
+
+    Y_UNIT_TEST(LimitFromBscSettings) {
+        constexpr ui32 limit = 5;
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .ConfigPreprocessor = [](ui32, TNodeWardenConfig& conf) {
+                conf.BlobStorageConfig->MutableBscSettings()->SetBridgeSyncMaxSyncers(limit);
+            },
+        }};
+        env.Sim(TDuration::Seconds(5));
+        const auto settings = NBridgeTest::ReadSettings(env);
+        UNIT_ASSERT_VALUES_EQUAL(settings.BridgeSyncMaxSyncersSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(settings.GetBridgeSyncMaxSyncers(0), limit);
+    }
 }
 
 Y_UNIT_TEST_SUITE(BridgeSyncerGeneration) {

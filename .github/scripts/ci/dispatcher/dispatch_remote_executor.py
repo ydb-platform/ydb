@@ -187,9 +187,9 @@ def build_ticket(cfg):
     repo = env_opt("PLATFORM_REPOSITORY") or env_opt("GITHUB_REPOSITORY")
     workflow = env_opt("PLATFORM_WORKFLOW") or env_opt("GITHUB_WORKFLOW") or "unknown"
     run_url = env_opt("PLATFORM_RUN_URL") or f"https://github.com/{repo}/actions/runs/{run_id}"
-    # Mirror attempt onto config.inputs for the host VM / executor claim.
+    # Force live attempt onto config.inputs (override stale resolve on re-run).
     if isinstance(cfg.get("inputs"), dict):
-        cfg["inputs"].setdefault("platform_run_attempt", attempt)
+        cfg["inputs"]["platform_run_attempt"] = attempt
     return {
         "version": 1,
         "kind": "remote-ticket",
@@ -295,23 +295,26 @@ def wait_executor_done(run_id, run_url):
         cfg = load_config()
         want_attempt = platform_run_attempt(cfg)
         endpoint, bucket = claim_s3(cfg)
-        body = http_get(public_url(endpoint, bucket, f"remote-claims/{env('PLATFORM_RUN_ID')}.json"))
-        if body:
-            claim = json.loads(body)
-            claim_attempt = str(claim.get("platform_run_attempt") or "").strip()
-            new_id = str(claim.get("executor_run_id") or "").strip()
-            if (
-                new_id
-                and new_id != run_id
-                and (not claim_attempt or claim_attempt == want_attempt)
-                and str(claim.get("status") or "").strip().lower() != "failed"
-            ):
-                new_url = str(claim.get("executor_run_url") or "").strip() or (
-                    f"https://github.com/{claim.get('executor_repository') or env('REPO')}/actions/runs/{new_id}"
-                )
-                print(f"::notice::executor {run_id} cancelled; following new claim {new_id}")
-                set_outputs(executor_run_id=new_id, executor_run_url=new_url)
-                return wait_executor_done(new_id, new_url)
+        claim_url = public_url(endpoint, bucket, f"remote-claims/{env('PLATFORM_RUN_ID')}.json")
+        for _ in range(40):  # ~10 min for replacement claim to land
+            body = http_get(claim_url)
+            if body:
+                claim = json.loads(body)
+                claim_attempt = str(claim.get("platform_run_attempt") or "").strip()
+                new_id = str(claim.get("executor_run_id") or "").strip()
+                if (
+                    new_id
+                    and new_id != run_id
+                    and (not claim_attempt or claim_attempt == want_attempt)
+                    and str(claim.get("status") or "").strip().lower() != "failed"
+                ):
+                    new_url = str(claim.get("executor_run_url") or "").strip() or (
+                        f"https://github.com/{claim.get('executor_repository') or env('REPO')}/actions/runs/{new_id}"
+                    )
+                    print(f"::notice::executor {run_id} cancelled; following new claim {new_id}")
+                    set_outputs(executor_run_id=new_id, executor_run_url=new_url)
+                    return wait_executor_done(new_id, new_url)
+            time.sleep(15)
     msg = f"executor finished with conclusion={conclusion}"
     if fail_on_remote:
         die(msg)

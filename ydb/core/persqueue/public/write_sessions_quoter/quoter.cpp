@@ -56,7 +56,7 @@ private:
     STFUNC(StateWork);
 
     void ProcessPending(TCountedLeakyBucket& bucket, const TKey& key, const TActorContext& ctx);
-    void AddPending(const TKey& key, const TActorId& actorId);
+    void AddPending(const TKey& key, const TActorId& actorId, const TActorContext& ctx);
     void RemoveFrontPending(const TKey& key);
     ui64 GetWriteSessionsInitRps(const TActorContext& ctx);
 
@@ -137,9 +137,9 @@ void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvAcquireQuota::TPtr&
             return;
         }
 
-        AddPending(key, ev->Sender);
+        AddPending(key, ev->Sender, ctx);
     } else {
-        ctx.Send(ev->Sender, new TEvWriteSessionsQuoter::TEvQuotaAcquired());
+        ctx.Send(ev->Sender, new TEvWriteSessionsQuoter::TEvQuotaAcquired(TDuration::Zero()));
     }
 }
 
@@ -176,8 +176,9 @@ void TWriteSessionsQuoter::ProcessPending(TCountedLeakyBucket& bucket, const TKe
     const auto now = ctx.Now();
     while (!pending->second.empty() && bucket.TryPush(now, 1)) {
         const auto actorId = pending->second.front().ActorId;
+        const auto startPending = pending->second.front().StartPending;
         RemoveFrontPending(key);
-        ctx.Send(actorId, new TEvWriteSessionsQuoter::TEvQuotaAcquired());
+        ctx.Send(actorId, new TEvWriteSessionsQuoter::TEvQuotaAcquired(now - startPending));
     }
 
     if (pending->second.empty()) {
@@ -185,9 +186,9 @@ void TWriteSessionsQuoter::ProcessPending(TCountedLeakyBucket& bucket, const TKe
     }
 }
 
-void TWriteSessionsQuoter::AddPending(const TKey& key, const TActorId& actorId) {
+void TWriteSessionsQuoter::AddPending(const TKey& key, const TActorId& actorId, const TActorContext& ctx) {
     auto& pending = Pending[key];
-    pending.push_back(TPendingItem{actorId, TInstant::Now()});
+    pending.push_back(TPendingItem{actorId, ctx.Now()});
     PendingIndex.emplace(actorId, TIndexItem{key, std::prev(pending.end())});
 }
 

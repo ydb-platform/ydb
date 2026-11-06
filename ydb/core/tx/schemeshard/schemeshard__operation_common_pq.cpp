@@ -436,32 +436,55 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
 
     std::optional<TBootstrapConfigWrapper> bootstrapConfig;
     if (txState->TxType == TTxState::TxCreatePQGroup && topicPath.Parent().IsCdcStream()) {
-        bootstrapConfig.emplace();
-
-        auto tablePath = topicPath.Parent().Parent(); // table/cdc_stream/topic
-        Y_ABORT_UNLESS(tablePath.IsResolved());
-
-        Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-        auto table = context.SS->Tables.at(tablePath.Base()->PathId);
-
-        const auto& partitions = table->GetPartitions();
-
-        for (ui32 i = 0; i < partitions.size(); ++i) {
-            const auto* cur = partitions.at(i);
-
-            Y_ABORT_UNLESS(context.SS->ShardInfos.contains(cur->ShardIdx));
-            const auto& shard = context.SS->ShardInfos.at(cur->ShardIdx);
-
-            auto& mg = *bootstrapConfig->AddExplicitMessageGroups();
-            mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shard.TabletID)));
-
-            if (i != partitions.size() - 1) {
-                mg.MutableKeyRange()->SetToBound(cur->EndOfRange);
+        // Only the Proto format consumes the bootstrap groups' routing content
+        // (key-range routing, split/merge dedup continuity), and the pqtablet
+        // rejects heartbeat/schema-change writes from an implicit source id in
+        // any format. Everything else — plain Json-family streams — routes by
+        // md5 hash and registers source ids on the fly, so its bootstrap (an
+        // O(source-table-shards) part staged with every per-shard message) is
+        // skipped. Gated by EnableCdcStreamImplicitSourceRegistration together
+        // with the datashard sender leniency; with the flag off every cdc
+        // stream keeps the bootstrap, as before.
+        bool buildBootstrapConfig = true;
+        if (AppData()->FeatureFlags.GetEnableCdcStreamImplicitSourceRegistration()) {
+            const auto& streamPathId = topicPath.Parent().Base()->PathId;
+            if (context.SS->CdcStreams.contains(streamPathId)) {
+                const auto& stream = context.SS->CdcStreams.at(streamPathId);
+                buildBootstrapConfig = stream->Format == NKikimrSchemeOp::ECdcStreamFormatProto
+                    || stream->SchemaChanges
+                    || stream->VirtualTimestamps
+                    || stream->ResolvedTimestamps != TDuration::Zero();
             }
+        }
 
-            if (i) {
-                const auto* prev = partitions.at(i - 1);
-                mg.MutableKeyRange()->SetFromBound(prev->EndOfRange);
+        if (buildBootstrapConfig) {
+            bootstrapConfig.emplace();
+
+            auto tablePath = topicPath.Parent().Parent(); // table/cdc_stream/topic
+            Y_ABORT_UNLESS(tablePath.IsResolved());
+
+            Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
+            auto table = context.SS->Tables.at(tablePath.Base()->PathId);
+
+            const auto& partitions = table->GetPartitions();
+
+            for (ui32 i = 0; i < partitions.size(); ++i) {
+                const auto* cur = partitions.at(i);
+
+                Y_ABORT_UNLESS(context.SS->ShardInfos.contains(cur->ShardIdx));
+                const auto& shard = context.SS->ShardInfos.at(cur->ShardIdx);
+
+                auto& mg = *bootstrapConfig->AddExplicitMessageGroups();
+                mg.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(shard.TabletID)));
+
+                if (i != partitions.size() - 1) {
+                    mg.MutableKeyRange()->SetToBound(cur->EndOfRange);
+                }
+
+                if (i) {
+                    const auto* prev = partitions.at(i - 1);
+                    mg.MutableKeyRange()->SetFromBound(prev->EndOfRange);
+                }
             }
         }
     }

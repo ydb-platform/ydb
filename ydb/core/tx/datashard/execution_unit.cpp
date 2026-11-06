@@ -12,48 +12,59 @@ namespace NDataShard {
 
 namespace {
 
-bool IsReadOnlyLocksPrepare(const TOperation::TPtr& op, TDataShard& dataShard) {
-    const auto* writeOp = TWriteOperation::TryCastWriteOperation(op);
-    if (!writeOp || op->IsImmediate()) {
-        return false;
-    }
-
-    const auto& writeTx = writeOp->GetWriteTx();
+bool IsLockValidationRequest(const TWriteOperation& writeOp, ui64 tabletId) {
+    const auto& writeTx = writeOp.GetWriteTx();
     if (!writeTx || !writeTx->Ready() || writeTx->HasOperations()) {
         return false;
     }
     const auto& locks = writeTx->GetKqpLocks();
-    if (!locks || locks->GetOp() != NKikimrDataEvents::TKqpLocks::Commit
-        || locks->LocksSize() == 0 || locks->ReceivingShardsSize() == 0) {
+    if (!locks || locks->GetOp() != NKikimrDataEvents::TKqpLocks::Commit || locks->LocksSize() == 0 || locks->ReceivingShardsSize() == 0) {
         return false;
     }
 
-    const ui64 tabletId = dataShard.TabletID();
     const auto& sendingShards = locks->GetSendingShards();
-    if (std::find(sendingShards.begin(), sendingShards.end(), tabletId) == sendingShards.end()) {
+    return std::find(sendingShards.begin(), sendingShards.end(), tabletId) != sendingShards.end();
+}
+
+bool IsReadOnlyLock(const NKikimrDataEvents::TLock& lockProto, TDataShard& dataShard, bool allowAncestorLocks) {
+    const ui64 tabletId = dataShard.TabletID();
+    if (lockProto.GetHasWrites() || (lockProto.GetDataShard() != tabletId && !allowAncestorLocks)) {
+        return false;
+    }
+
+    // The request may omit writes, so check for buffered writes in local lock state.
+    const auto lock = dataShard.SysLocksTable().GetRawLock(lockProto.GetLockId());
+    if (!lock || lock->IsBroken() || lock->IsWriteLock() ||
+        !lock->GetReadTables().contains(TPathId(lockProto.GetSchemeShard(), lockProto.GetPathId()))) {
+        return false;
+    }
+    if (lockProto.GetDataShard() != tabletId && !lock->GetAncestorLocks().contains(lockProto.GetDataShard())) {
+        return false;
+    }
+    return true;
+}
+
+bool IsReadLocksValidation(const TOperation::TPtr& op, TDataShard& dataShard) {
+    const auto* writeOp = TWriteOperation::TryCastWriteOperation(op);
+    if (!writeOp || op->IsImmediate() || !IsLockValidationRequest(*writeOp, dataShard.TabletID())) {
         return false;
     }
 
     const bool allowAncestorLocks = AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
-    const auto& sysLocks = dataShard.SysLocksTable();
+    const auto& locks = writeOp->GetWriteTx()->GetKqpLocks();
     for (const auto& lockProto : locks->GetLocks()) {
-        if (lockProto.GetHasWrites()
-            || (lockProto.GetDataShard() != tabletId && !allowAncestorLocks)) {
-            return false;
-        }
-        const auto lock = sysLocks.GetRawLock(lockProto.GetLockId());
-        if (!lock || lock->IsBroken() || lock->IsWriteLock()
-            || !lock->GetReadTables().contains(TPathId(lockProto.GetSchemeShard(), lockProto.GetPathId()))) {
-            return false;
-        }
-        if (lockProto.GetDataShard() != tabletId
-            && !lock->GetAncestorLocks().contains(lockProto.GetDataShard())) {
+        if (!IsReadOnlyLock(lockProto, dataShard, allowAncestorLocks)) {
             return false;
         }
     }
     return true;
 }
 
+bool IsReadOnlyOperation(const TOperation::TPtr& op, TDataShard& dataShard) {
+    // Ordinary read-only operations are explicitly marked by the pipeline.
+    // Lock-only prepares use the write path, but may only confirm reads on this shard.
+    return op->IsReadOnly() || IsReadLocksValidation(op, dataShard);
+}
 }
 
 THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
@@ -292,12 +303,8 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         return true;
     }
 
-    const bool changesQueueOverflow = !op->IsReadOnly() && DataShard.CheckChangesQueueOverflow();
-    const bool readOnlyLocksCommit = changesQueueOverflow && IsReadOnlyLocksPrepare(op, DataShard);
-    if (readOnlyLocksCommit) {
-        op->SetFlag(TTxFlags::ReadOnlyLocksCommit);
-    }
-    if (changesQueueOverflow && !readOnlyLocksCommit) {
+    const bool changesQueueOverflow = DataShard.CheckChangesQueueOverflow();
+    if (changesQueueOverflow && !IsReadOnlyOperation(op, DataShard)) {
         TString err = TStringBuilder()
                 << "Can't execute at blocked shard: " << " tablet id: " << DataShard.TabletID();
 
@@ -317,6 +324,9 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
         DataShard.IncCounter(COUNTER_CHANGE_QUEUE_OVERFLOW_REJECTS);
         op->Abort();
         return true;
+    }
+    if (changesQueueOverflow && !op->IsReadOnly()) {
+        op->SetFlag(TTxFlags::ReadOnlyLocksCommit);
     }
 
     if (DataShard.IsReplicated() && !(op->IsReadOnly() || op->IsCommitWritesTx())) {
@@ -361,8 +371,7 @@ bool TExecutionUnit::WillRejectDataTx(TOperation::TPtr op) const {
         return true;
     }
 
-    if (!op->IsReadOnly() && DataShard.CheckChangesQueueOverflow()
-        && !IsReadOnlyLocksPrepare(op, DataShard)) {
+    if (DataShard.CheckChangesQueueOverflow() && !IsReadOnlyOperation(op, DataShard)) {
         return true;
     }
 

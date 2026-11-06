@@ -5,7 +5,6 @@
 # Parameters: base_commit_sha head_commit_sha
 
 import os
-import tempfile
 import argparse
 
 
@@ -21,17 +20,8 @@ def log(msg: str):
     print(msg)
 
 
-def main(ya_make_command: str, graph_path: str, context_path: str, base_commit: str, head_commit: str) -> None:
+def main(ya_make_command: str, graph_path: str, context_path: str, workdir: str, base_commit: str, head_commit: str) -> None:
     ya = ya_make_command.split(' ')[0]
-
-    workdir = os.getenv('workdir')
-    if not workdir:
-        # Prefer job TMP_DIR (cleaned after build_and_test_ya) over system /tmp.
-        parent = os.getenv('TMP_DIR')
-        if parent:
-            workdir = tempfile.mkdtemp(prefix='graph_compare_', dir=parent)
-        else:
-            workdir = tempfile.mkdtemp()
 
     log(f'Workdir: {workdir}')
     log('Checkout base commit...')
@@ -65,6 +55,10 @@ if __name__ == '__main__':
         '--ya-make-command', '-y', type=str, dest='ya_make_command', required=True,
         help='Ya make command'
     )
+    parser.add_argument(
+        '--workdir', type=str, dest='workdir', required=True,
+        help='Directory for intermediate graph dumps'
+    )
     parser.add_argument(dest='base_commit', help='Base commit')
     parser.add_argument(dest='head_commit', help='Head commit')
     opts = parser.parse_args()
@@ -72,6 +66,7 @@ if __name__ == '__main__':
         ya_make_command=opts.ya_make_command,
         graph_path=opts.result_graph_path,
         context_path=opts.result_context_path,
+        workdir=opts.workdir,
         base_commit=opts.base_commit,
         head_commit=opts.head_commit
     )

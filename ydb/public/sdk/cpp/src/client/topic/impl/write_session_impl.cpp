@@ -652,7 +652,7 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
 }
 
 NThreading::TFuture<bool> TWriteSessionImpl::Flush() {
-    std::lock_guard guard(Lock);
+    std::unique_lock guard(Lock);
     if (Aborting.load()) {
         return NThreading::MakeFuture(false);
     }
@@ -674,7 +674,10 @@ NThreading::TFuture<bool> TWriteSessionImpl::Flush() {
         message->InitFlushPromise(Connections);
     }
 
-    return message->FlushPromise.GetFuture();
+    auto result = message->FlushPromise.GetFuture();
+    guard.unlock();
+    PostSendTask();
+    return result;
 }
 
 void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransactionBase* tx)
@@ -856,6 +859,7 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
         readyToAccept = TryIssueContinuationTokenImpl();
         FlushWriteIfRequiredImpl();
     }
+    PostSendTask();
     if (readyToAccept) {
         EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
     }
@@ -1678,7 +1682,18 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
 
     PackedMessagesToSend.emplace(std::move(block));
 
-    ScheduleSendImpl();
+    if (!CompressionExecutor->IsAsync()) {
+        SendImpl();
+    } else if (!SendImplScheduled.exchange(true)) {
+        CompressionExecutor->Post([cbContext = SelfContext]() {
+            if (auto self = cbContext->LockShared()) {
+                self->SendImplScheduled.store(false);
+                with_lock (self->Lock) {
+                    self->SendImpl();
+                }
+            }
+        });
+    }
     return memoryUsage;
 }
 
@@ -1761,7 +1776,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
 
     const bool skipCompression = Settings.Codec_ == ECodec::RAW || CurrentBatch.HasCodec();
     // Preserve ordering before adding a duplicate or decreasing manual sequence number.
-    if (SendImplScheduled && !OriginalMessagesToSend.empty()
+    if (!OriginalMessagesToSend.empty()
         && CurrentBatch.Messages.front().Id <= OriginalMessagesToSend.back().Id) {
         SendImpl();
     }
@@ -2045,22 +2060,29 @@ void TWriteSessionImpl::SendStandardBlock(
 void TWriteSessionImpl::ScheduleSendImpl() {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
-    if (!CompressionExecutor->IsAsync()) {
-        SendImpl();
-        return;
-    }
     if (SendImplScheduled) {
         return;
     }
 
-    CompressionExecutor->Post([cbContext = SelfContext] {
+    PendingSendTask = [cbContext = SelfContext] {
         if (auto self = cbContext->LockShared()) {
             std::lock_guard guard(self->Lock);
             self->SendImplScheduled = false;
             self->SendImpl();
         }
-    });
+    };
     SendImplScheduled = true;
+}
+
+void TWriteSessionImpl::PostSendTask() {
+    IExecutor::TFunction task;
+    {
+        std::lock_guard guard(Lock);
+        task.swap(PendingSendTask);
+    }
+    if (task) {
+        CompressionExecutor->Post(std::move(task));
+    }
 }
 
 void TWriteSessionImpl::SendImpl() {
@@ -2138,6 +2160,7 @@ bool TWriteSessionImpl::Close(TDuration closeTimeout) {
             WriteBatchImpl();
         }
     }
+    PostSendTask();
     auto startTime = TInstant::Now();
     auto remaining = closeTimeout;
     bool ready = false;
@@ -2188,8 +2211,11 @@ void TWriteSessionImpl::HandleWakeUpImpl() {
             return;
         }
         if (auto self = cbContext->LockShared()) {
-            std::lock_guard guard(self->Lock);
-            self->HandleWakeUpImpl();
+            {
+                std::lock_guard guard(self->Lock);
+                self->HandleWakeUpImpl();
+            }
+            self->PostSendTask();
         }
     };
     if (TInstant::Now() - LastTokenUpdate > UPDATE_TOKEN_PERIOD) {

@@ -464,6 +464,7 @@ private:
     uint64_t GetSeqNoImpl(uint64_t id);
     uint64_t GetIdImpl(uint64_t seqNo);
     void ScheduleSendImpl();
+    void PostSendTask();
     void SendImpl();
     void SendBatchBlock(const TBlock& block, Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest);
     void SendStandardBlock(const TBlock& block, Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest);
@@ -539,6 +540,7 @@ private:
     bool Connected = false;
     bool Started = false;
     std::atomic<bool> SendImplScheduled = false;
+    IExecutor::TFunction PendingSendTask;
     std::atomic<int> Aborting = 0;
     bool SessionEstablished = false;
     bool BatchingSupported = false;

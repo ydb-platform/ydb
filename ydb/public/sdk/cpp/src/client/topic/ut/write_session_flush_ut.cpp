@@ -34,7 +34,6 @@ Y_UNIT_TEST_SUITE(WriteSessionFlush) {
         auto pool = ::CreateThreadPool(1, 0);
         auto executor = NAdapters::CreateExternalThreadPoolExecutorAdapter(
             std::shared_ptr<IThreadPool>(pool.Release()));
-        UNIT_ASSERT(!executor->IsAsync());
 
         auto session = client.CreateSimpleBlockingWriteSession(
             TWriteSessionSettings()

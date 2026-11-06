@@ -15,7 +15,6 @@ Y_UNIT_TEST_SUITE(CompressExecutor) {
         auto pool = ::CreateThreadPool(1, 0);
         auto executor = NAdapters::CreateExternalThreadPoolExecutorAdapter(
             std::shared_ptr<IThreadPool>(pool.Release()));
-        UNIT_ASSERT(!executor->IsAsync());
 
         auto settings = setup.GetWriteSessionSettings();
         settings.Codec(ECodec::RAW).CompressionExecutor(executor);

@@ -366,6 +366,7 @@ private:
     ui64 GetSeqNoImpl(ui64 id);
     ui64 GetIdImpl(ui64 seqNo);
     void ScheduleSendImpl();
+    void PostSendTask();
     void SendImpl();
     void AbortImpl();
     void CloseImpl(EStatus statusCode, NYdb::NIssue::TIssues&& issues);
@@ -426,6 +427,7 @@ private:
     bool Connected = false;
     bool Started = false;
     bool SendImplScheduled = false;
+    IExecutor::TFunction PendingSendTask;
     std::atomic<int> Aborting = 0;
     bool SessionEstablished = false;
     ui32 PartitionId = 0;

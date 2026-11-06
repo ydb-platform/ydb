@@ -23,6 +23,10 @@ Platform never starts the host workflow. After the GitHub webhook, the host VM
 downloads `remote-ticket` (Actions API) and dispatches `ci_remote_executor`
 with `config.inputs`.
 
+The remote executor does **not** post GitHub commit statuses (`build_*` /
+`test_*`): when `source_run_id` is set, `build_and_test_ya` skips those curls.
+Checks / PR attribution stay on the platform (waiter + ingest).
+
 `platform_run_id` = caller `github.run_id`.
 
 Layout under `.github/scripts/ci/`:

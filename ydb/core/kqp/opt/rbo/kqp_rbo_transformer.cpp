@@ -116,12 +116,106 @@ bool IsRboTraceLogEnabled() {
     return htmlTracePath.Defined() && !htmlTracePath->empty();
 }
 
+struct TInputRepeatability {
+    // The subtree contains a value that may change when evaluated again.
+    bool HasNonRepeatableExpression = false;
+    // The subtree contains a row producer that depends on such a value.
+    // Sharing this producer across roots may require evaluating its rows only once.
+    bool HasNonRepeatableProducer = false;
+};
+
+// Summarize the original expression DAG, caching each node's subtree properties.
+// Keep scalar nondeterminism separate from row production: a shared RandomNumber
+// node alone does not imply that two statements share the same input rows.
+TInputRepeatability AnalyzeInputRepeatability(const TExprNode* node, THashMap<const TExprNode*, TInputRepeatability>& memo) {
+    if (const auto it = memo.find(node); it != memo.end()) {
+        return it->second;
+    }
+    // Match the conservative treatment of opaque functions used by logical
+    // subtree copying. Sequencers also must not be evaluated independently.
+    TInputRepeatability result;
+    result.HasNonRepeatableExpression = TCoNonDeterministicBase::Match(node) || TKqlSequencer::Match(node)
+        || node->IsCallable({"Udf", "ScriptUdf", "SqlCall"});
+    for (const auto& child : node->Children()) {
+        const auto childInfo = AnalyzeInputRepeatability(child.Get(), memo);
+        result.HasNonRepeatableExpression |= childInfo.HasNonRepeatableExpression;
+        result.HasNonRepeatableProducer |= childInfo.HasNonRepeatableProducer;
+    }
+    const auto type = node->GetTypeAnn();
+    const bool producesRows = TCoYqlSelect::Match(node) || TKqlSequencer::Match(node)
+        || (type && (type->GetKind() == ETypeAnnotationKind::List
+            || type->GetKind() == ETypeAnnotationKind::Stream || type->GetKind() == ETypeAnnotationKind::Flow));
+    // Annotation may intern equal scalar calls in otherwise independent inputs.
+    // Only sharing a row producer requires preserving its evaluation across roots.
+    result.HasNonRepeatableProducer |= producesRows && result.HasNonRepeatableExpression;
+    memo.emplace(node, result);
+    return result;
+}
+
+// Each query root is imported independently by RBO. If two writes consume the
+// same random row producer, they can consequently store different generated keys.
+// Reject shared non-repeatable inputs involving an effect while compiling, so
+// fallback can retry the whole query with the legacy optimizer before execution.
+void CheckSharedNonRepeatableInputs(const TExprNode::TPtr& input) {
+    TVector<std::pair<const TExprNode*, bool>> roots;
+    bool hasEffects = false;
+    for (const auto query : TKqlQueryList(input)) {
+        for (const auto result : query.Results()) {
+            auto value = result.Value().Ptr();
+            while (TCoUnordered::Match(value.Get()) || TCoTake::Match(value.Get())) {
+                value = value->HeadPtr();
+            }
+            // RETURNING observes the effect below; it does not evaluate its
+            // input a second time and must not count as an independent root.
+            if (!TKqlReturningList::Match(value.Get())) {
+                roots.emplace_back(value.Get(), false);
+            }
+        }
+        for (const auto effect : query.Effects()) {
+            roots.emplace_back(effect.Raw(), true);
+            hasEffects = true;
+        }
+    }
+    if (!hasEffects || roots.size() < 2) {
+        return;
+    }
+
+    // Pointer identity detects shared expressions before rewriting clones them.
+    // Repeated visits within one root do not require cross-root coordination.
+    THashMap<const TExprNode*, size_t> owners;
+    THashMap<const TExprNode*, TInputRepeatability> nonRepeatable;
+    for (size_t rootIndex = 0; rootIndex < roots.size(); ++rootIndex) {
+        TVector<const TExprNode*> pending{roots[rootIndex].first};
+        while (!pending.empty()) {
+            const auto* node = pending.back();
+            pending.pop_back();
+            const auto [it, inserted] = owners.emplace(node, rootIndex);
+            if (!inserted) {
+                if (it->second != rootIndex && (roots[it->second].second || roots[rootIndex].second)) {
+                    Y_ENSURE(!AnalyzeInputRepeatability(node, nonRepeatable).HasNonRepeatableProducer,
+                        "New RBO cannot independently evaluate shared non-repeatable input across query roots with effects");
+                }
+                // Descendants already belong to the first root. Checking the
+                // shared subtree here avoids walking it again for every root.
+                continue;
+            }
+            for (const auto& child : node->Children()) {
+                pending.push_back(child.Get());
+            }
+        }
+    }
+}
+
 } // anonymous namespace
 
 IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     if (KqpCtx.Config->OptFallbackToLegacyOptimizer.Get()) {
         Y_ENSURE(false, "Forced fallback to legacy optimizer");
     }
+
+    // RewriteSelect clones lambdas, and each root is later imported by a fresh
+    // PlanConverter. Check sharing while original expression identity survives.
+    CheckSharedNonRepeatableInputs(input);
     
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);

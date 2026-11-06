@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Remote executor handoff: pull (ticket/claim) or push (PAT workflow_dispatch)."""
+"""Remote executor handoff: pull (artifact/claim) or push (PAT workflow_dispatch).
+
+Pull publishes a GitHub Actions artifact `remote-ticket` with the full resolve
+config (webhook payloads lack workflow_dispatch inputs). Optional S3 ticket
+mirror when ticket_s3_* is configured.
+"""
 from __future__ import annotations
 
 import json
@@ -16,6 +21,9 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from remote_dispatch_config import apply_to_environ  # noqa: E402
+
+TICKET_ARTIFACT_NAME = "remote-ticket"
+TICKET_FILENAME = "remote-ticket.json"
 
 
 def die(msg):
@@ -123,12 +131,30 @@ def handoff(cfg):
     return mode if mode in ("pull", "push") else "pull"
 
 
-def ticket_s3(cfg):
-    ep = (cfg.get("ticket_s3_endpoint") or "").strip() or env_opt("TICKET_AWS_ENDPOINT") or env_opt("CALLER_AWS_ENDPOINT") or env_opt("AWS_ENDPOINT")
-    bucket = (cfg.get("ticket_s3_bucket") or "").strip() or env_opt("TICKET_AWS_BUCKET") or env_opt("CALLER_AWS_BUCKET") or env_opt("AWS_BUCKET")
+def ticket_s3_optional(cfg):
+    """Optional legacy mirror; empty means artifact-only pull."""
+    ep = (cfg.get("ticket_s3_endpoint") or "").strip() or env_opt("TICKET_AWS_ENDPOINT")
+    bucket = (cfg.get("ticket_s3_bucket") or "").strip() or env_opt("TICKET_AWS_BUCKET")
     if not ep or not bucket:
-        die("ticket S3 endpoint/bucket missing")
+        return None
     return ep.rstrip("/"), bucket
+
+
+def build_ticket(cfg):
+    run_id = env("PLATFORM_RUN_ID")
+    repo = env_opt("PLATFORM_REPOSITORY") or env_opt("GITHUB_REPOSITORY")
+    workflow = env_opt("PLATFORM_WORKFLOW") or env_opt("GITHUB_WORKFLOW") or "unknown"
+    run_url = env_opt("PLATFORM_RUN_URL") or f"https://github.com/{repo}/actions/runs/{run_id}"
+    return {
+        "version": 1,
+        "kind": "remote-ticket",
+        "platform_run_id": run_id,
+        "platform_repository": repo,
+        "platform_workflow": workflow,
+        "platform_run_url": run_url,
+        "config": cfg,
+        "created_at": utc_now(),
+    }
 
 
 def claim_s3(cfg):
@@ -201,35 +227,45 @@ def utc_now():
 
 def cmd_enqueue():
     cfg = load_config()
-    run_id = env("PLATFORM_RUN_ID")
-    repo = env_opt("PLATFORM_REPOSITORY") or env_opt("GITHUB_REPOSITORY")
-    workflow = env_opt("PLATFORM_WORKFLOW") or env_opt("GITHUB_WORKFLOW") or "unknown"
-    run_url = env_opt("PLATFORM_RUN_URL") or f"https://github.com/{repo}/actions/runs/{run_id}"
-    endpoint, bucket = ticket_s3(cfg)
-    key = f"remote-tickets/{run_id}.json"
-    ticket = {
-        "version": 1,
-        "platform_run_id": run_id,
-        "platform_repository": repo,
-        "platform_workflow": workflow,
-        "platform_run_url": run_url,
-        "config": cfg,
-        "created_at": utc_now(),
-    }
-    url = public_url(endpoint, bucket, key)
-    with tempfile.TemporaryDirectory(prefix="remote-ticket-") as tmp:
-        path = Path(tmp) / "ticket.json"
-        path.write_text(json.dumps(ticket, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        s3cmd_put(path, f"s3://{bucket}/{key}")
+    ticket = build_ticket(cfg)
+    run_id = ticket["platform_run_id"]
+    run_url = ticket["platform_run_url"]
+    path = Path(env_opt("TICKET_PATH") or TICKET_FILENAME)
+    path.write_text(json.dumps(ticket, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"Wrote {path} ({path.stat().st_size} bytes)")
 
-    set_outputs(platform_run_id=run_id, ticket_url=url, executor_run_id="", executor_run_url="")
-    append_summary(
-        f"### Remote pull enqueue\n"
-        f"- **platform run:** [{run_id}]({run_url})\n"
-        f"- **ticket:** [{url}]({quote_url(url)})\n"
-        f"- **claim key:** `remote-claims/{run_id}.json` on remote public S3\n\n"
+    ticket_url = ""
+    s3 = ticket_s3_optional(cfg)
+    if s3:
+        endpoint, bucket = s3
+        key = f"remote-tickets/{run_id}.json"
+        ticket_url = public_url(endpoint, bucket, key)
+        try:
+            s3cmd_put(path, f"s3://{bucket}/{key}")
+            print(f"Mirrored ticket to {ticket_url}")
+        except Exception as e:
+            print(f"::warning::optional S3 ticket mirror failed: {e}")
+            ticket_url = ""
+
+    set_outputs(
+        platform_run_id=run_id,
+        ticket_path=str(path),
+        ticket_artifact=TICKET_ARTIFACT_NAME,
+        ticket_url=ticket_url,
+        executor_run_id="",
+        executor_run_url="",
     )
-    print(f"::notice title=Remote ticket published::{url}")
+    lines = [
+        "### Remote pull enqueue\n",
+        f"- **platform run:** [{run_id}]({run_url})\n",
+        f"- **ticket artifact:** `{TICKET_ARTIFACT_NAME}` (`{path.name}`)\n",
+        f"- **claim key:** `remote-claims/{run_id}.json` on remote public S3\n",
+    ]
+    if ticket_url:
+        lines.append(f"- **S3 mirror:** [{ticket_url}]({quote_url(ticket_url)})\n")
+    lines.append("\n")
+    append_summary("".join(lines))
+    print(f"::notice title=Remote ticket artifact ready::{TICKET_ARTIFACT_NAME} on run {run_id}")
 
 
 def cmd_start():
@@ -380,20 +416,30 @@ def cmd_cancel():
     run_id = env_opt("EXECUTOR_RUN_ID")
 
     if handoff(cfg) == "pull" and platform_run_id:
-        endpoint, bucket = ticket_s3(cfg)
-        key = f"remote-tickets/{platform_run_id}.cancel"
-        with tempfile.TemporaryDirectory(prefix="remote-cancel-") as tmp:
-            path = Path(tmp) / "cancel.json"
-            path.write_text(
-                json.dumps({"version": 1, "platform_run_id": platform_run_id, "cancelled_at": utc_now()}, indent=2)
-                + "\n",
-                encoding="utf-8",
+        s3 = ticket_s3_optional(cfg)
+        if s3:
+            endpoint, bucket = s3
+            key = f"remote-tickets/{platform_run_id}.cancel"
+            with tempfile.TemporaryDirectory(prefix="remote-cancel-") as tmp:
+                path = Path(tmp) / "cancel.json"
+                path.write_text(
+                    json.dumps(
+                        {"version": 1, "platform_run_id": platform_run_id, "cancelled_at": utc_now()},
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                try:
+                    s3cmd_put(path, f"s3://{bucket}/{key}")
+                    append_summary(f"### Caller cancelled\n- cancel marker `s3://{bucket}/{key}`\n")
+                except Exception as e:
+                    print(f"::warning::cancel marker failed: {e}")
+        else:
+            append_summary(
+                "### Caller cancelled\n"
+                "- no S3 cancel mirror (artifact handoff); poller should see platform run cancelled\n"
             )
-            try:
-                s3cmd_put(path, f"s3://{bucket}/{key}")
-                append_summary(f"### Caller cancelled\n- cancel marker `s3://{bucket}/{key}`\n")
-            except Exception as e:
-                print(f"::warning::cancel marker failed: {e}")
 
     if run_id and env_opt("GH_TOKEN"):
         run_url = env_opt("EXECUTOR_RUN_URL") or f"https://github.com/{env('REPO')}/actions/runs/{run_id}"

@@ -24,11 +24,12 @@ DEFAULT_REMOTE: dict[str, Any] = {
     "workflow_file": "ci_remote_executor.yml",
     "workflow_name": "CI remote executor",
     "executor_ref": "nebius-ci",
-    # pull = public ticket + remote poller/claim (no launch PAT). push = workflow_dispatch + PAT.
+    # pull = Actions artifact remote-ticket + remote poller/claim (no launch PAT).
+    # push = workflow_dispatch + PAT.
     "handoff": "pull",
     "wait": True,
     "fail_on_remote_failure": True,
-    # Ticket on platform public S3 (empty → vars.AWS_* at enqueue).
+    # Optional legacy S3 mirror of the same ticket JSON (empty = artifact only).
     "ticket_s3_endpoint": "",
     "ticket_s3_bucket": "",
     # Artifacts + claims on remote host public S3.

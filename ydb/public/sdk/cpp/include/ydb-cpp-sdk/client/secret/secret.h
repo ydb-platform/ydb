@@ -9,6 +9,8 @@ class TDescribeSecretResult;
 
 using TAsyncDescribeSecretResult = NThreading::TFuture<TDescribeSecretResult>;
 
+struct TExportSecretSettings : public TOperationRequestSettings<TExportSecretSettings> {};
+
 class TSecretClient {
     class TImpl;
 

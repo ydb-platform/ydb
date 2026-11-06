@@ -161,7 +161,7 @@ public:
     TVector<TString> GetTargetTablePaths() const;
 
     bool IsExpectedSecretCopier(const TActorId& actorId) const;
-    void FinishSecretCopy();
+    void FinishSecretCopy(const TActorContext& ctx);
 
     bool IsExpectedTargetDiscoverer(const TActorId& actorId) const;
     void FinishTargetDiscovery();

@@ -289,11 +289,6 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         }
 
         if (consumer != consumers.end()) {
-            if (Kind == TReplication::ETargetKind::Secret && !consumer->GetImportant()) {
-                NYdb::NIssue::TIssues issues;
-                issues.AddIssue("Secret export consumer must be important");
-                return Reply(NYdb::TStatus(NYdb::EStatus::PRECONDITION_FAILED, std::move(issues)));
-            }
             Reply(NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues()));
         } else {
             NYdb::NIssue::TIssues issues;

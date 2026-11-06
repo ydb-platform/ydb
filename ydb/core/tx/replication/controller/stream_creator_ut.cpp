@@ -47,61 +47,47 @@ Y_UNIT_TEST_SUITE(ReplicationTestEnv) {
 }
 
 Y_UNIT_TEST_SUITE(TargetStreamPath) {
-    Y_UNIT_TEST(TableStreamPath) {
-        NKikimrReplication::TReplicationConfig config;
-        auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root");
-        const auto id = replication->AddTarget(TReplication::ETargetKind::Table,
-            std::make_shared<TTargetTable::TTableConfig>("/Source/table", "/Root/table"));
-        auto* target = replication->FindTarget(id);
-        target->SetStreamName("Stream");
-        UNIT_ASSERT_VALUES_EQUAL(target->GetStreamPath(), "/Source/table/Stream");
-    }
-
-    Y_UNIT_TEST(IndexTableStreamPath) {
-        NKikimrReplication::TReplicationConfig config;
-        auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root");
-        const auto id = replication->AddTarget(TReplication::ETargetKind::IndexTable,
-            std::make_shared<TTargetIndexTable::TIndexTableConfig>("/Source/table/index", "/Root/table/index"));
-        auto* target = replication->FindTarget(id);
-        target->SetStreamName("Stream");
-        UNIT_ASSERT_VALUES_EQUAL(target->GetStreamPath(), "/Source/table/index/indexImplTable/Stream");
-    }
-
-    Y_UNIT_TEST(SecretTargetsShareStreamInSourceDatabase) {
-        NKikimrReplication::TReplicationConfig config;
-        config.MutableSrcConnectionParams()->SetDatabase("/SourceDatabase");
-        auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root");
-        const auto first = replication->AddTarget(TReplication::ETargetKind::Secret,
-            std::make_shared<TTargetSecret::TSecretConfig>("/SourceDatabase/first", "/Root/first"));
-        const auto second = replication->AddTarget(TReplication::ETargetKind::Secret,
-            std::make_shared<TTargetSecret::TSecretConfig>("/SourceDatabase/nested/second", "/Root/second"));
-        for (const auto id : {first, second}) {
-            auto* target = replication->FindTarget(id);
+    Y_UNIT_TEST(PathsByTargetKind) {
+        using EKind = TReplication::ETargetKind;
+        const struct {
+            EKind Kind;
+            TString Source;
+            TString SourceDatabase;
+            TString Database;
+            TString Expected;
+        } cases[] = {
+            {EKind::Table, "/Source/table", "", "/Root", "/Source/table/Stream"},
+            {EKind::IndexTable, "/Source/table/index", "", "/Root", "/Source/table/index/indexImplTable/Stream"},
+            {EKind::Secret, "/SourceDatabase/first", "/SourceDatabase", "/Root", "/SourceDatabase/secretImpl/Stream"},
+            {EKind::Secret, "/SourceDatabase/nested/second", "/SourceDatabase", "/Root", "/SourceDatabase/secretImpl/Stream"},
+            {EKind::Secret, "/Other/secret", "", "/Root/tenant", "/Root/tenant/secretImpl/Stream"},
+            {EKind::Transfer, "/Source/topic", "", "/Root", "/Source/topic"},
+        };
+        for (const auto& test : cases) {
+            NKikimrReplication::TReplicationConfig config;
+            config.MutableSrcConnectionParams()->SetDatabase(test.SourceDatabase);
+            auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, test.Database);
+            TReplication::ITarget::IConfig::TPtr targetConfig;
+            switch (test.Kind) {
+            case EKind::Table:
+                targetConfig = std::make_shared<TTargetTable::TTableConfig>(test.Source, "/Root/table");
+                break;
+            case EKind::IndexTable:
+                targetConfig = std::make_shared<TTargetIndexTable::TIndexTableConfig>(test.Source, "/Root/table/index");
+                break;
+            case EKind::Secret:
+                targetConfig = std::make_shared<TTargetSecret::TSecretConfig>(test.Source, "/Root/secret");
+                break;
+            case EKind::Transfer:
+                targetConfig = std::make_shared<TTargetTransfer::TTransferConfig>(test.Source, "/Root/table", config);
+                break;
+            }
+            auto* target = replication->FindTarget(replication->AddTarget(test.Kind, std::move(targetConfig)));
             UNIT_ASSERT(target->GetStreamName().empty());
             UNIT_ASSERT(target->GetStreamConsumerName().empty());
             target->SetStreamName("Stream");
-            UNIT_ASSERT_VALUES_EQUAL(target->GetStreamPath(), "/SourceDatabase/secretImpl/Stream");
+            UNIT_ASSERT_VALUES_EQUAL_C(target->GetStreamPath(), test.Expected, test.Source);
         }
-    }
-
-    Y_UNIT_TEST(SecretStreamPathFallsBackToReplicationDatabase) {
-        NKikimrReplication::TReplicationConfig config;
-        auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root/tenant");
-        const auto id = replication->AddTarget(TReplication::ETargetKind::Secret,
-            std::make_shared<TTargetSecret::TSecretConfig>("/Other/secret", "/Root/tenant/secret"));
-        auto* target = replication->FindTarget(id);
-        target->SetStreamName("Stream");
-        UNIT_ASSERT_VALUES_EQUAL(target->GetStreamPath(), "/Root/tenant/secretImpl/Stream");
-    }
-
-    Y_UNIT_TEST(TransferStreamPath) {
-        NKikimrReplication::TReplicationConfig config;
-        auto replication = MakeIntrusive<TReplication>(ui64{1}, TPathId(42, 17), config, "/Root");
-        const auto id = replication->AddTarget(TReplication::ETargetKind::Transfer,
-            std::make_shared<TTargetTransfer::TTransferConfig>("/Source/topic", "/Root/table", config));
-        auto* target = replication->FindTarget(id);
-        target->SetStreamName("Stream");
-        UNIT_ASSERT_VALUES_EQUAL(target->GetStreamPath(), "/Source/topic");
     }
 }
 

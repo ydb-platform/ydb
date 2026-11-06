@@ -11,9 +11,12 @@ PEERDIR(
     ydb/core/persqueue/public/schema
     ydb/core/persqueue/writer
     ydb/core/protos
-    ydb/core/tx/replication/controller/protos
     ydb/core/tx/scheme_cache
     ydb/services/scheme_secret
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

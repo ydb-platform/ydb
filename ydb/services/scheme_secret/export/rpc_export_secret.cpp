@@ -12,7 +12,6 @@
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/core/tx/replication/controller/protos/secret_copy.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/ydb_secret.pb.h>
 #include <ydb/services/scheme_secret/resolver.h>
@@ -44,7 +43,8 @@ class TExportSecretRPC: public TRpcSchemeRequestActor<TExportSecretRPC, TEvExpor
 public:
     using TBase::TBase;
 
-    void Bootstrap() {
+    void Bootstrap(const TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
         const auto* request = GetProtoRequest();
         Database = CanonizePath(Request_->GetDatabaseName().GetOrElse(""));
         TopicPath = CanonicalizePath(Request_->NormalizePath(request->topic_path()), Database);

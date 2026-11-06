@@ -20,7 +20,6 @@ public:
             Replication.Reset();
             return true;
         }
-        Replication->FinishSecretCopy();
         const bool dropping = Replication->GetState() == TReplication::EState::Removing;
         NIceDb::TNiceDb db(txc.DB);
         for (auto* target : Replication->GetTargets()) {
@@ -58,8 +57,13 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        if (Replication) {
-            Replication->Progress(ctx);
+        if (Replication && Replication->IsExpectedSecretCopier(Ev->Sender)) {
+            if (Ev->Get()->Finished) {
+                Replication->FinishSecretCopy(ctx);
+                Replication->Progress(ctx);
+            } else {
+                ctx.Send(Ev->Sender, new TEvPrivate::TEvSecretsCopiedSaved(), 0, Ev->Cookie);
+            }
         }
     }
 };

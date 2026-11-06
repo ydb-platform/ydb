@@ -6,7 +6,6 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
-#include <ydb/core/tx/replication/controller/protos/secret_copy.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -16,6 +15,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/algorithm.h>
+
+#include <optional>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -39,6 +40,17 @@ bool DecodeSecretRecord(const TTopicMessage& message, NKikimrReplication::TSecre
 
 class TSecretCopier: public TActorBootstrapped<TSecretCopier> {
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+
+    enum class EPhase {
+        ResolvingOwner,
+        CreatingReader,
+        Reading,
+        ResolvingServices,
+        ProposingSecret,
+        WaitingSecret,
+        SavingProgress,
+        CommittingOffset,
+    };
 
 public:
     TSecretCopier(const TActorId& parent, TReplication::TPtr replication)
@@ -92,8 +104,8 @@ public:
 
 private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        if (StopRequested) {
-            return DropTopic();
+        if (Phase != EPhase::ResolvingOwner) {
+            return;
         }
         const auto& entries = ev->Get()->Request->ResultSet;
         if (entries.size() != 1 || entries.front().Status != TNavigate::EStatus::Ok
@@ -110,21 +122,25 @@ private:
             .ConsumerName("replicationConsumer")
             .AutoCommit(false)
             .AppendTopics(NYdb::NTopic::TTopicReadSettings().Path(TopicPath).AppendPartitionIds(0));
-        ReaderCreating = true;
+        Phase = EPhase::CreatingReader;
         Send(Proxy, new TEvYdbProxy::TEvCreateTopicReaderRequest(settings));
     }
 
     void Handle(TEvYdbProxy::TEvCreateTopicReaderResponse::TPtr& ev) {
-        ReaderCreating = false;
+        if (Phase != EPhase::CreatingReader) {
+            return;
+        }
         Reader = ev->Get()->Result;
-        if (StopRequested) {
-            DropTopic();
+        Phase = EPhase::Reading;
+        if (StopStatus) {
+            Finish(StopStatus->GetStatus(), StopStatus->GetIssues().ToOneLineString());
         } else {
             ReadNext();
         }
     }
 
     void ReadNext() {
+        Phase = EPhase::Reading;
         Send(Reader, new TEvYdbProxy::TEvReadTopicRequest(TEvYdbProxy::TReadTopicSettings()));
     }
 
@@ -133,8 +149,8 @@ private:
     }
 
     void Handle(TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {
-        if (StopRequested) {
-            return DropTopic();
+        if (Phase != EPhase::Reading) {
+            return;
         }
         PartitionId = ev->Get()->Result.PartitionId;
         Records = std::move(ev->Get()->Result.Messages);
@@ -155,10 +171,10 @@ private:
                     continue;
                 }
                 CurrentTarget = targetId;
-                CreateInFlight = true;
                 if (PipeCache) {
                     CreateSecret();
                 } else {
+                    Phase = EPhase::ResolvingServices;
                     Send(MakeTxProxyID(), new TEvTxUserProxy::TEvGetProxyServicesRequest());
                 }
                 return;
@@ -178,13 +194,25 @@ private:
             NextTarget = 0;
             CurrentValue = record.GetValue();
         }
+        // The next source offset must never hide destination identities that
+        // have only been recorded in this actor's memory.
+        Phase = EPhase::SavingProgress;
+        Send(Parent, new TEvPrivate::TEvSecretsCopied(Replication->GetId(),
+            NYdb::TStatus(NYdb::EStatus::SUCCESS, {}), Created, false), 0, NextOffset);
+    }
+
+    void Handle(TEvPrivate::TEvSecretsCopiedSaved::TPtr& ev) {
+        if (ev->Sender != Parent || Phase != EPhase::SavingProgress || ev->Cookie != NextOffset) {
+            return;
+        }
+        Phase = EPhase::CommittingOffset;
         Send(Proxy, new TEvYdbProxy::TEvCommitOffsetRequest(TopicPath, PartitionId,
             "replicationConsumer", NextOffset, NYdb::NTopic::TCommitOffsetSettings().ReadSessionId(ReadSessionId)));
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetResponse::TPtr& ev) {
-        if (StopRequested) {
-            return DropTopic();
+        if (Phase != EPhase::CommittingOffset) {
+            return;
         }
         const auto& status = ev->Get()->Result;
         if (!status.IsSuccess()) {
@@ -199,15 +227,14 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
+        if (Phase != EPhase::ResolvingServices) {
+            return;
+        }
         PipeCache = ev->Get()->Services.LeaderPipeCache;
         CreateSecret();
     }
 
     void CreateSecret() {
-        if (StopRequested) {
-            CreateInFlight = false;
-            return DropTopic();
-        }
         const auto* target = Replication->FindTarget(CurrentTarget);
         if (!target) {
             return Finish(NYdb::EStatus::CANCELLED, "Secret target removed during initial copy");
@@ -229,90 +256,111 @@ private:
         secret.SetName(destination.substr(prefix.size()));
         secret.SetValue(CurrentValue);
         secret.SetInheritPermissions(false);
+        Phase = EPhase::ProposingSecret;
         Send(MakeTxProxyID(), request.Release());
     }
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
+        if (Phase != EPhase::ProposingSecret) {
+            return;
+        }
         const auto code = YdbStatusFromProxyStatus(ev->Get());
         YDB_LOG_INFO("Destination secret creation status", {"status", code}, {"targetId", CurrentTarget});
+        const auto& record = ev->Get()->Record;
+        if (record.GetSchemeShardStatus() == NKikimrScheme::StatusAlreadyExists) {
+            Phase = EPhase::Reading;
+            return Finish(NYdb::EStatus::SCHEME_ERROR, "Destination secret already exists");
+        }
         if (!IsTxProxyInProgress(code) && code != Ydb::StatusIds::SUCCESS) {
+            Phase = EPhase::Reading;
             return Finish(static_cast<NYdb::EStatus>(code), "Cannot create destination secret");
         }
-        const auto& record = ev->Get()->Record;
         CurrentPathId = TPathId(record.GetSchemeShardTabletId(), record.GetPathId());
         if (code == Ydb::StatusIds::SUCCESS) {
             return SecretCreated();
         }
-        Send(PipeCache, new TEvPipeCache::TEvForward(
-            new NSchemeEvents::TEvNotifyTxCompletion(record.GetTxId()), Replication->GetSchemeShardId(), true));
+        CurrentTxId = record.GetTxId();
+        Phase = EPhase::WaitingSecret;
+        SubscribeTx();
     }
 
-    void Handle(NSchemeEvents::TEvNotifyTxCompletionResult::TPtr&) {
+    void SubscribeTx() {
+        Send(PipeCache, new TEvPipeCache::TEvForward(
+            new NSchemeEvents::TEvNotifyTxCompletion(CurrentTxId), CurrentPathId.OwnerId, true, CurrentTxId));
+    }
+
+    void Handle(NSchemeEvents::TEvNotifyTxCompletionResult::TPtr& ev) {
+        if (Phase != EPhase::WaitingSecret || ev->Get()->Record.GetTxId() != CurrentTxId) {
+            return;
+        }
         SecretCreated();
     }
 
     void SecretCreated() {
-        CreateInFlight = false;
+        if (CurrentTxId) {
+            Send(PipeCache, new TEvPipeCache::TEvUnlink(CurrentPathId.OwnerId));
+        }
+        Phase = EPhase::Reading;
+        CurrentTxId = 0;
         Completed.insert(CurrentTarget);
         Created.emplace(CurrentTarget, CurrentPathId);
-        if (StopRequested) {
-            DropTopic();
+        if (StopStatus) {
+            Finish(StopStatus->GetStatus(), StopStatus->GetIssues().ToOneLineString());
         } else {
             ApplyNext();
         }
     }
 
-    void DropTopic() {
-        if (DroppingTopic) {
-            return;
-        }
-        DroppingTopic = true;
-        if (Reader) {
-            Send(std::exchange(Reader, {}), new TEvents::TEvPoison());
-        }
-        Send(Proxy, new TEvYdbProxy::TEvDropTopicRequest(TopicPath, NYdb::NTopic::TDropTopicSettings()));
-    }
-
-    void Handle(TEvYdbProxy::TEvDropTopicResponse::TPtr& ev) {
-        const auto& status = ev->Get()->Result;
-        if (!status.IsSuccess() && status.GetStatus() != NYdb::EStatus::SCHEME_ERROR) {
-            return Finish(status.GetStatus(), "Cannot remove secret replication topic");
-        }
-        Finish(NYdb::EStatus::SUCCESS);
-    }
-
     void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr&) {
-        if (!DroppingTopic) {
-            Finish(NYdb::EStatus::UNAVAILABLE, "Secret replication reader stopped");
-        }
+        Finish(NYdb::EStatus::UNAVAILABLE, "Secret replication reader stopped");
     }
 
     void Handle(TEvPrivate::TEvCancelSecretCopy::TPtr&) {
-        StopRequested = true;
-        if (!CreateInFlight && !ReaderCreating) {
-            DropTopic();
-        }
+        Finish(NYdb::EStatus::SUCCESS);
     }
 
-    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-        Finish(NYdb::EStatus::UNAVAILABLE, "Destination SchemeShard is unavailable");
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
+        if (Phase != EPhase::WaitingSecret || ev->Get()->TabletId != CurrentPathId.OwnerId
+            || ev->Cookie != CurrentTxId)
+        {
+            return;
+        }
+        // Acceptance is already known. A lost subscription cannot turn the
+        // pending destination into an unowned object during DROP CASCADE.
+        Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup(CurrentTxId));
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        if (Phase == EPhase::WaitingSecret && ev->Get()->Tag == CurrentTxId) {
+            SubscribeTx();
+        }
     }
 
     void Finish(NYdb::EStatus code, const TString& issue = {}) {
+        if (!StopStatus || StopStatus->IsSuccess()) {
+            NYdb::NIssue::TIssues issues;
+            if (issue) {
+                issues.AddIssue(issue);
+            }
+            StopStatus.emplace(code, std::move(issues));
+        }
+        if (Phase == EPhase::CreatingReader || Phase == EPhase::ProposingSecret || Phase == EPhase::WaitingSecret) {
+            return;
+        }
+        code = StopStatus->GetStatus();
         YDB_LOG_INFO("Initial secret copy completed", {"status", code}, {"issue", issue},
             {"created", Created.size()});
-        NYdb::NIssue::TIssues issues;
-        if (issue) {
-            issues.AddIssue(issue);
-        }
         Send(Parent, new TEvPrivate::TEvSecretsCopied(Replication->GetId(),
-            NYdb::TStatus(code, std::move(issues)), std::move(Created)));
+            std::move(*StopStatus), std::move(Created)));
         PassAway();
     }
 
     void PassAway() override {
         if (Reader) {
             Send(Reader, new TEvents::TEvPoison());
+        }
+        if (PipeCache && CurrentTxId) {
+            Send(PipeCache, new TEvPipeCache::TEvUnlink(CurrentPathId.OwnerId));
         }
         TActorBootstrapped::PassAway();
     }
@@ -321,15 +369,16 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvPrivate::TEvCancelSecretCopy, Handle);
+            hFunc(TEvPrivate::TEvSecretsCopiedSaved, Handle);
             hFunc(TEvYdbProxy::TEvCreateTopicReaderResponse, Handle);
             hFunc(TEvYdbProxy::TEvStartTopicReadingSession, Handle);
             hFunc(TEvYdbProxy::TEvReadTopicResponse, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetResponse, Handle);
-            hFunc(TEvYdbProxy::TEvDropTopicResponse, Handle);
             hFunc(TEvYdbProxy::TEvTopicReaderGone, Handle);
             hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, Handle);
             hFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+            hFunc(TEvents::TEvWakeup, Handle);
             hFunc(NSchemeEvents::TEvNotifyTxCompletionResult, Handle);
             IgnoreFunc(NSchemeEvents::TEvNotifyTxCompletionRegistered);
             sFunc(TEvents::TEvPoison, PassAway);
@@ -354,13 +403,12 @@ private:
     ui64 PartitionId = 0;
     ui64 NextOffset = 0;
     ui64 CurrentTarget = 0;
+    ui64 CurrentTxId = 0;
     TPathId CurrentPathId;
     TActorId Reader;
     TActorId PipeCache;
-    bool StopRequested = false;
-    bool CreateInFlight = false;
-    bool ReaderCreating = false;
-    bool DroppingTopic = false;
+    EPhase Phase = EPhase::ResolvingOwner;
+    std::optional<NYdb::TStatus> StopStatus;
     bool InconsistentTopicPaths = false;
 };
 

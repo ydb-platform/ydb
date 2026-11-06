@@ -114,10 +114,6 @@ class TReplication::TImpl: public TLagProvider {
     }
 
     void ProgressTargets(TReplication* self, const TActorContext& ctx) {
-        if (State == EState::Removing && SecretCopier) {
-            ctx.Send(SecretCopier, new TEvPrivate::TEvCancelSecretCopy());
-            return;
-        }
         bool pendingSecrets = false;
         bool secretTopicsReady = true;
         for (const auto& [_, target] : Targets) {
@@ -207,6 +203,13 @@ public:
     }
 
     void Progress(TReplication* self, const TActorContext& ctx) {
+        if (PendingCredentialsReset) {
+            return;
+        }
+        if (SecretCopier && (State != EState::Ready || DesiredState != EState::Ready)) {
+            ctx.Send(SecretCopier, new TEvPrivate::TEvCancelSecretCopy());
+            return;
+        }
         if (State == EState::Done) {
             return;
         }
@@ -360,10 +363,32 @@ public:
         ++CredentialsRevision;
         TargetDiscoveryComplete = false;
         StopTargetDescribers(ctx);
-        for (auto* x : TVector<TActorId*>{&SecretResolver, &ResourceIdResolver, &TargetDiscoverer, &SecretCopier, &YdbProxy}) {
+        for (auto* x : TVector<TActorId*>{&SecretResolver, &ResourceIdResolver, &TargetDiscoverer}) {
             if (auto actorId = std::exchange(*x, {})) {
                 ctx.Send(actorId, new TEvents::TEvPoison());
             }
+        }
+        if (SecretCopier) {
+            // Keep the old source connection alive until the copier returns
+            // its accepted destination DDL and the controller saves it.
+            PendingCredentialsReset = true;
+            ctx.Send(SecretCopier, new TEvPrivate::TEvCancelSecretCopy());
+        } else {
+            ResetYdbProxy(ctx);
+        }
+    }
+
+    void ResetYdbProxy(const TActorContext& ctx) {
+        PendingCredentialsReset = false;
+        if (auto actorId = std::exchange(YdbProxy, {})) {
+            ctx.Send(actorId, new TEvents::TEvPoison());
+        }
+    }
+
+    void FinishSecretCopy(const TActorContext& ctx) {
+        SecretCopier = {};
+        if (PendingCredentialsReset) {
+            ResetYdbProxy(ctx);
         }
     }
 
@@ -403,6 +428,7 @@ private:
     TActorId TenantResolver; // TODO: Remove in next major release
     TActorId TargetDiscoverer;
     TActorId SecretCopier;
+    bool PendingCredentialsReset = false;
     ui64 TargetDiscovererRevision = 0;
     bool TargetDiscoveryComplete = false;
 
@@ -450,8 +476,8 @@ bool TReplication::IsExpectedSecretCopier(const TActorId& actorId) const {
     return actorId && actorId == Impl->SecretCopier;
 }
 
-void TReplication::FinishSecretCopy() {
-    Impl->SecretCopier = {};
+void TReplication::FinishSecretCopy(const TActorContext& ctx) {
+    Impl->FinishSecretCopy(ctx);
 }
 
 void TReplication::RemoveTarget(ui64 id) {

@@ -23,6 +23,11 @@
 namespace NKikimr::NReplication::NController {
 
 class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
+    void AddSecret(const TString& sourcePath, const TString& destinationPath) {
+        ToAdd.emplace_back(TReplication::ETargetKind::Secret,
+            std::make_shared<TTargetSecret::TSecretConfig>(sourcePath, destinationPath));
+    }
+
     void DescribePath(ui32 idx) {
         Y_ABORT_UNLESS(idx < Paths.size());
         Send(YdbProxy, new TEvYdbProxy::TEvDescribePathRequest(Paths.at(idx).first, {}), 0, idx);
@@ -64,8 +69,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                 break;
             case NYdb::NScheme::ESchemeEntryType::Secret:
                 if (IsReplication()) {
-                    ToAdd.emplace_back(TReplication::ETargetKind::Secret,
-                        std::make_shared<TTargetSecret::TSecretConfig>(path.first, path.second));
+                    AddSecret(path.first, path.second);
                     Pending.erase(it);
                     return MaybeReply();
                 }
@@ -277,11 +281,15 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
                     }
                     break;
                 case NYdb::NScheme::ESchemeEntryType::Secret:
+                    if (IsReplication()) {
+                        AddSecret(path.first + '/' + child.Name, path.second + '/' + child.Name);
+                    }
+                    break;
                 case NYdb::NScheme::ESchemeEntryType::Table:
                     Paths.emplace_back(
                         path.first  + '/' + child.Name,
                         path.second + '/' + child.Name);
-                    DescribePath(Paths.size() - 1);
+                    DescribeTable(Paths.size() - 1);
                     break;
                 default:
                     break;

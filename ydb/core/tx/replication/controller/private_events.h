@@ -53,6 +53,7 @@ struct TEvPrivate {
 
         EvSecretsCopied,
         EvCancelSecretCopy,
+        EvSecretsCopiedSaved,
 
         EvEnd,
     };
@@ -88,15 +89,21 @@ struct TEvPrivate {
 
     struct TEvCancelSecretCopy: public TEventLocal<TEvCancelSecretCopy, EvCancelSecretCopy> {};
 
+    struct TEvSecretsCopiedSaved: public TEventLocal<TEvSecretsCopiedSaved, EvSecretsCopiedSaved> {};
+
     struct TEvSecretsCopied: public TEventLocal<TEvSecretsCopied, EvSecretsCopied> {
         ui64 ReplicationId;
         NYdb::TStatus Status;
         THashMap<ui64, TPathId> Created;
+        // A checkpoint keeps the copier alive until its offset-cookie is
+        // acknowledged by TEvSecretsCopiedSaved after the transaction commits.
+        bool Finished;
 
-        TEvSecretsCopied(ui64 rid, NYdb::TStatus status, THashMap<ui64, TPathId> created)
+        TEvSecretsCopied(ui64 rid, NYdb::TStatus status, THashMap<ui64, TPathId> created, bool finished = true)
             : ReplicationId(rid)
             , Status(std::move(status))
             , Created(std::move(created))
+            , Finished(finished)
         {}
     };
 

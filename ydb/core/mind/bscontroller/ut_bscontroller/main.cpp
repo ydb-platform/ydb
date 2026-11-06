@@ -564,7 +564,7 @@ namespace {
                 if (group.GetErasureSpecies() != TBlobStorageGroupType::ErasureMirror3dc) {
                     continue;
                 }
-                group.SetMirror3dcState(TGroupState::DC_FAILURE);
+                group.SetMirror3dcState(NKikimrBlobStorage::TGroupState::DC_FAILURE);
                 for (auto& realm : *group.MutableRings()) {
                     ui32 node = realm.GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
                     realm.SetState(NodeDataCenters.at(node) == "2" ? TFailRealm::EXCLUDED : TFailRealm::INCLUDED);
@@ -679,7 +679,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             }
             return previousFilter(runtime, event);
         });
-        auto start = env.SetGroupStates(groupId, initial, TGroupState::DC_FAILURE);
+        auto start = env.SetGroupStates(groupId, initial, NKikimrBlobStorage::TGroupState::DC_FAILURE);
         start.MutableCommand(0)->MutableDefineGroupState()->MutableGroups(0)->SetGroupState(
             NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING);
         UNIT_ASSERT(env.Invoke(start).GetSuccess());
@@ -718,7 +718,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(promoted.GetGroupGeneration(), initialGeneration + 3);
         UNIT_ASSERT_VALUES_EQUAL(probes, 12);
         // A delayed proposal for the previous generation must not overwrite the new state.
-        NKikimrBlobStorage::TConfigRequest stale = env.SetGroupStates(groupId, initial, TGroupState::DC_FAILURE);
+        NKikimrBlobStorage::TConfigRequest stale = env.SetGroupStates(groupId, initial, NKikimrBlobStorage::TGroupState::DC_FAILURE);
         stale.MutableCommand(0)->MutableDefineGroupState()->MutableGroups(0)->SetExpectedGroupGeneration(initialGeneration);
         const NKikimrBlobStorage::TConfigResponse rejected = env.Invoke(stale);
         UNIT_ASSERT(!rejected.GetSuccess());
@@ -742,13 +742,13 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             }
         }
         UNIT_ASSERT(id);
-        auto request = env.SetGroupStates(id, {R::INCLUDED, R::INCLUDED, R::EXCLUDED}, TGroupState::DC_FAILURE);
+        auto request = env.SetGroupStates(id, {R::INCLUDED, R::INCLUDED, R::EXCLUDED}, NKikimrBlobStorage::TGroupState::DC_FAILURE);
         request.MutableCommand(0)->MutableDefineGroupState()->MutableGroups(0)->SetGroupState(S::DC_FAILURE_INV1_PENDING);
         UNIT_ASSERT(env.Invoke(request).GetSuccess());
         auto pending = env.ReadGroups().at(id);
         UNIT_ASSERT_VALUES_EQUAL(pending.GetMirror3dcState(), S::DC_FAILURE_INV1_PENDING);
         // An idempotent request explicitly preserves PENDING and the physical roles.
-        UNIT_ASSERT(env.Invoke(env.SetGroupStates(id, {R::INCLUDED, R::INCLUDED, R::EXCLUDED}, TGroupState::DC_FAILURE_INV1_PENDING)).GetSuccess());
+        UNIT_ASSERT(env.Invoke(env.SetGroupStates(id, {R::INCLUDED, R::INCLUDED, R::EXCLUDED}, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING)).GetSuccess());
         pending = env.ReadGroups().at(id);
         UNIT_ASSERT_VALUES_EQUAL(pending.GetMirror3dcState(), S::DC_FAILURE_INV1_PENDING);
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
@@ -768,7 +768,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
         UNIT_ASSERT(groupId);
         const std::array<TFailRealm::EState, 3> states{TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::RECOVERING};
-        const NKikimrBlobStorage::TConfigRequest request = env.SetGroupStates(groupId, states, TGroupState::DC_SOLO_RECOVERY_INV1);
+        const NKikimrBlobStorage::TConfigRequest request = env.SetGroupStates(groupId, states, NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1);
         const NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
         const TMap<ui32, NKikimrBlobStorage::TGroupInfo> after = env.ReadGroups();
@@ -788,7 +788,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         const auto beforeInvalid = env.ReadGroups().at(groupId);
         // Force bypasses graph edges, but still requires a valid group configuration.
         UNIT_ASSERT(!env.Invoke(env.SetGroupStates(groupId,
-            {TFailRealm::RECOVERING, TFailRealm::RECOVERING, TFailRealm::RECOVERING}, TGroupState::DC_SOLO_RECOVERY_INV1)).GetSuccess());
+            {TFailRealm::RECOVERING, TFailRealm::RECOVERING, TFailRealm::RECOVERING}, NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1)).GetSuccess());
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(),
             beforeInvalid.SerializeAsString());
     }
@@ -808,30 +808,30 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
         UNIT_ASSERT(groupId && blockGroupId);
         NKikimrBlobStorage::TConfigRequest shortRequest = env.SetGroupStates(groupId,
-            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, TGroupState::DC_FAILURE);
+            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, NKikimrBlobStorage::TGroupState::DC_FAILURE);
         shortRequest.MutableCommand(0)->MutableDefineGroupState()->MutableGroups(0)->MutableFailRealmStates()->RemoveLast();
         NKikimrBlobStorage::TConfigRequest invalidRequest = env.SetGroupStates(groupId,
-            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, TGroupState::DC_FAILURE);
+            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, NKikimrBlobStorage::TGroupState::DC_FAILURE);
         invalidRequest.MutableCommand(0)->MutableDefineGroupState()->MutableGroups(0)->SetFailRealmStates(0,
             static_cast<NKikimrBlobStorage::TDataCenterState::EState>(77));
         NKikimrBlobStorage::TConfigRequest missingId = env.SetGroupStates(groupId,
-            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, TGroupState::DC_FAILURE);
+            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, NKikimrBlobStorage::TGroupState::DC_FAILURE);
         missingId.MutableCommand(0)->MutableDefineGroupState()->MutableGroups(0)->ClearGroupId();
         NKikimrBlobStorage::TConfigRequest duplicate = env.SetGroupStates(groupId,
-            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, TGroupState::DC_FAILURE);
+            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, NKikimrBlobStorage::TGroupState::DC_FAILURE);
         NKikimrBlobStorage::TDefineGroupState* definitions =
             duplicate.MutableCommand(0)->MutableDefineGroupState();
         const NKikimrBlobStorage::TDefineGroupState::TGroupDefinition definition = definitions->GetGroups(0);
         *definitions->AddGroups() = definition;
         for (const NKikimrBlobStorage::TConfigRequest& request : {
                 shortRequest, invalidRequest, missingId, duplicate,
-                env.SetGroupStates(0, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, TGroupState::DC_FAILURE),
-                env.SetGroupStates(blockGroupId, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, TGroupState::DC_FAILURE)}) {
+                env.SetGroupStates(0, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, NKikimrBlobStorage::TGroupState::DC_FAILURE),
+                env.SetGroupStates(blockGroupId, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, NKikimrBlobStorage::TGroupState::DC_FAILURE)}) {
             const NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
             UNIT_ASSERT_C(!response.GetSuccess(), response.DebugString());
         }
         NKikimrBlobStorage::TConfigRequest request = env.SetGroupStates(groupId,
-            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, TGroupState::DC_FAILURE);
+            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, NKikimrBlobStorage::TGroupState::DC_FAILURE);
         request.SetRollback(true);
         UNIT_ASSERT(env.Invoke(request).GetRollbackSuccess());
         for (const auto& [id, group] : env.ReadGroups()) {
@@ -856,7 +856,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
         UNIT_ASSERT(groupId);
         const std::array<TFailRealm::EState, 3> states{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::RECOVERING};
-        UNIT_ASSERT(env.Invoke(env.SetGroupStates(groupId, states, TGroupState::DC_RECOVERY_INV1)).GetSuccess());
+        UNIT_ASSERT(env.Invoke(env.SetGroupStates(groupId, states, NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1)).GetSuccess());
         UNIT_ASSERT(!env.Invoke(env.Define({{"2", TDataCenter::INCLUDED}})).GetSuccess());
         const NKikimrBlobStorage::TGroupInfo overridden = env.ReadGroups().at(groupId);
         for (ui32 realm = 0; realm < 3; ++realm) {
@@ -866,7 +866,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         env.CheckStates(env.ReadGroups(), TFailRealm::INCLUDED);
         UNIT_ASSERT(env.Invoke(env.Define({{"2", TDataCenter::EXCLUDED}})).GetSuccess());
         env.CheckStates(env.ReadGroups(), TFailRealm::EXCLUDED);
-        UNIT_ASSERT(env.Invoke(env.SetGroupStates(groupId, states, TGroupState::DC_RECOVERY_INV1)).GetSuccess());
+        UNIT_ASSERT(env.Invoke(env.SetGroupStates(groupId, states, NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1)).GetSuccess());
         const ui32 generation = env.ReadGroups().at(groupId).GetGroupGeneration();
         RebootTablet(*env.Runtime, env.TabletId, env.Runtime->AllocateEdgeActor());
         const NKikimrBlobStorage::TGroupInfo restored = env.ReadGroups().at(groupId);
@@ -915,14 +915,14 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(env.Invoke(request).GetSuccess());
         for (const auto& [id, group] : env.ReadGroups()) {
             if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
-                UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState(), TGroupState::DC_SOLO_INV2);
+                UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState(), NKikimrBlobStorage::TGroupState::DC_SOLO_INV2);
             }
         }
         NKikimrBlobStorage::TConfigRequest returnRealm = env.Define({{"2", TDataCenter::EXCLUDED}});
         UNIT_ASSERT(env.Invoke(returnRealm).GetSuccess());
         for (const auto& [id, group] : env.ReadGroups()) {
             if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
-                UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState(), TGroupState::DC_SOLO_RECOVERY_INV2_PENDING);
+                UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState(), NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING);
             }
         }
         NKikimrBlobStorage::TConfigRequest excludeReturnedRealm = env.Define(
@@ -930,7 +930,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT(env.Invoke(excludeReturnedRealm).GetSuccess());
         for (const auto& [id, group] : env.ReadGroups()) {
             if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
-                UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState(), TGroupState::DC_SOLO_INV2);
+                UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState(), NKikimrBlobStorage::TGroupState::DC_SOLO_INV2);
             }
         }
     }
@@ -951,7 +951,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         for (const auto& [id, group] : env.ReadGroups()) {
             if (group.GetErasureSpecies() == TBlobStorageGroupType::ErasureMirror3dc) {
                 UNIT_ASSERT(group.HasMirror3dcState());
-                UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState(), TGroupState::DC_SOLO_DISASTER);
+                UNIT_ASSERT_VALUES_EQUAL(group.GetMirror3dcState(), NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER);
             }
         }
         before = env.ReadGroups();
@@ -1146,7 +1146,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             if (group.GetErasureSpecies() != TBlobStorageGroupType::ErasureMirror3dc) {
                 continue;
             }
-            group.SetMirror3dcState(TGroupState::DC_FAILURE);
+            group.SetMirror3dcState(NKikimrBlobStorage::TGroupState::DC_FAILURE);
             for (auto& realm : *group.MutableRings()) {
                 const auto node = realm.GetFailDomains(0).GetVDiskLocations(0).GetNodeID();
                 if (env.NodeDataCenters.at(node) == "2") {
@@ -1323,7 +1323,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
         UNIT_ASSERT(groupId);
         UNIT_ASSERT(env.Invoke(env.SetGroupStates(groupId,
-            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, TGroupState::DC_FAILURE)).GetSuccess());
+            {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, NKikimrBlobStorage::TGroupState::DC_FAILURE)).GetSuccess());
         const NKikimrBlobStorage::TGroupInfo before = env.ReadGroups().at(groupId);
         UNIT_ASSERT(env.Invoke(env.Define({{"unrelated-dc", TDataCenter::EXCLUDED}})).GetSuccess());
         UNIT_ASSERT_VALUES_EQUAL(env.ReadGroups().at(groupId).SerializeAsString(), before.SerializeAsString());
@@ -1342,7 +1342,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
         const auto groupId = definitions->Get(0).GetGroupId();
         definitions->Mutable(0)->SetFailRealmStates(0, NKikimrBlobStorage::TDataCenterState::EXCLUDED);
-        definitions->Mutable(0)->SetGroupState(TGroupState::DC_FAILURE);
+        definitions->Mutable(0)->SetGroupState(NKikimrBlobStorage::TGroupState::DC_FAILURE);
         UNIT_ASSERT(env.Invoke(request).GetSuccess());
         const auto after = env.ReadGroups();
         for (const auto& [id, group] : after) {

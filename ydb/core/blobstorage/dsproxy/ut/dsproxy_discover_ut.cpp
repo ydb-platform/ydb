@@ -472,7 +472,7 @@ void CheckMirror3dcSurvivingDiscovery(const TMirror3dcGroupState& states,
 Y_UNIT_TEST(Mirror3dcZeroEnsuredSurvivingCopy) {
 
     for (ui32 realm = 0; realm < 3; ++realm) {
-        TMirror3dcGroupState states{TGroupState::DC_SOLO_DISASTER,
+        TMirror3dcGroupState states{NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER,
             {TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}};
         states.FailRealmStates[realm] = TDataCenterState::INCLUDED;
         CheckMirror3dcSurvivingDiscovery(states, true, true);
@@ -482,21 +482,21 @@ Y_UNIT_TEST(Mirror3dcZeroEnsuredSurvivingCopy) {
 
 Y_UNIT_TEST(Mirror3dcZeroEnsuredEmptyAndFailedIndexes) {
 
-    CheckMirror3dcSurvivingDiscovery({TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, false, false);
-    CheckMirror3dcSurvivingDiscovery({TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, true, true, true);
-    CheckMirror3dcSurvivingDiscovery({TGroupState::NORMAL, {TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, false, false);
+    CheckMirror3dcSurvivingDiscovery({NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, false, false);
+    CheckMirror3dcSurvivingDiscovery({NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, true, true, true);
+    CheckMirror3dcSurvivingDiscovery({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, false, false);
 }
 
 Y_UNIT_TEST(Mirror3dcZeroEnsuredRejectsIndexOnlyCandidates) {
 
-    CheckMirror3dcSurvivingDiscovery({TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, false, true, false, true);
-    CheckMirror3dcSurvivingDiscovery({TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, false, false, false, true);
+    CheckMirror3dcSurvivingDiscovery({NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, false, true, false, true);
+    CheckMirror3dcSurvivingDiscovery({NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, false, false, false, true);
 }
 
 Y_UNIT_TEST(Mirror3dcSurvivingCopyWithRecoveringAndEnsuredRealms) {
 
-    CheckMirror3dcSurvivingDiscovery({TGroupState::DC_SOLO_RECOVERY, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, true, true);
-    CheckMirror3dcSurvivingDiscovery({TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, true, true);
+    CheckMirror3dcSurvivingDiscovery({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, true, true);
+    CheckMirror3dcSurvivingDiscovery({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, true, true);
 }
 
 Y_UNIT_TEST(Mirror3dcSuccess) {

@@ -85,7 +85,7 @@ struct TDSProxyEnv {
             for (ui32 realm = 0; realm < failRealmStates.size(); ++realm) {
                 dynamic.Mirror3dcState.FailRealmStates[realm] = failRealmStates[realm];
             }
-            dynamic.Mirror3dcState.State = groupState.value_or(TGroupState::NORMAL);
+            dynamic.Mirror3dcState.State = groupState.value_or(NKikimrBlobStorage::TGroupState::NORMAL);
             Info = MakeIntrusive<TBlobStorageGroupInfo>(Info->PickTopology(), std::move(dynamic), "",
                 TMaybe<TKikimrScopeId>{}, NPDisk::DEVICE_TYPE_UNKNOWN);
         }

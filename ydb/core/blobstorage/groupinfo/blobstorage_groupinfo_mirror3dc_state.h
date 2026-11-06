@@ -10,8 +10,7 @@
 namespace NKikimr {
 
 // State definitions and the complete state diagram live in blobstorage_base3.proto.
-using TGroupState = NKikimrBlobStorage::TGroupState;
-using EMirror3dcGroupState = TGroupState::EState;
+using EMirror3dcGroupState = NKikimrBlobStorage::TGroupState::EState;
 
 using EMirror3dcFailRealmState = NKikimrBlobStorage::TDataCenterState::EState;
 using TMirror3dcFailRealmStates = std::array<EMirror3dcFailRealmState, 3>;
@@ -29,7 +28,7 @@ constexpr bool IsRecovering(EMirror3dcFailRealmState state) {
 }
 
 struct TMirror3dcGroupState {
-    EMirror3dcGroupState State = TGroupState::NORMAL;
+    EMirror3dcGroupState State = NKikimrBlobStorage::TGroupState::NORMAL;
     // Indexed by physical failrealm and stored with the group generation.
     TMirror3dcFailRealmStates FailRealmStates{};
 
@@ -61,39 +60,39 @@ constexpr std::optional<TMirror3dcGroupLayouts> GetMirror3dcGroupLayouts(EMirror
         case static_cast<EMirror3dcGroupState>(std::numeric_limits<int>::min()):
         case static_cast<EMirror3dcGroupState>(std::numeric_limits<int>::max()):
             return std::nullopt;
-        case TGroupState::NORMAL:
+        case NKikimrBlobStorage::TGroupState::NORMAL:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_111_22};
-        case TGroupState::DC_FAILURE:
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_0, ELayout::LAYOUT_11_2};
-        case TGroupState::DC_FAILURE_INV1:
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_11};
-        case TGroupState::DC_FAILURE_INV2:
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_22, ELayout::LAYOUT_22};
-        case TGroupState::DC_RECOVERY:
+        case NKikimrBlobStorage::TGroupState::DC_RECOVERY:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_11_2};
-        case TGroupState::DC_RECOVERY_INV1:
+        case NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_111_22, ELayout::LAYOUT_111, ELayout::LAYOUT_11};
-        case TGroupState::DC_SOLO_DISASTER:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_0, ELayout::LAYOUT_0};
-        case TGroupState::DC_SOLO_INV1:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_INV1:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_1, ELayout::LAYOUT_1};
-        case TGroupState::DC_SOLO_INV2:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_INV2:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_2, ELayout::LAYOUT_2};
-        case TGroupState::DC_SOLO_RECOVERY:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_1, ELayout::LAYOUT_0};
-        case TGroupState::DC_SOLO_RECOVERY_INV1:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_1};
-        case TGroupState::DC_SOLO_RECOVERY_INV2:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_2};
-        case TGroupState::DC_FAILURE_INV1_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_11, ELayout::LAYOUT_11_2};
-        case TGroupState::DC_FAILURE_INV2_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_22, ELayout::LAYOUT_22, ELayout::LAYOUT_11};
-        case TGroupState::DC_SOLO_INV2_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_2, ELayout::LAYOUT_1};
-        case TGroupState::DC_SOLO_RECOVERY_INV1_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_1, ELayout::LAYOUT_1};
-        case TGroupState::DC_SOLO_RECOVERY_INV2_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING:
             return TMirror3dcGroupLayouts{ELayout::LAYOUT_2, ELayout::LAYOUT_11, ELayout::LAYOUT_2};
     }
     return std::nullopt;
@@ -111,39 +110,39 @@ constexpr std::optional<TMirror3dcFailRealmStates> GetMirror3dcRealmStates(EMirr
         case static_cast<EMirror3dcGroupState>(std::numeric_limits<int>::min()):
         case static_cast<EMirror3dcGroupState>(std::numeric_limits<int>::max()):
             return std::nullopt;
-        case TGroupState::NORMAL:
+        case NKikimrBlobStorage::TGroupState::NORMAL:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::INCLUDED};
-        case TGroupState::DC_FAILURE:
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED};
-        case TGroupState::DC_FAILURE_INV1:
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED};
-        case TGroupState::DC_FAILURE_INV2:
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED};
-        case TGroupState::DC_RECOVERY:
+        case NKikimrBlobStorage::TGroupState::DC_RECOVERY:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::RECOVERING};
-        case TGroupState::DC_RECOVERY_INV1:
+        case NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::RECOVERING};
-        case TGroupState::DC_SOLO_DISASTER:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED};
-        case TGroupState::DC_SOLO_INV1:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_INV1:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED};
-        case TGroupState::DC_SOLO_INV2:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_INV2:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED};
-        case TGroupState::DC_SOLO_RECOVERY:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED};
-        case TGroupState::DC_SOLO_RECOVERY_INV1:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED};
-        case TGroupState::DC_SOLO_RECOVERY_INV2:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED};
-        case TGroupState::DC_FAILURE_INV1_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED};
-        case TGroupState::DC_FAILURE_INV2_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED};
-        case TGroupState::DC_SOLO_INV2_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED};
-        case TGroupState::DC_SOLO_RECOVERY_INV1_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED};
-        case TGroupState::DC_SOLO_RECOVERY_INV2_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING:
             return TMirror3dcFailRealmStates{TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::EXCLUDED};
     }
     return std::nullopt;
@@ -152,7 +151,7 @@ constexpr std::optional<TMirror3dcFailRealmStates> GetMirror3dcRealmStates(EMirr
 // Logical roles are mapped to physical realms by the supplied tuple. All changes
 // retain realm identities, including when copy guarantees change on return to three DCs.
 struct TMirror3dcGroupConfiguration {
-    EMirror3dcGroupState State = TGroupState::NORMAL;
+    EMirror3dcGroupState State = NKikimrBlobStorage::TGroupState::NORMAL;
     TMirror3dcFailRealmStates Realms{};
     bool operator==(const TMirror3dcGroupConfiguration&) const = default;
 };
@@ -163,40 +162,40 @@ struct TMirror3dcTransition {
 };
 
 inline constexpr TMirror3dcTransition Mirror3dcAllowedGroupTransitions[] = {
-    {TGroupState::NORMAL, TGroupState::DC_FAILURE},
-    {TGroupState::DC_FAILURE, TGroupState::DC_FAILURE_INV1_PENDING},
-    {TGroupState::DC_FAILURE_INV1, TGroupState::DC_FAILURE_INV2_PENDING},
-    {TGroupState::DC_FAILURE_INV1, TGroupState::DC_SOLO_INV1},
-    {TGroupState::DC_FAILURE_INV2, TGroupState::DC_SOLO_INV2},
-    {TGroupState::DC_FAILURE, TGroupState::DC_RECOVERY},
-    {TGroupState::DC_RECOVERY, TGroupState::DC_FAILURE},
-    {TGroupState::DC_FAILURE_INV1, TGroupState::DC_RECOVERY_INV1},
-    {TGroupState::DC_RECOVERY_INV1, TGroupState::DC_FAILURE_INV1},
-    {TGroupState::DC_FAILURE_INV2, TGroupState::DC_RECOVERY_INV1},
-    {TGroupState::DC_FAILURE, TGroupState::DC_SOLO_DISASTER},
-    {TGroupState::DC_FAILURE_INV1_PENDING, TGroupState::DC_RECOVERY},
-    {TGroupState::DC_FAILURE_INV2_PENDING, TGroupState::DC_RECOVERY_INV1},
-    {TGroupState::DC_SOLO_DISASTER, TGroupState::DC_SOLO_RECOVERY},
-    {TGroupState::DC_SOLO_RECOVERY, TGroupState::DC_SOLO_DISASTER},
-    {TGroupState::DC_SOLO_RECOVERY_INV1, TGroupState::DC_SOLO_INV1},
-    {TGroupState::DC_FAILURE_INV1_PENDING, TGroupState::DC_FAILURE_INV1},
-    {TGroupState::DC_FAILURE_INV2_PENDING, TGroupState::DC_FAILURE_INV2},
-    {TGroupState::DC_SOLO_RECOVERY_INV2_PENDING, TGroupState::DC_SOLO_RECOVERY_INV2},
-    {TGroupState::DC_SOLO_RECOVERY_INV2, TGroupState::DC_FAILURE_INV1},
-    {TGroupState::DC_SOLO_INV1, TGroupState::DC_SOLO_INV2_PENDING},
-    {TGroupState::DC_SOLO_INV1, TGroupState::DC_SOLO_RECOVERY_INV1_PENDING},
-    {TGroupState::DC_SOLO_RECOVERY_INV1_PENDING, TGroupState::DC_SOLO_INV1},
-    {TGroupState::DC_SOLO_INV2, TGroupState::DC_SOLO_RECOVERY_INV2_PENDING},
-    {TGroupState::DC_SOLO_RECOVERY_INV2_PENDING, TGroupState::DC_SOLO_INV2},
-    {TGroupState::DC_SOLO_RECOVERY_INV2, TGroupState::DC_SOLO_INV2},
-    {TGroupState::DC_SOLO_RECOVERY_INV1, TGroupState::DC_FAILURE_INV1},
-    {TGroupState::DC_SOLO_RECOVERY_INV1_PENDING, TGroupState::DC_SOLO_RECOVERY_INV1},
-    {TGroupState::DC_FAILURE_INV2_PENDING, TGroupState::DC_SOLO_INV2_PENDING},
-    {TGroupState::DC_FAILURE_INV1_PENDING, TGroupState::DC_SOLO_DISASTER},
-    {TGroupState::DC_SOLO_INV2_PENDING, TGroupState::DC_SOLO_INV2},
-    {TGroupState::DC_RECOVERY_INV1, TGroupState::NORMAL},
-    {TGroupState::DC_RECOVERY, TGroupState::NORMAL},
-    {TGroupState::DC_SOLO_RECOVERY, TGroupState::DC_SOLO_RECOVERY_INV1_PENDING},
+    {NKikimrBlobStorage::TGroupState::NORMAL, NKikimrBlobStorage::TGroupState::DC_FAILURE},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, NKikimrBlobStorage::TGroupState::DC_SOLO_INV1},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE, NKikimrBlobStorage::TGroupState::DC_RECOVERY},
+    {NKikimrBlobStorage::TGroupState::DC_RECOVERY, NKikimrBlobStorage::TGroupState::DC_FAILURE},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1, NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1},
+    {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2, NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE, NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING, NKikimrBlobStorage::TGroupState::DC_RECOVERY},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING, NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER, NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY, NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, NKikimrBlobStorage::TGroupState::DC_SOLO_INV1},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING, NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING, NKikimrBlobStorage::TGroupState::DC_SOLO_INV1},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING, NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING},
+    {NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING, NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2},
+    {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, NKikimrBlobStorage::TGroupState::NORMAL},
+    {NKikimrBlobStorage::TGroupState::DC_RECOVERY, NKikimrBlobStorage::TGroupState::NORMAL},
+    {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY, NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING},
 };
 
 constexpr bool IsAllowedMirror3dcGroupTransition(EMirror3dcGroupState from, EMirror3dcGroupState to) {
@@ -250,18 +249,18 @@ constexpr bool IsAllowedMirror3dcGroupTransition(const TMirror3dcGroupConfigurat
 
 constexpr bool IsMirror3dcReplicationTarget(EMirror3dcGroupState state, EMirror3dcFailRealmState realm) {
     switch (state) {
-        case TGroupState::NORMAL:
-        case TGroupState::DC_RECOVERY:
-        case TGroupState::DC_FAILURE_INV1_PENDING:
-        case TGroupState::DC_FAILURE_INV2_PENDING:
-        case TGroupState::DC_SOLO_INV2_PENDING:
-        case TGroupState::DC_SOLO_RECOVERY:
+        case NKikimrBlobStorage::TGroupState::NORMAL:
+        case NKikimrBlobStorage::TGroupState::DC_RECOVERY:
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY:
             return !IsExcluded(realm);
-        case TGroupState::DC_RECOVERY_INV1:
-        case TGroupState::DC_SOLO_RECOVERY_INV1_PENDING:
-        case TGroupState::DC_SOLO_RECOVERY_INV2_PENDING:
-        case TGroupState::DC_SOLO_RECOVERY_INV1:
-        case TGroupState::DC_SOLO_RECOVERY_INV2:
+        case NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2:
             return IsRecovering(realm);
         default:
             return false;
@@ -277,20 +276,20 @@ constexpr std::optional<TMirror3dcGroupConfiguration> RecoveringComplete(
     }
     EMirror3dcGroupState next;
     switch (before.State) {
-        case TGroupState::DC_FAILURE_INV1_PENDING: next = TGroupState::DC_FAILURE_INV1; break;
-        case TGroupState::DC_FAILURE_INV2_PENDING: next = TGroupState::DC_FAILURE_INV2; break;
-        case TGroupState::DC_SOLO_INV2_PENDING: next = TGroupState::DC_SOLO_INV2; break;
-        case TGroupState::DC_SOLO_RECOVERY: next = TGroupState::DC_SOLO_RECOVERY_INV1_PENDING; break;
-        case TGroupState::DC_SOLO_RECOVERY_INV1_PENDING: next = TGroupState::DC_SOLO_RECOVERY_INV1; break;
-        case TGroupState::DC_SOLO_RECOVERY_INV2_PENDING: next = TGroupState::DC_SOLO_RECOVERY_INV2; break;
-        case TGroupState::DC_SOLO_RECOVERY_INV1:
-        case TGroupState::DC_SOLO_RECOVERY_INV2: next = TGroupState::DC_FAILURE_INV1; break;
-        case TGroupState::DC_RECOVERY:
-        case TGroupState::DC_RECOVERY_INV1: next = TGroupState::NORMAL; break;
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING: next = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1; break;
+        case NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING: next = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2; break;
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING: next = NKikimrBlobStorage::TGroupState::DC_SOLO_INV2; break;
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY: next = NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING; break;
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1_PENDING: next = NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1; break;
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING: next = NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2; break;
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1:
+        case NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2: next = NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1; break;
+        case NKikimrBlobStorage::TGroupState::DC_RECOVERY:
+        case NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1: next = NKikimrBlobStorage::TGroupState::NORMAL; break;
         default: return std::nullopt;
     }
     auto roles = before.Realms;
-    if (next == TGroupState::NORMAL || next == TGroupState::DC_FAILURE_INV1) {
+    if (next == NKikimrBlobStorage::TGroupState::NORMAL || next == NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1) {
         for (auto& realm : roles) {
             if (IsRecovering(realm)) {
                 realm = TFailRealm::INCLUDED;

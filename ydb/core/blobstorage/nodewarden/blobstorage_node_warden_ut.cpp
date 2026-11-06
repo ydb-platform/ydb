@@ -1997,8 +1997,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             auto makeInfo = [&](ui32 generation, EMirror3dcFailRealmState state) {
                 TBlobStorageGroupInfo::TDynamicInfo dynamic(vdiskId.GroupID, generation);
                 dynamic.Mirror3dcState = {
-                    state == TFailRealm::EXCLUDED ? TGroupState::DC_FAILURE
-                        : state == TFailRealm::RECOVERING ? TGroupState::DC_RECOVERY : TGroupState::NORMAL,
+                    state == TFailRealm::EXCLUDED ? NKikimrBlobStorage::TGroupState::DC_FAILURE
+                        : state == TFailRealm::RECOVERING ? NKikimrBlobStorage::TGroupState::DC_RECOVERY : NKikimrBlobStorage::TGroupState::NORMAL,
                     {TFailRealm::INCLUDED, state, TFailRealm::INCLUDED}};
                 for (ui32 i = 0; i < 9; ++i) {
                     dynamic.PushBackActorId(slot.GetVDiskServiceId());
@@ -2061,7 +2061,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             auto& group = warden.Groups[vdiskId.GroupID.GetRawId()];
             group.Group.emplace();
             TBlobStorageGroupInfo::TDynamicInfo dynamic(vdiskId.GroupID, 1);
-            dynamic.Mirror3dcState = {TGroupState::DC_FAILURE,
+            dynamic.Mirror3dcState = {NKikimrBlobStorage::TGroupState::DC_FAILURE,
                 {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::INCLUDED}};
             for (ui32 i = 0; i < 9; ++i) {
                 dynamic.PushBackActorId(slot.GetVDiskServiceId());

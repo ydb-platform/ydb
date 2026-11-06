@@ -1266,13 +1266,13 @@ namespace NKikimr::NBsController {
             }
             TGroups::iterator existing = Self.GroupMap.find(groupId);
             bool isNew = existing == Self.GroupMap.end();
-            TMirror3dcGroupConfiguration previous{TGroupState::NORMAL, normal};
+            TMirror3dcGroupConfiguration previous{NKikimrBlobStorage::TGroupState::NORMAL, normal};
             if (!isNew) {
-                previous = {existing->second->Mirror3dcState.value_or(TGroupState::NORMAL),
+                previous = {existing->second->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL),
                     existing->second->FailRealmStates.value_or(normal)};
             }
             TMirror3dcGroupConfiguration current{
-                group->Mirror3dcState.value_or(TGroupState::NORMAL), group->FailRealmStates.value_or(normal)};
+                group->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL), group->FailRealmStates.value_or(normal)};
             if (DataCenterStates.Changed() || isNew) {
                 std::array<bool, 3> changedRealms{};
                 std::array<bool, 3> excludedRealms{};
@@ -1325,15 +1325,15 @@ namespace NKikimr::NBsController {
             }
             if (previous.State != current.State) {
                 switch (current.State) {
-                    case TGroupState::DC_SOLO_DISASTER:
+                    case NKikimrBlobStorage::TGroupState::DC_SOLO_DISASTER:
                         if (!suppressFailModelChecking) {
                             return std::unexpected<TString>(TStringBuilder() << "group# " << groupId
                                 << ": transition to DC_SOLO_DISASTER requires suppressing fail model checks");
                         }
                         break;
-                    case TGroupState::DC_SOLO_INV1:
-                    case TGroupState::DC_SOLO_INV2:
-                    case TGroupState::DC_SOLO_INV2_PENDING: {
+                    case NKikimrBlobStorage::TGroupState::DC_SOLO_INV1:
+                    case NKikimrBlobStorage::TGroupState::DC_SOLO_INV2:
+                    case NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING: {
                         bool wasSolo = std::count(previous.Realms.begin(), previous.Realms.end(), TFailRealm::INCLUDED) == 1;
                         if (!wasSolo && !suppressDegradedGroupsChecking) {
                             return std::unexpected<TString>(TStringBuilder() << "group# " << groupId

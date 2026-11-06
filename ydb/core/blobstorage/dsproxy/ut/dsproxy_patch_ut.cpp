@@ -717,7 +717,7 @@ class TMirror3dcVPatchActorTest {
 
 public:
     TMirror3dcVPatchActorTest(const TVector<EMirror3dcFailRealmState>& realms = {},
-            EMirror3dcGroupState groupState = TGroupState::NORMAL) {
+            EMirror3dcGroupState groupState = NKikimrBlobStorage::TGroupState::NORMAL) {
         Args.MakeDefault(TErasureType::ErasureMirror3dc);
         SetLogPriorities(Runtime);
         SetupRuntime(Runtime);
@@ -770,9 +770,9 @@ public:
 
 Y_UNIT_TEST_SUITE(TVPatchMirror3dcActorTest) {
     Y_UNIT_TEST(NonNormalRealmsUseNaiveFallback) {
-        for (int value = TGroupState::EState_MIN; value <= TGroupState::EState_MAX; ++value) {
+        for (int value = NKikimrBlobStorage::TGroupState::EState_MIN; value <= NKikimrBlobStorage::TGroupState::EState_MAX; ++value) {
             const auto state = static_cast<EMirror3dcGroupState>(value);
-            if (state == TGroupState::NORMAL) {
+            if (state == NKikimrBlobStorage::TGroupState::NORMAL) {
                 continue;
             }
             auto realms = *GetMirror3dcRealmStates(state);

@@ -218,9 +218,9 @@ void CheckMirror3dcRealms(const TMirror3dcGroupState& realms,
 
 Y_UNIT_TEST_SUITE(TDSProxyGetBlockQuorumTest) {
     Y_UNIT_TEST(Mirror3dcSkipsFailedRealmsAndIgnoresRecoveryErrors) {
-        CheckMirror3dcRealms({TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, false, NKikimrProto::OK);
-        CheckMirror3dcRealms({TGroupState::DC_SOLO_RECOVERY_INV2, {TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, true, NKikimrProto::OK);
-        CheckMirror3dcRealms({TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}}, true, NKikimrProto::ERROR);
+        CheckMirror3dcRealms({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, false, NKikimrProto::OK);
+        CheckMirror3dcRealms({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2, {TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, true, NKikimrProto::OK);
+        CheckMirror3dcRealms({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED, TDataCenterState::INCLUDED}}, true, NKikimrProto::ERROR);
     }
 
 #define UNIT_TEST_QUORUM_RESPONSE(ERASURE) \

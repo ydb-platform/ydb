@@ -106,41 +106,41 @@ public:
 Y_UNIT_TEST_SUITE(BsControllerGroupState) {
     Y_UNIT_TEST(StableFailureDoesNotStartReplication) {
         TGroupStateFixture fixture;
-        fixture.Update(1, TGroupState::DC_FAILURE, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED});
+        fixture.Update(1, NKikimrBlobStorage::TGroupState::DC_FAILURE, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED});
         fixture.AssertNoRequests();
     }
     Y_UNIT_TEST(PendingWaitsForAllTargetRealms) {
         TGroupStateFixture fixture;
-        fixture.Update(1, TGroupState::DC_FAILURE_INV1_PENDING, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED});
+        fixture.Update(1, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1_PENDING, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED});
         TVDiskReplicationStatus status;
         status.FailSecondRealm = true;
         fixture.ReplyRound(6, status);
         fixture.AssertNoRequests();
         fixture.ReplyRound(6);
         const auto next = fixture.GetProposal();
-        UNIT_ASSERT(next.State == TGroupState::DC_FAILURE_INV1);
+        UNIT_ASSERT(next.State == NKikimrBlobStorage::TGroupState::DC_FAILURE_INV1);
         UNIT_ASSERT((next.Realms == TFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}));
     }
     Y_UNIT_TEST(RecoveryPendingChangesPolicyWithoutChangingRealmTuple) {
         TGroupStateFixture fixture;
-        fixture.Update(2, TGroupState::DC_SOLO_RECOVERY_INV2_PENDING, {TFailRealm::EXCLUDED, TFailRealm::INCLUDED, TFailRealm::RECOVERING});
+        fixture.Update(2, NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2_PENDING, {TFailRealm::EXCLUDED, TFailRealm::INCLUDED, TFailRealm::RECOVERING});
         fixture.ReplyRound(3);
         const auto next = fixture.GetProposal();
-        UNIT_ASSERT(next.State == TGroupState::DC_SOLO_RECOVERY_INV2);
+        UNIT_ASSERT(next.State == NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV2);
         UNIT_ASSERT(next.Realms == fixture.Info.States);
     }
     Y_UNIT_TEST(RecoveryQueriesOnlyR) {
         TGroupStateFixture fixture;
-        fixture.Update(3, TGroupState::DC_RECOVERY_INV1, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::INCLUDED});
+        fixture.Update(3, NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::INCLUDED});
         fixture.ReplyRound(3);
         const auto next = fixture.GetProposal();
-        UNIT_ASSERT(next.State == TGroupState::NORMAL);
+        UNIT_ASSERT(next.State == NKikimrBlobStorage::TGroupState::NORMAL);
         UNIT_ASSERT((next.Realms == TFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::INCLUDED}));
     }
     Y_UNIT_TEST(StaleOrIncompleteStatusCannotFinishTransition) {
         for (unsigned mode = 0; mode < 3; ++mode) {
             TGroupStateFixture fixture;
-            fixture.Update(4, TGroupState::DC_SOLO_INV2_PENDING, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED});
+            fixture.Update(4, NKikimrBlobStorage::TGroupState::DC_SOLO_INV2_PENDING, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED});
             TVDiskReplicationStatus status;
             if (mode == 0) {
                 status.ObsoleteGeneration = true;
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
     Y_UNIT_TEST(GroupUpdateKeepsOtherGroupsQueries) {
         TGroupStateFixture fixture;
         const TFailRealmStates initial{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED};
-        fixture.Update(1, TGroupState::DC_FAILURE_INV2_PENDING, initial);
+        fixture.Update(1, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING, initial);
         TGroupReplicationInfo other = fixture.Info;
         for (TGroupReplicationInfo::TVDisk& disk : other.VDisks) {
             disk.Id.GroupID = TGroupId::FromValue(43);
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
                 }
             }
         }
-        fixture.Update(2, TGroupState::DC_FAILURE_INV2_PENDING, initial);
+        fixture.Update(2, NKikimrBlobStorage::TGroupState::DC_FAILURE_INV2_PENDING, initial);
         // Late replies for group 42 are ignored; current replies for group 43 must still complete it.
         for (const TEvBlobStorage::TEvVStatus::TPtr& request : requests) {
             const TVDiskID disk = VDiskIDFromVDiskID(request->Get()->Record.GetVDiskID());

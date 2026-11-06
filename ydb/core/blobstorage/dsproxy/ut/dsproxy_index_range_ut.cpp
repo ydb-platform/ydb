@@ -160,56 +160,56 @@ void CheckPut(const TMirror3dcGroupState& realms, const TCounts& failures, NKiki
 Y_UNIT_TEST_SUITE(TDSProxyMirror3dcIndexRange) {
     Y_UNIT_TEST(NormalAndSoloWriteQuorumsReturnOk) {
         for (bool range : {false, true}) {
-            CheckRead(range ? ERead::Range : ERead::Index, {TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, {1, 1, 1}, {}, NKikimrProto::OK);
-            CheckRead(range ? ERead::Range : ERead::Index, {TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {2, 0, 0}, {}, NKikimrProto::OK);
-            CheckRead(range ? ERead::Range : ERead::Index, {TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {2, 2, 0}, {}, NKikimrProto::OK);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, {1, 1, 1}, {}, NKikimrProto::OK);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {2, 0, 0}, {}, NKikimrProto::OK);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {2, 2, 0}, {}, NKikimrProto::OK);
         }
     }
 
     Y_UNIT_TEST(EnsuredLayoutControlsGroupFailures) {
         for (bool range : {false, true}) {
-            CheckRead(range ? ERead::Range : ERead::Index, {TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {}, NKikimrProto::NODATA);
-            CheckRead(range ? ERead::Range : ERead::Index, {TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {1, 0, 0}, NKikimrProto::ERROR);
-            CheckRead(range ? ERead::Range : ERead::Index, {TGroupState::DC_SOLO_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {1, 0, 0}, NKikimrProto::NODATA);
-            CheckRead(range ? ERead::Range : ERead::Index, {TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {1, 1, 3}, NKikimrProto::ERROR);
-            CheckRead(range ? ERead::Range : ERead::Index, {TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {2, 2, 3}, NKikimrProto::ERROR);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {}, NKikimrProto::NODATA);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {1, 0, 0}, NKikimrProto::ERROR);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {1, 0, 0}, NKikimrProto::NODATA);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {1, 1, 3}, NKikimrProto::ERROR);
+            CheckRead(range ? ERead::Range : ERead::Index, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {2, 2, 3}, NKikimrProto::ERROR);
         }
     }
 
     Y_UNIT_TEST(AbsenceDependsOnNormalRealmsInEnsuredPair) {
         for (const ERead operation : {ERead::Range, ERead::Index, ERead::Get, ERead::Restore}) {
-            CheckRead(operation, {TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {1, 1, 1}, NKikimrProto::ERROR);
-            CheckRead(operation, {TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {2, 0, 2}, NKikimrProto::NODATA);
-            CheckRead(operation, {TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {1, 1, 0}, NKikimrProto::ERROR);
-            CheckRead(operation, {TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {0, 0, 3}, NKikimrProto::NODATA);
+            CheckRead(operation, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {1, 1, 1}, NKikimrProto::ERROR);
+            CheckRead(operation, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {2, 0, 2}, NKikimrProto::NODATA);
+            CheckRead(operation, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {1, 1, 0}, NKikimrProto::ERROR);
+            CheckRead(operation, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {0, 0, 3}, NKikimrProto::NODATA);
         }
     }
 
     Y_UNIT_TEST(OrdinaryGetReadsNormalAndRecoveringRealms) {
-        CheckRead(ERead::Get, {TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, NKikimrProto::OK);
-        CheckRead(ERead::Get, {TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {0, 1, 0}, {}, NKikimrProto::OK);
+        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, NKikimrProto::OK);
+        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {0, 1, 0}, {}, NKikimrProto::OK);
     }
 
     Y_UNIT_TEST(PhantomCheckSkipsFailedRealmsAndRejectsRecoveryErrors) {
-        CheckRead(ERead::Get, {TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {}, NKikimrProto::NODATA, true);
-        CheckRead(ERead::Get, {TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {0, 0, 3}, NKikimrProto::ERROR, true, false, true);
+        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {}, {}, NKikimrProto::NODATA, true);
+        CheckRead(ERead::Get, {NKikimrBlobStorage::TGroupState::DC_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::RECOVERING}}, {}, {0, 0, 3}, NKikimrProto::ERROR, true, false, true);
     }
 
     Y_UNIT_TEST(PartialCopiesAreRestoredThroughNewPutStrategy) {
         for (const auto operation : {ERead::Index, ERead::Restore}) {
-            CheckRead(operation, {TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, NKikimrProto::OK, false, true);
-            CheckRead(operation, {TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, NKikimrProto::OK, false, true);
+            CheckRead(operation, {NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, NKikimrProto::OK, false, true);
+            CheckRead(operation, {NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {1, 0, 0}, {}, NKikimrProto::OK, false, true);
         }
     }
 
     Y_UNIT_TEST(OrdinaryPutChecksFailureModelAndWriteQuorumAndSkipsFailedRealms) {
-        CheckPut({TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, {1, 1, 1}, NKikimrProto::ERROR);
-        CheckPut({TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, NKikimrProto::ERROR);
-        CheckPut({TGroupState::DC_SOLO_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, NKikimrProto::OK);
-        CheckPut({TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {2, 0, 0}, NKikimrProto::ERROR);
-        CheckPut({TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {1, 1, 0}, NKikimrProto::ERROR);
-        CheckPut({TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {0, 1, 0}, NKikimrProto::OK);
-        CheckPut({TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {0, 2, 0}, NKikimrProto::ERROR);
+        CheckPut({NKikimrBlobStorage::TGroupState::NORMAL, {TDataCenterState::INCLUDED, TDataCenterState::INCLUDED, TDataCenterState::INCLUDED}}, {1, 1, 1}, NKikimrProto::ERROR);
+        CheckPut({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, NKikimrProto::ERROR);
+        CheckPut({NKikimrBlobStorage::TGroupState::DC_SOLO_INV2, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {1, 0, 0}, NKikimrProto::OK);
+        CheckPut({NKikimrBlobStorage::TGroupState::DC_SOLO_INV1, {TDataCenterState::INCLUDED, TDataCenterState::EXCLUDED, TDataCenterState::EXCLUDED}}, {2, 0, 0}, NKikimrProto::ERROR);
+        CheckPut({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {1, 1, 0}, NKikimrProto::ERROR);
+        CheckPut({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {0, 1, 0}, NKikimrProto::OK);
+        CheckPut({NKikimrBlobStorage::TGroupState::DC_SOLO_RECOVERY_INV1, {TDataCenterState::INCLUDED, TDataCenterState::RECOVERING, TDataCenterState::EXCLUDED}}, {0, 2, 0}, NKikimrProto::ERROR);
     }
 
 }

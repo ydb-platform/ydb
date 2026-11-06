@@ -106,10 +106,7 @@ ISubOperation::TPtr MaybeProvisionFulltextRowId(
     return nullptr;
 }
 
-// A user request may only create sequences which belong to one of the table columns: a table create
-// is not a way to add standalone sequences (they are created with CREATE SEQUENCE). Names and
-// parameters are free: a user may create arbitrary sequences and manage their position anyway.
-static bool CheckUserColumnSequence(
+static bool CheckColumnSequence(
     const NKikimrSchemeOp::TIndexedTableCreationConfig& indexedTable,
     const NKikimrSchemeOp::TSequenceDescription& sequence,
     TString& errStr)
@@ -131,14 +128,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
 
     auto indexedTable = tx.GetCreateIndexedTable();
 
-    // Internal operations (replication, restore) describe the resulting schema explicitly, so they
-    // may carry arbitrary sequences; a user request may only get a column sequence via SERIAL.
-    if (!tx.GetInternal()) {
-        for (const auto& sequence : indexedTable.GetSequenceDescription()) {
-            TString errStr;
-            if (!CheckUserColumnSequence(indexedTable, sequence, errStr)) {
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, errStr)};
-            }
+    // All sequences are always created only with their paired columns.
+    for (const auto& sequence : indexedTable.GetSequenceDescription()) {
+        TString errStr;
+        if (!CheckColumnSequence(indexedTable, sequence, errStr)) {
+            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, errStr)};
         }
     }
 

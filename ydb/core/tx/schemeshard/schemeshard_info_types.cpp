@@ -551,7 +551,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral:
                         break;
                     default: {
-                        errStr = Sprintf("Cannot set default for column '%s'", colName.c_str());
+                        errStr = Sprintf("Unsupported default type for column '%s'", colName.c_str());
                         return nullptr;
                     }
                 }
@@ -567,28 +567,24 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 }
 
                 // The sequence of a column is created together with it and dropped with the table.
-                // An alter may restate the same default (a resync sends the complete column set),
-                // but cannot replace or reset it.
+                // An alter may restate the same default, but cannot replace or reset it.
                 switch (col.GetDefaultValueCase()) {
                     case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence:
                         if (col.GetDefaultFromSequence() != sourceColumn.DefaultValue) {
-                            errStr = Sprintf("Cannot change the default of column '%s': "
-                                "a sequence is created together with the column it belongs to", colName.c_str());
+                            errStr = Sprintf("Cannot change default value of serial column '%s'", colName.c_str());
                             return nullptr;
                         }
                         break;
                     case NKikimrSchemeOp::TColumnDescription::kEmptyDefault:
                     case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
-                        errStr = Sprintf("Cannot reset the default of column '%s': "
-                            "a sequence is created together with the column it belongs to", colName.c_str());
+                        errStr = Sprintf("Cannot change default value of serial column '%s'", colName.c_str());
                         return nullptr;
                     }
                     default:
                         break;
                 }
             } else if (col.GetDefaultValueCase() == NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence) {
-                errStr = Sprintf("Cannot change the default of column '%s': "
-                    "a sequence is created together with the column it belongs to", colName.c_str());
+                errStr = Sprintf("Cannot change default value of non-serial column '%s' to serial", colName.c_str());
                 return nullptr;
             }
 

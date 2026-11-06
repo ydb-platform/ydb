@@ -664,8 +664,7 @@ static void FillColumnDefault(const NKikimrKqp::TKqpColumnMetadataProto& in,
 }
 
 static bool FillAlterColumnDescription(const Ydb::Table::ColumnMeta& alter,
-    NKikimrSchemeOp::TColumnDescription* column, const TString& workingDir,
-    Ydb::StatusIds::StatusCode& code, TString& error)
+    NKikimrSchemeOp::TColumnDescription* column, Ydb::StatusIds::StatusCode& code, TString& error)
 {
     column->SetName(alter.name());
 
@@ -689,13 +688,7 @@ static bool FillAlterColumnDescription(const Ydb::Table::ColumnMeta& alter,
             break;
         }
         case Ydb::Table::ColumnMeta::kFromSequence: {
-            auto fromSequence = column->MutableDefaultFromSequence();
-            TString sequenceName = alter.from_sequence().name();
-            if (IsStartWithSlash(sequenceName)) {
-                *fromSequence = sequenceName;
-            } else {
-                *fromSequence = JoinPath({workingDir, sequenceName});
-            }
+            *column->MutableDefaultFromSequence() = alter.from_sequence().name();
             break;
         }
         case Ydb::Table::ColumnMeta::kEmptyDefault: {
@@ -708,8 +701,7 @@ static bool FillAlterColumnDescription(const Ydb::Table::ColumnMeta& alter,
 }
 
 static bool FillAlterColumnDescription(const NKikimrKqp::TKqpColumnMetadataProto& alter,
-    NKikimrSchemeOp::TColumnDescription* column, const TString& workingDir,
-    Ydb::StatusIds::StatusCode& code, TString& error)
+    NKikimrSchemeOp::TColumnDescription* column, Ydb::StatusIds::StatusCode& code, TString& error)
 {
     column->SetName(alter.GetName());
     if (alter.HasNotNull()) {
@@ -729,9 +721,6 @@ static bool FillAlterColumnDescription(const NKikimrKqp::TKqpColumnMetadataProto
         return false;
     }
     FillColumnDefault(alter, *column);
-    if (column->HasDefaultFromSequence() && !IsStartWithSlash(column->GetDefaultFromSequence())) {
-        column->SetDefaultFromSequence(JoinPath({workingDir, column->GetDefaultFromSequence()}));
-    }
     return true;
 }
 
@@ -879,14 +868,8 @@ static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest*
             return false;
         }
 
-        for (auto& col : *desc->MutableColumns()) {
-            if (col.HasDefaultFromSequence() && !IsStartWithSlash(col.GetDefaultFromSequence())) {
-                col.SetDefaultFromSequence(JoinPath({workingDir, col.GetDefaultFromSequence()}));
-            }
-        }
-
         for (const auto& alter : req->alter_columns()) {
-            if (!FillAlterColumnDescription(alter, desc->AddColumns(), workingDir, code, error)) {
+            if (!FillAlterColumnDescription(alter, desc->AddColumns(), code, error)) {
                 return false;
             }
         }

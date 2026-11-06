@@ -35,19 +35,7 @@ const NKikimrSchemeOp::TTableDescription* FindCreateTable(
     return nullptr;
 }
 
-const NKikimrSchemeOp::TTableDescription* FindAlterTable(
-        const TVector<NKikimrTxDataShard::TFlatSchemeTransaction>& txs, const TString& name)
-{
-    for (const auto& tx : txs) {
-        if (tx.HasAlterTable() && tx.GetAlterTable().GetName() == name) {
-            return &tx.GetAlterTable();
-        }
-    }
-    return nullptr;
-}
-
 } // anonymous namespace
-
 
     Y_UNIT_TEST(CreateSequence) {
         TTestBasicRuntime runtime;
@@ -958,7 +946,7 @@ const NKikimrSchemeOp::TTableDescription* FindAlterTable(
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "value1" DefaultFromSequence: "_serial_column_value2" }
-        )", {{NKikimrScheme::StatusInvalidParameter, "a sequence is created together with the column"}});
+        )", {{NKikimrScheme::StatusInvalidParameter, "Cannot change default value of serial column 'value1'"}});
 
         // Neither is referring to a standalone sequence.
         TestCreateSequence(runtime, ++txId, "/MyRoot", R"(
@@ -969,18 +957,18 @@ const NKikimrSchemeOp::TTableDescription* FindAlterTable(
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "value1" DefaultFromSequence: "/MyRoot/external" }
-        )", {{NKikimrScheme::StatusInvalidParameter, "a sequence is created together with the column"}});
+        )", {{NKikimrScheme::StatusInvalidParameter, "Cannot change default value of serial column 'value1'"}});
 
         // Resetting the default or replacing it with a literal is not allowed either.
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "value1" EmptyDefault: NULL_VALUE }
-        )", {{NKikimrScheme::StatusInvalidParameter, "Cannot reset the default of column 'value1'"}});
+        )", {{NKikimrScheme::StatusInvalidParameter, "Cannot change default value of serial column 'value1'"}});
 
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "value1" DefaultFromLiteral { type { type_id: INT64 } value { int64_value: 42 } } }
-        )", {{NKikimrScheme::StatusInvalidParameter, "Cannot reset the default of column 'value1'"}});
+        )", {{NKikimrScheme::StatusInvalidParameter, "Cannot change default value of serial column 'value1'"}});
 
         // Other alters of the table (and of the very same column) still work.
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(

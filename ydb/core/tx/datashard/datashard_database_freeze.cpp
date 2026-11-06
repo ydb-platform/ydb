@@ -62,7 +62,6 @@ class TDataShard::TTxDatabaseFreeze : public NTabletFlatExecutor::TTransactionBa
     THolder<TEvDataShard::TEvDatabaseFreezeResult> Response;
     TVector<IDataShardChangeCollector::TChange> Heartbeats;
     bool Unfreezing = false;
-    ui64 PersistedDeliveryLostEpoch = 0;
 
 public:
     TTxDatabaseFreeze(TDataShard* self, TEvDataShard::TEvDatabaseFreeze::TPtr ev)
@@ -108,12 +107,18 @@ public:
             return fail(Ydb::StatusIds::PRECONDITION_FAILED, "Database freeze owner does not match shard owner");
         }
         if (!request.GetEpoch() || !request.HasStage()
-            || request.GetStage() > TFreezeState::DRAIN_CDC)
+            || request.GetStage() < TFreezeState::OPEN || request.GetStage() > TFreezeState::DRAIN_CDC)
         {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Invalid database freeze request");
         }
         if (request.GetEpoch() < Self->DatabaseFreeze.GetEpoch()) {
             return fail(Ydb::StatusIds::ABORTED, "Stale database freeze epoch");
+        }
+        if (Self->SrcSplitDescription || Self->State == TShardState::SplitDstReceivingSnapshot) {
+            // The caller must finish split/merge and refresh its participant set.
+            // A replaced source shard will never become ready for this freeze.
+            return fail(Ydb::StatusIds::PRECONDITION_FAILED,
+                "Database freeze requires stable shard topology: shard participates in split/merge");
         }
         if (!Self->IsStateNewReadAllowed()) {
             result.SetReady(false);
@@ -163,11 +168,9 @@ public:
         }
         bool changed = false;
         if (newEpoch) {
-            const bool deliveryLost = stage != TFreezeState::OPEN
-                && (Self->DatabaseFreeze.GetDeliveryLost() || Self->UnconfirmedChangeRecordsRemoval);
             Self->DatabaseFreeze.Clear();
+            Self->DatabaseFreeze.SetStage(TFreezeState::OPEN);
             Self->DatabaseFreeze.SetEpoch(request.GetEpoch());
-            Self->DatabaseFreeze.SetDeliveryLost(deliveryLost);
             Self->DatabaseFreezeAcceptedTxIds.clear();
             for (const auto& [txId, op] : Self->TransQueue.GetTxsInFly()) {
                 if (!op->IsReadOnly() && !op->IsImmediate()) {
@@ -221,30 +224,16 @@ public:
                 ready = Heartbeats.empty() && Self->ChangesQueue.empty() && !Self->RemoveChangeRecordsInFly
                     && Self->CommittedLockChangeRecords.empty();
             }
-            if (Self->DatabaseFreeze.GetDeliveryLost()) {
-                // Persist the fence even if delivery was lost: only an explicit
-                // thaw is allowed to reopen a partially frozen database.
-                result.SetStatus(Ydb::StatusIds::PRECONDITION_FAILED);
-                result.SetIssue("Change records were discarded during database freeze");
-                ready = true;
-            }
             result.SetReady(ready);
         }
 
         if (changed) {
             Self->PersistSys(db, Schema::Sys_DatabaseFreeze, Self->DatabaseFreeze.SerializeAsString());
-            if (Self->DatabaseFreeze.GetDeliveryLost()) {
-                PersistedDeliveryLostEpoch = Self->DatabaseFreeze.GetEpoch();
-            }
         }
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        // A completion from an earlier epoch must not mark the current one.
-        if (PersistedDeliveryLostEpoch && Self->DatabaseFreeze.GetEpoch() == PersistedDeliveryLostEpoch) {
-            Self->DatabaseFreezeDeliveryLostPersistedEpoch = PersistedDeliveryLostEpoch;
-        }
         if (Heartbeats) {
             Self->EnqueueChangeRecords(std::move(Heartbeats));
         }

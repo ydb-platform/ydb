@@ -97,9 +97,7 @@ class TChangeSender: public TActor<TChangeSender> {
         }
 
         if (remove) {
-            auto* event = new NChangeExchange::TEvChangeExchange::TEvRemoveRecords(std::move(remove));
-            event->DeliveryConfirmed = false;
-            Send(DataShard.ActorId, event);
+            Send(DataShard.ActorId, new NChangeExchange::TEvChangeExchange::TEvRemoveRecords(std::move(remove)));
         }
     }
 

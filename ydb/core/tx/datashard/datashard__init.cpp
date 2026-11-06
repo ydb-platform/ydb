@@ -57,10 +57,9 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
     try {
         Self->State = TShardState::Unknown;
         Self->DatabaseFreeze.Clear();
-        Self->DatabaseFreezeDeliveryLostPersistedEpoch = 0;
+        Self->DatabaseFreeze.SetStage(NKikimrTxDataShard::TDatabaseFreezeState::OPEN);
         Self->DatabaseFreezeAcceptedTxIds.clear();
         Self->DatabaseFreezeLocalWrites = 0;
-        Self->UnconfirmedChangeRecordsRemoval = false;
         Self->LastLocalTid = Schema::MinLocalTid;
         Self->LastLoanTableTid = 0;
         Self->NextSeqno = 1;
@@ -363,9 +362,6 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
                 "Cannot parse Sys_DatabaseFreeze"
                 << ": tabletId# " << Self->TabletID()
                 << " bytes# " << data.size());
-            if (Self->DatabaseFreeze.GetDeliveryLost()) {
-                Self->DatabaseFreezeDeliveryLostPersistedEpoch = Self->DatabaseFreeze.GetEpoch();
-            }
             for (const auto txId : Self->DatabaseFreeze.GetAcceptedTxIds()) {
                 Self->DatabaseFreezeAcceptedTxIds.insert(txId);
             }

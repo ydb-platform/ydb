@@ -17,7 +17,6 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
-    ydb/core/persqueue/writer
     ydb/core/testlib/default
     ydb/core/tx
     yql/essentials/public/udf/service/exception_policy
@@ -29,7 +28,6 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     datashard_ut_write.cpp
-    datashard_ut_database_freeze.cpp
 )
 
 END()

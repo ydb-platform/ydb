@@ -13,6 +13,7 @@ ydb/core/kqp/executer_actor/ut KqpExecuter.ResultChannelFlowControlPauseResume-C
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CheckpointPropagationAfterSubgraphFinalization+LocalTopics+ModernChannels
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CheckpointPropagationAfterSubgraphFinalization-LocalTopics+ModernChannels
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewRanges
+ydb/core/kqp/ut/query KqpLimits.ComputeNodeMemoryLimit+EnableComputeSchedulerMemory
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query KqpLimits.StreamWrite+Allowed
 ydb/core/kqp/ut/query unittest.[*/*] chunk
@@ -107,6 +108,7 @@ ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_
 ydb/tests/fq/streaming test_rescaling.py.TestRescaling.test_pq_source_rescaling_twice
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_csv_no_header_select_price[True]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_csv_with_names_projection_column_order[True]
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[drop-join-column]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[drop-join-row]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[drop-native_join-row]
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_query_after_table_change[recreate-output-column]

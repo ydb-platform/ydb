@@ -26,10 +26,6 @@ namespace NKikimr::NGRpcService {
         PathNormalizer_ = std::move(normalizer);
     }
 
-    TString IRequestCtxBaseMtSafe::NormalizePath(TStringBuf path) const {
-        return PathNormalizer_ ? PathNormalizer_->NormalizePath(path) : TString(path);
-    }
-
     TString IRequestCtxBaseMtSafe::NormalizePath(TStringBuf path, TStringBuf base) const {
         TString resolved(path);
         const auto* appData = HasAppData() ? AppData() : nullptr;
@@ -69,14 +65,14 @@ namespace NKikimr::NGRpcService {
             return;
         }
 
-        SetPathNormalizer(IsPathNormalizationEnabled() ? std::move(normalizer) : nullptr);
         if (database) {
             if (relativeDatabase) {
                 database = PrependDomainIfNeeded("/" + appData->DomainsInfo->Domain->Name, *database);
             }
-            database = NormalizePath(*database);
+            database = IsPathNormalizationEnabled() && normalizer ? normalizer->NormalizePath(*database) : *database;
         }
 
+        SetPathNormalizer(IsPathNormalizationEnabled() ? std::move(normalizer) : nullptr);
         EffectiveDatabaseName_ = std::move(database);
         PathNormalizationInitialized_ = true;
     }

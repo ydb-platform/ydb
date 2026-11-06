@@ -8,11 +8,13 @@ namespace NKikimr::NBsController {
 
 std::optional<EMirror3dcFailRealmState> GetReplicatedRealmState(
         const TMirror3dcGroupConfiguration& config, ui32 realm) {
-    if (realm >= 3 || !IsValidMirror3dcGroupConfiguration(config)
-            || !IsMirror3dcReplicationTarget(config.State, config.Realms[realm])) {
+    bool validRealm = realm < config.Realms.size();
+    bool validConfiguration = IsValidMirror3dcGroupConfiguration(config);
+    bool replicationTarget = validRealm && IsMirror3dcReplicationTarget(config.State, config.Realms[realm]);
+    if (!validRealm || !validConfiguration || !replicationTarget) {
         return std::nullopt;
     }
-    const auto next = CompleteMirror3dcReplication(config);
+    std::optional<TMirror3dcGroupConfiguration> next = RecoveringComplete(config);
     return next ? std::optional(next->Realms[realm]) : std::nullopt;
 }
 
@@ -22,7 +24,7 @@ std::optional<TMirror3dcGroupConfiguration> GetConfiguration(const TGroupReplica
         TMirror3dcGroupConfiguration config{*info.GroupState, info.States};
         return IsValidMirror3dcGroupConfiguration(config) ? std::optional(config) : std::nullopt;
     }
-    return MigrateMirror3dcGroupConfiguration(info.States);
+    return std::nullopt;
 }
 } // namespace
 
@@ -60,7 +62,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
             Proposals.erase(it->second.ProposalCookie);
         }
         Groups.erase(message.GroupId);
-        const auto config = message.Info ? GetConfiguration(*message.Info) : std::nullopt;
+        std::optional<TMirror3dcGroupConfiguration> config = message.Info ? GetConfiguration(*message.Info) : std::nullopt;
         if (config) {
             bool needsReplication = false;
             for (ui32 realm = 0; realm < 3; ++realm) {
@@ -78,7 +80,7 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
         if (group->ProposalCookie) {
             return;
         }
-        const auto config = GetConfiguration(group->Info);
+        std::optional<TMirror3dcGroupConfiguration> config = GetConfiguration(group->Info);
         if (!config) {
             return;
         }
@@ -101,21 +103,18 @@ class TGroupStateActor : public TActorBootstrapped<TGroupStateActor> {
                 return;
             }
         }
-        const auto next = hasTarget ? CompleteMirror3dcReplication(*config) : std::nullopt;
-        if (next && IsAllowedMirror3dcGroupTransition(config->State, next->State, EMirror3dcTransitionKind::System)) {
-            using TDefinition = NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition;
+        std::optional<TMirror3dcGroupConfiguration> next = hasTarget ? RecoveringComplete(*config) : std::nullopt;
+        if (next && IsAllowedMirror3dcGroupTransition(config->State, next->State)) {
+            using TDefinition = NKikimrBlobStorage::TDefineGroupState::TGroupDefinition;
             std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> request =
                 std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
             NKikimrBlobStorage::TConfigRequest* requestConfig = request->Record.MutableRequest();
-            requestConfig->SetIgnoreGroupFailModelChecks(true);
-            requestConfig->SetIgnoreDegradedGroupsChecks(true);
-            requestConfig->SetIgnoreDisintegratedGroupsChecks(true);
-            TDefinition* definition = requestConfig->AddCommand()->MutableDefineFailRealmStates()->AddGroups();
+            TDefinition* definition = requestConfig->AddCommand()->MutableDefineGroupState()->AddGroups();
             definition->SetGroupId(groupId);
             definition->SetExpectedGroupGeneration(group->Info.Generation);
             definition->SetGroupState(next->State);
             for (EMirror3dcFailRealmState state : next->Realms) {
-                definition->AddFailRealmStates(static_cast<TDefinition::EFailRealmState>(state));
+                definition->AddFailRealmStates(state);
             }
             group->ProposalCookie = ++NextCookie;
             Proposals.emplace(group->ProposalCookie, groupId);

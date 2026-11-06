@@ -89,118 +89,13 @@ enum EEntityStatus {
     RESTART = 4; // entity has changed config or changed environment and should be restarted by warden
 }
 
-// Mirror-3-dc group state diagram. The group state is authoritative.
-// Realm roles: I = Included, X = Excluded, R = Recovering.
-// Copy guarantees and pending progress are represented by the group state and D/W/E.
-// E = Layout Ensurance: guaranteed layouts for confirmed blobs.
-// D = Layout Durability: background replication target.
-// W = Write Layout: layouts sufficient to acknowledge a new write.
-// OR separates alternative layouts; + combines copy counts in distinct failrealms.
-// Each box contains realm roles and D, W and E.
-// Columns describe logical roles; transitions retain physical failrealm identities.
-//
-//     +---------------------------------+
-// +-->|              NORMAL             |
-// |   | I/I/I                           |------------------------------+
-// |   | D: 1+1+1                        |                              |
-// |   | W: 1+1+1 OR 2+2                 |                              |
-// |   | E: 1+1+1 OR 2+2                 |                              |
-// |   +---------------------------------+                              |
-// |                                                                    |
-// |                                                                    |
-// |                                                                    |
-// |                                                                    v
-// |   +---------------------------------+             +----------------+----------------+                     +---------------------------------+             +---------------------------------+
-// +<--|           DC_RECOVERY           |<----------->|            DC_FAILURE           |-------------------->|         DC_SOLO_DISASTER        |<----------->|         DC_SOLO_RECOVERY        |
-// |   | I/I/R                           |             | I/I/X                           |                     | I/X/X                           |             | I/R/X                           |
-// |   | D: 1+1+1                        |             | D: 0                            |                     | D: 0                            |             | D: 1                            |
-// |   | W: 1+1+1 OR 2+2                 |             | W: 2+2                          |                     | W: 2                            |             | W: 2                            |
-// |   | E: 1+1 OR 2                     |<---+        | E: 1+1 OR 2                     |    +--------------->| E: 0                            |             | E: 0                            |
-// |   +---------------------------------+    |        +----------------+----------------+    |                +---------------------------------+             +----------------+----------------+
-// |                                          |                         |                     |                                                                                 |
-// |                                          |                         |                     |                                                                                 |
-// |                                          |                         v                     |                                                                                 v
-// |                                          |        +----------------+----------------+    |                                                                +----------------+----------------+
-// |                                          |        |     DC_FAILURE_INV1_PENDING     |    |                                                                |  DC_SOLO_RECOVERY_INV1_PENDING  |
-// |                                          |        | I/I/X                           |    |                                                                | I/R/X                           |
-// |                                          +--------| D: 1+1                          |----+                                                         +----->| D: 1                            |
-// |                                                   | W: 2+2                          |                                                              |      | W: 2                            |
-// |                                                   | E: 1+1 OR 2                     |                                                              |      | E: 1                            |
-// |                                                   +----------------+----------------+                                                              |      +----------------+----------------+
-// |                                                                    |                                                                               |                       |
-// |                                                                    |                                                                               |                       |
-// |                                                                    |                                                                               |                       |
-// |                                                                    v                                                                               |                       v
-// |   +---------------------------------+             +----------------+----------------+                     +---------------------------------+      |      +----------------+----------------+
-// +<--|         DC_RECOVERY_INV1        |<----------->|         DC_FAILURE_INV1         |-------------------->|           DC_SOLO_INV1          |      |      |      DC_SOLO_RECOVERY_INV1      |
-//     | I/I/R                           |             | I/I/X                           |                     | I/X/X                           |<-----+      | I/R/X                           |
-//     | D: 1+1+1                        |<-----+      | D: 1+1                          |                     | D: 1                            |      |      | D: 1+1                          |
-//     | W: 1+1+1 OR 2+2                 |      |      | W: 2+2                          |                +--->| W: 2                            |<-----=------| W: 2+2                          |
-//     | E: 1+1                          |      |      | E: 1+1                          |<------+        |    | E: 1                            |      |      | E: 1                            |---------+
-//     +---------------------------------+      |      +----------------+-------+--------+       |        |    +----------------+----------------+      |      +---------------------------------+         |
-//                                              |                       ^                        |        |                     ^                       |                                                  |
-//                                              |                       |                        |        |                     |                       |                                                  |
-//                                              |                       |                        +--------=---------------------=-----------------------=--------------------------------------------------+
-//                                              |                       |                                 |                     |                       |                                                  |
-//                                              |                       v                                 |                     v                       |                                                  |
-//                                              |      +----------------+----------------+                |    +----------------+----------------+      |      +---------------------------------+         |
-//                                              |      |     DC_FAILURE_INV2_PENDING     |                |    |       DC_SOLO_INV2_PENDING      |      |      |  DC_SOLO_RECOVERY_INV2_PENDING  |         |
-//                                              |      | I/I/X                           |                |    | I/X/X                           |      |      | I/R/X                           |         |
-//                                              +------| D: 2+2                          |----------------+    | D: 2                            |------+      | D: 1+1                          |         |
-//                                              |      | W: 2+2                          |                     | W: 2                            |             | W: 2                            |         |
-//                                              |      | E: 1+1                          |                     | E: 1                            |         +-->| E: 2                            |         |
-//                                              |      +----------------+----------------+                     +----------------+----------------+         |   +----------------+----------------+         |
-//                                              |                       |                                                       |                          |                    |                          |
-//                                              |                       |                                                       |                          |                    |                          |
-//                                              |                       |                                                       |                          |                    |                          |
-//                                              |                       v                                                       v                          |                    v                          |
-//                                              |      +----------------+----------------+                     +----------------+----------------+         |   +----------------+----------------+         |
-//                                              +------|         DC_FAILURE_INV2         |-------------------->|           DC_SOLO_INV2          |         |   |      DC_SOLO_RECOVERY_INV2      |         |
-//                                                     | I/I/X                           |                     | I/X/X                           |<--------+   | I/R/X                           |         |
-//                                                     | D: 2+2                          |                     | D: 2                            |<------------| D: 1+1                          |         |
-//                                                     | W: 2+2                          |                     | W: 2                            |             | W: 2+2                          |         |
-//                                                     | E: 2+2                          |                     | E: 2                            |             | E: 2                            |---------+
-//                                                     +---------------------------------+                     +---------------------------------+             +---------------------------------+
-//
-//
-// + marks turns/junctions; = is a crossing WITHOUT a connection.
-// Internal progress may change I/X/R, D and E without an administrator action.
-// A transition arrow does not itself replicate data; target guarantees must be established.
-//
-// Persisted and published with the group generation. Numeric values are wire-stable.
-message TMirror3dcGroupState {
-    enum EState {
-        NORMAL = 0;                                 // I/I/I.
-
-        DC_FAILURE = 1;                             // I/I/X.
-        DC_FAILURE_INV1_PENDING = 12;               // I/I/X.
-        DC_FAILURE_INV1 = 2;                        // I/I/X.
-        DC_FAILURE_INV2_PENDING = 13;               // I/I/X.
-        DC_FAILURE_INV2 = 3;                        // I/I/X.
-
-        DC_RECOVERY = 4;                            // I/I/R.
-        DC_RECOVERY_INV1 = 5;                       // I/I/R.
-
-        DC_SOLO_DISASTER = 6;                       // I/X/X.
-        DC_SOLO_INV1 = 7;                           // I/X/X.
-        DC_SOLO_INV2_PENDING = 14;                  // I/X/X.
-        DC_SOLO_INV2 = 8;                           // I/X/X.
-
-        DC_SOLO_RECOVERY = 9;                       // I/R/X.
-        DC_SOLO_RECOVERY_INV1_PENDING = 15;         // I/R/X.
-        DC_SOLO_RECOVERY_INV1 = 10;                 // I/R/X.
-        DC_SOLO_RECOVERY_INV2_PENDING = 16;         // I/R/X.
-        DC_SOLO_RECOVERY_INV2 = 11;                 // I/R/X.
-    }
-}
-
 message TFailRealmStates {
-    repeated TGroupInfo.TFailRealm.EState State = 1;
-    optional TMirror3dcGroupState.EState GroupState = 2;
+    repeated TDataCenterState.EState State = 1;
+    optional TGroupState.EState GroupState = 2;
 }
 
 message TFailRealmInfo {
-    optional TGroupInfo.TFailRealm.EState State = 1 [default = N0];
+    optional TDataCenterState.EState State = 1 [default = INCLUDED];
     // Empty if the location is unknown or the realm spans several data centers.
     optional string DataCenter = 2;
 }
@@ -214,27 +109,11 @@ message TVDiskLocation {
 
 message TGroupInfo {
     message TFailRealm {
-        // Invariant states describe minimum copies of every confirmed blob.
-        // Invariant0 makes no per-realm copy guarantee and does not imply an empty realm.
-        enum EState {
-            option allow_alias = true;
-            Invariant0 = 0;
-            Invariant1 = 1;
-            Invariant2 = 2;
-            Excluded = 3;
-            Recovering = 4;
-            // Legacy aliases retained for existing code.
-            N0 = 0;
-            N1 = 1;
-            N2 = 2;
-            F = 3; // Failure.
-            R = 4; // Recovery.
-        }
-        optional EState State = 2 [default = Invariant0];
         message TFailDomain {
             repeated TVDiskLocation VDiskLocations = 1;
         }
         repeated TFailDomain FailDomains = 1;
+        optional TDataCenterState.EState State = 2 [default = INCLUDED];
     }
 
     optional uint32 GroupID = 1;
@@ -258,7 +137,7 @@ message TGroupInfo {
     optional uint32 BridgeProxyGroupId = 19; // proxy group when running in Bridge mode
     optional uint32 BridgePileId = 20;
     optional bool DDisk = 21; // is this a Direct Block Group?
-    optional TMirror3dcGroupState.EState Mirror3dcState = 22;
+    optional TGroupState.EState Mirror3dcState = 22;
 }
 
 // VDiskStatus ordering is assumed to be lower for bad statuses and higher for good ones

@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "blobstorage_groupinfo_mirror3dc_state.h"
+
 #include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/blobstorage/crypto/crypto.h>
 #include <ydb/core/protos/blobstorage.pb.h>
@@ -340,7 +341,7 @@ public:
     // DYNAMIC INFO
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     struct TDynamicInfo {
-        using EFailRealmState = NKikimrBlobStorage::TGroupInfo::TFailRealm::EState;
+        using EFailRealmState = EMirror3dcFailRealmState;
 
         // blobstorage group id
         const TGroupId GroupId;
@@ -348,9 +349,7 @@ public:
         const ui32 GroupGeneration;
         // map to quickly get Service id (TActorId) from its order number inside TTopology
         TVector<TActorId> ServiceIdForOrderNumber;
-        // Indexed by physical failrealm. Kept with this generation, not in cached Topology.
-        TVector<EFailRealmState> FailRealmStates;
-        std::optional<EMirror3dcGroupState> Mirror3dcState;
+        TMirror3dcGroupState Mirror3dcState;
 
         TDynamicInfo(TGroupId groupId, ui32 groupGen);
         TDynamicInfo(const TDynamicInfo&) = default;
@@ -367,24 +366,22 @@ public:
     const TTopology &GetTopology() const { return *Topology; }
     const TDynamicInfo &GetDynamicInfo() const { return Dynamic; }
     TDynamicInfo::EFailRealmState GetFailRealmState(ui32 failRealmIdx) const {
-        return Dynamic.FailRealmStates.at(failRealmIdx);
-    }
-    std::optional<EMirror3dcGroupState> GetMirror3dcState() const {
-        if (Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc || Dynamic.FailRealmStates.size() != 3) {
-            return std::nullopt;
+        if (Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3dc) {
+            return NKikimrBlobStorage::TDataCenterState::INCLUDED;
         }
-        if (Dynamic.Mirror3dcState) {
-            const TMirror3dcGroupConfiguration config{*Dynamic.Mirror3dcState,
-                {GetFailRealmState(0), GetFailRealmState(1), GetFailRealmState(2)}};
-            return IsValidMirror3dcGroupConfiguration(config) ? Dynamic.Mirror3dcState : std::nullopt;
-        }
-        return GetMirror3dcGroupState(GetFailRealmState(0), GetFailRealmState(1), GetFailRealmState(2));
+        return Dynamic.Mirror3dcState.FailRealmStates.at(failRealmIdx);
     }
-    bool IsFailedFailRealm(ui32 failRealmIdx) const {
-        return GetFailRealmState(failRealmIdx) == NKikimrBlobStorage::TGroupInfo::TFailRealm::F;
+    const TMirror3dcGroupState& GetMirror3dcState() const {
+        return Dynamic.Mirror3dcState;
     }
-    bool IsRecoveringFailRealm(ui32 failRealmIdx) const {
-        return GetFailRealmState(failRealmIdx) == NKikimrBlobStorage::TGroupInfo::TFailRealm::R;
+    bool IsFailRealmIncluded(ui32 failRealmIdx) const {
+        return IsIncluded(GetFailRealmState(failRealmIdx));
+    }
+    bool IsFailRealmExcluded(ui32 failRealmIdx) const {
+        return IsExcluded(GetFailRealmState(failRealmIdx));
+    }
+    bool IsFailRealmRecovering(ui32 failRealmIdx) const {
+        return IsRecovering(GetFailRealmState(failRealmIdx));
     }
     EEncryptionMode GetEncryptionMode() const { return EncryptionMode; }
     ELifeCyclePhase GetLifeCyclePhase() const { return LifeCyclePhase; }

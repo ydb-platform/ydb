@@ -1190,10 +1190,9 @@ namespace NKikimr::NBsController {
         DataCenterStates.Unshare() = std::move(*states);
     }
 
-    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineFailRealmStates& cmd,
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDefineGroupState& cmd,
             TStatus& /*status*/) {
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        using TDefinition = NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition;
+        using TDefinition = NKikimrBlobStorage::TDefineGroupState::TGroupDefinition;
         THashSet<TGroupId> seen;
         for (const TDefinition& definition : cmd.GetGroups()) {
             const TGroupId groupId = TGroupId::FromValue(definition.GetGroupId());
@@ -1213,60 +1212,35 @@ namespace NKikimr::NBsController {
                 throw TExGroupGenerationMismatch(definition.GetGroupId(),
                     definition.GetExpectedGroupGeneration(), group->Generation);
             }
-            std::array<TFailRealm::EState, 3> states;
-            if (!definition.FailRealmStatesSize() && definition.HasGroupState()) {
-                const auto next = MakeMirror3dcGroupConfiguration(
-                    definition.GetGroupState(),
-                    group->FailRealmStates.value_or(TFailRealmStates{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}));
-                if (!next) {
-                    throw TExError() << "group state requires different physical realm roles for GroupId# " << groupId;
-                }
-                states = next->Realms;
-            } else {
-                if (definition.FailRealmStatesSize() != 3) {
-                    throw TExError() << "GroupId# " << groupId << " must define exactly three fail realm states";
-                }
-                for (ui32 realm = 0; realm < 3; ++realm) {
-                    const TDefinition::EFailRealmState state = definition.GetFailRealmStates(realm);
-                    if (!NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition::EFailRealmState_IsValid(state)) {
-                        throw TExError() << "unknown state for GroupId# " << groupId << " realm# " << realm;
-                    }
-                    states[realm] = static_cast<TFailRealm::EState>(state);
-                }
+            if (!definition.HasGroupState()) {
+                throw TExError() << "GroupId# " << groupId << " must define the group state";
             }
-            const bool unchangedRealms = group->FailRealmStates == states;
+            if (definition.FailRealmStatesSize() != 3) {
+                throw TExError() << "GroupId# " << groupId << " must define exactly three fail realm states";
+            }
+            TMirror3dcFailRealmStates states;
+            for (ui32 realm = 0; realm < states.size(); ++realm) {
+                NKikimrBlobStorage::TDataCenterState::EState state = definition.GetFailRealmStates(realm);
+                if (!NKikimrBlobStorage::TDataCenterState::EState_IsValid(state)) {
+                    throw TExError() << "unknown state for GroupId# " << groupId << " realm# " << realm;
+                }
+                states[realm] = state;
+            }
+            EMirror3dcGroupState groupState = definition.GetGroupState();
+            if (!IsValidMirror3dcGroupConfiguration({groupState, states})) {
+                throw TExError() << "invalid mirror-3-dc group state or realm roles for GroupId# " << groupId;
+            }
             TGroupInfo* updated = Groups.FindForUpdate(groupId);
             updated->FailRealmStates = states;
-            if (definition.HasGroupState()) {
-                updated->Mirror3dcState = definition.GetGroupState();
-                if (!IsValidMirror3dcGroupConfiguration({*updated->Mirror3dcState, states})) {
-                    throw TExError() << "invalid mirror-3-dc group state or realm roles for GroupId# " << groupId;
-                }
-            } else if (group->Mirror3dcState && unchangedRealms) {
-                updated->Mirror3dcState = group->Mirror3dcState;
-            } else {
-                const auto migrated = MigrateMirror3dcGroupConfiguration(states);
-                updated->Mirror3dcState = migrated ? std::optional(migrated->State) : std::nullopt;
-            }
+            updated->Mirror3dcState = groupState;
             // Every requested transition, including an idempotent one, publishes a new generation.
             GroupContentChanged.insert(groupId);
         }
     }
 
-    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TTestResetDataCenterStates&,
-            TStatus& /*status*/) {
-        DataCenterStates.Unshare().clear();
-        ResetDataCenterStates = true;
-        Groups.ForEach([&](TGroupId groupId, const TGroupInfo& group) {
-            if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
-                GroupContentChanged.insert(groupId);
-            }
-        });
-    }
-
-    std::expected<void, TString> TBlobStorageController::TConfigState::ApplyDataCenterStates(bool suppressFailModelChecking) {
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        const TFailRealmStates normal{TFailRealm::Invariant0, TFailRealm::Invariant0, TFailRealm::Invariant0};
+    std::expected<void, TString> TBlobStorageController::TConfigState::ApplyDataCenterStates(bool suppressFailModelChecking, bool suppressDegradedGroupsChecking) {
+        using TFailRealm = NKikimrBlobStorage::TDataCenterState;
+        TFailRealmStates normal{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::INCLUDED};
         TVector<TGroupId> groups;
         if (DataCenterStates.Changed()) {
             Groups.ForEach([&](TGroupId groupId, const TGroupInfo&) { groups.push_back(groupId); });
@@ -1277,10 +1251,11 @@ namespace NKikimr::NBsController {
                 }
             }
         }
-        for (const auto groupId : groups) {
-            const auto* group = Groups.Find(groupId);
-            if (group->ErasureSpecies != TErasureType::ErasureMirror3dc
-                    || StoragePools.Get().at(group->StoragePoolId).BridgeMode || group->VDisksInGroup.empty()) {
+        for (TGroupId groupId : groups) {
+            const TGroupInfo* group = Groups.Find(groupId);
+            bool isBridge = StoragePools.Get().at(group->StoragePoolId).BridgeMode;
+            bool isVirtualGroup = group->VDisksInGroup.empty();
+            if (group->ErasureSpecies != TErasureType::ErasureMirror3dc || isBridge || isVirtualGroup) {
                 continue;
             }
             if (group->Topology->GetTotalFailRealmsNum() != 3) {
@@ -1289,22 +1264,18 @@ namespace NKikimr::NBsController {
                 }
                 return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " must have three fail realms");
             }
-            const auto existing = Self.GroupMap.find(groupId);
-            const bool isNew = existing == Self.GroupMap.end();
-            const TFailRealmStates previous = isNew ? normal : existing->second->FailRealmStates.value_or(normal);
-            TFailRealmStates states = ResetDataCenterStates ? normal : group->FailRealmStates.value_or(normal);
-            const auto legacyPrevious = MigrateMirror3dcGroupConfiguration(previous);
-            const std::optional<EMirror3dcGroupState> previousState = isNew ? std::optional(TMirror3dcGroupState::NORMAL)
-                : existing->second->Mirror3dcState ? existing->second->Mirror3dcState
-                : legacyPrevious ? std::optional(legacyPrevious->State) : std::nullopt;
-            const auto migrated = MigrateMirror3dcGroupConfiguration(states);
-            std::optional<EMirror3dcGroupState> groupState = ResetDataCenterStates ? std::optional(TMirror3dcGroupState::NORMAL)
-                : group->Mirror3dcState ? group->Mirror3dcState
-                : migrated ? std::optional(migrated->State) : std::nullopt;
-            if (!ResetDataCenterStates && (DataCenterStates.Changed() || isNew)) {
+            TGroups::iterator existing = Self.GroupMap.find(groupId);
+            bool isNew = existing == Self.GroupMap.end();
+            TMirror3dcGroupConfiguration previous{TGroupState::NORMAL, normal};
+            if (!isNew) {
+                previous = {existing->second->Mirror3dcState.value_or(TGroupState::NORMAL),
+                    existing->second->FailRealmStates.value_or(normal)};
+            }
+            TMirror3dcGroupConfiguration current{
+                group->Mirror3dcState.value_or(TGroupState::NORMAL), group->FailRealmStates.value_or(normal)};
+            if (DataCenterStates.Changed() || isNew) {
                 std::array<bool, 3> changedRealms{};
                 std::array<bool, 3> excludedRealms{};
-                std::array<bool, 3> reincludedRealms{};
                 for (const TVSlotInfo* slot : group->VDisksInGroup) {
                     if (DataCenterStates.Get().empty() && Self.DataCenterStates.empty()) {
                         break;
@@ -1315,60 +1286,79 @@ namespace NKikimr::NBsController {
                     NActorsInterconnect::TNodeLocation location;
                     HostRecords->GetLocation(slot->VSlotId.NodeId).Serialize(&location, false);
                     const TString& name = location.GetDataCenter();
-                    const auto isExcluded = [&name](const TDataCenterStates& states) {
+                    auto isExcluded = [&name](const TDataCenterStates& states) {
                         // Missing and unlisted datacenters are included.
-                        const auto it = states.find(name);
+                        TDataCenterStates::const_iterator it = states.find(name);
                         return it != states.end()
-                            && it->second == NKikimrBlobStorage::TDefineDataCenterStates::TDataCenter::EXCLUDED;
+                            && it->second == NKikimrBlobStorage::TDataCenterState::EXCLUDED;
                     };
-                    const bool wasExcluded = !isNew && isExcluded(Self.DataCenterStates);
-                    const bool excluded = isExcluded(DataCenterStates.Get());
-                    const ui32 realm = slot->RingIdx;
+                    bool wasExcluded = !isNew && isExcluded(Self.DataCenterStates);
+                    bool excluded = isExcluded(DataCenterStates.Get());
+                    ui32 realm = slot->RingIdx;
                     changedRealms[realm] |= wasExcluded != excluded;
                     excludedRealms[realm] |= excluded;
-                    reincludedRealms[realm] |= wasExcluded && !excluded;
                 }
-                for (ui32 realm = 0; realm < 3; ++realm) {
-                    if (!changedRealms[realm]) {
-                        continue;
+                ui32 changedRealmCount = 0;
+                ui32 changedRealm = 0;
+                for (ui32 realm = 0; realm < changedRealms.size(); ++realm) {
+                    if (changedRealms[realm]) {
+                        ++changedRealmCount;
+                        changedRealm = realm;
                     }
-                    if (reincludedRealms[realm] && states[realm] != TFailRealm::Excluded) {
-                        // RFC 190 explicitly requires manual repair via DefineFailRealmStates, even with force.
-                        return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
-                            << " is writing to an excluded datacenter; repair its fail realm state first");
-                    }
-                    const auto next = groupState ? ChangeMirror3dcRealmAvailability(
-                        {*groupState, states}, realm, excludedRealms[realm]) : std::nullopt;
-                    if (next) {
-                        states = next->Realms;
-                        groupState = next->State;
-                    } else if (suppressFailModelChecking) {
-                        states[realm] = excludedRealms[realm] ? TFailRealm::F : TFailRealm::R;
-                        const auto forced = MigrateMirror3dcGroupConfiguration(states);
-                        groupState = forced ? std::optional(forced->State) : std::nullopt;
-                    } else {
+                }
+                if (changedRealmCount > 1) {
+                    return std::unexpected<TString>(TStringBuilder() << "group# " << groupId
+                        << ": only one fail realm may change availability at a time");
+                }
+                if (changedRealmCount == 1) {
+                    ui32 realm = changedRealm;
+                    std::optional<TMirror3dcGroupConfiguration> next = excludedRealms[realm]
+                        ? TakeDownFailRealm(current, realm)
+                        : ReturnFailRealm(current, realm);
+                    if (!next) {
                         return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
                             << ": invalid mirror-3-dc data center transition");
                     }
+                    current = *next;
                     GroupContentChanged.insert(groupId);
                 }
             }
+            if (previous.State != current.State) {
+                switch (current.State) {
+                    case TGroupState::DC_SOLO_DISASTER:
+                        if (!suppressFailModelChecking) {
+                            return std::unexpected<TString>(TStringBuilder() << "group# " << groupId
+                                << ": transition to DC_SOLO_DISASTER requires suppressing fail model checks");
+                        }
+                        break;
+                    case TGroupState::DC_SOLO_INV1:
+                    case TGroupState::DC_SOLO_INV2:
+                    case TGroupState::DC_SOLO_INV2_PENDING: {
+                        bool wasSolo = std::count(previous.Realms.begin(), previous.Realms.end(), TFailRealm::INCLUDED) == 1;
+                        if (!wasSolo && !suppressDegradedGroupsChecking) {
+                            return std::unexpected<TString>(TStringBuilder() << "group# " << groupId
+                                << ": transition to a DC_SOLO state requires ignoring degraded group checks");
+                        }
+                        break;
+                    }
+                    default:
+                        break;
+                }
+            }
             if (!suppressFailModelChecking) {
-                if (!groupState || !IsValidMirror3dcGroupConfiguration({*groupState, states})) {
+                if (!IsValidMirror3dcGroupConfiguration(current)) {
                     return std::unexpected<TString>(TStringBuilder() << "unsupported mirror-3-dc state for group# " << groupId);
                 }
-                if (!isNew && (!previousState || !IsAllowedMirror3dcGroupTransition(
-                        {*previousState, previous}, {*groupState, states}))) {
+                if (!isNew && !IsAllowedMirror3dcGroupTransition(previous, current)) {
                     return std::unexpected<TString>(TStringBuilder() << "group# " << groupId
                         << ": invalid mirror-3-dc group state transition");
                 }
             }
-            if (group->FailRealmStates.value_or(normal) != states || group->Mirror3dcState != groupState
-                    || ResetDataCenterStates) {
-                auto* updated = Groups.FindForUpdate(groupId);
-                updated->FailRealmStates = states;
-                updated->Mirror3dcState = groupState;
-                if (previous != states || previousState != groupState) {
+            if (group->FailRealmStates.value_or(normal) != current.Realms || group->Mirror3dcState != current.State) {
+                TGroupInfo* updated = Groups.FindForUpdate(groupId);
+                updated->FailRealmStates = current.Realms;
+                updated->Mirror3dcState = current.State;
+                if (previous != current) {
                     GroupContentChanged.insert(groupId);
                 }
             }

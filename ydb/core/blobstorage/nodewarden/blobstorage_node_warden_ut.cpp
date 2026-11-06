@@ -1987,16 +1987,19 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     CUSTOM_UNIT_TEST(TestRealmFailureTransitionRestartsVDisk) {
         using TNodeWarden = NStorage::TNodeWarden;
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
-        for (const auto [before, after] : {std::pair{TFailRealm::N0, TFailRealm::F}, {TFailRealm::F, TFailRealm::R}, {TFailRealm::F, TFailRealm::F}, {TFailRealm::N0, TFailRealm::R}}) {
+        using TFailRealm = NKikimrBlobStorage::TDataCenterState;
+        for (const auto [before, after] : {std::pair{TFailRealm::INCLUDED, TFailRealm::EXCLUDED}, {TFailRealm::EXCLUDED, TFailRealm::RECOVERING}, {TFailRealm::EXCLUDED, TFailRealm::EXCLUDED}, {TFailRealm::INCLUDED, TFailRealm::RECOVERING}}) {
             TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
             const auto wardenId = SetupNodeWardenForSlayTest(runtime);
             const TNodeWarden::TVSlotId slot(1, 2095, 1);
             const TVDiskID vdiskId(100595, 1, 1, 0, 0);
             const auto actorId = runtime.AllocateEdgeActor(1);
-            auto makeInfo = [&](ui32 generation, TFailRealm::EState state) {
+            auto makeInfo = [&](ui32 generation, EMirror3dcFailRealmState state) {
                 TBlobStorageGroupInfo::TDynamicInfo dynamic(vdiskId.GroupID, generation);
-                dynamic.FailRealmStates = {TFailRealm::N0, state, TFailRealm::N0};
+                dynamic.Mirror3dcState = {
+                    state == TFailRealm::EXCLUDED ? TGroupState::DC_FAILURE
+                        : state == TFailRealm::RECOVERING ? TGroupState::DC_RECOVERY : TGroupState::NORMAL,
+                    {TFailRealm::INCLUDED, state, TFailRealm::INCLUDED}};
                 for (ui32 i = 0; i < 9; ++i) {
                     dynamic.PushBackActorId(slot.GetVDiskServiceId());
                 }
@@ -2023,7 +2026,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 group.VDisksOfGroup.PushBack(&record);
                 warden.VDiskIdByActor.emplace(actorId, slot);
                 warden.UpdateGroupInfoForDisk(record, group.Info);
-                const bool restart = (before == TFailRealm::F) != (after == TFailRealm::F);
+                const bool restart = (before == TFailRealm::EXCLUDED) != (after == TFailRealm::EXCLUDED);
                 UNIT_ASSERT_VALUES_EQUAL(record.RuntimeData.has_value(), !restart);
                 UNIT_ASSERT_VALUES_EQUAL(record.ShutdownPending, restart);
                 UNIT_ASSERT_VALUES_EQUAL(record.RestartAfterShutdown, restart);
@@ -2035,7 +2038,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                     UNIT_ASSERT_VALUES_EQUAL(record.RuntimeData->GroupInfo->GroupGeneration, 2);
                 }
             });
-            if ((before == TFailRealm::F) != (after == TFailRealm::F)) {
+            if ((before == TFailRealm::EXCLUDED) != (after == TFailRealm::EXCLUDED)) {
                 runtime.WaitForEdgeActorEvent<TEvents::TEvPoison>(actorId, false);
             }
         }
@@ -2043,7 +2046,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     CUSTOM_UNIT_TEST(TestFailedRealmVDiskStartsInErrorState) {
         using TNodeWarden = NStorage::TNodeWarden;
-        using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+        using TFailRealm = NKikimrBlobStorage::TDataCenterState;
         TTestActorSystem runtime(1, NLog::PRI_ERROR, MakeIntrusive<TDomainsInfo>());
         const auto wardenId = SetupNodeWardenForSlayTest(runtime);
         const ui32 pdiskId = 2095;
@@ -2058,7 +2061,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             auto& group = warden.Groups[vdiskId.GroupID.GetRawId()];
             group.Group.emplace();
             TBlobStorageGroupInfo::TDynamicInfo dynamic(vdiskId.GroupID, 1);
-            dynamic.FailRealmStates = {TFailRealm::N0, TFailRealm::F, TFailRealm::N0};
+            dynamic.Mirror3dcState = {TGroupState::DC_FAILURE,
+                {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::INCLUDED}};
             for (ui32 i = 0; i < 9; ++i) {
                 dynamic.PushBackActorId(slot.GetVDiskServiceId());
             }

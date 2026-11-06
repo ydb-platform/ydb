@@ -394,7 +394,7 @@ namespace NKikimr::NBsController {
         bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
-            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking || state.ResetDataCenterStates); !result) {
+            if (auto result = state.ApplyDataCenterStates(parameters.SuppressFailModelChecking, parameters.SuppressDegradedGroupsChecking); !result) {
                 *errorDescription = result.error();
                 return false;
             }
@@ -708,7 +708,7 @@ namespace NKikimr::NBsController {
                 if (overlay->second) {
                     NKikimrBlobStorage::TFailRealmStates states;
                     if (overlay->second->FailRealmStates) {
-                        for (NKikimrBlobStorage::TGroupInfo::TFailRealm::EState value : *overlay->second->FailRealmStates) {
+                        for (NKikimrBlobStorage::TDataCenterState::EState value : *overlay->second->FailRealmStates) {
                             states.AddState(value);
                         }
                     }
@@ -1592,7 +1592,7 @@ namespace NKikimr::NBsController {
             if (group.ErasureSpecies == TErasureType::ErasureMirror3dc) {
                 for (ui32 realm = 0; realm < 3; ++realm) {
                     pb->AddFailRealms()->SetState(group.FailRealmStates ? (*group.FailRealmStates)[realm]
-                        : NKikimrBlobStorage::TGroupInfo::TFailRealm::N0);
+                        : NKikimrBlobStorage::TDataCenterState::INCLUDED);
                 }
             }
             for (const TVSlotInfo *vslot : group.VDisksInGroup) {

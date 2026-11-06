@@ -9,7 +9,7 @@ using namespace NKikimr;
 using namespace NKikimr::NBsController;
 
 namespace {
-using TFailRealm = NKikimrBlobStorage::TGroupInfo::TFailRealm;
+using TFailRealm = NKikimrBlobStorage::TDataCenterState;
 
 struct TVDiskReplicationStatus {
     bool Replicated = true;
@@ -85,8 +85,12 @@ public:
     TMirror3dcGroupConfiguration GetProposal() {
         TEvBlobStorage::TEvControllerConfigRequest::TPtr result =
             Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigRequest>(Controller);
-        const NKikimrBlobStorage::TDefineFailRealmStates& command =
-            result->Get()->Record.GetRequest().GetCommand(0).GetDefineFailRealmStates();
+        const NKikimrBlobStorage::TConfigRequest& request = result->Get()->Record.GetRequest();
+        UNIT_ASSERT(!request.GetIgnoreGroupFailModelChecks());
+        UNIT_ASSERT(!request.GetIgnoreDegradedGroupsChecks());
+        UNIT_ASSERT(!request.GetIgnoreDisintegratedGroupsChecks());
+        const NKikimrBlobStorage::TDefineGroupState& command =
+            result->Get()->Record.GetRequest().GetCommand(0).GetDefineGroupState();
         UNIT_ASSERT_VALUES_EQUAL(command.GroupsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(command.GetGroups(0).GetExpectedGroupGeneration(), Info.Generation);
         TFailRealmStates states;
@@ -99,16 +103,15 @@ public:
 };
 }
 
-using TGroupState = TMirror3dcGroupState;
 Y_UNIT_TEST_SUITE(BsControllerGroupState) {
     Y_UNIT_TEST(StableFailureDoesNotStartReplication) {
         TGroupStateFixture fixture;
-        fixture.Update(1, TGroupState::DC_FAILURE, {TFailRealm::N0, TFailRealm::N0, TFailRealm::F});
+        fixture.Update(1, TGroupState::DC_FAILURE, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED});
         fixture.AssertNoRequests();
     }
     Y_UNIT_TEST(PendingWaitsForAllTargetRealms) {
         TGroupStateFixture fixture;
-        fixture.Update(1, TGroupState::DC_FAILURE_INV1_PENDING, {TFailRealm::N0, TFailRealm::N0, TFailRealm::F});
+        fixture.Update(1, TGroupState::DC_FAILURE_INV1_PENDING, {TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED});
         TVDiskReplicationStatus status;
         status.FailSecondRealm = true;
         fixture.ReplyRound(6, status);
@@ -116,11 +119,11 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         fixture.ReplyRound(6);
         const auto next = fixture.GetProposal();
         UNIT_ASSERT(next.State == TGroupState::DC_FAILURE_INV1);
-        UNIT_ASSERT((next.Realms == TFailRealmStates{TFailRealm::N1, TFailRealm::N1, TFailRealm::F}));
+        UNIT_ASSERT((next.Realms == TFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}));
     }
     Y_UNIT_TEST(RecoveryPendingChangesPolicyWithoutChangingRealmTuple) {
         TGroupStateFixture fixture;
-        fixture.Update(2, TGroupState::DC_SOLO_RECOVERY_INV2_PENDING, {TFailRealm::F, TFailRealm::N2, TFailRealm::R});
+        fixture.Update(2, TGroupState::DC_SOLO_RECOVERY_INV2_PENDING, {TFailRealm::EXCLUDED, TFailRealm::INCLUDED, TFailRealm::RECOVERING});
         fixture.ReplyRound(3);
         const auto next = fixture.GetProposal();
         UNIT_ASSERT(next.State == TGroupState::DC_SOLO_RECOVERY_INV2);
@@ -128,16 +131,16 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
     }
     Y_UNIT_TEST(RecoveryQueriesOnlyR) {
         TGroupStateFixture fixture;
-        fixture.Update(3, TGroupState::DC_RECOVERY_INV1, {TFailRealm::N1, TFailRealm::R, TFailRealm::N1});
+        fixture.Update(3, TGroupState::DC_RECOVERY_INV1, {TFailRealm::INCLUDED, TFailRealm::RECOVERING, TFailRealm::INCLUDED});
         fixture.ReplyRound(3);
         const auto next = fixture.GetProposal();
         UNIT_ASSERT(next.State == TGroupState::NORMAL);
-        UNIT_ASSERT((next.Realms == TFailRealmStates{TFailRealm::N0, TFailRealm::N0, TFailRealm::N0}));
+        UNIT_ASSERT((next.Realms == TFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::INCLUDED}));
     }
     Y_UNIT_TEST(StaleOrIncompleteStatusCannotFinishTransition) {
         for (unsigned mode = 0; mode < 3; ++mode) {
             TGroupStateFixture fixture;
-            fixture.Update(4, TGroupState::DC_SOLO_INV2_PENDING, {TFailRealm::N1, TFailRealm::F, TFailRealm::F});
+            fixture.Update(4, TGroupState::DC_SOLO_INV2_PENDING, {TFailRealm::INCLUDED, TFailRealm::EXCLUDED, TFailRealm::EXCLUDED});
             TVDiskReplicationStatus status;
             if (mode == 0) {
                 status.ObsoleteGeneration = true;
@@ -152,7 +155,7 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
     }
     Y_UNIT_TEST(GroupUpdateKeepsOtherGroupsQueries) {
         TGroupStateFixture fixture;
-        const TFailRealmStates initial{TFailRealm::N1, TFailRealm::N1, TFailRealm::F};
+        const TFailRealmStates initial{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED};
         fixture.Update(1, TGroupState::DC_FAILURE_INV2_PENDING, initial);
         TGroupReplicationInfo other = fixture.Info;
         for (TGroupReplicationInfo::TVDisk& disk : other.VDisks) {
@@ -182,12 +185,12 @@ Y_UNIT_TEST_SUITE(BsControllerGroupState) {
         }
         TEvBlobStorage::TEvControllerConfigRequest::TPtr proposal =
             fixture.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigRequest>(fixture.Controller);
-        const NKikimrBlobStorage::TDefineFailRealmStates::TGroupDefinition& definition =
-            proposal->Get()->Record.GetRequest().GetCommand(0).GetDefineFailRealmStates().GetGroups(0);
+        const NKikimrBlobStorage::TDefineGroupState::TGroupDefinition& definition =
+            proposal->Get()->Record.GetRequest().GetCommand(0).GetDefineGroupState().GetGroups(0);
         UNIT_ASSERT_VALUES_EQUAL(definition.GetGroupId(), 43);
         UNIT_ASSERT_VALUES_EQUAL(definition.GetExpectedGroupGeneration(), 1);
         fixture.ReplyRound(6);
-        UNIT_ASSERT((fixture.GetProposal().Realms == TFailRealmStates{TFailRealm::N2, TFailRealm::N2, TFailRealm::F}));
+        UNIT_ASSERT((fixture.GetProposal().Realms == TFailRealmStates{TFailRealm::INCLUDED, TFailRealm::INCLUDED, TFailRealm::EXCLUDED}));
     }
 
 

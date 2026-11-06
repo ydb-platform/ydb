@@ -734,38 +734,24 @@ message TDeleteSpecificGroups {
 // Persistent cluster-wide states of physical DataCenters for dynamic mirror-3-dc groups.
 message TDefineDataCenterStates {
     message TDataCenter {
-        enum EDataCenterState {
-            INCLUDED = 0;
-            EXCLUDED = 1;
-        }
         optional string Name = 1;
-        optional EDataCenterState State = 2;
+        optional TDataCenterState.EState State = 2;
     }
     // Replaces the entire list. Unlisted DataCenters are INCLUDED.
     repeated TDataCenter DataCenter = 1;
 }
 
 // Clear the states and publish a new generation of every dynamic mirror-3-dc group (test use only).
-message TTestResetDataCenterStates {}
-
-// Set persisted group realm states; IgnoreGroupFailModelChecks bypasses transition validation.
-message TDefineFailRealmStates {
+// Set the persisted group state and physical realm roles; IgnoreGroupFailModelChecks bypasses transition validation.
+message TDefineGroupState {
     message TGroupDefinition {
-        enum EFailRealmState {
-            INVARIANT0 = 0;
-            INVARIANT1 = 1;
-            INVARIANT2 = 2;
-            EXCLUDED = 3;
-            RECOVERING = 4;
-        }
-
         optional uint32 GroupId = 1;
-        // Physical realm roles; exactly three when supplied. May be omitted with GroupState
-        // when the existing physical roles are unchanged.
-        repeated EFailRealmState FailRealmStates = 2;
+        // Required: exactly three physical realm roles.
+        repeated TDataCenterState.EState FailRealmStates = 2;
         // If set, apply only to this group generation.
         optional uint32 ExpectedGroupGeneration = 3;
-        optional TMirror3dcGroupState.EState GroupState = 4;
+        // Required by command validation.
+        optional TGroupState.EState GroupState = 4;
     }
 
     repeated TGroupDefinition Groups = 1;
@@ -831,8 +817,7 @@ message TConfigRequest {
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
             TDefineDataCenterStates DefineDataCenterStates = 65;
-            TTestResetDataCenterStates TestResetDataCenterStates = 66;
-            TDefineFailRealmStates DefineFailRealmStates = 67;
+            TDefineGroupState DefineGroupState = 67;
         }
     }
 
@@ -971,7 +956,7 @@ message TBaseConfig {
         string StoragePoolName = 13;
         // Effective mirror-3-dc realms in physical order (0/1/2); empty for other erasure species.
         repeated TFailRealmInfo FailRealms = 14;
-        optional TMirror3dcGroupState.EState Mirror3dcState = 15;
+        optional TGroupState.EState Mirror3dcState = 15;
     }
     message TNode {
         uint32 NodeId = 1;

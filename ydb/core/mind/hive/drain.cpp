@@ -377,7 +377,11 @@ void THive::Handle(TEvPrivate::TEvProcessPileDrains::TPtr&) {
     }
     std::optional<std::unordered_set<TBridgePileId>> pilesWithTablets;
     for (auto& [pileId, pile] : BridgePiles) {
-        if (!pile.Drain || pile.DrainActor) {
+        if (!pile.Drain) {
+            continue;
+        }
+        if (pile.DrainActor) {
+            pile.DrainRetry = true;
             continue;
         }
         if (!pilesWithTablets) {
@@ -388,11 +392,6 @@ void THive::Handle(TEvPrivate::TEvProcessPileDrains::TPtr&) {
         } else {
             StartPileDrain(pile);
         }
-    }
-    if (!ProcessPileDrainsScheduled &&
-        std::any_of(BridgePiles.begin(), BridgePiles.end(), [](const auto& item) { return item.second.Drain; })) {
-        ProcessPileDrainsScheduled = true;
-        Schedule(TDuration::Seconds(5), new TEvPrivate::TEvProcessPileDrains());
     }
 }
 

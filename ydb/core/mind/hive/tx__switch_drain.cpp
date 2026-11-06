@@ -162,7 +162,14 @@ public:
         for (const TActorId& initiator : Initiators) {
             Self->Send(initiator, new TEvHive::TEvDrainNodeResult(Status, Movements));
         }
-        Self->ProcessPileDrains();
+        if (const auto* pileId = std::get_if<TBridgePileId>(&Target)) {
+            const auto it = Self->BridgePiles.find(*pileId);
+            if (Self->BridgeInfo && it != Self->BridgePiles.end() && !it->second.DrainActor && std::exchange(it->second.DrainRetry, false)) {
+                Self->StartPileDrain(it->second);
+            }
+        } else {
+            Self->ProcessPileDrains();
+        }
     }
 };
 

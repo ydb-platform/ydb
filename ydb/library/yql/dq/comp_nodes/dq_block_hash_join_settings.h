@@ -15,7 +15,7 @@ enum class EBuildSide : ui32 {
 };
 
 inline constexpr TStringBuf EqualNullsSettingName = "EqualNulls";
-inline constexpr TStringBuf MarkKeySettingName = "MarkKey";
+inline constexpr TStringBuf MarkKeysSettingName = "MarkKeys";
 inline constexpr TStringBuf MarkJoinKindName = "Mark";
 
 struct TBlockHashJoinSettings {
@@ -26,7 +26,7 @@ struct TBlockHashJoinSettings {
     // these keys are valid join keys.
     TVector<ui32> EqualNullsKeys;
     bool Mark = false;
-    std::optional<ui32> MarkKey;
+    TVector<ui32> MarkKeys;
 
     bool LeftIsBuild() const { return BuildSide == EBuildSide::Left; }
 };

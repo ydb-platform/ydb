@@ -161,9 +161,7 @@ TRuntimeNode TDqProgramBuilder::MakeHashJoinSettings(const TBlockHashJoinSetting
     }
     if (settings.Mark) {
         settingsNodes.push_back(NewDataLiteral<bool>(true));
-        if (settings.MarkKey) {
-            settingsNodes.push_back(NewDataLiteral(*settings.MarkKey));
-        }
+        settingsNodes.push_back(AsTuple(settings.MarkKeys));
     }
     return NewTuple(settingsNodes);
 }

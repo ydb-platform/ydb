@@ -238,7 +238,7 @@ public:
 
         LOG_BUILD_STATS("Building histogram",
             {"rowResolution", RowCountResolution},
-            {"dataSizeResolution ", HumanReadableSize(DataSizeResolution, SF_BYTES)});
+            {"dataSizeResolution", HumanReadableSize(DataSizeResolution, SF_BYTES)});
 
         for (auto index : xrange(Subset.Flatten.size())) {
             auto& part = Subset.Flatten[index];
@@ -526,8 +526,8 @@ private:
         }
 
         LOG_BUILD_STATS("Finished",
-            {"stats.RowCountHistogram", stats.RowCountHistogram.size()},
-            {"stats.DataSizeHistogram", stats.DataSizeHistogram.size()},
+            {"statsRowCountHistogram", stats.RowCountHistogram.size()},
+            {"statsDataSizeHistogram", stats.DataSizeHistogram.size()},
             {"nextHistogramRowCount", nextHistogramRowCount},
             {"nextHistogramDataSize", nextHistogramDataSize},
             {"closedRowCount", closedRowCount},

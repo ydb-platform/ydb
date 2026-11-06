@@ -236,7 +236,7 @@ using TBuildStatsYieldHandler = std::function<void()>;
         } \
     } while (0)
 #else
-#define LOG_BUILD_STATS(...) \
+#define LOG_BUILD_STATS(T, ...) \
     do { \
         if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
             YDB_LOG_TRACE_CTX_COMP(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, T, {"logPrefix", logPrefix}, __VA_ARGS__); \

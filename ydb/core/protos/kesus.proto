@@ -100,15 +100,13 @@ message TEvDescribeSemaphoreChanged {
 }
 
 message TSemaphoreDescription {
-    // Keep definition field numbers compatible with earlier TEvCreateSemaphore responses.
-    reserved 1, 2, 3;
-    string Name = 4;
-    uint64 Limit = 5;
-    bytes Data = 6;
+    string Name = 1;
+    uint64 Limit = 2;
+    bytes Data = 3;
 
     // Number of tokens currently acquired by owners.
-    uint64 Count = 7;
-    bool Ephemeral = 8;
+    uint64 Count = 4;
+    bool Ephemeral = 5;
 }
 
 // Only persistent semaphore descriptions are returned.

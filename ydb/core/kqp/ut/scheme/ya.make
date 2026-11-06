@@ -3,6 +3,11 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
+# Full -g on these translation units pushes the linked .debug_info past 4 GiB.
+# libpthread's 32-bit .debug_aranges relocation then fails with R_X86_64_32.
+# Type units are deduplicated and keep that section under the limit.
+CXXFLAGS(-fdebug-types-section)
+
 IF (SANITIZER_TYPE)
     SIZE(MEDIUM)
     REQUIREMENTS(cpu:4)

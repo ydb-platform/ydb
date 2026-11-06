@@ -16,6 +16,7 @@
 
 #include <util/system/mutex.h>
 
+#include <functional>
 #include <memory>
 
 namespace NKikimrConfig {
@@ -227,6 +228,11 @@ public:
     IExternalStorageOperator::TPtr ConstructStorageOperator(bool verbose = false) const;
     template <typename TSettings>
     static IExternalStorageConfig::TPtr Construct(const NKikimrConfig::TAwsClientConfig& defaultAwsClientSettings, const TSettings& settings, NMonitoring::TDynamicCounterPtr rootCounters = AppData()->Counters);
+
+    // For tests: asked first about every S3 endpoint; a non-null config serves that endpoint instead of the S3 client.
+    // A test S3 mock uses it to answer inside the actor system of the test.
+    using TS3EndpointOverride = std::function<TPtr(const TString& endpoint, const TString& bucket, bool useVirtualAddressing)>;
+    static void SetS3EndpointOverride(TS3EndpointOverride override);
 };
 } // NExternalStorage
 

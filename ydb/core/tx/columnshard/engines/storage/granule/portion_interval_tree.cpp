@@ -52,7 +52,7 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
             default:
                 YDB_LOG_VERIFY(false,
                     {"posindex", pos.index()});
-                break;
+                return NArrow::TSimpleRowViewV0("");
         }
     };
 
@@ -67,7 +67,7 @@ std::partial_ordering TPositionView::Compare(const TPositionView& rhs) const {
             default:
                 YDB_LOG_VERIFY(false,
                     {"posIndex", pos.index()});
-                break;
+                return nullptr;
         }
     };
 

@@ -23,7 +23,8 @@ ydb/library/workload/
 ├── tpcc/               # TPC-C OLTP benchmark
 ├── tpcds/              # TPC-DS analytical benchmark
 ├── tpch/               # TPC-H analytical benchmark
-└── vector/             # Vector similarity search workload
+├── vector/             # Vector similarity search workload
+└── yaem/               # Log workload with yaem-like write sizes and timestamp lags
 ```
 
 ## Architecture Overview

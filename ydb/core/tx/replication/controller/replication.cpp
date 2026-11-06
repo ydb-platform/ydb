@@ -1,4 +1,5 @@
 #include "lag_provider.h"
+#include "index_replication.h"
 #include "private_events.h"
 #include "replication.h"
 #include "resource_id_resolver.h"
@@ -197,9 +198,19 @@ public:
             return;
         }
 
-        if (DesiredState == EState::Done && (State == EState::Ready || State == EState::Paused)) {
-            // Forced DONE only needs local destination cleanup. In particular,
-            // unresolved source credentials must not prevent it after restart.
+        bool needsSourceSequences = false;
+        if (DesiredState == EState::Done) {
+            for (const auto& [_, target] : Targets) {
+                needsSourceSequences |= target.Ptr->GetConfig()->IsSrcIndexTable()
+                    || target.Ptr->GetConfig()->IsRowIdIndex();
+            }
+        }
+        if (DesiredState == EState::Done && (State == EState::Ready || State == EState::Paused)
+            && (!needsSourceSequences || YdbProxy))
+        {
+            // Preserve local forced-DONE cleanup when no sequence handoff is
+            // needed. Fulltext/JSON targets recreate the source proxy after
+            // credentials are reset to obtain their sequence watermarks.
             if (!Database) {
                 ResolveDatabase(ctx);
             }
@@ -454,7 +465,8 @@ const TReplication::ITarget* TReplication::FindBaseTableTarget(const ITarget& in
         return nullptr;
     }
 
-    const auto path = CanonizePath(TString(ExtractParent(indexTarget.GetSrcPath())));
+    const auto path = CanonizePath(TString(ExtractParent(GetSourceIndexPath(
+        indexTarget.GetSrcPath(), indexTarget.GetConfig()->IsSrcIndexTable()))));
     for (const auto* target : GetTargets()) {
         if (target->GetKind() == TReplication::ETargetKind::Table && CanonizePath(target->GetSrcPath()) == path) {
             return target;

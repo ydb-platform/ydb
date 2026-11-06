@@ -457,6 +457,16 @@ message TableIndexDescription {
     repeated string data_columns = 6;
     // Size of index data in bytes
     uint64 size_bytes = 7;
+
+    // Describes the physical fulltext/JSON layout so replication can preserve
+    // it independently of the destination's storage-format feature flags.
+    enum FulltextStorageLayout {
+        FULLTEXT_STORAGE_LAYOUT_UNSPECIFIED = 0;
+        FULLTEXT_STORAGE_LAYOUT_FLAT = 1;
+        FULLTEXT_STORAGE_LAYOUT_COMPACT = 2;
+    }
+    FulltextStorageLayout fulltext_storage_layout = 16;
+    bool use_row_id_as_doc_id = 17;
 }
 
 // Represent multi-column table statistics

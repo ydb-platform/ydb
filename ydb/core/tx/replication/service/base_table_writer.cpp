@@ -530,6 +530,22 @@ class TLocalTableWriter
                 break;
             }
 
+            if (IndexBuild && Mode == EWriteMode::Simple) {
+                const auto version = TRowVersion(record->GetStep(), record->GetTxId());
+                BuildProgress.SetOffset(offset + r.GetLogicalMessageCount());
+                if (record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcHeartbeat) {
+                    version.ToProto(BuildProgress.MutableHeartbeat());
+                    if (!BuildProgress.HasSwitchOffset()) {
+                        BuildProgress.SetSwitchOffset(BuildProgress.GetOffset());
+                        break;
+                    }
+                    continue;
+                }
+                if (!BuildProgress.HasSwitchOffset()) {
+                    Max(version, TRowVersion::FromProto(BuildProgress.GetMaxVersion())).ToProto(BuildProgress.MutableMaxVersion());
+                }
+            }
+
             if (Mode == EWriteMode::Consistent) {
                 const auto version = TRowVersion(record->GetStep(), record->GetTxId());
 

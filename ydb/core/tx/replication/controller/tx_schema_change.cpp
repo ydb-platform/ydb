@@ -1,4 +1,5 @@
 #include "controller_impl.h"
+#include "index_replication.h"
 #include "dst_schema_changer.h"
 #include "target_table.h"
 
@@ -193,6 +194,7 @@ class TController::TTxSchemaChangeReport: public TTxBase {
     bool RecheckHeartbeats = false;
     bool ProgressReplication = false;
     bool ProgressRemovedIndexes = false;
+    TVector<TActorId> IndexReadyActorsToStop;
 
     static bool CanReplaceBarrier(const TSchemaBarrier& barrier, const NKikimrReplication::TSchemaChange& schema) {
         return barrier.IsDestinationSchemaReady()
@@ -496,8 +498,8 @@ class TController::TTxSchemaChangeReport: public TTxBase {
                 continue;
             }
 
-            const auto sourcePath = CanonizePath(target->GetSrcPath());
-            const auto parentPath = CanonizePath(TString(ExtractParent(target->GetSrcPath())));
+            const auto sourcePath = GetSourceIndexPath(target->GetSrcPath(), target->GetConfig()->IsSrcIndexTable());
+            const auto parentPath = CanonizePath(TString(ExtractParent(sourcePath)));
             if (parentPath != tablePath || retained.contains(sourcePath)) {
                 continue;
             }
@@ -506,6 +508,13 @@ class TController::TTxSchemaChangeReport: public TTxBase {
             // The source DROP has already removed the index stream.
             target->SetDstState(TReplication::EDstState::Removing);
             target->SetStreamState(TReplication::EStreamState::Removed);
+            if (target->GetConfig()->IsSrcIndexTable() || target->GetConfig()->IsRowIdIndex()) {
+                const auto actor = Self->IndexReadyActors.find(std::make_pair(key.first, target->GetId()));
+                if (actor != Self->IndexReadyActors.end()) {
+                    IndexReadyActorsToStop.push_back(actor->second);
+                    Self->IndexReadyActors.erase(actor);
+                }
+            }
             db.Table<Schema::Targets>().Key(key.first, target->GetId()).Update(
                 NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
             );
@@ -733,6 +742,9 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
+        for (const auto& actor : IndexReadyActorsToStop) {
+            ctx.Send(actor, new TEvents::TEvPoison());
+        }
         if (ProgressReplication) {
             const auto id = TWorkerId::Parse(Event->Get()->Record.GetWorker());
             if (auto replication = Self->Find(id.ReplicationId())) {
@@ -856,7 +868,7 @@ public:
         }
 
         TxId = it->second.DstAlterTxId;
-        if (!TxId) {
+        if (!TxId || (Event->Get()->PreviousTxId && TxId == Event->Get()->PreviousTxId)) {
             TxId = Event->Get()->TxId;
             it->second.DstAlterTxId = TxId;
             NIceDb::TNiceDb db(txc.DB);
@@ -1030,33 +1042,52 @@ public:
             auto* base = replication->FindTarget(key.second);
             if (base && base->GetKind() == TReplication::ETargetKind::Table) {
                 for (const auto& index : it->second.Schema.GetIndexes().GetItems()) {
-                    if (index.GetType() != "GlobalSync") {
+                    const auto type = GetSchemaIndexType(index);
+                    const bool fulltext = NTableIndex::IsFulltextOrJsonIndex(type);
+                    const bool rowId = AppData()->FeatureFlags.GetEnableFulltextIndexReplication() && IsFulltextRowIdIndex(index);
+                    if (index.GetType() != "GlobalSync" && !fulltext && !rowId) {
                         continue;
                     }
 
-                    const auto src = CanonizePath(ChildPath(SplitPath(base->GetSrcPath()), index.GetName()));
+                    const auto indexPath = CanonizePath(ChildPath(SplitPath(base->GetSrcPath()), index.GetName()));
                     bool exists = false;
                     for (const auto* target : replication->GetTargets()) {
-                        exists |= CanonizePath(target->GetSrcPath()) == src;
+                        exists |= GetSourceIndexPath(target->GetSrcPath(), target->GetConfig()->IsSrcIndexTable()) == indexPath;
                     }
                     if (exists) {
                         continue;
                     }
 
-                    const auto dst = CanonizePath(ChildPath(SplitPath(base->GetDstPath()),
-                        {index.GetName(), "indexImplTable"}));
-                    auto config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(src, dst);
-                    const auto tid = replication->AddTarget(TReplication::ETargetKind::IndexTable, config);
-                    replication->FindTarget(tid)->SetIndexBuild(true);
-                    auto& build = Self->IndexBuilds[{key.first, tid}];
-                    build.SetPhase(NKikimrReplication::TIndexBuildState::FILLING);
-                    build.SetSnapshotTxId(it->second.DstAlterTxId);
-                    db.Table<Schema::Targets>().Key(key.first, tid).Update(
-                        NIceDb::TUpdate<Schema::Targets::Kind>(TReplication::ETargetKind::IndexTable),
-                        NIceDb::TUpdate<Schema::Targets::SrcPath>(src),
-                        NIceDb::TUpdate<Schema::Targets::DstPath>(dst),
-                        NIceDb::TUpdate<Schema::Targets::IndexBuild>(build.SerializeAsString())
-                    );
+                    TVector<TString> keys(index.GetIndexColumns().begin(), index.GetIndexColumns().end());
+                    ui64 groupId = 0;
+                    for (const auto impl : NTableIndex::GetImplTables(type, keys)) {
+                        const TString tableName(impl);
+                        const auto src = fulltext
+                            ? CanonizePath(ChildPath(SplitPath(indexPath), tableName)) : indexPath;
+                        const auto dst = CanonizePath(ChildPath(SplitPath(base->GetDstPath()),
+                            {index.GetName(), tableName}));
+                        auto config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(src, dst, fulltext, rowId);
+                        const auto tid = replication->AddTarget(TReplication::ETargetKind::IndexTable, config);
+                        groupId = groupId ? groupId : tid;
+                        replication->FindTarget(tid)->SetIndexBuild(true);
+                        auto& build = Self->IndexBuilds[{key.first, tid}];
+                        build.SetPhase(NKikimrReplication::TIndexBuildState::FILLING);
+                        if (!fulltext && !rowId) {
+                            build.SetSnapshotTxId(it->second.DstAlterTxId);
+                        }
+                        if (fulltext || rowId) {
+                            build.SetIndexGroupId(groupId);
+                            build.SetIndexName(index.GetName());
+                        }
+                        db.Table<Schema::Targets>().Key(key.first, tid).Update(
+                            NIceDb::TUpdate<Schema::Targets::Kind>(TReplication::ETargetKind::IndexTable),
+                            NIceDb::TUpdate<Schema::Targets::SrcPath>(src),
+                            NIceDb::TUpdate<Schema::Targets::DstPath>(dst),
+                            NIceDb::TUpdate<Schema::Targets::SrcIndexTable>(fulltext),
+                            NIceDb::TUpdate<Schema::Targets::RowIdIndex>(rowId),
+                            NIceDb::TUpdate<Schema::Targets::IndexBuild>(build.SerializeAsString())
+                        );
+                    }
                 }
                 db.Table<Schema::Replications>().Key(key.first).Update(
                     NIceDb::TUpdate<Schema::Replications::NextTargetId>(replication->GetNextTargetId())

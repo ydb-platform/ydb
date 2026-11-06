@@ -619,6 +619,37 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         UNIT_ASSERT_VALUES_EQUAL(first.GetIndexes().GetItems(1).GetType(), "GlobalSync");
     }
 
+    Y_UNIT_TEST(SchemaChangeFulltextMetadata) {
+        for (const auto* type : {"GlobalFulltextPlain", "GlobalFulltextRelevance", "GlobalJson",
+                "GlobalFulltextCompact", "GlobalFulltextCompactRelevance", "GlobalJsonCompact"})
+        {
+            auto record = MakeIndexSchemaChangeRecord(TStringBuilder()
+                << "{\"idx\":{\"type\":\"" << type << "\",\"indexColumns\":[\"value\"],"
+                << "\"dataColumns\":[],\"fulltextSettings\":\"\",\"useRowIdAsDocId\":true}}");
+            NKikimrReplication::TSchemaChange schema;
+            TString error;
+            UNIT_ASSERT_C(record->TryGetSchemaChange(schema, error), error);
+            const auto& index = schema.GetIndexes().GetItems(0);
+            UNIT_ASSERT(index.HasFulltextSettings());
+            UNIT_ASSERT(index.GetUseRowIdAsDocId());
+            UNIT_ASSERT_VALUES_EQUAL(index.GetType(), type);
+        }
+        for (const auto* settings : {
+                R"("fulltextSettings":42,"useRowIdAsDocId":false)",
+                R"("fulltextSettings":"!","useRowIdAsDocId":false)",
+                R"("fulltextSettings":"","useRowIdAsDocId":"false")",
+                R"("fulltextSettings":"")"})
+        {
+            auto record = MakeIndexSchemaChangeRecord(TStringBuilder()
+                << "{\"idx\":{\"type\":\"GlobalFulltextPlain\",\"indexColumns\":[\"value\"],"
+                << "\"dataColumns\":[]," << settings << "}}");
+            NKikimrReplication::TSchemaChange schema;
+            TString error;
+            UNIT_ASSERT(!record->TryGetSchemaChange(schema, error));
+            UNIT_ASSERT(!error.empty());
+        }
+    }
+
     Y_UNIT_TEST(SchemaChangeRejectsInvalidIndexes) {
         for (const auto* indexes : {
             "null", "[]", R"({"":{}})",

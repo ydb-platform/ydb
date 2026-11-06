@@ -4,6 +4,7 @@
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/core/tx/replication/common/family_settings.h>
 
 #include <contrib/libs/rapidjson/include/rapidjson/reader.h>
@@ -604,6 +605,25 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
             auto* index = indexes->AddItems();
             index->SetName(name);
             index->SetType(definition["type"].GetString());
+            if (definition.Has("fulltextSettings")) {
+                if (!definition["fulltextSettings"].IsString()
+                    || !definition["useRowIdAsDocId"].IsBoolean())
+                {
+                    error = TStringBuilder() << "schema record index '" << name << "' has invalid fulltext settings";
+                    return false;
+                }
+                try {
+                    const auto settings = Base64StrictDecode(definition["fulltextSettings"].GetString());
+                    if (!index->MutableFulltextSettings()->ParseFromString(settings)) {
+                        error = TStringBuilder() << "schema record index '" << name << "' has malformed fulltext settings";
+                        return false;
+                    }
+                } catch (const std::exception&) {
+                    error = TStringBuilder() << "schema record index '" << name << "' has invalid fulltext settings encoding";
+                    return false;
+                }
+                index->SetUseRowIdAsDocId(definition["useRowIdAsDocId"].GetBoolean());
+            }
             for (const auto& column : definition["indexColumns"].GetArray()) {
                 index->AddIndexColumns(column.GetString());
             }

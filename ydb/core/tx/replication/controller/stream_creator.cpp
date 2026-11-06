@@ -1,4 +1,5 @@
 #include "logging.h"
+#include "index_replication.h"
 #include "private_events.h"
 #include "stream_creator.h"
 #include "target_with_stream.h"
@@ -132,7 +133,7 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         case TReplication::ETargetKind::Table:
             return CanonizePath(ChildPath(SplitPath(SrcPath), TString{Changefeed.GetName()}));
         case TReplication::ETargetKind::IndexTable:
-            return CanonizePath(ChildPath(SplitPath(SrcPath), {"indexImplTable", TString{Changefeed.GetName()}}));
+            return CanonizePath(ChildPath(SplitPath(GetSourceIndexTablePath(SrcPath, SrcIndexTable)), TString{Changefeed.GetName()}));
         case TReplication::ETargetKind::Transfer:
             return CanonizePath(SplitPath(SrcPath));
         }
@@ -418,6 +419,7 @@ public:
         , ReplicationId(rid)
         , TargetId(tid)
         , Kind(config->GetKind())
+        , SrcIndexTable(config->IsSrcIndexTable())
         , SrcPath(config->GetSrcPath())
         , SrcConsumerName(consumerName)
         , Changefeed(MakeChangefeed(streamName, retentionPeriod, resolvedTimestamps, NJson::TJsonMap{
@@ -471,6 +473,7 @@ private:
     const ui64 ReplicationId;
     const ui64 TargetId;
     const TReplication::ETargetKind Kind;
+    const bool SrcIndexTable;
     const TString SrcPath;
     const TString SrcConsumerName;
     const NYdb::NTable::TChangefeedDescription Changefeed;
@@ -491,8 +494,9 @@ IActor* CreateStreamCreator(TReplication* replication, ui64 targetId, const TAct
 
     const auto& config = replication->GetConfig();
     const auto& consistency = config.GetConsistencySettings();
-    const auto resolvedTimestamps = consistency.HasGlobal()
-        ? std::make_optional(TDuration::MilliSeconds(consistency.GetGlobal().GetCommitIntervalMilliSeconds()))
+    const auto resolvedTimestamps = consistency.HasGlobal() || target->IsIndexBuild()
+        ? std::make_optional(TDuration::MilliSeconds(consistency.HasGlobal()
+            ? consistency.GetGlobal().GetCommitIntervalMilliSeconds() : 1000))
         : std::nullopt;
     const bool needCreate = !config.HasTransferSpecific() || !config.GetTransferSpecific().GetTarget().HasConsumerName();
     const bool supportsTopicAutopartitioning = !consistency.HasGlobal() && AppData()->FeatureFlags.GetEnableTopicAutopartitioningForReplication();

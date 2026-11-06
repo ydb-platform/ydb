@@ -37,11 +37,12 @@ def env_opt(name: str, default: str = "") -> str:
     return (os.environ.get(name) or default).strip()
 
 
-def append_summary(text: str) -> None:
+def write_step_summary(text: str) -> None:
+    """Replace the job step summary with the rewritten job_summary body."""
     path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not path:
         return
-    with open(path, "a", encoding="utf-8") as f:
+    with open(path, "w", encoding="utf-8") as f:
         f.write(text if text.endswith("\n") else text + "\n")
 
 
@@ -244,7 +245,10 @@ def regenerate_summary(
     pull_number: str,
     workflow_run_id: str,
 ) -> Path:
-    """Regenerate ya-test.html with YDB history; merge enriched markdown into job_summary."""
+    """Regenerate ya-test.html with YDB history; merge enriched markdown into job_summary.
+
+    Does not touch GITHUB_STEP_SUMMARY — caller publishes the final file after S3 upload.
+    """
     summary_links = public_dir / "summary_links.txt"
     if not summary_links.exists():
         summary_links.write_text(f"00 [Artifacts]({public_dir_url}/index.html)\n", encoding="utf-8")
@@ -252,13 +256,18 @@ def regenerate_summary(
     job_summary = public_dir / "job_summary.md"
     remote_body = ""
     if job_summary.is_file():
+        # URL prefixes already rewritten to caller S3 by rewrite_url_prefix.
         remote_body = job_summary.read_text(encoding="utf-8").rstrip() + "\n\n"
 
     last = attempts[-1] if attempts else None
     if not last:
-        append_summary("_No test attempts found to regenerate._\n")
         if remote_body:
-            append_summary(remote_body)
+            job_summary.write_text(remote_body, encoding="utf-8")
+        elif not job_summary.is_file():
+            job_summary.write_text(
+                f"_No test attempts found._\n\n[Artifacts]({public_dir_url}/index.html)\n",
+                encoding="utf-8",
+            )
         return job_summary
 
     html_rel = last.get("html_relpath") or f"try_{last['retry']}/ya-test.html"
@@ -266,7 +275,10 @@ def regenerate_summary(
     html_path = public_dir / html_rel
     report_path = public_dir / report_rel
     if not report_path.is_file():
-        die(f"missing report for regenerate: {report_path}")
+        print(f"::warning::missing report for regenerate: {report_path}; keeping remote job_summary")
+        if remote_body:
+            job_summary.write_text(remote_body, encoding="utf-8")
+        return job_summary
 
     html_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -308,11 +320,16 @@ def regenerate_summary(
     if oom.is_file():
         cmd.extend(["--oom_dmesg_log", str(oom)])
     cmd.extend(["Tests", str(html_path), str(report_path)])
-    run(cmd, cwd=str(workspace))
+    try:
+        run(cmd, cwd=str(workspace))
+    except subprocess.CalledProcessError as e:
+        print(f"::warning::generate-summary failed ({e}); keeping remote job_summary with caller S3 links")
+        if remote_body:
+            job_summary.write_text(remote_body, encoding="utf-8")
+        return job_summary
 
     enriched_parts: list[str] = [
-        "## Summary (enriched)\n",
-        f"_Reuploaded from remote executor; links use `{public_dir_url}`._\n\n",
+        "## Summary (enriched)\n\n",
     ]
     if text_file.is_file():
         enriched_parts.append(text_file.read_text(encoding="utf-8"))
@@ -320,8 +337,6 @@ def regenerate_summary(
             enriched_parts.append("\n")
     enriched = "".join(enriched_parts)
     job_summary.write_text(remote_body + enriched, encoding="utf-8")
-    # Step summary: enriched block only (wait already mirrored raw remote summary).
-    append_summary(enriched)
     return job_summary
 
 
@@ -438,7 +453,6 @@ def flush_ci_metrics(
     print(f"Flushing ci_metrics from {rewritten}")
     uploaded = flush_file(str(rewritten))
     print(f"ci_metrics flush uploaded={uploaded}")
-    append_summary(f"- **ci_metrics:** flushed `{rewritten.name}` (uploaded={uploaded})\n")
 
 
 def upload_attempts(
@@ -556,19 +570,7 @@ def main() -> None:
     caller_run_root = f"s3://{caller_bucket}/{caller_repo}/{caller_workflow}/{caller_run_id}/remote-{run_id}"
 
     event_name, source_run_id, pull_number = resolve_source_attribution(meta, caller_run_id)
-
-    append_summary(
-        "\n".join(
-            [
-                "### Remote ingest",
-                f"- **executor run:** [{run_id}]({run_url})",
-                f"- **remote artifacts:** `{remote_bucket}/{key_prefix}`",
-                f"- **caller artifacts:** [{new_public}/index.html]({quote_url(new_public + '/index.html')})",
-                f"- **source event:** `{event_name}` run `{source_run_id}`",
-                "",
-            ]
-        )
-    )
+    executor_conclusion = env_opt("EXECUTOR_CONCLUSION")
 
     with tempfile.TemporaryDirectory(prefix="remote-ingest-") as tmp:
         public_dir = Path(tmp) / "results"
@@ -641,6 +643,15 @@ def main() -> None:
             caller_repo=caller_repo,
             caller_workflow=caller_workflow,
         )
+
+        # Job step summary = rewritten job_summary (caller S3 links), not ingest meta.
+        body = ""
+        if job_summary.is_file():
+            body = job_summary.read_text(encoding="utf-8").rstrip() + "\n"
+        footer_bits = [f"Remote executor: [{run_id}]({run_url})"]
+        if executor_conclusion:
+            footer_bits.append(f"`{executor_conclusion}`")
+        write_step_summary(body + "\n---\n" + " · ".join(footer_bits) + "\n")
 
     print(f"::notice title=Remote ingest complete::{new_public}/index.html")
 

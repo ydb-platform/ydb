@@ -115,6 +115,7 @@ jobs:
             .github/actions
             .github/scripts
             .github/config
+            .github/TESTOWNERS
           sparse-checkout-cone-mode: false
 
       - uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
@@ -147,6 +148,7 @@ jobs:
           REMOTE_AWS_BUCKET: ${{ fromJSON(inputs.config).summary_s3_bucket }}
           EXECUTOR_RUN_ID: ${{ needs.wait.outputs.executor_run_id }}
           EXECUTOR_RUN_URL: ${{ needs.wait.outputs.executor_run_url }}
+          EXECUTOR_CONCLUSION: ${{ needs.wait.outputs.executor_conclusion }}
           SOURCE_EVENT_NAME: ${{ github.event_name }}
           SOURCE_RUN_ID: ${{ github.run_id }}
           PULL_NUMBER: ${{ github.event.pull_request.number || github.event.number || '' }}

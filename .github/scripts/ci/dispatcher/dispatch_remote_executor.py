@@ -198,12 +198,7 @@ def cmd_enqueue():
         executor_run_id="",
         executor_run_url="",
     )
-    append_summary(
-        "### Remote enqueue\n"
-        f"- **platform run:** [{run_id}]({run_url})\n"
-        f"- **ticket artifact:** `{TICKET_ARTIFACT_NAME}`\n"
-        f"- **claim (host S3):** `remote-claims/{run_id}.json`\n\n"
-    )
+    # Keep enqueue quiet in the run UI — ingest owns the real job summary.
     print(f"::notice title=Remote ticket artifact ready::{TICKET_ARTIFACT_NAME} on run {run_id}")
 
 
@@ -223,9 +218,6 @@ def wait_for_claim(cfg):
             if run_id:
                 run_url = str(claim.get("executor_run_url") or "").strip() or (
                     f"https://github.com/{claim.get('executor_repository') or env('REPO')}/actions/runs/{run_id}"
-                )
-                append_summary(
-                    f"### Remote claim\n- **executor run:** [{run_id}]({run_url})\n\n"
                 )
                 return run_id, run_url
         if i % 10 == 0:
@@ -250,23 +242,14 @@ def wait_executor_done(run_id, run_url):
         die(f"timed out waiting for executor run {run_id} (last status={status})")
 
     set_outputs(executor_conclusion=conclusion or "")
+    # Thin wait summary — full rewritten summary is the ingest job's step summary.
     append_summary(
-        f"## Executor finished\n\n"
-        f"- **run:** [{run_id}]({run_url})\n"
-        f"- **conclusion:** `{conclusion}`\n\n"
-        f"_Enriched summary is attached by the ingest job after reupload._\n\n"
+        f"Remote executor [{run_id}]({run_url}) finished with `{conclusion}`.\n"
+        f"_Resulting summary is published by the ingest job after reupload to caller S3._\n"
     )
 
     summary_url = run_root_file_url(run_id, "job_summary.md")
-    body = fetch_retries(summary_url)
-    if body:
-        append_summary(
-            f"<details><summary>Original remote job summary</summary>\n\n"
-            f"_Source: [{summary_url}]({summary_url})_\n\n"
-            + (body if body.endswith("\n") else body + "\n")
-            + "\n</details>\n"
-        )
-    else:
+    if not fetch_retries(summary_url):
         art_url = run_root_file_url(run_id, "remote_artifacts.json")
         if fetch_retries(art_url, attempts=5, sleep_s=2):
             print("::warning::missing job_summary.md; remote_artifacts.json present")

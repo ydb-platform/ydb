@@ -529,7 +529,7 @@ THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResp
     for (const auto& range : ranges) {
         for (ui32 i = 0; i < range.PairSize(); ++i) {
             const auto& pair = range.GetPair(i);
-            YDB_LOG_ENSURE(pair.GetStatus() == NKikimrProto::OK), //this is readrange without keys, only OK could be here
+            YDB_LOG_ENSURE(pair.GetStatus() == NKikimrProto::OK, //this is readrange without keys, only OK could be here
                 {"status", pair.GetStatus()},
                 {"key", pair.GetKey()});
             keys.push_back(pair.GetKey());

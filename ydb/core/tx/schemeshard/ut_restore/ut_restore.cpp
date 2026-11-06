@@ -11286,6 +11286,7 @@ enum class EIndexBackupScenario {
     NoIndexIVsInMapping,
     ChangefeedDuringExport,
     RebootBeforeBackupPropose,
+    DataShardWithoutIndexPrefixes,
 };
 
 enum class EIncompleteIndexStage {
@@ -11294,7 +11295,7 @@ enum class EIncompleteIndexStage {
     BeforeBackup,
 };
 
-void RejectIncompleteVectorIndexExport(bool isFs, bool prefixed, EIncompleteIndexStage stage) {
+void CheckIncompleteVectorIndexExport(bool isFs, bool prefixed, EIncompleteIndexStage stage, bool isYt = false) {
     TBackupStorage storage(isFs);
     TTestBasicRuntime runtime;
     TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
@@ -11361,12 +11362,33 @@ void RejectIncompleteVectorIndexExport(bool isFs, bool prefixed, EIncompleteInde
         return stage == EIncompleteIndexStage::BeforeBackup && copyTxId
             && ev->Get()->Record.GetTxId() == copyTxId;
     });
+    // YT does not convert index settings. Inspect its proposal and emulate a
+    // failed upload so this regression test needs no external YT cluster.
+    TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> ytBackup(runtime, [&](const auto& ev) {
+        const auto& record = ev->Get()->Record;
+        if (!isYt || !record.TransactionSize()
+            || record.GetTransaction(0).GetOperationType() != NKikimrSchemeOp::ESchemeOpBackup) {
+            return false;
+        }
+        const auto& backup = record.GetTransaction(0).GetBackup();
+        UNIT_ASSERT(backup.HasYTSettings());
+        UNIT_ASSERT_VALUES_EQUAL(backup.GetTable().GetTable().GetTableIndexes(0)
+            .IndexImplTableDescriptionsSize(), 1);
+        runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+            new TEvSchemeShard::TEvModifySchemeTransactionResult(NKikimrScheme::StatusSchemeError,
+                record.GetTxId(), TTestTxConfig::SchemeShard, "YT backup proposal received")));
+        return true;
+    });
 
     if (stage == EIncompleteIndexStage::BeforeExport) {
         removeImplTable();
     }
     const ui64 exportTxId = ++txId;
-    AsyncExport(runtime, exportTxId, "/MyRoot", Sprintf(R"(
+    AsyncExport(runtime, exportTxId, "/MyRoot", isYt ? TString(R"(
+        ExportToYtSettings {
+            items { source_path: "/MyRoot/Table" destination_path: "//backup" }
+        }
+    )") : Sprintf(R"(
         %s {
             %s
             %s
@@ -11398,10 +11420,15 @@ void RejectIncompleteVectorIndexExport(bool isFs, bool prefixed, EIncompleteInde
         const auto result = TestGetExport(runtime, exportTxId, "/MyRoot", Ydb::StatusIds::CANCELLED);
         issues = NYql::IssuesFromMessageAsString(result.GetResponse().GetEntry().GetIssues());
     }
-    UNIT_ASSERT_STRING_CONTAINS(issues, "Incomplete description of index 'vector_idx'");
-    UNIT_ASSERT_STRING_CONTAINS(issues, prefixed
-        ? "expected at least 3 implementation table descriptions, got 2"
-        : "expected at least 2 implementation table descriptions, got 1");
+    if (isYt) {
+        UNIT_ASSERT_VALUES_EQUAL(ytBackup.size(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(issues, "YT backup proposal received");
+    } else {
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Incomplete description of index 'vector_idx'");
+        UNIT_ASSERT_STRING_CONTAINS(issues, prefixed
+            ? "expected at least 3 implementation table descriptions, got 2"
+            : "expected at least 2 implementation table descriptions, got 1");
+    }
 
     // Rejection must leave SchemeShard able to process subsequent operations.
     TestMkDir(runtime, ++txId, "/MyRoot", "AfterRejectedExport");
@@ -11539,6 +11566,22 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
             && schemeTx.HasBackup()
             && !schemeTx.GetBackup().GetTableName().StartsWith("indexImpl");
     });
+    ui32 proposalsWithoutIndexPrefixes = 0;
+    auto legacyProposalObserver = runtime.AddObserver<TEvDataShard::TEvProposeTransaction>([&](auto& ev) {
+        auto& record = ev->Get()->Record;
+        if (scenario != EIndexBackupScenario::DataShardWithoutIndexPrefixes
+            || record.GetTxKind() != NKikimrTxDataShard::TX_KIND_SCHEME) {
+            return;
+        }
+        NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+        if (schemeTx.ParseFromString(record.GetTxBody()) && schemeTx.GetBackup().HasIndexExportPrefixes()) {
+            // Exercise the legacy metadata calculation, as when the receiver
+            // does not know the new optional protobuf field.
+            schemeTx.MutableBackup()->ClearIndexExportPrefixes();
+            record.SetTxBody(schemeTx.SerializeAsString());
+            ++proposalsWithoutIndexPrefixes;
+        }
+    });
     const ui64 exportTxId = ++txId;
     TestExport(runtime, exportTxId, "/MyRoot", exportRequest);
     if (rebootBeforeBackupPropose) {
@@ -11563,6 +11606,9 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
     indexBackups.Stop().Unblock();
     env.TestWaitNotification(runtime, exportTxId);
     TestGetExport(runtime, exportTxId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    if (scenario == EIndexBackupScenario::DataShardWithoutIndexPrefixes) {
+        UNIT_ASSERT(proposalsWithoutIndexPrefixes > 0);
+    }
 
     const auto readFile = [&](const TString& path) -> TString {
         if (isFs) {
@@ -11786,6 +11832,118 @@ void ExportImportMaterializedIndexes(bool isFs, bool encrypted,
     }
 }
 
+void ExportImportComplexIndex(bool isFs, NKikimrSchemeOp::EIndexType type, bool prefixed = false) {
+    TBackupStorage storage(isFs);
+    TTestBasicRuntime runtime;
+    const bool isVector = type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
+    const bool compact = type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
+        || type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance;
+    TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(compact));
+    runtime.GetAppData().FeatureFlags.SetEnableFsBackups(isFs);
+    runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+    runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+    ui64 txId = 100;
+
+    TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+        Name: "Table"
+        Columns { Name: "key" Type: "%s" }
+        Columns { Name: "embedding" Type: "String" }
+        Columns { Name: "prefix" Type: "Uint32" }
+        Columns { Name: "value" Type: "String" }
+        KeyColumnNames: ["key"]
+    )", isVector ? "Uint32" : "Uint64"));
+    env.TestWaitNotification(runtime, txId);
+    TVector<TString> indexColumns;
+    const ui32 rowCount = isVector ? 200 : 4;
+    if (isVector) {
+        WriteVectorTableRows(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/Table", 0, 0, rowCount);
+        indexColumns = prefixed ? TVector<TString>{"prefix", "embedding"} : TVector<TString>{"embedding"};
+        TestBuildVectorIndex(runtime, ++txId, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/Table", "index1", indexColumns);
+    } else {
+        for (ui64 row = 0; row < rowCount; ++row) {
+            const TString text = row % 2 ? "green apple" : "red apple and red car";
+            UploadRow(runtime, "/MyRoot/Table", 0, {1}, {4}, {TCell::Make(row)}, {TCell(text.data(), text.size())});
+        }
+        indexColumns = {"value"};
+        Ydb::Table::TableIndex index;
+        index.set_name("index1");
+        index.add_index_columns("value");
+        const bool relevance = type == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
+            || type == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance;
+        auto* settings = relevance
+            ? index.mutable_global_fulltext_relevance_index()->mutable_fulltext_settings()
+            : index.mutable_global_fulltext_plain_index()->mutable_fulltext_settings();
+        auto* column = settings->add_columns();
+        column->set_column("value");
+        column->mutable_analyzers()->set_tokenizer(Ydb::Table::FulltextIndexSettings::WHITESPACE);
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", index);
+    }
+    env.TestWaitNotification(runtime, txId);
+    const auto build = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", txId);
+    UNIT_ASSERT_VALUES_EQUAL(build.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+    const TString encryptionSettings = R"(
+        encryption_settings {
+            encryption_algorithm: "AES-128-GCM"
+            symmetric_key { key: "0123456789012345" }
+        }
+    )";
+    TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+        %s {
+            %s
+            %s
+            %s
+            include_index_data: true
+            compression: "zstd"
+            items { source_path: "/MyRoot/Table" %s: "backup" }
+        }
+    )", isFs ? "ExportToFsSettings" : "ExportToS3Settings", storage.Settings().c_str(),
+        isFs ? "" : "destination_prefix: \"export\"", encryptionSettings.c_str(),
+        isFs ? "destination_path" : "destination_prefix"));
+    env.TestWaitNotification(runtime, txId);
+    TestGetExport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+    const auto implTables = NTableIndex::GetImplTables(type, indexColumns);
+    for (const bool directImport : {false, true}) {
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directImport);
+        const TString restoredPath = directImport ? "/MyRoot/RestoredDirect" : "/MyRoot/Restored";
+        ui32 indexBuilds = 0;
+        auto observer = runtime.AddObserver<TEvIndexBuilder::TEvCreateRequest>(
+            [&](auto&) { ++indexBuilds; });
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            %s {
+                %s
+                %s
+                %s
+                index_population_mode: INDEX_POPULATION_MODE_IMPORT
+                items { %s: "backup" destination_path: "%s" }
+            }
+        )", isFs ? "ImportFromFsSettings" : "ImportFromS3Settings", storage.Settings().c_str(),
+            isFs ? "" : "source_prefix: \"export\"", encryptionSettings.c_str(),
+            isFs ? "source_path" : "source_prefix", restoredPath.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(indexBuilds, 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, restoredPath), rowCount);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table"),
+            ReadShards(runtime, TTestTxConfig::SchemeShard, restoredPath));
+        TestDescribeResult(DescribePrivatePath(runtime, restoredPath + "/index1"), {
+            NLs::PathExist,
+            NLs::IndexType(type),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        for (const auto& implTable : implTables) {
+            const TString suffix = TStringBuilder() << "/index1/" << implTable;
+            // Compare the actual non-empty implementation tables:
+            // a rebuilt or silently skipped index must not pass as restored.
+            UNIT_ASSERT_C(CountRows(runtime, "/MyRoot/Table" + suffix) > 0, suffix);
+            UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard, "/MyRoot/Table" + suffix),
+                ReadShards(runtime, TTestTxConfig::SchemeShard, restoredPath + suffix));
+        }
+    }
+}
+
 void ExportGlobalIndexWithLocalBloom(bool isFs) {
     TBackupStorage storage(isFs);
     TTestBasicRuntime runtime;
@@ -11867,16 +12025,36 @@ void ExportGlobalIndexWithLocalBloom(bool isFs) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TEncryptedMaterializedIndexTests) {
+    Y_UNIT_TEST_QUAD(VectorIndex, IsFs, Prefixed) {
+        ExportImportComplexIndex(IsFs, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, Prefixed);
+    }
+
+    Y_UNIT_TEST_QUAD(FulltextIndex, Compact, Relevance) {
+        const auto type = Compact
+            ? (Relevance ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance : NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact)
+            : (Relevance ? NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance : NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain);
+        ExportImportComplexIndex(false, type);
+    }
+
+    Y_UNIT_TEST_FLAG(DataShardWithoutIndexPrefixes, IsFs) {
+        ExportImportMaterializedIndexes(IsFs, true, Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
+            "AES-128-GCM", EIndexBackupScenario::DataShardWithoutIndexPrefixes, true);
+    }
+
+    Y_UNIT_TEST(YtBackupDuringVectorIndexRebuild) {
+        CheckIncompleteVectorIndexExport(false, false, EIncompleteIndexStage::BeforeBackup, true);
+    }
+
     Y_UNIT_TEST_QUAD(RejectIncompleteVectorIndex, IsFs, Prefixed) {
-        RejectIncompleteVectorIndexExport(IsFs, Prefixed, EIncompleteIndexStage::BeforeExport);
+        CheckIncompleteVectorIndexExport(IsFs, Prefixed, EIncompleteIndexStage::BeforeExport);
     }
 
     Y_UNIT_TEST_FLAG(RejectIncompleteIndexBeforeMetadata, IsFs) {
-        RejectIncompleteVectorIndexExport(IsFs, false, EIncompleteIndexStage::BeforeMetadata);
+        CheckIncompleteVectorIndexExport(IsFs, false, EIncompleteIndexStage::BeforeMetadata);
     }
 
     Y_UNIT_TEST_FLAG(RejectIncompleteIndexBeforeBackup, IsFs) {
-        RejectIncompleteVectorIndexExport(IsFs, false, EIncompleteIndexStage::BeforeBackup);
+        CheckIncompleteVectorIndexExport(IsFs, false, EIncompleteIndexStage::BeforeBackup);
     }
 
     Y_UNIT_TEST_QUAD(Export, IsFs, Aes) {

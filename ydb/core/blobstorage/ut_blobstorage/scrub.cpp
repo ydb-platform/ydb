@@ -18,7 +18,8 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
 
         std::vector<TString> blobs;
         for (ui32 i = 0; i < 100; ++i) {
-            const ui32 size = RandomNumber(10u) == 0 ? RandomNumber<ui32>(3 << 20) + 1048576 : (RandomNumber<ui32>(65536) + 1); // 1 byte - 4 MB
+            const ui32 size = (RandomNumber(10u) == 0 ? RandomNumber<ui32>(3 << 20) + 1048576
+                : RandomNumber<ui32>(65536) + 1) * Max<ui32>(1, env.Settings.Erasure.DataParts() / 4);
             TString data = TString::Uninitialized(size);
             memset(data.Detach(), RandomNumber<ui8>(), size);
             blobs.push_back(data);
@@ -164,7 +165,7 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
 
     void ScrubTest(TBlobStorageGroupType erasure) {
         SetRandomSeed(1);
-        TEnvironmentSetup env(false, erasure);
+        TEnvironmentSetup env({.NodeCount = erasure.BlobSubgroupSize(), .Erasure = erasure});
         auto& runtime = env.Runtime;
         env.CreateBoxAndPool();
         env.Sim(TDuration::Minutes(1));
@@ -418,6 +419,10 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
     Y_UNIT_TEST(block42) {
         ScrubTest(TBlobStorageGroupType::Erasure4Plus2Block);
     }
+
+    Y_UNIT_TEST(Block82) {
+        ScrubTest(TBlobStorageGroupType::Erasure8Plus2Block);
+    }
 }
 
 Y_UNIT_TEST_SUITE(DeepScrubbing) {
@@ -612,6 +617,12 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
     DEEP_SCRUBBING_TEST(4Plus2Block, HugeBlob, OneCorruptedMainOneCorruptedHandoff);
     DEEP_SCRUBBING_TEST(4Plus2Block, SmallBlob, TwoCorruptedHandoff);
     DEEP_SCRUBBING_TEST(4Plus2Block, HugeBlob, TwoCorruptedHandoff);
+    DEEP_SCRUBBING_TEST(8Plus2Block, SmallBlob, TwoCorrruptedMain);
+    DEEP_SCRUBBING_TEST(8Plus2Block, HugeBlob, TwoCorrruptedMain);
+    DEEP_SCRUBBING_TEST(8Plus2Block, SmallBlob, OneCorruptedMainOneCorruptedHandoff);
+    DEEP_SCRUBBING_TEST(8Plus2Block, HugeBlob, OneCorruptedMainOneCorruptedHandoff);
+    DEEP_SCRUBBING_TEST(8Plus2Block, SmallBlob, TwoCorruptedHandoff);
+    DEEP_SCRUBBING_TEST(8Plus2Block, HugeBlob, TwoCorruptedHandoff);
     // DEEP_SCRUBBING_TEST(Mirror3dc, SmallBlob, OneCorrupted);
     // DEEP_SCRUBBING_TEST(Mirror3dc, HugeBlob, OneCorrupted);
     // DEEP_SCRUBBING_TEST(Mirror3dc, SmallBlob, TwoCorrruptedInSameDc);

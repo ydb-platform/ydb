@@ -24,12 +24,17 @@ public:
     }
 };
 
-class TDataIntegrityCheckerBlock42 : public TDataIntegrityCheckerBase {
+class TDataIntegrityCheckerParityBlock : public TDataIntegrityCheckerBase {
 public:
     using TDataIntegrityCheckerBase::TDataIntegrityCheckerBase;
 
     TPartsState GetDataState(const TLogoBlobID& id, const TPartsData& partsData, char separator) const override {
-        Y_ABORT_UNLESS(partsData.Parts.size() == 6);
+        const auto& type = Top->GType;
+        const ui32 dataParts = type.DataParts();
+        const ui32 totalParts = type.TotalPartCount();
+        const auto crcMode = static_cast<TErasureType::ECrcMode>(id.CrcMode());
+        const ui64 partSize = type.PartSize(TLogoBlobID(id, 1));
+        Y_ABORT_UNLESS(partsData.Parts.size() == totalParts);
 
         TPartsState partsState;
 
@@ -37,12 +42,18 @@ public:
             TRope Data;
             std::vector<ui32> DiskIdxs;
         };
-        std::array<std::vector<TSeenPart>, 6> seenParts;
+        TStackVec<std::vector<TSeenPart>, TErasureType::MaxTotalParts> seenParts(totalParts);
 
         // find all distinct copies of each part
-        for (ui32 partId = 0; partId < 6; ++partId) {
+        for (ui32 partId = 0; partId < totalParts; ++partId) {
             auto& seen = seenParts[partId];
             for (const auto& [diskIdx, data] : partsData.Parts[partId]) {
+                if (data.size() != partSize || !CheckCrcAtTheEnd(crcMode, data)) {
+                    partsState.IsOk = false;
+                    partsState.DataInfo = TStringBuilder() << "ERROR: incorrect size or CRC for part " << partId + 1
+                        << " on disk " << diskIdx << separator;
+                    return partsState;
+                }
                 bool isNew = true;
                 for (auto& seenPart : seen) {
                     if (!TRope::Compare(data, seenPart.Data)) {
@@ -63,7 +74,7 @@ public:
 
         TStringStream str;
         bool hasUnequalParts = false;
-        for (ui32 partId = 0; partId < 6; ++partId) {
+        for (ui32 partId = 0; partId < totalParts; ++partId) {
             const auto& seen = seenParts[partId];
             if (seen.size() > 1) {
                 hasUnequalParts = true;
@@ -96,41 +107,41 @@ public:
         erasureReport << "Erasure info:" << separator;
 
         std::vector<ui32> partIds;
-        partIds.reserve(6);
+        partIds.reserve(totalParts);
         bool erasureError = false;
 
-        TErasureType::ECrcMode crcMode = (TErasureType::ECrcMode)id.CrcMode();
-
         auto checkCombination = [&]() {
+            TStackVec<const TSeenPart*, TErasureType::MaxTotalParts> versions(dataParts);
             // iterate over combinations of part versions
-            for (const auto& seen0 : seenParts[partIds[0]]) {
-            for (const auto& seen1 : seenParts[partIds[1]]) {
-            for (const auto& seen2 : seenParts[partIds[2]]) {
-            for (const auto& seen3 : seenParts[partIds[3]]) {
-                std::array<TRope, 6> data;
-                data[partIds[0]] = seen0.Data;
-                data[partIds[1]] = seen1.Data;
-                data[partIds[2]] = seen2.Data;
-                data[partIds[3]] = seen3.Data;
-
-                ui32 restoreMask = 0;
-                restoreMask |= (1 << partIds[4]);
-                if (partIds.size() == 6) {
-                    restoreMask |= (1 << partIds[5]);
+            auto checkVersions = [&](auto&& self, ui32 part) -> void {
+                if (part < dataParts) {
+                    for (const auto& seen : seenParts[partIds[part]]) {
+                        versions[part] = &seen;
+                        self(self, part + 1);
+                    }
+                    return;
                 }
 
-                ErasureRestore(crcMode, TErasureType::Erasure4Plus2Block, id.BlobSize(), nullptr, data, restoreMask);
+                TStackVec<TRope, TErasureType::MaxTotalParts> data(totalParts);
+                for (ui32 part = 0; part < dataParts; ++part) {
+                    data[partIds[part]] = versions[part]->Data;
+                }
 
-                std::array<std::vector<ui32>, 4> diskIdxs{
-                    seen0.DiskIdxs, seen1.DiskIdxs, seen2.DiskIdxs, seen3.DiskIdxs};
+                ui32 restoreMask = 0;
+                restoreMask |= (1 << partIds[dataParts]);
+                if (partIds.size() == totalParts) {
+                    restoreMask |= (1 << partIds[dataParts + 1]);
+                }
+
+                ErasureRestore(crcMode, type, id.BlobSize(), nullptr, data, restoreMask);
 
                 auto checkOnePart = [&](ui32 partId) {
                     for (const auto& seen : seenParts[partId]) {
                         TStringStream str;
                         str << "{ ";
-                        for (ui32 part = 0; part < 4; ++part) {
+                        for (ui32 part = 0; part < dataParts; ++part) {
                             str << "part " << partIds[part] + 1 << " disks [ ";
-                            for (const auto& diskIdx : diskIdxs[part]) {
+                            for (const auto& diskIdx : versions[part]->DiskIdxs) {
                                 str << diskIdx << " ";
                             }
                             str << "]; ";
@@ -151,19 +162,20 @@ public:
                     }
                 };
 
-                checkOnePart(partIds[4]);
-                if (partIds.size() == 6) {
-                    checkOnePart(partIds[5]);
+                checkOnePart(partIds[dataParts]);
+                if (partIds.size() == totalParts) {
+                    checkOnePart(partIds[dataParts + 1]);
                 }
-            }}}}
+            };
+            checkVersions(checkVersions, 0);
         };
 
-        for (ui32 partId = 0; partId < 6; ++partId) {
+        for (ui32 partId = 0; partId < totalParts; ++partId) {
             if (!seenParts[partId].empty()) {
                 partIds.push_back(partId);
             }
         }
-        if (partIds.size() <= 4) { // 4 or less parts total, nothing to check
+        if (partIds.size() <= dataParts || !partSize) { // no redundant part bytes to check
             return partsState;
         }
 
@@ -176,18 +188,18 @@ public:
             }
         }
 
-        if (partIds.size() == 5) {
+        if (partIds.size() == totalParts - 1) {
             checkCombination();
-        } else { // partIds.size() == 6
+        } else { // partIds.size() == totalParts
             // iterate over different combinations to find good parts
-            for (ui8 gap1 = 0; gap1 < 5; ++gap1) {
-                for (ui8 gap2 = gap1 + 1; gap2 < 6; ++gap2) {
+            for (ui8 gap1 = 0; gap1 < totalParts - 1; ++gap1) {
+                for (ui8 gap2 = gap1 + 1; gap2 < totalParts; ++gap2) {
                     ui8 idx = 0;
-                    for (ui8 p = 0; p < 6; ++p) {
+                    for (ui8 p = 0; p < totalParts; ++p) {
                         if (p == gap1) {
-                            partIds[4] = p;
+                            partIds[dataParts] = p;
                         } else if (p == gap2) {
-                            partIds[5] = p;
+                            partIds[dataParts + 1] = p;
                         } else {
                             partIds[idx] = p;
                             ++idx;

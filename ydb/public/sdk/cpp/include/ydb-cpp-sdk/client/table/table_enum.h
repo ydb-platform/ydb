@@ -84,6 +84,14 @@ enum class EChangefeedFormat {
     Json /* "JSON" */,
     DynamoDBStreamsJson /* "DYNAMODB_STREAMS_JSON" */,
     DebeziumJson /* "DEBEZIUM_JSON" */,
+    Binary /* "BINARY" */,
+
+    Unknown = std::numeric_limits<int>::max()
+};
+
+enum class EChangefeedCompression {
+    None /* "NONE" */,
+    Zstd /* "ZSTD" */,
 
     Unknown = std::numeric_limits<int>::max()
 };

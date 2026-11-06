@@ -65,14 +65,14 @@ namespace NKikimr::NGRpcService {
             return;
         }
 
-        SetPathNormalizer(IsPathNormalizationEnabled() ? std::move(normalizer) : nullptr);
         if (database) {
             if (relativeDatabase) {
                 database = PrependDomainIfNeeded("/" + appData->DomainsInfo->Domain->Name, *database);
             }
-            database = NormalizePath(*database);
+            database = IsPathNormalizationEnabled() && normalizer ? normalizer->NormalizePath(*database) : *database;
         }
 
+        SetPathNormalizer(IsPathNormalizationEnabled() ? std::move(normalizer) : nullptr);
         EffectiveDatabaseName_ = std::move(database);
         PathNormalizationInitialized_ = true;
     }

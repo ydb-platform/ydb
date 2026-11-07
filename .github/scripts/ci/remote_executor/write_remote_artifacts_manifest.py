@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Write remote_artifacts.json locator at the S3 run root for platform ingest.
 
-Requires S3_BUCKET_PATH, PUBLIC_DIR_URL, PUBLIC_DIR, REMOTE_ARTIFACTS_JSON.
+Requires S3_BUCKET_PATH, PUBLIC_DIR_URL, REMOTE_ARTIFACTS_JSON, ORIGINAL_HEAD.
 Ingest reads artifact_key_prefix / public_dir_url / commit; attempts are
-re-discovered from the downloaded PUBLIC_DIR tree.
+re-discovered from the downloaded tree.
 """
 from __future__ import annotations
 

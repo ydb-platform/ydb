@@ -237,6 +237,44 @@ Y_UNIT_TEST_SUITE(TSchemeShardUserAttrsTest) {
         TestMkDir(runtime, txId++, "/MyRoot", "DirD", {NKikimrScheme::StatusInvalidParameter}, AlterUserAttrs(dirDAttrs));
     }
 
+    // __omit_export marks any object that export and backup must leave out.
+    Y_UNIT_TEST(OmitExport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "Omitted", {NKikimrScheme::StatusAccepted},
+            AlterUserAttrs({{"__omit_export", "true"}}));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Omitted"), {
+            NLs::UserAttrsEqual({{"__omit_export", "true"}}),
+        });
+
+        // Only "true" has a meaning; anything else is a typo.
+        TestMkDir(runtime, ++txId, "/MyRoot", "Invalid", {NKikimrScheme::StatusInvalidParameter},
+            AlterUserAttrs({{"__omit_export", "yes"}}));
+
+        // The attribute can be set and cleared on existing objects.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", AlterUserAttrs({{"__omit_export", "true"}}));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::UserAttrsEqual({{"__omit_export", "true"}}),
+        });
+
+        TestUserAttrs(runtime, ++txId, "/MyRoot", "Table", AlterUserAttrs({}, {"__omit_export"}));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+            NLs::UserAttrsEqual({}),
+        });
+    }
+
     // Regression test for a bug where dropping a tenant while AlterUserAttributes is
     // in-flight (after Propose, before the coordinator plan is applied) left orphaned
     // UserAttributesAlterData rows in the local database.

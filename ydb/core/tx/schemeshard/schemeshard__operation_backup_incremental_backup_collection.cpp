@@ -4,6 +4,8 @@
 #include "schemeshard__operation_states.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/backup/common/omit_export.h>
+
 #include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
@@ -201,6 +203,13 @@ TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationI
                 result = {CreateReject(opId, checks.GetStatus(), checks.GetError())};
                 return result;
             }
+        }
+
+        if (::NKikimr::NBackup::IsOmittedFromExport(tablePath.Base()->UserAttrs->Attrs)) {
+            result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
+                << "Table " << item.GetPath() << " is marked with " << ::NKikimr::NBackup::OMIT_EXPORT_ATTRIBUTE
+                << " and cannot be backed up")};
+            return result;
         }
 
         std::pair<TString, TString> paths;

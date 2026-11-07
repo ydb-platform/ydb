@@ -4,6 +4,7 @@
 #include "target_with_stream.h"
 #include "util.h"
 
+#include <ydb/core/backup/common/omit_export.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -35,7 +36,9 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
 
         auto desc = TChangefeedDescription(name, EChangefeedMode::Updates, EChangefeedFormat::Json)
             .WithRetentionPeriod(retentionPeriod)
-            .AddAttribute("__async_replication", NJson::WriteJson(attrs, false));
+            .AddAttribute("__async_replication", NJson::WriteJson(attrs, false))
+            // The feed is an implementation detail of the replication.
+            .AddAttribute(std::string(NBackup::OMIT_EXPORT_ATTRIBUTE), std::string(NBackup::OMIT_EXPORT_VALUE));
 
         if (initialScan) {
             desc.WithInitialScan();

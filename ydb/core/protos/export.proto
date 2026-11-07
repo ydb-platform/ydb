@@ -22,6 +22,8 @@ message TExport {
         Ydb.Export.ExportToFsSettings ExportToFsSettings = 11;
     }
     optional string UserSID = 10;
+    optional string CancelRequestedBy = 12;
+    optional google.protobuf.Timestamp CancelRequestTime = 13;
 }
 
 message TCreateExportRequest {

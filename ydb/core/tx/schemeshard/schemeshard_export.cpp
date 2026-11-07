@@ -89,6 +89,14 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
     if (exportInfo.UserSID) {
         exprt.SetUserSID(*exportInfo.UserSID);
     }
+    if (exportInfo.CancelRequestedBy) {
+        exprt.SetCancelRequestedBy(*exportInfo.CancelRequestedBy);
+    }
+    if (exportInfo.CancelRequestTime) {
+        auto& timestamp = *exprt.MutableCancelRequestTime();
+        timestamp.set_seconds(exportInfo.CancelRequestTime->Seconds());
+        timestamp.set_nanos(exportInfo.CancelRequestTime->NanoSecondsOfSecond());
+    }
 
     switch (exportInfo.State) {
     case TExportInfo::EState::CreateExportDir:
@@ -219,6 +227,17 @@ void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo& ex
         NIceDb::TUpdate<Schema::Exports::StartTime>(exportInfo.StartTime.Seconds()),
         NIceDb::TUpdate<Schema::Exports::EndTime>(exportInfo.EndTime.Seconds())
     );
+
+    if (exportInfo.CancelRequestedBy) {
+        db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
+            NIceDb::TUpdate<Schema::Exports::CancelRequestedBy>(*exportInfo.CancelRequestedBy)
+        );
+    }
+    if (exportInfo.CancelRequestTime) {
+        db.Table<Schema::Exports>().Key(exportInfo.Id).Update(
+            NIceDb::TUpdate<Schema::Exports::CancelRequestTime>(exportInfo.CancelRequestTime->MicroSeconds())
+        );
+    }
 }
 
 void TSchemeShard::PersistExportMetadata(NIceDb::TNiceDb& db, const TExportInfo& exportInfo) {

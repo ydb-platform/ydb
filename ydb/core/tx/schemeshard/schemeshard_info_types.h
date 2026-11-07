@@ -3876,6 +3876,9 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+    TMaybe<TString> CancelRequestedBy;
+    TMaybe<TInstant> CancelRequestTime;
+
     bool EnableChecksums = false;
     bool EnablePermissions = false;
     bool IncludeIndexData = false;

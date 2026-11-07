@@ -5,6 +5,7 @@
 #include <ydb/core/util/format.h>
 
 #include <library/cpp/json/json_writer.h>
+#include <library/cpp/html/escape/escape.h>
 #include <google/protobuf/util/json_util.h>
 #include <ydb/core/base/mon_auth.h>
 
@@ -1220,6 +1221,7 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                     TABLER() {
                         TAG_ATTRS(TTableH, {{"title", "NodeId:PDiskId"}}) { out << "Id"; }
                         TABLEH() { out << "Type"; }
+                        TABLEH() { out << "KindName"; }
                         TABLEH() { out << "Kind"; }
                         TABLEH() { out << "Path"; }
                         TABLEH() { out << "Guid"; }
@@ -1241,6 +1243,11 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                             TPDiskCategory category(pdisk->Kind);
                             TABLED() { out << pdiskId; }
                             TABLED() { out << category.TypeStrShort(); }
+                            TABLED() {
+                                if (const auto it = PDiskKindNames.find(category.Kind()); it != PDiskKindNames.end()) {
+                                    out << NHtml::EscapeText(it->second);
+                                }
+                            }
                             TABLED() { out << category.Kind(); }
                             TABLED() { out << pdisk->Path; }
                             TABLED() { out << pdisk->Guid; }

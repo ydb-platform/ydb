@@ -61,7 +61,7 @@ namespace NKikimr::NBsController {
         storagePool.RandomizeGroupMapping = false;
 
         for (const auto &item : cmd.GetPDiskFilter()) {
-            storagePool.PDiskFilters.insert(TStoragePoolInfo::TPDiskFilter::Parse(boxId, storagePoolId, item));
+            storagePool.PDiskFilters.insert(ParsePDiskFilter(PDiskKinds.Get(), boxId, storagePoolId, item));
         }
 
         //if (cmd.HasScopeId()) {

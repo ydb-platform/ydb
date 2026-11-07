@@ -1,5 +1,7 @@
 #include "mkql_factories.h"
 
+#include <yql/essentials/minikql/async/compute/compute.h>
+
 #include "mkql_addmember.h"
 #include "mkql_aggrcount.h"
 #include "mkql_append.h"
@@ -171,6 +173,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"Squeeze1", &WrapSqueeze1},
         {"Discard", &WrapDiscard},
         {"Fold1", &WrapFold1},
+        {"AsyncMap", &NAsync::WrapAsyncMap},
         {"Map", &WrapMap},
         {"OrderedMap", &WrapMap},
         {"MapNext", &WrapMapNext},

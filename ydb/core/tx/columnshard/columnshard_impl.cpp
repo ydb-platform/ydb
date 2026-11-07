@@ -46,7 +46,6 @@
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
-#include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tracing/startup_probes.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
@@ -108,7 +107,6 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
           EPercentileCounters_descriptor, ETxTypes_descriptor>())
     , Counters(*TabletCountersHolder)
     , StartupTimeline(TabletID(), Counters.GetCSCounters().Initialization)
-    , WriteTasksQueue(std::make_unique<TWriteTasksQueue>(this))
     , ProgressTxController(std::make_unique<TTxController>(*this))
     , StoragesManager(std::make_shared<NOlap::TStoragesManager>(*this))
     , DataLocksManager(std::make_shared<NOlap::NDataLocks::TManager>())
@@ -121,7 +119,7 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , CompactTaskSubscription(NOlap::TCompactColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
     , TTLTaskSubscription(NOlap::TTTLColumnEngineChanges::StaticTypeName(), Counters.GetSubscribeCounters())
-    , ScanGate(Counters.GetTabletCounters())
+    , ScanGate(Counters.GetTabletCounters(), TablesManager)
     , BackgroundController(Counters.GetBackgroundControllerCounters())
     , NormalizerController(StoragesManager, Counters.GetSubscribeCounters())
     , SysLocks(this)
@@ -192,7 +190,7 @@ void TColumnShard::SendWaitPlanStep(ui64 step) {
 }
 
 void TColumnShard::RescheduleWaitingReads() {
-    if (const std::optional<ui64> step = ScanGate.ReleaseReadable(GetMaxReadVersion())) {
+    if (const std::optional<ui64> step = ScanGate.ReleaseReadableSnapshot(GetMaxReadVersion())) {
         WaitPlanStep(*step);
     }
 }
@@ -2002,6 +2000,7 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvPrivate::TEvContinueFindEmptyHistoryIntervals, Handle);
         HFunc(TEvPrivate::TEvFindEmptyHistoryIntervalsPortionsReady, Handle);
         HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);
+        HFunc(NOlap::TEvPassWriteGate, Handle);
 
         HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
         HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);

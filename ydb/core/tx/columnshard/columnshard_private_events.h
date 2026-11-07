@@ -103,6 +103,7 @@ struct TEvPrivate {
 
         EvBackupExportReset,
 
+        EvPassWriteGate,
         EvEnd
     };
 

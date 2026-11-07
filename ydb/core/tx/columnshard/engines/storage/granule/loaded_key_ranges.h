@@ -18,25 +18,33 @@ private:
 
     EState State;
     // EState::From: every portion whose last key is >= this key is in memory
-    std::optional<NArrow::NMerger::TSortableBatchPosition> From;
+    std::optional<NArrow::TSimpleRow> From;
+    // From, in the form the ranges of a scan compare with
+    std::optional<NArrow::NMerger::TSortableBatchPosition> FromPosition;
 
-    TLoadedKeyRanges(const EState state, std::optional<NArrow::NMerger::TSortableBatchPosition>&& from)
+    explicit TLoadedKeyRanges(const EState state)
         : State(state)
-        , From(std::move(from))
+    {
+    }
+
+    explicit TLoadedKeyRanges(const NArrow::TSimpleRow& from)
+        : State(EState::From)
+        , From(from)
+        , FromPosition(from.BuildSortablePosition())
     {
     }
 
 public:
     static TLoadedKeyRanges BuildNothing() {
-        return TLoadedKeyRanges(EState::Nothing, std::nullopt);
+        return TLoadedKeyRanges(EState::Nothing);
     }
 
     static TLoadedKeyRanges BuildFrom(const NArrow::TSimpleRow& from) {
-        return TLoadedKeyRanges(EState::From, from.BuildSortablePosition());
+        return TLoadedKeyRanges(from);
     }
 
     static TLoadedKeyRanges BuildEverything() {
-        return TLoadedKeyRanges(EState::Everything, std::nullopt);
+        return TLoadedKeyRanges(EState::Everything);
     }
 
     bool IsEverythingLoaded() const {
@@ -45,6 +53,9 @@ public:
 
     // Whether every row the ranges select lies in a portion that is in memory.
     bool Covers(const TPKRangesFilter& ranges) const;
+
+    // Whether every row >= key lies in a portion that is in memory.
+    bool CoversFrom(const NArrow::TSimpleRow& key) const;
 };
 
 }   // namespace NKikimr::NOlap

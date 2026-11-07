@@ -300,6 +300,10 @@ def test_create_table_with_alter_quotas(ydb_hostel_db, ydb_serverless_db, ydb_en
 
 
 def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db, ydb_endpoint, ydb_cluster, caplog):
+    row_count = 1000
+    batch_size = 100
+    payload_size = 71680
+
     logger.debug(
         "test for serverless db %s over hostel db %s", ydb_disk_quoted_serverless_db, ydb_hostel_db
     )
@@ -406,20 +410,34 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
                     commit_tx=True,
                 )
 
+    @restart_coro_on_bad_session
     @gen.coroutine
     def async_write_keys(path, start, cnt):
-        futures = []
-        for i in range(start, start + cnt):
-            futures.append(async_write_key(path, i, 'a' * 71680))
-        waiter = gen.WaitIterator(*futures)
-        while not waiter.done():
-            yield waiter.next()
+        try:
+            with (yield async_session()) as session:
+                query = yield session.async_prepare('''\
+                    DECLARE $rows AS List<Struct<id: Uint64, value_string: Utf8>>;
+
+                    UPSERT INTO `{path}` SELECT id, value_string FROM AS_TABLE($rows);
+                '''.format(path=path))
+                with session.transaction(ydb.SerializableReadWrite()) as tx:
+                    yield tx.async_execute(
+                        query,
+                        parameters={
+                            '$rows': [
+                                {'id': key, 'value_string': 'a' * payload_size}
+                                for key in range(start, start + cnt)
+                            ],
+                        },
+                        commit_tx=True,
+                    )
+        except ydb.Unavailable as e:
+            if not is_disk_space_quota_exceeded_exception(e):
+                raise
 
     @gen.coroutine
     def async_erase_keys(path, start, cnt):
-        futures = []
-        for i in range(start, start + cnt):
-            futures.append(async_erase_key(path, i))
+        futures = [async_erase_key(path, key) for key in range(start, start + cnt)]
         waiter = gen.WaitIterator(*futures)
         while not waiter.done():
             yield waiter.next()
@@ -443,10 +461,11 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         path = os.path.join(database, "dirA0", "table")
         pool.retry_operation_sync(create_table, None, path)
 
+        # Keep each transaction below 7 MiB while attempting more than the 64 MiB quota.
         # Avoid formatting every large request payload as protobuf text.
         with caplog.at_level(logging.INFO, logger="ydb.connection"):
-            for start in range(0, 1000, 100):
-                IOLoop.current().run_sync(lambda: async_write_keys(path, start=start, cnt=100))
+            for start in range(0, row_count, batch_size):
+                IOLoop.current().run_sync(lambda: async_write_keys(path, start=start, cnt=batch_size))
 
         for _ in range(60):
             time.sleep(1)
@@ -464,8 +483,15 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         with pytest.raises(ydb.Unavailable, match=RE_DISK_SPACE_QUOTA_EXCEEDED):
             IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(0, 'test')]))
 
-        for start in range(0, 1000, 100):
-            IOLoop.current().run_sync(lambda: async_erase_keys(path, start=start, cnt=100))
+        # Preserve point deletes for the disk-space reclamation check.
+        with caplog.at_level(logging.INFO, logger="ydb.connection"):
+            for start in range(0, row_count, batch_size):
+                IOLoop.current().run_sync(lambda: async_erase_keys(path, start=start, cnt=batch_size))
+
+        def count_rows(session):
+            return session.transaction().execute(f"SELECT COUNT(*) AS row_count FROM `{path}`;", commit_tx=True)
+
+        assert pool.retry_operation_sync(count_rows)[0].rows[0].row_count == 0
 
         for _ in range(60):
             time.sleep(1)

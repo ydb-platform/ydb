@@ -1,3 +1,4 @@
+# CI monitoring experiment: rerun this suite with CPU/cgroup diagnostics.
 import json
 import logging
 import pytest

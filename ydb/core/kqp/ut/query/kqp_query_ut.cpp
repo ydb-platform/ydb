@@ -1,3 +1,4 @@
+// CI monitoring experiment: rerun this suite with CPU/cgroup diagnostics.
 #include <fmt/format.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 

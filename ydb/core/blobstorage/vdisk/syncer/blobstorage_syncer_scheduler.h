@@ -13,6 +13,24 @@ namespace NKikimr {
         : public TEventLocal<TEvStartupDataSyncDone, TEvBlobStorage::EvStartupDataSyncDone>
     {};
 
+    struct TEvSyncerMetadataSync
+        : public TEventLocal<TEvSyncerMetadataSync, TEvBlobStorage::EvSyncerMetadataSync> {
+        const ui32 Generation;
+
+        explicit TEvSyncerMetadataSync(ui32 generation)
+            : Generation(generation)
+        {}
+    };
+
+    struct TEvSyncerMetadataSyncDone
+        : public TEventLocal<TEvSyncerMetadataSyncDone, TEvBlobStorage::EvSyncerMetadataSyncDone> {
+        const ui32 Generation;
+
+        explicit TEvSyncerMetadataSyncDone(ui32 generation)
+            : Generation(generation)
+        {}
+    };
+
     ////////////////////////////////////////////////////////////////////////////
     // SYNCER ACTOR CREATOR
     ////////////////////////////////////////////////////////////////////////////

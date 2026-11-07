@@ -761,6 +761,7 @@ message TEvVSync {
     optional NKikimrBlobStorage.TVDiskID SourceVDiskID = 2; // sync this vdisk with ...
     optional NKikimrBlobStorage.TVDiskID TargetVDiskID = 3; // ... this vdisk
     optional bool NotifyIfNotReady = 4;
+    optional bool RequestTargetLsn = 5;
 }
 
 message TEvVSyncResult {
@@ -777,6 +778,8 @@ message TEvVSyncResult {
     }
     optional TStat Stat = 7;
     optional uint32 StatusFlags = 8;
+    // Returned only when RequestTargetLsn is set; bound to NewSyncState.Guid and VDiskID generation.
+    optional uint64 TargetLsn = 9;
 }
 
 enum ESyncFullStage {

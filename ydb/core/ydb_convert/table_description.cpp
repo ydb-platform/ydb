@@ -663,8 +663,7 @@ static void FillColumnDefault(const NKikimrKqp::TKqpColumnMetadataProto& in,
 }
 
 static bool FillAlterColumnDescription(const Ydb::Table::ColumnMeta& alter,
-    NKikimrSchemeOp::TColumnDescription* column, const TString& workingDir,
-    Ydb::StatusIds::StatusCode& code, TString& error)
+    NKikimrSchemeOp::TColumnDescription* column, Ydb::StatusIds::StatusCode& code, TString& error)
 {
     column->SetName(alter.name());
 
@@ -688,13 +687,7 @@ static bool FillAlterColumnDescription(const Ydb::Table::ColumnMeta& alter,
             break;
         }
         case Ydb::Table::ColumnMeta::kFromSequence: {
-            auto fromSequence = column->MutableDefaultFromSequence();
-            TString sequenceName = alter.from_sequence().name();
-            if (IsStartWithSlash(sequenceName)) {
-                *fromSequence = sequenceName;
-            } else {
-                *fromSequence = JoinPath({workingDir, sequenceName});
-            }
+            *column->MutableDefaultFromSequence() = alter.from_sequence().name();
             break;
         }
         case Ydb::Table::ColumnMeta::kEmptyDefault: {
@@ -707,8 +700,7 @@ static bool FillAlterColumnDescription(const Ydb::Table::ColumnMeta& alter,
 }
 
 static bool FillAlterColumnDescription(const NKikimrKqp::TKqpColumnMetadataProto& alter,
-    NKikimrSchemeOp::TColumnDescription* column, const TString& workingDir,
-    Ydb::StatusIds::StatusCode& code, TString& error)
+    NKikimrSchemeOp::TColumnDescription* column, Ydb::StatusIds::StatusCode& code, TString& error)
 {
     column->SetName(alter.GetName());
     if (alter.HasNotNull()) {
@@ -728,9 +720,6 @@ static bool FillAlterColumnDescription(const NKikimrKqp::TKqpColumnMetadataProto
         return false;
     }
     FillColumnDefault(alter, *column);
-    if (column->HasDefaultFromSequence() && !IsStartWithSlash(column->GetDefaultFromSequence())) {
-        column->SetDefaultFromSequence(JoinPath({workingDir, column->GetDefaultFromSequence()}));
-    }
     return true;
 }
 
@@ -876,14 +865,8 @@ static bool BuildAlterTableModifySchemeImpl(const TString& path, const TRequest*
             return false;
         }
 
-        for (auto& col : *desc->MutableColumns()) {
-            if (col.HasDefaultFromSequence() && !IsStartWithSlash(col.GetDefaultFromSequence())) {
-                col.SetDefaultFromSequence(JoinPath({workingDir, col.GetDefaultFromSequence()}));
-            }
-        }
-
         for (const auto& alter : req->alter_columns()) {
-            if (!FillAlterColumnDescription(alter, desc->AddColumns(), workingDir, code, error)) {
+            if (!FillAlterColumnDescription(alter, desc->AddColumns(), code, error)) {
                 return false;
             }
         }
@@ -3300,6 +3283,59 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     }
 
     tableDesc->MutableKeyColumnNames()->CopyFrom(in.primary_key());
+
+    // A restored table describes its sequences from the backup separately (FillDefaultValues in the
+    // import flow), so nothing is derived here: the parameters must come from the backup verbatim.
+    if (indexedTable && !tableDesc->GetIsRestore()) {
+        // A column may default from a sequence (e.g. a serial column): the scheme description then
+        // needs the sequence itself, otherwise the column would reference a non-existent object.
+        // Parameters are copied from the request when present (a table described and serialized by
+        // the SDK, which keeps them in the column) and derived from the column type otherwise.
+        auto* indexed = out.MutableCreateIndexedTable();
+
+        for (int i = 0; i < in.columns_size(); ++i) {
+            const auto& column = in.columns(i);
+            if (!column.has_from_sequence()) {
+                continue;
+            }
+
+            const auto& fromSequence = column.from_sequence();
+            auto* sequence = indexed->AddSequenceDescription();
+            sequence->SetName(fromSequence.name());
+            if (fromSequence.has_min_value()) {
+                sequence->SetMinValue(fromSequence.min_value());
+            }
+            if (fromSequence.has_max_value()) {
+                sequence->SetMaxValue(fromSequence.max_value());
+            }
+            if (fromSequence.has_start_value()) {
+                sequence->SetStartValue(fromSequence.start_value());
+            }
+            if (fromSequence.has_cache()) {
+                sequence->SetCache(fromSequence.cache());
+            }
+            if (fromSequence.has_increment()) {
+                sequence->SetIncrement(fromSequence.increment());
+            }
+            if (fromSequence.has_cycle()) {
+                sequence->SetCycle(fromSequence.cycle());
+            }
+            if (fromSequence.has_set_val()) {
+                sequence->MutableSetVal()->SetNextValue(fromSequence.set_val().next_value());
+                sequence->MutableSetVal()->SetNextUsed(fromSequence.set_val().next_used());
+            }
+
+            // The sequence has to produce values the column can store: prefer the type the request
+            // carries (a restored table or a sequence provisioned for an index column) and fall
+            // back to the column type.
+            if (fromSequence.has_data_type() && fromSequence.data_type().has_type_id()) {
+                const auto typeId = static_cast<NScheme::TTypeId>(fromSequence.data_type().type_id());
+                sequence->SetDataType(NScheme::TypeName(NScheme::TTypeInfo(typeId)));
+            } else if ((size_t)i < tableDesc->ColumnsSize()) {
+                sequence->SetDataType(tableDesc->GetColumns((size_t)i).GetType());
+            }
+        }
+    }
 
     if (!profiles.ApplyTableProfile(in.profile(), *tableDesc, status, error)) {
         return false;

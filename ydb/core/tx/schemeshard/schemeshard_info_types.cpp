@@ -546,21 +546,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
             if (col.DefaultValue_case() != NKikimrSchemeOp::TColumnDescription::DEFAULTVALUE_NOT_SET) {
                 switch (col.GetDefaultValueCase()) {
-                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {
-                        if (!localSequences.contains(col.GetDefaultFromSequence())) {
-                            errStr = Sprintf("Column '%s' cannot use an unknown sequence '%s'", colName.c_str(), col.GetDefaultFromSequence().c_str());
-                            return nullptr;
-                        }
+                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence:
+                    case NKikimrSchemeOp::TColumnDescription::kEmptyDefault:
+                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral:
                         break;
-                    }
-                    case NKikimrSchemeOp::TColumnDescription::kEmptyDefault: {
-                        break;
-                    }
-                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
-                        break;
-                    }
                     default: {
-                        errStr = Sprintf("Cannot set default for column '%s'", colName.c_str());
+                        errStr = Sprintf("Unsupported default type for column '%s'", colName.c_str());
                         return nullptr;
                     }
                 }
@@ -574,6 +565,27 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                     errStr = Sprintf("Cannot alter serial column '%s'", colName.c_str());
                     return nullptr;
                 }
+
+                // The sequence of a column is created together with it and dropped with the table.
+                // An alter may restate the same default, but cannot replace or reset it.
+                switch (col.GetDefaultValueCase()) {
+                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence:
+                        if (col.GetDefaultFromSequence() != sourceColumn.DefaultValue) {
+                            errStr = Sprintf("Cannot change default value of serial column '%s'", colName.c_str());
+                            return nullptr;
+                        }
+                        break;
+                    case NKikimrSchemeOp::TColumnDescription::kEmptyDefault:
+                    case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
+                        errStr = Sprintf("Cannot change default value of serial column '%s'", colName.c_str());
+                        return nullptr;
+                    }
+                    default:
+                        break;
+                }
+            } else if (col.GetDefaultValueCase() == NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence) {
+                errStr = Sprintf("Cannot change default value of non-serial column '%s' to serial", colName.c_str());
+                return nullptr;
             }
 
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromExpression && columnFamily && columnFamily->GetId() != 0) {
@@ -1178,6 +1190,9 @@ TVector<ui32> TTableInfo::FillDescriptionCache(TPathElement::TPtr pathInfo) {
             colDescr->SetNotNull(column.NotNull);
             colDescr->SetSetNotNullInProgress(column.SetNotNullInProgress);
             colDescr->SetFamily(column.Family);
+            if (column.DefaultKind == ETableColumnDefaultKind::FromSequence) {
+                colDescr->SetDefaultFromSequence(column.DefaultValue);
+            }
         }
         for (auto ci : keyColumnIds) {
             TableDescription.AddKeyColumnIds(ci);

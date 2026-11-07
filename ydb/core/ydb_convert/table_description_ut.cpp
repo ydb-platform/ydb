@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(ConvertTableDescription) {
         const auto& columns = result.GetAlterTable().GetColumns();
         UNIT_ASSERT_VALUES_EQUAL(columns.size(), 6);
         UNIT_ASSERT_VALUES_EQUAL(columns[0].GetDefaultFromLiteral().value().int32_value(), 42);
-        UNIT_ASSERT_VALUES_EQUAL(columns[1].GetDefaultFromSequence(), "/Root/Dir/sequence");
+        UNIT_ASSERT_VALUES_EQUAL(columns[1].GetDefaultFromSequence(), "sequence");
         UNIT_ASSERT_VALUES_EQUAL(columns[2].GetDefaultFromSequence(), "/Root/Other/sequence");
         UNIT_ASSERT(columns[3].HasEmptyDefault());
         UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(columns[4].DefaultValue_case()),

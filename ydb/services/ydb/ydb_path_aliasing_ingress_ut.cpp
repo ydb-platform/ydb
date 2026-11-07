@@ -350,52 +350,6 @@ namespace NKikimr::NGRpcService {
                 1);
         }
 
-        Y_UNIT_TEST_TWIN(AlterTableRewritesAbsoluteSequenceDefaults, enableRelativePaths) {
-            TFixture fixture(false, true, true, /*nestedAliasParent=*/false, enableRelativePaths);
-            auto stub = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
-            auto scheme = Ydb::Scheme::V1::SchemeService::NewStub(fixture.Channel);
-            Ydb::Scheme::MakeDirectoryRequest directory;
-            directory.set_path("/alias/nested");
-            Success(Call(*scheme, &TScheme::MakeDirectory, directory, "/alias"));
-            const TString table = "/alias/nested/sequence_table";
-            const TString sequence = table + "/seq";
-
-            Ydb::Table::CreateTableRequest create;
-            create.set_path(table);
-            auto* key = create.add_columns();
-            key->set_name("key");
-            key->mutable_type()->set_type_id(Ydb::Type::INT64);
-            key->mutable_from_sequence()->set_name("seq");
-            create.add_primary_key("key");
-            auto* existing = create.add_columns();
-            existing->set_name("existing");
-            existing->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT64);
-            Success(Call(*stub, &TTable::CreateTable, create, "/alias"));
-
-            Ydb::Table::AlterTableRequest absolute;
-            absolute.set_path(table);
-            auto* added = absolute.add_add_columns();
-            added->set_name("added_absolute");
-            added->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT64);
-            added->mutable_from_sequence()->set_name(sequence);
-            auto* altered = absolute.add_alter_columns();
-            altered->set_name("existing");
-            altered->mutable_from_sequence()->set_name(sequence);
-            Success(Call(*stub, &TTable::AlterTable, absolute, "/alias"));
-
-            Ydb::Table::AlterTableRequest relative;
-            relative.set_path(table);
-            const TString relativeSequence = enableRelativePaths ? "nested/sequence_table/seq" : "sequence_table/seq";
-            auto* relativeColumn = relative.add_add_columns();
-            relativeColumn->set_name("added_relative");
-            relativeColumn->mutable_type()->mutable_optional_type()->mutable_item()->set_type_id(Ydb::Type::INT64);
-            relativeColumn->mutable_from_sequence()->set_name(relativeSequence);
-            auto* relativeAlter = relative.add_alter_columns();
-            relativeAlter->set_name("existing");
-            relativeAlter->mutable_from_sequence()->set_name(relativeSequence);
-            Success(Call(*stub, &TTable::AlterTable, relative, "/alias"));
-        }
-
         Y_UNIT_TEST_TWIN(TopicRewritesNestedDlqPathsOnly, enableRelativePaths) {
             TFixture fixture(false, true, true, false, enableRelativePaths);
             auto stub = Ydb::Topic::V1::TopicService::NewStub(fixture.Channel);

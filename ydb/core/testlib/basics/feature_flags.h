@@ -88,6 +88,7 @@ public:
     FEATURE_FLAG_SETTER(EnableDataShardDetailedMetrics)
     FEATURE_FLAG_SETTER(EnableTopicDeferredPublish)
     FEATURE_FLAG_SETTER(TransferInternalDataDecompression)
+    FEATURE_FLAG_SETTER(EnableCdcStreamImplicitSourceRegistration)
     #undef FEATURE_FLAG_SETTER
 };
 

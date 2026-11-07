@@ -973,7 +973,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             const TCdcStream& streamDesc,
             bool useRealThreads = true,
             const TString& root = "Root",
-            const TString& tableName = "Table")
+            const TString& tableName = "Table",
+            std::optional<bool> implicitSourceRegistration = std::nullopt)
         {
             auto settings = TServerSettings(PortManager.GetPort(2134), {}, DefaultPQConfig())
                 .SetUseRealThreads(useRealThreads)
@@ -994,6 +995,12 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             const auto database = JoinPath({root});
             auto& runtime = *Server->GetRuntime();
+            if (implicitSourceRegistration) {
+                // The flag gates both sides of implicit source-id registration
+                // (the schemeshard bootstrap skip and the datashard sender
+                // leniency); the suite default is off, tests may run both.
+                runtime.GetAppData().FeatureFlags.SetEnableCdcStreamImplicitSourceRegistration(*implicitSourceRegistration);
+            }
             EdgeActor = runtime.AllocateEdgeActor();
 
             SetupLogging(runtime);
@@ -1283,9 +1290,10 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     struct PqRunner {
         static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
-                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr)
+                const TVector<TString>& queries, const TVector<TString>& records, bool checkKey = true, TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr,
+                std::optional<bool> implicitSourceRegistration = std::nullopt)
         {
-            TTestPqEnv env(tableDesc, streamDesc);
+            TTestPqEnv env(tableDesc, streamDesc, /*useRealThreads*/ true, "Root", "Table", implicitSourceRegistration);
 
             for (const auto& query : queries) {
                 ExecSQL(env.GetServer(), env.GetEdgeActor(), query, true, userCtx);
@@ -1679,6 +1687,25 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    // Same plain-Json delivery with the implicit source-id registration flag
+    // explicitly off (bootstrap built, strict sender) and on (bootstrap
+    // skipped, lenient sender) — both sides of the flag must deliver.
+    Y_UNIT_TEST_TWIN(KeysOnlyLogImplicitRegistration, ImplicitSourceRegistration) {
+        PqRunner::Read(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )", R"(
+            DELETE FROM `/Root/Table` WHERE key = 1;
+        )"}, {
+            R"({"update":{},"key":[1]})",
+            R"({"update":{},"key":[2]})",
+            R"({"update":{},"key":[3]})",
+            R"({"erase":{},"key":[1]})",
+        }, true, nullptr, ImplicitSourceRegistration);
+    }
+
     Y_UNIT_TEST_TRIPLET(UuidExchange, PqRunner, YdsRunner, TopicRunner) {
         TRunner::Read(UuidTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
@@ -1995,6 +2022,21 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{},"key":[2],"ts":"***"})",
             R"({"update":{},"key":[3],"ts":"***"})",
         });
+    }
+
+    // A heartbeat stream keeps the bootstrap in every mode; delivery must work
+    // with the implicit source-id registration flag on as well.
+    Y_UNIT_TEST(VirtualTimestampsImplicitRegistrationFlag) {
+        PqRunner::Read(SimpleTable(), WithVirtualTimestamps(KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson)), {R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )"}, {
+            R"({"update":{},"key":[1],"ts":"***"})",
+            R"({"update":{},"key":[2],"ts":"***"})",
+            R"({"update":{},"key":[3],"ts":"***"})",
+        }, true, nullptr, /*implicitSourceRegistration=*/true);
     }
 
     TShardedTableOptions DocApiTable() {

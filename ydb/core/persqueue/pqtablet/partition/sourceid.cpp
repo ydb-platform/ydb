@@ -567,12 +567,22 @@ TKeyPrefix::EMark TSourceIdWriter::FormatToMark(ESourceIdFormat format) {
 }
 
 void TSourceIdWriter::FillRequest(TEvKeyValue::TEvRequest* request, const TPartitionId& partition) {
-    TKeyPrefix key(TKeyPrefix::TypeInfo, partition, FormatToMark(Format));
     TBuffer data;
 
     for (const auto& [sourceId, sourceIdInfo] : Registrations) {
-        FillKeyAndData(Format, sourceId, sourceIdInfo, key, data);
+        // Explicit entries must persist under the proto mark in every format:
+        // the raw format cannot carry them (TSourceIdInfo::Serialize asserts
+        // !Explicit). If the batch format differs, the record under the batch
+        // format's mark is stale after the write and is deleted, otherwise
+        // both records would load on restart and the stale one could win by
+        // offset.
+        const auto entryFormat = sourceIdInfo.Explicit ? ESourceIdFormat::Proto : Format;
+        TKeyPrefix key(TKeyPrefix::TypeInfo, partition, FormatToMark(entryFormat));
+        FillKeyAndData(entryFormat, sourceId, sourceIdInfo, key, data);
         FillWrite(key, data, *request->Record.AddCmdWrite());
+        if (entryFormat != Format) {
+            FillDelete(partition, sourceId, FormatToMark(Format), *request->Record.AddCmdDeleteRange());
+        }
     }
 
     for (const auto& sourceId : Deregistrations) {

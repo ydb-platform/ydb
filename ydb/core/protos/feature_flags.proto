@@ -478,4 +478,11 @@ message TFeatureFlags {
     // When disabled, no new migrations to colder tiers are scheduled.
     // Existing data in all tiers remains readable.
     optional bool EnableDataTiering = 383 [default = false];    
+    // Skip the explicit source-id registration bootstrap for cdc streams that
+    // do not consume it (non-Proto formats without heartbeats and schema
+    // changes): their change senders register the source ids explicitly on
+    // first use. Gates the schemeshard bootstrap skip only; the datashard
+    // behavior does not depend on the flag, and enabling it at any time is
+    // safe (delivery continues with older datashards as well).
+    optional bool EnableCdcStreamImplicitSourceRegistration = 384 [default = false];
 }

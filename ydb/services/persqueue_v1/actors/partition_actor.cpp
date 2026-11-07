@@ -186,13 +186,8 @@ const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents(std::sh
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-<<<<<<< HEAD
-    if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications()) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("Consumer offset commits are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED));
-=======
     if (!AppData(ctx)->FeatureFlags.GetEnableClientModifications() && !TopicHolder->IsAsyncReplication) {
-        CloseSessionAndDie("Consumer offset commits are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED, ctx);
->>>>>>> ce0f9bd9d7a (Fix/cdc for replication (#58466))
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("Consumer offset commits are disabled", PersQueue::ErrorCode::PRECONDITION_FAILED));
         return;
     }
     // extend the lifetime for PartitionGraph

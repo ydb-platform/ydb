@@ -252,7 +252,7 @@ public:
         bool alter = HasRelevantTransferConfigChanges(oldConfig, newConfig);
 
         auto desiredState = Replication->GetDesiredState();
-        if (record.HasSwitchState() && !Self->ReplicationsWithSourceOffsetMismatch.contains(Replication->GetId())) {
+        if (record.HasSwitchState()) {
             switch (record.GetSwitchState().GetStateCase()) {
                 case NKikimrReplication::TReplicationState::kDone:
                     desiredState = TReplication::EState::Done;

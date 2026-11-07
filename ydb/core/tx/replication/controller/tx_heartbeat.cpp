@@ -117,10 +117,6 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        if (Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-            Self->PendingHeartbeats.clear();
-            return true;
-        }
 
         ui32 i = 0;
         while (!Self->PendingHeartbeats.empty() && i++ < MaxBatchSize) {
@@ -206,17 +202,13 @@ public:
         Self->TabletCounters->Simple()[COUNTER_WORKERS_WITH_HEARTBEAT] = Self->WorkersWithHeartbeat.size();
         Self->TabletCounters->Simple()[COUNTER_WORKERS_PENDING_HEARTBEAT] = Self->PendingHeartbeats.size();
 
-        if (CommitProposal && !Self->ReplicationsWithSourceOffsetMismatch.empty()) {
-            Self->CommittingTxId = 0;
-            CommitProposal.Reset();
-        }
         if (auto& ev = CommitProposal) {
             YDB_LOG_NOTICE_CTX(ctx, "Propose commit",
                 {"writeTxId", Self->CommittingTxId});
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }
 
-        if (HadHeartbeats && Self->ReplicationsWithSourceOffsetMismatch.empty()) {
+        if (HadHeartbeats) {
             Self->RunTxIndexBuild(ctx);
         }
 
@@ -280,11 +272,7 @@ public:
                 {"issues", NYql::IssuesFromMessageAsString(record.GetIssues())});
             Self->TabletCounters->Cumulative()[COUNTER_ERROR_COMMITTING_CHANGES] += 1;
 
-            if (!Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-                CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
-            } else {
-                Self->CommittingTxId = 0;
-            }
+            CommitProposal = MakeCommitProposal(Self->CommittingTxId, Self->GetCommitTablePaths(Self->AssignedTxIds.begin()->first));
             return true;
         }
 
@@ -306,9 +294,6 @@ public:
         db.Table<Schema::TxIds>().Key(it->first.Step, it->first.TxId).Delete();
         it = Self->AssignedTxIds.erase(it);
         Self->CommittingTxId = 0;
-        if (Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-            return true;
-        }
 
         Self->AdvanceVerifyingSchemaBarriers(db);
 
@@ -344,10 +329,6 @@ public:
 
         Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
 
-        if (CommitProposal && !Self->ReplicationsWithSourceOffsetMismatch.empty()) {
-            Self->CommittingTxId = 0;
-            CommitProposal.Reset();
-        }
         if (auto& ev = CommitProposal) {
             YDB_LOG_NOTICE_CTX(ctx, "Propose commit",
                 {"writeTxId", Self->CommittingTxId});
@@ -410,7 +391,6 @@ void TController::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, 
             if (barrier != SchemaBarriers.end()
                 && replication
                 && replication->GetState() != TReplication::EState::Removing
-                && !ReplicationsWithSourceOffsetMismatch.contains(key.first)
                 && target)
             {
                 ctx.Send(MakeTxProxyID(),

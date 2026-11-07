@@ -379,6 +379,15 @@ public:
         return WmSessionUpdater;
     }
 
+    // the interconnect session the request came through from another node; replies to that node go only through it
+    void SetReplySession(const TActorId& replySession) {
+        ReplySession = replySession;
+    }
+
+    const TActorId& GetReplySession() const {
+        return ReplySession;
+    }
+
     void SetProgressStatsPeriod(TDuration progressStatsPeriod) {
         ProgressStatsPeriod = progressStatsPeriod;
     }
@@ -483,6 +492,7 @@ private:
     mutable TString RequestType;
     mutable TIntrusiveConstPtr<NACLib::TUserToken> Token_;
     TActorId RequestActorId;
+    TActorId ReplySession;
     TString Database;
     TString DatabaseId;
     TString SessionId;

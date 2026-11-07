@@ -32,6 +32,16 @@ struct TKqpProxyRequest {
     NWilson::TSpan Span;
     NWilson::TSpan RedirectSpan;
     bool QueryDispatched = false;
+    // the node of the remote proxy the query was forwarded to, 0 if the session is local
+    ui32 RemoteNodeId = 0;
+    // the interconnect session the query went through to RemoteNodeId, known from its TEvNodeConnected
+    TActorId RemoteSession;
+    // that session broke
+    bool RemoteNodeDisconnected = false;
+    // the forwarded query can't change data, so it may be retried when its response is lost
+    bool RemoteReadOnly = false;
+    // the interconnect session the request came through from another node; the response goes only through it
+    TActorId ReplySession;
 
     TKqpProxyRequest(const TActorId& sender, ui64 senderCookie, const TString& traceId,
         ui32 eventType)

@@ -325,6 +325,14 @@ message TBridgePileInfo {
     optional Ydb.Bridge.PileState.State State = 3;
     optional uint32 Nodes = 4;
     map<string, uint32> GroupStatuses = 5; // UNKNOWN (grey), FULL (green), PARTIAL (yellow), DEGRADED (yellow), DISINTEGRATED (red)
+    // Alive means a node returned whiteboard system state in time and was not disconnected during collection;
+    // a node that did not answer is counted as not alive. Alive counters are absent (unknown, not zero)
+    // only when the pile cannot be queried. When bridge policy forbids interconnect, the serving node asks
+    // a viewer inside the target pile over HTTPS. INACTIVE piles remain unknown.
+    optional uint32 StorageNodes = 6; // Known static nodes.
+    optional uint32 AliveStorageNodes = 7;
+    optional uint32 ComputeNodes = 8; // Known dynamic nodes.
+    optional uint32 AliveComputeNodes = 9;
 }
 
 message TBridgeInfo {

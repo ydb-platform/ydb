@@ -29,6 +29,7 @@ DEFINE_ENUM(ERowRangeIndexMode,
 DEFINE_ENUM(EOptionalKind,
     (None)
     (Variant8)
+    (VariantVar)
 );
 
 class TFieldDescription

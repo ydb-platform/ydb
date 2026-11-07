@@ -9,6 +9,7 @@ SRCS(
     histogram.cpp
     signal_utils.cpp
     states.cpp
+    node_counters.cpp
 )
 
 PEERDIR(

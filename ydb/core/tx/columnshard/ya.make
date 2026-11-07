@@ -86,6 +86,7 @@ PEERDIR(
     ydb/core/util
     ydb/library/actors/core
     ydb/library/chunks_limiter
+    ydb/library/signals
     ydb/library/slide_limiter/usage
     ydb/library/yql/dq/actors/compute
     ydb/public/api/protos

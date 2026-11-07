@@ -21,6 +21,7 @@
 #include <ydb/core/tx/tiering/manager.h>
 
 #include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/signals/node_counters.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
@@ -131,6 +132,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
         {"event", "initialize_shard"},
         {"step", "OnActivateExecutor"});
     Executor()->RegisterExternalTabletCounters(TabletCountersHolder.release());
+    ExportNodeServiceCounters(AppData(ctx)->Counters);
 
     const auto selfActorId = SelfId();
     StoragesManager->Initialize(Executor()->Generation());

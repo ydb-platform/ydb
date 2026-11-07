@@ -85,7 +85,8 @@ public:
                 << ": " << status.GetStatus()
                 << ", " << status.GetIssues().ToOneLineString());
 
-            Self->SetReplicationError(*Replication, *target);
+            Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
+                << ": " << target->GetIssue());
 
             YDB_LOG_ERROR_CTX(ctx, "Create stream error",
                 {"rid", rid},

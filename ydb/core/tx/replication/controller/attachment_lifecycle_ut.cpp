@@ -1854,7 +1854,7 @@ Y_UNIT_TEST_SUITE(CredentialResolution) {
             UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetStatus()
                 == NKikimrReplication::TEvDescribeReplicationResult::NOT_FOUND);
             NTestSuiteTargetDiscoveryResults::AssertPersistedCounts(env, info, 0);
-            for (const auto* table : {"Workers", "ProcessedSourceOffsets"}) {
+            for (const auto* table : {"Workers"}) {
                 const auto result = ReadControllerQuery(runtime, info.ControllerId, Sprintf(R"((
                     (let range '('('ReplicationId (Uint64 '1) (Uint64 '1)) '('TargetId (Null) (Void)) '('WorkerId (Null) (Void))))
                     (return (AsList (SetResult 'Rows (SelectRange '%s range '('ReplicationId) '())))))

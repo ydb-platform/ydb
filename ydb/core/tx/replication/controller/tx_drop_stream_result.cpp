@@ -71,7 +71,6 @@ public:
         const bool isRemoving = dstState == TReplication::EDstState::Removing;
         const bool isAttaching = dstState == TReplication::EDstState::Attaching;
         if (isRemoving || isAttaching) {
-            Self->DeleteProcessedSourceOffsets(rid, tid, db);
             target->SetStreamState(TReplication::EStreamState::Removed);
             db.Table<Schema::SrcStreams>().Key(rid, tid).Update<Schema::SrcStreams::State>(target->GetStreamState());
         } else {

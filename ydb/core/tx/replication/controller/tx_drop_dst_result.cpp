@@ -85,7 +85,6 @@ void TController::RunTxDropDstResult(TEvPrivate::TEvDropDstResult::TPtr& ev, con
 
 void TController::RemoveTarget(NIceDb::TNiceDb& db, TReplication& replication, ui64 targetId) {
     const auto rid = replication.GetId();
-    DeleteProcessedSourceOffsets(rid, targetId, db);
     db.Table<Schema::Targets>().Key(rid, targetId).Delete();
     db.Table<Schema::SrcStreams>().Key(rid, targetId).Delete();
     for (const auto wid : replication.FindTarget(targetId)->GetWorkers()) {

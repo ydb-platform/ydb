@@ -22,6 +22,7 @@ COPY_FILE(
         llvm/IR/Module.h
         llvm/IR/Verifier.h
         llvm/IRReader/IRReader.h
+        llvm/IR/Mangler.h
         llvm/Linker/Linker.h
         llvm/Passes/PassBuilder.h
         llvm-c/Disassembler.h

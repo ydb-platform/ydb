@@ -1,4 +1,5 @@
 #include <yql/essentials/minikql/codegen/codegen.h>
+#include <yql/essentials/minikql/codegen/codegen_target.h>
 
 #include <codegen_ut_llvm_deps.h> // Y_IGNORE
 
@@ -244,6 +245,49 @@ Function* CreateUseExternalFromGeneratedFunction128(const ICodegen::TPtr& codege
 } // namespace
 
 Y_UNIT_TEST_SUITE(TCodegenTests) {
+
+Y_UNIT_TEST(HostTargetArchitecture) {
+    for (const auto target : {ETarget::Native, ETarget::CurrentOS}) {
+        auto codegen = ICodegen::Make(target);
+        const auto triple = codegen->GetModule().getTargetTriple();
+    #if defined(__aarch64__) || defined(_M_ARM64)
+        UNIT_ASSERT_C(triple.starts_with("aarch64-"), triple);
+    #else
+        UNIT_ASSERT_C(triple.starts_with("x86_64-"), triple);
+    #endif
+    }
+}
+
+    #if defined(__aarch64__) || defined(_M_ARM64)
+Y_UNIT_TEST(LinuxAarch64NativeFeatures) {
+    // Register the linked backends, but inspect Linux code generation without
+    // executing a foreign-OS object. This also runs on macOS ARM64.
+    auto native = ICodegen::Make(ETarget::Native);
+    struct TCase {
+        std::vector<std::string> Features;
+        bool Crc;
+        bool Crypto;
+    };
+    for (const auto& test : {TCase{{}, false, false},
+                             TCase{{"+neon", "+fp-armv8", "+crc"}, true, false},
+                             TCase{{"+neon", "+fp-armv8", "+crc", "+crypto"}, true, true}}) {
+        LLVMContext context;
+        auto module = std::make_unique<Module>("linux-arm-features", context);
+        const Triple triple("aarch64-unknown-linux-gnu");
+        module->setTargetTriple(triple.str());
+        EngineBuilder builder(std::move(module));
+        NYql::NCodegen::NPrivate::ConfigureNativeTarget(builder, triple, "cortex-a72", test.Features);
+        std::unique_ptr<TargetMachine> target(builder.selectTarget());
+        UNIT_ASSERT(target);
+        const auto* features = target->getMCSubtargetInfo();
+        UNIT_ASSERT(features);
+        UNIT_ASSERT_VALUES_EQUAL(features->checkFeatures("+crc"), test.Crc);
+        UNIT_ASSERT_VALUES_EQUAL(features->checkFeatures("+aes"), test.Crypto);
+        UNIT_ASSERT_VALUES_EQUAL(features->checkFeatures("+sha2"), test.Crypto);
+        UNIT_ASSERT(!features->checkFeatures("+sve"));
+    }
+}
+    #endif
 
 Y_UNIT_TEST(FibNative) {
     auto codegen = ICodegen::Make(ETarget::Native);

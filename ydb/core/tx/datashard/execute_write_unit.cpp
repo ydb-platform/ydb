@@ -1008,9 +1008,12 @@ public:
                 }
             };
 
+            const bool readOnlyLocksCommit = op->HasFlag(TTxFlags::ReadOnlyLocksCommit);
             auto [validated, brokenLocks] = op->HasVolatilePrepareFlag()
-                                                ? KqpValidateVolatileTx(sysLocks, kqpLocks, useGenericReadSets, txId, op->DelayedInReadSets(), awaitingDecisions, outReadSets, allowAncestorLocks)
-                                                : KqpValidateLocks(sysLocks, kqpLocks, useGenericReadSets, inReadSets, allowAncestorLocks);
+                ? KqpValidateVolatileTx(sysLocks, kqpLocks, useGenericReadSets, txId,
+                    op->DelayedInReadSets(), awaitingDecisions, outReadSets, allowAncestorLocks, readOnlyLocksCommit)
+                : KqpValidateLocks(sysLocks, kqpLocks, useGenericReadSets, inReadSets,
+                    allowAncestorLocks, readOnlyLocksCommit);
 
             if (!validated) {
                 YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TExecuteWriteUnit::Execute: aborting because locks are not valid",

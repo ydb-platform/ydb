@@ -978,6 +978,9 @@ public:
         record.SetMaxBytes(Min<ui64>(record.GetMaxBytes(), BufSize));
 
         record.SetResultFormat(Settings->GetDataFormat());
+        if (Settings->GetReadHints()) {
+            record.SetHints(Settings->GetReadHints());
+        }
 
         if (Settings->HasLockTxId() && LockInfo.BrokenLocks.empty()) {
             record.SetLockTxId(Settings->GetLockTxId());

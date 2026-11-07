@@ -477,5 +477,7 @@ message TFeatureFlags {
     // Enables policy-driven data tiering for row-oriented tables.
     // When disabled, no new migrations to colder tiers are scheduled.
     // Existing data in all tiers remains readable.
-    optional bool EnableDataTiering = 383 [default = false];    
+    optional bool EnableDataTiering = 383 [default = false];
+    // Send per-partition KeyValue storage usage to SchemeShard for disk quota accounting.
+    optional bool EnableKeyValueStorageUsageReports = 384 [default = false];
 }

@@ -959,5 +959,6 @@ enum ETxTypes {
     TXTYPE_INIT = 0                                                  [(TxTypeOpts) = {Name: "TxInit"}];
     TXTYPE_REQUEST = 1                                               [(TxTypeOpts) = {Name: "TxRequest"}];
     TXTYPE_DROP_REF_COUNTS_ON_ERROR = 2                              [(TxTypeOpts) = {Name: "TxDropRefCountsOnError"}];
+    TXTYPE_PERSIST_DISK_QUOTA = 3                                    [(TxTypeOpts) = {Name: "TxPersistDiskQuota"}];
 }
 

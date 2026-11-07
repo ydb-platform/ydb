@@ -322,6 +322,7 @@ protected:
     bool IsCollectEventSent;
     bool InitWithoutCollect;
     std::array<ui64, 256> ChannelDataUsage;
+    ui64 StorageUsageRevision = 1;
     std::bitset<256> UsedChannels;
     THolder<TChannelBalancer::TWeightManager> WeightManager;
 
@@ -392,6 +393,9 @@ public:
     TKeyValueState();
     void SetTabletInfo(TTabletStorageInfo* tabletInfo);
     void Clear();
+    bool DiskQuotaExceeded = false;
+
+    void FillStorageUsageReport(NKikimrKeyValue::StorageUsageReport& report) const;
     void SetupTabletCounters(TAutoPtr<TTabletCountersBase> counters);
     void ClearTabletCounters();
     TAutoPtr<TTabletCountersBase> TakeTabletCounters();

@@ -79,6 +79,14 @@ message TProcessingParams {
     optional uint64 IdlePlanResolution = 9;
 }
 
+// Persisted by SchemeShard with the pool bindings in effect when the report was received.
+message TKeyValuePartitionUsage {
+    optional uint32 generation = 1;
+    optional uint64 round = 2;
+    optional uint64 total_bytes = 3;
+    map<string, uint64> bytes_by_pool_kind = 4;
+}
+
 message TDiskSpaceUsage {
     message TTables {
         // in bytes
@@ -106,6 +114,7 @@ message TDiskSpaceUsage {
     optional TTables Tables = 1;
     optional TTopics Topics = 2;
     repeated TStoragePoolUsage StoragePoolsUsage = 3;
+    optional uint64 KeyValueBytes = 4;
 }
 
 message TDomainState {

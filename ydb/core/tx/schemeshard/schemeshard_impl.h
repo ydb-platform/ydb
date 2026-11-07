@@ -81,6 +81,8 @@ struct TEvListRequest;
 }
 
 namespace NKikimr::TEvKeyValue {
+    struct TEvStorageUsageReport;
+    using TEvStorageUsageReportPtr = TAutoPtr<NActors::TEventHandle<TEvStorageUsageReport>>;
     struct TEvVacuumResponse;
     using TEvVacuumResponse__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvVacuumResponse>>;
 }
@@ -913,7 +915,7 @@ public:
     void PersistRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId, const TRtmrVolumeInfo::TPtr rtmrVol);
     void PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId);
     void PersistSolomonVolume(NIceDb::TNiceDb &db, TPathId pathId, const TSolomonVolumeInfo::TPtr rtmrVol);
-    void PersistRemoveSolomonVolume(NIceDb::TNiceDb &db, TPathId pathId);
+    void PersistRemoveSolomonVolume(NIceDb::TNiceDb &db, TPathId pathId, const TActorContext& ctx);
     void PersistAlterSolomonVolume(NIceDb::TNiceDb &db, TPathId pathId, const TSolomonVolumeInfo::TPtr rtmrVol);
     static void PersistAddTxDependency(NIceDb::TNiceDb& db, const TTxId parentOpId, TTxId txId);
     static void PersistRemoveTxDependency(NIceDb::TNiceDb& db, TTxId opId, TTxId dependentOpId);
@@ -983,6 +985,7 @@ public:
     void PersistRemoveTable(NIceDb::TNiceDb& db, TPathId tableId, const TActorContext& ctx);
     void ClearBackupRestoreHistory(NIceDb::TNiceDb& db, TPathId pathId, const TMap<TTxId, TTableInfo::TBackupRestoreResult>& history);
     void PersistRevertedMigration(NIceDb::TNiceDb& db, TPathId pathId, TTabletId abandonedSchemeShardId);
+    void CheckDiskQuotasAndPublish(NIceDb::TNiceDb& db, TPathId domainId, TSubDomainInfo& domain, const TActorContext& ctx);
     void UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, const TPartitionStats& newPartitionStats, const TPartitionStats& oldPartitionStats, const TActorContext &ctx);
 
     // BlockStore
@@ -1622,6 +1625,7 @@ public:
     void Handle(TEvSchemeShard::TEvWakeupToRunShred::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvTenantShredRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvVacuumResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKeyValue::TEvStorageUsageReportPtr& ev, const TActorContext& ctx);
     void Handle(TEvKeyValue::TEvVacuumResponse__HandlePtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvTenantShredResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAddNewShardToShred::TPtr& ev, const TActorContext& ctx);
@@ -2294,6 +2298,7 @@ public:
     std::map<TPathId, std::set<TPathId>> DatabaseSpaceScopes; // database key -> hosted domains with this key
     bool DatabaseSpaceSubscriptionsActive = false; // subscriptions are maintained once the schemeshard is active
     struct TTxUpdateStorageSpaceState;
+    struct TTxStoreKeyValueUsage;
     void UnsubscribeFromDatabaseSpace();
     void Handle(TEvBlobStorage::TEvControllerDatabaseSpaceState::TPtr& ev, const TActorContext& ctx);
 

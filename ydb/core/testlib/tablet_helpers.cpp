@@ -1332,7 +1332,9 @@ namespace NKikimr {
                 } else if (type == TTabletTypes::DataShard) {
                     bootstrapperActorId = Boot(ctx, type, &CreateDataShard, DataGroupErasure);
                 } else if (type == TTabletTypes::KeyValue) {
-                    bootstrapperActorId = Boot(ctx, type, &CreateKeyValueFlat, DataGroupErasure);
+                    const auto& record = ev->Get()->Record;
+                    const auto tenant = record.HasObjectDomain() ? TPathId::FromDomainKey(record.GetObjectDomain()) : TPathId();
+                    bootstrapperActorId = Boot(ctx, type, &CreateKeyValueFlat, DataGroupErasure, tenant);
                 } else if (type == TTabletTypes::ColumnShard) {
                     bootstrapperActorId = Boot(ctx, type, &CreateColumnShard, DataGroupErasure);
                 } else if (type == TTabletTypes::PersQueue) {
@@ -1722,11 +1724,12 @@ namespace NKikimr {
 
     private:
         TActorId Boot(const TActorContext& ctx, TTabletTypes::EType tabletType, std::function<IActor* (const TActorId &, TTabletStorageInfo *)> op,
-            TBlobStorageGroupType::EErasureSpecies erasure) {
+            TBlobStorageGroupType::EErasureSpecies erasure, TPathId tenant = {}) {
             TIntrusivePtr<TBootstrapperInfo> bi(new TBootstrapperInfo(new TTabletSetupInfo(op, TMailboxType::Simple, 0,
                 TMailboxType::Simple, 0)));
-            return ctx.Register(CreateBootstrapper(
-                CreateTestTabletInfo(State->NextTabletId, tabletType, erasure), bi.Get()));
+            auto* info = CreateTestTabletInfo(State->NextTabletId, tabletType, erasure);
+            info->TenantPathId = tenant;
+            return ctx.Register(CreateBootstrapper(info, bi.Get()));
         }
 
         void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TFakeHiveTabletInfo *info) {

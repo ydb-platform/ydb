@@ -56,31 +56,33 @@ Many terms related to the [implementation of distributed storage](#distributed-s
 
 **Storage group**, **distributed storage group**, or **Blob storage group** is a place for reliable data storage, similar to [RAID](https://en.wikipedia.org/wiki/RAID), but using disks from multiple servers. Depending on the selected [cluster topology](#topology), storage groups use different algorithms to ensure high availability, similar to [standard RAID levels](https://en.wikipedia.org/wiki/Standard_RAID_levels).
 
-[Distributed storage](#distributed-storage) typically manages a large number of relatively small storage groups. Each group can be assigned to a specific [database](#database) to increase the disk space capacity and I/O throughput available to that database.
-
-[Static](#static-group) and [dynamic](#dynamic-group) storage groups are physical, meaning their data is placed directly on [VDisk](#vdisk)s.
+[Distributed storage](#distributed-storage) typically manages a large number of relatively small storage groups. Data of cluster-wide system [tablets](#tablet) is stored in [static groups](#static-group). Each [database](#database) includes one or more [dynamic groups](#dynamic-group), which provide that database with disk capacity and I/O throughput.
 
 #### Static group {#static-group}
 
 **Static group** is a special [storage group](#storage-group) created during the initial cluster deployment. Its main role is to store data of system [tablets](#tablet), which can be considered as cluster-wide metadata.
 
-A static group may require special attention during major cluster maintenance, such as decommissioning an [availability zone](#regions-az).
+A static group requires special attention during major cluster maintenance, such as decommissioning an [availability zone](#regions-az).
 
 #### Dynamic group {#dynamic-group}
 
 Ordinary storage groups that are not [static](#static-group) are called **dynamic groups**. They are called dynamic because they can be created and deleted on the fly while the [cluster](#cluster) is running.
 
+Each dynamic group belongs to a single [database](#database) and stores that database's data. [Tablets](#tablet) in the database reach these groups through [channels](#channel). Each channel is assigned to one group, and that assignment can change over time.
+
 #### Virtual storage group {#virtual-storage-groups}
 
-**Virtual storage group** is an entity that is not actually a [storage group](#storage-group), but looks like one from the outside (provides a similar external interface). It can store its data in other storage groups or in S3.
+**Virtual storage group** is an entity that exposes the same external interface as a [storage group](#storage-group). A virtual storage group stores the data written to it either in other storage groups or in S3-compatible storage, in contrast to [static](#static-group) and [dynamic groups](#dynamic-group), which store their data on [VDisks](#vdisk).
+
+Virtual storage groups decouple the physical placement of data from the logical allocation of storage to tablets. This gives the administrator more flexibility in storage management, including the ability to decommission dynamic groups and reduce the storage allocated to a particular [database](#database).
 
 #### BlobDepot {#blob-depot}
 
-**BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other storage groups and is also used when decommissioning physical groups.
+**BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other dynamic groups or in S3-compatible storage and is also used to decommission dynamic groups.
 
 ### Storage pool {#storage-pool}
 
-**Storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the cluster {{ ydb-short-name }}. Technically, each storage pool consists of many physical disks ([PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group by selecting appropriate storage devices. Typically, separate storage pools are created for devices of different types (for example, NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.
+**Storage pool** is a set of data storage devices with similar characteristics. Each storage pool is assigned a unique name within the {{ ydb-short-name }} cluster. Technically, each storage pool consists of many physical disks ([PDisk](#pdisk)). Each [storage group](#storage-group) is created in a specific storage pool, which determines the performance characteristics of the storage group by selecting appropriate storage devices. Typically, separate storage pools are created for devices of different types (for example, NVMe, SSD, and HDD) or for specific models of these devices that have different capacity and access speed.
 
 ### Actor {#actor}
 
@@ -826,13 +828,21 @@ Distributed storage stores immutable data, with each immutable data block identi
 
 #### PDisk {#pdisk}
 
-**PDisk** or **physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files that emulate a block device for testing purposes). PDisk ensures data integrity control (including [erasure coding](#erasure-coding) of sector groups to recover data on individual damaged sectors, integrity control using checksums), transparent encryption of all data on the disk, and transactional guarantees for disk operations (write acknowledgment strictly after `fsync`).
+**PDisk** or **physical disk** is a component that controls a physical disk drive (block device). In other words, PDisk is a subsystem that implements an abstraction similar to a specialized file system on top of block devices (or files that emulate a block device for testing purposes). PDisk provides durability guarantees for disk operations (write acknowledgment strictly after `fsync`).
 
-PDisk contains a scheduler that ensures shared use of the device's bandwidth among multiple clients ([VDisk](#vdisk)). PDisk divides the block device into blocks called [slots](#slot) (about 128 megabytes in size; smaller blocks are also allowed). At any given time, no more than one VDisk can own each slot. PDisk also maintains a recovery log shared by PDisk service records and all VDisks.
+PDisk stores data for its clients ([VDisks](#vdisk)) and manages their I/O. Each PDisk serves multiple VDisks and divides its capacity, IOPS, and bandwidth among them. PDisk includes a specialized operation scheduler that shares the device's bandwidth among the VDisks. VDisks can move from one PDisk to another using replication mechanisms without interrupting data access for applications and users.
+
+The maximum number of VDisks on a single PDisk is limited and is determined by a setting that depends on the physical device type: the number of [VDisk slots](#slot). Each VDisk occupies a certain number of slots on a PDisk (usually one slot, and two in some configurations). When the free slots are exhausted, no additional VDisks can be placed on that PDisk.
+
+PDisk maintains a recovery log shared by PDisk service records and all VDisks. It protects data with checksums and uses erasure coding to recover damaged sectors of the log and service records. In addition, PDisk supports transparent encryption of all data on the disk.
 
 #### VDisk {#vdisk}
 
-**VDisk**, **virtual disk** is a component that implements data storage of [distributed storage](#distributed-storage) [LogoBlob](#logoblob) on [PDisk](#pdisk). VDisk stores all its data on PDisk. One VDisk corresponds to one PDisk, but usually several VDisks are associated with one PDisk. Unlike PDisk, which hides blocks and journals behind itself, VDisk provides an interface at the LogoBlob and [LogoBlobID](#logoblobid) level, for example writing LogoBlob, reading LogoBlobID data, and deleting a set of LogoBlob using a special command. VDisk is a member of [storage group](#storage-group). VDisk itself is local, but many VDisks in a given group provide reliable data storage. VDisks in a group synchronize data with each other and replicate data in case of losses. A set of VDisks in a storage group forms a distributed RAID.
+**VDisk**, **virtual disk** is a component that implements data storage of [distributed storage](#distributed-storage) [LogoBlob](#logoblob) on [PDisk](#pdisk). VDisk stores all its data on PDisk. One VDisk corresponds to one PDisk, but usually several VDisks are associated with one PDisk.
+
+VDisk provides an operations interface at the LogoBlob and [LogoBlobID](#logoblobid) level, for example writing LogoBlob, reading LogoBlobID data, and deleting a set of LogoBlob using a special command.
+
+VDisk is a member of a [storage group](#storage-group). VDisk itself is local: it runs on the node that hosts its PDisk. Multiple VDisks in a storage group provide reliable data storage. VDisks in a group synchronize data with each other and replicate data in case of losses. A set of VDisks in a storage group forms a distributed RAID.
 
 #### Yard {#yard}
 

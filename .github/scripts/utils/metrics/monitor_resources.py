@@ -311,7 +311,7 @@ def run_monitor(
 
             # CPU total (absolute)
             curr_stat = read_proc_stat()
-            cpu_deltas = {key: value - prev_stat.get(key, value) for key, value in curr_stat.items()}
+            cpu_deltas = {key: max(0, value - prev_stat.get(key, value)) for key, value in curr_stat.items()}
             total_delta = sum(cpu_deltas.values())
             idle_delta = cpu_deltas.get("idle", 0) + cpu_deltas.get("iowait", 0)
             cpu_total_pct = 100.0 * (1 - idle_delta / total_delta) if total_delta > 0 else 0.0

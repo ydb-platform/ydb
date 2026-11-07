@@ -863,7 +863,7 @@ runs:
           else
             analytics start upload_tests_results
             # Stream logs instead of buffering and replaying them through xtrace.
-            # --pull label is derived in upload_tests_results.py (same as platform ingest).
+            # run-name label derived in upload_tests_results.py (same as platform ingest).
             .github/scripts/analytics/upload_tests_results.py \
               --test-results-file "${CURRENT_REPORT}" \
               --run-timestamp "${ATTEMPT_STARTED_AT}" \

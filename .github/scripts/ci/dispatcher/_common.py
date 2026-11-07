@@ -28,14 +28,6 @@ def env_opt(name: str) -> str:
     return (os.environ.get(name) or "").strip()
 
 
-def truthy(v: Any, default: bool = False) -> bool:
-    if v is None or v == "":
-        return default
-    if isinstance(v, bool):
-        return v
-    return str(v).strip().lower() in ("1", "true", "yes")
-
-
 def quote_url(url: str) -> str:
     return urllib.parse.quote(url, safe=":/%")
 

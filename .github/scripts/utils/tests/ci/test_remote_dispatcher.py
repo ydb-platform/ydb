@@ -64,6 +64,16 @@ class ResolveSeedsTest(unittest.TestCase):
         self.assertEqual(cfg["inputs"]["job_inputs"]["build_target"], "ydb/from-remote")
         self.assertEqual(cfg["inputs"]["job_inputs"]["build_preset"], "relwithdebinfo")
 
+    def test_unknown_remote_job_key_dies(self):
+        os.environ["REMOTE_JSON"] = json.dumps({"job": {"build_tagret": "ydb/x"}})
+        with self.assertRaises(SystemExit):
+            build_config()
+
+    def test_non_bool_fail_on_remote_failure_dies(self):
+        os.environ["REMOTE_JSON"] = json.dumps({"fail_on_remote_failure": "yes"})
+        with self.assertRaises(SystemExit):
+            build_config()
+
 
 class IndexCrawlSafetyTest(unittest.TestCase):
     def test_parse_index_rejects_parent_segments(self):

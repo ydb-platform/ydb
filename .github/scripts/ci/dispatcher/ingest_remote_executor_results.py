@@ -19,7 +19,7 @@ from typing import Any
 
 _DISPATCHER_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _DISPATCHER_DIR.parents[3]
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(_DISPATCHER_DIR))
 sys.path.insert(0, str(_REPO_ROOT / ".github/scripts/utils/analytics"))
 
 from _common import (  # noqa: E402

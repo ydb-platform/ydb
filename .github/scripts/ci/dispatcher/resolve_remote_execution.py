@@ -26,8 +26,19 @@ from _common import (  # noqa: E402
     die,
     host_s3,
     set_outputs,
-    truthy,
 )
+
+
+def _require_bool(value: Any, where: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    die(f"{where} must be bool, got {type(value).__name__}: {value!r}")
+
+
+def _reject_unknown(keys: set[str], allowed: set[str], where: str) -> None:
+    unknown = sorted(keys - allowed)
+    if unknown:
+        die(f"{where} has unknown keys: {unknown}")
 
 
 _DEFAULT_JOB: dict[str, Any] = {
@@ -91,6 +102,8 @@ def build_config() -> dict[str, Any]:
         remote_job = {}
     if not isinstance(remote_job, dict):
         die("remote JSON .job must be an object")
+    _reject_unknown(set(remote), set(DEFAULT_REMOTE), "remote JSON")
+    _reject_unknown(set(remote_job), set(_DEFAULT_JOB), "remote JSON .job")
 
     cfg = {**DEFAULT_REMOTE, **remote}
     job = {**_DEFAULT_JOB, **remote_job}
@@ -121,7 +134,7 @@ def build_config() -> dict[str, Any]:
     preset = _as_str(job["build_preset"]).split(",")[0].strip()
     if not preset:
         die("build_preset is empty")
-    fetch_depth = "0" if truthy(job["increment"]) else "2"
+    fetch_depth = "0" if _require_bool(job["increment"], "remote JSON .job.increment") else "2"
 
     cfg["analytics_job_name"] = cfg_str(cfg, "analytics_job_name")
     cfg["caller_workflow"] = (
@@ -145,7 +158,9 @@ def build_config() -> dict[str, Any]:
         die("runs_on must be a JSON array of runner labels")
     runs_on_str = json.dumps(runs_on, separators=(",", ":"))
 
-    cfg["fail_on_remote_failure"] = truthy(cfg.get("fail_on_remote_failure"), True)
+    cfg["fail_on_remote_failure"] = _require_bool(
+        cfg.get("fail_on_remote_failure"), "remote JSON fail_on_remote_failure"
+    )
     cfg["host_s3_endpoint"], cfg["host_s3_bucket"] = host_s3(cfg)
 
     # Host executor receives only config.inputs (VM → workflow_dispatch).

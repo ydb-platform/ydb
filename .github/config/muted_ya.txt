@@ -1,6 +1,5 @@
 ydb/core/blobstorage/ddisk/ut_large TPersistentBufferBenchmark.Zero4KiBFill32GiBAndRestartSectorMap
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
-ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.SyncLogDuplicateFreeChunkRealPDiskWithoutRestart
 ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
 ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
@@ -61,7 +60,6 @@ ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/config test_distconf_self_heal.py.TestKiKiMRDistConfSelfHealParallelCall2.test
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReplicasSpecificVolume.test_state_storage
-ydb/tests/functional/serverless test_serverless.py.test_discovery_with_inner_path[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
 ydb/tests/functional/serverless test_serverless.py.test_fixtures[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
 ydb/tests/functional/tenants test_system_views.py.TestQueryMetricsOneHourRestart.test_case
 ydb/tests/stress/kafka/tests py3test.sole chunk

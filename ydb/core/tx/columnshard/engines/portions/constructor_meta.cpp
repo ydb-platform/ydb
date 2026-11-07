@@ -21,10 +21,10 @@ void TPortionMetaConstructor::FillMetaInfo(const NArrow::TFirstLastSpecialKeys& 
     AFL_VERIFY(!RecordSnapshotMax);
     DeletionsCount = deletionsCount;
     if (snapshotKeys) {
-        RecordSnapshotMin = TSnapshot(snapshotKeys->GetFirst().GetValueVerified<ui64>(TIndexInfo::SPEC_COL_PLAN_STEP),
-            snapshotKeys->GetFirst().GetValueVerified<ui64>(TIndexInfo::SPEC_COL_TX_ID));
-        RecordSnapshotMax = TSnapshot(snapshotKeys->GetLast().GetValueVerified<ui64>(TIndexInfo::SPEC_COL_PLAN_STEP),
-            snapshotKeys->GetLast().GetValueVerified<ui64>(TIndexInfo::SPEC_COL_TX_ID));
+        RecordSnapshotMin = TSnapshot(snapshotKeys->GetFirst().GetValueVerified<uint64_t>(TIndexInfo::SPEC_COL_PLAN_STEP),
+            snapshotKeys->GetFirst().GetValueVerified<uint64_t>(TIndexInfo::SPEC_COL_TX_ID));
+        RecordSnapshotMax = TSnapshot(snapshotKeys->GetLast().GetValueVerified<uint64_t>(TIndexInfo::SPEC_COL_PLAN_STEP),
+            snapshotKeys->GetLast().GetValueVerified<uint64_t>(TIndexInfo::SPEC_COL_TX_ID));
     } else {
         RecordSnapshotMin = TSnapshot::Zero();
         RecordSnapshotMax = TSnapshot::Zero();

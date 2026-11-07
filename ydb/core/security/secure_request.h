@@ -41,12 +41,6 @@ private:
     }
 
     bool IsTokenRequired() const {
-        // EnableAnonymousDiscovery may omit credentials for ChooseProxy and ListEndpoints.
-        // Database and rate-limit checks still run.
-        if (AllowMissingToken) {
-            return false;
-        }
-
         if (GetEnforceUserTokenRequirement()) {
             return true;
         }
@@ -210,7 +204,8 @@ public:
             // Perform access checks
             ProcessAuthorizeTicketResult(MakeHolder<TEvTicketParser::TEvAuthorizeTicketResult>(SecurityToken, InternalToken), ctx);
         } else {
-            if (IsTokenRequired() && !IsTokenExists()) {
+            // AllowMissingToken waives only a missing token. A presented token is still checked.
+            if (IsTokenRequired() && !IsTokenExists() && !AllowMissingToken) {
                 return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Access denied without user token", .Retryable = false}, ctx);
             }
             if (SecurityToken.empty()) {

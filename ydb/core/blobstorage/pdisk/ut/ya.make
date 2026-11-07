@@ -45,6 +45,7 @@ SRCS(
     blobstorage_pdisk_ut.cpp
     blobstorage_pdisk_ut_actions.cpp
     blobstorage_pdisk_ut_color_limits.cpp
+    blobstorage_pdisk_ut_completion_order.cpp
     blobstorage_pdisk_ut_context.cpp
     blobstorage_pdisk_ut_env.cpp
     blobstorage_pdisk_ut_helpers.cpp

@@ -7,6 +7,11 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
+    kqp_rbo_effects_guards_fallback_ut.cpp
+    kqp_rbo_generated_sources_fallback_ut.cpp
+    kqp_rbo_index_returning_fallback_ut.cpp
+    kqp_rbo_index_writes_fallback_ut.cpp
+    kqp_rbo_shared_effects_fallback_ut.cpp
     kqp_rbo_yql_fallback_ut.cpp
 )
 

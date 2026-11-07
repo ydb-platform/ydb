@@ -773,28 +773,24 @@ private:
         TVector<TNodePtr> terms;
 
         if (auto result = Build(rule.GetRule_result_column5())) {
-            if (std::holds_alternative<TPlainAsterisk>(*result)) {
-                if (!rule.GetBlock6().empty()) {
-                    Error() << "Unable to use plain '*' with other projection items";
-                    return std::unexpected(ESQLError::Basic);
-                }
-
-                return TPlainAsterisk();
+            if ((*result)->IsAsterisk() && !(*result)->GetSourceName() && !rule.GetBlock6().empty()) {
+                Error() << "Unable to use plain '*' with other projection items";
+                return std::unexpected(ESQLError::Basic);
             }
 
-            terms.emplace_back(std::move(std::get<TNodePtr>(*result)));
+            terms.emplace_back(std::move(*result));
         } else {
             return std::unexpected(result.error());
         }
 
         for (const auto& block : rule.GetBlock6()) {
             if (auto result = Build(block.GetRule_result_column2())) {
-                if (std::holds_alternative<TPlainAsterisk>(*result)) {
+                if ((*result)->IsAsterisk() && !(*result)->GetSourceName()) {
                     Error() << "Unable to use plain '*' with other projection items";
                     return std::unexpected(ESQLError::Basic);
                 }
 
-                terms.emplace_back(std::move(std::get<TNodePtr>(*result)));
+                terms.emplace_back(std::move(*result));
             } else {
                 return std::unexpected(result.error());
             }
@@ -803,7 +799,7 @@ private:
         return terms;
     }
 
-    TSQLResult<std::variant<TNodePtr, TPlainAsterisk>> Build(const TRule_result_column& rule) {
+    TNodeResult Build(const TRule_result_column& rule) {
         switch (rule.GetAltCase()) {
             case NSQLv1Generated::TRule_result_column::kAltResultColumn1:
                 return Build(rule.GetAlt_result_column1());
@@ -814,12 +810,14 @@ private:
         }
     }
 
-    TSQLResult<std::variant<TNodePtr, TPlainAsterisk>> Build(const TRule_result_column::TAlt1& alt) {
+    TNodeResult Build(const TRule_result_column::TAlt1& alt) {
+        TMaybe<TString> source;
         if (alt.GetRule_opt_id_prefix1().HasBlock1()) {
-            return Unsupported("an_id DOT ASTERISK");
+            source = OptIdPrefixAsStr(alt.GetRule_opt_id_prefix1(), *this);
         }
 
-        return TPlainAsterisk();
+        Token(alt.GetToken2());
+        return TNonNull(BuildYqlStar(Ctx_.Pos(), std::move(source)));
     }
 
     TNodeResult Build(const TRule_result_column::TAlt2& alt) {

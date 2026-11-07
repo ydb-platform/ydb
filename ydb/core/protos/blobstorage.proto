@@ -1208,6 +1208,10 @@ message TEvControllerNodeServiceSetUpdate {
     optional uint64 BridgeSyncNodeRateBytesPerSecond = 13;
     // BSC supports shares, but doesn't know this one yet, as nodes are still reporting their syncers
     optional bool KeepBridgeSyncNodeRate = 14;
+    // the tablet generation of BSC, set in every message with syncers or a share; a message of a BSC that has moved to
+    // another node comes by another interconnect session, so it may arrive after those of the new instance, and then its
+    // syncers and share are ignored
+    optional uint32 ControllerGeneration = 15;
 }
 
 message TEvControllerConfigRequest {

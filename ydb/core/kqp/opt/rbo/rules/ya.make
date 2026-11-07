@@ -62,6 +62,7 @@ JOIN_SRCS(
 JOIN_SRCS(
     all_push_rest_1.cpp
     push_limit_into_sort.cpp
+    push_top_sort_through_union_all.cpp
     push_ranges.cpp
     push_simple_join_filter.cpp
 )

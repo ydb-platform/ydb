@@ -66,7 +66,7 @@ namespace {
 
     void SetupLogging(TTestActorRuntime& runtime) {
         NActors::NLog::EPriority priority = ENABLE_DETAILED_HIVE_LOG ? NLog::PRI_DEBUG : NLog::PRI_NOTICE;
-        NActors::NLog::EPriority otherPriority = NLog::PRI_DEBUG;
+        NActors::NLog::EPriority otherPriority = priority;
 
         if (ENABLE_DETAILED_HIVE_LOG) {
             runtime.SetLogPriority(NKikimrServices::HIVE, NLog::PRI_TRACE);
@@ -8091,25 +8091,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         clientConfig.AllowFollower = true;
         clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         TActorId pipeClient = runtime.Register(NTabletPipe::CreateClient(edge, tabletId, clientConfig));
-        TAutoPtr<IEventHandle> handle;
-        TInstant deadline = TInstant::Now() + timeout;
-        bool res = false;
-
-        do {
-            TEvTabletPipe::TEvClientConnected* ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(handle, timeout);
-            if (!ev) {
-                continue;
-            }
-            if (ev->TabletId == tabletId) {
-                res = (ev->Status == NKikimrProto::OK);
-                if (res) {
-                    break;
-                }
-            }
-        } while (TInstant::Now() <= deadline);
+        auto connected = runtime.GrabEdgeEventIf<TEvTabletPipe::TEvClientConnected>(edge,
+            [tabletId](const auto& ev) {
+                return ev->Get()->TabletId == tabletId && ev->Get()->Status == NKikimrProto::OK;
+            }, timeout);
 
         runtime.Send(new IEventHandle(pipeClient, TActorId(), new TEvents::TEvPoisonPill()));
-        UNIT_ASSERT_C(!res, "Unexpected successful tablet connection");
+        UNIT_ASSERT_C(!connected, "Unexpected successful tablet connection");
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionReconnect) {
@@ -12525,6 +12513,10 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
         }
 
         void PrintState() const {
+            if (!ENABLE_DETAILED_HIVE_LOG) {
+                return;
+            }
+
             Cerr << "\033c";
             for (const auto& [pool, groups] : GroupsByPool) {
                 Cerr << "[" << pool << "]" << Endl;
@@ -12543,7 +12535,6 @@ Y_UNIT_TEST_SUITE(TStorageBalanceTest) {
                 }
                 Cerr << Endl;
             }
-            Sleep(TDuration::Seconds(.1));
         }
 
         auto GetObserver(TTestActorRuntime& runtime, TActorId edgeActor) {

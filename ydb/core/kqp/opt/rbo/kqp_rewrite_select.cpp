@@ -1671,7 +1671,7 @@ TExprNode::TPtr RewriteReadOrEffectInput(const TExprNode::TPtr& node, TExprConte
     auto newInput = RewriteReadOrEffectInput(map.Input().Ptr(), ctx, kqpCtx, uniqueSourceIdCounter);
     auto lambda = map.Lambda();
     auto asStruct = lambda.Body().Maybe<TCoAsStruct>();
-    Y_ENSURE(asStruct);
+    Y_ENSURE(asStruct, "New RBO cannot import a table-effect Map whose body is not AsStruct");
 
     TVector<TExprNode::TPtr> mapElements;
 

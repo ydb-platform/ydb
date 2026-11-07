@@ -160,6 +160,11 @@
                 "ColumnId": 33,
                 "ColumnName": "BridgeSyncTotalRate",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 34,
+                "ColumnName": "BridgeSyncMaxSyncers",
+                "ColumnType": "Uint32"
             }
         ],
         "ColumnsDropped": [],
@@ -196,7 +201,8 @@
                     30,
                     31,
                     32,
-                    33
+                    33,
+                    34
                 ],
                 "RoomID": 0,
                 "Codec": 0,

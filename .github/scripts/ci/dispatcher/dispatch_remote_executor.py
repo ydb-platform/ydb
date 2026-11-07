@@ -130,7 +130,6 @@ def cmd_enqueue():
     cfg = load_config_json()
     ticket = build_ticket(cfg)
     run_id = ticket["platform_run_id"]
-    run_url = ticket["platform_run_url"]
     path = Path(env_opt("TICKET_PATH") or TICKET_FILENAME)
     path.write_text(json.dumps(ticket, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote {path} ({path.stat().st_size} bytes)")
@@ -139,12 +138,6 @@ def cmd_enqueue():
         platform_run_id=run_id,
         ticket_path=str(path),
         ticket_artifact=TICKET_ARTIFACT_NAME,
-    )
-    append_summary(
-        f"### Remote enqueue\n"
-        f"- **platform run:** [{run_id}]({run_url})\n"
-        f"- **ticket artifact:** `{TICKET_ARTIFACT_NAME}`\n"
-        f"- **claim (host S3):** `remote-claims/{run_id}.json`\n\n"
     )
     print(f"::notice title=Remote ticket artifact ready::{TICKET_ARTIFACT_NAME} on run {run_id}")
 

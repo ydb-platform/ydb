@@ -232,7 +232,8 @@ def format_launch_summary_md(cfg: dict[str, Any]) -> str:
         job = cfg["job"]
 
     lines = [
-        "## Resolved launch parameters",
+        "<details>",
+        "<summary>Resolved launch parameters</summary>",
         "",
         "| key | value |",
         "| --- | --- |",
@@ -281,7 +282,7 @@ def format_launch_summary_md(cfg: dict[str, Any]) -> str:
             ordered.append(key)
     for key in ordered:
         lines.append(f"| {key} | {_fmt_md_value(job.get(key))} |")
-    lines.append("")
+    lines.extend(["", "</details>", ""])
     return "\n".join(lines)
 
 

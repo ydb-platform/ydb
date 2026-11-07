@@ -1,6 +1,6 @@
 # Runner VM footprints (provisioned maximum resources per GitHub Actions label).
-# Used by fleet capacity export (export_runner_capacity). Not used by the tests
-# resource dashboard (that reads measured MemTotal/CPU from resources_monitor).
+# Used by fleet capacity export (export_runner_capacity).
+# Tests resource dashboard tuning: .github/config/tests_resource_dashboard.yml
 
 quotas:
   instances: 140

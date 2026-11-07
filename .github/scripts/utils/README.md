@@ -17,7 +17,7 @@
     - `dashboard_*.py` — рендеринг HTML
     - `ya_make_requirements.py` — чтение REQUIREMENTS из ya.make
 
-Dashboard limits/mem→cpu: measured host from `resources_monitor.jsonl` only (no limits if missing). `runners_footprints.yml` is for `export_runner_capacity` fleet inventory.
+Dashboard limits/mem→cpu: measured host from `resources_monitor.jsonl`; tuning knobs in `.github/config/tests_resource_dashboard.yml`. `runners_footprints.yml` is for `export_runner_capacity` fleet inventory only.
 
 Unit-тесты лежат отдельно в `tests/` (не рядом с продуктовым кодом):
 

@@ -7,24 +7,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 try:
-    from ..runner_capacity import (
-        CPU_SATURATION_PCT,
-        MEM_MIN_CHUNK_GB,
-        NEAR_BUDGET_FACTOR,
-        RunnerCapacity,
-        mem_cpu_tiers_for,
-    )
+    from ..runner_capacity import RunnerCapacity, load_dashboard_tuning, mem_cpu_tiers_for
 except ImportError:
     _dashboard_dir = Path(__file__).resolve().parent.parent
     if str(_dashboard_dir) not in sys.path:
         sys.path.insert(0, str(_dashboard_dir))
-    from runner_capacity import (
-        CPU_SATURATION_PCT,
-        MEM_MIN_CHUNK_GB,
-        NEAR_BUDGET_FACTOR,
-        RunnerCapacity,
-        mem_cpu_tiers_for,
-    )
+    from runner_capacity import RunnerCapacity, load_dashboard_tuning, mem_cpu_tiers_for
 
 
 def _status_bucket() -> dict[str, int]:
@@ -258,11 +246,12 @@ def build_cpu_recommendations(
         mem_cpu_tiers = runner_capacity.mem_cpu_tiers
     else:
         # p95/split still work; mem→cpu needs measured host capacity.
+        tuning = load_dashboard_tuning()
         runner_cores = 0
         mem_budget_gb = 0.0
-        mem_min_chunk_gb = MEM_MIN_CHUNK_GB
-        cpu_saturation_pct = CPU_SATURATION_PCT
-        near_budget_factor = NEAR_BUDGET_FACTOR
+        mem_min_chunk_gb = float(tuning["mem_min_chunk_gb"])
+        cpu_saturation_pct = float(tuning["cpu_saturation_pct"])
+        near_budget_factor = float(tuning["near_budget_factor"])
         mem_cpu_tiers = mem_cpu_tiers_for(64)
     dedup_runs_by_chunk: dict[tuple[str, str], dict[str, Any]] = {}
     dedup_runs_fallback: list[dict[str, Any]] = []

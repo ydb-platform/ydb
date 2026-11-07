@@ -1,21 +1,26 @@
 """Measured host capacity for the tests resource dashboard.
 
 Limits and mem→cpu recommendations use /proc data from resources_monitor.jsonl.
-If that data is missing, limits are omitted.
+Tuning knobs come from ``.github/config/tests_resource_dashboard.yml``.
+If monitor data is missing, limits are omitted.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Optional
 
-# Suite co-resident RAM budget as a fraction of measured MemTotal.
-MEM_BUDGET_FRACTION = 0.70
-# Matches ya make cgroup MemoryMax (95% of MemTotal).
-YA_MAKE_MEM_FRACTION = 0.95
-MEM_MIN_CHUNK_GB = 24.0
-CPU_SATURATION_PCT = 90.0
-NEAR_BUDGET_FACTOR = 1.10
+CONFIG_REL_PATH = Path(".github/config/tests_resource_dashboard.yml")
+
+_DEFAULT_TUNING = {
+    "mem_budget_fraction": 0.70,
+    "ya_make_mem_fraction": 0.95,
+    "mem_min_chunk_gb": 24.0,
+    "cpu_saturation_pct": 90.0,
+    "near_budget_factor": 1.10,
+}
 
 
 @dataclass(frozen=True)
@@ -39,6 +44,56 @@ class RunnerCapacity:
             "near_budget_factor": self.near_budget_factor,
             "ya_make_mem_limit_gb": round(self.ya_make_mem_limit_gb, 1),
         }
+
+
+def _repo_root_from_here() -> Path:
+    p = Path(__file__).resolve().parent
+    for _ in range(12):
+        if (p / "ydb").is_dir() and (p / ".github").is_dir():
+            return p
+        if p.parent == p:
+            break
+        p = p.parent
+    return Path.cwd()
+
+
+def default_config_path() -> Path:
+    root = _repo_root_from_here()
+    candidate = root / CONFIG_REL_PATH
+    if candidate.is_file():
+        return candidate
+    return CONFIG_REL_PATH
+
+
+def _load_yaml(path: Path) -> dict[str, Any]:
+    try:
+        import yaml
+    except ImportError as exc:
+        raise RuntimeError(f"PyYAML is required to load {path}") from exc
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    return data if isinstance(data, dict) else {}
+
+
+@lru_cache(maxsize=4)
+def load_dashboard_tuning(config_path: Optional[str] = None) -> dict[str, float]:
+    """Load dashboard tuning from YAML; fall back to built-in defaults."""
+    dash = dict(_DEFAULT_TUNING)
+    path = Path(config_path) if config_path else default_config_path()
+    try:
+        if not path.is_file():
+            return dash
+        raw = _load_yaml(path)
+    except (OSError, RuntimeError):
+        return dash
+    for key in dash:
+        if key not in raw:
+            continue
+        try:
+            dash[key] = float(raw[key])
+        except (TypeError, ValueError):
+            pass
+    return dash
 
 
 def mem_cpu_tiers_for(max_cores: int) -> tuple[int, ...]:
@@ -71,22 +126,24 @@ def capacity_from_measured(
     *,
     cpu_cores: Optional[float],
     ram_gb: Optional[float],
+    config_path: Optional[Path] = None,
 ) -> Optional[RunnerCapacity]:
     cpu = _positive_float(cpu_cores)
     ram = _positive_float(ram_gb)
     if cpu is None or ram is None:
         return None
 
+    tuning = load_dashboard_tuning(str(config_path) if config_path else None)
     vcpu = max(1, int(round(cpu)))
     return RunnerCapacity(
         vcpu=vcpu,
         ram_gb=ram,
-        mem_budget_gb=ram * MEM_BUDGET_FRACTION,
-        mem_min_chunk_gb=MEM_MIN_CHUNK_GB,
-        cpu_saturation_pct=CPU_SATURATION_PCT,
-        near_budget_factor=NEAR_BUDGET_FACTOR,
+        mem_budget_gb=ram * float(tuning["mem_budget_fraction"]),
+        mem_min_chunk_gb=float(tuning["mem_min_chunk_gb"]),
+        cpu_saturation_pct=float(tuning["cpu_saturation_pct"]),
+        near_budget_factor=float(tuning["near_budget_factor"]),
         mem_cpu_tiers=mem_cpu_tiers_for(vcpu),
-        ya_make_mem_limit_gb=ram * YA_MAKE_MEM_FRACTION,
+        ya_make_mem_limit_gb=ram * float(tuning["ya_make_mem_fraction"]),
     )
 
 
@@ -109,6 +166,7 @@ def enrich_resources_overlay(
     overlay: Optional[dict[str, Any]],
     *,
     records: Optional[list[dict[str, Any]]] = None,
+    config_path: Optional[Path] = None,
 ) -> tuple[Optional[dict[str, Any]], Optional[RunnerCapacity]]:
     if overlay is None:
         return None, None
@@ -120,6 +178,7 @@ def enrich_resources_overlay(
     capacity = capacity_from_measured(
         cpu_cores=measured.get("cpu_cores"),
         ram_gb=measured.get("ram_gb"),
+        config_path=config_path,
     )
     if capacity is None:
         out.pop("runner_limits", None)

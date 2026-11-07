@@ -12,10 +12,9 @@ from _paths import DASHBOARD, add_product_paths
 add_product_paths(DASHBOARD)
 
 from runner_capacity import (  # noqa: E402
-    MEM_BUDGET_FRACTION,
-    YA_MAKE_MEM_FRACTION,
     capacity_from_measured,
     enrich_resources_overlay,
+    load_dashboard_tuning,
     mem_cpu_tiers_for,
 )
 
@@ -31,13 +30,21 @@ def test_capacity_from_measured_requires_both():
     assert capacity_from_measured(cpu_cores=0, ram_gb=124.0) is None
 
 
+def test_load_dashboard_tuning_from_config():
+    tuning = load_dashboard_tuning()
+    assert tuning["mem_budget_fraction"] == 0.70
+    assert tuning["ya_make_mem_fraction"] == 0.95
+    assert tuning["mem_min_chunk_gb"] == 24.0
+
+
 def test_capacity_from_measured():
+    tuning = load_dashboard_tuning()
     cap = capacity_from_measured(cpu_cores=64, ram_gb=124.42)
     assert cap is not None
     assert cap.vcpu == 64
     assert abs(cap.ram_gb - 124.42) < 1e-6
-    assert abs(cap.mem_budget_gb - 124.42 * MEM_BUDGET_FRACTION) < 1e-6
-    assert abs(cap.ya_make_mem_limit_gb - 124.42 * YA_MAKE_MEM_FRACTION) < 1e-6
+    assert abs(cap.mem_budget_gb - 124.42 * tuning["mem_budget_fraction"]) < 1e-6
+    assert abs(cap.ya_make_mem_limit_gb - 124.42 * tuning["ya_make_mem_fraction"]) < 1e-6
     assert 64 in cap.mem_cpu_tiers
 
 
@@ -77,6 +84,7 @@ def load_tests(loader, tests, pattern):
     for fn in (
         test_mem_cpu_tiers_for,
         test_capacity_from_measured_requires_both,
+        test_load_dashboard_tuning_from_config,
         test_capacity_from_measured,
         test_enrich_resources_overlay_measured_limits,
         test_enrich_resources_overlay_no_limits_without_monitor,
@@ -88,6 +96,7 @@ def load_tests(loader, tests, pattern):
 if __name__ == "__main__":
     test_mem_cpu_tiers_for()
     test_capacity_from_measured_requires_both()
+    test_load_dashboard_tuning_from_config()
     test_capacity_from_measured()
     test_enrich_resources_overlay_measured_limits()
     test_enrich_resources_overlay_no_limits_without_monitor()

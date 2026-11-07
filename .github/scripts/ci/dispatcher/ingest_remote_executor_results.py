@@ -3,8 +3,7 @@
 
 Env (from dispatch_remote.yml ingest): CONFIG_JSON (resolve output),
 EXECUTOR_RUN_ID / EXECUTOR_RUN_URL / EXECUTOR_CONCLUSION,
-CALLER_AWS_ENDPOINT / CALLER_AWS_BUCKET, GITHUB_REPOSITORY / GITHUB_RUN_ID,
-WORKSPACE, GITHUB_STEP_SUMMARY.
+CALLER_AWS_ENDPOINT / CALLER_AWS_BUCKET, WORKSPACE, GITHUB_STEP_SUMMARY.
 """
 from __future__ import annotations
 
@@ -119,9 +118,9 @@ def _write_bytes(path: Path, data: bytes) -> None:
 def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest: Path) -> None:
     """Download a public artifact tree by walking Indexer index.html pages.
 
-    Nebius (and similar) buckets often allow anonymous GetObject but deny
-    ListBucket, so `aws s3 sync --no-sign-request` fails. Indexer listings are
-    public HTML and enumerate the same objects.
+    Host public buckets often allow anonymous GetObject but deny ListBucket,
+    so signed list sync fails. Indexer listings are public HTML and enumerate
+    the same objects.
     """
     dest.mkdir(parents=True, exist_ok=True)
     root_key = key_prefix.strip("/")

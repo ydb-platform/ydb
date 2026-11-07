@@ -122,7 +122,9 @@ def build_config() -> dict[str, Any]:
     increment = _as_str(job["increment"])
     fetch_depth = 0 if truthy(increment) else 2
 
-    cfg["analytics_job_name"] = _as_str(cfg.get("analytics_job_name")).strip() or "Run and debug tests"
+    cfg["analytics_job_name"] = _as_str(cfg["analytics_job_name"]).strip()
+    if not cfg["analytics_job_name"]:
+        die("analytics_job_name is empty")
     cfg["caller_workflow"] = (
         _as_str(cfg.get("caller_workflow")).strip()
         or (os.environ.get("GITHUB_WORKFLOW") or "").strip()
@@ -231,16 +233,12 @@ def format_launch_summary_md(cfg: dict[str, Any]) -> str:
     )
     for key in top_keys:
         if key == "code_ref":
-            val = inputs.get("code_ref") or cfg.get("code_ref")
+            val = inputs.get("code_ref")
         elif key == "runs_on":
-            val = inputs.get("runs_on") or cfg.get("runs_on")
+            val = inputs.get("runs_on")
         else:
             val = cfg.get(key)
         lines.append(f"| {key} | {_fmt_md_value(val)} |")
-
-    for key in ("platform_run_id", "platform_run_attempt", "platform_repository"):
-        if key in inputs:
-            lines.append(f"| inputs.{key} | {_fmt_md_value(inputs.get(key))} |")
 
     lines.extend(["", "### job_inputs", "", "| key | value |", "| --- | --- |"])
     ordered = list(_DEFAULT_JOB.keys())

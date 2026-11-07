@@ -1232,7 +1232,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         // A single comprehensive update must retire the omitted actors and start the replacement. No replay,
         // manual PDisk insertion, DESTROY record or controller reconnect supplies the missing recovery step.
         runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge,
-            new TEvNodeWardenStorageConfig(config, false, nullptr)), 0);
+            new TEvNodeWardenStorageConfig(config, true, nullptr)), 0);
         runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             return ev->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenStorageConfigConfirm;
         }, {edge});
@@ -1278,6 +1278,65 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     CUSTOM_UNIT_TEST(TestStaticServiceSetReusesObsoletePDiskIdWithNewGuid) {
         TestStaticServiceSetReplacesObsoletePDiskOnSamePath(0);
+    }
+
+    CUSTOM_UNIT_TEST(TestStartupConfigDoesNotRetireStaticServices) {
+        // When self-management gets turned off on a running node, distconf reports the startup config again.
+        TTestBasicRuntime runtime(1, false);
+        NKikimrBlobStorage::TNodeWardenServiceSet running;
+        Setup(runtime, "", nullptr, [](TAppPrepare& app) {
+            app.FeatureFlags.SetForceDistconfDisable(true); // this test supplies configurations directly
+        }, [&](ui32, TNodeWardenConfig& wardenConfig) {
+            running.CopyFrom(wardenConfig.BlobStorageConfig->GetServiceSet());
+        }, /*setupController=*/false, /*strandPDisk=*/false); // the observer below must see the actual actors
+
+        UNIT_ASSERT(running.PDisksSize());
+        UNIT_ASSERT(running.VDisksSize());
+        UNIT_ASSERT(running.GroupsSize());
+        const ui32 nodeId = runtime.GetNodeId(0);
+        std::set<TActorId> actors;
+        for (const auto& pdisk : running.GetPDisks()) {
+            actors.insert(runtime.GetLocalServiceId(MakeBlobStoragePDiskID(nodeId, pdisk.GetPDiskID()), 0));
+        }
+        for (const auto& vdisk : running.GetVDisks()) {
+            const auto& loc = vdisk.GetVDiskLocation();
+            actors.insert(runtime.GetLocalServiceId(MakeBlobStorageVDiskID(nodeId, loc.GetPDiskID(),
+                loc.GetVDiskSlotID()), 0));
+        }
+        UNIT_ASSERT(!actors.contains(TActorId()));
+
+        bool poisoned = false;
+        const auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvents::TSystem::Poison && actors.contains(ev->GetRecipientRewrite())) {
+                poisoned = true;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(previousObserver); };
+
+        NKikimrBlobStorage::TNodeWardenServiceSet noGroups; // what a v2 cluster has in its startup config
+        noGroups.AddAvailabilityDomains(1);
+        NKikimrBlobStorage::TNodeWardenServiceSet obsolete; // the VDisks have moved away since the node had started
+        obsolete.MutableGroups()->CopyFrom(running.GetGroups());
+
+        const auto edge = runtime.AllocateEdgeActor();
+        for (const auto *startup : {&noGroups, &obsolete}) {
+            auto config = std::make_shared<NKikimrBlobStorage::TStorageConfig>();
+            config->MutableBlobStorageConfig()->MutableServiceSet()->CopyFrom(*startup);
+            runtime.Send(new IEventHandle(MakeBlobStorageNodeWardenID(nodeId), edge,
+                new TEvNodeWardenStorageConfig(config, false, nullptr)), 0);
+            runtime.WaitForEdgeEvents([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+                return ev->GetTypeRewrite() == TEvBlobStorage::EvNodeWardenStorageConfigConfirm;
+            }, {edge});
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT(!poisoned);
+        }
+
+        // an ejected group would reply NO_GROUP to any request
+        SendToBsProxy(runtime, edge, running.GetGroups(0).GetGroupID(), new TEvBlobStorage::TEvStatus(TInstant::Max()));
+        const auto status =runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvStatusResult>(edge, TDuration::Seconds(30));
+        UNIT_ASSERT(status);
+        UNIT_ASSERT_UNEQUAL(status->Get()->Status, NKikimrProto::NO_GROUP);
     }
 
     CUSTOM_UNIT_TEST(TestHttpMonPage) {

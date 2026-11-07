@@ -96,6 +96,7 @@ struct TEvWorker {
             SCHEME_ERROR,
             UNAVAILABLE,
             OVERLOAD,
+            DATA_LOSS,
             DATA_ERROR,
         };
 

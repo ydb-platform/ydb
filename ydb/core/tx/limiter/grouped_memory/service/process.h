@@ -169,7 +169,7 @@ private:
     void FailNeverFitting(const std::shared_ptr<TAllocationInfo>& allocation) {
         auto stage = allocation->GetStage();
         LWPROBE(Allocated, "never_fits", allocation->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), allocation->GetAllocationTime(), false, false);
-        allocation->Fail(TStringBuilder() << stage->GetName() << "::(unrestricted_limit:" << stage->GetEffectiveUnrestrictedLimit()
+        allocation->Fail(TStringBuilder() << stage->GetName() << "::(unrestricted_limit:" << stage->GetPermanentUnrestrictedLimit()
                                           << ";volume:" << allocation->GetAllocatedVolume() << ") exceeds the unrestricted limit;");
         UnregisterAllocation(allocation->GetIdentifier());
     }
@@ -352,7 +352,7 @@ public:
         } else {
             auto allocationInfo = RegisterAllocationImpl(externalGroupId, allocation, stage);
             if (UnrestrictedEnabled && allocationInfo->GetAllocationStatus() == EAllocationStatus::Waiting && allocationInfo->NeverFitsUnrestricted()) {
-                // Nothing forces a request above the band any more. Waiting would never end and would hold the scope.
+                // A permanent configured bound cannot recover with a larger grant.
                 FailNeverFitting(allocationInfo);
                 return;
             }
@@ -392,7 +392,7 @@ public:
         return WaitAllocations.Allocate(isPriorityProcess, *this, allocationsCountLimit);
     }
 
-    // After the band shrank: waiting requests that no longer fit at zero usage.
+    // Reject only requests that exceed permanent configured bounds.
     void FailNeverFittingWaiting() {
         if (!UnrestrictedEnabled) {
             return;

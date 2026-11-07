@@ -58,6 +58,7 @@ struct TEvYdbProxy {
         EV_REQUEST_RESPONSE(CommitOffset),
         EvEndTopicPartition,
         EvStartTopicReadingSession,
+        EvTopicReaderStatus,
 
         EvEnd,
     };
@@ -265,6 +266,15 @@ struct TEvYdbProxy {
     };
 
     struct TEvStartTopicReadingSession: public TGenericResponse<TEvStartTopicReadingSession, EvStartTopicReadingSession, TStartTopicReadingSessionResult> {
+        using TBase::TBase;
+    };
+
+    struct TTopicReaderStatusResult {
+        TString ReadSessionId;
+        ui64 ReadOffset;
+    };
+
+    struct TEvTopicReaderStatus: public TGenericResponse<TEvTopicReaderStatus, EvTopicReaderStatus, TTopicReaderStatusResult> {
         using TBase::TBase;
     };
 

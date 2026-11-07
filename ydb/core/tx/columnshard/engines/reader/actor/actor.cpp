@@ -1,5 +1,7 @@
 #include "actor.h"
 
+#include <ydb/library/formats/arrow/size_calcer.h>
+
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
@@ -62,12 +64,15 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     ui32 scanId, ui64 txId, ui32 scanGen, ui64 requestCookie, ui64 tabletId, TDuration timeout,
     const TReadMetadataBase::TConstPtr& readMetadataRange, NKikimrDataEvents::EDataFormat dataFormat,
     const NColumnShard::TScanCounters& scanCountersPool, const NConveyorComposite::TCPULimitsConfig& cpuLimits,
-    std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId, std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool)
+    std::shared_ptr<NLWTrace::TOrbit> orbit, ui64 pathId, std::optional<NKqp::NScheduler::NHdrf::TFullPoolId> schedulerPool,
+    NYql::NDqProto::EDqStatsMode statsMode, std::shared_ptr<NScanStats::TCollector> runtimeStats)
     : StoragesManager(storagesManager)
     , DataAccessorsManager(dataAccessorsManager)
     , ColumnDataManager(columnDataManager)
     , ScanOrbit(std::move(orbit))
     , PathId(pathId)
+    , RuntimeStats((statsMode == NYql::NDqProto::DQ_STATS_MODE_FULL || statsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE)
+          ? (runtimeStats ? std::move(runtimeStats) : std::make_shared<NScanStats::TCollector>(tabletId)) : nullptr)
     , SchedulerPool(std::move(schedulerPool))
     , ColumnShardActorId(columnShardActorId)
     , ScanComputeActorId(scanComputeActorId)
@@ -95,15 +100,28 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
     //        "TabletId", TabletId)("ScanId", ScanId)("TxId", TxId)("ScanGen", ScanGen));
     auto g = Stats->MakeGuard("bootstrap");
     ScanActorId = ctx.SelfID;
+    if (RuntimeStats) {
+        RuntimeStats->BindScanId(SelfId().ToString());
+    }
+    auto initStats = RuntimeStats ? RuntimeStats->Start(NScanStats::TStep::ReaderInit,
+        "READER_INIT", "Initialize ColumnShard reader", NScanStats::Current()) : nullptr;
+    std::optional<NScanStats::TScope> initScope;
+    if (initStats) {
+        initScope.emplace(initStats, RuntimeStats);
+    }
 
     Y_ABORT_UNLESS(!ScanIterator);
     ResourceSubscribeActorId = ctx.Register(new NResourceBroker::NSubscribe::TActor(TabletId, SelfId()));
 
     std::shared_ptr<TReadContext> context =
         std::make_shared<TReadContext>(StoragesManager, DataAccessorsManager, ColumnDataManager, ScanCountersPool, ReadMetadataRange, SelfId(),
-            ResourceSubscribeActorId, ComputeShardingPolicy, ScanId, CPULimits, ScanOrbit, TxId, SchedulerPool);
+            ResourceSubscribeActorId, ComputeShardingPolicy, ScanId, CPULimits, ScanOrbit, TxId, SchedulerPool, RuntimeStats);
     ScanIterator = ReadMetadataRange->StartScan(context);
     auto startResult = ScanIterator->Start();
+    if (initStats) {
+        initStats->Finish(startResult.IsFail() ? NScanStats::TStep::failed : NScanStats::TStep::completed);
+    }
+    initScope.reset();
     StartInstant = TMonotonic::Now();
     if (!startResult) {
         YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
@@ -117,6 +135,13 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
         Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId, true),
             IEventHandle::FlagTrackDelivery);
+        if (RuntimeStats) {
+            CreditStats = RuntimeStats->Start(NScanStats::TStep::Ack,
+                "WAIT_CREDIT", "Wait for initial read credit", nullptr);
+            if (CreditStats) {
+                CreditStats->Suspend();
+            }
+        }
 
         Become(&TColumnShardScan::StateScan);
         ContinueProcessing();
@@ -157,6 +182,15 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
 }
 
 void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
+    auto ackStats = std::move(CreditStats);
+    if (!ackStats && RuntimeStats) {
+        ackStats = RuntimeStats->Start(NScanStats::TStep::Ack,
+            "READ_CREDIT", "Process read credit", nullptr);
+    }
+    std::optional<NScanStats::TScope> ackScope;
+    if (ackStats) {
+        ackScope.emplace(ackStats, RuntimeStats);
+    }
     auto ackProcessingGuard = ScanCountersPool.GetResultsForReplyGuard();
     StartWaitTime = TInstant::Now();
     auto g = Stats->MakeGuard("ack", IS_INFO_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN));
@@ -174,6 +208,10 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"event", "TEvScanDataAck"},
         {"info", ChunksLimiter.DebugString()});
+    if (ackStats) {
+        ackStats->Finish();
+    }
+    ackScope.reset();
     if (ScanIterator) {
         if (!!ScanIterator->GetAvailableResultsCount() && !*ScanIterator->GetAvailableResultsCount()) {
             ScanCountersPool.OnEmptyAck();
@@ -329,7 +367,16 @@ bool TColumnShardScan::ProduceResults() noexcept {
         return false;
     }
 
-    auto resultConclusion = ScanIterator->GetBatch();
+    auto resultConclusion = [&] {
+        auto readyStats = RuntimeStats ? RuntimeStats->Start(NScanStats::TStep::Ready,
+            "GET_BATCH", "Get ready reader batch", NScanStats::Current()) : nullptr;
+        NScanStats::TScope scope(readyStats, RuntimeStats);
+        auto result = ScanIterator->GetBatch();
+        if (readyStats) {
+            readyStats->Finish(result.IsFail() ? NScanStats::TStep::failed : NScanStats::TStep::completed);
+        }
+        return result;
+    }();
     if (resultConclusion.IsFail()) {
         YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
             {"stage", "got error"},
@@ -502,6 +549,12 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch, ui64 sourceId)
     if (Finished) {
         return true;
     }
+    auto sendStats = RuntimeStats ? RuntimeStats->Start(NScanStats::TStep::Send,
+        "PREPARE_SEND", "Prepare batch for send", nullptr) : nullptr;
+    std::optional<NScanStats::TScope> sendScope;
+    if (sendStats) {
+        sendScope.emplace(sendStats, RuntimeStats);
+    }
 
     Result->PageFault = pageFault;
     Result->PageFaults = PageFaults;
@@ -521,6 +574,12 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch, ui64 sourceId)
         {"finished", Result->Finished},
         {"fault", Result->PageFault},
         {"schema", (Result->ArrowBatch ? Result->ArrowBatch->schema()->ToString() : "")});
+    auto finishStats = lastBatch && RuntimeStats ? RuntimeStats->Start(NScanStats::TStep::Finish,
+        "FINISH_RESULT", "Prepare final read result", nullptr) : nullptr;
+    std::optional<NScanStats::TScope> finishScope;
+    if (finishStats) {
+        finishScope.emplace(finishStats, RuntimeStats);
+    }
     Finished = Result->Finished;
     if (Finished) {
         YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
@@ -543,6 +602,10 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch, ui64 sourceId)
         AFL_VERIFY(AckReceivedInstant);
         ScanCountersPool.AckWaitingInfo(TMonotonic::Now() - *AckReceivedInstant);
     }
+    if (finishStats) {
+        finishStats->Finish();
+    }
+    finishScope.reset();
     ReadMetadataRange->OnReplyConstruction(TabletId, *Result);
     AckReceivedInstant.reset();
     LastResultInstant = TMonotonic::Now();
@@ -566,6 +629,34 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch, ui64 sourceId)
     LWTRACK(SendResult, *ScanOrbit, PathId, TabletId, TxId, ScanId, sourceId, Result->GetRowsCount(),
         (Result->ArrowBatch ? NArrow::GetTableDataSize(Result->ArrowBatch) : 0), Result->CpuTime, Result->WaitTime, TInstant::Now() - LastSend,
         Result->Finished);
+    if (sendStats) {
+        sendStats->Update([&](auto& record) {
+            auto* output = record.MutableDetails()->MutableOutput();
+            const ui32 resultRows = Result->GetRowsCount();
+            output->SetRows(resultRows);
+            output->SetDataBatches(resultRows ? 1 : 0);
+            if (Result->ArrowBatch) {
+                output->SetArrowBytes(NArrow::GetTableDataSize(Result->ArrowBatch));
+            }
+        });
+        sendStats->Finish();
+    }
+    sendScope.reset();
+    if (RuntimeStats) {
+        if (lastBatch && CreditStats) {
+            NScanStats::TScope scope(CreditStats, RuntimeStats);
+            CreditStats->Finish(NScanStats::TStep::cancelled);
+            CreditStats.reset();
+        }
+        Result->ColumnShardStats = RuntimeStats->Drain(lastBatch);
+        if (!lastBatch && !ChunksLimiter.HasMore()) {
+            CreditStats = RuntimeStats->Start(NScanStats::TStep::Ack,
+                "WAIT_CREDIT", "Wait for read credit", nullptr);
+            if (CreditStats) {
+                CreditStats->Suspend();
+            }
+        }
+    }
     Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery);   // TODO: FlagSubscribeOnSession ?
     LastSend = TInstant::Now();
 
@@ -611,6 +702,11 @@ void TColumnShardScan::SendScanAborted() {
 }
 
 void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish status) {
+    if (CreditStats) {
+        NScanStats::TScope scope(CreditStats, RuntimeStats);
+        CreditStats->Finish(NScanStats::TStep::cancelled);
+        CreditStats.reset();
+    }
     if (AppDataVerified().ColumnShardConfig.GetEnableDiagnostics()) {
         auto scanIteratorDiagnostics = ScanIterator ? ScanIterator->DebugString(true) : TString(NoScanIteratorDiagnostics);
         Send(ScanDiagnosticsActorId,

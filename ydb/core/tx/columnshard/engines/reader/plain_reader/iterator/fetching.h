@@ -81,7 +81,7 @@ protected:
 
 public:
     TPortionAccessorFetchingStep()
-        : TBase("FETCHING_ACCESSOR")
+        : TBase("FETCHING_ACCESSOR", NScanStats::TStep::FetchAccessors)
     {
     }
 };
@@ -112,7 +112,7 @@ public:
     virtual TConclusion<TExecutionResult> DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     TPredicateFilter()
-        : TBase("PREDICATE")
+        : TBase("PREDICATE", NScanStats::TStep::Filter, NKqpProto::TColumnShardStepDetails::TFilter::pk_range)
     {
     }
 };
@@ -125,7 +125,7 @@ public:
     virtual TConclusion<TExecutionResult> DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     TSnapshotFilter()
-        : TBase("SNAPSHOT")
+        : TBase("SNAPSHOT", NScanStats::TStep::Filter)
     {
     }
 };
@@ -153,7 +153,7 @@ public:
     virtual TConclusion<TExecutionResult> DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     TDeletionFilter()
-        : TBase("DELETION")
+        : TBase("DELETION", NScanStats::TStep::Filter, NKqpProto::TColumnShardStepDetails::TFilter::deletion)
     {
     }
 };
@@ -166,7 +166,7 @@ public:
     virtual TConclusion<TExecutionResult> DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     TShardingFilter()
-        : TBase("SHARDING")
+        : TBase("SHARDING", NScanStats::TStep::Filter, NKqpProto::TColumnShardStepDetails::TFilter::sharding)
     {
     }
 };

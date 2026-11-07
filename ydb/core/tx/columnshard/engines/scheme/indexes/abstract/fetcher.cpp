@@ -1,8 +1,40 @@
 #include "fetcher.h"
 
+#include "stats.h"
+
+#include <util/generic/scope.h>
+
 namespace NKikimr::NOlap::NIndexes {
 
 namespace {
+
+std::shared_ptr<NScanStats::TOperation> StartIndexStats(
+    NScanStats::TStep::EStepKind kind, const TString& name, const IIndexMeta& index, NReader::NCommon::IDataSource& source) {
+    const auto& collector = NScanStats::CurrentCollector();
+    if (!collector) {
+        return {};
+    }
+    auto operation = collector->Start(kind, name, TString("Index ") + index.GetIndexName(), NScanStats::Current(), source.GetSourceId());
+    if (operation) {
+        operation->Update([&](NScanStats::TStep& record) {
+            record.SetMetaStep("IndexFilter");
+            record.SetCanonicalPath("");
+            record.ClearIndexDescriptors();
+            record.ClearSharedIndexInputs();
+            const auto& resolver = *source.GetContext()->GetCommonContext()->GetResolver();
+            AddIndexStatsDescriptor(record, index, [&](ui32 id) { return resolver.GetColumnName(id, false); });
+            if (kind == NScanStats::TStep::FetchColumns || kind == NScanStats::TStep::Assemble) {
+                auto* columns = kind == NScanStats::TStep::FetchColumns
+                    ? record.MutableDetails()->MutableFetchColumns()->MutableColumns()
+                    : record.MutableDetails()->MutableAssemble()->MutableColumns();
+                for (const auto& column : record.GetIndexDescriptors(0).GetColumns()) {
+                    columns->AddNames(column);
+                }
+            }
+        });
+    }
+    return operation;
+}
 
 TString GetStorageIdForIndexChunk(
     const NReader::NCommon::IDataSource& source, const std::shared_ptr<IIndexMeta>& indexMeta, const std::optional<TBlobRange>& blobRange) {
@@ -15,12 +47,20 @@ TString GetStorageIdForIndexChunk(
 }   // namespace
 
 void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCommon::TFetchingResultContext& context) {
+    auto stats = StartIndexStats(NScanStats::TStep::FetchColumns, "FETCH_INDEX", *IndexMeta, context.GetSource());
+    if (stats) {
+        RuntimeIndexStats.emplace(stats, NScanStats::CurrentCollector());
+    }
+    NScanStats::TScope scope(stats);
+    Y_DEFER { if (stats) { stats->Finish(); } };
     TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
     auto& source = context.GetSource();
     const auto& portionAccessor = source.GetPortionAccessor();
     auto indexChunks = portionAccessor.GetIndexChunksPointers(IndexMeta->GetIndexId());
     for (auto&& i : indexChunks) {
         if (i->HasBlobData()) {
+            NScanStats::RecordDataSourceRead("Memory", "InlineIndex", i->GetBlobDataVerified().size(),
+                NKqpProto::TColumnShardStepDetails::TStorageRead::index);
             TChunkOriginalData originalData(i->GetBlobDataVerified());
             const TString storageId = GetStorageIdForIndexChunk(source, IndexMeta, std::nullopt);
             FetchingStorageIds.emplace_back(storageId);
@@ -50,7 +90,7 @@ void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCom
         }
         std::shared_ptr<IBlobsReadingAction> reading = blobsAction.GetReading(storageId);
         for (auto&& i : ranges) {
-            reading->AddRange(i);
+            reading->AddRange(i, {}, NKqpProto::TColumnShardStepDetails::TStorageRead::index);
         }
         nextRead.Add(reading);
     }
@@ -60,6 +100,22 @@ void TIndexFetcherLogic::DoOnDataReceived(TReadActionsCollection& nextRead, NBlo
     if (blobs.IsEmpty()) {
         return;
     }
+    std::optional<NScanStats::TScope> indexContext;
+    if (RuntimeIndexStats) {
+        indexContext.emplace(*RuntimeIndexStats);
+    }
+    const auto& collector = NScanStats::CurrentCollector();
+    auto stats = collector && RuntimeIndexStats
+        ? collector->Start(NScanStats::TStep::FetchColumns, "FETCH_INDEX_BODY", TString("Index ") + IndexMeta->GetIndexName(), NScanStats::Current())
+        : nullptr;
+    if (stats) {
+        stats->Update([](NScanStats::TStep& record) {
+            record.SetCanonicalPath("");
+            record.ClearSharedIndexInputs();
+        });
+    }
+    NScanStats::TScope scope(stats);
+    Y_DEFER { if (stats) { stats->Finish(); } };
     TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
     THashMap<TString, std::vector<TBlobRange>> rangesByStorage;
     {
@@ -80,7 +136,7 @@ void TIndexFetcherLogic::DoOnDataReceived(TReadActionsCollection& nextRead, NBlo
         }
         auto reading = blobsAction.GetReading(storageId);
         for (auto&& i : ranges) {
-            reading->AddRange(i);
+            reading->AddRange(i, {}, NKqpProto::TColumnShardStepDetails::TStorageRead::index);
         }
         nextRead.Add(reading);
     }
@@ -90,6 +146,9 @@ TConclusionStatus TIndexFetcherLogic::DoOnDataCollected(NReader::NCommon::TFetch
     if (Fetching.empty()) {
         return TConclusionStatus::Success();
     }
+    auto stats = StartIndexStats(NScanStats::TStep::Assemble, "ASSEMBLE_INDEX", *IndexMeta, context.GetSource());
+    NScanStats::TScope scope(stats);
+    Y_DEFER { if (stats) { stats->Finish(); } };
     const bool hasIndex = context.GetIndexes().HasIndex(IndexMeta->GetIndexId());
     std::vector<std::vector<TString>> data;
     data.resize(IndexAddressesVector.size());

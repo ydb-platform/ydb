@@ -30,6 +30,7 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 using TPKSortPermutation = std::vector<ui64>;
 
+class IDataSource;
 class TFetchingScriptCursor;
 class TDataSourceLease;
 
@@ -38,7 +39,10 @@ private:
     std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator> ProgramIterator;
     std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor> ExecutionVisitor;
 
+    std::shared_ptr<NScanStats::TOperation> RuntimeStats;
+    THashMap<ui32, TString> StatsExpressions;
     std::optional<ui32> CurrentProgramNodeId;
+    ui64 IndexCheckStatsOrder = 0;
     std::shared_ptr<TFetchingStepSignals> CurrentStepSignals;
     std::optional<TMonotonic> CurrentNodeStart;
 
@@ -66,12 +70,22 @@ public:
         return PrevNode;
     }
 
-    void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
+    const std::shared_ptr<NScanStats::TOperation>& GetRuntimeStats() const { return RuntimeStats; }
+    TString GetStatsColumnName(IDataSource& source, ui32 columnId) const;
+    TString BuildStatsDescription(IDataSource& source, ui32 nodeId,
+        const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, std::vector<TString> columns);
+    void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals,
+        IDataSource& source, const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor, const TString& metaStep,
+        const std::vector<std::shared_ptr<NArrow::NSSA::IResourceProcessor>>& indexProcessors);
 
-    void OnFinishProgramStepExecution();
+    ui64 AllocateIndexCheckStatsOrder() {
+        return ++IndexCheckStatsOrder;
+    }
+
+    void OnFinishProgramStepExecution(NScanStats::TStep::EOutcome outcome = NScanStats::TStep::completed);
 
     void OnFailedProgramStepExecution() {
-        OnFinishProgramStepExecution();
+        OnFinishProgramStepExecution(NScanStats::TStep::failed);
     }
 
     void Start(IDataSource& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program,
@@ -176,6 +190,11 @@ protected:
 
 public:
     ui64 GetReservedMemory() const;
+
+    std::optional<ui64> GetStatsCandidateRows() const {
+        if (!HasStageData() || !GetStageData().HasTable() || !GetRecordsCountOptional()) { return std::nullopt; }
+        return GetStageData().GetTable().GetFilteredCount(*GetRecordsCountOptional(), Max<ui32>());
+    }
 
     TDuration GetAndResetWaitDuration() {
         const TMonotonic now = TMonotonic::Now();
@@ -321,6 +340,11 @@ public:
     }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const;
+
+    virtual void FillIndexStatsContext(
+        const std::vector<std::shared_ptr<NArrow::NSSA::IResourceProcessor>>& /*indexProcessors*/,
+        NScanStats::TStep& /*record*/) const {
+    }
 
     virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const {
         static std::shared_ptr<ISnapshotSchema> defaultValue;

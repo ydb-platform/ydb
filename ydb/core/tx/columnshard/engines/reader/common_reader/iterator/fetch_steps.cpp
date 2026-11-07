@@ -25,6 +25,12 @@ void TColumnBlobsFetchingStep::ReportTracing(IDataSource& source, const TFetchin
 
 TConclusion<TExecutionResult> TColumnBlobsFetchingStep::DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const {
     const TMonotonic start = TMonotonic::Now();
+    if (const auto& operation = NScanStats::Current()) {
+        operation->Update([&](NScanStats::TStep& record) {
+            auto* names = record.MutableDetails()->MutableFetchColumns()->MutableColumns();
+            for (ui32 id : Columns.GetColumnIds()) { names->AddNames(source.GetContext()->GetCommonContext()->GetResolver()->GetColumnName(id)); }
+        });
+    }
     auto result = source.StartFetchingColumns(step, Columns);
     const TDuration executionDurationMs = TMonotonic::Now() - start;
     source.AddExecutionDuration(executionDurationMs);
@@ -51,6 +57,12 @@ void TAssemblerStep::ReportTracing(
 
 TConclusion<TExecutionResult> TAssemblerStep::DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const {
     const TMonotonic start = TMonotonic::Now();
+    if (const auto& operation = NScanStats::Current()) {
+        operation->Update([&](NScanStats::TStep& record) {
+            auto* names = record.MutableDetails()->MutableAssemble()->MutableColumns();
+            for (const auto& name : Columns->GetColumnNamesVector()) { names->AddNames(name); }
+        });
+    }
     source.AssembleColumns(Columns);
     const TDuration executionDurationMs = TMonotonic::Now() - start;
     source.AddExecutionDuration(executionDurationMs);
@@ -66,6 +78,12 @@ ui64 TAssemblerStep::GetProcessingDataSize(const IDataSource& source) const {
 }
 
 TConclusion<TExecutionResult> TOptionalAssemblerStep::DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& /*step*/) const {
+    if (const auto& operation = NScanStats::Current()) {
+        operation->Update([&](NScanStats::TStep& record) {
+            auto* names = record.MutableDetails()->MutableAssemble()->MutableColumns();
+            for (const auto& name : Columns->GetColumnNamesVector()) { names->AddNames(name); }
+        });
+    }
     source.AssembleColumns(Columns, !source.IsSourceInMemory());
     return TExecutionResult::Done();
 }
@@ -84,8 +102,12 @@ void TAllocateMemoryStep::TFetchingStepAllocation::TStartJob::Start(std::unique_
 bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
     const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) {
     auto& data = SourceLease->GetSource();
+    NScanStats::TScope readerScope(Step.GetRuntimeStats(), data.GetContext()->GetCommonContext()->GetRuntimeStats());
+    std::optional<NScanStats::TScope> programScope;
+    if (!NeedNextStep) { programScope.emplace(data.GetExecutionContext().GetRuntimeStats()); }
     if (data.GetContext()->IsAborted()) {
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, data.AddEvent("fail_malloc"));
+        Step.FinishRuntimeStats(NScanStats::TStep::cancelled);
         guard->Release();
         return false;
     }
@@ -121,6 +143,8 @@ void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(cons
         {"event", "allocation_impossible"},
         {"error", errorMessage});
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("fail_malloc"));
+    Step.FinishRuntimeStats(NScanStats::TStep::failed);
+    if (source.GetExecutionContext().GetRuntimeStats()) { source.GetExecutionContext().GetRuntimeStats()->Finish(NScanStats::TStep::failed); }
     source.GetContext()->GetCommonContext()->AbortWithError("cannot allocate memory for step " + Step.GetName() + ": '" + errorMessage + "'");
 }
 
@@ -146,6 +170,12 @@ TConclusion<TExecutionResult> TAllocateMemoryStep::DoExecuteInplace(IDataSource&
         }
         size += sizeLocal;
     }
+    if (const auto& operation = step.GetRuntimeStats()) {
+        operation->Update([&](NScanStats::TStep& record) {
+            record.MutableDetails()->MutableMemoryReserve()->SetReservationBytes(size);
+            record.SetReadBytes(0);
+        });
+    }
     ReportTracing(source, step, TMonotonic::Now() - start, size);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("smalloc"));
     return TExecutionResult::Pending(std::make_shared<TFetchingStepAllocation::TStartJob>(size, step, StageIndex, true));
@@ -162,6 +192,12 @@ TConclusion<TExecutionResult> TBuildStageResultStep::DoExecuteInplace(IDataSourc
 
 TExecutionResult StartProgramStepReserveMemory(
     const IDataSource& source, const ui64 sizeToReserve, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {
+    if (const auto& operation = NScanStats::Current()) {
+        operation->Update([&](NScanStats::TStep& record) {
+            record.MutableDetails()->MutableMemoryReserve()->SetReservationBytes(sizeToReserve);
+            record.SetReadBytes(0);
+        });
+    }
     return TExecutionResult::Pending(std::make_shared<TAllocateMemoryStep::TFetchingStepAllocation::TStartJob>(
         sizeToReserve, source.GetExecutionContext().GetCursorStep(), stage, false));
 }

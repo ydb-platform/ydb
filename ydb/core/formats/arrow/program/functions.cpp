@@ -1,4 +1,5 @@
 #include "functions.h"
+#include "stats.h"
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/kernels/aggregate_basic_internal.h>
@@ -178,6 +179,7 @@ TConclusion<TFunctionResult> TInternalFunction::Call(
     auto argumentsReader = resources.GetArguments(TColumnChainInfo::ExtractColumnIds(context.GetColumns()), NeedConcatenation, false);
     TAccessorsCollection::TChunksMerger merger;
     while (auto arguments = argumentsReader.ReadNext()) {
+        AddStatsArgumentRows(arguments->Arguments);
         arrow::Result<arrow::Datum> result = arrow::Status::UnknownError<std::string>("unknown function");
         for (const auto& funcName : funcNames) {
             if (GetContext() && GetContext()->func_registry()->GetFunction(funcName).ok()) {

@@ -1,0 +1,7 @@
+UNITTEST_FOR(ydb/core/formats/arrow/reader/stats)
+
+SRCS(stats_ut.cpp stats_v2_ut.cpp)
+
+SRCS(stats_v3_ut.cpp)
+
+END()

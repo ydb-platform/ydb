@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
+
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/meta.h>
@@ -47,7 +49,12 @@ public:
         size_t operator()(const TObject& data);
     };
 
-    static TString GetCacheName();
+        static void OnStatsCacheHit(const TObject& object);
+        static void OnStatsSourceRead(const TObject& object);
+        static void OnStatsSharedRead(const TObject& object, const NScanStats::TCapture& capture);
+        static NScanStats::TCapture CaptureStatsRequest() { return {}; }
+
+        static TString GetCacheName();
 
     static TString GetServiceCode();
 

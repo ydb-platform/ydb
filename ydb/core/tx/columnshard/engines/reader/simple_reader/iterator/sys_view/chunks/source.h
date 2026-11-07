@@ -10,6 +10,7 @@
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NChunks {
 
 class TSourceData: public NAbstract::TPathSourceData {
+        bool IsStorageBackedColumn(ui64 columnId) const override;
 private:
     using TBase = NAbstract::TPathSourceData;
     YDB_READONLY_DEF(TPortionInfo::TConstPtr, Portion);

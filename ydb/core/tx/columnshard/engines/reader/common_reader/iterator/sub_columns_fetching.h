@@ -230,22 +230,22 @@ public:
                     }
                     if (dictPrefix && *dictPrefix <= colBlobRange.GetSize()) {
                         const TBlobRange subRange = FullChunkRange.BuildSubset(colBlobRange.GetOffset(), *dictPrefix);
-                        reading->AddRange(subRange);
+                        reading->AddRange(subRange, {}, NKqpProto::TColumnShardStepDetails::TStorageRead::data);
                         AddFetchData(subRange, path->Path.ColumnIndex, /*dictionaryOnly=*/true);
                     } else {
                         const TBlobRange subRange = FullChunkRange.BuildSubset(colBlobRange.GetOffset(), colBlobRange.GetSize());
-                        reading->AddRange(subRange);
+                        reading->AddRange(subRange, {}, NKqpProto::TColumnShardStepDetails::TStorageRead::data);
                         AddFetchData(subRange, path->Path.ColumnIndex);
                     }
                 } else if (!PartialArray->HasOthers() && !OthersReadData && path) {
                     auto readRange = PartialArray->GetHeader().GetOthersReadRange();
                     OthersReadData = FullChunkRange.BuildSubset(readRange.GetOffset(), readRange.GetSize());
-                    reading->AddRange(*OthersReadData);
+                    reading->AddRange(*OthersReadData, {}, NKqpProto::TColumnShardStepDetails::TStorageRead::data);
                 }
             }
         } else {
             HeaderRange = FullChunkRange.BuildSubset(0, std::min<ui32>(FullChunkRange.GetSize(), 4096));
-            reading->AddRange(*HeaderRange);
+            reading->AddRange(*HeaderRange, {}, NKqpProto::TColumnShardStepDetails::TStorageRead::metadata);
         }
     }
 
@@ -441,7 +441,7 @@ private:
                     }
                     AFL_VERIFY(blob.size() < size)("blob", blob.size())("size", size);
                     const TBlobRange headerRange = i.GetFullChunkRange().BuildSubset(blob.size(), size - blob.size());
-                    reading->AddRange(headerRange);
+                    reading->AddRange(headerRange, {}, NKqpProto::TColumnShardStepDetails::TStorageRead::metadata);
                     i.SetHeaderRange(headerRange);
                 }
             } else {

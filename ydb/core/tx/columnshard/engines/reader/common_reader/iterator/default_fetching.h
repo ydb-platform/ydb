@@ -113,7 +113,7 @@ private:
             AFL_VERIFY(!itFinished);
             if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
                 reading->SetIsBackgroundProcess(false);
-                reading->AddRange(source.RestoreBlobRange(c->BlobRange));
+                reading->AddRange(source.RestoreBlobRange(c->BlobRange), {}, NKqpProto::TColumnShardStepDetails::TStorageRead::data);
                 ColumnChunks.emplace_back(
                     c->GetMeta().GetRecordsCount(), source.RestoreBlobRange(c->BlobRange), c->GetMeta().GetAdditionalAccessorData());
             } else {

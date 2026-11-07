@@ -1,5 +1,7 @@
 #include "distinct_limit.h"
 
+#include <util/generic/scope.h>
+
 #include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections/abstract.h>
@@ -10,6 +12,21 @@ namespace NKikimr::NOlap::NReader::NTrivial {
 
 ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(const NCommon::TDataSourceLease& lease, TPlainReadData& /*reader*/) {
     auto& source = lease.GetSource();
+    const auto runtimeStats = Context->GetCommonContext()->GetRuntimeStats();
+    auto limitStats = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Limit,
+        GetPointName(), "Limit distinct keys across sources", nullptr, source.GetSourceId()) : nullptr;
+    if (limitStats) {
+        limitStats->Update([](auto& record) {
+            record.SetMetaStep("Output");
+            record.SetCanonicalPath("");
+        });
+    }
+    NScanStats::TScope limitScope(limitStats, runtimeStats);
+    Y_DEFER {
+        if (limitStats) {
+            limitStats->Finish();
+        }
+    };
     if (Seen.size() >= Limit) {
         return ESourceAction::Finish;
     }

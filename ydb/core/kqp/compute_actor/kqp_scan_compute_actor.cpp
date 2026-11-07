@@ -149,8 +149,14 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
             // TODO: CpuTime
         }
 
-        if (ScanData->ProfileStats) {
+        if (ScanData->ProfileStats || !ColumnShardScans.Empty()) {
             NKqpProto::TKqpTaskExtraStats taskExtraStats;
+            if (taskStats->HasExtra()) {
+                taskStats->GetExtra().UnpackTo(&taskExtraStats);
+            }
+            if (RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL && !ColumnShardScans.Empty()) {
+                ColumnShardScans.Export(taskExtraStats.MutableScanTaskExtraStats()->MutableColumnShardScans());
+            }
             //                auto scanTaskExtraStats = taskExtraStats.MutableScanTaskExtraStats();
             //                scanTaskExtraStats->SetRetriesCount(TotalRetries);
             taskStats->MutableExtra()->PackFrom(taskExtraStats);
@@ -200,13 +206,18 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
+    auto& msg = *ev->Get();
+    if (msg.GetColumnShardStats() && RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL) {
+        ColumnShardScans.Merge(*msg.GetColumnShardStats());
+    }
+    if (msg.IsStatsOnly()) {
+        return;
+    }
     ScanDataInFlight = false;
     ++SendDataReceived;
     YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Received TEvSendData",
         {"sender", ev->Sender},
         {"selfId", SelfId()});
-    auto& msg = *ev->Get();
-
     for (const auto& lock : msg.GetLocksInfo().Locks) {
         Locks.insert(lock);
     }

@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/formats/arrow/reader/stats
     ydb/core/protos
     ydb/core/resource_pools
     ydb/core/tx/columnshard/column_fetching

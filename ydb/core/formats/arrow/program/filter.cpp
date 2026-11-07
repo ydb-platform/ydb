@@ -103,11 +103,25 @@ TConclusion<TExecutionResult> TFilterProcessor::DoExecute(
     NArrow::TColumnFilter filter = filterVisitor.ExtractColumnFilter();
     AFL_VERIFY(filter.GetRecordsCountVerified() == inputColumns.front()->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
                                                      "input", inputColumns.front()->GetRecordsCount());
+    const auto operation = NScanStats::Current();
+    if (operation) {
+        const auto rows = inputColumns.front()->GetRecordsCount();
+        const auto inputRows = context.GetResources().GetFilteredCount(rows, Max<ui32>());
+        operation->Update([&](NScanStats::TStep& record) {
+            auto* details = record.MutableDetails()->MutableFilter();
+            details->SetInputRows(inputRows);
+            details->SetPurpose(NKqpProto::TColumnShardStepDetails::TFilter::sql);
+        });
+    }
+    context.MutableResources().AddFilter(filter);
+    if (operation) {
+        operation->Update([&](NScanStats::TStep& record) {
+            record.MutableDetails()->MutableFilter()->SetOutputRows(
+                context.GetResources().GetFilteredCount(inputColumns.front()->GetRecordsCount(), Max<ui32>()));
+        });
+    }
     if (context.GetLimit()) {
-        context.MutableResources().AddFilter(filter);
         context.MutableResources().CutFilter(context.GetResources().GetRecordsCountRobustVerified(), *context.GetLimit(), context.GetReverse());
-    } else {
-        context.MutableResources().AddFilter(filter);
     }
     return TExecutionResult::Done();
 }

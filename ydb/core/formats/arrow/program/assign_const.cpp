@@ -15,6 +15,13 @@ TConclusion<TExecutionResult> TConstProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     AFL_VERIFY(GetInput().empty());
     context.MutableResources().AddConstantVerified(GetOutputColumnIdOnce(), ScalarConstant);
+    if (const auto& operation = NScanStats::Current()) {
+        operation->Update([](NScanStats::TStep& record) {
+            if (record.GetStepKind() == NScanStats::TStep::Calculation) {
+                record.MutableDetails()->MutableCalculation()->SetRowsCount(1);
+            }
+        });
+    }
     return TExecutionResult::Done();
 }
 

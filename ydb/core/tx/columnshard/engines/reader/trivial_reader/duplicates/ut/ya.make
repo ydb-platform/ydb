@@ -39,6 +39,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    stats_propagation_ut.cpp
     ut_filters.cpp
     ut_index_memory.cpp
     ut_manager.cpp

@@ -100,6 +100,7 @@ TDuplicateManager::TDuplicateManager(
     , PKColumns(context.GetPKColumns())
     , PKSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetPrimaryKey())
     , Counters(context.GetCommonContext()->GetCounters().GetDuplicateFilteringCounters())
+    , RuntimeStats(context.GetCommonContext()->GetRuntimeStats())
     , Portions(MakePortionsIndex(portions))
     , DataAccessorsManager(context.GetCommonContext()->GetDataAccessorsManager())
     , ColumnDataManager(context.GetCommonContext()->GetColumnDataManager())
@@ -238,6 +239,7 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
     TBuildFilterContext columnFetchingRequest(SelfId(), AbortionFlag, constructor->GetRequest()->Get()->GetMaxVersion(),
         std::move(portionsToFetch), GetFetchingColumns(), PKSchema, LastSchema, ColumnDataManager, DataAccessorsManager, Counters,
         std::move(requestGuard), memoryGuard);
+    columnFetchingRequest.SetRuntimeStats(RuntimeStats);
     std::shared_ptr<TBuildFilterTaskExecutor> executor = std::make_shared<TBuildFilterTaskExecutor>(std::move(bordersIterator));
     if (InflightExecutors < MaxInflightExecutors) {
         auto startSchedule = executor->ScheduleNext(std::move(columnFetchingRequest));
@@ -289,6 +291,9 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
 }
 
 void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
+    if (const auto& acquisition = ev->Get()->Context.GetGlobalContext().GetStatsJob()) {
+        acquisition->Finish(ev->Get()->Result.IsFail() ? NScanStats::TStep::failed : NScanStats::TStep::completed);
+    }
     if (ev->Get()->Result.IsFail()) {
         YDB_LOG_TRACE("",
             {"component", "duplicates_manager"},

@@ -6,6 +6,8 @@
 #include <ydb/core/kqp/ut/olap/helpers/get_value.h>
 #include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
 
+#include <set>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -31,6 +33,82 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             return TDuration::MilliSeconds(10);
         }
     };
+
+    Y_UNIT_TEST(GenericQueryStepStatsModesAndEmptyResult) {
+        TTestHelper helper(TKikimrSettings().SetWithSampleTables(false));
+        TTestHelper::TColumnTable table;
+        table.SetName("/Root/StepStats").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+        helper.CreateTable(table);
+        TTestHelper::TUpdatesBuilder updates(table.GetArrowSchema(schema));
+        for (i32 i = 0; i < 64; ++i) {
+            updates.AddRow().Add(i).Add("value").Add(i);
+        }
+        helper.BulkUpsert(table, updates);
+        auto client = helper.GetKikimr().GetQueryClient(NYdb::NQuery::TClientSettings().AuthToken("root@builtin"));
+        for (const auto mode : {NYdb::NQuery::EStatsMode::Full, NYdb::NQuery::EStatsMode::Profile,
+                                NYdb::NQuery::EStatsMode::None, NYdb::NQuery::EStatsMode::Basic}) {
+            for (const bool empty : {false, true}) {
+                const TString query = empty
+                                          ? "SELECT id FROM `/Root/StepStats` WHERE LENGTH(resource_id) > 10000"
+                                          : "SELECT id FROM `/Root/StepStats`";
+                auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                                  NYdb::NQuery::TExecuteQuerySettings().StatsMode(mode))
+                                  .ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                ui64 rows = 0;
+                for (const auto& resultSet : result.GetResultSets()) {
+                    rows += resultSet.RowsCount();
+                }
+                UNIT_ASSERT_VALUES_EQUAL(rows, empty ? 0 : 64);
+                NJson::TJsonValue plan;
+                if (result.GetStats()) {
+                    if (const auto text = result.GetStats()->GetPlan()) {
+                        NJson::ReadJsonTree(TString(text->data(), text->size()), &plan, true);
+                    }
+                }
+                const auto scans = FindPlanNodes(plan, "ColumnShardScans");
+                const bool detailed = mode == NYdb::NQuery::EStatsMode::Full || mode == NYdb::NQuery::EStatsMode::Profile;
+                if (!detailed) {
+                    UNIT_ASSERT(scans.empty());
+                    continue;
+                }
+                UNIT_ASSERT_C(!scans.empty(), plan);
+                ui64 records = 0;
+                bool sawSelection = false;
+                for (const auto& stageScans : scans) {
+                    for (const auto& scan : stageScans.GetArraySafe()) {
+                        if (scan.Has("ExpectedContextOnly") && scan["ExpectedContextOnly"].GetBooleanSafe()) {
+                            UNIT_ASSERT_C(!scan.Has("TabletId"), scan);
+                            UNIT_ASSERT_VALUES_EQUAL(scan["ParticipatingTablets"].GetArraySafe().size(),
+                                scan["ParticipatingShards"].GetUIntegerSafe());
+                            continue;
+                        }
+                        UNIT_ASSERT(!scan["StatsScanId"].GetStringSafe().empty());
+                        UNIT_ASSERT(!scan["TabletId"].GetStringSafe().empty());
+                        UNIT_ASSERT(!scan["ReaderKind"].GetStringSafe().empty());
+                        UNIT_ASSERT_C(scan["Finished"].GetBooleanSafe(), scan);
+                        UNIT_ASSERT(!scan["Truncated"].GetBooleanSafe());
+                        std::set<ui64> ids;
+                        for (const auto& step : scan["Steps"].GetArraySafe()) {
+                            const ui64 id = step["StepId"].GetUIntegerSafe();
+                            UNIT_ASSERT(id);
+                            UNIT_ASSERT(ids.emplace(id).second);
+                            if (step["StepKind"].GetStringSafe() == "SelectPortions") {
+                                const auto& details = step["Details"].GetMapSafe();
+                                UNIT_ASSERT(details.contains("SelectedPortions"));
+                                UNIT_ASSERT(details.contains("SelectedVersionRows"));
+                                UNIT_ASSERT(details.contains("SelectedBlobBytes"));
+                                sawSelection = true;
+                            }
+                            ++records;
+                        }
+                    }
+                }
+                UNIT_ASSERT_C(records, plan);
+                UNIT_ASSERT_C(sawSelection, plan);
+            }
+        }
+    }
 
     Y_UNIT_TEST(AddRowsTableStandalone) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TOlapStatsController>();

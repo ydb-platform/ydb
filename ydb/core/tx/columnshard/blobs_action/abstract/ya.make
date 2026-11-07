@@ -14,6 +14,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/formats/arrow/reader/stats
     ydb/core/protos
     contrib/libs/apache/arrow
     ydb/core/tablet_flat

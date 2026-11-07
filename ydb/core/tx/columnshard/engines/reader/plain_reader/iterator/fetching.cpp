@@ -39,11 +39,23 @@ TConclusion<TExecutionResult> TDeletionFilter::DoExecuteInplace(NCommon::IDataSo
     auto collection =
         source.GetStageData().GetTable().SelectOptional(std::vector<ui32>({ (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG }), false);
     if (!collection) {
+        if (const auto& operation = NScanStats::Current()) {
+            operation->Update([](NScanStats::TStep& record) {
+                auto* details = record.MutableDetails()->MutableFilter();
+                if (details->HasInputRows()) { details->SetOutputRows(details->GetInputRows()); }
+            });
+        }
         return TExecutionResult::Done();
     }
 
     auto filterTable = collection->ToTable();
     if (!filterTable) {
+        if (const auto& operation = NScanStats::Current()) {
+            operation->Update([](NScanStats::TStep& record) {
+                auto* details = record.MutableDetails()->MutableFilter();
+                if (details->HasInputRows()) { details->SetOutputRows(details->GetInputRows()); }
+            });
+        }
         return TExecutionResult::Done();
     }
     AFL_VERIFY(filterTable->column(0)->type()->id() == arrow::boolean()->id());
@@ -93,7 +105,9 @@ TConclusion<TExecutionResult> TDetectInMem::DoExecuteInplace(NCommon::IDataSourc
     auto plan = source.GetContext()->GetColumnsFetchingPlan(source, true);
     source.MutableAs<IDataSource>()->InitFetchingPlan(plan);
     TFetchingScriptCursor cursor(plan, 0);
-    return cursor.Execute(source);
+    auto result = cursor.Execute(source);
+    if (const auto& operation = NScanStats::Current()) { operation->Finish(result.IsFail() ? NScanStats::TStep::failed : NScanStats::TStep::completed); }
+    return result;
 }
 
 TConclusion<TExecutionResult> TBuildFakeSpec::DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& /*step*/) const {

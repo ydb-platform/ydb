@@ -13,13 +13,16 @@ void TPortionAccessorFetchingSubscriber::TStartJob::Start(std::unique_ptr<TDataS
 
 void TPortionAccessorFetchingSubscriber::DoOnRequestsFinished(TDataAccessorsResult&& result) {
     auto& source = SourceLease->GetSource();
+    NScanStats::TScope scope(Step.GetRuntimeStats(), source.GetContext()->GetCommonContext()->GetRuntimeStats());
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("facc"));
     if (result.HasErrors()) {
+        Step.FinishRuntimeStats(NScanStats::TStep::failed);
         source.GetContext()->GetCommonContext()->AbortWithError("has errors on portion accessors restore");
         return;
     }
 
     if (result.HasRemovedData()) {
+        Step.FinishRuntimeStats(NScanStats::TStep::failed);
         source.GetContext()->GetCommonContext()->AbortWithError(
             TStringBuilder{} << "there is a removed accessors restore, count: " << result.GetRemovedData().size());
         return;

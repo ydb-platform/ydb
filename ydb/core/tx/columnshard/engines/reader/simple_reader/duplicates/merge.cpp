@@ -1,4 +1,6 @@
 #include "merge.h"
+
+#include <util/generic/scope.h>
 #include "private_events.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
@@ -49,6 +51,25 @@ public:
 };
 
 void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
+    const auto runtimeStats = Context.GetGlobalContext().GetRuntimeStats();
+    if (const auto& acquisition = Context.GetGlobalContext().GetStatsJob()) {
+        acquisition->Finish();
+    }
+    auto operation = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Merge,
+        "DUPLICATE_MERGE", "Resolve visible PK versions", {}) : nullptr;
+    if (operation) {
+        operation->Update([](auto& record) {
+            record.SetMetaStep("PKFilter");
+            record.SetCanonicalPath("Filter");
+        });
+    }
+    NScanStats::TScope statsScope(operation, runtimeStats);
+    auto outcome = NScanStats::TStep::failed;
+    Y_DEFER {
+        if (operation) {
+            operation->Finish(outcome);
+        }
+    };
     YDB_LOG_TRACE("",
         {"task", "build_duplicate_filters"},
         {"info", DebugString()});
@@ -67,12 +88,19 @@ void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/
         }
     }
 
+    outcome = NScanStats::TStep::completed;
+    if (operation) {
+        operation->Finish(outcome);
+    }
     TActivationContext::AsActorContext().Send(Context.GetGlobalContext().GetOwner(),
         new NPrivate::TEvFilterConstructionResult(std::move(filters), Context.GetGlobalContext().MakeResultInFlightGuard()));
     Context.GetExecutor()->ScheduleNext(Context.ExtractGlobalContext());
 }
 
 void TBuildDuplicateFilters::DoOnCannotExecute(const TString& reason) {
+    if (const auto& acquisition = Context.GetGlobalContext().GetStatsJob()) {
+        acquisition->Finish(NScanStats::TStep::failed);
+    }
     TActivationContext::AsActorContext().Send(Context.GetGlobalContext().GetOwner(),
         new NPrivate::TEvFilterConstructionResult(TConclusionStatus::Fail(reason), Context.GetGlobalContext().MakeResultInFlightGuard()));
 }

@@ -77,8 +77,37 @@ void IBlobsReadingAction::OnReadError(const TBlobRange& range, const TErrorStatu
     Groups.erase(it);
 }
 
-void IBlobsReadingAction::AddRange(const TBlobRange& range, const std::optional<TString>& result /*= {}*/) {
+TReadStatsContext IBlobsReadingAction::GetReadStatsContext(const TBlobRange& groupedRange) const {
+    auto group = Groups.find(groupedRange);
+    if (group == Groups.end() || RangeStats.empty()) {
+        return {};
+    }
+    std::optional<TReadStatsContext> result;
+    for (const auto& range : group->second) {
+        const auto it = RangeStats.find(range);
+        const TReadStatsContext context = it == RangeStats.end() ? TReadStatsContext{} : it->second;
+        if (result) {
+            result->Merge(context);
+        } else {
+            result = context;
+        }
+    }
+    return result.value_or(TReadStatsContext{});
+}
+
+void IBlobsReadingAction::AddRange(const TBlobRange& range, const std::optional<TString>& result, TReadStatsContext::EDataKind dataKind) {
     Y_ABORT_UNLESS(!Started);
+    if (auto collector = NScanStats::CurrentCollector()) {
+        auto parent = NScanStats::Current();
+        TReadStatsContext context;
+        context.Parent = parent;
+        context.DataKind = dataKind;
+        context.Collector = std::move(collector);
+        RangeStats.emplace(range, std::move(context));
+        if (parent) {
+            parent->AddRequestedRange(range.ToString(), range.Size);
+        }
+    }
     if (!result) {
         AFL_VERIFY(!RangesForResult.contains(range));
         AFL_VERIFY(RangesForRead.emplace(range).second)("range", range.ToString());

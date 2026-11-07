@@ -40,7 +40,7 @@ private:
 
 public:
     TStepAggregationSources(const std::shared_ptr<NArrow::NSSA::IResourcesAggregator>& proc)
-        : TBase("AGGREGATION")
+        : TBase("AGGREGATION", NScanStats::TStep::Aggregation)
         , Aggregator(proc)
     {
     }
@@ -56,7 +56,7 @@ private:
 
 public:
     TCleanAggregationSources(const std::shared_ptr<NArrow::NSSA::IResourcesAggregator>& proc)
-        : TBase("CLEAN_AGGREGATION")
+        : TBase("CLEAN_AGGREGATION", NScanStats::TStep::Cleanup)
         , Aggregator(proc)
     {
     }
@@ -107,7 +107,7 @@ public:
     }
 
     TPrepareResultStep(const bool startResultBuildingInplace)
-        : TBase("PREPARE_RESULT")
+        : TBase("PREPARE_RESULT", NScanStats::TStep::PrepareResult)
         , StartResultBuildingInplace(startResultBuildingInplace)
     {
     }
@@ -135,7 +135,7 @@ public:
     }
 
     TBuildResultStep(const ui32 startIndex, const ui32 recordsCount)
-        : TBase("BUILD_RESULT")
+        : TBase("BUILD_RESULT", NScanStats::TStep::BuildResult)
         , StartIndex(startIndex)
         , RecordsCount(recordsCount)
     {
@@ -159,7 +159,7 @@ public:
     virtual ui64 GetProcessingDataSize(const NCommon::IDataSource& source) const override;
 
     TColumnBlobsFetchingStep(const TColumnsSetIds& columns)
-        : TBase("FETCHING_COLUMNS")
+        : TBase("FETCHING_COLUMNS", NScanStats::TStep::FetchColumns)
         , Columns(columns)
     {
         AFL_VERIFY(Columns.GetColumnsCount());
@@ -180,7 +180,7 @@ protected:
 
 public:
     TPortionAccessorFetchedStep()
-        : TBase("PORTION_ACCESSOR_FETCHED")
+        : TBase("PORTION_ACCESSOR_FETCHED", NScanStats::TStep::FetchAccessors)
     {
     }
 };
@@ -213,7 +213,7 @@ public:
     virtual TConclusion<TExecutionResult> DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     TPredicateFilter()
-        : TBase("PREDICATE")
+        : TBase("PREDICATE", NScanStats::TStep::Filter, NKqpProto::TColumnShardStepDetails::TFilter::pk_range)
     {
     }
 };
@@ -272,7 +272,7 @@ public:
     virtual TConclusion<TExecutionResult> DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     TDeletionFilter()
-        : TBase("DELETION")
+        : TBase("DELETION", NScanStats::TStep::Filter, NKqpProto::TColumnShardStepDetails::TFilter::deletion)
     {
     }
 };
@@ -286,7 +286,7 @@ public:
     virtual TConclusion<TExecutionResult> DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     TShardingFilter()
-        : TBase("SHARDING")
+        : TBase("SHARDING", NScanStats::TStep::Filter, NKqpProto::TColumnShardStepDetails::TFilter::sharding)
     {
     }
 };
@@ -328,7 +328,7 @@ public:
     virtual TConclusion<TExecutionResult> DoExecuteInplace(NCommon::IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     TDuplicateFilter()
-        : TBase("DUPLICATE")
+        : TBase("DUPLICATE", NScanStats::TStep::Filter, NKqpProto::TColumnShardStepDetails::TFilter::duplicate)
     {
     }
 };

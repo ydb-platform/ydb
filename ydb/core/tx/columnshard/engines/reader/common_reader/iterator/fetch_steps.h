@@ -100,14 +100,14 @@ public:
     }
 
     TAllocateMemoryStep(const TColumnsSetIds& columns, const EMemType memType, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex)
-        : TBase("ALLOCATE_MEMORY::" + ::ToString(stageIndex))
+        : TBase("ALLOCATE_MEMORY::" + ::ToString(stageIndex), NScanStats::TStep::MemoryReserve)
         , StageIndex(stageIndex)
     {
         AddAllocation(columns, memType);
     }
 
     TAllocateMemoryStep(const ui64 memSize, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex)
-        : TBase("ALLOCATE_MEMORY::" + ::ToString(stageIndex))
+        : TBase("ALLOCATE_MEMORY::" + ::ToString(stageIndex), NScanStats::TStep::MemoryReserve)
         , StageIndex(stageIndex)
         , PredefinedSize(memSize)
     {
@@ -131,7 +131,7 @@ public:
     virtual TConclusion<TExecutionResult> DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     TAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
-        : TBase("ASSEMBLER" + (specName ? "::" + specName : ""))
+        : TBase("ASSEMBLER" + (specName ? "::" + specName : ""), NScanStats::TStep::Assemble)
         , Columns(columns)
     {
         AFL_VERIFY(Columns);
@@ -147,7 +147,7 @@ public:
     virtual TConclusion<TExecutionResult> DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& /*step*/) const override;
 
     TBuildStageResultStep()
-        : TBase("BUILD_STAGE_RESULT")
+        : TBase("BUILD_STAGE_RESULT", NScanStats::TStep::PrepareResult)
     {
     }
 };
@@ -167,7 +167,7 @@ public:
     virtual TConclusion<TExecutionResult> DoExecuteInplace(IDataSource& source, const TFetchingScriptCursor& step) const override;
 
     TOptionalAssemblerStep(const std::shared_ptr<TColumnsSet>& columns, const TString& specName = Default<TString>())
-        : TBase("OPTIONAL_ASSEMBLER" + (specName ? "::" + specName : ""))
+        : TBase("OPTIONAL_ASSEMBLER" + (specName ? "::" + specName : ""), NScanStats::TStep::Assemble)
         , Columns(columns)
     {
         AFL_VERIFY(Columns);
@@ -193,7 +193,7 @@ public:
     virtual ui64 GetProcessingDataSize(const IDataSource& source) const override;
 
     TColumnBlobsFetchingStep(const TColumnsSetIds& columns)
-        : TBase("FETCHING_COLUMNS")
+        : TBase("FETCHING_COLUMNS", NScanStats::TStep::FetchColumns)
         , Columns(columns)
     {
         AFL_VERIFY(Columns.GetColumnsCount());

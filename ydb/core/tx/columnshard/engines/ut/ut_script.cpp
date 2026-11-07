@@ -12,6 +12,29 @@ using namespace NKikimr::NOlap;
 using namespace NKikimr::NOlap::NReader;
 
 Y_UNIT_TEST_SUITE(TestScript) {
+    Y_UNIT_TEST(RuntimeCursorCopyBeforePendingAtZero) {
+        auto collector = std::make_shared<NScanStats::TCollector>(1);
+        auto script = std::make_shared<NCommon::TFetchingScript>(
+            "test", std::vector<std::shared_ptr<NCommon::IFetchingStep>>{ std::make_shared<NSimple::TDeletionFilter>() });
+        NCommon::TFetchingScriptCursor cursor(script, 0);
+        cursor.StartRuntimeStats(collector, 42);
+        auto callbackCopy = cursor;
+        cursor.GetRuntimeStats()->Suspend();
+        {
+            NScanStats::TScope callback(callbackCopy.GetRuntimeStats());
+            UNIT_ASSERT_VALUES_EQUAL(callbackCopy.GetStepIndex(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(callbackCopy.GetRuntimeStats()->GetStepId(), cursor.GetRuntimeStats()->GetStepId());
+            UNIT_ASSERT(!callbackCopy.Next());
+        }
+        cursor.FinishRuntimeStats();
+        auto report = collector->Drain(true);
+        UNIT_ASSERT(report->GetFinished());
+        UNIT_ASSERT_VALUES_EQUAL(report->StepsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(report->GetSteps(0).GetSourceId(), 42);
+        UNIT_ASSERT(report->GetSteps(0).GetOutcome() == NScanStats::TStep::completed);
+        UNIT_ASSERT(report->GetSteps(0).HasIntegralWaitDuration());
+    }
+
     std::shared_ptr<ISnapshotSchema> MakeTestSchema(THashMap<ui32, NTable::TColumn> columns, const std::vector<ui32> pkIds = { 0 }) {
         for (ui64 i = 0; i < pkIds.size(); ++i) {
             TValidator::CheckNotNull(columns.FindPtr(pkIds[i]))->KeyOrder = i;

@@ -1,6 +1,7 @@
 YQL_LIBRARY()
 
 PEERDIR(
+    ydb/core/formats/arrow/reader/stats
     ydb/library/conclusion
     ydb/library/actors/core
     ydb/library/services

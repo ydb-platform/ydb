@@ -1,4 +1,6 @@
 #pragma once
+
+#include <util/generic/scope.h>
 #include "counters.h"
 #include "manager.h"
 
@@ -25,6 +27,11 @@ private:
     std::unique_ptr<TManager> Manager;
 
     void HandleMain(NPublic::TEvents<TPolicy>::TEvAskData::TPtr& ev) {
+        const auto& capture = ev->Get()->GetStatsCapture();
+        auto statsOperation = capture.Collector ? capture.Collector->Start(NScanStats::TStep::Reader,
+            "CACHE_REQUEST", "Process cache request", capture.Operation) : nullptr;
+        NScanStats::TScope statsScope(statsOperation, capture.Collector);
+        Y_DEFER { if (statsOperation) { statsOperation->Finish(); } };
         Manager->AddRequest(
             std::make_shared<TRequest>(ev->Get()->ExtractAddresses(), ev->Get()->ExtractCallback(), ev->Get()->GetConsumer(), ev->Get()->GetStartRequestInstant()));
     }
@@ -38,10 +45,20 @@ private:
     }
 
     void HandleMain(NSource::TEvents<TPolicy>::TEvObjectsInfo::TPtr& ev) {
+        const auto& capture = ev->Get()->GetStatsCapture();
+        auto statsOperation = capture.Collector ? capture.Collector->Start(NScanStats::TStep::Reader,
+            "CACHE_RESULT", "Process cache read result", capture.Operation) : nullptr;
+        NScanStats::TScope statsScope(statsOperation, capture.Collector);
+        Y_DEFER { if (statsOperation) { statsOperation->Finish(); } };
         Manager->OnRequestResult(ev->Get()->GetSourceId(), ev->Get()->ExtractObjects(), ev->Get()->ExtractRemoved(), ev->Get()->ExtractErrors());
     }
 
     void HandleMain(NSource::TEvents<TPolicy>::TEvAdditionalObjectsInfo::TPtr& ev) {
+        const auto& capture = ev->Get()->GetStatsCapture();
+        auto statsOperation = capture.Collector ? capture.Collector->Start(NScanStats::TStep::Reader,
+            "CACHE_EXTRA_RESULT", "Process additional cache result", capture.Operation) : nullptr;
+        NScanStats::TScope statsScope(statsOperation, capture.Collector);
+        Y_DEFER { if (statsOperation) { statsOperation->Finish(); } };
         Manager->OnAdditionalObjectsInfo(ev->Get()->GetSourceId(), ev->Get()->ExtractAddObjects(), ev->Get()->ExtractRemoveObjects());
     }
 

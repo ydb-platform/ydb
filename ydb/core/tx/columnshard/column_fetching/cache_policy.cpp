@@ -1,11 +1,31 @@
 #include "cache_policy.h"
 
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
+
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/data_accessor/abstract/collector.h>
 #include <ydb/core/tx/general_cache/source/events.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 
 namespace NKikimr::NOlap::NGeneralCache {
+
+void TColumnDataCachePolicy::OnStatsCacheHit(const TObject& object) {
+    if (!NScanStats::CurrentCollector()) {
+        return;
+    }
+    std::optional<ui64> bytes;
+    if (object && (object->GetType() == NArrow::NAccessor::IChunkedArray::EType::Array ||
+        object->GetType() == NArrow::NAccessor::IChunkedArray::EType::ChunkedArray)) {
+        bytes = object->GetRawSize();
+    }
+    NScanStats::RecordDataSourceRead("ColumnCache", GetCacheName(), bytes,
+        NKqpProto::TColumnShardStepDetails::TStorageRead::data);
+}
+
+void TColumnDataCachePolicy::OnStatsSharedRead(const TObject&, const NScanStats::TCapture& capture) {
+    NScanStats::RecordNonOwnerDataSourceRead("SharedRead", "ColumnData", NKqpProto::TColumnShardStepDetails::TStorageRead::data,
+        capture, NScanStats::Current());
+}
 
 namespace {
 

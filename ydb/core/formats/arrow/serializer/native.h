@@ -61,6 +61,9 @@ protected:
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const override;
 
 public:
+    // Reads the codec from this payload's IPC metadata, independently of serializer write options.
+    static std::optional<TString> TryGetReadCodec(const TString& data);
+
     static std::shared_ptr<ISerializer> GetUncompressed() {
         static std::shared_ptr<ISerializer> result =
             std::make_shared<NArrow::NSerialization::TNativeSerializer>(arrow::Compression::UNCOMPRESSED);

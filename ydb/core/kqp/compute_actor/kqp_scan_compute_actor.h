@@ -33,6 +33,7 @@ private:
     bool ScanDataInFlight = false;
     ui64 SendDataReceived = 0;
     ui64 AcksSent = 0;
+    TColumnShardScanStatsCollection ColumnShardScans;
 
     struct TLockHash {
         size_t operator()(const NKikimrDataEvents::TLock& lock) {

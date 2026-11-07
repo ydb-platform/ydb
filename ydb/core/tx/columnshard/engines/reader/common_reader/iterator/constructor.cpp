@@ -16,14 +16,18 @@ void TBlobsFetcherTask::TStartJob::Start(std::unique_ptr<TDataSourceLease> sourc
 
 void TBlobsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     auto& source = SourceLease->GetSource();
+    NScanStats::TScope readerScope(Step.GetRuntimeStats(), source.GetContext()->GetCommonContext()->GetRuntimeStats());
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("fbf"));
-    source.MutableStageData().AddBlobs(source.DecodeBlobAddresses(ExtractBlobsData()));
+    auto blobs = ExtractBlobsData();
+    if (const auto& operation = Step.GetRuntimeStats()) { operation->AddReadBytes(blobs.GetTotalBlobsSize()); }
+    source.MutableStageData().AddBlobs(source.DecodeBlobAddresses(std::move(blobs)));
     AFL_VERIFY(Step.Next());
     auto task = std::make_shared<TStepAction>(std::move(SourceLease), std::move(Step), Context->GetCommonContext()->GetScanActorId(), false);
     Context->GetCommonContext()->SendTaskToExecute(task);
 }
 
 bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
+    Step.FinishRuntimeStats(NScanStats::TStep::failed);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, SourceLease->GetSource().AddEvent("ebf"));
     YDB_LOG_ERROR("",
         {"errorOnBlobReading", range},
@@ -56,6 +60,10 @@ void TColumnsFetcherTask::TStartJob::Start(std::unique_ptr<TDataSourceLease> sou
 }
 
 bool TColumnsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
+    Cursor.FinishRuntimeStats(NScanStats::TStep::failed);
+    if (SourceLease->GetSource().GetExecutionContext().GetRuntimeStats()) {
+        SourceLease->GetSource().GetExecutionContext().GetRuntimeStats()->Finish(NScanStats::TStep::failed);
+    }
     YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"errorOnBlobReading", range},
         {"scanActorId", SourceLease->GetSource().GetContext()->GetCommonContext()->GetScanActorId()},
@@ -72,10 +80,14 @@ bool TColumnsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& 
 
 void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
     auto& source = SourceLease->GetSource();
+    NScanStats::TScope readerScope(Cursor.GetRuntimeStats(), source.GetContext()->GetCommonContext()->GetRuntimeStats());
+    auto operation = source.GetExecutionContext().GetRuntimeStats();
+    NScanStats::TScope programScope(operation);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source.AddEvent("cf_reply"));
     const TMonotonic start = TMonotonic::Now();
     NBlobOperations::NRead::TCompositeReadBlobs blobsData = ExtractBlobsData();
     blobsData.Merge(std::move(ProvidedBlobs));
+    if (operation) { operation->AddReadBytes(blobsData.GetTotalBlobsSize()); }
     TReadActionsCollection readActions;
     auto* signals = source.GetExecutionContext().GetCurrentStepSignalsOptional();
     if (signals) {

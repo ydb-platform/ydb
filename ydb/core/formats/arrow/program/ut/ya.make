@@ -15,6 +15,7 @@ PEERDIR(
 )
 
 SRCS(
+    ut_stats.cpp
     ut_kernel_logic.cpp
     ut_collection.cpp
     ut_functions.cpp

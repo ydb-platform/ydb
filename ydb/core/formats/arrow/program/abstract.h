@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -397,6 +398,24 @@ private:
 public:
     virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator() const {
         return nullptr;
+    }
+
+    NScanStats::TStep::EStepKind GetStatsKind() const {
+        using E = NScanStats::TStep;
+        switch (ProcessorType) {
+            case EProcessorType::Filter: return E::Filter;
+            case EProcessorType::Const:
+            case EProcessorType::StreamLogic:
+            case EProcessorType::Calculation: return IsAggregation() ? E::Aggregation : E::Calculation;
+            case EProcessorType::Aggregation: return E::Aggregation;
+            case EProcessorType::Projection: return E::Projection;
+            case EProcessorType::FetchOriginalData: return E::FetchColumns;
+            case EProcessorType::AssembleOriginalData: return E::Assemble;
+            case EProcessorType::CheckIndexData:
+            case EProcessorType::CheckHeaderData: return E::IndexCheck;
+            case EProcessorType::ReserveMemory: return E::MemoryReserve;
+            default: return E::Reader;
+        }
     }
 
     TString GetSignalCategoryName() const {

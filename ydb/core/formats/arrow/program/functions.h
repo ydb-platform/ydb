@@ -3,6 +3,7 @@
 #include "aggr_common.h"
 #include "collection.h"
 #include "custom_registry.h"
+#include "stats.h"
 
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/library/arrow_kernels/operations.h>
@@ -78,6 +79,7 @@ protected:
 
 public:
     virtual bool IsAggregation() const = 0;
+    virtual TString GetStatsName() const { return DebugJson().GetStringRobust(); }
 
     virtual std::shared_ptr<IResourcesAggregator> BuildResultsAggregator(const TColumnChainInfo& /*output*/) const {
         return nullptr;
@@ -115,6 +117,11 @@ private:
     }
 
 public:
+    TString GetStatsName() const override {
+        const auto names = GetRegistryFunctionNames();
+        return names.empty() ? TString("Function") : TString(names.front().data(), names.front().size());
+    }
+
     TInternalFunction(const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions, const bool needConcatenation = false)
         : TBase(needConcatenation)
         , FunctionOptions(functionOptions) {
@@ -420,6 +427,7 @@ private:
                     }
                 }
             }
+            AddStatsArgumentRows(arguments);
             auto result = Function->Execute(arguments, FunctionOptions.get(), GetContext());
             if (result.ok()) {
                 return std::move(*result);
@@ -455,6 +463,11 @@ private:
     }
 
 public:
+    TString GetStatsName() const override {
+        const auto& name = Function->name();
+        return TString(name.data(), name.size());
+    }
+
     TKernelFunction(const std::shared_ptr<const arrow::compute::ScalarFunction> kernelsFunction,
         const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions = nullptr, const bool needConcatenation = false)
         : TBase(needConcatenation)

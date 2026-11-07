@@ -6,6 +6,8 @@ namespace NKikimr::NOlap::NReader::NCommon {
 class TFetchingScriptCursor {
 private:
     ui32 CurrentStepIdx = 0;
+    std::shared_ptr<NScanStats::TOperation> RuntimeStats;
+    std::optional<ui32> PendingStepIdx;
     YDB_READONLY(TMonotonic, StepStartInstant, TMonotonic::Zero());
     std::shared_ptr<TFetchingScript> Script;
     std::optional<TMonotonic> StepEndIfStepIsAsync = std::nullopt;
@@ -16,6 +18,21 @@ public:
         , Script(script)
     {
         AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
+    }
+
+    void StartRuntimeStats(const std::shared_ptr<NScanStats::TCollector>& collector, ui64 sourceId) {
+        if (collector && !RuntimeStats) {
+            const auto& step = Script->GetStep(CurrentStepIdx);
+            RuntimeStats = collector->Start(step->GetStatsKind(), step->GetName(), step->DebugString(),
+                NScanStats::Current(), sourceId);
+            if (StepStartInstant == TMonotonic::Zero()) { StepStartInstant = TMonotonic::Now(); }
+        }
+    }
+
+    const std::shared_ptr<NScanStats::TOperation>& GetRuntimeStats() const { return RuntimeStats; }
+
+    void FinishRuntimeStats(NScanStats::TStep::EOutcome outcome = NScanStats::TStep::completed) const {
+        if (RuntimeStats) { RuntimeStats->Finish(outcome); }
     }
 
     const TString& GetName() const {
@@ -45,6 +62,8 @@ public:
     }
 
     bool Next() {
+        FinishRuntimeStats();
+        RuntimeStats.reset();
         AFL_VERIFY(StepStartInstant != TMonotonic::Zero());
         const auto now = TMonotonic::Now();
         Script->AddStepDuration(CurrentStepIdx, TDuration::Zero(), now - StepStartInstant);

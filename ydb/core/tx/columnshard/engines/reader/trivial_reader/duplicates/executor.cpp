@@ -3,6 +3,8 @@
 
 #include <ydb/core/formats/arrow/reader/merger.h>
 
+#include <util/generic/scope.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering {
@@ -20,6 +22,9 @@ private:
     virtual void DoOnResultReady(THashMap<TAddress, std::shared_ptr<NArrow::NAccessor::IChunkedArray>>&& objectAddresses,
         THashSet<TAddress>&& /*removedAddresses*/,
         ::NKikimr::NGeneralCache::NPublic::TErrorAddresses<NGeneralCache::TColumnDataCachePolicy>&& errorAddresses) override {
+        if (const auto& acquisition = Request.GetGlobalContext().GetStatsJob()) {
+            acquisition->Finish(errorAddresses.HasErrors() ? NScanStats::TStep::failed : NScanStats::TStep::completed);
+        }
         if (errorAddresses.HasErrors()) {
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
                 std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(errorAddresses.GetErrorMessage())));
@@ -55,6 +60,9 @@ private:
 
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
+        if (const auto& acquisition = Request.GetGlobalContext().GetStatsJob()) {
+            acquisition->Finish(NScanStats::TStep::failed);
+        }
         TActorContext::AsActorContext().Send(
             Request.GetGlobalContext().GetOwner(), std::make_unique<TEvBordersConstructionResult>(std::move(Request),
                                                        TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage)));
@@ -63,6 +71,16 @@ private:
     virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
         const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) override {
         THashSet<TPortionAddress> portionAddresses;
+        const auto runtimeStats = Request.GetGlobalContext().GetRuntimeStats();
+        auto operation = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader, "DUPLICATE_COLUMN_CACHE",
+                                            "Request duplicate column inputs", Request.GetGlobalContext().GetStatsJob())
+                                      : nullptr;
+        NScanStats::TScope statsScope(operation, runtimeStats);
+        Y_DEFER {
+            if (operation) {
+                operation->Finish();
+            }
+        };
         for (const ui64 portionId : Request.GetBatch().GetPortionIds()) {
             AFL_VERIFY(portionAddresses.emplace(Request.GetGlobalContext().GetPortion(portionId)->GetAddress()).second);
         }
@@ -92,7 +110,20 @@ private:
 
 private:
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
+        const auto runtimeStats = Request.GetGlobalContext().GetRuntimeStats();
+        auto operation = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader, "DUPLICATE_ACCESSORS_READY",
+                                            "Process duplicate accessors", Request.GetGlobalContext().GetStatsJob())
+                                      : nullptr;
+        NScanStats::TScope statsScope(operation, runtimeStats);
+        Y_DEFER {
+            if (operation) {
+                operation->Finish();
+            }
+        };
         if (result.HasErrors()) {
+            if (const auto& acquisition = Request.GetGlobalContext().GetStatsJob()) {
+                acquisition->Finish(NScanStats::TStep::failed);
+            }
             TActorContext::AsActorContext().Send(Request.GetGlobalContext().GetOwner(),
                 std::make_unique<TEvBordersConstructionResult>(std::move(Request), TConclusionStatus::Fail(result.GetErrorMessage())));
             return;
@@ -143,6 +174,9 @@ private:
 
 private:
     virtual void DoOnAllocationImpossible(const TString& errorMessage) override {
+        if (const auto& acquisition = Request.GetGlobalContext().GetStatsJob()) {
+            acquisition->Finish(NScanStats::TStep::failed);
+        }
         TActorContext::AsActorContext().Send(
             Request.GetGlobalContext().GetOwner(), std::make_unique<TEvBordersConstructionResult>(std::move(Request),
                                                        TConclusionStatus::Fail(TStringBuilder() << "cannot allocate memory: " << errorMessage)));
@@ -156,6 +190,16 @@ private:
             request->AddPortion(Request.GetGlobalContext().GetPortion(portionId));
         }
         auto dataAccessorsManager = Request.GetGlobalContext().GetDataAccessorsManager();
+        const auto runtimeStats = Request.GetGlobalContext().GetRuntimeStats();
+        auto operation = runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader, "DUPLICATE_ACCESSORS", "Request duplicate accessors",
+                                            Request.GetGlobalContext().GetStatsJob())
+                                      : nullptr;
+        NScanStats::TScope statsScope(operation, runtimeStats);
+        Y_DEFER {
+            if (operation) {
+                operation->Finish();
+            }
+        };
         request->RegisterSubscriber(std::make_shared<TColumnDataAccessorFetching>(std::move(Request), guard));
         dataAccessorsManager->AskData(request);
         return true;
@@ -177,12 +221,45 @@ TBuildFilterTaskExecutor::TBuildFilterTaskExecutor(TBordersIterator&& bordersIte
 }
 
 bool TBuildFilterTaskExecutor::ScheduleNext(TBuildFilterContext&& context) {
+    const auto runtimeStats = context.GetRuntimeStats();
+    auto scheduling =
+        runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader, "DUPLICATE_PLAN", "Plan duplicate input batch", {}) : nullptr;
+    if (scheduling) {
+        scheduling->Update([](auto& record) {
+            record.SetMetaStep("PKFilter");
+            record.SetCanonicalPath("Filter/Merge");
+        });
+    }
+    NScanStats::TScope schedulingScope(scheduling, runtimeStats);
+    Y_DEFER {
+        if (scheduling) {
+            scheduling->Finish();
+        }
+    };
     if (BordersIterator.IsDone()) {
         return false;
     }
 
     auto bordersBatch = BordersIterator.Next();
     const ui64 mem = TColumnDataAccessorFetching::GetRequiredMemory(bordersBatch.GetPortionIds(), context);
+    auto acquisition =
+        runtimeStats ? runtimeStats->Start(NScanStats::TStep::Reader, "DUPLICATE_INPUTS", "Acquire duplicate merge inputs", {}) : nullptr;
+    if (acquisition) {
+        acquisition->Update([](auto& record) {
+            record.SetMetaStep("PKFilter");
+            record.SetCanonicalPath("Filter/Merge");
+        });
+    }
+    context.SetStatsJob(acquisition);
+    std::optional<NScanStats::TScope> acquisitionScope;
+    if (acquisition) {
+        acquisitionScope.emplace(acquisition, runtimeStats);
+    }
+    Y_DEFER {
+        if (acquisition) {
+            acquisition->Suspend();
+        }
+    };
     const ui64 processId = context.GetRequestGuard()->GetMemoryProcessId();
     const ui64 scopeId = context.GetRequestGuard()->GetMemoryScopeId();
     const ui64 groupId = context.GetRequestGuard()->GetMemoryGroupId();

@@ -4,6 +4,7 @@
 
 #include "blobs_action/abstract/gc.h"
 
+#include <ydb/core/formats/arrow/reader/stats/stats.h>
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
@@ -201,6 +202,7 @@ struct TEvPrivate {
         using TCallback = NKikimr::NGeneralCache::NSource::IObjectsProcessor<NOlap::NGeneralCache::TColumnDataCachePolicy>;
         using TColumnIdsByRequest = THashMap<TPortionRequest, std::set<ui32>>;
         YDB_READONLY_DEF(TColumnIdsByRequest, Requests);
+        YDB_READONLY_DEF(NScanStats::TCapture, StatsCapture);
         YDB_READONLY_DEF(std::shared_ptr<TCallback>, Callback);
 
     public:

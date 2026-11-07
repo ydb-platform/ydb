@@ -80,7 +80,6 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
                 {"streamPath", SrcStreamPath},
                 {"consumer", SrcStreamConsumerName},
                 {"ev", ev->Get()->ToString()});
-            Send(Parent, new TEvPrivate::TEvCompleteWorkerSet(ReplicationId, TargetId));
             return PassAway();
         }
 
@@ -130,8 +129,6 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
 
             RunWorker(partition.GetPartitionId());
         }
-
-        Send(Parent, new TEvPrivate::TEvCompleteWorkerSet(ReplicationId, TargetId));
 
         PassAway();
     }

@@ -16,7 +16,6 @@
 
 #include <memory>
 #include <mutex>
-#include <optional>
 
 namespace NKikimr::NReplication {
 
@@ -77,7 +76,16 @@ protected:
             }
         };
 
-        struct TEvTopicEventReady: public TEventLocal<TEvTopicEventReady, EvTopicEventReady> {};
+        struct TEvTopicEventReady: public TEventLocal<TEvTopicEventReady, EvTopicEventReady> {
+            const TActorId Sender;
+            const ui64 Cookie;
+
+            explicit TEvTopicEventReady(const TActorId& sender, ui64 cookie)
+                : Sender(sender)
+                , Cookie(cookie)
+            {
+            }
+        };
 
     }; // TEvPrivate
 
@@ -187,11 +195,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
             DeferredCommit.Commit();
         }
 
-        Y_ABORT_UNLESS(!ReadRequest);
-        ReadRequest.emplace(ev->Sender, ev->Cookie);
-        if (!WaitingEvent) {
-            WaitEvent();
-        }
+        WaitEvent(ev->Sender, ev->Cookie);
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
@@ -202,49 +206,37 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         Y_UNUSED(consumerName);
         Y_UNUSED(settings);
 
-        PartitionEndWatcher.SetCommittedOffset(offset - 1, Client);
+        PartitionEndWatcher.SetCommittedOffset(offset - 1, ev->Sender);
     }
 
-    void WaitEvent() {
-        Y_ABORT_UNLESS(!WaitingEvent);
-        WaitingEvent = true;
-
+    void WaitEvent(const TActorId& sender, ui64 cookie) {
         auto request = MakeRequest(SelfId());
-        auto cb = [request](const NThreading::TFuture<void>&) {
+        auto cb = [request, sender, cookie](const NThreading::TFuture<void>&) {
             if (auto r = request.lock()) {
-                r->Complete(new TEvPrivate::TEvTopicEventReady());
+                r->Complete(new TEvPrivate::TEvTopicEventReady(sender, cookie));
             }
         };
 
         Session->WaitEvent().Subscribe(std::move(cb));
     }
 
-    void ContinueWaiting() {
-        if (!SessionStarted || ReadRequest) {
-            WaitEvent();
-        }
-    }
-
-    void Handle(TEvPrivate::TEvTopicEventReady::TPtr&) {
-        WaitingEvent = false;
+    void Handle(TEvPrivate::TEvTopicEventReady::TPtr& ev) {
         auto event = Session->GetEvent(false);
         if (!event) {
-            return ContinueWaiting();
+            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         }
 
         if (auto* x = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
             PartitionEndWatcher.Clear(x->GetCommittedOffset());
             x->Confirm();
-            Send(Client, new TEvYdbProxy::TEvStartTopicReadingSession(*x));
-            SessionStarted = true;
-            return ContinueWaiting();
+            Send(ev->Get()->Sender, new TEvYdbProxy::TEvStartTopicReadingSession(*x), 0, ev->Get()->Cookie);
+            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
             x->Confirm();
-            SessionStarted = false;
-            return ContinueWaiting();
+            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
-            PartitionEndWatcher.SetEvent(std::move(*x), Client);
-            return ContinueWaiting();
+            PartitionEndWatcher.SetEvent(std::move(*x), ev->Get()->Sender);
+            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             THolder<TEvYdbProxy::TEvReadTopicResponse> response;
             try {
@@ -276,20 +268,17 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
             if (AutoCommit) {
                 DeferredCommit.Add(*x);
             }
-            Y_ABORT_UNLESS(ReadRequest);
-            const auto [sender, cookie] = *ReadRequest;
-            ReadRequest.reset();
-            return (void)Send(sender, response.Release(), 0, cookie);
+            return (void)Send(ev->Get()->Sender, new TEvYdbProxy::TEvReadTopicResponse(*x), 0, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
-            PartitionEndWatcher.SetCommittedOffset(x->GetCommittedOffset() - 1, Client);
-            return ContinueWaiting();
+            PartitionEndWatcher.SetCommittedOffset(x->GetCommittedOffset() - 1, ev->Get()->Sender);
+            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (std::get_if<TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
-            return ContinueWaiting();
+            return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
             auto status = TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(x->DebugString())});
-            return Leave(Client, std::move(status));
+            return Leave(ev->Get()->Sender, std::move(status));
         } else if (auto* x = std::get_if<TSessionClosedEvent>(&*event)) {
-            return Leave(Client, std::move(*x));
+            return Leave(ev->Get()->Sender, std::move(*x));
         } else {
             Y_ABORT("Unexpected event");
         }
@@ -308,9 +297,8 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
     }
 
 public:
-    TTopicReader(const TActorId& client, const std::shared_ptr<IReadSession>& session, bool autoCommit)
+    explicit TTopicReader(const std::shared_ptr<IReadSession>& session, bool autoCommit)
         : TBaseProxyActor(&TThis::StateWork)
-        , Client(client)
         , Session(session)
         , AutoCommit(autoCommit)
         , PartitionEndWatcher(this)
@@ -319,7 +307,6 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            sFunc(TEvents::TEvBootstrap, WaitEvent);
             hFunc(TEvYdbProxy::TEvReadTopicRequest, Handle);
             hFunc(TEvPrivate::TEvTopicEventReady, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
@@ -330,15 +317,10 @@ public:
     }
 
 private:
-    const TActorId Client;
     std::shared_ptr<IReadSession> Session;
     const bool AutoCommit;
-
     TDeferredCommit DeferredCommit;
     TPartitionEndWatcher PartitionEndWatcher;
-    std::optional<std::pair<TActorId, ui64>> ReadRequest;
-    bool WaitingEvent = false;
-    bool SessionStarted = false;
 
 }; // TTopicReader
 
@@ -501,9 +483,8 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         auto args = std::move(ev->Get()->GetArgs());
         const auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);
         auto session = std::invoke(&TTopicClient::CreateReadSession, client, settings.GetBase());
-        auto reader = RegisterWithSameMailbox(new TTopicReader(ev->Sender, session, settings.AutoCommit_));
+        auto reader = RegisterWithSameMailbox(new TTopicReader(session, settings.AutoCommit_));
         Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader));
-        Send(reader, new TEvents::TEvBootstrap());
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {

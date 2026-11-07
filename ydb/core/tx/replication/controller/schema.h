@@ -28,8 +28,6 @@ struct TControllerSchema: NIceDb::Schema {
         struct DesiredState: Column<8, NScheme::NTypeIds::Uint8> { using Type = TReplication::EState; };
         struct Database: Column<9, NScheme::NTypeIds::Utf8> {};
 
-        struct SourceOffsetMismatch: Column<15, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
-
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -40,8 +38,7 @@ struct TControllerSchema: NIceDb::Schema {
             Issue,
             NextTargetId,
             DesiredState,
-            Database,
-            SourceOffsetMismatch
+            Database
         >;
     };
 
@@ -64,12 +61,6 @@ struct TControllerSchema: NIceDb::Schema {
         struct TransformLambda: Column<10, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
         struct RunAsUser: Column<11, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
         struct DirectoryPath: Column<12, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
-        // Marks that registration has completed for the target, so Workers is
-        // a complete partition-membership set rather than a partial stream of
-        // asynchronous registrations.
-        struct WorkerSetComplete: Column<13, NScheme::NTypeIds::Bool> {
-            static constexpr bool Default = false;
-        };
         struct PendingDstPathOwnerId: Column<18, NScheme::NTypeIds::Uint64> {
             using Type = TOwnerId;
             static constexpr Type Default = InvalidOwnerId;
@@ -93,7 +84,6 @@ struct TControllerSchema: NIceDb::Schema {
             TransformLambda,
             RunAsUser,
             DirectoryPath,
-            WorkerSetComplete,
             PendingDstPathOwnerId,
             PendingDstPathLocalId
         >;
@@ -130,25 +120,13 @@ struct TControllerSchema: NIceDb::Schema {
         using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, HeartbeatVersionStep, HeartbeatVersionTxId>;
     };
 
-    // Unlike Workers, these positions survive pause/resume.
-    // An absent row means progress is unknown.
-    struct ProcessedSourceOffsets: Table<10> {
-        struct ReplicationId: Column<1, NScheme::NTypeIds::Uint64> {};
-        struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
-        struct WorkerId: Column<3, NScheme::NTypeIds::Uint64> {};
-        struct NextOffset: Column<4, NScheme::NTypeIds::Uint64> {};
-        using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
-        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, NextOffset>;
-    };
-
     using TTables = SchemaTables<
         SysParams,
         Replications,
         Targets,
         SrcStreams,
         TxIds,
-        Workers,
-        ProcessedSourceOffsets
+        Workers
     >;
 
 }; // TControllerSchema

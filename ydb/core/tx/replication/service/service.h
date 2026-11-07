@@ -26,16 +26,11 @@ struct TEvService {
         EvGetTxId,
         EvTxIdResult,
         EvHeartbeat,
-        EvSourceOffsetReport = EvHeartbeat + 5,
-        EvSourceOffsetResult,
 
         EvEnd,
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_SERVICE));
-
-    struct TEvSourceOffsetReport: public TEventPB<TEvSourceOffsetReport, NKikimrReplication::TEvSourceOffsetReport, EvSourceOffsetReport> {};
-    struct TEvSourceOffsetResult: public TEventPB<TEvSourceOffsetResult, NKikimrReplication::TEvSourceOffsetResult, EvSourceOffsetResult> {};
 
     struct TEvHandshake: public TEventPB<TEvHandshake, NKikimrReplication::TEvHandshake, EvHandshake> {
         TEvHandshake() = default;
@@ -70,16 +65,12 @@ struct TEvService {
         explicit TEvWorkerStatus(const TWorkerId& id,
                 NKikimrReplication::TEvWorkerStatus::EStatus status,
                 NKikimrReplication::TEvWorkerStatus::EReason reason,
-                const TString& errorDescription,
-                TMaybe<ui64> sourceCommittedOffset = Nothing()
+                const TString& errorDescription
         ) {
             id.Serialize(*Record.MutableWorker());
             Record.SetStatus(status);
             Record.SetReason(reason);
             Record.SetErrorDescription(errorDescription);
-            if (sourceCommittedOffset) {
-                Record.SetSourceCommittedOffset(*sourceCommittedOffset);
-            }
         }
 
         explicit TEvWorkerStatus(const TWorkerId& id, TDuration lag) {

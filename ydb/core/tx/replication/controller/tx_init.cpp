@@ -61,9 +61,6 @@ class TController::TTxInit: public TTxBase {
 
             auto replication = Self->Add(rid, pathId, config, database);
             replication->SetState(state, issue);
-            if (rowset.GetValueOrDefault<Schema::Replications::SourceOffsetMismatch>(false)) {
-                Self->ReplicationsWithSourceOffsetMismatch.insert(rid);
-            }
             replication->SetNextTargetId(nextTid);
             replication->SetDesiredState(desiredState);
 
@@ -93,8 +90,6 @@ class TController::TTxInit: public TTxBase {
             const auto dstPath = rowset.GetValue<Schema::Targets::DstPath>();
             const auto dstState = rowset.GetValue<Schema::Targets::DstState>();
             const auto issue = rowset.GetValue<Schema::Targets::Issue>();
-            const auto workerSetComplete =
-                rowset.GetValueOrDefault<Schema::Targets::WorkerSetComplete>(false);
             const auto dstPathId = TPathId(
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
@@ -127,9 +122,6 @@ class TController::TTxInit: public TTxBase {
             target->SetDstPathId(dstPathId);
             target->SetPendingDstPathId(pendingDstPathId);
             target->SetIssue(issue);
-            if (workerSetComplete) {
-                Self->CompleteWorkerSets.insert({rid, tid});
-            }
 
             if (!rowset.Next()) {
                 return false;
@@ -196,24 +188,6 @@ class TController::TTxInit: public TTxBase {
         return true;
     }
 
-    bool LoadProcessedSourceOffsets(NIceDb::TNiceDb& db) {
-        auto rowset = db.Table<Schema::ProcessedSourceOffsets>().Select();
-        if (!rowset.IsReady()) {
-            return false;
-        }
-        while (!rowset.EndOfSet()) {
-            const TWorkerId id(rowset.GetValue<Schema::ProcessedSourceOffsets::ReplicationId>(),
-                rowset.GetValue<Schema::ProcessedSourceOffsets::TargetId>(),
-                rowset.GetValue<Schema::ProcessedSourceOffsets::WorkerId>());
-            const auto nextOffset = rowset.GetValue<Schema::ProcessedSourceOffsets::NextOffset>();
-            Self->ProcessedSourceOffsets[id] = {nextOffset, nextOffset};
-            if (!rowset.Next()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     bool LoadWorkers(NIceDb::TNiceDb& db) {
         auto rowset = db.Table<Schema::Workers>().Select();
         if (!rowset.IsReady()) {
@@ -232,13 +206,9 @@ class TController::TTxInit: public TTxBase {
             );
 
             auto* worker = Self->GetOrCreateWorker(id);
-            // Zero denotes a registered worker that has not reported a
-            // heartbeat yet and must not join a recovered heartbeat quorum.
-            if (version != TRowVersion::Min()) {
-                worker->SetHeartbeat(version);
-                Self->WorkersWithHeartbeat.insert(id);
-                Self->WorkersByHeartbeat[version].insert(id);
-            }
+            worker->SetHeartbeat(version);
+            Self->WorkersWithHeartbeat.insert(id);
+            Self->WorkersByHeartbeat[version].insert(id);
 
             if (!rowset.Next()) {
                 return false;
@@ -255,8 +225,7 @@ class TController::TTxInit: public TTxBase {
             && LoadTargets(db)
             && LoadSrcStreams(db)
             && LoadTxIds(db)
-            && LoadWorkers(db)
-            && LoadProcessedSourceOffsets(db);
+            && LoadWorkers(db);
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {

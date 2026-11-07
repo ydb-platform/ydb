@@ -106,7 +106,7 @@ public:
         }
 
         auto desiredState = Replication->GetState();
-        if (record.HasSwitchState() && !Self->ReplicationsWithSourceOffsetMismatch.contains(Replication->GetId())) {
+        if (record.HasSwitchState()) {
             switch (record.GetSwitchState().GetStateCase()) {
                 case NKikimrReplication::TReplicationState::kDone:
                     desiredState = TReplication::EState::Done;
@@ -123,10 +123,6 @@ public:
                 default:
                     Y_ABORT("Invalid state");
             }
-        }
-
-        if (Self->ReplicationsWithSourceOffsetMismatch.contains(Replication->GetId())) {
-            alter = false;
         }
 
         if (alter && Replication->GetState() == TReplication::EState::Error) {
@@ -152,7 +148,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        if (!alter && !Self->ReplicationsWithSourceOffsetMismatch.contains(Replication->GetId()) && RetryPausedBootstrap(*Replication, db, ctx)) {
+        if (!alter && RetryPausedBootstrap(*Replication, db, ctx)) {
             issue.clear();
             desiredState = Replication->GetDesiredState();
         }

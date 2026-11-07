@@ -84,7 +84,8 @@ public:
                 << ": " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
                 << ", " << Ev->Get()->Error);
 
-            Self->SetReplicationError(*Replication, *target);
+            Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
+                << ": " << target->GetIssue());
 
             YDB_LOG_ERROR_CTX(ctx, "Alter dst error",
                 {"rid", rid},

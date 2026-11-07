@@ -6,22 +6,81 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
 
 
-def read_proc_stat() -> tuple[float, float]:
-    """Read /proc/stat, return (total_jiffies, idle_jiffies including iowait)."""
+def read_proc_stat() -> dict[str, int]:
+    """Read host CPU counters; guest time is already included in user/nice."""
     with open("/proc/stat") as f:
         line = f.readline()
     parts = line.split()
     # user nice system idle iowait irq softirq steal. guest and guest_nice are already inside user and nice.
-    total = sum(int(x) for x in parts[1:9])
-    idle = int(parts[4]) if len(parts) > 4 else 0
-    iowait = int(parts[5]) if len(parts) > 5 else 0
-    idle += iowait
-    return float(total), float(idle)
+    return dict(zip(("user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal"), map(int, parts[1:9])))
+
+
+def read_cpu_cgroups() -> dict:
+    """Sample our inherited CPU limits and counters up to the visible cgroup mount root.
+
+    Keep native cpu.stat names/units: throttled_usec in v2, throttled_time (ns)
+    in v1. Counter deltas show throttling during a run, not since cgroup creation.
+    """
+    try:
+        memberships = {}
+        for line in Path("/proc/self/cgroup").read_text().splitlines():
+            _, controllers, path = line.split(":", 2)
+            for controller in controllers.split(","):
+                memberships[controller] = path
+        version = 1 if "cpu" in memberships else 2
+        member = Path(memberships["cpu" if version == 1 else ""])
+        if ".." in member.parts:
+            return {"error": "CPU cgroup is outside the visible namespace"}
+        for line in Path("/proc/self/mountinfo").read_text().splitlines():
+            fields, fs = line.split(" - ", 1)
+            fs = fs.split()
+            if version == 2:
+                matches = fs[0] == "cgroup2"
+            else:
+                matches = fs[0] == "cgroup" and "cpu" in fs[2].split(",")
+            if not matches:
+                continue
+            # mountinfo escapes spaces and backslashes as octal sequences.
+            root, mount = (
+                Path(re.sub(r"\\([0-7]{3})", lambda m: chr(int(m[1], 8)), p))
+                for p in fields.split()[3:5]
+            )
+            if not member.is_relative_to(root):
+                continue
+            current = mount / member.relative_to(root)
+            groups = []
+            while True:
+                group = {"path": str(current)}
+                files = ("cpu.max", "cpu.stat") if version == 2 else (
+                    "cpu.cfs_quota_us", "cpu.cfs_period_us", "cpu.stat"
+                )
+                for name in files:
+                    try:
+                        value = (current / name).read_text().strip()
+                        if name == "cpu.stat":
+                            group[name] = {key: int(count) for key, count in
+                                           (line.split() for line in value.splitlines())}
+                        else:
+                            group[name] = value
+                    except FileNotFoundError:
+                        # The v2 root has no cpu.max; disabled controllers also omit files.
+                        continue
+                    except (OSError, ValueError) as e:
+                        group.setdefault("errors", {})[name] = str(e)
+                groups.append(group)
+                if current == mount:
+                    return {"version": version, "groups": groups}
+                current = current.parent
+        return {"error": "CPU cgroup mount not found"}
+    except (OSError, ValueError, KeyError) as e:
+        # Diagnostics must not stop the existing CPU/RAM/I/O monitor.
+        return {"error": str(e)}
 
 
 def _read_cmdline(pid: int) -> str:
@@ -285,10 +344,12 @@ def run_monitor(
 
             # CPU total (absolute)
             curr_stat = read_proc_stat()
-            total_delta = curr_stat[0] - prev_stat[0]
-            idle_delta = curr_stat[1] - prev_stat[1]
+            cpu_deltas = {key: value - prev_stat.get(key, value) for key, value in curr_stat.items()}
+            total_delta = sum(cpu_deltas.values())
+            idle_delta = cpu_deltas.get("idle", 0) + cpu_deltas.get("iowait", 0)
             cpu_total_pct = 100.0 * (1 - idle_delta / total_delta) if total_delta > 0 else 0.0
             prev_stat = curr_stat
+            cpu_cgroups = read_cpu_cgroups()
 
             # ya make process tree
             process_snapshot = read_process_snapshot()
@@ -358,6 +419,11 @@ def run_monitor(
             }
             record["cpu_cores"] = cpu_cores
             record["ram_total_gb"] = ram_total_gb
+            record.update({
+                f"cpu_{key}_pct": round(100.0 * value / total_delta, 2) if total_delta > 0 else 0.0
+                for key, value in cpu_deltas.items()
+            })
+            record["cpu_cgroups"] = cpu_cgroups
             jf.write(json.dumps(record) + "\n")
             jf.flush()
 

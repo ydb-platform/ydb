@@ -185,6 +185,9 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
+    , PrevToken(DbDriverState->GetCredentialsProvider()
+        ? DbDriverState->GetCredentialsProvider()->GetAuthInfoAsync()
+        : NThreading::MakeFuture(std::string()))
     , MaxBlockMessageCount(Settings.BatchFlushMessageCount_)
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
@@ -1911,14 +1914,14 @@ void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& 
         CloseImpl(EStatus::CLIENT_UNAUTHENTICATED, CurrentExceptionMessage());
         return;
     }
-    if (token == PrevToken) {
+    if (PrevToken.HasValue() && token == PrevToken.GetValue()) {
         return;
     }
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: updating token");
 
     UpdateTokenInProgress = true;
-    PrevToken = token;
+    PrevToken = future;
 
     TClientMessage clientMessage;
     clientMessage.mutable_update_token_request()->set_token(TStringType{token});

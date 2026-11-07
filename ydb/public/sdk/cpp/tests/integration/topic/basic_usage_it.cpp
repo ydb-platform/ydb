@@ -86,6 +86,26 @@ TEST_F(BasicUsage, TEST_NAME(ConnectToYDB)) {
     }
 }
 
+TEST_F(BasicUsage, TEST_NAME(WriteWithInitialToken)) {
+    TDriver driver(MakeDriverConfig().SetAuthToken("unused-token"));
+    TTopicClient client(driver);
+    auto session = client.CreateSimpleBlockingWriteSession(
+        TWriteSessionSettings().Path(GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID));
+
+    ASSERT_TRUE(session->Write("message", {}, {}, TDuration::Seconds(10)));
+    ASSERT_TRUE(session->Close(TDuration::Seconds(10)));
+}
+
+TEST_F(BasicUsage, TEST_NAME(PersQueueWriteWithInitialToken)) {
+    TDriver driver(MakeDriverConfig().SetAuthToken("unused-token"));
+    NPersQueue::TPersQueueClient client(driver);
+    auto session = client.CreateSimpleBlockingWriteSession(
+        NPersQueue::TWriteSessionSettings().Path(GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID));
+
+    ASSERT_TRUE(session->Write("message", {}, {}, TDuration::Seconds(10)));
+    ASSERT_TRUE(session->Close(TDuration::Seconds(10)));
+}
+
 TEST_F(BasicUsage, TEST_NAME(WriteRead)) {
     auto driver = MakeDriver();
 

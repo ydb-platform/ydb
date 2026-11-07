@@ -389,7 +389,7 @@ private:
     std::string PreferredClusterByCDS;
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory;
     TDbDriverStatePtr DbDriverState;
-    std::string PrevToken;
+    NThreading::TFuture<std::string> PrevToken;
     std::atomic_bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;

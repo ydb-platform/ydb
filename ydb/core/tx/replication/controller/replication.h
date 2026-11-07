@@ -95,6 +95,7 @@ public:
 
         virtual bool IsExpectedDstCreator(const TActorId& actorId) const = 0;
         virtual bool IsExpectedDstAlterer(const TActorId& actorId) const = 0;
+        virtual bool IsExpectedWorkerRegistar(const TActorId& actorId) const = 0;
 
         virtual const TPathId& GetDstPathId() const = 0;
         virtual void SetDstPathId(const TPathId& value) = 0;

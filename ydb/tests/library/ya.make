@@ -100,6 +100,7 @@ END()
 RECURSE(
     logbroker_federation
     compatibility
+    replication_credentials
     stability
     clients
     flavours

@@ -26,3 +26,7 @@ DEPENDS(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    credentials_rotation
+)

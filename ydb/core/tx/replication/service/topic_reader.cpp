@@ -253,6 +253,20 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
     void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
+        const auto status = ev->Get()->Result.GetStatus();
+        if (status == NYdb::EStatus::UNAUTHORIZED || status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
+            // Remote issues are untrusted and may contain credentials. Preserve
+            // the typed SDK cause, without logging or forwarding their text.
+            YDB_LOG_WARN("Source authentication failed", {"status", status});
+            if (Settings.ReportStats_) {
+                SendError();
+            }
+            const auto outcome = status == NYdb::EStatus::UNAUTHORIZED
+                    || AuthFailurePolicy == EAuthFailurePolicy::StaticLoginInitialization
+                ? TEvWorker::TEvGone::AUTH_ERROR : TEvWorker::TEvGone::UNAVAILABLE;
+            return Leave(outcome, TStringBuilder() << "Source authentication failed (" << status << ")");
+        }
+
         YDB_LOG_DEBUG("Handle",
             {"ev", ev->Get()->ToString()});
         if (Settings.ReportStats_) {
@@ -328,10 +342,12 @@ public:
         return NKikimrServices::TActivity::REPLICATION_REMOTE_TOPIC_READER;
     }
 
-    explicit TRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts)
+    explicit TRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts,
+        EAuthFailurePolicy authFailurePolicy)
         : TActor(&TThis::StateWork)
         , YdbProxy(ydbProxy)
         , Settings(opts)
+        , AuthFailurePolicy(authFailurePolicy)
     {
         const auto& base = Settings.GetBase();
         Y_ABORT_UNLESS(base.Topics_.size() == 1);
@@ -371,6 +387,7 @@ private:
 
     const TActorId YdbProxy;
     const TEvYdbProxy::TTopicReaderSettings Settings;
+    const EAuthFailurePolicy AuthFailurePolicy;
     mutable TMaybe<TString> LogPrefix;
 
     TActorId Worker;
@@ -392,8 +409,10 @@ private:
 
 }; // TRemoteTopicReader
 
-IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts) {
-    return new TRemoteTopicReader(ydbProxy, opts);
+IActor* CreateRemoteTopicReader(const TActorId& ydbProxy, const TEvYdbProxy::TTopicReaderSettings& opts,
+    EAuthFailurePolicy authFailurePolicy)
+{
+    return new TRemoteTopicReader(ydbProxy, opts, authFailurePolicy);
 }
 
 } //NKikimr::NReplication::NService

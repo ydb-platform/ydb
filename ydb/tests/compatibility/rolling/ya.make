@@ -8,6 +8,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 TEST_SRCS(
+    test_credentials_rotation.py
     test_rolling.py
     test_transfer.py
 )
@@ -24,6 +25,7 @@ DEPENDS(
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/compatibility
+    ydb/tests/library/replication_credentials
 )
 
 END()

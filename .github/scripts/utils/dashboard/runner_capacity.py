@@ -1,7 +1,7 @@
 """Measured host capacity for the tests resource dashboard.
 
-Chart limit lines and mem→cpu recommendations use /proc data from
-``resources_monitor.jsonl``. If that data is missing, limits are omitted.
+Limits and mem→cpu recommendations use /proc data from resources_monitor.jsonl.
+If that data is missing, limits are omitted.
 """
 
 from __future__ import annotations
@@ -9,8 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
-# Tuning applied to measured MemTotal / CPU (same ratios as ya make MemoryMax).
+# Suite co-resident RAM budget as a fraction of measured MemTotal.
 MEM_BUDGET_FRACTION = 0.70
+# Matches ya make cgroup MemoryMax (95% of MemTotal).
 YA_MAKE_MEM_FRACTION = 0.95
 MEM_MIN_CHUNK_GB = 24.0
 CPU_SATURATION_PCT = 90.0
@@ -48,21 +49,32 @@ def mem_cpu_tiers_for(max_cores: int) -> tuple[int, ...]:
     return tuple(tiers)
 
 
+def _positive_float(value: Any) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def _first_positive(records: Optional[list[dict[str, Any]]], key: str) -> Optional[float]:
+    for rec in records or []:
+        number = _positive_float(rec.get(key))
+        if number is not None:
+            return number
+    return None
+
+
 def capacity_from_measured(
     *,
     cpu_cores: Optional[float],
     ram_gb: Optional[float],
 ) -> Optional[RunnerCapacity]:
-    """Build capacity from measured host specs. None if either value is missing."""
-    try:
-        cpu = float(cpu_cores) if cpu_cores is not None else 0.0
-    except (TypeError, ValueError):
-        cpu = 0.0
-    try:
-        ram = float(ram_gb) if ram_gb is not None else 0.0
-    except (TypeError, ValueError):
-        ram = 0.0
-    if cpu <= 0 or ram <= 0:
+    cpu = _positive_float(cpu_cores)
+    ram = _positive_float(ram_gb)
+    if cpu is None or ram is None:
         return None
 
     vcpu = max(1, int(round(cpu)))
@@ -78,45 +90,18 @@ def capacity_from_measured(
     )
 
 
-def _first_positive(records: Optional[list[dict[str, Any]]], key: str) -> Optional[float]:
-    for rec in records or []:
-        raw = rec.get(key)
-        if raw is None:
-            continue
-        try:
-            value = float(raw)
-        except (TypeError, ValueError):
-            continue
-        if value > 0:
-            return value
-    return None
-
-
 def extract_measured_host_specs(
     overlay: Optional[dict[str, Any]],
     *,
     records: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Optional[float]]:
     measured_cpu = _first_positive(records, "cpu_cores")
-    if measured_cpu is None and overlay:
-        raw_cpu = overlay.get("cpu_cores")
-        try:
-            measured_cpu = float(raw_cpu) if raw_cpu else None
-        except (TypeError, ValueError):
-            measured_cpu = None
-        if measured_cpu is not None and measured_cpu <= 0:
-            measured_cpu = None
-
     measured_ram = _first_positive(records, "ram_total_gb")
-    if measured_ram is None and overlay:
-        raw_ram = overlay.get("ram_total_gb")
-        try:
-            measured_ram = float(raw_ram) if raw_ram else None
-        except (TypeError, ValueError):
-            measured_ram = None
-        if measured_ram is not None and measured_ram <= 0:
-            measured_ram = None
-
+    if overlay:
+        if measured_cpu is None:
+            measured_cpu = _positive_float(overlay.get("cpu_cores"))
+        if measured_ram is None:
+            measured_ram = _positive_float(overlay.get("ram_total_gb"))
     return {"cpu_cores": measured_cpu, "ram_gb": measured_ram}
 
 
@@ -125,7 +110,6 @@ def enrich_resources_overlay(
     *,
     records: Optional[list[dict[str, Any]]] = None,
 ) -> tuple[Optional[dict[str, Any]], Optional[RunnerCapacity]]:
-    """Attach measured host limits. Omit limits when monitor data is incomplete."""
     if overlay is None:
         return None, None
 

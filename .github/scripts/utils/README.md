@@ -17,7 +17,7 @@
     - `dashboard_*.py` — рендеринг HTML
     - `ya_make_requirements.py` — чтение REQUIREMENTS из ya.make
 
-Лимиты и mem→cpu на дашборде — только с реального раннера. Без `resources_monitor.jsonl` потолки не рисуются. `.github/config/runners_footprints.yml` — inventory для export_runner_capacity, не для дашборда.
+Dashboard limits/mem→cpu: measured host from `resources_monitor.jsonl` only (no limits if missing). `runners_footprints.yml` is for `export_runner_capacity` fleet inventory.
 
 Unit-тесты лежат отдельно в `tests/` (не рядом с продуктовым кодом):
 

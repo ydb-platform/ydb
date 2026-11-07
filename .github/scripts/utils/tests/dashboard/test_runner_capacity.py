@@ -56,7 +56,7 @@ def test_enrich_resources_overlay_measured_limits():
     assert out["runner_limits"]["cpu_cores_max"] == 64
     assert abs(out["runner_limits"]["ram_gb_max"] - 124.42) < 1e-6
     assert out["measured"]["ram_gb"] == 124.42
-    assert "runner_footprint" not in out
+    assert out["runner_capacity"]["vcpu"] == 64
 
 
 def test_enrich_resources_overlay_no_limits_without_monitor():

@@ -7,7 +7,7 @@
         "args":
           [
             {
-              "op_name":"HashShuffle",
+              "op_name":"InnerJoin (BlockHash)",
               "args":
                 [
                   {
@@ -19,7 +19,7 @@
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (BlockHash)",
+                                "op_name":"HashShuffle",
                                 "args":
                                   [
                                     {
@@ -63,7 +63,13 @@
                                               ]
                                           }
                                         ]
-                                    },
+                                    }
+                                  ]
+                              },
+                              {
+                                "op_name":"HashShuffle",
+                                "args":
+                                  [
                                     {
                                       "op_name":"HashShuffle",
                                       "args":
@@ -107,7 +113,13 @@
                                         ]
                                     }
                                   ]
-                              },
+                              }
+                            ]
+                        },
+                        {
+                          "op_name":"HashShuffle",
+                          "args":
+                            [
                               {
                                 "op_name":"HashShuffle",
                                 "args":
@@ -151,7 +163,13 @@
                                   ]
                               }
                             ]
-                        },
+                        }
+                      ]
+                  },
+                  {
+                    "op_name":"HashShuffle",
+                    "args":
+                      [
                         {
                           "op_name":"HashShuffle",
                           "args":

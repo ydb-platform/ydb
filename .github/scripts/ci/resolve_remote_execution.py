@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+"""Merge remote execution JSON with defaults → dispatch_remote `config` output.
+
+Env:
+  REMOTE_JSON — optional caller override (object or empty)
+  CODE_REF / GITHUB_SHA, GITHUB_WORKFLOW, GITHUB_EVENT_NAME, GITHUB_RUN_ID,
+  PULL_NUMBER, ANALYTICS_JOB_NAME (optional top-level overrides)
+  GITHUB_OUTPUT — write `config<<EOF...`
+
+The resulting config is the single opaque blob passed into dispatch_remote.yml.
+"""
+from __future__ import annotations
+
+import copy
+import json
+import os
+import re
+import sys
+from typing import Any
+
+
+DEFAULT_REMOTE: dict[str, Any] = {
+    "repository": "nebius/ydb",
+    "workflow_file": "ci_remote_executor.yml",
+    "workflow_name": "CI remote executor",
+    "executor_ref": "nebius-ci",
+    "wait": True,
+    "fail_on_remote_failure": True,
+    "summary_s3_endpoint": "https://s3.us-east-1.amazonaws.com",
+    "summary_s3_bucket": "ydb-nebius-ci-public-609722444123-us-east-1",
+    "analytics_job_name": "Run and debug tests",
+    "caller_workflow": "",
+    "runs_on": ["self-hosted", "linux", "amd64-large"],
+    "code_ref": "",
+    "analytics_branch": "",
+    "job": {
+        "build_target": "ydb/tests/olap/",
+        "build_preset": "relwithdebinfo",
+        "run_tests": True,
+        "increment": False,
+        "test_size": "small,medium",
+        "test_type": "",
+        "test_threads": "64",
+        "link_threads": "2",
+        "additional_ya_make_args": "",
+        "test_retry_count": "",
+        "put_build_results_to_cache": True,
+        "collect_coredumps": False,
+    },
+}
+
+
+def die(msg: str) -> None:
+    print(f"::error::{msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def _truthy(v: Any, default: bool = False) -> bool:
+    if v is None or v == "":
+        return default
+    if isinstance(v, bool):
+        return v
+    return str(v).strip().lower() in ("1", "true", "yes")
+
+
+def _as_str(v: Any, default: str = "") -> str:
+    if v is None:
+        return default
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    return str(v)
+
+
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    out = copy.deepcopy(base)
+    for key, val in override.items():
+        if isinstance(val, dict) and isinstance(out.get(key), dict):
+            out[key] = deep_merge(out[key], val)
+        else:
+            out[key] = copy.deepcopy(val)
+    return out
+
+
+def parse_remote_json(raw: str) -> dict[str, Any]:
+    raw = (raw or "").strip()
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        die(f"remote JSON is not valid JSON: {e}")
+    if not isinstance(data, dict):
+        die("remote JSON must be an object")
+    return data
+
+
+def build_config() -> dict[str, Any]:
+    cfg = deep_merge(DEFAULT_REMOTE, parse_remote_json(os.environ.get("REMOTE_JSON", "")))
+
+    # Optional seeds from the caller WF top-level inputs (when remote JSON omits job.*).
+    job = cfg.get("job") if isinstance(cfg.get("job"), dict) else {}
+    if not _as_str(job.get("build_target")).strip():
+        seed = (os.environ.get("DEFAULT_BUILD_TARGET") or "").strip()
+        if seed:
+            job = {**job, "build_target": seed}
+    if not _as_str(job.get("build_preset")).strip():
+        seed = (os.environ.get("DEFAULT_BUILD_PRESET") or "").split(",")[0].strip()
+        if seed:
+            job = {**job, "build_preset": seed}
+    cfg["job"] = job
+
+    code_ref = (os.environ.get("CODE_REF") or "").strip() or _as_str(cfg.get("code_ref")).strip()
+    if not code_ref:
+        code_ref = (os.environ.get("GITHUB_SHA") or "").strip()
+    if not code_ref:
+        die("code_ref is empty (pass remote.code_ref or CODE_REF / GITHUB_SHA)")
+    cfg["code_ref"] = code_ref
+
+    analytics = _as_str(cfg.get("analytics_branch")).strip()
+    if not analytics:
+        analytics = (
+            "main" if re.fullmatch(r"[0-9a-fA-F]{7,40}", code_ref) else code_ref
+        )
+    cfg["analytics_branch"] = analytics
+
+    job = cfg.get("job") if isinstance(cfg.get("job"), dict) else {}
+    preset = _as_str(job.get("build_preset"), "relwithdebinfo").split(",")[0].strip() or "relwithdebinfo"
+    increment = _as_str(job.get("increment"), "false")
+    fetch_depth = 0 if _truthy(increment) else 2
+
+    analytics_job = (
+        (os.environ.get("ANALYTICS_JOB_NAME") or "").strip()
+        or _as_str(cfg.get("analytics_job_name")).strip()
+        or "Run and debug tests"
+    )
+    cfg["analytics_job_name"] = analytics_job
+    cfg["caller_workflow"] = (
+        (os.environ.get("CALLER_WORKFLOW") or "").strip()
+        or _as_str(cfg.get("caller_workflow")).strip()
+        or (os.environ.get("GITHUB_WORKFLOW") or "").strip()
+    )
+
+    source_event = (os.environ.get("SOURCE_EVENT_NAME") or "").strip() or "workflow_dispatch"
+    source_run = (os.environ.get("SOURCE_RUN_ID") or "").strip() or (
+        os.environ.get("GITHUB_RUN_ID") or ""
+    )
+    pull_number = (os.environ.get("PULL_NUMBER") or "").strip()
+
+    job_inputs = {
+        "build_target": _as_str(job.get("build_target"), "ydb/"),
+        "build_preset": preset,
+        "run_tests": _as_str(job.get("run_tests"), "true"),
+        "increment": increment,
+        "fetch_depth": fetch_depth,
+        "test_size": _as_str(job.get("test_size"), "small,medium"),
+        "test_type": _as_str(job.get("test_type")),
+        "test_threads": _as_str(job.get("test_threads"), "64"),
+        "link_threads": _as_str(job.get("link_threads"), "2"),
+        "additional_ya_make_args": _as_str(job.get("additional_ya_make_args")),
+        "test_retry_count": _as_str(job.get("test_retry_count")),
+        "put_build_results_to_cache": _as_str(job.get("put_build_results_to_cache"), "true"),
+        "collect_coredumps": _as_str(job.get("collect_coredumps"), "false"),
+        "custom_branch_name": analytics,
+        "analytics_job_name": analytics_job,
+        "source_event_name": source_event,
+        "source_run_id": source_run,
+        "pull_number": pull_number,
+        "enable_ydb_qa": "false",
+    }
+
+    runs_on = cfg.get("runs_on")
+    if isinstance(runs_on, str):
+        try:
+            runs_on_obj = json.loads(runs_on)
+        except json.JSONDecodeError as e:
+            die(f"runs_on must be a JSON array: {e}")
+    else:
+        runs_on_obj = runs_on
+    if not isinstance(runs_on_obj, list):
+        die("runs_on must be a JSON array of runner labels")
+    runs_on_str = json.dumps(runs_on_obj, separators=(",", ":"))
+
+    cfg["wait"] = _truthy(cfg.get("wait"), True)
+    cfg["fail_on_remote_failure"] = _truthy(cfg.get("fail_on_remote_failure"), True)
+
+    # Executor workflow_dispatch payload (strings coerced later by dispatch start).
+    cfg["inputs"] = {
+        "code_ref": code_ref,
+        "job_inputs": job_inputs,
+        "runs_on": runs_on_str,
+    }
+    return cfg
+
+
+def main() -> int:
+    cfg = build_config()
+    text = json.dumps(cfg, ensure_ascii=False)
+    out = os.environ.get("GITHUB_OUTPUT")
+    if out:
+        with open(out, "a", encoding="utf-8") as f:
+            f.write("config<<EOF\n")
+            f.write(text)
+            f.write("\nEOF\n")
+            f.write(f"wait={str(cfg['wait']).lower()}\n")
+    print(json.dumps(cfg, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

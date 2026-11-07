@@ -191,7 +191,11 @@ runs:
           ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
         fi
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
-        echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
+        # PR comments only for PRs in *this* repository (never inputs.pull_number —
+        # remote host would otherwise comment on nebius/ydb with a platform PR #).
+        echo "PR_NUMBER=${{ github.event.number }}" >> "$GITHUB_ENV"
+        # Analytics / generate-summary history may still use the caller's PR number.
+        echo "ANALYTICS_PULL_NUMBER=${{ inputs.pull_number || github.event.number }}" >> "$GITHUB_ENV"
         if [ -n "$SOURCE_EVENT_NAME" ]; then
           echo "SOURCE_EVENT_NAME=$SOURCE_EVENT_NAME" >> "$GITHUB_ENV"
         fi
@@ -241,12 +245,6 @@ runs:
         echo "PUBLIC_DIR_URL=$PUBLIC_DIR_URL" >> $GITHUB_ENV
         mkdir -p $PUBLIC_DIR
 
-        # Durable job markdown for remote waiters. Written once in the final S3 step
-        # from the accumulated GITHUB_STEP_SUMMARY (job-scoped), then put at run root.
-        export JOB_SUMMARY_MD=$PUBLIC_DIR/job_summary.md
-        : > "$JOB_SUMMARY_MD"
-        echo "JOB_SUMMARY_MD=$JOB_SUMMARY_MD" >> $GITHUB_ENV
-
         echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
@@ -263,15 +261,8 @@ runs:
         . .github/scripts/utils/analytics/github_actions/analytics.sh
         analytics start init
 
-        # Remote executor hosts may run PEP 668 (externally-managed) Python
-        # and lack image-preinstalled CI deps (e.g. PyGithub for comment-pr).
-        PIP_ARGS=()
-        PIP_PKGS=(ydb 'ydb[yc]' codeowners humanize plotly pyyaml)
-        if [ -n "${SOURCE_RUN_ID:-}" ]; then
-          PIP_ARGS+=(--break-system-packages)
-          PIP_PKGS+=(PyGithub)
-        fi
-        python3 -m pip install "${PIP_ARGS[@]}" "${PIP_PKGS[@]}"
+        # Host (Nebius) sets PIP_BREAK_SYSTEM_PACKAGES=1 for PEP 668; local runners ignore it.
+        python3 -m pip install ydb 'ydb[yc]' codeowners humanize plotly pyyaml
         analytics end init --conclusion success
         if [ "${GH_PROXY_MEASURED:-}" = 1 ]; then
           chosen_mbps="${GH_PROXY_DIRECT_MBPS}"
@@ -315,7 +306,8 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
         GITHUB_RUN_ID: ${{ github.run_id }}
         COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != 'false' }}
-        PR_NUMBER: ${{ github.event.number || inputs.pull_number }}
+        PR_NUMBER: ${{ github.event.number }}
+        ANALYTICS_PULL_NUMBER: ${{ inputs.pull_number || github.event.number }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
@@ -757,13 +749,12 @@ runs:
               | jq -r '.results[] | select((.status == "FAILED") and (.error_type == "REGULAR") and (.type == "build")) | "path: " + .path + "\n\n" + ."rich-snippet" + "\n\n\n"' \
               | sed 's/\[\[[^]]*]\]//g' \
             ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
-            # Same text as the PR comment must land in job/step summary (main only
-            # posted the comment; GITHUB_STEP_SUMMARY / job_summary.md stayed links-only).
+            # Same text as the PR comment must land in step summary (and summary_text for S3).
             BUILD_FAIL_MSG="Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)"
             echo "$BUILD_FAIL_MSG" | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color red
             echo "$BUILD_FAIL_MSG" >> "$GITHUB_STEP_SUMMARY"
             printf '%s\n\n' "$BUILD_FAIL_MSG" > summary_text.txt
-            # Explicit marker for ingest (fail_summary.txt may be empty when jq finds no REGULAR build errors).
+            # Explicit marker for remote ingest (fail_summary.txt may be empty when jq finds no REGULAR build errors).
             printf '%s\n' "$BUILD_FAIL_MSG" > "$CURRENT_PUBLIC_DIR/build_failed.md"
             echo red > summary_color.txt
             cp -f summary_text.txt "$PUBLIC_DIR/summary_text.txt"
@@ -773,15 +764,15 @@ runs:
               --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
               --label "fail_summary_url=${CURRENT_PUBLIC_DIR_URL}/fail_summary.txt"
             analytics flush
-            # Do not break yet: still transform + generate-summary so ya-test.html /
-            # failure table exist on the executor; build-fail line stays first in summary_text.
+            # Continue into transform + generate-summary (all callers): statusrep.txt /
+            # ya-test.html / failure table; build-fail line stays first in summary_text.
           fi
 
           # archive build results report (orig)
           gzip -c $CURRENT_REPORT > $CURRENT_PUBLIC_DIR/orig_report.json.gz
 
           # postprocess build results report (add links, logs, mute tests etc)
-          # Also required after BUILD_FAILED so error_type tags / HTML exist on the host.
+          # Also after BUILD_FAILED so error_type tags / HTML exist.
           analytics start transform_build_results
           TRANSFORM_RC=0
           .github/scripts/tests/transform_build_results.py \
@@ -828,10 +819,9 @@ runs:
           fi
 
           if [ "$INPUT_RUN_TESTS" = "true" ]; then
-            # Set PR number only if it exists (for pull request events)
             PR_ARG=""
-            if [ -n "$PR_NUMBER" ]; then
-              PR_ARG="--pr_number $PR_NUMBER"
+            if [ -n "${ANALYTICS_PULL_NUMBER:-}" ]; then
+              PR_ARG="--pr_number $ANALYTICS_PULL_NUMBER"
             fi
 
             # Set the correct commit SHA - use original head for accurate version tracking
@@ -865,8 +855,7 @@ runs:
               mv summary_text.txt.tmp summary_text.txt
               echo red > summary_color.txt
             fi
-            # Durable copy for the final job_summary sync step (that step has its
-            # own empty GITHUB_STEP_SUMMARY and must not drop the table/message).
+            # Durable copy for S3 / remote host publish step (step summary is links-only).
             cp -f summary_text.txt "$PUBLIC_DIR/summary_text.txt"
             cp -f summary_text.txt "$CURRENT_PUBLIC_DIR/summary_text.txt"
           fi
@@ -901,8 +890,8 @@ runs:
                 run_name="${EFFECTIVE_RUN_ID}_manual"
                 ;;
               pull_request | pull_request_target)
-                if [ -n "$PR_NUMBER" ]; then
-                  run_name="${EFFECTIVE_RUN_ID}_PR_${PR_NUMBER}"
+                if [ -n "${ANALYTICS_PULL_NUMBER:-}" ]; then
+                  run_name="${EFFECTIVE_RUN_ID}_PR_${ANALYTICS_PULL_NUMBER}"
                 else
                   run_name="${EFFECTIVE_RUN_ID}_PR"
                 fi
@@ -1054,28 +1043,14 @@ runs:
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
         echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
         LINKS_LINE=$(cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))')
-        # Durable S3 job_summary for remote ingest: links + summary_text (table / build-fail).
-        # Step summary: links only — same as main; generate-summary already appended the table.
-        {
-          echo "$LINKS_LINE"
-          echo
-          if [ -f "$PUBLIC_DIR/summary_text.txt" ]; then
-            cat "$PUBLIC_DIR/summary_text.txt"
-          elif [ -f summary_text.txt ]; then
-            cat summary_text.txt
-          fi
-        } > "$JOB_SUMMARY_MD"
+        # Step summary: links only (generate-summary already appended the table when present).
+        # Remote host publishes job_summary.md + remote_artifacts.json at run root in its WF.
         echo "$LINKS_LINE" >> "$GITHUB_STEP_SUMMARY"
-        # Locator for caller ingest: exact S3 leaf + URLs + commit/branch (next to job_summary.md).
-        REMOTE_ARTIFACTS_JSON="$PUBLIC_DIR/remote_artifacts.json"
-        REMOTE_ARTIFACTS_JSON="$REMOTE_ARTIFACTS_JSON" \
-          python3 .github/scripts/ci/remote_executor/write_remote_artifacts_manifest.py
+        # Keep summary_text under PUBLIC_DIR for the host publish step / local debugging.
+        if [ -f summary_text.txt ] && [ ! -f "$PUBLIC_DIR/summary_text.txt" ]; then
+          cp -f summary_text.txt "$PUBLIC_DIR/summary_text.txt"
+        fi
         s3cmd sync --follow-symlinks ${S3_PUBLIC_ACL_FLAG} --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
-        # Stable run-root URL for remote waiters (leaf is ya-*/ under the run).
-        s3cmd put ${S3_PUBLIC_ACL_FLAG} --no-progress --no-mime-magic --guess-mime-type \
-          "$JOB_SUMMARY_MD" "${S3_BUCKET_PATH%/*}/job_summary.md"
-        s3cmd put ${S3_PUBLIC_ACL_FLAG} --no-progress --no-mime-magic --guess-mime-type \
-          "$REMOTE_ARTIFACTS_JSON" "${S3_BUCKET_PATH%/*}/remote_artifacts.json"
         echo "::endgroup::"
 
     - name: show free space

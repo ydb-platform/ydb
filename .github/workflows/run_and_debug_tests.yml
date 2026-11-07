@@ -42,19 +42,16 @@ on:
 jobs:
   resolve_remote:
     if: inputs.executor == 'remote'
-    # wait path shares runner-waiter with dispatch/wait; fire-and-forget stays on GitHub-hosted.
-    # wait flag is inside remote JSON — default true, so prefer waiter; fire-and-forget still ok on waiter.
-    runs-on: [self-hosted, runner-waiter]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       config: ${{ steps.resolve.outputs.config }}
-      wait: ${{ steps.resolve.outputs.wait }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
           sparse-checkout: |
-            .github/scripts/ci/dispatcher/resolve_remote_execution.py
+            .github/scripts/ci/dispatcher
           sparse-checkout-cone-mode: false
 
       - name: Resolve remote execution config

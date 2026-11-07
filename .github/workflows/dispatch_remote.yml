@@ -22,7 +22,7 @@ on:
 
 jobs:
   enqueue:
-    runs-on: ${{ fromJSON(inputs.config).wait && fromJSON('["self-hosted", "runner-waiter"]') || fromJSON('["ubuntu-latest"]') }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
       platform_run_id: ${{ steps.ticket.outputs.platform_run_id }}
@@ -45,7 +45,6 @@ jobs:
           PLATFORM_WORKFLOW: ${{ github.workflow }}
           PLATFORM_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           TICKET_PATH: remote-ticket.json
-          REPO: ${{ fromJSON(inputs.config).repository || github.repository }}
         run: python3 .github/scripts/ci/dispatcher/dispatch_remote_executor.py enqueue
 
       - name: Upload remote-ticket artifact
@@ -57,7 +56,6 @@ jobs:
           retention-days: 7
 
   wait:
-    if: fromJSON(inputs.config).wait
     needs: enqueue
     runs-on: [self-hosted, runner-waiter]
     # Self-hosted; allow ~24h jobs (22h runs + margin). Host WF must match.
@@ -76,15 +74,10 @@ jobs:
       - name: Wait for claim + executor
         id: wait
         env:
-          # Read host Actions run status (public repo may work without; PAT if private).
           GH_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
           CONFIG_JSON: ${{ inputs.config }}
           PLATFORM_RUN_ID: ${{ github.run_id }}
           PLATFORM_RUN_ATTEMPT: ${{ github.run_attempt }}
-          REPO: ${{ fromJSON(inputs.config).repository }}
-          AWS_ENDPOINT: ${{ fromJSON(inputs.config).claim_s3_endpoint }}
-          AWS_BUCKET: ${{ fromJSON(inputs.config).claim_s3_bucket }}
-          FAIL_ON_REMOTE_FAILURE: ${{ fromJSON(inputs.config).fail_on_remote_failure }}
         run: python3 .github/scripts/ci/dispatcher/dispatch_remote_executor.py wait
 
       - name: Cancel on caller cancel
@@ -95,14 +88,11 @@ jobs:
           PLATFORM_RUN_ID: ${{ github.run_id }}
           EXECUTOR_RUN_ID: ${{ steps.wait.outputs.executor_run_id }}
           EXECUTOR_RUN_URL: ${{ steps.wait.outputs.executor_run_url }}
-          REPO: ${{ fromJSON(inputs.config).repository }}
-          AWS_ENDPOINT: ${{ fromJSON(inputs.config).claim_s3_endpoint }}
-          AWS_BUCKET: ${{ fromJSON(inputs.config).claim_s3_bucket }}
         run: python3 .github/scripts/ci/dispatcher/dispatch_remote_executor.py cancel
 
   ingest:
     if: >-
-      fromJSON(inputs.config).wait && always() && !cancelled() &&
+      always() && !cancelled() &&
       needs.enqueue.result == 'success' &&
       needs.wait.result != 'cancelled' &&
       needs.wait.outputs.executor_run_id != ''
@@ -133,7 +123,7 @@ jobs:
           s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
           s3_bucket: ${{ vars.AWS_BUCKET }}
           s3_endpoint: ${{ vars.AWS_ENDPOINT }}
-          build_preset: ${{ fromJSON(inputs.config).inputs.job_inputs.build_preset || fromJSON(inputs.config).job.build_preset || 'relwithdebinfo' }}
+          build_preset: ${{ fromJSON(inputs.config).inputs.job_inputs.build_preset || 'relwithdebinfo' }}
 
       - name: Ingest remote artifacts
         env:
@@ -141,9 +131,6 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           CALLER_AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
           CALLER_AWS_BUCKET: ${{ vars.AWS_BUCKET }}
-          # Host public S3 (resolve copies summary_* → claim_*).
-          REMOTE_AWS_ENDPOINT: ${{ fromJSON(inputs.config).claim_s3_endpoint }}
-          REMOTE_AWS_BUCKET: ${{ fromJSON(inputs.config).claim_s3_bucket }}
           EXECUTOR_RUN_ID: ${{ needs.wait.outputs.executor_run_id }}
           EXECUTOR_RUN_URL: ${{ needs.wait.outputs.executor_run_url }}
           EXECUTOR_CONCLUSION: ${{ needs.wait.outputs.executor_conclusion }}

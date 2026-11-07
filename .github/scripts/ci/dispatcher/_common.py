@@ -36,10 +36,6 @@ def truthy(v: Any, default: bool = False) -> bool:
     return str(v).strip().lower() in ("1", "true", "yes")
 
 
-def truthy_env(name: str, default: str = "true") -> bool:
-    return truthy(os.environ.get(name, default), default=truthy(default))
-
-
 def quote_url(url: str) -> str:
     return urllib.parse.quote(url, safe=":/%")
 
@@ -125,35 +121,3 @@ def discover_attempts(
         )
     return found
 
-
-def apply_config_env(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Map resolve config → env for dispatch/ingest.
-
-    S3 endpoints stay in YAML / claim_s3(cfg): resolve fills claim_* from summary_*,
-    so scripts do not re-fallback or mirror AWS_* ↔ REMOTE_AWS_*.
-    """
-    cfg = cfg if cfg is not None else load_config_json()
-    if not cfg:
-        return cfg
-
-    repo = (cfg.get("repository") or "").strip() or env_opt("GITHUB_REPOSITORY")
-    if repo:
-        os.environ["REPO"] = repo
-
-    # Host artifact tree is under the executor workflow name.
-    workflow_name = (cfg.get("workflow_name") or "").strip()
-    if workflow_name:
-        os.environ["REMOTE_WORKFLOW_NAME"] = workflow_name
-
-    analytics = (cfg.get("analytics_job_name") or "").strip()
-    if analytics:
-        os.environ["ANALYTICS_JOB_NAME"] = analytics
-    caller_wf = (cfg.get("caller_workflow") or "").strip()
-    if caller_wf:
-        os.environ["CALLER_WORKFLOW"] = caller_wf
-
-    if "fail_on_remote_failure" in cfg:
-        os.environ["FAIL_ON_REMOTE_FAILURE"] = (
-            "true" if truthy(cfg.get("fail_on_remote_failure"), True) else "false"
-        )
-    return cfg

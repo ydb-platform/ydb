@@ -23,18 +23,15 @@ _DISPATCHER_DIR = os.path.dirname(os.path.abspath(__file__))
 if _DISPATCHER_DIR not in sys.path:
     sys.path.insert(0, _DISPATCHER_DIR)
 from _common import (  # noqa: E402
-    apply_config_env,
     die,
     discover_attempts,
     env,
     env_opt,
     http_get_bytes as http_get,
+    load_config_json,
     quote_url,
     write_step_summary,
 )
-from resolve_remote_execution import format_launch_summary_md  # noqa: E402
-
-
 def run(cmd: list[str], **kwargs: Any) -> None:
     print("+", " ".join(cmd), flush=True)
     subprocess.check_call(cmd, **kwargs)
@@ -469,8 +466,7 @@ def rewrite_ci_metrics_attribution(
                 row["run_url"] = run_url
             if pr_number is not None:
                 row["pr_number"] = pr_number
-            # Drop host job id so PK keys under the caller run; keep original in labels.
-            row["github_job_id"] = 0
+            # Keep host github_job_id; original also in labels.remote_github_job_id.
             if labels:
                 row["labels"] = labels
             dst.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -613,21 +609,44 @@ def s3cmd_put(local: Path, s3_uri: str) -> None:
 
 
 def main() -> None:
-    apply_config_env()
+    cfg = load_config_json()
+    host_repo = (cfg.get("repository") or "").strip()
+    if not host_repo:
+        die("CONFIG_JSON.repository missing")
+    host_workflow = (cfg.get("workflow_name") or "").strip()
+    if not host_workflow:
+        die("CONFIG_JSON.workflow_name missing")
+    host_ep = (cfg.get("host_s3_endpoint") or "").strip()
+    host_bucket = (cfg.get("host_s3_bucket") or "").strip()
+    if not host_ep or not host_bucket:
+        die("CONFIG_JSON.host_s3_endpoint/bucket missing")
 
     run_id = env("EXECUTOR_RUN_ID")
-    run_url = env_opt("EXECUTOR_RUN_URL") or f"https://github.com/{env('REPO')}/actions/runs/{run_id}"
+    run_url = env_opt("EXECUTOR_RUN_URL") or f"https://github.com/{host_repo}/actions/runs/{run_id}"
     workspace = Path(env("WORKSPACE")).resolve()
     caller_endpoint = env("CALLER_AWS_ENDPOINT").rstrip("/")
     caller_bucket = env("CALLER_AWS_BUCKET")
     caller_repo = env("GITHUB_REPOSITORY")
-    # Prefer explicit caller workflow (reusable WF's github.workflow is "Dispatch remote…").
-    caller_workflow = env_opt("CALLER_WORKFLOW") or env("GITHUB_WORKFLOW")
+    # Prefer config (reusable WF's github.workflow is "Dispatch remote…").
+    caller_workflow = (
+        (cfg.get("caller_workflow") or "").strip()
+        or env_opt("CALLER_WORKFLOW")
+        or env("GITHUB_WORKFLOW")
+    )
     caller_run_id = env("GITHUB_RUN_ID")
+    analytics_job = (cfg.get("analytics_job_name") or "").strip()
+    if analytics_job:
+        os.environ["ANALYTICS_JOB_NAME"] = analytics_job
+
+    # Manifest URL uses host repo/workflow + host public S3.
+    os.environ["REPO"] = host_repo
+    os.environ["REMOTE_WORKFLOW_NAME"] = host_workflow
+    os.environ["REMOTE_AWS_ENDPOINT"] = host_ep.rstrip("/")
+    os.environ["REMOTE_AWS_BUCKET"] = host_bucket
 
     meta = load_manifest(run_id)
-    remote_endpoint = (meta.get("s3_endpoint") or env("REMOTE_AWS_ENDPOINT")).rstrip("/")
-    remote_bucket = meta.get("s3_bucket") or env("REMOTE_AWS_BUCKET")
+    remote_endpoint = (meta.get("s3_endpoint") or host_ep).rstrip("/")
+    remote_bucket = meta.get("s3_bucket") or host_bucket
     key_prefix = meta.get("artifact_key_prefix") or ""
     if not key_prefix:
         die("remote_artifacts.json missing artifact_key_prefix")
@@ -721,14 +740,8 @@ def main() -> None:
         footer_bits = [f"Remote executor: [{run_id}]({run_url})"]
         if executor_conclusion:
             footer_bits.append(f"`{executor_conclusion}`")
-        cfg_raw = env_opt("CONFIG_JSON")
-        launch_md = ""
-        if cfg_raw:
-            try:
-                launch_md = format_launch_summary_md(json.loads(cfg_raw))
-            except json.JSONDecodeError as e:
-                print(f"::warning::CONFIG_JSON not JSON for launch summary: {e}")
-        write_step_summary(launch_md + body + "\n---\n" + " · ".join(footer_bits) + "\n")
+        # Launch params already under <details> in resolve_remote; ingest shows enriched body.
+        write_step_summary(body + "\n---\n" + " · ".join(footer_bits) + "\n")
 
     print(f"::notice title=Remote ingest complete::{new_public}/index.html")
 

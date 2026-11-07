@@ -50,10 +50,12 @@ class ResolveSeedsTest(unittest.TestCase):
         os.environ["DEFAULT_BUILD_PRESET"] = "release-asan,relwithdebinfo"
         os.environ["REMOTE_JSON"] = "{}"
         cfg = build_config()
-        self.assertEqual(cfg["job"]["build_target"], "ydb/core/foo")
-        self.assertEqual(cfg["job"]["build_preset"], "release-asan")
+        self.assertNotIn("job", cfg)
         self.assertEqual(cfg["inputs"]["job_inputs"]["build_target"], "ydb/core/foo")
         self.assertEqual(cfg["inputs"]["job_inputs"]["build_preset"], "release-asan")
+        self.assertIn("host_s3_endpoint", cfg)
+        self.assertNotIn("claim_s3_endpoint", cfg)
+        self.assertNotIn("wait", cfg)
 
     def test_remote_json_job_keys_win_over_ui_seeds(self):
         os.environ["DEFAULT_BUILD_TARGET"] = "ydb/from-ui"
@@ -62,8 +64,9 @@ class ResolveSeedsTest(unittest.TestCase):
             {"job": {"build_target": "ydb/from-remote", "build_preset": "relwithdebinfo"}}
         )
         cfg = build_config()
-        self.assertEqual(cfg["job"]["build_target"], "ydb/from-remote")
-        self.assertEqual(cfg["job"]["build_preset"], "relwithdebinfo")
+        self.assertNotIn("job", cfg)
+        self.assertEqual(cfg["inputs"]["job_inputs"]["build_target"], "ydb/from-remote")
+        self.assertEqual(cfg["inputs"]["job_inputs"]["build_preset"], "relwithdebinfo")
 
 
 class IndexCrawlSafetyTest(unittest.TestCase):

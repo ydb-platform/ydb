@@ -23,40 +23,40 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import die, truthy  # noqa: E402
 
 
+# Intermediate job defaults (merged from REMOTE_JSON / UI seeds → inputs.job_inputs only).
+_DEFAULT_JOB: dict[str, Any] = {
+    "build_target": "ydb/tests/olap/",
+    "build_preset": "relwithdebinfo",
+    "run_tests": True,
+    "increment": False,
+    "test_size": "small,medium",
+    "test_type": "",
+    "test_threads": "64",
+    "link_threads": "2",
+    "additional_ya_make_args": "",
+    "test_retry_count": "",
+    "put_build_results_to_cache": True,
+    "collect_coredumps": False,
+}
+
 DEFAULT_REMOTE: dict[str, Any] = {
     # Host repo / workflow identity (waiter polls GH; VM dispatches this WF).
     "repository": "nebius/ydb",
     "workflow_file": "ci_remote_executor.yml",
     "workflow_name": "CI remote executor",
     "executor_ref": "nebius-ci",
-    "wait": True,
     "fail_on_remote_failure": True,
-    # Host public S3 only (claims + build outputs). Platform waiter/ingest read
-    # these; the host must never be pointed at platform/YC S3 for launch context.
-    "summary_s3_endpoint": "https://s3.us-east-1.amazonaws.com",
-    "summary_s3_bucket": "ydb-nebius-ci-public-609722444123-us-east-1",
-    "claim_s3_endpoint": "",
-    "claim_s3_bucket": "",
+    # Host public S3 only (claims + build outputs). Legacy summary_s3_*/claim_s3_*
+    # aliases are accepted in REMOTE_JSON and collapsed here.
+    "host_s3_endpoint": "https://s3.us-east-1.amazonaws.com",
+    "host_s3_bucket": "ydb-nebius-ci-public-609722444123-us-east-1",
     "analytics_job_name": "Run and debug tests",
     "caller_workflow": "",
     "runs_on": ["self-hosted", "linux", "amd64-large"],
     "code_ref": "",
     "analytics_branch": "",
     "platform_repository": "",
-    "job": {
-        "build_target": "ydb/tests/olap/",
-        "build_preset": "relwithdebinfo",
-        "run_tests": True,
-        "increment": False,
-        "test_size": "small,medium",
-        "test_type": "",
-        "test_threads": "64",
-        "link_threads": "2",
-        "additional_ya_make_args": "",
-        "test_retry_count": "",
-        "put_build_results_to_cache": True,
-        "collect_coredumps": False,
-    },
+    "job": dict(_DEFAULT_JOB),
 }
 
 
@@ -180,18 +180,37 @@ def build_config() -> dict[str, Any]:
         die("runs_on must be a JSON array of runner labels")
     runs_on_str = json.dumps(runs_on_obj, separators=(",", ":"))
 
-    cfg["wait"] = truthy(cfg.get("wait"), True)
     cfg["fail_on_remote_failure"] = truthy(cfg.get("fail_on_remote_failure"), True)
     cfg["platform_repository"] = (
         _as_str(cfg.get("platform_repository")).strip()
         or (os.environ.get("GITHUB_REPOSITORY") or "").strip()
     )
-    if not _as_str(cfg.get("claim_s3_endpoint")).strip():
-        cfg["claim_s3_endpoint"] = cfg.get("summary_s3_endpoint") or ""
-    if not _as_str(cfg.get("claim_s3_bucket")).strip():
-        cfg["claim_s3_bucket"] = cfg.get("summary_s3_bucket") or ""
+    # Collapse legacy summary_s3_* / claim_s3_* into one host_s3_* pair.
+    host_ep = (
+        _as_str(cfg.get("host_s3_endpoint")).strip()
+        or _as_str(cfg.get("claim_s3_endpoint")).strip()
+        or _as_str(cfg.get("summary_s3_endpoint")).strip()
+    )
+    host_bucket = (
+        _as_str(cfg.get("host_s3_bucket")).strip()
+        or _as_str(cfg.get("claim_s3_bucket")).strip()
+        or _as_str(cfg.get("summary_s3_bucket")).strip()
+    )
+    if not host_ep or not host_bucket:
+        die("host_s3_endpoint/bucket missing (or legacy summary_s3_*/claim_s3_*)")
+    cfg["host_s3_endpoint"] = host_ep
+    cfg["host_s3_bucket"] = host_bucket
+    for dead in (
+        "summary_s3_endpoint",
+        "summary_s3_bucket",
+        "claim_s3_endpoint",
+        "claim_s3_bucket",
+        "wait",
+    ):
+        cfg.pop(dead, None)
 
     # Attempt identity so platform re-runs do not attach to a previous claim.
+    # build_ticket overwrites from live PLATFORM_RUN_ATTEMPT env on enqueue.
     platform_run_attempt = (
         (os.environ.get("PLATFORM_RUN_ATTEMPT") or "").strip()
         or (os.environ.get("GITHUB_RUN_ATTEMPT") or "").strip()
@@ -208,6 +227,8 @@ def build_config() -> dict[str, Any]:
         "job_inputs": job_inputs,
         "runs_on": runs_on_str,
     }
+    # Drop intermediate job object — consumers use inputs.job_inputs only.
+    cfg.pop("job", None)
     return cfg
 
 
@@ -228,8 +249,6 @@ def format_launch_summary_md(cfg: dict[str, Any]) -> str:
     """Full resolved launch params for job summary (no selective omit)."""
     inputs = cfg.get("inputs") if isinstance(cfg.get("inputs"), dict) else {}
     job = inputs.get("job_inputs") if isinstance(inputs.get("job_inputs"), dict) else {}
-    if not job and isinstance(cfg.get("job"), dict):
-        job = cfg["job"]
 
     lines = [
         "<details>",
@@ -249,12 +268,9 @@ def format_launch_summary_md(cfg: dict[str, Any]) -> str:
         "caller_workflow",
         "platform_repository",
         "runs_on",
-        "wait",
         "fail_on_remote_failure",
-        "summary_s3_endpoint",
-        "summary_s3_bucket",
-        "claim_s3_endpoint",
-        "claim_s3_bucket",
+        "host_s3_endpoint",
+        "host_s3_bucket",
     )
     for key in top_keys:
         if key == "code_ref":
@@ -270,8 +286,8 @@ def format_launch_summary_md(cfg: dict[str, Any]) -> str:
             lines.append(f"| inputs.{key} | {_fmt_md_value(inputs.get(key))} |")
 
     lines.extend(["", "### job_inputs", "", "| key | value |", "| --- | --- |"])
-    # Stable order: DEFAULT_REMOTE.job keys first, then any extras.
-    ordered = list(DEFAULT_REMOTE.get("job", {}).keys())
+    # Stable order: default job keys first, then any extras.
+    ordered = list(_DEFAULT_JOB.keys())
     for key in job:
         if key not in ordered:
             ordered.append(key)
@@ -295,7 +311,6 @@ def main() -> int:
             f.write("config<<EOF\n")
             f.write(text)
             f.write("\nEOF\n")
-            f.write(f"wait={str(cfg['wait']).lower()}\n")
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as f:

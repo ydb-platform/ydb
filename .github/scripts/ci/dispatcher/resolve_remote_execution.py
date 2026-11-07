@@ -37,13 +37,12 @@ def _reject_unknown(keys: set[str], allowed: set[str], where: str) -> None:
 
 def _check_types(values: dict[str, Any], defaults: dict[str, Any], where: str) -> None:
     for key, default in defaults.items():
-        if isinstance(default, (bool, list)):
-            v = values[key]
-            if type(v) is not type(default):
-                die(
-                    f"{where}.{key} must be {type(default).__name__}, "
-                    f"got {type(v).__name__}: {v!r}"
-                )
+        v = values[key]
+        if type(v) is not type(default):
+            die(
+                f"{where}.{key} must be {type(default).__name__}, "
+                f"got {type(v).__name__}: {v!r}"
+            )
 
 
 _DEFAULT_JOB: dict[str, Any] = {
@@ -79,12 +78,11 @@ DEFAULT_REMOTE: dict[str, Any] = {
 }
 
 
-def _as_str(v: Any) -> str:
-    if v is None:
-        return ""
+def _job_input_str(v: Any) -> str:
+    """workflow_dispatch inputs are strings; bools become true/false."""
     if isinstance(v, bool):
         return "true" if v else "false"
-    return str(v)
+    return v
 
 
 def parse_remote_json(raw: str) -> dict[str, Any]:
@@ -126,26 +124,26 @@ def build_config() -> dict[str, Any]:
             job["build_preset"] = seed
 
     # Prefer REMOTE_JSON.code_ref so callers can pin a SHA while CODE_REF is github.sha.
-    code_ref = _as_str(remote.get("code_ref")).strip() or (os.environ.get("CODE_REF") or "").strip()
+    code_ref = cfg["code_ref"].strip() or (os.environ.get("CODE_REF") or "").strip()
     if not code_ref:
         die("code_ref is empty (pass remote.code_ref or CODE_REF)")
     cfg["code_ref"] = code_ref
 
-    analytics = _as_str(cfg.get("analytics_branch")).strip()
+    analytics = cfg["analytics_branch"].strip()
     if not analytics:
         analytics = (
             "main" if re.fullmatch(r"[0-9a-fA-F]{7,40}", code_ref) else code_ref
         )
     cfg["analytics_branch"] = analytics
 
-    preset = _as_str(job["build_preset"]).split(",")[0].strip()
+    preset = job["build_preset"].split(",")[0].strip()
     if not preset:
         die("build_preset is empty")
     fetch_depth = "0" if job["increment"] else "2"
 
     cfg["analytics_job_name"] = cfg_str(cfg, "analytics_job_name")
     cfg["caller_workflow"] = (
-        _as_str(cfg.get("caller_workflow")).strip()
+        cfg["caller_workflow"].strip()
         or (os.environ.get("GITHUB_WORKFLOW") or "").strip()
     )
     if not cfg["caller_workflow"]:
@@ -153,7 +151,7 @@ def build_config() -> dict[str, Any]:
 
     pull_number = (os.environ.get("PULL_NUMBER") or "").strip()
 
-    job_inputs = {k: _as_str(job[k]) for k in _DEFAULT_JOB}
+    job_inputs = {k: _job_input_str(job[k]) for k in _DEFAULT_JOB}
     job_inputs["build_preset"] = preset
     job_inputs["fetch_depth"] = fetch_depth
     job_inputs["custom_branch_name"] = analytics

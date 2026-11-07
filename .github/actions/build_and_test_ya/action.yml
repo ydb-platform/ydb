@@ -191,10 +191,9 @@ runs:
           ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
         fi
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
-        # PR comments only for PRs in *this* repository (never inputs.pull_number —
-        # remote host would otherwise comment on nebius/ydb with a platform PR #).
+        # PR_NUMBER drives PR comments: only this repo's own event number.
         echo "PR_NUMBER=${{ github.event.number }}" >> "$GITHUB_ENV"
-        # Analytics / generate-summary history may still use the caller's PR number.
+        # Analytics / generate-summary may use the caller's PR number.
         echo "ANALYTICS_PULL_NUMBER=${{ inputs.pull_number || github.event.number }}" >> "$GITHUB_ENV"
         if [ -n "$SOURCE_EVENT_NAME" ]; then
           echo "SOURCE_EVENT_NAME=$SOURCE_EVENT_NAME" >> "$GITHUB_ENV"
@@ -261,7 +260,6 @@ runs:
         . .github/scripts/utils/analytics/github_actions/analytics.sh
         analytics start init
 
-        # Host (Nebius) sets PIP_BREAK_SYSTEM_PACKAGES=1 for PEP 668; local runners ignore it.
         python3 -m pip install ydb 'ydb[yc]' codeowners humanize plotly pyyaml
         analytics end init --conclusion success
         if [ "${GH_PROXY_MEASURED:-}" = 1 ]; then
@@ -452,8 +450,7 @@ runs:
           TEST_RETRY_COUNT=3
         fi
 
-        # Same as main's params+=(${{ inputs.additional_ya_make_args }}): GHA used to
-        # expand into the script so bash did quote-aware word split. Keep that via eval.
+        # eval: quote-aware word split of user-supplied args.
         if [ -n "$INPUT_ADDITIONAL_YA_MAKE_ARGS" ]; then
           eval "params+=($INPUT_ADDITIONAL_YA_MAKE_ARGS)"
         fi
@@ -715,7 +712,6 @@ runs:
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || POSTPROCESS_RC=$?
 
-          # GH_ALERTS_TG_* come from step env (same values main inlined via ${{ }}).
           .github/scripts/report_ram_analyzer.py \
             --report-file "$CURRENT_REPORT" \
             --output-file "$CURRENT_PUBLIC_DIR/ram_report.html" \
@@ -758,7 +754,6 @@ runs:
             printf '%s\n' "$BUILD_FAIL_MSG" > "$CURRENT_PUBLIC_DIR/build_failed.md"
             echo red > summary_color.txt
             cp -f summary_text.txt "$PUBLIC_DIR/summary_text.txt"
-            cp -f summary_text.txt "$CURRENT_PUBLIC_DIR/summary_text.txt"
             analytics enrich "$YA_MAKE_NAME" \
               --label "error=ya make rc=${RC}" \
               --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
@@ -855,9 +850,7 @@ runs:
               mv summary_text.txt.tmp summary_text.txt
               echo red > summary_color.txt
             fi
-            # Durable copy for S3 / remote host publish step (step summary is links-only).
             cp -f summary_text.txt "$PUBLIC_DIR/summary_text.txt"
-            cp -f summary_text.txt "$CURRENT_PUBLIC_DIR/summary_text.txt"
           fi
 
           analytics start s3_sync_try
@@ -1015,9 +1008,8 @@ runs:
           .github/scripts/tests/fail-checker.py "$LAST_BUILD_RESULTS_REPORT"
         fi
 
-    # Close in-job analytics before the final S3 sync so that when YDB QA is off
-    # (ANALYTICS_FILE under PUBLIC_DIR) ci_metrics.jsonl is included in the sync —
-    # no separate post-sync republish.
+    # Close in-job analytics before the final S3 sync so ci_metrics.jsonl under
+    # PUBLIC_DIR (YDB QA off) is included in the sync.
     - name: Flush analytics JSONL
       if: always() && steps.prepare_s3cmd.outcome == 'success'
       continue-on-error: true
@@ -1044,12 +1036,7 @@ runs:
         echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
         LINKS_LINE=$(cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))')
         # Step summary: links only (generate-summary already appended the table when present).
-        # Remote host publishes job_summary.md + remote_artifacts.json at run root in its WF.
         echo "$LINKS_LINE" >> "$GITHUB_STEP_SUMMARY"
-        # Keep summary_text under PUBLIC_DIR for the host publish step / local debugging.
-        if [ -f summary_text.txt ] && [ ! -f "$PUBLIC_DIR/summary_text.txt" ]; then
-          cp -f summary_text.txt "$PUBLIC_DIR/summary_text.txt"
-        fi
         s3cmd sync --follow-symlinks ${S3_PUBLIC_ACL_FLAG} --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
         echo "::endgroup::"
 

@@ -29,21 +29,19 @@ from _common import (  # noqa: E402
     truthy,
 )
 
-TICKET_ARTIFACT_NAME = "remote-ticket"
 TICKET_FILENAME = "remote-ticket.json"
 
 
 def host_s3(cfg: dict[str, Any]) -> tuple[str, str]:
-    """Host public S3 for claims — resolve emits a single host_s3_* pair."""
     ep = (cfg.get("host_s3_endpoint") or "").strip()
     bucket = (cfg.get("host_s3_bucket") or "").strip()
     if not ep or not bucket:
-        die("host_s3_endpoint/bucket missing (remote host public S3)")
+        die("host_s3_endpoint/bucket missing")
     return ep.rstrip("/"), bucket
 
 
 def repo_from_cfg(cfg: dict[str, Any]) -> str:
-    repo = (cfg.get("repository") or "").strip() or env_opt("REPO")
+    repo = (cfg.get("repository") or "").strip()
     if not repo:
         die("config.repository missing")
     return repo
@@ -107,9 +105,8 @@ def utc_now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def platform_run_attempt():
-    """Live github.run_attempt — env wins so re-runs ignore stale resolve output."""
-    return env_opt("PLATFORM_RUN_ATTEMPT") or env_opt("GITHUB_RUN_ATTEMPT") or "1"
+def platform_run_attempt() -> str:
+    return env("PLATFORM_RUN_ATTEMPT")
 
 
 def read_claim(cfg, platform_run_id: str) -> dict | None:
@@ -122,14 +119,13 @@ def read_claim(cfg, platform_run_id: str) -> dict | None:
 
 
 def build_ticket(cfg):
-    """Ticket payload for the host VM: prefer config.inputs as the sole dispatch source."""
+    """Ticket for the host VM: dispatch uses config.inputs only."""
     run_id = env("PLATFORM_RUN_ID")
     attempt = platform_run_attempt()
-    repo = env_opt("PLATFORM_REPOSITORY") or env_opt("GITHUB_REPOSITORY")
-    workflow = env_opt("PLATFORM_WORKFLOW") or env_opt("GITHUB_WORKFLOW") or "unknown"
-    run_url = env_opt("PLATFORM_RUN_URL") or f"https://github.com/{repo}/actions/runs/{run_id}"
-    inputs = cfg.get("inputs") if isinstance(cfg.get("inputs"), dict) else {}
-    inputs = dict(inputs)
+    repo = env("PLATFORM_REPOSITORY")
+    workflow = env("PLATFORM_WORKFLOW")
+    run_url = env("PLATFORM_RUN_URL")
+    inputs = dict(cfg.get("inputs") if isinstance(cfg.get("inputs"), dict) else {})
     inputs["platform_run_id"] = run_id
     inputs["platform_run_attempt"] = attempt
     inputs["platform_repository"] = repo
@@ -138,7 +134,7 @@ def build_ticket(cfg):
     return {
         "version": 1,
         "kind": "remote-ticket",
-        # Top-level ids kept for humans/logs; VM must dispatch from config.inputs.
+        # Top-level ids for humans/logs; VM must dispatch from config.inputs.
         "platform_run_id": run_id,
         "platform_run_attempt": attempt,
         "platform_repository": repo,
@@ -152,17 +148,10 @@ def build_ticket(cfg):
 def cmd_enqueue():
     cfg = load_config_json()
     ticket = build_ticket(cfg)
-    run_id = ticket["platform_run_id"]
-    path = Path(env_opt("TICKET_PATH") or TICKET_FILENAME)
+    path = Path(TICKET_FILENAME)
     path.write_text(json.dumps(ticket, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote {path} ({path.stat().st_size} bytes)")
-
-    set_outputs(
-        platform_run_id=run_id,
-        ticket_path=str(path),
-        ticket_artifact=TICKET_ARTIFACT_NAME,
-    )
-    print(f"::notice title=Remote ticket artifact ready::{TICKET_ARTIFACT_NAME} on run {run_id}")
+    print(f"::notice title=Remote ticket artifact ready::{TICKET_FILENAME} on run {ticket['platform_run_id']}")
 
 
 def wait_for_claim(cfg):
@@ -202,7 +191,6 @@ def wait_executor_done(cfg, run_id, run_url):
     print(f"Waiting for executor run {run_id} ({run_url}) ...")
     status = conclusion = ""
     for _ in range(2400):
-        # Long poll: tolerate transient 5xx (default retries=5).
         _, state = gh("GET", f"{api(repo)}/actions/runs/{run_id}", retries=5)
         status = state.get("status") or ""
         conclusion = state.get("conclusion") or ""
@@ -221,7 +209,7 @@ def wait_executor_done(cfg, run_id, run_url):
 
     if conclusion == "success":
         return
-    # Defence-in-depth: VM webhook redelivery can cancel+relaunch; follow a moved claim.
+    # Defence-in-depth if the VM cancels+relaunches on webhook redelivery.
     if conclusion == "cancelled":
         want_attempt = platform_run_attempt()
         for _ in range(40):

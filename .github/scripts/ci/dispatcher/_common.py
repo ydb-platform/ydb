@@ -17,8 +17,8 @@ def die(msg: str) -> None:
     sys.exit(1)
 
 
-def env(name: str, default: str | None = None) -> str:
-    v = os.environ.get(name, default)
+def env(name: str) -> str:
+    v = os.environ.get(name)
     if v is None or v == "":
         die(f"missing env {name}")
     return v
@@ -79,10 +79,10 @@ def set_outputs(**kwargs: Any) -> None:
             f.write(f"{k}={v}\n")
 
 
-def load_config_json(raw: str | None = None) -> dict[str, Any]:
-    text = (raw if raw is not None else os.environ.get("CONFIG_JSON", "")).strip()
+def load_config_json() -> dict[str, Any]:
+    text = (os.environ.get("CONFIG_JSON") or "").strip()
     if not text:
-        return {}
+        die("CONFIG_JSON empty")
     try:
         cfg = json.loads(text)
     except json.JSONDecodeError as e:

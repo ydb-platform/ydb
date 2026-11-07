@@ -7,7 +7,7 @@ emits one opaque config for dispatch_remote.yml (artifact → wait claim → ing
 Env:
   REMOTE_JSON — optional caller override (object or empty)
   CODE_REF / GITHUB_SHA, GITHUB_WORKFLOW, GITHUB_EVENT_NAME, GITHUB_RUN_ID,
-  PULL_NUMBER, ANALYTICS_JOB_NAME (optional top-level overrides)
+  PULL_NUMBER
   GITHUB_OUTPUT — write `config<<EOF...`
 """
 from __future__ import annotations
@@ -23,7 +23,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import die, truthy  # noqa: E402
 
 
-# Intermediate job defaults (merged from REMOTE_JSON / UI seeds → inputs.job_inputs only).
 _DEFAULT_JOB: dict[str, Any] = {
     "build_target": "ydb/tests/olap/",
     "build_preset": "relwithdebinfo",
@@ -46,8 +45,7 @@ DEFAULT_REMOTE: dict[str, Any] = {
     "workflow_name": "CI remote executor",
     "executor_ref": "nebius-ci",
     "fail_on_remote_failure": True,
-    # Host public S3 only (claims + build outputs). Legacy summary_s3_*/claim_s3_*
-    # aliases are accepted in REMOTE_JSON and collapsed here.
+    # Host public S3 (claims + build outputs). Platform never points host at YC S3.
     "host_s3_endpoint": "https://s3.us-east-1.amazonaws.com",
     "host_s3_bucket": "ydb-nebius-ci-public-609722444123-us-east-1",
     "analytics_job_name": "Run and debug tests",
@@ -56,7 +54,6 @@ DEFAULT_REMOTE: dict[str, Any] = {
     "code_ref": "",
     "analytics_branch": "",
     "platform_repository": "",
-    "job": dict(_DEFAULT_JOB),
 }
 
 
@@ -95,10 +92,9 @@ def build_config() -> dict[str, Any]:
     remote = parse_remote_json(os.environ.get("REMOTE_JSON", ""))
     cfg = deep_merge(DEFAULT_REMOTE, remote)
 
-    # UI seeds (test_targets / build_preset) override DEFAULT_REMOTE defaults when
-    # remote JSON omitted those job keys — not when the key is already present.
-    job = dict(cfg.get("job") if isinstance(cfg.get("job"), dict) else {})
     remote_job = remote.get("job") if isinstance(remote.get("job"), dict) else {}
+    job = deep_merge(_DEFAULT_JOB, remote_job)
+    # UI seeds override defaults when remote JSON omitted those job keys.
     if "build_target" not in remote_job:
         seed = (os.environ.get("DEFAULT_BUILD_TARGET") or "").strip()
         if seed:
@@ -107,7 +103,6 @@ def build_config() -> dict[str, Any]:
         seed = (os.environ.get("DEFAULT_BUILD_PRESET") or "").split(",")[0].strip()
         if seed:
             job["build_preset"] = seed
-    cfg["job"] = job
 
     code_ref = (os.environ.get("CODE_REF") or "").strip() or _as_str(cfg.get("code_ref")).strip()
     if not code_ref:
@@ -123,45 +118,36 @@ def build_config() -> dict[str, Any]:
         )
     cfg["analytics_branch"] = analytics
 
-    job = cfg.get("job") if isinstance(cfg.get("job"), dict) else {}
-    preset = _as_str(job.get("build_preset"), "relwithdebinfo").split(",")[0].strip() or "relwithdebinfo"
-    increment = _as_str(job.get("increment"), "false")
+    preset = _as_str(job["build_preset"]).split(",")[0].strip() or "relwithdebinfo"
+    increment = _as_str(job["increment"])
     fetch_depth = 0 if truthy(increment) else 2
 
-    analytics_job = (
-        (os.environ.get("ANALYTICS_JOB_NAME") or "").strip()
-        or _as_str(cfg.get("analytics_job_name")).strip()
-        or "Run and debug tests"
-    )
-    cfg["analytics_job_name"] = analytics_job
+    cfg["analytics_job_name"] = _as_str(cfg.get("analytics_job_name")).strip() or "Run and debug tests"
     cfg["caller_workflow"] = (
-        (os.environ.get("CALLER_WORKFLOW") or "").strip()
-        or _as_str(cfg.get("caller_workflow")).strip()
+        _as_str(cfg.get("caller_workflow")).strip()
         or (os.environ.get("GITHUB_WORKFLOW") or "").strip()
     )
 
-    source_event = (os.environ.get("SOURCE_EVENT_NAME") or "").strip() or "workflow_dispatch"
-    source_run = (os.environ.get("SOURCE_RUN_ID") or "").strip() or (
-        os.environ.get("GITHUB_RUN_ID") or ""
-    )
+    source_event = (os.environ.get("GITHUB_EVENT_NAME") or "").strip() or "workflow_dispatch"
+    source_run = (os.environ.get("GITHUB_RUN_ID") or "").strip()
     pull_number = (os.environ.get("PULL_NUMBER") or "").strip()
 
     job_inputs = {
-        "build_target": _as_str(job.get("build_target"), "ydb/"),
+        "build_target": _as_str(job["build_target"]),
         "build_preset": preset,
-        "run_tests": _as_str(job.get("run_tests"), "true"),
+        "run_tests": _as_str(job["run_tests"]),
         "increment": increment,
         "fetch_depth": fetch_depth,
-        "test_size": _as_str(job.get("test_size"), "small,medium"),
-        "test_type": _as_str(job.get("test_type")),
-        "test_threads": _as_str(job.get("test_threads"), "64"),
-        "link_threads": _as_str(job.get("link_threads"), "2"),
-        "additional_ya_make_args": _as_str(job.get("additional_ya_make_args")),
-        "test_retry_count": _as_str(job.get("test_retry_count")),
-        "put_build_results_to_cache": _as_str(job.get("put_build_results_to_cache"), "true"),
-        "collect_coredumps": _as_str(job.get("collect_coredumps"), "false"),
+        "test_size": _as_str(job["test_size"]),
+        "test_type": _as_str(job["test_type"]),
+        "test_threads": _as_str(job["test_threads"]),
+        "link_threads": _as_str(job["link_threads"]),
+        "additional_ya_make_args": _as_str(job["additional_ya_make_args"]),
+        "test_retry_count": _as_str(job["test_retry_count"]),
+        "put_build_results_to_cache": _as_str(job["put_build_results_to_cache"]),
+        "collect_coredumps": _as_str(job["collect_coredumps"]),
         "custom_branch_name": analytics,
-        "analytics_job_name": analytics_job,
+        "analytics_job_name": cfg["analytics_job_name"],
         "source_event_name": source_event,
         "source_run_id": source_run,
         "pull_number": pull_number,
@@ -185,50 +171,21 @@ def build_config() -> dict[str, Any]:
         _as_str(cfg.get("platform_repository")).strip()
         or (os.environ.get("GITHUB_REPOSITORY") or "").strip()
     )
-    # Collapse legacy summary_s3_* / claim_s3_* into one host_s3_* pair.
-    host_ep = (
-        _as_str(cfg.get("host_s3_endpoint")).strip()
-        or _as_str(cfg.get("claim_s3_endpoint")).strip()
-        or _as_str(cfg.get("summary_s3_endpoint")).strip()
-    )
-    host_bucket = (
-        _as_str(cfg.get("host_s3_bucket")).strip()
-        or _as_str(cfg.get("claim_s3_bucket")).strip()
-        or _as_str(cfg.get("summary_s3_bucket")).strip()
-    )
+
+    host_ep = _as_str(cfg.get("host_s3_endpoint")).strip()
+    host_bucket = _as_str(cfg.get("host_s3_bucket")).strip()
     if not host_ep or not host_bucket:
-        die("host_s3_endpoint/bucket missing (or legacy summary_s3_*/claim_s3_*)")
+        die("host_s3_endpoint/bucket missing")
     cfg["host_s3_endpoint"] = host_ep
     cfg["host_s3_bucket"] = host_bucket
-    for dead in (
-        "summary_s3_endpoint",
-        "summary_s3_bucket",
-        "claim_s3_endpoint",
-        "claim_s3_bucket",
-        "wait",
-    ):
-        cfg.pop(dead, None)
 
-    # Attempt identity so platform re-runs do not attach to a previous claim.
-    # build_ticket overwrites from live PLATFORM_RUN_ATTEMPT env on enqueue.
-    platform_run_attempt = (
-        (os.environ.get("PLATFORM_RUN_ATTEMPT") or "").strip()
-        or (os.environ.get("GITHUB_RUN_ATTEMPT") or "").strip()
-        or "1"
-    )
-
-    # Only these fields are passed to the host executor (from Actions artifact
-    # via VM). Host launch context is never taken from platform S3.
+    # Host executor receives only config.inputs (VM → workflow_dispatch).
+    # Enqueue stamps live platform_run_id/attempt/repository into inputs.
     cfg["inputs"] = {
-        "platform_run_id": source_run,
-        "platform_run_attempt": platform_run_attempt,
-        "platform_repository": cfg["platform_repository"],
         "code_ref": code_ref,
         "job_inputs": job_inputs,
         "runs_on": runs_on_str,
     }
-    # Drop intermediate job object — consumers use inputs.job_inputs only.
-    cfg.pop("job", None)
     return cfg
 
 
@@ -286,14 +243,19 @@ def format_launch_summary_md(cfg: dict[str, Any]) -> str:
             lines.append(f"| inputs.{key} | {_fmt_md_value(inputs.get(key))} |")
 
     lines.extend(["", "### job_inputs", "", "| key | value |", "| --- | --- |"])
-    # Stable order: default job keys first, then any extras.
     ordered = list(_DEFAULT_JOB.keys())
     for key in job:
         if key not in ordered:
             ordered.append(key)
-    # Always include derived fields that live only on job_inputs.
-    for key in ("fetch_depth", "custom_branch_name", "source_event_name", "source_run_id",
-                "pull_number", "enable_ydb_qa", "analytics_job_name"):
+    for key in (
+        "fetch_depth",
+        "custom_branch_name",
+        "source_event_name",
+        "source_run_id",
+        "pull_number",
+        "enable_ydb_qa",
+        "analytics_job_name",
+    ):
         if key not in ordered:
             ordered.append(key)
     for key in ordered:

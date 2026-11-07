@@ -24,9 +24,6 @@ jobs:
   enqueue:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    outputs:
-      platform_run_id: ${{ steps.ticket.outputs.platform_run_id }}
-      ticket_artifact: ${{ steps.ticket.outputs.ticket_artifact }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -38,13 +35,11 @@ jobs:
         id: ticket
         env:
           CONFIG_JSON: ${{ inputs.config }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
           PLATFORM_RUN_ID: ${{ github.run_id }}
           PLATFORM_RUN_ATTEMPT: ${{ github.run_attempt }}
           PLATFORM_REPOSITORY: ${{ github.repository }}
           PLATFORM_WORKFLOW: ${{ github.workflow }}
           PLATFORM_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          TICKET_PATH: remote-ticket.json
         run: python3 .github/scripts/ci/dispatcher/dispatch_remote_executor.py enqueue
 
       - name: Upload remote-ticket artifact
@@ -58,7 +53,6 @@ jobs:
   wait:
     needs: enqueue
     runs-on: [self-hosted, runner-waiter]
-    # Self-hosted; allow ~24h jobs (22h runs + margin). Host WF must match.
     timeout-minutes: 1440
     outputs:
       executor_run_id: ${{ steps.wait.outputs.executor_run_id }}
@@ -102,7 +96,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          # Whole .github tree: generate-summary needs TESTOWNERS (+ scripts/actions).
           sparse-checkout: .github
 
       - uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
@@ -114,7 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq s3cmd awscli
+          sudo apt-get install -y -qq s3cmd
           python3 -m pip install --user ydb 'ydb[yc]' codeowners jinja2 pyyaml
 
       - uses: ./.github/actions/s3cmd
@@ -123,19 +116,15 @@ jobs:
           s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
           s3_bucket: ${{ vars.AWS_BUCKET }}
           s3_endpoint: ${{ vars.AWS_ENDPOINT }}
-          build_preset: ${{ fromJSON(inputs.config).inputs.job_inputs.build_preset || 'relwithdebinfo' }}
+          build_preset: ${{ fromJSON(inputs.config).inputs.job_inputs.build_preset }}
 
       - name: Ingest remote artifacts
         env:
           CONFIG_JSON: ${{ inputs.config }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
           CALLER_AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
           CALLER_AWS_BUCKET: ${{ vars.AWS_BUCKET }}
           EXECUTOR_RUN_ID: ${{ needs.wait.outputs.executor_run_id }}
           EXECUTOR_RUN_URL: ${{ needs.wait.outputs.executor_run_url }}
           EXECUTOR_CONCLUSION: ${{ needs.wait.outputs.executor_conclusion }}
-          SOURCE_EVENT_NAME: ${{ github.event_name }}
-          SOURCE_RUN_ID: ${{ github.run_id }}
-          PULL_NUMBER: ${{ github.event.pull_request.number || github.event.number || '' }}
           WORKSPACE: ${{ github.workspace }}
         run: python3 .github/scripts/ci/dispatcher/ingest_remote_executor_results.py

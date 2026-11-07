@@ -2,7 +2,7 @@
 """Write remote_artifacts.json for caller-side post-wait ingest.
 
 Reads S3_BUCKET_PATH / PUBLIC_DIR_URL (and optional analytics env) and writes a
-small locator next to job_summary.md at the S3 run root. Discovers try_*/attempts
+locator next to job_summary.md at the S3 run root. Discovers try_*/attempts
 from PUBLIC_DIR when present.
 """
 from __future__ import annotations
@@ -18,9 +18,7 @@ from _common import discover_attempts, truthy  # noqa: E402
 
 
 def main() -> int:
-    out = os.environ.get("REMOTE_ARTIFACTS_JSON") or (
-        sys.argv[1] if len(sys.argv) > 1 else ""
-    )
+    out = os.environ.get("REMOTE_ARTIFACTS_JSON") or ""
     if not out:
         print("usage: REMOTE_ARTIFACTS_JSON=path write_remote_artifacts_manifest.py", file=sys.stderr)
         return 2
@@ -34,8 +32,8 @@ def main() -> int:
     run_root_key = key_prefix.rsplit("/", 1)[0]
     public_dir_url = os.environ["PUBLIC_DIR_URL"].rstrip("/")
     run_root_url = public_dir_url.rsplit("/", 1)[0]
-    endpoint = os.environ.get("AWS_ENDPOINT") or os.environ.get("S3_ENDPOINT") or ""
-    if not endpoint and public_dir_url.startswith("http"):
+    endpoint = ""
+    if public_dir_url.startswith("http"):
         parts = public_dir_url.split("/")
         if len(parts) >= 3:
             endpoint = "/".join(parts[:3])
@@ -60,7 +58,6 @@ def main() -> int:
         "source_event_name": os.environ.get("SOURCE_EVENT_NAME")
         or os.environ.get("GITHUB_EVENT_NAME", ""),
         "source_run_id": os.environ.get("SOURCE_RUN_ID") or os.environ.get("GITHUB_RUN_ID", ""),
-        "pull_number": os.environ.get("PR_NUMBER", ""),
         "executor_run_id": os.environ.get("GITHUB_RUN_ID", ""),
         "executor_workflow": os.environ.get("GITHUB_WORKFLOW", ""),
         "ci_metrics_relpath": "ci_metrics.jsonl" if disabled else "",

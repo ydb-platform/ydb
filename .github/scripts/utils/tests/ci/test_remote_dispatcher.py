@@ -28,12 +28,15 @@ class ResolveSeedsTest(unittest.TestCase):
                 "DEFAULT_BUILD_PRESET",
                 "CODE_REF",
                 "GITHUB_SHA",
-                "SOURCE_RUN_ID",
                 "GITHUB_RUN_ID",
+                "GITHUB_EVENT_NAME",
+                "GITHUB_WORKFLOW",
             )
         }
         os.environ["CODE_REF"] = "abcdef1"
-        os.environ["SOURCE_RUN_ID"] = "1"
+        os.environ["GITHUB_RUN_ID"] = "1"
+        os.environ["GITHUB_EVENT_NAME"] = "workflow_dispatch"
+        os.environ["GITHUB_WORKFLOW"] = "Run and debug tests"
         os.environ.pop("REMOTE_JSON", None)
         os.environ.pop("DEFAULT_BUILD_TARGET", None)
         os.environ.pop("DEFAULT_BUILD_PRESET", None)
@@ -50,12 +53,10 @@ class ResolveSeedsTest(unittest.TestCase):
         os.environ["DEFAULT_BUILD_PRESET"] = "release-asan,relwithdebinfo"
         os.environ["REMOTE_JSON"] = "{}"
         cfg = build_config()
-        self.assertNotIn("job", cfg)
         self.assertEqual(cfg["inputs"]["job_inputs"]["build_target"], "ydb/core/foo")
         self.assertEqual(cfg["inputs"]["job_inputs"]["build_preset"], "release-asan")
-        self.assertIn("host_s3_endpoint", cfg)
-        self.assertNotIn("claim_s3_endpoint", cfg)
-        self.assertNotIn("wait", cfg)
+        self.assertEqual(cfg["host_s3_endpoint"], "https://s3.us-east-1.amazonaws.com")
+        self.assertNotIn("platform_run_id", cfg["inputs"])
 
     def test_remote_json_job_keys_win_over_ui_seeds(self):
         os.environ["DEFAULT_BUILD_TARGET"] = "ydb/from-ui"
@@ -64,7 +65,6 @@ class ResolveSeedsTest(unittest.TestCase):
             {"job": {"build_target": "ydb/from-remote", "build_preset": "relwithdebinfo"}}
         )
         cfg = build_config()
-        self.assertNotIn("job", cfg)
         self.assertEqual(cfg["inputs"]["job_inputs"]["build_target"], "ydb/from-remote")
         self.assertEqual(cfg["inputs"]["job_inputs"]["build_preset"], "relwithdebinfo")
 

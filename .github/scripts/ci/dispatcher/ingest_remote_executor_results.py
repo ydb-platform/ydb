@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Post-wait ingest: remote-repo artifacts → caller S3 + YDB QA + enriched summary.
 
-Env (from dispatch_remote.yml ingest): EXECUTOR_RUN_ID, EXECUTOR_RUN_URL,
-REMOTE_AWS_ENDPOINT/BUCKET, REMOTE_WORKFLOW_NAME, CALLER_AWS_ENDPOINT/BUCKET,
-optional SOURCE_EVENT_NAME/SOURCE_RUN_ID/PULL_NUMBER/ANALYTICS_JOB_NAME,
-GITHUB_REPOSITORY/WORKFLOW/RUN_ID/STEP_SUMMARY, WORKSPACE.
+Env (from dispatch_remote.yml ingest): CONFIG_JSON (resolve output),
+EXECUTOR_RUN_ID / EXECUTOR_RUN_URL / EXECUTOR_CONCLUSION,
+CALLER_AWS_ENDPOINT / CALLER_AWS_BUCKET, GITHUB_REPOSITORY / GITHUB_RUN_ID,
+WORKSPACE, GITHUB_STEP_SUMMARY.
 """
 from __future__ import annotations
 
@@ -27,30 +27,32 @@ from _common import (  # noqa: E402
     discover_attempts,
     env,
     env_opt,
-    http_get_bytes as http_get,
+    http_get_bytes,
     load_config_json,
     quote_url,
     write_step_summary,
 )
+
+
 def run(cmd: list[str], **kwargs: Any) -> None:
     print("+", " ".join(cmd), flush=True)
     subprocess.check_call(cmd, **kwargs)
 
 
-def remote_artifacts_url(run_id: str) -> str:
-    base = (
-        f"{env('REMOTE_AWS_ENDPOINT').rstrip('/')}/{env('REMOTE_AWS_BUCKET')}/"
-        f"{env('REPO')}/{env('REMOTE_WORKFLOW_NAME')}/{run_id}/remote_artifacts.json"
+def load_manifest(
+    endpoint: str,
+    bucket: str,
+    host_repo: str,
+    host_workflow: str,
+    run_id: str,
+) -> dict[str, Any]:
+    url = quote_url(
+        f"{endpoint.rstrip('/')}/{bucket}/{host_repo}/{host_workflow}/{run_id}/remote_artifacts.json"
     )
-    return quote_url(base)
-
-
-def load_manifest(run_id: str) -> dict[str, Any]:
-    url = remote_artifacts_url(run_id)
     print(f"Fetching remote_artifacts.json from {url}")
     raw = None
     for _ in range(20):
-        raw = http_get(url)
+        raw = http_get_bytes(url)
         if raw:
             break
         time.sleep(3)
@@ -139,7 +141,7 @@ def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest:
 
         index_key = _posix_join(root_key, rel_dir, "index.html")
         index_url = _object_url(endpoint, bucket, index_key)
-        raw = http_get(index_url)
+        raw = http_get_bytes(index_url)
         if raw is None:
             if rel_dir == "":
                 die(f"missing index.html at {index_url}")
@@ -183,7 +185,7 @@ def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest:
                 continue
             file_key = _posix_join(root_key, child_rel)
             file_url = _object_url(endpoint, bucket, file_key)
-            data = http_get(file_url)
+            data = http_get_bytes(file_url)
             if data is None:
                 print(f"::warning::failed to download {file_url}")
                 n_fail += 1
@@ -229,11 +231,7 @@ def rewrite_url_prefix(root: Path, old: str, new: str) -> int:
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        if path.suffix.lower() not in text_suffixes and path.name not in (
-            "summary_links.txt",
-            "job_summary.md",
-            "remote_artifacts.json",
-        ):
+        if path.suffix.lower() not in text_suffixes:
             continue
         try:
             data = path.read_bytes()
@@ -265,22 +263,6 @@ def build_run_name(event_name: str, run_id: str, pull_number: str, attempt: int)
     else:
         base = run_id
     return f"{base}_attempt_{attempt}"
-
-
-def _nonempty(value: Any) -> str:
-    return str(value or "").strip()
-
-
-def resolve_source_attribution(
-    meta: dict[str, Any], caller_run_id: str
-) -> tuple[str, str, str]:
-    """Caller ingest runs in the platform job — prefer its github.* env."""
-    event_name = env_opt("SOURCE_EVENT_NAME") or _nonempty(meta.get("source_event_name"))
-    if not event_name or event_name == "workflow_call":
-        event_name = "workflow_dispatch"
-    source_run_id = env_opt("SOURCE_RUN_ID") or caller_run_id
-    pull_number = env_opt("PULL_NUMBER") or _nonempty(meta.get("pull_number"))
-    return event_name, source_run_id, pull_number
 
 
 def regenerate_summary(
@@ -485,9 +467,10 @@ def flush_ci_metrics(
     pull_number: str,
     caller_repo: str,
     caller_workflow: str,
+    job_name: str,
 ) -> None:
     """Flush remote-buffered ci_metrics.jsonl into caller analytics/ci_metrics."""
-    rel = _nonempty(meta.get("ci_metrics_relpath"))
+    rel = str(meta.get("ci_metrics_relpath") or "").strip()
     if not rel:
         print("Manifest has no ci_metrics_relpath; skipping analytics flush")
         return
@@ -497,11 +480,6 @@ def flush_ci_metrics(
         print(f"No ci_metrics at {metrics_path}; skipping analytics flush")
         return
 
-    job_name = (
-        env_opt("ANALYTICS_JOB_NAME")
-        or _nonempty(meta.get("analytics_job_name"))
-        or caller_workflow
-    )
     rewritten = rewrite_ci_metrics_attribution(
         metrics_path,
         run_id=source_run_id,
@@ -533,13 +511,8 @@ def upload_attempts(
     event_name: str,
     run_id: str,
     pull_number: str,
-    caller_workflow: str,
+    job_name: str,
 ) -> None:
-    job_name = (
-        env_opt("ANALYTICS_JOB_NAME")
-        or _nonempty(meta.get("analytics_job_name"))
-        or caller_workflow
-    )
     branch = meta.get("branch") or "main"
     commit = meta.get("commit") or ""
     build_preset = meta.get("build_preset") or "relwithdebinfo"
@@ -620,6 +593,18 @@ def main() -> None:
     host_bucket = (cfg.get("host_s3_bucket") or "").strip()
     if not host_ep or not host_bucket:
         die("CONFIG_JSON.host_s3_endpoint/bucket missing")
+    caller_workflow = (cfg.get("caller_workflow") or "").strip()
+    if not caller_workflow:
+        die("CONFIG_JSON.caller_workflow missing")
+    job_name = (cfg.get("analytics_job_name") or "").strip() or caller_workflow
+
+    inputs = cfg.get("inputs") if isinstance(cfg.get("inputs"), dict) else {}
+    ji = inputs.get("job_inputs") if isinstance(inputs.get("job_inputs"), dict) else {}
+    event_name = str(ji.get("source_event_name") or "workflow_dispatch").strip()
+    source_run_id = str(ji.get("source_run_id") or "").strip()
+    pull_number = str(ji.get("pull_number") or "").strip()
+    if not source_run_id:
+        die("CONFIG_JSON.inputs.job_inputs.source_run_id missing")
 
     run_id = env("EXECUTOR_RUN_ID")
     run_url = env_opt("EXECUTOR_RUN_URL") or f"https://github.com/{host_repo}/actions/runs/{run_id}"
@@ -627,26 +612,11 @@ def main() -> None:
     caller_endpoint = env("CALLER_AWS_ENDPOINT").rstrip("/")
     caller_bucket = env("CALLER_AWS_BUCKET")
     caller_repo = env("GITHUB_REPOSITORY")
-    # Prefer config (reusable WF's github.workflow is "Dispatch remote…").
-    caller_workflow = (
-        (cfg.get("caller_workflow") or "").strip()
-        or env_opt("CALLER_WORKFLOW")
-        or env("GITHUB_WORKFLOW")
-    )
     caller_run_id = env("GITHUB_RUN_ID")
-    analytics_job = (cfg.get("analytics_job_name") or "").strip()
-    if analytics_job:
-        os.environ["ANALYTICS_JOB_NAME"] = analytics_job
 
-    # Manifest URL uses host repo/workflow + host public S3.
-    os.environ["REPO"] = host_repo
-    os.environ["REMOTE_WORKFLOW_NAME"] = host_workflow
-    os.environ["REMOTE_AWS_ENDPOINT"] = host_ep.rstrip("/")
-    os.environ["REMOTE_AWS_BUCKET"] = host_bucket
-
-    meta = load_manifest(run_id)
-    remote_endpoint = (meta.get("s3_endpoint") or host_ep).rstrip("/")
-    remote_bucket = meta.get("s3_bucket") or host_bucket
+    meta = load_manifest(host_ep, host_bucket, host_repo, host_workflow, run_id)
+    remote_endpoint = host_ep.rstrip("/")
+    remote_bucket = host_bucket
     key_prefix = meta.get("artifact_key_prefix") or ""
     if not key_prefix:
         die("remote_artifacts.json missing artifact_key_prefix")
@@ -658,7 +628,6 @@ def main() -> None:
     caller_s3_path = f"s3://{caller_bucket}/{dest_key_prefix}"
     caller_run_root = f"s3://{caller_bucket}/{caller_repo}/{caller_workflow}/{caller_run_id}/remote-{run_id}"
 
-    event_name, source_run_id, pull_number = resolve_source_attribution(meta, caller_run_id)
     executor_conclusion = env_opt("EXECUTOR_CONCLUSION")
 
     with tempfile.TemporaryDirectory(prefix="remote-ingest-") as tmp:
@@ -673,7 +642,7 @@ def main() -> None:
         if indexer.is_file():
             run([sys.executable, str(indexer), "-r", f"{public_dir}/"], cwd=str(workspace))
 
-        attempts = discover_attempts(public_dir, list(meta.get("attempts") or []) or None)
+        attempts = discover_attempts(public_dir, meta.get("attempts"))
         print(f"attempts={json.dumps(attempts, ensure_ascii=False)}")
 
         job_summary = regenerate_summary(
@@ -706,7 +675,6 @@ def main() -> None:
         meta_path = public_dir / "remote_artifacts.json"
         meta_path.write_text(json.dumps(meta_out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-        # One sync after regenerate (URLs already rewritten; summary/HTML refreshed).
         s3cmd_sync_upload(public_dir, caller_s3_path)
         s3cmd_put(job_summary, f"{caller_run_root}/job_summary.md")
         s3cmd_put(meta_path, f"{caller_run_root}/remote_artifacts.json")
@@ -720,7 +688,7 @@ def main() -> None:
             event_name=event_name,
             run_id=source_run_id,
             pull_number=pull_number,
-            caller_workflow=caller_workflow,
+            job_name=job_name,
         )
 
         flush_ci_metrics(
@@ -732,6 +700,7 @@ def main() -> None:
             pull_number=pull_number,
             caller_repo=caller_repo,
             caller_workflow=caller_workflow,
+            job_name=job_name,
         )
 
         body = ""
@@ -740,7 +709,6 @@ def main() -> None:
         footer_bits = [f"Remote executor: [{run_id}]({run_url})"]
         if executor_conclusion:
             footer_bits.append(f"`{executor_conclusion}`")
-        # Launch params already under <details> in resolve_remote; ingest shows enriched body.
         write_step_summary(body + "\n---\n" + " · ".join(footer_bits) + "\n")
 
     print(f"::notice title=Remote ingest complete::{new_public}/index.html")

@@ -348,6 +348,18 @@ public:
     THashMap<TTxId, TOperation::TPtr> Operations;
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
+    THashMap<TPathId, NKikimrScheme::TDatabaseFreezeState> DatabaseFreezes;
+    THashMap<TPathId, TActorId> DatabaseFreezeWorkers;
+    // Pending progress is rebuilt by the worker after a restart, unlike the
+    // durable result in DatabaseFreezes.
+    THashMap<TPathId, TString> DatabaseFreezeProgress;
+    bool IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme& transaction);
+    bool IsDatabaseFreezeBlocking(const TPathId& pathId) const;
+    bool HasDatabaseFreezeSchemaWork(const TPathId& domainId) const;
+    void Handle(TEvSchemeShard::TEvDatabaseFreeze::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvDatabaseFreezeResult::TPtr& ev, const TActorContext& ctx);
+    struct TTxDatabaseFreeze;
+    struct TTxDatabaseFreezeDone;
     THashMap<TPathId, TPathDbRef> OwnDbRefs; // path's own type info record ref
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
 

@@ -70,6 +70,9 @@ public:
         }
 
         auto subDomainPathId = domainPath.GetPathIdForDomain();
+        if (Self->IsDatabaseFreezeBlocking(subDomainPathId)) {
+            return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Database is frozen for schema changes");
+        }
         auto subDomainInfo = domainPath.DomainInfo();
         const bool quotaAcquired = subDomainInfo->TryConsumeSchemeQuota(ctx.Now());
 

@@ -1264,6 +1264,7 @@ class TDataShard
             Sys_VacuumCompletedGeneration = 47,
 
             Sys_SubDomainTablesMetricsLevel = 48,
+            Sys_DatabaseFreeze = 49,
 
             // reserved
             SysPipeline_Flags = 1000,
@@ -1709,6 +1710,26 @@ public:
     bool IsStateFrozen() const {
         return State == TShardState::Frozen;
     }
+
+    bool IsDatabaseFrozen() const {
+        return DatabaseFreeze.GetStage() != NKikimrTxDataShard::TDatabaseFreezeState::OPEN;
+    }
+
+    bool IsUserTableWriteBlocked() const {
+        return IsStateFrozen() || IsDatabaseFrozen();
+    }
+
+    bool CanReceiveChangeRecords() const {
+        return State == TShardState::Ready
+            && DatabaseFreeze.GetStage() < NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC;
+    }
+
+    bool IsDatabaseWriteBlocked(const TOperation* op) const;
+    bool HasDatabaseFreezeWrites() const;
+    bool HasDatabaseFreezeIndexRecords() const;
+    bool HasDatabaseFreezeCdcScans() const;
+    void Handle(TEvDataShard::TEvDatabaseFreeze::TPtr& ev, const TActorContext& ctx);
+    class TTxDatabaseFreeze;
 
     bool IsReplicated() const {
         for (const auto& [_, info] : TableInfos) {
@@ -2967,6 +2988,11 @@ private:
     TInstant StopKeyAccessSamplingAt;
 
     TUserTable::TTableInfos TableInfos;  // tableId -> local table info
+    NKikimrTxDataShard::TDatabaseFreezeState DatabaseFreeze;
+    THashSet<ui64> DatabaseFreezeAcceptedTxIds;
+    // Local write transactions from construction through Complete(), including
+    // queued requests and requests that finish with an error.
+    ui64 DatabaseFreezeLocalWrites = 0;
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;
@@ -3164,6 +3190,7 @@ private:
 
     struct TEnqueuedRecordTag {};
     struct TEnqueuedRecord: public TIntrusiveListItem<TEnqueuedRecord, TEnqueuedRecordTag> {
+        TPathId PathId;
         ui64 BodySize;
         TPathId TableId;
         ui64 SchemaVersion;
@@ -3192,12 +3219,14 @@ private:
             : TEnqueuedRecord(record.BodySize, record.TableId, record.SchemaVersion,
                 record.CreatedAt(), record.LockId, record.LockOffset)
         {
+            PathId = record.PathId;
         }
 
         explicit TEnqueuedRecord(const TChangeRecord& record)
             : TEnqueuedRecord(record.GetBodySize(), record.GetTableId(), record.GetSchemaVersion(),
                 record.GetApproximateCreationDateTime(), record.GetLockId(), record.GetLockOffset())
         {
+            PathId = record.GetPathId();
         }
     };
 
@@ -3457,6 +3486,7 @@ protected:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvGone, Handle);
             HFuncTraced(TEvDataShard::TEvGetShardState, Handle);
+            HFuncTraced(TEvDataShard::TEvDatabaseFreeze, Handle);
             HFuncTraced(TEvDataShard::TEvSchemaChangedResult, Handle);
             HFuncTraced(TEvDataShard::TEvStateChangedResult, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransaction, Handle);

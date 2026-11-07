@@ -2862,6 +2862,14 @@ void TSchemeShard::PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPath
 void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
+    db.Table<Schema::DatabaseFreezes>().Key(pathId.LocalPathId).Delete();
+    DatabaseFreezes.erase(pathId);
+    DatabaseFreezeProgress.erase(pathId);
+    if (const auto worker = DatabaseFreezeWorkers.find(pathId); worker != DatabaseFreezeWorkers.end()) {
+        Send(worker->second, new TEvents::TEvPoisonPill);
+        DatabaseFreezeWorkers.erase(worker);
+    }
+
     auto it = SubDomains.find(pathId);
     if (it != SubDomains.end()) {
         TSubDomainInfo::TPtr subDomain = it->second;
@@ -6022,7 +6030,11 @@ void TSchemeShard::DefaultSignalTabletActive(const TActorContext &ctx) {
 }
 
 void TSchemeShard::Cleanup(const TActorContext &ctx) {
-    Y_UNUSED(ctx);
+    for (const auto& [_, worker] : DatabaseFreezeWorkers) {
+        ctx.Send(worker, new TEvents::TEvPoisonPill);
+    }
+    DatabaseFreezeWorkers.clear();
+    DatabaseFreezeProgress.clear();
 }
 
 void TSchemeShard::Enqueue(STFUNC_SIG) {
@@ -6184,6 +6196,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvProcessingRequest, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvUpdateTenantSchemeShard, Handle);
+        HFuncTraced(TEvSchemeShard::TEvDatabaseFreeze, Handle);
+        HFuncTraced(TEvSchemeShard::TEvDatabaseFreezeResult, Handle);
 
         HFuncTraced(NSchemeBoard::NSchemeshardEvents::TEvUpdateAck, Handle);
 

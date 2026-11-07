@@ -12,6 +12,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
+#include <ydb/core/backup/common/index_metadata.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
@@ -27,11 +28,13 @@
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/buffer.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/string/printf.h>
 
 #include <ydb/core/protos/config.pb.h>
 
@@ -1139,8 +1142,34 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     metadata.SetVersion(Task.GetEnableChecksums() ? 1 : 0);
     metadata.SetEnablePermissions(Task.GetEnablePermissions());
 
+    const bool enableChangefeedsExport = AppData()->FeatureFlags.GetEnableChangefeedsExport();
+
+    // Index impl tables listed in the table metadata. SchemeShard fixes their prefixes
+    // once per export (older SchemeShards do not, so compute them the same way here).
+    TVector<TIndexMetadata> indexes;
+    if (scheme) {
+        if (Task.HasIndexExportPrefixes()) {
+            for (const auto& index : Task.GetIndexExportPrefixes().GetIndexes()) {
+                indexes.push_back(TIndexMetadata{
+                    .ExportPrefix = index.GetExportPrefix(),
+                    .ImplTablePrefix = index.GetImplTablePrefix(),
+                });
+            }
+        } else {
+            // SchemeShard computes the same list (see ComputeIndexItemSuffix)
+            const ui32 changefeedsCount = enableChangefeedsExport ? Task.GetTable().GetTable().CdcStreamsSize() : 0;
+            indexes = MakeIndexesMetadata(scheme->indexes(), changefeedsCount + 1, encrypted,
+                AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
+        }
+    }
+
+    THashSet<TString> indexPrefixes;
+    for (const auto& index : indexes) {
+        indexPrefixes.insert(index.ExportPrefix);
+    }
+
     TVector<TChangefeedExportDescriptions> changefeeds;
-    if (AppData()->FeatureFlags.GetEnableChangefeedsExport()) {
+    if (enableChangefeedsExport) {
         const auto& persQueues = Task.GetChangefeedUnderlyingTopics();
         const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
         Y_ASSERT(persQueues.size() == cdcStreams.size());
@@ -1148,6 +1177,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         const int changefeedsCount = cdcStreams.size();
         changefeeds.reserve(changefeedsCount);
 
+        ui32 changefeedPrefixNumber = 0;
         for (int i = 0; i < changefeedsCount; ++i) {
             Ydb::Table::ChangefeedDescription changefeed;
             const auto& cdcStream = cdcStreams.at(i);
@@ -1165,10 +1195,11 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
             auto& descr = changefeeds.emplace_back(changefeed, topic);
             descr.Name = descr.ChangefeedDescription.name();
             if (encrypted) {
-                // Anonymize changefeed name in export
-                std::stringstream prefix;
-                prefix << std::setfill('0') << std::setw(3) << std::right << (i + 1);
-                descr.Prefix = prefix.str();
+                // Anonymize changefeed name in export. Skip the prefixes of indexes:
+                // a changefeed could be created after SchemeShard fixed them.
+                do {
+                    descr.Prefix = Sprintf("%03u", ++changefeedPrefixNumber);
+                } while (indexPrefixes.contains(descr.Prefix));
             } else {
                 descr.Prefix = descr.Name;
             }
@@ -1180,33 +1211,8 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         }
     }
 
-    if (scheme) {
-        int idx = changefeeds.size() + 1;
-        for (const auto& index : scheme->indexes()) {
-            const auto indexType = NTableIndex::TryConvertIndexType(index.type_case(), AppData()->FeatureFlags.GetEnableCompactFulltextIndex());
-            if (!indexType) {
-                continue;
-            }
-
-            const TVector<TString> indexColumns(index.index_columns().begin(), index.index_columns().end());
-
-            for (const auto& implTable : NTableIndex::GetImplTables(*indexType, indexColumns)) {
-                const TString implTablePrefix = TStringBuilder() << index.name() << "/" << implTable;
-                TString exportPrefix;
-                if (encrypted) {
-                    std::stringstream prefix;
-                    prefix << std::setfill('0') << std::setw(3) << std::right << idx++;
-                    exportPrefix = prefix.str();
-                } else {
-                    exportPrefix = implTablePrefix;
-                }
-
-                metadata.AddIndex(TIndexMetadata{
-                    .ExportPrefix = exportPrefix,
-                    .ImplTablePrefix = implTablePrefix,
-                });
-            }
-        }
+    for (const auto& index : indexes) {
+        metadata.AddIndex(index);
     }
 
     auto permissions = (Task.GetEnablePermissions() && Task.GetShardNum() == 0)

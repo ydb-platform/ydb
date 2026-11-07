@@ -44,6 +44,7 @@ struct TChangefeedMetadata {
 struct TIndexMetadata {
     TString ExportPrefix;
     TString ImplTablePrefix;
+    TMaybe<TEncryptionIV> IV = Nothing();
 };
 
 class TMetadata {
@@ -106,6 +107,7 @@ public:
         TString ExportPrefix;
         TString ObjectPath;
         TMaybe<NBackup::TEncryptionIV> IV;
+        TMap<TString, TEncryptionIV> IndexIVs = {};
     };
 
     TSchemaMapping() = default;

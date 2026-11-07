@@ -5,6 +5,9 @@
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/json_reader.h>
 
+#include <util/generic/yexception.h>
+#include <util/string/builder.h>
+
 namespace NKikimr::NBackup {
 
 void TMetadata::AddFullBackup(TFullBackupMetadata::TPtr fb) {
@@ -158,6 +161,14 @@ TString TSchemaMapping::Serialize() const {
         if (item.IV) {
             writer.Write("iv", item.IV->GetHexString());
         }
+        if (!item.IndexIVs.empty()) {
+            writer.WriteKey("indexIVs");
+            writer.OpenMap();
+            for (const auto& [path, iv] : item.IndexIVs) {
+                writer.Write(path, iv.GetHexString());
+            }
+            writer.CloseMap();
+        }
         writer.CloseMap();
     }
     writer.CloseMap();
@@ -207,6 +218,27 @@ bool TSchemaMapping::Deserialize(const TString& jsonContent, TString& error) {
         item.ObjectPath = exportObject;
         if (hasIV) {
             item.IV = TEncryptionIV::FromHexString(iv.GetString());
+        }
+        if (info.Has("indexIVs")) {
+            const auto& indexIVs = info["indexIVs"];
+            if (!hasIV || !indexIVs.IsMap()) {
+                error = "Incorrect indexIVs in schema mapping json";
+                return false;
+            }
+            for (const auto& [path, indexIV] : indexIVs.GetMap()) {
+                if (!indexIV.IsString()) {
+                    error = "Index IV in schema mapping json is not a string";
+                    return false;
+                }
+                try {
+                    auto parsedIV = TEncryptionIV::FromHexString(indexIV.GetString());
+                    Y_ENSURE(parsedIV.Size() == TEncryptionIV::SIZE, "Invalid index IV size");
+                    item.IndexIVs.emplace(path, std::move(parsedIV));
+                } catch (const std::exception& ex) {
+                    error = TStringBuilder() << "Invalid index IV in schema mapping json: " << ex.what();
+                    return false;
+                }
+            }
         }
     }
     return true;

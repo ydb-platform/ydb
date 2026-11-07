@@ -1521,6 +1521,16 @@ message TTaskCleaner {
     optional string TieringId = 3;
 }
 
+// Export prefixes of separate index impl-table items inside the table prefix
+message TIndexExportPrefixes {
+    message TIndex {
+        optional string ImplTablePrefix = 1; // relative path: <index name>/<impl table name>
+        optional string ExportPrefix = 2;
+    }
+
+    repeated TIndex Indexes = 1;
+}
+
 message TBackupTask {
     optional string TableName = 1;
     optional uint64 TableId = 2;
@@ -1571,6 +1581,10 @@ message TBackupTask {
     }
 
     optional TEncryptionSettings EncryptionSettings = 19;
+
+    // Index impl tables to list in the table metadata. Set by SchemeShard for encrypted
+    // exports with index data. If not set, DataShard computes the list itself.
+    optional TIndexExportPrefixes IndexExportPrefixes = 21;
 }
 
 message TRestoreTask {
@@ -2602,6 +2616,11 @@ message TChangefeedUnderlyingTopics {
     repeated TPathDescription ChangefeedUnderlyingTopics = 1;
 }
 
+message TExportIndexIVs {
+    // Relative index impl-table path -> IV of its separate backup item.
+    map<string, bytes> IVs = 1;
+}
+
 message TExportMetadata {
     message TSchemaMappingItem {
         optional string SourcePath = 1;
@@ -2609,6 +2628,9 @@ message TExportMetadata {
 
         // encryption details
         optional bytes IV = 3;
+        optional TExportIndexIVs IndexIVs = 4;
+        // Fixed once per export, the same list is sent to DataShard
+        optional TIndexExportPrefixes IndexExportPrefixes = 5;
     }
 
     repeated TSchemaMappingItem SchemaMapping = 1;

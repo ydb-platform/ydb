@@ -638,6 +638,9 @@ struct Schema : NIceDb::Schema {
         struct NeedToBill : Column<10, NScheme::NTypeIds::Bool> {};
         struct EnableChecksums : Column<11, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<12, NScheme::NTypeIds::Bool> {};
+        struct EncryptionSettings : Column<15, NScheme::NTypeIds::String, false, true> {}; // Sensitive column: contains the key
+        struct Compression : Column<16, NScheme::NTypeIds::String> {};
+        struct IndexExportPrefixes : Column<17, NScheme::NTypeIds::String> {};
         // deprecated
         struct CreateDestinationFlag : Column<4, NScheme::NTypeIds::Bool> {};
         struct EraseOldDataFlag : Column<5, NScheme::NTypeIds::Bool> {};
@@ -657,7 +660,10 @@ struct Schema : NIceDb::Schema {
             EnableChecksums,
             EnablePermissions,
             ChangefeedUnderlyingTopics,
-            FSSettings
+            FSSettings,
+            EncryptionSettings,
+            Compression,
+            IndexExportPrefixes
         >;
     };
 
@@ -676,6 +682,9 @@ struct Schema : NIceDb::Schema {
         struct NeedToBill : Column<11, NScheme::NTypeIds::Bool> {};
         struct EnableChecksums : Column<12, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<13, NScheme::NTypeIds::Bool> {};
+        struct EncryptionSettings : Column<16, NScheme::NTypeIds::String, false, true> {}; // Sensitive column: contains the key
+        struct Compression : Column<17, NScheme::NTypeIds::String> {};
+        struct IndexExportPrefixes : Column<18, NScheme::NTypeIds::String> {};
         // deprecated
         struct CreateDestinationFlag : Column<5, NScheme::NTypeIds::Bool> {};
         struct EraseOldDataFlag : Column<6, NScheme::NTypeIds::Bool> {};
@@ -696,7 +705,10 @@ struct Schema : NIceDb::Schema {
             EnableChecksums,
             EnablePermissions,
             ChangefeedUnderlyingTopics,
-            FSSettings
+            FSSettings,
+            EncryptionSettings,
+            Compression,
+            IndexExportPrefixes
         >;
     };
 
@@ -1790,6 +1802,7 @@ struct Schema : NIceDb::Schema {
         struct EncryptionIV : Column<18, NScheme::NTypeIds::String> {};
         struct SrcPath : Column<19, NScheme::NTypeIds::Utf8> {};
         struct ParentIndex : Column<21, NScheme::NTypeIds::Uint32> {};
+        struct IndexIVs : Column<24, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportIndexIVs; };
 
         using TKey = TableKey<ImportId, Index>;
         using TColumns = TableColumns<
@@ -1815,7 +1828,8 @@ struct Schema : NIceDb::Schema {
             Topic,
             ParentIndex,
             SysView,
-            ReplicationConfig
+            ReplicationConfig,
+            IndexIVs
         >;
     };
 

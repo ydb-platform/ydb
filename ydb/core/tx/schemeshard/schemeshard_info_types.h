@@ -4021,6 +4021,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString Issue;
         TPathId StreamImplPathId;
         TMaybe<NBackup::TEncryptionIV> ExportItemIV;
+        NKikimrSchemeOp::TExportIndexIVs ExportIndexIVs;
 
         ui32 ParentIdx = Max<ui32>();
         TVector<ui32> ChildItems;

@@ -1157,6 +1157,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "IndexExportPrefixes",
+                "ColumnType": "String"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -1225,12 +1230,23 @@
                 "ColumnId": 14,
                 "ColumnName": "FSSettings",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "EncryptionSettings",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "Compression",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,
@@ -1244,7 +1260,9 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15,
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4827,6 +4845,21 @@
                 "ColumnId": 15,
                 "ColumnName": "FSSettings",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "EncryptionSettings",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "Compression",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "IndexExportPrefixes",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -4847,7 +4880,10 @@
                     12,
                     13,
                     14,
-                    15
+                    15,
+                    16,
+                    17,
+                    18
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6732,6 +6768,11 @@
                 "ColumnId": 23,
                 "ColumnName": "ReplicationConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 24,
+                "ColumnName": "IndexIVs",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6760,7 +6801,8 @@
                     20,
                     21,
                     22,
-                    23
+                    23,
+                    24
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -36,6 +36,8 @@ class TBootstrapper : public TActorBootstrapped<TBootstrapper> {
 
     TInstant BootDelayedUntil;
 
+    ui32 BootBSErrorsInRow = 0; // boots of the leader that failed because of blob storage, with no other death between
+
 private:
     /**
      * A remote watcher waiting for our notification
@@ -755,13 +757,16 @@ private:
 
             LookOnActorID = {};
             NotifyWatchers();
-            if (ev->Get()->Reason == TEvTablet::TEvTabletDead::ReasonBootBSError) {
-                // booting again at once would most likely fail the same way; it would be a busy loop, and with all of
-                // it on one node of a test actor system the simulated time would not move
+            BootBSErrorsInRow = ev->Get()->Reason == TEvTablet::TEvTabletDead::ReasonBootBSError ? BootBSErrorsInRow + 1 : 0;
+            // a single failure is often a race with another generation, as with ALREADY or BLOCKED for the block, and
+            // the next boot gets a newer one; failing again means blob storage can't serve the tablet, and booting again
+            // at once would be a busy loop, which stops the simulated time when all of it is on one node in a test
+            if (BootBSErrorsInRow > 1) {
                 const TDuration sleepDuration = GetSleepDuration();
-                YDB_LOG_INFO("Tablet failed to boot because of blob storage, waiting",
+                YDB_LOG_INFO("Tablet failed to boot again because of blob storage, waiting",
                     {"tabletId", TabletInfo->TabletID},
                     {"tabletType", GetTabletTypeName()},
+                    {"bootBSErrorsInRow", BootBSErrorsInRow},
                     {"sleepDuration", sleepDuration});
                 ++RoundCounter; // wakeups of the previous rounds don't count
                 Schedule(sleepDuration, new TEvents::TEvWakeup(RoundCounter));

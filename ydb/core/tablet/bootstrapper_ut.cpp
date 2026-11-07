@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(BootstrapperTest) {
         UNIT_ASSERT_C(gen1 < gen2, "Unexpected gen1# " << gen1 << " not before gen2# " << gen2);
     }
 
-    Y_UNIT_TEST(BootBSErrorDelaysNextBoot) {
+    Y_UNIT_TEST(RepeatedBootBSErrorsDelayNextBoot) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         auto sender = runtime.AllocateEdgeActor();
@@ -161,9 +161,12 @@ Y_UNIT_TEST_SUITE(BootstrapperTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(failedAt.size(), numFailedBoots);
         UNIT_ASSERT_VALUES_EQUAL(nextBootAfter.size(), numFailedBoots);
-        for (const TDuration delay : nextBootAfter) {
-            // the sleep is from a half of WatchThreshold up to the whole of it
-            UNIT_ASSERT_C(delay >= TBootstrapperInfo(nullptr).WatchThreshold / 2, "delay# " << delay);
+        // the sleep is from a half of WatchThreshold up to the whole of it
+        const TDuration minSleep = TBootstrapperInfo(nullptr).WatchThreshold / 2;
+        // the first failure may be a race with another generation, so the tablet boots again at once
+        UNIT_ASSERT_C(nextBootAfter[0] < minSleep, "delay# " << nextBootAfter[0]);
+        for (size_t i = 1; i < nextBootAfter.size(); ++i) {
+            UNIT_ASSERT_C(nextBootAfter[i] >= minSleep, "i# " << i << " delay# " << nextBootAfter[i]);
         }
         Y_UNUSED(client);
     }

@@ -15,5 +15,6 @@
 - [Настройка NFS для выполнения резервного копирования](../../../../recipes/backup/nfs-backup/nfs-backup.md)
 - [Выгрузка в NFS `export nfs`](../export-nfs.md)
 - [Загрузка из NFS `import nfs`](../import-nfs.md)
+- [Проверка резервной копии `tools validate`](../tools-validate.md)
 
 {% include [_includes/options_overlay.md](options_overlay.md) %}

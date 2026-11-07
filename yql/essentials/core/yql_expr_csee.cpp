@@ -122,6 +122,9 @@ ui64 CalculateHash(ui16 depth, TExprNode& node, const TLambdaFrame& currFrame, c
             break;
         }
         case TExprNode::Callable:
+            if (node.IsCallable("AsyncInvoke")) {
+                hash = CseeHash(node.UniqueId(), hash);
+            }
             if (node.IsPosAware()) {
                 auto pos = node.Pos();
                 hash = CseeHash(&pos, sizeof(pos), hash);
@@ -252,6 +255,10 @@ bool EqualNodes(const TExprNode& left, TLambdaFrame& currLeftFrame, const TExprN
 bool DoEqualNodes(const TExprNode& left, TLambdaFrame& currLeftFrame, const TExprNode& right, TLambdaFrame& currRightFrame,
                   TEqualResults& visited, const TColumnOrderStorage& coStore)
 {
+    if ((left.IsCallable("AsyncInvoke") || right.IsCallable("AsyncInvoke")) && &left != &right) {
+        return false;
+    }
+
     if (left.Type() != right.Type()) {
         return false;
     }

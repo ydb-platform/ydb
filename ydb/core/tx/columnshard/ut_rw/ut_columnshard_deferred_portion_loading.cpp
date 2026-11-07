@@ -1,9 +1,13 @@
+#include <ydb/core/sys_view/common/registry.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_reader.h>
 #include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/data_events/payload_helper.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 
 namespace NKikimr {
 
@@ -15,14 +19,17 @@ namespace {
 using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
 const ui64 TableId = 1;
+const ui64 LockId = 7;
 const TDuration NoAnswerWait = TDuration::Seconds(1);
 
 struct TShardOptions {
     ui32 TableCount = 1;
     bool InMemMetadata = false;
+    TString CompactionPreset = "tiling++";
 };
 
-// Every table gets three committed portions, one per write: rows 0..99, 100..199, 200..299; batches of one portion each after a reboot
+// Every table gets three committed portions, one per write: rows 0..99, 200..299, 400..499; batches of one portion each after a reboot,
+// the newest first: after one batch the keys from 499 are loaded, after two from 299, after three everything
 class TShardWithPortions {
 public:
     NKikimr::NYDBTest::TControllers::TGuard<TDefaultTestsController> Controller =
@@ -36,6 +43,7 @@ public:
     explicit TShardWithPortions(const TShardOptions& shardOptions = {}) {
         Controller->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         TTester::Setup(Runtime);
+        Runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset(shardOptions.CompactionPreset);
         Runtime.GetAppData().ColumnShardConfig.MutableDeferredPortionLoadingSettings()->SetEnabled(true);
         Runtime.GetAppData().ColumnShardConfig.MutableDeferredPortionLoadingSettings()->SetPortionsPerBatch(1);
         Sender = Runtime.AllocateEdgeActor();
@@ -45,7 +53,7 @@ public:
         Runtime.DispatchEvents(options);
         CreateTables(shardOptions);
         for (ui32 i = 0; i < shardOptions.TableCount; ++i) {
-            for (ui64 from = 0; from < 300; from += 100) {
+            for (ui64 from = 0; from < 600; from += 200) {
                 WriteAndCommit(TableId + i, { from, from + 100 });
             }
         }
@@ -109,6 +117,79 @@ public:
         UNIT_ASSERT(reader.IsCorrectlyFinished());
         return rows ? rows->num_rows() : 0;
     }
+
+    void StartWrite(const std::pair<ui64, ui64> rows, const NEvWrite::EModificationType modificationType = NEvWrite::EModificationType::Upsert,
+        const ui64 lockId = 1) {
+        UNIT_ASSERT(
+            WriteData(Runtime, Sender, 2, TableId, MakeTestBlob(rows, Table.Schema), Table.Schema, false, nullptr, modificationType, lockId));
+    }
+
+    void StartWriteWithTimeout(const std::pair<ui64, ui64> rows, const ui64 lockId) {
+        UNIT_ASSERT(WriteData(Runtime, Sender, TTestTxConfig::TxTablet0, 2, TableId, MakeTestBlob(rows, Table.Schema), Table.Schema, nullptr,
+            NEvWrite::EModificationType::Upsert, lockId, TDuration::Seconds(1)));
+    }
+
+    void StartSnapshotIsolatedUpsert(const std::pair<ui64, ui64> rows) {
+        auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(2, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+        write->SetLockId(LockId, 1);
+        write->Record.SetLockMode(NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION);
+        write->Record.MutableMvccSnapshot()->SetStep(Snapshot.GetPlanStep());
+        write->Record.MutableMvccSnapshot()->SetTxId(Snapshot.GetTxId());
+        auto& operation = write->AddOperation(
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, TTableId(0, TableId, 1), {}, 0, NKikimrDataEvents::FORMAT_ARROW);
+        *operation.MutablePayloadSchema() = NArrow::SerializeSchema(*NArrow::MakeArrowSchema(Table.Schema));
+        NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(*write);
+        writer.AddDataToPayload(MakeTestBlob(rows, Table.Schema));
+        ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, write.release());
+    }
+
+    bool IsWriteAnswered() {
+        TAutoPtr<IEventHandle> handle;
+        return Runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(handle, NoAnswerWait);
+    }
+
+    ui32 WaitWriteStatus() {
+        return WaitWriteResult(Runtime, TTestTxConfig::TxTablet0);
+    }
+
+    // the gate's own retry is a scheduled wakeup, which the test runtime drops
+    void ExpireWaitingWrites() {
+        Runtime.AdvanceCurrentTime(TDuration::Seconds(2));
+        ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, new TEvents::TEvWakeup(1));
+    }
+
+    ui64 GetSimpleCounter(const TString& name) {
+        ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, new TEvTablet::TEvGetCounters());
+        const auto ev = Runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(Sender);
+        for (const auto& counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetSimpleCounters()) {
+            if (counter.GetName() == name) {
+                return counter.GetValue();
+            }
+        }
+        UNIT_FAIL("counter " << name << " not found");
+        return 0;
+    }
+
+    void NotifyLockGone() {
+        ForwardToTablet(
+            Runtime, TTestTxConfig::TxTablet0, Sender, new NLongTxService::TEvLongTxService::TEvLockStatus(LockId, Runtime.GetNodeId(),
+                                                           NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND));
+    }
+
+    const NColumnShard::TOperationsManager& Operations() {
+        return Controller->GetTheOnlyShard()->GetOperationsManager();
+    }
+
+    void AddSchemaVersion(const ui32 version) {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        UNIT_ASSERT(tx.ParseFromString(TTestSchema::AlterTableTxBody(TableId, true, version, Table.Schema, Table.Pk, {})));
+        tx.MutableAlterTable()->MutableSchema()->SetVersion(version);
+        Y_UNUSED(SetupSchema(Runtime, Sender, tx.SerializeAsString(), 200 + version));
+    }
+
+    void SendPeriodicWakeup() {
+        ForwardToTablet(Runtime, TTestTxConfig::TxTablet0, Sender, new TEvPrivate::TEvPeriodicWakeup(true));
+    }
 };
 
 }   // namespace
@@ -121,7 +202,7 @@ Y_UNIT_TEST_SUITE(TColumnShardDeferredPortionLoading) {
         UNIT_ASSERT(shard.Engine().AreAllPortionsLoaded(std::nullopt));
         UNIT_ASSERT_VALUES_EQUAL(shard.Engine().GetTables().begin()->second->GetPortions().size(), 3);
 
-        auto reader = shard.StartScan({ 0, 299 });
+        auto reader = shard.StartScan({ 0, 499 });
         UNIT_ASSERT(reader->WaitScannerAnswer());
         UNIT_ASSERT_VALUES_EQUAL(shard.ReadRows(*reader), 300);
     }
@@ -131,7 +212,7 @@ Y_UNIT_TEST_SUITE(TColumnShardDeferredPortionLoading) {
         TShardWithPortions shard;
         shard.AllowBatches(0);
         shard.Reboot();
-        auto newest = shard.StartScan({ 299, 299 });
+        auto newest = shard.StartScan({ 499, 499 });
         UNIT_ASSERT(!newest->WaitScannerAnswer(NoAnswerWait));
 
         shard.AllowBatches(1);
@@ -178,7 +259,7 @@ Y_UNIT_TEST_SUITE(TColumnShardDeferredPortionLoading) {
         shard.Reboot();
         shard.WaitBatchesLoaded(4);
         UNIT_ASSERT(shard.Engine().AreAllPortionsLoaded(std::nullopt));
-        auto reader = shard.StartScan({ 0, 299 });
+        auto reader = shard.StartScan({ 0, 499 });
         UNIT_ASSERT(reader->WaitScannerAnswer());
         UNIT_ASSERT_VALUES_EQUAL(shard.ReadRows(*reader), 300);
     }
@@ -227,10 +308,229 @@ Y_UNIT_TEST_SUITE(TColumnShardDeferredPortionLoading) {
         TShardWithPortions shard({ .InMemMetadata = true });
         shard.AllowBatches(0);
         shard.Reboot();
-        auto reader = shard.StartScan({ 0, 299 });
+        auto reader = shard.StartScan({ 0, 499 });
         UNIT_ASSERT(reader->WaitScannerAnswer());
         UNIT_ASSERT_VALUES_EQUAL(shard.ReadRows(*reader), 300);
         UNIT_ASSERT_VALUES_EQUAL(shard.Controller->GetPortionBatchesLoaded(), 0);
+    }
+
+    Y_UNIT_TEST(ScanWaitingForLoadedPortionsIsCounted) {
+        TShardWithPortions shard;
+        shard.AllowBatches(0);
+        shard.Reboot();
+        auto reader = shard.StartScan({ 100, 200 });
+        UNIT_ASSERT(!reader->WaitScannerAnswer(NoAnswerWait));
+        UNIT_ASSERT_VALUES_EQUAL(shard.GetSimpleCounter("ColumnShard/ScansWaitingLoadedPortions"), 1);
+
+        shard.AllowBatches(std::nullopt);
+        UNIT_ASSERT(reader->WaitScannerAnswer());
+        UNIT_ASSERT_VALUES_EQUAL(shard.GetSimpleCounter("ColumnShard/ScansWaitingLoadedPortions"), 0);
+    }
+
+    Y_UNIT_TEST(ScanWaitingForSnapshotIsCounted) {
+        TShardWithPortions shard;
+        TShardReader reader(
+            shard.Runtime, TTestTxConfig::TxTablet0, TableId, NOlap::TSnapshot(shard.Snapshot.GetPlanStep() + 1000000, Max<ui64>()));
+        reader.SetReplyColumnIds(shard.Table.GetColumnIds({ "timestamp" }));
+        reader.AddRange(MakeTestRange({ 100, 200 }, true, true, shard.Table.Pk));
+        reader.StartScanner();
+        UNIT_ASSERT(!reader.WaitScannerAnswer(NoAnswerWait));
+        UNIT_ASSERT_VALUES_EQUAL(shard.GetSimpleCounter("ColumnShard/ScansWaitingSnapshot"), 1);
+    }
+
+    // an insert reads the rows it writes through an internal scan
+    Y_UNIT_TEST(InsertBelowLoadedKeysWaits) {
+        TShardWithPortions shard;
+        shard.AllowBatches(1);
+        shard.Reboot();
+        shard.WaitBatchesLoaded(1);
+        shard.StartWrite({ 300, 310 }, NEvWrite::EModificationType::Insert);
+        UNIT_ASSERT(!shard.IsWriteAnswered());
+
+        shard.AllowBatches(std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    }
+
+    Y_UNIT_TEST(WriteAboveLoadedKeysLands) {
+        TShardWithPortions shard;
+        shard.AllowBatches(1);
+        shard.Reboot();
+        shard.WaitBatchesLoaded(1);
+        shard.StartWrite({ 600, 610 });
+        UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    }
+
+    Y_UNIT_TEST(LcBucketsWriteBelowLoadedKeysLands) {
+        TShardWithPortions shard({ .CompactionPreset = "lc-buckets" });
+        shard.AllowBatches(1);
+        shard.Reboot();
+        shard.WaitBatchesLoaded(1);
+        shard.StartWrite({ 100, 110 });
+        UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    }
+
+    // its own read needs the rows, so it waits at the write gate, where it has a timeout
+    Y_UNIT_TEST(LcBucketsInsertBelowLoadedKeysWaits) {
+        TShardWithPortions shard({ .CompactionPreset = "lc-buckets" });
+        shard.AllowBatches(1);
+        shard.Reboot();
+        shard.WaitBatchesLoaded(1);
+        shard.StartWrite({ 300, 310 }, NEvWrite::EModificationType::Insert);
+        UNIT_ASSERT(!shard.IsWriteAnswered());
+        UNIT_ASSERT_VALUES_EQUAL(shard.GetSimpleCounter("ColumnShard/WritesWaitingLoadedPortions"), 1);
+
+        shard.AllowBatches(std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    }
+
+    // a blind write under snapshot isolation reads the rows committed after its snapshot to find conflicts
+    Y_UNIT_TEST(LcBucketsSnapshotIsolatedUpsertBelowLoadedKeysWaits) {
+        TShardWithPortions shard({ .CompactionPreset = "lc-buckets" });
+        shard.AllowBatches(1);
+        shard.Reboot();
+        shard.WaitBatchesLoaded(1);
+        shard.StartSnapshotIsolatedUpsert({ 300, 310 });
+        UNIT_ASSERT(!shard.IsWriteAnswered());
+        UNIT_ASSERT_VALUES_EQUAL(shard.GetSimpleCounter("ColumnShard/WritesWaitingLoadedPortions"), 1);
+
+        shard.AllowBatches(std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    }
+
+    Y_UNIT_TEST(WriteWaitingForLoadedPortionsIsCounted) {
+        TShardWithPortions shard;
+        shard.AllowBatches(0);
+        shard.Reboot();
+        shard.StartWrite({ 100, 110 });
+        UNIT_ASSERT(!shard.IsWriteAnswered());
+        UNIT_ASSERT_VALUES_EQUAL(shard.GetSimpleCounter("ColumnShard/WritesWaitingLoadedPortions"), 1);
+
+        shard.AllowBatches(std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(shard.GetSimpleCounter("ColumnShard/WritesWaitingLoadedPortions"), 0);
+    }
+
+    // a held write still counts against the overload limit of the shard
+    Y_UNIT_TEST(WriteWaitingForLoadedPortionsStaysInFlight) {
+        TShardWithPortions shard;
+        shard.AllowBatches(0);
+        shard.Reboot();
+        shard.StartWrite({ 100, 110 });
+        UNIT_ASSERT(!shard.IsWriteAnswered());
+        UNIT_ASSERT_VALUES_EQUAL(shard.GetSimpleCounter("ColumnShard/WritesInFly"), 1);
+
+        shard.AllowBatches(std::nullopt);
+        UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(shard.GetSimpleCounter("ColumnShard/WritesInFly"), 0);
+    }
+
+    Y_UNIT_TEST(WriteWaitingForLoadedPortionsTimesOutOverloaded) {
+        TShardWithPortions shard;
+        shard.AllowBatches(0);
+        shard.Reboot();
+        shard.StartWriteWithTimeout({ 100, 110 }, 1);
+        UNIT_ASSERT(!shard.IsWriteAnswered());
+
+        shard.ExpireWaitingWrites();
+        UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
+    }
+
+    Y_UNIT_TEST(TimedOutNoTxWriteLeavesNoLock) {
+        TShardWithPortions shard;
+        shard.AllowBatches(0);
+        shard.Reboot();
+        shard.StartWriteWithTimeout({ 100, 110 }, 0);
+        UNIT_ASSERT(!shard.IsWriteAnswered());
+
+        shard.ExpireWaitingWrites();
+        Y_UNUSED(shard.WaitWriteStatus());
+        shard.Runtime.WaitFor("no lock of a not proposed transaction", [&] {
+            return shard.Operations().GetLockIdsOfNotProposedTransactions().empty();
+        }, TDuration::Seconds(30));
+    }
+
+    Y_UNIT_TEST(WriteWaitingForLoadedPortionsFailsWhenLockAborted) {
+        TShardWithPortions shard;
+        shard.AllowBatches(0);
+        shard.Reboot();
+        shard.StartWrite({ 100, 110 }, NEvWrite::EModificationType::Upsert, LockId);
+        UNIT_ASSERT(!shard.IsWriteAnswered());
+
+        shard.NotifyLockGone();
+        UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+    }
+
+    Y_UNIT_TEST(LockOfWriteWaitingForLoadedPortionsIsAborted) {
+        TShardWithPortions shard;
+        shard.AllowBatches(0);
+        shard.Reboot();
+        shard.StartWrite({ 100, 110 }, NEvWrite::EModificationType::Upsert, LockId);
+        UNIT_ASSERT(!shard.IsWriteAnswered());
+
+        shard.NotifyLockGone();
+        shard.Runtime.WaitFor("lock removed", [&] {
+            return !shard.Operations().GetLockOptional(LockId);
+        }, TDuration::Seconds(30));
+    }
+
+    Y_UNIT_TEST(WriteOfLockAbortedWhileParsedFails) {
+        TShardWithPortions shard;
+        shard.AllowBatches(1);
+        shard.Reboot();
+        shard.WaitBatchesLoaded(1);
+
+        TBlockEvents<NOlap::TEvPassWriteGate> parsed(shard.Runtime);
+        shard.StartWrite({ 600, 610 }, NEvWrite::EModificationType::Upsert, LockId);
+        shard.Runtime.WaitFor("batch parsed", [&] {
+            return !parsed.empty();
+        }, TDuration::Seconds(30));
+
+        shard.NotifyLockGone();
+        shard.Runtime.WaitFor("lock marked for abort", [&] {
+            const auto* lock = shard.Operations().GetLockOptional(LockId);
+            return lock && lock->NeedsAborting();
+        }, TDuration::Seconds(30));
+        parsed.Stop().Unblock();
+        UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN);
+    }
+
+    Y_UNIT_TEST(SysViewScanWaitsUntilEverythingIsLoaded) {
+        TShardWithPortions shard;
+        shard.AllowBatches(2);
+        shard.Reboot();
+        shard.WaitBatchesLoaded(2);
+
+        TShardReader reader(shard.Runtime, TTestTxConfig::TxTablet0, TableId, shard.Snapshot);
+        reader.SetTablePath("/.sys/primary_index_portion_stats");
+        reader.SetReplyColumnIds({ NKikimr::NSysView::Schema::PrimaryIndexPortionStats::PortionId::ColumnId });
+        reader.StartScanner();
+        UNIT_ASSERT(!reader.WaitScannerAnswer(NoAnswerWait));
+
+        shard.AllowBatches(std::nullopt);
+        UNIT_ASSERT(reader.WaitScannerAnswer());
+        Y_UNUSED(shard.ReadRows(reader));
+    }
+
+    // an unloaded portion may still use a version that no loaded portion uses
+    Y_UNIT_TEST(SchemaCleanupWaitsUntilEverythingIsLoaded) {
+        TShardWithPortions shard;
+        shard.Runtime.GetAppData().FeatureFlags.SetEnableCSSchemasCollapsing(true);
+        shard.AllowBatches(1);
+        shard.Reboot();
+        shard.WaitBatchesLoaded(1);
+
+        shard.AddSchemaVersion(2);
+        shard.AddSchemaVersion(3);
+        shard.SendPeriodicWakeup();
+        shard.Runtime.SimulateSleep(NoAnswerWait);
+        UNIT_ASSERT_VALUES_EQUAL(shard.Controller->GetCleanupSchemasFinishedCounter().Val(), 0);
+
+        shard.AllowBatches(std::nullopt);
+        shard.WaitBatchesLoaded(3);
+        shard.SendPeriodicWakeup();
+        shard.Runtime.WaitFor("schemas cleaned", [&] {
+            return shard.Controller->GetCleanupSchemasFinishedCounter().Val() > 0;
+        }, TDuration::Seconds(30));
     }
 }
 

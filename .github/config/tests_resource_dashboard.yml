@@ -1,0 +1,14 @@
+# Tuning for the tests resource dashboard (limits / mem→cpu recommendations).
+# Host CPU/RAM ceilings always come from resources_monitor.jsonl (measured);
+# these knobs only scale that measured capacity.
+
+# Per-suite co-resident RAM budget as a fraction of measured MemTotal.
+mem_budget_fraction: 0.70
+# Ignore memory-driven cpu bumps when heaviest chunk is below this size (GB).
+mem_min_chunk_gb: 24.0
+# Runner CPU busy threshold (%) for contention-vs-long-test heuristics.
+cpu_saturation_pct: 90.0
+# Single-test "near timeout budget" factor for split/contention hints.
+near_budget_factor: 1.10
+# Matches ya make cgroup MemoryMax in build_and_test_ya (fraction of MemTotal).
+ya_make_mem_fraction: 0.95

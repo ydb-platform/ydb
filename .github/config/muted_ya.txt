@@ -33,6 +33,7 @@ ydb/core/persqueue/ut TPartitionTests.ReplicationDataIgnoresReplicationConsumerW
 ydb/core/sys_view/ut AuthSystemView.AuthGroups_Access
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/functional Transfer.RetentionGapDoesNotFailTransfer
+ydb/core/tx/columnshard/export/actor/ut TExportActorLifecycle.RetriesExportAfterS3ThrottlingMidUpload
 ydb/core/tx/replication/controller/ut_schema_change BootstrapImport.SourceWithIndex+Materialized+DirectImport
 ydb/core/tx/replication/controller/ut_schema_change BootstrapImport.SourceWithIndex+Materialized-DirectImport
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk

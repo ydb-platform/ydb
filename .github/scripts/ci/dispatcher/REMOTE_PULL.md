@@ -25,7 +25,8 @@ with `config.inputs`.
 
 The remote executor does **not** post GitHub commit statuses (`build_*` /
 `test_*`): when `source_run_id` is set, `build_and_test_ya` skips those curls.
-Checks / PR attribution stay on the platform (waiter + ingest).
+The caller run's waiter/ingest outcome is the signal (no separate `test_<preset>`
+status is posted today).
 
 `platform_run_id` = caller `github.run_id`.
 `platform_run_attempt` = caller `github.run_attempt` (in ticket `config.inputs` and

@@ -460,8 +460,10 @@ runs:
           TEST_RETRY_COUNT=3
         fi
 
-        if [ ! -z "$INPUT_ADDITIONAL_YA_MAKE_ARGS" ]; then
-          params+=($INPUT_ADDITIONAL_YA_MAKE_ARGS)
+        # Same as main's params+=(${{ inputs.additional_ya_make_args }}): GHA used to
+        # expand into the script so bash did quote-aware word split. Keep that via eval.
+        if [ -n "$INPUT_ADDITIONAL_YA_MAKE_ARGS" ]; then
+          eval "params+=($INPUT_ADDITIONAL_YA_MAKE_ARGS)"
         fi
 
         params+=(
@@ -501,7 +503,7 @@ runs:
         echo "::debug::get version"
         ./ya --version
 
-        if [ true = $INPUT_RUN_TESTS ]; then
+        if [ true = "$INPUT_RUN_TESTS" ]; then
             params+=(-A)
         fi
         YA_MAKE_COMMAND="./ya make ${params[@]}"
@@ -538,7 +540,7 @@ runs:
                 YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
              fi
           done
-          if [ true = $INPUT_RUN_TESTS ]; then
+          if [ true = "$INPUT_RUN_TESTS" ]; then
             YA_MAKE_COMMAND+=" --retest"
           fi
           $YA_MAKE_COMMAND -k --cache-tests \
@@ -565,7 +567,7 @@ runs:
         analytics track runner_info --kind info --runner
         analytics flush
 
-        if [ true = $INPUT_RUN_TESTS ]; then
+        if [ true = "$INPUT_RUN_TESTS" ]; then
           params+=(--retest)
         fi
 
@@ -721,14 +723,14 @@ runs:
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || POSTPROCESS_RC=$?
 
-          GH_ALERTS_TG_LOGINS='$GH_ALERTS_TG_LOGINS' \
+          # GH_ALERTS_TG_* come from step env (same values main inlined via ${{ }}).
           .github/scripts/report_ram_analyzer.py \
             --report-file "$CURRENT_REPORT" \
             --output-file "$CURRENT_PUBLIC_DIR/ram_report.html" \
             --output-file-url "$CURRENT_PUBLIC_DIR_URL/ram_report.html" \
             --ram-usage-file ram_usage.txt \
             --bot-token-file "$TELEGRAM_BOT_TOKEN_FILE" \
-            --chat-id '$GH_ALERTS_TG_CHAT' \
+            --chat-id "$GH_ALERTS_TG_CHAT" \
             --memory-threshold 97 || POSTPROCESS_RC=$?
 
           # convert to chromium trace
@@ -761,6 +763,8 @@ runs:
             echo "$BUILD_FAIL_MSG" | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color red
             echo "$BUILD_FAIL_MSG" >> "$GITHUB_STEP_SUMMARY"
             printf '%s\n\n' "$BUILD_FAIL_MSG" > summary_text.txt
+            # Explicit marker for ingest (fail_summary.txt may be empty when jq finds no REGULAR build errors).
+            printf '%s\n' "$BUILD_FAIL_MSG" > "$CURRENT_PUBLIC_DIR/build_failed.md"
             echo red > summary_color.txt
             cp -f summary_text.txt "$PUBLIC_DIR/summary_text.txt"
             cp -f summary_text.txt "$CURRENT_PUBLIC_DIR/summary_text.txt"
@@ -897,9 +901,8 @@ runs:
                 run_name="${EFFECTIVE_RUN_ID}_manual"
                 ;;
               pull_request | pull_request_target)
-                pr_number="${PR_NUMBER:-$PR_NUMBER}"
-                if [ -n "$pr_number" ]; then
-                  run_name="${EFFECTIVE_RUN_ID}_PR_${pr_number}"
+                if [ -n "$PR_NUMBER" ]; then
+                  run_name="${EFFECTIVE_RUN_ID}_PR_${PR_NUMBER}"
                 else
                   run_name="${EFFECTIVE_RUN_ID}_PR"
                 fi
@@ -1005,7 +1008,7 @@ runs:
           testmessage="The check has been failed"
         fi
         if [ -n "$SOURCE_RUN_ID" ]; then
-          echo "Skipping GitHub commit status test_${BUILD_PRESET} (remote executor; platform side posts checks). source_run_id=$SOURCE_RUN_ID result=$teststatus"
+          echo "Skipping GitHub commit status test_${BUILD_PRESET} (remote executor; caller waiter/ingest own the run result). source_run_id=$SOURCE_RUN_ID result=$teststatus"
         else
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GITHUB_TOKEN" -H "X-GitHub-Api-Version: 2022-11-28" \
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${STATUS_SHA}" \
@@ -1051,8 +1054,8 @@ runs:
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
         echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
         LINKS_LINE=$(cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))')
-        # This step has a fresh GITHUB_STEP_SUMMARY; rebuild job_summary from
-        # artifact links + generate-summary / build-fail text (not step summary alone).
+        # Durable S3 job_summary for remote ingest: links + summary_text (table / build-fail).
+        # Step summary: links only — same as main; generate-summary already appended the table.
         {
           echo "$LINKS_LINE"
           echo
@@ -1062,7 +1065,7 @@ runs:
             cat summary_text.txt
           fi
         } > "$JOB_SUMMARY_MD"
-        cat "$JOB_SUMMARY_MD" >> "$GITHUB_STEP_SUMMARY"
+        echo "$LINKS_LINE" >> "$GITHUB_STEP_SUMMARY"
         # Locator for caller ingest: exact S3 leaf + URLs + commit/branch (next to job_summary.md).
         REMOTE_ARTIFACTS_JSON="$PUBLIC_DIR/remote_artifacts.json"
         REMOTE_ARTIFACTS_JSON="$REMOTE_ARTIFACTS_JSON" \

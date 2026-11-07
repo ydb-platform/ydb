@@ -102,18 +102,21 @@ def parse_remote_json(raw: str) -> dict[str, Any]:
 
 
 def build_config() -> dict[str, Any]:
-    cfg = deep_merge(DEFAULT_REMOTE, parse_remote_json(os.environ.get("REMOTE_JSON", "")))
+    remote = parse_remote_json(os.environ.get("REMOTE_JSON", ""))
+    cfg = deep_merge(DEFAULT_REMOTE, remote)
 
-    # Optional seeds from the caller WF top-level inputs (when remote JSON omits job.*).
-    job = cfg.get("job") if isinstance(cfg.get("job"), dict) else {}
-    if not _as_str(job.get("build_target")).strip():
+    # UI seeds (test_targets / build_preset) override DEFAULT_REMOTE defaults when
+    # remote JSON omitted those job keys — not when the key is already present.
+    job = dict(cfg.get("job") if isinstance(cfg.get("job"), dict) else {})
+    remote_job = remote.get("job") if isinstance(remote.get("job"), dict) else {}
+    if "build_target" not in remote_job:
         seed = (os.environ.get("DEFAULT_BUILD_TARGET") or "").strip()
         if seed:
-            job = {**job, "build_target": seed}
-    if not _as_str(job.get("build_preset")).strip():
+            job["build_target"] = seed
+    if "build_preset" not in remote_job:
         seed = (os.environ.get("DEFAULT_BUILD_PRESET") or "").split(",")[0].strip()
         if seed:
-            job = {**job, "build_preset": seed}
+            job["build_preset"] = seed
     cfg["job"] = job
 
     code_ref = (os.environ.get("CODE_REF") or "").strip() or _as_str(cfg.get("code_ref")).strip()
@@ -189,9 +192,6 @@ def build_config() -> dict[str, Any]:
 
     cfg["wait"] = _truthy(cfg.get("wait"), True)
     cfg["fail_on_remote_failure"] = _truthy(cfg.get("fail_on_remote_failure"), True)
-    cfg.pop("handoff", None)
-    cfg.pop("ticket_s3_endpoint", None)
-    cfg.pop("ticket_s3_bucket", None)
     cfg["platform_repository"] = (
         _as_str(cfg.get("platform_repository")).strip()
         or (os.environ.get("GITHUB_REPOSITORY") or "").strip()

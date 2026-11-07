@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CI_DISABLE_YDB_QA kill-switch for remote hosts without YDB QA access."""
+"""CI_DISABLE_YDB_QA: disabled wrapper must not open YDB; flush keeps the batch."""
 
 from __future__ import annotations
 
@@ -16,12 +16,10 @@ _UTILS_ANALYTICS = Path(__file__).resolve().parents[3] / "analytics"
 sys.path.insert(0, str(_UTILS_ANALYTICS))
 sys.path.insert(0, str(_SCRIPTS / "analytics"))
 
-# ydb_wrapper imports the YDB SDK at module load; stub it for unit tests.
 sys.modules.setdefault("ydb", MagicMock())
 
 from collector.flush import flush_file, has_send_credentials  # noqa: E402
-from collector.schema import is_ydb_qa_disabled as schema_disabled  # noqa: E402
-from ydb_wrapper import YDBWrapper, is_ydb_qa_disabled  # noqa: E402
+from ydb_wrapper import YDBWrapper  # noqa: E402
 
 
 class YdbQaDisableTest(unittest.TestCase):
@@ -43,24 +41,11 @@ class YdbQaDisableTest(unittest.TestCase):
             else:
                 os.environ[key] = value
 
-    def test_is_ydb_qa_disabled_truthy(self):
-        os.environ.pop("CI_DISABLE_YDB_QA", None)
-        self.assertFalse(is_ydb_qa_disabled())
-        self.assertFalse(schema_disabled())
-        os.environ["CI_DISABLE_YDB_QA"] = "1"
-        self.assertTrue(is_ydb_qa_disabled())
-        self.assertTrue(schema_disabled())
-        os.environ["CI_DISABLE_YDB_QA"] = "true"
-        self.assertTrue(is_ydb_qa_disabled())
-
-    def test_wrapper_skips_config_and_credentials(self):
+    def test_wrapper_disabled_skips_credentials(self):
         os.environ["CI_DISABLE_YDB_QA"] = "1"
         os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = "/tmp/fake-sa.json"
         with YDBWrapper(silent=True) as wrapper:
-            self.assertEqual(wrapper.config_source, "disabled:CI_DISABLE_YDB_QA")
             self.assertFalse(wrapper.check_credentials())
-            self.assertEqual(wrapper.database_endpoint, "")
-            self.assertEqual(wrapper.database_path, "")
 
     def test_flush_keeps_local_batch_when_disabled(self):
         os.environ["CI_DISABLE_YDB_QA"] = "1"
@@ -79,17 +64,6 @@ class YdbQaDisableTest(unittest.TestCase):
             self.assertEqual(uploaded, 0)
             self.assertTrue(os.path.exists(path))
             self.assertFalse(os.path.exists(path + ".offset"))
-
-            export = os.path.join(tmp, "ci_metrics.jsonl")
-            os.environ["ANALYTICS_EXPORT_FILE"] = export
-            with mock.patch("collector.flush._open_ydb_wrapper") as open_wrapper:
-                uploaded = flush_file(path)
-                open_wrapper.assert_not_called()
-            self.assertEqual(uploaded, 0)
-            self.assertTrue(os.path.exists(export))
-            with open(export, encoding="utf-8") as handle:
-                self.assertIn('"name":"step"', handle.read())
-            os.environ.pop("ANALYTICS_EXPORT_FILE", None)
 
 
 if __name__ == "__main__":

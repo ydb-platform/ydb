@@ -110,11 +110,11 @@ def parse_index_hrefs(html: str) -> list[str]:
             continue
         if href.startswith("./"):
             href = href[2:]
-        # Parent crumb in Indexer listings.
-        if href == "../" or href == ".." or href.startswith("../"):
-            continue
         href = href.replace("\\", "/").lstrip("/")
-        if not href or href in seen:
+        # Reject parent crumbs and any .. segment (a/../../x).
+        if not href or any(p == ".." for p in href.split("/")):
+            continue
+        if href in seen:
             continue
         seen.add(href)
         out.append(href)
@@ -123,6 +123,19 @@ def parse_index_hrefs(html: str) -> list[str]:
 
 def _posix_join(*parts: str) -> str:
     return "/".join(p.strip("/") for p in parts if p and p.strip("/"))
+
+
+def _safe_under(dest: Path, child_rel: str) -> Path | None:
+    """Resolve child_rel under dest; None if it escapes (path traversal)."""
+    parts = [p for p in child_rel.split("/") if p and p != "."]
+    if any(p == ".." for p in parts):
+        return None
+    local = dest.joinpath(*parts) if parts else dest
+    try:
+        local.resolve().relative_to(dest.resolve())
+    except ValueError:
+        return None
+    return local
 
 
 def _object_url(endpoint: str, bucket: str, key: str) -> str:
@@ -167,7 +180,12 @@ def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest:
             n_fail += 1
             continue
 
-        local_index = dest.joinpath(*rel_dir.split("/"), "index.html") if rel_dir else dest / "index.html"
+        index_rel = _posix_join(rel_dir, "index.html") if rel_dir else "index.html"
+        local_index = _safe_under(dest, index_rel)
+        if local_index is None:
+            print(f"::warning::refusing unsafe index path {index_rel!r}")
+            n_fail += 1
+            continue
         _write_bytes(local_index, raw)
         n_ok += 1
 
@@ -182,18 +200,22 @@ def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest:
             # Dir link: either "try_1/index.html" (recursive Indexer) or "try_1/".
             if href.endswith("/index.html"):
                 sub = child_rel[: -len("/index.html")]
-                if sub not in seen_dirs:
+                if sub and _safe_under(dest, sub) is not None and sub not in seen_dirs:
                     queue.append(sub)
                 continue
             if href.endswith("/"):
                 sub = child_rel.rstrip("/")
-                if sub not in seen_dirs:
+                if sub and _safe_under(dest, sub) is not None and sub not in seen_dirs:
                     queue.append(sub)
                 continue
 
+            local_path = _safe_under(dest, child_rel)
+            if local_path is None:
+                print(f"::warning::refusing unsafe href path {child_rel!r}")
+                n_fail += 1
+                continue
             file_key = _posix_join(root_key, child_rel)
             file_url = _object_url(endpoint, bucket, file_key)
-            local_path = dest.joinpath(*child_rel.split("/"))
             data = http_get(file_url)
             if data is None:
                 print(f"::warning::failed to download {file_url}")
@@ -353,9 +375,6 @@ def regenerate_summary(
     enriched markdown (history / build-fail headline). Does not touch
     GITHUB_STEP_SUMMARY — caller publishes the final file after S3 upload.
     """
-    # Ingest runs on the platform with YDB credentials; never inherit host kill-switch.
-    os.environ.pop("CI_DISABLE_YDB_QA", None)
-
     summary_links = public_dir / "summary_links.txt"
     if not summary_links.exists():
         summary_links.write_text(f"00 [Artifacts]({public_dir_url}/index.html)\n", encoding="utf-8")
@@ -394,6 +413,7 @@ def regenerate_summary(
     status_file = public_dir / "ingest_statusrep.txt"
     try_dir = public_dir / f"try_{last['retry']}"
     oom = try_dir / "oom_dmesg.txt"
+    build_failed_md = try_dir / "build_failed.md"
     fail_summary = try_dir / "fail_summary.txt"
 
     cmd = [
@@ -447,9 +467,11 @@ def regenerate_summary(
             job_summary.write_text(remote_body, encoding="utf-8")
         return job_summary
 
-    # Same headline as build_and_test_ya / comment-pr when ya make failed this try.
+    # Prefer executor-written marker (always set on BUILD_FAILED); fall back to fail_summary.
     build_fail_line = ""
-    if fail_summary.is_file() and fail_summary.stat().st_size > 0:
+    if build_failed_md.is_file() and build_failed_md.stat().st_size > 0:
+        build_fail_line = build_failed_md.read_text(encoding="utf-8").rstrip() + "\n\n"
+    elif fail_summary.is_file() and fail_summary.stat().st_size > 0:
         build_fail_line = (
             f"Build failed, see the [logs]({public_dir_url}/ya_make_output.txt). "
             f"Also see [fail summary]({public_dir_url}/try_{last['retry']}/fail_summary.txt).\n\n"
@@ -572,8 +594,6 @@ def flush_ci_metrics(
         caller_repo=caller_repo,
     )
 
-    # Caller ingest must write YDB even if a stray CI_DISABLE leaked into the env.
-    os.environ.pop("CI_DISABLE_YDB_QA", None)
     analytics_dir = workspace / ".github/scripts/utils/analytics"
     ga_dir = analytics_dir / "github_actions"
     for path in (str(analytics_dir), str(ga_dir), str(workspace / ".github/scripts/analytics")):
@@ -743,7 +763,7 @@ def main() -> None:
                 "attempts": attempts,
                 "caller_public_dir_url": new_public,
                 "caller_artifact_key_prefix": dest_key_prefix,
-                "caller_run_root_url": (
+                "caller_run_root_url": quote_url(
                     f"{caller_endpoint}/{caller_bucket}/{caller_repo}/"
                     f"{caller_workflow}/{caller_run_id}/remote-{run_id}"
                 ),

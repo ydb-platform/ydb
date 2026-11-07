@@ -160,7 +160,14 @@ Possible errors during asynchronous replication can be grouped into the followin
 
 {% note warning %}
 
-Currently, asynchronous replication that is aborted due to a critical error cannot be resumed. In this case, you must [drop](../yql/reference/syntax/drop-async-replication.md) and [create](../yql/reference/syntax/create-async-replication.md) a new asynchronous replication instance.
+After fixing the cause of a critical error, you can resume asynchronous replication without dropping the instance. First pause it, then set its state to `STANDBY`:
+
+```yql
+ALTER ASYNC REPLICATION my_replication SET (STATE = 'PAUSED');
+ALTER ASYNC REPLICATION my_replication SET (STATE = 'STANDBY');
+```
+
+Make sure the pause and processing of accumulated changes fit within the [record retention period](cdc.md#retention-period). For details, see [ALTER ASYNC REPLICATION](../yql/reference/syntax/alter-async-replication.md).
 
 {% endnote %}
 

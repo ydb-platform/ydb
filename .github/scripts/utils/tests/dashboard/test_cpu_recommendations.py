@@ -17,11 +17,12 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from _paths import TEST_METRICS, add_product_paths
+from _paths import DASHBOARD, TEST_METRICS, add_product_paths
 
-add_product_paths(TEST_METRICS)
+add_product_paths(TEST_METRICS, DASHBOARD)
 
 from dashboard_cpu_recommendations import _marker_suite_start_us, build_cpu_recommendations
+from runner_footprint import RunnerCapacity, mem_cpu_tiers_for
 
 try:
     import pytest
@@ -30,6 +31,21 @@ except ImportError:
 
 
 GB_KB = 1024 * 1024  # 1 GB expressed in KB
+
+
+def _capacity(*, vcpu: int, ram_gb: float, mem_budget_gb: float) -> RunnerCapacity:
+    """Explicit measured capacity for recommendation unit tests (no footprint YAML)."""
+    return RunnerCapacity(
+        vcpu=vcpu,
+        ram_gb=ram_gb,
+        mem_budget_gb=mem_budget_gb,
+        mem_min_chunk_gb=24.0,
+        cpu_saturation_pct=90.0,
+        near_budget_factor=1.10,
+        mem_cpu_tiers=mem_cpu_tiers_for(vcpu),
+        ya_make_mem_limit_gb=ram_gb * 0.95,
+        source="measured",
+    )
 
 
 def _run(suite, chunk, start_sec, dur_sec, cores, ram_gb=0.0, status="OK"):
@@ -237,6 +253,7 @@ def test_memory_drives_cpu_bump_not_ram():
         report_status_by_suite={suite: {"tests": _status(), "chunks": _status()}},
         max_test_duration_sec_by_suite={suite: 50.0},
         test_duration_stats_by_suite={suite: {"chunk_loads": []}},
+        runner_capacity=_capacity(vcpu=96, ram_gb=286.0, mem_budget_gb=200.0),
     ))
     r = recs[suite]
     assert round(r["max_chunk_ram_gb"]) == 58, r["mem_explain"]
@@ -262,6 +279,7 @@ def test_light_suite_no_memory_cpu_bump():
         report_status_by_suite={suite: {"tests": _status(), "chunks": _status()}},
         max_test_duration_sec_by_suite={suite: 50.0},
         test_duration_stats_by_suite={suite: {"chunk_loads": []}},
+        runner_capacity=_capacity(vcpu=64, ram_gb=124.0, mem_budget_gb=86.8),
     ))
     r = recs[suite]
     assert r["cpu_for_memory"] is None, r["mem_explain"]

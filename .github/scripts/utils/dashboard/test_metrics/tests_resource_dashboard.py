@@ -30,7 +30,7 @@ try:
     from .dashboard_cpu_recommendations import build_cpu_recommendations
     from .dashboard_html_main import build_html_dashboard
     from .dashboard_report_table import build_report_table_html
-    from ..runner_footprint import enrich_resources_overlay, resolve_runner_footprint
+    from ..runner_footprint import enrich_resources_overlay
 except ImportError:
     _script_dir = Path(__file__).resolve().parent
     _dashboard_dir = _script_dir.parent
@@ -40,7 +40,7 @@ except ImportError:
     from dashboard_cpu_recommendations import build_cpu_recommendations
     from dashboard_html_main import build_html_dashboard
     from dashboard_report_table import build_report_table_html
-    from runner_footprint import enrich_resources_overlay, resolve_runner_footprint
+    from runner_footprint import enrich_resources_overlay
 
 normalize_suite_path = ya_make_requirements.normalize_suite_path
 
@@ -1601,7 +1601,7 @@ def main() -> None:
         "--build-preset",
         type=str,
         default=None,
-        help="ya make build preset (e.g. release-asan) for runner footprint limits from .github/config/runners_footprints.yml",
+        help="ya make build preset (metadata for the dashboard; host limits come from resources_monitor)",
     )
     p.add_argument("--runner", type=str, default=None, help="Runner name (e.g. GitHub Actions runner) for monitoring link")
     p.add_argument("--pr", type=str, default=None, help="PR number for dashboard header")
@@ -1831,6 +1831,7 @@ def main() -> None:
 
     resources_records: Optional[list[dict[str, Any]]] = None
     resources_overlay = None
+    runner_capacity = None
     if args.resources_jsonl and args.resources_jsonl.exists():
         try:
             from ..resources_loader import load_resources_jsonl
@@ -1843,20 +1844,22 @@ def main() -> None:
             records=resources_records,
             activity_deltas=activity_deltas,
         )
-
-    runner_footprint = resolve_runner_footprint(build_preset=args.build_preset)
-    resources_overlay = enrich_resources_overlay(
-        resources_overlay,
-        runner_footprint,
-        records=resources_records,
-    )
+        resources_overlay, runner_capacity = enrich_resources_overlay(
+            resources_overlay,
+            records=resources_records,
+        )
 
     # Runner CPU-utilization series (evlog_sec, cpu_pct) for saturation-aware recommendations.
     runner_cpu_series: Optional[list[tuple[float, float]]] = None
     if resources_overlay:
         xs = resources_overlay.get("xs_evlog_sec") or []
         cores = resources_overlay.get("cpu_total_cores") or []
-        machine_cores = float(resources_overlay.get("cpu_cores", 0) or 0)
+        measured = resources_overlay.get("measured") or {}
+        machine_cores = float(
+            measured.get("cpu_cores")
+            or resources_overlay.get("cpu_cores")
+            or 0
+        )
         if xs and cores and machine_cores > 0:
             runner_cpu_series = [
                 (float(t), float(c) / machine_cores * 100.0) for t, c in zip(xs, cores)
@@ -1871,7 +1874,7 @@ def main() -> None:
         test_duration_stats_by_suite=test_duration_stats_by_suite,
         maximize_reqs_for_timeout_tests=args.maximize_reqs_for_timeout_tests,
         runner_cpu_series=runner_cpu_series,
-        runner_footprint=runner_footprint,
+        runner_capacity=runner_capacity,
     )
     suite_test_event_times = build_test_event_times_direct(
         report_path, args.suite_path, enriched_runs, args.evlog
@@ -2013,7 +2016,9 @@ def main() -> None:
             "repo_root_for_synthetic": str(repo_root) if repo_root else None,
             "sanitizer": effective_sanitizer,
             "build_preset": args.build_preset,
-            "runner_footprint": runner_footprint.to_dict(),
+            # Measured host capacity only; omitted when resources_monitor is missing.
+            "runner_capacity": runner_capacity.to_dict() if runner_capacity else None,
+            "runner_footprint": runner_capacity.to_dict() if runner_capacity else None,
         }
         build_html_dashboard(
             args.suite_path,

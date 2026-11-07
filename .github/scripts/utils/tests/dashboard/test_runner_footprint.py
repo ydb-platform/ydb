@@ -1,4 +1,4 @@
-"""Tests for runner_footprint config loader."""
+"""Tests for measured runner capacity (dashboard limits / recommendations)."""
 
 from __future__ import annotations
 
@@ -12,32 +12,11 @@ from _paths import DASHBOARD, add_product_paths
 add_product_paths(DASHBOARD)
 
 from runner_footprint import (  # noqa: E402
+    capacity_from_measured,
     enrich_resources_overlay,
-    footprint_key_for_preset,
+    load_dashboard_tuning,
     mem_cpu_tiers_for,
-    resolve_runner_footprint,
 )
-
-
-def test_footprint_key_for_preset():
-    assert footprint_key_for_preset("release-asan") == "build-preset-release-asan"
-    assert footprint_key_for_preset("build-preset-release-asan") == "build-preset-release-asan"
-
-
-def test_resolve_release_asan_footprint():
-    fp = resolve_runner_footprint(build_preset="release-asan")
-    assert fp.vcpu == 64
-    assert fp.ram_gb == 320.0
-    assert fp.mem_budget_gb == 320.0 * 0.70
-    assert fp.ya_make_mem_limit_gb == 320.0 * 0.95
-    assert fp.footprint_key == "build-preset-release-asan"
-    assert 64 in fp.mem_cpu_tiers
-
-
-def test_resolve_relwithdebinfo_footprint():
-    fp = resolve_runner_footprint(build_preset="relwithdebinfo")
-    assert fp.vcpu == 64
-    assert fp.ram_gb == 256.0
 
 
 def test_mem_cpu_tiers_for():
@@ -45,40 +24,75 @@ def test_mem_cpu_tiers_for():
     assert mem_cpu_tiers_for(96) == (1, 2, 4, 8, 16, 32, 48, 64, 96)
 
 
-def test_enrich_resources_overlay_adds_limits():
-    fp = resolve_runner_footprint(build_preset="release-asan")
+def test_capacity_from_measured_requires_both():
+    assert capacity_from_measured(cpu_cores=None, ram_gb=124.0) is None
+    assert capacity_from_measured(cpu_cores=64, ram_gb=None) is None
+    assert capacity_from_measured(cpu_cores=0, ram_gb=124.0) is None
+
+
+def test_capacity_from_measured_applies_tuning():
+    dash = load_dashboard_tuning()
+    cap = capacity_from_measured(cpu_cores=64, ram_gb=124.42)
+    assert cap is not None
+    assert cap.vcpu == 64
+    assert abs(cap.ram_gb - 124.42) < 1e-6
+    assert abs(cap.mem_budget_gb - 124.42 * dash["mem_budget_fraction"]) < 1e-6
+    assert abs(cap.ya_make_mem_limit_gb - 124.42 * dash["ya_make_mem_fraction"]) < 1e-6
+    assert cap.source == "measured"
+    assert 64 in cap.mem_cpu_tiers
+
+
+def test_enrich_resources_overlay_measured_limits():
     overlay = {
         "xs_evlog_sec": [0.0, 1.0],
         "cpu_total_cores": [10.0, 20.0],
         "ram_gb": [100.0, 120.0],
         "cpu_cores": 64,
+        "ram_total_gb": 124.42,
     }
-    records = [{"ram_total_gb": 280.5}]
-    out = enrich_resources_overlay(overlay, fp, records=records)
+    records = [{"cpu_cores": 64, "ram_total_gb": 124.42}]
+    out, cap = enrich_resources_overlay(overlay, records=records)
     assert out is not None
+    assert cap is not None
     assert out["runner_limits"]["cpu_cores_max"] == 64
-    assert out["runner_limits"]["ram_gb_max"] == 320.0
-    assert out["measured"]["ram_gb"] == 280.5
-    assert out["runner_footprint"]["build_preset"] == "release-asan"
+    assert abs(out["runner_limits"]["ram_gb_max"] - 124.42) < 1e-6
+    assert out["measured"]["ram_gb"] == 124.42
+    assert out["runner_capacity"]["source"] == "measured"
+    assert out["runner_footprint"]["ram_gb"] == out["runner_capacity"]["ram_gb"]
+
+
+def test_enrich_resources_overlay_no_lie_without_monitor():
+    overlay = {
+        "xs_evlog_sec": [0.0],
+        "cpu_total_cores": [1.0],
+        "ram_gb": [1.0],
+    }
+    out, cap = enrich_resources_overlay(overlay, records=[])
+    assert out is not None
+    assert cap is None
+    assert "runner_limits" not in out
+    assert "runner_capacity" not in out
+    assert out["measured"]["cpu_cores"] is None
+    assert out["measured"]["ram_gb"] is None
 
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
     for fn in (
-        test_footprint_key_for_preset,
-        test_resolve_release_asan_footprint,
-        test_resolve_relwithdebinfo_footprint,
         test_mem_cpu_tiers_for,
-        test_enrich_resources_overlay_adds_limits,
+        test_capacity_from_measured_requires_both,
+        test_capacity_from_measured_applies_tuning,
+        test_enrich_resources_overlay_measured_limits,
+        test_enrich_resources_overlay_no_lie_without_monitor,
     ):
         suite.addTest(unittest.FunctionTestCase(fn))
     return suite
 
 
 if __name__ == "__main__":
-    test_footprint_key_for_preset()
-    test_resolve_release_asan_footprint()
-    test_resolve_relwithdebinfo_footprint()
     test_mem_cpu_tiers_for()
-    test_enrich_resources_overlay_adds_limits()
+    test_capacity_from_measured_requires_both()
+    test_capacity_from_measured_applies_tuning()
+    test_enrich_resources_overlay_measured_limits()
+    test_enrich_resources_overlay_no_lie_without_monitor()
     print("OK")

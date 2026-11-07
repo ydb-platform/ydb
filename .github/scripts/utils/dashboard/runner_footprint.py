@@ -1,4 +1,12 @@
-"""Load runner provisioned footprints and dashboard tuning from .github/config."""
+"""Runner capacity for the tests dashboard: measured host specs only.
+
+Chart limit lines and CPU/memory recommendations use /proc data from
+``resources_monitor.jsonl``. Provisioned sizes in ``runners_footprints.yml``
+are not used here (that file remains for fleet capacity export).
+
+Dashboard tuning knobs (budget fractions, saturation) may still be read from
+the ``dashboard:`` section of that YAML.
+"""
 
 from __future__ import annotations
 
@@ -10,8 +18,8 @@ CONFIG_REL_PATH = Path(".github/config/runners_footprints.yml")
 
 
 @dataclass(frozen=True)
-class RunnerFootprint:
-    """Provisioned runner capacity (max) plus derived dashboard budgets."""
+class RunnerCapacity:
+    """Actual runner capacity from the host monitor, plus dashboard tuning."""
 
     vcpu: int
     ram_gb: float
@@ -21,9 +29,7 @@ class RunnerFootprint:
     near_budget_factor: float
     mem_cpu_tiers: tuple[int, ...]
     ya_make_mem_limit_gb: float
-    build_preset: Optional[str] = None
-    footprint_key: Optional[str] = None
-    source: str = "config"
+    source: str = "measured"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -34,10 +40,12 @@ class RunnerFootprint:
             "cpu_saturation_pct": self.cpu_saturation_pct,
             "near_budget_factor": self.near_budget_factor,
             "ya_make_mem_limit_gb": round(self.ya_make_mem_limit_gb, 1),
-            "build_preset": self.build_preset,
-            "footprint_key": self.footprint_key,
             "source": self.source,
         }
+
+
+# Backward-compatible alias for older imports/tests.
+RunnerFootprint = RunnerCapacity
 
 
 def _repo_root_from_here() -> Path:
@@ -69,15 +77,6 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def footprint_key_for_preset(build_preset: str) -> str:
-    preset = (build_preset or "").strip()
-    if not preset:
-        return ""
-    if preset.startswith("build-preset-"):
-        return preset
-    return f"build-preset-{preset}"
-
-
 def mem_cpu_tiers_for(max_cores: int) -> tuple[int, ...]:
     base = (1, 2, 4, 8, 16, 32, 48, 64, 96, 128)
     tiers = [t for t in base if t <= max_cores]
@@ -96,107 +95,135 @@ def _dashboard_defaults() -> dict[str, float]:
     }
 
 
-def _pick_footprint_entry(
-    config: dict[str, Any],
-    build_preset: Optional[str],
-) -> tuple[dict[str, Any], str, str]:
-    footprints = config.get("footprints") or {}
-    if not isinstance(footprints, dict):
-        footprints = {}
-
-    key = footprint_key_for_preset(build_preset or "")
-    if key and key in footprints and isinstance(footprints[key], dict):
-        return footprints[key], key, "config"
-
-    default_fp = config.get("default_footprint") or {}
-    if isinstance(default_fp, dict) and default_fp:
-        return default_fp, "default_footprint", "default"
-
-    return {"vcpu": 96, "ram_gb": 320.0}, "fallback", "fallback"
-
-
-def resolve_runner_footprint(
-    *,
-    build_preset: Optional[str] = None,
-    config_path: Optional[Path] = None,
-) -> RunnerFootprint:
-    """Resolve provisioned runner maximums for recommendations and chart limit lines."""
+def load_dashboard_tuning(config_path: Optional[Path] = None) -> dict[str, float]:
+    """Load dashboard tuning knobs (fractions/thresholds), not machine sizes."""
+    dash = dict(_dashboard_defaults())
     path = config_path or default_config_path()
     try:
         config = _load_yaml(path) if path.is_file() else {}
     except (OSError, RuntimeError):
-        config = {}
-
-    fp_entry, fp_key, source = _pick_footprint_entry(config, build_preset)
-    dash = dict(_dashboard_defaults())
-    raw_dash = config.get("dashboard")
-    if isinstance(raw_dash, dict):
+        return dash
+    raw = config.get("dashboard")
+    if isinstance(raw, dict):
         for k in dash:
-            if k in raw_dash:
+            if k in raw:
                 try:
-                    dash[k] = float(raw_dash[k])
+                    dash[k] = float(raw[k])
                 except (TypeError, ValueError):
                     pass
+    return dash
 
-    vcpu = int(fp_entry.get("vcpu") or 1)
-    ram_gb = float(fp_entry.get("ram_gb") or 1.0)
-    mem_budget_gb = ram_gb * float(dash["mem_budget_fraction"])
-    ya_make_mem_limit_gb = ram_gb * float(dash["ya_make_mem_fraction"])
 
-    return RunnerFootprint(
-        vcpu=max(1, vcpu),
-        ram_gb=ram_gb,
-        mem_budget_gb=mem_budget_gb,
+def capacity_from_measured(
+    *,
+    cpu_cores: Optional[float],
+    ram_gb: Optional[float],
+    config_path: Optional[Path] = None,
+) -> Optional[RunnerCapacity]:
+    """Build capacity from measured host specs. Returns None if either is missing."""
+    try:
+        cpu = float(cpu_cores) if cpu_cores is not None else 0.0
+    except (TypeError, ValueError):
+        cpu = 0.0
+    try:
+        ram = float(ram_gb) if ram_gb is not None else 0.0
+    except (TypeError, ValueError):
+        ram = 0.0
+    if cpu <= 0 or ram <= 0:
+        return None
+
+    dash = load_dashboard_tuning(config_path)
+    vcpu = max(1, int(round(cpu)))
+    return RunnerCapacity(
+        vcpu=vcpu,
+        ram_gb=ram,
+        mem_budget_gb=ram * float(dash["mem_budget_fraction"]),
         mem_min_chunk_gb=float(dash["mem_min_chunk_gb"]),
         cpu_saturation_pct=float(dash["cpu_saturation_pct"]),
         near_budget_factor=float(dash["near_budget_factor"]),
-        mem_cpu_tiers=mem_cpu_tiers_for(max(1, vcpu)),
-        ya_make_mem_limit_gb=ya_make_mem_limit_gb,
-        build_preset=(build_preset or None),
-        footprint_key=fp_key,
-        source=source,
+        mem_cpu_tiers=mem_cpu_tiers_for(vcpu),
+        ya_make_mem_limit_gb=ram * float(dash["ya_make_mem_fraction"]),
+        source="measured",
     )
 
 
-def enrich_resources_overlay(
+def _first_positive(records: Optional[list[dict[str, Any]]], key: str) -> Optional[float]:
+    for rec in records or []:
+        raw = rec.get(key)
+        if raw is None:
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if value > 0:
+            return value
+    return None
+
+
+def extract_measured_host_specs(
     overlay: Optional[dict[str, Any]],
-    footprint: RunnerFootprint,
     *,
     records: Optional[list[dict[str, Any]]] = None,
-) -> Optional[dict[str, Any]]:
-    """Attach provisioned limits and measured machine specs to the monitor overlay."""
-    if overlay is None:
-        return None
-    out = dict(overlay)
-    out["runner_limits"] = {
-        "cpu_cores_max": footprint.vcpu,
-        "ram_gb_max": footprint.ram_gb,
-        "mem_budget_gb": round(footprint.mem_budget_gb, 1),
-        "ya_make_mem_limit_gb": round(footprint.ya_make_mem_limit_gb, 1),
-    }
-    def _first_positive(key: str) -> Optional[float]:
-        for rec in records or []:
-            raw = rec.get(key)
-            if raw is None:
-                continue
-            try:
-                value = float(raw)
-            except (TypeError, ValueError):
-                continue
-            if value > 0:
-                return value
-        return None
-
-    measured_cpu = _first_positive("cpu_cores")
-    if measured_cpu is None:
-        raw_cpu = out.get("cpu_cores")
+) -> dict[str, Optional[float]]:
+    """Read cpu_cores / ram_total_gb from monitor records or overlay fields."""
+    measured_cpu = _first_positive(records, "cpu_cores")
+    if measured_cpu is None and overlay:
+        raw_cpu = overlay.get("cpu_cores")
         try:
             measured_cpu = float(raw_cpu) if raw_cpu else None
         except (TypeError, ValueError):
             measured_cpu = None
-    out["measured"] = {
-        "cpu_cores": measured_cpu,
-        "ram_gb": _first_positive("ram_total_gb") or out.get("ram_total_gb"),
+        if measured_cpu is not None and measured_cpu <= 0:
+            measured_cpu = None
+
+    measured_ram = _first_positive(records, "ram_total_gb")
+    if measured_ram is None and overlay:
+        raw_ram = overlay.get("ram_total_gb")
+        try:
+            measured_ram = float(raw_ram) if raw_ram else None
+        except (TypeError, ValueError):
+            measured_ram = None
+        if measured_ram is not None and measured_ram <= 0:
+            measured_ram = None
+
+    return {"cpu_cores": measured_cpu, "ram_gb": measured_ram}
+
+
+def enrich_resources_overlay(
+    overlay: Optional[dict[str, Any]],
+    *,
+    records: Optional[list[dict[str, Any]]] = None,
+    config_path: Optional[Path] = None,
+) -> tuple[Optional[dict[str, Any]], Optional[RunnerCapacity]]:
+    """Attach measured host limits. No fake provisioned ceilings when monitor is absent."""
+    if overlay is None:
+        return None, None
+
+    out = dict(overlay)
+    measured = extract_measured_host_specs(out, records=records)
+    out["measured"] = measured
+
+    capacity = capacity_from_measured(
+        cpu_cores=measured.get("cpu_cores"),
+        ram_gb=measured.get("ram_gb"),
+        config_path=config_path,
+    )
+    if capacity is None:
+        # Do not invent limits — charts/recommendations skip them.
+        out.pop("runner_limits", None)
+        out.pop("runner_capacity", None)
+        out.pop("runner_footprint", None)
+        return out, None
+
+    out["runner_limits"] = {
+        "cpu_cores_max": capacity.vcpu,
+        "ram_gb_max": capacity.ram_gb,
+        "mem_budget_gb": round(capacity.mem_budget_gb, 1),
+        "ya_make_mem_limit_gb": round(capacity.ya_make_mem_limit_gb, 1),
     }
-    out["runner_footprint"] = footprint.to_dict()
-    return out
+    capacity_dict = capacity.to_dict()
+    out["runner_capacity"] = capacity_dict
+    # Keep legacy key so older HTML/JSON consumers still see the same fields.
+    out["runner_footprint"] = capacity_dict
+    return out, capacity

@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 try:
-    from ..runner_footprint import RunnerFootprint, resolve_runner_footprint
+    from ..runner_footprint import RunnerCapacity
 except ImportError:
     _dashboard_dir = Path(__file__).resolve().parent.parent
     if str(_dashboard_dir) not in sys.path:
         sys.path.insert(0, str(_dashboard_dir))
-    from runner_footprint import RunnerFootprint, resolve_runner_footprint
+    from runner_footprint import RunnerCapacity
 
 
 def _status_bucket() -> dict[str, int]:
@@ -235,15 +235,18 @@ def build_cpu_recommendations(
     test_duration_stats_by_suite: Optional[dict[str, dict[str, Any]]] = None,
     maximize_reqs_for_timeout_tests: bool = False,
     runner_cpu_series: Optional[list[tuple[float, float]]] = None,
-    runner_footprint: Optional[RunnerFootprint] = None,
+    runner_capacity: Optional[RunnerCapacity] = None,
+    # Deprecated alias; prefer runner_capacity (measured host only).
+    runner_footprint: Optional[RunnerCapacity] = None,
 ) -> list[dict[str, Any]]:
-    fp = runner_footprint or resolve_runner_footprint()
-    runner_cores = fp.vcpu
-    mem_budget_gb = fp.mem_budget_gb
-    mem_min_chunk_gb = fp.mem_min_chunk_gb
-    cpu_saturation_pct = fp.cpu_saturation_pct
-    near_budget_factor = fp.near_budget_factor
-    mem_cpu_tiers = fp.mem_cpu_tiers
+    fp = runner_capacity or runner_footprint
+    # Without measured host specs do not invent fleet footprint ceilings for mem→cpu.
+    runner_cores = fp.vcpu if fp is not None else 0
+    mem_budget_gb = fp.mem_budget_gb if fp is not None else 0.0
+    mem_min_chunk_gb = fp.mem_min_chunk_gb if fp is not None else 24.0
+    cpu_saturation_pct = fp.cpu_saturation_pct if fp is not None else 90.0
+    near_budget_factor = fp.near_budget_factor if fp is not None else 1.10
+    mem_cpu_tiers = fp.mem_cpu_tiers if fp is not None else (1, 2, 4, 8, 16, 32, 48, 64)
     dedup_runs_by_chunk: dict[tuple[str, str], dict[str, Any]] = {}
     dedup_runs_fallback: list[dict[str, Any]] = []
     for r in runs:
@@ -428,7 +431,7 @@ def build_cpu_recommendations(
         cpu_for_memory: Any = None
         mem_max_parallel = 0
         mem_driven_cpu = False
-        if max_chunk_ram_gb >= mem_min_chunk_gb:
+        if fp is not None and max_chunk_ram_gb >= mem_min_chunk_gb and mem_budget_gb > 0 and runner_cores > 0:
             mem_max_parallel = max(1, int(mem_budget_gb // max_chunk_ram_gb))
             cpu_for_memory = _round_cpu_up(runner_cores / mem_max_parallel, mem_cpu_tiers)
             if recommended_req != "all" and int(recommended_req) < int(cpu_for_memory):

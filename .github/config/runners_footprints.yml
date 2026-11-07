@@ -1,6 +1,7 @@
 # Runner VM footprints (provisioned maximum resources per GitHub Actions label).
-# Used by the tests resource dashboard for recommendation ceilings and limit lines.
-# Actual usage during a run comes from resources_monitor.jsonl (/proc); it may be lower.
+# Used by fleet capacity export (export_runner_capacity). The tests resource dashboard
+# does NOT use these sizes for chart limits or recommendations — it uses measured
+# MemTotal/CPU from resources_monitor.jsonl only (see dashboard: tuning below).
 
 quotas:
   instances: 140
@@ -71,9 +72,9 @@ default_footprint:
   ram_gb: 256
   nrd_ssd_gb: 2417
 
-# Dashboard / CPU recommendation tuning (not runner provisioning).
+# Dashboard / CPU recommendation tuning (applied to measured host RAM/CPU).
 dashboard:
-  # Per-suite co-resident RAM budget as a fraction of provisioned ram_gb.
+  # Per-suite co-resident RAM budget as a fraction of measured MemTotal.
   mem_budget_fraction: 0.70
   mem_min_chunk_gb: 24.0
   cpu_saturation_pct: 90.0

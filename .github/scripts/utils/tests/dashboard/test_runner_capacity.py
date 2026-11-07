@@ -11,10 +11,11 @@ from _paths import DASHBOARD, add_product_paths
 
 add_product_paths(DASHBOARD)
 
-from runner_footprint import (  # noqa: E402
+from runner_capacity import (  # noqa: E402
+    MEM_BUDGET_FRACTION,
+    YA_MAKE_MEM_FRACTION,
     capacity_from_measured,
     enrich_resources_overlay,
-    load_dashboard_tuning,
     mem_cpu_tiers_for,
 )
 
@@ -30,15 +31,13 @@ def test_capacity_from_measured_requires_both():
     assert capacity_from_measured(cpu_cores=0, ram_gb=124.0) is None
 
 
-def test_capacity_from_measured_applies_tuning():
-    dash = load_dashboard_tuning()
+def test_capacity_from_measured():
     cap = capacity_from_measured(cpu_cores=64, ram_gb=124.42)
     assert cap is not None
     assert cap.vcpu == 64
     assert abs(cap.ram_gb - 124.42) < 1e-6
-    assert abs(cap.mem_budget_gb - 124.42 * dash["mem_budget_fraction"]) < 1e-6
-    assert abs(cap.ya_make_mem_limit_gb - 124.42 * dash["ya_make_mem_fraction"]) < 1e-6
-    assert cap.source == "measured"
+    assert abs(cap.mem_budget_gb - 124.42 * MEM_BUDGET_FRACTION) < 1e-6
+    assert abs(cap.ya_make_mem_limit_gb - 124.42 * YA_MAKE_MEM_FRACTION) < 1e-6
     assert 64 in cap.mem_cpu_tiers
 
 
@@ -57,11 +56,10 @@ def test_enrich_resources_overlay_measured_limits():
     assert out["runner_limits"]["cpu_cores_max"] == 64
     assert abs(out["runner_limits"]["ram_gb_max"] - 124.42) < 1e-6
     assert out["measured"]["ram_gb"] == 124.42
-    assert out["runner_capacity"]["source"] == "measured"
-    assert out["runner_footprint"]["ram_gb"] == out["runner_capacity"]["ram_gb"]
+    assert "runner_footprint" not in out
 
 
-def test_enrich_resources_overlay_no_lie_without_monitor():
+def test_enrich_resources_overlay_no_limits_without_monitor():
     overlay = {
         "xs_evlog_sec": [0.0],
         "cpu_total_cores": [1.0],
@@ -72,8 +70,6 @@ def test_enrich_resources_overlay_no_lie_without_monitor():
     assert cap is None
     assert "runner_limits" not in out
     assert "runner_capacity" not in out
-    assert out["measured"]["cpu_cores"] is None
-    assert out["measured"]["ram_gb"] is None
 
 
 def load_tests(loader, tests, pattern):
@@ -81,9 +77,9 @@ def load_tests(loader, tests, pattern):
     for fn in (
         test_mem_cpu_tiers_for,
         test_capacity_from_measured_requires_both,
-        test_capacity_from_measured_applies_tuning,
+        test_capacity_from_measured,
         test_enrich_resources_overlay_measured_limits,
-        test_enrich_resources_overlay_no_lie_without_monitor,
+        test_enrich_resources_overlay_no_limits_without_monitor,
     ):
         suite.addTest(unittest.FunctionTestCase(fn))
     return suite
@@ -92,7 +88,7 @@ def load_tests(loader, tests, pattern):
 if __name__ == "__main__":
     test_mem_cpu_tiers_for()
     test_capacity_from_measured_requires_both()
-    test_capacity_from_measured_applies_tuning()
+    test_capacity_from_measured()
     test_enrich_resources_overlay_measured_limits()
-    test_enrich_resources_overlay_no_lie_without_monitor()
+    test_enrich_resources_overlay_no_limits_without_monitor()
     print("OK")

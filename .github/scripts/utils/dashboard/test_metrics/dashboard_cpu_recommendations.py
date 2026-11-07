@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 try:
-    from ..runner_footprint import RunnerCapacity
+    from ..runner_capacity import RunnerCapacity
 except ImportError:
     _dashboard_dir = Path(__file__).resolve().parent.parent
     if str(_dashboard_dir) not in sys.path:
         sys.path.insert(0, str(_dashboard_dir))
-    from runner_footprint import RunnerCapacity
+    from runner_capacity import RunnerCapacity
 
 
 def _status_bucket() -> dict[str, int]:
@@ -236,11 +236,8 @@ def build_cpu_recommendations(
     maximize_reqs_for_timeout_tests: bool = False,
     runner_cpu_series: Optional[list[tuple[float, float]]] = None,
     runner_capacity: Optional[RunnerCapacity] = None,
-    # Deprecated alias; prefer runner_capacity (measured host only).
-    runner_footprint: Optional[RunnerCapacity] = None,
 ) -> list[dict[str, Any]]:
-    fp = runner_capacity or runner_footprint
-    # Without measured host specs do not invent fleet footprint ceilings for mem→cpu.
+    fp = runner_capacity
     runner_cores = fp.vcpu if fp is not None else 0
     mem_budget_gb = fp.mem_budget_gb if fp is not None else 0.0
     mem_min_chunk_gb = fp.mem_min_chunk_gb if fp is not None else 24.0

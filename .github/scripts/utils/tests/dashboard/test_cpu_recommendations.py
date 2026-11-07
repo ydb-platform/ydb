@@ -22,7 +22,7 @@ from _paths import DASHBOARD, TEST_METRICS, add_product_paths
 add_product_paths(TEST_METRICS, DASHBOARD)
 
 from dashboard_cpu_recommendations import _marker_suite_start_us, build_cpu_recommendations
-from runner_footprint import RunnerCapacity, mem_cpu_tiers_for
+from runner_capacity import RunnerCapacity, mem_cpu_tiers_for
 
 try:
     import pytest
@@ -34,7 +34,6 @@ GB_KB = 1024 * 1024  # 1 GB expressed in KB
 
 
 def _capacity(*, vcpu: int, ram_gb: float, mem_budget_gb: float) -> RunnerCapacity:
-    """Explicit measured capacity for recommendation unit tests (no footprint YAML)."""
     return RunnerCapacity(
         vcpu=vcpu,
         ram_gb=ram_gb,
@@ -44,7 +43,6 @@ def _capacity(*, vcpu: int, ram_gb: float, mem_budget_gb: float) -> RunnerCapaci
         near_budget_factor=1.10,
         mem_cpu_tiers=mem_cpu_tiers_for(vcpu),
         ya_make_mem_limit_gb=ram_gb * 0.95,
-        source="measured",
     )
 
 

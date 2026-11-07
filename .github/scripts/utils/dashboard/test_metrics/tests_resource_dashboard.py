@@ -30,7 +30,7 @@ try:
     from .dashboard_cpu_recommendations import build_cpu_recommendations
     from .dashboard_html_main import build_html_dashboard
     from .dashboard_report_table import build_report_table_html
-    from ..runner_footprint import enrich_resources_overlay
+    from ..runner_capacity import enrich_resources_overlay
 except ImportError:
     _script_dir = Path(__file__).resolve().parent
     _dashboard_dir = _script_dir.parent
@@ -40,7 +40,7 @@ except ImportError:
     from dashboard_cpu_recommendations import build_cpu_recommendations
     from dashboard_html_main import build_html_dashboard
     from dashboard_report_table import build_report_table_html
-    from runner_footprint import enrich_resources_overlay
+    from runner_capacity import enrich_resources_overlay
 
 normalize_suite_path = ya_make_requirements.normalize_suite_path
 
@@ -2016,9 +2016,7 @@ def main() -> None:
             "repo_root_for_synthetic": str(repo_root) if repo_root else None,
             "sanitizer": effective_sanitizer,
             "build_preset": args.build_preset,
-            # Measured host capacity only; omitted when resources_monitor is missing.
             "runner_capacity": runner_capacity.to_dict() if runner_capacity else None,
-            "runner_footprint": runner_capacity.to_dict() if runner_capacity else None,
         }
         build_html_dashboard(
             args.suite_path,

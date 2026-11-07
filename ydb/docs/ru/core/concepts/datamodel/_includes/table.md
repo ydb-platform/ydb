@@ -120,6 +120,71 @@ CREATE TABLE article (
 
 При включенном автоматическом партиционировании необходимо также не забыть установить корректное значение параметра [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT](#auto_partitioning_min_partitions_count), чтобы все партиции не объединились в одну сразу после создания таблицы.
 
+### Ограничения дефолтного автошардирования {#default_auto_sharding_limits}
+
+**Ограничения дефолтного автошардирования** — типичные риски и пределы масштабирования, если при создании таблицы не заданы параметры `AUTO_PARTITIONING_*`.
+
+Значения параметров по умолчанию и механика split/merge описаны в разделе [Партиционирование строковой таблицы](#partitioning_row_table). Сводка дефолтов для разработчиков — [{#T}](../../../dev/tables/partitioning/auto/index.md#auto-sharding-limits); [лимиты объектов схемы](../../limits-ydb.md#schema-object).
+
+#### Когда дефолтов может не хватить {#default_auto_sharding_gaps}
+
+Если явной настройки `AUTO_PARTITIONING_*` недостаточно, см. [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings), [ориентиры по числу партиций](#default_auto_sharding_heuristics) и [{#T}](../../../troubleshooting/performance/schemas/splits-merges.md) при частых split/merge.
+
+Ниже — типичные **цепочки «условие → поведение {{ ydb-short-name }} → симптом → что настроить»**. Универсального набора min/max для всех таблиц нет — в том числе **не считайте**, что одно фиксированное число партиций «лучше» другого для любой таблицы; учитывайте профиль запросов и [лимиты базы](../../limits-ydb.md#schema-object).
+
+| Условие | Поведение системы | Симптом | Что предпринять |
+| ------- | ----------------- | ------- | --------------- |
+| [`AUTO_PARTITIONING_BY_LOAD`](#auto_partitioning_by_load) **выключен** (дефолт), нагрузка растёт по CPU, а не по размеру партиции | Нет split по нагрузке | Одна партиция упирается примерно в одно ядро CPU на записи; растёт latency | Включить split по нагрузке, задать согласованные [min](#auto_partitioning_min_partitions_count) и [max](#auto_partitioning_max_partitions_count) — [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings) |
+| Достигнут [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](#auto_partitioning_max_partitions_count) (дефолт **50**) | Упёрлись в max partitions | RPS и объём данных делятся только между текущим числом партиций; партиции растут | Поднять max с учётом лимитов, уменьшить [порог размера партиции](#auto_partitioning_partition_size_mb), спланировать стартовое число партиций — см. [подраздел ниже](#default_auto_sharding_heuristics) |
+| [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count) **= 1** (дефолт), длительный спад нагрузки | Merge может свести таблицу к одной партиции | После всплеска снова нужны split, возможны задержки | Увеличить min partitions — [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings) |
+| Монотонно растущий первичный ключ, split в основном **по размеру** | Новые строки попадают в «хвост» одного диапазона ключей | Горячая партиция до срабатывания порога по размеру | Задать [UNIFORM_PARTITIONS](#uniform_partitions) или [PARTITION_AT_KEYS](#partition_at_keys), включить split по нагрузке, пересмотреть ключ — [{#T}](../../../dev/primary-key/row-oriented.md) |
+| Высокая конкуренция за **отдельные ключи** (горячий ключ, низкая кардинальность) | Нагрузка на один ключ не делится между партициями | Перегрузка сохраняется при любых `AUTO_PARTITIONING_*` | Пересмотреть модель первичного ключа — [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings), [{#T}](../../../dev/primary-key/row-oriented.md) |
+
+#### Ориентиры по числу партиций {#default_auto_sharding_heuristics}
+
+Таблица ниже — **порядок величин на одну партицию**; учитывайте, что фактические пределы зависят от профиля запросов и конфигурации кластера. **Оцените**, сколько партиций нужно таблице, с нескольких сторон и возьмите **максимум** из оценок с учётом [лимитов базы](../../limits-ydb.md#schema-object). **Подберите** параметры `AUTO_PARTITIONING_*`, опираясь на [рекомендации по выбору числа партиций](../../../dev/tables/partitioning/choosing-partition-count.md).
+
+| Ориентир | Порядок величины | Примечание |
+| -------- | ---------------- | ---------- |
+| Запросы | ~**1000 RPS** на партицию | Зависит от профиля запросов |
+| Объём данных | ~**1 ГиБ** на партицию | Зависит от профиля данных; при массовой загрузке — [рекомендации по загрузке данных](../../../dev/batch-upload.md) |
+| Пропускная способность | ~**10 МБ/с** на партицию | Зависит от размера строк и типа операций |
+
+{% cut "Пример: таблица только с дефолтами и монотонным ключом" %}
+
+```yql
+CREATE TABLE orders (
+    order_id Uint64,
+    customer_id Uint64,
+    amount Double,
+    created_at Timestamp,
+    PRIMARY KEY (order_id)
+);
+```
+
+Сценарий «монотонный ключ + дефолты» — в таблице [выше](#default_auto_sharding_gaps).
+
+{% endcut %}
+
+{% cut "Пример: явные настройки AUTO_PARTITIONING_*" %}
+
+Если для таблицы `orders` дефолтов недостаточно, задайте параметры партиционирования явно. Конкретные значения зависят от нагрузки и топологии кластера — см. [ориентиры выше](#default_auto_sharding_heuristics).
+
+```yql
+ALTER TABLE orders SET (
+    AUTO_PARTITIONING_BY_LOAD = ENABLED,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min_partitions>,
+    AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = <max_partitions>
+);
+```
+
+Где:
+
+- `<min_partitions>` — минимальное число партиций ([`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count)).
+- `<max_partitions>` — верхняя граница числа партиций ([`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](#auto_partitioning_max_partitions_count)).
+
+{% endcut %}
+
 ### Чтение с реплик {#read_only_replicas}
 
 При выполнении запросов в {{ ydb-short-name }} фактическое выполнение запроса к каждой партиции осуществляется в единой точке, обслуживающей протокол распределенных транзакций. Но благодаря хранению данных на разделяемом хранилище возможен запуск одной или нескольких реплик партиции, без выделения дополнительного места на сторадже — данные уже хранятся реплицированно и возможно обслуживание более одного читателя (но писатель при этом все еще в каждый момент строго один).

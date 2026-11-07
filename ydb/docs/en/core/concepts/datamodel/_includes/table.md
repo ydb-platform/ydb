@@ -123,6 +123,71 @@ Boundary values of keys for initial table partitioning. It's a list of boundary 
 
 When automatic partitioning is enabled, make sure to set the correct value for [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT](#auto_partitioning_min_partitions_count) to avoid merging all partitions into one immediately after creating the table.
 
+### Limits of default auto-sharding {#default_auto_sharding_limits}
+
+**Limits of default auto-sharding** are typical scaling risks and boundaries when a row table is created without explicit `AUTO_PARTITIONING_*` settings.
+
+Default parameter values and split/merge mechanics are documented in [Row table partitioning](#partitioning_row_table). A developer-oriented summary of defaults: [{#T}](../../../dev/tables/partitioning/auto/index.md#auto-sharding-limits); [schema object limits](../../limits-ydb.md#schema-object).
+
+#### When defaults may be insufficient {#default_auto_sharding_gaps}
+
+If explicit `AUTO_PARTITIONING_*` tuning is insufficient, use [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings), [partition count guides](#default_auto_sharding_heuristics), and [{#T}](../../../troubleshooting/performance/schemas/splits-merges.md) if partitions split and merge frequently.
+
+The table lists typical **condition → {{ ydb-short-name }} behavior → symptom → what to configure** chains. There is no single min/max pair for every table — **don’t assume** one fixed partition count is universally “better” than another; account for query profile and [database limits](../../limits-ydb.md#schema-object).
+
+| Condition | System behavior | Symptom | What to do |
+| --------- | --------------- | ------- | ---------- |
+| [`AUTO_PARTITIONING_BY_LOAD`](#auto_partitioning_by_load) **disabled** (default), load grows on CPU rather than partition size | No load-based split | One partition hits roughly one CPU core for writes; latency grows | Enable load-based splitting; set aligned [min](#auto_partitioning_min_partitions_count) and [max](#auto_partitioning_max_partitions_count) — [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings) |
+| [`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](#auto_partitioning_max_partitions_count) reached (default **50**) | Hit max partitions | RPS and data are spread only across the current partition count; partitions grow | Raise max within limits, lower [partition size threshold](#auto_partitioning_partition_size_mb), plan initial partition count — see [section below](#default_auto_sharding_heuristics) |
+| [`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count) **= 1** (default), long load drop | Merge can leave a single partition | New splits after the next spike; possible latency spikes | Raise min partitions — [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings) |
+| Monotonically increasing primary key, splitting mainly **by size** | New rows land in one key range’s “tail” | Hot partition until the size threshold fires | Set [UNIFORM_PARTITIONS](#uniform_partitions) or [PARTITION_AT_KEYS](#partition_at_keys), enable load-based split, revisit the key — [{#T}](../../../dev/primary-key/row-oriented.md) |
+| High contention on **individual keys** (hot key, low cardinality) | Load on one key is not split across partitions | Overload persists with any `AUTO_PARTITIONING_*` | Revise the primary key design — [{#T}](../../../dev/tables/partitioning/anti-patterns.md#default-no-settings), [{#T}](../../../dev/primary-key/row-oriented.md) |
+
+#### Partition count guides {#default_auto_sharding_heuristics}
+
+The table below lists **order-of-magnitude values per partition**; keep in mind that actual limits depend on query profile and cluster configuration. **Estimate** how many partitions the table needs from several angles, **take** the **maximum**, and respect [database limits](../../limits-ydb.md#schema-object). **Choose** `AUTO_PARTITIONING_*` using [recommendations for choosing partition count](../../../dev/tables/partitioning/choosing-partition-count.md).
+
+| Heuristic | Order of magnitude | Note |
+| --------- | ------------------ | ---- |
+| Requests | ~**1000 RPS** per partition | Depends on query profile |
+| Data volume | ~**1 GiB** per partition | Depends on data profile; for bulk load — [data loading recommendations](../../../dev/batch-upload.md) |
+| Throughput | ~**10 MB/s** per partition | Depends on row size and operation type |
+
+{% cut "Example: table with defaults only and a monotonic key" %}
+
+```yql
+CREATE TABLE orders (
+    order_id Uint64,
+    customer_id Uint64,
+    amount Double,
+    created_at Timestamp,
+    PRIMARY KEY (order_id)
+);
+```
+
+The “monotonic key + defaults” scenario is in the [table above](#default_auto_sharding_gaps).
+
+{% endcut %}
+
+{% cut "Example: explicit AUTO_PARTITIONING_* settings" %}
+
+If defaults are not enough for the `orders` table, set partitioning parameters explicitly. Specific values depend on workload and cluster topology — see the [guides above](#default_auto_sharding_heuristics).
+
+```yql
+ALTER TABLE orders SET (
+    AUTO_PARTITIONING_BY_LOAD = ENABLED,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = <min_partitions>,
+    AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = <max_partitions>
+);
+```
+
+Where:
+
+- `<min_partitions>` — minimum partition count ([`AUTO_PARTITIONING_MIN_PARTITIONS_COUNT`](#auto_partitioning_min_partitions_count)).
+- `<max_partitions>` — upper bound on partition count ([`AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`](#auto_partitioning_max_partitions_count)).
+
+{% endcut %}
+
 ### Reading Data from Replicas {#read_only_replicas}
 
 When executing queries in {{ ydb-short-name }}, the actual execution of a query to each partition is performed at a single point that serves the distributed transaction protocol. However, thanks to storing data on shared storage, it is possible to launch one or more replicas of a partition without allocating additional storage space — the data is already stored replicated, and more than one reader can be served (but the writer is still strictly one at any given moment).

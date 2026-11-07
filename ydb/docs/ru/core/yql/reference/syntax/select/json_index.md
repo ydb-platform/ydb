@@ -94,6 +94,24 @@ WHERE JSON_VALUE(payload, '$.user.name' RETURNING Utf8) = "Charlie"u;
     WHERE JSON_EXISTS(payload, '$.k ? (@ == $v)' PASSING $v AS v);
     ```
 
+    Для поиска пересечения с JSON-массивом произвольной длины можно передать параметр типа `Json`:
+
+    ```yql
+    DECLARE $values AS Json;
+
+    SELECT id
+    FROM documents VIEW json_idx
+    WHERE JSON_EXISTS(
+        payload,
+        '$.tags[*] ? (@ == $values)'
+        PASSING $values AS values
+    );
+    ```
+
+    Если параметр `PASSING` имеет тип `Json`, его индексируемые значения раскрываются во время выполнения в OR-набор токенов. Повторяющиеся значения не создают дубли строк, а пустой массив возвращает пустой результат. Точная семантика JsonPath по-прежнему проверяется пост-фильтром.
+
+    При поиске по параметру типа `Json` не поддерживается `ERROR ON ERROR`, а в `JSON_VALUE` — также `ERROR ON EMPTY`. Ограничение относится к условию поиска по индексу; подробнее см. в [поддерживаемых предикатах](../../../../dev/json-indexes.md#json-exists).
+
 ## Комбинации AND и OR
 
 `JSON_EXISTS` и `JSON_VALUE` над одной JSON-колонкой могут объединяться в одном `WHERE` операторами `AND` и `OR`:

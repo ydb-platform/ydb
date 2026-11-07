@@ -13,6 +13,7 @@ PEERDIR(
     ydb/library/workload/tpcds
     ydb/library/workload/tpch
     ydb/library/workload/vector
+    ydb/library/workload/yaem
 )
 
 END()
@@ -32,4 +33,5 @@ RECURSE(
     tpcds
     tpch
     vector
+    yaem
 )

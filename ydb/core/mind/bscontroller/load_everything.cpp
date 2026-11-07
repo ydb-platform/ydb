@@ -811,7 +811,7 @@ public:
                         const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, groupId,
                             targetGroupId);
                         Y_ABORT_UNLESS(inserted);
-                        Self->SyncersRequiringAction.PushBack(&it->second);
+                        Self->EnqueueSyncer(it->second);
                     }
                 });
             }

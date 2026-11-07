@@ -1,11 +1,21 @@
 #pragma once
 
 #include "log_iface.h"
+
+#include <map>
+#include <memory>
+
 #include <util/generic/vector.h>
 #include <util/digest/murmur.h>
 #include <util/random/easy.h>
+#include <util/system/mutex.h>
 
 namespace NActors {
+    namespace NStructuredLog {
+        class ILogSink;
+        using ILogSinkSPtr = std::shared_ptr<ILogSink>;
+    }
+
     namespace NLog {
         inline const char* PriorityToString(EPrio priority) {
             switch (priority) {
@@ -173,6 +183,16 @@ namespace NActors {
             void SetThrottleDelay(TDuration value);
             void SetUseLocalTimestamps(bool value);
             void SetEnableStructuredLogInJson(bool value);
+
+            using TLogSinkMap = std::map<TString, NStructuredLog::ILogSinkSPtr>;
+            using TLogSinkMapSPtr = std::shared_ptr<const TLogSinkMap>;
+            TLogSinkMapSPtr GetSinks();
+            void SetSinks(TLogSinkMapSPtr sinks);
+
+            ~TSettings();
+        protected:
+            TMutex SinksMutex;      // Lock access to sinks
+            TLogSinkMapSPtr Sinks;
 
         private:
             int SetLevelImpl(

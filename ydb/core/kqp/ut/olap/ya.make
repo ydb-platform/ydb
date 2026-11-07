@@ -51,4 +51,5 @@ RECURSE_FOR_TESTS(
     storage
     reading
     pushdown
+    event_log
 )

@@ -1,5 +1,7 @@
 #include "log_settings.h"
 
+#include <ydb/library/actors/struct_log/log_sink.h>
+
 #include <util/stream/str.h>
 
 namespace NActors {
@@ -233,6 +235,18 @@ namespace NActors {
             }
 
             return InvalidComponent;
+        }
+
+        TSettings::~TSettings() = default;
+
+        TSettings::TLogSinkMapSPtr TSettings::GetSinks() {
+            TGuard<TMutex> guard(SinksMutex);
+            return Sinks;
+        }
+
+        void TSettings::SetSinks(TLogSinkMapSPtr sinks) {
+            TGuard<TMutex> guard(SinksMutex);
+            Sinks = sinks;
         }
 
     }

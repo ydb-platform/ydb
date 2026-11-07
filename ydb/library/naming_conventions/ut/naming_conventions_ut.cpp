@@ -2,6 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/datetime/base.h>
 #include <util/stream/format.h>
 #include <util/stream/str.h>
 
@@ -19,6 +20,14 @@ Y_UNIT_TEST_SUITE(NamingConventionsSuite) {
         UNIT_ASSERT_EQUAL("CamelCase", SnakeToCamelCase("camel_case"));
         UNIT_ASSERT_EQUAL("Snakesnake", SnakeToCamelCase("snakesnake"));
         UNIT_ASSERT_EQUAL("Bfg", SnakeToCamelCase("bfg_"));
+    }
+
+    Y_UNIT_TEST(TestCpuMonitoringSmoke) {
+        // Allow several samples from the CI monitor, which runs every 3 seconds.
+        const auto deadline = TInstant::Now() + TDuration::Seconds(10);
+        do {
+            UNIT_ASSERT_EQUAL("cpu_monitoring_smoke", CamelToSnakeCase("CpuMonitoringSmoke"));
+        } while (TInstant::Now() < deadline);
     }
 
 }

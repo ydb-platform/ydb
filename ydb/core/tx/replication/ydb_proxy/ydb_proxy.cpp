@@ -502,8 +502,8 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
         const auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);
         auto session = std::invoke(&TTopicClient::CreateReadSession, client, settings.GetBase());
         auto reader = RegisterWithSameMailbox(new TTopicReader(ev->Sender, session, settings.AutoCommit_));
-        Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader));
         Send(reader, new TEvents::TEvBootstrap());
+        Send(ev->Sender, new TEvYdbProxy::TEvCreateTopicReaderResponse(reader));
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {

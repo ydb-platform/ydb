@@ -84,6 +84,14 @@ public:
         return Channel->IsFinished();
     }
 
+    void Finish() override {
+        Channel->Finish();
+    }
+
+    ui64 Drop() override {
+        return Channel->Drop();
+    }
+
 private:
     void UpdateOutputChannelStats()
     {

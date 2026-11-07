@@ -39,6 +39,10 @@ public:
     virtual NDqProto::TPopResponse Pop(NDq::TDqSerializedBatch& data) = 0;
 
     virtual bool IsFinished() const = 0;
+
+    virtual void Finish() = 0;
+
+    virtual ui64 Drop() = 0;
 };
 
 class ITaskRunner: public TThrRefBase, private TNonCopyable {

@@ -3531,10 +3531,16 @@ message TLabel {
     optional string Value = 2;
 }
 
+message TGeneralCacheConsumer {
+    optional string Name = 1;
+    optional uint32 Weight = 2 [default = 0];
+}
+
 message TGeneralCacheConfig {
     optional uint64 MemoryLimit = 1;
     optional uint64 DirectInflightSourceLimit = 2;
     optional uint64 DirectInflightGlobalLimit = 3;
+    repeated TGeneralCacheConsumer Consumers = 4;
 }
 
 message TStatisticsConfig {

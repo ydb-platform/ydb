@@ -12,6 +12,12 @@
 
 #include <library/cpp/cache/cache.h>
 
+#include <algorithm>
+#include <map>
+#include <optional>
+#include <utility>
+#include <vector>
+
 namespace NKikimr::NGeneralCache::NPrivate {
 
 template <class TPolicy>
@@ -139,8 +145,16 @@ private:
     const TSourceId SourceId;
     static inline TAtomicCounter Counter = 0;
     const ui64 Cookie = Counter.Inc();
+    struct TWeightedQueue {
+        ui32 Weight = 0;
+        ui64 Inflight = 0;
+        std::deque<std::shared_ptr<TRequest>> Requests;
+    };
+
     THashMap<TAddress, std::vector<std::shared_ptr<TRequest>>> RequestedObjects;
-    YDB_READONLY_DEF(std::deque<std::shared_ptr<TRequest>>, RequestsQueue);
+    std::map<ui64, TWeightedQueue> WeightedQueues;
+    std::deque<std::shared_ptr<TRequest>> UnweightedQueue;
+    THashMap<TAddress, ui64> InflightQueue;
     YDB_READONLY_DEF(THashSet<ui64>, RequestsInProgress);
     THashMap<ui64, std::vector<std::shared_ptr<TRequest>>> RequestsByCookies;
     const std::shared_ptr<TManagerCounters> Counters;
@@ -158,9 +172,52 @@ public:
         , ObjectsProcessor(objectsProcessor) {
     }
 
+    bool IsRequestAttached(const TAddress& address, const std::shared_ptr<TRequest>& request) const {
+        const auto it = RequestedObjects.find(address);
+        if (it == RequestedObjects.end()) {
+            return false;
+        }
+        for (const auto& queued : it->second) {
+            if (queued.get() == request.get()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    NPublic::TCacheRequestClass ClassOf(const EConsumer consumer) const {
+        return GetCacheRequestClass(consumer, Counters->GetConfig());
+    }
+
     void EnqueueRequest(const std::shared_ptr<TRequest>& request) {
         Counters->GetQueueObjectsCount()->Add(request->GetWaitBySource(SourceId).size());
-        RequestsQueue.emplace_back(request);
+        const auto requestClass = ClassOf(request->GetConsumer());
+        if (requestClass.Weight == 0) {
+            UnweightedQueue.emplace_back(request);
+            return;
+        }
+        auto& queue = WeightedQueues[requestClass.QueueId];
+        queue.Weight = requestClass.Weight;
+        queue.Requests.emplace_back(request);
+    }
+
+    void ReleaseInflight(const TAddress& address) {
+        const auto owner = InflightQueue.find(address);
+        if (owner == InflightQueue.end()) {
+            return;
+        }
+        const ui64 queueId = owner->second;
+        InflightQueue.erase(owner);
+        const auto queue = WeightedQueues.find(queueId);
+        if (queue == WeightedQueues.end()) {
+            return;
+        }
+        if (queue->second.Inflight > 0) {
+            --queue->second.Inflight;
+        }
+        if (queue->second.Requests.empty() && queue->second.Inflight == 0) {
+            WeightedQueues.erase(queue);
+        }
     }
 
     void AddObjects(THashMap<TAddress, TObject>&& add, const bool isAdditional, const TMonotonic now) {
@@ -181,6 +238,7 @@ public:
                     Counters->FetchedObject->Inc();
                 }
             }
+            ReleaseInflight(i.first);
             RequestedObjects.erase(it);
             Counters->GetTotalInFlight()->Dec();
         }
@@ -199,6 +257,7 @@ public:
                     Counters->OnMissCacheRequestFinished(r->GetStartRequest(), r->GetCreated(), now);
                 }
             }
+            ReleaseInflight(i.first);
             RequestedObjects.erase(it);
             Counters->GetTotalInFlight()->Dec();
         }
@@ -222,6 +281,7 @@ public:
                     Counters->NoExistsObject->Inc();
                 }
             }
+            ReleaseInflight(i);
             RequestedObjects.erase(it);
             Counters->GetTotalInFlight()->Dec();
         }
@@ -229,14 +289,33 @@ public:
 
     void Abort() {
         const TMonotonic now = TMonotonic::Now();
-        for (auto&& i : RequestsQueue) {
-            auto addresses = i->GetWaitBySource(SourceId);
-            Counters->GetQueueObjectsCount()->Sub(addresses.size());
-            for (auto&& objAddr : addresses) {
-                Y_UNUSED(i->AddError(objAddr, "source broken: " + ::ToString(SourceId)));
+        const TString error = "source broken: " + ::ToString(SourceId);
+        auto abortQueue = [&](std::deque<std::shared_ptr<TRequest>>& queue) {
+            for (auto&& request : queue) {
+                const auto addresses = request->GetWaitBySource(SourceId);
+                ui64 queued = 0;
+                bool finished = false;
+                for (const auto& objAddr : addresses) {
+                    if (IsRequestAttached(objAddr, request)) {
+                        continue;
+                    }
+                    ++queued;
+                    finished = request->AddError(objAddr, error) || finished;
+                }
+                Counters->GetQueueObjectsCount()->Sub(queued);
+                if (finished && RequestsInProgress.erase(request->GetRequestId())) {
+                    Counters->OnMissCacheRequestFinished(request->GetStartRequest(), request->GetCreated(), now);
+                }
             }
+            queue.clear();
+        };
+        for (auto& [queueId, queue] : WeightedQueues) {
+            Y_UNUSED(queueId);
+            abortQueue(queue.Requests);
         }
-        RequestsQueue.clear();
+        WeightedQueues.clear();
+        abortQueue(UnweightedQueue);
+        InflightQueue.clear();
         for (auto&& [objAddr, requests] : RequestedObjects) {
             for (auto&& r : requests) {
                 Counters->FailedObject->Inc();
@@ -255,34 +334,198 @@ public:
         AFL_VERIFY(RequestedObjects.empty() || NActors::TActorSystem::IsStopped());
     }
 
-    void DrainQueue() {
-        THashMap<EConsumer, THashSet<TAddress>> requestedAddresses;
-        THashSet<TAddress>* consumerAddresses = nullptr;
-        std::optional<EConsumer> currentConsumer;
-        while (RequestsQueue.size() && RequestedObjects.size() < Counters->GetConfig().GetDirectInflightSourceLimit() &&
-               Counters->CheckTotalLimit()) {
-            auto request = std::move(RequestsQueue.front());
-            RequestsQueue.pop_front();
-            auto& sourceWaitObjects = request->GetWaitBySource(SourceId);
-            Counters->GetQueueObjectsCount()->Sub(sourceWaitObjects.size());
-            if (request->IsAborted()) {
-                Counters->AbortedRequests->Inc();
+    bool HasWeightedWaiting() const {
+        for (const auto& [queueId, queue] : WeightedQueues) {
+            Y_UNUSED(queueId);
+            if (!queue.Requests.empty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::optional<std::pair<ui64, ui64>> PickWeighted(const ui64 sourceLimit) const {
+        struct TCandidate {
+            ui64 QueueId = 0;
+            ui32 Weight = 0;
+            ui64 Inflight = 0;
+            ui64 Remainder = 0;
+            ui64 Target = 0;
+        };
+        std::vector<TCandidate> candidates;
+        ui64 sumWeight = 0;
+        for (const auto& [queueId, queue] : WeightedQueues) {
+            if (queue.Requests.empty() || queue.Weight == 0) {
                 continue;
             }
-            AFL_VERIFY(RequestsInProgress.emplace(request->GetRequestId()).second);
-            if (!currentConsumer || *currentConsumer != request->GetConsumer()) {
-                consumerAddresses = &requestedAddresses[request->GetConsumer()];
+            sumWeight += queue.Weight;
+            candidates.push_back(TCandidate{ queueId, queue.Weight, queue.Inflight, 0, 0 });
+        }
+        if (candidates.empty() || sumWeight == 0 || sourceLimit == 0) {
+            return std::nullopt;
+        }
+        ui64 assigned = 0;
+        for (auto& candidate : candidates) {
+            const ui64 product = sourceLimit * static_cast<ui64>(candidate.Weight);
+            candidate.Target = product / sumWeight;
+            candidate.Remainder = product % sumWeight;
+            assigned += candidate.Target;
+        }
+        std::vector<size_t> order(candidates.size());
+        for (size_t i = 0; i < order.size(); ++i) {
+            order[i] = i;
+        }
+        std::sort(order.begin(), order.end(), [&](const size_t left, const size_t right) {
+            const auto& a = candidates[left];
+            const auto& b = candidates[right];
+            if (a.Remainder != b.Remainder) {
+                return a.Remainder > b.Remainder;
             }
-            Counters->DirectRequests->Inc();
-            for (auto&& i : sourceWaitObjects) {
-                auto it = RequestedObjects.find(i);
-                if (it == RequestedObjects.end()) {
-                    it = RequestedObjects.emplace(i, std::vector<std::shared_ptr<TRequest>>()).first;
-                    Counters->GetTotalInFlight()->Inc();
-                    AFL_VERIFY(consumerAddresses->emplace(i).second);
-                    Counters->DirectObjects->Inc();
+            if (a.Weight != b.Weight) {
+                return a.Weight > b.Weight;
+            }
+            return a.QueueId < b.QueueId;
+        });
+        for (size_t extra = 0; extra < sourceLimit - assigned && extra < order.size(); ++extra) {
+            ++candidates[order[extra]].Target;
+        }
+        // A queued consumer with a tiny weight still gets one slot, taken from the largest share.
+        for (auto& candidate : candidates) {
+            if (candidate.Target) {
+                continue;
+            }
+            auto donor = std::max_element(candidates.begin(), candidates.end(), [](const TCandidate& a, const TCandidate& b) {
+                return a.Target < b.Target;
+            });
+            if (donor->Target <= 1) {
+                break;
+            }
+            --donor->Target;
+            candidate.Target = 1;
+        }
+
+        const TCandidate* chosen = nullptr;
+        for (const auto& candidate : candidates) {
+            if (candidate.Inflight >= candidate.Target) {
+                continue;
+            }
+            if (!chosen || candidate.Target - candidate.Inflight > chosen->Target - chosen->Inflight ||
+                (candidate.Target - candidate.Inflight == chosen->Target - chosen->Inflight && candidate.Weight > chosen->Weight) ||
+                (candidate.Target - candidate.Inflight == chosen->Target - chosen->Inflight && candidate.Weight == chosen->Weight &&
+                    candidate.QueueId < chosen->QueueId)) {
+                chosen = &candidate;
+            }
+        }
+        if (!chosen) {
+            return std::nullopt;
+        }
+        return std::make_pair(chosen->QueueId, chosen->Target - chosen->Inflight);
+    }
+
+    struct TDispatchResult {
+        ui64 NewAddresses = 0;
+        bool PutBack = false;
+    };
+
+    TDispatchResult DispatchFront(std::deque<std::shared_ptr<TRequest>>& queue, const ui64 newAddressLimit,
+        const std::optional<ui64> weightedQueueId, THashMap<EConsumer, THashSet<TAddress>>& requestedAddresses,
+        const TMonotonic now) {
+        if (queue.empty() || newAddressLimit == 0) {
+            return {};
+        }
+        auto request = queue.front();
+        queue.pop_front();
+        const auto& sourceWaitObjects = request->GetWaitBySource(SourceId);
+        if (request->IsAborted()) {
+            const bool started = RequestsInProgress.contains(request->GetRequestId());
+            const auto addresses = sourceWaitObjects;
+            ui64 queuedLeft = 0;
+            bool finished = false;
+            for (const auto& addr : addresses) {
+                if (IsRequestAttached(addr, request)) {
+                    continue;
                 }
-                it->second.emplace_back(request);
+                ++queuedLeft;
+                if (started) {
+                    finished = request->AddError(addr, "request aborted") || finished;
+                }
+            }
+            Counters->GetQueueObjectsCount()->Sub(queuedLeft);
+            Counters->AbortedRequests->Inc();
+            if (finished) {
+                AFL_VERIFY(RequestsInProgress.erase(request->GetRequestId()));
+                Counters->OnMissCacheRequestFinished(request->GetStartRequest(), request->GetCreated(), now);
+            }
+            return {};
+        }
+
+        const bool firstDispatch = RequestsInProgress.emplace(request->GetRequestId()).second;
+        if (firstDispatch) {
+            Counters->DirectRequests->Inc();
+        }
+        auto& consumerAddresses = requestedAddresses[request->GetConsumer()];
+        ui64 newAddresses = 0;
+        ui64 leftQueue = 0;
+        bool partial = false;
+        for (const auto& addr : sourceWaitObjects) {
+            if (!firstDispatch && IsRequestAttached(addr, request)) {
+                continue;
+            }
+            auto itAddress = RequestedObjects.find(addr);
+            if (itAddress == RequestedObjects.end()) {
+                if (newAddresses >= newAddressLimit) {
+                    partial = true;
+                    break;
+                }
+                itAddress = RequestedObjects.emplace(addr, std::vector<std::shared_ptr<TRequest>>()).first;
+                Counters->GetTotalInFlight()->Inc();
+                AFL_VERIFY(consumerAddresses.emplace(addr).second);
+                Counters->DirectObjects->Inc();
+                ++newAddresses;
+                if (weightedQueueId) {
+                    InflightQueue.emplace(addr, *weightedQueueId);
+                    WeightedQueues[*weightedQueueId].Inflight++;
+                }
+            }
+            itAddress->second.emplace_back(request);
+            ++leftQueue;
+        }
+        Counters->GetQueueObjectsCount()->Sub(leftQueue);
+        if (partial) {
+            queue.emplace_front(std::move(request));
+        }
+        return TDispatchResult{ newAddresses, partial };
+    }
+
+    void DrainQueue() {
+        THashMap<EConsumer, THashSet<TAddress>> requestedAddresses;
+        const ui64 sourceLimit = Counters->GetConfig().GetDirectInflightSourceLimit();
+        const TMonotonic now = TMonotonic::Now();
+
+        while (RequestedObjects.size() < sourceLimit && Counters->CheckTotalLimit()) {
+            if (const auto chosen = PickWeighted(sourceLimit)) {
+                auto& queue = WeightedQueues[chosen->first];
+                const ui64 budget = std::min(chosen->second, sourceLimit - RequestedObjects.size());
+                const auto dispatched = DispatchFront(queue.Requests, budget, chosen->first, requestedAddresses, now);
+                if (dispatched.PutBack && dispatched.NewAddresses == 0) {
+                    break;
+                }
+                continue;
+            }
+            // Weight 0 sends nothing while a weighted consumer has queued requests, even if its share is full.
+            if (HasWeightedWaiting() || UnweightedQueue.empty()) {
+                break;
+            }
+            const auto dispatched = DispatchFront(UnweightedQueue, sourceLimit - RequestedObjects.size(), std::nullopt, requestedAddresses, now);
+            if (dispatched.PutBack) {
+                break;
+            }
+        }
+        for (auto queue = WeightedQueues.begin(); queue != WeightedQueues.end();) {
+            if (queue->second.Requests.empty() && queue->second.Inflight == 0) {
+                queue = WeightedQueues.erase(queue);
+            } else {
+                ++queue;
             }
         }
         ObjectsProcessor->AskData(std::move(requestedAddresses), ObjectsProcessor, Cookie);

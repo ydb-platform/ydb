@@ -57,6 +57,14 @@ public:
 private:
     bool AllowEmptyDatabase;
     bool Detailed = false;
+    enum class EView { Piles, Databases, Groups };
+    EView View = EView::Piles;
+    bool NotSynced = false;
+    TString DatabasePath;
+    TString StoragePool;
+    std::optional<NBridge::TStoragePoolId> StoragePoolId;
+    std::optional<TString> PileName;
+    std::optional<NBridge::EStorageMode> StorageModeFilter;
 };
 
 class TCommandBridgeSwitchover : public TYdbCommand {

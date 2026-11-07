@@ -10,10 +10,13 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <utility>
+
+#include <util/datetime/base.h>
 
 namespace NYdb::inline Dev::NBridge {
 
-struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClusterStateSettings> {
+struct TUpdateClusterStateSettings: public TOperationRequestSettings<TUpdateClusterStateSettings> {
     //! Compare-and-set guard: the cluster state generation (TGetClusterStateResult::GetGeneration()) the update is
     //! based on. The update is applied only if the cluster state still has this generation when the change
     //! executes. ABORTED means that the generation differs and the update was not applied; UNAVAILABLE means that
@@ -23,24 +26,24 @@ struct TUpdateClusterStateSettings : public TOperationRequestSettings<TUpdateClu
     FLUENT_SETTING_OPTIONAL(uint64_t, ExpectedGeneration);
 };
 
-struct TGetClusterStateSettings : public TOperationRequestSettings<TGetClusterStateSettings> {
+struct TGetClusterStateSettings: public TOperationRequestSettings<TGetClusterStateSettings> {
     //! Request a static-node connectivity snapshot, independent of storage health.
     //! An older server may reject the optional query or omit the report.
     FLUENT_SETTING_DEFAULT(bool, IncludePileConnectivity, false);
 };
 
-struct TConvertToBridgeSettings : public TOperationRequestSettings<TConvertToBridgeSettings> {
+struct TConvertToBridgeSettings: public TOperationRequestSettings<TConvertToBridgeSettings> {
     //! Leave existing storage pools and their groups non-bridged (static storage groups are still converted); they are
     //! not replicated to added piles until converted separately. Requires the bridge config to enable non-uniform
     //! storage.
     FLUENT_SETTING_DEFAULT(bool, SkipStoragePoolConversion, false);
 };
 
-struct TAddPileSettings : public TOperationRequestSettings<TAddPileSettings> {};
+struct TAddPileSettings: public TOperationRequestSettings<TAddPileSettings> {};
 
-struct TRemovePileSettings : public TOperationRequestSettings<TRemovePileSettings> {};
+struct TRemovePileSettings: public TOperationRequestSettings<TRemovePileSettings> {};
 
-struct TSetDatabaseBridgeModeSettings : public TOperationRequestSettings<TSetDatabaseBridgeModeSettings> {
+struct TSetDatabaseBridgeModeSettings: public TOperationRequestSettings<TSetDatabaseBridgeModeSettings> {
     //! With ordinary mode, retain data copies in this pile. Empty selects copies automatically.
     FLUENT_SETTING_DEFAULT(std::string, RetainPileName, {});
 };
@@ -67,7 +70,7 @@ struct TPileStateUpdate {
 struct TPendingPileOperation {
     enum class EKind {
         UNSPECIFIED = 0,
-        ADD = 1, // the pile is being added to the cluster: its storage groups are being created
+        ADD = 1,    // the pile is being added to the cluster: its storage groups are being created
         REMOVE = 2, // the pile is being removed from the cluster: its storage groups are being deleted
     };
 
@@ -75,6 +78,152 @@ struct TPendingPileOperation {
     EKind Kind = EKind::UNSPECIFIED;
     std::string ErrorReason; // why the last attempt has failed; the operation is retried meanwhile
 };
+
+enum class ESynchronizationStatus {
+    Unspecified = 0,
+    Synced = 1,
+    Syncing = 2,
+    Pending = 3,
+    NotRequired = 4,
+    Unknown = 5,
+};
+
+enum class EStorageMode {
+    Unspecified = 0,
+    Bridged = 1,
+    Ordinary = 2,
+    Mixed = 3,
+};
+
+struct TStoragePoolId {
+    uint64_t BoxId = 0;
+    uint64_t PoolId = 0;
+};
+
+struct TStoragePool {
+    TStoragePoolId Id;
+    std::string Name;
+};
+
+// Required = Synced + Syncing + Pending + Unknown; NOT_REQUIRED is excluded.
+struct TGroupSyncCounts {
+    uint64_t Required = 0;
+    uint64_t Synced = 0;
+    uint64_t Syncing = 0;
+    uint64_t Pending = 0;
+    uint64_t Unknown = 0;
+};
+
+// Counts storage owners once per pile; serverless shares its storage owner.
+// Total = Synced + Syncing + Pending + Unknown + NotRequired.
+struct TDatabaseSyncCounts {
+    uint64_t Total = 0;
+    uint64_t Synced = 0;
+    uint64_t Syncing = 0;
+    uint64_t Pending = 0;
+    uint64_t Unknown = 0;
+    uint64_t NotRequired = 0;
+};
+
+// Last error; may remain while synchronization is running.
+struct TSynchronizationError {
+    std::string Message;
+    std::optional<TInstant> OccurredAt;
+};
+
+// In these observations, an unset PileName means unknown placement; empty names are valid.
+struct TPileSynchronization {
+    std::optional<std::string> PileName;
+    TDatabaseSyncCounts Databases;
+};
+
+// One storage owner and pile; Mixed counts only bridged pools.
+struct TDatabaseSynchronization {
+    std::optional<std::string> DatabasePath;
+    std::vector<TStoragePool> StoragePools;
+    EStorageMode StorageMode = EStorageMode::Unspecified;
+    std::optional<std::string> PileName;
+    TGroupSyncCounts Groups;
+    std::optional<TSynchronizationError> LastSyncError;
+};
+
+struct TGroupSynchronization {
+    uint32_t GroupId = 0;
+    std::optional<uint32_t> PhysicalGroupId;
+    // Unset for groups outside dynamic pools.
+    std::optional<TStoragePool> StoragePool;
+    std::optional<std::string> PileName;
+    ESynchronizationStatus SyncStatus = ESynchronizationStatus::Unspecified;
+    // Diagnostic only; use SyncStatus for programmatic checks.
+    std::string SyncPhase;
+    std::optional<TSynchronizationError> LastSyncError;
+};
+
+struct TListPileSynchronizationSettings: public TOperationRequestSettings<TListPileSynchronizationSettings> {};
+
+struct TListDatabaseSynchronizationSettings: public TOperationRequestSettings<TListDatabaseSynchronizationSettings> {
+    // Serverless paths select shared storage.
+    FLUENT_SETTING_OPTIONAL(std::string, DatabasePath);
+    // Unset: all piles; empty: the real pile named "".
+    FLUENT_SETTING_OPTIONAL(std::string, PileName);
+    FLUENT_SETTING_DEFAULT(bool, OnlyIncomplete, false);
+    FLUENT_SETTING_OPTIONAL(EStorageMode, StorageMode);
+};
+
+// Select all groups or a nonempty database/pool scope.
+class TGroupSynchronizationScope {
+public:
+    enum class EKind { Database,
+                       StoragePoolName,
+                       StoragePoolId,
+                       All };
+
+    static TGroupSynchronizationScope All() {
+        return {EKind::All, {}, {}};
+    }
+
+    static TGroupSynchronizationScope Database(std::string path) {
+        return {EKind::Database, std::move(path), {}};
+    }
+
+    static TGroupSynchronizationScope PoolName(std::string name) {
+        return {EKind::StoragePoolName, std::move(name), {}};
+    }
+
+    static TGroupSynchronizationScope PoolId(TStoragePoolId id) {
+        return {EKind::StoragePoolId, {}, id};
+    }
+
+    EKind GetKind() const {
+        return Kind_;
+    }
+    const std::string& GetName() const {
+        return Name_;
+    }
+    const TStoragePoolId& GetPoolId() const {
+        return PoolId_;
+    }
+
+private:
+    TGroupSynchronizationScope(EKind kind, std::string name, TStoragePoolId poolId)
+        : Kind_(kind)
+        , Name_(std::move(name))
+        , PoolId_(poolId)
+    {
+    }
+
+    EKind Kind_;
+    std::string Name_;
+    TStoragePoolId PoolId_;
+};
+
+struct TListGroupSynchronizationSettings: public TOperationRequestSettings<TListGroupSynchronizationSettings> {
+    // Unset: all piles; empty: the real pile named "".
+    FLUENT_SETTING_OPTIONAL(std::string, PileName);
+    // Empty: all statuses; otherwise union. Unspecified is invalid.
+    FLUENT_SETTING_DEFAULT(std::vector<ESynchronizationStatus>, Statuses, {});
+};
+
 
 // Connectivity of one distconf binding component; this is not disk health or a failover vote.
 struct TPileConnectivity {
@@ -95,18 +244,19 @@ struct TPileConnectivityReport {
     std::vector<TPileConnectivity> Piles;
 };
 
-class TGetClusterStateResult : public TStatus {
+class TGetClusterStateResult: public TStatus {
 public:
     TGetClusterStateResult(TStatus&& status, std::vector<TPileStateUpdate>&& state, uint64_t generation,
-            bool conversionInProgress = false, std::optional<TPendingPileOperation> pendingPileOperation = std::nullopt,
-            std::optional<TPileConnectivityReport> pileConnectivity = std::nullopt)
+                           bool conversionInProgress = false, std::optional<TPendingPileOperation> pendingPileOperation = std::nullopt,
+                           std::optional<TPileConnectivityReport> pileConnectivity = std::nullopt)
         : TStatus(std::move(status))
         , State_(std::move(state))
         , Generation_(generation)
         , ConversionInProgress_(conversionInProgress)
         , PendingPileOperation_(std::move(pendingPileOperation))
         , PileConnectivity_(std::move(pileConnectivity))
-    {}
+    {
+    }
 
     const std::vector<TPileStateUpdate>& GetState() const {
         return State_;
@@ -141,15 +291,128 @@ private:
 
 using TAsyncGetClusterStateResult = NThreading::TFuture<TGetClusterStateResult>;
 
+// Complete results; oversized requests fail.
+class TListPileSynchronizationResult: public TStatus {
+public:
+    TListPileSynchronizationResult(TStatus&& status, std::vector<TPileSynchronization> rows = {},
+                                  uint64_t clusterStateGeneration = 0, TInstant observedAt = {},
+                                  uint64_t unattributedStoragePools = 0)
+        : TStatus(std::move(status))
+        , Piles_(std::move(rows))
+        , ClusterStateGeneration_(clusterStateGeneration)
+        , ObservedAt_(observedAt)
+        , UnattributedStoragePools_(unattributedStoragePools)
+    {
+    }
+
+    const std::vector<TPileSynchronization>& GetPiles() const {
+        return Piles_;
+    }
+    uint64_t GetClusterStateGeneration() const {
+        return ClusterStateGeneration_;
+    }
+    TInstant GetObservedAt() const {
+        return ObservedAt_;
+    }
+    // Pools whose database cannot be identified; excluded from totals.
+    uint64_t GetUnattributedStoragePools() const {
+        return UnattributedStoragePools_;
+    }
+
+private:
+    std::vector<TPileSynchronization> Piles_;
+    uint64_t ClusterStateGeneration_ = 0;
+    TInstant ObservedAt_;
+    uint64_t UnattributedStoragePools_ = 0;
+};
+
+class TListDatabaseSynchronizationResult: public TStatus {
+public:
+    TListDatabaseSynchronizationResult(TStatus&& status, std::vector<TDatabaseSynchronization> rows = {},
+                                       uint64_t clusterStateGeneration = 0, TInstant observedAt = {},
+                                       std::optional<std::string> storageOwnerDatabasePath = std::nullopt)
+        : TStatus(std::move(status))
+        , Databases_(std::move(rows))
+        , ClusterStateGeneration_(clusterStateGeneration)
+        , ObservedAt_(observedAt)
+        , StorageOwnerDatabasePath_(std::move(storageOwnerDatabasePath))
+    {
+    }
+
+    const std::vector<TDatabaseSynchronization>& GetDatabases() const {
+        return Databases_;
+    }
+    uint64_t GetClusterStateGeneration() const {
+        return ClusterStateGeneration_;
+    }
+    TInstant GetObservedAt() const {
+        return ObservedAt_;
+    }
+    const std::optional<std::string>& GetStorageOwnerDatabasePath() const {
+        return StorageOwnerDatabasePath_;
+    }
+
+private:
+    std::vector<TDatabaseSynchronization> Databases_;
+    uint64_t ClusterStateGeneration_ = 0;
+    TInstant ObservedAt_;
+    std::optional<std::string> StorageOwnerDatabasePath_;
+};
+
+class TListGroupSynchronizationResult: public TStatus {
+public:
+    TListGroupSynchronizationResult(TStatus&& status, std::vector<TGroupSynchronization> rows = {},
+                                    uint64_t clusterStateGeneration = 0, TInstant observedAt = {},
+                                    std::optional<std::string> storageOwnerDatabasePath = std::nullopt)
+        : TStatus(std::move(status))
+        , Groups_(std::move(rows))
+        , ClusterStateGeneration_(clusterStateGeneration)
+        , ObservedAt_(observedAt)
+        , StorageOwnerDatabasePath_(std::move(storageOwnerDatabasePath))
+    {
+    }
+
+    const std::vector<TGroupSynchronization>& GetGroups() const {
+        return Groups_;
+    }
+    uint64_t GetClusterStateGeneration() const {
+        return ClusterStateGeneration_;
+    }
+    TInstant GetObservedAt() const {
+        return ObservedAt_;
+    }
+    const std::optional<std::string>& GetStorageOwnerDatabasePath() const {
+        return StorageOwnerDatabasePath_;
+    }
+
+private:
+    std::vector<TGroupSynchronization> Groups_;
+    uint64_t ClusterStateGeneration_ = 0;
+    TInstant ObservedAt_;
+    std::optional<std::string> StorageOwnerDatabasePath_;
+};
+
+
+using TAsyncListPileSynchronizationResult = NThreading::TFuture<TListPileSynchronizationResult>;
+using TAsyncListDatabaseSynchronizationResult = NThreading::TFuture<TListDatabaseSynchronizationResult>;
+using TAsyncListGroupSynchronizationResult = NThreading::TFuture<TListGroupSynchronizationResult>;
+
 class TBridgeClient {
 public:
     explicit TBridgeClient(const TDriver& driver, const TCommonClientSettings& settings = {});
     ~TBridgeClient();
 
     TAsyncStatus UpdateClusterState(const std::vector<TPileStateUpdate>& updates,
-        const std::vector<std::string>& quorumPiles, const TUpdateClusterStateSettings& settings = {});
+                                    const std::vector<std::string>& quorumPiles, const TUpdateClusterStateSettings& settings = {});
 
     TAsyncGetClusterStateResult GetClusterState(const TGetClusterStateSettings& settings = {});
+
+    TAsyncListPileSynchronizationResult ListPileSynchronization(const TListPileSynchronizationSettings& settings = {});
+
+    TAsyncListDatabaseSynchronizationResult ListDatabaseSynchronization(const TListDatabaseSynchronizationSettings& settings = {});
+
+    TAsyncListGroupSynchronizationResult ListGroupSynchronization(const TGroupSynchronizationScope& scope,
+                                                                  const TListGroupSynchronizationSettings& settings = {});
 
     // Convert a running non-bridged cluster into a bridged one with a single pile. All nodes must already run with
     // a single-pile bridge config.
@@ -173,4 +436,4 @@ private:
     std::unique_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::NBridge
+} // namespace NYdb::inline Dev::NBridge

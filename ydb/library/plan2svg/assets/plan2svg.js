@@ -2,7 +2,58 @@
 <![CDATA[
     var selectedGroups = [];
 
-    function shift_nodes(node, delta) {
+window.addEventListener("load", function() {
+    const root = document.querySelector("svg");
+    if (!root || !root.querySelector("[data-cs-panel]")) {
+        return;
+    }
+    const ns = "http://www.w3.org/2000/svg";
+    const clip = document.createElementNS(ns, "clipPath");
+    clip.id = "cs-plan-overlay-clip";
+    clip.setAttribute("clipPathUnits", "userSpaceOnUse");
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("clip-rule", "evenodd");
+    clip.appendChild(path);
+    root.appendChild(clip);
+    // Query-wide highlights must leave holes for the stage-local CS surfaces.
+    Array.from(root.children).filter(node => node.tagName === "rect").forEach(node => {
+        const group = document.createElementNS(ns, "g");
+        group.setAttribute("clip-path", "url(#cs-plan-overlay-clip)");
+        root.insertBefore(group, node);
+        group.appendChild(node);
+    });
+    function update() {
+        const matrix = root.getScreenCTM();
+        if (!matrix) {
+            return;
+        }
+        const inverse = matrix.inverse();
+        let shape = `M0 0H${root.width.baseVal.value}V${root.height.baseVal.value}H0Z`;
+        root.querySelectorAll("[data-cs-panel]").forEach(panel => {
+            const bounds = panel.getBoundingClientRect();
+            if (!bounds.width || !bounds.height) {
+                return;
+            }
+            const begin = new DOMPoint(bounds.left, bounds.top).matrixTransform(inverse);
+            const end = new DOMPoint(bounds.right, bounds.bottom).matrixTransform(inverse);
+            shape += `M${begin.x} ${begin.y}H${end.x}V${end.y}H${begin.x}Z`;
+        });
+        path.setAttribute("d", shape);
+    }
+    let pending = false;
+    new MutationObserver(function() {
+        if (!pending) {
+            pending = true;
+            requestAnimationFrame(function() {
+                pending = false;
+                update();
+            });
+        }
+    }).observe(root, {subtree: true, attributes: true, attributeFilter: ["height", "y", "style", "class"]});
+    update();
+});
+
+function shift_nodes(node, delta) {
         while(node && node.tagName == "svg") {
             node.setAttribute("y", Number(node.getAttribute("y")) + delta);
             node = node.nextElementSibling;
@@ -203,6 +254,9 @@ window.addEventListener("keydown", function(e) {
     window.addEventListener("click", function(e) {
         var node = e.target;
         while (node) {
+        if (node.hasAttribute("data-cs-panel")) {
+            return;
+        }
         if (node.classList.contains("cs-stage-toggle")) {
             toggle_cs_stats(node);
             return;

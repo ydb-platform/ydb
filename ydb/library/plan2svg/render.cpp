@@ -1244,6 +1244,10 @@ void TPlan::PrintStage(TStringBuilder& builder, const std::shared_ptr<TStage>& s
         builder << "<svg data-cs-panel='" << stage->PhysicalStageId << "' data-cs-plan-index='" << stage->ColumnShardPlanIndex.value()
             << "' data-height='" << stage->ColumnShardHeight
             << "' x='0' y='" << stage->Height << "' width='" << Config.Width << "' height='0' style='display:none'>"
+            << "<rect class='cs-panel-surface' width='100%' height='100%' fill='#ffffff'/>"
+            << "<style>g.selected [data-cs-panel] rect.stage{fill:var(--stage-main,#F2F2F2)}"
+            << "g.selected [data-cs-panel] rect.clone{fill:var(--stage-clone,#D9D9D9)}"
+            << "g.selected [data-cs-panel] rect.background{opacity:0}</style>"
             << stage->ColumnShardSvg << "</svg>" << Endl;
     }
     builder << "</svg>" << Endl;
@@ -1888,10 +1892,6 @@ TColumnShardSourceTotals ColumnShardSourceTotals(const NJson::TJsonValue& value)
     return result;
 }
 
-TString ColumnShardSourceName(const TColumnShardSourceKey& source) {
-    return source.first + (source.second ? " / " + source.second : TString());
-}
-
 TString ColumnShardKeyPart(TStringBuf value) {
     return TStringBuilder() << value.size() << ':' << value;
 }
@@ -1944,6 +1944,8 @@ TColumnShardIndexContext ColumnShardIndexContext(const NJson::TJsonValue& step, 
 
 struct TColumnShardNode {
     TString Name;
+    TStepGroup PresentationSteps;
+    std::map<TString, NJson::TJsonValue> IndexDescriptors;
     TString Meta;
     TString Path;
     TString Kind;
@@ -1992,6 +1994,7 @@ struct TColumnShardNode {
             child.IndexKey = IndexKey;
             child.IndexMembers = IndexMembers;
             child.IndexDescriptions = IndexDescriptions;
+            child.IndexDescriptors = IndexDescriptors;
             child.SharedIndexInputs = SharedIndexInputs;
         }
         return child;
@@ -2031,6 +2034,14 @@ struct TColumnShardNode {
     }
 
     void Add(const NJson::TJsonValue& step, const TString& tablet, bool summary, bool directWait) {
+        const auto* descriptors = step.GetValueByPath("IndexDescriptors");
+        if (descriptors && descriptors->GetType() == NJson::JSON_ARRAY) {
+            for (const auto& descriptor : descriptors->GetArray()) {
+                if (descriptor.GetType() == NJson::JSON_MAP) {
+                    IndexDescriptors.emplace(descriptor.GetStringRobust(), descriptor);
+                }
+            }
+        }
         const TString semantic = ColumnShardSemanticDescription(step);
         if (semantic) {
             auto& descriptions = SemanticDescriptions[StepText(step, "StepKind")];
@@ -2079,6 +2090,7 @@ struct TColumnShardNode {
             Inclusive.Tablets[tablet].Add(StepValue(step, "IntegralExecutionDuration"));
             Read.Tablets[tablet].Add(StepValue(step, "ReadBytes"));
         }
+        PresentationSteps.Steps.push_back(&step);
         if (!summary || core) {
             Details.Steps.push_back(&step);
             for (TStringBuf field : {TStringBuf("Operation"), TStringBuf("StepName"), TStringBuf("Details.Predicate"),
@@ -2442,215 +2454,358 @@ TString ColumnShardSourcesAttribute(const TColumnShardNode& node) {
     return sources.GetStringRobust();
 }
 
-TString ColumnShardSourceDetails(const TColumnShardNode& node, TStringBuilder& tooltip) {
-    TString result;
-    for (const auto& [source, value] : node.Sources) {
-        if (!value.Bytes && !value.Unknown) { continue; }
-        if (result) { result += "; "; }
-        result += ColumnShardSourceName(source) + ": ";
-        result += value.Unknown || value.Overflow ? (value.Bytes ? "≥ " + FormatBytes(value.Bytes) : TString("unknown bytes"))
-            : FormatBytes(value.Bytes);
-        tooltip << " Source " << ColumnShardSourceName(source) << ": owned known bytes=" << value.Bytes
-            << ", reads=" << value.Reads << ", unknown-byte reads=" << value.Unknown << ".";
-        if (value.Shared) {
-            result += " (shared provenance)";
-            tooltip << " Shared references have no owned byte charge; known bytes in a mixed bucket belong to actual owned reads.";
-        }
-    }
-    if (result) {
-        tooltip << " Metastep sources follow semantic ownership; reader/fetch wrappers may include descendant reads across metasteps. "
-            << "These views overlap and must not be added; the independent Storage table counts unique owned reads.";
-        return "sources: " + result;
-    }
-    return {};
+TString ColumnShardWidgetStyles() {
+    return R"CS(<style>
+      .cs-ui{font:11px Verdana,sans-serif;color:#263747;box-sizing:border-box}
+      .cs-ui *{box-sizing:border-box}.cs-ui .cs-label{font-size:9px;color:#65788a}
+      .cs-ui .cs-value{font-size:12px;font-weight:600;color:#18354f}.cs-ui .cs-unit{font-size:9px;margin-left:4px;color:#65788a}
+      .cs-ui .cs-observed{border-left:3px solid #d6a13b}.cs-ui .cs-unknown{color:#8b98a4;font-size:10px}
+      .cs-stats{padding:5px 10px;display:grid;gap:2px;height:100%;overflow:auto}
+      .cs-reader-header{padding:3px 10px;display:flex;align-items:center;gap:9px;height:100%;overflow:hidden;background:#e5eef4}
+      .cs-stat{display:grid;grid-template-columns:54px 1fr 1fr 1fr;align-items:center;gap:5px;min-height:14px}
+      .cs-stat-head{font-size:8px;color:#7b8b98;text-align:right}.cs-stat .cs-value{text-align:right;font-size:10px}
+      .cs-stat>.cs-number{text-align:right}.cs-chevron{transform:rotate(90deg);transform-origin:3px 4px}
+      svg.folded>g>.cs-row-toggle .cs-chevron{transform:none}
+      .cs-coverage{height:5px;background:#e2eaf0;border-radius:3px;overflow:hidden}.cs-coverage>i{display:block;height:100%;background:#4c92bb}
+      .cs-shards{grid-column:2/5;display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:6px}
+      .cs-count{display:flex;gap:4px;align-items:baseline}.cs-count b{font-size:11px}.cs-count small{font-size:8px;color:#65788a}
+      .cs-details{padding:5px 10px;display:flex;flex-wrap:wrap;align-content:flex-start;gap:5px;height:100%;overflow:auto}
+      .cs-field{background:#f2f6f9;border:1px solid #e1e9ee;border-radius:5px;padding:4px 7px;min-width:82px;flex:1}
+      .cs-field>.cs-label{display:block;margin-bottom:3px}.cs-field.cs-wide{flex-basis:100%}
+      .cs-expression{font:10px monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:#59437d}
+      .cs-chips{display:flex;flex-wrap:wrap;gap:3px}.cs-chip{border-radius:4px;background:#e7eff5;padding:2px 5px;font-size:10px}
+      .cs-flow{display:flex;align-items:center;gap:4px;flex:1;min-width:220px}.cs-flow .cs-field{min-width:70px}
+      .cs-flow svg{width:22px;height:12px;flex-shrink:0}.cs-flow path{fill:none;stroke:#6894b4;stroke-width:1.5}
+      .cs-meter{height:5px;background:#dde8ef;border-radius:3px;margin-top:5px;overflow:hidden}
+      .cs-meter i{display:block;height:100%;background:#6aa58e}
+      .cs-index{border-left:3px solid #8f83b5}.cs-provider{border-left:3px solid #73a596}
+      .cs-state{display:inline-flex;align-items:center;gap:4px;font-size:9px;color:#65788a}
+      .cs-state i{width:7px;height:7px;border-radius:50%;background:#9baab5;display:inline-block}
+      .cs-state.cs-good i{background:#56a286}.cs-state.cs-warning i{background:#d6a13b}
+      .cs-names{font:11px Verdana,sans-serif;fill:#263747}.cs-heading{font:10px Verdana,sans-serif;fill:#65788a;font-weight:bold}
+    </style>)CS";
 }
 
-TString ColumnShardIndexDetails(const TColumnShardNode& node, TStringBuilder& tooltip) {
-    if (node.IndexDescriptions.empty() && node.IndexOrders.empty() && node.SharedInputReferences.empty() &&
-        node.Meta != "IndexFilter" && node.Kind != "IndexCheck") {
-        return {};
-    }
-    TString result;
-    if (!node.IndexDescriptions.empty()) {
-        result = node.SharedIndexInputs ? "shared index inputs: " : "index: ";
-        if (node.SharedIndexInputs) {
-            tooltip << " Shared operations are charged once; descriptors list the index consumers and may omit non-index column-header consumers.";
-        }
-        ui32 count = 0;
-        for (const auto& description : node.IndexDescriptions) {
-            tooltip << " Index context: " << description << '.';
-            if (count++ < 2) { result += (count > 1 ? " | " : "") + description; }
-        }
-    }
-    if (!node.IndexOrders.empty()) {
-        if (result) { result += "; "; }
-        result += "check positions ";
-        ui32 count = 0;
-        for (ui64 order : node.IndexOrders) {
-            tooltip << " Observed CHECK position=" << order << '.';
-            if (count++ < 8) { result += (count > 1 ? "," : "") + ToString(order); }
-        }
-        if (count > 8) { result += "…"; }
-        tooltip << " CHECK positions are source-local invocation positions, not a global timeline across parallel sources/tablets.";
-    }
-    auto availability = [&](TStringBuf path, TStringBuf label) {
-        ui64 known = 0, missing = 0;
-        for (const auto* step : node.Details.Steps) {
-            const auto* value = step->GetValueByPath(path);
-            if (value && value->GetType() == NJson::JSON_BOOLEAN) {
-                ++known;
-                missing += !value->GetBooleanSafe();
-            }
-        }
-        if (known) {
-            tooltip << ' ' << label << '=' << missing << '/' << known << " evaluated calls.";
-            if (result) { result += "; "; }
-            result += TString(label) + ' ' + ToString(missing) + '/' + ToString(known);
-        }
-    };
-    availability("Details.IndexAvailable", "metadata unavailable");
-    availability("Details.IndexDataAvailable", "data unavailable");
-    availability("Details.AppliedToResourceFilter", "without direct resource-filter mutation");
-    tooltip << " A check without direct resource-filter mutation may expose a bitmap for a later Filter; it is not proof that the index was unused.";
-    if (!node.SharedInputReferences.empty()) {
-        tooltip << " Actual input owners (references, not additional quota/time): ";
-        for (const auto& reference : node.SharedInputReferences) { tooltip << reference << "; "; }
-        if (result) { result += "; "; }
-        result += "input owner " + *node.SharedInputReferences.begin();
-        if (node.SharedInputReferences.size() > 1) { result += " (+" + ToString(node.SharedInputReferences.size() - 1) + ')'; }
+TString ColumnShardWidgetNumber(ui64 value, bool bytes) {
+    const TString text = bytes ? FormatBytes(value) : FormatInteger(value);
+    const size_t split = text.find_first_not_of("0123456789.,");
+    const TString amount = text.substr(0, split);
+    const TString unit = split == TString::npos ? TString() : text.substr(split);
+    return TStringBuilder() << "<span class='cs-number'><span class='cs-value'>" << SvgEscape(amount) << "</span>"
+        << "<span class='cs-unit'>" << SvgEscape(unit) << "</span></span>";
+}
+
+TString ColumnShardWidgetField(TStringBuf name, const TString& value, TStringBuf extra = {}) {
+    return TStringBuilder() << "<div class='cs-field " << extra << "'><span class='cs-label'>"
+        << SvgEscape(name) << "</span>" << value << "</div>";
+}
+
+TStepGroup ColumnShardWidgetGroup(const TColumnShardNode& node, TStringBuf kind) {
+    TStepGroup result;
+    for (const auto* step : node.PresentationSteps.Steps) {
+        if (!kind || ColumnShardKind(StepText(*step, "StepKind")) == kind) { result.Steps.push_back(step); }
     }
     return result;
 }
 
-TString ColumnShardDetails(const TColumnShardNode& node, bool partial, TStringBuilder& tooltip) {
-    if (node.ReaderOverhead.Summary().ExpectedCalls) {
-        node.ReaderOverhead.Tooltip(tooltip, "Owned reader dispatcher overhead, us");
-        node.ReaderOverviewWait.Tooltip(tooltip, "Inclusive reader wait (overview only, excluded from primary), us");
-        return "reader overhead " + node.ReaderOverhead.Cell(FormatDurationUs, false);
+std::set<TString> ColumnShardWidgetValues(const TStepGroup& group, TStringBuf path) {
+    std::set<TString> result;
+    for (const auto* step : group.Steps) {
+        const auto* value = step->GetValueByPath(path);
+        if (!value) { continue; }
+        if (value->GetType() == NJson::JSON_STRING && value->GetStringSafe()) { result.insert(value->GetStringSafe()); }
+        if (value->GetType() == NJson::JSON_ARRAY) {
+            for (const auto& item : value->GetArray()) {
+                if (item.GetType() == NJson::JSON_STRING && item.GetStringSafe()) { result.insert(item.GetStringSafe()); }
+            }
+        }
     }
-    if (node.SentRows.Summary().ExpectedCalls) {
-        node.SentRows.Tooltip(tooltip, "Output event rows");
-        node.SentDataBatches.Tooltip(tooltip, "Output data batches (events with rows)");
-        node.SentArrowBytes.Tooltip(tooltip, "Represented Arrow payload bytes (not serialized/network bytes)");
-        tooltip << "Metadata/control events have zero data batches. Controls without Arrow payload are outside Arrow-byte eligibility. "
-            << "A measured zero Arrow payload is included; a data event without an Arrow-byte measurement is unknown. "
-            << "Output Arrow bytes and BuildResult result bytes describe different boundaries and must not be added.";
-        return "rows " + node.SentRows.Cell(FormatInteger, false) + "; data batches "
-            + node.SentDataBatches.Cell(FormatInteger, false) + "; Arrow payload " + node.SentArrowBytes.Cell(FormatBytes, false);
-    }
-    if (node.SelectedPortions.Summary().ExpectedCalls) {
-        node.SelectedPortions.Tooltip(tooltip, "Metadata selected portions");
-        node.SelectedVersionRows.Tooltip(tooltip, "Metadata physical version rows (estimate)");
-        node.SelectedBlobBytes.Tooltip(tooltip, "Metadata blob bytes (estimate, not actual read)");
-        return "portions " + node.SelectedPortions.Cell(FormatInteger, false) + "; metadata versions "
-            + node.SelectedVersionRows.Cell(FormatInteger, false) + "; metadata blobs " + node.SelectedBlobBytes.Cell(FormatBytes, false);
-    }
-    if (node.Details.Steps.empty()) {
-        return {};
-    }
-    auto field = [&](TStringBuf path, TStringBuf label, TString (*format)(ui64)) {
-        auto metric = node.Details.Metric(path);
-        metric.Tooltip(tooltip, label, node.Details.Steps.size(), format);
-        return metric.Total(format);
+    return result;
+}
+
+TString ColumnShardWidgetChips(const std::set<TString>& values) {
+    TStringBuilder result;
+    result << "<div class='cs-chips'>";
+    for (const auto& value : values) { result << "<span class='cs-chip'>" << SvgEscape(value) << "</span>"; }
+    result << "</div>";
+    return result;
+}
+
+TString ColumnShardWidgetMetric(const TStepGroup& group, TStringBuf path, TStringBuf name, bool bytes = false) {
+    const auto metric = group.Metric(path);
+    if (!metric.Count) { return {}; }
+    return ColumnShardWidgetField(name, metric.Overflow
+        ? TString("<span class='cs-unknown'>Overflow</span>") : ColumnShardWidgetNumber(metric.Sum, bytes),
+        metric.Overflow || metric.Count < group.Steps.size() ? "cs-observed" : "");
+}
+
+TString ColumnShardWidgetFlow(const TStepGroup& group, TStringBuf input, TStringBuf output, TStringBuf title, bool bytes = false) {
+    const auto left = group.Metric(input), right = group.Metric(output);
+    if (!left.Count && !right.Count) { return {}; }
+    ui64 paired = 0;
+    for (const auto* step : group.Steps) { paired += StepValue(*step, input).has_value() && StepValue(*step, output).has_value(); }
+    const bool comparable = paired && paired == left.Count && paired == right.Count && !left.Overflow && !right.Overflow;
+    const ui64 scale = std::max(left.Sum, right.Sum);
+    auto value = [&](const auto& metric) {
+        TStringBuilder result;
+        result << (metric.Overflow ? TString("<span class='cs-unknown'>Overflow</span>")
+            : metric.Count ? ColumnShardWidgetNumber(metric.Sum, bytes)
+            : TString("<span class='cs-unknown'>Not recorded</span>"));
+        if (comparable && scale) {
+            result << "<div class='cs-meter'><i style='width:" << 100.0 * metric.Sum / scale << "%'></i></div>";
+        }
+        return TString(result);
     };
-    TString kind = node.Kind;
-    if (!kind) {
-        if (node.Name == "PKFilter" || node.Name == "Filter") {
-            kind = "Filter";
-        } else if (node.Name == "IndexFilter") {
-            kind = "IndexCheck";
-        } else if (node.Name == "FetchOtherColumns") {
-            kind = "Fetching";
+    return TStringBuilder() << "<div class='cs-flow' data-cs-flow='" << ColumnShardAttribute(title) << "'>"
+        << ColumnShardWidgetField(TStringBuilder() << title << " input", value(left))
+        << "<svg viewBox='0 0 22 12'><path d='M1 6H20M15 1L20 6L15 11'/></svg>"
+        << ColumnShardWidgetField(TStringBuilder() << title << " output", value(right)) << "</div>";
+}
+
+TString ColumnShardWidgetAvailability(const TStepGroup& group, TStringBuf path, TStringBuf title,
+    TStringBuf trueLabel = "present", TStringBuf falseLabel = "absent") {
+    ui64 known = 0, available = 0;
+    for (const auto* step : group.Steps) {
+        const auto* value = step->GetValueByPath(path);
+        if (value && value->GetType() == NJson::JSON_BOOLEAN) { ++known; available += value->GetBooleanSafe(); }
+    }
+    if (!known) { return {}; }
+    TStringBuilder value;
+    value << "<span class='cs-state " << (available == known ? "cs-good" : "cs-warning") << "'><i></i>"
+        << ColumnShardWidgetNumber(available, false) << "<span class='cs-label'>" << trueLabel << "</span></span>"
+        << "<span class='cs-count'>" << ColumnShardWidgetNumber(known - available, false)
+        << "<small>" << falseLabel << "</small></span>";
+    return ColumnShardWidgetField(title, value);
+}
+
+TString ColumnShardWidgetDetails(const TColumnShardNode& node, bool partial) {
+    TStringBuilder html;
+    TString kind = node.Kind ? node.Kind : node.Name;
+    if (kind == "PKFilter") { kind = "Filter"; }
+    if (kind == "IndexFilter") { kind = "IndexCheck"; }
+    if (kind == "FetchOtherColumns") { kind = "Fetching"; }
+    const auto group = ColumnShardWidgetGroup(node, kind);
+    auto chips = [&](TStringBuf path, TStringBuf title, const TStepGroup& from) {
+        const auto values = ColumnShardWidgetValues(from, path);
+        if (!values.empty()) { html << ColumnShardWidgetField(title, ColumnShardWidgetChips(values), "cs-wide"); }
+    };
+    if (node.Skipped) { html << ColumnShardWidgetField("Skipped calls", ColumnShardWidgetNumber(node.Skipped, false)); }
+    if (node.Failed) { html << ColumnShardWidgetField("Failed calls", ColumnShardWidgetNumber(node.Failed, false), "cs-observed"); }
+    if (node.Cancelled) { html << ColumnShardWidgetField("Cancelled calls", ColumnShardWidgetNumber(node.Cancelled, false), "cs-observed"); }
+    if (node.Row == "step" && (kind == "Ack" || kind == "Limit" || kind == "Ready" || kind == "Finish" ||
+            kind == "PrepareResult" || kind == "Merge" || kind == "ReaderInit" || kind == "FetchAccessors" || kind == "ParseProgram")) {
+        std::set<TString> actions;
+        for (const auto& stepName : ColumnShardWidgetValues(group, "StepName")) {
+            const TString label = stepName == "WAIT_CREDIT" ? "Wait for credit"
+                : stepName == "SYNC_LIMIT" ? "Synchronize limit"
+                : stepName == "BUILD_STAGE_RESULT" ? "Prepare source page"
+                : stepName == "MERGE_INTERVAL" ? "Merge interval" : stepName;
+            actions.insert(label);
+        }
+        if (!actions.empty()) { html << ColumnShardWidgetField("Action", ColumnShardWidgetChips(actions)); }
+    }
+    if (node.SharedIndexInputs) {
+        html << "<span class='cs-state cs-good'><i></i>Shared input owner</span>";
+    } else if (!node.SharedInputReferences.empty()) {
+        html << "<span class='cs-state'><i></i>Shared inputs charged to their owner</span>";
+    }
+    const bool indexContext = node.Meta == "IndexFilter" || node.Kind == "IndexCheck" ||
+        (node.SharedIndexInputs && node.IndexKey);
+    for (const auto& [identity, descriptor] : node.IndexDescriptors) {
+            if (!indexContext) { break; }
+            Y_UNUSED(identity);
+            TStringBuilder value;
+            value << "<strong class='cs-value'>" << SvgEscape(StepText(descriptor, "Name")) << "</strong>"
+                << "<div class='cs-label'>" << SvgEscape(StepText(descriptor, "Type")) << "</div>";
+            const TString indexId = ColumnShardIdentity(descriptor, "IndexId");
+            if (indexId) { value << "<div class='cs-label'>Index id <b>" << SvgEscape(indexId) << "</b></div>"; }
+            const auto* columns = descriptor.GetValueByPath("Columns");
+            if (columns && columns->GetType() == NJson::JSON_ARRAY) {
+                std::set<TString> names;
+                for (const auto& column : columns->GetArray()) { names.insert(column.GetStringSafe()); }
+                value << ColumnShardWidgetChips(names);
+            }
+            html << ColumnShardWidgetField("Index", value, "cs-index");
+    }
+    if (kind == "Filter" || kind == "IndexCheck") {
+        auto predicates = ColumnShardWidgetValues(group, "Details.Predicate");
+        if (predicates.empty()) {
+            for (const auto* step : group.Steps) {
+                TString operation = StepText(*step, "Operation");
+                if (operation.StartsWith("Filter(") && operation.size() > 7 && operation.back() == ')') {
+                    predicates.insert(operation.substr(7, operation.size() - 8));
+                } else if (kind == "IndexCheck" && operation.StartsWith("Index ")) {
+                    predicates.insert(std::move(operation));
+                }
+            }
+        }
+        for (const auto& predicate : predicates) {
+            html << ColumnShardWidgetField("Predicate", "<div class='cs-expression'>" + SvgEscape(predicate) + "</div>", "cs-wide");
+        }
+        if (kind == "IndexCheck") {
+            chips("Details.IndexType", "Checker type", group);
+            html << ColumnShardWidgetFlow(group, "Details.CandidateInputRows", "Details.CandidateOutputRows", "Candidates");
+            html << ColumnShardWidgetAvailability(group, "Details.IndexAvailable", "Index metadata")
+                << ColumnShardWidgetAvailability(group, "Details.IndexDataAvailable", "Index payload")
+                << ColumnShardWidgetAvailability(group, "Details.AppliedToResourceFilter", "Direct mask application", "applied", "not applied");
+        }
+        if (node.Row != "step" && kind == "Filter") {
+            std::map<TString, TStepGroup> masks;
+            for (const auto* step : group.Steps) {
+                masks[StepText(*step, "Details.Purpose")].Steps.push_back(step);
+            }
+            for (const auto& [purpose, mask] : masks) {
+                const TString label = purpose == "pk_range" ? "PK range" : purpose == "sql" ? "Predicate"
+                    : purpose == "deletion" ? "Deletion" : purpose == "duplicate" ? "Duplicate"
+                    : purpose == "snapshot" ? "Snapshot" : purpose == "limit" ? "Source limit" : "Mask";
+                html << ColumnShardWidgetFlow(mask, "Details.InputRows", "Details.OutputRows", label);
+            }
         } else {
-            kind = node.Name;
+            chips("Details.Purpose", "Mask", group);
+            html << ColumnShardWidgetFlow(group, "Details.InputRows", "Details.OutputRows", "Rows");
         }
-    }
-    if (kind == "Filter" || kind == "IndexCheck" || kind == "Aggregation") {
-        if (kind == "IndexCheck" && node.Details.Metric("Details.CandidateInputRows").Count) {
-            tooltip << " Index candidates describe the proposed bitmap decision; resource-filter changes describe its direct application. "
-                << "Do not sum candidate rejections across index checks or with later Filter applications.";
-            return "candidate mask (calls) " + field("Details.CandidateInputRows", "Proposed index candidate input rows", FormatInteger)
-                + " → " + field("Details.CandidateOutputRows", "Proposed index candidate output rows", FormatInteger)
-                + "; resource gate " + field("Details.InputRows", "Resource-filter input rows", FormatInteger)
-                + " → " + field("Details.OutputRows", "Resource-filter output rows", FormatInteger);
+    } else if (kind == "Fetching" || kind == "Assemble" || kind == "ReserveMemory") {
+        chips("Details.Columns", "Columns", group);
+        html << ColumnShardWidgetMetric(group, "Details.ReservationBytes", "Requested memory quota", true)
+            << ColumnShardWidgetMetric(group, "Details.RequestedBytes", "Requested ranges", true)
+            << ColumnShardWidgetMetric(group, "Details.RequestedRangeBytes", "Requested ranges", true)
+            << ColumnShardWidgetMetric(group, "ReadBytes", "Delivered payload", true);
+    } else if (kind == "StorageRead") {
+        chips("Details.BackendKind", "Backend", group);
+        chips("Details.StorageTier", "Storage", group);
+        chips("Details.DataKind", "Payload kind", group);
+        html << ColumnShardWidgetMetric(group, "Details.RequestedRangeBytes", "Requested ranges", true)
+            << ColumnShardWidgetMetric(group, "ReadBytes", "Returned payload", true)
+            << ColumnShardWidgetAvailability(group, "Details.IsRetry", "Read attempts", "retry", "initial");
+    } else if (kind == "Decode") {
+        chips("Details.Column", "Column", group);
+        chips("Details.Codec", "Codec", group);
+        html << ColumnShardWidgetFlow(group, "Details.EncodedInputBytes", "Details.DecodedOutputBytes", "Bytes", true)
+            << ColumnShardWidgetMetric(group, "Details.DecodedRows", "Rows");
+    } else if (kind == "Aggregation") {
+        chips("Details.Keys", "Grouping keys", group);
+        chips("Details.Functions", "Aggregate functions", group);
+        html << ColumnShardWidgetFlow(group, "Details.InputRows", "Details.OutputRows", "Aggregate call rows");
+    } else if (kind == "Calculation") {
+        auto expressions = ColumnShardWidgetValues(group, "Details.Expression");
+        if (expressions.empty()) { expressions = ColumnShardWidgetValues(group, "Operation"); }
+        for (const auto& expression : expressions) {
+            html << ColumnShardWidgetField("Expression", "<div class='cs-expression'>" + SvgEscape(expression) + "</div>", "cs-wide");
         }
-        TString result = kind == "IndexCheck" ? "processed check candidates (calls) "
-            : kind == "Aggregation" ? "aggregate call rows " : "processed filter candidates (calls) ";
-        result += field("Details.InputRows", "Call input rows", FormatInteger) + " → "
-            + field("Details.OutputRows", "Call output rows", FormatInteger);
-        auto input = node.Details.Metric("Details.InputRows");
-        auto output = node.Details.Metric("Details.OutputRows");
-        if (node.Meta == "Filter" && kind == "Filter" && !partial && input.Count == node.Details.Steps.size() &&
-            output.Count == input.Count && !input.Overflow && !output.Overflow && input.Sum) {
-            result += Sprintf(" (call-weighted %.1f%%)", 100.0 * output.Sum / input.Sum);
+        html << ColumnShardWidgetMetric(group, "Details.RowsCount", "Rows");
+    } else if (kind == "Projection" || kind == "BuildResult") {
+        if (kind == "Projection") {
+            chips("Details.InputColumns", "Input columns", group);
+            chips("Details.OutputColumns", "Output columns", group);
         }
-        tooltip << "These are processed call populations, not unique rows of the whole metastep. ";
-        if (kind == "Aggregation") {
-            tooltip << "Scalar output rows are not groups. Keyed output rows may be partial groups; no final unique-group count is inferred.";
+        html << ColumnShardWidgetMetric(group, "Details.PageRows", "Input page rows")
+            << ColumnShardWidgetMetric(group, "Details.PageInputBytes", "Input page payload", true);
+        html << ColumnShardWidgetMetric(group, "Details.ResultRows", "Produced rows")
+            << ColumnShardWidgetMetric(group, "Details.ResultBytes", "Arrow result payload", true);
+    }
+    if (node.Row == "meta" && kind != "ReserveMemory") {
+        html << ColumnShardWidgetMetric(ColumnShardWidgetGroup(node, "ReserveMemory"),
+            "Details.ReservationBytes", "Requested memory quota", true);
+    }
+    if (!node.IndexOrders.empty()) {
+        TStringBuilder values;
+        for (ui64 order : node.IndexOrders) { values << "<span class='cs-chip'>" << order << "</span>"; }
+        html << ColumnShardWidgetField("Observed source-local check positions", "<div class='cs-chips'>" + values + "</div>");
+    }
+    auto summary = [&](const auto& metric, TStringBuf title, bool bytes = false, TStringBuf unit = {}) {
+        const auto value = metric.Summary();
+        if (value.ExpectedCalls) {
+            TString content = value.KnownCalls ? ColumnShardWidgetNumber(value.Sum, bytes)
+                : TString("<span class='cs-unknown'>Not recorded</span>");
+            if (unit && value.KnownCalls) { content += "<span class='cs-unit'>" + SvgEscape(unit) + "</span>"; }
+            html << ColumnShardWidgetField(title, content);
         }
-        return result;
+    };
+    summary(node.SelectedPortions, "Selected portions");
+    summary(node.SelectedVersionRows, "Metadata version rows");
+    summary(node.SelectedBlobBytes, "Metadata blob estimate", true);
+    summary(node.SentRows, "Sent rows");
+    summary(node.SentDataBatches, "Data batches");
+    summary(node.SentArrowBytes, "Arrow payload", true);
+    summary(node.ReaderOverhead, "Reader dispatcher time", false, "us");
+    for (const auto& [source, value] : node.Sources) {
+        if (!value.Bytes && !value.Unknown) { continue; }
+        TStringBuilder content;
+        content << "<strong class='cs-value'>" << SvgEscape(source.first) << "</strong><div class='cs-label'>"
+            << SvgEscape(source.second) << "</div>";
+        content << (value.Bytes || !value.Unknown ? ColumnShardWidgetNumber(value.Bytes, true)
+            : TString("<span class='cs-unknown'>Volume not recorded</span>"));
+        if (value.Unknown || value.Overflow || partial) { content << "<div class='cs-state cs-warning'><i></i>Observed volume</div>"; }
+        html << ColumnShardWidgetField("Read origin", content, "cs-provider");
     }
-    if (kind == "Decode") {
-        return field("Details.EncodedInputBytes", "Encoded input", FormatBytes) + " → "
-            + field("Details.DecodedOutputBytes", "Decoded output", FormatBytes);
-    }
-    if (kind == "Fetching") {
-        return "requested " + field("Details.RequestedBytes", "Requested logical ranges", FormatBytes)
-            + "; delivered " + field("ReadBytes", "Delivered serialized slices", FormatBytes);
-    }
-    if (kind == "StorageRead") {
-        return "requested " + field("Details.RequestedRangeBytes", "Requested backend ranges", FormatBytes);
-    }
-    if (kind == "ReserveMemory") {
-        return "quota " + field("Details.ReservationBytes", "Requested quota (not RSS)", FormatBytes);
-    }
-    if (kind == "BuildResult") {
-        return field("Details.ResultRows", "Result rows", FormatInteger) + " rows / "
-            + field("Details.ResultBytes", "Arrow result bytes", FormatBytes);
-    }
-    if (kind == "Calculation") {
-        return field("Details.RowsCount", "Processed calculation rows", FormatInteger) + " rows";
-    }
-    return {};
+    if (!html) { html << "<span class='cs-unknown'>No recorded attributes</span>"; }
+    return html;
 }
 
-TString ColumnShardSemanticLabel(const TColumnShardNode& node, TStringBuilder& tooltip) {
-    TString indexLabel;
-    if (node.Row == "meta" && node.Meta == "IndexFilter") {
-        for (const auto& description : node.IndexDescriptions) {
-            if (indexLabel) { indexLabel += " | "; }
-            indexLabel += description;
-        }
+TString ColumnShardWidgetStatistics(const TColumnShardNode& node, const TColumnShardRead& read) {
+    TStringBuilder html;
+    const ui64 total = read.Denominator(), active = node.ActiveTablets.size();
+    const double coverage = total ? std::min(100.0, 100.0 * active / total) : 0;
+    html << "<div class='cs-stat cs-stat-head'><span></span><span>Total</span><span>Mean</span><span>Max</span></div>"
+        << "<div class='cs-stat'><span class='cs-label'>Shards</span><div class='cs-shards'>"
+        << "<div class='cs-coverage'><i style='width:" << coverage << "%'></i></div>"
+        << "<span class='cs-count'><b>" << active << "</b><small>active</small></span>"
+        << "<span class='cs-count'><b>" << total << "</b><small>" << (read.ExpectedKnown ? "planned" : "received")
+        << "</small></span></div></div>"
+        << "<div class='cs-stat'><span class='cs-label'>Calls</span>" << ColumnShardWidgetNumber(node.Calls, false)
+        << "<span></span><span></span></div>";
+    auto timing = [&](const auto& metric, TStringBuf name) {
+        const auto value = metric.Summary();
+        auto amount = [&](double number) -> TString {
+            const double scale = number >= 1000000 ? 1000000 : number >= 1000 ? 1000 : 1;
+            return TStringBuilder() << "<span class='cs-value'>" << Sprintf("%.2f", number / scale)
+                << "<span class='cs-unit'>" << (scale == 1 ? "us" : scale == 1000 ? "ms" : "s") << "</span></span>";
+        };
+        const TString unknown = "<span class='cs-unknown'>Not recorded</span>";
+        html << "<div class='cs-stat" << (value.KnownCalls < value.ExpectedCalls ? " cs-observed" : "")
+            << "' title='Measured calls " << value.KnownCalls << " of " << value.ExpectedCalls
+            << ". Complete shard totals " << value.KnownShards << " of " << active << ".'>"
+            << "<span class='cs-label'>" << name << "</span>"
+            << (value.KnownCalls ? TString(amount(value.Sum)) : unknown)
+            << (value.KnownShards ? TString(amount(double(value.KnownSum) / value.KnownShards)) : unknown)
+            << (value.KnownShards ? TString(amount(value.Max)) : unknown) << "</div>";
+    };
+    timing(node.Active, "Active");
+    timing(node.Wait, "Wait");
+    const auto bytes = node.Read.Summary();
+    html << "<div class='cs-stat'><span class='cs-label'>Read</span>"
+        << (bytes.KnownCalls ? ColumnShardWidgetNumber(bytes.Sum, true)
+            : TString("<span class='cs-unknown'>Not recorded</span>"));
+    if (read.Partial || node.Failed || node.Cancelled || bytes.KnownCalls < bytes.ExpectedCalls) {
+        html << "<span class='cs-state cs-warning'><i></i>Observed</span>";
     }
-    TString kind = node.Kind;
-    if (kind == "ReserveMemory") { kind = "MemoryReserve"; }
-    if (kind == "Fetching") { kind = "FetchColumns"; }
-    if (node.Row != "step") {
-        if (node.Name == "PKFilter" || node.Name == "Filter") { kind = "Filter"; }
-        else if (node.Name == "IndexFilter") { kind = "IndexCheck"; }
-        else if (node.Name == "FetchOtherColumns") { kind = "FetchColumns"; }
-        else { kind = node.Name; }
-    }
-    const auto descriptions = node.SemanticDescriptions.find(kind);
-    if (descriptions == node.SemanticDescriptions.end()) { return indexLabel; }
-    tooltip << "Semantic descriptions (distinct observed variants; variants are not a conjunction): ";
-    TString label;
-    ui32 count = 0;
-    for (const auto& description : descriptions->second) {
-        tooltip << description << "; ";
-        if (count++ < 2) {
-            if (label) { label += " | "; }
-            label += description;
-        }
-    }
-    if (count > 2) { label += " (+" + ToString(count - 2) + " variants)"; }
-    if (node.SemanticDescriptionsTruncated) { tooltip << "Description limit reached; additional variants omitted. "; }
-    return indexLabel + (indexLabel && label ? "; " : "") + label;
+    html << "</div>";
+    return html;
 }
 
-ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TColumnShardRead& read,
-    const TColumnShardNode& node, ui32 top, ui32 depth) {
-    constexpr ui32 rowHeight = INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+void PrintColumnShardWidget(TStringBuilder& svg, ui32 x, ui32 y, ui32 width, ui32 height,
+    TStringBuf css, const TString& html) {
+    svg << "<foreignObject x='" << x << "' y='" << y << "' width='" << width << "' height='" << height
+        << "'><div xmlns='http://www.w3.org/1999/xhtml' class='cs-ui " << css << "'>" << html << "</div></foreignObject>";
+}
+
+TString ColumnShardWidgetIcon(TStringBuf name) {
+    if (name == "Filter" || name == "PKFilter" || name == "IndexFilter" || name == "IndexCheck") {
+        return "<path d='M2 3H22L14 12V20L10 22V12Z'/>";
+    }
+    if (name == "ReserveMemory") {
+        return "<rect x='4' y='6' width='16' height='12' rx='2'/><path d='M7 2V6M12 2V6M17 2V6M7 18V22M12 18V22M17 18V22'/>";
+    }
+    if (name == "Aggregation") {
+        return "<path d='M2 4H9V8H2ZM2 10H9V14H2ZM2 16H9V20H2ZM15 8H22V16H15ZM9 6L15 12M9 12H15M9 18L15 12'/>";
+    }
+    if (name == "Projection") { return "<path d='M2 3H7V21H2ZM10 3H15V21H10ZM18 3H23V21H18M10 8H15M10 15H15'/>"; }
+    if (name == "Decode") { return "<path d='M2 6H20L16 2M20 6L16 10M22 18H4L8 14M4 18L8 22'/>"; }
+    if (name == "BuildResult" || name == "PrepareResult") { return "<path d='M3 6L12 2L21 6V18L12 22L3 18ZM3 6L12 10L21 6M12 10V22'/>"; }
+    return "<path d='M3 5H21V19H3ZM7 9H17M7 14H14'/>";
+}
+
+std::vector<const TColumnShardNode*> ColumnShardOrderedChildren(const TColumnShardNode& node) {
     std::vector<const TColumnShardNode*> children;
     const bool splitIndexes = std::any_of(node.Children.begin(), node.Children.end(), [](const auto& entry) {
         return entry.second.Row == "meta" && entry.second.Meta == "IndexFilter" && entry.second.IndexKey;
@@ -2671,71 +2826,13 @@ ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TCo
         }
         return std::make_pair(left->Name, left->IndexKey) < std::make_pair(right->Name, right->IndexKey);
     });
-    TStringBuilder body;
-    ui32 height = rowHeight;
-    for (const auto* child : children) {
-        height += PrintColumnShardNode(body, viz, read, *child, height - rowHeight, depth + 1);
-    }
-    TStringBuilder tooltip;
-    tooltip << node.Meta << '/' << node.Path << '/' << node.Kind << "; calls=" << node.Calls
-        << "; active tablets=" << node.ActiveTablets.size() << '/' << read.Denominator()
-        << (read.ExpectedKnown ? " planned physical tablets" : " received physical tablets; expected total unknown")
-        << "; received in logical read=" << read.ReceivedShards() << "; received in this family=" << read.Tablets.size()
-        << "; known expected roster union=" << read.KnownExpectedTablets.size()
-        << "; skipped=" << node.Skipped << "; failed=" << node.Failed << "; cancelled=" << node.Cancelled << ". "
-        << "Primary Active is owned elapsed work; step rows show their own work, and metasteps include each descendant once. "
-        << "Inclusive parent/child timers are not added. Metastep Wait uses the direct blocked-operation frontier. "
-        << "Displayed order is semantic; independent branches and tablets may overlap.";
-    node.Active.Tooltip(tooltip, "Owned active, us");
-    node.Inclusive.Tooltip(tooltip, "Inclusive active (details only), us");
-    node.Wait.Tooltip(tooltip, "Wait, us");
-    node.Read.Tooltip(tooltip, "Received bytes (this boundary)");
-    TString details = ColumnShardDetails(node, read.Partial, tooltip);
-    const TString semanticLabel = ColumnShardSemanticLabel(node, tooltip);
-    if (semanticLabel) {
-        details = semanticLabel + (details ? "; " + details : TString());
-    }
-    if (!node.Descriptions.empty()) {
-        tooltip << "Examples / descriptions (up to 12): ";
-    }
-    for (const auto& description : node.Descriptions) {
-        tooltip << description << "; ";
-    }
-    if (read.Partial) {
-        tooltip << "PARTIAL population: observed work only; absent measurements are not zero. ";
-    }
-    if (read.PendingAttempts) {
-        tooltip << read.PendingAttempts << " latest attempt reports have unfinalized operations; maximum pending="
-            << read.MaxPendingOperations << ". Shared async work may continue after LIMIT/cancel; later costs are absent from this snapshot. ";
-    }
-    tooltip << "Expected roster covers observed StatsGroupId cohorts only; a wholly missing cohort requires external stage/query coverage.";
-    if (read.ExpectedKnown && read.ExpectedShards > read.ReceivedShards()) {
-        tooltip << ' ' << read.ExpectedShards - read.ReceivedShards()
-            << " planned tablets have no runtime report; they may not have started (for example due to LIMIT). "
-            << "This difference alone does not establish lost runtime data.";
-    }
-    const bool structural = node.Row == "step" && !node.Calls && !node.Skipped && !children.empty();
-    if (!node.Calls) {
-        details = structural ? "parent context (no separate call)" : !read.Attempts ? "runtime not observed"
-            : read.Partial || read.Unclassified ? "not observed" : "not executed in received runtimes";
-        if (read.Family == "PLAIN" && node.Name == "FetchOtherColumns") {
-            details = "inputs materialized before merge";
-        }
-        if (read.Family == "PLAIN" && node.Name == "IndexFilter") {
-            details = "no physical index fetching after merge";
-        }
-    }
-    if (read.Family == "PLAIN" && node.Meta == "IndexFilter" && node.Calls) {
-        tooltip << "PLAIN checker visits use the program's fake data source; they do not prove physical index usage.";
-        if (node.Row == "meta") {
-            details = "program-only checks (no physical index fetching after merge); " + details;
-        }
-    }
+    return children;
+}
+
+void PrintColumnShardNodeMetrics(TStringBuilder& svg, const TColumnShardRead& read,
+    const TColumnShardNode& node, bool structural) {
     const auto active = node.Active.Summary();
     const auto wait = node.Wait.Summary();
-    for (const auto& extra : {ColumnShardSourceDetails(node, tooltip), ColumnShardIndexDetails(node, tooltip)}) {
-        if (extra) { details += (details ? "; " : "") + extra; }
-    }
     NJson::TJsonValue indexPositions(NJson::JSON_ARRAY);
     for (ui64 order : node.IndexOrders) { indexPositions.AppendValue(order); }
     svg << "<svg data-cs-index-key='" << ColumnShardAttribute(node.IndexKey)
@@ -2751,6 +2848,7 @@ ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TCo
         << "' data-cs-known-expected-shards='" << read.KnownExpectedTablets.size()
         << "' data-cs-denominator='" << (read.ExpectedKnown ? "expected" : "received")
         << "' data-cs-structural='" << (structural ? "true" : "false") << "' data-cs-calls='" << node.Calls
+        << "' data-cs-skipped='" << node.Skipped << "' data-cs-failed='" << node.Failed << "' data-cs-cancelled='" << node.Cancelled
         << "' data-cs-active-sum='" << active.Sum << "' data-cs-owned-sum='" << active.Sum
         << "' data-cs-active-overflow='" << (active.Overflow ? "true" : "false")
         << "' data-cs-active-known-shards='" << active.KnownShards
@@ -2775,6 +2873,9 @@ ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TCo
             << "' data-cs-output-arrow-bytes='" << bytes.Sum << "' data-cs-output-arrow-bytes-known-shards='" << bytes.KnownShards
             << "' data-cs-output-arrow-bytes-eligible-shards='" << bytes.EligibleShards;
     }
+}
+
+void PrintColumnShardBoundaryMetrics(TStringBuilder& svg, const TColumnShardNode& node) {
     const auto readBytes = node.Read.Summary();
     if (node.ReaderOverhead.Summary().ExpectedCalls) {
         const auto overhead = node.ReaderOverhead.Summary();
@@ -2810,36 +2911,59 @@ ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TCo
             svg << "' data-cs-call-output-rows='" << callOutput.Sum;
         }
     }
-    svg << "' x='0' y='" << top << "' width='" << viz.Config.Width << "' height='" << height << "'>"
-        << "<svg width='" << viz.Config.Width << "' height='" << rowHeight << "'><g><title>" << SvgEscape(tooltip) << "</title>"
-        << SvgRect(0, 0, viz.Config.Width, rowHeight, node.Row == "step" ? "stage" : "columns");
-    if (!children.empty()) {
-        svg << "<g class='plus button' data-cs-toggle='row'>" << SvgRect(depth * INTERNAL_WIDTH, 0, CONN_SIZE, CONN_SIZE, "transparent")
-            << "<use href='#icon_minus' class='icon_minus' transform='translate(" << depth * INTERNAL_WIDTH
-            << ",0) scale(0.014)' fill='" << viz.Config.Palette.ConnectionText << "'/>"
-            << "<use href='#icon_plus' class='icon_plus' transform='translate(" << depth * INTERNAL_WIDTH
-            << ",0) scale(0.014)' fill='" << viz.Config.Palette.ConnectionText << "'/></g>";
+}
+
+ui32 PrintColumnShardNode(TStringBuilder& svg, const TVisualizer& viz, const TColumnShardRead& read,
+    const TColumnShardNode& node, ui32 top, ui32 depth) {
+    constexpr ui32 rowHeight = 112;
+    const auto children = ColumnShardOrderedChildren(node);
+    TStringBuilder body;
+    ui32 height = rowHeight;
+    for (const auto* child : children) {
+        height += PrintColumnShardNode(body, viz, read, *child, height - rowHeight, depth + 1);
     }
-    const ui32 indent = std::min<ui32>((depth + 1) * INTERNAL_WIDTH, 270);
-    const TString nameBase = node.Row == "meta" && node.Meta == "IndexFilter" && node.SharedIndexInputs
-        ? TString("IndexFilter · shared inputs") : node.Name;
-    const TString name = semanticLabel.StartsWith(nameBase + "(") ? semanticLabel
-        : nameBase + (semanticLabel ? " (" + semanticLabel + ")" : TString());
-    StepCell(svg, indent, 315 - indent, name);
-    StepCell(svg, 315, 90, TStringBuilder() << node.ActiveTablets.size() << '/' << read.Denominator()
-        << (read.ExpectedKnown ? "" : " recv"));
-    StepCell(svg, 405, 65, FormatInteger(node.Calls));
-    StepCell(svg, 470, 205, node.Active.Cell(FormatDurationUs));
-    StepCell(svg, 675, 205, node.Wait.Cell(FormatDurationUs));
-    StepCell(svg, 880, 110, node.Read.Cell(FormatBytes, false));
-    StepCell(svg, 990, viz.Config.Width > 990 ? viz.Config.Width - 990 : 0, details);
+    const bool structural = node.Row == "step" && !node.Calls && !node.Skipped && !children.empty();
+    const bool collapsed = node.Row == "meta" && !children.empty();
+    const ui32 visibleHeight = collapsed ? rowHeight : height;
+    PrintColumnShardNodeMetrics(svg, read, node, structural);
+    PrintColumnShardBoundaryMetrics(svg, node);
+    svg << "' data-cs-row-height='" << rowHeight << "' x='0' y='" << top << "' width='" << viz.Config.Width
+        << "' height='" << visibleHeight << "'><svg class='" << (collapsed ? "folded" : "")
+        << "' width='" << viz.Config.Width << "' height='" << rowHeight << "'><g>"
+        << "<rect class='cs-row-background' width='" << viz.Config.Width << "' height='" << rowHeight
+        << "' fill='" << (node.Row == "step" ? "#ffffff" : "#edf3f7") << "'/>";
+    if (!children.empty()) {
+        svg << "<g class='plus button cs-row-toggle' data-cs-toggle='row' transform='translate(" << depth * 12 + 6
+            << ",12)'><rect width='12' height='12' fill='transparent'/>"
+            << "<path class='cs-chevron' d='M0 0L6 4L0 8Z' fill='#61798d'/></g>";
+    }
+    const ui32 nameEnd = viz.Config.Width / 4, statisticsEnd = viz.Config.Width * 52 / 100;
+    const ui32 indent = std::min<ui32>(depth * 12 + 24, nameEnd - 70);
+    TString name = node.Row == "step" && node.Kind ? node.Kind : node.Name;
+    if (name == "Decode") {
+        const auto codecs = ColumnShardWidgetValues(ColumnShardWidgetGroup(node, "Decode"), "Details.Codec");
+        if (codecs.size() == 1 && codecs.begin()->size() < 16) { name += " (" + *codecs.begin() + ')'; }
+    }
+    svg << "<text data-cs-name='true' class='cs-names' x='" << indent << "' y='23'>" << SvgEscape(name) << "</text>";
+    svg << "<svg x='" << indent << "' y='54' width='26' height='26' viewBox='0 0 24 24'>"
+        << "<g fill='none' stroke='#7a9bb1' stroke-width='1.4' stroke-linejoin='round'>"
+        << ColumnShardWidgetIcon(node.Row == "step" ? node.Kind : node.Name) << "</g></svg>";
+    if (!node.Calls || node.Failed || node.Cancelled) {
+        const TString status = structural ? "Context" : node.Failed ? "Failed" : node.Cancelled ? "Cancelled"
+            : node.Skipped ? "Skipped" : !read.Attempts || read.Partial ? "Not observed" : "Not executed";
+        svg << "<text class='cs-heading' x='" << indent << "' y='42'>" << status << "</text>";
+    }
+    PrintColumnShardWidget(svg, nameEnd, 0, statisticsEnd - nameEnd, rowHeight,
+        "cs-stats", ColumnShardWidgetStatistics(node, read));
+    PrintColumnShardWidget(svg, statisticsEnd, 0, viz.Config.Width - statisticsEnd, rowHeight,
+        "cs-details", ColumnShardWidgetDetails(node, read.Partial));
     svg << "</g></svg>";
     if (!children.empty()) {
         svg << "<svg x='0' y='" << rowHeight << "' width='" << viz.Config.Width << "' height='" << height - rowHeight << "'>"
             << body << "</svg>";
     }
     svg << "</svg>" << Endl;
-    return height;
+    return visibleHeight;
 }
 
 bool HasColumnShardMetaStats(const TVisualizer& viz, const TStage* onlyStage) {
@@ -2904,7 +3028,7 @@ struct TColumnShardStorage {
     bool Partial = false;
 };
 
-TColumnShardStorage CollectColumnShardStorage(const TVisualizer& viz) {
+TColumnShardStorage CollectColumnShardStorage(const TVisualizer& viz, const TStage* onlyStage) {
     TColumnShardStorage result;
     std::map<TString, TColumnShardStorage::TAttempt> attempts;
     TColumnShardRead coverage;
@@ -2912,6 +3036,9 @@ TColumnShardStorage CollectColumnShardStorage(const TVisualizer& viz) {
     size_t planIndex = 0;
     for (const auto& plan : viz.Plans) {
         for (const auto& stage : plan->Stages) {
+            if (stage.get() != onlyStage) {
+                continue;
+            }
             const TString scope = TStringBuilder() << "plan " << planIndex << " / stage " << stage->PhysicalStageId;
             for (const auto& scan : stage->ColumnShardScans.GetArray()) {
                 if (scan.GetType() != NJson::JSON_MAP) {
@@ -2995,12 +3122,12 @@ TColumnShardStorage CollectColumnShardStorage(const TVisualizer& viz) {
     return result;
 }
 
-ui32 PrintColumnShardStorage(TStringBuilder& svg, const TVisualizer& viz, ui32 top) {
-    const auto storage = CollectColumnShardStorage(viz);
+ui32 PrintColumnShardStorage(TStringBuilder& svg, const TVisualizer& viz, ui32 top, const TStage* onlyStage) {
+    const auto storage = CollectColumnShardStorage(viz, onlyStage);
     if (!storage.Present) {
         return 0;
     }
-    constexpr ui32 rowHeight = INTERNAL_HEIGHT + INTERNAL_GAP_Y;
+    constexpr ui32 rowHeight = 40;
     const ui32 sourceEnd = viz.Config.Width * 32 / 100;
     const ui32 readEnd = viz.Config.Width * 69 / 100;
     const ui32 bytesEnd = viz.Config.Width * 84 / 100;
@@ -3008,31 +3135,35 @@ ui32 PrintColumnShardStorage(TStringBuilder& svg, const TVisualizer& viz, ui32 t
     TStringBuilder rows;
     ui32 height = 2 * rowHeight;
     auto row = [&](TStringBuf kind, const TColumnShardSourceKey& source, const TString& read,
-                   const TColumnShardSourceTotals& value, const TString& readLabel) {
+                   const TColumnShardSourceTotals& value) {
         const bool partial = storage.PopulationPartial || value.Unknown || value.Overflow;
         TString amount = FormatBytes(value.Bytes);
         const size_t suffix = amount.find_first_not_of("0123456789.");
         const TString unit = suffix == TString::npos ? TString("B") : amount.substr(suffix);
         amount = amount.substr(0, suffix);
-        TStringBuilder tooltip;
-        tooltip << ColumnShardSourceName(source) << "; " << readLabel << "; observed bytes=" << value.Bytes
-            << "; reads=" << value.Reads << "; reads with unknown byte size=" << value.Unknown
-            << "; data kinds=";
-        for (const auto& dataKind : value.DataKinds) { tooltip << dataKind << ';'; }
-        tooltip << " Each source read is counted once from cumulative scan snapshots. Detail rows and source subtotals are not additional reads. "
-            << "Bytes are supplied-source payload, not decoded Arrow bytes or a physical-device I/O total.";
-        if (value.Shared) { tooltip << " Includes shared-source references whose byte ownership is unavailable; their bytes are not charged twice."; }
-        if (partial) { tooltip << " PARTIAL: observed lower bound; absent or in-flight measurements are not zero."; }
         rows << "<svg data-cs-storage-row='" << kind << "' data-cs-source-kind='" << ColumnShardAttribute(source.first)
             << "' data-cs-source-name='" << ColumnShardAttribute(source.second) << "' data-cs-storage-read='"
             << ColumnShardAttribute(read) << "' data-cs-storage-bytes='" << value.Bytes << "' data-cs-storage-reads='" << value.Reads
             << "' data-cs-storage-unknown='" << value.Unknown << "' data-cs-storage-partial='" << (partial ? "true" : "false")
-            << "' x='0' y='" << height << "' width='" << viz.Config.Width << "' height='" << rowHeight << "'><g><title>"
-            << SvgEscape(tooltip) << "</title>" << SvgRect(0, 0, viz.Config.Width, rowHeight, kind == "read" ? "stage" : "columns");
-        StepCell(rows, INTERNAL_WIDTH, sourceEnd > INTERNAL_WIDTH ? sourceEnd - INTERNAL_WIDTH : 0,
-            kind == "read" ? "↳ " + ColumnShardSourceName(source) : ColumnShardSourceName(source));
-        StepCell(rows, sourceEnd, readEnd - sourceEnd, readLabel);
-        StepCell(rows, readEnd, bytesEnd - readEnd, partial && !value.Bytes ? TString("—") : (partial ? "≥ " : "") + amount);
+            << "' x='0' y='" << height << "' width='" << viz.Config.Width << "' height='" << rowHeight << "'><g>"
+            << "<rect width='" << viz.Config.Width << "' height='" << rowHeight << "' fill='"
+            << (kind == "grand-total" ? "#e5eef4" : "#f6f9fb") << "'/>";
+        TStringBuilder provider;
+        provider << "<strong class='cs-value'>" << SvgEscape(source.first) << "</strong><div class='cs-label'>"
+            << SvgEscape(source.second) << "</div>";
+        PrintColumnShardWidget(rows, INTERNAL_WIDTH, 0, sourceEnd - INTERNAL_WIDTH, rowHeight, "cs-details", provider);
+        const ui64 known = value.Reads >= value.Unknown ? value.Reads - value.Unknown : 0;
+        TStringBuilder coverage;
+        coverage << "<div class='cs-shards'><div class='cs-coverage'><i style='width:"
+            << (value.Reads ? 100.0 * known / value.Reads : 0) << "%'></i></div>"
+            << "<span class='cs-count'><b>" << known << "</b><small>measured</small></span>"
+            << "<span class='cs-count'><b>" << value.Unknown << "</b><small>unknown volume</small></span></div>";
+        PrintColumnShardWidget(rows, sourceEnd, 0, readEnd - sourceEnd, rowHeight, "cs-details", coverage);
+        TStringBuilder volume;
+        volume << (partial && !value.Bytes ? TString("<span class='cs-unknown'>Not recorded</span>")
+            : TString("<span class='cs-value'>") + SvgEscape(amount) + "</span>");
+        if (partial) { volume << "<div class='cs-state cs-warning'><i></i>Observed</div>"; }
+        PrintColumnShardWidget(rows, readEnd, 0, bytesEnd - readEnd, rowHeight, "cs-details", volume);
         StepCell(rows, bytesEnd, unitEnd - bytesEnd, unit);
         StepCell(rows, unitEnd, viz.Config.Width - unitEnd, FormatInteger(value.Reads));
         rows << "</g></svg>" << Endl;
@@ -3040,19 +3171,17 @@ ui32 PrintColumnShardStorage(TStringBuilder& svg, const TVisualizer& viz, ui32 t
     };
     for (const auto& [source, value] : storage.Sources) {
         if (!value.Bytes && !value.Unknown) { continue; }
-        row("source-total", source, {}, value, "All reads — datasource subtotal");
-        for (const auto& [read, detail] : storage.Reads.at(source)) {
-            if (detail.Bytes || detail.Unknown) { row("read", source, read, detail, storage.Labels.at(read)); }
-        }
+        row("source-total", source, {}, value);
     }
-    row("grand-total", {"Total", {}}, {}, storage.Total, storage.Partial ? "Observed request total (partial)" : "Request total");
-    svg << "<svg data-cs-storage='query' data-cs-storage-partial='" << (storage.Partial ? "true" : "false")
+    row("grand-total", {"Stage total", {}}, {}, storage.Total);
+    svg << "<svg data-cs-storage='stage' data-cs-storage-partial='" << (storage.Partial ? "true" : "false")
+        << "' data-cs-plan-index='" << onlyStage->ColumnShardPlanIndex.value() << "' data-cs-stage-id='" << onlyStage->PhysicalStageId
         << "' x='0' y='" << top << "' width='" << viz.Config.Width << "' height='" << height << "'>"
         << SvgRect(0, 0, viz.Config.Width, 2 * rowHeight, "columns");
-    StepCell(svg, INTERNAL_WIDTH, viz.Config.Width - INTERNAL_WIDTH, storage.Partial ? "Storage · observed sources (PARTIAL)" : "Storage · all read sources");
+    StepCell(svg, INTERNAL_WIDTH, viz.Config.Width - INTERNAL_WIDTH, "Storage");
     svg << "<svg x='0' y='" << rowHeight << "' width='" << viz.Config.Width << "' height='" << rowHeight << "'>";
     StepCell(svg, INTERNAL_WIDTH, sourceEnd > INTERNAL_WIDTH ? sourceEnd - INTERNAL_WIDTH : 0, "Datasource");
-    StepCell(svg, sourceEnd, readEnd - sourceEnd, "Read · table / stage");
+    StepCell(svg, sourceEnd, readEnd - sourceEnd, "Volume coverage");
     StepCell(svg, readEnd, bytesEnd - readEnd, "Read bytes");
     StepCell(svg, bytesEnd, unitEnd - bytesEnd, "Unit");
     StepCell(svg, unitEnd, viz.Config.Width - unitEnd, "Reads");
@@ -3104,67 +3233,55 @@ ui32 PrintColumnShardCache(TStringBuilder& svg, const TVisualizer& viz, const TC
     return rowHeight;
 }
 
-ui32 PrintAggregatedColumnShardStats(TStringBuilder& svg, const TVisualizer& viz, ui32 top, const TStage* onlyStage) {
-    constexpr ui32 rowHeight = INTERNAL_HEIGHT + INTERNAL_GAP_Y;
-    ui32 height = 0;
-    for (const auto& plan : viz.Plans) {
-        for (const auto& stage : plan->Stages) {
-            if (stage.get() != onlyStage) {
-                continue;
+void CollectColumnShardAttemptData(TColumnShardAttempt& attempt, const NJson::TJsonValue& scan, bool missingIdentity) {
+    if (attempt.Last && ColumnShardFlag(*attempt.Last, "Finished") && !ColumnShardFlag(scan, "Finished")) {
+        ReadColumnShardCohortHeader(attempt, scan);
+        return;
+    }
+    attempt.Last = &scan;
+    attempt.MissingIdentity = attempt.MissingIdentity || missingIdentity;
+    if (auto tablet = ColumnShardIdentity(scan, "TabletId")) { attempt.Tablet = std::move(tablet); }
+    if (auto reader = StepText(scan, "ReaderKind")) { attempt.Reader = std::move(reader); }
+    ReadColumnShardCohortHeader(attempt, scan);
+    const auto* cache = scan.GetValueByPath("CacheStats");
+    if (cache && cache->GetType() == NJson::JSON_MAP) { attempt.Cache = cache; }
+    const auto* steps = scan.GetValueByPath("Steps");
+    if (steps && steps->GetType() == NJson::JSON_ARRAY) {
+        for (const auto& step : steps->GetArray()) {
+            if (step.GetType() != NJson::JSON_MAP) { continue; }
+            if (auto id = StepValue(step, "StepId")) {
+                attempt.Steps[*id] = &step;
+            } else {
+                attempt.UnidentifiedSteps.push_back(&step);
+                attempt.MissingIdentity = true;
             }
-            std::map<TString, TColumnShardAttempt> attempts;
-            TColumnShardRead cohortContext;
-            bool expectedContextSeen = false;
-            ui64 unidentified = 0;
-            for (const auto& scan : stage->ColumnShardScans.GetArray()) {
-                if (scan.GetType() != NJson::JSON_MAP) {
-                    continue;
-                }
-                if (ColumnShardFlag(scan, "ExpectedContextOnly")) {
-                    TColumnShardAttempt header;
-                    ReadColumnShardCohortHeader(header, scan);
-                    cohortContext.AddCohort(header, {}, true);
-                    expectedContextSeen = true;
-                    continue;
-                }
-                TString identity = ColumnShardIdentity(scan, "StatsScanId");
-                bool missingIdentity = !identity;
-                if (missingIdentity) {
-                    identity = TStringBuilder() << "unidentified-" << ++unidentified;
-                }
-                auto& attempt = attempts[identity];
-                if (attempt.Last && ColumnShardFlag(*attempt.Last, "Finished") && !ColumnShardFlag(scan, "Finished")) {
-                    ReadColumnShardCohortHeader(attempt, scan);
-                    continue;
-                }
-                attempt.Last = &scan;
-                attempt.MissingIdentity = attempt.MissingIdentity || missingIdentity;
-                if (auto tablet = ColumnShardIdentity(scan, "TabletId")) {
-                    attempt.Tablet = std::move(tablet);
-                }
-                if (auto reader = StepText(scan, "ReaderKind")) {
-                    attempt.Reader = std::move(reader);
-                }
-                ReadColumnShardCohortHeader(attempt, scan);
-                const auto* cache = scan.GetValueByPath("CacheStats");
-                if (cache && cache->GetType() == NJson::JSON_MAP) {
-                    attempt.Cache = cache;
-                }
-                const auto* steps = scan.GetValueByPath("Steps");
-                if (steps && steps->GetType() == NJson::JSON_ARRAY) {
-                    for (const auto& step : steps->GetArray()) {
-                        if (step.GetType() != NJson::JSON_MAP) {
-                            continue;
-                        }
-                        if (auto id = StepValue(step, "StepId")) {
-                            attempt.Steps[*id] = &step;
-                        } else {
-                            attempt.UnidentifiedSteps.push_back(&step);
-                            attempt.MissingIdentity = true;
-                        }
-                    }
-                }
-            }
+        }
+    }
+}
+
+std::map<TString, TColumnShardAttempt> CollectColumnShardAttempts(const TStage& stage,
+    TColumnShardRead& cohortContext, bool& expectedContextSeen) {
+    std::map<TString, TColumnShardAttempt> attempts;
+    ui64 unidentified = 0;
+    for (const auto& scan : stage.ColumnShardScans.GetArray()) {
+        if (scan.GetType() != NJson::JSON_MAP) { continue; }
+        if (ColumnShardFlag(scan, "ExpectedContextOnly")) {
+            TColumnShardAttempt header;
+            ReadColumnShardCohortHeader(header, scan);
+            cohortContext.AddCohort(header, {}, true);
+            expectedContextSeen = true;
+            continue;
+        }
+        TString identity = ColumnShardIdentity(scan, "StatsScanId");
+        const bool missingIdentity = !identity;
+        if (missingIdentity) { identity = TStringBuilder() << "unidentified-" << ++unidentified; }
+        CollectColumnShardAttemptData(attempts[identity], scan, missingIdentity);
+    }
+    return attempts;
+}
+
+std::map<TString, TColumnShardRead> BuildColumnShardReads(const std::map<TString, TColumnShardAttempt>& attempts,
+    TColumnShardRead& cohortContext) {
             std::map<TString, TColumnShardRead> reads;
             for (const auto& [identity, attempt] : attempts) {
                 TString family = attempt.Reader == "PLAIN" ? TString("PLAIN")
@@ -3201,6 +3318,21 @@ ui32 PrintAggregatedColumnShardStats(TStringBuilder& svg, const TVisualizer& viz
                     read.CacheTablets.insert(tablet);
                 }
             }
+    return reads;
+}
+
+ui32 PrintAggregatedColumnShardStats(TStringBuilder& svg, const TVisualizer& viz, ui32 top, const TStage* onlyStage) {
+    constexpr ui32 rowHeight = 24;
+    ui32 height = 0;
+    for (const auto& plan : viz.Plans) {
+        for (const auto& stage : plan->Stages) {
+            if (stage.get() != onlyStage) {
+                continue;
+            }
+            TColumnShardRead cohortContext;
+            bool expectedContextSeen = false;
+            const auto attempts = CollectColumnShardAttempts(*stage, cohortContext, expectedContextSeen);
+            auto reads = BuildColumnShardReads(attempts, cohortContext);
             cohortContext.FinalizeCohorts();
             if (reads.empty() && expectedContextSeen) {
                 reads["UNKNOWN"].Family = "UNKNOWN";
@@ -3223,29 +3355,30 @@ ui32 PrintAggregatedColumnShardStats(TStringBuilder& svg, const TVisualizer& viz
                     readHeight += PrintColumnShardCache(body, viz, read, readHeight - rowHeight);
                 }
                 TStringBuilder title;
-                title << "ColumnShard · Stage " << stage->PhysicalStageId << " · " << read.Family << " · " << read.Tablets.size()
-                    << " family tablets · " << read.ReceivedShards() << " received read tablets · " << read.Attempts << " attempts";
-                if (read.ExpectedKnown) {
-                    title << " · " << read.ExpectedShards << " planned (known cohorts)";
-                    if (read.ExpectedShards > read.ReceivedShards()) {
-                        title << " · " << read.ExpectedShards - read.ReceivedShards() << " not observed / may not have started";
-                    }
-                } else {
-                    title << " · expected unknown (known roster union " << read.KnownExpectedTablets.size() << ')';
+                title << "<strong class='cs-value'>ColumnShard</strong>";
+                std::set<TString> readerNames;
+                for (const auto& [identity, attempt] : attempts) {
+                    Y_UNUSED(identity);
+                    const TString family = attempt.Reader == "PLAIN" ? "PLAIN"
+                        : attempt.Reader == "SIMPLE" || attempt.Reader == "TRIVIAL" ? "SIMPLE/TRIVIAL" : "UNKNOWN";
+                    if (family == read.Family && attempt.Reader) { readerNames.insert(attempt.Reader); }
                 }
-                if (read.Partial) {
-                    title << " · PARTIAL population (received runtime statistics)";
-                } else if (read.Attempts) {
-                    title << " · received runtime reports finished";
-                }
-                if (!read.Attempts) {
-                    title << " · reader/runtime not observed";
+                title << ColumnShardWidgetChips(readerNames)
+                    << "<span class='cs-label'>Stage</span><b>" << stage->PhysicalStageId
+                    << "</b><span class='cs-label'>Family tablets</span><b>" << read.Tablets.size()
+                    << "</b><span class='cs-label'>Received</span><b>" << read.ReceivedShards()
+                    << "</b><span class='cs-label'>Planned</span><b>";
+                if (read.ExpectedKnown) { title << read.ExpectedShards; } else { title << "Not recorded"; }
+                title << "</b><span class='cs-state " << (read.Partial || !read.Attempts ? "cs-warning" : "cs-good")
+                    << "'><i></i>" << (!read.Attempts ? "Runtime not observed" : read.Partial ? "Incomplete snapshots" : "Complete snapshots") << "</span>";
+                if (read.ExpectedKnown && read.ExpectedShards > read.ReceivedShards()) {
+                    title << "<span class='cs-label'>Not observed</span><b>" << read.ExpectedShards - read.ReceivedShards() << "</b>";
                 }
                 if (read.PendingAttempts) {
-                    title << " · unfinalized operations: max " << read.MaxPendingOperations << " in " << read.PendingAttempts << " attempts";
+                    title << "<span class='cs-label'>Pending operations maximum</span><b>" << read.MaxPendingOperations << "</b>";
                 }
                 if (read.Unclassified) {
-                    title << " · unclassified operations";
+                    title << "<span class='cs-state cs-warning'><i></i>Unclassified operations</span>";
                 }
                 svg << "<svg data-columnshard='read' data-cs-plan-index='" << stage->ColumnShardPlanIndex.value()
                     << "' data-cs-family='" << ColumnShardAttribute(read.Family)
@@ -3266,16 +3399,15 @@ ui32 PrintAggregatedColumnShardStats(TStringBuilder& svg, const TVisualizer& viz
                     << "<g class='plus button' data-cs-toggle='read'>" << SvgRect(0, 0, CONN_SIZE, CONN_SIZE, "transparent")
                     << "<use href='#icon_minus' class='icon_minus' transform='scale(0.014)' fill='" << viz.Config.Palette.ConnectionText << "'/>"
                     << "<use href='#icon_plus' class='icon_plus' transform='scale(0.014)' fill='" << viz.Config.Palette.ConnectionText << "'/></g>"
-                    << SvgTextS(INTERNAL_WIDTH, (INTERNAL_HEIGHT + INTERNAL_TEXT_HEIGHT) / 2, title)
+                    << "<foreignObject width='" << viz.Config.Width << "' height='" << rowHeight
+                    << "'><div xmlns='http://www.w3.org/1999/xhtml' class='cs-ui cs-reader-header'>" << title
+                    << "</div></foreignObject>"
                     << "</g></svg><svg x='0' y='" << rowHeight << "' width='" << viz.Config.Width << "' height='" << readHeight - rowHeight << "'>"
                     << "<svg width='" << viz.Config.Width << "' height='" << rowHeight << "'>";
-                StepCell(svg, INTERNAL_WIDTH, 315 - INTERNAL_WIDTH, "Metastep / kind");
-                StepCell(svg, 315, 90, "Shards");
-                StepCell(svg, 405, 65, "Calls");
-                StepCell(svg, 470, 205, "Active sum / mean / max");
-                StepCell(svg, 675, 205, "Wait sum / mean / max");
-                StepCell(svg, 880, 110, "Read bytes");
-                StepCell(svg, 990, viz.Config.Width > 990 ? viz.Config.Width - 990 : 0, "Details · own boundary");
+    const ui32 nameEnd = viz.Config.Width / 4, statisticsEnd = viz.Config.Width * 52 / 100;
+    StepCell(svg, INTERNAL_WIDTH, nameEnd - INTERNAL_WIDTH, "Step");
+    StepCell(svg, nameEnd, statisticsEnd - nameEnd, "Statistics");
+    StepCell(svg, statisticsEnd, viz.Config.Width - statisticsEnd, "Details");
                 svg << "</svg>" << body << "</svg></svg>" << Endl;
                 height += readHeight + INTERNAL_GAP_Y;
             }
@@ -3464,7 +3596,12 @@ TString TVisualizer::PrintSvg() {
         for (const auto& stage : plan->Stages) {
             stage->ColumnShardPlanIndex = columnShardPlanIndex;
             stage->ColumnShardSvg.clear();
+            stage->ColumnShardSvg << ColumnShardWidgetStyles();
             stage->ColumnShardHeight = PrintColumnShardStats(stage->ColumnShardSvg, *this, 0, stage.get());
+            if (stage->ColumnShardHeight) {
+                stage->ColumnShardHeight += PrintColumnShardStorage(stage->ColumnShardSvg, *this,
+                    stage->ColumnShardHeight, stage.get());
+            }
         }
         plan->PrepareSvg(MaxTime, timelineDelta, offsetY);
         ++columnShardPlanIndex;
@@ -3475,7 +3612,7 @@ TString TVisualizer::PrintSvg() {
     }
 
     TStringBuilder storage;
-    const ui32 storageHeight = PrintColumnShardStorage(storage, *this, offsetY);
+    const ui32 storageHeight = 0;
 
     svg << "<svg width='" << Config.Width << "' height='" << offsetY + storageHeight << "' xmlns='http://www.w3.org/2000/svg'>" << Endl;
     svg << "<clipPath id='clipTextPath'><rect x='" << Config.HeaderLeft

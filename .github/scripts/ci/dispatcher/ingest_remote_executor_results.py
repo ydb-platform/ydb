@@ -1,0 +1,741 @@
+#!/usr/bin/env python3
+"""Post-wait ingest: remote-repo artifacts → caller S3 + YDB QA + enriched summary.
+
+Env (from dispatch_remote.yml ingest): EXECUTOR_RUN_ID, EXECUTOR_RUN_URL,
+REMOTE_AWS_ENDPOINT/BUCKET, REMOTE_WORKFLOW_NAME, CALLER_AWS_ENDPOINT/BUCKET,
+optional SOURCE_EVENT_NAME/SOURCE_RUN_ID/PULL_NUMBER/ANALYTICS_JOB_NAME,
+GITHUB_REPOSITORY/WORKFLOW/RUN_ID/STEP_SUMMARY, WORKSPACE.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.parse
+from pathlib import Path
+from typing import Any
+
+_DISPATCHER_DIR = os.path.dirname(os.path.abspath(__file__))
+if _DISPATCHER_DIR not in sys.path:
+    sys.path.insert(0, _DISPATCHER_DIR)
+from _common import (  # noqa: E402
+    apply_config_env,
+    die,
+    discover_attempts as discover_attempts_fs,
+    env,
+    env_opt,
+    http_get_bytes as http_get,
+    quote_url,
+    write_step_summary,
+)
+from resolve_remote_execution import format_launch_summary_md  # noqa: E402
+
+
+def run(cmd: list[str], **kwargs: Any) -> None:
+    print("+", " ".join(cmd), flush=True)
+    subprocess.check_call(cmd, **kwargs)
+
+
+def remote_artifacts_url(run_id: str) -> str:
+    base = (
+        f"{env('REMOTE_AWS_ENDPOINT').rstrip('/')}/{env('REMOTE_AWS_BUCKET')}/"
+        f"{env('REPO')}/{env('REMOTE_WORKFLOW_NAME')}/{run_id}/remote_artifacts.json"
+    )
+    return quote_url(base)
+
+
+def load_manifest(run_id: str) -> dict[str, Any]:
+    url = remote_artifacts_url(run_id)
+    print(f"Fetching remote_artifacts.json from {url}")
+    raw = None
+    for _ in range(20):
+        raw = http_get(url)
+        if raw:
+            break
+        time.sleep(3)
+    if not raw:
+        die(f"missing remote_artifacts.json at {url}")
+    meta = json.loads(raw.decode())
+    if not isinstance(meta, dict) or int(meta.get("version") or 0) != 1:
+        die(f"unexpected remote_artifacts.json schema: {meta!r}")
+    return meta
+
+
+_INDEX_HREF_RE = re.compile(r"""href=["']([^"']+)["']""", re.IGNORECASE)
+
+
+def parse_index_hrefs(html: str) -> list[str]:
+    """Relative file/dir links from Indexer index.html (skip parent/nav/abs)."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in _INDEX_HREF_RE.findall(html):
+        href = urllib.parse.unquote(raw.strip())
+        if not href or href.startswith(("#", "?", "mailto:", "javascript:")):
+            continue
+        if "://" in href:
+            continue
+        if href.startswith("./"):
+            href = href[2:]
+        href = href.replace("\\", "/").lstrip("/")
+        # Reject parent crumbs and any .. segment (a/../../x).
+        if not href or any(p == ".." for p in href.split("/")):
+            continue
+        if href in seen:
+            continue
+        seen.add(href)
+        out.append(href)
+    return out
+
+
+def _posix_join(*parts: str) -> str:
+    return "/".join(p.strip("/") for p in parts if p and p.strip("/"))
+
+
+def _safe_under(dest: Path, child_rel: str) -> Path | None:
+    """Resolve child_rel under dest; None if it escapes (path traversal)."""
+    parts = [p for p in child_rel.split("/") if p and p != "."]
+    if any(p == ".." for p in parts):
+        return None
+    local = dest.joinpath(*parts) if parts else dest
+    try:
+        local.resolve().relative_to(dest.resolve())
+    except ValueError:
+        return None
+    return local
+
+
+def _object_url(endpoint: str, bucket: str, key: str) -> str:
+    return quote_url(f"{endpoint.rstrip('/')}/{bucket}/{key.lstrip('/')}")
+
+
+def _write_bytes(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+
+
+def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest: Path) -> None:
+    """Download a public artifact tree by walking Indexer index.html pages.
+
+    Nebius (and similar) buckets often allow anonymous GetObject but deny
+    ListBucket, so `aws s3 sync --no-sign-request` fails. Indexer listings are
+    public HTML and enumerate the same objects.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    root_key = key_prefix.strip("/")
+    endpoint = endpoint.rstrip("/")
+
+    # BFS over directory keys relative to root_key ("" = leaf root).
+    queue: list[str] = [""]
+    seen_dirs: set[str] = set()
+    n_ok = 0
+    n_fail = 0
+
+    while queue:
+        rel_dir = queue.pop(0)
+        if rel_dir in seen_dirs:
+            continue
+        seen_dirs.add(rel_dir)
+
+        index_key = _posix_join(root_key, rel_dir, "index.html")
+        index_url = _object_url(endpoint, bucket, index_key)
+        raw = http_get(index_url)
+        if raw is None:
+            if rel_dir == "":
+                die(f"missing index.html at {index_url}")
+            print(f"::warning::missing index.html at {index_url}; skipping subtree")
+            n_fail += 1
+            continue
+
+        index_rel = _posix_join(rel_dir, "index.html") if rel_dir else "index.html"
+        local_index = _safe_under(dest, index_rel)
+        if local_index is None:
+            print(f"::warning::refusing unsafe index path {index_rel!r}")
+            n_fail += 1
+            continue
+        _write_bytes(local_index, raw)
+        n_ok += 1
+
+        try:
+            html = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            html = raw.decode("utf-8", errors="replace")
+
+        for href in parse_index_hrefs(html):
+            child_rel = _posix_join(rel_dir, href)
+
+            # Dir link: either "try_1/index.html" (recursive Indexer) or "try_1/".
+            if href.endswith("/index.html"):
+                sub = child_rel[: -len("/index.html")]
+                if sub and _safe_under(dest, sub) is not None and sub not in seen_dirs:
+                    queue.append(sub)
+                continue
+            if href.endswith("/"):
+                sub = child_rel.rstrip("/")
+                if sub and _safe_under(dest, sub) is not None and sub not in seen_dirs:
+                    queue.append(sub)
+                continue
+
+            local_path = _safe_under(dest, child_rel)
+            if local_path is None:
+                print(f"::warning::refusing unsafe href path {child_rel!r}")
+                n_fail += 1
+                continue
+            file_key = _posix_join(root_key, child_rel)
+            file_url = _object_url(endpoint, bucket, file_key)
+            data = http_get(file_url)
+            if data is None:
+                print(f"::warning::failed to download {file_url}")
+                n_fail += 1
+                continue
+            _write_bytes(local_path, data)
+            n_ok += 1
+
+    print(
+        f"Downloaded {n_ok} object(s) via index.html crawl "
+        f"(s3://{bucket}/{root_key}/); failures={n_fail}"
+    )
+    if n_ok == 0:
+        die(f"index crawl downloaded nothing under s3://{bucket}/{root_key}/")
+
+
+def rewrite_url_prefix(root: Path, old: str, new: str) -> int:
+    if not old or old == new:
+        return 0
+    olds = {old, old.rstrip("/"), quote_url(old), quote_url(old.rstrip("/"))}
+    news_map = {
+        old: new,
+        old.rstrip("/"): new.rstrip("/"),
+        quote_url(old): quote_url(new),
+        quote_url(old.rstrip("/")): quote_url(new.rstrip("/")),
+    }
+    n = 0
+    text_suffixes = {
+        ".json",
+        ".html",
+        ".htm",
+        ".txt",
+        ".md",
+        ".js",
+        ".css",
+        ".xml",
+        ".yaml",
+        ".yml",
+        ".csv",
+        ".log",
+        ".out",
+        ".err",
+    }
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in text_suffixes and path.name not in (
+            "summary_links.txt",
+            "job_summary.md",
+            "remote_artifacts.json",
+        ):
+            continue
+        try:
+            data = path.read_bytes()
+        except OSError:
+            continue
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        orig = text
+        for o in olds:
+            if o and o in text:
+                text = text.replace(o, news_map.get(o, new))
+        if text != orig:
+            path.write_text(text, encoding="utf-8")
+            n += 1
+    return n
+
+
+def build_run_name(event_name: str, run_id: str, pull_number: str, attempt: int) -> str:
+    if event_name == "workflow_dispatch":
+        base = f"{run_id}_manual"
+    elif event_name in ("pull_request", "pull_request_target"):
+        base = f"{run_id}_PR_{pull_number}" if pull_number else f"{run_id}_PR"
+    elif event_name == "schedule":
+        base = f"{run_id}_schedule"
+    elif event_name == "push":
+        base = f"{run_id}_POST"
+    else:
+        base = run_id
+    return f"{base}_attempt_{attempt}"
+
+
+def _nonempty(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def resolve_source_attribution(
+    meta: dict[str, Any], caller_run_id: str
+) -> tuple[str, str, str]:
+    """Caller ingest runs in the platform job — prefer its github.* env."""
+    event_name = env_opt("SOURCE_EVENT_NAME") or _nonempty(meta.get("source_event_name"))
+    if not event_name or event_name == "workflow_call":
+        event_name = "workflow_dispatch"
+    source_run_id = env_opt("SOURCE_RUN_ID") or caller_run_id
+    pull_number = env_opt("PULL_NUMBER") or _nonempty(meta.get("pull_number"))
+    return event_name, source_run_id, pull_number
+
+
+def discover_attempts(public_dir: Path, meta: dict[str, Any]) -> list[dict[str, Any]]:
+    return discover_attempts_fs(public_dir, list(meta.get("attempts") or []) or None)
+
+
+def regenerate_summary(
+    workspace: Path,
+    public_dir: Path,
+    public_dir_url: str,
+    attempts: list[dict[str, Any]],
+    build_preset: str,
+    branch: str,
+    pull_number: str,
+    workflow_run_id: str,
+) -> Path:
+    """Regenerate ya-test.html with YDB history; rewrite job_summary.
+
+    Layout: executor job_summary under a collapsed <details>, then the expanded
+    enriched markdown (history / build-fail headline). Does not touch
+    GITHUB_STEP_SUMMARY — caller publishes the final file after S3 upload.
+    """
+    summary_links = public_dir / "summary_links.txt"
+    if not summary_links.exists():
+        summary_links.write_text(f"00 [Artifacts]({public_dir_url}/index.html)\n", encoding="utf-8")
+
+    job_summary = public_dir / "job_summary.md"
+    remote_body = ""
+    if job_summary.is_file():
+        # URL prefixes already rewritten to caller S3 by rewrite_url_prefix.
+        remote_body = job_summary.read_text(encoding="utf-8").rstrip() + "\n\n"
+
+    def _keep_remote() -> Path:
+        # rewrite_url_prefix already updated job_summary.md in place.
+        if not job_summary.is_file():
+            job_summary.write_text(
+                f"_No test attempts found._\n\n[Artifacts]({public_dir_url}/index.html)\n",
+                encoding="utf-8",
+            )
+        return job_summary
+
+    last = attempts[-1] if attempts else None
+    if not last:
+        return _keep_remote()
+
+    html_rel = last.get("html_relpath") or f"try_{last['retry']}/ya-test.html"
+    report_rel = last.get("report_relpath") or f"try_{last['retry']}/report.json"
+    html_path = public_dir / html_rel
+    report_path = public_dir / report_rel
+    testowners = workspace / ".github/TESTOWNERS"
+    if not report_path.is_file():
+        print(f"::warning::missing report for regenerate: {report_path}; keeping remote job_summary")
+        return _keep_remote()
+    if not testowners.is_file():
+        print(
+            f"::warning::{testowners} missing (sparse checkout?); "
+            "skipping generate-summary, keeping remote job_summary with caller S3 links"
+        )
+        return _keep_remote()
+
+    html_path.parent.mkdir(parents=True, exist_ok=True)
+
+    color_file = public_dir / "ingest_summary_color.txt"
+    text_file = public_dir / "ingest_summary_text.txt"
+    status_file = public_dir / "ingest_statusrep.txt"
+    try_dir = public_dir / f"try_{last['retry']}"
+    oom = try_dir / "oom_dmesg.txt"
+    build_failed_md = try_dir / "build_failed.md"
+    fail_summary = try_dir / "fail_summary.txt"
+
+    cmd = [
+        sys.executable,
+        str(workspace / ".github/scripts/tests/generate-summary.py"),
+        "--summary_links",
+        str(summary_links),
+        "--public_dir",
+        str(public_dir),
+        "--public_dir_url",
+        public_dir_url,
+        "--build_preset",
+        build_preset,
+        "--branch",
+        branch,
+        "--status_report_file",
+        str(status_file),
+        "--is_retry",
+        "0" if len(attempts) <= 1 else "1",
+        "--is_last_retry",
+        "1",
+        "--is_test_result_ignored",
+        "0",
+        "--comment_color_file",
+        str(color_file),
+        "--comment_text_file",
+        str(text_file),
+        "--workflow_run_id",
+        workflow_run_id,
+    ]
+    if pull_number:
+        cmd.extend(["--pr_number", pull_number])
+    if oom.is_file() and oom.stat().st_size > 0:
+        cmd.extend(["--oom_dmesg_log", str(oom)])
+    cmd.extend(["Tests", str(html_path), str(report_path)])
+    try:
+        run(cmd, cwd=str(workspace))
+    except subprocess.CalledProcessError as e:
+        print(f"::warning::generate-summary failed ({e}); keeping remote job_summary with caller S3 links")
+        return _keep_remote()
+
+    # Prefer executor-written marker (always set on BUILD_FAILED); fall back to fail_summary.
+    build_fail_line = ""
+    if build_failed_md.is_file() and build_failed_md.stat().st_size > 0:
+        build_fail_line = build_failed_md.read_text(encoding="utf-8").rstrip() + "\n\n"
+    elif fail_summary.is_file() and fail_summary.stat().st_size > 0:
+        build_fail_line = (
+            f"Build failed, see the [logs]({public_dir_url}/ya_make_output.txt). "
+            f"Also see [fail summary]({public_dir_url}/try_{last['retry']}/fail_summary.txt).\n\n"
+        )
+
+    parts: list[str] = []
+    # Keep the host/executor body under the cut; enriched section is the primary view.
+    if remote_body.strip():
+        parts.append("<details>\n")
+        parts.append("<summary>Remote executor summary</summary>\n\n")
+        parts.append(remote_body if remote_body.endswith("\n") else remote_body + "\n")
+        parts.append("</details>\n\n")
+    parts.append("## Summary (enriched)\n\n")
+    if build_fail_line:
+        parts.append(build_fail_line)
+    if text_file.is_file():
+        body = text_file.read_text(encoding="utf-8")
+        parts.append(body if body.endswith("\n") else body + "\n")
+    job_summary.write_text("".join(parts), encoding="utf-8")
+    return job_summary
+
+
+def _as_uint(value: Any) -> int | None:
+    try:
+        if value is None or value == "":
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def rewrite_ci_metrics_attribution(
+    metrics_path: Path,
+    *,
+    run_id: str,
+    event_name: str,
+    workflow: str,
+    job_name: str,
+    pull_number: str,
+    caller_repo: str,
+) -> Path:
+    """Rewrite remote-stamped JSONL rows to caller run attribution before YDB flush."""
+    out = metrics_path.with_name(metrics_path.name + ".caller")
+    run_url = (
+        f"https://github.com/{caller_repo}/actions/runs/{run_id}" if caller_repo and run_id else None
+    )
+    pr_number = _as_uint(pull_number)
+    rewritten = 0
+    with metrics_path.open(encoding="utf-8") as src, out.open("w", encoding="utf-8") as dst:
+        for line in src:
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                row = json.loads(raw)
+            except json.JSONDecodeError:
+                dst.write(line if line.endswith("\n") else line + "\n")
+                continue
+            if not isinstance(row, dict):
+                dst.write(line if line.endswith("\n") else line + "\n")
+                continue
+            labels = row.get("labels") if isinstance(row.get("labels"), dict) else {}
+            if row.get("run_id") is not None:
+                labels.setdefault("remote_executor_run_id", row.get("run_id"))
+            if row.get("github_job_id") is not None:
+                labels.setdefault("remote_github_job_id", row.get("github_job_id"))
+            row["run_id"] = _as_uint(run_id)
+            row["event_name"] = event_name
+            row["workflow"] = workflow or row.get("workflow")
+            if job_name:
+                row["job_name"] = job_name
+            if run_url:
+                row["run_url"] = run_url
+            if pr_number is not None:
+                row["pr_number"] = pr_number
+            # Drop host job id so PK keys under the caller run; keep original in labels.
+            row["github_job_id"] = 0
+            if labels:
+                row["labels"] = labels
+            dst.write(json.dumps(row, ensure_ascii=False) + "\n")
+            rewritten += 1
+    print(f"Rewrote {rewritten} ci_metrics row(s) for caller run_id={run_id}")
+    return out
+
+
+def flush_ci_metrics(
+    workspace: Path,
+    public_dir: Path,
+    meta: dict[str, Any],
+    *,
+    event_name: str,
+    source_run_id: str,
+    pull_number: str,
+    caller_repo: str,
+    caller_workflow: str,
+) -> None:
+    """Flush remote-buffered ci_metrics.jsonl into caller analytics/ci_metrics."""
+    rel = _nonempty(meta.get("ci_metrics_relpath"))
+    if not rel:
+        print("Manifest has no ci_metrics_relpath; skipping analytics flush")
+        return
+
+    metrics_path = public_dir / rel
+    if not metrics_path.is_file() or metrics_path.stat().st_size == 0:
+        print(f"No ci_metrics at {metrics_path}; skipping analytics flush")
+        return
+
+    job_name = (
+        env_opt("ANALYTICS_JOB_NAME")
+        or _nonempty(meta.get("analytics_job_name"))
+        or caller_workflow
+    )
+    rewritten = rewrite_ci_metrics_attribution(
+        metrics_path,
+        run_id=source_run_id,
+        event_name=event_name,
+        workflow=caller_workflow,
+        job_name=job_name,
+        pull_number=pull_number,
+        caller_repo=caller_repo,
+    )
+
+    analytics_dir = workspace / ".github/scripts/utils/analytics"
+    ga_dir = analytics_dir / "github_actions"
+    for path in (str(analytics_dir), str(ga_dir), str(workspace / ".github/scripts/analytics")):
+        if path not in sys.path:
+            sys.path.insert(0, path)
+
+    from github_actions.ci_metrics import flush_file  # noqa: E402
+
+    print(f"Flushing ci_metrics from {rewritten}")
+    uploaded = flush_file(str(rewritten))
+    print(f"ci_metrics flush uploaded={uploaded}")
+
+
+def upload_attempts(
+    workspace: Path,
+    public_dir: Path,
+    attempts: list[dict[str, Any]],
+    meta: dict[str, Any],
+    event_name: str,
+    run_id: str,
+    pull_number: str,
+    caller_workflow: str,
+) -> None:
+    job_name = (
+        env_opt("ANALYTICS_JOB_NAME")
+        or _nonempty(meta.get("analytics_job_name"))
+        or caller_workflow
+    )
+    branch = meta.get("branch") or "main"
+    commit = meta.get("commit") or ""
+    build_preset = meta.get("build_preset") or "relwithdebinfo"
+    if not commit:
+        die("remote_artifacts.json missing commit")
+
+    for att in attempts:
+        report = public_dir / att["report_relpath"]
+        if not report.is_file():
+            print(f"::warning::skip upload, missing {report}")
+            continue
+        pull = build_run_name(event_name, run_id, pull_number, int(att["retry"]))
+        cmd = [
+            sys.executable,
+            str(workspace / ".github/scripts/analytics/upload_tests_results.py"),
+            "--test-results-file",
+            str(report),
+            "--run-timestamp",
+            str(att.get("started_at") or "0"),
+            "--commit",
+            commit,
+            "--build-type",
+            build_preset,
+            "--pull",
+            pull,
+            "--job-name",
+            job_name,
+            "--job-id",
+            run_id,
+            "--branch",
+            branch,
+        ]
+        run(cmd, cwd=str(workspace))
+
+
+def s3cmd_sync_upload(local: Path, s3_bucket_path: str) -> None:
+    run(
+        [
+            "s3cmd",
+            "sync",
+            "--follow-symlinks",
+            "--acl-public",
+            "--no-progress",
+            "--stats",
+            "--no-mime-magic",
+            "--guess-mime-type",
+            "--no-check-md5",
+            f"{local}/",
+            s3_bucket_path if s3_bucket_path.endswith("/") else s3_bucket_path + "/",
+        ]
+    )
+
+
+def s3cmd_put(local: Path, s3_uri: str) -> None:
+    run(
+        [
+            "s3cmd",
+            "put",
+            "--acl-public",
+            "--no-progress",
+            "--no-mime-magic",
+            "--guess-mime-type",
+            str(local),
+            s3_uri,
+        ]
+    )
+
+
+def main() -> None:
+    apply_config_env()
+
+    run_id = env("EXECUTOR_RUN_ID")
+    run_url = env_opt("EXECUTOR_RUN_URL") or f"https://github.com/{env('REPO')}/actions/runs/{run_id}"
+    workspace = Path(env("WORKSPACE")).resolve()
+    caller_endpoint = env("CALLER_AWS_ENDPOINT").rstrip("/")
+    caller_bucket = env("CALLER_AWS_BUCKET")
+    caller_repo = env("GITHUB_REPOSITORY")
+    # Prefer explicit caller workflow (reusable WF's github.workflow is "Dispatch remote…").
+    caller_workflow = env_opt("CALLER_WORKFLOW") or env("GITHUB_WORKFLOW")
+    caller_run_id = env("GITHUB_RUN_ID")
+
+    meta = load_manifest(run_id)
+    remote_endpoint = (meta.get("s3_endpoint") or env("REMOTE_AWS_ENDPOINT")).rstrip("/")
+    remote_bucket = meta.get("s3_bucket") or env("REMOTE_AWS_BUCKET")
+    key_prefix = meta.get("artifact_key_prefix") or ""
+    if not key_prefix:
+        die("remote_artifacts.json missing artifact_key_prefix")
+    old_public = (meta.get("public_dir_url") or "").rstrip("/")
+
+    leaf = key_prefix.rstrip("/").rsplit("/", 1)[-1]
+    dest_key_prefix = f"{caller_repo}/{caller_workflow}/{caller_run_id}/remote-{run_id}/{leaf}"
+    new_public = quote_url(f"{caller_endpoint}/{caller_bucket}/{dest_key_prefix}")
+    caller_s3_path = f"s3://{caller_bucket}/{dest_key_prefix}"
+    caller_run_root = f"s3://{caller_bucket}/{caller_repo}/{caller_workflow}/{caller_run_id}/remote-{run_id}"
+
+    event_name, source_run_id, pull_number = resolve_source_attribution(meta, caller_run_id)
+    executor_conclusion = env_opt("EXECUTOR_CONCLUSION")
+
+    with tempfile.TemporaryDirectory(prefix="remote-ingest-") as tmp:
+        public_dir = Path(tmp) / "results"
+        print(f"Downloading s3://{remote_bucket}/{key_prefix} → {public_dir} (via index.html)")
+        download_prefix_via_index(remote_endpoint, remote_bucket, key_prefix, public_dir)
+
+        n = rewrite_url_prefix(public_dir, old_public, new_public)
+        print(f"Rewrote URL prefix in {n} files ({old_public} → {new_public})")
+
+        indexer = workspace / ".github/scripts/Indexer/indexer.py"
+        if indexer.is_file():
+            run([sys.executable, str(indexer), "-r", f"{public_dir}/"], cwd=str(workspace))
+
+        attempts = discover_attempts(public_dir, meta)
+        print(f"attempts={json.dumps(attempts, ensure_ascii=False)}")
+
+        job_summary = regenerate_summary(
+            workspace=workspace,
+            public_dir=public_dir,
+            public_dir_url=new_public,
+            attempts=attempts,
+            build_preset=meta.get("build_preset") or "relwithdebinfo",
+            branch=meta.get("branch") or "main",
+            pull_number=pull_number,
+            workflow_run_id=source_run_id,
+        )
+
+        meta_out = dict(meta)
+        meta_out.update(
+            {
+                "ingested": True,
+                "attempts": attempts,
+                "caller_public_dir_url": new_public,
+                "caller_artifact_key_prefix": dest_key_prefix,
+                "caller_run_root_url": quote_url(
+                    f"{caller_endpoint}/{caller_bucket}/{caller_repo}/"
+                    f"{caller_workflow}/{caller_run_id}/remote-{run_id}"
+                ),
+                "source_event_name": event_name,
+                "source_run_id": source_run_id,
+                "pull_number": pull_number,
+            }
+        )
+        meta_path = public_dir / "remote_artifacts.json"
+        meta_path.write_text(json.dumps(meta_out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+        # One sync after regenerate (URLs already rewritten; summary/HTML refreshed).
+        s3cmd_sync_upload(public_dir, caller_s3_path)
+        s3cmd_put(job_summary, f"{caller_run_root}/job_summary.md")
+        s3cmd_put(meta_path, f"{caller_run_root}/remote_artifacts.json")
+        print(f"::notice title=Caller artifacts uploaded::{new_public}/index.html")
+
+        upload_attempts(
+            workspace=workspace,
+            public_dir=public_dir,
+            attempts=attempts,
+            meta=meta,
+            event_name=event_name,
+            run_id=source_run_id,
+            pull_number=pull_number,
+            caller_workflow=caller_workflow,
+        )
+
+        flush_ci_metrics(
+            workspace=workspace,
+            public_dir=public_dir,
+            meta=meta,
+            event_name=event_name,
+            source_run_id=source_run_id,
+            pull_number=pull_number,
+            caller_repo=caller_repo,
+            caller_workflow=caller_workflow,
+        )
+
+        body = ""
+        if job_summary.is_file():
+            body = job_summary.read_text(encoding="utf-8").rstrip() + "\n"
+        footer_bits = [f"Remote executor: [{run_id}]({run_url})"]
+        if executor_conclusion:
+            footer_bits.append(f"`{executor_conclusion}`")
+        cfg_raw = env_opt("CONFIG_JSON")
+        launch_md = ""
+        if cfg_raw:
+            try:
+                launch_md = format_launch_summary_md(json.loads(cfg_raw))
+            except json.JSONDecodeError as e:
+                print(f"::warning::CONFIG_JSON not JSON for launch summary: {e}")
+        write_step_summary(launch_md + body + "\n---\n" + " · ".join(footer_bits) + "\n")
+
+    print(f"::notice title=Remote ingest complete::{new_public}/index.html")
+
+
+if __name__ == "__main__":
+    main()

@@ -7,6 +7,7 @@ import os
 import re
 import sys
 import traceback
+import urllib.parse
 from enum import Enum
 from operator import attrgetter
 from typing import List, Dict
@@ -614,6 +615,18 @@ def _dmesg_has_oom(oom_dmesg_log):
         return False
 
 
+def _http_url(prefix: str, *parts: str) -> str:
+    """Join URL path parts; percent-encode so spaces in workflow names do not break Markdown."""
+    base = (prefix or "").rstrip("/")
+    for part in parts:
+        part = str(part).lstrip("/")
+        if not part:
+            continue
+        base = f"{base}/{part}"
+    # Preserve scheme separators and already-encoded octets (avoid %25 double-encoding).
+    return urllib.parse.quote(base, safe=":/%")
+
+
 def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset, branch, pr_number=None, workflow_run_id=None, oom_dmesg_log=None):
     summary = TestSummary(is_retry=is_retry)
     summary.dmesg_has_oom = _dmesg_has_oom(oom_dmesg_log)
@@ -621,7 +634,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
         try:
             if os.path.isabs(oom_dmesg_log) and os.path.commonpath([oom_dmesg_log, public_dir]) == os.path.abspath(public_dir):
                 rel = os.path.relpath(oom_dmesg_log, public_dir)
-                summary.oom_dmesg_url = f"{public_dir_url}/{rel}"
+                summary.oom_dmesg_url = _http_url(public_dir_url, rel)
         except ValueError:
             pass
     if summary.dmesg_has_oom:
@@ -644,7 +657,7 @@ def gen_summary(public_dir, public_dir_url, paths, is_retry: bool, build_preset,
 
         if os.path.isabs(html_fn):
             html_fn = os.path.relpath(html_fn, public_dir)
-        report_url = f"{public_dir_url}/{html_fn}"
+        report_url = _http_url(public_dir_url, html_fn)
 
         render_testlist_html(summary_line.tests, os.path.join(public_dir, html_fn), build_preset, branch, pr_number, workflow_run_id)
         summary_line.add_report(html_fn, report_url)

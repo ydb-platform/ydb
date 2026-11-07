@@ -3,29 +3,85 @@ name: Run and debug tests
 on:
   workflow_dispatch:
     inputs:
+      executor:
+        description: 'ydb_yc = local runners; remote = dispatch via opaque remote JSON'
+        required: false
+        type: choice
+        options:
+          - ydb_yc
+          - remote
+        default: ydb_yc
+      remote:
+        description: >
+          remote only: JSON override for host/dispatch/job (empty = script defaults).
+          Agents / other workflows pass the full blob; humans rarely edit this in UI.
+        required: false
+        type: string
+        default: ''
       test_targets:
-        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
+        description: 'ydb_yc: paths to tests; also default remote.job.build_target when remote JSON omits it'
         required: false
         type: string
         default: 'ydb/tests/olap/'
       build_preset:
-        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
+        description: 'ydb_yc: presets (comma-separated); remote uses remote.job.build_preset or first value via resolve defaults'
         required: false
         type: string
         default: 'relwithdebinfo, release-asan'
       branches:
-        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path)'
+        description: 'Branches to test (comma-separated or JSON array); ydb_yc only'
         required: false
         type: string
         default: ''
       use_branches_config:
-        description: 'If true, use branches from .github/config/stable_tests_branches.json'
+        description: 'If true, use branches from .github/config/stable_tests_branches.json; ydb_yc only'
         required: false
         type: boolean
         default: false
 
 jobs:
+  resolve_remote:
+    if: inputs.executor == 'remote'
+    # wait path shares runner-waiter with dispatch/wait; fire-and-forget stays on GitHub-hosted.
+    # wait flag is inside remote JSON — default true, so prefer waiter; fire-and-forget still ok on waiter.
+    runs-on: [self-hosted, runner-waiter]
+    timeout-minutes: 5
+    outputs:
+      config: ${{ steps.resolve.outputs.config }}
+      wait: ${{ steps.resolve.outputs.wait }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/scripts/ci/dispatcher/resolve_remote_execution.py
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve remote execution config
+        id: resolve
+        env:
+          REMOTE_JSON: ${{ inputs.remote }}
+          CODE_REF: ${{ github.sha }}
+          CALLER_WORKFLOW: ${{ github.workflow }}
+          SOURCE_EVENT_NAME: ${{ github.event_name }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+          PLATFORM_RUN_ATTEMPT: ${{ github.run_attempt }}
+          PULL_NUMBER: ${{ github.event.pull_request.number || github.event.number || '' }}
+          # Seed job.build_* when remote JSON omits them.
+          DEFAULT_BUILD_TARGET: ${{ inputs.test_targets }}
+          DEFAULT_BUILD_PRESET: ${{ inputs.build_preset }}
+        run: python3 .github/scripts/ci/dispatcher/resolve_remote_execution.py
+
+  remote:
+    if: inputs.executor == 'remote'
+    needs: resolve_remote
+    uses: ./.github/workflows/dispatch_remote.yml
+    secrets: inherit
+    with:
+      config: ${{ needs.resolve_remote.outputs.config }}
+
   prepare:
+    if: inputs.executor == 'ydb_yc'
     runs-on: ubuntu-latest
     outputs:
       branches_json: ${{ steps.format-branches.outputs.branches_json }}
@@ -95,6 +151,7 @@ jobs:
 
   main:
     name: Run and debug tests
+    if: inputs.executor == 'ydb_yc'
     needs: prepare
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
@@ -111,5 +168,5 @@ jobs:
 
   collect_combined_summary:
     needs: main
-    if: always()
+    if: always() && inputs.executor == 'ydb_yc'
     uses: ./.github/workflows/collect_combined_summary.yml

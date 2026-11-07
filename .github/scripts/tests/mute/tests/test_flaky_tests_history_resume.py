@@ -43,22 +43,40 @@ class DetermineStartDateTest(unittest.TestCase):
         self.assertEqual(start, override)
         self.assertEqual(end, self.end_date)
 
-    def test_recent_history_resumes_without_gap(self):
-        # Normal steady-state case: last recorded day is yesterday -> resume exactly
-        # there (no artificial cold-start-style jump, no gap).
+    def test_recent_history_resumes_with_incremental_lookback(self):
+        # Last recorded day is yesterday -> resume INCREMENTAL_LOOKBACK_DAYS earlier.
         recent = self.end_date - datetime.timedelta(days=1)
+        expected = recent - datetime.timedelta(days=fth.INCREMENTAL_LOOKBACK_DAYS)
         with mock.patch.object(fth, 'get_max_date_from_history', return_value=recent):
             start, end = self._call(end_date_override=self.end_date)
-        self.assertEqual(start, recent)
+        self.assertEqual(start, expected)
         self.assertEqual(end, self.end_date)
 
-    def test_moderately_stale_history_still_resumes_from_last_day(self):
-        # A gap smaller than MAX_RESUME_GAP_DAYS must not be capped — this is exactly
-        # the "avoid history gaps" behavior the PR intentionally introduced.
+    def test_moderately_stale_history_still_resumes_from_last_day_minus_lookback(self):
+        # Gap smaller than MAX_RESUME_GAP_DAYS must not be capped.
         stale = self.end_date - datetime.timedelta(days=fth.MAX_RESUME_GAP_DAYS - 10)
+        expected = stale - datetime.timedelta(days=fth.INCREMENTAL_LOOKBACK_DAYS)
         with mock.patch.object(fth, 'get_max_date_from_history', return_value=stale):
             start, end = self._call(end_date_override=self.end_date)
-        self.assertEqual(start, stale)
+        self.assertEqual(start, expected)
+
+    def test_gap_exactly_max_resume_still_applies_lookback(self):
+        # Cap compares max(date_window), not the lookback-shifted start; at gap == 180
+        # lookback still applies (start = end - 181).
+        stale = self.end_date - datetime.timedelta(days=fth.MAX_RESUME_GAP_DAYS)
+        expected = stale - datetime.timedelta(days=fth.INCREMENTAL_LOOKBACK_DAYS)
+        with mock.patch.object(fth, 'get_max_date_from_history', return_value=stale):
+            start, end = self._call(end_date_override=self.end_date)
+        self.assertEqual(start, expected)
+        self.assertEqual(end, self.end_date)
+
+    def test_gap_one_past_max_resume_is_capped_without_lookback(self):
+        # gap == 181 -> capped to end - 180; lookback not applied on the capped branch.
+        stale = self.end_date - datetime.timedelta(days=fth.MAX_RESUME_GAP_DAYS + 1)
+        expected = self.end_date - datetime.timedelta(days=fth.MAX_RESUME_GAP_DAYS)
+        with mock.patch.object(fth, 'get_max_date_from_history', return_value=stale):
+            start, end = self._call(end_date_override=self.end_date)
+        self.assertEqual(start, expected)
 
     def test_very_stale_history_is_capped_not_unbounded(self):
         # Collection paused for ~2 years: resuming from the true last-recorded day

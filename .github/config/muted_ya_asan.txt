@@ -147,6 +147,7 @@ ydb/core/kqp/ut/view TCreateAndDropViewTest.DropNonexistingView
 ydb/core/kqp/ut/view TCreateAndDropViewTest.DropViewIfExists
 ydb/core/kqp/ut/view TCreateAndDropViewTest.InvalidTableRef
 ydb/core/kqp/ut/view TSelectFromViewTest.LeftJoinViewsWithNoMatch
+ydb/core/nbs/cloud/blockstore/libs/common/memory/ut ArenaAllocatorTest.Multithreaded
 ydb/core/nbs/cloud/blockstore/libs/common/memory/ut unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/benchmark g_benchmark.sole chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
@@ -212,6 +213,7 @@ ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.Repla
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.ReplacedDiscovery-NewFirst
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery+Drop
 ydb/core/tx/replication/controller/ut_schema_change TargetDiscoveryResults.TerminalStateIgnoresDiscovery-Drop
+ydb/core/tx/replication/controller/ut_schema_change unittest.[*/*] chunk
 ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.AdoptedWorkerWaitsForSecretAfterDisconnect+SecretFirst
 ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.AdoptedWorkerWaitsForSecretAfterDisconnect-SecretFirst
 ydb/core/tx/replication/controller/ut_worker_lifecycle SessionLifecycle.AdoptedWorkerWaitsForSecretAfterStop+SecretFirst

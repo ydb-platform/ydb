@@ -402,10 +402,9 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     auto lambda = TCoLambda(FilterExpr.Node);
     double selectivity = TPredicateSelectivityComputer(inputStats).Compute(lambda.Body());
 
-    double filterSelectivity = selectivity * Props.Statistics->Selectivity;
-    Props.Statistics->EBytes = filterSelectivity * Props.Statistics->EBytes;
-    Props.Statistics->ERows = filterSelectivity * Props.Statistics->ERows;
-    Props.Statistics->Selectivity = filterSelectivity;
+    Props.Statistics->EBytes *= selectivity;
+    Props.Statistics->ERows *= selectivity;
+    Props.Statistics->Selectivity *= selectivity;
 }
 
 /**

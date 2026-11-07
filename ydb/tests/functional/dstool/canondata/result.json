@@ -29,6 +29,10 @@
         null,
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.3"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.4"
         }
     ],
     "test_canonical_requests.Test.test_cluster_balance_mismatching_size_in_units": [

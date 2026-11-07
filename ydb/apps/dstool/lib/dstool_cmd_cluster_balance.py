@@ -10,8 +10,9 @@ It can operate in several modes:
 1. Overpopulated PDisk mode (--only-from-overpopulated-pdisks):
    Moves VDisks from PDisks that exceed their expected slot count to less populated PDisks.
 
-2. Slot-based balancing (--sort-by=slots, default):
-   Redistributes VDisks to equalize slot usage across PDisks.
+2. Slot-based balancing:
+   --sort-by=slots (default) - Equalize slot usage across PDisks.
+   --sort-by=free_slots_per_rack - Equalize the number of free slots across racks.
 
 3. Space-based balancing (--sort-by=space_ratio):
    Redistributes VDisks based on available free space ratios.
@@ -38,9 +39,14 @@ def add_options(p):
     p.add_argument('--only-from-overpopulated-pdisks', action='store_true', help='Move vdisks out only from pdisks with over expected slot count')
     p.add_argument(
         '--sort-by',
-        choices=['slots', 'space_ratio'],
+        choices=['slots', 'space_ratio', 'free_slots_per_rack'],
         default='slots',
-        help='First to reassign disks with the most slots or with the highest space ratio or with the most vslots in the group'
+        help=(
+            'Which VDisks to reassign first:\n'
+            ' slots - from PDisks with the most occupied slots\n'
+            ' space_ratio - from PDisks with the lowest free space ratio\n'
+            ' free_slots_per_rack - from racks with the fewest free slots'
+        )
     )
     g = p.add_mutually_exclusive_group()
     g.add_argument('--storage-pool', type=str, help='Storage pool to balance')
@@ -235,10 +241,14 @@ class BalancingStrategy(IBalancingStrategy):
                 common.print_if_verbose(self.args, f'Replicating pdisks: {replicating_pdisks_str}', file=sys.stdout)
                 return True
 
+    def get_balancing_usage(self):
+        return self.cluster_info.pdisk_usage
+
     def calculate_extra_info(self):
-        self.histo = Counter(self.cluster_info.pdisk_usage.values())
+        self.histo = Counter(self.get_balancing_usage().values())
         self.overpopulated_pdisks = list_overpopulated_pdisks(self.cluster_info)
-        common.print_if_verbose(self.args, 'Number of used slots -> number pdisks: ' + ' '.join('%d=>%d' % (k, self.histo[k]) for k in sorted(self.histo)), file=sys.stdout)
+        pdisk_histo = Counter(self.cluster_info.pdisk_usage.values())
+        common.print_if_verbose(self.args, 'Number of used slots -> number pdisks: ' + ' '.join('%d=>%d' % (k, pdisk_histo[k]) for k in sorted(pdisk_histo)), file=sys.stdout)
         return False
 
     def filter_must_first_vslots(self, candidate_vslots):
@@ -297,6 +307,7 @@ class BalancingStrategy(IBalancingStrategy):
         vslot_id = common.get_vslot_id(vslot.VSlotId)
 
         pdisk_usage = self.cluster_info.pdisk_usage
+        balancing_usage = self.get_balancing_usage()
         pdisk_usage_w_donors = self.cluster_info.pdisk_usage_w_donors
         expected_slot_count_map = self.cluster_info.expected_slot_count_map
         histo = self.histo
@@ -306,14 +317,10 @@ class BalancingStrategy(IBalancingStrategy):
         common.print_if_verbose(self.args, 'Checking to relocate vdisk from vslot %s on pdisk %s with slot usage %d, try_blocking=%s' %
                                 (vslot_id, pdisk_id, pdisk_usage[pdisk_id], try_blocking), file=sys.stdout)
 
-        current_usage = pdisk_usage[pdisk_id]
+        current_usage = balancing_usage[pdisk_id]
         is_from_overpopulated_pdisk = pdisk_id in self.overpopulated_pdisks
-        if not is_from_overpopulated_pdisk:
-            for i in range(0, current_usage - weight_from):
-                if histo[i]:
-                    break
-            else:
-                return False
+        if not is_from_overpopulated_pdisk and not any(usage < current_usage - weight_from for usage in histo):
+            return False
 
         request = common.kikimr_bsconfig.TConfigRequest(Rollback=True)
         index = len(request.Command)
@@ -333,7 +340,9 @@ class BalancingStrategy(IBalancingStrategy):
                 (*pdisk_from, *pdisk_to, pdisk_usage_w_donors[pdisk_to], expected_slot_count), file=sys.stdout)
             return False
 
-        if not is_from_overpopulated_pdisk and pdisk_usage[pdisk_to] + weight_to > pdisk_usage[pdisk_from] - weight_from:
+        if pdisk_to not in balancing_usage or (
+            not is_from_overpopulated_pdisk and balancing_usage[pdisk_to] + weight_to > balancing_usage[pdisk_from] - weight_from
+        ):
             if not try_blocking:
                 return False
             request = common.kikimr_bsconfig.TConfigRequest(Rollback=True)
@@ -342,9 +351,11 @@ class BalancingStrategy(IBalancingStrategy):
                 check_pdisk_id = common.get_pdisk_id(pdisk)
                 check_weight = self.cluster_info.get_vslot_weight_on_pdisk(vslot.GroupId, check_pdisk_id)
                 expected_slot_count = expected_slot_count_map.get(check_pdisk_id, 0)
-                disk_is_better = not expected_slot_count or pdisk_usage_w_donors[check_pdisk_id] + check_weight <= expected_slot_count
-                if disk_is_better:
-                    if pdisk_usage[check_pdisk_id] + check_weight > pdisk_usage[pdisk_id] - weight_from:
+                disk_is_better = check_pdisk_id in balancing_usage and (
+                    not expected_slot_count or pdisk_usage_w_donors[check_pdisk_id] + check_weight <= expected_slot_count
+                )
+                if disk_is_better and not is_from_overpopulated_pdisk:
+                    if balancing_usage[check_pdisk_id] + check_weight > balancing_usage[pdisk_id] - weight_from:
                         disk_is_better = False
 
                 if not disk_is_better:
@@ -390,7 +401,40 @@ class VSlotBalancingStrategy(BalancingStrategy):
         super().__init__(args, cluster_info, groups_info)
 
     def order_candidate_vslots(self, candidate_vslots):
-        return order_vslots_by_pdisk_usage(candidate_vslots, self.cluster_info.pdisk_usage)
+        return order_vslots_by_pdisk_usage(candidate_vslots, self.get_balancing_usage())
+
+
+class RackFreeSlotsBalancingStrategy(VSlotBalancingStrategy):
+    def calculate_extra_info(self):
+        node_racks = {
+            node.NodeId: (node.Location.DataCenter, node.Location.Module, node.Location.Rack)
+            for node in self.cluster_info.base_config.Node
+        }
+        rack_usage = Counter()
+        unknown_pdisks = set()
+        for pdisk_id, usage in self.cluster_info.pdisk_usage.items():
+            expected_slot_count = self.cluster_info.expected_slot_count_map.get(pdisk_id, 0)
+            if not expected_slot_count:
+                unknown_pdisks.add(pdisk_id)
+                continue
+            # Negative free slots preserve the descending usage ordering and relocation comparisons.
+            rack_usage[node_racks[pdisk_id[0]]] += usage - expected_slot_count
+        self.pdisk_rack_usage = {
+            pdisk_id: rack_usage[node_racks[pdisk_id[0]]]
+            for pdisk_id in self.cluster_info.pdisk_usage
+            if pdisk_id not in unknown_pdisks
+        }
+        if unknown_pdisks:
+            common.print_if_not_quiet(self.args, f'Skipping {len(unknown_pdisks)} PDisks with unknown ExpectedSlotCount', file=sys.stdout)
+            pdisk_ids = ', '.join(f'[{node_id}:{pdisk_id}]' for node_id, pdisk_id in sorted(unknown_pdisks))
+            common.print_if_verbose(self.args, f'PDisk ids with unknown expected slot counts: {pdisk_ids}', file=sys.stdout)
+        return super().calculate_extra_info()
+
+    def get_balancing_usage(self):
+        return self.pdisk_rack_usage
+
+    def filter_must_first_vslots(self, candidate_vslots):
+        return filter_vslots_by_pdisks(super().filter_must_first_vslots(candidate_vslots), self.pdisk_rack_usage)
 
 
 class SpaceRatioBalancingStrategy(BalancingStrategy):
@@ -669,6 +713,8 @@ def do(args):
     Constants.apply_args(args)
     if args.sort_by == 'slots':
         strategy_factory = VSlotBalancingStrategy
+    elif args.sort_by == 'free_slots_per_rack':
+        strategy_factory = RackFreeSlotsBalancingStrategy
     elif args.sort_by == 'space_ratio':
         strategy_factory = SpaceRatioBalancingStrategy
     elif args.sort_by == 'group_slots':

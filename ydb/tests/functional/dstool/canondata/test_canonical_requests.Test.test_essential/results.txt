@@ -70,10 +70,12 @@ dstool
 │  │                                    their expected slot count to less 
 │  │                                    populated PDisks.
 │  │                                    
-│  │                                    2. Slot-based balancing (--sort-
-│  │                                    by=slots, default):
-│  │                                       Redistributes VDisks to equalize slot
-│  │                                     usage across PDisks.
+│  │                                    2. Slot-based balancing:
+│  │                                       --sort-by=slots (default) - Equalize 
+│  │                                    slot usage across PDisks.
+│  │                                       --sort-by=free_slots_per_rack - 
+│  │                                    Equalize the number of free slots across
+│  │                                     racks.
 │  │                                    
 │  │                                    3. Space-based balancing (--sort-
 │  │                                    by=space_ratio):

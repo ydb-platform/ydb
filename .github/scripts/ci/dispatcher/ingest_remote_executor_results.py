@@ -274,34 +274,28 @@ def regenerate_summary(
     pull_number: str,
     workflow_run_id: str,
 ) -> Path:
-    """Regenerate ya-test.html with YDB history; rewrite job_summary.
+    """Regenerate ya-test.html with YDB history; write enriched job_summary.
 
-    Layout: executor job_summary under a collapsed <details>, then the expanded
-    enriched markdown (history / build-fail headline). Does not touch
-    GITHUB_STEP_SUMMARY — caller publishes the final file after S3 upload.
+    Host publishes job_summary.md at run root for humans; ingest builds its own
+    enriched summary from attempt artifacts. Does not touch GITHUB_STEP_SUMMARY —
+    caller publishes the final file after S3 upload.
     """
     summary_links = public_dir / "summary_links.txt"
     if not summary_links.exists():
         summary_links.write_text(f"00 [Artifacts]({public_dir_url}/index.html)\n", encoding="utf-8")
 
     job_summary = public_dir / "job_summary.md"
-    remote_body = ""
-    if job_summary.is_file():
-        # URL prefixes already rewritten to caller S3 by rewrite_url_prefix.
-        remote_body = job_summary.read_text(encoding="utf-8").rstrip() + "\n\n"
 
-    def _keep_remote() -> Path:
-        # rewrite_url_prefix already updated job_summary.md in place.
-        if not job_summary.is_file():
-            job_summary.write_text(
-                f"_No test attempts found._\n\n[Artifacts]({public_dir_url}/index.html)\n",
-                encoding="utf-8",
-            )
+    def _stub_summary() -> Path:
+        job_summary.write_text(
+            f"_No test attempts found._\n\n[Artifacts]({public_dir_url}/index.html)\n",
+            encoding="utf-8",
+        )
         return job_summary
 
     last = attempts[-1] if attempts else None
     if not last:
-        return _keep_remote()
+        return _stub_summary()
 
     html_rel = last.get("html_relpath") or f"try_{last['retry']}/ya-test.html"
     report_rel = last.get("report_relpath") or f"try_{last['retry']}/report.json"
@@ -309,14 +303,14 @@ def regenerate_summary(
     report_path = public_dir / report_rel
     testowners = workspace / ".github/TESTOWNERS"
     if not report_path.is_file():
-        print(f"::warning::missing report for regenerate: {report_path}; keeping remote job_summary")
-        return _keep_remote()
+        print(f"::warning::missing report for regenerate: {report_path}; writing stub job_summary")
+        return _stub_summary()
     if not testowners.is_file():
         print(
             f"::warning::{testowners} missing (sparse checkout?); "
-            "skipping generate-summary, keeping remote job_summary with caller S3 links"
+            "skipping generate-summary, writing stub job_summary"
         )
-        return _keep_remote()
+        return _stub_summary()
 
     html_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -364,8 +358,8 @@ def regenerate_summary(
     try:
         run(cmd, cwd=str(workspace))
     except subprocess.CalledProcessError as e:
-        print(f"::warning::generate-summary failed ({e}); keeping remote job_summary with caller S3 links")
-        return _keep_remote()
+        print(f"::warning::generate-summary failed ({e}); writing stub job_summary")
+        return _stub_summary()
 
     # Prefer executor-written marker (always set on BUILD_FAILED); fall back to fail_summary.
     build_fail_line = ""
@@ -377,14 +371,7 @@ def regenerate_summary(
             f"Also see [fail summary]({public_dir_url}/try_{last['retry']}/fail_summary.txt).\n\n"
         )
 
-    parts: list[str] = []
-    # Keep the host/executor body under the cut; enriched section is the primary view.
-    if remote_body.strip():
-        parts.append("<details>\n")
-        parts.append("<summary>Remote executor summary</summary>\n\n")
-        parts.append(remote_body if remote_body.endswith("\n") else remote_body + "\n")
-        parts.append("</details>\n\n")
-    parts.append("## Summary (enriched)\n\n")
+    parts: list[str] = ["## Summary (enriched)\n\n"]
     if build_fail_line:
         parts.append(build_fail_line)
     if text_file.is_file():
@@ -459,7 +446,6 @@ def rewrite_ci_metrics_attribution(
 def flush_ci_metrics(
     workspace: Path,
     public_dir: Path,
-    meta: dict[str, Any],
     *,
     event_name: str,
     source_run_id: str,
@@ -469,12 +455,7 @@ def flush_ci_metrics(
     job_name: str,
 ) -> None:
     """Flush remote-buffered ci_metrics.jsonl into caller analytics/ci_metrics."""
-    rel = str(meta.get("ci_metrics_relpath") or "").strip()
-    if not rel:
-        print("Manifest has no ci_metrics_relpath; skipping analytics flush")
-        return
-
-    metrics_path = public_dir / rel
+    metrics_path = public_dir / "ci_metrics.jsonl"
     if not metrics_path.is_file() or metrics_path.stat().st_size == 0:
         print(f"No ci_metrics at {metrics_path}; skipping analytics flush")
         return
@@ -506,17 +487,21 @@ def upload_attempts(
     workspace: Path,
     public_dir: Path,
     attempts: list[dict[str, Any]],
-    meta: dict[str, Any],
+    *,
+    branch: str,
+    commit: str,
+    build_preset: str,
     event_name: str,
     run_id: str,
     pull_number: str,
     job_name: str,
 ) -> None:
-    branch = meta.get("branch") or "main"
-    commit = meta.get("commit") or ""
-    build_preset = meta.get("build_preset") or "relwithdebinfo"
     if not commit:
         die("remote_artifacts.json missing commit")
+    if not branch:
+        die("job_inputs.custom_branch_name missing")
+    if not build_preset:
+        die("job_inputs.build_preset missing")
 
     for att in attempts:
         report = public_dir / att["report_relpath"]
@@ -595,18 +580,28 @@ def main() -> None:
     caller_workflow = (cfg.get("caller_workflow") or "").strip()
     if not caller_workflow:
         die("CONFIG_JSON.caller_workflow missing")
-    job_name = (cfg.get("analytics_job_name") or "").strip() or caller_workflow
+    job_name = (cfg.get("analytics_job_name") or "").strip()
+    if not job_name:
+        die("CONFIG_JSON.analytics_job_name missing")
 
     inputs = cfg.get("inputs") if isinstance(cfg.get("inputs"), dict) else {}
     ji = inputs.get("job_inputs") if isinstance(inputs.get("job_inputs"), dict) else {}
-    event_name = str(ji.get("source_event_name") or "workflow_dispatch").strip()
+    event_name = str(ji.get("source_event_name") or "").strip()
     source_run_id = str(ji.get("source_run_id") or "").strip()
     pull_number = str(ji.get("pull_number") or "").strip()
+    build_preset = str(ji.get("build_preset") or "").strip()
+    branch = str(ji.get("custom_branch_name") or "").strip()
+    if not event_name:
+        die("CONFIG_JSON.inputs.job_inputs.source_event_name missing")
     if not source_run_id:
         die("CONFIG_JSON.inputs.job_inputs.source_run_id missing")
+    if not build_preset:
+        die("CONFIG_JSON.inputs.job_inputs.build_preset missing")
+    if not branch:
+        die("CONFIG_JSON.inputs.job_inputs.custom_branch_name missing")
 
     run_id = env("EXECUTOR_RUN_ID")
-    run_url = env_opt("EXECUTOR_RUN_URL") or f"https://github.com/{host_repo}/actions/runs/{run_id}"
+    run_url = env("EXECUTOR_RUN_URL")
     workspace = Path(env("WORKSPACE")).resolve()
     caller_endpoint = env("CALLER_AWS_ENDPOINT").rstrip("/")
     caller_bucket = env("CALLER_AWS_BUCKET")
@@ -620,6 +615,9 @@ def main() -> None:
     if not key_prefix:
         die("remote_artifacts.json missing artifact_key_prefix")
     old_public = (meta.get("public_dir_url") or "").rstrip("/")
+    commit = str(meta.get("commit") or "").strip()
+    if not commit:
+        die("remote_artifacts.json missing commit")
 
     leaf = key_prefix.rstrip("/").rsplit("/", 1)[-1]
     dest_key_prefix = f"{caller_repo}/{caller_workflow}/{caller_run_id}/remote-{run_id}/{leaf}"
@@ -641,7 +639,7 @@ def main() -> None:
         if indexer.is_file():
             run([sys.executable, str(indexer), "-r", f"{public_dir}/"], cwd=str(workspace))
 
-        attempts = discover_attempts(public_dir, meta.get("attempts"))
+        attempts = discover_attempts(public_dir)
         print(f"attempts={json.dumps(attempts, ensure_ascii=False)}")
 
         job_summary = regenerate_summary(
@@ -649,28 +647,29 @@ def main() -> None:
             public_dir=public_dir,
             public_dir_url=new_public,
             attempts=attempts,
-            build_preset=meta.get("build_preset") or "relwithdebinfo",
-            branch=meta.get("branch") or "main",
+            build_preset=build_preset,
+            branch=branch,
             pull_number=pull_number,
             workflow_run_id=source_run_id,
         )
 
-        meta_out = dict(meta)
-        meta_out.update(
-            {
-                "ingested": True,
-                "attempts": attempts,
-                "caller_public_dir_url": new_public,
-                "caller_artifact_key_prefix": dest_key_prefix,
-                "caller_run_root_url": quote_url(
-                    f"{caller_endpoint}/{caller_bucket}/{caller_repo}/"
-                    f"{caller_workflow}/{caller_run_id}/remote-{run_id}"
-                ),
-                "source_event_name": event_name,
-                "source_run_id": source_run_id,
-                "pull_number": pull_number,
-            }
-        )
+        meta_out = {
+            "version": meta.get("version", 1),
+            "artifact_key_prefix": key_prefix,
+            "public_dir_url": old_public,
+            "commit": commit,
+            "ingested": True,
+            "attempts": attempts,
+            "caller_public_dir_url": new_public,
+            "caller_artifact_key_prefix": dest_key_prefix,
+            "caller_run_root_url": quote_url(
+                f"{caller_endpoint}/{caller_bucket}/{caller_repo}/"
+                f"{caller_workflow}/{caller_run_id}/remote-{run_id}"
+            ),
+            "source_event_name": event_name,
+            "source_run_id": source_run_id,
+            "pull_number": pull_number,
+        }
         meta_path = public_dir / "remote_artifacts.json"
         meta_path.write_text(json.dumps(meta_out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -683,7 +682,9 @@ def main() -> None:
             workspace=workspace,
             public_dir=public_dir,
             attempts=attempts,
-            meta=meta,
+            branch=branch,
+            commit=commit,
+            build_preset=build_preset,
             event_name=event_name,
             run_id=source_run_id,
             pull_number=pull_number,
@@ -693,7 +694,6 @@ def main() -> None:
         flush_ci_metrics(
             workspace=workspace,
             public_dir=public_dir,
-            meta=meta,
             event_name=event_name,
             source_run_id=source_run_id,
             pull_number=pull_number,

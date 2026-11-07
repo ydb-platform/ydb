@@ -6,8 +6,8 @@ emits one opaque config for dispatch_remote.yml (artifact → wait claim → ing
 
 Env:
   REMOTE_JSON — optional caller override (object or empty)
-  CODE_REF / GITHUB_SHA, GITHUB_WORKFLOW, GITHUB_EVENT_NAME, GITHUB_RUN_ID,
-  PULL_NUMBER
+  CODE_REF, GITHUB_WORKFLOW, GITHUB_EVENT_NAME, GITHUB_RUN_ID,
+  DEFAULT_BUILD_TARGET, DEFAULT_BUILD_PRESET, GITHUB_REPOSITORY
   GITHUB_OUTPUT — write `config<<EOF...`
 """
 from __future__ import annotations
@@ -53,7 +53,6 @@ DEFAULT_REMOTE: dict[str, Any] = {
     "runs_on": ["self-hosted", "linux", "amd64-large"],
     "code_ref": "",
     "analytics_branch": "",
-    "platform_repository": "",
 }
 
 
@@ -104,11 +103,10 @@ def build_config() -> dict[str, Any]:
         if seed:
             job["build_preset"] = seed
 
-    code_ref = (os.environ.get("CODE_REF") or "").strip() or _as_str(cfg.get("code_ref")).strip()
+    # Prefer REMOTE_JSON.code_ref so callers can pin a SHA while CODE_REF is github.sha.
+    code_ref = _as_str(remote.get("code_ref")).strip() or (os.environ.get("CODE_REF") or "").strip()
     if not code_ref:
-        code_ref = (os.environ.get("GITHUB_SHA") or "").strip()
-    if not code_ref:
-        die("code_ref is empty (pass remote.code_ref or CODE_REF / GITHUB_SHA)")
+        die("code_ref is empty (pass remote.code_ref or CODE_REF)")
     cfg["code_ref"] = code_ref
 
     analytics = _as_str(cfg.get("analytics_branch")).strip()
@@ -169,10 +167,6 @@ def build_config() -> dict[str, Any]:
     runs_on_str = json.dumps(runs_on_obj, separators=(",", ":"))
 
     cfg["fail_on_remote_failure"] = truthy(cfg.get("fail_on_remote_failure"), True)
-    cfg["platform_repository"] = (
-        _as_str(cfg.get("platform_repository")).strip()
-        or (os.environ.get("GITHUB_REPOSITORY") or "").strip()
-    )
 
     host_ep = _as_str(cfg.get("host_s3_endpoint")).strip()
     host_bucket = _as_str(cfg.get("host_s3_bucket")).strip()
@@ -225,20 +219,13 @@ def format_launch_summary_md(cfg: dict[str, Any]) -> str:
         "analytics_branch",
         "analytics_job_name",
         "caller_workflow",
-        "platform_repository",
         "runs_on",
         "fail_on_remote_failure",
         "host_s3_endpoint",
         "host_s3_bucket",
     )
     for key in top_keys:
-        if key == "code_ref":
-            val = inputs.get("code_ref")
-        elif key == "runs_on":
-            val = inputs.get("runs_on")
-        else:
-            val = cfg.get(key)
-        lines.append(f"| {key} | {_fmt_md_value(val)} |")
+        lines.append(f"| {key} | {_fmt_md_value(cfg.get(key))} |")
 
     lines.extend(["", "### job_inputs", "", "| key | value |", "| --- | --- |"])
     ordered = list(_DEFAULT_JOB.keys())

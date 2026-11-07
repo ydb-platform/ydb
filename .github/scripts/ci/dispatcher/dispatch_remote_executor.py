@@ -164,21 +164,23 @@ def wait_for_claim(cfg):
         claim = read_claim(cfg, platform_run_id)
         if claim:
             claim_attempt = str(claim.get("platform_run_attempt") or "").strip()
-            if claim_attempt and claim_attempt != want_attempt:
+            if claim_attempt != want_attempt:
                 if i % 10 == 0:
                     print(
                         f"{time.strftime('%H:%M:%S', time.gmtime())} "
-                        f"stale claim attempt={claim_attempt} (want {want_attempt}); waiting..."
+                        f"stale claim attempt={claim_attempt!r} (want {want_attempt}); waiting..."
                     )
                 time.sleep(30)
                 continue
             run_id = str(claim.get("executor_run_id") or "").strip()
-            if run_id:
-                run_url = str(claim.get("executor_run_url") or "").strip() or (
-                    f"https://github.com/{claim.get('executor_repository') or repo_from_cfg(cfg)}"
-                    f"/actions/runs/{run_id}"
-                )
+            run_url = str(claim.get("executor_run_url") or "").strip()
+            if run_id and run_url:
                 return run_id, run_url
+            if run_id and not run_url and i % 10 == 0:
+                print(
+                    f"{time.strftime('%H:%M:%S', time.gmtime())} "
+                    f"claim missing executor_run_url for run_id={run_id}; waiting..."
+                )
         if i % 10 == 0:
             print(f"{time.strftime('%H:%M:%S', time.gmtime())} waiting for claim...")
         time.sleep(30)
@@ -217,15 +219,8 @@ def wait_executor_done(cfg, run_id, run_url):
             if claim:
                 claim_attempt = str(claim.get("platform_run_attempt") or "").strip()
                 new_id = str(claim.get("executor_run_id") or "").strip()
-                if (
-                    new_id
-                    and new_id != run_id
-                    and (not claim_attempt or claim_attempt == want_attempt)
-                ):
-                    new_url = str(claim.get("executor_run_url") or "").strip() or (
-                        f"https://github.com/{claim.get('executor_repository') or repo}"
-                        f"/actions/runs/{new_id}"
-                    )
+                new_url = str(claim.get("executor_run_url") or "").strip()
+                if new_id and new_id != run_id and claim_attempt == want_attempt and new_url:
                     print(f"::notice::executor {run_id} cancelled; following new claim {new_id}")
                     set_outputs(executor_run_id=new_id, executor_run_url=new_url)
                     return wait_executor_done(cfg, new_id, new_url)

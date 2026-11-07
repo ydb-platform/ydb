@@ -303,7 +303,7 @@ class YDBWrapper:
     
     def check_credentials(self):
         """Check for YDB credentials"""
-        if self._ydb_qa_disabled or is_ydb_qa_disabled():
+        if self._ydb_qa_disabled:
             print(
                 f"YDB QA disabled via {_DISABLE_YDB_QA_ENV}, skipping",
                 file=self._log_stream,

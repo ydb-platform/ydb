@@ -92,12 +92,8 @@ def load_config_json() -> dict[str, Any]:
     return cfg
 
 
-def discover_attempts(
-    public_dir: Path, meta_attempts: list[dict[str, Any]] | None = None
-) -> list[dict[str, Any]]:
-    """Prefer manifest attempts; else scan try_*/report.json under public_dir."""
-    if meta_attempts:
-        return list(meta_attempts)
+def discover_attempts(public_dir: Path) -> list[dict[str, Any]]:
+    """Scan try_*/report.json under public_dir (action always writes started_at)."""
     found: list[dict[str, Any]] = []
     if not public_dir.is_dir():
         return found
@@ -105,15 +101,17 @@ def discover_attempts(
         m = re.match(r"try_(\d+)$", report.parent.name)
         if not m:
             continue
-        retry = int(m.group(1))
         started_file = report.parent / "started_at"
-        if started_file.is_file():
-            started_at = started_file.read_text(encoding="utf-8").strip() or "0"
-        else:
-            started_at = str(int(report.stat().st_mtime))
+        if not started_file.is_file():
+            print(f"::warning::missing {started_file}; skipping attempt")
+            continue
+        started_at = started_file.read_text(encoding="utf-8").strip()
+        if not started_at:
+            print(f"::warning::empty {started_file}; skipping attempt")
+            continue
         found.append(
             {
-                "retry": retry,
+                "retry": int(m.group(1)),
                 "started_at": started_at,
                 "report_relpath": str(report.relative_to(public_dir)),
                 "html_relpath": str((report.parent / "ya-test.html").relative_to(public_dir)),

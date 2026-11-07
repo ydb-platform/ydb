@@ -1,20 +1,15 @@
 #!/usr/bin/env python3
-"""Write remote_artifacts.json for caller-side post-wait ingest.
+"""Write remote_artifacts.json locator at the S3 run root for platform ingest.
 
-Reads S3_BUCKET_PATH / PUBLIC_DIR_URL (and optional analytics env) and writes a
-locator next to job_summary.md at the S3 run root. Discovers try_*/attempts
-from PUBLIC_DIR when present.
+Requires S3_BUCKET_PATH, PUBLIC_DIR_URL, PUBLIC_DIR, REMOTE_ARTIFACTS_JSON.
+Ingest reads artifact_key_prefix / public_dir_url / commit; attempts are
+re-discovered from the downloaded PUBLIC_DIR tree.
 """
 from __future__ import annotations
 
 import json
 import os
 import sys
-from pathlib import Path
-
-_DISPATCHER = Path(__file__).resolve().parents[1] / "dispatcher"
-sys.path.insert(0, str(_DISPATCHER))
-from _common import discover_attempts, truthy  # noqa: E402
 
 
 def main() -> int:
@@ -28,40 +23,18 @@ def main() -> int:
         print(f"S3_BUCKET_PATH must be s3://...; got {bucket_path!r}", file=sys.stderr)
         return 2
     rest = bucket_path[len("s3://") :]
-    bucket, _, key_prefix = rest.partition("/")
-    run_root_key = key_prefix.rsplit("/", 1)[0]
+    _, _, key_prefix = rest.partition("/")
     public_dir_url = os.environ["PUBLIC_DIR_URL"].rstrip("/")
-    run_root_url = public_dir_url.rsplit("/", 1)[0]
-    endpoint = ""
-    if public_dir_url.startswith("http"):
-        parts = public_dir_url.split("/")
-        if len(parts) >= 3:
-            endpoint = "/".join(parts[:3])
-
-    disabled = truthy(os.environ.get("CI_DISABLE_YDB_QA"))
-    public_dir = Path(os.environ.get("PUBLIC_DIR") or Path(out).resolve().parent)
-    attempts = discover_attempts(public_dir)
+    commit = os.environ.get("ORIGINAL_HEAD", "")
+    if not commit:
+        print("ORIGINAL_HEAD missing", file=sys.stderr)
+        return 2
 
     meta = {
         "version": 1,
-        "host_repository": os.environ.get("GITHUB_REPOSITORY", ""),
-        "s3_bucket": bucket,
-        "s3_endpoint": endpoint,
         "artifact_key_prefix": key_prefix,
-        "run_root_key_prefix": run_root_key,
         "public_dir_url": public_dir_url,
-        "run_root_url": run_root_url,
-        "build_preset": os.environ.get("BUILD_PRESET", ""),
-        "branch": os.environ.get("BRANCH_NAME", ""),
-        "commit": os.environ.get("ORIGINAL_HEAD", ""),
-        "analytics_job_name": os.environ.get("ANALYTICS_JOB_NAME", ""),
-        "source_event_name": os.environ.get("SOURCE_EVENT_NAME")
-        or os.environ.get("GITHUB_EVENT_NAME", ""),
-        "source_run_id": os.environ.get("SOURCE_RUN_ID") or os.environ.get("GITHUB_RUN_ID", ""),
-        "executor_run_id": os.environ.get("GITHUB_RUN_ID", ""),
-        "executor_workflow": os.environ.get("GITHUB_WORKFLOW", ""),
-        "ci_metrics_relpath": "ci_metrics.jsonl" if disabled else "",
-        "attempts": attempts,
+        "commit": commit,
     }
     with open(out, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)

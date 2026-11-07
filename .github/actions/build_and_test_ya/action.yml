@@ -68,14 +68,10 @@ inputs:
     type: string
     required: false
     description: "Override analytics job_name (remote executor / workflow_dispatch); empty = resolve from github.workflow"
-  source_event_name:
-    type: string
-    required: false
-    description: "Caller event_name for analytics pull naming (remote executor is always workflow_dispatch)"
   source_run_id:
     type: string
     required: false
-    description: "Caller run_id for analytics pull naming / job_id (empty = github.run_id)"
+    description: "When set, skip test_* GitHub commit statuses (caller waiter/ingest owns the result)"
 defaults:
   run:
     shell: bash
@@ -176,10 +172,8 @@ runs:
       env:
         WORKFLOW_NAME: ${{ github.workflow }}
         BUILD_PRESET: ${{ inputs.build_preset }}
-        EVENT_NAME: ${{ inputs.source_event_name || github.event_name }}
+        EVENT_NAME: ${{ github.event_name }}
         ANALYTICS_JOB_NAME_OVERRIDE: ${{ inputs.analytics_job_name }}
-        SOURCE_EVENT_NAME: ${{ inputs.source_event_name }}
-        SOURCE_RUN_ID: ${{ inputs.source_run_id }}
         GITHUB_NUMERIC_JOB_ID: ${{ job.check_run_id }}
         GITHUB_TOKEN: ${{ github.token }}
         # Env values are not shell-parsed — safe for untrusted PR titles.
@@ -195,12 +189,6 @@ runs:
         echo "PR_NUMBER=${{ github.event.number }}" >> "$GITHUB_ENV"
         # Analytics / generate-summary may use the caller's PR number.
         echo "ANALYTICS_PULL_NUMBER=${{ inputs.pull_number || github.event.number }}" >> "$GITHUB_ENV"
-        if [ -n "$SOURCE_EVENT_NAME" ]; then
-          echo "SOURCE_EVENT_NAME=$SOURCE_EVENT_NAME" >> "$GITHUB_ENV"
-        fi
-        if [ -n "$SOURCE_RUN_ID" ]; then
-          echo "SOURCE_RUN_ID=$SOURCE_RUN_ID" >> "$GITHUB_ENV"
-        fi
         # Random delimiter so a hostile title cannot close the GITHUB_ENV block.
         # printf (not echo): titles starting with -n/-e/-E must not be echo flags.
         PR_TITLE_DELIM="ghadelimiter_$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
@@ -248,7 +236,7 @@ runs:
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
         # With YDB QA off, buffer ci_metrics under PUBLIC_DIR for remote-repo S3 + caller ingest.
-        if [ "${CI_DISABLE_YDB_QA:-}" = "1" ] || [ "${CI_DISABLE_YDB_QA:-}" = "true" ]; then
+        if [ "${CI_DISABLE_YDB_QA:-}" = "1" ]; then
           ANALYTICS_FILE=$PUBLIC_DIR/ci_metrics.jsonl
         else
           ANALYTICS_FILE=$TMP_DIR/analytics.jsonl
@@ -873,30 +861,28 @@ runs:
             break
           fi
 
-          if [ "${CI_DISABLE_YDB_QA:-}" = "1" ] || [ "${CI_DISABLE_YDB_QA:-}" = "true" ]; then
+          if [ "${CI_DISABLE_YDB_QA:-}" = "1" ]; then
             echo "Skipping upload_tests_results (CI_DISABLE_YDB_QA=${CI_DISABLE_YDB_QA})"
           else
-            EFFECTIVE_EVENT_NAME="${SOURCE_EVENT_NAME:-$GITHUB_EVENT_NAME}"
-            EFFECTIVE_RUN_ID="${SOURCE_RUN_ID:-$GITHUB_RUN_ID}"
-            case "$EFFECTIVE_EVENT_NAME" in
+            case "$GITHUB_EVENT_NAME" in
               workflow_dispatch)
-                run_name="${EFFECTIVE_RUN_ID}_manual"
+                run_name="${GITHUB_RUN_ID}_manual"
                 ;;
               pull_request | pull_request_target)
                 if [ -n "${ANALYTICS_PULL_NUMBER:-}" ]; then
-                  run_name="${EFFECTIVE_RUN_ID}_PR_${ANALYTICS_PULL_NUMBER}"
+                  run_name="${GITHUB_RUN_ID}_PR_${ANALYTICS_PULL_NUMBER}"
                 else
-                  run_name="${EFFECTIVE_RUN_ID}_PR"
+                  run_name="${GITHUB_RUN_ID}_PR"
                 fi
                 ;;
               schedule)
-                run_name="${EFFECTIVE_RUN_ID}_schedule"
+                run_name="${GITHUB_RUN_ID}_schedule"
                 ;;
               push)
-                run_name="${EFFECTIVE_RUN_ID}_POST"
+                run_name="${GITHUB_RUN_ID}_POST"
                 ;;
               *)
-                run_name="${EFFECTIVE_RUN_ID}"
+                run_name="${GITHUB_RUN_ID}"
                 ;;
             esac
             run_name="${run_name}_attempt_${RETRY}"
@@ -909,7 +895,7 @@ runs:
               --build-type "${BUILD_PRESET}" \
               --pull "${run_name}" \
               --job-name "${ANALYTICS_JOB_NAME}" \
-              --job-id "${EFFECTIVE_RUN_ID}" \
+              --job-id "${GITHUB_RUN_ID}" \
               --branch "${BRANCH_NAME}"
             analytics end upload_tests_results
             analytics flush

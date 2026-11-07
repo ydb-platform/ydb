@@ -90,6 +90,7 @@ class IndexCrawlSafetyTest(unittest.TestCase):
             try_dir.mkdir()
             (try_dir / "report.json").write_text("{}", encoding="utf-8")
             (try_dir / "ya-test.html").write_text("<html/>", encoding="utf-8")
+            (try_dir / "started_at").write_text("1700000000", encoding="utf-8")
             found = discover_attempts(root)
             self.assertEqual(len(found), 1)
             self.assertEqual(found[0]["retry"], 1)

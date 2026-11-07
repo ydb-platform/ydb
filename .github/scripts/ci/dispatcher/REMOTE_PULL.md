@@ -26,9 +26,9 @@ with **`ticket.config.inputs` only**. Enqueue stamps
 `config.inputs` from live `github.run_*`. Top-level ticket fields are for
 humans/logs.
 
-The remote executor does **not** post GitHub commit statuses (`build_*` /
-`test_*`): when `source_run_id` is set, `build_and_test_ya` skips those curls.
-The caller run's waiter/ingest outcome is the signal.
+Host runs as `workflow_dispatch`, so PR-only `build_*` / pending statuses never
+fire; `test_*` is skipped when `source_run_id` is set. The caller run's
+waiter/ingest outcome is the signal.
 
 Host durable publish (`job_summary.md` + `remote_artifacts.json` at run root)
 lives in `ci_remote_executor.yml`, not in the shared `build_and_test_ya` action.

@@ -441,6 +441,14 @@ namespace NBridgeTest {
         return groupId;
     }
 
+    inline NKikimrBlobStorage::TUpdateSettings ReadSettings(TEnvironmentSetup& env) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableReadSettings();
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        return response.GetStatus(0).GetSettings();
+    }
+
     inline void SetBridgeSyncMaxSyncers(TEnvironmentSetup& env, ui32 maxSyncers) {
         NKikimrBlobStorage::TConfigRequest request;
         request.AddCommand()->MutableUpdateSettings()->AddBridgeSyncMaxSyncers(maxSyncers);
@@ -451,11 +459,11 @@ namespace NBridgeTest {
     // Follows the syncers of dynamic groups as BSC assigns them to nodes, and holds their completions on demand, so that
     // they stay running. Updates for different nodes may come in any order, so the numbers are exact when things settle.
     struct TSyncerTracker {
-        bool Hold = false;
+        bool Hold = false; // whether completions are put into Held
         std::map<ui32, std::set<ui32>> NodeSyncers; // node -> target groups, as the last update from BSC says
         std::vector<std::pair<ui32, ui32>> Started; // node and target group, in the order of starting
-        std::deque<std::pair<ui32, std::unique_ptr<IEventHandle>>> Held;
-        std::set<const void*> Released;
+        std::deque<std::pair<ui32, std::unique_ptr<IEventHandle>>> Held; // node and completion, in the order of arrival
+        std::set<const void*> Released; // completions on their way through the filter again, not to be held twice
 
         // to be called from the filter function, whose result it returns
         bool OnEvent(ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
@@ -464,7 +472,7 @@ namespace NBridgeTest {
                 if (record.GetUpdateSyncers()) {
                     std::set<ui32> targets;
                     for (const auto& syncer : record.GetSyncers()) {
-                        if (TGroupID(syncer.GetBridgeProxyGroupId()).ConfigurationType() == EGroupConfigurationType::Dynamic) {
+                        if (IsDynamicGroup(TGroupId::FromValue(syncer.GetBridgeProxyGroupId()))) {
                             targets.insert(syncer.GetTargetGroupId());
                         }
                     }
@@ -503,7 +511,7 @@ namespace NBridgeTest {
         }
 
         // lets held syncers finish one by one until the condition is met, checking the number of the running ones
-        void RunUntil(TEnvironmentSetup& env, size_t maxRunning, const std::function<bool()>& condition) {
+        void RunUntil(TEnvironmentSetup& env, size_t maxRunning, const TString& what, const std::function<bool()>& condition) {
             for (ui32 i = 0; i < 1000 && !condition(); ++i) {
                 env.Sim(TDuration::Seconds(1));
                 UNIT_ASSERT_LE(GetNumRunning(), maxRunning);
@@ -511,7 +519,7 @@ namespace NBridgeTest {
                     ReleaseOne(env);
                 }
             }
-            UNIT_ASSERT(condition());
+            UNIT_ASSERT_C(condition(), what);
         }
     };
 

@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(BridgeAddPile) {
         WaitUntil(env, [&] { return tracker.GetNumRunning() >= 2; }, "syncers running");
         env.Sim(TDuration::Seconds(5)); // the static group gets synced by now, so it takes no slots
         UNIT_ASSERT_VALUES_EQUAL(tracker.GetNumRunning(), 2);
-        tracker.RunUntil(env, 2, [&] {
+        tracker.RunUntil(env, 2, "pile synchronized", [&] {
             return GetPileState(env, 2) == NKikimrBridge::TClusterState::SYNCHRONIZED;
         });
         env.Runtime->FilterFunction = {};

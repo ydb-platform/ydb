@@ -458,7 +458,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
             : Spiller(std::move(spiller))
         {
             for(int index = 0; index < std::ssize(Spiller.GetBuckets()); ++index) {
-                ProbeState.Buckets.push_back(TTable{self.Layouts_.Build, PreservedRowsInBuildTable()});
+                ProbeState.Buckets.push_back(self.MakeTable());
             }
             self.Logger_.LogDebug("BuildingInMemoryTable stage started");
         }
@@ -618,15 +618,24 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     };
 
     THybridHashJoin(TSides<Source> sources, TComputationContext& ctx, TString componentName,
-                    TSides<const NPackedTuple::TTupleLayout*> layouts)
+                    TSides<const NPackedTuple::TTupleLayout*> layouts, TSides<bool> any = {})
         : Logger_(ctx, componentName)
         , Layouts_(layouts)
         , Spiller_(ctx.SpillerFactory ? ctx.SpillerFactory->CreateSpiller() : nullptr)
         , Sources_(std::move(sources))
+        , Any_(any)
     {
+        // Duplicate probe rows are skipped by a mark on the matched build row, so an unmatched
+        // preserved probe row would have nowhere to keep that mark.
+        MKQL_ENSURE(!Any_.Probe || !PreservedRowsInProbeStream(),
+                    "ANY on the preserved side requires that side to be the build side");
     }
 
     struct Finish {};
+
+    TTable MakeTable() const {
+        return TTable{Layouts_.Build, PreservedRowsInBuildTable(), Any_.Build, Any_.Probe};
+    }
 
     TPackResult Flatten(TMKQLVector<TPackResult> tuples) {
         return Layouts_.Build->Flatten(tuples);
@@ -1006,7 +1015,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
                         for (auto& future : tdata->Futures) {
                             vec.push_back(GetPage(std::move(future), ESide::Build));
                         }
-                        NJoinTable::TNeumannJoinTable table{Layouts_.Build, PreservedRowsInBuildTable()};
+                        TTable table = MakeTable();
                         table.BuildWith(Flatten(std::move(vec)));
                         state.SelectedPair->Table = TTableAndSomeData{.Table = std::move(table), .Futures = {}};
                     } else {
@@ -1194,6 +1203,7 @@ template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class 
     TSides<const NPackedTuple::TTupleLayout*> Layouts_;
     ISpiller::TPtr Spiller_;
     Sources Sources_;
+    TSides<bool> Any_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
 };
@@ -1218,6 +1228,11 @@ inline TBlockHashJoinSettings ParseHashJoinSettingsTuple(TRuntimeNode node) {
         for (ui32 i = 0; i < keys->GetValuesCount(); ++i) {
             settings.EqualNullsKeys.push_back(AS_VALUE(TDataLiteral, keys->GetValue(i))->AsValue().Get<ui32>());
         }
+    }
+    if (settingsTuple->GetValuesCount() >= 3) {
+        const auto any = GetAnyJoinSettings(AS_VALUE(TDataLiteral, settingsTuple->GetValue(2))->AsValue().Get<ui32>());
+        settings.LeftAny = IsAnyJoinLeft(any);
+        settings.RightAny = IsAnyJoinRight(any);
     }
     return settings;
 }

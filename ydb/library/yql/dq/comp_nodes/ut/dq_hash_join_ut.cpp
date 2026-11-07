@@ -24,6 +24,7 @@
 #include <bit>
 #include <limits>
 #include <numeric>
+#include <set>
 
 namespace NKikimr::NMiniKQL {
 
@@ -84,6 +85,119 @@ void FilterRenamesForSemiAndOnlyJoins(TJoinTestData& td) {
         return RightSemiOrOnly(td.Kind) && indexAndSide.Side == EJoinSide::kLeft ||
                LeftSemiOrOnly(td.Kind) && indexAndSide.Side == EJoinSide::kRight;
     });
+}
+
+template <bool LongKeys>
+TJoinTestData AnyJoinTestData(EJoinKind kind, bool leftAny, bool rightAny, EBuildSide buildSide, bool spill = false) {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    using TKey = std::conditional_t<LongKeys, TString, ui64>;
+    const auto makeKey = [](ui64 value) -> TKey {
+        if constexpr (LongKeys) {
+            return TString(80, 'k') + ToString(value);
+        } else {
+            return value;
+        }
+    };
+    TVector<std::optional<TKey>> leftKeys, rightKeys;
+    TVector<TString> leftValues, rightValues;
+    const ui64 distinctKeys = spill ? 1300 : 3;
+    for (int pass = 0; pass < 2; ++pass) {
+        for (ui64 key = 0; key < distinctKeys; ++key) {
+            leftKeys.push_back(makeKey(key));
+            rightKeys.push_back(makeKey(key + 1));
+            // ANY may select any representative; keep its payload independent of the input order.
+            leftValues.push_back(TStringBuilder() << "left-" << (leftAny ? 0 : pass) << "-" << key);
+            rightValues.push_back(TStringBuilder() << "right-" << (rightAny ? 0 : pass) << "-" << key);
+        }
+        leftKeys.push_back(std::nullopt);
+        rightKeys.push_back(std::nullopt);
+        leftValues.push_back("null-left");
+        rightValues.push_back("null-right");
+    }
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    const auto select = [](const auto& keys, bool any) {
+        TVector<size_t> rows;
+        std::set<TKey> seen;
+        for (size_t i = 0; i < keys.size(); ++i) {
+            if (!any || !keys[i] || seen.insert(*keys[i]).second) {
+                rows.push_back(i);
+            }
+        }
+        return rows;
+    };
+    const auto lhs = select(leftKeys, leftAny);
+    const auto rhs = select(rightKeys, rightAny);
+    TVector<std::optional<TKey>> expectedLeftKeys, expectedRightKeys;
+    TVector<TString> expectedLeftValues, expectedInnerRightValues;
+    TVector<std::optional<TString>> expectedRightValues;
+    const auto addLeft = [&](size_t left) {
+        expectedLeftKeys.push_back(leftKeys[left]);
+        expectedLeftValues.push_back(leftValues[left]);
+    };
+    for (const auto left : lhs) {
+        bool matched = false;
+        for (const auto right : rhs) {
+            if (leftKeys[left] && rightKeys[right] && leftKeys[left] == rightKeys[right]) {
+                matched = true;
+                if (kind == EJoinKind::Inner || kind == EJoinKind::Left) {
+                    addLeft(left);
+                    expectedRightKeys.push_back(rightKeys[right]);
+                    expectedRightValues.push_back(rightValues[right]);
+                    expectedInnerRightValues.push_back(rightValues[right]);
+                }
+            }
+        }
+        if (!matched && kind == EJoinKind::Left) {
+            addLeft(left);
+            expectedRightKeys.push_back(std::nullopt);
+            expectedRightValues.push_back(std::nullopt);
+        } else if ((matched && kind == EJoinKind::LeftSemi) || (!matched && kind == EJoinKind::LeftOnly)) {
+            addLeft(left);
+        }
+    }
+    if (kind == EJoinKind::Inner) {
+        td.Result = ConvertVectorsToTuples(setup, expectedLeftKeys, expectedLeftValues,
+                                          expectedRightKeys, expectedInnerRightValues);
+    } else if (kind == EJoinKind::Left) {
+        td.Result = ConvertVectorsToTuples(setup, expectedLeftKeys, expectedLeftValues,
+                                          expectedRightKeys, expectedRightValues);
+    } else {
+        td.Result = ConvertVectorsToTuples(setup, expectedLeftKeys, expectedLeftValues);
+    }
+    td.Kind = kind;
+    td.JoinSettings.BuildSide = buildSide;
+    td.JoinSettings.LeftAny = leftAny;
+    td.JoinSettings.RightAny = rightAny;
+    if (spill) {
+        td.JoinMemoryConstraint = 1;
+        td.ExpectsSpilling = true;
+    }
+    return td;
+}
+
+TJoinTestData AnyJoinInplaceBuildRowsTestData(EBuildSide buildSide, bool equalNulls) {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<std::optional<ui32>> left = {1, 1, 2, 2, std::nullopt, std::nullopt};
+    TVector<std::optional<ui32>> right = {2, 2, 3, 3, std::nullopt, std::nullopt};
+    TVector<std::optional<ui32>> expectedLeft = {1, 2, std::nullopt, std::nullopt};
+    TVector<std::optional<ui32>> expectedRight = {std::nullopt, 2, std::nullopt, std::nullopt};
+    if (equalNulls) {
+        expectedLeft.pop_back();
+        expectedRight.pop_back();
+        td.JoinSettings.EqualNullsKeys = {0};
+    }
+    td.Left = ConvertVectorsToTuples(setup, left);
+    td.Right = ConvertVectorsToTuples(setup, right);
+    td.Result = ConvertVectorsToTuples(setup, expectedLeft, expectedRight);
+    td.Kind = EJoinKind::Left;
+    td.Renames = {{0, EJoinSide::kLeft}, {0, EJoinSide::kRight}};
+    td.JoinSettings.BuildSide = buildSide;
+    td.JoinSettings.LeftAny = true;
+    td.JoinSettings.RightAny = true;
+    return td;
 }
 
 TJoinTestData BasicInnerJoinTestData() {
@@ -2836,6 +2950,41 @@ Y_UNIT_TEST_SUITE(TDqHashJoinDispatchTest) {
 }
 
 Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
+    Y_UNIT_TEST_TWIN(TestAnyJoin, BlockJoin) {
+        for (const auto kind : {EJoinKind::Inner, EJoinKind::Left, EJoinKind::LeftSemi, EJoinKind::LeftOnly}) {
+            for (const auto buildSide : {EBuildSide::Left, EBuildSide::Right}) {
+                for (const auto any : {EAnyJoinSettings::Left, EAnyJoinSettings::Right, EAnyJoinSettings::Both}) {
+                    if (kind != EJoinKind::Inner && buildSide == EBuildSide::Right && IsAnyJoinLeft(any)) {
+                        continue;
+                    }
+                    Test(AnyJoinTestData<false>(kind, IsAnyJoinLeft(any), IsAnyJoinRight(any), buildSide), BlockJoin);
+                    Test(AnyJoinTestData<true>(kind, IsAnyJoinLeft(any), IsAnyJoinRight(any), buildSide), BlockJoin);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TestAnyJoinSpilling, BlockJoin) {
+        for (const auto any : {EAnyJoinSettings::Left, EAnyJoinSettings::Right, EAnyJoinSettings::Both}) {
+            Test(AnyJoinTestData<true>(EJoinKind::Left, IsAnyJoinLeft(any), IsAnyJoinRight(any), EBuildSide::Left, true), BlockJoin);
+        }
+        Test(AnyJoinTestData<true>(EJoinKind::Inner, true, true, EBuildSide::Right, true), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestAnyJoinInplaceBuildRows, BlockJoin) {
+        for (const bool equalNulls : {false, true}) {
+            Test(AnyJoinInplaceBuildRowsTestData(EBuildSide::Left, equalNulls), BlockJoin);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(TestAnyJoinRejectsPreservedProbe, BlockJoin) {
+        for (const auto kind : {EJoinKind::Left, EJoinKind::LeftSemi, EJoinKind::LeftOnly}) {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(
+                Test(AnyJoinTestData<false>(kind, true, false, EBuildSide::Right), BlockJoin), yexception,
+                "ANY on the preserved side requires that side to be the build side");
+        }
+    }
+
     Y_UNIT_TEST(TestSerializedListKeySpilling) {
         Test(SerializedListKeySpillingTestData(), false);
     }
@@ -3399,6 +3548,24 @@ Y_UNIT_TEST_SUITE(TDqHashJoinSettingsCompatibilityTest) {
         const auto parsed = ParseHashJoinSettingsTuple(oldSettings);
         UNIT_ASSERT_EQUAL(parsed.BuildSide, EBuildSide::Left);
         UNIT_ASSERT(parsed.EqualNullsKeys.empty());
+        UNIT_ASSERT(!parsed.LeftAny);
+        UNIT_ASSERT(!parsed.RightAny);
+    }
+
+    Y_UNIT_TEST(NewRuntimeReadsAnyWithoutChangingArgumentPositions) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        const TVector<ui32> keys = {0};
+        const auto settings = pb.NewTuple({
+            pb.NewDataLiteral(static_cast<ui32>(EBuildSide::Left)),
+            pb.AsTuple(keys),
+            pb.NewDataLiteral(static_cast<ui32>(EAnyJoinSettings::Both)),
+        });
+        const auto parsed = ParseHashJoinSettingsTuple(settings);
+        UNIT_ASSERT_EQUAL(parsed.BuildSide, EBuildSide::Left);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.EqualNullsKeys, keys);
+        UNIT_ASSERT(parsed.LeftAny);
+        UNIT_ASSERT(parsed.RightAny);
     }
 
     Y_UNIT_TEST(OldRuntimeIgnoresNewSettingsField) {

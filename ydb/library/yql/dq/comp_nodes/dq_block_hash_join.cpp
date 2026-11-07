@@ -250,7 +250,9 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
                                                     .Probe = {ctx, streams, meta, Converters_, ESide::Probe}},
                     ctx, "BlockHashJoin",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
-                                                              .Probe = Converters_.Probe->GetTupleLayout()})
+                                                              .Probe = Converters_.Probe->GetTupleLayout()},
+                    TSides<bool>{.Build = meta->Settings.LeftIsBuild() ? meta->Settings.LeftAny : meta->Settings.RightAny,
+                                 .Probe = meta->Settings.LeftIsBuild() ? meta->Settings.RightAny : meta->Settings.LeftAny})
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
             , PairFilter_(std::move(pairFilter))

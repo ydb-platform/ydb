@@ -689,7 +689,8 @@ protected:
             rightCollectStage,
             KqpCtx.Config->BlockHashJoinSwapLeftJoinSides.Get().GetOrElse(false),
             KqpCtx.Config->GetUseScalarHashJoin(),
-            KqpCtx.Config->GetUseScalarHashJoinForMap()
+            KqpCtx.Config->GetUseScalarHashJoinForMap(),
+            KqpCtx.Config->GetUseHashJoinForAny()
         );
         DumpAppliedRule("BuildJoin", node.Ptr(), output.Ptr(), ctx);
         return output;

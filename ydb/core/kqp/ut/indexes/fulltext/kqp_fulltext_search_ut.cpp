@@ -11,6 +11,7 @@
 
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/kqp/ut/indexes/fulltext/kqp_fulltext_ut_common.h>
+#include <util/generic/array_ref.h>
 
 namespace NKikimr::NKqp {
 
@@ -1826,6 +1827,827 @@ Y_UNIT_TEST(SelectWithFulltextMatchAndNgramWildcardSpecialCharacters) {
     }
 }
 
+struct TFulltextLikeCase {
+    const char* Expression;
+    const char* Pattern;
+    const char* Expected;
+    const char* Operator = "LIKE";
+};
+
+TParams FulltextPatternParams(const std::string& pattern, bool utf8 = false) {
+    auto builder = TParamsBuilder();
+    auto& value = builder.AddParam("$pattern");
+    if (utf8) {
+        value.Utf8(pattern).Build();
+    } else {
+        value.String(pattern).Build();
+    }
+    return builder.Build();
+}
+
+void CheckFulltextScoreWithStringPredicates(NQuery::TQueryClient& db, bool utf8) {
+    const TString score = "FulltextScore(Text, 'abc def')";
+    const auto baseline = db.ExecuteQuery(Sprintf(R"sql(
+        SELECT Key, %s AS Relevance FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE %s > 0 ORDER BY Key;
+    )sql", score.c_str(), score.c_str()), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(baseline.GetStatus(), EStatus::SUCCESS, baseline.GetIssues().ToString());
+    std::map<ui64, double> scores;
+    TResultSetParser baselineParser(baseline.GetResultSet(0));
+    while (baselineParser.TryNextRow()) {
+        scores.emplace(*baselineParser.ColumnParser("Key").GetOptionalUint64(),
+            baselineParser.ColumnParser("Relevance").GetDouble());
+    }
+
+    struct TCase {
+        const char* Predicate;
+        const char* Pattern;
+        std::vector<ui64> Keys;
+    };
+    const TCase cases[] = {
+        {"Text LIKE '%' || $pattern || '%'", "abc%def", {0, 1, 2, 3, 5, 6, 8}},
+        {"StartsWith(Text, String::AsciiToLower($pattern))", "ABC", {0, 1, 2, 3, 8}},
+        {"Text = Substring(CAST($pattern AS String), 1)", "xabc%def", {0}},
+    };
+    for (const auto& test : cases) {
+        const auto params = FulltextPatternParams(test.Pattern, utf8);
+        for (const bool scoreFirst : {false, true}) {
+            const TString scorePredicate = score + " > 0";
+            const auto query = Sprintf(R"sql(
+                DECLARE $pattern AS %s;
+                SELECT Key, %s AS Relevance FROM `/Root/Texts` VIEW fulltext_idx
+                WHERE %s AND %s ORDER BY Key;
+            )sql", utf8 ? "Utf8" : "String", score.c_str(),
+                scoreFirst ? scorePredicate.c_str() : test.Predicate,
+                scoreFirst ? test.Predicate : scorePredicate.c_str());
+            const auto filtered = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(filtered.GetStatus(), EStatus::SUCCESS, query << filtered.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(filtered.GetResultSet(0).RowsCount(), test.Keys.size());
+            TResultSetParser parser(filtered.GetResultSet(0));
+            size_t row = 0;
+            while (parser.TryNextRow()) {
+                const ui64 key = *parser.ColumnParser("Key").GetOptionalUint64();
+                UNIT_ASSERT_VALUES_EQUAL(key, test.Keys[row++]);
+                UNIT_ASSERT_C(std::abs(parser.ColumnParser("Relevance").GetDouble() - scores.at(key)) < 1e-8, query);
+            }
+        }
+    }
+}
+
+void DoSelectWithFulltextLike(bool relevance, bool utf8, TConstArrayRef<TFulltextLikeCase> cases,
+    bool checkInvalidExpressions = false)
+{
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db, utf8);
+
+    auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+            (0, "abc%def"),
+            (1, "abc_def"),
+            (2, "abc!def"),
+            (3, "abcXdef"),
+            (4, "Abc%def"),
+            (5, "prefix abc%def suffix"),
+            (6, "prefix abcXdef suffix"),
+            (7, NULL),
+            (8, "abc?def"),
+            (9, "abc%"),
+            (10, "ab_cd"),
+            (11, "ab%cd"),
+            (12, "ΛΟΓΟΣ"), (13, "λογος"), (14, "λογοσ"),
+            (15, "ſtone"), (16, "Stone"), (17, "stone"),
+            (18, "морекот"), (19, "МОРЕКОТ"), (20, "морекод");
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+
+    AddIndexNGram(db, 3, 3, relevance, false, false, "whitespace");
+    for (const auto& test : cases) {
+        const auto params = FulltextPatternParams(test.Pattern, utf8);
+
+        const TString query = Sprintf(R"sql(
+            DECLARE $pattern AS %s;
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+            WHERE Text %s %s ORDER BY Key;
+        )sql", utf8 ? "Utf8" : "String", test.Operator, test.Expression);
+        const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+            query << " pattern: " << test.Pattern << ": " << result.GetIssues().ToString());
+        CompareYson(test.Expected, FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    if (!checkInvalidExpressions) {
+        return;
+    }
+
+    for (const auto& [escape, pattern] : {
+            std::pair{"%", "abc%def"}, std::pair{"_", "abc_def"}}) {
+        const auto params = FulltextPatternParams(pattern, utf8);
+        for (const auto* view : {"PRIMARY KEY", "fulltext_idx"}) {
+            const auto query = Sprintf(R"sql(
+                DECLARE $pattern AS %s;
+                $rx = Udf(Re2::PatternFromLike)($pattern, '%s');
+                SELECT Key FROM `/Root/Texts` VIEW %s
+                WHERE Re2::Match($rx, Re2::Options(true AS CaseSensitive))(Text) ORDER BY Key;
+            )sql", utf8 ? "Utf8" : "String", escape, view);
+            const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[0u]];[[1u]];[[2u]];[[3u]];[[8u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    const auto params = TParamsBuilder().AddParam("$pattern").String("abc%def").Build().Build();
+    for (const auto* expression : {
+            "Coalesce(Text, '') || '%'",
+            "Coalesce(Text, '')",
+            "If(Key = 0u, $pattern, 'abcXdef')",
+            "If(Random(1) < 0.5, $pattern, 'abcXdef')",
+            "WithSideEffectsMode($pattern, 'General')"}) {
+        const auto query = Sprintf(R"sql(
+            DECLARE $pattern AS String;
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+            WHERE Text LIKE %s;
+        )sql", expression);
+        const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported predicate is used to access index");
+    }
+
+    if (relevance) {
+        CheckFulltextScoreWithStringPredicates(db, utf8);
+        const auto result = db.ExecuteQuery(R"sql(
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+            WHERE FulltextScore(Text, Coalesce(Text, '')) > 0;
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported predicate is used to access index");
+    }
+}
+
+Y_UNIT_TEST_QUAD(SelectWithFulltextLikeEscape, RELEVANCE, UTF8) {
+    const TFulltextLikeCase cases[] = {
+        {"$pattern ESCAPE '!'", "abc!%def", "[[[0u]]]"},
+        {"$pattern ESCAPE '!'", "abc!_def", "[[[1u]]]"},
+        {"$pattern ESCAPE '!'", "abc!!def", "[[[2u]]]"},
+        {"$pattern ESCAPE '!'", "abc!Xdef", "[[[3u]]]"},
+        {"$pattern ESCAPE '!'", "ab!_cd", "[[[10u]]]"},
+        {"$pattern ESCAPE '!'", "ab!%cd", "[[[11u]]]"},
+        {"$pattern ESCAPE '!'", "%abc!%def%", "[[[0u]];[[5u]]]"},
+        {"$pattern ESCAPE '?'", "abc?%def", "[[[0u]]]"},
+        {"$pattern ESCAPE '?'", "abc??def", "[[[8u]]]"},
+        {"'ab!_cd' ESCAPE '!'", "", "[[[10u]]]"},
+        {"'ab!%cd' ESCAPE '!'", "", "[[[11u]]]"},
+        {"'ab!%cd%' ESCAPE '!'", "", "[[[11u]]]"},
+        {"'%ab!%cd' ESCAPE '!'", "", "[[[11u]]]"},
+        {"'%ab!%cd%' ESCAPE '!'", "", "[[[11u]]]"},
+        {"$pattern ESCAPE '!' AND Text LIKE 'abc_def'", "abc!%def", "[[[0u]]]"},
+        {"$pattern ESCAPE '!' AND Text LIKE 'abcXde_'", "abc!%def", "[]"},
+    };
+    DoSelectWithFulltextLike(RELEVANCE, UTF8, cases);
+}
+
+Y_UNIT_TEST_QUAD(SelectWithFulltextLikeExpressions, RELEVANCE, UTF8) {
+    const TFulltextLikeCase cases[] = {
+        {"'%' || $pattern || '%'", "abc%def", "[[[0u]];[[1u]];[[2u]];[[3u]];[[5u]];[[6u]];[[8u]]]"},
+        {"'%' || $pattern || '%'", "abc_def", "[[[0u]];[[1u]];[[2u]];[[3u]];[[5u]];[[6u]];[[8u]]]"},
+        {"'%' || $pattern || '%'", "abcXdef", "[[[3u]];[[6u]]]"},
+        {"'%' || $pattern || '%'", "Abc%def", "[[[4u]]]"},
+        {"'%' || $pattern || '%' ESCAPE '!'", "abc!%def", "[[[0u]];[[5u]]]"},
+        {"'%' || $pattern || '%' ESCAPE '!'", "abc!_def", "[[[1u]]]"},
+        {"'%' || $pattern || '%' ESCAPE '!'", "abc!!def", "[[[2u]]]"},
+        {"'%' || $pattern || '%' ESCAPE '!'", "abc!", "[[[9u]]]"},
+        {"String::AsciiToLower($pattern)", "ABC%DEF", "[[[0u]];[[1u]];[[2u]];[[3u]];[[8u]]]"},
+        {"String::AsciiToLower($pattern) ESCAPE '!'", "ABC!%DEF", "[[[0u]]]"},
+        {"(CASE WHEN $pattern != '' THEN $pattern ELSE 'abcXdef' END)",
+            "abc%def", "[[[0u]];[[1u]];[[2u]];[[3u]];[[8u]]]"},
+        {"(CASE WHEN $pattern != '' THEN $pattern ELSE 'abcXdef' END) ESCAPE '!'",
+            "abc!%def", "[[[0u]]]"},
+        {"Substring(CAST($pattern AS String), 1)", "xabc%def", "[[[0u]];[[1u]];[[2u]];[[3u]];[[8u]]]"},
+        {"Substring(CAST($pattern AS String), 1) ESCAPE '!'", "xabc!%def", "[[[0u]]]"},
+        {"CAST($pattern AS String)", "abc%def", "[[[0u]];[[1u]];[[2u]];[[3u]];[[8u]]]"},
+        {"CAST($pattern AS String) ESCAPE '!'", "abc!%def", "[[[0u]]]"},
+        {"Just($pattern)", "abc%def", "[[[0u]]]", "="},
+        {"Just('abc%def')", "", "[[[0u]]]", "="},
+        {"$pattern", "%λογος%", "[[[13u]]]", "ILIKE"},
+        {"$pattern", "%λογοσ%", "[[[12u]];[[14u]]]", "ILIKE"},
+        {"$pattern ESCAPE '!'", "%λογο!ς%", "[[[13u]]]", "ILIKE"},
+        {"'%' || $pattern || '%'", "λογος", "[[[13u]]]", "ILIKE"},
+        {"$pattern", "%stone%", "[[[16u]];[[17u]]]", "ILIKE"},
+        {"$pattern", "%ſtone%", "[[[15u]]]", "ILIKE"},
+        {"$pattern", "мор%кот", "[[[18u]];[[19u]]]", "ILIKE"},
+        {"If(CurrentUtcTimestamp() >= Timestamp('1970-01-01T00:00:00Z'), $pattern, 'abcXdef')",
+            "abc%def", "[[[0u]];[[1u]];[[2u]];[[3u]];[[8u]]]"},
+    };
+    DoSelectWithFulltextLike(RELEVANCE, UTF8, cases, true);
+}
+
+Y_UNIT_TEST_TWIN(SelectWithFulltextLikeEscapedEdgeNgram, UTF8) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db, UTF8);
+
+    auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+            (0, "%abc"), (1, "_abc"), (2, "xabc"), (3, "abc"), (4, "x%abc");
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+
+    AddIndexNGram(db, 3, 3, false, true, false, "whitespace");
+
+    const TString query = Sprintf(R"sql(
+        DECLARE $pattern AS %s;
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE Text LIKE $pattern ESCAPE '!' ORDER BY Key;
+    )sql", UTF8 ? "Utf8" : "String");
+    for (const auto& [pattern, expected] : {
+            std::pair{"!%abc", "[[[0u]]]"}, std::pair{"!_abc", "[[[1u]]]"}}) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), FulltextPatternParams(pattern, UTF8)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+            pattern << ": " << result.GetIssues().ToString());
+        CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    auto literal = db.ExecuteQuery(R"sql(
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE Text LIKE 'x!%abc' ESCAPE '!' ORDER BY Key;
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(literal.GetStatus(), EStatus::SUCCESS, literal.GetIssues().ToString());
+    CompareYson("[[[4u]]]", FormatResultSetYson(literal.GetResultSet(0)));
+}
+
+Y_UNIT_TEST(SelectWithFulltextLikeEscapeStopwords) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+
+    auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+            (0, "foo _ the cats"), (1, "foo X the cats"), (2, "foo there");
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+
+    AddIndexNGram(db, 3, 3, false, false, false, "whitespace", {.Stopwords = true});
+
+    for (const auto& [pattern, expected] : {
+            std::pair{"foo !_%the cats", "[[[0u]]]"},
+            std::pair{"%the% cats", "[[[0u]];[[1u]]]"}}) {
+        const auto params = TParamsBuilder().AddParam("$pattern").String(pattern).Build().Build();
+        auto result = db.ExecuteQuery(R"sql(
+            DECLARE $pattern AS String;
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+            WHERE Text LIKE $pattern ESCAPE '!' ORDER BY Key;
+        )sql", NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+    }
+    const auto params = TParamsBuilder().AddParam("$pattern").String("%her%").Build().Build();
+    const auto partial = db.ExecuteQuery(R"sql(
+        DECLARE $pattern AS String;
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE Text LIKE $pattern;
+    )sql", NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(partial.GetStatus(), EStatus::BAD_REQUEST, partial.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS(partial.GetIssues().ToString(), "No search terms were extracted");
+    const auto wildcard = db.ExecuteQuery(R"sql(
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE FulltextMatch(Text, '%her%', 'Wildcard' AS Mode);
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(wildcard.GetStatus(), EStatus::BAD_REQUEST, wildcard.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS(wildcard.GetIssues().ToString(), "No search terms were extracted");
+}
+
+Y_UNIT_TEST(SelectWithFulltextLikeLengthFilter) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    const auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+            (0, "cat food"), (1, "cat longword"), (2, "cats food");
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+    AddIndexNGram(db, 3, 3, false, false, false, "whitespace", {.MinTokenLength = 4});
+
+    const auto exact = db.ExecuteQuery(R"sql(
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx WHERE Text = 'cat food';
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(exact.GetStatus(), EStatus::SUCCESS, exact.GetIssues().ToString());
+    CompareYson("[[[0u]]]", FormatResultSetYson(exact.GetResultSet(0)));
+    const auto partial = db.ExecuteQuery(R"sql(
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx WHERE Text LIKE 'cat%';
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(partial.GetStatus(), EStatus::BAD_REQUEST, partial.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS(partial.GetIssues().ToString(), "No search terms were extracted");
+    const auto wildcard = db.ExecuteQuery(R"sql(
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE FulltextMatch(Text, 'cat%', 'Wildcard' AS Mode);
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(wildcard.GetStatus(), EStatus::BAD_REQUEST, wildcard.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS(wildcard.GetIssues().ToString(), "No search terms were extracted");
+}
+
+Y_UNIT_TEST(SelectWithFulltextLikeResidualPredicates) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    const auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+            (0, "Hello"), (1, "hello"), (2, "other"), (3, NULL);
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+    AddIndexNGram(db, 3, 3, false, false, false, "standard", {.Lowercase = false});
+
+    struct TCase {
+        const char* Predicate;
+        const char* Pattern;
+        const char* Expected;
+    };
+    const TCase cases[] = {
+        {"Text ILIKE $pattern", "%hello%", nullptr},
+        {"Coalesce(If(Data IS NULL, NULL, Text LIKE $pattern), TRUE)", "%other%", nullptr},
+        {"Coalesce(Text LIKE $pattern, TRUE)", "%ello%", "[[[0u]];[[1u]]]"},
+        {"$record.Text LIKE $pattern", "%other%", nullptr},
+        {"StartsWith(YQL::FlatMap(Text, ($x) -> (Just(YQL::ToString(Length($x))))), $pattern)", "5", nullptr},
+    };
+    for (const auto& [predicate, pattern, expected] : cases) {
+        const auto params = TParamsBuilder()
+            .AddParam("$pattern").String(pattern).Build()
+            .AddParam("$record").BeginStruct().AddMember("Text").String("other").EndStruct().Build()
+            .Build();
+        const auto query = Sprintf(R"sql(
+            DECLARE $pattern AS String;
+            DECLARE $record AS Struct<Text: String>;
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx WHERE %s ORDER BY Key;
+        )sql", predicate);
+        const auto standalone = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        if (expected) {
+            UNIT_ASSERT_VALUES_EQUAL_C(standalone.GetStatus(), EStatus::SUCCESS, standalone.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(standalone.GetResultSet(0)));
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(standalone.GetStatus(), EStatus::BAD_REQUEST, standalone.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(standalone.GetIssues().ToString(), "Unsupported predicate is used to access index");
+        }
+
+        for (const bool predicateFirst : {false, true}) {
+            const char* match = "FulltextMatch(Text, 'Hello')";
+            const auto filteredQuery = Sprintf(R"sql(
+                DECLARE $pattern AS String;
+                DECLARE $record AS Struct<Text: String>;
+                SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+                WHERE %s AND %s ORDER BY Key;
+            )sql", predicateFirst ? predicate : match, predicateFirst ? match : predicate);
+            const auto filtered = db.ExecuteQuery(filteredQuery, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(filtered.GetStatus(), EStatus::SUCCESS, filtered.GetIssues().ToString());
+            CompareYson("[[[0u]]]", FormatResultSetYson(filtered.GetResultSet(0)));
+        }
+    }
+
+    const auto wildcard = db.ExecuteQuery(R"sql(
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE FulltextMatch(Text, '%ell%', 'Wildcard' AS Mode) ORDER BY Key;
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(wildcard.GetStatus(), EStatus::SUCCESS, wildcard.GetIssues().ToString());
+    CompareYson("[[[0u]];[[1u]]]", FormatResultSetYson(wildcard.GetResultSet(0)));
+}
+
+Y_UNIT_TEST(SelectWithFulltextLikeBinaryEscape) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    const auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+            (0, "abc\x00def"), (1, "abcdef"), (2, "abc\\def"), (3, "abc\\!def"),
+            (4, "abc"), (5, "abc!");
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+    AddIndexNGram(db, 3, 3, false, false, false, "whitespace");
+
+    struct TCase {
+        const char* Escape;
+        std::string Pattern;
+        const char* Expected;
+    };
+    const TCase cases[] = {
+        {"'\\x00'", std::string("abc\0def", 7), "[[[0u]]]"},
+        {"'!'", "abc!!", "[[[5u]]]"},
+        {"'!'", "abc!", "[[[4u]]]"},
+        {"'!'", "missing!", "[]"},
+    };
+    for (const auto& test : cases) {
+        const auto params = TParamsBuilder().AddParam("$pattern").String(test.Pattern).Build().Build();
+        for (const auto* view : {"PRIMARY KEY", "fulltext_idx"}) {
+            const auto query = Sprintf(R"sql(
+                DECLARE $pattern AS String;
+                SELECT Key FROM `/Root/Texts` VIEW %s
+                WHERE Text LIKE $pattern ESCAPE %s ORDER BY Key;
+            )sql", view, test.Escape);
+            const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(test.Expected, FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    const auto guardedParams = FulltextPatternParams("abc!\\!def");
+    const auto guarded = db.ExecuteQuery(R"sql(
+        DECLARE $pattern AS String;
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE Text LIKE $pattern ESCAPE '!';
+    )sql", NYdb::NQuery::TTxControl::NoTx(), guardedParams).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(guarded.GetStatus(), EStatus::BAD_REQUEST, guarded.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS(guarded.GetIssues().ToString(), "No search terms were extracted");
+    for (const bool matchFirst : {false, true}) {
+        const char* match = "FulltextMatch(Text, 'abc')";
+        const char* like = "Text LIKE $pattern ESCAPE '!'";
+        const auto query = Sprintf(R"sql(
+            DECLARE $pattern AS String;
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx WHERE %s AND %s ORDER BY Key;
+        )sql", matchFirst ? match : like, matchFirst ? like : match);
+        const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), guardedParams).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[[[3u]]]", FormatResultSetYson(result.GetResultSet(0)));
+    }
+    for (const auto* view : {"PRIMARY KEY", "fulltext_idx"}) {
+        const auto query = Sprintf(R"sql(
+            DECLARE $pattern AS String;
+            $rx = Udf(Re2::PatternFromLike)($pattern, @@\@@);
+            SELECT Key FROM `/Root/Texts` VIEW %s
+            WHERE Re2::Match($rx, Re2::Options(true AS CaseSensitive))(Text) ORDER BY Key;
+        )sql", view);
+        const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            FulltextPatternParams(R"(abc\_def)")).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[[[3u]]]", FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(SelectWithFulltextLikeEscapeStandardEdgeNgram) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+
+    auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+            (0, "ax#abc%def"), (1, "ax#abcXdef"), (2, "_\u3000abc def");
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+
+    AddIndexNGram(db, 3, 3, false, true);
+    const TString query = R"sql(
+        DECLARE $pattern AS String;
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE Text LIKE $pattern ESCAPE '!' ORDER BY Key;
+    )sql";
+    for (const auto& [pattern, expected] : {
+            std::pair{"a%#abc!%def", "[[[0u]]]"}, std::pair{"%\u3000abc def", "[[[2u]]]"}}) {
+        const auto params = TParamsBuilder().AddParam("$pattern").String(pattern).Build().Build();
+        const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(SelectWithFulltextLikeEscapeStandardNgram) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+            (0, "カ_abc"), (1, "、_abc"), (2, "x_abc"), (3, "zabc"), (4, "abc"),
+            (5, "x\u200Dカ_abc"), (6, "x\u200Dカタカナ"), (7, "カ\u0345_abc");
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+    AddIndexNGram(db);
+
+    const auto params = TParamsBuilder().AddParam("$pattern").String("%!_abc%").Build().Build();
+    const auto result = db.ExecuteQuery(R"sql(
+        DECLARE $pattern AS String;
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE Text LIKE $pattern ESCAPE '!' ORDER BY Key;
+    )sql", NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson("[[[0u]];[[1u]];[[2u]];[[5u]];[[7u]]]", FormatResultSetYson(result.GetResultSet(0)));
+
+    const auto wildcard = db.ExecuteQuery(R"sql(
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE FulltextMatch(Text, '%_abc%', 'Wildcard' AS Mode) ORDER BY Key;
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE FulltextMatch(Text, '%カタカナ%', 'Wildcard' AS Mode) ORDER BY Key;
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(wildcard.GetStatus(), EStatus::SUCCESS, wildcard.GetIssues().ToString());
+    CompareYson("[[[0u]];[[1u]];[[2u]];[[3u]];[[5u]];[[7u]]]", FormatResultSetYson(wildcard.GetResultSet(0)));
+    CompareYson("[[[6u]]]", FormatResultSetYson(wildcard.GetResultSet(1)));
+
+    const auto modeParams = TParamsBuilder().AddParam("$mode").String("Wildcard").Build().Build();
+    for (const auto* mode : {"$mode", "String::AsciiToLower($mode)"}) {
+        const auto query = Sprintf(R"sql(
+            DECLARE $mode AS String;
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+            WHERE FulltextMatch(Text, '%%_abc%%', %s AS Mode);
+        )sql", mode);
+        const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), modeParams).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported predicate is used to access index");
+    }
+}
+
+Y_UNIT_TEST(SelectWithFulltextLikeWhitespaceEdgeNgram) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+            (0, "x +abcdef"), (1, "x abcdef"), (2, "x +abcother"), (3, "x abcdef cats");
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+    AddIndexNGram(db, 3, 3, false, true, false, "whitespace");
+
+    for (const auto* expression : {"$pattern", "'%' || $pattern || '%'", "'x +abc%'"}) {
+        const auto query = Sprintf(R"sql(
+            DECLARE $pattern AS String;
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+            WHERE Text LIKE %s ORDER BY Key;
+        )sql", expression);
+        const auto params = TParamsBuilder().AddParam("$pattern").String("x +abc%").Build().Build();
+        const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[[[0u]];[[2u]]]", FormatResultSetYson(result.GetResultSet(0)));
+    }
+    for (const bool wildcardFirst : {false, true}) {
+        const char* wildcard = "FulltextMatch(Text, 'x abc%', 'Wildcard' AS Mode)";
+        const char* keywords = "FulltextMatch(Text, '+cats')";
+        const auto query = Sprintf(R"sql(
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+            WHERE %s AND %s ORDER BY Key;
+        )sql", wildcardFirst ? wildcard : keywords, wildcardFirst ? keywords : wildcard);
+        const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[[[3u]]]", FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(SelectWithFulltextLikeMultipleWildcardKeywordNgram) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    const auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+            (0, "abcXdef"), (1, "abc"), (2, "def"), (3, "abc Xdef");
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+    AddIndexNGram(db, 1, 1, false, false, false, "keyword");
+
+    const auto result = db.ExecuteQuery(R"sql(
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE FulltextMatch(Text, '%abc%', 'Wildcard' AS Mode)
+            AND FulltextMatch(Text, '%def%', 'Wildcard' AS Mode) ORDER BY Key;
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson("[[[0u]];[[3u]]]", FormatResultSetYson(result.GetResultSet(0)));
+    const auto keywords = db.ExecuteQuery(R"sql(
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE FulltextMatch(Text, 'abc') AND FulltextMatch(Text, 'def');
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(keywords.GetStatus(), EStatus::BAD_REQUEST, keywords.GetIssues().ToString());
+    UNIT_ASSERT_STRING_CONTAINS(keywords.GetIssues().ToString(),
+        "Multiple fulltext match predicates with the keyword tokenizer are not supported");
+}
+
+Y_UNIT_TEST_TWIN(SelectWithFulltextLikeConjunctionOperator, RELEVANCE) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+            (0, "foo bazxyz"), (1, "bar bazxyz"), (2, "bazxyz"),
+            (3, "foo bar bazxyz"), (4, "foo bar other"),
+            (5, "foo bar qux bazxyz"), (6, "qux bazxyz"),
+            (7, "Достоевский"), (8, "пушкинский"), (9, "российский"), (10, "достоевский");
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+    AddIndexNGram(db, 3, 3, RELEVANCE);
+
+    struct TCase {
+        const char* Pattern;
+        const char* Minimum;
+        const char* Expected;
+    };
+    const TCase cases[] = {
+        {"%bazxyz%", "1", "[[[0u]];[[1u]];[[3u]];[[5u]];[[6u]]]"},
+        {"%bazxyz%", "75%", "[[[3u]];[[5u]]]"},
+        {"%bazxyz%", "100%", "[[[5u]]]"},
+        {"%foo%", "1", "[[[0u]];[[3u]];[[4u]];[[5u]]]"},
+        {"%foo%", "50%", "[[[0u]];[[3u]];[[4u]];[[5u]]]"},
+    };
+    for (const auto* like : {"Text LIKE $pattern", "Text LIKE $pattern ESCAPE '!'"}) {
+        for (const bool likeFirst : {false, true}) {
+            for (const auto& [pattern, minimum, expected] : cases) {
+                const TString match = Sprintf(
+                    "FulltextMatch(Text, 'foo bar qux', 'or' AS DefaultOperator, '%s' AS MinimumShouldMatch)", minimum);
+                const TString query = Sprintf(R"sql(
+                    DECLARE $pattern AS String;
+                    SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+                    WHERE %s AND %s ORDER BY Key;
+                )sql", likeFirst ? like : match.c_str(), likeFirst ? match.c_str() : like);
+                const auto params = TParamsBuilder().AddParam("$pattern").String(pattern).Build().Build();
+                const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, query << result.GetIssues().ToString());
+                CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    }
+
+    struct TWildcardCase {
+        const char* Wildcard;
+        const char* Predicate;
+        const char* Pattern;
+        const char* Expected;
+        const char* SecondWildcard = nullptr;
+    };
+    const TWildcardCase wildcardCases[] = {
+        {"%oo%", "Text LIKE $pattern", "%foo%", "[[[0u]];[[3u]];[[4u]];[[5u]]]"},
+        {"%oo%", "Text LIKE '%' || $pattern || '%'", "foo", "[[[0u]];[[3u]];[[4u]];[[5u]]]"},
+        {"%foo%", "Text LIKE $pattern", "%bazxyz%", "[[[0u]];[[3u]];[[5u]]]"},
+        {"%oo%", "Text LIKE $pattern", "%foo%", "[[[3u]];[[4u]];[[5u]]]", "%ar%"},
+    };
+    for (const auto& test : wildcardCases) {
+        const auto params = FulltextPatternParams(test.Pattern);
+        for (const bool wildcardFirst : {false, true}) {
+            for (const bool useIndex : {false, true}) {
+                TString wildcard = useIndex
+                    ? Sprintf("FulltextMatch(Text, '%s', 'Wildcard' AS Mode)", test.Wildcard)
+                    : Sprintf("Text ILIKE '%s'", test.Wildcard);
+                if (test.SecondWildcard) {
+                    wildcard += useIndex
+                        ? Sprintf(" AND FulltextMatch(Text, '%s', 'Wildcard' AS Mode)", test.SecondWildcard)
+                        : Sprintf(" AND Text ILIKE '%s'", test.SecondWildcard);
+                }
+                const auto query = Sprintf(R"sql(
+                    DECLARE $pattern AS String;
+                    SELECT Key FROM `/Root/Texts` VIEW %s
+                    WHERE %s AND %s ORDER BY Key;
+                )sql", useIndex ? "fulltext_idx" : "PRIMARY KEY",
+                    wildcardFirst ? wildcard.c_str() : test.Predicate,
+                    wildcardFirst ? test.Predicate : wildcard.c_str());
+                const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, query << result.GetIssues().ToString());
+                CompareYson(test.Expected, FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }
+    }
+    for (const bool wildcardFirst : {false, true}) {
+        const char* wildcard = "FulltextMatch(Text, '%oo%', 'Wildcard' AS Mode, 'invalid' AS DefaultOperator)";
+        const char* like = "Text LIKE '%foo%'";
+        const auto query = Sprintf(R"sql(
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx WHERE %s AND %s;
+        )sql", wildcardFirst ? wildcard : like, wildcardFirst ? like : wildcard);
+        const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported default operator: `invalid`");
+    }
+
+    auto checkReads = [&](const char* predicate, const char* expected, ui64 expectedReads) {
+        const auto query = Sprintf(R"sql(
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx WHERE %s ORDER BY Key;
+        )sql", predicate);
+        const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Basic)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        UNIT_ASSERT(result.GetStats());
+        ui64 mainRowsRead = 0;
+        for (const auto& phase : TProtoAccessor::GetProto(*result.GetStats()).query_phases()) {
+            for (const auto& access : phase.table_access()) {
+                if (access.name() == "/Root/Texts") {
+                    mainRowsRead += access.reads().rows();
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(mainRowsRead, expectedReads);
+    };
+    checkReads("Text ILIKE '%foo%' AND Text LIKE '%bazxyz%'", "[[[0u]];[[3u]];[[5u]]]", 3);
+    checkReads("FulltextMatch(Text, '%foo%', 'Wildcard' AS Mode) AND Text LIKE '%bazxyz%'", "[[[0u]];[[3u]];[[5u]]]", 3);
+    checkReads("FulltextMatch(Text, '%достоевский%', 'Wildcard' AS Mode)", "[[[7u]];[[10u]]]", 2);
+
+    const auto unnamed = db.ExecuteQuery(R"sql(
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE FulltextMatch(Text, 'foo') AND FulltextMatch(Text, 'bar') ORDER BY Key;
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(unnamed.GetStatus(), EStatus::SUCCESS, unnamed.GetIssues().ToString());
+    CompareYson("[[[3u]];[[4u]];[[5u]]]", FormatResultSetYson(unnamed.GetResultSet(0)));
+    for (const auto* named : {
+            "FulltextMatch(Text, 'foo', 'or' AS DefaultOperator)",
+            "FulltextMatch(Text, 'foo bar', 'or' AS DefaultOperator, '1' AS MinimumShouldMatch)"}) {
+        for (const bool namedFirst : {false, true}) {
+            const char* plain = "FulltextMatch(Text, 'bar')";
+            const auto query = Sprintf(R"sql(
+                SELECT Key FROM `/Root/Texts` VIEW fulltext_idx WHERE %s AND %s;
+            )sql", namedFirst ? named : plain, namedFirst ? plain : named);
+            const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Multiple fulltext match predicates with named options are not supported");
+        }
+    }
+}
+
+Y_UNIT_TEST(SelectWithFulltextLikeWithoutNgrams) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+            (0, "abcdef"), (1, "xabc def"), (2, "abc def"), (3, "Σ"), (4, "σ"), (5, "ς"),
+            (6, "Достоевский Толстой"), (7, "Новости спорта"), (8, "ДОСТОЕВСКИЙ ТОЛСТОЙ"),
+            (9, "Достоевский"), (10, "Толстой");
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+
+    auto validate = [&](const char* pattern, const char* expected, const char* op = "LIKE") {
+        for (const auto* escape : {"", " ESCAPE '!'"}) {
+            const auto query = Sprintf(R"sql(
+                DECLARE $pattern AS String;
+                SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+                WHERE Text %s $pattern%s ORDER BY Key;
+            )sql", op, escape);
+            const auto params = TParamsBuilder().AddParam("$pattern").String(pattern).Build().Build();
+            const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+            if (expected) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+                if (TStringBuf(op) == "ILIKE") {
+                    TString primaryQuery = query;
+                    SubstGlobal(primaryQuery, "VIEW fulltext_idx", "VIEW PRIMARY KEY");
+                    const auto primary = db.ExecuteQuery(primaryQuery, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+                    UNIT_ASSERT_VALUES_EQUAL_C(primary.GetStatus(), EStatus::SUCCESS, primary.GetIssues().ToString());
+                    CompareYson(expected, FormatResultSetYson(primary.GetResultSet(0)));
+                }
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "No search terms were extracted");
+            }
+        }
+    };
+    AddIndex(db);
+    validate("%abc def", "[[[1u]];[[2u]]]");
+    validate("%abc def%", nullptr);
+    validate("Достоевский Толстой", "[[[6u]];[[8u]]]", "ILIKE");
+    validate("Новости спорта", "[[[7u]]]", "ILIKE");
+    const auto literal = db.ExecuteQuery(R"sql(
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE Text ILIKE 'Достоевский Толстой' ORDER BY Key;
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(literal.GetStatus(), EStatus::SUCCESS, literal.GetIssues().ToString());
+    CompareYson("[[[6u]];[[8u]]]", FormatResultSetYson(literal.GetResultSet(0)));
+    DropIndex(db);
+    AddIndex(db, "fulltext_plain", "keyword");
+    validate("abc%", nullptr);
+    for (const auto* view : {"PRIMARY KEY", "fulltext_idx"}) {
+        const auto query = Sprintf(R"sql(
+            DECLARE $pattern AS String;
+            SELECT Key FROM `/Root/Texts` VIEW %s
+            WHERE Text ILIKE $pattern AND Text LIKE $pattern ORDER BY Key;
+        )sql", view);
+        const auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+            FulltextPatternParams("σ")).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[[[4u]]]", FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
+Y_UNIT_TEST(SelectWithFulltextLikeEscapedKeyword) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    auto upsert = db.ExecuteQuery(R"sql(
+        UPSERT INTO `/Root/Texts` (`Key`, `Text`) VALUES
+            (0, "abc%def"), (1, "abcXdef"), (2, "abc def"),
+            (3, "abc%def suffix"), (4, "abc% def"), (5, NULL);
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+
+    AddIndex(db, "fulltext_plain", "keyword");
+
+    auto params = TParamsBuilder()
+        .AddParam("$pattern").String("abc!%def").Build()
+        .AddParam("$other").String("abc?%def").Build()
+        .AddParam("$spaced").String("abc!% def").Build()
+        .Build();
+    auto result = db.ExecuteQuery(R"sql(
+        DECLARE $pattern AS String;
+        DECLARE $other AS String;
+        DECLARE $spaced AS String;
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE Text LIKE $pattern ESCAPE '!' ORDER BY Key;
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE Text LIKE $pattern ESCAPE '!' AND Text LIKE $other ESCAPE '?' ORDER BY Key;
+        SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+        WHERE Text LIKE $spaced ESCAPE '!' ORDER BY Key;
+    )sql", NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson("[[[0u]]]", FormatResultSetYson(result.GetResultSet(0)));
+    CompareYson("[[[0u]]]", FormatResultSetYson(result.GetResultSet(1)));
+    CompareYson("[[[4u]]]", FormatResultSetYson(result.GetResultSet(2)));
+}
+
 Y_UNIT_TEST(ImbalanceNgrams) {
     auto kikimr = Kikimr();
     auto db = kikimr.GetQueryClient();
@@ -2489,6 +3311,46 @@ Y_UNIT_TEST_QUAD(SelectWithFulltextMatchShorterThanMinNgram, RELEVANCE, UTF8) {
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), querySettings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         UNIT_ASSERT(result.GetIssues().ToString().contains("No search terms were extracted from the query"));
+    }
+}
+
+Y_UNIT_TEST(ExplainFulltextLike) {
+    auto kikimr = Kikimr();
+    auto db = kikimr.GetQueryClient();
+    CreateTexts(db);
+    AddIndexNGram(db, 3, 3, false, false, false, "whitespace");
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+    struct TCase {
+        const char* Operator;
+        const char* Pattern;
+        const char* Query;
+    };
+    const TCase cases[] = {
+        {"LIKE", "'%abc!%def%'", "CONTAINS(\"abc%def\")"},
+        {"LIKE", "$p", "LIKE($p ESCAPE \"!\")"},
+        {"ILIKE", "$p", "ILIKE($p ESCAPE \"!\")"},
+    };
+    for (const auto& test : cases) {
+        const TString query = Sprintf(R"sql(
+            DECLARE $p AS String;
+            SELECT Key FROM `/Root/Texts` VIEW fulltext_idx
+            WHERE Text %s %s ESCAPE '!';
+        )sql", test.Operator, test.Pattern);
+        const auto result = session.ExplainDataQuery(query).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        const auto read = FindPlanNodeByKv(plan, "Name", "ReadFullTextIndex");
+        UNIT_ASSERT(read.IsDefined());
+        const auto& properties = read.GetMapSafe();
+        UNIT_ASSERT(properties.contains("Query"));
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("Query").GetStringSafe(), test.Query);
+        if (TStringBuf(test.Pattern) != "$p") {
+            UNIT_ASSERT(properties.contains("SearchTerms"));
+            UNIT_ASSERT_STRING_CONTAINS(properties.at("SearchTerms").GetStringSafe(), "bc%");
+            UNIT_ASSERT_STRING_CONTAINS(properties.at("SearchTerms").GetStringSafe(), "c%d");
+        }
     }
 }
 

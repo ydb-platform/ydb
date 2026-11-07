@@ -2896,6 +2896,16 @@ void TKqpTasksGraph::BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQu
         settings->MutableQuerySettings()->SetQuery(TString(queryBuilder));
     }
 
+    for (const auto& query : fullTextSource.GetQuerySettings().GetPatternQueries()) {
+        const auto value = ExtractPhyValue(
+            stageInfo, query.GetPattern(),
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+        auto* resolved = settings->MutableQuerySettings()->AddPatternQueries();
+        resolved->SetPattern(TString(value.AsStringRef()));
+        resolved->SetEscape(query.GetEscape());
+        resolved->SetMode(query.GetMode());
+    }
+
     for (const auto& token : fullTextSource.GetQuerySettings().GetTokens()) {
         for (const auto& resolved : ResolveFullTextQueryTokenExpanded(token, stageInfo)) {
             settings->MutableQuerySettings()->AddTokens(resolved);

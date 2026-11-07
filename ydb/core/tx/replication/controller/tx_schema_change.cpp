@@ -791,7 +791,7 @@ public:
 };
 
 void TController::StartSchemaChangeDstAlter(const std::pair<ui64, ui64>& key, const TActorContext& ctx) {
-    if (ReplicationsWithSourceOffsetMismatch.contains(key.first) || SchemaChangeDstAlterers.contains(key)) {
+    if (SchemaChangeDstAlterers.contains(key)) {
         return;
     }
 
@@ -880,9 +880,6 @@ void TController::RunTxSchemaChangeDstAlterTxId(TEvPrivate::TEvSchemaChangeDstAl
 }
 
 void TController::StartSchemaChangeTargetFlush(const std::pair<ui64, ui64>& key, const TActorContext& ctx) {
-    if (ReplicationsWithSourceOffsetMismatch.contains(key.first)) {
-        return;
-    }
     const auto barrierIt = SchemaBarriers.find(key);
     if (CommittingTxId || barrierIt == SchemaBarriers.end()) {
         return;

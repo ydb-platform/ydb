@@ -63,7 +63,21 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->RemoveTarget(db, *Replication, tid);
+        db.Table<Schema::Targets>().Key(rid, tid).Delete();
+        db.Table<Schema::SrcStreams>().Key(rid, tid).Delete();
+        for (const auto wid : target->GetWorkers()) {
+            db.Table<Schema::Workers>().Key(rid, tid, wid).Delete();
+        }
+        Self->IndexBuilds.erase({rid, tid});
+        for (auto it = Self->IndexBuildProgress.begin(); it != Self->IndexBuildProgress.end();) {
+            if (it->first.ReplicationId() == rid && it->first.TargetId() == tid) {
+                db.Table<Schema::IndexBuildWorkers>().Key(rid, tid, it->first.WorkerId()).Delete();
+                Self->IndexBuildProgress.erase(it++);
+            } else {
+                ++it;
+            }
+        }
+        Replication->RemoveTarget(tid);
 
         return true;
     }

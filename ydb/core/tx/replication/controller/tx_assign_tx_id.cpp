@@ -74,12 +74,6 @@ public:
             {"assigned", Self->AssignedTxIds.size()},
             {"allocated", Self->AllocatedTxIds.size()});
 
-        const auto replication = Self->GetSingle();
-        if (replication && Self->ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-            Self->PendingTxId.clear();
-            return true;
-        }
-
         NIceDb::TNiceDb db(txc.DB);
 
         auto result = Process([&](const TRowVersion& version) -> TAssignResult {
@@ -176,10 +170,8 @@ public:
         Self->TabletCounters->Simple()[COUNTER_ALLOCATED_TX_IDS] = Self->AllocatedTxIds.size();
         Self->TabletCounters->Simple()[COUNTER_ASSIGNED_TX_IDS] = Self->AssignedTxIds.size();
 
-        if (Self->ReplicationsWithSourceOffsetMismatch.empty()) {
-            for (auto& [nodeId, ev] : Result) {
-                ctx.Send(MakeReplicationServiceId(nodeId), std::move(ev));
-            }
+        for (auto& [nodeId, ev] : Result) {
+            ctx.Send(MakeReplicationServiceId(nodeId), std::move(ev));
         }
 
         Self->AllocateTxIds(ctx);
@@ -194,10 +186,6 @@ public:
 }; // TTxAssignTxId
 
 void TController::AllocateTxIds(const TActorContext& ctx) {
-    const auto replication = GetSingle();
-    if (replication && ReplicationsWithSourceOffsetMismatch.contains(replication->GetId())) {
-        return;
-    }
     if (AllocateTxIdInFlight || AllocatedTxIds.size() >= MinAllocatedTxIds) {
         return;
     }

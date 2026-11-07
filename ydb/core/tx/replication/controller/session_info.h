@@ -14,7 +14,6 @@ public:
 
     void SetReady();
     bool IsReady() const;
-    bool SupportsSourceOffsets = false;
 
     void AttachWorker(const TWorkerId& id);
     void DetachWorker(const TWorkerId& id);

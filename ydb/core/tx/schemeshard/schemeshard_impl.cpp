@@ -4551,6 +4551,24 @@ NKikimrSchemeOp::TChangefeedUnderlyingTopics ConvertChangefeedUnderlyingTopics(
     return result;
 }
 
+void TSchemeShard::CreateTableSchemeSnapshot(
+    NIceDb::TNiceDb& db,
+    TPathId pathId,
+    const NKikimrSchemeOp::TBackupTask& settings)
+{
+    Y_ABORT_UNLESS(settings.HasTable());
+
+    db.Table<Schema::TableSchemeSnapshots>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::TableSchemeSnapshots::TableName>(settings.GetTableName()),
+        NIceDb::TUpdate<Schema::TableSchemeSnapshots::TableDescription>(settings.GetTable().SerializeAsString()),
+        NIceDb::TUpdate<Schema::TableSchemeSnapshots::ChangefeedUnderlyingTopics>(
+            ConvertChangefeedUnderlyingTopics(settings.GetChangefeedUnderlyingTopics()).SerializeAsString()));
+}
+
+void TSchemeShard::RemoveTableSchemeSnapshot(NIceDb::TNiceDb& db, TPathId pathId) {
+    db.Table<Schema::TableSchemeSnapshots>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
 void TSchemeShard::PersistBackupSettings(
         NIceDb::TNiceDb& db,
         TPathId pathId,
@@ -4929,6 +4947,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
         db.Table<Schema::BackupSettings>().Key(pathId.LocalPathId).Delete();
     }
     db.Table<Schema::MigratedBackupSettings>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+    RemoveTableSchemeSnapshot(db, pathId);
 
     db.Table<Schema::RestoreTasks>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 
@@ -5204,6 +5223,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
         db.Table<Schema::BackupSettings>().Key(pathId.LocalPathId).Delete();
     }
     db.Table<Schema::MigratedBackupSettings>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+    RemoveTableSchemeSnapshot(db, pathId);
 
     db.Table<Schema::RestoreTasks>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
 

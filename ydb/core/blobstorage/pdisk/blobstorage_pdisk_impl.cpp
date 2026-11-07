@@ -423,7 +423,7 @@ void TPDisk::Stop() {
     // Drain Forseti
     while (!ForsetiScheduler.IsEmpty()) {
         ForsetiTimeNs += 1000000000ull;
-        TIntrusivePtr<NSchLab::TJob> job = ForsetiScheduler.SelectJob(ForsetiTimeNs);
+        auto* job = ForsetiScheduler.SelectJob(ForsetiTimeNs);
         if (job) {
             TRequestBase* req = static_cast<TRequestBase*>(job->Payload);
             ForsetiTimeNs += job->Cost + 1;
@@ -4706,7 +4706,7 @@ void TPDisk::GetJobsFromForsetti() {
 
     while (ForsetiTimeNs <= virtualDeadline) {
         ForsetiTimeNs++;
-        TIntrusivePtr<NSchLab::TJob> job = ForsetiScheduler.SelectJob(ForsetiTimeNs);
+        auto* job = ForsetiScheduler.SelectJob(ForsetiTimeNs);
         if (job) {
             TRequestBase* req = static_cast<TRequestBase*>(job->Payload);
 
@@ -5097,7 +5097,7 @@ void TPDisk::AddCbs(ui32 ownerId, EGate gate, const char *gateName, ui64 minBudg
         cbs.CbsName = Sprintf("Owner_%" PRIu32 "_%s", (ui32)ownerId, gateName);
         cbs.MaxBudget = minBudget;
         ForsetiTimeNs++;
-        ForsetiScheduler.AddCbs(ownerId, gate, cbs, ForsetiTimeNs);
+        ForsetiScheduler.AddCbs(ownerId, gate, std::move(cbs), ForsetiTimeNs);
     }
 }
 

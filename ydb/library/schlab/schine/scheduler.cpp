@@ -1,4 +1,5 @@
 #include "scheduler.h"
+#include <algorithm>
 
 #include <library/cpp/lwtrace/all.h>
 
@@ -43,6 +44,7 @@ TCbs* TScheduler::GetCbs(ui8 ownerIdx, ui8 gateIdx) {
 }
 
 void TScheduler::AddCbs(ui8 ownerIdx, ui8 gateIdx, TCbs newCbs, ui64 timeNs) {
+    Y_ABORT_UNLESS(newCbs.IsEmpty() && newCbs.State == CbsStateIdle);
     if (!IsProbeRegistrationDone) {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(SCHLAB_PROVIDER));
         IsProbeRegistrationDone = true;
@@ -64,7 +66,8 @@ void TScheduler::AddCbs(ui8 ownerIdx, ui8 gateIdx, TCbs newCbs, ui64 timeNs) {
     Y_ABORT_UNLESS(!cbs->IsPresent(), "CbsIdx# %" PRIu32 " ownerId# %" PRIu32 " gateIdx# %" PRIu32 " Marker# SCH02",
         (ui32)cbsIdx, (ui32)ownerIdx, (ui32)gateIdx);
 
-    *cbs = newCbs;
+    *cbs = std::move(newCbs);
+    ActiveRunningCount += IsActiveRunning(cbs->State);
     cbs->CbsIdx = cbsIdx;
     gate.CbsIdx = cbsIdx;
 
@@ -112,13 +115,13 @@ ui32 TScheduler::NewCbs() {
         }
     }
     Cbs.emplace_back();
+    NonEmptyCbs.reserve(Cbs.capacity());
     FirstEmptyCbs = Max<ui32>();
     return (Cbs.size() - 1);
 }
 
 TIntrusivePtr<TJob> TScheduler::CreateJob() {
-    TIntrusivePtr<NSchLab::TJob> job = new NSchLab::TJob;
-    return job;
+    return JobPool->Acquire();
 }
 
 void TScheduler::AddJob(TCbs *cbs, TIntrusivePtr<TJob> &job, ui8 ownerIdx, ui8 gateIdx, ui64 timeNs) {
@@ -133,6 +136,10 @@ void TScheduler::AddJob(TCbs *cbs, TIntrusivePtr<TJob> &job, ui8 ownerIdx, ui8 g
     }
 
     cbs->PushJob(job);
+    if (wasEmpty) {
+        const ui32 idx = cbs->CbsIdx;
+        NonEmptyCbs.insert(std::lower_bound(NonEmptyCbs.begin(), NonEmptyCbs.end(), idx), idx);
+    }
     HasAtLeastOneJob = true;
 
     LWPROBE(AddJob, (ui32)ownerIdx * 1000 + (ui32)gateIdx, timeNs, cbs->JobsSize, cbs->JobsCost);
@@ -182,7 +189,7 @@ void TScheduler::OnJobCostChange(TCbs *cbs, TIntrusivePtr<TJob> &job, ui64 timeN
     }
 }
 
-TIntrusivePtr<TJob> TScheduler::SelectJob(ui64 timeNs) {
+TJob* TScheduler::SelectJob(ui64 timeNs) {
     AddSchLogFrame(timeNs);
     // EDF
     bool doLog = IsBinLogEnabled;
@@ -191,21 +198,19 @@ TIntrusivePtr<TJob> TScheduler::SelectJob(ui64 timeNs) {
         log.Write((ui64)FrameTypeSelectJob); // FrameType
         log.Write(timeNs); // TimeStamp
     }
-    TIntrusivePtr<TJob> bestJob = nullptr;
+    TJob* bestJob = nullptr;
     double totalWeightedCost = 0.0;
 
     bool foundAtLeastOneJob = false;
 
     if (HasAtLeastOneJob) {
-        const size_t cbsSize = Cbs.size();
-
-        for (ui32 idx = 0; idx < cbsSize; ++idx) {
+        for (ui32 idx : NonEmptyCbs) {
             TCbs &cbs = Cbs[idx];
 
             if (cbs.IsPresent() && !cbs.IsEmpty()) {
                 foundAtLeastOneJob = true;
 
-                totalWeightedCost += (double)cbs.Weight / (double)cbs.PeekJob()->Cost;
+                totalWeightedCost += (double)cbs.Weight / (double)cbs.PeekJobBorrowed()->Cost;
                 if (cbs.State == CbsStateDepleted || cbs.State == CbsStateDepletedGrub) {
                     EvaluateNextJob(idx, timeNs, doLog);
                     if (cbs.State == CbsStateDepleted || cbs.State == CbsStateDepletedGrub) {
@@ -219,9 +224,9 @@ TIntrusivePtr<TJob> TScheduler::SelectJob(ui64 timeNs) {
                     log.Write(cbs.CurBudget); // CbsCurBudget
                 }
                 if (!bestJob) {
-                    bestJob = cbs.PeekJob();
-                } else if (cbs.PeekJob()->Deadline < bestJob->Deadline) {
-                    bestJob = cbs.PeekJob();
+                    bestJob = cbs.PeekJobBorrowed();
+                } else if (cbs.PeekJobBorrowed()->Deadline < bestJob->Deadline) {
+                    bestJob = cbs.PeekJobBorrowed();
                 }
             }
         }
@@ -252,29 +257,27 @@ TIntrusivePtr<TJob> TScheduler::SelectJob(ui64 timeNs) {
 
     if (bestJob) {
         bestJob->State = JobStateRunning;
-        Cbs[bestJob->CbsIdx].State = CbsStateRunning;
+        SetCbsState(Cbs[bestJob->CbsIdx], CbsStateRunning);
         accountCbsIdx = bestJob->CbsIdx;
     } else {
         double threshold = double(Rng() % (1ull << 23)) / double(1ull << 23) * totalWeightedCost;
         double acc = 0;
-        TIntrusivePtr<TJob> job = nullptr;
+        TJob* job = nullptr;
         
-        const size_t cbsSize = Cbs.size();
-
-        for (ui32 idx = 0; idx < cbsSize; ++idx) {
+        for (ui32 idx : NonEmptyCbs) {
             TCbs &cbs = Cbs[idx];
             if (cbs.IsPresent() && !cbs.IsEmpty()) {
                 if (!bestJob) {
-                    job = cbs.PeekJob();
+                    job = cbs.PeekJobBorrowed();
                     acc += job->WeightedInverseCost;
                     if (acc > threshold) {
                         bestJob = job;
                     }
                 }
                 //if (!bestJob) {
-                //    bestJob = cbs.PeekJob();
-                //} else if (cbs.PeekJob()->Deadline < bestJob->Deadline) {
-                //    bestJob = cbs.PeekJob();
+                //    bestJob = cbs.PeekJobBorrowed();
+                //} else if (cbs.PeekJobBorrowed()->Deadline < bestJob->Deadline) {
+                //    bestJob = cbs.PeekJobBorrowed();
                 //}
             }
             if (cbs.State == CbsStateDepletedGrub) {
@@ -322,7 +325,7 @@ void TScheduler::UpdateTotalWeight() {
 void TScheduler::EvaluateNextJob(ui64 cbsIdx, ui64 timeNs, bool doLogCbsUpdate) {
     auto &log = SchLog.Bin;
     TCbs &cbs = Cbs[cbsIdx];
-    TIntrusivePtr<TJob> job = cbs.PeekJob();
+    TJob* job = cbs.PeekJobBorrowed();
     i64 jobCost = job->Cost;
 
     // XXX - a reference to Resource Reservations for General Purpose Applications article (feb. 2009, IEEE)
@@ -342,7 +345,7 @@ void TScheduler::EvaluateNextJob(ui64 cbsIdx, ui64 timeNs, bool doLogCbsUpdate) 
         // leave Uact unchanged because it already accounts for the fraction of Disk Time currently used by the task
         job->Deadline = cbs.CbsDeadline;
         if (cbs.State != CbsStateActive) {
-            cbs.State = CbsStateActive;
+            SetCbsState(cbs, CbsStateActive);
         }
     } else {
         if (timeNs >= cbs.CbsDeadline) {
@@ -365,7 +368,7 @@ void TScheduler::EvaluateNextJob(ui64 cbsIdx, ui64 timeNs, bool doLogCbsUpdate) 
             }
             cbs.CurBudget = cbs.MaxBudget > jobCost ? cbs.MaxBudget : jobCost;
             job->Deadline = cbs.CbsDeadline;
-            cbs.State = CbsStateActive;
+            SetCbsState(cbs, CbsStateActive);
             LWPROBE(ActivateTask, (ui32)cbs.OwnerIdx * 1000 + cbs.GateIdx,
                     timeNs, prevUact, Uact, jobCost, cbs.CurBudget, cbs.Weight, TotalWeight);
         } else {
@@ -377,14 +380,7 @@ void TScheduler::EvaluateNextJob(ui64 cbsIdx, ui64 timeNs, bool doLogCbsUpdate) 
                 cbs.CbsDeadline += jobPeriod;
             }
             job->Deadline = cbs.CbsDeadline;
-            bool isTheLast = true;
-            for (ui32 idx = 0; idx < Cbs.size(); ++idx) {
-                if (Cbs[idx].State == CbsStateActive ||
-                        Cbs[idx].State == CbsStateRunning) {
-                    isTheLast = false;
-                    break;
-                }
-            }
+            const bool isTheLast = ActiveRunningCount == 0;
             ECbsState state;
             if (!isTheLast) {
                 state = CbsStateDepleted;
@@ -392,7 +388,7 @@ void TScheduler::EvaluateNextJob(ui64 cbsIdx, ui64 timeNs, bool doLogCbsUpdate) 
                 state = CbsStateDepletedGrub;
             }
             if (state != cbs.State) {
-                cbs.State = state;
+                SetCbsState(cbs, state);
             }
         }
     }
@@ -405,12 +401,12 @@ void TScheduler::EvaluateNextJob(ui64 cbsIdx, ui64 timeNs, bool doLogCbsUpdate) 
     }
 }
 
-void TScheduler::CompleteJob(ui64 timeNs, TIntrusivePtr<TJob> &job) {
+void TScheduler::CompleteJob(ui64 timeNs, TJob* job) {
     Y_ABORT_UNLESS(job);
     Y_ABORT_UNLESS(job->CbsIdx != TCbs::InvalidIdx);
     Y_ABORT_UNLESS(job->CbsIdx < Cbs.size());
     Y_ABORT_UNLESS(!Cbs[job->CbsIdx].IsEmpty());
-    Y_ABORT_UNLESS(Cbs[job->CbsIdx].PeekJob() == job.Get());
+    Y_ABORT_UNLESS(Cbs[job->CbsIdx].PeekJobBorrowed() == job);
 
 
     AddSchLogFrame(timeNs);
@@ -454,7 +450,7 @@ void TScheduler::CompleteJob(ui64 timeNs, TIntrusivePtr<TJob> &job) {
             if (Uact < 0.0) {
                 Uact = 0.0;
             }
-            account.State = CbsStateDepleted;
+            SetCbsState(account, CbsStateDepleted);
         }
         LWPROBE(CompleteJobInDepletedCbs, (ui32)cbs.OwnerIdx * 1000 + cbs.GateIdx,
                 timeNs, prevUact, Uact, job->Cost, dqi, account.CurBudget, account.Weight, TotalWeight);
@@ -478,10 +474,14 @@ void TScheduler::CompleteJob(ui64 timeNs, TIntrusivePtr<TJob> &job) {
         log.Write((ui64)job->State); // JobState
     }
 
-    cbs.PopJob();
+    // Transfer the queue reference; retain job through the remaining accesses.
+    auto completed = cbs.PopJob();
     LWPROBE(PopJob, (ui32)cbs.OwnerIdx * 1000 + cbs.GateIdx, timeNs, cbs.JobsSize, cbs.JobsCost);
     if (cbs.IsEmpty()) {
-        cbs.State = CbsStateIdle;
+        SetCbsState(cbs, CbsStateIdle);
+        auto it = std::lower_bound(NonEmptyCbs.begin(), NonEmptyCbs.end(), cbs.CbsIdx);
+        Y_ABORT_UNLESS(it != NonEmptyCbs.end() && *it == cbs.CbsIdx);
+        NonEmptyCbs.erase(it);
     } else {
         EvaluateNextJob(job->CbsIdx, timeNs, false);
     }
@@ -516,9 +516,9 @@ void TScheduler::AddSchLogFrame(ui64 timeNs) {
 
 void TScheduler::SchLogCbsKeyframeRecord(const TCbs &cbs) {
     // Record CbsKeyframe fromat (7+ items):
-    // 7 + 5 * cbs.Jobs.size() + 1 + 1
+    // 7 + 5 * cbs.JobsSize + 1 + 1
     auto &log = SchLog.Bin;
-    if (!log.HasSpace(7 + 5 * cbs.Jobs.size() + 1 + 1)) {
+    if (!log.HasSpace(7 + 5 * cbs.JobsSize + 1 + 1)) {
         SchLog.IsFull = true;
         return;
     }
@@ -530,7 +530,7 @@ void TScheduler::SchLogCbsKeyframeRecord(const TCbs &cbs) {
     log.Write(cbs.CbsDeadline); // Deadline
     log.Write((ui64)cbs.State); // State
     for (auto jobIt = cbs.Jobs.begin(); jobIt != cbs.Jobs.end(); ++jobIt) {
-        TJob &job = **jobIt;
+        const TJob &job = *jobIt;
         // Record JobKeyframe format (5 items):
         log.Write(job.Id); // Id
         log.Write(job.Cost); // Cost
@@ -550,7 +550,7 @@ void TScheduler::SchLogKeyframe(ui64 timeNs) {
     }
     log.Write((ui64)FrameTypeKey); // FrameType (1+ items)
     // Frame Keyframe format (3+ items):
-    // 3 + ?*(7 + 5 * cbs.Jobs.size() + 1) + 1
+    // 3 + ?*(7 + 5 * cbs.JobsSize + 1) + 1
     log.Write(timeNs); // TimeStamp
     log.Write((ui64)0); //EpochTime
     log.Write(Uact); // Uact

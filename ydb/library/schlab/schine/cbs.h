@@ -2,7 +2,7 @@
 #include "defs.h"
 #include "cbs_state.h"
 #include "job.h"
-#include <util/generic/list.h>
+#include <util/generic/intrlist.h>
 #include <util/generic/string.h>
 
 namespace NKikimr {
@@ -28,7 +28,7 @@ public:
 
     static const ui64 InvalidIdx = 65535;
 
-    typedef TList<TIntrusivePtr<TJob>> TJobs;
+    using TJobs = TIntrusiveList<TJob>;
     TJobs Jobs;
     ui64 JobsSize;
     ui64 JobsCost;
@@ -39,15 +39,38 @@ public:
 public:
     TCbs();
     ~TCbs();
+    TCbs(TCbs&& other) noexcept;
+    TCbs& operator=(TCbs&& other) noexcept;
+    TCbs(const TCbs&) = delete;
+    TCbs& operator=(const TCbs&) = delete;
 
     void Reset(ui64 cbsIdx, ui8 ownerIdx, ui8 gateIdx);
     void PushJob(TIntrusivePtr<TJob> &job);
     TIntrusivePtr<TJob> PeekTailJob();
-    TIntrusivePtr<TJob> PeekJob();
+    TIntrusivePtr<TJob> PeekJob() {
+        Y_ABORT_UNLESS(!Jobs.Empty());
+        if (Jobs.Empty()) {
+            return nullptr;
+        }
+        return Jobs.Front();
+    }
+    // Valid only while the queue retains the job; caller must not remove it.
+    TJob* PeekJobBorrowed() {
+        Y_ABORT_UNLESS(!Jobs.Empty());
+        if (Jobs.Empty()) {
+            return nullptr;
+        }
+        return Jobs.Front();
+    }
     TIntrusivePtr<TJob> PopJob();
-    bool IsEmpty();
-    bool IsPresent();
+    bool IsEmpty() {
+        return Jobs.Empty();
+    }
+    bool IsPresent() {
+        return CbsIdx != InvalidIdx;
+    }
 protected:
+    void Swap(TCbs& other) noexcept;
     void DeleteJobs();
 };
 

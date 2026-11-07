@@ -57,13 +57,6 @@ struct TConnectRightCheckResult {
     TStringBuf Reason;
 };
 
-// Temporary LOGBROKER-10668: methods that may omit credentials when EnableAnonymousDiscovery is on.
-// A presented token or client certificate is still checked.
-constexpr TStringBuf AnonymousDiscoveryMethods[] = {
-    "NKikimrClient.TGRpcServer/ChooseProxy",
-    "Ydb.Discovery.V1.DiscoveryService/ListEndpoints",
-};
-
 template<typename TCtx>
 bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
     IRequestProxyCtx* requestProxyCtx = ctx;
@@ -129,6 +122,16 @@ class TGrpcRequestCheckActor
 
     static constexpr bool IsHttpRequest = std::is_same_v<TEvent, TEvHttpRequestAuthAndCheck>;
     static constexpr bool IsGrpcRequest = !IsHttpRequest;
+
+    // Temporary: methods that may omit credentials when EnableAnonymousDiscovery is on.
+    // A presented token or client certificate is still checked.
+    static bool IsAnonymousDiscoveryMethod(TStringBuf method) {
+        static constexpr TStringBuf methods[] = {
+            "NKikimrClient.TGRpcServer/ChooseProxy",
+            "Ydb.Discovery.V1.DiscoveryService/ListEndpoints",
+        };
+        return IsIn(methods, method);
+    }
 
 public:
     void OnAccessDenied(const TEvTicketParser::TError& error, const TActorContext& ctx) {
@@ -280,7 +283,7 @@ public:
         }
 
         const TString method = GrpcRequestBaseCtx_->GetRpcMethodName();
-        if (!IsIn(AnonymousDiscoveryMethods, method)) {
+        if (!IsAnonymousDiscoveryMethod(method)) {
             return;
         }
 

@@ -16,7 +16,8 @@ NActors::IActor* CreatePoolResolverActor(
 
 // Fetch and create pool in scheme shard
 NActors::IActor* CreatePoolFetcherActor(const NActors::TActorId& replyActorId, const TString& databaseId, const TString& poolId,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig);
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const NKikimrConfig::TWorkloadManagerConfig& workloadManagerConfig,
+    bool syncVersion = false);
 NActors::IActor* CreatePoolCreatorActor(const NActors::TActorId& replyActorId, const TString& databaseId, const TString& poolId,
     const NResourcePool::TPoolSettings& poolConfig, TIntrusiveConstPtr<NACLib::TUserToken> userToken, NACLibProto::TDiffACL diffAcl);
 

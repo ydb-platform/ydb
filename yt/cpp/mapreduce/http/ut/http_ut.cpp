@@ -1,6 +1,11 @@
 #include "simple_server.h"
 
+#include <yt/cpp/mapreduce/common/retry_lib.h>
+
+#include <yt/cpp/mapreduce/http/context.h>
+#include <yt/cpp/mapreduce/http/host_manager.h>
 #include <yt/cpp/mapreduce/http/http.h>
+#include <yt/cpp/mapreduce/http/http_client.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
 
@@ -14,6 +19,8 @@
 
 using namespace NYT;
 using namespace testing;
+
+using NYT::NPrivate::THostManager;
 
 void WriteDataFrame(TStringBuf string, IOutputStream* stream)
 {
@@ -65,6 +72,7 @@ struct TMisbehavingServerConfig
     TDuration HeaderDelay;
     bool SendInvalidHeader = false;
     TDuration BodyDelay;
+    TString ResponseBody = "42";
 };
 
 std::unique_ptr<TSimpleServer> CreateMisbehavingServer(TMisbehavingServerConfig config)
@@ -111,7 +119,7 @@ std::unique_ptr<TSimpleServer> CreateMisbehavingServer(TMisbehavingServerConfig 
                 }
 
                 *output << "\r\n";
-                *output << "42";
+                *output << config.ResponseBody;
                 output->Flush();
             } catch (const std::exception& exc) {
             }
@@ -291,4 +299,23 @@ TEST(TWrapSystemErrorTest, BodyTimeout)
         request.GetResponseStream()->ReadAll(),
         TErrorResponse,
         "can not read from socket input stream");
+}
+
+TEST(THostManagerTest, EmptyHostListIsTransient)
+{
+    auto server = CreateMisbehavingServer({
+        .ResponseBody = "[]",
+    });
+    TClientContext context;
+    context.ServerName = server->GetAddress();
+    context.HttpClient = NHttpClient::CreateDefaultHttpClient();
+
+    try {
+        THostManager::Get().GetProxyForHeavyRequest(context);
+        FAIL() << "Empty discovery response must fail";
+    } catch (const TErrorResponse& error) {
+        EXPECT_THAT(error.what(), HasSubstr("returned empty host list"));
+        EXPECT_TRUE(IsRetriable(error));
+        EXPECT_FALSE(error.GetRequestId().empty());
+    }
 }

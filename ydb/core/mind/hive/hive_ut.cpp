@@ -9138,6 +9138,44 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         MakeSureTabletIsUp(runtime, tablet2, 0);
     }
 
+    Y_UNIT_TEST(TestMonResumeTabletTxType) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+        TActorId sender = runtime.AllocateEdgeActor(0);
+
+        THolder<TEvHive::TEvCreateTablet> ev = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+        ui64 tablet = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tablet, 0);
+
+        {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(HTTP_METHOD_POST);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("ResumeTablet");
+            auto* p3 = pb.AddQueryParams();
+            p3->SetKey("tablet");
+            p3->SetValue(TStringBuilder() << tablet);
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+        }
+
+        UNIT_ASSERT_GT(GetTabletTxCompleted(runtime, hiveTablet, "Hive/TxMonResumeTablet"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetTabletTxCompleted(runtime, hiveTablet, "Hive/TxMonStopTablet"), 0);
+    }
+
     Y_UNIT_TEST(TestTabletAvailability) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
@@ -11008,6 +11046,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         makeRequest(10, NKikimrProto::ERROR, ++version);
         makeRequest(0, NKikimrProto::ERROR, ++version);
         makeRequest(5, NKikimrProto::OK, ++version);
+
+        // A reply from a tenant hive is forwarded to the initiator by TTxShrinkPoolReply
+        {
+            auto reply = std::make_unique<TEvHive::TEvShrinkStoragePoolReply>();
+            reply->Record.SetStatus(NKikimrProto::ERROR);
+            runtime.SendToPipe(hiveTablet, senderA, reply.release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            runtime.GrabEdgeEventRethrow<TEvHive::TEvShrinkStoragePoolReply>(handle);
+        }
+        UNIT_ASSERT_GT(GetTabletTxCompleted(runtime, hiveTablet, "Hive/TxShrinkPoolReply"), 0);
     }
 
     void TestShrinkStoragePool(TTestBasicRuntime& runtime, bool& activeZone) {

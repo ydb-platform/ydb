@@ -28,11 +28,6 @@ void TSessionsManager::Start(NColumnShard::TColumnShard& shard) const {
     if (!SourceSessions.empty() || !DestSessions.empty()) {
         VerifyNoDeferredPortionLoading();
     }
-    if (!shard.GetIndexAs<TColumnEngineForLogs>().AreAllPortionsLoaded(std::nullopt)) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-            {"skipReason", "portions_not_loaded"});
-        return;
-    }
     for (auto&& i : SourceSessions) {
         if (i.second->IsReadyForStarting()) {
             i.second->PrepareToStart(shard);

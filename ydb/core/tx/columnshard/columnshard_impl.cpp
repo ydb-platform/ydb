@@ -2037,7 +2037,6 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(NLocalDbBackup::TEvStartBackup, Handle);
         HFunc(NLocalDbBackup::TEvCancelBackup, Handle);
         hFunc(TEvPrivate::TEvPrefetchPortionsMetadata, Handle);
-        hFunc(TEvPrivate::TEvSetLoadedKeyRanges, Handle);
         hFunc(TEvPrivate::TEvReportBaseStatistics, Handle);
         hFunc(TEvPrivate::TEvReportExecutorStatistics, Handle);
         HFunc(NEvents::TDataEvents::TEvWrite, Handle);

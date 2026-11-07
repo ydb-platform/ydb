@@ -336,13 +336,6 @@ void TColumnShard::Handle(TEvPrivate::TEvPrefetchPortionsMetadata::TPtr& /*ev*/)
     }
 }
 
-void TColumnShard::Handle(TEvPrivate::TEvSetLoadedKeyRanges::TPtr& ev) {
-    auto& engine = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
-    engine.GetGranulePtrVerified(ev->Get()->PathId)->SetLoadedKeyRanges(std::move(ev->Get()->LoadedKeyRanges));
-    ScanGate.ReleaseLoadedPortions();
-    DrainWriteQueue(ActorContext());
-}
-
 void TColumnShard::Handle(TEvPrivate::TEvPingSnapshotsUsage::TPtr& /*ev*/, const TActorContext& ctx) {
     const TDuration stalenessLivetime = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStaleness();
     const TDuration stalenessInMem = NYDBTest::TControllers::GetColumnShardController()->GetMaxReadStalenessInMem();

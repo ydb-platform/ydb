@@ -1312,8 +1312,17 @@ namespace NKikimr::NDDisk {
         struct TSyncSourceCookie {
             ui64 SyncId;
             bool PersistentBuffer;
+            // The interconnect session of a remote read, known after TEvNodeConnected. The source replies
+            // through this session, so the reply is lost when the session is.
+            TActorId Session = {};
+            // The node of a remote source, 0 for a local one.
+            ui32 NodeId = 0;
         };
         THashMap<ui64, TSyncSourceCookie> SyncSourceCookies;
+        // Pending reads per remote source node; the subscription to the node is dropped when none remain.
+        THashMap<ui32, ui32> SyncSourceReadsPerNode;
+        // Forgets a pending source read and unsubscribes from its node when no other read waits for that node.
+        void ForgetSyncSource(ui64 cookie);
         void Handle(TEvSync::TPtr ev);
         // Requests write.Selector of the input from its source.
         void SendSyncSourceRead(TDataWrite& write, const TSyncReadRequest& input);
@@ -1326,6 +1335,8 @@ namespace NKikimr::NDDisk {
         template<class TResult>
         void HandleSyncSourceResult(typename TResult::TPtr ev, bool persistentBuffer);
         void HandleSyncSourceUndelivered(ui64 cookie, bool persistentBuffer);
+        void Handle(TEvInterconnect::TEvNodeConnected::TPtr ev);
+        void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev);
         void CompleteSyncSource(ui64 cookie, bool persistentBuffer,
             NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString reason,
             bool hasPayload, TRope data, std::vector<ui64> checksums);

@@ -342,9 +342,11 @@ def regenerate_summary(
     pull_number: str,
     workflow_run_id: str,
 ) -> Path:
-    """Regenerate ya-test.html with YDB history; rewrite job_summary from that markdown.
+    """Regenerate ya-test.html with YDB history; rewrite job_summary.
 
-    Does not touch GITHUB_STEP_SUMMARY — caller publishes the final file after S3 upload.
+    Layout: executor job_summary under a collapsed <details>, then the expanded
+    enriched markdown (history / build-fail headline). Does not touch
+    GITHUB_STEP_SUMMARY — caller publishes the final file after S3 upload.
     """
     # Ingest runs on the platform with YDB credentials; never inherit host kill-switch.
     os.environ.pop("CI_DISABLE_YDB_QA", None)
@@ -448,14 +450,19 @@ def regenerate_summary(
             f"Also see [fail summary]({public_dir_url}/try_{last['retry']}/fail_summary.txt).\n\n"
         )
 
-    parts: list[str] = ["## Summary (enriched)\n\n"]
+    parts: list[str] = []
+    # Keep the host/executor body under the cut; enriched section is the primary view.
+    if remote_body.strip():
+        parts.append("<details>\n")
+        parts.append("<summary>Remote executor summary</summary>\n\n")
+        parts.append(remote_body if remote_body.endswith("\n") else remote_body + "\n")
+        parts.append("</details>\n\n")
+    parts.append("## Summary (enriched)\n\n")
     if build_fail_line:
         parts.append(build_fail_line)
     if text_file.is_file():
         body = text_file.read_text(encoding="utf-8")
         parts.append(body if body.endswith("\n") else body + "\n")
-    # Replace (do not append to) remote job_summary — host may already include the
-    # full links+table body; appending would duplicate after the summary_text fix.
     job_summary.write_text("".join(parts), encoding="utf-8")
     return job_summary
 

@@ -537,7 +537,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         auto tableClient = kikimr.GetTableClient();
         {
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=ALTER_COLUMN, NAME=field, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`);");
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=pk_int_max, TYPE=MAX, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=pk_int_min_max, TYPE=MIN_MAX, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
             csController->WaitActualization(TDuration::Seconds(40));
             csController->WaitCompactions(TDuration::Seconds(5));
@@ -563,7 +563,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             }
         }
         {
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=pk_int_max);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=pk_int_min_max);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
             csController->WaitActualization(TDuration::Seconds(30));
             {
@@ -577,7 +577,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             }
         }
         {
-            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=pk_int_max, TYPE=MAX, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
+            helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=pk_int_min_max, TYPE=MIN_MAX, FEATURES=`{\"column_name\" : \"pk_int\"}`);");
             helper.ExecuteSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
             csController->WaitActualization(TDuration::Seconds(40));
             {

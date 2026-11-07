@@ -153,12 +153,12 @@ public:
         return *this;
     }
 
-    TSchemaHistory& AddMaxIndex(const ui32 indexId, const TString& name, const ui32 columnId) {
+    TSchemaHistory& AddMinMaxIndex(const ui32 indexId, const TString& name, const ui32 columnId) {
         auto* index = Last().AddIndexes();
         index->SetId(indexId);
         index->SetName(name);
-        index->SetClassName("MAX");
-        index->MutableMaxIndex()->SetColumnId(columnId);
+        index->SetClassName("MIN_MAX");
+        index->MutableMinMaxIndex()->SetColumnId(columnId);
         return *this;
     }
 
@@ -337,13 +337,13 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
 
     Y_UNIT_TEST(AddIndex) {
         TSchemaHistory history;
-        history.NextVersion().AddMaxIndex(10, "max_ts", KeyColumnId);
+        history.NextVersion().AddMinMaxIndex(10, "min_max_ts", KeyColumnId);
         CheckDiffsBuildSchemas(history);
     }
 
     Y_UNIT_TEST(DropIndex) {
         TSchemaHistory history;
-        history.NextVersion().AddMaxIndex(10, "max_ts", KeyColumnId);
+        history.NextVersion().AddMinMaxIndex(10, "min_max_ts", KeyColumnId);
         history.NextVersion().DropIndex(10);
         CheckDiffsBuildSchemas(history);
     }
@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
 
     Y_UNIT_TEST(MergedAddAndDropIndex) {
         TSchemaHistory history;
-        history.NextVersion().AddMaxIndex(10, "max_ts", KeyColumnId);
+        history.NextVersion().AddMinMaxIndex(10, "min_max_ts", KeyColumnId);
         history.NextVersion().DropIndex(10);
         CheckMergedDiffBuildsSchema(history);
     }
@@ -405,7 +405,7 @@ Y_UNIT_TEST_SUITE(TIndexInfoSchemaDiff) {
     Y_UNIT_TEST(MergedColumnAndIndexChanges) {
         TSchemaHistory history;
         history.NextVersion().DropColumn(2).AddColumn(4, "json", NScheme::NTypeIds::JsonDocument).SetSubColumns(4, 10);
-        history.NextVersion().AddMaxIndex(10, "max_ts", KeyColumnId).SetCompression(3, NKikimrSchemeOp::ColumnCodecZSTD);
+        history.NextVersion().AddMinMaxIndex(10, "min_max_ts", KeyColumnId).SetCompression(3, NKikimrSchemeOp::ColumnCodecZSTD);
         history.NextVersion().SetDefaultCompression(NKikimrSchemeOp::ColumnCodecZSTD).AddColumn(5, "a_first", NScheme::NTypeIds::Uint64);
         CheckMergedDiffBuildsSchema(history);
     }

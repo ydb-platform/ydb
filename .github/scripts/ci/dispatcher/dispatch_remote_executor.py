@@ -20,11 +20,14 @@ from typing import Any
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import (  # noqa: E402
     append_summary,
+    cfg_str,
     die,
     env,
     env_opt,
+    host_s3,
     http_get_text,
     load_config_json,
+    object_url,
     set_outputs,
     truthy,
 )
@@ -32,19 +35,8 @@ from _common import (  # noqa: E402
 TICKET_FILENAME = "remote-ticket.json"
 
 
-def host_s3(cfg: dict[str, Any]) -> tuple[str, str]:
-    ep = (cfg.get("host_s3_endpoint") or "").strip()
-    bucket = (cfg.get("host_s3_bucket") or "").strip()
-    if not ep or not bucket:
-        die("host_s3_endpoint/bucket missing")
-    return ep.rstrip("/"), bucket
-
-
 def repo_from_cfg(cfg: dict[str, Any]) -> str:
-    repo = (cfg.get("repository") or "").strip()
-    if not repo:
-        die("config.repository missing")
-    return repo
+    return cfg_str(cfg, "repository")
 
 
 def api(repo: str) -> str:
@@ -97,21 +89,13 @@ def gh(method, url, body=None, retries=5, ok_codes=(200, 201, 202, 204)):
     die(f"GitHub {method} {url} failed: {last_err}")
 
 
-def public_url(endpoint, bucket, key):
-    return f"{endpoint}/{bucket}/{key}"
-
-
 def utc_now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def platform_run_attempt() -> str:
-    return env("PLATFORM_RUN_ATTEMPT")
-
-
 def read_claim(cfg, platform_run_id: str) -> dict | None:
     endpoint, bucket = host_s3(cfg)
-    body = http_get_text(public_url(endpoint, bucket, f"remote-claims/{platform_run_id}.json"))
+    body = http_get_text(object_url(endpoint, bucket, f"remote-claims/{platform_run_id}.json"))
     if not body:
         return None
     claim = json.loads(body)
@@ -121,7 +105,7 @@ def read_claim(cfg, platform_run_id: str) -> dict | None:
 def build_ticket(cfg):
     """Ticket for the host VM: dispatch uses config.inputs only."""
     run_id = env("PLATFORM_RUN_ID")
-    attempt = platform_run_attempt()
+    attempt = env("PLATFORM_RUN_ATTEMPT")
     repo = env("PLATFORM_REPOSITORY")
     workflow = env("PLATFORM_WORKFLOW")
     run_url = env("PLATFORM_RUN_URL")
@@ -156,9 +140,9 @@ def cmd_enqueue():
 
 def wait_for_claim(cfg):
     platform_run_id = env("PLATFORM_RUN_ID")
-    want_attempt = platform_run_attempt()
+    want_attempt = env("PLATFORM_RUN_ATTEMPT")
     endpoint, bucket = host_s3(cfg)
-    url = public_url(endpoint, bucket, f"remote-claims/{platform_run_id}.json")
+    url = object_url(endpoint, bucket, f"remote-claims/{platform_run_id}.json")
     print(f"Waiting for claim at {url} (attempt={want_attempt}) ...")
     for i in range(2400):
         claim = read_claim(cfg, platform_run_id)
@@ -213,7 +197,7 @@ def wait_executor_done(cfg, run_id, run_url):
         return
     # Defence-in-depth if the VM cancels+relaunches on webhook redelivery.
     if conclusion == "cancelled":
-        want_attempt = platform_run_attempt()
+        want_attempt = env("PLATFORM_RUN_ATTEMPT")
         for _ in range(40):
             claim = read_claim(cfg, env("PLATFORM_RUN_ID"))
             if claim:

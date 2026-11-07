@@ -48,7 +48,9 @@ DISABLE_YDB_QA_ENV = "CI_DISABLE_YDB_QA"
 
 
 def is_ydb_qa_disabled() -> bool:
-    return os.environ.get(DISABLE_YDB_QA_ENV, "").strip().lower() in ("1", "true", "yes")
+    return os.environ.get(DISABLE_YDB_QA_ENV, "").strip() == "1"
+
+
 INTERNAL_FIELD_KEYS = ("file", "attach", "enrich", "flush", "table_path")
 
 

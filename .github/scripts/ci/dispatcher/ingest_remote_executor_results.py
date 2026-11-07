@@ -3,7 +3,7 @@
 
 Env (from dispatch_remote.yml ingest): CONFIG_JSON (resolve output),
 EXECUTOR_RUN_ID / EXECUTOR_RUN_URL / EXECUTOR_CONCLUSION,
-CALLER_AWS_ENDPOINT / CALLER_AWS_BUCKET, WORKSPACE, GITHUB_STEP_SUMMARY.
+CALLER_AWS_ENDPOINT / CALLER_AWS_BUCKET, GITHUB_STEP_SUMMARY.
 """
 from __future__ import annotations
 
@@ -18,19 +18,32 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
-_DISPATCHER_DIR = os.path.dirname(os.path.abspath(__file__))
-if _DISPATCHER_DIR not in sys.path:
-    sys.path.insert(0, _DISPATCHER_DIR)
+_DISPATCHER_DIR = Path(__file__).resolve().parent
+_REPO_ROOT = _DISPATCHER_DIR.parents[3]
+if str(_DISPATCHER_DIR) not in sys.path:
+    sys.path.insert(0, str(_DISPATCHER_DIR))
+_ANALYTICS_UTILS = _REPO_ROOT / ".github/scripts/utils/analytics"
+_ANALYTICS_GA = _ANALYTICS_UTILS / "github_actions"
+_ANALYTICS_SCRIPTS = _REPO_ROOT / ".github/scripts/analytics"
+for _p in (_ANALYTICS_UTILS, _ANALYTICS_GA, _ANALYTICS_SCRIPTS):
+    s = str(_p)
+    if s not in sys.path:
+        sys.path.insert(0, s)
+
 from _common import (  # noqa: E402
+    cfg_str,
     die,
     discover_attempts,
     env,
     env_opt,
+    host_s3,
     http_get_bytes,
     load_config_json,
+    object_url,
     quote_url,
     write_step_summary,
 )
+from github_actions.ci_metrics import flush_file  # noqa: E402
 
 
 def run(cmd: list[str], **kwargs: Any) -> None:
@@ -45,8 +58,8 @@ def load_manifest(
     host_workflow: str,
     run_id: str,
 ) -> dict[str, Any]:
-    url = quote_url(
-        f"{endpoint.rstrip('/')}/{bucket}/{host_repo}/{host_workflow}/{run_id}/remote_artifacts.json"
+    url = object_url(
+        endpoint, bucket, f"{host_repo}/{host_workflow}/{run_id}/remote_artifacts.json"
     )
     print(f"Fetching remote_artifacts.json from {url}")
     raw = None
@@ -106,10 +119,6 @@ def _safe_under(dest: Path, child_rel: str) -> Path | None:
     return local
 
 
-def _object_url(endpoint: str, bucket: str, key: str) -> str:
-    return quote_url(f"{endpoint.rstrip('/')}/{bucket}/{key.lstrip('/')}")
-
-
 def _write_bytes(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
@@ -139,7 +148,7 @@ def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest:
         seen_dirs.add(rel_dir)
 
         index_key = _posix_join(root_key, rel_dir, "index.html")
-        index_url = _object_url(endpoint, bucket, index_key)
+        index_url = object_url(endpoint, bucket, index_key)
         raw = http_get_bytes(index_url)
         if raw is None:
             if rel_dir == "":
@@ -183,7 +192,7 @@ def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest:
                 n_fail += 1
                 continue
             file_key = _posix_join(root_key, child_rel)
-            file_url = _object_url(endpoint, bucket, file_key)
+            file_url = object_url(endpoint, bucket, file_key)
             data = http_get_bytes(file_url)
             if data is None:
                 print(f"::warning::failed to download {file_url}")
@@ -297,10 +306,8 @@ def regenerate_summary(
     if not last:
         return _stub_summary()
 
-    html_rel = last.get("html_relpath") or f"try_{last['retry']}/ya-test.html"
-    report_rel = last.get("report_relpath") or f"try_{last['retry']}/report.json"
-    html_path = public_dir / html_rel
-    report_path = public_dir / report_rel
+    html_path = public_dir / last["html_relpath"]
+    report_path = public_dir / last["report_relpath"]
     testowners = workspace / ".github/TESTOWNERS"
     if not report_path.is_file():
         print(f"::warning::missing report for regenerate: {report_path}; writing stub job_summary")
@@ -320,7 +327,6 @@ def regenerate_summary(
     try_dir = public_dir / f"try_{last['retry']}"
     oom = try_dir / "oom_dmesg.txt"
     build_failed_md = try_dir / "build_failed.md"
-    fail_summary = try_dir / "fail_summary.txt"
 
     cmd = [
         sys.executable,
@@ -361,15 +367,9 @@ def regenerate_summary(
         print(f"::warning::generate-summary failed ({e}); writing stub job_summary")
         return _stub_summary()
 
-    # Prefer executor-written marker (always set on BUILD_FAILED); fall back to fail_summary.
     build_fail_line = ""
     if build_failed_md.is_file() and build_failed_md.stat().st_size > 0:
         build_fail_line = build_failed_md.read_text(encoding="utf-8").rstrip() + "\n\n"
-    elif fail_summary.is_file() and fail_summary.stat().st_size > 0:
-        build_fail_line = (
-            f"Build failed, see the [logs]({public_dir_url}/ya_make_output.txt). "
-            f"Also see [fail summary]({public_dir_url}/try_{last['retry']}/fail_summary.txt).\n\n"
-        )
 
     parts: list[str] = ["## Summary (enriched)\n\n"]
     if build_fail_line:
@@ -444,11 +444,10 @@ def rewrite_ci_metrics_attribution(
 
 
 def flush_ci_metrics(
-    workspace: Path,
     public_dir: Path,
     *,
     event_name: str,
-    source_run_id: str,
+    run_id: str,
     pull_number: str,
     caller_repo: str,
     caller_workflow: str,
@@ -462,21 +461,13 @@ def flush_ci_metrics(
 
     rewritten = rewrite_ci_metrics_attribution(
         metrics_path,
-        run_id=source_run_id,
+        run_id=run_id,
         event_name=event_name,
         workflow=caller_workflow,
         job_name=job_name,
         pull_number=pull_number,
         caller_repo=caller_repo,
     )
-
-    analytics_dir = workspace / ".github/scripts/utils/analytics"
-    ga_dir = analytics_dir / "github_actions"
-    for path in (str(analytics_dir), str(ga_dir), str(workspace / ".github/scripts/analytics")):
-        if path not in sys.path:
-            sys.path.insert(0, path)
-
-    from github_actions.ci_metrics import flush_file  # noqa: E402
 
     print(f"Flushing ci_metrics from {rewritten}")
     uploaded = flush_file(str(rewritten))
@@ -496,13 +487,6 @@ def upload_attempts(
     pull_number: str,
     job_name: str,
 ) -> None:
-    if not commit:
-        die("remote_artifacts.json missing commit")
-    if not branch:
-        die("job_inputs.custom_branch_name missing")
-    if not build_preset:
-        die("job_inputs.build_preset missing")
-
     for att in attempts:
         report = public_dir / att["report_relpath"]
         if not report.is_file():
@@ -515,7 +499,7 @@ def upload_attempts(
             "--test-results-file",
             str(report),
             "--run-timestamp",
-            str(att.get("started_at") or "0"),
+            att["started_at"],
             "--commit",
             commit,
             "--build-type",
@@ -567,51 +551,35 @@ def s3cmd_put(local: Path, s3_uri: str) -> None:
 
 def main() -> None:
     cfg = load_config_json()
-    host_repo = (cfg.get("repository") or "").strip()
-    if not host_repo:
-        die("CONFIG_JSON.repository missing")
-    host_workflow = (cfg.get("workflow_name") or "").strip()
-    if not host_workflow:
-        die("CONFIG_JSON.workflow_name missing")
-    host_ep = (cfg.get("host_s3_endpoint") or "").strip()
-    host_bucket = (cfg.get("host_s3_bucket") or "").strip()
-    if not host_ep or not host_bucket:
-        die("CONFIG_JSON.host_s3_endpoint/bucket missing")
-    caller_workflow = (cfg.get("caller_workflow") or "").strip()
-    if not caller_workflow:
-        die("CONFIG_JSON.caller_workflow missing")
-    job_name = (cfg.get("analytics_job_name") or "").strip()
-    if not job_name:
-        die("CONFIG_JSON.analytics_job_name missing")
+    host_repo = cfg_str(cfg, "repository")
+    host_workflow = cfg_str(cfg, "workflow_name")
+    host_ep, host_bucket = host_s3(cfg)
+    caller_workflow = cfg_str(cfg, "caller_workflow")
+    job_name = cfg_str(cfg, "analytics_job_name")
 
     inputs = cfg.get("inputs") if isinstance(cfg.get("inputs"), dict) else {}
     ji = inputs.get("job_inputs") if isinstance(inputs.get("job_inputs"), dict) else {}
-    event_name = str(ji.get("source_event_name") or "").strip()
-    source_run_id = str(ji.get("source_run_id") or "").strip()
+    if not isinstance(ji, dict) or not ji:
+        die("CONFIG_JSON.inputs.job_inputs missing")
     pull_number = str(ji.get("pull_number") or "").strip()
     build_preset = str(ji.get("build_preset") or "").strip()
     branch = str(ji.get("custom_branch_name") or "").strip()
-    if not event_name:
-        die("CONFIG_JSON.inputs.job_inputs.source_event_name missing")
-    if not source_run_id:
-        die("CONFIG_JSON.inputs.job_inputs.source_run_id missing")
     if not build_preset:
         die("CONFIG_JSON.inputs.job_inputs.build_preset missing")
     if not branch:
         die("CONFIG_JSON.inputs.job_inputs.custom_branch_name missing")
 
+    event_name = env("GITHUB_EVENT_NAME")
+    caller_run_id = env("GITHUB_RUN_ID")
     run_id = env("EXECUTOR_RUN_ID")
     run_url = env("EXECUTOR_RUN_URL")
-    workspace = Path(env("WORKSPACE")).resolve()
+    workspace = _REPO_ROOT
     caller_endpoint = env("CALLER_AWS_ENDPOINT").rstrip("/")
     caller_bucket = env("CALLER_AWS_BUCKET")
     caller_repo = env("GITHUB_REPOSITORY")
-    caller_run_id = env("GITHUB_RUN_ID")
 
     meta = load_manifest(host_ep, host_bucket, host_repo, host_workflow, run_id)
-    remote_endpoint = host_ep.rstrip("/")
-    remote_bucket = host_bucket
-    key_prefix = meta.get("artifact_key_prefix") or ""
+    key_prefix = str(meta.get("artifact_key_prefix") or "").strip()
     if not key_prefix:
         die("remote_artifacts.json missing artifact_key_prefix")
     old_public = (meta.get("public_dir_url") or "").rstrip("/")
@@ -629,8 +597,8 @@ def main() -> None:
 
     with tempfile.TemporaryDirectory(prefix="remote-ingest-") as tmp:
         public_dir = Path(tmp) / "results"
-        print(f"Downloading s3://{remote_bucket}/{key_prefix} → {public_dir} (via index.html)")
-        download_prefix_via_index(remote_endpoint, remote_bucket, key_prefix, public_dir)
+        print(f"Downloading s3://{host_bucket}/{key_prefix} → {public_dir} (via index.html)")
+        download_prefix_via_index(host_ep, host_bucket, key_prefix, public_dir)
 
         n = rewrite_url_prefix(public_dir, old_public, new_public)
         print(f"Rewrote URL prefix in {n} files ({old_public} → {new_public})")
@@ -650,11 +618,11 @@ def main() -> None:
             build_preset=build_preset,
             branch=branch,
             pull_number=pull_number,
-            workflow_run_id=source_run_id,
+            workflow_run_id=caller_run_id,
         )
 
         meta_out = {
-            "version": meta.get("version", 1),
+            "version": 1,
             "artifact_key_prefix": key_prefix,
             "public_dir_url": old_public,
             "commit": commit,
@@ -667,7 +635,7 @@ def main() -> None:
                 f"{caller_workflow}/{caller_run_id}/remote-{run_id}"
             ),
             "source_event_name": event_name,
-            "source_run_id": source_run_id,
+            "source_run_id": caller_run_id,
             "pull_number": pull_number,
         }
         meta_path = public_dir / "remote_artifacts.json"
@@ -686,16 +654,15 @@ def main() -> None:
             commit=commit,
             build_preset=build_preset,
             event_name=event_name,
-            run_id=source_run_id,
+            run_id=caller_run_id,
             pull_number=pull_number,
             job_name=job_name,
         )
 
         flush_ci_metrics(
-            workspace=workspace,
             public_dir=public_dir,
             event_name=event_name,
-            source_run_id=source_run_id,
+            run_id=caller_run_id,
             pull_number=pull_number,
             caller_repo=caller_repo,
             caller_workflow=caller_workflow,

@@ -293,7 +293,6 @@ runs:
         GITHUB_RUN_ID: ${{ github.run_id }}
         COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != 'false' }}
         PR_NUMBER: ${{ github.event.number }}
-        ANALYTICS_PULL_NUMBER: ${{ inputs.pull_number || github.event.number }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}

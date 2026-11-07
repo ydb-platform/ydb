@@ -7,8 +7,10 @@ emits one opaque config for dispatch_remote.yml (artifact → wait claim → ing
 Env:
   REMOTE_JSON — optional caller override (object or empty)
   CODE_REF, GITHUB_WORKFLOW, GITHUB_EVENT_NAME, GITHUB_RUN_ID,
-  DEFAULT_BUILD_TARGET, DEFAULT_BUILD_PRESET, GITHUB_REPOSITORY
+  DEFAULT_BUILD_TARGET, DEFAULT_BUILD_PRESET, GITHUB_REPOSITORY,
+  PULL_NUMBER (optional)
   GITHUB_OUTPUT — write `config<<EOF...`
+  GITHUB_STEP_SUMMARY — optional launch-params table
 """
 from __future__ import annotations
 
@@ -116,7 +118,9 @@ def build_config() -> dict[str, Any]:
         )
     cfg["analytics_branch"] = analytics
 
-    preset = _as_str(job["build_preset"]).split(",")[0].strip() or "relwithdebinfo"
+    preset = _as_str(job["build_preset"]).split(",")[0].strip()
+    if not preset:
+        die("build_preset is empty")
     increment = _as_str(job["increment"])
     fetch_depth = 0 if truthy(increment) else 2
 
@@ -128,31 +132,14 @@ def build_config() -> dict[str, Any]:
         or (os.environ.get("GITHUB_WORKFLOW") or "").strip()
     )
 
-    source_event = (os.environ.get("GITHUB_EVENT_NAME") or "").strip() or "workflow_dispatch"
-    source_run = (os.environ.get("GITHUB_RUN_ID") or "").strip()
     pull_number = (os.environ.get("PULL_NUMBER") or "").strip()
 
-    job_inputs = {
-        "build_target": _as_str(job["build_target"]),
-        "build_preset": preset,
-        "run_tests": _as_str(job["run_tests"]),
-        "increment": increment,
-        "fetch_depth": fetch_depth,
-        "test_size": _as_str(job["test_size"]),
-        "test_type": _as_str(job["test_type"]),
-        "test_threads": _as_str(job["test_threads"]),
-        "link_threads": _as_str(job["link_threads"]),
-        "additional_ya_make_args": _as_str(job["additional_ya_make_args"]),
-        "test_retry_count": _as_str(job["test_retry_count"]),
-        "put_build_results_to_cache": _as_str(job["put_build_results_to_cache"]),
-        "collect_coredumps": _as_str(job["collect_coredumps"]),
-        "custom_branch_name": analytics,
-        "analytics_job_name": cfg["analytics_job_name"],
-        "source_event_name": source_event,
-        "source_run_id": source_run,
-        "pull_number": pull_number,
-        "enable_ydb_qa": "false",
-    }
+    job_inputs = {k: _as_str(job[k]) for k in _DEFAULT_JOB}
+    job_inputs["build_preset"] = preset
+    job_inputs["fetch_depth"] = fetch_depth
+    job_inputs["custom_branch_name"] = analytics
+    job_inputs["analytics_job_name"] = cfg["analytics_job_name"]
+    job_inputs["pull_number"] = pull_number
 
     runs_on = cfg.get("runs_on")
     if isinstance(runs_on, str):
@@ -200,8 +187,8 @@ def _fmt_md_value(v: Any) -> str:
 
 def format_launch_summary_md(cfg: dict[str, Any]) -> str:
     """Full resolved launch params for job summary (no selective omit)."""
-    inputs = cfg.get("inputs") if isinstance(cfg.get("inputs"), dict) else {}
-    job = inputs.get("job_inputs") if isinstance(inputs.get("job_inputs"), dict) else {}
+    inputs = cfg["inputs"]
+    job = inputs["job_inputs"]
 
     lines = [
         "<details>",
@@ -228,23 +215,8 @@ def format_launch_summary_md(cfg: dict[str, Any]) -> str:
         lines.append(f"| {key} | {_fmt_md_value(cfg.get(key))} |")
 
     lines.extend(["", "### job_inputs", "", "| key | value |", "| --- | --- |"])
-    ordered = list(_DEFAULT_JOB.keys())
-    for key in job:
-        if key not in ordered:
-            ordered.append(key)
-    for key in (
-        "fetch_depth",
-        "custom_branch_name",
-        "source_event_name",
-        "source_run_id",
-        "pull_number",
-        "enable_ydb_qa",
-        "analytics_job_name",
-    ):
-        if key not in ordered:
-            ordered.append(key)
-    for key in ordered:
-        lines.append(f"| {key} | {_fmt_md_value(job.get(key))} |")
+    for key, val in job.items():
+        lines.append(f"| {key} | {_fmt_md_value(val)} |")
     lines.extend(["", "</details>", ""])
     return "\n".join(lines)
 

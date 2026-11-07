@@ -126,5 +126,4 @@ jobs:
           EXECUTOR_RUN_ID: ${{ needs.wait.outputs.executor_run_id }}
           EXECUTOR_RUN_URL: ${{ needs.wait.outputs.executor_run_url }}
           EXECUTOR_CONCLUSION: ${{ needs.wait.outputs.executor_conclusion }}
-          WORKSPACE: ${{ github.workspace }}
         run: python3 .github/scripts/ci/dispatcher/ingest_remote_executor_results.py

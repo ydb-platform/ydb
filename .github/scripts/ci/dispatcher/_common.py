@@ -92,6 +92,26 @@ def load_config_json() -> dict[str, Any]:
     return cfg
 
 
+def cfg_str(cfg: dict[str, Any], key: str) -> str:
+    v = cfg.get(key)
+    if v is None:
+        die(f"CONFIG_JSON.{key} missing")
+    s = str(v).strip()
+    if not s:
+        die(f"CONFIG_JSON.{key} missing")
+    return s
+
+
+def host_s3(cfg: dict[str, Any]) -> tuple[str, str]:
+    ep = cfg_str(cfg, "host_s3_endpoint").rstrip("/")
+    bucket = cfg_str(cfg, "host_s3_bucket")
+    return ep, bucket
+
+
+def object_url(endpoint: str, bucket: str, key: str) -> str:
+    return quote_url(f"{endpoint.rstrip('/')}/{bucket}/{key.lstrip('/')}")
+
+
 def discover_attempts(public_dir: Path) -> list[dict[str, Any]]:
     """Scan try_*/report.json under public_dir (action always writes started_at)."""
     found: list[dict[str, Any]] = []

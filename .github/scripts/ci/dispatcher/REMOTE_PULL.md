@@ -27,13 +27,18 @@ with **`ticket.config.inputs` only**. Enqueue stamps
 humans/logs.
 
 Host runs as `workflow_dispatch`, so PR-only `build_*` / pending statuses never
-fire; `test_*` is skipped when `source_run_id` is set. The caller run's
-waiter/ingest outcome is the signal.
+fire; `test_*` is skipped when the action gets `source_run_id`
+(`= platform_run_id`). The caller run's waiter/ingest outcome is the signal.
 
 Host durable publish (`job_summary.md` + `remote_artifacts.json` at run root)
 lives in `ci_remote_executor.yml`, not in the shared `build_and_test_ya` action.
 
 Host S3: `host_s3_endpoint` / `host_s3_bucket`.
+
+VM dispatch uses `ticket.config.inputs` (`code_ref`, `job_inputs`, `runs_on`,
+plus enqueue-stamped `platform_run_*`). Top-level `repository` /
+`workflow_file` / `executor_ref` / `workflow_name` are for the VM + waiter
+(GH poll), not for `workflow_dispatch` inputs.
 
 Layout under `.github/scripts/ci/`:
 

@@ -233,13 +233,11 @@ def cmd_cancel():
             claim = read_claim(cfg, platform_run_id)
             if claim:
                 _, run_id, claim_url = parse_claim(claim)
-                if not run_url:
-                    run_url = claim_url
+                run_url = run_url or claim_url
     if not run_id:
         append_summary("### Caller cancelled\n- no executor run id to cancel yet\n")
         return
-    if not run_url:
-        run_url = f"https://github.com/{repo}/actions/runs/{run_id}"
+    run_url = run_url or f"https://github.com/{repo}/actions/runs/{run_id}"
     code, _ = gh(
         "POST",
         f"{api(repo)}/actions/runs/{run_id}/cancel",

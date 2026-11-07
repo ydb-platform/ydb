@@ -54,20 +54,12 @@ def http_get_text(url: str, timeout: int = 60) -> str | None:
     return None if raw is None else raw.decode()
 
 
-def _write_summary(text: str, mode: str) -> None:
+def append_summary(text: str) -> None:
     path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not path:
         return
-    with open(path, mode, encoding="utf-8") as f:
+    with open(path, "a", encoding="utf-8") as f:
         f.write(text if text.endswith("\n") else text + "\n")
-
-
-def append_summary(text: str) -> None:
-    _write_summary(text, "a")
-
-
-def write_step_summary(text: str) -> None:
-    _write_summary(text, "w")
 
 
 def set_outputs(**kwargs: Any) -> None:

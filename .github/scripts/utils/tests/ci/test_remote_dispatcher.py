@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pure-function checks for remote resolve seeds and index crawl path safety."""
+"""Pure-function checks for remote resolve seeds, discover_attempts, index crawl."""
 
 from __future__ import annotations
 
@@ -52,6 +52,7 @@ class ResolveSeedsTest(unittest.TestCase):
         self.assertEqual(cfg["inputs"]["job_inputs"]["build_preset"], "release-asan")
         self.assertEqual(cfg["host_s3_endpoint"], "https://s3.us-east-1.amazonaws.com")
         self.assertNotIn("platform_run_id", cfg["inputs"])
+        self.assertNotIn("job", cfg)
 
     def test_remote_json_job_keys_win_over_ui_seeds(self):
         os.environ["DEFAULT_BUILD_TARGET"] = "ydb/from-ui"

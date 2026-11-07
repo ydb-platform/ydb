@@ -28,6 +28,7 @@ if _s not in sys.path:
     sys.path.insert(0, _s)
 
 from _common import (  # noqa: E402
+    append_summary,
     cfg_str,
     die,
     discover_attempts,
@@ -38,9 +39,27 @@ from _common import (  # noqa: E402
     load_config_json,
     object_url,
     quote_url,
-    write_step_summary,
 )
 from github_actions.ci_metrics import flush_file  # noqa: E402
+
+_TEXT_SUFFIXES = frozenset(
+    {
+        ".json",
+        ".html",
+        ".htm",
+        ".txt",
+        ".md",
+        ".js",
+        ".css",
+        ".xml",
+        ".yaml",
+        ".yml",
+        ".csv",
+        ".log",
+        ".out",
+        ".err",
+    }
+)
 
 
 def run(cmd: list[str], **kwargs: Any) -> None:
@@ -208,49 +227,20 @@ def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest:
 def rewrite_url_prefix(root: Path, old: str, new: str) -> int:
     if not old or old == new:
         return 0
-    news_map = {
-        old: new,
-        old.rstrip("/"): new.rstrip("/"),
-        quote_url(old): quote_url(new),
-        quote_url(old.rstrip("/")): quote_url(new.rstrip("/")),
-    }
     n = 0
-    text_suffixes = {
-        ".json",
-        ".html",
-        ".htm",
-        ".txt",
-        ".md",
-        ".js",
-        ".css",
-        ".xml",
-        ".yaml",
-        ".yml",
-        ".csv",
-        ".log",
-        ".out",
-        ".err",
-    }
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        if path.suffix.lower() not in text_suffixes:
+        if path.suffix.lower() not in _TEXT_SUFFIXES:
             continue
         try:
-            data = path.read_bytes()
-        except OSError:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
             continue
-        try:
-            text = data.decode("utf-8")
-        except UnicodeDecodeError:
+        if old not in text:
             continue
-        orig = text
-        for o, repl in news_map.items():
-            if o in text:
-                text = text.replace(o, repl)
-        if text != orig:
-            path.write_text(text, encoding="utf-8")
-            n += 1
+        path.write_text(text.replace(old, new), encoding="utf-8")
+        n += 1
     return n
 
 
@@ -269,7 +259,7 @@ def build_run_name(event_name: str, run_id: str, pull_number: str, attempt: int)
 
 
 def regenerate_summary(
-    workspace: Path,
+    *,
     public_dir: Path,
     public_dir_url: str,
     attempts: list[dict[str, Any]],
@@ -277,18 +267,16 @@ def regenerate_summary(
     branch: str,
     pull_number: str,
     workflow_run_id: str,
+    scratch_dir: Path,
+    job_summary: Path,
 ) -> Path:
     """Regenerate ya-test.html with YDB history; write enriched job_summary.
 
     Host publishes job_summary.md at run root for humans; ingest builds its own
-    enriched summary from attempt artifacts. Does not touch GITHUB_STEP_SUMMARY —
-    caller publishes the final file after S3 upload.
+    enriched summary from attempt artifacts. generate-summary is run with
+    GITHUB_STEP_SUMMARY cleared so it cannot append to the ingest job summary.
     """
     summary_links = public_dir / "summary_links.txt"
-    if not summary_links.exists():
-        summary_links.write_text(f"00 [Artifacts]({public_dir_url}/index.html)\n", encoding="utf-8")
-
-    job_summary = public_dir / "job_summary.md"
 
     def _stub_summary() -> Path:
         job_summary.write_text(
@@ -303,17 +291,15 @@ def regenerate_summary(
 
     html_path = public_dir / last["html_relpath"]
     report_path = public_dir / last["report_relpath"]
-
-    color_file = public_dir / "ingest_summary_color.txt"
-    text_file = public_dir / "ingest_summary_text.txt"
-    status_file = public_dir / "ingest_statusrep.txt"
+    color_file = scratch_dir / "ingest_summary_color.txt"
+    text_file = scratch_dir / "ingest_summary_text.txt"
     try_dir = public_dir / f"try_{last['retry']}"
     oom = try_dir / "oom_dmesg.txt"
     build_failed_md = try_dir / "build_failed.md"
 
     cmd = [
         sys.executable,
-        str(workspace / ".github/scripts/tests/generate-summary.py"),
+        str(_REPO_ROOT / ".github/scripts/tests/generate-summary.py"),
         "--summary_links",
         str(summary_links),
         "--public_dir",
@@ -324,8 +310,6 @@ def regenerate_summary(
         build_preset,
         "--branch",
         branch,
-        "--status_report_file",
-        str(status_file),
         "--is_retry",
         "0" if len(attempts) <= 1 else "1",
         "--is_last_retry",
@@ -344,8 +328,10 @@ def regenerate_summary(
     if oom.is_file() and oom.stat().st_size > 0:
         cmd.extend(["--oom_dmesg_log", str(oom)])
     cmd.extend(["Tests", str(html_path), str(report_path)])
+    child_env = dict(os.environ)
+    child_env["GITHUB_STEP_SUMMARY"] = ""
     try:
-        run(cmd, cwd=str(workspace))
+        run(cmd, cwd=str(_REPO_ROOT), env=child_env)
     except subprocess.CalledProcessError as e:
         print(f"::warning::generate-summary failed ({e}); writing stub job_summary")
         return _stub_summary()
@@ -450,7 +436,6 @@ def flush_ci_metrics(
 
 
 def upload_attempts(
-    workspace: Path,
     public_dir: Path,
     attempts: list[dict[str, Any]],
     *,
@@ -467,7 +452,7 @@ def upload_attempts(
         pull = build_run_name(event_name, run_id, pull_number, int(att["retry"]))
         cmd = [
             sys.executable,
-            str(workspace / ".github/scripts/analytics/upload_tests_results.py"),
+            str(_REPO_ROOT / ".github/scripts/analytics/upload_tests_results.py"),
             "--test-results-file",
             str(report),
             "--run-timestamp",
@@ -485,7 +470,7 @@ def upload_attempts(
             "--branch",
             branch,
         ]
-        run(cmd, cwd=str(workspace))
+        run(cmd, cwd=str(_REPO_ROOT))
 
 
 def s3cmd_sync_upload(local: Path, s3_bucket_path: str) -> None:
@@ -543,7 +528,6 @@ def main() -> None:
     caller_run_id = env("GITHUB_RUN_ID")
     run_id = env("EXECUTOR_RUN_ID")
     run_url = env("EXECUTOR_RUN_URL")
-    workspace = _REPO_ROOT
     caller_endpoint = env("CALLER_AWS_ENDPOINT").rstrip("/")
     caller_bucket = env("CALLER_AWS_BUCKET")
     caller_repo = env("GITHUB_REPOSITORY")
@@ -563,11 +547,20 @@ def main() -> None:
     new_public = quote_url(f"{caller_endpoint}/{caller_bucket}/{dest_key_prefix}")
     caller_s3_path = f"s3://{caller_bucket}/{dest_key_prefix}"
     caller_run_root = f"s3://{caller_bucket}/{run_root_key}"
+    caller_run_root_url = quote_url(f"{caller_endpoint}/{caller_bucket}/{run_root_key}")
 
     executor_conclusion = env_opt("EXECUTOR_CONCLUSION")
 
     with tempfile.TemporaryDirectory(prefix="remote-ingest-") as tmp:
-        public_dir = Path(tmp) / "results"
+        tmp_path = Path(tmp)
+        public_dir = tmp_path / "results"
+        scratch_dir = tmp_path / "scratch"
+        out_dir = tmp_path / "out"
+        scratch_dir.mkdir()
+        out_dir.mkdir()
+        job_summary = out_dir / "job_summary.md"
+        meta_path = out_dir / "remote_artifacts.json"
+
         print(f"Downloading s3://{host_bucket}/{key_prefix} → {public_dir} (via index.html)")
         download_prefix_via_index(host_ep, host_bucket, key_prefix, public_dir)
 
@@ -575,15 +568,14 @@ def main() -> None:
         print(f"Rewrote URL prefix in {n} files ({old_public} → {new_public})")
 
         run(
-            [sys.executable, str(workspace / ".github/scripts/Indexer/indexer.py"), "-r", f"{public_dir}/"],
-            cwd=str(workspace),
+            [sys.executable, str(_REPO_ROOT / ".github/scripts/Indexer/indexer.py"), "-r", f"{public_dir}/"],
+            cwd=str(_REPO_ROOT),
         )
 
         attempts = discover_attempts(public_dir)
         print(f"attempts={json.dumps(attempts, ensure_ascii=False)}")
 
-        job_summary = regenerate_summary(
-            workspace=workspace,
+        regenerate_summary(
             public_dir=public_dir,
             public_dir_url=new_public,
             attempts=attempts,
@@ -591,23 +583,19 @@ def main() -> None:
             branch=branch,
             pull_number=pull_number,
             workflow_run_id=caller_run_id,
+            scratch_dir=scratch_dir,
+            job_summary=job_summary,
         )
 
         meta_out = {
             "version": 1,
-            "artifact_key_prefix": key_prefix,
-            "public_dir_url": old_public,
             "commit": commit,
-            "ingested": True,
-            "attempts": attempts,
             "caller_public_dir_url": new_public,
             "caller_artifact_key_prefix": dest_key_prefix,
-            "caller_run_root_url": quote_url(f"{caller_endpoint}/{caller_bucket}/{run_root_key}"),
-            "source_event_name": event_name,
-            "source_run_id": caller_run_id,
-            "pull_number": pull_number,
+            "caller_run_root_url": caller_run_root_url,
+            "executor_run_id": run_id,
+            "executor_run_url": run_url,
         }
-        meta_path = public_dir / "remote_artifacts.json"
         meta_path.write_text(json.dumps(meta_out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
         s3cmd_sync_upload(public_dir, caller_s3_path)
@@ -616,7 +604,6 @@ def main() -> None:
         print(f"::notice title=Caller artifacts uploaded::{new_public}/index.html")
 
         upload_attempts(
-            workspace=workspace,
             public_dir=public_dir,
             attempts=attempts,
             branch=branch,
@@ -642,7 +629,7 @@ def main() -> None:
         footer_bits = [f"Remote executor: [{run_id}]({run_url})"]
         if executor_conclusion:
             footer_bits.append(f"`{executor_conclusion}`")
-        write_step_summary(body + "\n---\n" + " · ".join(footer_bits) + "\n")
+        append_summary(body + "\n---\n" + " · ".join(footer_bits) + "\n")
 
     print(f"::notice title=Remote ingest complete::{new_public}/index.html")
 

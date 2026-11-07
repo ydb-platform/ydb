@@ -737,7 +737,6 @@ runs:
             echo "$BUILD_FAIL_MSG" | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color red
             echo "$BUILD_FAIL_MSG" >> "$GITHUB_STEP_SUMMARY"
             printf '%s\n' "$BUILD_FAIL_MSG" > "$CURRENT_PUBLIC_DIR/build_failed.md"
-            echo red > summary_color.txt
             analytics enrich "$YA_MAKE_NAME" \
               --label "error=ya make rc=${RC}" \
               --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
@@ -825,7 +824,7 @@ runs:
           fi
 
           # One compose for summary_text: optional build-fail headline + generate-summary body.
-          if [ $BUILD_FAILED = 1 ] && [ -f "$CURRENT_PUBLIC_DIR/build_failed.md" ]; then
+          if [ $BUILD_FAILED = 1 ]; then
             {
               cat "$CURRENT_PUBLIC_DIR/build_failed.md"
               echo
@@ -834,7 +833,6 @@ runs:
               fi
             } > summary_text.txt.tmp
             mv summary_text.txt.tmp summary_text.txt
-            echo red > summary_color.txt
           fi
           if [ -f summary_text.txt ]; then
             cp -f summary_text.txt "$PUBLIC_DIR/summary_text.txt"

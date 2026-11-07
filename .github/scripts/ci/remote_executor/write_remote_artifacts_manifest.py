@@ -18,14 +18,20 @@ def main() -> int:
         print("usage: REMOTE_ARTIFACTS_JSON=path write_remote_artifacts_manifest.py", file=sys.stderr)
         return 2
 
-    bucket_path = os.environ["S3_BUCKET_PATH"]  # s3://bucket/key/prefix
+    bucket_path = (os.environ.get("S3_BUCKET_PATH") or "").strip()
+    if not bucket_path:
+        print("S3_BUCKET_PATH missing", file=sys.stderr)
+        return 2
     if not bucket_path.startswith("s3://"):
         print(f"S3_BUCKET_PATH must be s3://...; got {bucket_path!r}", file=sys.stderr)
         return 2
     rest = bucket_path[len("s3://") :]
     _, _, key_prefix = rest.partition("/")
-    public_dir_url = os.environ["PUBLIC_DIR_URL"].rstrip("/")
-    commit = os.environ.get("ORIGINAL_HEAD", "")
+    public_dir_url = (os.environ.get("PUBLIC_DIR_URL") or "").rstrip("/")
+    if not public_dir_url:
+        print("PUBLIC_DIR_URL missing", file=sys.stderr)
+        return 2
+    commit = (os.environ.get("ORIGINAL_HEAD") or "").strip()
     if not commit:
         print("ORIGINAL_HEAD missing", file=sys.stderr)
         return 2

@@ -531,27 +531,23 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
         {"error", EStatus_Name(status)}
     );
     if (IsRetryableSchemeShardStatus(status)) {
-        const auto requestIt = RequestsInFlight.find(requestId);
-        Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
-        if (requestIt->second.Request->Settings.RetryPolicy) {
-            if (ScheduleSchemeShardRetry(requestId, secretName)) {
-                return true;
-            }
-
-            YDB_LOG_NOTICE("Retry limit exceeded for secret",
-                {"event", "TEvDescribeSchemeResult"},
-                {"requestId", requestId},
-                {"secret", secretName}
-            );
-            FillResponse(
-                requestId,
-                NKqp::TEvDescribeSecretsResponse::TDescription(
-                    Ydb::StatusIds::UNAVAILABLE,
-                    { NYql::TIssue(TStringBuilder() << "Retry limit exceeded for secret `" << secretName << "`") }
-                )
-            );
+        if (ScheduleSchemeShardRetry(requestId, secretName)) {
             return true;
         }
+
+        YDB_LOG_NOTICE("Retry limit exceeded for secret",
+            {"event", "TEvDescribeSchemeResult"},
+            {"requestId", requestId},
+            {"secret", secretName}
+        );
+        FillResponse(
+            requestId,
+            NKqp::TEvDescribeSecretsResponse::TDescription(
+                Ydb::StatusIds::UNAVAILABLE,
+                { NYql::TIssue(TStringBuilder() << "Retry limit exceeded for secret `" << secretName << "`") }
+            )
+        );
+        return true;
     }
 
     const auto errorStatus = MapSchemeShardStatus(status);
@@ -563,6 +559,16 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
     return true;
 }
 
+const IRetryPolicy<>::TPtr DEFAULT_RETRY_POLICY = MakeShortRetryPolicy();
+
+IRetryPolicy<>::TPtr TDescribeSecretSettings::GetRetryPolicy() const {
+    if (RetryPolicy) {
+        return RetryPolicy;
+    }
+
+    return DEFAULT_RETRY_POLICY;
+}
+
 bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& requestId,
     const TString& unresolvedSecretPath
 ) {
@@ -570,10 +576,7 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& request
     Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
 
     if (!requestIt->second.SchemeCacheRetryState) {
-        static const auto defaultSchemeCacheRetryPolicy = MakeShortRetryPolicy();
-        const auto& retryPolicy = requestIt->second.Request->Settings.RetryPolicy
-            ? requestIt->second.Request->Settings.RetryPolicy
-            : defaultSchemeCacheRetryPolicy;
+        const auto retryPolicy = requestIt->second.Request->Settings.GetRetryPolicy();
         requestIt->second.SchemeCacheRetryState = retryPolicy->CreateRetryState();
     }
 
@@ -595,10 +598,7 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeShardRetry(const ui64& request
     const auto requestIt = RequestsInFlight.find(requestId);
     Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
 
-    const auto& retryPolicy = requestIt->second.Request->Settings.RetryPolicy;
-    if (!retryPolicy) {
-        return false;
-    }
+    const auto retryPolicy = requestIt->second.Request->Settings.GetRetryPolicy();
 
     auto& retryState = requestIt->second.SchemeShardRetryStates[secretPath];
     if (!retryState) {
@@ -640,6 +640,7 @@ IRetryPolicy<>::TPtr MakeLongRetryPolicy() {
         /* maxTime */ TDuration::Minutes(60)
     );
 }
+
 
 void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId, const TResponseContext& responseCtx) {
     if (responseCtx.FilledSecretsCnt != responseCtx.Secrets.size()) {

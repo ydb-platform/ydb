@@ -26,6 +26,7 @@ struct TShardOptions {
     ui32 TableCount = 1;
     bool InMemMetadata = false;
     TString CompactionPreset = "tiling++";
+    TString TilingJson;
 };
 
 // Every table gets three committed portions, one per write: rows 0..99, 200..299, 400..499; batches of one portion each after a reboot,
@@ -70,6 +71,11 @@ public:
             TTestSchema::InitSchema(Table.Schema, Table.Pk, {}, table->MutableSchema());
             if (shardOptions.InMemMetadata) {
                 table->MutableSchema()->MutableOptions()->MutableMetadataManagerConstructor()->SetClassName("in_mem");
+            }
+            if (shardOptions.TilingJson) {
+                auto* planner = table->MutableSchema()->MutableOptions()->MutableCompactionPlannerConstructor();
+                planner->SetClassName("tiling++");
+                planner->MutableTiling()->SetJson(shardOptions.TilingJson);
             }
         }
         Y_UNUSED(SetupSchema(Runtime, Sender, tx.SerializeAsString(), 10));
@@ -395,6 +401,31 @@ Y_UNIT_TEST_SUITE(TColumnShardDeferredPortionLoading) {
 
         shard.AllowBatches(std::nullopt);
         UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+    }
+
+    // overlapping portions in the last level overload tiling++; compaction must clear it with the loading held
+    Y_UNIT_TEST(CompactionClearsWriteOverloadWhileLoading) {
+        TShardWithPortions shard({ .TilingJson = R"({"accumulator_portion_size_limit":1,"last_level_candidate_portions_overload":10})" });
+        shard.AllowBatches(1);
+        shard.Reboot();
+        shard.WaitBatchesLoaded(1);
+        shard.Runtime.GetAppData().FeatureFlags.SetEnableCompactionOverloadDetection(false);
+        for (ui32 i = 0; i < 20; ++i) {
+            shard.WriteAndCommit(TableId, { 600, 610 });
+        }
+        shard.Runtime.GetAppData().FeatureFlags.SetEnableCompactionOverloadDetection(true);
+        shard.StartWrite({ 700, 710 });
+        UNIT_ASSERT(!shard.IsWriteAnswered());
+
+        shard.Controller->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        shard.SendPeriodicWakeup();
+        shard.Runtime.WaitFor("compaction overload cleared", [&] {
+            return !shard.Engine().GetTables().begin()->second->GetOptimizerPlanner().GetUsefulMetric().IsCritical();
+        }, TDuration::Seconds(60));
+        // the gate's own retry is a scheduled wakeup, which the test runtime drops
+        ForwardToTablet(shard.Runtime, TTestTxConfig::TxTablet0, shard.Sender, new TEvents::TEvWakeup(1));
+        UNIT_ASSERT_VALUES_EQUAL(shard.WaitWriteStatus(), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        UNIT_ASSERT_VALUES_EQUAL(shard.Controller->GetPortionBatchesLoaded(), 1);
     }
 
     Y_UNIT_TEST(WriteWaitingForLoadedPortionsIsCounted) {

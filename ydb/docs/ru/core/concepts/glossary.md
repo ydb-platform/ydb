@@ -440,6 +440,10 @@ JSON-индекс, как и [полнотекстовый индекс](#fullte
 
 {{ ydb-short-name }} поддерживает [разные виды аутентификации](../security/authentication.md) и различные типы токенов.
 
+### OpenID Connect {#oidc}
+
+**[OpenID Connect (OIDC)](https://openid.net/specs/openid-connect-core-1_0.html)** представляет собой протокол аутентификации поверх OAuth 2.0, позволяющий приложению использовать внешнего провайдера идентификации для входа пользователей. [CLI](../reference/ydb-cli/oidc.md) и [SDK](../reference/ydb-sdk/auth.md#oidc) {{ ydb-short-name }} получают токен доступа у внешнего провайдера идентификации (IdP) и передают его серверу базы данных. В {{ ydb-short-name }} [Enterprise Manager](../devops/enterprise-manager/sso.md) OIDC используется для единого входа в веб-интерфейс с корпоративной учётной записью.
+
 ### Токен пользователя {#user-token}
 
 **Токен пользователя** — внутренний результат проверки [аутентификационного токена](#auth-token). Он содержит [SID](#access-sid) пользователя и групп и используется при [авторизации](../security/authorization.md). Токен пользователя используется и хранится только на создавшем его [узле](#node) и не передаётся клиенту. Подробнее см. в статье [{#T}](../security/caching-authentication-results.md).

@@ -1,4 +1,4 @@
-"""Tests for measured runner capacity (dashboard limits / recommendations)."""
+"""Behavioral tests for measured host capacity on the resources overlay."""
 
 from __future__ import annotations
 
@@ -12,92 +12,83 @@ from _paths import DASHBOARD, add_product_paths
 add_product_paths(DASHBOARD)
 
 from runner_capacity import (  # noqa: E402
-    capacity_from_measured,
+    DashboardTuning,
     enrich_resources_overlay,
-    load_dashboard_tuning,
-    mem_cpu_tiers_for,
+    measured_host_from_records,
+)
+
+_TUNING = DashboardTuning(
+    mem_budget_fraction=0.70,
+    ya_make_mem_fraction=0.95,
+    mem_min_chunk_gb=24.0,
+    cpu_saturation_pct=90.0,
+    near_budget_factor=1.10,
 )
 
 
-def test_mem_cpu_tiers_for():
-    assert mem_cpu_tiers_for(64) == (1, 2, 4, 8, 16, 32, 48, 64)
-    assert mem_cpu_tiers_for(96) == (1, 2, 4, 8, 16, 32, 48, 64, 96)
-
-
-def test_capacity_from_measured_requires_both():
-    assert capacity_from_measured(cpu_cores=None, ram_gb=124.0) is None
-    assert capacity_from_measured(cpu_cores=64, ram_gb=None) is None
-    assert capacity_from_measured(cpu_cores=0, ram_gb=124.0) is None
-
-
-def test_load_dashboard_tuning_from_config():
-    tuning = load_dashboard_tuning()
-    assert tuning["mem_budget_fraction"] == 0.70
-    assert tuning["ya_make_mem_fraction"] == 0.95
-    assert tuning["mem_min_chunk_gb"] == 24.0
-
-
-def test_capacity_from_measured():
-    tuning = load_dashboard_tuning()
-    cap = capacity_from_measured(cpu_cores=64, ram_gb=124.42)
-    assert cap is not None
-    assert cap.vcpu == 64
-    assert abs(cap.ram_gb - 124.42) < 1e-6
-    assert abs(cap.mem_budget_gb - 124.42 * tuning["mem_budget_fraction"]) < 1e-6
-    assert abs(cap.ya_make_mem_limit_gb - 124.42 * tuning["ya_make_mem_fraction"]) < 1e-6
-    assert 64 in cap.mem_cpu_tiers
-
-
-def test_enrich_resources_overlay_measured_limits():
+def test_enrich_attaches_single_host_block():
     overlay = {
         "xs_evlog_sec": [0.0, 1.0],
         "cpu_total_cores": [10.0, 20.0],
         "ram_gb": [100.0, 120.0],
-        "cpu_cores": 64,
-        "ram_total_gb": 124.42,
+        # series-normalization sentinel must not become host.vcpu
+        "cpu_cores": 1,
     }
     records = [{"cpu_cores": 64, "ram_total_gb": 124.42}]
-    out, cap = enrich_resources_overlay(overlay, records=records)
-    assert out is not None
-    assert cap is not None
-    assert out["runner_limits"]["cpu_cores_max"] == 64
-    assert abs(out["runner_limits"]["ram_gb_max"] - 124.42) < 1e-6
-    assert out["measured"]["ram_gb"] == 124.42
-    assert out["runner_capacity"]["vcpu"] == 64
-
-
-def test_enrich_resources_overlay_no_limits_without_monitor():
-    overlay = {
-        "xs_evlog_sec": [0.0],
-        "cpu_total_cores": [1.0],
-        "ram_gb": [1.0],
+    out, host = enrich_resources_overlay(overlay, records=records, tuning=_TUNING)
+    assert host is not None
+    assert host.vcpu == 64
+    assert out["host"] == {
+        "vcpu": 64,
+        "ram_gb": 124.4,
+        "mem_budget_gb": 87.1,
+        "ya_make_mem_limit_gb": 118.2,
     }
-    out, cap = enrich_resources_overlay(overlay, records=[])
-    assert out is not None
-    assert cap is None
     assert "runner_limits" not in out
     assert "runner_capacity" not in out
+    assert "measured" not in out
+
+
+def test_no_host_from_overlay_sentinel_or_partial_records():
+    overlay = {"xs_evlog_sec": [0.0], "cpu_cores": 1, "ram_total_gb": 124.0}
+    out, host = enrich_resources_overlay(overlay, records=[], tuning=_TUNING)
+    assert host is None
+    assert "host" not in out
+
+    # RAM without CPU (or vice versa) is not enough.
+    assert measured_host_from_records([{"ram_total_gb": 124.0}]) is None
+    assert measured_host_from_records([{"cpu_cores": 64}]) is None
+    # Overlay scalars alone must never invent a host.
+    out2, host2 = enrich_resources_overlay(
+        {"cpu_cores": 64, "ram_total_gb": 124.0},
+        records=[{"ram_used_kb": 1}],
+        tuning=_TUNING,
+    )
+    assert host2 is None
+    assert "host" not in out2
+
+
+def _all_tests():
+    return [
+        test_enrich_attaches_single_host_block,
+        test_no_host_from_overlay_sentinel_or_partial_records,
+    ]
 
 
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
-    for fn in (
-        test_mem_cpu_tiers_for,
-        test_capacity_from_measured_requires_both,
-        test_load_dashboard_tuning_from_config,
-        test_capacity_from_measured,
-        test_enrich_resources_overlay_measured_limits,
-        test_enrich_resources_overlay_no_limits_without_monitor,
-    ):
+    for fn in _all_tests():
         suite.addTest(unittest.FunctionTestCase(fn))
     return suite
 
 
 if __name__ == "__main__":
-    test_mem_cpu_tiers_for()
-    test_capacity_from_measured_requires_both()
-    test_load_dashboard_tuning_from_config()
-    test_capacity_from_measured()
-    test_enrich_resources_overlay_measured_limits()
-    test_enrich_resources_overlay_no_limits_without_monitor()
-    print("OK")
+    failures = 0
+    for t in _all_tests():
+        try:
+            t()
+            print(f"PASS {t.__name__}")
+        except AssertionError as e:
+            failures += 1
+            print(f"FAIL {t.__name__}: {e}")
+    sys.exit(1 if failures else 0)

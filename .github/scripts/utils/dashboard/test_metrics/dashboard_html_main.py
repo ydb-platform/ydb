@@ -56,11 +56,11 @@ def build_html_dashboard(
         ya_activity_deltas=ya_activity_deltas,
     )
 
-    rf = (run_config or {}).get("runner_capacity") or {}
-    rf_vcpu = rf.get("vcpu", "n/a")
-    rf_ram = rf.get("ram_gb", "n/a")
-    rf_budget = rf.get("mem_budget_gb", "n/a")
-    rf_ya_mem = rf.get("ya_make_mem_limit_gb", "n/a")
+    host = (run_config or {}).get("host") or {}
+    rf_vcpu = host.get("vcpu", "n/a")
+    rf_ram = host.get("ram_gb", "n/a")
+    rf_budget = host.get("mem_budget_gb", "n/a")
+    rf_ya_mem = host.get("ya_make_mem_limit_gb", "n/a")
     out_data = out_html.with_name(out_html.stem + "_data.json")
     write_dashboard_data_json(out_data, payload)
     data_url_js = js_script_json(out_data.name)
@@ -924,14 +924,8 @@ def build_html_dashboard(
         );
       }}
       function hostCapacity(kind) {{
-        const ro = data.resources_overlay || {{}};
-        const lim = ro.runner_limits || {{}};
-        const measured = ro.measured || {{}};
-        const live = kind === 'cpu'
-          ? (measured.cpu_cores || ro.cpu_cores)
-          : (measured.ram_gb || ro.ram_total_gb);
-        const fallback = kind === 'cpu' ? lim.cpu_cores_max : lim.ram_gb_max;
-        const n = Number(live != null && live !== '' ? live : fallback);
+        const host = (data.resources_overlay || {{}}).host || {{}};
+        const n = Number(kind === 'cpu' ? host.vcpu : host.ram_gb);
         if (!Number.isFinite(n) || n <= 0) return null;
         if (kind === 'cpu') return String(Math.round(n));
         return formatHeadlineNumber('ram', n);
@@ -2182,31 +2176,31 @@ def build_html_dashboard(
     }}
 
     function addCpuLimitTrace(plotId, ro) {{
-      if (!ro || !ro.runner_limits || !ro.runner_limits.cpu_cores_max) return;
+      if (!ro || !ro.host || !ro.host.vcpu) return;
       const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
       if (!xDisp.length) return;
-      const y = Number(ro.runner_limits.cpu_cores_max);
+      const y = Number(ro.host.vcpu);
       Plotly.addTraces(plotId, [{{
         x: xDisp,
         y: xDisp.map(() => y),
         mode: 'lines',
-          name: 'CPU limit (host measured)',
+        name: 'CPU limit (host measured)',
         line: {{ color: '#9333ea', width: 2, dash: 'dash' }},
         legendrank: 1001,
-          hovertemplate: 'CPU host max (measured): %{{y:.0f}} cores<extra></extra>',
+        hovertemplate: 'CPU host max (measured): %{{y:.0f}} cores<extra></extra>',
       }}]);
     }}
 
     function addRamLimitTraces(plotId, ro) {{
-      if (!ro || !ro.runner_limits) return;
-      const lim = ro.runner_limits;
+      if (!ro || !ro.host) return;
+      const host = ro.host;
       const xDisp = (ro.xs_evlog_sec || []).map(x => xToDisplay(x));
       if (!xDisp.length) return;
       const traces = [];
-      if (lim.ram_gb_max) {{
+      if (host.ram_gb) {{
         traces.push({{
           x: xDisp,
-          y: xDisp.map(() => Number(lim.ram_gb_max)),
+          y: xDisp.map(() => Number(host.ram_gb)),
           mode: 'lines',
           name: 'RAM limit (host measured)',
           line: {{ color: '#9333ea', width: 2, dash: 'dash' }},
@@ -2214,10 +2208,10 @@ def build_html_dashboard(
           hovertemplate: 'RAM host max (measured): %{{y:.1f}} GB<extra></extra>',
         }});
       }}
-      if (lim.ya_make_mem_limit_gb) {{
+      if (host.ya_make_mem_limit_gb) {{
         traces.push({{
           x: xDisp,
-          y: xDisp.map(() => Number(lim.ya_make_mem_limit_gb)),
+          y: xDisp.map(() => Number(host.ya_make_mem_limit_gb)),
           mode: 'lines',
           name: 'RAM ya.make cgroup',
           line: {{ color: '#c026d3', width: 2, dash: 'dot' }},

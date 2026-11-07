@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 try:
-    from ..runner_capacity import RunnerCapacity, load_dashboard_tuning, mem_cpu_tiers_for
+    from ..runner_capacity import DashboardTuning, MeasuredHost, load_dashboard_tuning, mem_cpu_tiers_for
 except ImportError:
     _dashboard_dir = Path(__file__).resolve().parent.parent
     if str(_dashboard_dir) not in sys.path:
         sys.path.insert(0, str(_dashboard_dir))
-    from runner_capacity import RunnerCapacity, load_dashboard_tuning, mem_cpu_tiers_for
+    from runner_capacity import DashboardTuning, MeasuredHost, load_dashboard_tuning, mem_cpu_tiers_for
 
 
 def _status_bucket() -> dict[str, int]:
@@ -235,24 +235,21 @@ def build_cpu_recommendations(
     test_duration_stats_by_suite: Optional[dict[str, dict[str, Any]]] = None,
     maximize_reqs_for_timeout_tests: bool = False,
     runner_cpu_series: Optional[list[tuple[float, float]]] = None,
-    runner_capacity: Optional[RunnerCapacity] = None,
+    measured_host: Optional[MeasuredHost] = None,
+    tuning: Optional[DashboardTuning] = None,
 ) -> list[dict[str, Any]]:
-    if runner_capacity is not None:
-        runner_cores = runner_capacity.vcpu
-        mem_budget_gb = runner_capacity.mem_budget_gb
-        mem_min_chunk_gb = runner_capacity.mem_min_chunk_gb
-        cpu_saturation_pct = runner_capacity.cpu_saturation_pct
-        near_budget_factor = runner_capacity.near_budget_factor
-        mem_cpu_tiers = runner_capacity.mem_cpu_tiers
+    dash = tuning if tuning is not None else load_dashboard_tuning()
+    mem_min_chunk_gb = dash.mem_min_chunk_gb
+    cpu_saturation_pct = dash.cpu_saturation_pct
+    near_budget_factor = dash.near_budget_factor
+    if measured_host is not None:
+        runner_cores = measured_host.vcpu
+        mem_budget_gb = measured_host.mem_budget_gb(dash)
+        mem_cpu_tiers = mem_cpu_tiers_for(measured_host.vcpu)
     else:
-        # p95/split still work; mem→cpu needs measured host capacity.
-        tuning = load_dashboard_tuning()
         runner_cores = 0
         mem_budget_gb = 0.0
-        mem_min_chunk_gb = float(tuning["mem_min_chunk_gb"])
-        cpu_saturation_pct = float(tuning["cpu_saturation_pct"])
-        near_budget_factor = float(tuning["near_budget_factor"])
-        mem_cpu_tiers = mem_cpu_tiers_for(64)
+        mem_cpu_tiers = mem_cpu_tiers_for(None)
     dedup_runs_by_chunk: dict[tuple[str, str], dict[str, Any]] = {}
     dedup_runs_fallback: list[dict[str, Any]] = []
     for r in runs:
@@ -437,7 +434,7 @@ def build_cpu_recommendations(
         cpu_for_memory: Any = None
         mem_max_parallel = 0
         mem_driven_cpu = False
-        if runner_capacity is not None and max_chunk_ram_gb >= mem_min_chunk_gb and mem_budget_gb > 0 and runner_cores > 0:
+        if measured_host is not None and max_chunk_ram_gb >= mem_min_chunk_gb:
             mem_max_parallel = max(1, int(mem_budget_gb // max_chunk_ram_gb))
             cpu_for_memory = _round_cpu_up(runner_cores / mem_max_parallel, mem_cpu_tiers)
             if recommended_req != "all" and int(recommended_req) < int(cpu_for_memory):

@@ -22,7 +22,7 @@ from _paths import DASHBOARD, TEST_METRICS, add_product_paths
 add_product_paths(TEST_METRICS, DASHBOARD)
 
 from dashboard_cpu_recommendations import _marker_suite_start_us, build_cpu_recommendations
-from runner_capacity import RunnerCapacity, mem_cpu_tiers_for
+from runner_capacity import DashboardTuning, MeasuredHost
 
 try:
     import pytest
@@ -32,18 +32,22 @@ except ImportError:
 
 GB_KB = 1024 * 1024  # 1 GB expressed in KB
 
+_TUNING = DashboardTuning(
+    mem_budget_fraction=0.70,
+    ya_make_mem_fraction=0.95,
+    mem_min_chunk_gb=24.0,
+    cpu_saturation_pct=90.0,
+    near_budget_factor=1.10,
+)
 
-def _capacity(*, vcpu: int, ram_gb: float, mem_budget_gb: float) -> RunnerCapacity:
-    return RunnerCapacity(
-        vcpu=vcpu,
-        ram_gb=ram_gb,
-        mem_budget_gb=mem_budget_gb,
-        mem_min_chunk_gb=24.0,
-        cpu_saturation_pct=90.0,
-        near_budget_factor=1.10,
-        mem_cpu_tiers=mem_cpu_tiers_for(vcpu),
-        ya_make_mem_limit_gb=ram_gb * 0.95,
-    )
+
+def _host(*, vcpu: int, ram_gb: float) -> MeasuredHost:
+    return MeasuredHost(vcpu=vcpu, ram_gb=ram_gb)
+
+
+def _recs(*args, **kwargs):
+    kwargs.setdefault("tuning", _TUNING)
+    return build_cpu_recommendations(*args, **kwargs)
 
 
 def _run(suite, chunk, start_sec, dur_sec, cores, ram_gb=0.0, status="OK"):
@@ -88,7 +92,7 @@ def test_cpu_is_p95_only_no_duration_boost():
         _run(suite, 1, 0, 100, cores=2.0),
         _run(suite, 2, 0, 100, cores=2.0),
     ]
-    recs = _by_suite(build_cpu_recommendations(
+    recs = _by_suite(_recs(
         runs,
         requirements_cache={suite: {"cpu_cores": 2, "size": "LARGE", "split_factor": 3}},
         report_status_by_suite={suite: {"tests": _status(), "chunks": _status()}},
@@ -116,7 +120,7 @@ def test_split_raised_proactively_without_timeout():
         {"sum_duration_sec": 7200.0, "max_test_duration_sec": 500.0, "chunk_idx": 0, "chunk_group": None},
         {"sum_duration_sec": 200.0, "max_test_duration_sec": 200.0, "chunk_idx": 1, "chunk_group": None},
     ]
-    recs = _by_suite(build_cpu_recommendations(
+    recs = _by_suite(_recs(
         runs,
         requirements_cache={suite: {"cpu_cores": 2, "size": "LARGE", "split_factor": 2}},
         report_status_by_suite={suite: {"tests": _status(timeouts=0), "chunks": _status()}},
@@ -144,7 +148,7 @@ def test_single_test_blocks_split():
         {"sum_duration_sec": 3601.0, "max_test_duration_sec": 3601.0, "chunk_idx": 0, "chunk_group": None},
         {"sum_duration_sec": 300.0, "max_test_duration_sec": 300.0, "chunk_idx": 1, "chunk_group": None},
     ]
-    recs = _by_suite(build_cpu_recommendations(
+    recs = _by_suite(_recs(
         runs,
         requirements_cache={suite: {"cpu_cores": 2, "size": "LARGE", "split_factor": 2}},
         report_status_by_suite={suite: {"tests": _status(timeouts=2), "chunks": _status()}},
@@ -169,7 +173,7 @@ def test_single_test_contention_suspected_on_saturated_runner():
     ]
     # Runner pinned near 95% during the suite window ([0,1000] evlog sec).
     cpu_series = [(100.0, 95.0), (400.0, 96.0), (700.0, 94.0), (900.0, 97.0)]
-    recs = _by_suite(build_cpu_recommendations(
+    recs = _by_suite(_recs(
         runs,
         requirements_cache={suite: {"cpu_cores": 2, "size": "LARGE", "split_factor": 2}},
         report_status_by_suite={suite: {"tests": _status(timeouts=2), "chunks": _status()}},
@@ -197,7 +201,7 @@ def test_single_test_not_contention_when_way_over_budget():
         {"sum_duration_sec": 300.0, "max_test_duration_sec": 300.0, "chunk_idx": 1, "chunk_group": None},
     ]
     cpu_series = [(100.0, 95.0), (400.0, 96.0), (700.0, 94.0), (900.0, 97.0)]
-    recs = _by_suite(build_cpu_recommendations(
+    recs = _by_suite(_recs(
         runs,
         requirements_cache={suite: {"cpu_cores": 2, "size": "LARGE", "split_factor": 2}},
         report_status_by_suite={suite: {"tests": _status(timeouts=2), "chunks": _status()}},
@@ -221,7 +225,7 @@ def test_cpu_lower_suppressed_under_split_pressure():
     chunk_loads = [
         {"sum_duration_sec": 7200.0, "max_test_duration_sec": 500.0, "chunk_idx": 0, "chunk_group": None},
     ]
-    recs = _by_suite(build_cpu_recommendations(
+    recs = _by_suite(_recs(
         runs,
         # ya.make reserves cpu:8 but observed p95 is ~2 -> would normally be "lower"
         requirements_cache={suite: {"cpu_cores": 8, "size": "LARGE", "split_factor": 2}},
@@ -245,13 +249,13 @@ def test_memory_drives_cpu_bump_not_ram():
         _run(suite, 0, 0, 100, cores=2.0, ram_gb=58.0),
         _run(suite, 1, 0, 100, cores=2.0, ram_gb=40.0),
     ]
-    recs = _by_suite(build_cpu_recommendations(
+    recs = _by_suite(_recs(
         runs,
         requirements_cache={suite: {"cpu_cores": 16, "ram_gb": 32, "size": "LARGE", "split_factor": 2}},
         report_status_by_suite={suite: {"tests": _status(), "chunks": _status()}},
         max_test_duration_sec_by_suite={suite: 50.0},
         test_duration_stats_by_suite={suite: {"chunk_loads": []}},
-        runner_capacity=_capacity(vcpu=96, ram_gb=286.0, mem_budget_gb=200.0),
+        measured_host=_host(vcpu=96, ram_gb=286.0),
     ))
     r = recs[suite]
     assert round(r["max_chunk_ram_gb"]) == 58, r["mem_explain"]
@@ -271,13 +275,13 @@ def test_light_suite_no_memory_cpu_bump():
         _run(suite, 0, 0, 100, cores=2.0, ram_gb=12.0),
         _run(suite, 1, 0, 100, cores=2.0, ram_gb=11.0),
     ]
-    recs = _by_suite(build_cpu_recommendations(
+    recs = _by_suite(_recs(
         runs,
         requirements_cache={suite: {"cpu_cores": 4, "size": "LARGE", "split_factor": 2}},
         report_status_by_suite={suite: {"tests": _status(), "chunks": _status()}},
         max_test_duration_sec_by_suite={suite: 50.0},
         test_duration_stats_by_suite={suite: {"chunk_loads": []}},
-        runner_capacity=_capacity(vcpu=64, ram_gb=124.0, mem_budget_gb=86.8),
+        measured_host=_host(vcpu=64, ram_gb=124.0),
     ))
     r = recs[suite]
     assert r["cpu_for_memory"] is None, r["mem_explain"]
@@ -315,7 +319,7 @@ def test_build_cpu_recommendations_straggler_suite_start():
         _run(suite, 3, t0 + gap, 6.0, 1.0),
         _run(suite, 4, t0 + gap + 60, 5.0, 1.0),
     ]
-    recs = build_cpu_recommendations(
+    recs = _recs(
         runs,
         requirements_cache={suite: {"cpu_cores": 4, "ram_gb": 32, "size": "MEDIUM", "split_factor": 300}},
         report_status_by_suite={suite: {"tests": _status(), "chunks": _status()}},

@@ -525,6 +525,24 @@ namespace {
             return std::nullopt;
         }
 
+        if (IsYqlNullExprNode(defaultExpr) && columnType) {
+            const auto* nullableType = columnType;
+            if (nullableType->GetKind() != ETypeAnnotationKind::Optional
+                && nullableType->GetKind() != ETypeAnnotationKind::Pg)
+            {
+                nullableType = ctx.MakeType<TOptionalExprType>(nullableType);
+            }
+            auto literal = Build<TCoNothing>(ctx, defaultExpr.Pos())
+                .OptionalType(BuildTypeExpr(defaultExpr.Pos(), *nullableType, ctx))
+                .Done();
+            onRepeat(ctx.Builder(defaultExpr.Pos())
+                .Callable("EvaluateExpr")
+                .Add(0, literal.Ptr())
+                .Seal()
+                .Build());
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+        }
+
         if (defaultType->HasNull() || IsPgNullExprNode(defaultExpr)) {
             if (columnNotNull) {
                 if (table) {
@@ -535,19 +553,6 @@ namespace {
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Default expr " << name
                         << " is nullable or optional, but column has not null constraint."));
-                }
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (defaultExpr.Maybe<TCoNull>().IsValid()) {
-                if (table) {
-                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                        << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                        << " Column: \"" << name
-                        << "\". Default expr with null is not supported. Use DROP DEFAULT to replace the default value by null."));
-                } else {
-                    ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
-                        << "Default expr " << name << " is null, but default expr with null is not supported. Try to set the column without DEFAULT clause instead."));
                 }
                 return IGraphTransformer::TStatus::Error;
             }
@@ -2496,13 +2501,6 @@ private:
                         }
 
                         if (column) {
-                            if (!column->IsDefaultKindDefined()) {
-                                ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
-                                    << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
-                                    << " Column: \"" << name
-                                    << "\" has no default to drop"));
-                                return TStatus::Error;
-                            }
                             if (column->IsDefaultFromSequence()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
                                     << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)

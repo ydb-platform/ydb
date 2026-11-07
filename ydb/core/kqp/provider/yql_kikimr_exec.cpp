@@ -2206,6 +2206,12 @@ public:
                             return SyncError();
                         }
 
+                        if (hasNotNull && hasDefaultValue && columnBuild->default_from_literal().value().has_null_flag_value()) {
+                            ctx.AddError(YqlIssue(ctx.GetPosition(columnTuple.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST,
+                                "Cannot add not null column with NULL default value"));
+                            return SyncError();
+                        }
+
                         for (size_t itemIdx = 3; itemIdx < columnTuple.Size(); ++itemIdx) {
                             auto columnItem = columnTuple.Item(itemIdx);
                             if (!columnItem.Maybe<TExprList>()) {
@@ -2395,16 +2401,11 @@ public:
                                 defaultExpr = maybeJust.Cast().Input();
                             }
 
-                            bool isNull = defaultExpr.Maybe<TCoNull>().IsValid() || IsPgNullExprNode(defaultExpr);
-                            if (isNull) {
-                                alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_NULL);
-                            } else {
-                                alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
-                                auto err = FillLiteralProto(defaultExpr, nullptr, *alter_columns->MutableDefaultFromLiteral());
-                                if (err) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
-                                    return SyncError();
-                                }
+                            alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);
+                            auto err = FillLiteralProto(defaultExpr, &RemoveOptionality(*defaultExpr.Ref().GetTypeAnn()), *alter_columns->MutableDefaultFromLiteral());
+                            if (err) {
+                                ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), *err));
+                                return SyncError();
                             }
                         } else if (alterColumnAction == "dropDefault") {
                             if (table.Metadata->Kind == EKikimrTableKind::Olap) {

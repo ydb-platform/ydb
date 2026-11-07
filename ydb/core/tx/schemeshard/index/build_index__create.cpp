@@ -309,6 +309,10 @@ public:
                             notNull,
                             familyName));
                 } else {
+                    if (notNull && colInfo.default_from_literal().value().has_null_flag_value()) {
+                        return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                            << "Cannot add not null column '" << colInfo.GetColumnName() << "' with NULL default value");
+                    }
                     buildInfo->BuildColumns.push_back(
                         TIndexBuildInfo::TColumnBuildInfo(
                             colInfo.GetColumnName(), colInfo.default_from_literal(), notNull, familyName));

@@ -33,9 +33,9 @@ TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableOptions sched
     NDqProto::TDqTask* task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database)
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database, NMonitoring::TDynamicCounterPtr counters)
     : TBase(std::move(schedulableOptions), executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings,
-        memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /* taskCounters = */ nullptr, std::move(traceId), std::move(arena))
+        memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /* taskCounters = */ std::move(counters), std::move(traceId), std::move(arena))
     , ComputeCtx(settings.StatsMode)
     , BlockTrackingMode(mode)
 {

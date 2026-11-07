@@ -114,6 +114,41 @@ message TDomainState {
     optional bool StorageSpaceExhausted = 3; // storage pools of the database are running out of space (reported by BS_CONTROLLER)
 }
 
+// Disk space quotas exactly as SchemeShard enforces them, together with the usage it compares them against.
+// Lets clients show the quota state without reproducing SchemeShard accounting rules.
+message TDiskSpaceQuotaUsage {
+    enum EMode {
+        MODE_UNSPECIFIED = 0;
+        // DatabaseQuotas.data_size_*_quota is checked against the total database usage
+        // (tables, plus topics when EnableTopicDiskSubDomainQuota is on); storage_quotas are ignored.
+        // Entries contain a single item with an empty PoolKind.
+        MODE_DATABASE = 1;
+        // DatabaseQuotas.storage_quotas are checked against the usage of the storage pool kind with the same name
+        // (tables only); the overall database quota is ignored.
+        // Entries contain an item for every pool kind that has either usage or a quota.
+        MODE_STORAGE_POOL_KINDS = 2;
+    }
+
+    message TEntry {
+        optional string PoolKind = 1; // empty in MODE_DATABASE
+        optional uint64 Usage = 2; // bytes, the value compared with the quotas
+        // Effective quotas in bytes: when only one of the quotas is configured, the other one is equal to it.
+        // 0 means no limit. See QuotaExceeded for how they are combined into the database state.
+        optional uint64 SoftQuota = 3;
+        optional uint64 HardQuota = 4;
+    }
+
+    optional EMode Mode = 1;
+    repeated TEntry Entries = 2;
+    // Persisted database-wide quota hysteresis state, recomputed whenever the usage or the quotas change:
+    // - becomes true when Usage > HardQuota for any entry with a non-zero HardQuota;
+    // - becomes false only when Usage < SoftQuota for every entry with a non-zero SoftQuota;
+    // - otherwise keeps its previous value.
+    // Unlike DomainState.DiskQuotaExceeded, it is not affected by StorageSpaceExhausted,
+    // so writes can stay blocked after QuotaExceeded becomes false.
+    optional bool QuotaExceeded = 3;
+}
+
 message TAuditSettings {
     optional bool EnableDmlAudit = 1 [default = false];
     repeated string ExpectedSubjects = 2;
@@ -152,6 +187,10 @@ message TDomainDescription {
     optional TAuditSettings AuditSettings = 21;
 
     optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel TablesMetricsLevel = 26;
+
+    // Set only by the SchemeShard that enforces the quotas of the database. Absent in older SchemeShard versions
+    // and in the parent SchemeShard's description of an external subdomain: describe it via its tenant SchemeShard.
+    optional TDiskSpaceQuotaUsage DiskSpaceQuotaUsage = 27;
 }
 
 message TSchemeQuotas {

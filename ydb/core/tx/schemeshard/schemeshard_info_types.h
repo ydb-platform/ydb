@@ -2625,6 +2625,11 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     bool CheckDiskSpaceQuotas(IQuotaCounters* counters);
 
     /*
+    Describes the disk space quotas and usage exactly as CheckDiskSpaceQuotas() compares them.
+    */
+    void FillDiskSpaceQuotaUsage(NKikimrSubDomains::TDiskSpaceQuotaUsage& out) const;
+
+    /*
     Checks current small-blobs usage against small-blobs quotas.
     Returns true when the SmallBlobsQuotaExceeded flag has changed and needs to be persisted and pushed to scheme board.
     */
@@ -2636,7 +2641,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     */
     bool CheckQuotas(IQuotaCounters* counters);
 
-    ui64 TotalDiskSpaceUsage() {
+    ui64 TotalDiskSpaceUsage() const {
         return DiskSpaceUsage.Tables.TotalSize + (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() ? GetPQAccountStorage() : 0);
     }
 

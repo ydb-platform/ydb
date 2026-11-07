@@ -258,7 +258,7 @@ void InitViewerHiveStatsJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerTenantInfoJsonHandler(TJsonHandlers &handlers) {
-    handlers.AddHandler("/viewer/tenantinfo", new THttpHandler<TJsonTenantInfo>(TJsonTenantInfo::GetSwagger()), 5);
+    handlers.AddHandler("/viewer/tenantinfo", new THttpHandler<TJsonTenantInfo>(TJsonTenantInfo::GetSwagger()), 6);
 }
 
 void InitViewerWhoAmIJsonHandler(TJsonHandlers& handlers) {

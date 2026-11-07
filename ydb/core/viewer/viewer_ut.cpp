@@ -1478,6 +1478,195 @@ Y_UNIT_TEST_SUITE(Viewer) {
         CheckStorageLimitWithGroupSizeInUnits(true, true);
     }
 
+    // Returns the only tenant of /viewer/tenantinfo?storage=true, with the domain description patched by `fill`
+    NJson::TJsonValue GetTenantInfoWithDomainDescription(std::function<void(NKikimrSubDomains::TDomainDescription&)> fill) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvDescribeSchemeResult) {
+                auto* response = ev->Get<TEvSchemeShard::TEvDescribeSchemeResult>();
+                auto* domain = response->MutableRecord()->MutablePathDescription()->MutableDomainDescription();
+                domain->ClearStoragePools();
+                domain->ClearDiskSpaceUsage();
+                domain->ClearDiskSpaceQuotaUsage();
+                domain->ClearDomainState();
+                domain->ClearDatabaseQuotas();
+                fill(*domain);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/tenantinfo?storage=true&use_cache=false HTTP/1.1\r\n\r\n", endpoint, {});
+        runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        TAutoPtr<IEventHandle> handle;
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Response->Status, "200", result->Response->Body);
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        const auto& tenants = json["TenantInfo"].GetArray();
+        UNIT_ASSERT_VALUES_EQUAL(tenants.size(), 1);
+        return tenants[0];
+    }
+
+    void AddStoragePools(NKikimrSubDomains::TDomainDescription& domain, std::initializer_list<TString> kinds) {
+        for (const auto& kind : kinds) {
+            auto* pool = domain.AddStoragePools();
+            pool->SetName("/Root:" + kind);
+            pool->SetKind(kind);
+        }
+    }
+
+    void AddPoolUsage(NKikimrSubDomains::TDomainDescription& domain, const TString& kind, ui64 size) {
+        auto* poolUsage = domain.MutableDiskSpaceUsage()->AddStoragePoolsUsage();
+        poolUsage->SetPoolKind(kind);
+        poolUsage->SetTotalSize(size);
+    }
+
+    void AddQuotaEntry(NKikimrSubDomains::TDiskSpaceQuotaUsage& quotaUsage, const TString& kind, ui64 usage, ui64 soft, ui64 hard) {
+        auto* entry = quotaUsage.AddEntries();
+        entry->SetPoolKind(kind);
+        entry->SetUsage(usage);
+        entry->SetSoftQuota(soft);
+        entry->SetHardQuota(hard);
+    }
+
+    // soft or hard quota equal to 0 means that the field must be absent
+    void CheckTablesStorage(const NJson::TJsonValue& tenant, const TString& type, ui64 size, ui64 soft, ui64 hard) {
+        const NJson::TJsonValue* found = nullptr;
+        for (const auto& tablesStorage : tenant["TablesStorage"].GetArray()) {
+            if (tablesStorage["Type"].GetString() == type) {
+                UNIT_ASSERT_C(!found, "duplicate TablesStorage " << type);
+                found = &tablesStorage;
+            }
+        }
+        UNIT_ASSERT_C(found, "no TablesStorage " << type << " in " << tenant["TablesStorage"].GetStringRobust());
+        const auto& tablesStorage = *found;
+        UNIT_ASSERT_VALUES_EQUAL_C(tablesStorage["Size"].GetString(), ToString(size), type);
+        if (soft) {
+            UNIT_ASSERT_VALUES_EQUAL_C(tablesStorage["SoftQuota"].GetString(), ToString(soft), type);
+            UNIT_ASSERT_VALUES_EQUAL_C(tablesStorage["Limit"].GetString(), ToString(soft), type);
+        } else {
+            UNIT_ASSERT_C(!tablesStorage.Has("SoftQuota"), tablesStorage.GetStringRobust());
+            UNIT_ASSERT_C(!tablesStorage.Has("Limit"), tablesStorage.GetStringRobust());
+        }
+        if (hard) {
+            UNIT_ASSERT_VALUES_EQUAL_C(tablesStorage["HardQuota"].GetString(), ToString(hard), type);
+        } else {
+            UNIT_ASSERT_C(!tablesStorage.Has("HardQuota"), tablesStorage.GetStringRobust());
+        }
+    }
+
+    Y_UNIT_TEST(TenantInfoDiskSpaceQuotaDatabaseMode)
+    {
+        const auto tenant = GetTenantInfoWithDomainDescription([](NKikimrSubDomains::TDomainDescription& domain) {
+            AddStoragePools(domain, {"ssd", "hdd"});
+            AddPoolUsage(domain, "ssd", 100);
+            AddPoolUsage(domain, "hdd", 50);
+            domain.MutableDiskSpaceUsage()->MutableTopics()->SetDataSize(30);
+            // only the hard quota is configured, the effective soft quota is equal to it
+            domain.MutableDatabaseQuotas()->set_data_size_hard_quota(1000);
+            auto& quotaUsage = *domain.MutableDiskSpaceQuotaUsage();
+            quotaUsage.SetMode(NKikimrSubDomains::TDiskSpaceQuotaUsage::MODE_DATABASE);
+            quotaUsage.SetQuotaExceeded(false);
+            AddQuotaEntry(quotaUsage, "", 180, 1000, 1000);
+            domain.MutableDomainState()->SetDiskQuotaExceeded(true);
+            domain.MutableDomainState()->SetStorageSpaceExhausted(true);
+        });
+
+        const auto& quota = tenant["DiskSpaceQuota"];
+        UNIT_ASSERT_C(quota.IsMap(), tenant.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL(quota["DiskQuotaExceeded"].GetBoolean(), true);
+        UNIT_ASSERT_VALUES_EQUAL(quota["StorageSpaceExhausted"].GetBoolean(), true);
+        UNIT_ASSERT_C(quota.Has("SmallBlobsQuotaExceeded"), quota.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL(quota["SmallBlobsQuotaExceeded"].GetBoolean(), false);
+        const auto& quotaUsage = quota["DiskSpaceQuotaUsage"];
+        UNIT_ASSERT_VALUES_EQUAL(quotaUsage["Mode"].GetString(), "MODE_DATABASE");
+        UNIT_ASSERT_VALUES_EQUAL(quotaUsage["QuotaExceeded"].GetBoolean(), false);
+        UNIT_ASSERT_VALUES_EQUAL(quotaUsage["Entries"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(quotaUsage["Entries"][0]["Usage"].GetString(), "180");
+
+        // the database quota is attached to the main storage type, which also holds the topics
+        UNIT_ASSERT_VALUES_EQUAL(tenant["TablesStorage"].GetArray().size(), 2);
+        CheckTablesStorage(tenant, "SSD", 130, 1000, 1000);
+        CheckTablesStorage(tenant, "HDD", 50, 0, 0);
+    }
+
+    Y_UNIT_TEST(TenantInfoDiskSpaceQuotaStoragePoolKindsMode)
+    {
+        const auto tenant = GetTenantInfoWithDomainDescription([](NKikimrSubDomains::TDomainDescription& domain) {
+            AddStoragePools(domain, {"ssd", "ssd-fast", "hdd"});
+            AddPoolUsage(domain, "ssd", 100);
+            AddPoolUsage(domain, "ssd-fast", 20);
+            auto& quotaUsage = *domain.MutableDiskSpaceQuotaUsage();
+            quotaUsage.SetMode(NKikimrSubDomains::TDiskSpaceQuotaUsage::MODE_STORAGE_POOL_KINDS);
+            quotaUsage.SetQuotaExceeded(false);
+            // two pool kinds of the same storage type are summed up
+            AddQuotaEntry(quotaUsage, "ssd", 100, 800, 1000);
+            AddQuotaEntry(quotaUsage, "ssd-fast", 20, 150, 200);
+            // a quota without usage
+            AddQuotaEntry(quotaUsage, "hdd", 0, 300, 400);
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(tenant["DiskSpaceQuota"]["DiskSpaceQuotaUsage"]["Mode"].GetString(), "MODE_STORAGE_POOL_KINDS");
+        UNIT_ASSERT_VALUES_EQUAL(tenant["DiskSpaceQuota"]["DiskQuotaExceeded"].GetBoolean(), false);
+        UNIT_ASSERT_VALUES_EQUAL(tenant["TablesStorage"].GetArray().size(), 2);
+        CheckTablesStorage(tenant, "SSD", 120, 950, 1200);
+        CheckTablesStorage(tenant, "HDD", 0, 300, 400);
+    }
+
+    Y_UNIT_TEST(TenantInfoDiskSpaceQuotaStoragePoolKindsUnlimited)
+    {
+        const auto tenant = GetTenantInfoWithDomainDescription([](NKikimrSubDomains::TDomainDescription& domain) {
+            AddStoragePools(domain, {"ssd", "ssd-idle", "hdd", "hdd-unlimited"});
+            AddPoolUsage(domain, "ssd", 100);
+            AddPoolUsage(domain, "hdd", 50);
+            AddPoolUsage(domain, "hdd-unlimited", 10);
+            auto& quotaUsage = *domain.MutableDiskSpaceQuotaUsage();
+            quotaUsage.SetMode(NKikimrSubDomains::TDiskSpaceQuotaUsage::MODE_STORAGE_POOL_KINDS);
+            quotaUsage.SetQuotaExceeded(false);
+            AddQuotaEntry(quotaUsage, "ssd", 100, 800, 1000);
+            // "ssd-idle" has neither usage nor a quota, so SchemeShard doesn't report it
+            AddQuotaEntry(quotaUsage, "hdd", 50, 300, 400);
+            AddQuotaEntry(quotaUsage, "hdd-unlimited", 10, 0, 0);
+        });
+
+        // a storage type has no limit when any of its pool kinds has no limit
+        UNIT_ASSERT_VALUES_EQUAL(tenant["TablesStorage"].GetArray().size(), 2);
+        CheckTablesStorage(tenant, "SSD", 100, 0, 0);
+        CheckTablesStorage(tenant, "HDD", 60, 0, 0);
+    }
+
+    Y_UNIT_TEST(TenantInfoDiskSpaceQuotaOlderSchemeShard)
+    {
+        const auto tenant = GetTenantInfoWithDomainDescription([](NKikimrSubDomains::TDomainDescription& domain) {
+            AddStoragePools(domain, {"ssd", "hdd"});
+            AddPoolUsage(domain, "ssd", 100);
+            domain.MutableDatabaseQuotas()->set_data_size_hard_quota(1000);
+        });
+
+        const auto& quota = tenant["DiskSpaceQuota"];
+        UNIT_ASSERT_C(quota.IsMap(), tenant.GetStringRobust());
+        UNIT_ASSERT_C(!quota.Has("DiskSpaceQuotaUsage"), quota.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL(quota["DiskQuotaExceeded"].GetBoolean(), false);
+        UNIT_ASSERT_VALUES_EQUAL(quota["StorageSpaceExhausted"].GetBoolean(), false);
+        UNIT_ASSERT_VALUES_EQUAL(quota["SmallBlobsQuotaExceeded"].GetBoolean(), false);
+
+        // raw database quotas, as before
+        UNIT_ASSERT_VALUES_EQUAL(tenant["TablesStorage"].GetArray().size(), 1);
+        CheckTablesStorage(tenant, "SSD", 100, 0, 1000);
+    }
+
     Y_UNIT_TEST(StorageLimitsCappedByUserChunkPool) {
         for (bool cluster : {false, true}) {
             for (ui64 poolSize : {0, 600}) {

@@ -755,7 +755,20 @@ private:
 
             LookOnActorID = {};
             NotifyWatchers();
-            BeginNewCycle();
+            if (ev->Get()->Reason == TEvTablet::TEvTabletDead::ReasonBootBSError) {
+                // booting again at once would most likely fail the same way; it would be a busy loop, and with all of
+                // it on one node of a test actor system the simulated time would not move
+                const TDuration sleepDuration = GetSleepDuration();
+                YDB_LOG_INFO("Tablet failed to boot because of blob storage, waiting",
+                    {"tabletId", TabletInfo->TabletID},
+                    {"tabletType", GetTabletTypeName()},
+                    {"sleepDuration", sleepDuration});
+                ++RoundCounter; // wakeups of the previous rounds don't count
+                Schedule(sleepDuration, new TEvents::TEvWakeup(RoundCounter));
+                Become(&TThis::StateSleep);
+            } else {
+                BeginNewCycle();
+            }
         } else if (ev->Sender == FollowerActorID) {
             FollowerActorID = {};
             BootFollower();

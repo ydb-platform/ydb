@@ -6,7 +6,6 @@ import json
 import os
 import re
 import sys
-import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -128,7 +127,11 @@ def discover_attempts(
 
 
 def apply_config_env(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Map resolve config → env actually read by dispatch/ingest (no dead aliases)."""
+    """Map resolve config → env for dispatch/ingest.
+
+    S3 endpoints stay in YAML / claim_s3(cfg): resolve fills claim_* from summary_*,
+    so scripts do not re-fallback or mirror AWS_* ↔ REMOTE_AWS_*.
+    """
     cfg = cfg if cfg is not None else load_config_json()
     if not cfg:
         return cfg
@@ -137,27 +140,10 @@ def apply_config_env(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
     if repo:
         os.environ["REPO"] = repo
 
+    # Host artifact tree is under the executor workflow name.
     workflow_name = (cfg.get("workflow_name") or "").strip()
     if workflow_name:
-        os.environ["WORKFLOW_NAME"] = workflow_name
-        # Ingest still looks up host artifacts under the executor workflow name.
         os.environ["REMOTE_WORKFLOW_NAME"] = workflow_name
-
-    # Resolve already copies summary → claim; prefer claim, fall back to summary.
-    endpoint = (
-        (cfg.get("claim_s3_endpoint") or "").strip()
-        or (cfg.get("summary_s3_endpoint") or "").strip()
-    )
-    bucket = (
-        (cfg.get("claim_s3_bucket") or "").strip()
-        or (cfg.get("summary_s3_bucket") or "").strip()
-    )
-    if endpoint:
-        os.environ["AWS_ENDPOINT"] = endpoint
-        os.environ["REMOTE_AWS_ENDPOINT"] = endpoint
-    if bucket:
-        os.environ["AWS_BUCKET"] = bucket
-        os.environ["REMOTE_AWS_BUCKET"] = bucket
 
     analytics = (cfg.get("analytics_job_name") or "").strip()
     if analytics:

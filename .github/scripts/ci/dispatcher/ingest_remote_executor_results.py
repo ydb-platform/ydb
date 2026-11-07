@@ -25,7 +25,7 @@ if _DISPATCHER_DIR not in sys.path:
 from _common import (  # noqa: E402
     apply_config_env,
     die,
-    discover_attempts as discover_attempts_fs,
+    discover_attempts,
     env,
     env_opt,
     http_get_bytes as http_get,
@@ -284,10 +284,6 @@ def resolve_source_attribution(
     source_run_id = env_opt("SOURCE_RUN_ID") or caller_run_id
     pull_number = env_opt("PULL_NUMBER") or _nonempty(meta.get("pull_number"))
     return event_name, source_run_id, pull_number
-
-
-def discover_attempts(public_dir: Path, meta: dict[str, Any]) -> list[dict[str, Any]]:
-    return discover_attempts_fs(public_dir, list(meta.get("attempts") or []) or None)
 
 
 def regenerate_summary(
@@ -658,7 +654,7 @@ def main() -> None:
         if indexer.is_file():
             run([sys.executable, str(indexer), "-r", f"{public_dir}/"], cwd=str(workspace))
 
-        attempts = discover_attempts(public_dir, meta)
+        attempts = discover_attempts(public_dir, list(meta.get("attempts") or []) or None)
         print(f"attempts={json.dumps(attempts, ensure_ascii=False)}")
 
         job_summary = regenerate_summary(

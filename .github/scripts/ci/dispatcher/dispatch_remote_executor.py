@@ -74,18 +74,10 @@ def gh(method, url, body=None, retries=1, ok_codes=(200, 201, 202, 204)):
     die(f"GitHub {method} {url} failed: {last_err}")
 
 
-def load_config():
-    return load_config_json()
-
-
 def claim_s3(cfg):
-    """Host public S3 for claims — resolve already fills claim_* from summary_*."""
-    ep = (cfg.get("claim_s3_endpoint") or cfg.get("summary_s3_endpoint") or "").strip() or env_opt(
-        "AWS_ENDPOINT"
-    )
-    bucket = (cfg.get("claim_s3_bucket") or cfg.get("summary_s3_bucket") or "").strip() or env_opt(
-        "AWS_BUCKET"
-    )
+    """Host public S3 for claims — resolve fills claim_* from summary_* once."""
+    ep = (cfg.get("claim_s3_endpoint") or "").strip() or env_opt("AWS_ENDPOINT")
+    bucket = (cfg.get("claim_s3_bucket") or "").strip() or env_opt("AWS_BUCKET")
     if not ep or not bucket:
         die("claim S3 endpoint/bucket missing (remote host public S3)")
     return ep.rstrip("/"), bucket
@@ -135,7 +127,7 @@ def build_ticket(cfg):
 
 
 def cmd_enqueue():
-    cfg = load_config()
+    cfg = load_config_json()
     ticket = build_ticket(cfg)
     run_id = ticket["platform_run_id"]
     run_url = ticket["platform_run_url"]
@@ -215,7 +207,7 @@ def wait_executor_done(run_id, run_url):
         return
     # Duplicate host dispatch can cancel this run; follow the claim if it moved.
     if conclusion == "cancelled":
-        cfg = load_config()
+        cfg = load_config_json()
         want_attempt = platform_run_attempt()
         for _ in range(40):
             claim = read_claim(cfg, env("PLATFORM_RUN_ID"))
@@ -242,11 +234,10 @@ def wait_executor_done(run_id, run_url):
 
 
 def cmd_wait():
-    cfg = load_config()
+    cfg = load_config_json()
     run_id, run_url = wait_for_claim(cfg)
     set_outputs(executor_run_id=run_id, executor_run_url=run_url)
     os.environ["REPO"] = (cfg.get("repository") or "").strip() or env_opt("REPO")
-    os.environ["WORKFLOW_NAME"] = (cfg.get("workflow_name") or "").strip() or env_opt("WORKFLOW_NAME")
     ep, bucket = claim_s3(cfg)
     os.environ["AWS_ENDPOINT"] = ep
     os.environ["AWS_BUCKET"] = bucket
@@ -256,7 +247,7 @@ def cmd_wait():
 def cmd_cancel():
     run_id = env_opt("EXECUTOR_RUN_ID")
     if not run_id:
-        cfg = load_config()
+        cfg = load_config_json()
         platform_run_id = env_opt("PLATFORM_RUN_ID")
         if platform_run_id:
             claim = read_claim(cfg, platform_run_id)
@@ -276,11 +267,11 @@ def cmd_cancel():
 
 
 def main():
-    if len(sys.argv) != 2 or sys.argv[1] not in ("enqueue", "start", "wait", "cancel"):
-        die("usage: dispatcher/dispatch_remote_executor.py enqueue|start|wait|cancel")
+    if len(sys.argv) != 2 or sys.argv[1] not in ("enqueue", "wait", "cancel"):
+        die("usage: dispatcher/dispatch_remote_executor.py enqueue|wait|cancel")
     apply_config_env()
     cmd = sys.argv[1]
-    if cmd in ("enqueue", "start"):
+    if cmd == "enqueue":
         cmd_enqueue()
     elif cmd == "wait":
         cmd_wait()

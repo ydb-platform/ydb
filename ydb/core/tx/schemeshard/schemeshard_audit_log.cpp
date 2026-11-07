@@ -442,16 +442,16 @@ void AuditLogExportEnd(const TExportInfo& info, TSchemeShard* SS) {
     // TSchemeShard::FromXxportInfo() can not be used here
     switch (info.Kind) {
         case TExportInfo::EKind::YT:
-            Y_ABORT_UNLESS(proto.MutableExportToYtSettings()->ParseFromString(info.Settings));
+            proto.MutableExportToYtSettings()->CopyFrom(info.GetSettings<Ydb::Export::ExportToYtSettings>());
             proto.MutableExportToYtSettings()->clear_token();
             break;
         case TExportInfo::EKind::S3:
-            Y_ABORT_UNLESS(proto.MutableExportToS3Settings()->ParseFromString(info.Settings));
+            proto.MutableExportToS3Settings()->CopyFrom(info.GetSettings<Ydb::Export::ExportToS3Settings>());
             proto.MutableExportToS3Settings()->clear_access_key();
             proto.MutableExportToS3Settings()->clear_secret_key();
             break;
         case TExportInfo::EKind::FS:
-            Y_ABORT_UNLESS(proto.MutableExportToFsSettings()->ParseFromString(info.Settings));
+            proto.MutableExportToFsSettings()->CopyFrom(info.GetSettings<Ydb::Export::ExportToFsSettings>());
             break;
     }
     _AuditLogXxportEnd(info, "EXPORT END", ExportKindSpecificParts(proto), SS);

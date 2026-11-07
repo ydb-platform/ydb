@@ -50,12 +50,13 @@ protected:
 
 protected:
     TExportFilesUploader(const TSettings& settings, const TString& destinationPrefix)
-        : Settings(settings)
+        : NumberOfRetries(settings.number_of_retries())
+        , EncryptionAlgorithm(settings.encryption_settings().encryption_algorithm())
         , DestinationPrefix(destinationPrefix)
         , ExternalStorageConfig(NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, settings))
     {
-        if (Settings.has_encryption_settings()) {
-            Key = NBackup::TEncryptionKey(Settings.encryption_settings().symmetric_key().key());
+        if (settings.has_encryption_settings()) {
+            Key = NBackup::TEncryptionKey(settings.encryption_settings().symmetric_key().key());
         }
     }
 
@@ -84,7 +85,7 @@ protected:
             filePath += ".enc";
             try {
                 TBuffer encContent = NBackup::TEncryptedFileSerializer::EncryptFullFile(
-                    Settings.encryption_settings().encryption_algorithm(),
+                    EncryptionAlgorithm,
                     *Key, *iv,
                     content);
                 content.assign(encContent.Data(), encContent.Size());
@@ -144,7 +145,7 @@ protected:
     }
 
     void RetryOrFinish(const Aws::S3::S3Error& error, TFileUpload& upload) {
-        if (upload.Attempt < Settings.number_of_retries() && NWrappers::ShouldRetry(error)) {
+        if (upload.Attempt < NumberOfRetries && NWrappers::ShouldRetry(error)) {
             Retry(upload);
         } else {
             Fail(TStringBuilder() << GetObjectKey(upload.Path) << ": " << LogPrefix() << " error: " << error.GetMessage());
@@ -186,7 +187,8 @@ public:
     }
 
 private:
-    TSettings Settings;
+    ui32 NumberOfRetries;
+    TString EncryptionAlgorithm;
     TString DestinationPrefix;
     TMaybe<NBackup::TEncryptionKey> Key;
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;

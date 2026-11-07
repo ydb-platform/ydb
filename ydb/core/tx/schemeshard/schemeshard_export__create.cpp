@@ -69,21 +69,16 @@ using namespace NTabletFlatExecutor;
 using namespace NBackup::NFieldsWrappers;
 // Erases encryption key from settings, if settings type supports it
 // Returns true if settings changed
-template <class TSettings, class = decltype(std::declval<TSettings>().encryption_settings())> // Function for TSettings that have encryption_settings()
-bool EraseEncryptionKeyFromSettingsProto(TString* serializedSettings) {
-    TSettings settings;
-    if (!settings.ParseFromString(*serializedSettings)) {
-        return false;
-    }
-    if (settings.encryption_settings().has_symmetric_key()) {
-        settings.mutable_encryption_settings()->clear_symmetric_key();
-        return settings.SerializeToString(serializedSettings);
-    }
-    return false;
-}
-
 template <class TSettings>
-bool EraseEncryptionKeyFromSettingsProto(...) {
+bool EraseEncryptionKeyFromSettingsProto(TExportInfo& exportInfo) {
+    if constexpr (requires (TSettings settings) { settings.encryption_settings(); }) {
+        const auto& current = exportInfo.GetSettings<TSettings>();
+        if (current.encryption_settings().has_symmetric_key()) {
+            auto settings = current;
+            settings.mutable_encryption_settings()->clear_symmetric_key();
+            return exportInfo.SetSettings(std::move(settings));
+        }
+    }
     return false;
 }
 
@@ -91,13 +86,13 @@ void TSchemeShard::EraseEncryptionKey(NIceDb::TNiceDb& db, TExportInfo& exportIn
     bool erased = false;
     switch (exportInfo.Kind) {
     case TExportInfo::EKind::YT:
-        erased = EraseEncryptionKeyFromSettingsProto<Ydb::Export::ExportToYtSettings>(&exportInfo.Settings);
+        erased = EraseEncryptionKeyFromSettingsProto<Ydb::Export::ExportToYtSettings>(exportInfo);
         break;
     case TExportInfo::EKind::S3:
-        erased = EraseEncryptionKeyFromSettingsProto<Ydb::Export::ExportToS3Settings>(&exportInfo.Settings);
+        erased = EraseEncryptionKeyFromSettingsProto<Ydb::Export::ExportToS3Settings>(exportInfo);
         break;
     case TExportInfo::EKind::FS:
-        erased = EraseEncryptionKeyFromSettingsProto<Ydb::Export::ExportToFsSettings>(&exportInfo.Settings);
+        erased = EraseEncryptionKeyFromSettingsProto<Ydb::Export::ExportToFsSettings>(exportInfo);
         break;
     }
     if (erased) {
@@ -552,8 +547,7 @@ private:
         UploadScheme<Ydb::Export::ExportToYtSettings>(exportInfo, itemIdx, ctx); // Common code for all types of storage
 
         if (IsPathTypeSchemeObject(item)) {
-            TSettings exportSettings;
-            Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
+            const auto& exportSettings = exportInfo.GetSettings<TSettings>();
             const auto databaseRoot = CanonizePath(Self->RootPathElements);
 
             NBackup::TMetadata metadata;
@@ -593,8 +587,7 @@ private:
 
     template <typename TSettings>
     bool FillExportMetadata(TExportInfo& exportInfo, TString& issues) {
-        TSettings exportSettings;
-        Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
+        auto exportSettings = exportInfo.GetSettings<TSettings>();
 
         const TString& destination = GetCommonDestination(exportSettings);
         if (destination.empty()) { // No place to save backup metadata
@@ -658,7 +651,7 @@ private:
                 schemaMappingItem.SetIV(NBackup::TEncryptionIV::Combine(*iv, NBackup::EBackupFileType::Metadata, itemIndex, 0).GetBinaryString());
             }
         }
-        if (!exportSettings.SerializeToString(&exportInfo.Settings)) {
+        if (!exportInfo.SetSettings(std::move(exportSettings))) {
             issues = "Failed to serialize settings";
             return false;
         }
@@ -674,8 +667,7 @@ private:
 
     template <typename TSettings>
     bool UploadExportMetadata(TExportInfo& exportInfo, const TActorContext& ctx) { // returns true if we need to change state to UploadExportMetadata
-        TSettings exportSettings;
-        Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo.Settings));
+        const auto& exportSettings = exportInfo.GetSettings<TSettings>();
 
         if (GetCommonDestination(exportSettings).empty()) { // No place to save backup metadata
             return false;
@@ -787,8 +779,7 @@ private:
             return;
         }
 
-        Ydb::Export::ExportToS3Settings settings;
-        Y_ABORT_UNLESS(settings.ParseFromString(exportInfo.Settings));
+        const auto& settings = exportInfo.GetSettings<Ydb::Export::ExportToS3Settings>();
         const TString prefix = operationMarker
             ? GetExportCompletionPrefix(settings)
             : ExportItemDestinationPrefix(Self, exportInfo, itemIdx);

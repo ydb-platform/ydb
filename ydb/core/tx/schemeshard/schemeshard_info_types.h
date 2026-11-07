@@ -14,6 +14,7 @@
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
+#include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
@@ -65,6 +66,8 @@
 #include <util/generic/vector.h>
 
 #include <array>
+#include <type_traits>
+#include <variant>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -3851,7 +3854,54 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     ui64 Id;  // TxId from the original TEvCreateExportRequest
     TString Uid;
     EKind Kind;
+
+private:
     TString Settings;
+    mutable std::variant<std::monostate,
+        Ydb::Export::ExportToYtSettings,
+        Ydb::Export::ExportToS3Settings,
+        Ydb::Export::ExportToFsSettings> ParsedSettings;
+
+    template <typename TSettings>
+    void CheckSettingsKind() const {
+        if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToYtSettings>) {
+            Y_ABORT_UNLESS(Kind == EKind::YT);
+        } else if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToS3Settings>) {
+            Y_ABORT_UNLESS(Kind == EKind::S3);
+        } else {
+            static_assert(std::is_same_v<TSettings, Ydb::Export::ExportToFsSettings>);
+            Y_ABORT_UNLESS(Kind == EKind::FS);
+        }
+    }
+
+public:
+    const TString& GetSerializedSettings() const {
+        return Settings;
+    }
+
+    // References remain valid until settings are replaced or the export is destroyed.
+    template <typename TSettings>
+    const TSettings& GetSettings() const {
+        CheckSettingsKind<TSettings>();
+        if (std::holds_alternative<std::monostate>(ParsedSettings)) {
+            auto& settings = ParsedSettings.emplace<TSettings>();
+            Y_ABORT_UNLESS(settings.ParseFromString(Settings));
+        }
+        return std::get<TSettings>(ParsedSettings);
+    }
+
+    template <typename TSettings>
+    bool SetSettings(TSettings settings) {
+        CheckSettingsKind<TSettings>();
+        TString serialized;
+        if (!settings.SerializeToString(&serialized)) {
+            return false;
+        }
+        Settings = std::move(serialized);
+        ParsedSettings = std::move(settings);
+        return true;
+    }
+
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
     TString PeerName;  // required for making audit log records

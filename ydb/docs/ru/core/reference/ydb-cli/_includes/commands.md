@@ -23,9 +23,13 @@
 Команда / подкоманда | Краткое описание
 --- | ---
 admin cluster bootstrap | Инициализация подготовленного [кластера](../../../concepts/glossary.md#cluster)
+[admin cluster bridge convert](../commands/bridge/convert.md) | Преобразование обычного [кластера](../../../concepts/glossary.md#cluster) в [bridge](../../../concepts/bridge.md) с одним pile
+[admin cluster bridge destroy-pile](../commands/bridge/destroy-pile.md) | Удаление хранилища и данных отключённого [pile](../../../concepts/glossary.md#pile)
 [admin cluster bridge failover](../commands/bridge/failover.md) | Аварийное переключение при недоступности [pile](../../../concepts/glossary.md#pile)
+[admin cluster bridge join-pile (rejoin)](../commands/bridge/rejoin.md) | Подключение подготовленного [pile](../../../concepts/glossary.md#pile) или возврат после обслуживания
 [admin cluster bridge list](../commands/bridge/list.md) | Список состояния каждого [pile](../../../concepts/glossary.md#pile) в [режиме bridge](../../../concepts/bridge.md)
-[admin cluster bridge rejoin](../commands/bridge/rejoin.md) | Возвращение [pile](../../../concepts/glossary.md#pile) в [кластер](../../../concepts/glossary.md#cluster) после обслуживания или восстановления
+[admin cluster bridge provision-pile](../commands/bridge/provision-pile.md) | Подготовка хранилища нового [pile](../../../concepts/glossary.md#pile)
+[admin cluster bridge set-database-mode](../commands/bridge/set-database-mode.md) | Переключение [базы данных](../../../concepts/glossary.md#database) между режимом bridge и обычным хранилищем
 [admin cluster bridge switchover](../commands/bridge/switchover.md) | Плановая смена `PRIMARY` [pile](../../../concepts/glossary.md#pile)
 [admin cluster bridge takedown](../commands/bridge/takedown.md) | Вывод [pile](../../../concepts/glossary.md#pile) из [кластера](../../../concepts/glossary.md#cluster) для обслуживания
 [admin cluster config fetch](../commands/configuration/cluster/fetch.md) | Получение текущей динамической конфигурации [кластера](../../../concepts/glossary.md#cluster)

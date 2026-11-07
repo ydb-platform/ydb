@@ -20,6 +20,7 @@ from typing import Any
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import (  # noqa: E402
     append_summary,
+    cfg_bool,
     cfg_str,
     die,
     env,
@@ -29,7 +30,6 @@ from _common import (  # noqa: E402
     load_config_json,
     object_url,
     set_outputs,
-    truthy,
 )
 
 TICKET_FILENAME = "remote-ticket.json"
@@ -172,7 +172,7 @@ def wait_for_claim(cfg):
 
 
 def wait_executor_done(cfg, token: str, run_id, run_url):
-    fail_on_remote = truthy(cfg.get("fail_on_remote_failure"), True)
+    fail_on_remote = cfg_bool(cfg, "fail_on_remote_failure")
     repo = cfg_str(cfg, "repository")
     print(f"Waiting for executor run {run_id} ({run_url}) ...")
     status = conclusion = ""

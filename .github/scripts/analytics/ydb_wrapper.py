@@ -33,11 +33,14 @@ _QUERY_CLIENT_SETTINGS = (
     .with_native_json_in_result_sets(False)
 )
 
-_DISABLE_YDB_QA_ENV = "CI_DISABLE_YDB_QA"
+_DISABLE_YDB_QA_ENV = "CI_DISABLE_YDB_QA"  # twin of collector.schema.DISABLE_YDB_QA_ENV
 
 
 def is_ydb_qa_disabled() -> bool:
-    """True when CI must not read/write YDB QA (remote host / enable_ydb_qa=false)."""
+    """True when CI must not read/write YDB QA (remote host / enable_ydb_qa=false).
+
+    Twin: collector.schema.is_ydb_qa_disabled (same env name / value).
+    """
     return os.environ.get(_DISABLE_YDB_QA_ENV, "").strip() == "1"
 
 

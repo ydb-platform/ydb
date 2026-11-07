@@ -315,6 +315,21 @@ def upload_to_table(wrapper, table_path, rows, column_types, table_name="table")
     print(f'Successfully uploaded to {table_name}')
 
 
+def build_run_name(event_name: str, run_id: str, pull_number: str, attempt: int) -> str:
+    """Analytics `--pull` label: `{run_id}_{manual|PR_N|schedule|POST}_attempt_{N}`."""
+    if event_name == "workflow_dispatch":
+        base = f"{run_id}_manual"
+    elif event_name in ("pull_request", "pull_request_target"):
+        base = f"{run_id}_PR_{pull_number}" if pull_number else f"{run_id}_PR"
+    elif event_name == "schedule":
+        base = f"{run_id}_schedule"
+    elif event_name == "push":
+        base = f"{run_id}_POST"
+    else:
+        base = run_id
+    return f"{base}_attempt_{attempt}"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--test-results-file', action='store',
@@ -326,7 +341,13 @@ def main():
     parser.add_argument('--branch', default='store',
                         dest="branch", required=True, help='branch name ')
     parser.add_argument('--pull', action='store', dest="pull",
-                        required=True, help='pull number')
+                        help='legacy analytics pull label; prefer --event-name/--attempt')
+    parser.add_argument('--event-name', action='store', dest="event_name",
+                        help='GITHUB_EVENT_NAME; with --attempt derives --pull')
+    parser.add_argument('--pr-number', action='store', dest="pr_number", default="",
+                        help='PR number for pull_request* events')
+    parser.add_argument('--attempt', action='store', dest="attempt", type=int,
+                        help='retry/attempt index for analytics pull label')
     parser.add_argument('--run-timestamp', action='store',
                         dest="run_timestamp", required=True, help='time of test run start')
     parser.add_argument('--job-name', action='store', dest="job_name",
@@ -335,6 +356,12 @@ def main():
                         required=True, help='job id of workflow')
 
     args = parser.parse_args()
+    if args.pull:
+        pull = args.pull
+    elif args.event_name is not None and args.attempt is not None:
+        pull = build_run_name(args.event_name, args.job_id, args.pr_number or "", args.attempt)
+    else:
+        parser.error("provide --pull, or both --event-name and --attempt")
 
     try:
         with YDBWrapper() as wrapper:
@@ -346,7 +373,7 @@ def main():
             # Parse build-results-report JSON with test results
             results = parse_build_results_report(
                 args.test_results_file, args.build_type, args.job_name, args.job_id,
-                args.commit, args.branch, args.pull, args.run_timestamp
+                args.commit, args.branch, pull, args.run_timestamp
             )
 
             # Add owner information

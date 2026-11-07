@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pure-function checks for remote resolve seeds, discover_attempts, index crawl."""
+"""Resolve seeds (env-backed), discover_attempts, and index-crawl safety checks."""
 
 from __future__ import annotations
 

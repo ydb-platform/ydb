@@ -99,6 +99,15 @@ def cfg_str(cfg: dict[str, Any], key: str) -> str:
     return s
 
 
+def cfg_bool(cfg: dict[str, Any], key: str) -> bool:
+    if key not in cfg:
+        die(f"CONFIG_JSON.{key} missing")
+    v = cfg[key]
+    if isinstance(v, bool):
+        return v
+    die(f"CONFIG_JSON.{key} must be bool, got {type(v).__name__}: {v!r}")
+
+
 def host_s3(cfg: dict[str, Any]) -> tuple[str, str]:
     ep = cfg_str(cfg, "host_s3_endpoint").rstrip("/")
     bucket = cfg_str(cfg, "host_s3_bucket")

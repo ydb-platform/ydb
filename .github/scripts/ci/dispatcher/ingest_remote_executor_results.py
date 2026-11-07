@@ -13,19 +13,14 @@ import re
 import subprocess
 import sys
 import tempfile
-import time
 import urllib.parse
 from pathlib import Path
 from typing import Any
 
 _DISPATCHER_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _DISPATCHER_DIR.parents[3]
-if str(_DISPATCHER_DIR) not in sys.path:
-    sys.path.insert(0, str(_DISPATCHER_DIR))
-_ANALYTICS_UTILS = _REPO_ROOT / ".github/scripts/utils/analytics"
-_s = str(_ANALYTICS_UTILS)
-if _s not in sys.path:
-    sys.path.insert(0, _s)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, str(_REPO_ROOT / ".github/scripts/utils/analytics"))
 
 from _common import (  # noqa: E402
     append_summary,
@@ -78,12 +73,8 @@ def load_manifest(
         endpoint, bucket, f"{host_repo}/{host_workflow}/{run_id}/remote_artifacts.json"
     )
     print(f"Fetching remote_artifacts.json from {url}")
-    raw = None
-    for _ in range(20):
-        raw = http_get_bytes(url)
-        if raw:
-            break
-        time.sleep(3)
+    # Wait already saw host run completed; host publishes this in its final step.
+    raw = http_get_bytes(url)
     if not raw:
         die(f"missing remote_artifacts.json at {url}")
     meta = json.loads(raw.decode())
@@ -244,20 +235,6 @@ def rewrite_url_prefix(root: Path, old: str, new: str) -> int:
     return n
 
 
-def build_run_name(event_name: str, run_id: str, pull_number: str, attempt: int) -> str:
-    if event_name == "workflow_dispatch":
-        base = f"{run_id}_manual"
-    elif event_name in ("pull_request", "pull_request_target"):
-        base = f"{run_id}_PR_{pull_number}" if pull_number else f"{run_id}_PR"
-    elif event_name == "schedule":
-        base = f"{run_id}_schedule"
-    elif event_name == "push":
-        base = f"{run_id}_POST"
-    else:
-        base = run_id
-    return f"{base}_attempt_{attempt}"
-
-
 def regenerate_summary(
     *,
     public_dir: Path,
@@ -268,26 +245,19 @@ def regenerate_summary(
     pull_number: str,
     workflow_run_id: str,
     scratch_dir: Path,
-    job_summary: Path,
-) -> Path:
-    """Regenerate ya-test.html with YDB history; write enriched job_summary.
+) -> str:
+    """Regenerate ya-test.html with YDB history; return enriched job_summary markdown.
 
     Host publishes job_summary.md at run root for humans; ingest builds its own
     enriched summary from attempt artifacts. generate-summary is run with
     GITHUB_STEP_SUMMARY cleared so it cannot append to the ingest job summary.
     """
     summary_links = public_dir / "summary_links.txt"
-
-    def _stub_summary() -> Path:
-        job_summary.write_text(
-            f"_No test attempts found._\n\n[Artifacts]({public_dir_url}/index.html)\n",
-            encoding="utf-8",
-        )
-        return job_summary
+    stub = f"_No test attempts found._\n\n[Artifacts]({public_dir_url}/index.html)\n"
 
     last = attempts[-1] if attempts else None
     if not last:
-        return _stub_summary()
+        return stub
 
     html_path = public_dir / last["html_relpath"]
     report_path = public_dir / last["report_relpath"]
@@ -334,7 +304,7 @@ def regenerate_summary(
         run(cmd, cwd=str(_REPO_ROOT), env=child_env)
     except subprocess.CalledProcessError as e:
         print(f"::warning::generate-summary failed ({e}); writing stub job_summary")
-        return _stub_summary()
+        return stub
 
     parts: list[str] = ["## Summary (enriched)\n\n"]
     if build_failed_md.is_file() and build_failed_md.stat().st_size > 0:
@@ -342,17 +312,7 @@ def regenerate_summary(
     if text_file.is_file():
         body = text_file.read_text(encoding="utf-8")
         parts.append(body if body.endswith("\n") else body + "\n")
-    job_summary.write_text("".join(parts), encoding="utf-8")
-    return job_summary
-
-
-def _as_uint(value: Any) -> int | None:
-    try:
-        if value is None or value == "":
-            return None
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+    return "".join(parts)
 
 
 def rewrite_ci_metrics_attribution(
@@ -368,7 +328,8 @@ def rewrite_ci_metrics_attribution(
     """Rewrite remote-stamped JSONL rows to caller run attribution before YDB flush."""
     out = metrics_path.with_name(metrics_path.name + ".caller")
     run_url = f"https://github.com/{caller_repo}/actions/runs/{run_id}"
-    pr_number = _as_uint(pull_number)
+    caller_run_id = int(run_id)
+    pr_number = int(pull_number) if pull_number else None
     rewritten = 0
     with metrics_path.open(encoding="utf-8") as src, out.open("w", encoding="utf-8") as dst:
         for line in src:
@@ -386,16 +347,13 @@ def rewrite_ci_metrics_attribution(
             labels = row.get("labels") if isinstance(row.get("labels"), dict) else {}
             if row.get("run_id") is not None:
                 labels.setdefault("remote_executor_run_id", row.get("run_id"))
-            if row.get("github_job_id") is not None:
-                labels.setdefault("remote_github_job_id", row.get("github_job_id"))
-            row["run_id"] = _as_uint(run_id)
+            row["run_id"] = caller_run_id
             row["event_name"] = event_name
             row["workflow"] = workflow
             row["job_name"] = job_name
             row["run_url"] = run_url
             if pr_number is not None:
                 row["pr_number"] = pr_number
-            # Keep host github_job_id; original also in labels.remote_github_job_id.
             if labels:
                 row["labels"] = labels
             dst.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -449,7 +407,6 @@ def upload_attempts(
 ) -> None:
     for att in attempts:
         report = public_dir / att["report_relpath"]
-        pull = build_run_name(event_name, run_id, pull_number, int(att["retry"]))
         cmd = [
             sys.executable,
             str(_REPO_ROOT / ".github/scripts/analytics/upload_tests_results.py"),
@@ -461,8 +418,12 @@ def upload_attempts(
             commit,
             "--build-type",
             build_preset,
-            "--pull",
-            pull,
+            "--event-name",
+            event_name,
+            "--pr-number",
+            pull_number,
+            "--attempt",
+            str(int(att["retry"])),
             "--job-name",
             job_name,
             "--job-id",
@@ -575,7 +536,7 @@ def main() -> None:
         attempts = discover_attempts(public_dir)
         print(f"attempts={json.dumps(attempts, ensure_ascii=False)}")
 
-        regenerate_summary(
+        summary_md = regenerate_summary(
             public_dir=public_dir,
             public_dir_url=new_public,
             attempts=attempts,
@@ -584,8 +545,8 @@ def main() -> None:
             pull_number=pull_number,
             workflow_run_id=caller_run_id,
             scratch_dir=scratch_dir,
-            job_summary=job_summary,
         )
+        job_summary.write_text(summary_md, encoding="utf-8")
 
         meta_out = {
             "version": 1,
@@ -625,7 +586,7 @@ def main() -> None:
             job_name=job_name,
         )
 
-        body = job_summary.read_text(encoding="utf-8").rstrip() + "\n"
+        body = summary_md.rstrip() + "\n"
         footer_bits = [f"Remote executor: [{run_id}]({run_url})"]
         if executor_conclusion:
             footer_bits.append(f"`{executor_conclusion}`")

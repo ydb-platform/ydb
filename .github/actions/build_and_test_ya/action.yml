@@ -290,7 +290,6 @@ runs:
       shell: bash
       env:
         GITHUB_TOKEN: ${{ github.token }}
-        GITHUB_RUN_ID: ${{ github.run_id }}
         COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != 'false' }}
         PR_NUMBER: ${{ github.event.number }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
@@ -834,6 +833,7 @@ runs:
             } > summary_text.txt.tmp
             mv summary_text.txt.tmp summary_text.txt
           fi
+          # Nebius ci_remote_executor.yml composes PUBLIC_DIR/job_summary.md from this file.
           if [ -f summary_text.txt ]; then
             cp -f summary_text.txt "$PUBLIC_DIR/summary_text.txt"
           fi
@@ -861,36 +861,17 @@ runs:
           if [ "${CI_DISABLE_YDB_QA:-}" = "1" ]; then
             echo "Skipping upload_tests_results (CI_DISABLE_YDB_QA=${CI_DISABLE_YDB_QA})"
           else
-            case "$GITHUB_EVENT_NAME" in
-              workflow_dispatch)
-                run_name="${GITHUB_RUN_ID}_manual"
-                ;;
-              pull_request | pull_request_target)
-                if [ -n "${ANALYTICS_PULL_NUMBER:-}" ]; then
-                  run_name="${GITHUB_RUN_ID}_PR_${ANALYTICS_PULL_NUMBER}"
-                else
-                  run_name="${GITHUB_RUN_ID}_PR"
-                fi
-                ;;
-              schedule)
-                run_name="${GITHUB_RUN_ID}_schedule"
-                ;;
-              push)
-                run_name="${GITHUB_RUN_ID}_POST"
-                ;;
-              *)
-                run_name="${GITHUB_RUN_ID}"
-                ;;
-            esac
-            run_name="${run_name}_attempt_${RETRY}"
             analytics start upload_tests_results
             # Stream logs instead of buffering and replaying them through xtrace.
+            # --pull label is derived in upload_tests_results.py (same as platform ingest).
             .github/scripts/analytics/upload_tests_results.py \
               --test-results-file "${CURRENT_REPORT}" \
               --run-timestamp "${ATTEMPT_STARTED_AT}" \
               --commit "${ORIGINAL_HEAD}" \
               --build-type "${BUILD_PRESET}" \
-              --pull "${run_name}" \
+              --event-name "${GITHUB_EVENT_NAME}" \
+              --pr-number "${ANALYTICS_PULL_NUMBER:-}" \
+              --attempt "${RETRY}" \
               --job-name "${ANALYTICS_JOB_NAME}" \
               --job-id "${GITHUB_RUN_ID}" \
               --branch "${BRANCH_NAME}"

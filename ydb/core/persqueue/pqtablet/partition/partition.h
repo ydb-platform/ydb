@@ -163,6 +163,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitDataStep;
     friend TInitEndWriteTimestampStep;
     friend TInitFieldsStep;
+    friend TNotifyWriteSessionsQuoterStep;
 
     friend TPartitionSourceManager;
 
@@ -171,6 +172,7 @@ class TPartition : public TBaseTabletActor<TPartition> {
 
 public:
     const TString& TopicName() const;
+    void PassAway() override;
 
     ui64 GetUsedStorage(const TInstant& ctx);
 
@@ -811,6 +813,7 @@ private:
 
 private:
     ui32 TabletGeneration;
+    bool WriteSessionsQuoterNotified = false;
     const TPartitionId Partition;
     NKikimrPQ::TPQTabletConfig Config;
     NKikimrPQ::TPQTabletConfig TabletConfig;

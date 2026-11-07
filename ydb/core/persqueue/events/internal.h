@@ -2023,4 +2023,69 @@ struct TEvPQ {
     };
 };
 
+struct TEvWriteSessionsQuoter {
+    enum EEv {
+        EvNotify = InternalEventSpaceBegin(NPQ::NEvents::EServices::WRITE_SESSIONS_QUOTER),
+        EvAcquireQuota,
+        EvQuotaAcquired,
+        EvRemove,
+        EvQuotaDeclined,
+        EvEnd,
+    };
+
+    static_assert(EvEnd <= InternalEventSpaceBegin(NPQ::NEvents::EServices::END));
+
+    struct TEvNotify : TEventLocal<TEvNotify, EvNotify> {
+        TEvNotify(const TString& topic, ui32 partition, ui32 generation)
+            : Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
+    };
+
+    struct TEvAcquireQuota : TEventLocal<TEvAcquireQuota, EvAcquireQuota> {
+        TEvAcquireQuota(const TString& topic, ui32 partition, ui32 generation)
+            : Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
+    };
+
+    struct TEvQuotaAcquired : TEventLocal<TEvQuotaAcquired, EvQuotaAcquired> {
+        TEvQuotaAcquired(TDuration quotaWaitTime)
+            : QuotaWaitTime(quotaWaitTime)
+        {
+        }
+
+        const TDuration QuotaWaitTime;
+    };
+
+    struct TEvQuotaDeclined : TEventLocal<TEvQuotaDeclined, EvQuotaDeclined> {
+        TEvQuotaDeclined() = default;
+    };
+
+    struct TEvRemove : TEventLocal<TEvRemove, EvRemove> {
+        TEvRemove(const TString& topic, ui32 partition, ui32 generation)
+            : Topic(topic)
+            , Partition(partition)
+            , Generation(generation)
+        {
+        }
+
+        const TString Topic;
+        const ui32 Partition;
+        const ui32 Generation;
+    };
+};
+
 } //NKikimr

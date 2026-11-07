@@ -40,7 +40,7 @@ void TPageCollectionProtoHelper::Do(TBundle *bundle, const TPartComponents &pc)
     bundle->MutablePageCollections()->Reserve(pc.PageCollectionComponents.size());
 
     for (auto &one : pc.PageCollectionComponents)
-        Bundle(bundle->AddPageCollections(), one.LargeGlobId, one.RawMeta);
+        Bundle(bundle->AddPageCollections(), one.LargeGlobId, one.SharedMeta ? one.SharedMeta->Raw : TSharedData());
 
     if (auto &legacy = pc.Legacy)
         bundle->SetLegacy(legacy);
@@ -141,7 +141,7 @@ NTable::TPartComponents TPageCollectionProtoHelper::MakePageCollectionComponents
         auto& item = components.emplace_back();
         item.LargeGlobId = TLargeGlobIdProto::Get(pageCollection.GetLargeGlobId());
         if (pageCollection.HasMeta()) {
-            item.RawMeta = TSharedData::Copy(pageCollection.GetMeta());
+            item.SetMeta(TSharedData::Copy(pageCollection.GetMeta()));
         }
     }
 

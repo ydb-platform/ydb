@@ -29,16 +29,21 @@ from _common import (  # noqa: E402
 )
 
 
-def _require_bool(value: Any, where: str) -> bool:
-    if isinstance(value, bool):
-        return value
-    die(f"{where} must be bool, got {type(value).__name__}: {value!r}")
-
-
 def _reject_unknown(keys: set[str], allowed: set[str], where: str) -> None:
     unknown = sorted(keys - allowed)
     if unknown:
         die(f"{where} has unknown keys: {unknown}")
+
+
+def _check_types(values: dict[str, Any], defaults: dict[str, Any], where: str) -> None:
+    for key, default in defaults.items():
+        if isinstance(default, (bool, list)):
+            v = values[key]
+            if type(v) is not type(default):
+                die(
+                    f"{where}.{key} must be {type(default).__name__}, "
+                    f"got {type(v).__name__}: {v!r}"
+                )
 
 
 _DEFAULT_JOB: dict[str, Any] = {
@@ -107,6 +112,8 @@ def build_config() -> dict[str, Any]:
 
     cfg = {**DEFAULT_REMOTE, **remote}
     job = {**_DEFAULT_JOB, **remote_job}
+    _check_types(cfg, DEFAULT_REMOTE, "remote JSON")
+    _check_types(job, _DEFAULT_JOB, "remote JSON .job")
 
     # UI seeds override defaults when remote JSON omitted those job keys.
     if "build_target" not in remote_job:
@@ -134,7 +141,7 @@ def build_config() -> dict[str, Any]:
     preset = _as_str(job["build_preset"]).split(",")[0].strip()
     if not preset:
         die("build_preset is empty")
-    fetch_depth = "0" if _require_bool(job["increment"], "remote JSON .job.increment") else "2"
+    fetch_depth = "0" if job["increment"] else "2"
 
     cfg["analytics_job_name"] = cfg_str(cfg, "analytics_job_name")
     cfg["caller_workflow"] = (
@@ -153,14 +160,7 @@ def build_config() -> dict[str, Any]:
     job_inputs["analytics_job_name"] = cfg["analytics_job_name"]
     job_inputs["pull_number"] = pull_number
 
-    runs_on = cfg.get("runs_on")
-    if not isinstance(runs_on, list):
-        die("runs_on must be a JSON array of runner labels")
-    runs_on_str = json.dumps(runs_on, separators=(",", ":"))
-
-    cfg["fail_on_remote_failure"] = _require_bool(
-        cfg.get("fail_on_remote_failure"), "remote JSON fail_on_remote_failure"
-    )
+    runs_on_str = json.dumps(cfg["runs_on"], separators=(",", ":"))
     cfg["host_s3_endpoint"], cfg["host_s3_bucket"] = host_s3(cfg)
 
     # Host executor receives only config.inputs (VM → workflow_dispatch).

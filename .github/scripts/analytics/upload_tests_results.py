@@ -316,7 +316,7 @@ def upload_to_table(wrapper, table_path, rows, column_types, table_name="table")
 
 
 def build_run_name(event_name: str, run_id: str, pull_number: str, attempt: int) -> str:
-    """Analytics run-name label: `{run_id}_{manual|PR_N|schedule|POST}_attempt_{N}`."""
+    """Analytics run-name: known events → `{run_id}_{manual|PR_N|schedule|POST}_attempt_{N}`; else `{run_id}_attempt_{N}`."""
     if event_name == "workflow_dispatch":
         base = f"{run_id}_manual"
     elif event_name in ("pull_request", "pull_request_target"):

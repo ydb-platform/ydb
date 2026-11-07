@@ -74,6 +74,11 @@ class ResolveSeedsTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             build_config()
 
+    def test_non_bool_run_tests_dies(self):
+        os.environ["REMOTE_JSON"] = json.dumps({"job": {"run_tests": "yes"}})
+        with self.assertRaises(SystemExit):
+            build_config()
+
 
 class IndexCrawlSafetyTest(unittest.TestCase):
     def test_parse_index_rejects_parent_segments(self):

@@ -339,8 +339,7 @@ def rewrite_ci_metrics_attribution(
             try:
                 row = json.loads(raw)
             except json.JSONDecodeError:
-                dst.write(line if line.endswith("\n") else line + "\n")
-                continue
+                row = None
             if not isinstance(row, dict):
                 dst.write(line if line.endswith("\n") else line + "\n")
                 continue

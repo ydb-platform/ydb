@@ -135,7 +135,7 @@ jobs:
           s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
           s3_bucket: ${{ vars.AWS_BUCKET }}
           s3_endpoint: ${{ vars.AWS_ENDPOINT }}
-          build_preset: relwithdebinfo
+          build_preset: ${{ fromJSON(inputs.config).inputs.job_inputs.build_preset || fromJSON(inputs.config).job.build_preset || 'relwithdebinfo' }}
 
       - name: Ingest remote artifacts
         env:

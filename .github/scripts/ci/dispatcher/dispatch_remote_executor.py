@@ -19,6 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from remote_dispatch_config import apply_to_environ  # noqa: E402
+from resolve_remote_execution import format_launch_summary_md  # noqa: E402
 
 TICKET_ARTIFACT_NAME = "remote-ticket"
 TICKET_FILENAME = "remote-ticket.json"
@@ -219,7 +220,14 @@ def cmd_enqueue():
         executor_run_id="",
         executor_run_url="",
     )
-    # Keep enqueue quiet in the run UI — ingest owns the real job summary.
+    # Full resolved params (not a selective subset): same table as resolve_remote.
+    append_summary(
+        format_launch_summary_md(cfg)
+        + f"### Remote enqueue\n"
+        f"- **platform run:** [{run_id}]({run_url})\n"
+        f"- **ticket artifact:** `{TICKET_ARTIFACT_NAME}`\n"
+        f"- **claim (host S3):** `remote-claims/{run_id}.json`\n\n"
+    )
     print(f"::notice title=Remote ticket artifact ready::{TICKET_ARTIFACT_NAME} on run {run_id}")
 
 

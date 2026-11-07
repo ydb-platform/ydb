@@ -20,6 +20,11 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+_DISPATCHER_DIR = os.path.dirname(os.path.abspath(__file__))
+if _DISPATCHER_DIR not in sys.path:
+    sys.path.insert(0, _DISPATCHER_DIR)
+from resolve_remote_execution import format_launch_summary_md  # noqa: E402
+
 
 def die(msg: str) -> None:
     print(f"::error::{msg}", file=sys.stderr)
@@ -777,14 +782,22 @@ def main() -> None:
             caller_workflow=caller_workflow,
         )
 
-        # Job step summary = rewritten job_summary (caller S3 links), not ingest meta.
+        # Job step summary: full launch params + rewritten job_summary (caller S3 links).
         body = ""
         if job_summary.is_file():
             body = job_summary.read_text(encoding="utf-8").rstrip() + "\n"
         footer_bits = [f"Remote executor: [{run_id}]({run_url})"]
         if executor_conclusion:
             footer_bits.append(f"`{executor_conclusion}`")
-        write_step_summary(body + "\n---\n" + " · ".join(footer_bits) + "\n")
+        # Prefer ticket config (CONFIG_JSON) so every job_input is visible, not a subset.
+        cfg_raw = env_opt("CONFIG_JSON")
+        launch_md = ""
+        if cfg_raw:
+            try:
+                launch_md = format_launch_summary_md(json.loads(cfg_raw))
+            except json.JSONDecodeError as e:
+                print(f"::warning::CONFIG_JSON not JSON for launch summary: {e}")
+        write_step_summary(launch_md + body + "\n---\n" + " · ".join(footer_bits) + "\n")
 
     print(f"::notice title=Remote ingest complete::{new_public}/index.html")
 

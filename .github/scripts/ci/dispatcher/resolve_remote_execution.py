@@ -221,6 +221,80 @@ def build_config() -> dict[str, Any]:
     return cfg
 
 
+def _fmt_md_value(v: Any) -> str:
+    if v is None:
+        return "`∅`"
+    if isinstance(v, bool):
+        return f"`{'true' if v else 'false'}`"
+    if isinstance(v, (list, dict)):
+        return f"`{json.dumps(v, ensure_ascii=False, separators=(',', ':'))}`"
+    s = str(v)
+    if s == "":
+        return "`\"\"`"
+    return f"`{s}`"
+
+
+def format_launch_summary_md(cfg: dict[str, Any]) -> str:
+    """Full resolved launch params for job summary (no selective omit)."""
+    inputs = cfg.get("inputs") if isinstance(cfg.get("inputs"), dict) else {}
+    job = inputs.get("job_inputs") if isinstance(inputs.get("job_inputs"), dict) else {}
+    if not job and isinstance(cfg.get("job"), dict):
+        job = cfg["job"]
+
+    lines = [
+        "## Resolved launch parameters",
+        "",
+        "| key | value |",
+        "| --- | --- |",
+    ]
+    top_keys = (
+        "repository",
+        "workflow_file",
+        "workflow_name",
+        "executor_ref",
+        "code_ref",
+        "analytics_branch",
+        "analytics_job_name",
+        "caller_workflow",
+        "platform_repository",
+        "runs_on",
+        "wait",
+        "fail_on_remote_failure",
+        "summary_s3_endpoint",
+        "summary_s3_bucket",
+        "claim_s3_endpoint",
+        "claim_s3_bucket",
+    )
+    for key in top_keys:
+        if key == "code_ref":
+            val = inputs.get("code_ref") or cfg.get("code_ref")
+        elif key == "runs_on":
+            val = inputs.get("runs_on") or cfg.get("runs_on")
+        else:
+            val = cfg.get(key)
+        lines.append(f"| {key} | {_fmt_md_value(val)} |")
+
+    for key in ("platform_run_id", "platform_run_attempt", "platform_repository"):
+        if key in inputs:
+            lines.append(f"| inputs.{key} | {_fmt_md_value(inputs.get(key))} |")
+
+    lines.extend(["", "### job_inputs", "", "| key | value |", "| --- | --- |"])
+    # Stable order: DEFAULT_REMOTE.job keys first, then any extras.
+    ordered = list(DEFAULT_REMOTE.get("job", {}).keys())
+    for key in job:
+        if key not in ordered:
+            ordered.append(key)
+    # Always include derived fields that live only on job_inputs.
+    for key in ("fetch_depth", "custom_branch_name", "source_event_name", "source_run_id",
+                "pull_number", "enable_ydb_qa", "analytics_job_name"):
+        if key not in ordered:
+            ordered.append(key)
+    for key in ordered:
+        lines.append(f"| {key} | {_fmt_md_value(job.get(key))} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def main() -> int:
     cfg = build_config()
     text = json.dumps(cfg, ensure_ascii=False)
@@ -231,6 +305,10 @@ def main() -> int:
             f.write(text)
             f.write("\nEOF\n")
             f.write(f"wait={str(cfg['wait']).lower()}\n")
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as f:
+            f.write(format_launch_summary_md(cfg))
     print(json.dumps(cfg, ensure_ascii=False, indent=2))
     return 0
 

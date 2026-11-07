@@ -4,7 +4,9 @@
 #include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common_tx.h>
 
+#include <ydb/core/base/hive.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_sender.h>
 #include <ydb/core/persqueue/events/global.h>
@@ -23,6 +25,7 @@
 #include <ydb/library/aclib/user_context.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
@@ -532,14 +535,15 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
     }
 
     void WaitForContent(TServer::TPtr server, const TString& tablePath, const TString& expected) {
-        while (true) {
+        for (ui32 attempt = 0; attempt < 30; ++attempt) {
             auto content = ReadShardedTable(server, tablePath);
             if (StripInPlace(content) == expected) {
-                break;
-            } else {
-                SimulateSleep(server, TDuration::Seconds(1));
+                return;
             }
+            SimulateSleep(server, TDuration::Seconds(1));
         }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(StripString(ReadShardedTable(server, tablePath)), expected, tablePath);
     }
 
     Y_UNIT_TEST(ShouldDeliverChangesOnSplitMerge) {
@@ -973,7 +977,8 @@ Y_UNIT_TEST_SUITE(Cdc) {
             const TCdcStream& streamDesc,
             bool useRealThreads = true,
             const TString& root = "Root",
-            const TString& tableName = "Table")
+            const TString& tableName = "Table",
+            bool enableGrpc = false)
         {
             auto settings = TServerSettings(PortManager.GetPort(2134), {}, DefaultPQConfig())
                 .SetUseRealThreads(useRealThreads)
@@ -988,7 +993,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 .SetEnableParameterizedDecimal(true);
 
             Server = new TServer(settings);
-            if (useRealThreads) {
+            if (useRealThreads || enableGrpc) {
                 Server->EnableGRpc(settings.GrpcPort);
             }
 
@@ -1002,13 +1007,18 @@ Y_UNIT_TEST_SUITE(Cdc) {
             CreateShardedTable(Server, EdgeActor, database, tableName, tableDesc);
             WaitTxNotification(Server, EdgeActor, AsyncAlterAddStream(Server, database, tableName, streamDesc));
 
-            if (useRealThreads) {
+            if (useRealThreads || enableGrpc) {
                 TString endpoint = "localhost:" + ToString(settings.GrpcPort);
                 auto driverConfig = NYdb::TDriverConfig()
                     .SetEndpoint(endpoint)
                     .SetDatabase("/" + settings.DomainName);
-                auto driver = NYdb::TDriver(driverConfig);
-                Client = TDerived::MakeClient(driver, database);
+                if (!useRealThreads) {
+                    // Synchronous discovery blocks the client constructor while
+                    // simulated actors need DispatchEvents to serve discovery.
+                    driverConfig.SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+                }
+                Driver = MakeHolder<NYdb::TDriver>(driverConfig);
+                Client = TDerived::MakeClient(*Driver, CanonizePath(database));
             }
         }
 
@@ -1022,6 +1032,11 @@ Y_UNIT_TEST_SUITE(Cdc) {
             return *Client;
         }
 
+        NYdb::TDriver& GetDriver() {
+            UNIT_ASSERT(Driver);
+            return *Driver;
+        }
+
         const TActorId& GetEdgeActor() const {
             return EdgeActor;
         }
@@ -1030,6 +1045,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         TPortManager PortManager;
         TServer::TPtr Server;
         TActorId EdgeActor;
+        THolder<NYdb::TDriver> Driver;
         THolder<TClient> Client;
 
     }; // TTestEnv
@@ -1611,6 +1627,140 @@ Y_UNIT_TEST_SUITE(Cdc) {
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
         }
     };
+
+    Y_UNIT_TEST(ReadRowsAfterCdcDoesNotReturnStaleValue) {
+        static constexpr ui32 Key = 1;
+        static constexpr ui32 InitialValue = 1;
+        static constexpr ui32 UpdatedValue = 2;
+
+        // Event observers only intercept actor delivery in simulated runtime.
+        // Keep gRPC enabled to exercise the public Topic and Table SDKs.
+        TTestTopicEnv env(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson),
+            false, "Root", "Table", true);
+        auto& runtime = *env.GetServer()->GetRuntime();
+        auto& topicClient = env.GetClient();
+        NYdb::NTable::TTableClient tableClient(env.GetDriver());
+
+        {
+            auto result = runtime.WaitFuture(topicClient.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
+                .BeginAddConsumer("user").EndAddConsumer()));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto reader = topicClient.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
+            .AppendTopics(std::string{"/Root/Table/Stream"})
+            .ConsumerName("user"));
+
+        auto readCdcRecord = [&]() -> std::pair<ui32, ui32> {
+            while (true) {
+                runtime.WaitFuture(reader->WaitEvent());
+                auto event = reader->GetEvent(false);
+                UNIT_ASSERT(event);
+
+                if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    UNIT_ASSERT_VALUES_EQUAL(data->GetMessages().size(), 1);
+
+                    NJson::TJsonValue json;
+                    UNIT_ASSERT(NJson::ReadJsonTree(TString{data->GetMessages().front().GetData()}, &json));
+                    return {
+                        json["key"][0].GetUIntegerSafe(),
+                        json["update"]["value"].GetUIntegerSafe(),
+                    };
+                }
+
+                if (auto* start = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                    start->Confirm();
+                } else if (auto* stop = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                    stop->Confirm();
+                } else if (auto* closed = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                    UNIT_FAIL(TStringBuilder() << "CDC read session closed: " << closed->DebugString());
+                }
+            }
+        };
+
+        const auto tableId = ResolveTableId(env.GetServer(), env.GetEdgeActor(), "/Root/Table");
+        const auto shard = GetTableShards(env.GetServer(), env.GetEdgeActor(), "/Root/Table").at(0);
+
+        auto sendUpsert = [&](ui32 value) {
+            const auto sender = runtime.AllocateEdgeActor();
+            auto request = MakeWriteRequest(std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, std::vector<ui32>{1, 2},
+                std::vector<TCell>{TCell::Make(Key), TCell::Make(value)});
+            runtime.SendToPipe(shard, sender, request.release());
+            return sender;
+        };
+
+        {
+            WaitForWriteCompleted(runtime, sendUpsert(InitialValue));
+            const auto [cdcKey, cdcValue] = readCdcRecord();
+            UNIT_ASSERT_VALUES_EQUAL(cdcKey, Key);
+            UNIT_ASSERT_VALUES_EQUAL(cdcValue, InitialValue);
+        }
+
+        NTxHelpers::TTransactionState snapshotReader(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+
+        TBlockEvents<TEvMediatorTimecast::TEvUpdate> blockUpdate(runtime);
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> blockGranular(runtime);
+
+        // Protect the acquired snapshot before choosing the immediate write
+        // version. Mediator updates remain intercepted until after ReadRows.
+        UNIT_ASSERT_VALUES_EQUAL(snapshotReader.ReadKey(tableId, shard, Key), "1, 1\n");
+
+        // Select the write version after UnprotectedReadEdge has been promoted.
+        // Neither its reply nor CDC may expose it before it is readable.
+        bool cdcRequested = false;
+        auto observeRequests = runtime.AddObserver<NChangeExchange::TEvChangeExchange::TEvRequestRecords>(
+            [&](auto&) { cdcRequested = true; });
+        TBlockEvents<NChangeExchange::TEvChangeExchange::TEvRecords> cdcBodies(runtime,
+            [](const auto& ev) {
+                return AnyOf(ev->Get()->Records, [](const auto& record) {
+                    return record->GetKind() == NChangeExchange::IChangeRecord::EKind::CdcDataChange;
+                });
+            });
+        const auto writeSender = sendUpsert(UpdatedValue);
+        runtime.WaitFor("CDC body request", [&] { return cdcRequested; });
+        UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(
+            writeSender, TDuration::Seconds(1)));
+
+        const bool cdcWaitedForVisibility = cdcBodies.empty();
+        cdcBodies.Stop().Unblock();
+        blockUpdate.Stop().Unblock();
+        blockGranular.Stop().Unblock();
+        WaitForWriteCompleted(runtime, writeSender);
+
+        const auto [cdcKey, cdcValue] = readCdcRecord();
+        // Cancel the streaming RPC while simulated actors are still being
+        // dispatched below. Leaving it to the destructor would make gRPC
+        // shutdown wait for a session whose server actor cannot run anymore.
+        reader->Close(TDuration::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(cdcKey, Key);
+        UNIT_ASSERT_VALUES_EQUAL(cdcValue, UpdatedValue);
+
+        NYdb::TValueBuilder keys;
+        keys.BeginList()
+            .AddListItem()
+                .BeginStruct()
+                    .AddMember("key").Uint32(cdcKey)
+                .EndStruct()
+            .EndList();
+
+        auto readResult = runtime.WaitFuture(tableClient.ReadRows("/Root/Table", keys.Build()),
+            TDuration::Seconds(10));
+
+        UNIT_ASSERT_C(readResult.IsSuccess(), readResult.GetIssues().ToString());
+
+        NYdb::TResultSetParser parser(readResult.GetResultSet());
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("key").GetOptionalUint32().value(), cdcKey);
+        const ui32 readValue = parser.ColumnParser("value").GetOptionalUint32().value();
+        UNIT_ASSERT(!parser.TryNextRow());
+
+        UNIT_ASSERT_C(cdcWaitedForVisibility, "CDC was published before its row version became readable");
+        UNIT_ASSERT_VALUES_EQUAL_C(readValue, cdcValue,
+            "ReadRows returned a row version older than the CDC record");
+    }
 
     static TString DebeziumBody(const char* op, const char* before, const char* after, bool snapshot = false, TIntrusivePtr<NACLib::TUserContext> userCtx = nullptr) {
         NJsonWriter::TBuf body;
@@ -2570,6 +2720,161 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
             SimulateSleep(server, TDuration::Seconds(1));
         }
+    }
+
+    static void TestCdcVisibilityHandoff(bool reboot, bool split, bool migrateState = true) {
+        TPortManager pm;
+        TServerSettings settings(pm.GetPort(2134), {}, DefaultPQConfig());
+        settings.SetUseRealThreads(false).SetDomainName("Root").SetNodeCount(2);
+        settings.FeatureFlags.SetEnableDataShardInMemoryStateMigration(migrateState);
+        TServer::TPtr server = new TServer(settings);
+        auto& runtime = *server->GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        InitRoot(server, sender);
+
+        ui32 tabletNode = runtime.GetNodeId(0);
+        auto pinTablets = runtime.AddObserver<TEvHive::TEvCreateTablet>([&](auto& ev) {
+            ev->Get()->Record.ClearAllowedNodeIDs();
+            ev->Get()->Record.AddAllowedNodeIDs(tabletNode);
+        });
+        CreateShardedTable(server, sender, "/Root", "Table", SimpleTable().Indexes({
+            {"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+        }));
+        WaitTxNotification(server, sender, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+        const auto tableId = ResolveTableId(server, sender, "/Root/Table");
+        const auto shard = GetTableShards(server, sender, "/Root/Table").at(0);
+
+        auto sendUpsert = [&](ui32 value) {
+            const auto edge = runtime.AllocateEdgeActor();
+            auto request = MakeWriteRequest(std::nullopt,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                tableId, std::vector<ui32>{1, 2},
+                std::vector<TCell>{TCell::Make(ui32(1)), TCell::Make(value)});
+            runtime.SendToPipe(shard, edge, request.release());
+            return edge;
+        };
+        auto readCdcValues = [&] {
+            TVector<ui32> values;
+            for (const auto& [_, body] : GetRecords(runtime, sender, "/Root/Table/Stream", 0)) {
+                NJson::TJsonValue json;
+                UNIT_ASSERT(NJson::ReadJsonTree(body, &json));
+                UNIT_ASSERT_VALUES_EQUAL(json["key"][0].GetUIntegerSafe(), 1);
+                values.push_back(json["update"]["value"].GetUIntegerSafe());
+            }
+            return values;
+        };
+        auto waitForCdcCount = [&](size_t count) {
+            for (ui32 attempt = 0; attempt < 100; ++attempt) {
+                auto values = readCdcValues();
+                if (values.size() >= count) {
+                    UNIT_ASSERT_VALUES_EQUAL(values.size(), count);
+                    return values;
+                }
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            UNIT_FAIL("Timed out waiting for " << count << " CDC records");
+            return TVector<ui32>{};
+        };
+        WaitForWriteCompleted(runtime, sendUpsert(1));
+        UNIT_ASSERT_VALUES_EQUAL(waitForCdcCount(1).front(), 1);
+
+        NTxHelpers::TTransactionState snapshotReader(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+        TBlockEvents<TEvMediatorTimecast::TEvUpdate> sourceUpdates(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite().NodeId() == runtime.GetNodeId(0);
+        });
+        TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate> sourceGranular(runtime, [&](const auto& ev) {
+            return ev->GetRecipientRewrite().NodeId() == runtime.GetNodeId(0);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(snapshotReader.ReadKey(tableId, shard, 1), "1, 1\n");
+
+        ui32 requestTransactions = 0;
+        auto observeRequestTransactions = runtime.AddObserver<IEventHandle>([&](auto& ev) {
+            if (ev->GetTypeName().Contains("TEvRequestChangeRecords")) {
+                ++requestTransactions;
+            }
+        });
+        const auto write2 = sendUpsert(2);
+        UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(write2, TDuration::Seconds(1)));
+        const auto write3 = sendUpsert(3);
+        UNIT_ASSERT(!runtime.GrabEdgeEventRethrow<NEvents::TDataEvents::TEvWriteResult>(write3, TDuration::Seconds(1)));
+
+        // A parked CDC body must not stall the independent async-index sender.
+        NTestSuiteAsyncIndexChangeExchange::WaitForContent(server, "/Root/Table/by_value/indexImplTable",
+            "value = 3, key = 1");
+        UNIT_ASSERT_VALUES_EQUAL(readCdcValues().size(), 1);
+        const ui32 requestsBefore = requestTransactions;
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        UNIT_ASSERT_VALUES_EQUAL_C(requestTransactions, requestsBefore,
+            "Waiting for CDC visibility must not busy-loop change-record requests");
+
+        if (reboot) {
+            RebootTablet(runtime, shard, sender);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(readCdcValues().size(), 1);
+        }
+
+        THolder<TBlockEvents<TEvMediatorTimecast::TEvUpdate>> destinationUpdates;
+        THolder<TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate>> destinationGranular;
+        ui64 splitTxId = 0;
+        if (split) {
+            tabletNode = runtime.GetNodeId(1);
+            destinationUpdates = MakeHolder<TBlockEvents<TEvMediatorTimecast::TEvUpdate>>(runtime,
+                [&](const auto& ev) { return ev->GetRecipientRewrite().NodeId() == tabletNode; });
+            destinationGranular = MakeHolder<TBlockEvents<TEvMediatorTimecast::TEvGranularUpdate>>(runtime,
+                [&](const auto& ev) { return ev->GetRecipientRewrite().NodeId() == tabletNode; });
+            SetSplitMergePartCountLimit(&runtime, -1);
+            splitTxId = AsyncSplitTable(server, sender, "/Root/Table", shard, 10);
+        }
+
+        sourceUpdates.Stop().Unblock();
+        sourceGranular.Stop().Unblock();
+        if (!reboot) {
+            WaitForWriteCompleted(runtime, write2);
+            WaitForWriteCompleted(runtime, write3);
+        }
+        const auto values = waitForCdcCount(3);
+        UNIT_ASSERT_VALUES_EQUAL(values[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(values[1], 2);
+        UNIT_ASSERT_VALUES_EQUAL(values[2], 3);
+
+        if (split) {
+            WaitTxNotification(server, sender, splitTxId);
+            const auto destination = GetTableShards(server, sender, "/Root/Table").at(0);
+            auto request = MakeHolder<TEvDataShard::TEvRead>();
+            request->Record.SetReadId(1);
+            request->Record.MutableTableId()->SetOwnerId(tableId.PathId.OwnerId);
+            request->Record.MutableTableId()->SetTableId(tableId.PathId.LocalPathId);
+            request->Record.AddColumns(1);
+            request->Record.AddColumns(2);
+            request->Record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+            request->Keys.emplace_back(TVector<TCell>{TCell::Make(ui32(1))});
+            const auto readSender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, destination, readSender, request.Release());
+            auto result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender, TDuration::Seconds(1));
+            if (result) {
+                UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(result->Get()), "1, 3\n");
+            }
+            destinationUpdates->Stop().Unblock();
+            destinationGranular->Stop().Unblock();
+            if (!result) {
+                result = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+                UNIT_ASSERT_VALUES_EQUAL(FormatIntReadResult(result->Get()), "1, 3\n");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(CdcVisibilityWaitDoesNotBlockAsyncIndex) {
+        TestCdcVisibilityHandoff(false, false);
+    }
+
+    Y_UNIT_TEST_TWIN(CdcVisibilityWaitSurvivesRestart, MigrateState) {
+        TestCdcVisibilityHandoff(true, false, MigrateState);
+    }
+
+    Y_UNIT_TEST(CdcVisibilityWaitSurvivesSplit) {
+        TestCdcVisibilityHandoff(false, true);
     }
 
     void AssertColumn(const NJson::TJsonValue& table, const TString& name,

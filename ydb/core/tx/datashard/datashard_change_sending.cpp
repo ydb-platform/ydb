@@ -21,7 +21,10 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
         size_t bodiesSize = 0;
         bool ok = true;
 
-        for (const auto& [_, records] : Self->ChangeRecordsRequested) {
+        for (const auto& [recipient, records] : Self->ChangeRecordsRequested) {
+            if (Self->ChangeRecordsWaitingVisibility.contains(recipient)) {
+                continue;
+            }
             for (const auto& record : records) {
                 auto itQueue = Self->ChangesQueue.find(record.Order);
                 if (itQueue == Self->ChangesQueue.end()) {
@@ -151,7 +154,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
 
     bool Select(NIceDb::TNiceDb& db) {
         for (auto& [recipient, records] : Self->ChangeRecordsRequested) {
-            if (!records) {
+            if (!records || Self->ChangeRecordsWaitingVisibility.contains(recipient)) {
                 continue;
             }
 
@@ -199,6 +202,21 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
                     break;
                 }
 
+                const auto kind = result.Record->GetKind();
+                if (kind == IChangeRecord::EKind::CdcDataChange ||
+                    kind == IChangeRecord::EKind::CdcHeartbeat)
+                {
+                    const TRowVersion version(result.Record->GetStep(), result.Record->GetTxId());
+                    if (Self->MediatorStateWaiting || version.Step > Self->GetMaxObservedStep()) {
+                        // Keep the body requested: PendingBody in the change
+                        // sender prevents later records (including heartbeats)
+                        // from overtaking it. Other senders, such as async
+                        // indexes, may continue independently.
+                        RecordsToWait[recipient] = version;
+                        break;
+                    }
+                }
+
                 if (itQueue->second.LockId) {
                     RecordsToSend[recipient].push_back(
                         TChangeRecordBuilder(result.Record)
@@ -242,6 +260,14 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
+        // A newer generation may have frozen our in-memory visibility edges
+        // while this transaction was committing. It will reload the persisted
+        // records; the old generation must not publish any new observations.
+        if (Self->InMemoryVarsFrozen) {
+            Self->RequestChangeRecordsInFly = false;
+            return;
+        }
+
         size_t sent = 0;
         for (auto& kv : RecordsToSend) {
             const auto& to = kv.first;
@@ -253,6 +279,17 @@ public:
                 {"recordsCount", records.size()},
                 {"to", to},
                 {"tabletId", Self->TabletID()});
+            for (const auto& record : records) {
+                const TRowVersion version(record->GetStep(), record->GetTxId());
+                if (record->GetKind() == IChangeRecord::EKind::CdcDataChange &&
+                    version <= Self->SnapshotManager.GetImmediateWriteEdge())
+                {
+                    // CDC is an external observation of a committed write even
+                    // if its original client never receives a reply. Remember
+                    // that observation in the state migrated to a new leader.
+                    Self->SnapshotManager.PromoteImmediateWriteEdgeReplied(version);
+                }
+            }
             ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvRecords(std::move(records)));
         }
 
@@ -284,11 +321,11 @@ public:
         Self->IncCounter(COUNTER_CHANGE_RECORDS_SENT, sent);
         Self->IncCounter(COUNTER_CHANGE_RECORDS_FORGOTTEN, forgotten);
 
-        if (left) {
-            Self->Execute(new TTxRequestChangeRecords(Self), ctx);
-        } else {
-            Self->RequestChangeRecordsInFly = false;
+        Self->RequestChangeRecordsInFly = false;
+        for (const auto& [recipient, version] : RecordsToWait) {
+            Self->ChangeRecordsWaitingVisibility[recipient] = version.Step;
         }
+        Self->ScheduleRequestChangeRecords(ctx);
     }
 
 private:
@@ -297,6 +334,7 @@ private:
 
     THashMap<TActorId, TVector<TChangeRecord::TPtr>> RecordsToSend;
     THashMap<TActorId, TVector<ui64>> RecordsToForget;
+    THashMap<TActorId, TRowVersion> RecordsToWait;
 
 }; // TTxRequestChangeRecords
 
@@ -434,9 +472,32 @@ void TDataShard::Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::T
 }
 
 void TDataShard::ScheduleRequestChangeRecords(const TActorContext& ctx) {
-    if (ChangeRecordsRequested && !RequestChangeRecordsInFly) {
-        ctx.Send(SelfId(), new TEvPrivate::TEvRequestChangeRecords);
-        RequestChangeRecordsInFly = true;
+    if (RequestChangeRecordsInFly || InMemoryVarsFrozen) {
+        return;
+    }
+
+    if (!MediatorStateWaiting) {
+        for (auto it = ChangeRecordsWaitingVisibility.begin(); it != ChangeRecordsWaitingVisibility.end();) {
+            const ui64 step = it->second;
+            if (step > GetMaxObservedStep()) {
+                WaitPlanStep(step);
+            }
+
+            // The shared timecast entry may have advanced while subscribing.
+            if (step > GetMaxObservedStep()) {
+                ++it;
+            } else {
+                ChangeRecordsWaitingVisibility.erase(it++);
+            }
+        }
+    }
+
+    for (const auto& [recipient, records] : ChangeRecordsRequested) {
+        if (records && !ChangeRecordsWaitingVisibility.contains(recipient)) {
+            RequestChangeRecordsInFly = true;
+            ctx.Send(SelfId(), new TEvPrivate::TEvRequestChangeRecords);
+            return;
+        }
     }
 }
 

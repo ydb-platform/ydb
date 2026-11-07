@@ -2622,7 +2622,11 @@ TDataShard::TPromotePostExecuteEdges TDataShard::PromoteImmediatePostExecuteEdge
             YDB_LOG_TRACE("PromoteImmediatePostExecuteEdges at promoting UnprotectedReadEdge",
                 {"tabletId", TabletID()},
                 {"version", version});
-            SnapshotManager.PromoteUnprotectedReadEdge(version);
+            if (SnapshotManager.PromoteUnprotectedReadEdge(version) &&
+                !ChangeRecordsWaitingVisibility.empty())
+            {
+                ScheduleRequestChangeRecords(ActorContext());
+            }
 
             // Make sure pending distributed transactions are marked incomplete,
             // since we just protected up to and including version from writes,
@@ -2868,6 +2872,11 @@ void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep, const TActorCo
         }
     }
 
+    if (!ChangeRecordsWaitingVisibility.empty()) {
+        ScheduleRequestChangeRecords(ctx);
+    }
+    CheckSplitCanStart(ctx);
+
     PromoteFollowerReadEdge();
 
     EmitHeartbeats();
@@ -2889,8 +2898,11 @@ public:
         return true;
     }
 
-    void Complete(const TActorContext&) override {
-        // nothing
+    void Complete(const TActorContext& ctx) override {
+        if (!Self->ChangeRecordsWaitingVisibility.empty()) {
+            Self->ScheduleRequestChangeRecords(ctx);
+        }
+        Self->CheckSplitCanStart(ctx);
     }
 
 private:

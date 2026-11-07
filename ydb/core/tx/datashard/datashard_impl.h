@@ -3210,6 +3210,7 @@ private:
 
     // out
     THashMap<TActorId, TSet<TRequestedRecord>> ChangeRecordsRequested;
+    THashMap<TActorId, ui64> ChangeRecordsWaitingVisibility;
     TSet<ui64> ChangeRecordsToRemove; // ui64 is order
     bool RequestChangeRecordsInFly = false;
     bool RemoveChangeRecordsInFly = false;

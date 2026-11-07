@@ -477,5 +477,6 @@ message TFeatureFlags {
     // Enables policy-driven data tiering for row-oriented tables.
     // When disabled, no new migrations to colder tiers are scheduled.
     // Existing data in all tiers remains readable.
-    optional bool EnableDataTiering = 383 [default = false];    
+    optional bool EnableDataTiering = 383 [default = false];
+    optional bool EnableColumnshardCutHistorySending = 384 [default = false];
 }

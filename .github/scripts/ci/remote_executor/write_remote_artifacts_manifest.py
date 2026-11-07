@@ -9,38 +9,12 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 from pathlib import Path
 
-
-def _truthy_disable() -> bool:
-    return os.environ.get("CI_DISABLE_YDB_QA", "").strip().lower() in ("1", "true", "yes")
-
-
-def discover_attempts(public_dir: Path) -> list[dict]:
-    found = []
-    if not public_dir.is_dir():
-        return found
-    for report in sorted(public_dir.glob("try_*/report.json")):
-        m = re.match(r"try_(\d+)$", report.parent.name)
-        if not m:
-            continue
-        retry = int(m.group(1))
-        started_file = report.parent / "started_at"
-        if started_file.is_file():
-            started_at = started_file.read_text(encoding="utf-8").strip() or "0"
-        else:
-            started_at = str(int(report.stat().st_mtime))
-        found.append(
-            {
-                "retry": retry,
-                "started_at": started_at,
-                "report_relpath": str(report.relative_to(public_dir)),
-                "html_relpath": str((report.parent / "ya-test.html").relative_to(public_dir)),
-            }
-        )
-    return found
+_DISPATCHER = Path(__file__).resolve().parents[1] / "dispatcher"
+sys.path.insert(0, str(_DISPATCHER))
+from _common import discover_attempts, truthy  # noqa: E402
 
 
 def main() -> int:
@@ -66,7 +40,7 @@ def main() -> int:
         if len(parts) >= 3:
             endpoint = "/".join(parts[:3])
 
-    disabled = _truthy_disable()
+    disabled = truthy(os.environ.get("CI_DISABLE_YDB_QA"))
     public_dir = Path(os.environ.get("PUBLIC_DIR") or Path(out).resolve().parent)
     attempts = discover_attempts(public_dir)
 

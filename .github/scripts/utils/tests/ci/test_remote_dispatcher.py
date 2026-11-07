@@ -13,6 +13,7 @@ from pathlib import Path
 _DISPATCHER = Path(__file__).resolve().parents[3] / "ci" / "dispatcher"
 sys.path.insert(0, str(_DISPATCHER))
 
+from _common import discover_attempts  # noqa: E402
 from ingest_remote_executor_results import _safe_under, parse_index_hrefs  # noqa: E402
 from resolve_remote_execution import build_config  # noqa: E402
 
@@ -78,6 +79,18 @@ class IndexCrawlSafetyTest(unittest.TestCase):
             ok = _safe_under(dest, "try_1/report.json")
             self.assertIsNotNone(ok)
             self.assertTrue(str(ok.resolve()).startswith(str(dest.resolve())))
+
+    def test_discover_attempts_scans_try_dirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            try_dir = root / "try_1"
+            try_dir.mkdir()
+            (try_dir / "report.json").write_text("{}", encoding="utf-8")
+            (try_dir / "ya-test.html").write_text("<html/>", encoding="utf-8")
+            found = discover_attempts(root)
+            self.assertEqual(len(found), 1)
+            self.assertEqual(found[0]["retry"], 1)
+            self.assertEqual(found[0]["report_relpath"], "try_1/report.json")
 
 
 if __name__ == "__main__":

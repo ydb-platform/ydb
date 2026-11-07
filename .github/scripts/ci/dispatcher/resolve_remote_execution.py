@@ -19,6 +19,9 @@ import re
 import sys
 from typing import Any
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import die, truthy  # noqa: E402
+
 
 DEFAULT_REMOTE: dict[str, Any] = {
     # Host repo / workflow identity (waiter polls GH; VM dispatches this WF).
@@ -55,19 +58,6 @@ DEFAULT_REMOTE: dict[str, Any] = {
         "collect_coredumps": False,
     },
 }
-
-
-def die(msg: str) -> None:
-    print(f"::error::{msg}", file=sys.stderr)
-    sys.exit(1)
-
-
-def _truthy(v: Any, default: bool = False) -> bool:
-    if v is None or v == "":
-        return default
-    if isinstance(v, bool):
-        return v
-    return str(v).strip().lower() in ("1", "true", "yes")
 
 
 def _as_str(v: Any, default: str = "") -> str:
@@ -136,7 +126,7 @@ def build_config() -> dict[str, Any]:
     job = cfg.get("job") if isinstance(cfg.get("job"), dict) else {}
     preset = _as_str(job.get("build_preset"), "relwithdebinfo").split(",")[0].strip() or "relwithdebinfo"
     increment = _as_str(job.get("increment"), "false")
-    fetch_depth = 0 if _truthy(increment) else 2
+    fetch_depth = 0 if truthy(increment) else 2
 
     analytics_job = (
         (os.environ.get("ANALYTICS_JOB_NAME") or "").strip()
@@ -190,8 +180,8 @@ def build_config() -> dict[str, Any]:
         die("runs_on must be a JSON array of runner labels")
     runs_on_str = json.dumps(runs_on_obj, separators=(",", ":"))
 
-    cfg["wait"] = _truthy(cfg.get("wait"), True)
-    cfg["fail_on_remote_failure"] = _truthy(cfg.get("fail_on_remote_failure"), True)
+    cfg["wait"] = truthy(cfg.get("wait"), True)
+    cfg["fail_on_remote_failure"] = truthy(cfg.get("fail_on_remote_failure"), True)
     cfg["platform_repository"] = (
         _as_str(cfg.get("platform_repository")).strip()
         or (os.environ.get("GITHUB_REPOSITORY") or "").strip()

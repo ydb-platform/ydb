@@ -16,53 +16,23 @@ import sys
 import tempfile
 import time
 import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import Any
 
 _DISPATCHER_DIR = os.path.dirname(os.path.abspath(__file__))
 if _DISPATCHER_DIR not in sys.path:
     sys.path.insert(0, _DISPATCHER_DIR)
+from _common import (  # noqa: E402
+    apply_config_env,
+    die,
+    discover_attempts as discover_attempts_fs,
+    env,
+    env_opt,
+    http_get_bytes as http_get,
+    quote_url,
+    write_step_summary,
+)
 from resolve_remote_execution import format_launch_summary_md  # noqa: E402
-
-
-def die(msg: str) -> None:
-    print(f"::error::{msg}", file=sys.stderr)
-    sys.exit(1)
-
-
-def env(name: str, default: str | None = None) -> str:
-    v = os.environ.get(name, default)
-    if v is None or v == "":
-        die(f"missing env {name}")
-    return v
-
-
-def env_opt(name: str, default: str = "") -> str:
-    return (os.environ.get(name) or default).strip()
-
-
-def write_step_summary(text: str) -> None:
-    """Replace the job step summary with the rewritten job_summary body."""
-    path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if not path:
-        return
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text if text.endswith("\n") else text + "\n")
-
-
-def http_get(url: str, timeout: int = 60) -> bytes | None:
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
-            return resp.read()
-    except Exception as e:
-        print(f"GET {url} failed: {e}")
-        return None
-
-
-def quote_url(url: str) -> str:
-    # Keep '/' and already-encoded '%xx' so re-quoting is idempotent.
-    return urllib.parse.quote(url, safe=":/%")
 
 
 def run(cmd: list[str], **kwargs: Any) -> None:
@@ -307,56 +277,17 @@ def _nonempty(value: Any) -> str:
 def resolve_source_attribution(
     meta: dict[str, Any], caller_run_id: str
 ) -> tuple[str, str, str]:
-    """Prefer remote_artifacts.json (filled from job_inputs) over ingest env.
-
-    Reusable workflow_call sets github.event_name=workflow_call and must not
-    override the caller's real event recorded on the executor.
-    """
-    meta_event = _nonempty(meta.get("source_event_name"))
-    env_event = env_opt("SOURCE_EVENT_NAME")
-    if meta_event and meta_event != "workflow_call":
-        event_name = meta_event
-    elif env_event and env_event != "workflow_call":
-        event_name = env_event
-    else:
+    """Caller ingest runs in the platform job — prefer its github.* env."""
+    event_name = env_opt("SOURCE_EVENT_NAME") or _nonempty(meta.get("source_event_name"))
+    if not event_name or event_name == "workflow_call":
         event_name = "workflow_dispatch"
-
-    meta_run = _nonempty(meta.get("source_run_id"))
-    executor_run = _nonempty(meta.get("executor_run_id"))
-    env_run = env_opt("SOURCE_RUN_ID")
-    if meta_run and meta_run != executor_run:
-        source_run_id = meta_run
-    else:
-        source_run_id = env_run or meta_run or caller_run_id
-
+    source_run_id = env_opt("SOURCE_RUN_ID") or caller_run_id
     pull_number = env_opt("PULL_NUMBER") or _nonempty(meta.get("pull_number"))
     return event_name, source_run_id, pull_number
 
 
 def discover_attempts(public_dir: Path, meta: dict[str, Any]) -> list[dict[str, Any]]:
-    attempts = list(meta.get("attempts") or [])
-    if attempts:
-        return attempts
-    found = []
-    for report in sorted(public_dir.glob("try_*/report.json")):
-        m = re.match(r"try_(\d+)$", report.parent.name)
-        if not m:
-            continue
-        retry = int(m.group(1))
-        started_file = report.parent / "started_at"
-        if started_file.is_file():
-            started_at = started_file.read_text(encoding="utf-8").strip() or "0"
-        else:
-            started_at = str(int(report.stat().st_mtime))
-        found.append(
-            {
-                "retry": retry,
-                "started_at": started_at,
-                "report_relpath": str(report.relative_to(public_dir)),
-                "html_relpath": str((report.parent / "ya-test.html").relative_to(public_dir)),
-            }
-        )
-    return found
+    return discover_attempts_fs(public_dir, list(meta.get("attempts") or []) or None)
 
 
 def regenerate_summary(
@@ -385,26 +316,33 @@ def regenerate_summary(
         # URL prefixes already rewritten to caller S3 by rewrite_url_prefix.
         remote_body = job_summary.read_text(encoding="utf-8").rstrip() + "\n\n"
 
-    last = attempts[-1] if attempts else None
-    if not last:
-        if remote_body:
-            job_summary.write_text(remote_body, encoding="utf-8")
-        elif not job_summary.is_file():
+    def _keep_remote() -> Path:
+        # rewrite_url_prefix already updated job_summary.md in place.
+        if not job_summary.is_file():
             job_summary.write_text(
                 f"_No test attempts found._\n\n[Artifacts]({public_dir_url}/index.html)\n",
                 encoding="utf-8",
             )
         return job_summary
 
+    last = attempts[-1] if attempts else None
+    if not last:
+        return _keep_remote()
+
     html_rel = last.get("html_relpath") or f"try_{last['retry']}/ya-test.html"
     report_rel = last.get("report_relpath") or f"try_{last['retry']}/report.json"
     html_path = public_dir / html_rel
     report_path = public_dir / report_rel
+    testowners = workspace / ".github/TESTOWNERS"
     if not report_path.is_file():
         print(f"::warning::missing report for regenerate: {report_path}; keeping remote job_summary")
-        if remote_body:
-            job_summary.write_text(remote_body, encoding="utf-8")
-        return job_summary
+        return _keep_remote()
+    if not testowners.is_file():
+        print(
+            f"::warning::{testowners} missing (sparse checkout?); "
+            "skipping generate-summary, keeping remote job_summary with caller S3 links"
+        )
+        return _keep_remote()
 
     html_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -448,24 +386,12 @@ def regenerate_summary(
         cmd.extend(["--pr_number", pull_number])
     if oom.is_file() and oom.stat().st_size > 0:
         cmd.extend(["--oom_dmesg_log", str(oom)])
-    testowners = workspace / ".github/TESTOWNERS"
-    if not testowners.is_file():
-        print(
-            f"::warning::{testowners} missing (sparse checkout?); "
-            "skipping generate-summary, keeping remote job_summary with caller S3 links"
-        )
-        if remote_body:
-            job_summary.write_text(remote_body, encoding="utf-8")
-        return job_summary
-
     cmd.extend(["Tests", str(html_path), str(report_path)])
     try:
         run(cmd, cwd=str(workspace))
     except subprocess.CalledProcessError as e:
         print(f"::warning::generate-summary failed ({e}); keeping remote job_summary with caller S3 links")
-        if remote_body:
-            job_summary.write_text(remote_body, encoding="utf-8")
-        return job_summary
+        return _keep_remote()
 
     # Prefer executor-written marker (always set on BUILD_FAILED); fall back to fail_summary.
     build_fail_line = ""
@@ -691,11 +617,7 @@ def s3cmd_put(local: Path, s3_uri: str) -> None:
 
 
 def main() -> None:
-    # Opaque config from dispatch_remote.yml (same blob resolve_remote_execution emits).
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from remote_dispatch_config import apply_to_environ
-
-    apply_to_environ()
+    apply_config_env()
 
     run_id = env("EXECUTOR_RUN_ID")
     run_url = env_opt("EXECUTOR_RUN_URL") or f"https://github.com/{env('REPO')}/actions/runs/{run_id}"
@@ -717,7 +639,6 @@ def main() -> None:
 
     leaf = key_prefix.rstrip("/").rsplit("/", 1)[-1]
     dest_key_prefix = f"{caller_repo}/{caller_workflow}/{caller_run_id}/remote-{run_id}/{leaf}"
-    # HTTP URLs must be percent-encoded (workflow names with spaces break Markdown links).
     new_public = quote_url(f"{caller_endpoint}/{caller_bucket}/{dest_key_prefix}")
     caller_s3_path = f"s3://{caller_bucket}/{dest_key_prefix}"
     caller_run_root = f"s3://{caller_bucket}/{caller_repo}/{caller_workflow}/{caller_run_id}/remote-{run_id}"
@@ -739,11 +660,6 @@ def main() -> None:
 
         attempts = discover_attempts(public_dir, meta)
         print(f"attempts={json.dumps(attempts, ensure_ascii=False)}")
-
-        # Publish rewritten tree first so caller-S3 links are live even if
-        # generate-summary fails later (previous dogfood: NoSuchKey on index.html).
-        s3cmd_sync_upload(public_dir, caller_s3_path)
-        print(f"::notice title=Caller artifacts uploaded::{new_public}/index.html")
 
         job_summary = regenerate_summary(
             workspace=workspace,
@@ -775,10 +691,11 @@ def main() -> None:
         meta_path = public_dir / "remote_artifacts.json"
         meta_path.write_text(json.dumps(meta_out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-        # Re-sync enriched summary / regenerated HTML, then pin run-root copies.
+        # One sync after regenerate (URLs already rewritten; summary/HTML refreshed).
         s3cmd_sync_upload(public_dir, caller_s3_path)
         s3cmd_put(job_summary, f"{caller_run_root}/job_summary.md")
         s3cmd_put(meta_path, f"{caller_run_root}/remote_artifacts.json")
+        print(f"::notice title=Caller artifacts uploaded::{new_public}/index.html")
 
         upload_attempts(
             workspace=workspace,
@@ -802,14 +719,12 @@ def main() -> None:
             caller_workflow=caller_workflow,
         )
 
-        # Job step summary: full launch params + rewritten job_summary (caller S3 links).
         body = ""
         if job_summary.is_file():
             body = job_summary.read_text(encoding="utf-8").rstrip() + "\n"
         footer_bits = [f"Remote executor: [{run_id}]({run_url})"]
         if executor_conclusion:
             footer_bits.append(f"`{executor_conclusion}`")
-        # Prefer ticket config (CONFIG_JSON) so every job_input is visible, not a subset.
         cfg_raw = env_opt("CONFIG_JSON")
         launch_md = ""
         if cfg_raw:

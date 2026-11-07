@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 import sys
 import time
 from pathlib import Path
@@ -21,66 +20,34 @@ def read_proc_stat() -> dict[str, int]:
     return dict(zip(("user", "nice", "system", "idle", "iowait", "irq", "softirq", "steal"), map(int, parts[1:9])))
 
 
-def read_cpu_cgroups() -> dict:
-    """Sample our inherited CPU limits and counters up to the visible cgroup mount root.
-
-    Keep native cpu.stat names/units: throttled_usec in v2, throttled_time (ns)
-    in v1. Counter deltas show throttling during a run, not since cgroup creation.
-    """
+def read_cpu_cgroups(pid: int) -> dict:
+    """Read raw CPU limits/counters from standard CI cgroup mounts and parents."""
+    result = {}
     try:
-        memberships = {}
-        for line in Path("/proc/self/cgroup").read_text().splitlines():
+        for line in Path(f"/proc/{pid}/cgroup").read_text().splitlines():
             _, controllers, path = line.split(":", 2)
-            for controller in controllers.split(","):
-                memberships[controller] = path
-        version = 1 if "cpu" in memberships else 2
-        member = Path(memberships["cpu" if version == 1 else ""])
-        if ".." in member.parts:
-            return {"error": "CPU cgroup is outside the visible namespace"}
-        for line in Path("/proc/self/mountinfo").read_text().splitlines():
-            fields, fs = line.split(" - ", 1)
-            fs = fs.split()
-            if version == 2:
-                matches = fs[0] == "cgroup2"
-            else:
-                matches = fs[0] == "cgroup" and "cpu" in fs[2].split(",")
-            if not matches:
+            if controllers and "cpu" not in controllers.split(","):
                 continue
-            # mountinfo escapes spaces and backslashes as octal sequences.
-            root, mount = (
-                Path(re.sub(r"\\([0-7]{3})", lambda m: chr(int(m[1], 8)), p))
-                for p in fields.split()[3:5]
-            )
-            if not member.is_relative_to(root):
+            if ".." in Path(path).parts:
+                result["error"] = "CPU cgroup is outside the visible namespace"
                 continue
-            current = mount / member.relative_to(root)
-            groups = []
+            root = Path("/sys/fs/cgroup/cpu" if controllers else "/sys/fs/cgroup")
+            current = root / path.lstrip("/")
             while True:
-                group = {"path": str(current)}
-                files = ("cpu.max", "cpu.stat") if version == 2 else (
-                    "cpu.cfs_quota_us", "cpu.cfs_period_us", "cpu.stat"
-                )
-                for name in files:
+                for name in ("cpu.stat", "cpu.max", "cpu.cfs_quota_us", "cpu.cfs_period_us"):
+                    file = current / name
                     try:
-                        value = (current / name).read_text().strip()
-                        if name == "cpu.stat":
-                            group[name] = {key: int(count) for key, count in
-                                           (line.split() for line in value.splitlines())}
-                        else:
-                            group[name] = value
+                        result[str(file)] = file.read_text().strip()
                     except FileNotFoundError:
-                        # The v2 root has no cpu.max; disabled controllers also omit files.
-                        continue
-                    except (OSError, ValueError) as e:
-                        group.setdefault("errors", {})[name] = str(e)
-                groups.append(group)
-                if current == mount:
-                    return {"version": version, "groups": groups}
+                        pass  # Some files only exist in v1 or v2, or below the root.
+                    except OSError as e:
+                        result[str(file)] = {"error": str(e)}
+                if current == root:
+                    break
                 current = current.parent
-        return {"error": "CPU cgroup mount not found"}
-    except (OSError, ValueError, KeyError) as e:
-        # Diagnostics must not stop the existing CPU/RAM/I/O monitor.
-        return {"error": str(e)}
+    except OSError as e:
+        result["error"] = str(e)
+    return result
 
 
 def _read_cmdline(pid: int) -> str:
@@ -349,12 +316,16 @@ def run_monitor(
             idle_delta = cpu_deltas.get("idle", 0) + cpu_deltas.get("iowait", 0)
             cpu_total_pct = 100.0 * (1 - idle_delta / total_delta) if total_delta > 0 else 0.0
             prev_stat = curr_stat
-            cpu_cgroups = read_cpu_cgroups()
 
             # ya make process tree
             process_snapshot = read_process_snapshot()
             ya_pids = find_ya_process_tree(process_snapshot)
             pid_data = list(process_snapshot.values())
+            cpu_cgroups = read_cpu_cgroups(os.getpid())
+            # ya make runs in its own systemd scope, outside the monitor's cgroup.
+            for pid in ya_pids:
+                if process_snapshot[pid]["ppid"] not in ya_pids:
+                    cpu_cgroups.update(read_cpu_cgroups(pid))
 
             cpu_ya_jiffies = 0
             ram_ya_kb = 0

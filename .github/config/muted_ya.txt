@@ -186,6 +186,7 @@ ydb/tests/functional/restarts test_restarts.py.TestRestartSingleMirror3DC.test_r
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/sqs/common test_queues_managing.py.TestQueuesManagingWithTenant.test_delete_queue[tables_format_v1-std]
 ydb/tests/functional/sqs/migration/compatibility/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
+ydb/tests/functional/sqs/migration/compatibility/common ydb.tests.functional.sqs.common.test_queue_counters.py.TestSqsGettingCounters.test_sqs_action_counters
 ydb/tests/functional/sqs/migration/finished/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/sqs/migration/topic_creation/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/statistics test_restarts.py.test_basic

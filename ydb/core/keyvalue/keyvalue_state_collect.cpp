@@ -311,6 +311,16 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
         }
     }
 
+    // A reader may still own a blob whose last index reference was removed.
+    // Protect it if this operation advances the barrier past the blob.
+    for (const auto& [id, count] : ReadBlobRefCounts) {
+        Y_ABORT_UNLESS(count);
+        const auto genStep = THelpers::GenerationStep(id);
+        if (!RefCounts.contains(id) && storedGenStep < genStep && genStep <= collectGenStep) {
+            keep.push_back(id);
+        }
+    }
+
     // create list of blobs that must have to DoNotKeep flag set; these blobs must have Keep flag written and reside in
     // Trash now
     TVector<TLogoBlobID> doNotKeep;
@@ -327,6 +337,10 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
                 TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode));
             continue;
         }
+        if (ReadBlobRefCounts.contains(id)) {
+            ++it;
+            continue;
+        }
         if (genStep <= storedGenStep) {
             doNotKeep.push_back(id);
         }
@@ -337,7 +351,12 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
     doNotKeep.shrink_to_fit();
     trashGoingToCollect.shrink_to_fit();
 
-    Y_ABORT_UNLESS(trashGoingToCollect);
+    if (trashGoingToCollect.empty()) {
+        // All eligible trash is held by readers. OnRequestComplete will retry GC.
+        // No command was sent, so the stored barrier must remain unchanged.
+        CollectOperation.Reset();
+        return;
+    }
 
     YDB_LOG_TRACE_COMP(NKikimrServices::KEYVALUE, "StartCollectingIfPossible Flags",
         {"keyValue", TabletId},

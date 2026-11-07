@@ -271,6 +271,12 @@ protected:
     TIndex Index;
     THashMap<TLogoBlobID, ui32> RefCounts;
 
+    // Transient read ownership, independent of persistent index references.
+    THashMap<ui64, TVector<TLogoBlobID>> ReadBlobsByRequest;
+    THashMap<TLogoBlobID, ui64> ReadBlobRefCounts;
+    void AcquireReadBlobs(const TIntermediate& intermediate);
+    void ReleaseReadBlobs(ui64 requestUid);
+
     TMap<ui64, TSet<TLogoBlobID>> TrashForVacuum; // vacuum generation -> set of blobs
     TSet<TLogoBlobID> Trash;
     ui64 CompletedVacuumGeneration = 0;

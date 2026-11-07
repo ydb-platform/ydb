@@ -159,6 +159,7 @@ ydb/tests/functional/blobstorage test_other.py.TestOther.test_nodata
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_disabled_enabled
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_enabled
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_enabled_disabled
+ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles
 ydb/tests/functional/bridge test_pile_ops.py.TestBridgePileOps.test_convert_add_switch_remove
 ydb/tests/functional/bridge test_three_piles.py.TestBridgeThreePiles.test_discovery
 ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[index_predicate_point.sql-plan]
@@ -208,5 +209,8 @@ ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests/soak test_feature_index_soak.py.TestFeatureIndexSoak.test_feature_index_soak
 ydb/tests/stress/reconfig_state_storage_workload/tests test_state_storage_workload.py.TestReconfigStateStorageWorkload.test_state_storage
+ydb/tests/stress/reconfig_state_storage_workload/tests/large py3test.[test_board_workload.py] chunk
+ydb/tests/stress/reconfig_state_storage_workload/tests/large py3test.[test_scheme_board_workload.py] chunk
+ydb/tests/stress/reconfig_state_storage_workload/tests/large py3test.[test_state_storage_workload.py] chunk
 ydb/tests/stress/statistics_workload/tests test_workload.py.TestStatisticsWorkload.test
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[old_sdk]

@@ -59,6 +59,7 @@ private:
     };
 
     std::optional<TFullActualizationInfo> BuildActualizationInfo(const TPortionInfo& portion) const;
+    void RefreshImpl(const std::shared_ptr<ISnapshotSchema>& targetSchema, const TAddExternalContext& externalContext);
 
 protected:
     virtual void DoAddPortion(const TPortionInfo& info, const TAddExternalContext& context) override;
@@ -68,6 +69,10 @@ protected:
 
 public:
     void Refresh(const TAddExternalContext& externalContext);
+    // Targets the latest schema regardless of SchemeNeedActualization (ALTER TABLE ... COMPACT WITH (CASCADE = true)).
+    void ForceActualization(const TAddExternalContext& externalContext);
+    // true when every live portion already has the target schema (nothing left to actualize, in-flight tasks included)
+    bool IsActualized(const THashMap<ui64, TPortionInfo::TPtr>& portions) const;
 
     TSchemeActualizer(const TInternalPathId pathId, const TVersionedIndex& versionedIndex);
 };

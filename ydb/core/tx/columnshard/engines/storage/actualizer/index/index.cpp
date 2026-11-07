@@ -38,6 +38,17 @@ void TGranuleActualizationIndex::RefreshScheme(const TAddExternalContext& contex
     NYDBTest::TControllers::GetColumnShardController()->OnActualizationRefreshScheme();
 }
 
+void TGranuleActualizationIndex::ForceSchemeActualization(const TAddExternalContext& context) {
+    AFL_VERIFY(SchemeActualizer);
+    SchemeActualizer->ForceActualization(context);
+    NYDBTest::TControllers::GetColumnShardController()->OnActualizationRefreshScheme();
+}
+
+bool TGranuleActualizationIndex::IsSchemeActualized(const THashMap<ui64, TPortionInfo::TPtr>& portions) const {
+    AFL_VERIFY(SchemeActualizer);
+    return SchemeActualizer->IsActualized(portions);
+}
+
 TGranuleActualizationIndex::TGranuleActualizationIndex(
     const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager)
     : PathId(pathId)

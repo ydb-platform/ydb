@@ -1226,7 +1226,7 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
     }
 
     const auto internalPathId = TablesManager.ResolveInternalPathIdOptional(TSchemeShardLocalPathId::FromRawValue(pathId.LocalPathId), true);
-    auto& engine = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
+    auto& engine = TablesManager.MutablePrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
     auto granule = internalPathId ? engine.GetGranuleOptional(*internalPathId) : nullptr;
     if (!granule) {
         YDB_LOG_WARN("Forced compaction of unknown path",
@@ -1249,7 +1249,14 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    if (*noIntersections) {
+    // CASCADE: every portion is also rewritten to the latest schema (as if SCHEME_NEED_ACTUALIZATION was set).
+    const bool actualizeSchema = record.GetActualizeSchema();
+    if (actualizeSchema) {
+        engine.StartActualization({});
+        granule->ForceSchemeActualization();
+    }
+
+    if (*noIntersections && (!actualizeSchema || granule->IsSchemeActualized())) {
         YDB_LOG_DEBUG("Forced compaction already done",
             {"tablet", TabletID()},
             {"pathId", pathId},
@@ -1258,14 +1265,18 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
         return;
     }
 
-    // Portions still intersect: hold the request and reply once the table settles. Background
-    // compaction is kicked for this path; RecheckForcedCompactions() answers the waiter later.
+    // Portions still intersect (or are not actualized yet): hold the request and reply once the table settles.
+    // Background compaction (and actualization) is kicked; RecheckForcedCompactions() answers the waiter later.
     YDB_LOG_DEBUG("Forced compaction registered",
         {"tablet", TabletID()},
         {"pathId", pathId},
+        {"actualizeSchema", actualizeSchema},
         {"requestedFrom", ev->Sender});
-    ForcedCompactionWaiters[*internalPathId].push_back({ ev->Sender, ev->Cookie, pathId });
+    ForcedCompactionWaiters[*internalPathId].push_back({ ev->Sender, ev->Cookie, pathId, actualizeSchema });
     SetupCompaction({ *internalPathId });
+    if (actualizeSchema) {
+        SetupTtl();
+    }
 }
 
 void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
@@ -1285,9 +1296,11 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
             status = NKikimrTxDataShard::TEvCompactTableResult::FAILED;
         } else {
             const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
+            // a path with mixed waiters is answered once the strongest condition holds
+            const bool actualizeSchema = std::any_of(waiters.begin(), waiters.end(), [](const auto& w) { return w.ActualizeSchema; });
             if (noIntersections.IsFail()) {
                 status = NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED;
-            } else if (*noIntersections) {
+            } else if (*noIntersections && (!actualizeSchema || granule->IsSchemeActualized())) {
                 status = NKikimrTxDataShard::TEvCompactTableResult::OK;
             }
         }

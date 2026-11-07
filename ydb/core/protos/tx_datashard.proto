@@ -2323,6 +2323,8 @@ message TEvCompactTable {
     optional NKikimrProto.TPathID PathId = 1;
     optional bool CompactBorrowed = 2; // i.e. taken
     optional bool CompactSinglePartedShards = 3;
+    // Column tables only: additionally rewrite every portion to the latest schema and reply once this is done.
+    optional bool ActualizeSchema = 4;
 }
 
 message TEvCompactTableResult {

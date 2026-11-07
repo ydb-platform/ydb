@@ -139,7 +139,27 @@ void TSchemeActualizer::DoExtractTasks(
 }
 
 void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
-    TargetSchema = VersionedIndex.GetLastCriticalSchema();
+    RefreshImpl(VersionedIndex.GetLastCriticalSchema(), externalContext);
+}
+
+void TSchemeActualizer::ForceActualization(const TAddExternalContext& externalContext) {
+    RefreshImpl(VersionedIndex.GetLastSchema(), externalContext);
+}
+
+bool TSchemeActualizer::IsActualized(const THashMap<ui64, TPortionInfo::TPtr>& portions) const {
+    if (!TargetSchema) {
+        return true;
+    }
+    for (auto&& [_, portion] : portions) {
+        if (!portion->HasRemoveSnapshot() && portion->GetSchema(VersionedIndex)->GetVersion() < TargetSchema->GetVersion()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void TSchemeActualizer::RefreshImpl(const std::shared_ptr<ISnapshotSchema>& targetSchema, const TAddExternalContext& externalContext) {
+    TargetSchema = targetSchema;
     if (!TargetSchema) {
         TSchemeGlobalCounters::OnRefreshEmpty();
         AFL_VERIFY(PortionsInfo.empty());

@@ -3668,7 +3668,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         UNIT_ASSERT_VALUES_EQUAL(block[0]->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
     }
 
-    Y_UNIT_TEST(SchemeshardShouldRejectCascadeCompactionForColumnTable) {
+    Y_UNIT_TEST(SchemeshardShouldCascadeCompactColumnTableWithSchemaActualization) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         Setup(runtime, env);
@@ -3685,9 +3685,22 @@ Y_UNIT_TEST_SUITE(TSchemeshardForcedCompactionTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Cascade compaction is not supported for column tables and must be rejected up front.
-        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true, /*maxShardsInFlight=*/1,
-            Ydb::StatusIds::BAD_REQUEST);
+        // Column tables have no index impl tables: CASCADE instead asks every shard to rewrite its portions
+        // to the latest schema (TEvCompactTable::ActualizeSchema) on top of the compaction itself.
+        std::vector<bool> actualizeSchema;
+        auto observer = runtime.AddObserver<TEvDataShard::TEvCompactTable>(
+            [&](const TEvDataShard::TEvCompactTable::TPtr& ev) {
+                actualizeSchema.push_back(ev->Get()->Record.GetActualizeSchema());
+            });
+        TBlockEvents<TEvDataShard::TEvCompactTableResult> block(runtime);
+
+        TestCompact(runtime, ++txId, "/MyRoot", "/MyRoot/ColumnTable", /*cascade=*/true);
+
+        // An empty table is already compacted and actualized, so the columnshard succeeds at once.
+        runtime.WaitFor("EvCompactTableResult", [&]{ return block.size() >= 1; });
+        UNIT_ASSERT_VALUES_EQUAL(block[0]->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        UNIT_ASSERT_VALUES_EQUAL(actualizeSchema.size(), 1);
+        UNIT_ASSERT(actualizeSchema[0]);
     }
 
     Y_UNIT_TEST(SchemeshardShouldFailToCompactColumnTableInStore) {

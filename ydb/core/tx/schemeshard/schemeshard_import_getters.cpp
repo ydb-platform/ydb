@@ -4,6 +4,7 @@
 #include "schemeshard_private.h"
 #include "schemeshard_xxport__helpers.h"
 
+#include <ydb/core/backup/common/changefeed.h>
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
@@ -869,6 +870,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         auto nextStep = [this]() {
             if (++IndexDownloadedChangefeed >= ChangefeedsPrefixes.size()) {
+                DropAsyncReplicationChangefeeds();
                 Reply();
             } else {
                 Become(&TThis::StateDownloadChangefeeds);
@@ -886,6 +888,28 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     template <typename T>
     static void Resize(::google::protobuf::RepeatedPtrField<T>* repeatedField, ui64 size) {
         while (size--) repeatedField->Add();
+    }
+
+    // Backups made before export learned to skip them may still carry the
+    // changefeed that async replication installed on the source table.
+    void DropAsyncReplicationChangefeeds() {
+        Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
+        auto& changefeeds = *ImportInfo->Items.at(ItemIdx).Changefeeds.MutableChangefeeds();
+
+        for (int i = 0; i < changefeeds.size();) {
+            if (!NBackup::IsAsyncReplicationChangefeed(changefeeds.Get(i).GetChangefeed())) {
+                ++i;
+                continue;
+            }
+
+            YDB_LOG_INFO("Skip async replication changefeed",
+                {"self", SelfId()},
+                {"importId", ImportInfo->Id},
+                {"itemIdx", ItemIdx},
+                {"changefeed", changefeeds.Get(i).GetChangefeed().name()},
+            );
+            changefeeds.DeleteSubrange(i, 1);
+        }
     }
 
     void HandleChangefeeds(TEvExternalStorage::TEvListObjectsResponse::TPtr& ev) {

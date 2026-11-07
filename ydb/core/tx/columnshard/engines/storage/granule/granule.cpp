@@ -203,7 +203,9 @@ std::vector<std::shared_ptr<TPortionInfo>> TGranuleMeta::AddLoadedPortions(const
             AFL_VERIFY(InsertedPortionsById.contains(portion->GetPortionId()))("portion_id", portion->GetPortionId());
             continue;
         }
-        // compaction output below the loaded keys is already in memory
+        // compaction output below the loaded keys is already in memory.
+        // if a portion gets deleted concurrently with the loading, its transaction Complete will be executed
+        // after this one and delete the portion just fine.
         if (Portions.contains(portion->GetPortionId())) {
             continue;
         }

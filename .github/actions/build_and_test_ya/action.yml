@@ -136,8 +136,8 @@ runs:
       with:
         s3_bucket: ${{ fromJSON( inputs.vars ).AWS_BUCKET }}
         s3_endpoint: ${{ fromJSON( inputs.vars ).AWS_ENDPOINT }}
-        s3_region: ${{ fromJSON( inputs.vars ).AWS_REGION || 'ru-central1' }}
-        public_acl: ${{ fromJSON( inputs.vars ).AWS_PUBLIC_ACL || 'true' }}
+        s3_region: ${{ fromJSON( inputs.vars ).AWS_REGION }}
+        public_acl: ${{ fromJSON( inputs.vars ).AWS_PUBLIC_ACL }}
         s3_key_id: ${{ fromJSON( inputs.secs ).AWS_KEY_ID }}
         s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
         folder_prefix: ${{ env.folder_prefix }}
@@ -732,22 +732,17 @@ runs:
               | jq -r '.results[] | select((.status == "FAILED") and (.error_type == "REGULAR") and (.type == "build")) | "path: " + .path + "\n\n" + ."rich-snippet" + "\n\n\n"' \
               | sed 's/\[\[[^]]*]\]//g' \
             ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
-            # Same text as the PR comment must land in step summary (and summary_text for S3).
+            # Same text as the PR comment; durable marker for ingest. summary_text is composed once below.
             BUILD_FAIL_MSG="Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)"
             echo "$BUILD_FAIL_MSG" | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color red
             echo "$BUILD_FAIL_MSG" >> "$GITHUB_STEP_SUMMARY"
-            printf '%s\n\n' "$BUILD_FAIL_MSG" > summary_text.txt
-            # Explicit marker for remote ingest (fail_summary.txt may be empty when jq finds no REGULAR build errors).
             printf '%s\n' "$BUILD_FAIL_MSG" > "$CURRENT_PUBLIC_DIR/build_failed.md"
             echo red > summary_color.txt
-            cp -f summary_text.txt "$PUBLIC_DIR/summary_text.txt"
             analytics enrich "$YA_MAKE_NAME" \
               --label "error=ya make rc=${RC}" \
               --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
               --label "fail_summary_url=${CURRENT_PUBLIC_DIR_URL}/fail_summary.txt"
             analytics flush
-            # Continue into transform + generate-summary (all callers): statusrep.txt /
-            # ya-test.html / failure table; build-fail line stays first in summary_text.
           fi
 
           # archive build results report (orig)
@@ -827,16 +822,21 @@ runs:
               --oom_dmesg_log "$OOM_DMESG_LOG" \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_REPORT"
             analytics end generate_summary
-            # Keep the build-failure headline first (same wording as the PR comment).
-            if [ $BUILD_FAILED = 1 ] && [ -n "${BUILD_FAIL_MSG:-}" ]; then
-              {
-                echo "$BUILD_FAIL_MSG"
-                echo
+          fi
+
+          # One compose for summary_text: optional build-fail headline + generate-summary body.
+          if [ $BUILD_FAILED = 1 ] && [ -f "$CURRENT_PUBLIC_DIR/build_failed.md" ]; then
+            {
+              cat "$CURRENT_PUBLIC_DIR/build_failed.md"
+              echo
+              if [ -f summary_text.txt ]; then
                 cat summary_text.txt
-              } > summary_text.txt.tmp
-              mv summary_text.txt.tmp summary_text.txt
-              echo red > summary_color.txt
-            fi
+              fi
+            } > summary_text.txt.tmp
+            mv summary_text.txt.tmp summary_text.txt
+            echo red > summary_color.txt
+          fi
+          if [ -f summary_text.txt ]; then
             cp -f summary_text.txt "$PUBLIC_DIR/summary_text.txt"
           fi
 
@@ -851,7 +851,7 @@ runs:
           analytics flush
 
           # Build-fail already posted the PR comment above; avoid a second edit with the table.
-          if [ $BUILD_FAILED = 0 ] && [ "$INPUT_RUN_TESTS" = "true" ] && [ -f summary_text.txt ]; then
+          if [ $BUILD_FAILED = 0 ] && [ "$INPUT_RUN_TESTS" = "true" ]; then
             cat summary_text.txt | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
           fi
 

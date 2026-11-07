@@ -148,12 +148,9 @@ def flush_file(
         if not rows:
             print(f"No valid metric rows in {metrics_path}, keeping local batch")
             return 0
-        if is_ydb_qa_disabled():
-            # Keep JSONL on disk for S3 publish + caller-side flush; do not advance offset.
-            print(f"CI_DISABLE_YDB_QA: {len(rows)} pending row(s) kept in {metrics_path}")
-            return 0
         if not has_send_credentials():
-            print("Analytics YDB credentials are missing, keeping local batch")
+            # Includes CI_DISABLE_YDB_QA=1: keep JSONL for S3 / caller-side flush.
+            print(f"Analytics send disabled or credentials missing; keeping {len(rows)} row(s) in {metrics_path}")
             return 0
         upsert_fn = upsert or upsert_metrics
         with _open_ydb_wrapper(ydb_wrapper_factory) as wrapper:

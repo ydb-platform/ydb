@@ -27,15 +27,10 @@ class ResolveSeedsTest(unittest.TestCase):
                 "DEFAULT_BUILD_TARGET",
                 "DEFAULT_BUILD_PRESET",
                 "CODE_REF",
-                "GITHUB_SHA",
-                "GITHUB_RUN_ID",
-                "GITHUB_EVENT_NAME",
                 "GITHUB_WORKFLOW",
             )
         }
         os.environ["CODE_REF"] = "abcdef1"
-        os.environ["GITHUB_RUN_ID"] = "1"
-        os.environ["GITHUB_EVENT_NAME"] = "workflow_dispatch"
         os.environ["GITHUB_WORKFLOW"] = "Run and debug tests"
         os.environ.pop("REMOTE_JSON", None)
         os.environ.pop("DEFAULT_BUILD_TARGET", None)

@@ -87,8 +87,6 @@ jobs:
   ingest:
     if: >-
       always() && !cancelled() &&
-      needs.enqueue.result == 'success' &&
-      needs.wait.result != 'cancelled' &&
       needs.wait.outputs.executor_run_id != ''
     needs: [enqueue, wait]
     runs-on: ubuntu-latest

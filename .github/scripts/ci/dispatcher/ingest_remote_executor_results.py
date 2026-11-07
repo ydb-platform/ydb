@@ -23,12 +23,9 @@ _REPO_ROOT = _DISPATCHER_DIR.parents[3]
 if str(_DISPATCHER_DIR) not in sys.path:
     sys.path.insert(0, str(_DISPATCHER_DIR))
 _ANALYTICS_UTILS = _REPO_ROOT / ".github/scripts/utils/analytics"
-_ANALYTICS_GA = _ANALYTICS_UTILS / "github_actions"
-_ANALYTICS_SCRIPTS = _REPO_ROOT / ".github/scripts/analytics"
-for _p in (_ANALYTICS_UTILS, _ANALYTICS_GA, _ANALYTICS_SCRIPTS):
-    s = str(_p)
-    if s not in sys.path:
-        sys.path.insert(0, s)
+_s = str(_ANALYTICS_UTILS)
+if _s not in sys.path:
+    sys.path.insert(0, _s)
 
 from _common import (  # noqa: E402
     cfg_str,
@@ -175,13 +172,12 @@ def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest:
             child_rel = _posix_join(rel_dir, href)
 
             # Dir link: either "try_1/index.html" (recursive Indexer) or "try_1/".
-            if href.endswith("/index.html"):
-                sub = child_rel[: -len("/index.html")]
-                if sub and _safe_under(dest, sub) is not None and sub not in seen_dirs:
-                    queue.append(sub)
-                continue
-            if href.endswith("/"):
-                sub = child_rel.rstrip("/")
+            if href.endswith("/index.html") or href.endswith("/"):
+                sub = (
+                    child_rel[: -len("/index.html")]
+                    if href.endswith("/index.html")
+                    else child_rel.rstrip("/")
+                )
                 if sub and _safe_under(dest, sub) is not None and sub not in seen_dirs:
                     queue.append(sub)
                 continue
@@ -212,7 +208,6 @@ def download_prefix_via_index(endpoint: str, bucket: str, key_prefix: str, dest:
 def rewrite_url_prefix(root: Path, old: str, new: str) -> int:
     if not old or old == new:
         return 0
-    olds = {old, old.rstrip("/"), quote_url(old), quote_url(old.rstrip("/"))}
     news_map = {
         old: new,
         old.rstrip("/"): new.rstrip("/"),
@@ -250,9 +245,9 @@ def rewrite_url_prefix(root: Path, old: str, new: str) -> int:
         except UnicodeDecodeError:
             continue
         orig = text
-        for o in olds:
-            if o and o in text:
-                text = text.replace(o, news_map.get(o, new))
+        for o, repl in news_map.items():
+            if o in text:
+                text = text.replace(o, repl)
         if text != orig:
             path.write_text(text, encoding="utf-8")
             n += 1
@@ -308,18 +303,6 @@ def regenerate_summary(
 
     html_path = public_dir / last["html_relpath"]
     report_path = public_dir / last["report_relpath"]
-    testowners = workspace / ".github/TESTOWNERS"
-    if not report_path.is_file():
-        print(f"::warning::missing report for regenerate: {report_path}; writing stub job_summary")
-        return _stub_summary()
-    if not testowners.is_file():
-        print(
-            f"::warning::{testowners} missing (sparse checkout?); "
-            "skipping generate-summary, writing stub job_summary"
-        )
-        return _stub_summary()
-
-    html_path.parent.mkdir(parents=True, exist_ok=True)
 
     color_file = public_dir / "ingest_summary_color.txt"
     text_file = public_dir / "ingest_summary_text.txt"
@@ -367,13 +350,9 @@ def regenerate_summary(
         print(f"::warning::generate-summary failed ({e}); writing stub job_summary")
         return _stub_summary()
 
-    build_fail_line = ""
-    if build_failed_md.is_file() and build_failed_md.stat().st_size > 0:
-        build_fail_line = build_failed_md.read_text(encoding="utf-8").rstrip() + "\n\n"
-
     parts: list[str] = ["## Summary (enriched)\n\n"]
-    if build_fail_line:
-        parts.append(build_fail_line)
+    if build_failed_md.is_file() and build_failed_md.stat().st_size > 0:
+        parts.append(build_failed_md.read_text(encoding="utf-8").rstrip() + "\n\n")
     if text_file.is_file():
         body = text_file.read_text(encoding="utf-8")
         parts.append(body if body.endswith("\n") else body + "\n")
@@ -402,9 +381,7 @@ def rewrite_ci_metrics_attribution(
 ) -> Path:
     """Rewrite remote-stamped JSONL rows to caller run attribution before YDB flush."""
     out = metrics_path.with_name(metrics_path.name + ".caller")
-    run_url = (
-        f"https://github.com/{caller_repo}/actions/runs/{run_id}" if caller_repo and run_id else None
-    )
+    run_url = f"https://github.com/{caller_repo}/actions/runs/{run_id}"
     pr_number = _as_uint(pull_number)
     rewritten = 0
     with metrics_path.open(encoding="utf-8") as src, out.open("w", encoding="utf-8") as dst:
@@ -427,11 +404,9 @@ def rewrite_ci_metrics_attribution(
                 labels.setdefault("remote_github_job_id", row.get("github_job_id"))
             row["run_id"] = _as_uint(run_id)
             row["event_name"] = event_name
-            row["workflow"] = workflow or row.get("workflow")
-            if job_name:
-                row["job_name"] = job_name
-            if run_url:
-                row["run_url"] = run_url
+            row["workflow"] = workflow
+            row["job_name"] = job_name
+            row["run_url"] = run_url
             if pr_number is not None:
                 row["pr_number"] = pr_number
             # Keep host github_job_id; original also in labels.remote_github_job_id.
@@ -489,9 +464,6 @@ def upload_attempts(
 ) -> None:
     for att in attempts:
         report = public_dir / att["report_relpath"]
-        if not report.is_file():
-            print(f"::warning::skip upload, missing {report}")
-            continue
         pull = build_run_name(event_name, run_id, pull_number, int(att["retry"]))
         cmd = [
             sys.executable,
@@ -557,17 +529,15 @@ def main() -> None:
     caller_workflow = cfg_str(cfg, "caller_workflow")
     job_name = cfg_str(cfg, "analytics_job_name")
 
-    inputs = cfg.get("inputs") if isinstance(cfg.get("inputs"), dict) else {}
-    ji = inputs.get("job_inputs") if isinstance(inputs.get("job_inputs"), dict) else {}
+    inputs = cfg.get("inputs")
+    if not isinstance(inputs, dict):
+        die("CONFIG_JSON.inputs missing")
+    ji = inputs.get("job_inputs")
     if not isinstance(ji, dict) or not ji:
         die("CONFIG_JSON.inputs.job_inputs missing")
     pull_number = str(ji.get("pull_number") or "").strip()
-    build_preset = str(ji.get("build_preset") or "").strip()
-    branch = str(ji.get("custom_branch_name") or "").strip()
-    if not build_preset:
-        die("CONFIG_JSON.inputs.job_inputs.build_preset missing")
-    if not branch:
-        die("CONFIG_JSON.inputs.job_inputs.custom_branch_name missing")
+    build_preset = cfg_str(ji, "build_preset")
+    branch = cfg_str(ji, "custom_branch_name")
 
     event_name = env("GITHUB_EVENT_NAME")
     caller_run_id = env("GITHUB_RUN_ID")
@@ -588,10 +558,11 @@ def main() -> None:
         die("remote_artifacts.json missing commit")
 
     leaf = key_prefix.rstrip("/").rsplit("/", 1)[-1]
-    dest_key_prefix = f"{caller_repo}/{caller_workflow}/{caller_run_id}/remote-{run_id}/{leaf}"
+    run_root_key = f"{caller_repo}/{caller_workflow}/{caller_run_id}/remote-{run_id}"
+    dest_key_prefix = f"{run_root_key}/{leaf}"
     new_public = quote_url(f"{caller_endpoint}/{caller_bucket}/{dest_key_prefix}")
     caller_s3_path = f"s3://{caller_bucket}/{dest_key_prefix}"
-    caller_run_root = f"s3://{caller_bucket}/{caller_repo}/{caller_workflow}/{caller_run_id}/remote-{run_id}"
+    caller_run_root = f"s3://{caller_bucket}/{run_root_key}"
 
     executor_conclusion = env_opt("EXECUTOR_CONCLUSION")
 
@@ -603,9 +574,10 @@ def main() -> None:
         n = rewrite_url_prefix(public_dir, old_public, new_public)
         print(f"Rewrote URL prefix in {n} files ({old_public} → {new_public})")
 
-        indexer = workspace / ".github/scripts/Indexer/indexer.py"
-        if indexer.is_file():
-            run([sys.executable, str(indexer), "-r", f"{public_dir}/"], cwd=str(workspace))
+        run(
+            [sys.executable, str(workspace / ".github/scripts/Indexer/indexer.py"), "-r", f"{public_dir}/"],
+            cwd=str(workspace),
+        )
 
         attempts = discover_attempts(public_dir)
         print(f"attempts={json.dumps(attempts, ensure_ascii=False)}")
@@ -630,10 +602,7 @@ def main() -> None:
             "attempts": attempts,
             "caller_public_dir_url": new_public,
             "caller_artifact_key_prefix": dest_key_prefix,
-            "caller_run_root_url": quote_url(
-                f"{caller_endpoint}/{caller_bucket}/{caller_repo}/"
-                f"{caller_workflow}/{caller_run_id}/remote-{run_id}"
-            ),
+            "caller_run_root_url": quote_url(f"{caller_endpoint}/{caller_bucket}/{run_root_key}"),
             "source_event_name": event_name,
             "source_run_id": caller_run_id,
             "pull_number": pull_number,
@@ -669,9 +638,7 @@ def main() -> None:
             job_name=job_name,
         )
 
-        body = ""
-        if job_summary.is_file():
-            body = job_summary.read_text(encoding="utf-8").rstrip() + "\n"
+        body = job_summary.read_text(encoding="utf-8").rstrip() + "\n"
         footer_bits = [f"Remote executor: [{run_id}]({run_url})"]
         if executor_conclusion:
             footer_bits.append(f"`{executor_conclusion}`")

@@ -9,10 +9,10 @@ import sys
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 
-def die(msg: str) -> None:
+def die(msg: str) -> NoReturn:
     print(f"::error::{msg}", file=sys.stderr)
     sys.exit(1)
 
@@ -24,8 +24,8 @@ def env(name: str) -> str:
     return v
 
 
-def env_opt(name: str, default: str = "") -> str:
-    return (os.environ.get(name) or default).strip()
+def env_opt(name: str) -> str:
+    return (os.environ.get(name) or "").strip()
 
 
 def truthy(v: Any, default: bool = False) -> bool:
@@ -54,20 +54,20 @@ def http_get_text(url: str, timeout: int = 60) -> str | None:
     return None if raw is None else raw.decode()
 
 
-def append_summary(text: str) -> None:
+def _write_summary(text: str, mode: str) -> None:
     path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not path:
         return
-    with open(path, "a", encoding="utf-8") as f:
+    with open(path, mode, encoding="utf-8") as f:
         f.write(text if text.endswith("\n") else text + "\n")
+
+
+def append_summary(text: str) -> None:
+    _write_summary(text, "a")
 
 
 def write_step_summary(text: str) -> None:
-    path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if not path:
-        return
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(text if text.endswith("\n") else text + "\n")
+    _write_summary(text, "w")
 
 
 def set_outputs(**kwargs: Any) -> None:
@@ -76,7 +76,12 @@ def set_outputs(**kwargs: Any) -> None:
         return
     with open(path, "a", encoding="utf-8") as f:
         for k, v in kwargs.items():
-            f.write(f"{k}={v}\n")
+            s = str(v)
+            if "\n" in s or "\r" in s:
+                delim = f"ghadelimiter_{os.urandom(8).hex()}"
+                f.write(f"{k}<<{delim}\n{s}\n{delim}\n")
+            else:
+                f.write(f"{k}={s}\n")
 
 
 def load_config_json() -> dict[str, Any]:
@@ -113,7 +118,7 @@ def object_url(endpoint: str, bucket: str, key: str) -> str:
 
 
 def discover_attempts(public_dir: Path) -> list[dict[str, Any]]:
-    """Scan try_*/report.json under public_dir (action always writes started_at)."""
+    """Scan try_*/report.json under public_dir; each try dir must have started_at."""
     found: list[dict[str, Any]] = []
     if not public_dir.is_dir():
         return found
@@ -123,12 +128,10 @@ def discover_attempts(public_dir: Path) -> list[dict[str, Any]]:
             continue
         started_file = report.parent / "started_at"
         if not started_file.is_file():
-            print(f"::warning::missing {started_file}; skipping attempt")
-            continue
+            die(f"missing {started_file}")
         started_at = started_file.read_text(encoding="utf-8").strip()
         if not started_at:
-            print(f"::warning::empty {started_file}; skipping attempt")
-            continue
+            die(f"empty {started_file}")
         found.append(
             {
                 "retry": int(m.group(1)),

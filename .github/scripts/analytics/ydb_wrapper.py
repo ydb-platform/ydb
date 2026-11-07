@@ -92,13 +92,14 @@ class YDBWrapper:
         self._connection_timeout = 60
         self._stats_connection_timeout = 60
 
+        if script_name is None:
+            script_name = self._get_caller_script_name()
+        self._script_name = script_name
+        self._github_info = self._get_github_action_info()
+
         if self._ydb_qa_disabled:
             self._config_source = f"disabled:{_DISABLE_YDB_QA_ENV}"
             self._enable_statistics = False
-            if script_name is None:
-                script_name = self._get_caller_script_name()
-            self._script_name = script_name
-            self._github_info = self._get_github_action_info()
             self._log("info", f"YDB QA disabled via {_DISABLE_YDB_QA_ENV}")
             return
 
@@ -131,18 +132,8 @@ class YDBWrapper:
                     self._config_source = f"file:{resolved_path} (vars.YDB_QA_CONFIG not set)"
 
         self._log("info", f"YDB config source: {self._config_source}")
-        
-        # Statistics settings
         self._enable_statistics = enable_statistics
-        
-        # Automatically determine script_name if not provided
-        if script_name is None:
-            script_name = self._get_caller_script_name()
-        self._script_name = script_name
-        
-        # GitHub Action info - get once
-        self._github_info = self._get_github_action_info()
-        
+
         # Get cluster version once during initialization (uses cached main driver)
         try:
             self._get_cluster_version(self._get_driver())

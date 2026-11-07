@@ -35,10 +35,6 @@ from _common import (  # noqa: E402
 TICKET_FILENAME = "remote-ticket.json"
 
 
-def repo_from_cfg(cfg: dict[str, Any]) -> str:
-    return cfg_str(cfg, "repository")
-
-
 def api(repo: str) -> str:
     return f"https://api.github.com/repos/{repo}"
 
@@ -50,12 +46,12 @@ def require_gh_token() -> str:
     return token
 
 
-def gh(method, url, body=None, retries=5, ok_codes=(200, 201, 202, 204)):
+def gh(method, url, token: str, body=None, retries=5, ok_codes=(200, 201, 202, 204)):
     data = None if body is None else json.dumps(body).encode()
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "Authorization": f"Bearer {require_gh_token()}",
+        "Authorization": f"Bearer {token}",
     }
     if data is not None:
         headers["Content-Type"] = "application/json"
@@ -65,10 +61,7 @@ def gh(method, url, body=None, retries=5, ok_codes=(200, 201, 202, 204)):
         try:
             with urllib.request.urlopen(req) as resp:
                 raw = resp.read()
-                code = resp.status
-                if code not in ok_codes:
-                    die(f"GitHub {method} {url} -> HTTP {code}")
-                return code, json.loads(raw) if raw else None
+                return resp.status, json.loads(raw) if raw else None
         except urllib.error.HTTPError as e:
             raw = e.read()
             last_err = (e.code, raw.decode(errors="replace"))
@@ -102,6 +95,13 @@ def read_claim(cfg, platform_run_id: str) -> dict | None:
     return claim if isinstance(claim, dict) else None
 
 
+def parse_claim(claim: dict[str, Any]) -> tuple[str, str, str]:
+    attempt = str(claim.get("platform_run_attempt") or "").strip()
+    run_id = str(claim.get("executor_run_id") or "").strip()
+    run_url = str(claim.get("executor_run_url") or "").strip()
+    return attempt, run_id, run_url
+
+
 def build_ticket(cfg):
     """Ticket for the host VM: dispatch uses config.inputs only."""
     run_id = env("PLATFORM_RUN_ID")
@@ -109,7 +109,10 @@ def build_ticket(cfg):
     repo = env("PLATFORM_REPOSITORY")
     workflow = env("PLATFORM_WORKFLOW")
     run_url = env("PLATFORM_RUN_URL")
-    inputs = dict(cfg.get("inputs") if isinstance(cfg.get("inputs"), dict) else {})
+    inputs = cfg.get("inputs")
+    if not isinstance(inputs, dict):
+        die("CONFIG_JSON.inputs missing")
+    inputs = dict(inputs)
     inputs["platform_run_id"] = run_id
     inputs["platform_run_attempt"] = attempt
     inputs["platform_repository"] = repo
@@ -147,7 +150,7 @@ def wait_for_claim(cfg):
     for i in range(2400):
         claim = read_claim(cfg, platform_run_id)
         if claim:
-            claim_attempt = str(claim.get("platform_run_attempt") or "").strip()
+            claim_attempt, run_id, run_url = parse_claim(claim)
             if claim_attempt != want_attempt:
                 if i % 10 == 0:
                     print(
@@ -156,28 +159,25 @@ def wait_for_claim(cfg):
                     )
                 time.sleep(30)
                 continue
-            run_id = str(claim.get("executor_run_id") or "").strip()
-            run_url = str(claim.get("executor_run_url") or "").strip()
             if run_id and run_url:
                 return run_id, run_url
-            if run_id and not run_url and i % 10 == 0:
-                print(
-                    f"{time.strftime('%H:%M:%S', time.gmtime())} "
-                    f"claim missing executor_run_url for run_id={run_id}; waiting..."
-                )
+            die(
+                f"malformed claim at {url}: "
+                f"executor_run_id={run_id!r} executor_run_url={run_url!r}"
+            )
         if i % 10 == 0:
             print(f"{time.strftime('%H:%M:%S', time.gmtime())} waiting for claim...")
         time.sleep(30)
     die(f"timed out waiting for claim at {url}")
 
 
-def wait_executor_done(cfg, run_id, run_url):
+def wait_executor_done(cfg, token: str, run_id, run_url):
     fail_on_remote = truthy(cfg.get("fail_on_remote_failure"), True)
-    repo = repo_from_cfg(cfg)
+    repo = cfg_str(cfg, "repository")
     print(f"Waiting for executor run {run_id} ({run_url}) ...")
     status = conclusion = ""
     for _ in range(2400):
-        _, state = gh("GET", f"{api(repo)}/actions/runs/{run_id}", retries=5)
+        _, state = gh("GET", f"{api(repo)}/actions/runs/{run_id}", token, retries=5)
         status = state.get("status") or ""
         conclusion = state.get("conclusion") or ""
         print(f"{time.strftime('%H:%M:%S', time.gmtime())} status={status} conclusion={conclusion or 'none'}")
@@ -187,7 +187,7 @@ def wait_executor_done(cfg, run_id, run_url):
     if status != "completed":
         die(f"timed out waiting for executor run {run_id} (last status={status})")
 
-    set_outputs(executor_conclusion=conclusion or "")
+    set_outputs(executor_conclusion=conclusion)
     append_summary(
         f"Remote executor [{run_id}]({run_url}) finished with `{conclusion}`.\n"
         f"_Resulting summary is published by the ingest job after reupload to caller S3._\n"
@@ -201,13 +201,11 @@ def wait_executor_done(cfg, run_id, run_url):
         for _ in range(40):
             claim = read_claim(cfg, env("PLATFORM_RUN_ID"))
             if claim:
-                claim_attempt = str(claim.get("platform_run_attempt") or "").strip()
-                new_id = str(claim.get("executor_run_id") or "").strip()
-                new_url = str(claim.get("executor_run_url") or "").strip()
+                claim_attempt, new_id, new_url = parse_claim(claim)
                 if new_id and new_id != run_id and claim_attempt == want_attempt and new_url:
                     print(f"::notice::executor {run_id} cancelled; following new claim {new_id}")
                     set_outputs(executor_run_id=new_id, executor_run_url=new_url)
-                    return wait_executor_done(cfg, new_id, new_url)
+                    return wait_executor_done(cfg, token, new_id, new_url)
             time.sleep(15)
     msg = f"executor finished with conclusion={conclusion}"
     if fail_on_remote:
@@ -216,30 +214,36 @@ def wait_executor_done(cfg, run_id, run_url):
 
 
 def cmd_wait():
-    require_gh_token()
+    token = require_gh_token()
     cfg = load_config_json()
     run_id, run_url = wait_for_claim(cfg)
     set_outputs(executor_run_id=run_id, executor_run_url=run_url)
-    wait_executor_done(cfg, run_id, run_url)
+    wait_executor_done(cfg, token, run_id, run_url)
 
 
 def cmd_cancel():
+    token = require_gh_token()
     cfg = load_config_json()
-    repo = repo_from_cfg(cfg)
+    repo = cfg_str(cfg, "repository")
     run_id = env_opt("EXECUTOR_RUN_ID")
+    run_url = env_opt("EXECUTOR_RUN_URL")
     if not run_id:
         platform_run_id = env_opt("PLATFORM_RUN_ID")
         if platform_run_id:
             claim = read_claim(cfg, platform_run_id)
             if claim:
-                run_id = str(claim.get("executor_run_id") or "").strip()
-    if not run_id or not env_opt("GH_TOKEN"):
+                _, run_id, claim_url = parse_claim(claim)
+                if not run_url:
+                    run_url = claim_url
+    if not run_id:
         append_summary("### Caller cancelled\n- no executor run id to cancel yet\n")
         return
-    run_url = env_opt("EXECUTOR_RUN_URL") or f"https://github.com/{repo}/actions/runs/{run_id}"
+    if not run_url:
+        run_url = f"https://github.com/{repo}/actions/runs/{run_id}"
     code, _ = gh(
         "POST",
         f"{api(repo)}/actions/runs/{run_id}/cancel",
+        token,
         retries=3,
         ok_codes=(202, 204, 409),
     )

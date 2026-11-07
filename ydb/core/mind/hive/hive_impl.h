@@ -272,6 +272,9 @@ protected:
     void LogBalancerNotStarted(const TString& balancerType, EBalancerSuppressReason reason);
     bool StartHiveBalancer(TBalancerSettings&& settings);
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
+    void StartPileDrain(TBridgePileInfo& pile);
+    bool HasTabletsToDrain(TBridgePileId pileId) const;
+    void ProcessPileDrains();
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     bool StartHiveStorageBalancer(TStorageBalancerSettings settings);
     // starts a new reassign for every tablet in the list
@@ -328,7 +331,7 @@ protected:
     ITransaction* CreateReleaseTabletsReply(TEvHive::TEvReleaseTabletsReply::TPtr event);
     ITransaction* CreateConfigureSubdomain(TEvHive::TEvConfigureHive::TPtr event);
     ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo = 0, ui64 cookie = 0);
-    ITransaction* CreateSwitchDrainOff(TDrainTarget target, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements);
+    ITransaction* CreateSwitchDrainOff(TDrainTarget target, NKikimrProto::EReplyStatus status, ui32 movements);
     ITransaction* CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event);
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
     ITransaction* CreateUpdateTabletsObject(TEvHive::TEvUpdateTabletsObject::TPtr event);
@@ -417,6 +420,7 @@ protected:
     TBootQueue BootQueue;
     bool ProcessWaitQueueScheduled = false;
     bool ProcessBootQueueScheduled = false;
+    bool ProcessPileDrainsScheduled = false;
     bool ProcessBootQueuePostponed = false;
     TInstant LastConnect;
     TInstant ProcessBootQueuePostponedUntil;
@@ -624,6 +628,7 @@ protected:
     void Handle(TEvPrivate::TEvCheckTabletNodeAlive::TPtr&);
     void HandleInit(TEvPrivate::TEvProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessBootQueue::TPtr&);
+    void Handle(TEvPrivate::TEvProcessPileDrains::TPtr&);
     void Handle(TEvPrivate::TEvPostponeProcessBootQueue::TPtr&);
     void Handle(TEvPrivate::TEvProcessDisconnectNode::TPtr&);
     void HandleInit(TEvPrivate::TEvProcessTabletBalancer::TPtr&);

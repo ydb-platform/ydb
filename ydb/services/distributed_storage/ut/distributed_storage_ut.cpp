@@ -2,6 +2,7 @@
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/formats/factory.h>
+#include <ydb/core/protos/blobstorage_pdisk_kind.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/public/api/grpc/draft/ydb_distributed_storage_v1.grpc.pb.h>
@@ -248,6 +249,43 @@ void IgnoreAllSafetyChecks(Ydb::DistributedStorage::SafetyOptions& safety) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(DistributedStorageGRpcService) {
+    Y_UNIT_TEST(StorageStatePreservesNamedPDiskFilter) {
+        TDistributedStorageTestServer server;
+        auto& runtime = *server.GetRuntime();
+        const auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto* config = request->Record.MutableRequest();
+        config->SetIgnoreGroupReserve(true);
+        config->AddCommand()->MutableDefinePDiskKind()->SetName("qlc");
+        auto* pool = config->AddCommand()->MutableDefineStoragePool();
+        pool->SetBoxId(1);
+        pool->SetStoragePoolId(4242);
+        pool->SetName("named-filter");
+        pool->SetErasureSpecies("none");
+        pool->SetVDiskKind("Default");
+        pool->SetNumGroups(0);
+        auto* filter = pool->AddPDiskFilter();
+        filter->AddProperty()->SetType(NKikimrBlobStorage::NVME);
+        filter->AddProperty()->SetKindName("qlc");
+        config->AddCommand()->MutableQueryBaseConfig();
+        runtime.SendToPipe(MakeBSControllerID(), sender, request.Release());
+        const auto response = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(sender);
+        UNIT_ASSERT_C(response->Get()->Record.GetResponse().GetSuccess(), response->Get()->Record.DebugString());
+        const auto kind = response->Get()->Record.GetResponse().GetStatus(2).GetBaseConfig().GetPDiskKind(0).GetKind();
+        const auto state = StreamStorageState(server.GetChannel(), {.StoragePools = true});
+        UNIT_ASSERT_VALUES_EQUAL(state.Status, Ydb::StatusIds::SUCCESS);
+        bool found = false;
+        for (const auto& exported : state.StoragePools) {
+            if (exported.storage_pool_id() == 4242) {
+                found = true;
+                UNIT_ASSERT_VALUES_EQUAL(exported.pdisk_filters_size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(exported.pdisk_filters(0).kind_name(), "qlc");
+                UNIT_ASSERT_VALUES_EQUAL(exported.pdisk_filters(0).kind(), kind);
+            }
+        }
+        UNIT_ASSERT(found);
+    }
+
     Y_UNIT_TEST(StorageStateContainsAllSectionsIncludingStaticStorage) {
         TDistributedStorageTestServer server;
         const auto result = StreamStorageState(server.GetChannel(), TStorageStateOptions::All());

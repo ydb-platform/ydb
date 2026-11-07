@@ -249,6 +249,10 @@ protected:
                     InterfaceVersion = response.GetStatus(0).GetInterfaceVersion();
                 }
                 if (InterfaceVersion >= BSC_INTERFACE_REPLACE_CONFIG) {
+                    if (auto error = self->CheckControllerInterface(InterfaceVersion)) {
+                        return self->Reply(Ydb::StatusIds::BAD_REQUEST, *error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                            self->ActorContext());
+                    }
                     // ask to replace/fetch config if needed
                     auto ev = self->ProcessControllerQuery();
                     NTabletPipe::SendData(self->SelfId(), BSCPipeClient, ev.release(), 0, TBase::Span_.GetTraceId());
@@ -458,6 +462,11 @@ protected:
 
     virtual bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) = 0;
     virtual std::unique_ptr<IEventBase> ProcessControllerQuery() = 0;
+
+    // Lets a request refuse a BS_CONTROLLER that is too old for what the request carries, before sending it.
+    virtual std::optional<TString> CheckControllerInterface(ui32 /*interfaceVersion*/) {
+        return std::nullopt;
+    }
 
     const TDerived *Self() const { return static_cast<const TDerived*>(this); }
     TDerived *Self() { return static_cast<TDerived*>(this); }

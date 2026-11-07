@@ -174,7 +174,7 @@ TAutoPtr<TLogBackend> CreateAuditLogUnifiedAgentBackend(
 
     auto clusterName = appConfig.HasLogConfig() && appConfig.GetLogConfig().HasClusterName() ? appConfig.GetLogConfig().GetClusterName() : "";
     const auto& dnConfig = appConfig.GetDynamicNameserviceConfig();
-    auto uaCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "ua_client");
+    auto uaCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "ua_client_audit");
     const auto& maxStaticNodeId = dnConfig.GetMaxStaticNodeId();
     const auto& uaClientConfig = uaBackend.HasUAClientConfig() ? uaBackend.GetUAClientConfig() : appConfig.GetLogConfig().GetUAClientConfig();
     const auto& logName = uaBackend.HasLogName() ? uaBackend.GetLogName() : uaClientConfig.GetLogName();

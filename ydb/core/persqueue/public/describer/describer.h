@@ -53,6 +53,7 @@ struct TTopicInfo {
     TString CdcStreamName;
 
     ui64 CreateStep = 0;
+    bool IsServerless = false;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> Info;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TDirEntryInfo> Self;
     TIntrusivePtr<TSecurityObject> SecurityObject;

@@ -844,7 +844,7 @@ void TReadSessionActor::HandleDescribeTopicsResponse(TEvDescribeTopicsResponse::
 
 void TReadSessionActor::CreateInitAndAuthActor(const TActorContext& ctx) {
     AuthInitActor = ctx.Register(new V1::TReadInitAndAuthActor(
-            ctx, ctx.SelfID, InternalClientId, Cookie, Session, PqMetaCache, NewSchemeCache, Counters, Token,
+            ctx, ctx.SelfID, InternalClientId, Cookie, Session, Database, NewSchemeCache, Counters, Token,
             TopicsList, TopicsHandler.GetLocalCluster()
     ));
 }

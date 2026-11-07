@@ -2494,7 +2494,7 @@ template <EProtocol Protocol>
 void TReadSessionActor<Protocol>::RunAuthActor(const TActorContext& ctx) {
     AFL_ENSURE(!AuthInitActor);
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
-        ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
+        ctx, ctx.SelfID, ClientId, Cookie, Session, Request->GetDatabaseName().GetOrElse(TString()), NewSchemeCache, Counters, Token, TopicsList,
         TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));
 }
 

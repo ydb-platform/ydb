@@ -342,10 +342,13 @@ def regenerate_summary(
     pull_number: str,
     workflow_run_id: str,
 ) -> Path:
-    """Regenerate ya-test.html with YDB history; merge enriched markdown into job_summary.
+    """Regenerate ya-test.html with YDB history; rewrite job_summary from that markdown.
 
     Does not touch GITHUB_STEP_SUMMARY — caller publishes the final file after S3 upload.
     """
+    # Ingest runs on the platform with YDB credentials; never inherit host kill-switch.
+    os.environ.pop("CI_DISABLE_YDB_QA", None)
+
     summary_links = public_dir / "summary_links.txt"
     if not summary_links.exists():
         summary_links.write_text(f"00 [Artifacts]({public_dir_url}/index.html)\n", encoding="utf-8")
@@ -382,7 +385,9 @@ def regenerate_summary(
     color_file = public_dir / "ingest_summary_color.txt"
     text_file = public_dir / "ingest_summary_text.txt"
     status_file = public_dir / "ingest_statusrep.txt"
-    oom = public_dir / f"try_{last['retry']}" / "oom_dmesg.txt"
+    try_dir = public_dir / f"try_{last['retry']}"
+    oom = try_dir / "oom_dmesg.txt"
+    fail_summary = try_dir / "fail_summary.txt"
 
     cmd = [
         sys.executable,
@@ -414,7 +419,7 @@ def regenerate_summary(
     ]
     if pull_number:
         cmd.extend(["--pr_number", pull_number])
-    if oom.is_file():
+    if oom.is_file() and oom.stat().st_size > 0:
         cmd.extend(["--oom_dmesg_log", str(oom)])
     testowners = workspace / ".github/TESTOWNERS"
     if not testowners.is_file():
@@ -435,15 +440,23 @@ def regenerate_summary(
             job_summary.write_text(remote_body, encoding="utf-8")
         return job_summary
 
-    enriched_parts: list[str] = [
-        "## Summary (enriched)\n\n",
-    ]
+    # Same headline as build_and_test_ya / comment-pr when ya make failed this try.
+    build_fail_line = ""
+    if fail_summary.is_file() and fail_summary.stat().st_size > 0:
+        build_fail_line = (
+            f"Build failed, see the [logs]({public_dir_url}/ya_make_output.txt). "
+            f"Also see [fail summary]({public_dir_url}/try_{last['retry']}/fail_summary.txt).\n\n"
+        )
+
+    parts: list[str] = ["## Summary (enriched)\n\n"]
+    if build_fail_line:
+        parts.append(build_fail_line)
     if text_file.is_file():
-        enriched_parts.append(text_file.read_text(encoding="utf-8"))
-        if not enriched_parts[-1].endswith("\n"):
-            enriched_parts.append("\n")
-    enriched = "".join(enriched_parts)
-    job_summary.write_text(remote_body + enriched, encoding="utf-8")
+        body = text_file.read_text(encoding="utf-8")
+        parts.append(body if body.endswith("\n") else body + "\n")
+    # Replace (do not append to) remote job_summary — host may already include the
+    # full links+table body; appending would duplicate after the summary_text fix.
+    job_summary.write_text("".join(parts), encoding="utf-8")
     return job_summary
 
 

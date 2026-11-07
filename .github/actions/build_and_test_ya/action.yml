@@ -755,19 +755,29 @@ runs:
               | jq -r '.results[] | select((.status == "FAILED") and (.error_type == "REGULAR") and (.type == "build")) | "path: " + .path + "\n\n" + ."rich-snippet" + "\n\n\n"' \
               | sed 's/\[\[[^]]*]\]//g' \
             ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
-            echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color red
+            # Same text as the PR comment must land in job/step summary (main only
+            # posted the comment; GITHUB_STEP_SUMMARY / job_summary.md stayed links-only).
+            BUILD_FAIL_MSG="Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)"
+            echo "$BUILD_FAIL_MSG" | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color red
+            echo "$BUILD_FAIL_MSG" >> "$GITHUB_STEP_SUMMARY"
+            printf '%s\n\n' "$BUILD_FAIL_MSG" > summary_text.txt
+            echo red > summary_color.txt
+            cp -f summary_text.txt "$PUBLIC_DIR/summary_text.txt"
+            cp -f summary_text.txt "$CURRENT_PUBLIC_DIR/summary_text.txt"
             analytics enrich "$YA_MAKE_NAME" \
               --label "error=ya make rc=${RC}" \
               --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
               --label "fail_summary_url=${CURRENT_PUBLIC_DIR_URL}/fail_summary.txt"
             analytics flush
-            break
+            # Do not break yet: still transform + generate-summary so ya-test.html /
+            # failure table exist on the executor; build-fail line stays first in summary_text.
           fi
 
           # archive build results report (orig)
           gzip -c $CURRENT_REPORT > $CURRENT_PUBLIC_DIR/orig_report.json.gz
 
           # postprocess build results report (add links, logs, mute tests etc)
+          # Also required after BUILD_FAILED so error_type tags / HTML exist on the host.
           analytics start transform_build_results
           TRANSFORM_RC=0
           .github/scripts/tests/transform_build_results.py \
@@ -783,25 +793,31 @@ runs:
           cp $CURRENT_REPORT $LAST_BUILD_RESULTS_REPORT
 
           TESTS_RESULT=0
-          analytics start fail_checker
-          .github/scripts/tests/fail-checker.py "$CURRENT_REPORT" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
-          FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
-          analytics enrich "$YA_MAKE_NAME" --report "$CURRENT_REPORT"
-          if [ $TESTS_RESULT = 0 ]; then
-            analytics end fail_checker
-            analytics enrich "$YA_MAKE_NAME" --label "tests_status=passed"
+          FAILED_TESTS_COUNT=0
+          if [ $BUILD_FAILED = 0 ]; then
+            analytics start fail_checker
+            .github/scripts/tests/fail-checker.py "$CURRENT_REPORT" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
+            FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
+            analytics enrich "$YA_MAKE_NAME" --report "$CURRENT_REPORT"
+            if [ $TESTS_RESULT = 0 ]; then
+              analytics end fail_checker
+              analytics enrich "$YA_MAKE_NAME" --label "tests_status=passed"
+            else
+              analytics end fail_checker --rc "$TESTS_RESULT" --error "failed_tests=${FAILED_TESTS_COUNT}"
+              analytics enrich "$YA_MAKE_NAME" --label "tests_status=failed" --label "failed_tests=${FAILED_TESTS_COUNT}"
+            fi
           else
-            analytics end fail_checker --rc "$TESTS_RESULT" --error "failed_tests=${FAILED_TESTS_COUNT}"
-            analytics enrich "$YA_MAKE_NAME" --label "tests_status=failed" --label "failed_tests=${FAILED_TESTS_COUNT}"
+            echo "0" > $CURRENT_PUBLIC_DIR/failed_count.txt
+            analytics enrich "$YA_MAKE_NAME" --report "$CURRENT_REPORT" --label "tests_status=build_failed"
           fi
 
           IS_LAST_RETRY=0
 
-          if [ $TESTS_RESULT = 0 ] || [ $RETRY = $TEST_RETRY_COUNT ]; then
+          if [ $BUILD_FAILED = 1 ] || [ $TESTS_RESULT = 0 ] || [ $RETRY = $TEST_RETRY_COUNT ]; then
             IS_LAST_RETRY=1
           fi
 
-          if [ $FAILED_TESTS_COUNT -gt 500 ]; then
+          if [ $BUILD_FAILED = 0 ] && [ $FAILED_TESTS_COUNT -gt 500 ]; then
             IS_LAST_RETRY=1
             TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
             echo $TOO_MANY_FAILED | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color red
@@ -835,6 +851,20 @@ runs:
               --oom_dmesg_log "$OOM_DMESG_LOG" \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_REPORT"
             analytics end generate_summary
+            # Keep the build-failure headline first (same wording as the PR comment).
+            if [ $BUILD_FAILED = 1 ] && [ -n "${BUILD_FAIL_MSG:-}" ]; then
+              {
+                echo "$BUILD_FAIL_MSG"
+                echo
+                cat summary_text.txt
+              } > summary_text.txt.tmp
+              mv summary_text.txt.tmp summary_text.txt
+              echo red > summary_color.txt
+            fi
+            # Durable copy for the final job_summary sync step (that step has its
+            # own empty GITHUB_STEP_SUMMARY and must not drop the table/message).
+            cp -f summary_text.txt "$PUBLIC_DIR/summary_text.txt"
+            cp -f summary_text.txt "$CURRENT_PUBLIC_DIR/summary_text.txt"
           fi
 
           analytics start s3_sync_try
@@ -847,8 +877,14 @@ runs:
             --label "artifacts_url=${CURRENT_PUBLIC_DIR_URL}/"
           analytics flush
 
-          if [ "$INPUT_RUN_TESTS" = "true" ]; then
+          # Build-fail already posted the PR comment above; avoid a second edit with the table.
+          if [ $BUILD_FAILED = 0 ] && [ "$INPUT_RUN_TESTS" = "true" ] && [ -f summary_text.txt ]; then
             cat summary_text.txt | GITHUB_TOKEN="$GITHUB_TOKEN" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
+          fi
+
+          # Build failures: publish this try's artifacts/summary, then stop (no test retries).
+          if [ $BUILD_FAILED = 1 ]; then
+            break
           fi
 
           if [ "${CI_DISABLE_YDB_QA:-}" = "1" ] || [ "${CI_DISABLE_YDB_QA:-}" = "true" ]; then
@@ -1014,9 +1050,19 @@ runs:
         echo "::group::s3-sync"
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
         echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
-        cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
-        # Single write: full job summary (avoids duplicating build-step content).
-        cat "$GITHUB_STEP_SUMMARY" > "$JOB_SUMMARY_MD"
+        LINKS_LINE=$(cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))')
+        # This step has a fresh GITHUB_STEP_SUMMARY; rebuild job_summary from
+        # artifact links + generate-summary / build-fail text (not step summary alone).
+        {
+          echo "$LINKS_LINE"
+          echo
+          if [ -f "$PUBLIC_DIR/summary_text.txt" ]; then
+            cat "$PUBLIC_DIR/summary_text.txt"
+          elif [ -f summary_text.txt ]; then
+            cat summary_text.txt
+          fi
+        } > "$JOB_SUMMARY_MD"
+        cat "$JOB_SUMMARY_MD" >> "$GITHUB_STEP_SUMMARY"
         # Locator for caller ingest: exact S3 leaf + URLs + commit/branch (next to job_summary.md).
         REMOTE_ARTIFACTS_JSON="$PUBLIC_DIR/remote_artifacts.json"
         REMOTE_ARTIFACTS_JSON="$REMOTE_ARTIFACTS_JSON" \

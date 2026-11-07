@@ -147,7 +147,6 @@ struct TEvYdbProxy {
 
         FLUENT_SETTING_DEFAULT(bool, AutoCommit, true);
         FLUENT_SETTING_DEFAULT(bool, ReportStats, false);
-        FLUENT_SETTING_DEFAULT(bool, FailOnDataLoss, false);
 
         #define PROXY_METHOD(name) \
             template <typename... Args> \
@@ -228,20 +227,17 @@ struct TEvYdbProxy {
     struct TStartTopicReadingSessionResult {
         explicit TStartTopicReadingSessionResult(const NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event)
             : ReadSessionId(event.GetPartitionSession()->GetReadSessionId())
-            , CommittedOffset(event.GetCommittedOffset())
         {
         }
 
-        explicit TStartTopicReadingSessionResult(const TString& readSessionId, ui64 committedOffset = 0)
+        explicit TStartTopicReadingSessionResult(const TString& readSessionId)
             : ReadSessionId(readSessionId)
-            , CommittedOffset(committedOffset)
         {
         }
 
         void Out(IOutputStream& out) const;
 
         TString ReadSessionId;
-        ui64 CommittedOffset = 0;
     };
 
     struct TEvStartTopicReadingSession: public TGenericResponse<TEvStartTopicReadingSession, EvStartTopicReadingSession, TStartTopicReadingSessionResult> {

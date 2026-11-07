@@ -64,7 +64,6 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->DeleteProcessedSourceOffsets(rid, tid, db);
         const auto dstState = target->GetDstState();
         const bool isRemoving = dstState == TReplication::EDstState::Removing;
         const bool isAttaching = dstState == TReplication::EDstState::Attaching;

@@ -3,11 +3,18 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 
+#include <util/charset/utf8.h>
+#include <util/string/builder.h>
+
 namespace NKikimr::NSchemeShard {
 
 namespace {
 
 using TStage = NKikimrTxDataShard::TDatabaseFreezeState;
+
+constexpr size_t MaxProgressIssueBytes = 4096;
+constexpr size_t MaxParticipantIssueBytes = 256;
+constexpr size_t MaxProgressParticipants = 8;
 
 // The persistent fence and participant set live in SchemeShard. The worker is
 // disposable: after a reboot a retry starts it at FENCE_WRITES and DataShards
@@ -16,12 +23,63 @@ class TDatabaseFreezeWorker : public TActorBootstrapped<TDatabaseFreezeWorker> {
     const TActorId Owner;
     const ui64 SchemeShardId;
     const TPathId PathId;
-    const TPathId DomainKey;
     const ui64 Epoch;
     const TVector<ui64> Shards;
     TStage::EStage Stage;
     THashSet<ui64> Pending;
     THashMap<ui64, TActorId> Pipes;
+    THashMap<ui64, TString> PendingIssues;
+
+    void ReportProgress() {
+        const char* stageName = "UNKNOWN";
+        switch (Stage) {
+        case TStage::OPEN:
+            stageName = "OPEN";
+            break;
+        case TStage::FENCE_WRITES:
+            stageName = "FENCE_WRITES";
+            break;
+        case TStage::DRAIN_INDEXES:
+            stageName = "DRAIN_INDEXES";
+            break;
+        case TStage::DRAIN_CDC:
+            stageName = "DRAIN_CDC";
+            break;
+        default:
+            break;
+        }
+        TStringBuilder issue;
+        issue << stageName << ": acknowledged " << Shards.size() - Pending.size()
+            << " of " << Shards.size() << " DataShards; pending " << Pending.size();
+        size_t shown = 0;
+        // Show participants with diagnostics first, within the same size limit.
+        for (const auto& [shard, reason] : PendingIssues) {
+            if (shown == MaxProgressParticipants) {
+                break;
+            }
+            issue << "; DataShard " << shard << ": " << reason;
+            ++shown;
+        }
+        for (const auto shard : Pending) {
+            if (shown == MaxProgressParticipants) {
+                break;
+            }
+            if (!PendingIssues.contains(shard)) {
+                issue << "; DataShard " << shard << ": awaiting acknowledgement";
+                ++shown;
+            }
+        }
+        if (shown < Pending.size()) {
+            issue << "; " << Pending.size() - shown << " more participants";
+        }
+        auto result = MakeHolder<TEvSchemeShard::TEvDatabaseFreezeResult>();
+        result->Record.SetPathId(PathId.LocalPathId);
+        result->Record.SetEpoch(Epoch);
+        result->Record.SetReady(false);
+        result->Record.SetStatus(Ydb::StatusIds::SUCCESS);
+        result->Record.SetIssue(TString(Utf8TruncateRobust(issue, MaxProgressIssueBytes)));
+        Send(Owner, result.Release());
+    }
 
     void SendPending() {
         for (const auto shard : Pending) {
@@ -34,8 +92,8 @@ class TDatabaseFreezeWorker : public TActorBootstrapped<TDatabaseFreezeWorker> {
             auto request = MakeHolder<TEvDataShard::TEvDatabaseFreeze>();
             request->Record.SetEpoch(Epoch);
             request->Record.SetSchemeShardId(SchemeShardId);
-            request->Record.SetDomainOwnerId(DomainKey.OwnerId);
-            request->Record.SetDomainLocalPathId(DomainKey.LocalPathId);
+            request->Record.SetDomainOwnerId(PathId.OwnerId);
+            request->Record.SetDomainLocalPathId(PathId.LocalPathId);
             request->Record.SetStage(Stage);
             NTabletPipe::SendData(SelfId(), pipe, request.Release());
         }
@@ -54,11 +112,13 @@ class TDatabaseFreezeWorker : public TActorBootstrapped<TDatabaseFreezeWorker> {
 
     void StartStage() {
         Pending.clear();
+        PendingIssues.clear();
         Pending.insert(Shards.begin(), Shards.end());
         if (Pending.empty()) {
             return Finish(Ydb::StatusIds::SUCCESS);
         }
         SendPending();
+        ReportProgress();
     }
 
     void Handle(TEvDataShard::TEvDatabaseFreezeResult::TPtr& ev) {
@@ -72,8 +132,14 @@ class TDatabaseFreezeWorker : public TActorBootstrapped<TDatabaseFreezeWorker> {
             return Finish(result.GetStatus(), result.GetIssue());
         }
         if (!result.GetReady()) {
+            if (result.GetIssue().empty()) {
+                PendingIssues.erase(result.GetTabletId());
+            } else {
+                PendingIssues[result.GetTabletId()] = TString(Utf8TruncateRobust(result.GetIssue(), MaxParticipantIssueBytes));
+            }
             return;
         }
+        PendingIssues.erase(result.GetTabletId());
         Pending.erase(result.GetTabletId());
         if (Pending.empty()) {
             if (Stage == TStage::OPEN || Stage == TStage::DRAIN_CDC) {
@@ -95,6 +161,10 @@ class TDatabaseFreezeWorker : public TActorBootstrapped<TDatabaseFreezeWorker> {
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         auto it = Pipes.find(ev->Get()->TabletId);
         if (ev->Get()->Status != NKikimrProto::OK && it != Pipes.end() && it->second == ev->Get()->ClientId) {
+            if (Pending.contains(ev->Get()->TabletId)) {
+                PendingIssues[ev->Get()->TabletId] = TStringBuilder()
+                    << "tablet pipe connection failed, status " << ui32(ev->Get()->Status);
+            }
             Reconnect(ev->Get()->TabletId);
         }
     }
@@ -102,12 +172,16 @@ class TDatabaseFreezeWorker : public TActorBootstrapped<TDatabaseFreezeWorker> {
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         auto it = Pipes.find(ev->Get()->TabletId);
         if (it != Pipes.end() && it->second == ev->Get()->ClientId) {
+            if (Pending.contains(ev->Get()->TabletId)) {
+                PendingIssues[ev->Get()->TabletId] = "tablet pipe disconnected";
+            }
             Reconnect(ev->Get()->TabletId);
         }
     }
 
     void Wakeup() {
         SendPending();
+        ReportProgress();
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
     }
 
@@ -120,11 +194,10 @@ class TDatabaseFreezeWorker : public TActorBootstrapped<TDatabaseFreezeWorker> {
 
 public:
     TDatabaseFreezeWorker(TActorId owner, ui64 schemeShardId, TPathId pathId,
-            TPathId domainKey, ui64 epoch, bool freeze, TVector<ui64> shards)
+            ui64 epoch, bool freeze, TVector<ui64> shards)
         : Owner(owner)
         , SchemeShardId(schemeShardId)
         , PathId(pathId)
-        , DomainKey(domainKey)
         , Epoch(epoch)
         , Shards(std::move(shards))
         , Stage(freeze ? TStage::FENCE_WRITES : TStage::OPEN)
@@ -151,6 +224,192 @@ public:
 };
 
 } // anonymous namespace
+
+bool TSchemeShard::IsDatabaseFreezeBlocking(const NKikimrSchemeOp::TModifyScheme& transaction) {
+    if (DatabaseFreezes.empty()) {
+        return false;
+    }
+    TVector<TPath> mutationPaths{TPath::Resolve(transaction.GetWorkingDir(), this)};
+    auto addPath = [&](const TString& path) {
+        mutationPaths.push_back(TPath::Resolve(path, this));
+    };
+    auto addNamedPath = [&](const TString& name) {
+        // Resolve the whole name: operations may be rewritten later to
+        // create intermediate directories from a multi-component name.
+        addPath(TStringBuilder() << transaction.GetWorkingDir() << '/' << name);
+    };
+    auto addPathId = [&](const auto& pathId) {
+        if constexpr (requires { pathId.GetOwnerId(); }) {
+            mutationPaths.push_back(TPath::Init(TPathId::FromProto(pathId), this));
+        } else {
+            mutationPaths.push_back(TPath::Init(MakeLocalId(pathId), this));
+        }
+    };
+    auto addTarget = [&](const auto& description) {
+        if constexpr (requires { description.HasName(); }) {
+            if (description.HasName()) {
+                addNamedPath(description.GetName());
+            }
+        }
+        if constexpr (requires { description.HasPathName(); }) {
+            if (description.HasPathName()) {
+                addNamedPath(description.GetPathName());
+            }
+        }
+        if constexpr (requires { description.HasTableName(); }) {
+            if (description.HasTableName()) {
+                addNamedPath(description.GetTableName());
+            }
+        }
+        if constexpr (requires { description.HasTablePath(); }) {
+            if (description.HasTablePath()) {
+                addPath(description.GetTablePath());
+            }
+        }
+        if constexpr (requires { description.HasPathId(); }) {
+            if (description.HasPathId()) {
+                addPathId(description.GetPathId());
+            }
+        }
+    };
+    // Check payload targets as well as WorkingDir. In particular, a
+    // shared SchemeShard can receive a request addressed by path ID or
+    // through the parent of an independently frozen domain.
+    [&](const auto&... descriptions) {
+        (addTarget(descriptions), ...);
+    }(
+        transaction.GetMkDir(), transaction.GetCreateTable(),
+        transaction.GetCreatePersQueueGroup(), transaction.GetAlterPersQueueGroup(),
+        transaction.GetDrop(), transaction.GetModifyACL(),
+        transaction.GetAlterTable(), transaction.GetSubDomain(),
+        transaction.GetCreateRtmrVolume(), transaction.GetCreateBlockStoreVolume(),
+        transaction.GetAlterBlockStoreVolume(), transaction.GetAssignBlockStoreVolume(),
+        transaction.GetKesus(), transaction.GetCreateSolomonVolume(),
+        transaction.GetAlterUserAttributes(), transaction.GetUpgradeSubDomain(),
+        transaction.GetInitiateBuildIndexMainTable(), transaction.GetLockConfig(),
+        transaction.GetAlterTableIndex(), transaction.GetFinalizeBuildIndexMainTable(),
+        transaction.GetApplyIndexBuild(), transaction.GetAlterSolomonVolume(),
+        transaction.GetDropIndex(), transaction.GetCancelIndexBuild(),
+        transaction.GetCreateFileStore(), transaction.GetAlterFileStore(),
+        transaction.GetBackup(), transaction.GetRestore(),
+        transaction.GetCreateColumnStore(), transaction.GetCreateColumnTable(),
+        transaction.GetAlterColumnStore(), transaction.GetAlterColumnTable(),
+        transaction.GetCreateCdcStream(), transaction.GetAlterCdcStream(),
+        transaction.GetDropCdcStream(), transaction.GetRotateCdcStream(),
+        transaction.GetSequence(), transaction.GetReplication(),
+        transaction.GetBlobDepot(), transaction.GetMoveIndex(),
+        transaction.GetAllocatePersQueueGroup(), transaction.GetDeallocatePersQueueGroup(),
+        transaction.GetCreateExternalTable(), transaction.GetCreateExternalDataSource(),
+        transaction.GetDropColumnBuild(), transaction.GetCreateView(),
+        transaction.GetAlterReplication(), transaction.GetCreateContinuousBackup(),
+        transaction.GetAlterContinuousBackup(), transaction.GetDropContinuousBackup(),
+        transaction.GetCreateResourcePool(), transaction.GetCreateBackupCollection(),
+        transaction.GetAlterBackupCollection(), transaction.GetDropBackupCollection(),
+        transaction.GetBackupBackupCollection(), transaction.GetBackupIncrementalBackupCollection(),
+        transaction.GetRestoreBackupCollection(), transaction.GetCreateSysView(),
+        transaction.GetCreateSecret(), transaction.GetAlterSecret(),
+        transaction.GetCreateStreamingQuery(), transaction.GetTruncateTable(),
+        transaction.GetPrepareIndexValidation(), transaction.GetCreateTestShardSet(),
+        transaction.GetCreateIndexedTable().GetTableDescription());
+    if (transaction.GetAlterTable().HasId_Deprecated()) {
+        addPathId(transaction.GetAlterTable().GetId_Deprecated());
+    }
+    if (transaction.GetDrop().HasId()) {
+        addPathId(transaction.GetDrop().GetId());
+    }
+    if (transaction.GetBackup().HasTableId()) {
+        addPathId(transaction.GetBackup().GetTableId());
+    }
+    if (transaction.GetRestore().HasTableId()) {
+        addPathId(transaction.GetRestore().GetTableId());
+    }
+    if (transaction.HasInitiateIndexBuild()) {
+        addPath(transaction.GetInitiateIndexBuild().GetTable());
+    }
+    if (transaction.HasSplitMergeTablePartitions()) {
+        const auto& split = transaction.GetSplitMergeTablePartitions();
+        if (split.HasTablePath()) {
+            addPath(split.GetTablePath());
+        }
+        if (split.HasTableLocalId()) {
+            mutationPaths.push_back(TPath::Init(TPathId(
+                split.HasTableOwnerId() ? split.GetTableOwnerId() : TabletID(),
+                split.GetTableLocalId()), this));
+        }
+    }
+    for (const auto* move : {&transaction.GetMoveTable(), &transaction.GetMoveTableIndex(),
+        &transaction.GetMoveSequence()})
+    {
+        if (move->HasSrcPath()) {
+            addPath(move->GetSrcPath());
+        }
+        if (move->HasDstPath()) {
+            addPath(move->GetDstPath());
+        }
+    }
+    if (transaction.HasCreateConsistentCopyTables()) {
+        for (const auto& copy : transaction.GetCreateConsistentCopyTables().GetCopyTableDescriptions()) {
+            addPath(copy.GetDstPath());
+            if (copy.HasCreateSrcCdcStream() || copy.HasDropSrcCdcStream()) {
+                addPath(copy.GetSrcPath());
+            }
+        }
+    }
+    if (transaction.HasChangePathState()) {
+        addNamedPath(transaction.GetChangePathState().GetPath());
+    }
+    if (transaction.HasRestoreMultipleIncrementalBackups()) {
+        const auto& restore = transaction.GetRestoreMultipleIncrementalBackups();
+        if (restore.HasDstTablePath()) {
+            addPath(restore.GetDstTablePath());
+        }
+        if (restore.HasDstPathId()) {
+            addPathId(restore.GetDstPathId());
+        }
+    }
+    if (transaction.HasIncrementalRestoreLockTargets()) {
+        for (const auto& path : transaction.GetIncrementalRestoreLockTargets().GetDstPaths()) {
+            addPath(path);
+        }
+        for (const auto& path : transaction.GetIncrementalRestoreLockTargets().GetSrcPaths()) {
+            addPath(path);
+        }
+    }
+    if (transaction.HasIncrementalRestoreFinalize()) {
+        const auto& restore = transaction.GetIncrementalRestoreFinalize();
+        if (restore.HasBackupCollectionPathId()) {
+            addPathId(restore.GetBackupCollectionPathId());
+        }
+        for (const auto& path : restore.GetTargetTablePaths()) {
+            addPath(path);
+        }
+        for (const auto& path : restore.GetBackupTablePaths()) {
+            addPath(path);
+        }
+    }
+    if (transaction.HasCreateLongIncrementalBackupOp()) {
+        for (const auto& stream : transaction.GetCreateLongIncrementalBackupOp().GetStreamPathIds()) {
+            addPathId(stream);
+        }
+    }
+    for (auto& path : mutationPaths) {
+        path.RiseUntilExisted();
+        if (path.IsResolved() && IsDatabaseFreezeBlocking(path.Base()->PathId)) {
+            const auto domainId = path.GetPathIdForDomain();
+            const auto freeze = DatabaseFreezes.find(domainId);
+            // Let operations accepted before the fence finish their internal
+            // stages. CDC initial scan finalization also needs a scheme tx.
+            const bool continuation = transaction.GetInternal() && freeze != DatabaseFreezes.end()
+                && !freeze->second.GetParticipantsFixed();
+            const bool finishCdcScan = transaction.HasAlterCdcStream()
+                && transaction.GetAlterCdcStream().HasGetReady();
+            if (!continuation && !finishCdcScan) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 bool TSchemeShard::IsDatabaseFreezeBlocking(const TPathId& pathId) const {
     if (!PathsById.contains(pathId)) {
@@ -274,6 +533,7 @@ struct TSchemeShard::TTxDatabaseFreeze : public TSchemeShard::TRwTxBase {
         auto& state = Self->DatabaseFreezes[PathId];
         bool changed = false;
         if (request.GetEpoch() > state.GetEpoch()) {
+            Self->DatabaseFreezeProgress.erase(PathId);
             state.Clear();
             state.SetEpoch(request.GetEpoch());
             state.SetFreeze(request.GetFreeze());
@@ -310,6 +570,14 @@ struct TSchemeShard::TTxDatabaseFreeze : public TSchemeShard::TRwTxBase {
         if (state.GetReady()) {
             response.SetStatus(state.GetStatus());
             response.SetIssue(state.GetIssue());
+        } else if (!state.GetParticipantsFixed()) {
+            response.SetIssue("Waiting for previously accepted schema operations to finish");
+        } else if (const auto progress = Self->DatabaseFreezeProgress.find(PathId);
+            progress != Self->DatabaseFreezeProgress.end())
+        {
+            response.SetIssue(progress->second);
+        } else {
+            response.SetIssue("Waiting for DataShard acknowledgements");
         }
     }
 
@@ -333,10 +601,9 @@ struct TSchemeShard::TTxDatabaseFreeze : public TSchemeShard::TRwTxBase {
             {
                 // DataShard stores the domain path in its owning SchemeShard,
                 // including a tenant SchemeShard's local root path.
-                const auto key = PathId;
                 TVector<ui64> shards(state->second.GetShards().begin(), state->second.GetShards().end());
                 Self->DatabaseFreezeWorkers[PathId] = ctx.RegisterWithSameMailbox(new TDatabaseFreezeWorker(
-                    Self->SelfId(), Self->TabletID(), PathId, key, state->second.GetEpoch(),
+                    Self->SelfId(), Self->TabletID(), PathId, state->second.GetEpoch(),
                     state->second.GetFreeze(), std::move(shards)));
             }
         }
@@ -375,8 +642,10 @@ struct TSchemeShard::TTxDatabaseFreezeDone : public TSchemeShard::TRwTxBase {
     }
 
     void DoComplete(const TActorContext&) override {
-        if (PathId && Self->DatabaseFreezes.at(PathId).GetEpoch() == Completed.GetEpoch()) {
-            Self->DatabaseFreezes.at(PathId).CopyFrom(Completed);
+        const auto state = Self->DatabaseFreezes.find(PathId);
+        if (state != Self->DatabaseFreezes.end() && state->second.GetEpoch() == Completed.GetEpoch()) {
+            state->second.CopyFrom(Completed);
+            Self->DatabaseFreezeProgress.erase(PathId);
             Self->DatabaseFreezeWorkers.erase(PathId);
         }
     }
@@ -387,6 +656,19 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvDatabaseFreeze::TPtr& ev, const TAc
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvDatabaseFreezeResult::TPtr& ev, const TActorContext& ctx) {
+    if (!ev->Get()->Record.GetReady()) {
+        const auto& result = ev->Get()->Record;
+        const TPathId pathId(TabletID(), result.GetPathId());
+        const auto state = DatabaseFreezes.find(pathId);
+        const auto worker = DatabaseFreezeWorkers.find(pathId);
+        if (state != DatabaseFreezes.end() && worker != DatabaseFreezeWorkers.end()
+            && worker->second == ev->Sender && state->second.GetEpoch() == result.GetEpoch()
+            && !state->second.GetReady() && result.GetStatus() == Ydb::StatusIds::SUCCESS)
+        {
+            DatabaseFreezeProgress[pathId] = TString(Utf8TruncateRobust(result.GetIssue(), MaxProgressIssueBytes));
+        }
+        return;
+    }
     Execute(new TTxDatabaseFreezeDone(this, ev), ctx);
 }
 

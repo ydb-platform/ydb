@@ -299,7 +299,6 @@ public:
 
 private:
     TRowVersion MvccVersion = TRowVersion::Min();
-    bool LocalWriteRegistered = false;
 };
 
 // Attaches a directly-built part (direct part import) as a bottom layer of the
@@ -315,7 +314,6 @@ public:
 
 private:
     TEvDataShard::TEvS3DirectWriteFinish::TPtr Ev;
-    bool LocalWriteRegistered = false;
     bool Success = false;
     TString Error;
 };

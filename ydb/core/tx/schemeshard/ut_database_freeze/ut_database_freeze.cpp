@@ -1,9 +1,13 @@
+#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/public/lib/value/value.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/string/cast.h>
 #include <util/string/printf.h>
 
 using namespace NKikimr;
@@ -286,6 +290,9 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         env.Runtime.WaitFor("accepted table creation at DataShard", [&] { return !creation.empty(); });
         env.CheckPending();
         UNIT_ASSERT_VALUES_EQUAL(shardRequests, 0);
+        const auto pending = env.Request(1, true);
+        UNIT_ASSERT(!pending.GetReady());
+        UNIT_ASSERT_STRING_CONTAINS(pending.GetIssue(), "Waiting for previously accepted schema operations");
         env.CheckSchemaBlocked();
         creation.Stop().Unblock();
         env.Env.TestWaitNotification(env.Runtime, createTx);
@@ -494,6 +501,180 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         env.Write();
     }
 
+    Y_UNIT_TEST(FailedFreezeCanBeRetriedWithNewEpoch) {
+        TFreezeEnv env;
+        env.CreateTable();
+        auto failure = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreezeResult>([](auto& ev) {
+            if (ev->Get()->Record.GetStage() == TStage::DRAIN_CDC) {
+                ev->Get()->Record.SetReady(true);
+                ev->Get()->Record.SetStatus(Ydb::StatusIds::PRECONDITION_FAILED);
+                ev->Get()->Record.SetIssue("Injected freeze failure");
+            }
+        });
+        env.Wait(1, true, Ydb::StatusIds::PRECONDITION_FAILED);
+        failure.Remove();
+        // Polling a completed epoch must not restart it, even after recovery.
+        env.Wait(1, true, Ydb::StatusIds::PRECONDITION_FAILED);
+        RebootTablet(env.Runtime, env.Owner, env.Runtime.AllocateEdgeActor());
+        env.Wait(1, true, Ydb::StatusIds::PRECONDITION_FAILED);
+        env.Wait(2, true);
+        const auto completed = env.Request(2, true);
+        UNIT_ASSERT(completed.GetReady());
+        UNIT_ASSERT(completed.GetIssue().empty());
+        env.CheckSchemaBlocked();
+        env.Write("Table", false);
+        env.Wait(3, false);
+        env.AdvancePlanStep();
+        env.CheckSchemaAvailable();
+        env.Write();
+    }
+
+    Y_UNIT_TEST(PendingFreezeReportsParticipantsAndPipeDisconnect) {
+        TFreezeEnv env;
+        env.CreateTable("Table", 2);
+        const auto shard = env.Shards().front();
+        TActorId worker;
+        THashMap<TActorId, THashMap<ui64, TActorId>> connections;
+        auto requests = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreeze>([&](auto& ev) {
+            worker = ev->Sender;
+        });
+        auto pipes = env.Runtime.AddObserver<TEvTabletPipe::TEvClientConnected>([&](auto& ev) {
+            if (ev->Get()->Status == NKikimrProto::OK) {
+                connections[ev->GetRecipientRewrite()][ev->Get()->TabletId] = ev->Get()->ClientId;
+            }
+        });
+        TBlockEvents<TEvDataShard::TEvDatabaseFreezeResult> held(env.Runtime, [&](const auto& ev) {
+            return ev->Get()->Record.GetStage() == TStage::DRAIN_CDC
+                && ev->Get()->Record.GetTabletId() == shard;
+        });
+        env.CheckPending();
+        env.Runtime.WaitFor("pending participant", [&] { return !held.empty(); });
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+        auto pending = env.Request(1, true);
+        UNIT_ASSERT(!pending.GetReady());
+        UNIT_ASSERT_STRING_CONTAINS(pending.GetIssue(), "DRAIN_CDC: acknowledged 1 of 2 DataShards; pending 1");
+        UNIT_ASSERT_STRING_CONTAINS(pending.GetIssue(), ToString(shard));
+
+        const auto pipe = connections.at(worker).at(shard);
+        env.Runtime.Send(new IEventHandle(worker, env.Runtime.AllocateEdgeActor(),
+            new TEvTabletPipe::TEvClientDestroyed(shard, pipe, TActorId())));
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+        pending = env.Request(1, true);
+        UNIT_ASSERT(!pending.GetReady());
+        UNIT_ASSERT_STRING_CONTAINS(pending.GetIssue(), "tablet pipe disconnected");
+        const auto reconnectedPipe = connections.at(worker).at(shard);
+        env.Runtime.Send(new IEventHandle(worker, env.Runtime.AllocateEdgeActor(),
+            new TEvTabletPipe::TEvClientConnected(shard, NKikimrProto::ERROR, reconnectedPipe,
+                TActorId(), false, false, 0)));
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+        pending = env.Request(1, true);
+        UNIT_ASSERT(!pending.GetReady());
+        UNIT_ASSERT_STRING_CONTAINS(pending.GetIssue(), "tablet pipe connection failed");
+        held.Stop().Unblock();
+        env.Wait(1, true);
+        UNIT_ASSERT(env.Request(1, true).GetIssue().empty());
+        env.Wait(2, false);
+        UNIT_ASSERT(env.Request(2, false).GetIssue().empty());
+    }
+
+    Y_UNIT_TEST(PendingParticipantIssuesAreBoundedAndRebuiltAfterRestart) {
+        TFreezeEnv env;
+        env.CreateTable();
+        auto issues = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreezeResult>([](auto& ev) {
+            if (ev->Get()->Record.GetStage() == TStage::DRAIN_CDC) {
+                ev->Get()->Record.SetReady(false);
+                ev->Get()->Record.SetIssue("Unknown table while draining: " + TString(8192, 'x'));
+            }
+        });
+        auto checkProgress = [&] {
+            for (ui32 attempt = 0; attempt < 300; ++attempt) {
+                const auto pending = env.Request(1, true);
+                UNIT_ASSERT(!pending.GetReady());
+                UNIT_ASSERT_VALUES_EQUAL(pending.GetStatus(), ui32(Ydb::StatusIds::SUCCESS));
+                if (pending.GetIssue().Contains("Unknown table while draining")) {
+                    UNIT_ASSERT_STRING_CONTAINS(pending.GetIssue(), "DRAIN_CDC");
+                    UNIT_ASSERT_C(pending.GetIssue().size() <= 4096, pending.GetIssue().size());
+                    return;
+                }
+                env.Runtime.SimulateSleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_FAIL("Participant issue was not propagated");
+        };
+        env.CheckPending();
+        checkProgress();
+        RebootTablet(env.Runtime, env.Owner, env.Runtime.AllocateEdgeActor());
+        env.CheckPending();
+        checkProgress();
+        issues.Remove();
+        env.Wait(1, true);
+        UNIT_ASSERT(env.Request(1, true).GetIssue().empty());
+        env.Wait(2, false);
+    }
+
+    Y_UNIT_TEST(PendingProgressLimitsParticipantList) {
+        TFreezeEnv env;
+        env.CreateTable("Table", 12);
+        TBlockEvents<TEvDataShard::TEvDatabaseFreezeResult> held(env.Runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetStage() == TStage::FENCE_WRITES;
+        });
+        env.CheckPending();
+        env.Runtime.WaitFor("all participant replies held", [&] { return held.size() >= 12; });
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+        const auto pending = env.Request(1, true);
+        UNIT_ASSERT(!pending.GetReady());
+        UNIT_ASSERT_STRING_CONTAINS(pending.GetIssue(), "FENCE_WRITES: acknowledged 0 of 12 DataShards; pending 12");
+        UNIT_ASSERT_STRING_CONTAINS(pending.GetIssue(), "4 more participants");
+        UNIT_ASSERT_C(pending.GetIssue().size() <= 4096, pending.GetIssue().size());
+        held.Stop().Unblock();
+        env.Wait(1, true);
+        env.Wait(2, false);
+    }
+
+    Y_UNIT_TEST(ProgressFromReplacedWorkerCannotOverwriteNewEpoch) {
+        TFreezeEnv env;
+        env.CreateTable();
+        TActorId oldWorker;
+        auto requests = env.Runtime.AddObserver<TEvDataShard::TEvDatabaseFreeze>([&](auto& ev) {
+            if (ev->Get()->Record.GetEpoch() == 1) {
+                oldWorker = ev->Sender;
+            }
+        });
+        TBlockEvents<TEvDataShard::TEvDatabaseFreezeResult> cdc(env.Runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetStage() == TStage::DRAIN_CDC;
+        });
+        TBlockEvents<TEvSchemeShard::TEvDatabaseFreezeResult> progress(env.Runtime, [&](const auto& ev) {
+            return oldWorker && ev->Sender == oldWorker && ev->Get()->Record.GetEpoch() == 1
+                && !ev->Get()->Record.GetReady();
+        });
+        env.CheckPending();
+        env.Runtime.WaitFor("old worker CDC request", [&] { return !cdc.empty(); });
+        env.Runtime.WaitFor("old worker progress", [&] { return !progress.empty(); });
+        TBlockEvents<TEvDataShard::TEvDatabaseFreezeResult> thaw(env.Runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetStage() == TStage::OPEN;
+        });
+        env.CheckPending(2, false);
+        env.Runtime.WaitFor("new worker thaw request", [&] { return !thaw.empty(); });
+        env.Runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_STRING_CONTAINS(env.Request(2, false).GetIssue(), "OPEN");
+
+        // Even a matching epoch cannot make another actor's progress valid.
+        auto stale = MakeHolder<TEvSchemeShard::TEvDatabaseFreezeResult>();
+        stale->Record.CopyFrom(progress.front()->Get()->Record);
+        stale->Record.SetEpoch(2);
+        stale->Record.SetIssue("Obsolete worker progress");
+        env.Runtime.Send(new IEventHandle(progress.front()->GetRecipientRewrite(), oldWorker, stale.Release()));
+        progress.Stop().Unblock();
+        env.Runtime.SimulateSleep(TDuration::Seconds(1));
+        const auto pending = env.Request(2, false);
+        UNIT_ASSERT(!pending.GetReady());
+        UNIT_ASSERT_STRING_CONTAINS(pending.GetIssue(), "OPEN");
+        UNIT_ASSERT(!pending.GetIssue().Contains("Obsolete"));
+        thaw.Stop().Unblock();
+        env.Wait(2, false);
+        cdc.Stop().Unblock();
+        UNIT_ASSERT(env.Request(2, false).GetIssue().empty());
+    }
+
     Y_UNIT_TEST(UnsupportedColumnTableDoesNotFenceRowTables) {
         TFreezeEnv env;
         env.CreateTable();
@@ -529,6 +710,84 @@ Y_UNIT_TEST_SUITE(SchemeShardDatabaseFreeze) {
         env.Wait(2, false);
         env.Write();
         env.CheckSchemaAvailable();
+    }
+
+    Y_UNIT_TEST(DroppedDatabaseFreezeStateIsRemoved) {
+        TFreezeEnv env;
+        TestCreateSubDomain(env.Runtime, ++env.TxId, "/MyRoot", R"(Name: "Frozen")");
+        env.Env.TestWaitNotification(env.Runtime, env.TxId);
+        env.Root = "/MyRoot/Frozen";
+        env.PathId = DescribePath(env.Runtime, env.Root).GetPathId();
+        auto freezeRows = [&] {
+            const auto result = ReadSystemTable(env.Runtime, env.Owner, "DatabaseFreezes", {"PathId"}, {"PathId"});
+            return NClient::TValue::Create(result)["Result"]["List"].Size();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(freezeRows(), 0);
+        env.Wait(1, true);
+        env.Wait(2, false);
+        UNIT_ASSERT_VALUES_EQUAL(freezeRows(), 1);
+        const TPathId domainId(env.Owner, env.PathId);
+        env.Env.AddExtSubdomainCleanupObserver(env.Runtime, domainId);
+        TestDropSubDomain(env.Runtime, ++env.TxId, "/MyRoot", "Frozen");
+        env.Env.TestWaitNotification(env.Runtime, env.TxId);
+        env.Env.WaitForExtSubdomainCleanup(env.Runtime, domainId);
+        UNIT_ASSERT_VALUES_EQUAL(freezeRows(), 0);
+        RebootTablet(env.Runtime, env.Owner, env.Runtime.AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(freezeRows(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.Request(2, false).GetStatus(), ui32(Ydb::StatusIds::NOT_FOUND));
+
+        // A new database with the same name gets an independent epoch space.
+        TestCreateSubDomain(env.Runtime, ++env.TxId, "/MyRoot", R"(Name: "Frozen")");
+        env.Env.TestWaitNotification(env.Runtime, env.TxId);
+        env.PathId = DescribePath(env.Runtime, env.Root).GetPathId();
+        UNIT_ASSERT(env.PathId != domainId.LocalPathId);
+        env.Wait(1, true);
+        env.Wait(2, false);
+    }
+
+    Y_UNIT_TEST(PayloadTargetsCannotBypassFrozenDomain) {
+        TFreezeEnv env;
+        TestCreateSubDomain(env.Runtime, ++env.TxId, "/MyRoot", R"(
+            Name: "Frozen" PlanResolution: 50 Coordinators: 1 Mediators: 1 TimeCastBucketsPerMediator: 2
+        )");
+        env.Env.TestWaitNotification(env.Runtime, env.TxId);
+        env.Root = "/MyRoot/Frozen";
+        env.PathId = DescribePath(env.Runtime, env.Root).GetPathId();
+        env.CreateTable();
+        const auto tableId = DescribePath(env.Runtime, env.Path("Table")).GetPathId();
+        TestCreateSequence(env.Runtime, ++env.TxId, env.Root, R"(Name: "Sequence")");
+        env.Env.TestWaitNotification(env.Runtime, env.TxId);
+        env.Wait(1, true);
+
+        // Neither WorkingDir nor a missing WorkingDir may hide a frozen target.
+        const auto alter = Sprintf(R"(
+            PathId { OwnerId: %lu LocalId: %lu }
+            Columns { Name: "extra" Type: "Uint32" }
+        )", env.Owner, tableId);
+        TestAlterTable(env.Runtime, ++env.TxId, "/MyRoot", alter, {{NKikimrScheme::StatusPreconditionFailed}});
+        TestAlterTable(env.Runtime, ++env.TxId, "", Sprintf(R"(
+            Id_Deprecated: %lu Columns { Name: "extra" Type: "Uint32" }
+        )", tableId), {{NKikimrScheme::StatusPreconditionFailed}});
+        TestDropTable(env.Runtime, ++env.TxId, tableId, {{NKikimrScheme::StatusPreconditionFailed}});
+        TestUserAttrs(env.Runtime, ++env.TxId, "/MyRoot", "Frozen",
+            {{NKikimrScheme::StatusPreconditionFailed}}, AlterUserAttrs({{"test", "value"}}));
+        TestModifyACL(env.Runtime, ++env.TxId, "/MyRoot", "Frozen", "", "", NKikimrScheme::StatusPreconditionFailed);
+        TestCreateTable(env.Runtime, ++env.TxId, "/MyRoot", R"(
+            Name: "Frozen/NewTable"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )", {{NKikimrScheme::StatusPreconditionFailed}});
+        TestMoveSequence(env.Runtime, ++env.TxId, env.Path("Sequence"), env.Path("Renamed"),
+            {{NKikimrScheme::StatusPreconditionFailed}});
+
+        TestMkDir(env.Runtime, ++env.TxId, "/MyRoot", "Outside");
+        env.Env.TestWaitNotification(env.Runtime, env.TxId);
+        env.Wait(2, false);
+        TestAlterTable(env.Runtime, ++env.TxId, "/MyRoot", alter);
+        env.Env.TestWaitNotification(env.Runtime, env.TxId);
+        TestMoveSequence(env.Runtime, ++env.TxId, env.Path("Sequence"), env.Path("Renamed"));
+        env.Env.TestWaitNotification(env.Runtime, env.TxId);
+        TestDescribeResult(DescribePath(env.Runtime, env.Path("Renamed")), {NLs::PathExist});
     }
 
     Y_UNIT_TEST(TenantSchemeShardUsesItsOwnDomainPath) {

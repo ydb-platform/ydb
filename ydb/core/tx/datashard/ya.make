@@ -530,6 +530,7 @@ RECURSE_FOR_TESTS(
     ut_change_collector
     ut_change_exchange
     ut_compaction
+    ut_database_freeze
     ut_disk_quotas
     ut_direct_restore
     ut_erase_rows

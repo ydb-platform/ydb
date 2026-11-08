@@ -87,7 +87,17 @@ public:
             return true;
         };
 
-        if (!Self->SubDomainPathId || !Self->CurrentSchemeShardId) {
+        const bool schemeShardUnknown = !Self->CurrentSchemeShardId || Self->CurrentSchemeShardId == INVALID_TABLET_ID;
+        if (!Self->SubDomainPathId || schemeShardUnknown) {
+            TStringBuilder issue;
+            issue << "Database freeze is waiting for shard owner metadata:";
+            if (!Self->SubDomainPathId) {
+                issue << " SubDomainPathId is unknown;";
+            }
+            if (schemeShardUnknown) {
+                issue << " CurrentSchemeShardId is unknown;";
+            }
+            result.SetIssue(issue);
             result.SetReady(false);
             return true;
         }
@@ -97,12 +107,18 @@ public:
             return fail(Ydb::StatusIds::PRECONDITION_FAILED, "Database freeze owner does not match shard owner");
         }
         if (!request.GetEpoch() || !request.HasStage()
-            || request.GetStage() > TFreezeState::DRAIN_CDC)
+            || request.GetStage() < TFreezeState::OPEN || request.GetStage() > TFreezeState::DRAIN_CDC)
         {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Invalid database freeze request");
         }
         if (request.GetEpoch() < Self->DatabaseFreeze.GetEpoch()) {
             return fail(Ydb::StatusIds::ABORTED, "Stale database freeze epoch");
+        }
+        if (Self->SrcSplitDescription || Self->State == TShardState::SplitDstReceivingSnapshot) {
+            // The caller must finish split/merge and refresh its participant set.
+            // A replaced source shard will never become ready for this freeze.
+            return fail(Ydb::StatusIds::PRECONDITION_FAILED,
+                "Database freeze requires stable shard topology: shard participates in split/merge");
         }
         if (!Self->IsStateNewReadAllowed()) {
             result.SetReady(false);
@@ -126,23 +142,35 @@ public:
         if (!newEpoch && stage > Self->DatabaseFreeze.GetStage() + 1) {
             return fail(Ydb::StatusIds::BAD_REQUEST, "Database freeze stages cannot be skipped");
         }
+        const bool hasIndexRecords = stage >= TFreezeState::DRAIN_INDEXES && Self->HasDatabaseFreezeIndexRecords();
+        if (hasIndexRecords) {
+            for (const auto& [order, record] : Self->ChangesQueue) {
+                if (!Self->TableInfos.contains(record.TableId.LocalPathId)) {
+                    // Keep the conservative drain fence, but make an unknown
+                    // table distinguishable from records awaiting delivery.
+                    result.SetIssue(TStringBuilder()
+                        << "Database freeze drain is waiting for a change record for an unknown table"
+                        << ": order# " << order << " tableId# " << record.TableId
+                        << " pathId# " << record.PathId);
+                    break;
+                }
+            }
+        }
         if (stage > TFreezeState::FENCE_WRITES && Self->HasDatabaseFreezeWrites()) {
             result.SetReady(false);
             return true;
         }
         if (stage == TFreezeState::DRAIN_CDC
-            && (Self->HasDatabaseFreezeIndexRecords() || Self->HasDatabaseFreezeCdcScans()))
+            && (hasIndexRecords || Self->HasDatabaseFreezeCdcScans()))
         {
             result.SetReady(false);
             return true;
         }
         bool changed = false;
         if (newEpoch) {
-            const bool deliveryLost = stage != TFreezeState::OPEN
-                && (Self->DatabaseFreeze.GetDeliveryLost() || Self->UnconfirmedChangeRecordsRemoval);
             Self->DatabaseFreeze.Clear();
+            Self->DatabaseFreeze.SetStage(TFreezeState::OPEN);
             Self->DatabaseFreeze.SetEpoch(request.GetEpoch());
-            Self->DatabaseFreeze.SetDeliveryLost(deliveryLost);
             Self->DatabaseFreezeAcceptedTxIds.clear();
             for (const auto& [txId, op] : Self->TransQueue.GetTxsInFly()) {
                 if (!op->IsReadOnly() && !op->IsImmediate()) {
@@ -164,7 +192,7 @@ public:
 
             bool ready = !Self->HasDatabaseFreezeWrites();
             if (stage >= TFreezeState::DRAIN_INDEXES) {
-                ready = ready && !Self->HasDatabaseFreezeIndexRecords()
+                ready = ready && !hasIndexRecords
                     && !Self->HasDatabaseFreezeCdcScans();
             }
             if (stage == TFreezeState::DRAIN_CDC && ready) {
@@ -195,13 +223,6 @@ public:
                 // This command cannot acknowledge them before that happens.
                 ready = Heartbeats.empty() && Self->ChangesQueue.empty() && !Self->RemoveChangeRecordsInFly
                     && Self->CommittedLockChangeRecords.empty();
-            }
-            if (Self->DatabaseFreeze.GetDeliveryLost()) {
-                // Persist the fence even if delivery was lost: only an explicit
-                // thaw is allowed to reopen a partially frozen database.
-                result.SetStatus(Ydb::StatusIds::PRECONDITION_FAILED);
-                result.SetIssue("Change records were discarded during database freeze");
-                ready = true;
             }
             result.SetReady(ready);
         }

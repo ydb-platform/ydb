@@ -1719,6 +1719,11 @@ public:
         return IsStateFrozen() || IsDatabaseFrozen();
     }
 
+    bool CanReceiveChangeRecords() const {
+        return State == TShardState::Ready
+            && DatabaseFreeze.GetStage() < NKikimrTxDataShard::TDatabaseFreezeState::DRAIN_CDC;
+    }
+
     bool IsDatabaseWriteBlocked(const TOperation* op) const;
     bool HasDatabaseFreezeWrites() const;
     bool HasDatabaseFreezeIndexRecords() const;
@@ -2974,6 +2979,8 @@ private:
     TUserTable::TTableInfos TableInfos;  // tableId -> local table info
     NKikimrTxDataShard::TDatabaseFreezeState DatabaseFreeze;
     THashSet<ui64> DatabaseFreezeAcceptedTxIds;
+    // Local write transactions from construction through Complete(), including
+    // queued requests and requests that finish with an error.
     ui64 DatabaseFreezeLocalWrites = 0;
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
@@ -3224,7 +3231,6 @@ private:
     TSet<ui64> ChangeRecordsToRemove; // ui64 is order
     bool RequestChangeRecordsInFly = false;
     bool RemoveChangeRecordsInFly = false;
-    bool UnconfirmedChangeRecordsRemoval = false;
     THashMap<ui64, TEnqueuedRecord> ChangesQueue; // ui64 is order
     TIntrusiveList<TEnqueuedRecord, TEnqueuedRecordTag> ChangesList;
     ui64 ChangesQueueBytes = 0;

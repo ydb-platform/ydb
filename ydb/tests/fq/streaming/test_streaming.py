@@ -2411,15 +2411,6 @@ FROM `{table_name}`"""
         kikimr.ydb_client.query(sql.format(query_name=query_name1))
         kikimr.ydb_client.query(sql.format(query_name=query_name2))
 
-    @staticmethod
-    def _parse_json_rows(rows):
-        parsed = []
-        for row in rows:
-            if isinstance(row, (bytes, bytearray)):
-                row = row.decode("utf-8")
-            parsed.append(json.loads(row))
-        return parsed
-
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize(
         "kikimr",
@@ -2522,9 +2513,9 @@ FROM `{table_name}`"""
             "ok-extra-keys",
         }
 
-        rows = self._parse_json_rows(
-            self.read_stream(len(expected_notes), topic_path=self.output_topic, endpoint=endpoint)
-        )
+        rows = [
+            *map(json.loads, self.read_stream(len(expected_notes), topic_path=self.output_topic, endpoint=endpoint))
+        ]
         assert len(rows) == len(expected_notes)
 
         parsed = {row["note"]: row for row in rows}
@@ -2644,7 +2635,7 @@ FROM `{table_name}`"""
 
         self.write_stream(messages, endpoint=endpoint)
 
-        rows = self._parse_json_rows(self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint))
+        rows = [*map(json.loads, self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint))]
         assert len(rows) == 1
 
         row = rows[0]
@@ -2710,9 +2701,9 @@ FROM `{table_name}`"""
 
         expected_notes = {"valid-empty", "valid1"}
 
-        rows = self._parse_json_rows(
-            self.read_stream(len(expected_notes), topic_path=self.output_topic, endpoint=endpoint)
-        )
+        rows = [
+            *map(json.loads, self.read_stream(len(expected_notes), topic_path=self.output_topic, endpoint=endpoint))
+        ]
         assert len(rows) == len(expected_notes)
 
         parsed = {row["note"]: row for row in rows}

@@ -5,6 +5,7 @@ SRCS(
     kqp_new_parser_ut.cpp
     kqp_name_resolver_ut.cpp
     kqp_expr_lowering_ut.cpp
+    kqp_type_annotation_ut.cpp
 )
 
 PEERDIR(

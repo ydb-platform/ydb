@@ -151,17 +151,36 @@ Y_UNIT_TEST_SUITE(KqpNewYqlParserFallback) {
         TKikimrRunner kikimr(settings);
         auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto scheme = tableSession.ExecuteSchemeQuery(
-            "CREATE TABLE `/Root/names` (id Int64 NOT NULL, value String, PRIMARY KEY(id));").GetValueSync();
+            "CREATE TABLE `/Root/names` (id Int64 NOT NULL, value String, amount Decimal(12,2), PRIMARY KEY(id));").GetValueSync();
         UNIT_ASSERT_C(scheme.IsSuccess(), scheme.GetIssues().ToString());
         auto session = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
         auto valid = session.ExecuteQuery("SELECT n.id, n.value FROM `/Root/names` AS n WHERE n.id > 0 ORDER BY n.id;",
             NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(valid.IsSuccess(), valid.GetIssues().ToString());
         const auto deadline = TInstant::Now() + TDuration::Seconds(10);
-        while (!logs.Snapshot().Contains("New YQL name resolution succeeded") && TInstant::Now() < deadline) {
+        while (!logs.Snapshot().Contains("New YQL type annotation succeeded") && TInstant::Now() < deadline) {
             Sleep(TDuration::MilliSeconds(10));
         }
         UNIT_ASSERT_C(logs.Snapshot().Contains("New YQL name resolution succeeded"), logs.Snapshot());
+        UNIT_ASSERT_C(logs.Snapshot().Contains("New YQL type annotation succeeded"), logs.Snapshot());
+
+        auto params = TParamsBuilder().AddParam("$offset").Int64(3).Build().Build();
+        auto parameterized = session.ExecuteQuery("SELECT id + $offset, amount FROM `/Root/names` LIMIT 5;",
+            NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_C(parameterized.IsSuccess(), parameterized.GetIssues().ToString());
+
+        auto badType = session.ExecuteQuery("SELECT n.id + n.value FROM `/Root/names` AS n;",
+            NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT(!badType.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(badType.GetIssues().ToString(), "New YQL type annotation");
+
+        auto outerJoin = session.ExecuteQuery("SELECT r.id FROM `/Root/names` AS l "
+            "LEFT JOIN `/Root/names` AS r ON l.id = r.id;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(outerJoin.IsSuccess(), outerJoin.GetIssues().ToString());
+
+        auto aggregate = session.ExecuteQuery("SELECT COUNT(*) FROM `/Root/names`;",
+            NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(aggregate.IsSuccess(), aggregate.GetIssues().ToString());
 
         auto missing = session.ExecuteQuery("SELECT n.absent FROM `/Root/names` AS n;",
             NQuery::TTxControl::NoTx()).ExtractValueSync();

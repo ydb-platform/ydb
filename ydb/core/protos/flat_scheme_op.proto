@@ -317,6 +317,9 @@ message TTableReplicationConfig {
     optional EReplicationMode Mode = 1;
     optional EConsistencyLevel ConsistencyLevel = 2;
     optional EImportState ImportState = 3;
+    // PathId of the replication that owns this table. May outlive a dropped replication;
+    // a new replication can claim the table once the old replication's path is deleted.
+    optional NKikimrProto.TPathID OwnerPathId = 4;
 }
 
 message TTableIncrementalBackupConfig {
@@ -2191,6 +2194,9 @@ message TModifyScheme {
     optional TCreateFullBackupOp CreateFullBackupOp = 95;
 
     optional TCreateTestShardSet CreateTestShardSet = 96;
+
+    // Conditional replication cleanup: skip if the table is owned by another replication.
+    optional NKikimrProto.TPathID ExpectedReplicationOwnerPathId = 97;
 
     // Some entries are grouped by semantics, so are out of order
 }

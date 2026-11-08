@@ -367,6 +367,55 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(ReplicaOwnership, TableOwnership) {
+        enum class EOwner { Fresh, Legacy, Current, Foreign };
+        struct TCase { EOwner Owner; bool InitialScan; };
+        UNIT_ASSERT(!NKikimrConfig::TFeatureFlags().GetEnableAsyncReplicationTableOwnership());
+        const TCase cases[] = {
+            {EOwner::Fresh, true}, {EOwner::Fresh, false},
+            {EOwner::Legacy, true}, {EOwner::Legacy, false},
+            {EOwner::Current, true}, {EOwner::Current, false},
+            {EOwner::Foreign, true}, {EOwner::Foreign, false},
+        };
+        for (const auto& test : cases) {
+            TFeatureFlags flags;
+            flags.FeatureFlags.SetEnableAsyncReplicationTableOwnership(TableOwnership);
+            TEnv env(flags);
+            const auto owner = env.GetPathId("/Root");
+            auto table = MakeTableDescription({.Name = "Source", .KeyColumns = {"key"},
+                .Columns = {{.Name = "key", .Type = "Uint32"}}, .ReplicationConfig = Nothing()});
+            env.CreateTable("/Root", *table);
+            if (test.Owner != EOwner::Fresh) {
+                table->SetName("Dst");
+                FillReplicationConfig(*table->MutableReplicationConfig(), EReplicationMode::ReadOnly, EConsistencyLevel::Row);
+                if (test.Owner != EOwner::Legacy) {
+                    owner.ToProto(table->MutableReplicationConfig()->MutableOwnerPathId());
+                }
+                env.CreateTable("/Root", *table);
+            }
+            // A non-initial-scan replication starts paused and waits for import into a placeholder.
+            env.GetRuntime().Register(CreateDstCreator(env.GetSender(), owner.OwnerId, env.GetYdbProxy(),
+                "/Root", test.Owner == EOwner::Foreign ? env.GetPathId("/Root/Source") : owner,
+                1, 1, TReplication::ETargetKind::Table, "/Root/Source", "/Root/Dst",
+                EReplicationMode::ReadOnly, EConsistencyLevel::Row, test.InitialScan, TReplication::EState::Paused));
+            const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            if (test.Owner == EOwner::Foreign) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusPreconditionFailed, result->Get()->Error);
+                UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "owned by another replication");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusSuccess, result->Get()->Error);
+                UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstPathId, env.GetPathId("/Root/Dst"));
+            }
+            const auto config = env.GetDescription("/Root/Dst").GetPathDescription().GetTable().GetReplicationConfig();
+            const bool owned = test.Owner == EOwner::Fresh ? TableOwnership : test.Owner != EOwner::Legacy;
+            UNIT_ASSERT_VALUES_EQUAL(config.HasOwnerPathId(), owned);
+            if (owned) {
+                UNIT_ASSERT_VALUES_EQUAL(TPathId::FromProto(config.GetOwnerPathId()), owner);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(config.GetMode(), NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY);
+        }
+    }
+
     Y_UNIT_TEST(AttachTable) {
         TEnv env;
         const auto table = TTestTableDescription{

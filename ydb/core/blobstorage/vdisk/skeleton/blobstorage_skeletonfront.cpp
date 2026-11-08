@@ -896,7 +896,7 @@ namespace NKikimr {
             StartTimestamp = TActivationContext::Monotonic();
             TimerGroup.SkeletonFrontUptimeSeconds() = 0;
             CounterGroup.VDiskCount() = 1;
-            Become(GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)
+            Become(GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)
                 ? &TThis::StateDatabaseError : &TThis::StateLocalRecoveryInProgress);
         }
 
@@ -1298,7 +1298,7 @@ namespace NKikimr {
             SetReceivedTime(ev);
             TInstant now = TAppData::TimeProvider->Now();
             FillInCostSettingsAndTimestampIfApplicable(ev->Get()->Record, now);
-            if (GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)) {
+            if (GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
                 const NKikimrBlobStorage::TVDiskID* targetId = nullptr;
                 if constexpr (requires { ev->Get()->Record.GetVDiskID(); }) {
                     targetId = &ev->Get()->Record.GetVDiskID();
@@ -1333,7 +1333,7 @@ namespace NKikimr {
         }
 
         void DatabaseErrorHandle(TEvBlobStorage::TEvVCheckReadiness::TPtr& ev, const TActorContext& ctx) {
-            if (GInfo->IsFailedFailRealm(SelfVDiskId.FailRealm)) {
+            if (GInfo->IsFailRealmExcluded(SelfVDiskId.FailRealm)) {
                 HandleCheckReadiness(ev, ctx);
             } else {
                 Reply(ev, ctx, NKikimrProto::VDISK_ERROR_STATE, "VDisk is in error state", TAppData::TimeProvider->Now());

@@ -394,6 +394,14 @@ namespace NKikimr::NStorage {
             if (group.GroupResolver) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
             }
+            TVector<TVDiskRecord*> disks;
+            for (auto& vdisk : group.VDisksOfGroup) {
+                disks.push_back(&vdisk);
+            }
+            for (auto* vdisk : disks) {
+                PoisonLocalVDisk(*vdisk);
+            }
+            group.VDisksOfGroup.Clear();
             Groups.erase(groupId);
             Send(SelfId(), new TEvNodeWardenUnsubscribeFromCache(Sprintf("G%08" PRIx32, groupId)));
 

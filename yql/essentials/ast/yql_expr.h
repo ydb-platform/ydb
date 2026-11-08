@@ -2908,6 +2908,8 @@ struct TExprContext: private TNonCopyable {
     std::unordered_map<const TTypeAnnotationNode*, TExprNode::TPtr> TypeAsNodeCache;
     std::unordered_set<TStringBuf, THash<TStringBuf>> DisabledConstraints;
     std::unordered_map<TString, const TTypeAnnotationNode*> ParseTypeCache;
+    TNodeOnNodeOwnedMap LazyBindings;
+    TNodeOnNodeOwnedMap LazyBindingClones;
 
     ui64 NextUniqueId = 0;
     ui64 NodeAllocationCounter = 0;

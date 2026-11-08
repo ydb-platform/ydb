@@ -45,6 +45,7 @@ private:
     struct TTxSemaphoreAcquire;
     struct TTxSemaphoreCreate;
     struct TTxSemaphoreDescribe;
+    struct TTxSemaphoresDescribe;
     struct TTxSemaphoreDelete;
     struct TTxSemaphoreRelease;
     struct TTxSemaphoreTimeout;
@@ -393,6 +394,7 @@ private:
     void Handle(TEvKesus::TEvSetConfig::TPtr& ev);
     void Handle(TEvKesus::TEvGetConfig::TPtr& ev);
     void Handle(TEvKesus::TEvDescribeSemaphore::TPtr& ev);
+    void Handle(TEvKesus::TEvDescribeSemaphores::TPtr& ev);
     void Handle(TEvKesus::TEvDescribeProxies::TPtr& ev);
     void Handle(TEvKesus::TEvDescribeSessions::TPtr& ev);
     void Handle(TEvKesus::TEvRegisterProxy::TPtr& ev);

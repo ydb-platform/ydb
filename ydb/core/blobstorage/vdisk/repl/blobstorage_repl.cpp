@@ -394,6 +394,15 @@ namespace NKikimr {
                 donor.PDiskId, donor.VSlotId, donor.VDiskId));
         }
 
+        void HandleNonPhantomsRemain(STFUNC_SIG) {
+            Y_VERIFY_S(ev->Sender == ReplJobActorId &&
+                ev->Cookie == static_cast<ui64>(EReplDone::NonPhantomsRemain), ReplCtx->VCtx->VDiskLogPrefix);
+            if (!std::exchange(UnrecoveredNonphantomBlobs, true)) {
+                TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
+                    SelfId(), nullptr, static_cast<ui64>(EReplDone::NonPhantomsRemain)));
+            }
+        }
+
         void Handle(TEvReplFinished::TPtr &ev) {
             Y_VERIFY_S(ev->Sender == ReplJobActorId, ReplCtx->VCtx->VDiskLogPrefix);
             ReplJobActorId = {};
@@ -768,6 +777,7 @@ namespace NKikimr {
         STRICT_STFUNC(StateRepl,
             cFunc(TEvReplToken::EventType, HandleReplToken)
             hFunc(TEvReplStarted, Handle)
+            fFunc(TEvBlobStorage::EvReplDone, HandleNonPhantomsRemain)
             hFunc(TEvReplFinished, Handle)
             hFunc(NMon::TEvHttpInfo, Handle)
             cFunc(TEvents::TSystem::Poison, PassAway)

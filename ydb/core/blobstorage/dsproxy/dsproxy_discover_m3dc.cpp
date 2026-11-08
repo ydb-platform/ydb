@@ -19,9 +19,8 @@ static bool HasZeroEnsuredLayout(const TBlobStorageGroupInfo& info) {
     if (info.GetTopology().GetTotalFailRealmsNum() != 3) {
         return false;
     }
-    const std::optional<EMirror3dcGroupState> state = GetMirror3dcGroupState(
-        info.GetFailRealmState(0), info.GetFailRealmState(1), info.GetFailRealmState(2));
-    return state && GetMirror3dcGroupLayouts(*state)->Ensured == EMirror3dcLayout::LAYOUT_0;
+    std::optional<TMirror3dcGroupLayouts> layouts = GetMirror3dcGroupLayouts(info.GetMirror3dcState().State);
+    return layouts && layouts->Ensured == EMirror3dcLayout::LAYOUT_0;
 }
 
 class TDiscoverVDiskWorker {
@@ -283,8 +282,8 @@ public:
         const ui32 numDisks = Info->GetTotalVDisksNum();
         VDiskWorkers.reserve(numDisks);
         for (ui32 i = 0; i < numDisks; ++i) {
-            const TVDiskID vdiskId = Info->GetVDiskId(i);
-            const bool active = !Info->IsFailedFailRealm(vdiskId.FailRealm);
+            TVDiskID vdiskId = Info->GetVDiskId(i);
+            bool active = !Info->IsFailRealmExcluded(vdiskId.FailRealm);
             VDiskWorkers.emplace_back(vdiskId, tabletId, minGeneration, forceBlockedGeneration, active);
             NumReadyWorkers += !active;
         }
@@ -534,12 +533,12 @@ public:
 
         // generate GetBlock queries if we need 'em
         if (DiscoverBlockedGeneration) {
-            for (const auto& vdisk : Info->GetVDisks()) {
-                auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-                if (Info->IsFailedFailRealm(vd.FailRealm)) {
+            for (const TBlobStorageGroupInfo::TVDiskInfo& vdisk : Info->GetVDisks()) {
+                TVDiskID vd = Info->GetVDiskId(vdisk.OrderNumber);
+                if (Info->IsFailRealmExcluded(vd.FailRealm)) {
                     continue;
                 }
-                auto query = std::make_unique<TEvBlobStorage::TEvVGetBlock>(TabletId, vd, Deadline);
+                std::unique_ptr<TEvBlobStorage::TEvVGetBlock> query = std::make_unique<TEvBlobStorage::TEvVGetBlock>(TabletId, vd, Deadline);
 
                 DSP_LOG_DEBUG_S("DSPDM06", "sending TEvVGetBlock# " << query->ToString());
                 ++GetBlockRepliesRemaining;

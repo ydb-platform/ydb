@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
             // JSON_EXISTS with TRUE ON ERROR is negation
             ValidateError(db, R"(JSON_EXISTS(Text, '$.key' TRUE ON ERROR))");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key' FALSE ON ERROR))", {"\4key"});
-            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key' ERROR ON ERROR))", {"\4key"});
+            ValidateError(db, R"(JSON_EXISTS(Text, '$.key' ERROR ON ERROR))");
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$.key' UNKNOWN ON ERROR))", {"\4key"});
         });
     }
@@ -613,12 +613,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
 
             // DEFAULT ON EMPTY with non-NULL value is negation
             ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int DEFAULT 12 ON EMPTY) > 10)");
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int ERROR ON EMPTY) > 10)", {"\4key"});
+            ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int ERROR ON EMPTY) > 10)");
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int NULL ON EMPTY) > 10)", {"\4key"});
 
             // DEFAULT ON ERROR with non-NULL value is negation
             ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int DEFAULT 12 ON ERROR) > 10)");
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int ERROR ON ERROR) > 10)", {"\4key"});
+            ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int ERROR ON ERROR) > 10)");
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int NULL ON ERROR) > 10)", {"\4key"});
 
             // Both DEFAULT ON EMPTY and DEFAULT ON ERROR with non-NULL value are negation too
@@ -2543,12 +2543,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int32 DEFAULT NULL ON EMPTY) > 10)", {"\4key"});
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int32 DEFAULT NULL ON ERROR) > 10)", {"\4key"});
 
-            // Combinations of NULL / ERROR / DEFAULT NULL handlers - all allowed
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int32 NULL ON EMPTY ERROR ON ERROR) == 1)", {"\4key" + numSuffix(1)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int32 ERROR ON EMPTY NULL ON ERROR) == 1)", {"\4key" + numSuffix(1)});
+            // ERROR handlers prevent extraction, including when combined with NULL / DEFAULT NULL.
+            ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int32 NULL ON EMPTY ERROR ON ERROR) == 1)");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int32 ERROR ON EMPTY NULL ON ERROR) == 1)");
             ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int32 NULL ON EMPTY DEFAULT NULL ON ERROR) == 1)", {"\4key" + numSuffix(1)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int32 DEFAULT NULL ON EMPTY ERROR ON ERROR) == 1)", {"\4key" + numSuffix(1)});
-            ValidateTokens(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int32 ERROR ON EMPTY DEFAULT NULL ON ERROR) == 1)", {"\4key" + numSuffix(1)});
+            ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int32 DEFAULT NULL ON EMPTY ERROR ON ERROR) == 1)");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int32 ERROR ON EMPTY DEFAULT NULL ON ERROR) == 1)");
 
             // Mixed - non-NULL DEFAULT on either side blocks extraction
             ValidateError(db, R"(JSON_VALUE(Text, '$.key' RETURNING Int32 DEFAULT 12 ON EMPTY NULL ON ERROR) == 1)");
@@ -2677,7 +2677,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
                 .AddParam("$p").Json("[]").Build()
                 .Build();
             const TString errorHandlerMessage =
-                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics for Json parameters";
+                "JSON index cannot preserve ERROR ON EMPTY/ERROR semantics";
 
             ValidateError(db,
                 R"(JSON_EXISTS(Text, 'strict $.k1 ? (@ == $value)' PASSING $p AS value ERROR ON ERROR))",

@@ -22,17 +22,20 @@ using duration_nano_t = std::chrono::duration<ui64, std::nano>;
 using duration_t = std::chrono::duration<double>;
 
 duration_t GetBasePerformance() {
-    duration_nano_t accm{};
-    for (int i = 0; i < 1000000; ++i) {
-        accm += duration_nano_t(NActors::MeasureTaskDurationNs());
-    }
-    return std::chrono::duration_cast<duration_t>(accm);
+    static const duration_t basePerformance = [] {
+        duration_nano_t accm{};
+        for (int i = 0; i < 1000000; ++i) {
+            accm += duration_nano_t(NActors::MeasureTaskDurationNs());
+        }
+        return std::chrono::duration_cast<duration_t>(accm);
+    }();
+    return basePerformance;
 }
-
-static double BASE_PERF = GetBasePerformance().count();
 
 Y_UNIT_TEST_SUITE(THiveImplTest) {
     Y_UNIT_TEST(BootQueueSpeed) {
+        [[maybe_unused]] const double basePerf = GetBasePerformance().count();
+
         TBootQueue bootQueue;
         static constexpr ui64 NUM_TABLETS = 1000000;
 
@@ -52,9 +55,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         Ctest << "Create = " << passed << Endl;
 #ifndef _san_enabled_
 #ifndef NDEBUG
-        UNIT_ASSERT(passed < 3 * BASE_PERF);
+        UNIT_ASSERT(passed < 3 * basePerf);
 #else
-        UNIT_ASSERT(passed < 1 * BASE_PERF);
+        UNIT_ASSERT(passed < 1 * basePerf);
 #endif
 #endif
         timer.Reset();
@@ -90,9 +93,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         Ctest << "Process = " << passed << Endl;
 #ifndef _san_enabled_
 #ifndef NDEBUG
-        UNIT_ASSERT(passed < 10 * BASE_PERF);
+        UNIT_ASSERT(passed < 10 * basePerf);
 #else
-        UNIT_ASSERT(passed < 2 * BASE_PERF);
+        UNIT_ASSERT(passed < 2 * basePerf);
 #endif
 #endif
 
@@ -108,18 +111,20 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         Ctest << "Move = " << passed << Endl;
 #ifndef _san_enabled_
 #ifndef NDEBUG
-        UNIT_ASSERT(passed < 2 * BASE_PERF);
+        UNIT_ASSERT(passed < 2 * basePerf);
 #else
-        UNIT_ASSERT(passed < 0.1 * BASE_PERF);
+        UNIT_ASSERT(passed < 0.1 * basePerf);
 #endif
 #endif
     }
 
     Y_UNIT_TEST(BalancerSpeedAndDistribution) {
+        [[maybe_unused]] const double basePerf = GetBasePerformance().count();
+
         static constexpr ui64 NUM_TABLETS = 1000000;
         static constexpr ui64 NUM_BUCKETS = 16;
 
-        auto CheckSpeedAndDistribution = [](
+        auto CheckSpeedAndDistribution = [=](
             std::unordered_map<ui64, TLeaderTabletInfo>& allTablets,
             std::function<void(std::vector<TTabletInfo*>::iterator, std::vector<TTabletInfo*>::iterator, EResourceToBalance)> func,
             EResourceToBalance resource) -> void {
@@ -138,9 +143,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             Ctest << "Time=" << passed << Endl;
 #ifndef _san_enabled_
 #ifndef NDEBUG
-            UNIT_ASSERT(passed < 1 * BASE_PERF);
+            UNIT_ASSERT(passed < 1 * basePerf);
 #else
-            UNIT_ASSERT(passed < 1 * BASE_PERF);
+            UNIT_ASSERT(passed < 1 * basePerf);
 #endif
 #endif
             std::vector<double> buckets(NUM_BUCKETS, 0);

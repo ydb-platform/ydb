@@ -1,4 +1,4 @@
-"""Run the existing RBO cases with the new AST frontend enabled.
+"""Frontend compatibility checks using the existing RBO cases.
 
 PRAGMA/DECLARE/named-expression preambles and data-loading setup are retained.
 Excluded cases test writes or multiple result-producing statements. Unsupported
@@ -92,7 +92,7 @@ def collect_cases():
 
 
 @pytest.mark.parametrize("module,name", collect_cases())
-def test_rbo_with_new_ast(module, name):
+def test_rbo_frontend_compatibility(module, name):
     env = os.environ.copy()
     env["YDB_KQP_TEST_NEW_AST"] = "1"
     # Do not inherit an outer C++ runner's selection and accidentally run zero

@@ -755,8 +755,11 @@ public:
                 .IsResolved()
                 .Or(&TPath::TChecker::IsTable, &TPath::TChecker::IsColumnTable)
                 .NotDeleted()
-                .NotAsyncReplicaTable()
                 .NotUnderOperation();
+
+            if (checks && (!internal || !Transaction.HasRestore() || !path.IsImportingReplica())) {
+                checks.NotAsyncReplicaTable();
+            }
 
             if (!internal) {
                 checks

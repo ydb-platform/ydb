@@ -64,11 +64,11 @@ struct TControllerSchema: NIceDb::Schema {
         struct TransformLambda: Column<10, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
         struct RunAsUser: Column<11, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
         struct DirectoryPath: Column<12, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
-        struct PendingDstPathOwnerId: Column<18, NScheme::NTypeIds::Uint64> {
+        struct PendingDstPathOwnerId: Column<18, NScheme::NTypeIds::Uint64> { // Deprecated.
             using Type = TOwnerId;
             static constexpr Type Default = InvalidOwnerId;
         };
-        struct PendingDstPathLocalId: Column<19, NScheme::NTypeIds::Uint64> {
+        struct PendingDstPathLocalId: Column<19, NScheme::NTypeIds::Uint64> { // Deprecated.
             using Type = TLocalPathId;
             static constexpr Type Default = InvalidLocalPathId;
         };

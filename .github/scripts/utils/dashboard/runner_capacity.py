@@ -1,14 +1,20 @@
 """Measured host capacity for the tests resource dashboard.
 
 Ceilings and mem→cpu budgets come from resources_monitor.jsonl host fields.
-Tuning knobs live in ``.github/config/tests_resource_dashboard.yml`` (required).
+Tuning knobs live in ``.github/config/tests_resource_dashboard.yml`` (defaults used if missing).
 """
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 CONFIG_REL_PATH = Path(".github/config/tests_resource_dashboard.yml")
 _MEM_CPU_TIERS_BASE = (1, 2, 4, 8, 16, 32, 48, 64, 96, 128)
@@ -21,6 +27,9 @@ class DashboardTuning:
     mem_min_chunk_gb: float
     cpu_saturation_pct: float
     near_budget_factor: float
+
+
+DEFAULT_TUNING = DashboardTuning(0.70, 0.95, 24.0, 90.0, 1.10)
 
 
 @dataclass(frozen=True)
@@ -50,12 +59,10 @@ def _default_config_path() -> Path:
 
 def load_dashboard_tuning(config_path: Optional[Path] = None) -> DashboardTuning:
     path = Path(config_path) if config_path else _default_config_path()
-    if not path.is_file():
-        raise FileNotFoundError(f"Missing dashboard tuning config: {path}")
-    try:
-        import yaml
-    except ImportError as exc:
-        raise RuntimeError(f"PyYAML is required to load {path}") from exc
+    if yaml is None or not path.is_file():
+        reason = "PyYAML is not installed" if yaml is None else f"missing config {path}"
+        print(f"WARNING: {reason}; using default dashboard tuning", file=sys.stderr)
+        return DEFAULT_TUNING
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
     if not isinstance(raw, dict):

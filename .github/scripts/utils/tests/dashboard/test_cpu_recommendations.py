@@ -290,6 +290,28 @@ def test_light_suite_no_memory_cpu_bump():
     assert r["recommended_cpu"] == 2
 
 
+def test_no_memory_cpu_bump_without_measured_host():
+    """Without monitor host data, skip mem→cpu bumps even for a heavy chunk."""
+    suite = "s/mem_no_host"
+    runs = [
+        _run(suite, 0, 0, 100, cores=2.0, ram_gb=58.0),
+        _run(suite, 1, 0, 100, cores=2.0, ram_gb=40.0),
+    ]
+    recs = _by_suite(_recs(
+        runs,
+        requirements_cache={suite: {"cpu_cores": 16, "ram_gb": 32, "size": "LARGE", "split_factor": 2}},
+        report_status_by_suite={suite: {"tests": _status(), "chunks": _status()}},
+        max_test_duration_sec_by_suite={suite: 50.0},
+        test_duration_stats_by_suite={suite: {"chunk_loads": []}},
+        measured_host=None,
+    ))
+    r = recs[suite]
+    assert r["cpu_for_memory"] is None, r["mem_explain"]
+    assert r["mem_driven_cpu"] is False
+    assert r["recommended_cpu"] == 2
+    assert "n/a (no monitor host)" in r["mem_explain"]
+
+
 def test_marker_suite_start_ignores_straggler_prefix():
     """Early isolated chunks must not shift the suite start marker before the main wave."""
     t0 = 1_000_000_000_000_000  # us
@@ -340,6 +362,7 @@ def _all_tests():
         test_cpu_lower_suppressed_under_split_pressure,
         test_memory_drives_cpu_bump_not_ram,
         test_light_suite_no_memory_cpu_bump,
+        test_no_memory_cpu_bump_without_measured_host,
     ]
 
 

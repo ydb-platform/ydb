@@ -897,10 +897,13 @@ def build_cpu_recommendations(
         # into a cpu recommendation above (cpu_for_memory). Here we expose the diagnostic
         # per-chunk numbers and explain how memory maps onto the cpu slot.
         per_chunk_ram_gb = peak_ram / max_par if max_par > 0 else peak_ram
+        mem_budget_explain = (
+            f"{mem_budget_gb:.0f}" if measured_host is not None else "n/a (no monitor host)"
+        )
         mem_explain = (
             f"max_chunk_ram_gb={max_chunk_ram_gb:.1f}; peak_suite_ram_gb={peak_ram:.1f}; "
             f"max_parallel_self={max_par}; avg_per_chunk_ram_gb={per_chunk_ram_gb:.1f}; "
-            f"mem_budget_gb={mem_budget_gb:.0f}; cpu_for_memory={cpu_for_memory}; "
+            f"mem_budget_gb={mem_budget_explain}; cpu_for_memory={cpu_for_memory}; "
             f"mem_driven_cpu={mem_driven_cpu}"
         )
         if cpu_for_memory is not None:

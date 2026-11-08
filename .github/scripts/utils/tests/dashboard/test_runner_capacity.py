@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,10 +13,17 @@ from _paths import DASHBOARD, add_product_paths
 add_product_paths(DASHBOARD)
 
 from runner_capacity import (  # noqa: E402
+    DEFAULT_TUNING,
     DashboardTuning,
     enrich_resources_overlay,
+    load_dashboard_tuning,
     measured_host_from_records,
 )
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 _TUNING = DashboardTuning(
     mem_budget_fraction=0.70,
@@ -68,10 +76,44 @@ def test_no_host_from_overlay_sentinel_or_partial_records():
     assert "host" not in out2
 
 
+def test_load_tuning_from_repo_config():
+    if yaml is None:
+        raise unittest.SkipTest("PyYAML is not installed")
+    assert load_dashboard_tuning() == DEFAULT_TUNING
+
+
+def test_load_tuning_falls_back_when_config_missing():
+    assert load_dashboard_tuning(Path("/nonexistent/tests_resource_dashboard.yml")) == DEFAULT_TUNING
+
+
+def test_load_tuning_rejects_bad_value():
+    if yaml is None:
+        raise unittest.SkipTest("PyYAML is not installed")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "bad.yml"
+        path.write_text(
+            "mem_budget_fraction: 0\n"
+            "ya_make_mem_fraction: 0.95\n"
+            "mem_min_chunk_gb: 24.0\n"
+            "cpu_saturation_pct: 90.0\n"
+            "near_budget_factor: 1.10\n",
+            encoding="utf-8",
+        )
+        try:
+            load_dashboard_tuning(path)
+        except ValueError:
+            return
+        raise AssertionError("expected ValueError for mem_budget_fraction: 0")
+
+
 def _all_tests():
     return [
         test_enrich_attaches_single_host_block,
         test_no_host_from_overlay_sentinel_or_partial_records,
+        test_load_tuning_from_repo_config,
+        test_load_tuning_falls_back_when_config_missing,
+        test_load_tuning_rejects_bad_value,
     ]
 
 
@@ -88,6 +130,8 @@ if __name__ == "__main__":
         try:
             t()
             print(f"PASS {t.__name__}")
+        except unittest.SkipTest as e:
+            print(f"SKIP {t.__name__}: {e}")
         except AssertionError as e:
             failures += 1
             print(f"FAIL {t.__name__}: {e}")

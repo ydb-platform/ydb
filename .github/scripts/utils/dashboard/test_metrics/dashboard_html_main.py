@@ -57,10 +57,10 @@ def build_html_dashboard(
     )
 
     host = (run_config or {}).get("host") or {}
-    rf_vcpu = host.get("vcpu", "n/a")
-    rf_ram = host.get("ram_gb", "n/a")
-    rf_budget = host.get("mem_budget_gb", "n/a")
-    rf_ya_mem = host.get("ya_make_mem_limit_gb", "n/a")
+    host_vcpu = host.get("vcpu", "n/a")
+    host_ram = host.get("ram_gb", "n/a")
+    host_budget = host.get("mem_budget_gb", "n/a")
+    host_ya_mem = host.get("ya_make_mem_limit_gb", "n/a")
     out_data = out_html.with_name(out_html.stem + "_data.json")
     write_dashboard_data_json(out_data, payload)
     data_url_js = js_script_json(out_data.name)
@@ -525,7 +525,7 @@ def build_html_dashboard(
             <li>SIZE still caps recommended CPU (SMALL=1, MEDIUM=4). When CLI flag <code>--maximize-reqs-for-timeout-tests</code> is enabled, suites crossing the duration threshold additionally use size max: <b>SMALL=1, MEDIUM=4, LARGE=4</b>.</li>
             <li><b>recommended_split</b> uses per-<b>chunk</b> load: sum test durations inside each chunk. Overloaded chunks (<code>sum &gt; size_timeout*0.98</code>) are detected <b>even without a timeout</b> (<code>split_severity=at_risk</code>); with a timeout it is <code>timeout</code>. Required chunk count is <code>ceil(overloaded_total / (size_timeout*0.5))</code>, and a single very heavy chunk is split into <code>ceil(max_chunk_load / (size_timeout*0.5))</code> pieces. If a <b>single test</b> alone is at/above the budget (<code>single_test_blocks_split</code>), SPLIT_FACTOR cannot help. In that case, if the test is only marginally over budget <b>and the runner was CPU-saturated</b> during the suite window (<code>single_test_contention_suspected</code>, from <code>resources_monitor.jsonl</code>), it is likely contention-inflated — TRY raising <code>REQUIREMENTS(cpu)</code> (fewer parallel chunks → decontention) before a test-level fix; otherwise (genuinely long) the fix is <code>TIMEOUT()</code> / reduce work / mute.</li>
             <li><b>cpu_action</b> compares recommended cpu to <code>ya_cpu</code>. A <b>lower</b> suggestion is suppressed (kept <b>ok</b>) while the suite is under split/time pressure, because a smaller cpu slot increases parallel chunks and can worsen timeouts/OOM.</li>
-            <li><b>memory → cpu</b>: local scheduler ignores <code>REQUIREMENTS(ram)</code>; raise cpu slot from measured host (<b>{rf_vcpu}/{rf_ram} GB</b>, budget ≈ <b>{rf_budget} GB</b>) so heaviest chunks fit. Skipped without monitor data.</li>
+            <li><b>memory → cpu</b>: local scheduler ignores <code>REQUIREMENTS(ram)</code>; raise cpu slot from measured host (<b>{host_vcpu}/{host_ram} GB</b>, budget ≈ <b>{host_budget} GB</b>) so heaviest chunks fit: <code>floor(mem_budget / max_chunk_ram)</code> parallel chunks, <code>cpu ≈ ceil(cores / that)</code>, raised when <code>cpu_for_memory &gt; p95</code> (shown red). Skipped without monitor data.</li>
           </ol>
           <ul>
             <li><b>status chunks</b>: counters from report rows where <code>chunk=true</code>. <b>total</b> = all chunk rows, <b>passed</b> = status OK/PASS.</li>
@@ -543,7 +543,7 @@ def build_html_dashboard(
           <ul>
             <li><b>By suites (stacked):</b> At time <code>t</code> we sum each active chunk contribution. For CPU it is <code>cpu_sec_report / duration_used_sec</code> (average cores for that run); for RAM it is the chunk memory metric from report converted to GB. This is a model by chunks, not an instantaneous per-process sample.</li>
             <li><b>Total (monitor, red line):</b> Absolute system CPU (cores) and RAM (GB) from <code>/proc</code> during the run (actual usage).</li>
-            <li><b>Limits (purple dashed):</b> host <code>MemTotal</code> / CPU from <code>resources_monitor.jsonl</code>; dotted line ≈ ya.make cgroup (~{rf_ya_mem} GB). Omitted if monitor data is missing.</li>
+            <li><b>Limits (purple dashed):</b> host <code>MemTotal</code> / CPU from <code>resources_monitor.jsonl</code>; dotted line ≈ ya.make cgroup (~{host_ya_mem} GB). Omitted if monitor data is missing.</li>
             <li><b>Chunk duration:</b> <code>duration_report_sec</code> from report; <code>duration_evlog_sec</code> from evlog B/E. For CPU/cores we use <code>duration_used_sec = max(report, evlog)</code>.</li>
             <li><b>CPU time per chunk (report):</b> <code>cpu_sec_report = ru_utime + ru_stime</code> from report metrics (seconds).</li>
             <li><b>CPU shown on charts (cores_est):</b> <code>cores_est = cpu_sec_report / duration_used_sec</code> (duration_used_sec = max(report, evlog)). Chart value at time <code>t</code> is the sum of active chunks at <code>t</code>.</li>

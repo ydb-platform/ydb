@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/rbo/kqp_rbo_yql_query_helpers.h>
-#include <ydb/core/kqp/ut/rbo/kqp_rbo_yql_workload_helpers.h>
+#include "kqp_workload_queries.h"
 
 #include <library/cpp/resource/resource.h>
 #include <yql/essentials/public/langver/yql_langver.h>

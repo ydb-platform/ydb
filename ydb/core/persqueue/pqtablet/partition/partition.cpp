@@ -386,6 +386,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , NumChannels(numChannels)
     , WriteBufferIsFullCounter(nullptr)
     , WriteLagMs(TDuration::Minutes(1), 100)
+    , WriteInitThrottledMs(TDuration::Minutes(1), 100)
     , LastEmittedHeartbeat(TRowVersion::Min())
     , LastEmittedSchemaChange(TRowVersion::Min())
     , SamplingControl(samplingControl)
@@ -2617,6 +2618,8 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
 
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES, TotalPartitionWriteSpeed);
     SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_MESSAGES, TotalPartitionWriteSpeedInMessages);
+    const ui64 initThrottledMs = WriteInitThrottledMs.Update(now);
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_INIT_THROTTLED_MS, initThrottledMs);
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {

@@ -683,6 +683,7 @@ struct TEvPQ {
         TActorId Sender;
         bool Force;
         bool RegisterIfNotExists;
+        TDuration WriteSessionQuotaWaitTime = TDuration::Zero();
     };
 
     struct TEvPipeDisconnected : public TEventLocal<TEvPipeDisconnected, EvPipeDisconnected> {

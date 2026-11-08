@@ -1122,6 +1122,7 @@ private:
     TInstant WriteTimestampEstimate;
     bool ManageWriteTimestampEstimate = true;
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
+    NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteInitThrottledMs;
     //ToDo - counters.
     THolder<TPercentileCounter> InputTimeLag;
     THolder<TMultiBucketCounter> SupportivePartitionTimeLag;

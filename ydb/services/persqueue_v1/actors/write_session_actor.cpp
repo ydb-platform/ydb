@@ -736,6 +736,8 @@ void TWriteSessionActor<Protocol>::Handle(TEvWriteSessionsQuoter::TEvQuotaDeclin
         return;
     }
 
+    LOG_E("Write session quota declined");
+
     CloseSession("Write session quota declined: partition or generation is unavailable",
                  PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED, ctx);
 }
@@ -816,6 +818,7 @@ bool TWriteSessionActor<Protocol>::CreatePartitionWriterCache(const TActorContex
     opts.WithSourceId(SourceId);
     opts.WithInitialSeqNo(InitialSeqNo);
     opts.WithExpectedGeneration(ExpectedGeneration);
+    opts.WithWriteSessionQuotaWaitTime(WriteSessionQuotaWaitTime);
 
     if constexpr (Protocol == EProtocol::Topic) {
         for (const auto& item : InitRequest.write_session_meta()) {

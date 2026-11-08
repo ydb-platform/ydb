@@ -18,6 +18,8 @@ namespace NKikimr::NPQ {
 namespace {
 
 static constexpr ui64 MAX_PENDING_REQUESTS = 1'000'000;
+static constexpr TDuration BUCKET_WINDOW = TDuration::Seconds(1);
+static constexpr TDuration WAKEUP_INTERVAL = TDuration::MilliSeconds(100);
 
 struct TKey {
     TString Topic;
@@ -77,7 +79,7 @@ private:
 
 void TWriteSessionsQuoter::Bootstrap(const TActorContext& ctx) {
     Become(&TWriteSessionsQuoter::StateWork);
-    ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+    ctx.Send(SelfId(), new TEvents::TEvWakeup());
 }
 
 void TWriteSessionsQuoter::Handle(TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
@@ -86,7 +88,7 @@ void TWriteSessionsQuoter::Handle(TEvents::TEvWakeup::TPtr&, const TActorContext
         bucket.Update(now);
         ProcessPending(bucket, key, ctx);
     }
-    ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+    ctx.Schedule(WAKEUP_INTERVAL, new TEvents::TEvWakeup());
 }
 
 ui64 TWriteSessionsQuoter::GetWriteSessionsInitRps(const TActorContext& ctx) {
@@ -102,7 +104,7 @@ void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvNotify::TPtr& ev, c
             .Partition = msg.Partition,
             .Generation = msg.Generation
         },
-        GetWriteSessionsInitRps(ctx), TDuration::Seconds(1), ctx.Now()
+        GetWriteSessionsInitRps(ctx), BUCKET_WINDOW, ctx.Now()
     );
 }
 

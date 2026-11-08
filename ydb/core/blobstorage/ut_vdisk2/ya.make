@@ -13,6 +13,7 @@ ENDIF()
 SRCS(
     defs.h
     env.h
+    anubis_proxy.cpp
     blob_stat.cpp
     huge.cpp
     compaction.cpp

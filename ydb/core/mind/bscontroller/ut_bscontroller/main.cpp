@@ -1123,9 +1123,11 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         using R = TDataCenterStatesEnv::TFailRealm;
         TDataCenterStatesEnv env;
         UNIT_ASSERT(env.Invoke(env.Define({{"2", DC::EXCLUDED}})).GetSuccess());
-        UNIT_ASSERT(env.Invoke(env.Define({{"1", DC::EXCLUDED}, {"2", DC::EXCLUDED}})).GetSuccess());
         UNIT_ASSERT(env.Invoke(env.SetCopyGuarantee(1)).GetSuccess());
-        UNIT_ASSERT(env.Invoke(env.Define({{"1", DC::EXCLUDED}, {"2", DC::EXCLUDED}})).GetSuccess());
+        auto excludeSecond = env.Define({{"1", DC::EXCLUDED}, {"2", DC::EXCLUDED}});
+        excludeSecond.SetIgnoreDegradedGroupsChecks(true);
+        UNIT_ASSERT(env.Invoke(excludeSecond).GetSuccess());
+        UNIT_ASSERT(env.Invoke(excludeSecond).GetSuccess());
         UNIT_ASSERT(!env.Invoke(env.Define({})).GetSuccess()); // Two recoveries cannot start together.
         UNIT_ASSERT(env.Invoke(env.Define({{"1", DC::EXCLUDED}})).GetSuccess());
         UNIT_ASSERT(!env.Invoke(env.Define({{"2", DC::EXCLUDED}})).GetSuccess()); // Cannot swap recovering DCs.
@@ -1165,6 +1167,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
 
         auto repair = env.SetCopyGuarantee(0);
         for (auto& definition : *repair.MutableCommand(0)->MutableDefineGroupState()->MutableGroups()) {
+            definition.SetGroupState(NKikimrBlobStorage::TGroupState::NORMAL);
             for (int realm = 0; realm < 3; ++realm) {
                 definition.SetFailRealmStates(realm, NKikimrBlobStorage::TDataCenterState::INCLUDED);
             }

@@ -1274,7 +1274,7 @@ namespace NKikimr::NBsController {
             TMirror3dcGroupConfiguration current{
                 group->Mirror3dcState.value_or(NKikimrBlobStorage::TGroupState::NORMAL), group->FailRealmStates.value_or(normal)};
             if (DataCenterStates.Changed() || isNew) {
-                std::array<bool, 3> changedRealms{};
+                std::array<bool, 3> previouslyExcludedRealms{};
                 std::array<bool, 3> excludedRealms{};
                 for (const TVSlotInfo* slot : group->VDisksInGroup) {
                     if (DataCenterStates.Get().empty() && Self.DataCenterStates.empty()) {
@@ -1295,13 +1295,13 @@ namespace NKikimr::NBsController {
                     bool wasExcluded = !isNew && isExcluded(Self.DataCenterStates);
                     bool excluded = isExcluded(DataCenterStates.Get());
                     ui32 realm = slot->RingIdx;
-                    changedRealms[realm] |= wasExcluded != excluded;
+                    previouslyExcludedRealms[realm] |= wasExcluded;
                     excludedRealms[realm] |= excluded;
                 }
                 ui32 changedRealmCount = 0;
                 ui32 changedRealm = 0;
-                for (ui32 realm = 0; realm < changedRealms.size(); ++realm) {
-                    if (changedRealms[realm]) {
+                for (ui32 realm = 0; realm < excludedRealms.size(); ++realm) {
+                    if (previouslyExcludedRealms[realm] != excludedRealms[realm]) {
                         ++changedRealmCount;
                         changedRealm = realm;
                     }
@@ -1312,14 +1312,16 @@ namespace NKikimr::NBsController {
                 }
                 if (changedRealmCount == 1) {
                     ui32 realm = changedRealm;
-                    std::optional<TMirror3dcGroupConfiguration> next = excludedRealms[realm]
-                        ? TakeDownFailRealm(current, realm)
-                        : ReturnFailRealm(current, realm);
-                    if (!next) {
-                        return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
-                            << ": invalid mirror-3-dc data center transition");
+                    if (!excludedRealms[realm] || current.Realms[realm] != TFailRealm::EXCLUDED) {
+                        std::optional<TMirror3dcGroupConfiguration> next = excludedRealms[realm]
+                            ? TakeDownFailRealm(current, realm)
+                            : ReturnFailRealm(current, realm);
+                        if (!next) {
+                            return std::unexpected<TString>(TStringBuilder() << "group# " << groupId << " realm# " << realm
+                                << ": invalid mirror-3-dc data center transition");
+                        }
+                        current = *next;
                     }
-                    current = *next;
                     GroupContentChanged.insert(groupId);
                 }
             }

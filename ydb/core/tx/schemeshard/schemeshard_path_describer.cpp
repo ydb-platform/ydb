@@ -1787,11 +1787,16 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
     desc.SetVersion(info->AlterVersion);
 
     if (const auto& shardIdx = info->ControllerShardIdx; shardIdx != InvalidShardIdx) {
-        Y_ABORT_UNLESS(ShardInfos.contains(shardIdx));
-        const auto& shardInfo = ShardInfos.at(shardIdx);
+        const auto* shardInfo = ShardInfos.FindPtr(shardIdx);
+        if (!shardInfo) {
+            // DROP deletes the controller before its coordinator plan removes the path.
+            Y_ABORT_UNLESS(PathsById.at(pathId)->PlannedToDrop());
+            desc.ClearControllerId();
+            return;
+        }
 
-        if (shardInfo.TabletID != InvalidTabletId) {
-            desc.SetControllerId(ui64(shardInfo.TabletID));
+        if (shardInfo->TabletID != InvalidTabletId) {
+            desc.SetControllerId(ui64(shardInfo->TabletID));
         }
     }
 }

@@ -62,8 +62,6 @@ ydb/tests/functional/config test_distconf_self_heal.py.TestKiKiMRDistConfSelfHea
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReplicasSpecificVolume.test_state_storage
 ydb/tests/functional/serverless test_serverless.py.test_fixtures[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
 ydb/tests/functional/tenants test_system_views.py.TestQueryMetricsOneHourRestart.test_case
-ydb/tests/stress/kafka/tests py3test.sole chunk
-ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test_direct_batched_produce
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk

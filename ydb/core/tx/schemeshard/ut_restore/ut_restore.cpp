@@ -6171,6 +6171,108 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         Run(runtime, env, ConvertTestData(data), request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
     }
 
+    Y_UNIT_TEST(ShouldCheckQuotasWithSuccessfulHistory) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(GenerateTestData(Utf8KeyValueScheme())), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        auto request = [&](ui32 index) {
+            return Sprintf(R"(
+                OperationParams { labels { key: "uid" value: "quota-%u" } }
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items { source_prefix: "" destination_path: "/MyRoot/Table%u" }
+                }
+            )", index, port, index);
+        };
+        ui64 txId = 100;
+        TVector<ui64> ids;
+        for (ui32 i = 0; i < 100; ++i) {
+            ids.push_back(++txId);
+            TestImport(runtime, ids.back(), "/MyRoot", request(i));
+            env.TestWaitNotification(runtime, ids.back());
+            UNIT_ASSERT_VALUES_EQUAL(TestGetImport(runtime, ids.back(), "/MyRoot")
+                .GetResponse().GetEntry().GetProgress(), Ydb::Import::ImportProgress::PROGRESS_DONE);
+        }
+
+        TBlockEvents<TEvPrivate::TEvImportSchemeReady> schemes(runtime);
+        for (ui32 i = 100; i < 110; ++i) {
+            ids.push_back(++txId);
+            TestImport(runtime, ids.back(), "/MyRoot", request(i));
+        }
+        runtime.WaitFor("ten active imports", [&] { return schemes.size() == 10; });
+        TestImport(runtime, ++txId, "/MyRoot", request(110), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+        TestImport(runtime, ++txId, "/MyRoot", request(0));
+        schemes.Stop().Unblock();
+        for (ui32 i = 100; i < 110; ++i) {
+            env.TestWaitNotification(runtime, ids[i]);
+        }
+        TestImport(runtime, ++txId, "/MyRoot", request(110), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestGetImport(runtime, ids.front(), "/MyRoot");
+        TestGetImport(runtime, ids.back(), "/MyRoot");
+        TestImport(runtime, ++txId, "/MyRoot", request(110), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+        TestImport(runtime, ++txId, "/MyRoot", request(0));
+
+        TestForgetImport(runtime, ++txId, "/MyRoot", ids.front());
+        TestGetImport(runtime, ids.front(), "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        const ui64 replacement = ++txId;
+        TestImport(runtime, replacement, "/MyRoot", request(110));
+        env.TestWaitNotification(runtime, replacement);
+        TestImport(runtime, ++txId, "/MyRoot", request(111), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST(ShouldCheckQuotasForCancelledImports) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        SetSchemeshardSchemaLimits(runtime, TSchemeLimits{.MaxImports = 2});
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(GenerateTestData(Utf8KeyValueScheme())), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+        auto request = [&](ui32 index) {
+            return Sprintf(R"(
+                ImportFromS3Settings {
+                    endpoint: "localhost:%d"
+                    scheme: HTTP
+                    items { source_prefix: "" destination_path: "/MyRoot/Table%u" }
+                }
+            )", port, index);
+        };
+
+        ui64 txId = 100;
+        TBlockEvents<TEvPrivate::TEvImportSchemeReady> schemes(runtime);
+        const ui64 first = ++txId;
+        TestImport(runtime, first, "/MyRoot", request(0));
+        const ui64 second = ++txId;
+        TestImport(runtime, second, "/MyRoot", request(1));
+        runtime.WaitFor("two active imports", [&] { return schemes.size() == 2; });
+        TestImport(runtime, ++txId, "/MyRoot", request(2), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+        for (ui64 id : {first, second}) {
+            TestCancelImport(runtime, ++txId, "/MyRoot", id);
+            env.TestWaitNotification(runtime, id);
+            TestGetImport(runtime, id, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        }
+        schemes.Stop().Unblock();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        TestImport(runtime, ++txId, "/MyRoot", request(2), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+        TestForgetImport(runtime, ++txId, "/MyRoot", first);
+        TestGetImport(runtime, first, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        for (ui32 i = 2; i < 4; ++i) {
+            const ui64 id = ++txId;
+            TestImport(runtime, id, "/MyRoot", request(i));
+            env.TestWaitNotification(runtime, id);
+            TestGetImport(runtime, id, "/MyRoot");
+        }
+        SetSchemeshardSchemaLimits(runtime, TSchemeLimits{.MaxImports = 0});
+        TestImport(runtime, ++txId, "/MyRoot", request(4), "", "", Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
     Y_UNIT_TEST_FLAG(CheckItemProgress, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

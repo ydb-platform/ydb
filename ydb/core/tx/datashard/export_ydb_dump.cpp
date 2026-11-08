@@ -4,8 +4,9 @@
 #include "export_iface.h"
 #include "type_serialization.h"
 
+#include <ydb/library/table_digest/json_document.h>
+
 #include <library/cpp/string_utils/quote/quote.h>
-#include <yql/essentials/types/binary_json/read.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/yexception.h>
@@ -135,7 +136,8 @@ bool Collect(const NTable::IScan::TRow& row, IOutputStream& out) override {
             out << '"' << CGIEscapeRet(cell.AsBuf()) << '"';
             break;
         case NScheme::NTypeIds::JsonDocument:
-            out << '"' << CGIEscapeRet(NBinaryJson::SerializeToJson(cell.AsBuf())) << '"';
+            // Preserve stored doubles when the exported JSON is restored.
+            out << '"' << CGIEscapeRet(NYql::NDigest::CanonicalJsonDocument(cell.AsBuf(), /*writeNanAsString=*/true)) << '"';
             break;
         case NScheme::NTypeIds::Pg:
             serialized = PgToStream(cell.AsBuf(), column.Type, out, ErrorString);

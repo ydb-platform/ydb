@@ -1045,55 +1045,139 @@ namespace {
             return DescribePath(Runtime(), "/MyRoot/Coordination").GetPathDescription().GetKesus().GetKesusTabletId();
         }
 
-        void AddExportKesusResource(ui64 tabletId, const TString& path, bool root = true) {
-            auto request = MakeHolder<TEvKesus::TEvAddQuoterResource>();
-            auto* resource = request->Record.MutableResource();
-            resource->SetResourcePath(path);
-            auto* config = resource->MutableHierarchicalDRRResourceConfig();
+        template <typename TResult, typename TRequest>
+        void SendKesusRequest(ui64 tabletId, THolder<TRequest> request) {
+            const auto sender = Runtime().AllocateEdgeActor();
+            Runtime().SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto response = Runtime().GrabEdgeEventRethrow<TResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS,
+                response->Get()->Record.DebugString());
+        }
+
+        static NKikimrKesus::TStreamingQuoterResource MakeExportKesusResource(const TString& path, bool root = true) {
+            NKikimrKesus::TStreamingQuoterResource resource;
+            resource.SetResourcePath(path);
+            auto* config = resource.MutableHierarchicalDRRResourceConfig();
             if (root) {
                 config->SetMaxUnitsPerSecond(100);
                 config->SetMaxBurstSizeCoefficient(1.5);
                 config->SetPrefetchCoefficient(0.4);
                 config->SetPrefetchWatermark(0.6);
-                auto* metering = resource->MutableAccountingConfig();
+                auto* metering = resource.MutableAccountingConfig();
                 metering->SetReportPeriodMs(5000);
                 metering->SetAccountPeriodMs(1000);
                 metering->SetCollectPeriodSec(30);
                 metering->SetProvisionedUnitsPerSecond(25);
-            } else if (path.EndsWith("grandchild")) {
-                config->SetImmediatelyFillUpTo(-123);
-                config->MutableReplicatedBucket()->SetReportIntervalMs(321);
             }
-            const auto sender = Runtime().AllocateEdgeActor();
-            Runtime().SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
-            auto response = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvAddQuoterResourceResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS,
-                response->Get()->Record.DebugString());
+            return resource;
+        }
+
+        void AddExportKesusResource(ui64 tabletId, const NKikimrKesus::TStreamingQuoterResource& resource) {
+            auto request = MakeHolder<TEvKesus::TEvAddQuoterResource>();
+            *request->Record.MutableResource() = resource;
+            SendKesusRequest<TEvKesus::TEvAddQuoterResourceResult>(tabletId, std::move(request));
+        }
+
+        void AddExportKesusResource(ui64 tabletId, const TString& path, bool root = true) {
+            AddExportKesusResource(tabletId, MakeExportKesusResource(path, root));
+        }
+
+        void DeleteExportKesusResource(ui64 tabletId, const TString& path) {
+            auto request = MakeHolder<TEvKesus::TEvDeleteQuoterResource>();
+            request->Record.SetResourcePath(path);
+            SendKesusRequest<TEvKesus::TEvDeleteQuoterResourceResult>(tabletId, std::move(request));
+        }
+
+        void SetExportKesusResourceLimit(ui64 tabletId, const TString& path, double limit) {
+            auto request = MakeHolder<TEvKesus::TEvUpdateQuoterResource>();
+            request->Record.MutableResource()->SetResourcePath(path);
+            request->Record.MutableResource()->MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(limit);
+            SendKesusRequest<TEvKesus::TEvUpdateQuoterResourceResult>(tabletId, std::move(request));
         }
 
         void AddExportKesusSemaphore(ui64 tabletId, const TString& name, ui64 limit, const TString& data = {}) {
-            const auto sender = Runtime().AllocateEdgeActor();
-            Runtime().SendToPipe(tabletId, sender, new TEvKesus::TEvCreateSemaphore("/MyRoot/Coordination", name, limit, data),
-                0, GetPipeConfigWithRetries());
-            const auto response = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvCreateSemaphoreResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS,
-                response->Get()->Record.DebugString());
+            SendKesusRequest<TEvKesus::TEvCreateSemaphoreResult>(tabletId,
+                MakeHolder<TEvKesus::TEvCreateSemaphore>("/MyRoot/Coordination", name, limit, data));
         }
 
-        TVector<Ydb::RateLimiter::Resource> ReadExportedKesusResources() {
-            const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
+        void DeleteExportKesusSemaphore(ui64 tabletId, const TString& name) {
+            SendKesusRequest<TEvKesus::TEvDeleteSemaphoreResult>(tabletId,
+                MakeHolder<TEvKesus::TEvDeleteSemaphore>("/MyRoot/Coordination", name, false));
+        }
+
+        template <typename TReadFile>
+        static TVector<Ydb::RateLimiter::Resource> ReadExportedKesusResources(
+            const NBackup::TMetadata& metadata, const TReadFile& readFile)
+        {
             UNIT_ASSERT(metadata.GetRateLimiterResources());
             TVector<Ydb::RateLimiter::Resource> resources;
             for (const auto& entry : *metadata.GetRateLimiterResources()) {
+                UNIT_ASSERT_VALUES_EQUAL(entry.ExportPrefix,
+                    Sprintf("rate_limiter_resources/%03u", ui32(resources.size() + 1)));
                 Ydb::RateLimiter::CreateResourceRequest request;
-                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-                    GetS3FileContent("/coordination/" + entry.ExportPrefix + "/create_rate_limiter.pb"), &request));
+                UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(
+                    readFile(entry.ExportPrefix + "/create_rate_limiter.pb"), &request), entry.ExportPrefix);
                 UNIT_ASSERT(request.coordination_node_path().empty());
                 UNIT_ASSERT(request.resource().resource_path().empty());
                 auto& resource = resources.emplace_back(std::move(*request.mutable_resource()));
                 resource.set_resource_path(entry.ResourcePath);
             }
             return resources;
+        }
+
+        TVector<Ydb::RateLimiter::Resource> ReadExportedKesusResources() {
+            const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
+            return ReadExportedKesusResources(metadata, [&](const TString& path) {
+                return GetS3FileContent("/coordination/" + path);
+            });
+        }
+
+        template <typename TReadFile>
+        static TVector<Ydb::Coordination::SessionRequest::CreateSemaphore> ReadExportedKesusSemaphores(
+            const NBackup::TMetadata& metadata, const TReadFile& readFile)
+        {
+            UNIT_ASSERT(metadata.GetSemaphores());
+            TVector<Ydb::Coordination::SessionRequest::CreateSemaphore> semaphores;
+            for (const auto& entry : *metadata.GetSemaphores()) {
+                UNIT_ASSERT_VALUES_EQUAL(entry.ExportPrefix, Sprintf("semaphores/%03u", ui32(semaphores.size() + 1)));
+                auto& semaphore = semaphores.emplace_back();
+                UNIT_ASSERT_C(google::protobuf::TextFormat::ParseFromString(
+                    readFile(entry.ExportPrefix + "/create_semaphore.pb"), &semaphore), entry.ExportPrefix);
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), entry.Name);
+                UNIT_ASSERT_VALUES_EQUAL(semaphore.req_id(), 0);
+            }
+            return semaphores;
+        }
+
+        TVector<Ydb::Coordination::SessionRequest::CreateSemaphore> ReadExportedKesusSemaphores() {
+            const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
+            return ReadExportedKesusSemaphores(metadata, [&](const TString& path) {
+                return GetS3FileContent("/coordination/" + path);
+            });
+        }
+
+        static void CheckExportedKesusSemaphore(const Ydb::Coordination::SessionRequest::CreateSemaphore& semaphore,
+            const TString& name, ui64 limit, const TString& data = {})
+        {
+            UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), name);
+            UNIT_ASSERT_VALUES_EQUAL_C(semaphore.limit(), limit, name);
+            UNIT_ASSERT_VALUES_EQUAL_C(semaphore.data(), data, name);
+        }
+
+        static void CheckExportedKesusResource(const Ydb::RateLimiter::Resource& resource, bool root) {
+            if (root) {
+                UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_units_per_second(), 100);
+                UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_burst_size_coefficient(), 1.5);
+                UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().prefetch_coefficient(), 0.4);
+                UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().prefetch_watermark(), 0.6);
+                UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().report_period_ms(), 5000);
+                UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().meter_period_ms(), 1000);
+                UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().collect_period_sec(), 30);
+                UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().provisioned_units_per_second(), 25);
+            } else {
+                // Inherited settings must remain unset, rather than becoming explicit limits.
+                UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_units_per_second(), 0);
+            }
         }
 
         void TestKesusExport(bool isFs, bool empty, bool encrypted) {
@@ -1108,7 +1192,10 @@ namespace {
                 AddExportKesusResource(tabletId, "a");
                 AddExportKesusResource(tabletId, "a/z", false);
                 AddExportKesusResource(tabletId, "a/a", false);
-                AddExportKesusResource(tabletId, "a/a/grandchild", false);
+                auto grandchild = MakeExportKesusResource("a/a/grandchild", false);
+                grandchild.MutableHierarchicalDRRResourceConfig()->SetImmediatelyFillUpTo(-123);
+                grandchild.MutableHierarchicalDRRResourceConfig()->MutableReplicatedBucket()->SetReportIntervalMs(321);
+                AddExportKesusResource(tabletId, grandchild);
                 AddExportKesusResource(tabletId, "semaphores");
                 // Valid resource paths must not be interpreted as filesystem paths.
                 AddExportKesusResource(tabletId, ".");
@@ -1198,39 +1285,16 @@ namespace {
 
             const TString metadataText = readPlaintext("metadata.json");
             const auto metadata = NBackup::TMetadata::Deserialize(metadataText);
-            UNIT_ASSERT(metadata.GetRateLimiterResources());
-            const auto& entries = *metadata.GetRateLimiterResources();
+            const auto resources = ReadExportedKesusResources(metadata, readPlaintext);
             const TVector<TString> expectedPaths = empty
                 ? TVector<TString>{}
                 : TVector<TString>{".", "..", "../escaped", "a", "a/a", "a/a/grandchild",
                     "a/create_rate_limiter.pb", "a/z", "metadata.json", "rate_limiter_resources", "semaphores", "z"};
-            UNIT_ASSERT_VALUES_EQUAL(entries.size(), expectedPaths.size());
-            TVector<Ydb::RateLimiter::Resource> resources;
-            for (size_t i = 0; i < entries.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(entries[i].ResourcePath, expectedPaths[i]);
-                UNIT_ASSERT_VALUES_EQUAL(entries[i].ExportPrefix, Sprintf("rate_limiter_resources/%03u", ui32(i + 1)));
-                Ydb::RateLimiter::CreateResourceRequest request;
-                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-                    readPlaintext(entries[i].ExportPrefix + "/create_rate_limiter.pb"), &request));
-                UNIT_ASSERT(request.coordination_node_path().empty());
-                UNIT_ASSERT(request.resource().resource_path().empty());
-                resources.emplace_back(std::move(*request.mutable_resource()));
-            }
+            UNIT_ASSERT_VALUES_EQUAL(resources.size(), expectedPaths.size());
             for (size_t i = 0; i < resources.size(); ++i) {
                 const auto& resource = resources[i];
-                if (!expectedPaths[i].Contains('/')) {
-                    UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_units_per_second(), 100);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_burst_size_coefficient(), 1.5);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().prefetch_coefficient(), 0.4);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().prefetch_watermark(), 0.6);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().report_period_ms(), 5000);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().meter_period_ms(), 1000);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().collect_period_sec(), 30);
-                    UNIT_ASSERT_VALUES_EQUAL(resource.metering_config().provisioned_units_per_second(), 25);
-                } else {
-                    // Inherited settings must remain unset, rather than becoming explicit limits.
-                    UNIT_ASSERT_VALUES_EQUAL(resource.hierarchical_drr().max_units_per_second(), 0);
-                }
+                UNIT_ASSERT_VALUES_EQUAL(resource.resource_path(), expectedPaths[i]);
+                CheckExportedKesusResource(resource, !expectedPaths[i].Contains('/'));
                 if (expectedPaths[i] == "a/a/grandchild") {
                     const auto& leaf = resource.hierarchical_drr();
                     UNIT_ASSERT(leaf.has_immediately_fill_up_to());
@@ -1240,21 +1304,12 @@ namespace {
                 }
             }
 
-            UNIT_ASSERT(metadata.GetSemaphores());
-            const auto& semaphores = *metadata.GetSemaphores();
+            const auto semaphores = ReadExportedKesusSemaphores(metadata, readPlaintext);
             UNIT_ASSERT_VALUES_EQUAL(semaphores.size(), empty ? 0 : 2);
             UNIT_ASSERT_VALUES_EQUAL(semaphoreRequests, 1);
             for (ui32 i = 0; i < semaphores.size(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(semaphores[i].ExportPrefix,
-                    Sprintf("semaphores/%03u", i + 1));
-                Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
-                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-                    readPlaintext(semaphores[i].ExportPrefix + "/create_semaphore.pb"), &semaphore));
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), semaphores[i].Name);
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), i ? "/absolute/name" : "../binary");
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), i ? Max<ui64>() : 3);
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), i ? TString() : TString("a\0\xffz", 4));
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.req_id(), 0);
+                CheckExportedKesusSemaphore(semaphores[i], i ? "/absolute/name" : "../binary",
+                    i ? Max<ui64>() : 3, i ? TString() : TString("a\0\xffz", 4));
             }
 
             CheckPermissions(readPlaintext("permissions.pb"), [](const auto& permissions) {
@@ -1329,36 +1384,17 @@ namespace {
             const auto resources = ReadExportedKesusResources();
             UNIT_ASSERT_VALUES_EQUAL(resources.size(), empty ? 1 : 3);
             UNIT_ASSERT_VALUES_EQUAL(resources[0].resource_path(), "A");
-            UNIT_ASSERT_VALUES_EQUAL(NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"))
-                .GetSemaphores()->size(), 1);
+            const auto semaphores = ReadExportedKesusSemaphores();
+            UNIT_ASSERT_VALUES_EQUAL(semaphores.size(), 1);
+            CheckExportedKesusSemaphore(semaphores.front(), "A", 1, "semaphore data");
 
-            const auto sender = Runtime().AllocateEdgeActor();
-            auto request = MakeHolder<TEvKesus::TEvDeleteQuoterResource>();
-            request->Record.SetResourcePath("A");
-            Runtime().SendToPipe(tabletId, sender, request.Release(), 0, GetPipeConfigWithRetries());
-            auto response = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvDeleteQuoterResourceResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
-
-            auto deleteSemaphore = MakeHolder<TEvKesus::TEvDeleteSemaphore>();
-            deleteSemaphore->Record.SetKesusPath("/MyRoot/Coordination");
-            deleteSemaphore->Record.SetName("A");
-            Runtime().SendToPipe(tabletId, sender, deleteSemaphore.Release(), 0, GetPipeConfigWithRetries());
-            const auto deletedSemaphore = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvDeleteSemaphoreResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(deletedSemaphore->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+            DeleteExportKesusResource(tabletId, "A");
+            DeleteExportKesusSemaphore(tabletId, "A");
 
             if (!empty) {
-                auto remove = MakeHolder<TEvKesus::TEvDeleteQuoterResource>();
-                remove->Record.SetResourcePath("Z");
-                Runtime().SendToPipe(tabletId, sender, remove.Release(), 0, GetPipeConfigWithRetries());
-                auto removed = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvDeleteQuoterResourceResult>(sender);
-                UNIT_ASSERT_VALUES_EQUAL(removed->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+                DeleteExportKesusResource(tabletId, "Z");
                 AddExportKesusResource(tabletId, "C");
-                auto update = MakeHolder<TEvKesus::TEvUpdateQuoterResource>();
-                update->Record.MutableResource()->SetResourcePath("B");
-                update->Record.MutableResource()->MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(200);
-                Runtime().SendToPipe(tabletId, sender, update.Release(), 0, GetPipeConfigWithRetries());
-                auto updated = Runtime().GrabEdgeEventRethrow<TEvKesus::TEvUpdateQuoterResourceResult>(sender);
-                UNIT_ASSERT_VALUES_EQUAL(updated->Get()->Record.GetError().GetStatus(), Ydb::StatusIds::SUCCESS);
+                SetExportKesusResourceLimit(tabletId, "B", 200);
             }
 
             const TString oldMetadata = GetS3FileContent("/coordination/metadata.json");
@@ -1388,9 +1424,7 @@ namespace {
             }
             // Files beyond the new resource list remain in storage and must be ignored.
             UNIT_ASSERT(HasS3File(Sprintf("/coordination/rate_limiter_resources/%03u/create_rate_limiter.pb", empty ? 1u : 3u)));
-            const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
-            UNIT_ASSERT(metadata.GetSemaphores());
-            UNIT_ASSERT(metadata.GetSemaphores()->empty());
+            UNIT_ASSERT(ReadExportedKesusSemaphores().empty());
             UNIT_ASSERT(HasS3File("/coordination/semaphores/001/create_semaphore.pb"));
             UNIT_ASSERT_VALUES_EQUAL(GetS3FileContent("/coordination/metadata.json.sha256"),
                 NBackup::ComputeChecksum(GetS3FileContent("/coordination/metadata.json")));
@@ -1531,17 +1565,9 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(resources.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(resources[0].resource_path(), "A");
             if constexpr (semaphores) {
-                const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
-                UNIT_ASSERT(metadata.GetSemaphores());
-                UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->size(), 1);
-                const auto& entry = metadata.GetSemaphores()->front();
-                UNIT_ASSERT_VALUES_EQUAL(entry.Name, "lock");
-                Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
-                UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-                    GetS3FileContent("/coordination/" + entry.ExportPrefix + "/create_semaphore.pb"), &semaphore));
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), "lock");
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), "data");
+                const auto descriptions = ReadExportedKesusSemaphores();
+                UNIT_ASSERT_VALUES_EQUAL(descriptions.size(), 1);
+                CheckExportedKesusSemaphore(descriptions.front(), "lock", 2, "data");
             }
         }
 
@@ -5558,22 +5584,16 @@ state: STATE_ENABLED
         TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::SUCCESS);
 
         const auto metadata = NBackup::TMetadata::Deserialize(readFile("metadata.json"));
-        UNIT_ASSERT(metadata.GetRateLimiterResources());
-        const auto& resources = *metadata.GetRateLimiterResources();
+        const auto resources = ReadExportedKesusResources(metadata, readFile);
         const TVector<TString> expectedPaths = {"semaphores", "semaphores/001", "semaphores/001/create_semaphore.pb"};
         UNIT_ASSERT_VALUES_EQUAL(resources.size(), expectedPaths.size());
         for (ui32 i = 0; i < resources.size(); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(resources[i].ResourcePath, expectedPaths[i]);
-            UNIT_ASSERT_VALUES_EQUAL(resources[i].ExportPrefix, Sprintf("rate_limiter_resources/%03u", i + 1));
-            Ydb::RateLimiter::CreateResourceRequest resource;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-                readFile(resources[i].ExportPrefix + "/create_rate_limiter.pb"), &resource));
-            UNIT_ASSERT_VALUES_EQUAL(resource.resource().hierarchical_drr().max_units_per_second(), i ? 0 : 100);
+            UNIT_ASSERT_VALUES_EQUAL(resources[i].resource_path(), expectedPaths[i]);
+            CheckExportedKesusResource(resources[i], i == 0);
         }
-        UNIT_ASSERT(metadata.GetSemaphores());
-        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->front().Name, "lock");
-        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->front().ExportPrefix, "semaphores/001");
+        const auto semaphores = ReadExportedKesusSemaphores(metadata, readFile);
+        UNIT_ASSERT_VALUES_EQUAL(semaphores.size(), 1);
+        CheckExportedKesusSemaphore(semaphores.front(), "lock", 1, "data");
         UNIT_ASSERT_VALUES_EQUAL(readFile("semaphores/001/create_semaphore.pb"), oldSemaphore);
 
         results.Unblock();
@@ -5630,18 +5650,10 @@ state: STATE_ENABLED
         Env().TestWaitNotification(Runtime(), 101);
         TestGetExport(Runtime(), 101, "/MyRoot", Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(requestCount, 1);
-        const auto metadata = NBackup::TMetadata::Deserialize(GetS3FileContent("/coordination/metadata.json"));
-        UNIT_ASSERT(metadata.GetSemaphores());
-        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->at(0).Name, "A");
-        UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->at(1).Name, "B");
-        for (const auto& entry : *metadata.GetSemaphores()) {
-            Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
-            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(
-                GetS3FileContent("/coordination/" + entry.ExportPrefix + "/create_semaphore.pb"), &semaphore));
-            UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), entry.Name);
-            UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), entry.Name == "A" ? 1 : 2);
-        }
+        const auto semaphores = ReadExportedKesusSemaphores();
+        UNIT_ASSERT_VALUES_EQUAL(semaphores.size(), 2);
+        CheckExportedKesusSemaphore(semaphores[0], "A", 1);
+        CheckExportedKesusSemaphore(semaphores[1], "B", 2);
     }
 
     Y_UNIT_TEST(KesusConnectionFailuresRespectDeadline) {

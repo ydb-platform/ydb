@@ -17,6 +17,12 @@ enum ELockMode {
     LOCK_MODE_SHARED,
 };
 
+NKikimrKesus::TSemaphoreDescription MakeSemaphoreDescription(
+    const TString& name, ui64 limit, const TString& data = {}, ui64 count = 0, bool ephemeral = false);
+
+void VerifySemaphoreDescriptions(const NKikimrKesus::TEvDescribeSemaphoresResult& result,
+    const TVector<NKikimrKesus::TSemaphoreDescription>& expected);
+
 struct TTestContext {
     TTabletTypes::EType TabletType;
     ui64 TabletId;
@@ -226,6 +232,8 @@ struct TTestContext {
     };
 
     TSimpleSemaphoreDescription DescribeSemaphore(const TString& name, bool includeWaiters = false);
+    NKikimrKesus::TEvDescribeSemaphoresResult DescribeSemaphores(
+        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
     void VerifySemaphoreNotFound(const TString& name);
     void VerifySemaphoreOwners(const TString& name, const THashSet<ui64>& sessionIds, bool ephemeral = false);
     void VerifySemaphoreWaiters(const TString& name, const THashSet<ui64>& sessionIds, bool ephemeral = false);

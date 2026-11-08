@@ -211,16 +211,113 @@ Y_UNIT_TEST_SUITE(KqpNewYqlTypeAnnotation) {
         UNIT_ASSERT_VALUES_EQUAL(f.Ctx.RepeatTransformCounter, 17);
     }
 
-    // Syntax/name support alone must not imply support for grouping or windows.
-    Y_UNIT_TEST(UnsupportedRelationalSemanticsFallBack) {
-        for (const TString sql : {"SELECT COUNT(*) FROM t;", "SELECT id FROM t GROUP BY id;",
-            "SELECT SUM(id) OVER () FROM t;", "SELECT (SELECT id FROM t);", "SELECT value LIKE 'a%' FROM t;"}) {
+    // These checks exercise the typed relational boundary without host fallback.
+    Y_UNIT_TEST(TemporalConstructorsUseSqlEncoding) {
+        TFixture f;
+        f.Ok("SELECT Date('1998-12-01') - Interval('P90D'), DateTime64('2024-01-01T00:00:00Z');");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(0), "Optional<Date>");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(1), "Datetime64");
+    }
+
+    Y_UNIT_TEST(AggregationGroupingAndSetTypes) {
+        TFixture f;
+        f.Ok("SELECT value, SUM(id) AS s, COUNT(DISTINCT score), AVG(id) FROM t GROUP BY value HAVING s > 0 ORDER BY s;");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(1), "Int64");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(2), "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(3), "Double");
+        UNIT_ASSERT_VALUES_EQUAL(f.Result->Groupings.at(&f.Query()).Aggregates.size(), 3);
+        TFixture scalar;
+        scalar.Ok("SELECT SUM(id), COUNT(*) FROM t;");
+        UNIT_ASSERT_VALUES_EQUAL(scalar.Output(0), "Optional<Int64>");
+        UNIT_ASSERT_VALUES_EQUAL(scalar.Output(1), "Uint64");
+        TFixture set;
+        set.Ok("SELECT id FROM t UNION ALL SELECT score FROM t;");
+        UNIT_ASSERT_VALUES_EQUAL(set.Output(0), "Optional<Int64>");
+    }
+
+    Y_UNIT_TEST(GroupingSetsAndWindows) {
+        TFixture f;
+        f.Ok("SELECT id, GROUPING(id), SUM(SUM(score)) OVER (), RANK() OVER (ORDER BY SUM(score)) "
+            "FROM t GROUP BY ROLLUP(id);");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(0), "Optional<Int64>");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(1), "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(3), "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(f.Result->Groupings.at(&f.Query()).Sets.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(f.Result->Windows.at(&f.Query()).size(), 2);
+    }
+
+    Y_UNIT_TEST(CorrelatedSubqueriesHaveExplicitCaptures) {
+        TFixture f;
+        f.Ok("SELECT l.id, (SELECT MAX(r.id) FROM t AS r WHERE r.id = l.id) FROM t AS l "
+            "WHERE EXISTS (SELECT r.id FROM t AS r WHERE r.id = l.id) AND l.id IN (SELECT id FROM t);");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(1), "Optional<Int64>");
+        UNIT_ASSERT_VALUES_EQUAL(f.Result->Subqueries.size(), 3);
+    }
+
+    Y_UNIT_TEST(UngroupedColumnsAreRejected) {
+        TFixture f;
+        f.Run("SELECT id, SUM(score) FROM t;");
+        UNIT_ASSERT(!f.Result);
+        UNIT_ASSERT(!f.Ctx.IssueManager.GetIssues().Empty());
+    }
+
+    // Each use specializes a fresh lambda. Local bindings and nested closures
+    // must retain lexical argument ownership after the shared Apply expansion.
+    Y_UNIT_TEST(PreambleLambdasArePolymorphicAndCaptureLexically) {
+        TFixture f;
+        f.Ctx.Step.Done(TExprStep::ExpandApplyForLambdas);
+        f.Ctx.RepeatTransformCounter = 17;
+        f.Ok("$identity = ($x) -> ($x); $make = ($x) -> { $n = $x + 1; "
+            "return ($y) -> ($n + $y); }; $zero = () -> (42); "
+            "SELECT $identity(id), $identity(value), $make(id)(2), $zero() FROM t;");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(0, 3), "Int64");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(1, 3), "Optional<String>");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(2, 3), "Int64");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(3, 3), "Int32");
+        UNIT_ASSERT(f.Ctx.Step.IsDone(TExprStep::ExpandApplyForLambdas));
+        UNIT_ASSERT_VALUES_EQUAL(f.Ctx.RepeatTransformCounter, 17);
+    }
+
+    Y_UNIT_TEST(PreambleQueriesUseTypedLambdasAndOuterJoinSchemas) {
+        TFixture f;
+        f.Ok("$inc = ($x) -> ($x + 1); $q = SELECT $inc(id) AS k FROM t; "
+            "$r = (WITH c AS (SELECT k FROM $q) SELECT * FROM c); "
+            "SELECT l.k, r.k FROM $q AS l LEFT JOIN $r AS r ON l.k = r.k;");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(0, 3), "Int64");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(1, 3), "Optional<Int64>");
+    }
+
+    Y_UNIT_TEST(PreambleLambdaCapturesSdkParameter) {
+        TFixture f;
+        f.Settings.Parameters["$offset"] = f.Ctx.MakeType<TDataExprType>(EDataSlot::Int64);
+        f.Ok("$f = ($x) -> ($x + $offset); SELECT $f(id) FROM t;");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(0, 1), "Int64");
+    }
+
+    Y_UNIT_TEST(PreambleLambdaErrorsUseYqlDiagnostics) {
+        for (const TString sql : {"$f = ($x) -> ($x + 1); SELECT $f();",
+            "$f = ($x) -> ($x + 1); SELECT $f(1, 2);",
+            "$f = ($x) -> ($x + 1); SELECT $f('text');",
+            "$f = ($x) -> ($missing + $x); SELECT $f(1);"}) {
             TFixture f;
-            UNIT_ASSERT_EXCEPTION(f.Run(sql), TNewYqlParserFallback);
-            UNIT_ASSERT(!f.Result);
-            UNIT_ASSERT(f.Ctx.IssueManager.GetIssues().Empty());
+            f.Ctx.Step.Done(TExprStep::ExpandApplyForLambdas);
+            f.Run(sql);
+            UNIT_ASSERT_C(!f.Result, sql);
+            UNIT_ASSERT_C(!f.Ctx.IssueManager.GetIssues().Empty(), sql);
+            UNIT_ASSERT(f.Ctx.Step.IsDone(TExprStep::ExpandApplyForLambdas));
         }
     }
+
+    // This is the pragma used by TPCH/TPCDS preambles. It enables the comma
+    // spelling of Cross without changing scalar or output nullability rules.
+    Y_UNIT_TEST(PreambleImplicitCrossJoinPragma) {
+        TFixture f;
+        f.Ok("PRAGMA AnsiImplicitCrossJoin; $q = (SELECT id FROM t); "
+            "SELECT l.id, r.id FROM $q AS l, $q AS r;");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(0, 2), "Int64");
+        UNIT_ASSERT_VALUES_EQUAL(f.Output(1, 2), "Int64");
+    }
+
 }
 
 } // namespace NKikimr::NKqp

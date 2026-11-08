@@ -174,6 +174,22 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         LiteralIs(like.Escape, "'!'");
     }
 
+    Y_UNIT_TEST(InSingletonCollectionsPreserveTheirOuterTuple) {
+        auto ast = Parse("SELECT x IN (1), x IN ((1, 2)), x IN $items, x IN (SELECT id FROM t), (1), "
+            "x IN ((SELECT id FROM t));");
+        const auto& columns = Select(*ast).Columns;
+        const auto& singleton = As<TTuple>(As<TIn>(columns[0].Expression).Collection);
+        UNIT_ASSERT_VALUES_EQUAL(singleton.Elements.size(), 1);
+        LiteralIs(singleton.Elements[0].Expression, "1");
+        const auto& tuples = As<TTuple>(As<TIn>(columns[1].Expression).Collection);
+        UNIT_ASSERT_VALUES_EQUAL(tuples.Elements.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(As<TTuple>(tuples.Elements[0].Expression).Elements.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(As<TParameter>(As<TIn>(columns[2].Expression).Collection).Spelling, "$items");
+        As<TSubquery>(As<TIn>(columns[3].Expression).Collection);
+        LiteralIs(columns[4].Expression, "1");
+        As<TSubquery>(As<TIn>(columns[5].Expression).Collection);
+    }
+
     // Distinguish grouping from tuples/lists and relational subqueries even
     // though their grammar shares parenthesized alternatives.
     Y_UNIT_TEST(ParenthesesCollectionsAndSubqueries) {
@@ -526,11 +542,8 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
         const TVector<TString> queries = {
             "SELECT 1; DELETE FROM t;",
             "SELECT * WITHOUT id FROM t;",
-            "SELECT ($x) -> ($x + 1);",
             "SELECT x = y = z;",
             "SELECT * FROM t OUTER JOIN u;",
-            "SELECT SUM(x) OVER (PARTITION BY ($x) -> ($x + 1)) FROM t;",
-            "SELECT * FROM t SAMPLE ($x) -> ($x + 1);",
             "SELECT * FROM t WITH SCHEMA Callable<() -> Int32>;",
             "PRAGMA OrderedColumns; DELETE FROM t;",
             "SELECT * FROM ANY t;",
@@ -546,6 +559,29 @@ Y_UNIT_TEST_SUITE(KqpNewYqlAst) {
     Y_UNIT_TEST(EmptyScript) {
         UNIT_ASSERT(Parse("-- comment\n")->Statements.empty());
     }
+
+    // Both query-assignment spellings and both lambda-body spellings must own
+    // their syntax after the temporary ANTLR parser has been destroyed.
+    Y_UNIT_TEST(NamedPreambleAndLambdaBodies) {
+        auto ast = Parse("$f = ($x, $y) -> { $n = $x + 1; return $n + $y; }; "
+            "$g = () -> (42); $q = SELECT $f(id, 2) AS k FROM t; "
+            "$r = (WITH c AS (SELECT k FROM $q) SELECT * FROM c); SELECT * FROM $r;");
+        UNIT_ASSERT_VALUES_EQUAL(ast->Statements.size(), 5);
+        const auto& f = std::get<TNamedBinding>(ast->Statements[0].Value);
+        UNIT_ASSERT_VALUES_EQUAL(f.Name.Spelling, "$f");
+        const auto& lambda = std::get<TLambda>(f.Value->Value);
+        UNIT_ASSERT_VALUES_EQUAL(lambda.Parameters.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(lambda.Parameters[1].Spelling, "$y");
+        UNIT_ASSERT_VALUES_EQUAL(lambda.Bindings[0].Name.Spelling, "$n");
+        UNIT_ASSERT(std::holds_alternative<TBinary>(lambda.Body->Value));
+        const auto& g = std::get<TNamedBinding>(ast->Statements[1].Value);
+        UNIT_ASSERT(std::get<TLambda>(g.Value->Value).Parameters.empty());
+        const auto& q = std::get<TNamedBinding>(ast->Statements[2].Value);
+        UNIT_ASSERT(std::holds_alternative<TSubquery>(q.Value->Value));
+        const auto& r = std::get<TNamedBinding>(ast->Statements[3].Value);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TSubquery>(r.Value->Value).Query->With.size(), 1);
+    }
+
 }
 
 } // namespace NKikimr::NKqp

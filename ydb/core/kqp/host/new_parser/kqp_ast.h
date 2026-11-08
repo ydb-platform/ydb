@@ -69,6 +69,21 @@ struct TParameter {
     TString Spelling; // Includes '$'.
 };
 
+// A definition is a lexical binding, not an assignment to a runtime variable.
+// Its address distinguishes successive definitions of the same SQL name.
+// Query-valued definitions use TSubquery and are consumed as named sources.
+struct TNamedBinding {
+    TSourceRange Range;
+    TParameter Name;
+    TExpressionPtr Value;
+};
+
+struct TLambda {
+    TVector<TParameter> Parameters;
+    TVector<TNamedBinding> Bindings;
+    TExpressionPtr Body;
+};
+
 struct TStar {
     std::optional<TIdentifier> Qualifier;
 };
@@ -247,7 +262,7 @@ struct TPatternMatch {
 struct TExpression {
     TSourceRange Range;
     std::variant<TLiteral, TName, TParameter, TStar, TUnary, TBinary, TCall, TMember, TIndex,
-        TTuple, TList, TCase, TCast, TSubquery, TExists, TBetween, TIn, TPatternMatch> Value;
+        TTuple, TList, TCase, TCast, TSubquery, TExists, TBetween, TIn, TPatternMatch, TLambda> Value;
 };
 
 struct TTable {
@@ -404,7 +419,7 @@ enum class EExplainMode { None, Explain, QueryPlan };
 struct TStatement {
     TSourceRange Range;
     EExplainMode Explain = EExplainMode::None;
-    std::variant<TQueryStatement, TPragmaStatement> Value;
+    std::variant<TQueryStatement, TPragmaStatement, TNamedBinding> Value;
 };
 
 // Pragmas remain interleaved with queries so each semantic pass can apply

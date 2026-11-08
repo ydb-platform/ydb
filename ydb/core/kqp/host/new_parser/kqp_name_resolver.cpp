@@ -3,6 +3,7 @@
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/scope.h>
 #include <util/stream/str.h>
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
@@ -46,6 +47,8 @@ public:
         for (const auto& statement : Script.Statements) {
             if (const auto* pragma = std::get_if<TPragmaStatement>(&statement.Value)) {
                 Pragma(*pragma);
+            } else if (const auto* binding = std::get_if<TNamedBinding>(&statement.Value)) {
+                Define(*binding);
             } else {
                 Query(*std::get<TQueryStatement>(statement.Value).Query, nullptr, {});
             }
@@ -54,6 +57,25 @@ public:
     }
 
 private:
+    TString ParameterName(const TParameter& parameter, const TSourceRange& range) const {
+        return "$" + Decode(parameter.Spelling.substr(1), range);
+    }
+
+    void Define(const TNamedBinding& binding) {
+        // Resolve the RHS before publishing the name. A reassignment captures
+        // the preceding definition; it cannot create a recursive binding.
+        Expression(*binding.Value, {}, {}, {});
+        Result.Definitions[&binding.Name] = binding.Value.get();
+        if (const auto* query = std::get_if<TSubquery>(&binding.Value->Value)) {
+            Result.NamedQueries[&binding.Name] = query->Query.get();
+        } else if (const auto* reference = Result.BindingReferences.FindPtr(binding.Value.get())) {
+            if (const auto* query = Result.NamedQueries.FindPtr(*reference)) {
+                Result.NamedQueries[&binding.Name] = *query;
+            }
+        }
+        NamedValues[ParameterName(binding.Name, binding.Range)] = &binding.Name;
+    }
+
     [[noreturn]] void Error(const TSourceRange& range, const TString& message) const {
         throw TResolutionError{NYql::TIssue(NYql::TPosition(range.Column + 1, range.Line, Script.File),
             TStringBuilder() << "New YQL name resolution: " << message)};
@@ -104,7 +126,15 @@ private:
     void Pragma(const TPragmaStatement& pragma) {
         // This controls the legacy translator's representation, not SQL names.
         // The original frontend still validates its value during host import.
-        if (!pragma.Namespace && AsciiEqualsIgnoreCase(Name(pragma.Name), "YqlSelect")) {
+        if (!pragma.Namespace && (AsciiEqualsIgnoreCase(Name(pragma.Name), "YqlSelect")
+            || AsciiEqualsIgnoreCase(Name(pragma.Name), "YqlSelectAllowUnnamedGroupByExpr"))) {
+            return;
+        }
+        // Benchmark preambles explicitly enable comma joins. The AST already
+        // represents these as Cross joins, which have the same column scope as
+        // explicit CROSS JOIN. Other forms/settings must still request fallback.
+        if (!pragma.Namespace && AsciiEqualsIgnoreCase(Name(pragma.Name), "AnsiImplicitCrossJoin")
+            && pragma.ValueForm == EPragmaValueForm::None) {
             return;
         }
         if (pragma.Namespace || !AsciiEqualsIgnoreCase(Name(pragma.Name), "TablePathPrefix")
@@ -247,9 +277,10 @@ private:
                 }
                 // Function names are not column references. Function overload
                 // and parameter type resolution belong to expression lowering.
-                if (!std::holds_alternative<TName>(value.Callable->Value)
-                    && !std::holds_alternative<TParameter>(value.Callable->Value) && !ExpressionName(*value.Callable)) {
-                    Unsupported(expression.Range, "dynamic call targets");
+                if (!std::holds_alternative<TName>(value.Callable->Value) && !ExpressionName(*value.Callable)) {
+                    // A named or inline lambda is a value in the lexical scope,
+                    // so its target must be bound just like an ordinary argument.
+                    visit(value.Callable);
                 }
                 for (const auto& argument : value.Arguments) {
                     visit(argument.Expression);
@@ -282,7 +313,24 @@ private:
             } else if constexpr (std::is_same_v<T, TCast>) {
                 visit(value.Value);
             } else if constexpr (std::is_same_v<T, TSubquery> || std::is_same_v<T, TExists>) {
+                if (LambdaDepth) { Unsupported(expression.Range, "relational queries inside scalar lambdas"); }
                 Query(*value.Query, &scope, ctes);
+            } else if constexpr (std::is_same_v<T, TLambda>) {
+                auto outer = NamedValues;
+                ++LambdaDepth;
+                Y_DEFER { NamedValues = std::move(outer); --LambdaDepth; };
+                THashSet<TString> parameters;
+                for (const auto& parameter : value.Parameters) {
+                    const auto name = ParameterName(parameter, expression.Range);
+                    if (!parameters.insert(name).second) {
+                        Error(expression.Range, TStringBuilder() << "Duplicate lambda parameter '" << name << "'");
+                    }
+                    NamedValues[name] = &parameter;
+                }
+                // Lambda locals have the same sequential binding rules as the
+                // preamble. No implicit row scope is captured by a scalar lambda.
+                for (const auto& binding : value.Bindings) { Define(binding); }
+                Expression(*value.Body, {}, {}, {});
             } else if constexpr (std::is_same_v<T, TBetween>) {
                 visit(value.Value); visit(value.Lower); visit(value.Upper);
             } else if constexpr (std::is_same_v<T, TIn>) {
@@ -297,6 +345,9 @@ private:
                 }
             } else {
                 static_assert(std::is_same_v<T, TParameter>);
+                if (const auto* binding = NamedValues.FindPtr(ParameterName(value, expression.Range))) {
+                    Result.BindingReferences[&expression] = *binding;
+                }
             }
         }, expression.Value);
     }
@@ -337,13 +388,25 @@ private:
         TString qualifier;
         TVector<TColumnId> inputs;
         if (const auto* table = std::get_if<TTable>(&source.Value)) {
-            if (table->Binding || table->Anonymous || table->Provider) {
-                Unsupported(source.Range, "bound, anonymous or provider-qualified tables");
+            if (table->Anonymous || table->Provider || (table->Binding && table->Cluster)) {
+                Unsupported(source.Range, "anonymous, provider-qualified or cluster-qualified bound tables");
             }
             const auto name = Name(table->Name);
             qualifier = name;
             const auto cte = ctes.find(name);
-            if (!table->Cluster && cte != ctes.end()) {
+            if (table->Binding) {
+                const auto key = ParameterName(TParameter{table->Name.Spelling}, source.Range);
+                const auto* binding = NamedValues.FindPtr(key);
+                if (!binding) { Error(source.Range, TStringBuilder() << "Unknown named source '" << key << "'"); }
+                const auto* query = Result.NamedQueries.FindPtr(*binding);
+                if (!query) { Unsupported(source.Range, "non-query named sources"); }
+                // The producer was resolved at its definition, with that point's
+                // settings and lexical captures. Each source still gets fresh
+                // visible IDs below, just like a WITH CTE or derived table.
+                Result.NamedSources[&source] = *query;
+                inputs = Result.QueryOutputs.at(*query);
+                qualifier = key.substr(1);
+            } else if (!table->Cluster && cte != ctes.end()) {
                 inputs = cte->second;
             } else {
                 const auto cluster = table->Cluster ? Name(*table->Cluster) : Settings.DefaultCluster;
@@ -399,12 +462,14 @@ private:
         return scope;
     }
 
-    void Group(const TGroupingElement& group, const TScope& scope, const TCtes& ctes) {
-        if (group.Expression.Alias) {
-            Unsupported(group.Range, "GROUP BY aliases");
-        }
+    void Group(const TGroupingElement& group, TScope& scope, const TCtes& ctes) {
         if (group.Expression.Expression) {
             Expression(*group.Expression.Expression, scope, ctes, {});
+            if (group.Expression.Alias) {
+                const auto id = AddColumn({Name(*group.Expression.Alias), nullptr, {}, {}, group.Expression.Expression.get(), {}});
+                Result.GroupAliases[group.Expression.Expression.get()] = id;
+                scope.Columns.push_back({id, {}});
+            }
         }
         for (const auto& item : group.Elements) {
             Group(item, scope, ctes);
@@ -437,7 +502,18 @@ private:
         }
         const auto* select = std::get_if<TSelect>(&query.Body);
         if (!select) {
-            Unsupported(query.Range, "set operation column alignment");
+            // Set operations align by ordinal; output names come from the left
+            // operand while fresh identities keep branch bindings independent.
+            const auto& set = std::get<TSetOperation>(query.Body);
+            const auto left = Query(*set.Left, parent, ctes);
+            const auto right = Query(*set.Right, parent, ctes);
+            if (left.size() != right.size()) { Error(query.Range, "Set operands have different column counts"); }
+            TVector<TColumnId> outputs;
+            for (const auto id : left) { outputs.push_back(AddColumn({Result.Columns[id].Name, nullptr, {}, {}, nullptr, {}})); }
+            Result.QueryOutputs[&query] = outputs;
+            if (query.Limit) { Expression(*query.Limit, {}, ctes, {}); }
+            if (query.Offset) { Expression(*query.Offset, {}, ctes, {}); }
+            return outputs;
         }
         TScope scope = select->From ? Source(*select->From, ctes, parent) : TScope{};
         scope.Parent = parent;
@@ -462,9 +538,6 @@ private:
         for (const auto& projection : select->Columns) {
             const auto& expression = *projection.Expression;
             if (const auto* star = std::get_if<TStar>(&expression.Value)) {
-                if (scope.Relations.size() > 1) {
-                    Unsupported(expression.Range, "join star output naming");
-                }
                 const auto qualifier = star->Qualifier ? Name(*star->Qualifier) : TString();
                 if (star->Qualifier && !scope.Relations.contains(qualifier)) {
                     Error(expression.Range, TStringBuilder() << "Unknown table alias '" << qualifier << "'");
@@ -476,7 +549,13 @@ private:
                 for (const auto& column : scope.Columns) {
                     if (qualifier.empty() || qualifier == column.Qualifier) {
                         expansion.push_back(column.Id);
-                        outputs.push_back(AddColumn({Result.Columns[column.Id].Name, nullptr, {}, {}, &expression, column.Id}));
+                        // An unqualified star over a join exposes qualified
+                        // field names, matching SQL v1's derived-row contract.
+                        auto name = Result.Columns[column.Id].Name;
+                        if (scope.Relations.size() > 1 && !star->Qualifier && !column.Qualifier.empty()) {
+                            name = column.Qualifier + "." + name;
+                        }
+                        outputs.push_back(AddColumn({name, nullptr, {}, {}, &expression, column.Id}));
                     }
                 }
             } else {
@@ -488,11 +567,6 @@ private:
                     input ? std::optional(*input) : std::nullopt}));
             }
         }
-        if (select->Having) {
-            // SELECT-alias visibility in HAVING is dialect dependent. Defer
-            // until its binding rules are implemented instead of misbinding it.
-            Unsupported(select->Having->Range, "HAVING alias visibility");
-        }
         // Projection aliases form the nearest ORDER BY scope. Its parent keeps
         // unprojected input columns available for hidden sort dependencies; WHERE
         // was resolved earlier and therefore cannot see these aliases.
@@ -501,6 +575,7 @@ private:
         for (auto id : outputs) {
             orderScope.Columns.push_back({id, {}});
         }
+        if (select->Having) { Expression(*select->Having, orderScope, ctes, windows); }
         for (const auto& sort : select->OrderBy) {
             Expression(*sort.Expression, orderScope, ctes, windows);
         }
@@ -517,6 +592,8 @@ private:
     TNameResolutionSettings Settings;
     const TTableLookup& Lookup;
     TResolvedNames Result;
+    THashMap<TString, const TParameter*> NamedValues;
+    size_t LambdaDepth = 0;
 };
 
 } // namespace

@@ -17,6 +17,7 @@ PEERDIR(
     yql/essentials/core/sql_types
     yql/essentials/core/type_ann
     yql/essentials/public/udf
+    yql/essentials/minikql
     ydb/core/kqp/host/new_parser/grammar/default
     ydb/core/kqp/host/new_parser/grammar/ansi
     yql/essentials/parser/common/antlr4

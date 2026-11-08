@@ -5,8 +5,10 @@
 #include <yql/essentials/core/sql_types/normalize_name.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 
 #include <util/stream/str.h>
+#include <util/generic/scope.h>
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
@@ -35,6 +37,7 @@ public:
 
     TNode Expression(const TExpression& expression) {
         const auto pos = Pos(expression.Range);
+        if (const auto* replacement = Bindings.Expressions.FindPtr(&expression)) { return *replacement; }
         // Resolved identity takes precedence over the syntax variant, including
         // ANSI quoted identifiers represented as literals and qualified members.
         if (Bindings.Names) {
@@ -53,11 +56,36 @@ public:
             } else if constexpr (std::is_same_v<T, TName>) {
                 Error(expression.Range, "Unresolved column reference");
             } else if constexpr (std::is_same_v<T, TParameter>) {
+                if (Bindings.Names) {
+                    if (const auto* reference = Bindings.Names->BindingReferences.FindPtr(&expression)) {
+                        if (const auto* argument = Locals.FindPtr(*reference)) { return *argument; }
+                        const auto* definition = Bindings.Names->Definitions.FindPtr(*reference);
+                        if (!definition) { Error(expression.Range, "Lambda argument is outside its lexical scope"); }
+                        // Lower afresh per use: YQL lambdas are polymorphic and
+                        // annotation may specialize/rewrite each application.
+                        return Expression(**definition);
+                    }
+                }
                 const auto* binding = Bindings.Parameters.FindPtr(value.Spelling);
                 if (!binding || !*binding) {
                     Error(expression.Range, TStringBuilder() << "Missing parameter binding for " << value.Spelling);
                 }
                 return *binding;
+            } else if constexpr (std::is_same_v<T, TLambda>) {
+                if (!Bindings.Names) { Error(expression.Range, "Lambda lowering requires resolved lexical bindings"); }
+                auto outer = Locals;
+                Y_DEFER { Locals = std::move(outer); };
+                TExprNode::TListType arguments;
+                for (const auto& parameter : value.Parameters) {
+                    auto argument = Ctx.NewArgument(pos, parameter.Spelling);
+                    Locals[&parameter] = argument;
+                    arguments.push_back(std::move(argument));
+                }
+                // Definitions in the body are substituted through the resolver's
+                // identity links. Outer argument bindings remain available for
+                // nested closures even when an inner parameter has the same name.
+                auto body = Expression(*value.Body);
+                return Ctx.NewLambda(pos, Ctx.NewArguments(pos, std::move(arguments)), std::move(body));
             } else if constexpr (std::is_same_v<T, TUnary>) {
                 if (value.Op == EUnaryOp::Minus) {
                     if (const auto* literal = std::get_if<TLiteral>(&value.Operand->Value);
@@ -150,7 +178,36 @@ public:
                     Ctx.NewList(pos, std::move(options))});
                 return value.Negated ? Call(pos, "Not", {result}) : result;
             } else if constexpr (std::is_same_v<T, TPatternMatch>) {
-                Unsupported(expression.Range, "pattern matching UDFs");
+                // Reuse the same Re2 runtime configuration as SQL v1. Literal
+                // prefix/suffix patterns retain simple predicates for RBO/CBO.
+                auto input = Expression(*value.Value);
+                auto pattern = Expression(*value.Pattern);
+                TNode result;
+                if (value.Op == EPatternOp::Like && !value.Escape && pattern->IsCallable({"String", "Utf8"})) {
+                    const TString text(pattern->Head().Content());
+                    if (!text.Contains('_') && !text.Contains('\\')) {
+                        auto inner = text;
+                        const bool leading = inner.StartsWith('%'), trailing = inner.EndsWith('%');
+                        if (leading) { inner = inner.substr(1); }
+                        if (trailing && !inner.empty()) { inner.pop_back(); }
+                        if (!inner.Contains('%')) {
+                            result = Call(pos, leading ? (trailing ? "StringContains" : "EndsWith")
+                                : trailing ? "StartsWith" : "==", {input, Call(pos, pattern->Content(), {Atom(pos, inner)})});
+                        }
+                    }
+                }
+                if (!result) {
+                    if (value.Op != EPatternOp::Like && value.Op != EPatternOp::ILike) { Unsupported(expression.Range, "non-LIKE pattern operators"); }
+                    TExprNode::TListType escapeArgs = {Call(pos, "Udf", {Atom(pos, "Re2.PatternFromLike")}), pattern};
+                    if (value.Escape) { escapeArgs.push_back(Expression(*value.Escape)); }
+                    auto escaped = Call(pos, "Apply", std::move(escapeArgs));
+                    auto options = Call(pos, "NamedApply", {Call(pos, "Udf", {Atom(pos, "Re2.Options")}), Ctx.NewList(pos, {}),
+                        Call(pos, "AsStruct", {Ctx.NewList(pos, {Atom(pos, "CaseSensitive"),
+                            Call(pos, "Bool", {Atom(pos, value.Op == EPatternOp::Like ? "true" : "false")})})})});
+                    auto matcher = Call(pos, "AssumeStrict", {Call(pos, "Udf", {Atom(pos, "Re2.Match"), Ctx.NewList(pos, {escaped, options})})});
+                    result = Call(pos, "Apply", {matcher, input});
+                }
+                return value.Negated ? Call(pos, "Not", {result}) : result;
             } else if constexpr (std::is_same_v<T, TSubquery> || std::is_same_v<T, TExists>) {
                 Unsupported(expression.Range, "relational subquery lowering");
             } else {
@@ -390,7 +447,7 @@ private:
             if (arg.Alias) { Unsupported(range, "named function arguments"); }
             args.push_back(Expression(*arg.Expression));
         }
-        if (std::holds_alternative<TParameter>(call.Callable->Value)) {
+        if (!std::holds_alternative<TName>(call.Callable->Value)) {
             args.insert(args.begin(), Expression(*call.Callable));
             return Call(pos, "Apply", std::move(args));
         }
@@ -402,9 +459,38 @@ private:
             args.insert(args.begin(), *callable);
             return Call(pos, "Apply", std::move(args));
         }
-        if (name->Module) { Unsupported(range, "unbound module functions"); }
+        if (name->Module) {
+            auto module = Identifier(*name->Module);
+            if (AsciiEqualsIgnoreCase(module, "DateTime")) { module = "DateTime2"; }
+            // SqlCall delegates overload selection, optional lifting and UDF
+            // type configuration to the shared YQL annotation machinery.
+            return Call(pos, "SqlCall", {Atom(pos, module + "." + spelling),
+                Ctx.NewList(pos, {Call(pos, "PositionalArgs", std::move(args))})});
+        }
         if (const auto issue = NormalizeName(Ctx.GetPosition(pos), spelling)) {
             Error(range, issue->GetMessage());
+        }
+        // SQL date/time constructors accept ISO text; YQL data callables
+        // require the encoded integer. Use the same MiniKQL parser as SQL v1
+        // rather than implementing a second calendar/interval parser.
+        static const THashMap<TString, TString> temporalTypes = {
+            {"date", "Date"}, {"datetime", "Datetime"}, {"timestamp", "Timestamp"}, {"interval", "Interval"},
+            {"date32", "Date32"}, {"datetime64", "Datetime64"}, {"timestamp64", "Timestamp64"}, {"interval64", "Interval64"}};
+        if (const auto* type = temporalTypes.FindPtr(spelling)) {
+            if (args.size() != 1 || !args.front()->IsCallable("String")) { Error(range, "Date/time constructor requires one String literal"); }
+            const auto text = args.front()->Head().Content();
+            const auto slot = *NUdf::FindDataSlot(*type);
+            const auto value = NKikimr::NMiniKQL::ValueFromString(slot, NUdf::TStringRef(text.data(), text.size()));
+            if (!value) { Error(range, "Invalid date/time literal"); }
+            TString encoded;
+            switch (slot) {
+                case EDataSlot::Date: encoded = ToString(value.Get<ui16>()); break;
+                case EDataSlot::Datetime: encoded = ToString(value.Get<ui32>()); break;
+                case EDataSlot::Timestamp: encoded = ToString(value.Get<ui64>()); break;
+                case EDataSlot::Date32: encoded = ToString(value.Get<i32>()); break;
+                default: encoded = ToString(value.Get<i64>()); break;
+            }
+            return Call(pos, *type, {Atom(pos, encoded)});
         }
         if (spelling == "astuple") {
             return Ctx.NewList(pos, std::move(args));
@@ -439,6 +525,7 @@ private:
     const TExpressionBindings& Bindings;
     TExprContext& Ctx;
     const TExpressionLoweringSettings& Settings;
+    THashMap<const TParameter*, TNode> Locals;
 };
 
 } // namespace

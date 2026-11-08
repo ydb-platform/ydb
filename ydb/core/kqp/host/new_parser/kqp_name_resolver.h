@@ -63,7 +63,15 @@ struct TResolvedNames {
     THashMap<const TExpression*, TColumnId> ColumnReferences;
     THashMap<const TExpression*, TVector<TColumnId>> Stars;
     THashMap<const TQuery*, TVector<TColumnId>> QueryOutputs;
+    // GROUP BY aliases are visible after the grouping expression is resolved.
+    THashMap<const TExpression*, TColumnId> GroupAliases;
     THashMap<const TWindowReference*, const TWindowDefinition*> WindowReferences;
+    // Lexical identities distinguish lambda arguments and successive named
+    // definitions. Unbound parameter references remain external SDK parameters.
+    THashMap<const TExpression*, const TParameter*> BindingReferences;
+    THashMap<const TParameter*, const TExpression*> Definitions;
+    THashMap<const TParameter*, const TQuery*> NamedQueries;
+    THashMap<const TSource*, const TQuery*> NamedSources;
 };
 
 struct TNameResolutionResult {

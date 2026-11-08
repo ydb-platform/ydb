@@ -23,6 +23,16 @@ struct TFixture : NTests::TIdTestContext {
         auto table = std::make_shared<NNewYql::TTableMetadata>();
         table->Path = "/Root/t";
         table->Columns = {{"id", 1, "Int64", true}, {"value", 2, "String", false}, {"a", 3, "Int32", true}};
+        // RBO type recomputation consults the provider catalog independently of
+        // the frontend snapshot. Register the same mock schema in both places.
+        auto& description = Tables->GetOrAddTable(KqpCtx.Cluster, "/Root", table->Path);
+        description.Metadata = MakeIntrusive<TKikimrTableMetadata>();
+        description.Metadata->DoesExist = true;
+        for (const auto& column : table->Columns) {
+            description.Metadata->Columns.emplace(column.Name,
+                TKikimrColumnMetadata(column.Name, column.Id, column.Type, column.NotNull));
+        }
+        UNIT_ASSERT(description.Load(ExprCtx));
         auto resolved = NNewYql::ResolveNames(*Ast, {"ut", "/Root", {}},
             [&](const TString&, const TString&) { return table; });
         UNIT_ASSERT_C(resolved.IsOk(), resolved.Issues.ToString());
@@ -44,7 +54,7 @@ struct TFixture : NTests::TIdTestContext {
                 return NNewYql::TRboTable{table, NYql::EStorageType::RowStorage};
             }, orderedColumns);
         NTests::AssertIdInvariants(*root, root->PlanProps);
-        for (const auto& item : *root) {
+        for (const auto& item : IterateSubtreeWithSubplans(root.Get(), root->PlanProps)) {
             for (const auto& expression : item.Current->GetExpressions()) {
                 CheckArguments(*expression.get().GetLambda());
                 UNIT_ASSERT_EQUAL(expression.get().PlanProps, &root->PlanProps);
@@ -65,6 +75,31 @@ struct TFixture : NTests::TIdTestContext {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
+    // Recompute every operator type as well as validating IU ownership. This
+    // catches mismatches between scalar annotations and relational result types.
+    Y_UNIT_TEST(RelationalExpressionsLowerAndReannotate) {
+        for (const TString sql : {
+            "SELECT value, SUM(id) AS s, COUNT(DISTINCT a) FROM t GROUP BY value HAVING s > 0 ORDER BY s;",
+            "SELECT a + 1 AS k, SUM(id) FROM t GROUP BY a + 1;",
+            "SELECT a, GROUPING(a), SUM(id) FROM t GROUP BY ROLLUP(a);",
+            "SELECT a, SUM(SUM(id)) OVER (), RANK() OVER (ORDER BY SUM(id)) FROM t GROUP BY a;",
+            "SELECT id FROM t UNION ALL SELECT a FROM t;",
+            "SELECT value FROM t INTERSECT SELECT value FROM t;",
+            "SELECT l.id, (SELECT MAX(r.id) FROM t AS r WHERE r.id = l.id) FROM t AS l;",
+            "SELECT l.id FROM t AS l WHERE EXISTS (SELECT r.id FROM t AS r WHERE r.id = l.id);",
+            "SELECT COUNT(*) FROM t AS l WHERE EXISTS (SELECT * FROM t AS r WHERE r.id = l.id AND r.a != l.a) "
+                "AND NOT EXISTS (SELECT * FROM t AS r WHERE r.id = l.id);",
+            "SELECT id FROM t WHERE id IN (SELECT id FROM t);"}) {
+            TFixture f;
+            auto root = f.Run(sql);
+            auto annotator = CreateTypeAnnotationTransformer(CreateExtCallableTypeAnnotationTransformer(f.TypeCtx, true), f.TypeCtx);
+            TRBOContext ctx(f.KqpCtx, f.ExprCtx, f.TypeCtx, *annotator, *f.FuncRegistry);
+            UNIT_ASSERT_C(root->ComputeTypes(ctx) == IGraphTransformer::TStatus::Ok,
+                sql << ": " << f.ExprCtx.IssueManager.GetIssues().ToString());
+            f.Lower();
+        }
+    }
+
     // ORDER BY uses an unprojected computed value; the map must retain its input
     // and count literals must already be visible to later pushdown rules.
     Y_UNIT_TEST(ProjectionSortAndLimitKeepHiddenDependencies) {
@@ -174,6 +209,34 @@ Y_UNIT_TEST_SUITE(KqpNewYqlRboLowering) {
             UNIT_ASSERT(f.ExprCtx.IssueManager.GetIssues().Empty());
         }
     }
+
+    // Named query aliases must share a producer while their self-join ports
+    // define disjoint IUs. Reimport also checks annotation/AST immutability.
+    Y_UNIT_TEST(PreambleLambdasAndNamedQueriesLowerDirectly) {
+        TFixture f;
+        auto root = f.Run("$offset = 1; $inc = ($x) -> ($x + $offset); "
+            "$q = (SELECT $inc(id) AS k FROM t); $alias = $q; "
+            "$offset = 100; SELECT l.k, r.k FROM $q AS l JOIN $alias AS r ON l.k = r.k ORDER BY l.k LIMIT 2;");
+        UNIT_ASSERT_VALUES_EQUAL(f.Find(*root, EOperator::Source).size(), 1);
+        const auto ports = f.Find(*root, EOperator::Replicate);
+        UNIT_ASSERT_VALUES_EQUAL(ports.size(), 2);
+        UNIT_ASSERT(!ports[0]->GetOutputIUs().HasAny(ports[1]->GetOutputIUs()));
+        auto annotator = CreateTypeAnnotationTransformer(CreateExtCallableTypeAnnotationTransformer(f.TypeCtx, true), f.TypeCtx);
+        TRBOContext ctx(f.KqpCtx, f.ExprCtx, f.TypeCtx, *annotator, *f.FuncRegistry);
+        UNIT_ASSERT_C(root->ComputeTypes(ctx) == IGraphTransformer::TStatus::Ok, f.ExprCtx.IssueManager.GetIssues().ToString());
+        auto again = f.Lower();
+        UNIT_ASSERT_VALUES_EQUAL(f.Find(*again, EOperator::Source).size(), 1);
+    }
+
+    Y_UNIT_TEST(PreambleQueriesComposeWithWithCtesAndDerivedTables) {
+        TFixture f;
+        auto root = f.Run("$q = SELECT id FROM t; $r = (SELECT id + 1 AS k FROM $q); "
+            "WITH c AS (SELECT k FROM $r) SELECT d.k FROM (SELECT k FROM c) AS d WHERE d.k > 0;");
+        UNIT_ASSERT_VALUES_EQUAL(f.Find(*root, EOperator::Source).size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(root->GetColumns().Items()[0].second, "k");
+        UNIT_ASSERT_VALUES_EQUAL(f.Find(*root, EOperator::Filter).size(), 1);
+    }
+
 }
 
 } // namespace NKikimr::NKqp

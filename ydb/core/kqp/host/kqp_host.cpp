@@ -1468,6 +1468,7 @@ private:
                     settingsBuilder.GetIsAmbiguityError());
                 traceScope.SetSuccess(parsed.IsOk());
                 if (!parsed.IsOk()) {
+                    YQL_CLOG(INFO, ProviderKqp) << "New YQL parser reported syntax errors";
                     ctx.IssueManager.AddIssues(parsed.Issues);
                     return result;
                 }
@@ -2675,7 +2676,8 @@ private:
                 }
                 for (size_t i = 0; i < columns.size(); ++i) {
                     if (columns[i].second != legacy.ColumnOrder().Item(i).StringValue()) {
-                        ythrow TNewYqlParserFallback() << "Result labels differ at the RBO boundary";
+                        ythrow TNewYqlParserFallback() << "Result labels differ at the RBO boundary: column " << i
+                            << ", native '" << columns[i].second << "', expected '" << legacy.ColumnOrder().Item(i).StringValue() << "'";
                     }
                 }
                 // RewriteSelect puts the SQL LIMIT innermost; PushTakeIntoPlan

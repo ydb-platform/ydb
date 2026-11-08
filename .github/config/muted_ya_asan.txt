@@ -45,6 +45,7 @@ ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
 ydb/core/tx/replication/controller/ut_schema_change AttachmentLifecycle.PublicDoneRetriesResourceExhaustionAcrossRestart
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ChangedCredentialsBeforeDeferredReset+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.DropDuringDeferredDoneResolvesFreshSecret
+ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ForceDropCascadeAfterDoneWithoutSourceDeletesOwnedDestination
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.ForceDropReplayedAfterLegacyAdmission+Cascade
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.LateResultsDuringAndAfterDone+ResourceId
 ydb/core/tx/replication/controller/ut_schema_change CredentialResolution.LateResultsDuringAndAfterDone-ResourceId

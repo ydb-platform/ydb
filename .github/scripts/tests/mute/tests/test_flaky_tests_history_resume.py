@@ -103,5 +103,22 @@ class DetermineStartDateTest(unittest.TestCase):
         self.assertEqual(start, self.end_date - datetime.timedelta(days=fth.DEFAULT_DAYS_BACK))
 
 
+class BuildHistoryQueryTest(unittest.TestCase):
+    def test_prev_flaky_join_uses_full_identity(self):
+        # full_name alone is not unique in flaky_tests_window (PK also has
+        # suite_folder, test_name); joining only on full_name duplicates runs.
+        query = fth.build_history_query(
+            datetime.date(2026, 11, 5),
+            'test_runs',
+            'testowners',
+            'flaky_tests_window',
+            'relwithdebinfo',
+            'main',
+        )
+        self.assertIn('j.full_name = prev.full_name', query)
+        self.assertIn('j.suite_folder = prev.suite_folder', query)
+        self.assertIn('j.test_name = prev.test_name', query)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -237,13 +237,15 @@ def build_history_query(date, test_runs_table, testowners_table, flaky_tests_tab
                 ON test_and_date.full_name = hist.full_name
             ) AS j
             LEFT JOIN (
-                SELECT full_name, owners
+                SELECT full_name, suite_folder, test_name, owners
                 FROM `{flaky_tests_table}`
                 WHERE date_window = Date('{date}')
                     AND build_type = '{build_type}'
                     AND branch = '{branch}'
             ) AS prev
             ON j.full_name = prev.full_name
+                AND j.suite_folder = prev.suite_folder
+                AND j.test_name = prev.test_name
             GROUP BY
                 j.full_name,
                 j.suite_folder,

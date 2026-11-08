@@ -17,8 +17,10 @@ host workflow, not composite inputs):
 | `CI_REMOTE_EXECUTOR=1` | action skips the test commit-status post |
 | `CI_DISABLE_YDB_QA=1` | action and scripts skip YDB QA (exit 0, no DB open) |
 
-The host publishes `remote_artifacts.json` itself (`files` list of whatever is
-in `PUBLIC_DIR`). Ingest copies listed objects. `report.json` and `index.html`
+The host publishes `remote_artifacts.json` itself after `build_and_test_ya`
+finishes (including composite cleanup): it lists objects already synced under
+`S3_BUCKET_PATH` via `s3cmd ls`, not a local `PUBLIC_DIR` tree. Ingest copies
+listed objects. `report.json` and `index.html`
 are used when the host listed them. `ci_metrics.jsonl` and `started_at` are
 optional: metrics flush and test-results upload run only when those files exist.
 

@@ -504,6 +504,7 @@ namespace NKikimr::NStorage {
             .DonorMode = donorMode,
             .ReadOnly = readOnly,
             .DDisk = ddisk,
+            .DonorDiskIds = std::move(donorDiskIds),
         });
 
         if (!ddisk) {
@@ -579,6 +580,7 @@ namespace NKikimr::NStorage {
         // 5. Making VDisk a donor one.
         // 6. Updating VDisk generation when modifying group.
         // 7. Putting VDisk into or out of read-only
+        // 8. Moving the PDisk of a donor of this VDisk.
         //
         // The main idea of this command is when VDisk is created, it does not change its configuration. It may be
         // wiped out several times, it may become a donor or read-only and then it may be destroyed. That is a possible life cycle
@@ -654,10 +656,25 @@ namespace NKikimr::NStorage {
             }
         } else if (!record.RuntimeData) {
             StartLocalVDiskActor(record);
-        } else if (record.RuntimeData->DonorMode < record.Config.HasDonorMode() || record.RuntimeData->ReadOnly != record.Config.GetReadOnly()) {
+        } else if (record.RuntimeData->DonorMode < record.Config.HasDonorMode() || record.RuntimeData->ReadOnly != record.Config.GetReadOnly() ||
+                HasUnknownDonors(record)) {
             PoisonLocalVDisk(record);
             StartLocalVDiskActor(record);
         }
+    }
+
+    bool TNodeWarden::HasUnknownDonors(const TVDiskRecord& vdisk) {
+        // the VDisk learns where its donors are when it starts; a donor that has moved along with its PDisk is reachable
+        // only at the new place
+        const auto& known = vdisk.RuntimeData->DonorDiskIds;
+        for (const auto& donor : vdisk.Config.GetDonors()) {
+            const std::pair<TVDiskID, TActorId> item(VDiskIDFromVDiskID(donor.GetVDiskId()),
+                TVSlotId(donor.GetVDiskLocation()).GetVDiskServiceId());
+            if (std::find(known.begin(), known.end(), item) == known.end()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     void TNodeWarden::Slay(TVDiskRecord& vdisk, ESlayAction action) {

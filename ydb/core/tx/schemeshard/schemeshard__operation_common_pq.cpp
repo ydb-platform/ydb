@@ -87,18 +87,35 @@ struct TPartitionsGraphTraverse {
 };
 
 
-void MakePQTabletConfig(const TOperationContext& context,
-                                NKikimrPQ::TPQTabletConfig& config,
-                                const TTopicInfo& pqGroup,
-                                const TTopicTabletInfo& pqShard,
-                                const TString& topicName,
-                                const TString& topicPath,
-                                const TString& cloudId,
-                                const TString& folderId,
-                                const TString& databaseId,
-                                const TString& databasePath,
-                                const TString& monitoringProjectId)
-{
+
+class TBootstrapConfigWrapper: public NKikimrPQ::TBootstrapConfig {
+    mutable std::optional<TRcBuf> PreSerializedProposeTransaction;
+
+public:
+    const TRcBuf& GetPreSerializedProposeTransaction() const {
+        if (!PreSerializedProposeTransaction) {
+            NKikimrPQ::TEvProposeTransaction record;
+            record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(*this);
+            PreSerializedProposeTransaction = TRcBuf(record.SerializeAsString());
+        }
+        return *PreSerializedProposeTransaction;
+    }
+};
+
+// Invariant part of the PQ tablet config: everything except the three per-shard
+// repeated fields (PartitionIds, Partitions, AllPartitions). Serialized once per
+// pass and shared by all shards of the topic.
+void FillPQTabletConfigCommon(
+    NKikimrPQ::TPQTabletConfig& config,
+    const TTopicInfo& pqGroup,
+    const TString& topicName,
+    const TString& topicPath,
+    const TString& cloudId,
+    const TString& folderId,
+    const TString& databaseId,
+    const TString& databasePath,
+    const TString& monitoringProjectId
+) {
     ParsePQTabletConfig(config, pqGroup);
 
     config.SetTopicName(topicName);
@@ -114,7 +131,17 @@ void MakePQTabletConfig(const TOperationContext& context,
     if (pqGroup.AlterData) {
         config.SetVersion(pqGroup.AlterData->AlterVersion);
     }
+}
 
+// Per-shard delta of the PQ tablet config: the three repeated fields only
+// (they concatenate on parse, never override). Appending it to the common
+// part yields exactly the full per-shard config.
+void AppendPQTabletConfigDelta(
+    NKikimrPQ::TPQTabletConfig& config,
+    const TOperationContext& context,
+    const TTopicInfo& pqGroup,
+    const TTopicTabletInfo& pqShard
+) {
     THashSet<ui32> linkedPartitions;
     TPartitionsGraphTraverse parentPartitions(pqGroup);
 
@@ -154,95 +181,68 @@ void MakePQTabletConfig(const TOperationContext& context,
     }
 }
 
-class TBootstrapConfigWrapper: public NKikimrPQ::TBootstrapConfig {
-    struct TSerializedProposeTransaction {
-        TString Value;
+// Serializes the invariant config part once per pass (proto fill is
+// FillPQTabletConfigCommon). Each shard message carries this part followed by
+// its delta (MakePQProposeTransactionFragments).
+TString FillPQConfigCommonPart(
+    const TOperationContext& context,
+    const TTopicInfo& pqGroup,
+    const TString& topicName,
+    const TString& topicPath,
+    const TString& cloudId,
+    const TString& folderId,
+    const TString& databaseId,
+    const TString& databasePath,
+    const TString& monitoringProjectId
+) {
+    NKikimrPQ::TEvProposeTransaction record;
+    FillPQTabletConfigCommon(
+        *record.MutableConfig()->MutableTabletConfig(),
+        pqGroup, topicName, topicPath,
+        cloudId, folderId, databaseId, databasePath, monitoringProjectId);
 
-        static TSerializedProposeTransaction Serialize(const NKikimrPQ::TBootstrapConfig& value) {
-            NKikimrPQ::TEvProposeTransaction record;
-            record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(value);
-            return {record.SerializeAsString()};
-        }
-    };
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Common PersQueue tablet config for this pass"
+        << ": config: " << record.ShortDebugString()
+    );
 
-    struct TSerializedUpdateConfig {
-        TString Value;
+    return record.SerializeAsString();
+}
 
-        static TSerializedUpdateConfig Serialize(const NKikimrPQ::TBootstrapConfig& value) {
-            NKikimrPQ::TUpdateConfig record;
-            record.MutableBootstrapConfig()->CopyFrom(value);
-            return {record.SerializeAsString()};
-        }
-    };
-
-    mutable std::optional<std::variant<
-        TSerializedProposeTransaction,
-        TSerializedUpdateConfig
-    >> PreSerialized;
-
-    template <typename T>
-    const TString& Get() const {
-        if (!PreSerialized) {
-            PreSerialized.emplace(T::Serialize(*this));
-        }
-
-        const auto* value = std::get_if<T>(&PreSerialized.value());
-        Y_ABORT_UNLESS(value);
-
-        return value->Value;
-    }
-
-public:
-    const TString& GetPreSerializedProposeTransaction() const {
-        return Get<TSerializedProposeTransaction>();
-    }
-
-    const TString& GetPreSerializedUpdateConfig() const {
-        return Get<TSerializedUpdateConfig>();
-    }
-};
-
-THolder<TEvPersQueue::TEvProposeTransaction> MakeEvProposeTransaction(
+// Stages the per-shard PQ propose message as ordered wire fragments: common
+// part, per-shard delta, (bootstrap part, for cdc topics), record tail —
+// parsed by the tablet as one TEvProposeTransaction (repeated config fields
+// merge). The common and bootstrap parts are built once per pass and shared
+// by refcount (see the lifecycle comment in schemeshard__pipe_messages.h).
+TPipeMessageFragments MakePQProposeTransactionFragments(
         TTxId txId,
+        const TRcBuf& configCommonPart,
         const TTopicInfo& pqGroup,
         const TTopicTabletInfo& pqShard,
-        const TString& topicName,
-        const TString& topicPath,
-        const std::optional<TBootstrapConfigWrapper>& bootstrapConfig,
-        const TString& cloudId,
-        const TString& folderId,
-        const TString& databaseId,
-        const TString& databasePath,
-        const TString& monitoringProjectId,
+        const std::optional<TRcBuf>& bootstrapPart,
         TTxState::ETxType txType,
         const TOperationContext& context
-    )
+)
 {
-    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
-    event->Record.SetTxId(ui64(txId));
-    ActorIdToProto(context.SS->SelfId(), event->Record.MutableSourceActor());
+    NKikimrPQ::TEvProposeTransaction deltaRecord;
+    AppendPQTabletConfigDelta(
+        *deltaRecord.MutableConfig()->MutableTabletConfig(),
+        context, pqGroup, pqShard);
 
-    MakePQTabletConfig(context,
-                      *event->Record.MutableConfig()->MutableTabletConfig(),
-                       pqGroup,
-                       pqShard,
-                       topicName,
-                       topicPath,
-                       cloudId,
-                       folderId,
-                       databaseId,
-                       databasePath,
-                       monitoringProjectId);
-    if (bootstrapConfig) {
+    NKikimrPQ::TEvProposeTransaction tailRecord;
+    tailRecord.SetTxId(ui64(txId));
+    ActorIdToProto(context.SS->SelfId(), tailRecord.MutableSourceActor());
+
+    TPipeMessageFragments fragments;
+    fragments.Items.reserve(4);
+    fragments.Items.push_back(configCommonPart); // refcount share, one buffer per pass
+    fragments.Items.push_back(MakePipeMessageFragment(deltaRecord.SerializeAsString())); // per-shard delta
+    if (bootstrapPart) {
         Y_ABORT_UNLESS(txType == TTxState::TxCreatePQGroup);
-        event->PreSerializedData += bootstrapConfig->GetPreSerializedProposeTransaction();
+        fragments.Items.push_back(*bootstrapPart); // refcount share, one buffer per pass
     }
+    fragments.Items.push_back(MakePipeMessageFragment(tailRecord.SerializeAsString())); // per-shard record fields
 
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Propose configure PersQueue" <<
-                ", message: " << event->Record.ShortUtf8DebugString());
-
-    return event;
+    return fragments;
 }
 
 }  // anonymous namespace
@@ -360,7 +360,7 @@ bool TConfigureParts::HandleReply(TEvPersQueue::TEvUpdateConfigResponse::TPtr& e
                     << " at tablet" << ssId);
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     DebugHint() << " HandleReply TEvUpdateConfigResponse"
-                    << " message: " << ev->Get()->Record.ShortUtf8DebugString()
+                    << " message: " << ev->Get()->Record.ShortDebugString()
                     << " at tablet" << ssId);
 
     TTxState* txState = context.SS->FindTx(OperationId);
@@ -485,6 +485,24 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         }
     }
 
+    // Common parts of the pass, shared by all shard messages by refcount
+    // (see the lifecycle comment in schemeshard__pipe_messages.h).
+    const TRcBuf configCommonPart = MakePipeMessageFragment(FillPQConfigCommonPart(
+        context,
+        *pqGroup,
+        topicName,
+        topicPath.PathString(),
+        cloudId,
+        folderId,
+        databaseId,
+        databasePath,
+        monitoringProjectId));
+
+    std::optional<TRcBuf> bootstrapPart;
+    if (bootstrapConfig) {
+        bootstrapPart = bootstrapConfig->GetPreSerializedProposeTransaction(); // refcount share
+    }
+
     for (auto shard : txState->Shards) {
         TShardIdx idx = shard.Idx;
         TTabletId tabletId = context.SS->ShardInfos.at(idx).TabletID;
@@ -500,27 +518,16 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                             << ", Partitions size: " << pqShard->Partitions.size()
                             << ", at schemeshard: " << ssId);
 
-            THolder<NActors::IEventBase> event = MakeEvProposeTransaction(OperationId.GetTxId(),
+            auto fragments = MakePQProposeTransactionFragments(OperationId.GetTxId(),
+                                                    configCommonPart,
                                                     *pqGroup,
                                                     *pqShard,
-                                                    topicName,
-                                                    topicPath.PathString(),
-                                                    bootstrapConfig,
-                                                    cloudId,
-                                                    folderId,
-                                                    databaseId,
-                                                    databasePath,
-                                                    monitoringProjectId,
+                                                    bootstrapPart,
                                                     txState->TxType,
                                                     context);
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Propose configure PersQueue"
-                            << ", opId: " << OperationId
-                            << ", tabletId: " << tabletId
-                            << ", at schemeshard: " << ssId);
+            context.OnComplete.BindMsgToPipe(OperationId, tabletId, idx, TEvPersQueue::TEvProposeTransaction::EventType, std::move(fragments));
 
-            context.OnComplete.BindMsgToPipe(OperationId, tabletId, idx, event.Release());
         } else {
             Y_ABORT_UNLESS(shard.TabletType == ETabletType::PersQueueReadBalancer);
 
@@ -597,7 +604,7 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
                         "Propose configure PersQueueReadBalancer"
                             << ", opId: " << OperationId
                             << ", tabletId: " << tabletId
-                            << ", message: " << event->Record.ShortUtf8DebugString()
+                            << ", message: " << event->Record.ShortDebugString()
                             << ", at schemeshard: " << ssId);
 
             context.OnComplete.BindMsgToPipe(OperationId, tabletId, idx, event.Release());

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Launch the C++ bridge_skipper using the running mock's direct node endpoints.
-# skipper.sh [--mode manual|auto] [--listen HOST:PORT] [--state-dir DIR]
+# skipper.sh [--listen HOST:PORT] [--state-dir DIR]
 # BRIDGE_SKIPPER_BINARY overrides the built executable.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

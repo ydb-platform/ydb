@@ -28,15 +28,20 @@ class SkipperLauncherTest(unittest.TestCase):
         self.assertEqual(binary, "/mock/bridge_skipper")
         config = json.loads(Path(argv[argv.index("--config") + 1]).read_text())
         self.assertEqual(config["cluster_id"], "mock-session")
-        self.assertEqual(config["mode"], "manual")
+        self.assertNotIn("mode", config)
         self.assertEqual(config["endpoints"], {
             pile.name: ["grpc://" + node.endpoint for node in pile.nodes]
             for pile in self.cluster.topology.piles})
         self.assertTrue(argv[argv.index("--state-dir") + 1].endswith("/bridge_skipper/mock-session"))
 
-    def test_auto_and_listener_are_explicit_options(self):
+    def test_listener_is_explicit_and_mode_has_no_config_override(self):
         with mock.patch.object(supervisor.os, "execv") as execute:
-            supervisor.cmd_skipper(self.cluster, self.args("--mode", "auto", "--listen", "127.0.0.1:18080"))
+            supervisor.cmd_skipper(self.cluster, self.args("--listen", "127.0.0.1:18080"))
         argv = execute.call_args.args[1]
         config = json.loads(Path(argv[argv.index("--config") + 1]).read_text())
-        self.assertEqual((config["mode"], config["http"]["listen"]), ("auto", "127.0.0.1:18080"))
+        self.assertNotIn("mode", config)
+        self.assertEqual(config["http"]["listen"], "127.0.0.1:18080")
+
+    def test_mode_flag_is_rejected_instead_of_overriding_persisted_mode(self):
+        with self.assertRaises(SystemExit):
+            self.args("--mode", "auto")

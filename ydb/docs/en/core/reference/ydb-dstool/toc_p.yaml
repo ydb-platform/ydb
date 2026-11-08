@@ -3,6 +3,8 @@ items:
     href: index.md
   - name: Installation
     href: install.md
+  - name: Connection and authentication
+    href: connect.md
   - name: Global options
     href: global-options.md
   - name: Device list

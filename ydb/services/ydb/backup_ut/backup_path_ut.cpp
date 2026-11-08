@@ -7,6 +7,10 @@
 
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
+#include <ydb/library/backup/proto/proto.h>
+#include <ydb/core/backup/common/metadata.h>
+#include <ydb/public/api/protos/ydb_coordination.pb.h>
+#include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 
 #include <arrow/api.h>
 
@@ -277,6 +281,158 @@ struct TBackupTraits<NExport::TExportToFsSettings> {
         f.ModifyChecksumAndCheckThatImportFails(checksumFiles, importSettings);
     }
 };
+
+template <typename TExportSettings, typename TBackupTestFixture>
+void ExportKesusImpl(TBackupTestFixture& f, bool throughDirectory) {
+    TBackupTraits<TExportSettings> traits;
+    auto& runtime = *f.Server().GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+    NKikimr::TControlBoard::SetValue(1, runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport);
+
+    auto status = f.YdbSchemeClient().MakeDirectory("/Root/KesusExport").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    NCoordination::TClient coordination(f.YdbDriver());
+    status = coordination.CreateNode("/Root/KesusExport/Coordination").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    NRateLimiter::TRateLimiterClient rateLimiter(f.YdbDriver());
+    status = rateLimiter.CreateResource("/Root/KesusExport/Coordination", "limit",
+        NRateLimiter::TCreateResourceSettings().MaxUnitsPerSecond(100)).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+    auto sessionResult = coordination.StartSession("/Root/KesusExport/Coordination").GetValueSync();
+    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+    auto session = sessionResult.ExtractResult();
+    const std::string semaphoreData("a\0\xffz", 4);
+    status = session.CreateSemaphore("../persistent", 3, semaphoreData).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    const auto acquired = session.AcquireSemaphore("../persistent",
+        NCoordination::TAcquireSemaphoreSettings().Count(2)).GetValueSync();
+    UNIT_ASSERT_C(acquired.IsSuccess(), acquired.GetIssues().ToString());
+    UNIT_ASSERT(acquired.GetResult());
+    const auto ephemeral = session.AcquireSemaphore("ephemeral",
+        NCoordination::TAcquireSemaphoreSettings().Count(1).Ephemeral()).GetValueSync();
+    UNIT_ASSERT_C(ephemeral.IsSuccess(), ephemeral.GetIssues().ToString());
+    UNIT_ASSERT(ephemeral.GetResult());
+
+    auto settings = traits.MakeExportSettingsRaw(f);
+    settings.AppendItem(typename TExportSettings::TItem{
+        .Src = throughDirectory ? "/Root/KesusExport" : "/Root/KesusExport/Coordination",
+        .Dst = "coordination",
+    });
+    f.WaitOpSuccess(traits.Export(f, settings));
+
+    const TString prefix = traits.FilePrefixRaw() + "coordination/" + (throughDirectory ? "Coordination/" : "");
+    auto readFile = [&](const TString& name) -> TString {
+        const TString path = prefix + name;
+        if constexpr (std::is_same_v<TExportSettings, NExport::TExportToS3Settings>) {
+            const auto& data = f.GetS3Data();
+            UNIT_ASSERT_C(data.contains(path), path);
+            return data.at(path);
+        } else {
+            return TFileInput(TFsPath(f.GetTempDir().Path()) / path).ReadAll();
+        }
+    };
+    Ydb::Coordination::CreateNodeRequest node;
+    UNIT_ASSERT(NYdb::NBackup::ParseProto(readFile("create_coordination_node.pb"), node));
+    UNIT_ASSERT(node.has_config());
+    const auto metadata = NKikimr::NBackup::TMetadata::Deserialize(readFile("metadata.json"));
+    UNIT_ASSERT(metadata.GetRateLimiterResources());
+    UNIT_ASSERT_VALUES_EQUAL(metadata.GetRateLimiterResources()->size(), 1);
+    const auto& entry = metadata.GetRateLimiterResources()->front();
+    UNIT_ASSERT_VALUES_EQUAL(entry.ResourcePath, "limit");
+    UNIT_ASSERT_VALUES_EQUAL(entry.ExportPrefix, "rate_limiter_resources/001");
+    Ydb::RateLimiter::CreateResourceRequest resource;
+    UNIT_ASSERT(NYdb::NBackup::ParseProto(readFile(entry.ExportPrefix + "/create_rate_limiter.pb"), resource));
+    UNIT_ASSERT(resource.coordination_node_path().empty());
+    UNIT_ASSERT(resource.resource().resource_path().empty());
+    UNIT_ASSERT_VALUES_EQUAL(resource.resource().hierarchical_drr().max_units_per_second(), 100);
+
+    UNIT_ASSERT(metadata.GetSemaphores());
+    UNIT_ASSERT_VALUES_EQUAL(metadata.GetSemaphores()->size(), 1);
+    const auto& semaphoreEntry = metadata.GetSemaphores()->front();
+    UNIT_ASSERT_VALUES_EQUAL(semaphoreEntry.Name, "../persistent");
+    UNIT_ASSERT_VALUES_EQUAL(semaphoreEntry.ExportPrefix, "semaphores/001");
+    Ydb::Coordination::SessionRequest::CreateSemaphore semaphore;
+    UNIT_ASSERT(NYdb::NBackup::ParseProto(readFile(semaphoreEntry.ExportPrefix + "/create_semaphore.pb"), semaphore));
+    UNIT_ASSERT_VALUES_EQUAL(semaphore.name(), "../persistent");
+    UNIT_ASSERT_VALUES_EQUAL(semaphore.limit(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(semaphore.data(), semaphoreData);
+    UNIT_ASSERT_VALUES_EQUAL(semaphore.req_id(), 0);
+
+    // Replay the exported public definition in a new node; no owners or waiters are restored.
+    status = coordination.CreateNode("/Root/RestoredCoordination").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    auto restoredSessionResult = coordination.StartSession("/Root/RestoredCoordination").GetValueSync();
+    UNIT_ASSERT_C(restoredSessionResult.IsSuccess(), restoredSessionResult.GetIssues().ToString());
+    auto restoredSession = restoredSessionResult.ExtractResult();
+    status = restoredSession.CreateSemaphore(semaphore.name(), semaphore.limit(), semaphore.data()).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    const auto restored = restoredSession.DescribeSemaphore(semaphore.name(),
+        NCoordination::TDescribeSemaphoreSettings().IncludeOwners().IncludeWaiters()).GetValueSync();
+    UNIT_ASSERT_C(restored.IsSuccess(), restored.GetIssues().ToString());
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetResult().GetCount(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetResult().GetLimit(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(restored.GetResult().GetData(), semaphoreData);
+    UNIT_ASSERT(!restored.GetResult().IsEphemeral());
+    UNIT_ASSERT(restored.GetResult().GetOwners().empty());
+    UNIT_ASSERT(restored.GetResult().GetWaiters().empty());
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
+void ExportKesusIcbImpl(TBackupTestFixture& f, bool throughDirectory) {
+    TBackupTraits<TExportSettings> traits;
+    auto& runtime = *f.Server().GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+
+    auto status = f.YdbSchemeClient().MakeDirectory("/Root/KesusExport").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    NCoordination::TClient coordination(f.YdbDriver());
+    status = coordination.CreateNode("/Root/KesusExport/Coordination").GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    if (throughDirectory) {
+        auto session = f.YdbTableClient().CreateSession().GetValueSync();
+        UNIT_ASSERT_C(session.IsSuccess(), session.GetIssues().ToString());
+        status = session.GetSession().CreateTable("/Root/KesusExport/Table", NYdb::NTable::TTableBuilder()
+            .AddNullableColumn("Key", EPrimitiveType::Uint64)
+            .SetPrimaryKeyColumn("Key")
+            .Build()).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    }
+
+    auto settings = traits.MakeExportSettingsRaw(f);
+    settings.AppendItem(typename TExportSettings::TItem{
+        .Src = throughDirectory ? "/Root/KesusExport" : "/Root/KesusExport/Coordination",
+        .Dst = "coordination",
+    });
+    auto hasFile = [&](const TString& name) {
+        const TString path = traits.FilePrefixRaw() + "coordination/" + name;
+        if constexpr (std::is_same_v<TExportSettings, NExport::TExportToS3Settings>) {
+            return f.GetS3Data().contains(path);
+        } else {
+            return (TFsPath(f.GetTempDir().Path()) / path).Exists();
+        }
+    };
+    const TString nodeFile = throughDirectory
+        ? "Coordination/create_coordination_node.pb" : "create_coordination_node.pb";
+
+    auto& control = runtime.GetAppData().Icb->BackupControls.S3Controls.EnableKesusExport;
+    UNIT_ASSERT_VALUES_EQUAL(control.AtomicLoad()->Get(), 0);
+    const auto disabled = traits.Export(f, settings);
+    if (throughDirectory) {
+        // RPC must exclude Kesus before sending the expanded item list to SchemeShard.
+        f.WaitOpSuccess(disabled);
+        UNIT_ASSERT(hasFile("Table/scheme.pb"));
+    } else {
+        UNIT_ASSERT(disabled.Ready());
+        UNIT_ASSERT_VALUES_EQUAL_C(disabled.Status().GetStatus(), EStatus::UNSUPPORTED,
+            disabled.Status().GetIssues().ToString());
+    }
+    UNIT_ASSERT(!hasFile(nodeFile));
+
+    NKikimr::TControlBoard::SetValue(1, control);
+    f.WaitOpSuccess(traits.Export(f, settings));
+    UNIT_ASSERT(hasFile(nodeFile));
+}
 
 template <typename TExportSettings, typename TBackupTestFixture>
 void ImportFilterByYdbObjectPathImpl(TBackupTestFixture& f, bool isOlap, bool enableRelativePaths = false) {
@@ -2201,6 +2357,14 @@ Y_UNIT_TEST_SUITE_F(PathAliasingExplicitExport, TPathAliasExplicitExportFixture)
 }
 
 Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
+    Y_UNIT_TEST_TWIN(ExportKesus, ThroughDirectory) {
+        ExportKesusImpl<NExport::TExportToFsSettings>(*this, ThroughDirectory);
+    }
+
+    Y_UNIT_TEST_TWIN(ExportKesusIcb, ThroughDirectory) {
+        ExportKesusIcbImpl<NExport::TExportToFsSettings>(*this, ThroughDirectory);
+    }
+
     Y_UNIT_TEST(ImportFilterByYdbObjectPath) {
         ImportFilterByYdbObjectPathImpl<NExport::TExportToFsSettings, TFsBackupTestFixture>(*this, false);
     }
@@ -2279,6 +2443,14 @@ Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
 }
 
 Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
+    Y_UNIT_TEST_TWIN(ExportKesus, ThroughDirectory) {
+        ExportKesusImpl<NExport::TExportToS3Settings>(*this, ThroughDirectory);
+    }
+
+    Y_UNIT_TEST_TWIN(ExportKesusIcb, ThroughDirectory) {
+        ExportKesusIcbImpl<NExport::TExportToS3Settings>(*this, ThroughDirectory);
+    }
+
     Y_UNIT_TEST_TWIN(ExportWholeDatabase, IsOlap) {
         ExportWholeDatabaseImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }

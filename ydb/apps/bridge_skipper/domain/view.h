@@ -9,7 +9,7 @@ struct TViewSelection {
     std::optional<EBlockerReason> Blocker;
     // Endpoints whose fresh reply is at the selected generation; empty without a View.
     std::set<TString> CurrentEndpoints;
-    // Earliest inclusive expiry of the selected generation's admitted views.
+    // Exclusive end of freshness for the selected generation's admitted views.
     TMonotonic ValidUntil = TMonotonic::Max();
 };
 

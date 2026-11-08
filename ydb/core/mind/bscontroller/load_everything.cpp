@@ -284,6 +284,9 @@ public:
                 }
                 if (groups.HaveValue<T::FailRealmStates>()) {
                     const NKikimrBlobStorage::TFailRealmStates states = groups.GetValue<T::FailRealmStates>();
+                    if (states.HasGroupState()) {
+                        group.Mirror3dcState = states.GetGroupState();
+                    }
                     if (states.StateSize()) {
                         Y_ABORT_UNLESS(states.StateSize() == 3);
                         group.FailRealmStates.emplace();
@@ -811,7 +814,7 @@ public:
                         const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, groupId,
                             targetGroupId);
                         Y_ABORT_UNLESS(inserted);
-                        Self->SyncersRequiringAction.PushBack(&it->second);
+                        Self->EnqueueSyncer(it->second);
                     }
                 });
             }

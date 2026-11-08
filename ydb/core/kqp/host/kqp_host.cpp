@@ -3,6 +3,7 @@
 #include "new_parser/kqp_new_parser.h"
 #include "new_parser/kqp_name_resolver.h"
 #include "new_parser/kqp_type_annotation.h"
+#include "new_parser/rbo/kqp_rbo_lowering.h"
 #include <ydb/core/kqp/tracing/kqp_compile_trace_transformer.h>
 #include "kqp_statement_rewrite.h"
 
@@ -1484,9 +1485,9 @@ private:
                     }
                 }
                 NewParserAst = std::move(parsed.Ast);
-                // Until direct RBO lowering is available, reuse the original
-                // pipeline's asynchronous catalog load to bind this AST.
-                ythrow TNewYqlParserFallback() << "New AST construction succeeded; AST-to-RBO lowering is not implemented";
+                // The original frontend still supplies asynchronous catalog
+                // loading and result packaging. RBO can consume the typed AST.
+                YQL_CLOG(INFO, ProviderKqp) << "New YQL AST construction succeeded";
             } catch (const TNewYqlParserFallback& e) {
                 // No expression lowering has run yet. Resume the original pipeline
                 // with its existing AST, settings and optimizer selection intact.
@@ -2469,6 +2470,10 @@ private:
     }
 
     void SetupSession(EKikimrQueryType queryType, TCompileTrace::TPtr trace = {}) {
+        if (TransformCtx) {
+            TransformCtx->NewParserRboLowering = {};
+            TransformCtx->NewParserRboQueryCount = 0;
+        }
         NewParserTypes.reset();
         NewParserTypeSettings = {};
         NewParserTypesProcessed = false;
@@ -2589,12 +2594,93 @@ private:
                     return IGraphTransformer::TStatus::Error;
                 }
                 YQL_CLOG(INFO, ProviderKqp) << "New YQL type annotation succeeded";
+                InstallNewParserRboLowering();
             } catch (const TNewYqlParserFallback& e) {
                 YQL_CLOG(INFO, ProviderKqp) << "New YQL type annotation fallback: " << e.what();
             }
             trace.SetSuccess(true);
             return IGraphTransformer::TStatus::Ok;
         });
+    }
+
+    void InstallNewParserRboLowering() {
+        TVector<const NNewYql::TQuery*> queries;
+        for (const auto& statement : NewParserAst->Statements) {
+            if (const auto* query = std::get_if<NNewYql::TQueryStatement>(&statement.Value)) {
+                queries.push_back(query->Query.get());
+            }
+        }
+        TransformCtx->NewParserRboQueryCount = queries.size();
+        TransformCtx->NewParserRboLowering = [this, queries = std::move(queries)](size_t index,
+            const TExprNode::TPtr& legacyRoot, const TExprNode::TPtr& hints, TExprContext& ctx) -> TIntrusivePtr<TOpRoot>
+        {
+            try {
+                const auto lookup = [&](const NNewYql::TTableMetadata& snapshot) -> NNewYql::TRboTable {
+                    if (snapshot.Cluster != Cluster) {
+                        ythrow TNewYqlParserFallback() << "Cross-cluster RBO reads are not supported";
+                    }
+                    const auto& description = SessionCtx->Tables().ExistingTable(snapshot.Cluster, snapshot.Path);
+                    const auto& metadata = *description.Metadata;
+                    if (metadata.PathId.OwnerId() != snapshot.OwnerId || metadata.PathId.TableId() != snapshot.TableId
+                        || metadata.SchemaVersion != snapshot.SchemaVersion
+                        || (metadata.Kind != EKikimrTableKind::Datashard && metadata.Kind != EKikimrTableKind::Olap)) {
+                        ythrow TNewYqlParserFallback() << "Table metadata changed before RBO lowering";
+                    }
+                    auto table = Build<TKqpTable>(ctx, legacyRoot->Pos())
+                        .Path().Build(snapshot.Path)
+                        .PathId().Build(TStringBuilder() << snapshot.OwnerId << ':' << snapshot.TableId)
+                        .SysView().Build("").Version().Build(ToString(snapshot.SchemaVersion)).Done().Ptr();
+                    return {table, metadata.Kind == EKikimrTableKind::Olap ? NYql::EStorageType::ColumnStorage : NYql::EStorageType::RowStorage};
+                };
+                const auto& query = *queries.at(index);
+                auto lowered = NNewYql::LowerToRbo(query, *NewParserAst, *NewParserNames, *NewParserTypes,
+                    ctx, lookup, TypesCtx->OrderedColumns);
+                const auto legacy = TKqpOpRoot(legacyRoot);
+                // Retain the legacy result contract while catalog loading and
+                // result packaging still run through the original frontend.
+                const auto& columns = lowered->GetColumns().Items();
+                if (columns.size() != legacy.ColumnOrder().Size()) {
+                    ythrow TNewYqlParserFallback() << "Result arity differs at the RBO boundary";
+                }
+                for (size_t i = 0; i < columns.size(); ++i) {
+                    if (columns[i].second != legacy.ColumnOrder().Item(i).StringValue()) {
+                        ythrow TNewYqlParserFallback() << "Result labels differ at the RBO boundary";
+                    }
+                }
+                // RewriteSelect puts the SQL LIMIT innermost; PushTakeIntoPlan
+                // may add outer service result caps. Preserve those caps once,
+                // including their position relative to SQL OFFSET.
+                TVector<TKqpOpLimit> limits;
+                auto input = legacy.Input();
+                while (auto limit = input.Maybe<TKqpOpLimit>()) {
+                    limits.push_back(limit.Cast());
+                    input = limit.Cast().Input();
+                }
+                if (query.Limit) {
+                    if (limits.empty()) { ythrow TNewYqlParserFallback() << "Missing SQL LIMIT at RBO boundary"; }
+                    limits.pop_back();
+                }
+                auto op = lowered->GetInput();
+                for (auto it = limits.rbegin(); it != limits.rend(); ++it) {
+                    if (it->Offset()) { ythrow TNewYqlParserFallback() << "Unexpected result-cap OFFSET"; }
+                    op = MakeIntrusive<TOpLimit>(std::move(op), it->Pos(),
+                        NKqp::TExpression(it->Count().Ptr(), &ctx), EOpPhase::Undefined);
+                }
+                TVector<TString> queryColumns;
+                if (hints) {
+                    for (const auto& hint : hints->Children()) { queryColumns.emplace_back(hint->Content()); }
+                }
+                auto root = MakeIntrusive<TOpRoot>(std::move(op), lowered->Pos, lowered->GetColumns(), std::move(queryColumns));
+                root->PlanProps = std::move(lowered->PlanProps);
+                root->Node = legacyRoot;
+                for (const auto& item : *root) { item.Current->BindExpressionPlanProps(&root->PlanProps); }
+                YQL_CLOG(INFO, ProviderKqp) << "New YQL RBO lowering succeeded";
+                return root;
+            } catch (const TNewYqlParserFallback& e) {
+                YQL_CLOG(INFO, ProviderKqp) << "New YQL RBO lowering fallback: " << e.what();
+                return {};
+            }
+        };
     }
 
     void SetupYqlTransformer(EKikimrQueryType queryType, TCompileTrace::TPtr trace = {}) {

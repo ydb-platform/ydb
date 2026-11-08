@@ -8,11 +8,13 @@ REQUIREMENTS(cpu:2)
 
 SRCS(
     kqp_new_parser_fallback_ut.cpp
+    kqp_rbo_lowering_ut.cpp
 )
 
 PEERDIR(
     library/cpp/resource
     ydb/core/kqp/ut/common
+    ydb/core/kqp/host/new_parser/rbo
     ydb/library/benchmarks/queries/tpch
     ydb/library/yql/udfs/statistics_internal
     yql/essentials/parser/pg_wrapper

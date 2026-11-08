@@ -187,12 +187,21 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
     // with two roots is not a result tuple.
     ui64 physicalTxGroup = 0;
     ui64 effectPriority = 0;
+    size_t frontendIndex = 0;
+    size_t resultCount = 0;
+    bool useFrontend = TransformCtx && bool(TransformCtx->NewParserRboLowering);
+    for (const auto query : TKqlQueryList(input)) {
+        resultCount += query.Results().Size();
+        useFrontend = useFrontend && query.Effects().Size() == 0;
+    }
+    useFrontend = useFrontend && resultCount == TransformCtx->NewParserRboQueryCount;
     auto addRoot = [&](TExprNode::TPtr root, TExprNode::TPtr columns) {
         if (TCoUnordered::Match(root.Get())) {
             root = root->HeadPtr();
         }
         Y_ENSURE(TKqpOpRoot::Match(root.Get()), "Expected an RBO query root, got " << root->Content());
-        auto opRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(root, columns);
+        auto opRoot = useFrontend ? TransformCtx->NewParserRboLowering(frontendIndex++, root, columns, ctx) : nullptr;
+        if (!opRoot) { opRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(root, columns); }
         opRoot->PlanProps.PhysicalTxGroup = physicalTxGroup;
         opRoot->PlanProps.EffectPriority = effectPriority;
         opRoot->ComputeParents();

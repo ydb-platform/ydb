@@ -42,7 +42,6 @@ _TEXT_SUFFIXES = frozenset(
 
 _TRY_ARTIFACT_SUFFIXES = (
     "report.json",
-    "ya-test.html",
     "started_at",
     "index.html",
 )

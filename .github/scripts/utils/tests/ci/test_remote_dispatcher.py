@@ -257,6 +257,47 @@ class ManifestDownloadTest(unittest.TestCase):
             self.assertEqual(failed, ["try_1/logs/a.log"])
             self.assertTrue((Path(tmp) / "try_1" / "report.json").is_file())
 
+    def test_try_manifest_without_ya_test_html_succeeds(self):
+        files = [
+            "index.html",
+            "ci_metrics.jsonl",
+            "try_1/index.html",
+            "try_1/report.json",
+            "try_1/started_at",
+        ]
+        objects = {
+            "index.html": b"<html/>",
+            "ci_metrics.jsonl": b"{}\n",
+            "try_1/index.html": b"<html/>",
+            "try_1/report.json": b"{}",
+            "try_1/started_at": b"1700000000",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            failed = download_listed_objects(
+                "https://ep",
+                "bucket",
+                "prefix",
+                files,
+                Path(tmp),
+                fetch=self._fetch_from(objects),
+            )
+            self.assertEqual(failed, [])
+            self.assertFalse((Path(tmp) / "try_1" / "ya-test.html").exists())
+
+    def test_listed_ya_test_html_missing_object_dies(self):
+        files = self._manifest_files()
+        objects = self._objects()
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(SystemExit):
+                download_listed_objects(
+                    "https://ep",
+                    "bucket",
+                    "prefix",
+                    files,
+                    Path(tmp),
+                    fetch=self._fetch_from(objects, missing={"try_1/ya-test.html"}),
+                )
+
 
 class HttpRetryTest(unittest.TestCase):
     def test_retries_then_succeeds(self):

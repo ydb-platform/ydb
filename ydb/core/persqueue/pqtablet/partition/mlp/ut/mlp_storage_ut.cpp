@@ -4714,6 +4714,48 @@ Y_UNIT_TEST(HasRetentionExpiredMessages) {
     UNIT_ASSERT(utils.Storage.begin() == utils.Storage.end());
 }
 
+Y_UNIT_TEST(RejectsTruncatedSerializedData) {
+    auto makeStorage = [] {
+        return TStorage(TIntrusivePtr<MockTimeProvider>(new MockTimeProvider()), {});
+    };
+
+    {
+        auto storage = makeStorage();
+        NKikimrPQ::TMLPStorageSnapshot snapshot;
+        snapshot.SetFormatVersion(1);
+        snapshot.SetMessages(TString(1, '\0'));
+
+        UNIT_ASSERT_EXCEPTION(storage.Initialize(snapshot), yexception);
+    }
+
+    {
+        auto storage = makeStorage();
+        NKikimrPQ::TMLPStorageSnapshot snapshot;
+        snapshot.SetFormatVersion(1);
+        snapshot.SetMessages(TString(8, '\0') + TString(1, '\xFF'));
+
+        UNIT_ASSERT_EXCEPTION(storage.Initialize(snapshot), yexception);
+    }
+
+    {
+        auto storage = makeStorage();
+        NKikimrPQ::TMLPStorageWAL wal;
+        wal.SetFormatVersion(1);
+        wal.SetAddedMessages(TString(1, '\xFF'));
+
+        UNIT_ASSERT_EXCEPTION(storage.ApplyWAL(wal), yexception);
+    }
+
+    {
+        auto storage = makeStorage();
+        NKikimrPQ::TMLPStorageWAL wal;
+        wal.SetFormatVersion(1);
+        wal.SetAddedMessages(TString(1, '\0'));
+
+        UNIT_ASSERT_EXCEPTION(storage.ApplyWAL(wal), yexception);
+    }
+}
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

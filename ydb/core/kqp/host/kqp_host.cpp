@@ -2,6 +2,7 @@
 #include "kqp_host_impl.h"
 #include "new_parser/kqp_new_parser.h"
 #include "new_parser/kqp_name_resolver.h"
+#include "new_parser/kqp_type_annotation.h"
 #include <ydb/core/kqp/tracing/kqp_compile_trace_transformer.h>
 #include "kqp_statement_rewrite.h"
 
@@ -12,6 +13,7 @@
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cbo_factory.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/kqp/tracing/kqp_compile_trace.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
@@ -1464,6 +1466,23 @@ private:
                 }
                 NewParserSettings = {translationSettings.DefaultCluster, translationSettings.PathPrefix,
                     translationSettings.ClusterPathPrefixes};
+                NewParserTypeSettings = {};
+                NewParserTypeSettings.Expressions.UnicodeLiterals = translationSettings.UnicodeLiterals;
+                NewParserTypeSettings.Expressions.FlexibleTypes = !translationSettings.Flags.contains("DisableFlexibleTypes");
+                if (translationSettings.Flags.contains("AnsiInForEmptyOrNullableItemsCollections")) {
+                    NewParserTypeSettings.Expressions.AnsiIn = true;
+                } else if (translationSettings.Flags.contains("DisableAnsiInForEmptyOrNullableItemsCollections")) {
+                    NewParserTypeSettings.Expressions.AnsiIn = false;
+                }
+                if (query.ParameterTypes) {
+                    for (const auto& [name, proto] : *query.ParameterTypes) {
+                        const auto* type = ParseTypeFromYdbType(proto, ctx);
+                        if (!type) {
+                            return result;
+                        }
+                        NewParserTypeSettings.Parameters[name.StartsWith('$') ? name : "$" + name] = type;
+                    }
+                }
                 NewParserAst = std::move(parsed.Ast);
                 // Until direct RBO lowering is available, reuse the original
                 // pipeline's asynchronous catalog load to bind this AST.
@@ -2348,6 +2367,7 @@ private:
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
             .Add(CreateNewParserNameResolutionTransformer(), "ResolveNewParserNames")
+            .Add(CreateNewParserTypeAnnotationTransformer(), "AnnotateNewParserTypes")
             .Add(endPass("Annotate IO"), "TraceEndIOAnnotation")
             .Add(beginPass("Annotate types"), "TraceBeginTypeAnnotation")
             .AddTypeAnnotation()
@@ -2420,6 +2440,7 @@ private:
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
             .Add(CreateNewParserNameResolutionTransformer(), "ResolveNewParserNames")
+            .Add(CreateNewParserTypeAnnotationTransformer(), "AnnotateNewParserTypes")
             .Add(endPass("Annotate IO"), "TraceEndIOAnnotation")
             .Add(beginPass("Annotate types"), "TraceBeginTypeAnnotation")
             .AddTypeAnnotation()
@@ -2448,6 +2469,9 @@ private:
     }
 
     void SetupSession(EKikimrQueryType queryType, TCompileTrace::TPtr trace = {}) {
+        NewParserTypes.reset();
+        NewParserTypeSettings = {};
+        NewParserTypesProcessed = false;
         NewParserNames.reset();
         NewParserAst.reset();
         NewParserNamesProcessed = false;
@@ -2514,7 +2538,11 @@ private:
                         if (column.IsBuildInProgress) {
                             ythrow TNewYqlParserFallback() << "Column schema change in progress: " << path;
                         }
-                        snapshot->Columns.push_back({column.Name, column.Id, column.Type, column.NotNull});
+                        const auto* type = description->GetColumnType(column.Name);
+                        if (!type) {
+                            ythrow TNewYqlParserFallback() << "Column type is not available: " << path << "." << column.Name;
+                        }
+                        snapshot->Columns.push_back({column.Name, column.Id, FormatType(type), column.NotNull});
                     };
                     if (metadata.ColumnOrder.empty()) {
                         for (const auto& [name, column] : metadata.Columns) {
@@ -2539,6 +2567,30 @@ private:
                 YQL_CLOG(INFO, ProviderKqp) << "New YQL name resolution succeeded";
             } catch (const TNewYqlParserFallback& e) {
                 YQL_CLOG(INFO, ProviderKqp) << "New YQL name resolution fallback: " << e.what();
+            }
+            trace.SetSuccess(true);
+            return IGraphTransformer::TStatus::Ok;
+        });
+    }
+
+    TAutoPtr<IGraphTransformer> CreateNewParserTypeAnnotationTransformer() {
+        return CreateFunctorTransformer([this](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            output = input;
+            if (!NewParserNames || NewParserTypesProcessed) {
+                return IGraphTransformer::TStatus::Ok;
+            }
+            NewParserTypesProcessed = true;
+            TCompileTraceScope trace(SessionCtx->Query().CompileTrace.Get(), TCompileTraceLevels::Phase,
+                "Annotate new YQL AST types");
+            try {
+                NewParserTypes = NNewYql::AnnotateAst(*NewParserAst, *NewParserNames, ctx, *TypesCtx, NewParserTypeSettings);
+                if (!NewParserTypes) {
+                    trace.SetSuccess(false);
+                    return IGraphTransformer::TStatus::Error;
+                }
+                YQL_CLOG(INFO, ProviderKqp) << "New YQL type annotation succeeded";
+            } catch (const TNewYqlParserFallback& e) {
+                YQL_CLOG(INFO, ProviderKqp) << "New YQL type annotation fallback: " << e.what();
             }
             trace.SetSuccess(true);
             return IGraphTransformer::TStatus::Ok;
@@ -2593,6 +2645,9 @@ private:
     mutable NNewYql::TNameResolutionSettings NewParserSettings;
     std::unique_ptr<NNewYql::TResolvedNames> NewParserNames;
     bool NewParserNamesProcessed = false;
+    mutable NNewYql::TAstTypeAnnotationSettings NewParserTypeSettings;
+    std::unique_ptr<NNewYql::TAnnotatedAst> NewParserTypes;
+    bool NewParserTypesProcessed = false;
     TExprNode::TPtr FakeWorld;
     TKqpAsyncResultBase<IKqpHost::TQueryResult>::TAsyncTransformStatusCallback DataProvidersFinalizer;
 

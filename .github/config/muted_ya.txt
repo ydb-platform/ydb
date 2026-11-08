@@ -37,7 +37,6 @@ ydb/core/tx/columnshard/export/actor/ut TExportActorLifecycle.RetriesExportAfter
 ydb/core/tx/replication/controller/ut_schema_change BootstrapImport.SourceWithIndex+Materialized+DirectImport
 ydb/core/tx/replication/controller/ut_schema_change BootstrapImport.SourceWithIndex+Materialized-DirectImport
 ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
-ydb/core/util/ut TCircularOperationQueueTest.ShouldShuffle
 ydb/core/viewer/tests test.py.TestViewer.test_topic_data_cdc
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
@@ -58,37 +57,10 @@ ydb/services/persqueue_v1/ut/tablet_restart_session_ut TTabletRestartServerClean
 ydb/services/persqueue_v1/ut/tablet_restart_session_ut unittest.sole chunk
 ydb/services/ydb/table_split_ut YdbTableSplit.SplitByLoadWithReadsMultipleSplitsWithData
 ydb/services/ydb/ut YdbPathAliasingIngress.DiscoveryKeepsHeaderAndBodySeparate
-ydb/tests/compatibility/common test_snapshot_isolation.py.TestSnapshotIsolation.test_row_tables[rolling_stable-26-4-1_to_prestable-27-1-1]
-ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-27-1-1_to_stable-26-4-1]
-ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_exact_feature_config[rolling_stable-26-4-1_to_prestable-27-1-1]
-ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-4-1_to_prestable-27-1-1]
-ydb/tests/compatibility/indexes test_json_index.py.TestCompactJsonIndexWithRowId.test_compact_json_row_id_across_rolls[rolling_stable-26-4-1_to_prestable-27-1-1]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_stable-26-4-1-lax]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_stable-26-4-1-strict]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-4-1_to_prestable-27-1-1-lax]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-4-1_to_prestable-27-1-1-strict]
-ydb/tests/compatibility/indexes test_unique_index.py.TestUniqueIndex.test_unique_index[rolling_stable-26-4-1_to_prestable-27-1-1]
-ydb/tests/compatibility/indexes test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-4-1_to_prestable-27-1-1]
-ydb/tests/compatibility/kv test_s3_router_metrics.py.TestS3RouterMetricsRestart.test_kv_volume_over_s3_survives_version_change_with_router_metrics_push[restart_prestable-27-1-1_to_stable-26-4-1]
-ydb/tests/compatibility/kv test_s3_router_metrics.py.TestS3RouterMetricsRolling.test_kv_volume_over_s3_survives_rolling_with_router_metrics_push[rolling_stable-26-4-1_to_prestable-27-1-1]
-ydb/tests/compatibility/olap test_bloom_index.py.TestBloomIndex.test_bloom_index[rolling_stable-26-4-1_to_prestable-27-1-1]
-ydb/tests/compatibility/olap test_compression.py.TestCompressionRestart.test_compress_table[restart_prestable-27-1-1_to_stable-26-4-1]
-ydb/tests/compatibility/olap test_encoding.py.TestEncoding.test_encoding[rolling_stable-26-4-1_to_prestable-27-1-1]
-ydb/tests/compatibility/olap test_min_max_index.py.TestMinMaxIndex.test_min_max_index[rolling_stable-26-4-1_to_prestable-27-1-1]
-ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRestart.test_rename_table[restart_prestable-27-1-1_to_stable-26-4-1]
-ydb/tests/compatibility/olap test_rename_table.py.TestRenameTableRollingUpdate.test_rename_table[rolling_stable-26-4-1_to_prestable-27-1-1]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_stable-26-4-1-False]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_prestable-27-1-1_to_stable-26-4-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_prestable-27-1-1-False]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringPrefixAlter.test_prefix_changes_preserve_existing_objects[restart_stable-26-4-1_to_prestable-27-1-1-True]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_prestable-27-1-1_to_stable-26-4-1-False]
-ydb/tests/compatibility/olap test_tiering.py.TestTieringRestart.test_tiering_survives_version_change[restart_prestable-27-1-1_to_stable-26-4-1-True]
-ydb/tests/compatibility/rolling test_rolling.py.TestRolling.test_kv[rolling_stable-26-4-1_to_prestable-27-1-1-column]
-ydb/tests/compatibility/rolling test_rolling.py.TestRolling.test_kv[rolling_stable-26-4-1_to_prestable-27-1-1-row]
-ydb/tests/compatibility/rolling test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-26-4-1_to_prestable-27-1-1-row-False]
-ydb/tests/compatibility/rolling test_transfer.py.TestTransferRollingUpdate.test_transfer[rolling_stable-26-4-1_to_prestable-27-1-1-row-True]
-ydb/tests/compatibility/topics py3test.[test_kafka_topic.py */*] chunk
-ydb/tests/compatibility/topics py3test.[test_topic.py */*] chunk
 ydb/tests/compatibility/udf test_datetime2.py.TestDatetime2.test_all[mixed_prestable-27-1-1_and_stable-26-4-1]
 ydb/tests/datashard/set_column_constraint/concurrency py3test.[test_set_not_null_concurrency.py */*] chunk
 ydb/tests/datashard/set_column_constraint/concurrency test_set_not_null_concurrency.py.TestSetNotNullConcurrency.test_set_not_null_with_concurrent_upserts
@@ -155,6 +127,7 @@ ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[2-no_sha
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
 ydb/tests/fq/yt/yt_integration py3test.sole chunk
 ydb/tests/functional/api py3test.[test_public_api.py] chunk
+ydb/tests/functional/api test_public_api.py.TestAttributes.test_create_table
 ydb/tests/functional/blobstorage test_other.py.TestOther.test_nodata
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_disabled_enabled
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_enabled
@@ -175,9 +148,8 @@ ydb/tests/functional/config test_distconf_self_heal.py.TestKiKiMRDistConfSelfHea
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_list_legacy_api
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
-ydb/tests/functional/federation_test unittest.[*/*] chunk
-ydb/tests/functional/mirror3dc test_mirror3dc.py.TestMirror3dc.test_exclude_one_dc
 ydb/tests/functional/mvp/meta py3test.[test_support_links.py] chunk
+ydb/tests/functional/mvp/meta test_support_links.py.test_meta_support_links_rejects_database_with_node_or_host
 ydb/tests/functional/nbs/F5_observability F5_02_parse_pbuffer_occupancy.py.TestF5_02ParsePbufferOccupancy.test_parse_pbuffer_occupancy
 ydb/tests/functional/restarts test_restarts.py.TestRestartClusterMirror34.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok
 ydb/tests/functional/restarts test_restarts.py.TestRestartMultipleBlock42.test_tablets_are_successfully_started_after_few_killed_nodes

@@ -153,6 +153,7 @@ TString GetSecretName(const NYql::TCreateObjectSettings& settings, const TString
     }
 
     static const TSet<TString> properties{
+        "storage_pool_name", // ObjectStorage
         "database_name",
         "protocol",   // managed PG, CH
         "mdb_cluster_id",   // managed PG, CH, GP, MY

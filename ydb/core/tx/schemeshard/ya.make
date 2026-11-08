@@ -158,6 +158,7 @@ SRCS(
     schemeshard__operation_common_external_table.cpp
     schemeshard__operation_common_pq.cpp
     schemeshard__operation_common_resource_pool.cpp
+    schemeshard__operation_common_solomon.cpp
     schemeshard__operation_common_subdomain.cpp
     schemeshard__operation_common_subdomain.h
     schemeshard__operation_consistent_copy_tables.cpp

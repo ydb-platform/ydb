@@ -18,6 +18,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_external_data_source.cpp
+    ut_kv_storage_pool.cpp
 )
 
 END()

@@ -2294,6 +2294,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TWorkloadManagerServiceInitializer(runConfig, workloadManagerGateway));
     }
 
+    if (serviceMask.EnableTxProxy || (serviceMask.EnableKqp && runConfig.AppConfig.GetKQPConfig().GetEnable())) {
+        sil->AddServiceInitializer(new TSchemaSecretsInitializer(runConfig));
+    }
+
     if (serviceMask.EnableKqp) {
         sil->AddServiceInitializer(new TKqpServiceInitializer(runConfig, ModuleFactories, *this));
     }

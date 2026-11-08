@@ -147,7 +147,15 @@ message TStorageConfig {
 }
 
 message TKeyValueStorageConfig {
-    repeated TStorageSettings Channel = 3;
+    message TChannel {
+        optional string PreferredPoolKind = 1;
+        optional bool AllowOtherKinds = 2 [default = true]; // legacy TStorageSettings encoding
+        oneof ExternalStorage {
+            string ExternalDataSource = 3;
+            string StoragePool = 4;
+        }
+    }
+    repeated TChannel Channel = 3;
 }
 
 message TFamilyDescription {
@@ -1776,6 +1784,7 @@ message TAlterSolomonVolume {
     optional uint64 PartitionCount = 3;
 
     optional bool UpdateChannelsBinding = 4 [default = false];
+    optional bool InheritChannelsBinding = 6 [default = false]; // new partitions inherit the volume's exact bindings
 
     optional TKeyValueStorageConfig StorageConfig = 5;
 }
@@ -2511,6 +2520,12 @@ message TExternalTableReferences {
 
 message TExternalDataSourceProperties {
     map<string, string> Properties = 1;
+    // SchemeShard-owned fields. StoragePoolChannels freezes the underlying
+    // BlobDepot tablet placement selected when the CREATE was accepted.
+    optional string StoragePoolError = 2;
+    repeated string StoragePoolChannels = 3;
+    // Unique within the bucket even when independent clusters reuse the same PathId.
+    optional string StoragePoolObjectPrefix = 4;
 }
 
 message TExternalDataSourceDescription {

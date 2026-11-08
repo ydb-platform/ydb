@@ -204,9 +204,115 @@ TString ListSecrets(const TVector<TString>& paths) {
     return sb;
 }
 
+TEvTxUserProxy::TEvNavigate* MakeDescribeSecretRequest(const TString& database, const TString& path) {
+    auto request = MakeHolder<TEvTxUserProxy::TEvNavigate>();
+    request->Record.SetDatabaseName(database);
+    auto* describe = request->Record.MutableDescribePath();
+    describe->SetPath(path);
+    describe->MutableOptions()->SetReturnSecretValue(true);
+    return request.Release();
+}
+
+// A durable storage binding has a SID but no current group membership. A grant
+// to that SID is sufficient only when no applicable DENY could override it.
+bool CanReadStoragePoolSecret(const NKikimrSchemeOp::TDirEntry& entry, const TString& sid) {
+    if (entry.GetOwner() == sid) {
+        return true;
+    }
+    NACLibProto::TACL acl;
+    if (!entry.HasEffectiveACL() || !acl.ParseFromString(entry.GetEffectiveACL())) {
+        return false;
+    }
+    bool directGrant = false;
+    for (const auto& ace : acl.GetACE()) {
+        if ((ace.GetInheritanceType() & NACLib::InheritOnly) || !(ace.GetAccessRight() & NACLib::SelectRow)) {
+            continue;
+        }
+        if (ace.GetAccessType() == static_cast<ui32>(NACLib::EAccessType::Deny)) {
+            return false;
+        }
+        if (ace.GetAccessType() == static_cast<ui32>(NACLib::EAccessType::Allow) && ace.GetSID() == sid) {
+            directGrant = true;
+        }
+    }
+    return directGrant;
+}
+
+class TStoragePoolSecrets : public NActors::TActorBootstrapped<TStoragePoolSecrets> {
+    using TDescription = NKqp::TEvDescribeSecretsResponse::TDescription;
+    THolder<TEvResolveSecret> Request;
+    std::vector<TString> Values;
+    size_t Received = 0;
+
+    void Finish(TDescription result) {
+        Request->Promise.SetValue(std::move(result));
+        PassAway();
+    }
+
+    void Fail() {
+        Finish(TDescription(Ydb::StatusIds::UNAVAILABLE, {NYql::TIssue("Storage pool secrets are unavailable")}));
+    }
+
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        const auto& rec = ev->Get()->GetRecord();
+        const auto& desc = rec.GetPathDescription();
+        const size_t index = ev->Cookie;
+        // The value and its effective ACL come from the same SchemeShard
+        // snapshot, including when a secret has just been dropped and recreated.
+        if (index >= Values.size() || rec.GetStatus() != NKikimrScheme::StatusSuccess ||
+                rec.GetPath() != Request->SecretNames[index] || !desc.GetSecretDescription().HasValue() ||
+                !CanReadStoragePoolSecret(desc.GetSelf(), Request->UserToken->GetUserSID()) ||
+                desc.GetSecretDescription().GetValue().empty()) {
+            return Fail();
+        }
+        if (Values[index].empty()) {
+            Values[index] = desc.GetSecretDescription().GetValue();
+            if (++Received == Values.size()) {
+                Finish(TDescription(std::move(Values)));
+            }
+        }
+    }
+
+    STRICT_STFUNC(StateWork,
+        hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+        cFunc(NActors::TEvents::TSystem::Wakeup, Fail);
+        cFunc(NActors::TEvents::TSystem::Undelivered, Fail);
+    )
+
+public:
+    explicit TStoragePoolSecrets(THolder<TEvResolveSecret> request)
+        : Request(std::move(request))
+        , Values(Request->SecretNames.size())
+    {}
+
+    void Bootstrap() {
+        const auto& db = Request->Database;
+        if (!Request->UserToken || Request->UserToken->GetUserSID().empty() ||
+                db.empty() || db != CanonizePath(db) || Values.size() != 2) {
+            return Fail();
+        }
+        for (const auto& path : Request->SecretNames) {
+            if (path != CanonizePath(path) || !path.StartsWith(db + '/')) {
+                return Fail();
+            }
+        }
+        Become(&TThis::StateWork);
+        Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
+        for (size_t i = 0; i < Values.size(); ++i) {
+            // Path-based navigation verifies database scope in SchemeCache.
+            Send(MakeTxProxyID(), MakeDescribeSecretRequest(db, Request->SecretNames[i]),
+                NActors::IEventHandle::FlagTrackDelivery, i);
+        }
+    }
+};
+
 }  // anonymous namespace
 
 void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr& ev) {
+    if (ev->Get()->Settings.ForStoragePool) {
+        Register(new TStoragePoolSecrets(ev->Release()));
+        return;
+    }
     YDB_LOG_DEBUG("HandleIncomingRequest",
         {"event", "TEvResolveSecret"},
         {"requestId", LastRequestId},
@@ -281,6 +387,12 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(
     }
 
     for (const auto& entry: request->ResultSet) {
+        if (!entry.SecretInfo) {
+            FillResponse(requestId, NKqp::TEvDescribeSecretsResponse::TDescription(
+                Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("Expected a schema secret") }));
+            return;
+        }
+
         const auto& secretDescription = entry.SecretInfo->Description;
         Y_ENSURE(!secretDescription.HasValue(), "SchemeCache must never contain secret values");
 
@@ -289,7 +401,7 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(
 
         if (secretIt != VersionedSecrets.end() &&
             (LocalCacheHasActualVersion(secretIt->second, secretDescription.GetVersion()) &&
-            LocalCacheHasActualObject(secretIt->second, request->ResultSet.front().Self->Info.GetPathId())))
+            LocalCacheHasActualObject(secretIt->second, entry.Self->Info.GetPathId())))
         {
             // some secret version is in cache
             ++respIt->second.FilledSecretsCnt;
@@ -308,13 +420,8 @@ void TDescribeSchemaSecretsService::SendSchemeShardRequest(
     const ui64 requestId,
     const TString& secretPath)
 {
-    TAutoPtr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
     Y_ENSURE(!ev.Database.empty(), "Database name must be set in TxProxy requests");
-    navigateRequest->Record.SetDatabaseName(ev.Database);
-    NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-    record->SetPath(secretPath);
-    record->MutableOptions()->SetReturnSecretValue(true);
-    Send(MakeTxProxyID(), navigateRequest.Release(), 0, requestId);
+    Send(MakeTxProxyID(), MakeDescribeSecretRequest(ev.Database, secretPath), 0, requestId);
 }
 
 void TDescribeSchemaSecretsService::HandleSchemeShardResponse(

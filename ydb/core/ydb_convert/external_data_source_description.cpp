@@ -126,6 +126,10 @@ void FillExternalDataSourceDescription(
     for (const auto& [key, value] : inDesc.GetProperties().GetProperties()) {
         properties[to_upper(key)] = value;
     }
+    if (inDesc.GetProperties().HasStoragePoolError()) {
+        out.set_storage_pool_error(inDesc.GetProperties().GetStoragePoolError());
+    }
+
     Convert(inDesc.GetAuth(), properties);
     Convert(inDesc.GetReferences(), properties);
 }

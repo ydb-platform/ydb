@@ -17,6 +17,7 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/actors/core
     ydb/services/metadata/secret
+    ydb/services/scheme_secret/client
     ydb/services/metadata
 )
 

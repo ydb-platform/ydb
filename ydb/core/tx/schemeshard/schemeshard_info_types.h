@@ -2115,6 +2115,9 @@ struct TSolomonVolumeInfo: TSimpleRefCount<TSolomonVolumeInfo> {
     {
     }
 
+    // Legacy volumes can have different channel bindings on individual partitions.
+    TShardIdx GetFirstPartitionShardIdx() const;
+
     TSolomonVolumeInfo::TPtr CreateAlter() const {
         return CreateAlter(Version + 1);
     }

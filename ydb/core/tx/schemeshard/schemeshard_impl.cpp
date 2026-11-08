@@ -16,6 +16,7 @@
 #include <ydb/core/base/metadata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tx_processing.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
@@ -69,24 +70,9 @@ bool ResolvePoolNames(
     TChannelsBindings result;
 
     for (ui32 channelId = 0; channelId < channelCount; ++channelId) {
-        const auto poolKind = channel2poolKind(channelId);
-
-        auto poolIt = std::find_if(
-            storagePools.begin(),
-            storagePools.end(),
-            [=] (const TStoragePools::value_type& pool) {
-                return poolKind == pool.GetKind();
-            }
-        );
-
-        if (poolIt == storagePools.end()) {
-            //unable to construct channel binding with the storage pool
+        if (!BindChannelByPoolKind(result.emplace_back(), storagePools, channel2poolKind(channelId))) {
             return false;
         }
-
-        result.emplace_back();
-        result.back().SetStoragePoolName(poolIt->GetName());
-        result.back().SetStoragePoolKind(poolIt->GetKind());
     }
 
     channelsBinding.swap(result);
@@ -736,6 +722,7 @@ TMessageSeqNo TSchemeShard::NextRound() {
 }
 
 void TSchemeShard::Clear() {
+    SolomonExternalDataSources.clear();
     HasOrphanPlaceholders = false;
 
     // disarm ref handles: the whole state resets, PathsById clears first
@@ -1399,6 +1386,12 @@ bool TSchemeShard::ResolveSolomonChannels(const NKikimrSchemeOp::TKeyValueStorag
     auto getPoolKind = [&] (ui32 channel) {
         return TStringBuf(config.GetChannel(channel).GetPreferredPoolKind());
     };
+
+    for (const auto& channel : config.GetChannel()) {
+        if (channel.HasExternalDataSource() || channel.HasStoragePool()) {
+            return false;
+        }
+    }
 
     return ResolvePoolNames(
         config.ChannelSize(),
@@ -5966,6 +5959,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
     MaxBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxBuildIndexShardsInFlight();
     MaxStoredIndexBuilds = appData->SchemeShardConfig.GetMaxStoredIndexBuilds();
+    MaxExternalDataSourceStoragePoolsPerDatabase = appData->SchemeShardConfig.GetMaxExternalDataSourceStoragePoolsPerDatabase();
     ConfigureCondErase(appData->SchemeShardConfig, ctx);
 
     SendStatsIntervalSecondsDedicated = appData->StatisticsConfig.GetBaseStatsSendIntervalSecondsDedicated();
@@ -6193,6 +6187,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPersQueue::TEvDropTabletReply, Handle);
         HFuncTraced(TEvPersQueue::TEvUpdateConfigResponse, Handle);
         HFuncTraced(TEvPersQueue::TEvProposeTransactionResult, Handle);
+        HFuncTraced(TEvBlobStorage::TEvExternalDataSourcePoolResult, Handle);
         HFuncTraced(TEvBlobDepot::TEvApplyConfigResult, Handle);
 
         //pipes msg
@@ -7515,6 +7510,27 @@ void TSchemeShard::Handle(TEvPersQueue::TEvProposeTransactionResult::TPtr& ev, c
     }
 
     Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvBlobStorage::TEvExternalDataSourcePoolResult::TPtr& ev, const TActorContext& ctx) {
+    const auto txId = ev->Cookie;
+    const auto& result = ev->Get()->Record;
+    const auto part = result.GetSubTxId();
+    auto* tx = FindTx(TOperationId(TTxId(txId), part));
+    if (!tx || tx->TxType != TTxState::TxCreateExternalDataSource || tx->State != TTxState::Propose || tx->ExternalDataSourcePoolCompleted) {
+        return;
+    }
+    auto* progress = new TEvPrivate::TEvProgressOperation(txId, part);
+    if (result.GetSuccess() && !result.GetReady()) {
+        ctx.Schedule(TDuration::Seconds(5), progress);
+        return;
+    }
+    tx->ExternalDataSourcePoolCompleted = true;
+    if (!result.GetSuccess()) {
+        tx->ExternalDataSourcePoolError = result.GetErrorDescription().empty()
+            ? TString("BlobStorage controller rejected pool allocation") : result.GetErrorDescription();
+    }
+    ctx.Send(SelfId(), progress);
 }
 
 void TSchemeShard::Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr& ev, const TActorContext& ctx) {
@@ -8991,6 +9007,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         MaxRestoreBuildIndexShardsInFlight = schemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
         MaxBuildIndexShardsInFlight = schemeShardConfig.GetMaxBuildIndexShardsInFlight();
         MaxStoredIndexBuilds = schemeShardConfig.GetMaxStoredIndexBuilds();
+        MaxExternalDataSourceStoragePoolsPerDatabase = schemeShardConfig.GetMaxExternalDataSourceStoragePoolsPerDatabase();
         ConfigureCondErase(schemeShardConfig, ctx);
     }
 

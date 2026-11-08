@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
@@ -11,6 +12,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
+#include <ydb/services/scheme_secret/client/events.h>
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/hash.h>
@@ -188,6 +190,8 @@ namespace NKikimr::NBlobDepot {
         };
 
         NKikimrBlobDepot::TS3BackendSettings Settings;
+        ui64 CredentialRequestId = 0;
+        bool ResolvingCredentials = false;
         ui64 TabletId = 0;
         TString LogId;
         TString OriginalEndpoint;
@@ -380,8 +384,101 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        void RegisterInnerWrapper(NWrappers::IExternalStorageConfig::TPtr externalStorageConfig,
-                TIntrusivePtr<TRouteCounters> routeCounters) {
+        void ClearCredentials() {
+            RetireInnerWrapper();
+            Settings.MutableSettings()->ClearAccessKey();
+            Settings.MutableSettings()->ClearSecretKey();
+            ResolvingCredentials = false;
+            while (!PendingRequests.empty()) {
+                RejectPendingRequest(std::move(PendingRequests.front()));
+                PendingRequests.pop_front();
+            }
+        }
+
+        void ResolveCredentials() {
+            if (!Settings.HasExternalDataSourceCredentials()) {
+                return;
+            }
+
+            if (ResolvingCredentials) {
+                // A resolver can disappear during a node reconfiguration. Bound the lifetime
+                // of the old credentials and fence out a delayed result from that request.
+                ClearCredentials();
+            }
+
+            const ui64 cookie = ++CredentialRequestId;
+            Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup());
+            const auto& credentials = Settings.GetExternalDataSourceCredentials();
+            const TString& database = credentials.GetDatabase();
+            const auto isLocalSecret = [&database](const TString& path) {
+                return path == CanonizePath(path) && path.StartsWith(database + "/");
+            };
+
+            if (!AppData()->FeatureFlags.GetEnableSchemaSecrets() || !database || database != CanonizePath(database)
+                    || !credentials.GetOwnerSid() || !isLocalSecret(credentials.GetAccessKeySecretPath())
+                    || !isLocalSecret(credentials.GetSecretKeySecretPath())) {
+                ClearCredentials();
+                return;
+            }
+
+            ResolvingCredentials = true;
+            using TResult = NKqp::TEvDescribeSecretsResponse;
+            auto promise = NThreading::NewPromise<TResult::TDescription>();
+            promise.GetFuture().Subscribe([system = TActivationContext::ActorSystem(), self = SelfId(), cookie](
+                    const NThreading::TFuture<TResult::TDescription>& future) {
+                if (future.HasValue()) {
+                    system->Send(new IEventHandle(self, self, new TResult(future.GetValue()), 0, cookie));
+                }
+            });
+            auto token = MakeIntrusive<NACLib::TUserToken>(credentials.GetOwnerSid(), TVector<NACLib::TSID>{});
+            Send(NSecret::MakeDescribeSchemaSecretServiceId(SelfId().NodeId()),
+                new NSecret::TEvResolveSecret(token, database,
+                    {credentials.GetAccessKeySecretPath(), credentials.GetSecretKeySecretPath()}, std::move(promise),
+                    {.ForStoragePool = true}),
+                IEventHandle::FlagTrackDelivery, cookie);
+        }
+
+        void Handle(NKqp::TEvDescribeSecretsResponse::TPtr ev) {
+            if (ev->Sender != SelfId() || !ResolvingCredentials || ev->Cookie != CredentialRequestId) {
+                return;
+            }
+
+            ResolvingCredentials = false;
+            const auto& result = ev->Get()->Description;
+            if (result.Status != Ydb::StatusIds::SUCCESS || result.SecretValues.size() != 2
+                    || !result.SecretValues[0] || !result.SecretValues[1]) {
+                ClearCredentials();
+                return;
+            }
+
+            auto* s3 = Settings.MutableSettings();
+            if (s3->GetAccessKey() == result.SecretValues[0] && s3->GetSecretKey() == result.SecretValues[1]) {
+                return;
+            }
+
+            s3->SetAccessKey(result.SecretValues[0]);
+            s3->SetSecretKey(result.SecretValues[1]);
+            if (!BalancerEnabled()) {
+                BuildInnerWrapper(OriginalEndpoint);
+            } else if (s3->HasProxyHost()) {
+                RegisterInnerWrapper(true);
+            }
+        }
+
+        void Handle(TEvents::TEvUndelivered::TPtr ev) {
+            if (ev->Get()->SourceType == NSecret::TEvResolveSecret::EventType && ev->Cookie == CredentialRequestId) {
+                ResolvingCredentials = false;
+                ClearCredentials();
+            }
+        }
+
+        void RegisterInnerWrapper(bool proxy) {
+            if (Settings.HasExternalDataSourceCredentials() && !Settings.GetSettings().HasSecretKey()) {
+                return;
+            }
+
+            auto externalStorageConfig = NWrappers::IExternalStorageConfig::Construct(AppData()->AwsClientConfig, Settings.GetSettings());
+            auto routeCounters = MakeRouteCounters(proxy);
             RetireInnerWrapper();
 
             auto inFlight = MakeIntrusive<TWrapperInFlight>();
@@ -407,7 +504,8 @@ namespace NKikimr::NBlobDepot {
                 *ev,
                 NWrappers::NExternalStorage::MakeServiceUnavailableError(
                     "ServiceUnavailable",
-                    TStringBuilder() << "S3 endpoint is not resolved yet, id# " << LogId));
+                    TStringBuilder() << (Settings.HasExternalDataSourceCredentials() && !Settings.GetSettings().HasSecretKey()
+                        ? "S3 credentials are unavailable, id# " : "S3 endpoint is not resolved yet, id# ") << LogId));
             Y_ABORT_UNLESS(response);
             Send(ev->Sender, response.release(), 0, ev->Cookie);
         }
@@ -445,9 +543,7 @@ namespace NKikimr::NBlobDepot {
         void BuildInnerWrapper(const TString& endpoint) {
             auto* mutableSettings = Settings.MutableSettings();
             mutableSettings->SetEndpoint(endpoint);
-            RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
-                AppData()->AwsClientConfig, *mutableSettings),
-                MakeRouteCounters(false));
+            RegisterInnerWrapper(false);
             CurrentEndpoint = endpoint;
 
             YDB_LOG_INFO("S3Router endpoint set (direct)",
@@ -466,9 +562,7 @@ namespace NKikimr::NBlobDepot {
             mutableSettings->SetProxyPort(port);
             mutableSettings->SetProxyScheme(Settings.GetBalancerProxyScheme());
             const TString proxyEndpoint = TStringBuilder() << host << ':' << port;
-            RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
-                AppData()->AwsClientConfig, *mutableSettings),
-                MakeRouteCounters(true));
+            RegisterInnerWrapper(true);
             CurrentEndpoint = proxyEndpoint;
 
             YDB_LOG_INFO("S3Router endpoint switch (via proxy)",
@@ -613,6 +707,11 @@ namespace NKikimr::NBlobDepot {
                 return;
             }
 
+            if (Settings.HasExternalDataSourceCredentials() && !ResolvingCredentials && !Settings.GetSettings().HasSecretKey()) {
+                RejectRequest(std::unique_ptr<IEventHandle>(ev.Release()));
+                return;
+            }
+
             if (PendingRequests.size() < MaxPendingRequests) {
                 YDB_LOG_DEBUG("S3Router queueing request until balancer resolves",
                     {"marker", "BDTS34"},
@@ -652,6 +751,11 @@ namespace NKikimr::NBlobDepot {
                 {"endpoint", OriginalEndpoint},
                 {"balancerEnabled", BalancerEnabled()},
                 {"balancerHost", BalancerEnabled() ? Settings.GetBalancerHost() : TString()});
+
+            if (Settings.HasExternalDataSourceCredentials()) {
+                ClearCredentials();
+                ResolveCredentials();
+            }
 
             if (BalancerEnabled()) {
                 IssueBalancerRequest();
@@ -702,6 +806,9 @@ namespace NKikimr::NBlobDepot {
             }
             switch (type) {
                 hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, Handle);
+                hFunc(NKqp::TEvDescribeSecretsResponse, Handle);
+                hFunc(TEvents::TEvUndelivered, Handle);
+                cFunc(TEvents::TSystem::Wakeup, ResolveCredentials);
                 cFunc(TEvPrivate::EvBalancerTick, HandleBalancerTick);
                 cFunc(TEvPrivate::EvRefreshNow, HandleRefreshNow);
                 cFunc(TEvPrivate::EvSweepRetiring, HandleSweepRetiring);

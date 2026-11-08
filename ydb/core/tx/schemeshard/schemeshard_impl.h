@@ -320,6 +320,8 @@ public:
 
     TDbRefMap<TTopicInfo::TPtr> Topics{"Topics", this, DbRefMaps};
     TDbRefMap<TRtmrVolumeInfo::TPtr> RtmrVolumes{"RtmrVolumes", this, DbRefMaps};
+    // Rebuilt from EDS back-references, including bindings still used by older channel generations.
+    THashMap<TPathId, THashSet<TPathId>> SolomonExternalDataSources;
     TDbRefMap<TSolomonVolumeInfo::TPtr> SolomonVolumes{"SolomonVolumes", this, DbRefMaps};
     TDbRefMap<TSubDomainInfo::TPtr> SubDomains{"SubDomains", this, DbRefMaps};
     TDbRefMap<TBlockStoreVolumeInfo::TPtr> BlockStoreVolumes{"BlockStoreVolumes", this, DbRefMaps};
@@ -466,6 +468,7 @@ public:
     ui32 MaxRestoreBuildIndexShardsInFlight = 0;
     ui32 MaxBuildIndexShardsInFlight = 0;
     ui32 MaxStoredIndexBuilds = 0;
+    ui32 MaxExternalDataSourceStoragePoolsPerDatabase = 0;
 
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;
@@ -702,6 +705,10 @@ public:
 
     bool ResolveTabletChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolveRtmrChannels(const TPathId domainId, TChannelsBindings& channelsBinding) const;
+    bool ResolveSolomonVolumeChannels(const NKikimrSchemeOp::TKeyValueStorageConfig& config, const TPath& volume,
+        const NACLib::TUserToken* userToken, TChannelsBindings& bindings, TEvSchemeShard::TEvModifySchemeTransactionResult& result);
+    void PersistSolomonExternalDataSourceReferences(NIceDb::TNiceDb& db, const TPath& volume, const TChannelsBindings& bindings);
+    void ReleaseSolomonExternalDataSourceReferences(NIceDb::TNiceDb& db, TPathId volumeId);
     bool ResolveSolomonChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolveSolomonChannels(const NKikimrSchemeOp::TKeyValueStorageConfig &config, const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolvePqChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
@@ -1626,6 +1633,7 @@ public:
     void Handle(TEvSchemeShard::TEvTenantShredResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAddNewShardToShred::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TAutoPtr<TEventHandle<TEvBlobStorage::TEvExternalDataSourcePoolResult>>& ev, const TActorContext& ctx);
     void Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvShredInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvShredManualStartupRequest::TPtr& ev, const TActorContext& ctx);

@@ -5,6 +5,7 @@
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/tabletid.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -66,6 +67,20 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateExternalDataSource);
 
+        auto& source = *context.SS->ExternalDataSources.at(txState->TargetPathId);
+        if (!NExternalDataSource::GetStoragePoolAlias(source.Properties).empty()) {
+            if (!txState->ExternalDataSourcePoolCompleted && !source.Properties.HasStoragePoolError()) {
+                NExternalDataSource::RequestStoragePool(TPath::Init(txState->TargetPathId, context.SS), source, OperationId, context);
+                return false;
+            }
+            if (!txState->ExternalDataSourcePoolError.empty()) {
+                NIceDb::TNiceDb db(context.GetDB());
+                source.Properties.SetStoragePoolError(txState->ExternalDataSourcePoolError);
+                context.SS->PersistExternalDataSource(db, txState->TargetPathId);
+            }
+            context.OnComplete.UnbindMsgFromPipe(OperationId, TTabletId(MakeBSControllerID()),
+                TPipeMessageId(OperationId.GetSubTxId(), ui64(OperationId.GetTxId())));
+        }
         context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
         return false;
     }
@@ -201,6 +216,10 @@ public:
         const TExternalDataSourceInfo::TPtr externalDataSourceInfo =
             NExternalDataSource::CreateExternalDataSource(externalDataSourceDescription, 1);
         Y_ABORT_UNLESS(externalDataSourceInfo);
+        if (auto error = NExternalDataSource::PrepareStoragePool(externalDataSourceDescription, *externalDataSourceInfo, parentPath, context, owner)) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, error);
+            return result;
+        }
 
         const auto newPathId = context.SS->AllocatePathId();
 

@@ -47,4 +47,7 @@ message TSchemeShardConfig {
 
     // maximum recent index build operations to maintain (older ones are removed)
     optional uint32 MaxStoredIndexBuilds = 11 [default = 1000];
+
+    // Each managed EDS allocates a BlobDepot tablet and a virtual group.
+    optional uint32 MaxExternalDataSourceStoragePoolsPerDatabase = 12 [default = 64];
 }

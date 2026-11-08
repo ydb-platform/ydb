@@ -27,15 +27,17 @@ namespace NKikimr::NBlobDepot {
         TString Prefix;
         const TString Bucket;
         const TString LogId;
+        const bool RefreshableCredentials;
         std::optional<TString> Marker;
 
     public:
-        TScannerActor(TActorId parentId, TActorId wrapperId, TString prefix, TString bucket, TString logId)
+        TScannerActor(TActorId parentId, TActorId wrapperId, TString prefix, TString bucket, TString logId, bool refreshableCredentials)
             : ParentId(parentId)
             , WrapperId(wrapperId)
             , Prefix(std::move(prefix))
             , Bucket(std::move(bucket))
             , LogId(std::move(logId))
+            , RefreshableCredentials(refreshableCredentials)
         {
             Prefix += '/';
         }
@@ -67,6 +69,13 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvExternalStorage::TEvListObjectsResponse::TPtr ev) {
             auto& msg = *ev->Get();
             if (!msg.IsSuccess()) {
+                if (RefreshableCredentials) {
+                    // A rotation can restore access after the startup scan has already begun.
+                    YDB_LOG_WARN("S3 scan will retry", {"id", LogId}, {"errorCode", msg.GetError().GetExceptionName()});
+                    Schedule(TDuration::Minutes(1), new TEvents::TEvWakeup());
+                    return;
+                }
+
                 FinishWithError(msg.GetError().GetMessage().c_str());
             } else {
                 const auto& result = msg.Result.GetResult();
@@ -111,6 +120,7 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvExternalStorage::TEvListObjectsResponse, Handle)
             cFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
             cFunc(TEvPrivate::EvScanContinue, IssueNextRequest)
+            cFunc(TEvents::TSystem::Wakeup, IssueNextRequest)
             cFunc(TEvents::TSystem::Poison, PassAway)
         )
     };
@@ -170,7 +180,8 @@ namespace NKikimr::NBlobDepot {
 
     void TS3Manager::RunScannerActor() {
         Y_ABORT_UNLESS(!ScannerActorId);
-        ScannerActorId = Self->Register(new TScannerActor(Self->SelfId(), WrapperId, BasePath, Bucket, Self->GetLogId()));
+        ScannerActorId = Self->Register(new TScannerActor(Self->SelfId(), WrapperId, BasePath, Bucket, Self->GetLogId(),
+            Self->Config.GetS3BackendSettings().HasExternalDataSourceCredentials()));
     }
 
     void TS3Manager::HandleScanner(TAutoPtr<IEventHandle> ev) {

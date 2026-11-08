@@ -14,6 +14,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/aws_init/aws.h>
+#include <ydb/services/scheme_secret/client/events.h>
 
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -114,6 +115,8 @@ class TStallingS3Server {
     std::atomic<size_t> RequestsReceived{0};
     std::atomic<bool> Stopped{false};
     THolder<TThread> AcceptThread;
+    TMutex SigningMutex;
+    TString LastAccessKey;
     TMutex ConnectionsMutex;
     TVector<THolder<TThread>> ConnectionThreads;
 
@@ -140,6 +143,11 @@ public:
 
     ui16 GetPort() const { return Port; }
     size_t GetRequestsReceived() const { return RequestsReceived.load(); }
+
+    TString GetLastAccessKey() {
+        TGuard<TMutex> guard(SigningMutex);
+        return LastAccessKey;
+    }
 
     void Stop() {
         if (Stopped.exchange(true)) {
@@ -188,6 +196,12 @@ private:
             }
 
             request.append(buffer, received);
+        }
+
+        with_lock (SigningMutex) {
+            constexpr TStringBuf marker = "Credential=";
+            const size_t start = request.find(marker);
+            LastAccessKey = start == TString::npos ? TString() : TString(TStringBuf(request).SubStr(start + marker.size()).Before('/'));
         }
 
         ++RequestsReceived;
@@ -507,6 +521,76 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
 
         WaitReal(runtime, [&] { return result->Done.load(); }, holdDuration * 3);
         UNIT_ASSERT_C(result->Ok.load(), result->Error);
+    }
+
+    Y_UNIT_TEST(SchemaSecretsRotateAndRevokeS3Access) {
+        TStallingS3Server server(4096, TDuration::Zero());
+        TTestActorRuntime runtime;
+        runtime.SetUseRealInterconnect();
+        runtime.Initialize(TAppPrepare().Unwrap());
+        const auto resolver = runtime.AllocateEdgeActor();
+        runtime.RegisterService(NSecret::MakeDescribeSchemaSecretServiceId(runtime.GetNodeId()), resolver);
+
+        NKikimrBlobDepot::TS3BackendSettings settings;
+        auto* s3 = settings.MutableSettings();
+        s3->SetEndpoint(TStringBuilder() << "127.0.0.1:" << server.GetPort());
+        s3->SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
+        s3->SetBucket("test-bucket");
+        s3->SetRegion("ru-central1");
+        s3->SetUseVirtualAddressing(false);
+
+        auto* credentials = settings.MutableExternalDataSourceCredentials();
+        credentials->SetDatabase("/Root/db");
+        credentials->SetAccessKeySecretPath("/Root/db/id");
+        credentials->SetSecretKeySecretPath("/Root/db/secret");
+        credentials->SetOwnerSid("eds-owner");
+        const auto router = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
+        const auto edge = runtime.AllocateEdgeActor();
+        const auto refresh = [&] {
+            runtime.Send(new IEventHandle(router, edge, new TEvents::TEvWakeup()), 0, true);
+        };
+
+        using TDescription = NKqp::TEvDescribeSecretsResponse::TDescription;
+        const auto reply = [&](TDescription answer) {
+            auto request = runtime.GrabEdgeEventRethrow<NSecret::TEvResolveSecret>(resolver, TDuration::Seconds(1));
+            UNIT_ASSERT(request);
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->UserToken->GetUserSID(), "eds-owner");
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->Database, "/Root/db");
+            UNIT_ASSERT(request->Get()->Settings.ForStoragePool);
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->SecretNames, (TVector<TString>{"/Root/db/id", "/Root/db/secret"}));
+            request->Get()->Promise.SetValue(std::move(answer));
+            runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        };
+
+        const auto read = [&] {
+            auto result = MakeIntrusive<TGetResult>();
+            const auto collector = runtime.Register(new TGetCollector(result));
+            auto request = Aws::S3::Model::GetObjectRequest().WithBucket("test-bucket").WithKey("key").WithRange("bytes=0-4095");
+            runtime.Send(new IEventHandle(router, collector, new NWrappers::NExternalStorage::TEvGetObjectRequest(request)), 0, true);
+            return result;
+        };
+
+        const auto succeeded = [&](const TIntrusivePtr<TGetResult>& result) {
+            WaitReal(runtime, [&] { return result->Done.load(); });
+            return result->Ok.load();
+        };
+
+        // An initial scan or user read can arrive before the secret lookup finishes.
+        const auto firstRead = read();
+        UNIT_ASSERT_VALUES_EQUAL(server.GetRequestsReceived(), 0);
+        reply(TDescription({"first-id", "first-key"}));
+        UNIT_ASSERT(succeeded(firstRead));
+        UNIT_ASSERT_VALUES_EQUAL(server.GetLastAccessKey(), "first-id");
+
+        refresh();
+        reply(TDescription({"second-id", "second-key"}));
+        UNIT_ASSERT(succeeded(read()));
+        UNIT_ASSERT_VALUES_EQUAL(server.GetLastAccessKey(), "second-id");
+
+        refresh();
+        reply(TDescription(Ydb::StatusIds::UNAUTHORIZED, {}));
+        UNIT_ASSERT(!succeeded(read()));
+        UNIT_ASSERT_VALUES_EQUAL(server.GetRequestsReceived(), 2);
     }
 
     Y_UNIT_TEST(RouterPoisonedWithRequestInFlight) {

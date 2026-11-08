@@ -40,6 +40,16 @@ inline bool IsParentPathValid(const THolder<TProposeResponse>& result,
     return static_cast<bool>(checks);
 }
 
+TString GetStoragePoolName(const TString& database, const TPathId& pathId);
+
+TString GetStoragePoolAlias(const NKikimrSchemeOp::TExternalDataSourceProperties& properties);
+
+TString PrepareStoragePool(const NKikimrSchemeOp::TExternalDataSourceDescription& desc, TExternalDataSourceInfo& source,
+                            const TPath& parent, const TProposeContext& context, const TString& owner);
+
+void RequestStoragePool(const TPath& path, const TExternalDataSourceInfo& source,
+                        TOperationId operationId, TOperationContext& context);
+
 bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
               const NExternalSource::IExternalSourceFactory::TPtr& factory,
               TString& errStr);

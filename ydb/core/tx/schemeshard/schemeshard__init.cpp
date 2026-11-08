@@ -2093,6 +2093,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_PROTOBUF_SUPPRESS_NODISCARD externalDataSource->ExternalTableReferences.ParseFromString(rowset.GetValue<Schema::ExternalDataSource::ExternalTableReferences>());
                 Y_PROTOBUF_SUPPRESS_NODISCARD externalDataSource->Properties.ParseFromString(rowset.GetValue<Schema::ExternalDataSource::Properties>());
 
+                for (const auto& reference : externalDataSource->ExternalTableReferences.GetReferences()) {
+                    const auto referrer = TPathId::FromProto(reference.GetPathId());
+                    const auto path = Self->PathsById.find(referrer);
+                    if (path != Self->PathsById.end() && path->second->IsSolomon()) {
+                        Self->SolomonExternalDataSources[referrer].insert(pathId);
+                    }
+                }
+
                 if (!rowset.Next())
                     return false;
             }

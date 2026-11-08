@@ -2,6 +2,8 @@
 #include "config.h"
 #include "select_groups.h"
 
+#include <google/protobuf/util/message_differencer.h>
+
 namespace NKikimr::NBsController {
 
         class TBlobStorageController::TBlobStorageController::TTxConfigCmd
@@ -12,6 +14,10 @@ namespace NKikimr::NBsController {
             const NKikimrBlobStorage::TConfigRequest Cmd;
             const bool SelfHeal;
             const bool GroupLayoutSanitizer;
+            const TScopeId OriginScope;
+            const bool ReplyToSchemeShard;
+            TString PreviousStoragePoolFailure;
+            bool PreviousStoragePoolOwnershipMismatch = false;
             std::optional<THostRecordMap> EnforceHostRecords;
             THolder<TEvBlobStorage::TEvControllerConfigResponse> Ev;
             NKikimrBlobStorage::TConfigResponse *Response;
@@ -23,13 +29,16 @@ namespace NKikimr::NBsController {
 
         public:
             TTxConfigCmd(const NKikimrBlobStorage::TConfigRequest &cmd, const TActorId &notifyId, ui64 cookie,
-                    bool selfHeal, bool groupLayoutSanitizer, std::optional<THostRecordMap> enforceHostRecords, TBlobStorageController *controller)
+                    bool selfHeal, bool groupLayoutSanitizer, std::optional<THostRecordMap> enforceHostRecords,
+                    TBlobStorageController *controller, TScopeId originScope, bool replyToSchemeShard = false)
                 : TTransactionBase(controller)
                 , NotifyId(notifyId)
                 , Cookie(cookie)
                 , Cmd(cmd)
                 , SelfHeal(selfHeal)
                 , GroupLayoutSanitizer(groupLayoutSanitizer)
+                , OriginScope(originScope)
+                , ReplyToSchemeShard(replyToSchemeShard)
                 , EnforceHostRecords(std::move(enforceHostRecords))
                 , Ev(new TEvBlobStorage::TEvControllerConfigResponse())
                 , Response(Ev->Record.MutableResponse())
@@ -226,6 +235,24 @@ namespace NKikimr::NBsController {
                 TRequestCounter counter(Self->TabletCounters, NBlobStorageController::COUNTER_CONFIG_USEC);
                 THPTimer timer;
 
+                const bool createStoragePool = Cmd.CommandSize() == 1 && Cmd.GetCommand(0).HasCreateExternalDataSourcePool();
+                if (createStoragePool) {
+                    NIceDb::TNiceDb db(txc.DB);
+                    using T = Schema::ExternalDataSourcePoolFailures;
+                    const auto& group = Cmd.GetCommand(0).GetCreateExternalDataSourcePool().GetGroup();
+                    auto row = db.Table<T>().Key(group.GetStoragePoolName()).Select();
+                    if (!row.IsReady()) {
+                        return false;
+                    }
+                    if (!row.EndOfSet()) {
+                        const TScopeId scope(row.GetValue<T::SchemeShardId>(), row.GetValue<T::PathItemId>());
+                        PreviousStoragePoolOwnershipMismatch =
+                            (OriginScope != TScopeId::LocallyGenerated && OriginScope.first && OriginScope != scope) ||
+                            !google::protobuf::util::MessageDifferencer::Equals(group, row.GetValue<T::Allocation>());
+                        PreviousStoragePoolFailure = row.GetValue<T::Reason>();
+                    }
+                }
+
                 // check if there is some special sole command
                 if (Cmd.CommandSize() == 1 && IsSoleCommand(Cmd.GetCommand(0))) {
                     WrapCommand([&] {
@@ -347,6 +374,22 @@ namespace NKikimr::NBsController {
                     Rollback();
                 } else if (Success) {
                     Self->CommitConfigUpdates(*State, txc);
+                    if (createStoragePool && PreviousStoragePoolFailure.empty()) {
+                        const auto& error = Response->GetStatus(0).GetExternalDataSourcePoolError();
+                        if (!error.empty()) {
+                            // Persist the terminal result atomically with deletion
+                            // of the group, including its Hive cleanup record.
+                            const auto& group = Cmd.GetCommand(0).GetCreateExternalDataSourcePool().GetGroup();
+                            const auto scope = State->FailedExternalDataSourcePoolScope;
+                            NIceDb::TNiceDb db(txc.DB);
+                            using T = Schema::ExternalDataSourcePoolFailures;
+                            db.Table<T>().Key(group.GetStoragePoolName()).Update(
+                                NIceDb::TUpdate<T::Reason>(error),
+                                NIceDb::TUpdate<T::SchemeShardId>(scope.first),
+                                NIceDb::TUpdate<T::PathItemId>(scope.second),
+                                NIceDb::TUpdate<T::Allocation>(group));
+                        }
+                    }
                 }
 
                 Finish();
@@ -436,6 +479,21 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(RemoveDriveSerial)
                     HANDLE_COMMAND(ForgetDriveSerial)
                     HANDLE_COMMAND(MigrateToSerial)
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kCreateExternalDataSourcePool: {
+                        if (Cmd.CommandSize() != 1) {
+                            throw TExError() << "External data source pool allocation must be a single command";
+                        }
+                        const auto& create = cmd.GetCreateExternalDataSourcePool();
+                        if (PreviousStoragePoolOwnershipMismatch) {
+                            throw TExError() << "External data source pool ownership mismatch";
+                        }
+                        if (!PreviousStoragePoolFailure.empty()) {
+                            status.SetExternalDataSourcePoolSubTxId(create.GetSubTxId());
+                            status.SetExternalDataSourcePoolError(PreviousStoragePoolFailure);
+                            return;
+                        }
+                        return state.ExecuteStep(create, status, OriginScope);
+                    }
                     HANDLE_COMMAND(AllocateVirtualGroup)
                     HANDLE_COMMAND(DecommitGroups)
                     HANDLE_COMMAND(WipeVDisk)
@@ -485,7 +543,20 @@ namespace NKikimr::NBsController {
                 } else {
                     Ev->Record.MutableResponse()->SetConfigTxSeqNo(Self->NextConfigTxSeqNo - 1);
                 }
-                TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
+                if (ReplyToSchemeShard) {
+                    auto result = MakeHolder<TEvBlobStorage::TEvExternalDataSourcePoolResult>();
+                    result->Record.SetSubTxId(Cmd.GetCommand(0).GetCreateExternalDataSourcePool().GetSubTxId());
+                    const auto& status = Response->GetStatus(0);
+                    result->Record.SetSuccess(Response->GetSuccess() && status.GetExternalDataSourcePoolError().empty());
+                    result->Record.SetReady(status.GetExternalDataSourcePoolReady());
+                    if (!result->Record.GetSuccess()) {
+                        result->Record.SetErrorDescription(Response->GetSuccess() ? status.GetExternalDataSourcePoolError()
+                            : Response->GetErrorDescription());
+                    }
+                    TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), result.Release(), 0, Cookie));
+                } else {
+                    TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
+                }
                 Self->UpdatePDisksCounters();
             }
         };
@@ -504,7 +575,14 @@ namespace NKikimr::NBsController {
             YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Execute TEvControllerConfigRequest",
                 {"marker", "BSCTXCC01"},
                 {"request", request});
-            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, ev->Get()->GroupLayoutSanitizer, ev->Get()->EnforceHostRecords, this));
+            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, ev->Get()->SelfHeal, ev->Get()->GroupLayoutSanitizer,
+                ev->Get()->EnforceHostRecords, this, ev->OriginScopeId));
+        }
+
+        void TBlobStorageController::Handle(TEvBlobStorage::TEvExternalDataSourcePoolRequest::TPtr &ev) {
+            NKikimrBlobStorage::TConfigRequest request;
+            request.AddCommand()->MutableCreateExternalDataSourcePool()->Swap(&ev->Get()->Record);
+            Execute(new TTxConfigCmd(request, ev->Sender, ev->Cookie, false, false, std::nullopt, this, ev->OriginScopeId, true));
         }
 
 } // NKikimr::NBsController

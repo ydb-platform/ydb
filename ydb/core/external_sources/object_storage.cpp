@@ -147,8 +147,9 @@ struct TObjectStorageExternalSource: public IExternalSource {
             ythrow TExternalSourceException() << "Internal error. Couldn't parse protobuf with external data source description";
         }
 
-        if (!proto.GetProperties().GetProperties().empty()) {
-            throw TExternalSourceException() << "ObjectStorage source doesn't support any properties";
+        const auto& properties = proto.GetProperties().GetProperties();
+        if (!properties.empty() && (properties.size() != 1 || !properties.contains("storage_pool_name"))) {
+            throw TExternalSourceException() << "ObjectStorage source only supports the storage_pool_name property";
         }
 
         if (StripString(proto.GetLocation()).empty()) {

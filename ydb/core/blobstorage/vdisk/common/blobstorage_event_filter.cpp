@@ -37,6 +37,7 @@ namespace NKikimr {
             TEvBlobStorage::EvVCheckReadinessResult,
             TEvBlobStorage::EvVCompactResult,
             TEvBlobStorage::EvControllerNodeServiceSetUpdate,
+            TEvBlobStorage::EvExternalDataSourcePoolResult,
         };
 
         static const ui32 eventsIntraSystem[] = {

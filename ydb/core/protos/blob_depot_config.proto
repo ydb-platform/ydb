@@ -66,6 +66,14 @@ message TS3BackendSettings {
     optional uint32 MetricsPushIntervalMs = 9 [default = 2500];
     optional uint32 MaxRetiringWrappers = 10 [default = 8];
     optional uint32 MinRetireGracePeriodSec = 11 [default = 60];
+
+    message TExternalDataSourceCredentials {
+        optional string Database = 1;
+        optional string AccessKeySecretPath = 2;
+        optional string SecretKeySecretPath = 3;
+        optional string OwnerSid = 4;
+    }
+    optional TExternalDataSourceCredentials ExternalDataSourceCredentials = 12;
 }
 
 message TBlobDepotConfig {

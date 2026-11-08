@@ -247,6 +247,36 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
         }
     }
 
+    Y_UNIT_TEST(StoragePoolSecretAccessUsesCurrentACL) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        auto admin = kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken("root@builtin"))
+            .CreateSession().GetValueSync().GetSession();
+        const TString path = "/Root/storage-key";
+        CreateSchemaSecret(path, "current", admin);
+
+        const auto resolve = [&](const TString& sid) {
+            return ResolveSecrets({path, path}, kikimr, GetUserToken(sid), {.ForStoragePool = true});
+        };
+        const auto assertDenied = [&](const TString& sid) {
+            const auto result = resolve(sid).GetFuture().GetValueSync();
+            UNIT_ASSERT_UNEQUAL(result.Status, Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT(result.SecretValues.empty());
+        };
+        const TString grantee = "grantee@builtin";
+        assertDenied(grantee);
+        NACLib::TDiffACL grant;
+        grant.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, grantee);
+        kikimr.GetTestClient().TestModifyACL("/Root", "storage-key", grant.SerializeAsString());
+        AssertSecretValues({"current", "current"}, resolve(grantee));
+
+        NACLib::TDiffACL deny;
+        deny.AddAccess(NACLib::EAccessType::Deny, NACLib::SelectRow, "restricted-group@builtin");
+        kikimr.GetTestClient().TestModifyACL("/Root", "storage-key", deny.SerializeAsString());
+        assertDenied(grantee);
+        AssertSecretValues({"current", "current"}, resolve("root@builtin"));
+    }
+
     Y_UNIT_TEST(BatchRequest) {
         TKikimrRunner kikimr;
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);

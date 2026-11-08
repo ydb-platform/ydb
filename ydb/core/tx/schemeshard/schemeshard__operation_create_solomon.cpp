@@ -30,6 +30,14 @@ bool ValidateConfig(const NKikimrSchemeOp::TCreateSolomonVolume& op,
         return true;
     }
 
+    for (const auto& channel : op.GetStorageConfig().GetChannel()) {
+        if (channel.HasExternalDataSource() || channel.HasStoragePool()) {
+            errStr = "External storage channels require a positive partition count";
+            status = TEvSchemeShard::EStatus::StatusInvalidParameter;
+            return false;
+        }
+    }
+
     if (op.HasChannelProfileId() || op.HasStorageConfig()) {
         errStr = "don't set channel profile id or storage config, please. We are going to adopt already created tablets";
         status = TEvSchemeShard::EStatus::StatusInvalidParameter;
@@ -317,13 +325,12 @@ public:
 
         TChannelsBindings channelsBinding;
         if (!adoptingTablets) {
-            bool isResolved = false;
             if (solomonDescription.HasStorageConfig()) {
-                isResolved = context.SS->ResolveSolomonChannels(solomonDescription.GetStorageConfig(), dstPath.GetPathIdForDomain(), channelsBinding);
-            } else {
-                isResolved = context.SS->ResolveSolomonChannels(channelProfileId, dstPath.GetPathIdForDomain(), channelsBinding);
-            }
-            if (!isResolved) {
+                if (!context.SS->ResolveSolomonVolumeChannels(solomonDescription.GetStorageConfig(), dstPath,
+                        context.UserToken.Get(), channelsBinding, *result)) {
+                    return result;
+                }
+            } else if (!context.SS->ResolveSolomonChannels(channelProfileId, dstPath.GetPathIdForDomain(), channelsBinding)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
                 return result;
             }
@@ -366,6 +373,8 @@ public:
         // All validations MUST stay above this line — a SetError/return after
         // it would leave unreverted memory changes.
         NIceDb::TNiceDb db(context.GetDB());
+
+        context.SS->PersistSolomonExternalDataSourceReferences(db, dstPath, channelsBinding);
 
         for (const auto& part: solomonVolume->Partitions) {
             TShardIdx shardIdx = part.first;

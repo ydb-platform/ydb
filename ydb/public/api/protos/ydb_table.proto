@@ -1865,6 +1865,8 @@ message DescribeExternalDataSourceResult {
     optional string source_type = 2;
     optional string location = 3;
     map<string, string> properties = 4;
+    // Set when the storage pool requested by this source could not be provisioned.
+    optional string storage_pool_error = 5;
 }
 
 // Returns information about an external table with a given path.

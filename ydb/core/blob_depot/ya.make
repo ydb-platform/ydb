@@ -9,6 +9,7 @@ LIBRARY()
             s3_router_stub.cpp
         )
     ELSE()
+        PEERDIR(ydb/services/scheme_secret/client)
         SRCS(
             s3.cpp
             s3_delete.cpp

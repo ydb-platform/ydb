@@ -112,6 +112,8 @@ runs:
       with:
         s3_bucket: ${{ fromJSON( inputs.vars ).AWS_BUCKET }}
         s3_endpoint: ${{ fromJSON( inputs.vars ).AWS_ENDPOINT }}
+        s3_region: ${{ fromJSON( inputs.vars ).AWS_REGION || 'ru-central1' }}
+        public_acl: ${{ fromJSON( inputs.vars ).AWS_PUBLIC_ACL || 'true' }}
         s3_key_id: ${{ fromJSON( inputs.secs ).AWS_KEY_ID }}
         s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
         folder_prefix: ${{ env.folder_prefix }}
@@ -756,7 +758,7 @@ runs:
           fi
 
           analytics start s3_sync_try
-          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+          s3cmd sync --follow-symlinks ${S3_PUBLIC_ACL_FLAG} --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
           analytics end s3_sync_try
           analytics enrich "$YA_MAKE_NAME" \
             --label "report_url=${CURRENT_PUBLIC_DIR_URL}/ya-test.html" \
@@ -769,6 +771,10 @@ runs:
           fi
 
           # upload tests results to YDB
+          # Host sets CI_DISABLE_YDB_QA=1; scripts also exit 0 without opening YDB.
+          if [ "${CI_DISABLE_YDB_QA:-}" = "1" ]; then
+            echo "Skipping upload_tests_results (CI_DISABLE_YDB_QA=1)"
+          else
           # Create run name based on event type and retry number
           case "$GITHUB_EVENT_NAME" in
             workflow_dispatch)
@@ -806,6 +812,7 @@ runs:
             --branch "${BRANCH_NAME}"
           analytics end upload_tests_results
           analytics flush
+          fi
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
@@ -868,6 +875,11 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -x
+        # Host job env only — not a composite input. Skips test_* commit status.
+        if [ "${CI_REMOTE_EXECUTOR:-}" = "1" ]; then
+          echo "Skipping test commit status (CI_REMOTE_EXECUTOR=1)"
+          exit 0
+        fi
         if [ true = ${{ inputs.run_tests }} ]; then
           teststatus=$(cat statusrep.txt)
           if [[ $teststatus == "success" ]]; then
@@ -900,7 +912,7 @@ runs:
         echo "::group::s3-sync"
         .github/scripts/Indexer/indexer.py -r "$PUBLIC_DIR/"
         echo "00 [Artifacts](${PUBLIC_DIR_URL}/index.html)" >> $SUMMARY_LINKS
-        s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+        s3cmd sync --follow-symlinks ${S3_PUBLIC_ACL_FLAG} --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"
 

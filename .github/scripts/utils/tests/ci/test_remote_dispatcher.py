@@ -25,6 +25,7 @@ from ingest_remote_executor_results import (  # noqa: E402
     _safe_under,
     download_prefix_via_index,
     parse_index_hrefs,
+    rewrite_ci_metrics_attribution,
 )
 from resolve_remote_execution import build_config  # noqa: E402
 
@@ -38,8 +39,37 @@ def patch_env(test: unittest.TestCase, **values: str) -> None:
 class ResolveSeedsTest(unittest.TestCase):
     def setUp(self):
         patch_env(self, CODE_REF="abcdef1", GITHUB_WORKFLOW="Run and debug tests")
-        for key in ("REMOTE_JSON", "DEFAULT_BUILD_TARGET", "DEFAULT_BUILD_PRESET"):
+        for key in (
+            "REMOTE_JSON",
+            "DEFAULT_BUILD_TARGET",
+            "DEFAULT_BUILD_PRESET",
+            "ANALYTICS_BRANCH",
+            "GITHUB_REF_NAME",
+        ):
             os.environ.pop(key, None)
+
+    def test_sha_code_ref_maps_analytics_to_main(self):
+        self.assertEqual(build_config()["analytics_branch"], "main")
+
+    def test_analytics_branch_env_wins_over_sha_heuristic(self):
+        os.environ["ANALYTICS_BRANCH"] = "stable-25-1"
+        cfg = build_config()
+        self.assertEqual(cfg["analytics_branch"], "stable-25-1")
+        self.assertEqual(cfg["inputs"]["job_inputs"]["custom_branch_name"], "stable-25-1")
+
+    def test_remote_code_ref_ignores_analytics_branch_env(self):
+        os.environ["ANALYTICS_BRANCH"] = "main"
+        os.environ["REMOTE_JSON"] = json.dumps({"code_ref": "stable-25-1"})
+        self.assertEqual(build_config()["analytics_branch"], "stable-25-1")
+
+    def test_github_ref_name_not_used_implicitly(self):
+        os.environ["GITHUB_REF_NAME"] = "123/merge"
+        self.assertEqual(build_config()["analytics_branch"], "main")
+
+    def test_remote_json_analytics_branch_wins_over_env(self):
+        os.environ["ANALYTICS_BRANCH"] = "stable-25-1"
+        os.environ["REMOTE_JSON"] = json.dumps({"analytics_branch": "custom"})
+        self.assertEqual(build_config()["analytics_branch"], "custom")
 
     def test_ui_seeds_override_defaults_when_remote_omits_job_keys(self):
         os.environ["DEFAULT_BUILD_TARGET"] = "ydb/core/foo"
@@ -339,6 +369,60 @@ class WaitClaimAttemptTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 dre.wait_for_claim(cfg)
 
+    def test_claim_timeout_uses_claim_wait_attempts(self):
+        os.environ["CLAIM_WAIT_ATTEMPTS"] = "5"
+        cfg = dre.load_config_json()
+        with mock.patch.object(dre, "read_claim", return_value=None) as read, mock.patch.object(
+            dre.time, "sleep"
+        ):
+            with self.assertRaises(SystemExit):
+                dre.wait_for_claim(cfg)
+        self.assertEqual(read.call_count, 5)
+
+    def test_claim_timeout_default(self):
+        os.environ.pop("CLAIM_WAIT_ATTEMPTS", None)
+        cfg = dre.load_config_json()
+        with mock.patch.object(dre, "read_claim", return_value=None) as read, mock.patch.object(
+            dre.time, "sleep"
+        ):
+            with self.assertRaises(SystemExit):
+                dre.wait_for_claim(cfg)
+        self.assertEqual(read.call_count, 120)
+
+
+class RewriteCiMetricsTest(unittest.TestCase):
+    def _rewrite(self, rows, pull_number="7"):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "ci_metrics.jsonl"
+            src.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+            out = rewrite_ci_metrics_attribution(
+                src,
+                run_id="500",
+                event_name="workflow_dispatch",
+                workflow="Run and debug tests",
+                job_name="Run and debug tests",
+                pull_number=pull_number,
+                caller_repo="ydb-platform/ydb",
+            )
+            return [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+
+    def test_run_attempt_from_caller_env(self):
+        patch_env(self, PLATFORM_RUN_ATTEMPT="3")
+        (row,) = self._rewrite([{"run_id": 9, "run_attempt": 1, "labels": {"k": "v"}}])
+        self.assertEqual(row["run_id"], 500)
+        self.assertEqual(row["run_attempt"], 3)
+        self.assertEqual(row["pr_number"], 7)
+        self.assertEqual(
+            row["labels"],
+            {"k": "v", "remote_executor_run_id": 9, "remote_executor_run_attempt": 1},
+        )
+
+    def test_bad_pull_number_does_not_crash(self):
+        patch_env(self, PLATFORM_RUN_ATTEMPT="1")
+        (row,) = self._rewrite([{"run_id": 9}], pull_number="abc")
+        self.assertNotIn("pr_number", row)
+        self.assertEqual(row["run_attempt"], 1)
+
 
 class EnqueueOutputTest(unittest.TestCase):
     def test_writes_ticket_and_output(self):
@@ -383,6 +467,11 @@ class WorkflowContractTest(unittest.TestCase):
             "PLATFORM_RUN_ATTEMPT: ${{ needs.enqueue.outputs.ticket_attempt }}",
             text,
         )
+        self.assertIn("PLATFORM_RUN_ATTEMPT: ${{ github.run_attempt }}", text)
+
+    def test_run_and_debug_passes_analytics_branch(self):
+        text = (_GITHUB / "workflows/run_and_debug_tests.yml").read_text(encoding="utf-8")
+        self.assertIn("ANALYTICS_BRANCH: ${{ github.ref_name }}", text)
 
 
 if __name__ == "__main__":

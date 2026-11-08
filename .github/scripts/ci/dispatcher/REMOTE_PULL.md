@@ -51,3 +51,33 @@ Build config: `dispatcher/resolve_remote_execution.py` → opaque JSON into
 - **Re-run all jobs** — reruns `enqueue`, writes a new ticket with a new
   `platform_run_attempt`, and the host claims that attempt. Use this when you
   need a fresh remote build/test.
+
+## Limits (operator notes)
+
+### Single dispatch per platform run
+
+Artifact name, claim key and host concurrency are keyed only by
+`platform_run_id`. Do not call `dispatch_remote.yml` more than once per run
+(e.g. from a matrix) until a `dispatch_key` exists on both platform and host.
+
+### VM contract (required, outside these PRs)
+
+- Verify webhook signature, source repo and workflow allowlist.
+- Take `platform_run_id` / attempt from the webhook payload, not from ticket
+  fields alone.
+- Pick the ticket matching the webhook attempt (highest / newest).
+- Serialize `job_inputs` object → JSON string for `workflow_dispatch`.
+- Enforce a `runs_on` allowlist.
+- Reject fork `head_repository`.
+
+### Cancel
+
+Platform cancel calls the host Actions API: `GH_TOKEN` needs `actions: write`
+on the host repo.
+
+### Claim timeout
+
+The waiter fails if no matching claim appears within ~60 min
+(`CLAIM_WAIT_ATTEMPTS`, default 120 × 30s; repo var
+`REMOTE_CLAIM_WAIT_ATTEMPTS`). Executor wait stays 2400 × 30s
+(`EXECUTOR_WAIT_ATTEMPTS`).

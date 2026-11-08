@@ -141,6 +141,11 @@ def _attempt_int(raw: str, *, label: str) -> int:
     return n
 
 
+def _attempts_env(name: str, default: int) -> int:
+    raw = env_opt(name)
+    return _attempt_int(raw, label=name) if raw else default
+
+
 def cmd_enqueue():
     cfg = load_config_json()
     ticket = build_ticket(cfg)
@@ -157,8 +162,9 @@ def wait_for_claim(cfg):
     want_attempt = _attempt_int(env("PLATFORM_RUN_ATTEMPT"), label="PLATFORM_RUN_ATTEMPT")
     endpoint, bucket = host_s3(cfg)
     url = object_url(endpoint, bucket, f"remote-claims/{platform_run_id}.json")
-    print(f"Waiting for claim at {url} (ticket_attempt={want_attempt}) ...")
-    for i in range(2400):
+    attempts = _attempts_env("CLAIM_WAIT_ATTEMPTS", 120)
+    print(f"Waiting for claim at {url} (ticket_attempt={want_attempt}, {attempts}x30s) ...")
+    for i in range(attempts):
         claim = read_claim(cfg, platform_run_id)
         if claim:
             claim_attempt_raw, run_id, run_url = parse_claim(claim)
@@ -186,7 +192,10 @@ def wait_for_claim(cfg):
         if i % 10 == 0:
             print(f"{time.strftime('%H:%M:%S', time.gmtime())} waiting for claim...")
         time.sleep(30)
-    die(f"timed out waiting for claim at {url}")
+    die(
+        f"ticket not claimed in time ({attempts}x30s) at {url} "
+        f"(ticket_attempt={want_attempt}); check host VM / webhook delivery"
+    )
 
 
 def wait_executor_done(cfg, token: str, run_id, run_url):
@@ -194,7 +203,7 @@ def wait_executor_done(cfg, token: str, run_id, run_url):
     repo = cfg_str(cfg, "repository")
     print(f"Waiting for executor run {run_id} ({run_url}) ...")
     status = conclusion = ""
-    for _ in range(2400):
+    for _ in range(_attempts_env("EXECUTOR_WAIT_ATTEMPTS", 2400)):
         _, state = gh("GET", f"{api(repo)}/actions/runs/{run_id}", token, retries=5)
         status = state.get("status") or ""
         conclusion = state.get("conclusion") or ""

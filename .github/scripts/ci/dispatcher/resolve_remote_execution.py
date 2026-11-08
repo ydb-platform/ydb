@@ -7,7 +7,7 @@ emits one opaque config for dispatch_remote.yml (artifact → wait claim → ing
 Env:
   REMOTE_JSON — optional caller override (object or empty)
   CODE_REF, GITHUB_WORKFLOW, DEFAULT_BUILD_TARGET, DEFAULT_BUILD_PRESET,
-  PULL_NUMBER (optional)
+  PULL_NUMBER (optional), ANALYTICS_BRANCH (optional, ignored if remote.code_ref set)
   GITHUB_OUTPUT — write `config=...`
   GITHUB_STEP_SUMMARY — optional launch-params table
 """
@@ -124,12 +124,16 @@ def build_config() -> dict[str, Any]:
             job["build_preset"] = seed
 
     # Prefer REMOTE_JSON.code_ref so callers can pin a SHA while CODE_REF is github.sha.
-    code_ref = cfg["code_ref"].strip() or (os.environ.get("CODE_REF") or "").strip()
+    remote_code_ref = cfg["code_ref"].strip()
+    code_ref = remote_code_ref or (os.environ.get("CODE_REF") or "").strip()
     if not code_ref:
         die("code_ref is empty (pass remote.code_ref or CODE_REF)")
     cfg["code_ref"] = code_ref
 
+    # ANALYTICS_BRANCH describes CODE_REF; ignore it when remote.code_ref overrides the ref.
     analytics = cfg["analytics_branch"].strip()
+    if not analytics and not remote_code_ref:
+        analytics = (os.environ.get("ANALYTICS_BRANCH") or "").strip()
     if not analytics:
         analytics = (
             "main" if re.fullmatch(r"[0-9a-fA-F]{7,40}", code_ref) else code_ref

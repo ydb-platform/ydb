@@ -77,6 +77,8 @@ jobs:
           PLATFORM_RUN_ID: ${{ github.run_id }}
           # Pin to the attempt that wrote the ticket (not live github.run_attempt).
           PLATFORM_RUN_ATTEMPT: ${{ needs.enqueue.outputs.ticket_attempt }}
+          # 30s per attempt; empty → defaults in dispatch_remote_executor.py.
+          CLAIM_WAIT_ATTEMPTS: ${{ vars.REMOTE_CLAIM_WAIT_ATTEMPTS }}
         run: python3 .github/scripts/ci/dispatcher/dispatch_remote_executor.py wait
 
       - name: Cancel on caller cancel
@@ -126,6 +128,7 @@ jobs:
           CONFIG_JSON: ${{ inputs.config }}
           CALLER_AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
           CALLER_AWS_BUCKET: ${{ vars.AWS_BUCKET }}
+          PLATFORM_RUN_ATTEMPT: ${{ github.run_attempt }}
           EXECUTOR_RUN_ID: ${{ needs.wait.outputs.executor_run_id }}
           EXECUTOR_RUN_URL: ${{ needs.wait.outputs.executor_run_url }}
           EXECUTOR_CONCLUSION: ${{ needs.wait.outputs.executor_conclusion }}

@@ -338,7 +338,14 @@ def rewrite_ci_metrics_attribution(
     out = metrics_path.with_name(metrics_path.name + ".caller")
     run_url = f"https://github.com/{caller_repo}/actions/runs/{run_id}"
     caller_run_id = int(run_id)
-    pr_number = int(pull_number) if pull_number else None
+    pr_number = None
+    if pull_number:
+        try:
+            pr_number = int(pull_number)
+        except ValueError:
+            print(f"::warning::pull_number={pull_number!r} is not an integer; pr_number not set")
+    attempt_raw = env_opt("PLATFORM_RUN_ATTEMPT") or env_opt("GITHUB_RUN_ATTEMPT")
+    caller_attempt = int(attempt_raw) if attempt_raw.isdigit() else None
     rewritten = 0
     with metrics_path.open(encoding="utf-8") as src, out.open("w", encoding="utf-8") as dst:
         for line in src:
@@ -355,6 +362,10 @@ def rewrite_ci_metrics_attribution(
             labels = row.get("labels") if isinstance(row.get("labels"), dict) else {}
             if row.get("run_id") is not None:
                 labels.setdefault("remote_executor_run_id", row.get("run_id"))
+            if caller_attempt is not None:
+                if row.get("run_attempt") is not None:
+                    labels.setdefault("remote_executor_run_attempt", row.get("run_attempt"))
+                row["run_attempt"] = caller_attempt
             row["run_id"] = caller_run_id
             row["event_name"] = event_name
             row["workflow"] = workflow

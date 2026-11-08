@@ -57,6 +57,7 @@ jobs:
         env:
           REMOTE_JSON: ${{ inputs.remote }}
           CODE_REF: ${{ github.sha }}
+          ANALYTICS_BRANCH: ${{ github.ref_name }}
           DEFAULT_BUILD_TARGET: ${{ inputs.test_targets }}
           DEFAULT_BUILD_PRESET: ${{ inputs.build_preset }}
         run: python3 .github/scripts/ci/dispatcher/resolve_remote_execution.py
